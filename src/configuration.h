@@ -37,8 +37,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 
 // Select which T-Beam board is being used. Only uncomment one.
-#define T_BEAM_V10  // AKA Rev1 (second board released)
-
+// #define T_BEAM_V10  // AKA Rev1 (second board released)
+#define HELTEC_LORA32
 
 #define DEBUG_PORT              Serial      // Serial debug port
 #define SERIAL_BAUD             115200      // Serial debug baud rate
@@ -74,12 +74,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // General
 // -----------------------------------------------------------------------------
 
-#define I2C_SDA         21
-#define I2C_SCL         22
 
-#if defined(T_BEAM_V10)
-#define BUTTON_PIN      38
-#endif
+
+
 
 // -----------------------------------------------------------------------------
 // OLED
@@ -108,12 +105,36 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MISO_GPIO       19
 #define MOSI_GPIO       27
 #define NSS_GPIO        18
+
 #if defined(T_BEAM_V10)
+
+#define I2C_SDA         21
+#define I2C_SCL         22
+
+#define BUTTON_PIN      38
+
 #define RESET_GPIO      14
-#endif
 #define DIO0_GPIO       26
 #define DIO1_GPIO       33 // Note: not really used on this board
 #define DIO2_GPIO       32 // Note: not really used on this board
+#define PMU_IRQ         35
+
+#elif defined(HELTEC_LORA32)
+#define I2C_SDA         4
+#define I2C_SCL         15
+
+#define RESET_OLED      16
+
+#define VEXT_ENABLE     21 // active low, powers the oled display
+#define LED_PIN         25
+#define BUTTON_PIN      0
+
+#define RESET_GPIO      14
+#define DIO0_GPIO       34
+#define DIO1_GPIO       35
+#define DIO2_GPIO       32 // Note: not really used on this board
+#endif
+
 
 // -----------------------------------------------------------------------------
 // AXP192 (Rev1-specific options)
@@ -122,4 +143,4 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // #define AXP192_SLAVE_ADDRESS  0x34 // Now defined in axp20x.h
 #define GPS_POWER_CTRL_CH     3
 #define LORA_POWER_CTRL_CH    2
-#define PMU_IRQ               35
+

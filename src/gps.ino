@@ -56,73 +56,15 @@ uint8_t gps_sats() {
 }
 
 void gps_setup() {
+    #ifdef GPS_RX_PIN
     _serial_gps.begin(GPS_BAUDRATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+    #endif
 }
 
 static void gps_loop() {
+    #ifdef GPX_RX_PIN
     while (_serial_gps.available()) {
         _gps.encode(_serial_gps.read());
     }
+    #endif
 }
-
-#if defined(PAYLOAD_USE_FULL)
-
-    // More data than PAYLOAD_USE_CAYENNE
-    void buildPacket(uint8_t txBuffer[10])
-    {
-        LatitudeBinary = ((_gps.location.lat() + 90) / 180.0) * 16777215;
-        LongitudeBinary = ((_gps.location.lng() + 180) / 360.0) * 16777215;
-        altitudeGps = _gps.altitude.meters();
-        hdopGps = _gps.hdop.value() / 10;
-        sats = _gps.satellites.value();
-
-        sprintf(t, "Lat: %f", _gps.location.lat());
-        Serial.println(t);
-        sprintf(t, "Lng: %f", _gps.location.lng());
-        Serial.println(t);
-        sprintf(t, "Alt: %d", altitudeGps);
-        Serial.println(t);
-        sprintf(t, "Hdop: %d", hdopGps);
-        Serial.println(t);
-        sprintf(t, "Sats: %d", sats);
-        Serial.println(t);
-
-        txBuffer[0] = ( LatitudeBinary >> 16 ) & 0xFF;
-        txBuffer[1] = ( LatitudeBinary >> 8 ) & 0xFF;
-        txBuffer[2] = LatitudeBinary & 0xFF;
-        txBuffer[3] = ( LongitudeBinary >> 16 ) & 0xFF;
-        txBuffer[4] = ( LongitudeBinary >> 8 ) & 0xFF;
-        txBuffer[5] = LongitudeBinary & 0xFF;
-        txBuffer[6] = ( altitudeGps >> 8 ) & 0xFF;
-        txBuffer[7] = altitudeGps & 0xFF;
-        txBuffer[8] = hdopGps & 0xFF;
-        txBuffer[9] = sats & 0xFF;
-    }
-
-#elif defined(PAYLOAD_USE_CAYENNE)
-
-    // CAYENNE DF
-    void buildPacket(uint8_t txBuffer[11])
-    {
-        sprintf(t, "Lat: %f", _gps.location.lat());
-        Serial.println(t);
-        sprintf(t, "Lng: %f", _gps.location.lng());
-        Serial.println(t);        
-        sprintf(t, "Alt: %f", _gps.altitude.meters());
-        Serial.println(t);        
-        int32_t lat = _gps.location.lat() * 10000;
-        int32_t lon = _gps.location.lng() * 10000;
-        int32_t alt = _gps.altitude.meters() * 100;
-        
-        txBuffer[2] = lat >> 16;
-        txBuffer[3] = lat >> 8;
-        txBuffer[4] = lat;
-        txBuffer[5] = lon >> 16;
-        txBuffer[6] = lon >> 8;
-        txBuffer[7] = lon;
-        txBuffer[8] = alt >> 16;
-        txBuffer[9] = alt >> 8;
-        txBuffer[10] = alt;
-    }
-
-#endif

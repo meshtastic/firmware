@@ -59,16 +59,19 @@ void doDeepSleep(uint64_t msecToWake)
     
     // FIXME, shutdown radio headinterups before powering off device
     
+  #ifdef T_BEAM_V10
     if(axp192_found) {
         // turn on after initial testing with real hardware
         axp.setPowerOutPut(AXP192_LDO2, AXP202_OFF); // LORA radio
         axp.setPowerOutPut(AXP192_LDO3, AXP202_OFF); // GPS main power
     }
+    #endif
 
     // FIXME - use an external 10k pulldown so we can leave the RTC peripherals powered off
     // until then we need the following lines
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
 
+#ifdef BUTTON_PIN
     // Only GPIOs which are have RTC functionality can be used in this bit map: 0,2,4,12-15,25-27,32-39.
     uint64_t gpioMask = (1ULL << BUTTON_PIN);
 
@@ -76,6 +79,7 @@ void doDeepSleep(uint64_t msecToWake)
     gpio_pullup_en((gpio_num_t) BUTTON_PIN);
 
     esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ALL_LOW);
+#endif
 
     esp_sleep_enable_timer_wakeup(msecToWake * 1000ULL); // call expects usecs
     esp_deep_sleep_start();                              // TBD mA sleep current (battery)
@@ -127,10 +131,12 @@ void scanI2Cdevice(void)
                 ssd1306_found = true;
                 Serial.println("ssd1306 display found");
             }
+            #ifdef T_BEAM_V10
             if (addr == AXP192_SLAVE_ADDRESS) {
                 axp192_found = true;
                 Serial.println("axp192 PMU found");
             }
+            #endif
         } else if (err == 4) {
             Serial.print("Unknow error at address 0x");
             if (addr < 16)
@@ -156,6 +162,7 @@ void scanI2Cdevice(void)
     LDO3 200mA -> GPS
  */
 void axp192Init() {
+  #ifdef T_BEAM_V10
     if (axp192_found) {
         if (!axp.begin(Wire, AXP192_SLAVE_ADDRESS)) {
             Serial.println("AXP192 Begin PASS");
@@ -200,6 +207,7 @@ void axp192Init() {
     } else {
         Serial.println("AXP192 not found");
     }
+    #endif
 }
 
 
@@ -227,20 +235,29 @@ void setup() {
   initDeepSleep();
   // delay(1000); FIXME - remove
 
+#ifdef VEXT_ENABLE
+  pinMode(VEXT_ENABLE, OUTPUT);
+  digitalWrite(VEXT_ENABLE, 0); // turn on the display power
+#endif 
+
+#ifdef RESET_OLED
+  pinMode(RESET_OLED, OUTPUT);
+  digitalWrite(RESET_OLED, 1);
+#endif 
+
   Wire.begin(I2C_SDA, I2C_SCL);
   scanI2Cdevice();
 
-  // FIXME - remove once we know dynamic probing is working
-  #ifdef T_BEAM_V10
-  // axp192_found = true;
-  // ssd1306_found = true;
-  #endif
   axp192Init();
 
   // Buttons & LED
+#ifdef BUTTON_PIN
   pinMode(BUTTON_PIN, INPUT_PULLUP);
+  digitalWrite(BUTTON_PIN, 1);
+#endif
 #ifdef LED_PIN
   pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, 0); // turn off for now
 #endif
 
   // Hello
@@ -280,6 +297,7 @@ void loop() {
     sleep();
   }
 
+#ifdef BUTTON_PIN
   // if user presses button for more than 3 secs, discard our network prefs and reboot (FIXME, use a debounce lib instead of this boilerplate)
   static bool wasPressed = false;
   static uint32_t minPressMs; // what tick should we call this press long enough
@@ -299,6 +317,7 @@ void loop() {
       // ESP.restart();
     }
   }
+#endif
 
   // Send every SEND_INTERVAL millis
   static uint32_t last = 0;
