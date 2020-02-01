@@ -42,7 +42,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define DEBUG_PORT              Serial      // Serial debug port
 #define SERIAL_BAUD             115200      // Serial debug baud rate
-#define SLEEP_BETWEEN_MESSAGES  true        // Do sleep between messages
+#define SLEEP_BETWEEN_MESSAGES  false       // Do sleep between messages
 #define SEND_INTERVAL           (5 * 60 * 1000) // Sleep for these many millis
 #define MESSAGE_TO_SLEEP_DELAY  5000        // Time after message before going to sleep
 #define LOGO_DELAY              5000        // Time to show logo on first boot
