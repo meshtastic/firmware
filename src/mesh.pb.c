@@ -6,49 +6,49 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
-PB_BIND(mesh_Position, mesh_Position, AUTO)
+PB_BIND(Position, Position, AUTO)
 
 
-PB_BIND(mesh_Time, mesh_Time, AUTO)
+PB_BIND(Time, Time, AUTO)
 
 
-PB_BIND(mesh_Data, mesh_Data, AUTO)
+PB_BIND(Data, Data, AUTO)
 
 
-PB_BIND(mesh_User, mesh_User, AUTO)
+PB_BIND(User, User, AUTO)
 
 
-PB_BIND(mesh_WantNodeNum, mesh_WantNodeNum, AUTO)
+PB_BIND(WantNodeNum, WantNodeNum, AUTO)
 
 
-PB_BIND(mesh_DenyNodeNum, mesh_DenyNodeNum, AUTO)
+PB_BIND(DenyNodeNum, DenyNodeNum, AUTO)
 
 
-PB_BIND(mesh_SubPacket, mesh_SubPacket, AUTO)
+PB_BIND(SubPacket, SubPacket, AUTO)
 
 
-PB_BIND(mesh_MeshPayload, mesh_MeshPayload, 2)
+PB_BIND(MeshPayload, MeshPayload, 2)
 
 
-PB_BIND(mesh_MeshPacket, mesh_MeshPacket, 2)
+PB_BIND(MeshPacket, MeshPacket, 2)
 
 
-PB_BIND(mesh_RadioConfig, mesh_RadioConfig, 2)
+PB_BIND(RadioConfig, RadioConfig, 2)
 
 
-PB_BIND(mesh_NodeInfo, mesh_NodeInfo, AUTO)
+PB_BIND(NodeInfo, NodeInfo, AUTO)
 
 
-PB_BIND(mesh_DeviceState, mesh_DeviceState, 4)
+PB_BIND(DeviceState, DeviceState, 4)
 
 
-PB_BIND(mesh_FromRadio, mesh_FromRadio, 2)
+PB_BIND(FromRadio, FromRadio, 2)
 
 
-PB_BIND(mesh_ToRadio, mesh_ToRadio, 2)
+PB_BIND(ToRadio, ToRadio, 2)
 
 
-PB_BIND(mesh_ToRadio_WantNodes, mesh_ToRadio_WantNodes, AUTO)
+PB_BIND(ToRadio_WantNodes, ToRadio_WantNodes, AUTO)
 
 
 

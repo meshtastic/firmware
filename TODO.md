@@ -2,8 +2,10 @@
 
 # High priority
 
-* make protobufs more real
-* attach mesh service to radio and bluetooth
+* make message send from android go to service, then to mesh radio
+* make message receive from radio go through to android
+* have MeshService keep a node DB by sniffing user messages
+* have meshservice send location data on mesh (if device has a GPS)
 
 # Medium priority
 

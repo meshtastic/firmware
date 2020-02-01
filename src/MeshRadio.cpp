@@ -63,6 +63,8 @@ bool MeshRadio::init() {
     // you can set transmitter powers from 5 to 23 dBm:
     // FIXME - can we do this?
     // rf95.setTxPower(23, false);
+    
+    return true;
 }
 
 
