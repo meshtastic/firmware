@@ -21,36 +21,19 @@ typedef enum _mesh_Data_Type {
 } mesh_Data_Type;
 
 /* Struct definitions */
-typedef struct _mesh_DenyNodeNum {
-    pb_callback_t macaddr;
-} mesh_DenyNodeNum;
-
-typedef struct _mesh_MeshPayload {
-    pb_callback_t subPackets;
-} mesh_MeshPayload;
-
 typedef struct _mesh_ToRadio_WantNodes {
     char dummy_field;
 } mesh_ToRadio_WantNodes;
 
-typedef struct _mesh_User {
-    pb_callback_t id;
-    pb_callback_t long_name;
-    pb_callback_t short_name;
-    pb_callback_t macaddr;
-} mesh_User;
-
+typedef PB_BYTES_ARRAY_T(100) mesh_Data_payload_t;
 typedef struct _mesh_Data {
     mesh_Data_Type typ;
-    pb_callback_t payload;
+    mesh_Data_payload_t payload;
 } mesh_Data;
 
-typedef struct _mesh_MeshPacket {
-    int32_t from;
-    int32_t to;
-    bool has_payload;
-    mesh_MeshPayload payload;
-} mesh_MeshPacket;
+typedef struct _mesh_DenyNodeNum {
+    char macaddr[6];
+} mesh_DenyNodeNum;
 
 typedef struct _mesh_Position {
     double latitude;
@@ -68,18 +51,17 @@ typedef struct _mesh_Time {
     uint64_t msecs;
 } mesh_Time;
 
+typedef struct _mesh_User {
+    char id[16];
+    char long_name[40];
+    char short_name[4];
+    char macaddr[6];
+} mesh_User;
+
 typedef struct _mesh_WantNodeNum {
     uint32_t desired_nodenum;
-    pb_callback_t macaddr;
+    char macaddr[6];
 } mesh_WantNodeNum;
-
-typedef struct _mesh_DeviceState {
-    bool has_radio;
-    mesh_RadioConfig radio;
-    pb_callback_t node_db;
-    pb_callback_t receive_queue;
-    int32_t my_node_num;
-} mesh_DeviceState;
 
 typedef struct _mesh_NodeInfo {
     int32_t num;
@@ -103,15 +85,27 @@ typedef struct _mesh_SubPacket {
     } variant;
 } mesh_SubPacket;
 
-typedef struct _mesh_ToRadio {
-    pb_size_t which_variant;
-    union {
-        mesh_MeshPacket packet;
-        mesh_ToRadio_WantNodes want_nodes;
-        mesh_RadioConfig set_radio;
-        mesh_User set_owner;
-    } variant;
-} mesh_ToRadio;
+typedef struct _mesh_MeshPayload {
+    pb_size_t subPackets_count;
+    mesh_SubPacket subPackets[4];
+} mesh_MeshPayload;
+
+typedef struct _mesh_MeshPacket {
+    int32_t from;
+    int32_t to;
+    bool has_payload;
+    mesh_MeshPayload payload;
+} mesh_MeshPacket;
+
+typedef struct _mesh_DeviceState {
+    bool has_radio;
+    mesh_RadioConfig radio;
+    pb_size_t node_db_count;
+    mesh_NodeInfo node_db[32];
+    pb_size_t receive_queue_count;
+    mesh_MeshPacket receive_queue[32];
+    int32_t my_node_num;
+} mesh_DeviceState;
 
 typedef struct _mesh_FromRadio {
     uint32_t num;
@@ -123,6 +117,16 @@ typedef struct _mesh_FromRadio {
     } variant;
 } mesh_FromRadio;
 
+typedef struct _mesh_ToRadio {
+    pb_size_t which_variant;
+    union {
+        mesh_MeshPacket packet;
+        mesh_ToRadio_WantNodes want_nodes;
+        mesh_RadioConfig set_radio;
+        mesh_User set_owner;
+    } variant;
+} mesh_ToRadio;
+
 
 /* Helper constants for enums */
 #define _mesh_Data_Type_MIN mesh_Data_Type_SIGNAL_OPAQUE
@@ -133,47 +137,39 @@ typedef struct _mesh_FromRadio {
 /* Initializer values for message structs */
 #define mesh_Position_init_default               {0, 0, 0, 0}
 #define mesh_Time_init_default                   {0}
-#define mesh_Data_init_default                   {_mesh_Data_Type_MIN, {{NULL}, NULL}}
-#define mesh_User_init_default                   {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
-#define mesh_WantNodeNum_init_default            {0, {{NULL}, NULL}}
-#define mesh_DenyNodeNum_init_default            {{{NULL}, NULL}}
+#define mesh_Data_init_default                   {_mesh_Data_Type_MIN, {0, {0}}}
+#define mesh_User_init_default                   {"", "", "", ""}
+#define mesh_WantNodeNum_init_default            {0, ""}
+#define mesh_DenyNodeNum_init_default            {""}
 #define mesh_SubPacket_init_default              {0, {mesh_Position_init_default}}
-#define mesh_MeshPayload_init_default            {{{NULL}, NULL}}
+#define mesh_MeshPayload_init_default            {0, {mesh_SubPacket_init_default, mesh_SubPacket_init_default, mesh_SubPacket_init_default, mesh_SubPacket_init_default}}
 #define mesh_MeshPacket_init_default             {0, 0, false, mesh_MeshPayload_init_default}
 #define mesh_RadioConfig_init_default            {0, 0}
 #define mesh_NodeInfo_init_default               {0, false, mesh_User_init_default, false, mesh_Position_init_default, false, mesh_Time_init_default}
-#define mesh_DeviceState_init_default            {false, mesh_RadioConfig_init_default, {{NULL}, NULL}, {{NULL}, NULL}, 0}
+#define mesh_DeviceState_init_default            {false, mesh_RadioConfig_init_default, 0, {mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default, mesh_NodeInfo_init_default}, 0, {mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default, mesh_MeshPacket_init_default}, 0}
 #define mesh_FromRadio_init_default              {0, 0, {mesh_MeshPacket_init_default}}
 #define mesh_ToRadio_init_default                {0, {mesh_MeshPacket_init_default}}
 #define mesh_ToRadio_WantNodes_init_default      {0}
 #define mesh_Position_init_zero                  {0, 0, 0, 0}
 #define mesh_Time_init_zero                      {0}
-#define mesh_Data_init_zero                      {_mesh_Data_Type_MIN, {{NULL}, NULL}}
-#define mesh_User_init_zero                      {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
-#define mesh_WantNodeNum_init_zero               {0, {{NULL}, NULL}}
-#define mesh_DenyNodeNum_init_zero               {{{NULL}, NULL}}
+#define mesh_Data_init_zero                      {_mesh_Data_Type_MIN, {0, {0}}}
+#define mesh_User_init_zero                      {"", "", "", ""}
+#define mesh_WantNodeNum_init_zero               {0, ""}
+#define mesh_DenyNodeNum_init_zero               {""}
 #define mesh_SubPacket_init_zero                 {0, {mesh_Position_init_zero}}
-#define mesh_MeshPayload_init_zero               {{{NULL}, NULL}}
+#define mesh_MeshPayload_init_zero               {0, {mesh_SubPacket_init_zero, mesh_SubPacket_init_zero, mesh_SubPacket_init_zero, mesh_SubPacket_init_zero}}
 #define mesh_MeshPacket_init_zero                {0, 0, false, mesh_MeshPayload_init_zero}
 #define mesh_RadioConfig_init_zero               {0, 0}
 #define mesh_NodeInfo_init_zero                  {0, false, mesh_User_init_zero, false, mesh_Position_init_zero, false, mesh_Time_init_zero}
-#define mesh_DeviceState_init_zero               {false, mesh_RadioConfig_init_zero, {{NULL}, NULL}, {{NULL}, NULL}, 0}
+#define mesh_DeviceState_init_zero               {false, mesh_RadioConfig_init_zero, 0, {mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero, mesh_NodeInfo_init_zero}, 0, {mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero, mesh_MeshPacket_init_zero}, 0}
 #define mesh_FromRadio_init_zero                 {0, 0, {mesh_MeshPacket_init_zero}}
 #define mesh_ToRadio_init_zero                   {0, {mesh_MeshPacket_init_zero}}
 #define mesh_ToRadio_WantNodes_init_zero         {0}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define mesh_DenyNodeNum_macaddr_tag             1
-#define mesh_MeshPayload_subPackets_tag          3
-#define mesh_User_id_tag                         1
-#define mesh_User_long_name_tag                  2
-#define mesh_User_short_name_tag                 3
-#define mesh_User_macaddr_tag                    4
 #define mesh_Data_typ_tag                        1
 #define mesh_Data_payload_tag                    2
-#define mesh_MeshPacket_from_tag                 1
-#define mesh_MeshPacket_to_tag                   2
-#define mesh_MeshPacket_payload_tag              3
+#define mesh_DenyNodeNum_macaddr_tag             1
 #define mesh_Position_latitude_tag               1
 #define mesh_Position_longitude_tag              2
 #define mesh_Position_altitude_tag               3
@@ -181,12 +177,12 @@ typedef struct _mesh_FromRadio {
 #define mesh_RadioConfig_keep_all_packets_tag    100
 #define mesh_RadioConfig_promiscuous_mode_tag    101
 #define mesh_Time_msecs_tag                      1
+#define mesh_User_id_tag                         1
+#define mesh_User_long_name_tag                  2
+#define mesh_User_short_name_tag                 3
+#define mesh_User_macaddr_tag                    4
 #define mesh_WantNodeNum_desired_nodenum_tag     1
 #define mesh_WantNodeNum_macaddr_tag             2
-#define mesh_DeviceState_radio_tag               1
-#define mesh_DeviceState_node_db_tag             2
-#define mesh_DeviceState_receive_queue_tag       3
-#define mesh_DeviceState_my_node_num_tag         4
 #define mesh_NodeInfo_num_tag                    1
 #define mesh_NodeInfo_user_tag                   2
 #define mesh_NodeInfo_position_tag               4
@@ -197,14 +193,22 @@ typedef struct _mesh_FromRadio {
 #define mesh_SubPacket_user_tag                  4
 #define mesh_SubPacket_want_node_tag             5
 #define mesh_SubPacket_deny_node_tag             6
-#define mesh_ToRadio_packet_tag                  1
-#define mesh_ToRadio_want_nodes_tag              100
-#define mesh_ToRadio_set_radio_tag               101
-#define mesh_ToRadio_set_owner_tag               102
+#define mesh_MeshPayload_subPackets_tag          3
+#define mesh_MeshPacket_from_tag                 1
+#define mesh_MeshPacket_to_tag                   2
+#define mesh_MeshPacket_payload_tag              3
+#define mesh_DeviceState_radio_tag               1
+#define mesh_DeviceState_node_db_tag             2
+#define mesh_DeviceState_receive_queue_tag       3
+#define mesh_DeviceState_my_node_num_tag         4
 #define mesh_FromRadio_packet_tag                2
 #define mesh_FromRadio_my_node_num_tag           3
 #define mesh_FromRadio_node_info_tag             4
 #define mesh_FromRadio_num_tag                   1
+#define mesh_ToRadio_packet_tag                  1
+#define mesh_ToRadio_want_nodes_tag              100
+#define mesh_ToRadio_set_radio_tag               101
+#define mesh_ToRadio_set_owner_tag               102
 
 /* Struct field encoding specification for nanopb */
 #define mesh_Position_FIELDLIST(X, a) \
@@ -222,27 +226,27 @@ X(a, STATIC,   SINGULAR, UINT64,   msecs,             1)
 
 #define mesh_Data_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    typ,               1) \
-X(a, CALLBACK, SINGULAR, BYTES,    payload,           2)
-#define mesh_Data_CALLBACK pb_default_field_callback
+X(a, STATIC,   SINGULAR, BYTES,    payload,           2)
+#define mesh_Data_CALLBACK NULL
 #define mesh_Data_DEFAULT NULL
 
 #define mesh_User_FIELDLIST(X, a) \
-X(a, CALLBACK, SINGULAR, STRING,   id,                1) \
-X(a, CALLBACK, SINGULAR, STRING,   long_name,         2) \
-X(a, CALLBACK, SINGULAR, STRING,   short_name,        3) \
-X(a, CALLBACK, SINGULAR, STRING,   macaddr,           4)
-#define mesh_User_CALLBACK pb_default_field_callback
+X(a, STATIC,   SINGULAR, STRING,   id,                1) \
+X(a, STATIC,   SINGULAR, STRING,   long_name,         2) \
+X(a, STATIC,   SINGULAR, STRING,   short_name,        3) \
+X(a, STATIC,   SINGULAR, STRING,   macaddr,           4)
+#define mesh_User_CALLBACK NULL
 #define mesh_User_DEFAULT NULL
 
 #define mesh_WantNodeNum_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   desired_nodenum,   1) \
-X(a, CALLBACK, SINGULAR, STRING,   macaddr,           2)
-#define mesh_WantNodeNum_CALLBACK pb_default_field_callback
+X(a, STATIC,   SINGULAR, STRING,   macaddr,           2)
+#define mesh_WantNodeNum_CALLBACK NULL
 #define mesh_WantNodeNum_DEFAULT NULL
 
 #define mesh_DenyNodeNum_FIELDLIST(X, a) \
-X(a, CALLBACK, SINGULAR, STRING,   macaddr,           1)
-#define mesh_DenyNodeNum_CALLBACK pb_default_field_callback
+X(a, STATIC,   SINGULAR, STRING,   macaddr,           1)
+#define mesh_DenyNodeNum_CALLBACK NULL
 #define mesh_DenyNodeNum_DEFAULT NULL
 
 #define mesh_SubPacket_FIELDLIST(X, a) \
@@ -262,8 +266,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (variant,deny_node,variant.deny_node),   6)
 #define mesh_SubPacket_variant_deny_node_MSGTYPE mesh_DenyNodeNum
 
 #define mesh_MeshPayload_FIELDLIST(X, a) \
-X(a, CALLBACK, REPEATED, MESSAGE,  subPackets,        3)
-#define mesh_MeshPayload_CALLBACK pb_default_field_callback
+X(a, STATIC,   REPEATED, MESSAGE,  subPackets,        3)
+#define mesh_MeshPayload_CALLBACK NULL
 #define mesh_MeshPayload_DEFAULT NULL
 #define mesh_MeshPayload_subPackets_MSGTYPE mesh_SubPacket
 
@@ -294,10 +298,10 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  last_seen,         5)
 
 #define mesh_DeviceState_FIELDLIST(X, a) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  radio,             1) \
-X(a, CALLBACK, REPEATED, MESSAGE,  node_db,           2) \
-X(a, CALLBACK, REPEATED, MESSAGE,  receive_queue,     3) \
+X(a, STATIC,   REPEATED, MESSAGE,  node_db,           2) \
+X(a, STATIC,   REPEATED, MESSAGE,  receive_queue,     3) \
 X(a, STATIC,   SINGULAR, SINT32,   my_node_num,       4)
-#define mesh_DeviceState_CALLBACK pb_default_field_callback
+#define mesh_DeviceState_CALLBACK NULL
 #define mesh_DeviceState_DEFAULT NULL
 #define mesh_DeviceState_radio_MSGTYPE mesh_RadioConfig
 #define mesh_DeviceState_node_db_MSGTYPE mesh_NodeInfo
@@ -366,18 +370,18 @@ extern const pb_msgdesc_t mesh_ToRadio_WantNodes_msg;
 /* Maximum encoded size of messages (where known) */
 #define mesh_Position_size                       40
 #define mesh_Time_size                           11
-/* mesh_Data_size depends on runtime parameters */
-/* mesh_User_size depends on runtime parameters */
-/* mesh_WantNodeNum_size depends on runtime parameters */
-/* mesh_DenyNodeNum_size depends on runtime parameters */
-/* mesh_SubPacket_size depends on runtime parameters */
-/* mesh_MeshPayload_size depends on runtime parameters */
-/* mesh_MeshPacket_size depends on runtime parameters */
+#define mesh_Data_size                           104
+#define mesh_User_size                           70
+#define mesh_WantNodeNum_size                    13
+#define mesh_DenyNodeNum_size                    7
+#define mesh_SubPacket_size                      106
+#define mesh_MeshPayload_size                    432
+#define mesh_MeshPacket_size                     457
 #define mesh_RadioConfig_size                    6
-/* mesh_NodeInfo_size depends on runtime parameters */
-/* mesh_DeviceState_size depends on runtime parameters */
-/* mesh_FromRadio_size depends on runtime parameters */
-/* mesh_ToRadio_size depends on runtime parameters */
+#define mesh_NodeInfo_size                       138
+#define mesh_DeviceState_size                    19246
+#define mesh_FromRadio_size                      466
+#define mesh_ToRadio_size                        460
 #define mesh_ToRadio_WantNodes_size              0
 
 #ifdef __cplusplus

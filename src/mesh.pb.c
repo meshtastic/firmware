@@ -27,10 +27,10 @@ PB_BIND(mesh_DenyNodeNum, mesh_DenyNodeNum, AUTO)
 PB_BIND(mesh_SubPacket, mesh_SubPacket, AUTO)
 
 
-PB_BIND(mesh_MeshPayload, mesh_MeshPayload, AUTO)
+PB_BIND(mesh_MeshPayload, mesh_MeshPayload, 2)
 
 
-PB_BIND(mesh_MeshPacket, mesh_MeshPacket, AUTO)
+PB_BIND(mesh_MeshPacket, mesh_MeshPacket, 2)
 
 
 PB_BIND(mesh_RadioConfig, mesh_RadioConfig, 2)
@@ -39,10 +39,10 @@ PB_BIND(mesh_RadioConfig, mesh_RadioConfig, 2)
 PB_BIND(mesh_NodeInfo, mesh_NodeInfo, AUTO)
 
 
-PB_BIND(mesh_DeviceState, mesh_DeviceState, AUTO)
+PB_BIND(mesh_DeviceState, mesh_DeviceState, 4)
 
 
-PB_BIND(mesh_FromRadio, mesh_FromRadio, AUTO)
+PB_BIND(mesh_FromRadio, mesh_FromRadio, 2)
 
 
 PB_BIND(mesh_ToRadio, mesh_ToRadio, 2)
