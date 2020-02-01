@@ -1,0 +1,26 @@
+{
+  "name": "BluetoothOTA",
+  "keywords": "esp32, bluetooth",
+  "description": "A BTLE based software OTA update tool",
+  "repository":
+  {
+    "type": "git",
+    "url": "https://github.com/geeksville/fixme.git"
+  },
+  "authors":
+  [
+    {
+      "name": "Kevin Hester",
+      "email": "kevinh@geeksville.com",
+      "url": "https://github.com/geeksville",
+      "maintainer": true
+    }
+  ],
+  "version": "0.0.1",
+  "frameworks": "arduino",
+  "platforms": "*",
+  "dependencies": [
+    { "name": "Update" },
+    { "name": "ESP32 BLE Arduino" }
+  ]
+}
