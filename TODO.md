@@ -2,13 +2,27 @@
 
 # High priority
 
-* add mesh layer
-* wrap in nice MeshRadio class
+* make protobufs more real
+* attach mesh service to radio and bluetooth
 
 # Medium priority
 
 * add interrupt detach/sleep mode config to lora radio so we can enable deepsleep without panicing
+* figure out if we can use PA_BOOST
+* scrub default radio config settings for bandwidth/range/speed
+* use a freertos thread to remain blocked reading from recvfromAckTimeout, so that we don't need to keep polling it from our main thread
+* override peekAtMessage so we can see any messages that pass through our node (even if not broadcast)?  would that be useful?
+
+# Pre-beta priority
+
+* make sure main cpu is not woken for packets with bad crc or not addressed to this node - do that in the radio hw
+* enable fast init inside the gps chip
+* dynamically select node nums
+* triple check fcc compliance
+* allow setting full radio params from android
 
 # Done
 
 * change the partition table to take advantage of the 4MB flash on the wroom: http://docs.platformio.org/en/latest/platforms/espressif32.html#partition-tables
+* wrap in nice MeshRadio class
+* add mesh send & rx

@@ -43,7 +43,7 @@ public:
     mesh sw does if it does conflict?  would it be better for people who are replying with denynode num to just broadcast their denial?)
 };
 
-class Mesh {
+class MeshRadio {
 
 public:
 
@@ -51,11 +51,11 @@ public:
     void handleFromMesh(NodeNum fromNode, NodeNum toNode, std::string s);
 
     /// handle a packet from the phone, send it on the mesh
-    void handleFromRadio(MeshPacket p);
+    void handleToMesh(MeshPacket p);
 };
 
 /// Top level app for this service.  keeps the mesh, the radio config and the queue of received packets.
-class MeshRadio {
+class MeshService {
 public:
 };
 
