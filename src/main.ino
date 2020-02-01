@@ -26,6 +26,7 @@
 #include <TinyGPS++.h>
 #include <Wire.h>
 #include "BluetoothUtil.h"
+#include "MeshRadio.h"
 
 #ifdef T_BEAM_V10
 #include "axp20x.h"
@@ -38,14 +39,6 @@ bool ssd1306_found = false;
 bool axp192_found = false;
 
 bool packetSent, packetQueued;
-
-#if defined(PAYLOAD_USE_FULL)
-  // includes number of satellites and accuracy
-  static uint8_t txBuffer[10];
-#elif defined(PAYLOAD_USE_CAYENNE)
-  // CAYENNE DF
-  static uint8_t txBuffer[11] = {0x03, 0x88, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-#endif
 
 // deep sleep support
 RTC_DATA_ATTR int bootCount = 0;
@@ -63,7 +56,8 @@ void doDeepSleep(uint64_t msecToWake)
     // esp_wifi_stop();
 
     screen_off(); // datasheet says this will draw only 10ua
-    LMIC_shutdown(); // cleanly shutdown the radio
+    
+    // FIXME, shutdown radio headinterups before powering off device
     
     if(axp192_found) {
         // turn on after initial testing with real hardware
@@ -271,11 +265,14 @@ void setup() {
   }
 
   initBLE("KHBT Test"); // FIXME, use a real name based on the macaddr
+
+  mesh_init();
 }
 
 void loop() {
   gps_loop();
   screen_loop();
+  mesh_loop();
   loopBLE();
 
   if(packetSent) {
