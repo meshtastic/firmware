@@ -7,6 +7,7 @@
 
 # Medium priority
 
+* correctly map nodeids to nodenums, currently we just do a proof of concept by always doing a broadcast
 * add interrupt detach/sleep mode config to lora radio so we can enable deepsleep without panicing
 * figure out if we can use PA_BOOST
 * scrub default radio config settings for bandwidth/range/speed
