@@ -5,6 +5,7 @@
 * solder debug headers to board
 * make message send from android go to service, then to mesh radio
 * make message receive from radio go through to android
+* test loopback tx/rx path code without using radio
 * have MeshService keep a node DB by sniffing user messages
 * have meshservice send location data on mesh (if device has a GPS)
 
@@ -20,6 +21,8 @@
 * sendToMesh can currently block for a long time, instead have it just queue a packet for a radio freertos thread
 * see section 7.3 of https://cdn.sparkfun.com/assets/learn_tutorials/8/0/4/RFM95_96_97_98W.pdf and have hope radio wake only when a valid packet is received.  Possibly even wake the ESP32 from deep sleep via GPIO.
 * fix the logo
+* do debug logging to android over bluetooth
+* break out my bluetooth OTA software as a seperate library so others can use it
 
 # Pre-beta priority
 

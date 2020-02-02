@@ -28,7 +28,7 @@
 #include <Wire.h>
 #include "BluetoothUtil.h"
 #include "MeshBluetoothService.h"
-#include "MeshRadio.h"
+#include "MeshService.h"
 
 #ifdef T_BEAM_V10
 #include "axp20x.h"
@@ -62,7 +62,7 @@ void doDeepSleep(uint64_t msecToWake)
   screen_off(); // datasheet says this will draw only 10ua
 
   // Put radio in sleep mode (will still draw power but only 0.2uA)
-  radio.sleep();
+  service.radio.sleep();
 
 #ifdef RESET_OLED
   digitalWrite(RESET_OLED, 1); // put the display in reset before killing its power
@@ -345,7 +345,7 @@ void setup()
   delay(LOGO_DELAY);
   //}
 
-  mesh_init();
+  service.init();
   BLEServer *serve = initBLE("KHBT Test"); // FIXME, use a real name based on the macaddr
   BLEService *bts = createMeshBluetoothService(serve);
   bts->start();
@@ -356,7 +356,7 @@ void loop()
 {
   gps_loop();
   screen_loop();
-  mesh_loop();
+  service.loop();
   loopBLE();
 
 #ifdef LED_PIN

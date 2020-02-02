@@ -29,22 +29,3 @@ public:
         return xQueueReceive(h, p, maxWait);
     }
 };
-
-
-/**
- * A wrapper for freertos queues that assumes each element is a pointer
- */
-template <class T> class PointerQueue: public TypedQueue<T *> {
-    TypedQueue h;
-public:
-    PointerQueue(int maxElements) : TypedQueue(maxElements) {
-    }
-
-    // preturns a ptr or null if the queue was empty
-    T *dequeuePtr(TickType_t maxWait = portMAX_DELAY) {
-        T *p;
-        
-        return dequeue(&p, maxWait)  == pdTRUE ? p : NULL;
-    }
-};
-

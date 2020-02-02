@@ -2,6 +2,9 @@
 
 #include <RH_RF95.h>
 #include <RHMesh.h>
+#include "MemoryPool.h"
+#include "mesh.pb.h"
+#include "PointerQueue.h"
 
 #define NODENUM_BROADCAST 255
 #define ERRNO_OK 0
@@ -10,37 +13,42 @@
 typedef int ErrorCode;
 typedef uint8_t NodeNum;
 
-/// Callback for a receive packet, the callee must copy/queue the payload elsewhere before returning
-typedef void (*MeshRXHandler)(NodeNum from, NodeNum to, const uint8_t *buf, size_t len);
+#define MAX_TX_QUEUE 4 // max number of packets which can be waiting for transmission
+
 
 /**
  * A raw low level interface to our mesh.  Only understands nodenums and bytes (not protobufs or node ids)
  */
 class MeshRadio {
 public:
-    MeshRadio();
+    /** pool is the pool we will alloc our rx packets from
+     * rxDest is where we will send any rx packets, it becomes receivers responsibility to return packet to the pool
+     */
+    MeshRadio(MemoryPool<MeshPacket> &pool, PointerQueue<MeshPacket> &rxDest);
 
     bool init();
 
     /// Prepare the radio to enter sleep mode, where it should draw only 0.2 uA
     void sleep() { rf95.sleep(); }
 
-    /// Send a packet - the current implementation blocks for a while possibly (FIXME)
-    ErrorCode sendTo(NodeNum dest, const uint8_t *buf, size_t len);
+    /// Send a packet (possibly by enquing in a private fifo).  This routine will
+    /// later free() the packet to pool.
+    ErrorCode send(MeshPacket *p);
 
     /// Do loop callback operations (we currently FIXME poll the receive mailbox here)
     /// for received packets it will call the rx handler
     void loop();
 
-    void setRXHandler(MeshRXHandler h) { rxHandler = h; }
-
 private:
     RH_RF95 rf95; // the raw radio interface
     RHMesh manager;
-    MeshRXHandler rxHandler;
+    // MeshRXHandler rxHandler;
+
+    MemoryPool<MeshPacket> &pool;
+    PointerQueue<MeshPacket> &rxDest;
+    PointerQueue<MeshPacket> txQueue;
+
+    /// low level send, might block for mutiple seconds
+    ErrorCode sendTo(NodeNum dest, const uint8_t *buf, size_t len);
 };
 
-extern MeshRadio radio;
-
-void mesh_init();
-void mesh_loop();

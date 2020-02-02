@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <assert.h>
 
+#include "PointerQueue.h"
 
 /**
  * A pool based allocator
@@ -10,12 +11,13 @@
  * Eventually this routine will even be safe for ISR use...
  */
 template <class T> class MemoryPool {
-    TypedQueue<T *> dead;
+    PointerQueue<T> dead;
 
     T *buf; // our large raw block of memory
 
+    size_t maxElements;
 public:
-    MemoryPool(int maxElements): queued(maxElements), dead(maxElements) {
+    MemoryPool(size_t _maxElements): dead(_maxElements), maxElements(_maxElements) {
         buf = new T[maxElements];
         
         // prefill dead
@@ -29,19 +31,28 @@ public:
 
     /// Return a queable object which has been prefilled with zeros
     T *allocZeroed(TickType_t maxWait = portMAX_DELAY) {
-        T *p;
-
-        if(dead.dequeue(&p, maxWait) != pdTRUE)
-            return NULL;
-
-        memset(p, 0, sizeof(T));
+        T *p = dead.dequeuePtr(maxWait);
+        
+        if(p)
+            memset(p, 0, sizeof(T));
         return p;
     }
 
+    /// Return a queable object which is a copy of some other object
+    T *allocCopy(const T &src, TickType_t maxWait = portMAX_DELAY) {
+        T *p = dead.dequeuePtr(maxWait);
+        
+        if(p)
+            memcpy(p, &src, sizeof(T));
+        return p;
+    }
+
+
     /// Return a buffer for use by others
-    void free(T *p) {
+    void release(T *p) {
         int res = dead.enqueue(p, 0);
         assert(res == pdTRUE);
+        assert(p >= buf && (p - buf) < maxElements); // sanity check to make sure a programmer didn't free something that didn't come from this pool
     }
 };
 
