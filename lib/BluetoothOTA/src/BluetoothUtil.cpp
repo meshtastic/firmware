@@ -1,6 +1,5 @@
 #include "BluetoothUtil.h"
 #include "BluetoothSoftwareUpdate.h"
-#include "MeshBluetoothService.h"
 #include <esp_gatt_defs.h>
 #include <BLE2902.h>
 #include <Arduino.h>
@@ -122,14 +121,10 @@ BLEServer *initBLE(std::string deviceName) {
     BLEService *pUpdate = createUpdateService(pServer); // We need to advertise this so our android ble scan operation can see it
     pServer->getAdvertising()->addServiceUUID(pUpdate->getUUID());
 
-    BLEService *pMesh = createMeshBluetoothService(pServer); // We need to advertise this so our android ble scan operation can see it
-    pServer->getAdvertising()->addServiceUUID(pMesh->getUUID());
-
     // start all our services (do this after creating all of them)
     pDevInfo->start();
     pBattery->start();
     pUpdate->start();
-    pMesh->start();
 
     // Start advertising
     pServer->getAdvertising()->start();

@@ -84,7 +84,6 @@ void mesh_init() {
   }
 }
 
-
 int16_t packetnum = 0;  // packet counter, we increment per xmission
 
 void mesh_loop()
