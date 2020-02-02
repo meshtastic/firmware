@@ -40,6 +40,7 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 
 # Low priority
 
+* reneable the bluetooth battely level service on the T-BEAM, because we can read battery level there
 * report esp32 device code bugs back to the mothership via android
 
 # Done

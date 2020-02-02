@@ -78,9 +78,23 @@ BLEService *createBatteryService(BLEServer* server) {
     addWithDesc(pBattery, &BatteryLevelCharacteristic, "Percentage 0 - 100");
     BatteryLevelCharacteristic.addDescriptor(new BLE2902()); // Needed so clients can request notification
 
+    // I don't think we need to advertise this
+    // server->getAdvertising()->addServiceUUID(pBattery->getUUID());
+    pBattery->start();
+
     return pBattery;
 }
 
+
+/**
+ * Update the battery level we are currently telling clients.
+ * level should be a pct between 0 and 100
+ */
+void updateBatteryLevel(uint8_t level) {
+      // Pretend to update battery levels - fixme do elsewhere
+    BatteryLevelCharacteristic.setValue(&level, 1);
+    BatteryLevelCharacteristic.notify();
+}
 
 
 void dumpCharacteristic(BLECharacteristic *c) {
@@ -115,15 +129,14 @@ BLEServer *initBLE(std::string deviceName) {
 
     BLEService *pDevInfo = createDeviceInfomationService(pServer);
 
-    BLEService *pBattery = createBatteryService(pServer);
-    pServer->getAdvertising()->addServiceUUID(pBattery->getUUID());
+    // We now let users create the battery service only if they really want (not all devices have a battery)
+    // BLEService *pBattery = createBatteryService(pServer);
 
     BLEService *pUpdate = createUpdateService(pServer); // We need to advertise this so our android ble scan operation can see it
     pServer->getAdvertising()->addServiceUUID(pUpdate->getUUID());
 
     // start all our services (do this after creating all of them)
     pDevInfo->start();
-    pBattery->start();
     pUpdate->start();
 
     // Start advertising
@@ -134,14 +147,5 @@ BLEServer *initBLE(std::string deviceName) {
 
 // Called from loop
 void loopBLE() {
-    static uint8_t level = 31;
-
-    // Pretend to update battery levels - fixme do elsewhere
-    BatteryLevelCharacteristic.setValue(&level, 1);
-    BatteryLevelCharacteristic.notify();
-    delay(5000);
-
-    level = (level + 1) % 100;
-
     bluetoothRebootCheck();
 }
