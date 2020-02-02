@@ -37,8 +37,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 
 // Select which T-Beam board is being used. Only uncomment one.
-// #define T_BEAM_V10  // AKA Rev1 (second board released)
-#define HELTEC_LORA32
+#define T_BEAM_V10  // AKA Rev1 (second board released)
+// #define HELTEC_LORA32
 
 #define DEBUG_PORT              Serial      // Serial debug port
 #define SERIAL_BAUD             115200      // Serial debug baud rate

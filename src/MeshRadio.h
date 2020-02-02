@@ -13,7 +13,7 @@
 typedef int ErrorCode;
 typedef uint8_t NodeNum;
 
-#define MAX_TX_QUEUE 4 // max number of packets which can be waiting for transmission
+#define MAX_TX_QUEUE 8 // max number of packets which can be waiting for transmission
 
 
 /**

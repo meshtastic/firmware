@@ -79,7 +79,7 @@ void doDeepSleep(uint64_t msecToWake)
 #ifdef T_BEAM_V10
   if (axp192_found)
   {
-    // turn on after initial testing with real hardware
+    axp.setChgLEDMode(AXP20X_LED_OFF); // turn off the AXP LED
 
     // No need to turn this off if the power draw in sleep mode really is just 0.2uA and turning it off would
     // leave floating input for the IRQ line
@@ -360,7 +360,7 @@ void setup()
 
   service.init();
   BLEServer *serve = initBLE(getDeviceName()); // FIXME, use a real name based on the macaddr
-  BLEService *bts = createMeshBluetoothService(serve);
+  createMeshBluetoothService(serve);
 }
 
 void loop()
@@ -370,10 +370,18 @@ void loop()
   service.loop();
   loopBLE();
 
+  static bool ledon;
+  ledon ^= 1;
+
 #ifdef LED_PIN
   // toggle the led so we can get some rough sense of how often loop is pausing
-  digitalWrite(LED_PIN, digitalRead(LED_PIN) ? 0 : 1);
+  digitalWrite(LED_PIN, ledon);
 #endif
+
+  if(axp192_found) {
+    // blink the axp led
+    axp.setChgLEDMode(ledon ? AXP20X_LED_LOW_LEVEL : AXP20X_LED_OFF);
+  }
 
 #ifdef BUTTON_PIN
   // if user presses button for more than 3 secs, discard our network prefs and reboot (FIXME, use a debounce lib instead of this boilerplate)
