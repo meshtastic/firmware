@@ -289,6 +289,19 @@ void initDeepSleep()
   Serial.printf("booted, wake cause %d (boot count %d)\n", wakeCause, bootCount);
 }
 
+
+const char *getDeviceName()
+{
+  uint8_t dmac[6];
+  assert(esp_efuse_mac_get_default(dmac) == ESP_OK);
+
+  // Meshtastic_ab3c
+  static char name[20];
+  sprintf(name, "Meshtastic_%02x%02x", dmac[4], dmac[5]); 
+  return name;
+}
+
+
 void setup()
 {
 // Debug
@@ -346,7 +359,7 @@ void setup()
   //}
 
   service.init();
-  BLEServer *serve = initBLE("KHBT Test"); // FIXME, use a real name based on the macaddr
+  BLEServer *serve = initBLE(getDeviceName()); // FIXME, use a real name based on the macaddr
   BLEService *bts = createMeshBluetoothService(serve);
   bts->start();
   serve->getAdvertising()->addServiceUUID(bts->getUUID());
