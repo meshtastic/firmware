@@ -23,6 +23,7 @@
 
 #include "configuration.h"
 #include "rom/rtc.h"
+#include <driver/rtc_io.h>
 #include <TinyGPS++.h>
 #include <Wire.h>
 #include "BluetoothUtil.h"
@@ -56,12 +57,26 @@ void doDeepSleep(uint64_t msecToWake)
   // not using wifi yet, but once we are this is needed to shutoff the radio hw
   // esp_wifi_stop();
 
+  BLEDevice::deinit(false); // We are required to shutdown bluetooth before deep or light sleep
+
   screen_off(); // datasheet says this will draw only 10ua
 
   // FIXME, shutdown radiohead interrupts before powering off device
 
   // Put radio in sleep mode (will still draw power but only 0.2uA)
   radio.sleep();
+
+#ifdef RESET_OLED
+  digitalWrite(RESET_OLED, 1); // put the display in reset before killing its power
+#endif
+
+#ifdef VEXT_ENABLE
+  digitalWrite(VEXT_ENABLE, 1); // turn off the display power
+#endif
+
+#ifdef LED_PIN
+  digitalWrite(LED_PIN, 0); // turn off the led
+#endif
 
 #ifdef T_BEAM_V10
   if (axp192_found)
@@ -72,9 +87,26 @@ void doDeepSleep(uint64_t msecToWake)
   }
 #endif
 
-#ifdef VEXT_ENABLE
-  digitalWrite(VEXT_ENABLE, 1); // turn off the display power
-#endif
+  /*
+  Some ESP32 IOs have internal pullups or pulldowns, which are enabled by default. 
+  If an external circuit drives this pin in deep sleep mode, current consumption may 
+  increase due to current flowing through these pullups and pulldowns.
+
+  To isolate a pin, preventing extra current draw, call rtc_gpio_isolate() function.
+  For example, on ESP32-WROVER module, GPIO12 is pulled up externally. 
+  GPIO12 also has an internal pulldown in the ESP32 chip. This means that in deep sleep, 
+  some current will flow through these external and internal resistors, increasing deep 
+  sleep current above the minimal possible value. 
+
+  Note: we don't isolate pins that are used for the LED, i2c, spi or the wake button
+  */
+  static const uint8_t rtcGpios[] = { /* 0, */ 2, 
+    /* 4, */ 12,13, /* 14, */ /* 15, */
+    /* 25, */ 26, /* 27, */
+    32,33,34,35,36,37,/* 38, */ 39 };
+
+  for(int i = 0; i < sizeof(rtcGpios); i++)
+    rtc_gpio_isolate((gpio_num_t) rtcGpios[i]);
 
   // FIXME - use an external 10k pulldown so we can leave the RTC peripherals powered off
   // until then we need the following lines
