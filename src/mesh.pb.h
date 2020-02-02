@@ -86,16 +86,11 @@ typedef struct _SubPacket {
     } variant;
 } SubPacket;
 
-typedef struct _MeshPayload {
-    pb_size_t subPackets_count;
-    SubPacket subPackets[4];
-} MeshPayload;
-
 typedef struct _MeshPacket {
     int32_t from;
     int32_t to;
     bool has_payload;
-    MeshPayload payload;
+    SubPacket payload;
 } MeshPacket;
 
 typedef struct _DeviceState {
@@ -143,8 +138,7 @@ typedef struct _ToRadio {
 #define WantNodeNum_init_default                 {0, ""}
 #define DenyNodeNum_init_default                 {""}
 #define SubPacket_init_default                   {0, {Position_init_default}}
-#define MeshPayload_init_default                 {0, {SubPacket_init_default, SubPacket_init_default, SubPacket_init_default, SubPacket_init_default}}
-#define MeshPacket_init_default                  {0, 0, false, MeshPayload_init_default}
+#define MeshPacket_init_default                  {0, 0, false, SubPacket_init_default}
 #define RadioConfig_init_default                 {0, 0}
 #define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, false, Time_init_default}
 #define DeviceState_init_default                 {false, RadioConfig_init_default, 0, {NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default}, 0, {MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default}, 0}
@@ -158,8 +152,7 @@ typedef struct _ToRadio {
 #define WantNodeNum_init_zero                    {0, ""}
 #define DenyNodeNum_init_zero                    {""}
 #define SubPacket_init_zero                      {0, {Position_init_zero}}
-#define MeshPayload_init_zero                    {0, {SubPacket_init_zero, SubPacket_init_zero, SubPacket_init_zero, SubPacket_init_zero}}
-#define MeshPacket_init_zero                     {0, 0, false, MeshPayload_init_zero}
+#define MeshPacket_init_zero                     {0, 0, false, SubPacket_init_zero}
 #define RadioConfig_init_zero                    {0, 0}
 #define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, false, Time_init_zero}
 #define DeviceState_init_zero                    {false, RadioConfig_init_zero, 0, {NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero}, 0, {MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero}, 0}
@@ -195,7 +188,6 @@ typedef struct _ToRadio {
 #define SubPacket_user_tag                       4
 #define SubPacket_want_node_tag                  5
 #define SubPacket_deny_node_tag                  6
-#define MeshPayload_subPackets_tag               3
 #define MeshPacket_from_tag                      1
 #define MeshPacket_to_tag                        2
 #define MeshPacket_payload_tag                   3
@@ -268,19 +260,13 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (variant,deny_node,variant.deny_node),   6)
 #define SubPacket_variant_want_node_MSGTYPE WantNodeNum
 #define SubPacket_variant_deny_node_MSGTYPE DenyNodeNum
 
-#define MeshPayload_FIELDLIST(X, a) \
-X(a, STATIC,   REPEATED, MESSAGE,  subPackets,        3)
-#define MeshPayload_CALLBACK NULL
-#define MeshPayload_DEFAULT NULL
-#define MeshPayload_subPackets_MSGTYPE SubPacket
-
 #define MeshPacket_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, INT32,    from,              1) \
 X(a, STATIC,   SINGULAR, INT32,    to,                2) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  payload,           3)
 #define MeshPacket_CALLBACK NULL
 #define MeshPacket_DEFAULT NULL
-#define MeshPacket_payload_MSGTYPE MeshPayload
+#define MeshPacket_payload_MSGTYPE SubPacket
 
 #define RadioConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     keep_all_packets, 100) \
@@ -344,7 +330,6 @@ extern const pb_msgdesc_t User_msg;
 extern const pb_msgdesc_t WantNodeNum_msg;
 extern const pb_msgdesc_t DenyNodeNum_msg;
 extern const pb_msgdesc_t SubPacket_msg;
-extern const pb_msgdesc_t MeshPayload_msg;
 extern const pb_msgdesc_t MeshPacket_msg;
 extern const pb_msgdesc_t RadioConfig_msg;
 extern const pb_msgdesc_t NodeInfo_msg;
@@ -361,7 +346,6 @@ extern const pb_msgdesc_t ToRadio_WantNodes_msg;
 #define WantNodeNum_fields &WantNodeNum_msg
 #define DenyNodeNum_fields &DenyNodeNum_msg
 #define SubPacket_fields &SubPacket_msg
-#define MeshPayload_fields &MeshPayload_msg
 #define MeshPacket_fields &MeshPacket_msg
 #define RadioConfig_fields &RadioConfig_msg
 #define NodeInfo_fields &NodeInfo_msg
@@ -378,13 +362,12 @@ extern const pb_msgdesc_t ToRadio_WantNodes_msg;
 #define WantNodeNum_size                         13
 #define DenyNodeNum_size                         7
 #define SubPacket_size                           106
-#define MeshPayload_size                         432
-#define MeshPacket_size                          457
+#define MeshPacket_size                          130
 #define RadioConfig_size                         6
 #define NodeInfo_size                            140
-#define DeviceState_size                         19310
-#define FromRadio_size                           466
-#define ToRadio_size                             460
+#define DeviceState_size                         8846
+#define FromRadio_size                           149
+#define ToRadio_size                             133
 #define ToRadio_WantNodes_size                   0
 
 #ifdef __cplusplus

@@ -10,8 +10,8 @@
 typedef int ErrorCode;
 typedef uint8_t NodeNum;
 
-/// Callback for a receive packet
-typedef void (*MeshRXHandler)(NodeNum from, NodeNum to, std::string packet);
+/// Callback for a receive packet, the callee must copy/queue the payload elsewhere before returning
+typedef void (*MeshRXHandler)(NodeNum from, NodeNum to, const uint8_t *buf, size_t len);
 
 /**
  * A raw low level interface to our mesh.  Only understands nodenums and bytes (not protobufs or node ids)

@@ -27,10 +27,7 @@ PB_BIND(DenyNodeNum, DenyNodeNum, AUTO)
 PB_BIND(SubPacket, SubPacket, AUTO)
 
 
-PB_BIND(MeshPayload, MeshPayload, 2)
-
-
-PB_BIND(MeshPacket, MeshPacket, 2)
+PB_BIND(MeshPacket, MeshPacket, AUTO)
 
 
 PB_BIND(RadioConfig, RadioConfig, 2)
@@ -39,10 +36,10 @@ PB_BIND(RadioConfig, RadioConfig, 2)
 PB_BIND(NodeInfo, NodeInfo, AUTO)
 
 
-PB_BIND(DeviceState, DeviceState, 4)
+PB_BIND(DeviceState, DeviceState, 2)
 
 
-PB_BIND(FromRadio, FromRadio, 2)
+PB_BIND(FromRadio, FromRadio, AUTO)
 
 
 PB_BIND(ToRadio, ToRadio, 2)
