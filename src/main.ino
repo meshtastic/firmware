@@ -257,7 +257,7 @@ void setup() {
 #endif
 #ifdef LED_PIN
   pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, 0); // turn off for now
+  digitalWrite(LED_PIN, 1); // turn on for now
 #endif
 
   // Hello
@@ -274,12 +274,12 @@ void setup() {
   gps_setup();
 
   // Show logo on first boot after removing battery
-  if (bootCount == 0) {
+  //if (bootCount == 0) {
     screen_print(APP_NAME " " APP_VERSION, 0, 0);
     screen_show_logo();
     screen_update();
     delay(LOGO_DELAY);
-  }
+  //}
 
   initBLE("KHBT Test"); // FIXME, use a real name based on the macaddr
 

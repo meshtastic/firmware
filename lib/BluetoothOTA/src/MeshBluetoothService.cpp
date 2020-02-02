@@ -5,6 +5,10 @@
 #include <Arduino.h>
 #include <assert.h>
 
+#include <pb_encode.h>
+#include <pb_decode.h>
+#include "mesh.pb.h"
+#include "MeshRadio.h"
 
 /*
 receivedPacketQueue - this is a queue of messages we've received from the mesh, which we are keeping to deliver to the phone.
@@ -49,31 +53,73 @@ public:
 
 */
 
+/// A temporary buffer used for sending packets, sized to hold the biggest buffer we might need
+static uint8_t outbuf[MeshPacket_size];
+
 /**
  * Top level app for this service.  keeps the mesh, the radio config and the queue of received packets.
  * 
  */
-class MeshService {
+class MeshService
+{
 public:
+    /// Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)
+    void handleToRadio(std::string s)
+    {
+        static ToRadio r; // new ToRadio(); FIXME dynamically allocate
+
+        pb_istream_t stream = pb_istream_from_buffer((const uint8_t *)s.c_str(), s.length());
+        if (!pb_decode(&stream, ToRadio_fields, &r))
+        {
+            Serial.printf("Error: can't decode ToRadio %s\n", PB_GET_ERROR(&stream));
+        }
+        else
+        {
+            switch (r.which_variant)
+            {
+            case ToRadio_packet_tag:
+                sendToMesh(r.variant.packet);
+                break;
+
+            default:
+                Serial.println("Error: unexpected ToRadio variant");
+                break;
+            }
+        }
+    }
+
+private:
+    /// Send a packet into the mesh
+    void sendToMesh(const MeshPacket &p)
+    {
+        assert(p.has_payload);
+
+        pb_ostream_t stream = pb_ostream_from_buffer(outbuf, sizeof(outbuf));
+        if (!pb_encode(&stream, MeshPacket_fields, &p))
+        {
+            Serial.printf("Error: can't encode MeshPacket %s\n", PB_GET_ERROR(&stream));
+        }
+        else
+        {
+            radio.sendTo(p.to, outbuf, stream.bytes_written);
+        }
+    }
 };
 
+MeshService service;
 
 static BLECharacteristic meshFromRadioCharacteristic("8ba2bcc2-ee02-4a55-a531-c525c5e454d5", BLECharacteristic::PROPERTY_READ);
 static BLECharacteristic meshToRadioCharacteristic("f75c76d2-129e-4dad-a1dd-7866124401e7", BLECharacteristic::PROPERTY_WRITE);
 static BLECharacteristic meshFromNumCharacteristic("ed9da18c-a800-4f66-a670-aa7547e34453", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
 
-
-/// Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)
-static void handleToRadio(std::string s) {
-
-}
-
 class BluetoothMeshCallbacks : public BLECharacteristicCallbacks
 {
-    void onRead(BLECharacteristic *c) {
+    void onRead(BLECharacteristic *c)
+    {
         Serial.println("Got on read");
 
-        if(c == &meshFromRadioCharacteristic) {
+        if (c == &meshFromRadioCharacteristic)
+        {
             // Someone is going to read our value as soon as this callback returns.  So fill it with the next message in the queue
             // or make empty if the queue is empty
             // c->setValue(byteptr, len);
@@ -85,10 +131,12 @@ class BluetoothMeshCallbacks : public BLECharacteristicCallbacks
         // dumpCharacteristic(pCharacteristic);
         Serial.println("Got on write");
 
-        if(c == &meshToRadioCharacteristic) {
-            handleToRadio(c->getValue());
+        if (c == &meshToRadioCharacteristic)
+        {
+            service.handleToRadio(c->getValue());
         }
-        else {
+        else
+        {
             assert(0); // Not yet implemented
         }
     }
@@ -140,7 +188,8 @@ Not all messages are kept in the fromradio queue (filtered based on SubPacket):
 A variable keepAllPackets, if set to true will suppress this behavior and instead keep everything for forwarding to the phone (for debugging)
 
  */
-BLEService *createMeshBluetoothService(BLEServer* server) {
+BLEService *createMeshBluetoothService(BLEServer *server)
+{
     // Create the BLE Service
     BLEService *service = server->createService("6ba1b218-15a8-461f-9fa8-5dcae273eafd");
 
@@ -151,9 +200,8 @@ BLEService *createMeshBluetoothService(BLEServer* server) {
     meshFromRadioCharacteristic.setCallbacks(&btMeshCb);
     meshToRadioCharacteristic.setCallbacks(&btMeshCb);
     meshFromNumCharacteristic.setCallbacks(&btMeshCb);
-    
+
     meshFromNumCharacteristic.addDescriptor(new BLE2902()); // Needed so clients can request notification
 
     return service;
 }
-

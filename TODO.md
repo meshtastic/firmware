@@ -15,6 +15,9 @@
 * scrub default radio config settings for bandwidth/range/speed
 * use a freertos thread to remain blocked reading from recvfromAckTimeout, so that we don't need to keep polling it from our main thread
 * override peekAtMessage so we can see any messages that pass through our node (even if not broadcast)?  would that be useful?
+* sendToMesh can currently block for a long time, instead have it just queue a packet for a radio freertos thread
+
+* fix the logo
 
 # Pre-beta priority
 
@@ -23,6 +26,10 @@
 * dynamically select node nums
 * triple check fcc compliance
 * allow setting full radio params from android
+
+# Low priority
+
+* report esp32 device code bugs back to the mothership via android
 
 # Done
 

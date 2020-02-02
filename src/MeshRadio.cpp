@@ -69,6 +69,7 @@ bool MeshRadio::init() {
 
 
 ErrorCode MeshRadio::sendTo(NodeNum dest, const uint8_t *buf, size_t len) {
+    Serial.println("Sending...");
     return manager.sendtoWait((uint8_t *) buf, len, dest);
 }
 
@@ -91,11 +92,9 @@ void mesh_loop()
   radio.loop();
 
   delay(1000); // Wait 1 second between transmits, could also 'sleep' here!
-  Serial.println("Transmitting..."); // Send a message to rf95_server
-  
+
   char radiopacket[20] = "Hello World #      ";
   sprintf(radiopacket, "hello %d", packetnum++);
   
-  Serial.println("Sending...");
   radio.sendTo(NODENUM_BROADCAST, (uint8_t *)radiopacket, sizeof(radiopacket));
 }
