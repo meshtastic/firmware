@@ -18,7 +18,7 @@
 * use a freertos thread to remain blocked reading from recvfromAckTimeout, so that we don't need to keep polling it from our main thread
 * override peekAtMessage so we can see any messages that pass through our node (even if not broadcast)?  would that be useful?
 * sendToMesh can currently block for a long time, instead have it just queue a packet for a radio freertos thread
-
+* see section 7.3 of https://cdn.sparkfun.com/assets/learn_tutorials/8/0/4/RFM95_96_97_98W.pdf and have hope radio wake only when a valid packet is received.  Possibly even wake the ESP32 from deep sleep via GPIO.
 * fix the logo
 
 # Pre-beta priority

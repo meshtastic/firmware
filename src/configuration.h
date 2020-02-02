@@ -42,7 +42,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define DEBUG_PORT              Serial      // Serial debug port
 #define SERIAL_BAUD             115200      // Serial debug baud rate
-#define SLEEP_MSECS             (5 * 60 * 1000) // Sleep for these many millis (or a button press or a lora msg?)
+#define SLEEP_MSECS             (24 * 60 * 60 * 1000) // Sleep for these many millis (or a button press or a lora msg?)
 #define MESSAGE_TO_SLEEP_DELAY  5000        // Time after message before going to sleep
 #define LOGO_DELAY              5000        // Time to show logo on first boot
 #define REQUIRE_RADIO           true        // If true, we will fail to start if the radio is not found
@@ -129,9 +129,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BUTTON_PIN      0
 
 #define RESET_GPIO      14
-#define DIO0_GPIO       34
-#define DIO1_GPIO       35
-#define DIO2_GPIO       32 // Note: not really used on this board
+#define DIO0_GPIO       26
+#define DIO1_GPIO       35 
+#define DIO2_GPIO       34 
 #endif
 
 

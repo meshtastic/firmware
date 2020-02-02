@@ -22,6 +22,9 @@ public:
 
     bool init();
 
+    /// Prepare the radio to enter sleep mode, where it should draw only 0.2 uA
+    void sleep() { rf95.sleep(); }
+
     /// Send a packet - the current implementation blocks for a while possibly (FIXME)
     ErrorCode sendTo(NodeNum dest, const uint8_t *buf, size_t len);
 

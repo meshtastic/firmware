@@ -60,6 +60,9 @@ void doDeepSleep(uint64_t msecToWake)
 
   // FIXME, shutdown radiohead interrupts before powering off device
 
+  // Put radio in sleep mode (will still draw power but only 0.2uA)
+  radio.sleep();
+
 #ifdef T_BEAM_V10
   if (axp192_found)
   {
@@ -316,7 +319,7 @@ void loop()
 #ifdef LED_PIN
   // toggle the led so we can get some rough sense of how often loop is pausing
   digitalWrite(LED_PIN, digitalRead(LED_PIN) ? 0 : 1);
-#endif 
+#endif
 
 #ifdef BUTTON_PIN
   // if user presses button for more than 3 secs, discard our network prefs and reboot (FIXME, use a debounce lib instead of this boilerplate)
@@ -345,19 +348,14 @@ void loop()
   }
 #endif
 
-  // Send every SEND_INTERVAL millis
-  static uint32_t last = 0;
-  if (true)
-  {
 #ifdef MINWAKE_MSECS
-      if (millis() > MINWAKE_MSECS)
-      {
-        sleep();
-      }
+  if (millis() > MINWAKE_MSECS)
+  {
+    sleep();
+  }
 #endif
 
-      // No GPS lock yet, let the OS put the main CPU in low power mode for 100ms (or until another interrupt comes in)
-      // i.e. don't just keep spinning in loop as fast as we can.
-      delay(100);
-    }
+  // No GPS lock yet, let the OS put the main CPU in low power mode for 100ms (or until another interrupt comes in)
+  // i.e. don't just keep spinning in loop as fast as we can.
+  delay(100);
 }
