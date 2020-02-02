@@ -101,7 +101,7 @@ private:
         }
         else
         {
-            radio.sendTo(p.to, outbuf, stream.bytes_written);
+            assert(radio.sendTo(p.to, outbuf, stream.bytes_written) == ERRNO_OK);
         }
     }
 };

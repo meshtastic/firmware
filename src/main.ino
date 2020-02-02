@@ -58,7 +58,7 @@ void doDeepSleep(uint64_t msecToWake)
 
   screen_off(); // datasheet says this will draw only 10ua
 
-  // FIXME, shutdown radio headinterups before powering off device
+  // FIXME, shutdown radiohead interrupts before powering off device
 
 #ifdef T_BEAM_V10
   if (axp192_found)
@@ -67,6 +67,10 @@ void doDeepSleep(uint64_t msecToWake)
     axp.setPowerOutPut(AXP192_LDO2, AXP202_OFF); // LORA radio
     axp.setPowerOutPut(AXP192_LDO3, AXP202_OFF); // GPS main power
   }
+#endif
+
+#ifdef VEXT_ENABLE
+  digitalWrite(VEXT_ENABLE, 1); // turn off the display power
 #endif
 
   // FIXME - use an external 10k pulldown so we can leave the RTC peripherals powered off
@@ -89,7 +93,7 @@ void doDeepSleep(uint64_t msecToWake)
 
 void sleep()
 {
-#if SLEEP_BETWEEN_MESSAGES
+#ifdef SLEEP_MSECS
 
   // If the user has a screen, tell them we are about to sleep
   if (ssd1306_found)
@@ -101,15 +105,11 @@ void sleep()
 
     // Wait for MESSAGE_TO_SLEEP_DELAY millis to sleep
     delay(MESSAGE_TO_SLEEP_DELAY);
-
-    // Turn off screen
-    screen_off();
   }
 
   // We sleep for the interval between messages minus the current millis
   // this way we distribute the messages evenly every SEND_INTERVAL millis
-  uint32_t sleep_for = (millis() < SEND_INTERVAL) ? SEND_INTERVAL - millis() : SEND_INTERVAL;
-  doDeepSleep(sleep_for);
+  doDeepSleep(SLEEP_MSECS);
 
 #endif
 }
@@ -313,11 +313,10 @@ void loop()
   mesh_loop();
   loopBLE();
 
-  if (packetSent)
-  {
-    packetSent = false;
-    sleep();
-  }
+#ifdef LED_PIN
+  // toggle the led so we can get some rough sense of how often loop is pausing
+  digitalWrite(LED_PIN, digitalRead(LED_PIN) ? 0 : 1);
+#endif 
 
 #ifdef BUTTON_PIN
   // if user presses button for more than 3 secs, discard our network prefs and reboot (FIXME, use a debounce lib instead of this boilerplate)
@@ -348,24 +347,10 @@ void loop()
 
   // Send every SEND_INTERVAL millis
   static uint32_t last = 0;
-  static bool first = true;
-  if (0 == last || millis() - last > SEND_INTERVAL)
+  if (true)
   {
-    if (false)
-    {
-      last = millis();
-      first = false;
-      Serial.println("TRANSMITTED");
-    }
-    else
-    {
-      if (first)
-      {
-        screen_print("Waiting GPS lock\n");
-        first = false;
-      }
-#ifdef GPS_WAIT_FOR_LOCK
-      if (millis() > GPS_WAIT_FOR_LOCK)
+#ifdef MINWAKE_MSECS
+      if (millis() > MINWAKE_MSECS)
       {
         sleep();
       }
@@ -375,5 +360,4 @@ void loop()
       // i.e. don't just keep spinning in loop as fast as we can.
       delay(100);
     }
-  }
 }

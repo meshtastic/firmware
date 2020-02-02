@@ -42,14 +42,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define DEBUG_PORT              Serial      // Serial debug port
 #define SERIAL_BAUD             115200      // Serial debug baud rate
-#define SLEEP_BETWEEN_MESSAGES  false       // Do sleep between messages
-#define SEND_INTERVAL           (5 * 60 * 1000) // Sleep for these many millis
+#define SLEEP_MSECS             (5 * 60 * 1000) // Sleep for these many millis (or a button press or a lora msg?)
 #define MESSAGE_TO_SLEEP_DELAY  5000        // Time after message before going to sleep
 #define LOGO_DELAY              5000        // Time to show logo on first boot
 #define REQUIRE_RADIO           true        // If true, we will fail to start if the radio is not found
 
 // If not defined, we will wait for lock forever
-#define GPS_WAIT_FOR_LOCK       (60 * 1000)  // Wait after every boot for GPS lock (may need longer than 5s because we turned the gps off during deep sleep)
+#define MINWAKE_MSECS           (30 * 1000)  // Wait after every boot for GPS lock (may need longer than 5s because we turned the gps off during deep sleep)
 
 // -----------------------------------------------------------------------------
 // DEBUG

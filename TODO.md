@@ -2,6 +2,7 @@
 
 # High priority
 
+* solder debug headers to board - debug sendTo hang bug
 * make message send from android go to service, then to mesh radio
 * make message receive from radio go through to android
 * have MeshService keep a node DB by sniffing user messages
@@ -9,6 +10,7 @@
 
 # Medium priority
 
+* use https://lastminuteengineers.com/esp32-sleep-modes-power-consumption/ association sleep pattern to save power - but see https://github.com/espressif/esp-idf/issues/2070 
 * correctly map nodeids to nodenums, currently we just do a proof of concept by always doing a broadcast
 * add interrupt detach/sleep mode config to lora radio so we can enable deepsleep without panicing
 * figure out if we can use PA_BOOST
@@ -21,6 +23,7 @@
 
 # Pre-beta priority
 
+* do hibernation mode to get power draw down to 2.5uA https://lastminuteengineers.com/esp32-sleep-modes-power-consumption/ 
 * make sure main cpu is not woken for packets with bad crc or not addressed to this node - do that in the radio hw
 * enable fast init inside the gps chip
 * dynamically select node nums

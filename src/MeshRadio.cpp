@@ -20,7 +20,7 @@ NodeNum getDesiredNodeNum() {
     uint8_t dmac[6];
     esp_efuse_mac_get_default(dmac);
 
-    // FIXME
+    // FIXME not the right way to guess node numes
     uint8_t r = dmac[5];
     assert(r != 0xff); // It better not be the broadcast address
     return r;
@@ -69,8 +69,14 @@ bool MeshRadio::init() {
 
 
 ErrorCode MeshRadio::sendTo(NodeNum dest, const uint8_t *buf, size_t len) {
-    Serial.println("Sending...");
-    return manager.sendtoWait((uint8_t *) buf, len, dest);
+    Serial.printf("mesh sendTo %d bytes to %d\n", len, dest);
+    // FIXME - for now we do all packets as broadcast
+    dest = NODENUM_BROADCAST;
+
+    // Note: we don't use sendToWait here because we don't want to wait and for the time being don't require
+    // reliable delivery
+    // return manager.sendtoWait((uint8_t *) buf, len, dest);
+    return manager.sendto((uint8_t *) buf, len, dest) ? ERRNO_OK : ERRNO_UNKNOWN;
 }
 
 void MeshRadio::loop() {
@@ -95,5 +101,5 @@ void mesh_loop()
   char radiopacket[20] = "Hello World #      ";
   sprintf(radiopacket, "hello %d", packetnum++);
   
-  radio.sendTo(NODENUM_BROADCAST, (uint8_t *)radiopacket, sizeof(radiopacket));
+  assert(radio.sendTo(NODENUM_BROADCAST, (uint8_t *)radiopacket, sizeof(radiopacket)) == ERRNO_OK);
 }
