@@ -61,8 +61,6 @@ void doDeepSleep(uint64_t msecToWake)
 
   screen_off(); // datasheet says this will draw only 10ua
 
-  // FIXME, shutdown radiohead interrupts before powering off device
-
   // Put radio in sleep mode (will still draw power but only 0.2uA)
   radio.sleep();
 
@@ -82,7 +80,16 @@ void doDeepSleep(uint64_t msecToWake)
   if (axp192_found)
   {
     // turn on after initial testing with real hardware
-    axp.setPowerOutPut(AXP192_LDO2, AXP202_OFF); // LORA radio
+
+    // No need to turn this off if the power draw in sleep mode really is just 0.2uA and turning it off would
+    // leave floating input for the IRQ line
+    
+    // If we want to leave the radio receving in would be 11.5mA current draw, but most of the time it is just waiting
+    // in its sequencer (true?) so the average power draw should be much lower even if we were listinging for packets
+    // all the time.
+
+    // axp.setPowerOutPut(AXP192_LDO2, AXP202_OFF); // LORA radio
+
     axp.setPowerOutPut(AXP192_LDO3, AXP202_OFF); // GPS main power
   }
 #endif
@@ -98,7 +105,7 @@ void doDeepSleep(uint64_t msecToWake)
   some current will flow through these external and internal resistors, increasing deep 
   sleep current above the minimal possible value. 
 
-  Note: we don't isolate pins that are used for the LED, i2c, spi or the wake button
+  Note: we don't isolate pins that are used for the LORA, LED, i2c, spi or the wake button
   */
   static const uint8_t rtcGpios[] = { /* 0, */ 2, 
     /* 4, */ 12,13, /* 14, */ /* 15, */
@@ -108,6 +115,9 @@ void doDeepSleep(uint64_t msecToWake)
   for(int i = 0; i < sizeof(rtcGpios); i++)
     rtc_gpio_isolate((gpio_num_t) rtcGpios[i]);
 
+    // FIXME, disable internal rtc pullups/pulldowns on the non isolated pins. for inputs that we aren't using
+    // to detect wake and in normal operation the external part drives them hard.
+
   // FIXME - use an external 10k pulldown so we can leave the RTC peripherals powered off
   // until then we need the following lines
   esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
@@ -116,8 +126,9 @@ void doDeepSleep(uint64_t msecToWake)
   // Only GPIOs which are have RTC functionality can be used in this bit map: 0,2,4,12-15,25-27,32-39.
   uint64_t gpioMask = (1ULL << BUTTON_PIN);
 
-  // FIXME change polarity so we can wake on ANY_HIGH instead - that would allow us to use all three buttons (instead of just the first)
-  gpio_pullup_en((gpio_num_t)BUTTON_PIN);
+  // Not needed because both of the current boards have external pullups
+  // FIXME change polarity in hw so we can wake on ANY_HIGH instead - that would allow us to use all three buttons (instead of just the first)
+  // gpio_pullup_en((gpio_num_t)BUTTON_PIN);
 
   esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ALL_LOW);
 #endif

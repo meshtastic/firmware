@@ -2,7 +2,7 @@
 
 # High priority
 
-* solder debug headers to board - debug sendTo hang bug
+* solder debug headers to board
 * make message send from android go to service, then to mesh radio
 * make message receive from radio go through to android
 * have MeshService keep a node DB by sniffing user messages
@@ -23,12 +23,17 @@
 
 # Pre-beta priority
 
+* don't even power on bluetooth until we have some data to send to the android phone.  Most of the time we should be sleeping in a lowpower "listening for lora" only mode.  Once we have some packets for the phone, then power on bluetooth
+until the phone pulls those packets.  Ever so often power on bluetooth just so we can see if the phone wants to send some packets.  Possibly might need ULP processor to help with this wake process.
 * do hibernation mode to get power draw down to 2.5uA https://lastminuteengineers.com/esp32-sleep-modes-power-consumption/ 
 * make sure main cpu is not woken for packets with bad crc or not addressed to this node - do that in the radio hw
 * enable fast init inside the gps chip
 * dynamically select node nums
 * triple check fcc compliance
 * allow setting full radio params from android
+* pick channel center frequency based on name? "dolphin" would hash to 900Mhz, "cat" to 905MHz etc?  Or is that too opaque?
+* scan to find channels with low background noise?
+* share channel settings over Signal (or qr code) by embedding an an URL which is handled by the MeshUtil app.
 
 # Low priority
 

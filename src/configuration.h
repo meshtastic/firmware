@@ -124,7 +124,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define RESET_OLED      16
 
-#define VEXT_ENABLE     21 // active low, powers the oled display
+#define VEXT_ENABLE     21 // active low, powers the oled display and the lora antenna boost
 #define LED_PIN         25
 #define BUTTON_PIN      0
 
