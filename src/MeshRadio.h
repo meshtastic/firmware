@@ -32,7 +32,8 @@ public:
     void sleep() { rf95.sleep(); }
 
     /// Send a packet (possibly by enquing in a private fifo).  This routine will
-    /// later free() the packet to pool.
+    /// later free() the packet to pool.  This routine is not allowed to stall because it is called from
+    /// bluetooth comms code.  If the txmit queue is empty it might return an error
     ErrorCode send(MeshPacket *p);
 
     /// Do loop callback operations (we currently FIXME poll the receive mailbox here)

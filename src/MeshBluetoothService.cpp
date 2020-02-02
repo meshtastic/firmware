@@ -106,6 +106,9 @@ BLEService *createMeshBluetoothService(BLEServer *server)
 
     meshFromNumCharacteristic.addDescriptor(new BLE2902()); // Needed so clients can request notification
 
+    service->start();
+    server->getAdvertising()->addServiceUUID(service->getUUID());
+
     return service;
 }
 

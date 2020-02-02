@@ -11,7 +11,6 @@
 // Change to 434.0 or other frequency, must match RX's freq!
 #define RF95_FREQ 915.0
 
-
 /**
  * get our starting (provisional) nodenum from flash.  But check first if anyone else is using it, by trying to send a message to it (arping)
  */
@@ -78,25 +77,8 @@ bool MeshRadio::init()
 
 ErrorCode MeshRadio::send(MeshPacket *p)
 {
-  int res = ERRNO_UNKNOWN;
-
-  /// A temporary buffer used for sending packets, sized to hold the biggest buffer we might need
-  static uint8_t outbuf[SubPacket_size];
-
-  assert(p->has_payload);
-
-  pb_ostream_t stream = pb_ostream_from_buffer(outbuf, sizeof(outbuf));
-  if (!pb_encode(&stream, SubPacket_fields, &p->payload))
-  {
-    Serial.printf("Error: can't encode SubPacket %s\n", PB_GET_ERROR(&stream));
-  }
-  else
-  {
-    res = sendTo(p->to, outbuf, stream.bytes_written);
-  }
-
-  pool.release(p);
-  return res;
+  Serial.println("enquing packet for sending on mesh");
+  return txQueue.enqueue(p, 0); // nowait
 }
 
 ErrorCode MeshRadio::sendTo(NodeNum dest, const uint8_t *buf, size_t len)
@@ -104,6 +86,8 @@ ErrorCode MeshRadio::sendTo(NodeNum dest, const uint8_t *buf, size_t len)
   Serial.printf("mesh sendTo %d bytes to %d\n", len, dest);
   // FIXME - for now we do all packets as broadcast
   dest = NODENUM_BROADCAST;
+
+  assert(len <= 255); // Make sure we don't overflow the tiny max packet size 
 
   // Note: we don't use sendToWait here because we don't want to wait and for the time being don't require
   // reliable delivery
@@ -124,6 +108,57 @@ static int16_t packetnum = 0;  // packet counter, we increment per xmission
   assert(sendTo(NODENUM_BROADCAST, (uint8_t *)radiopacket, sizeof(radiopacket)) == ERRNO_OK);
 #endif
 
-  // manager.recvfromAckTimeout()
-}
+  /// A temporary buffer used for sending/receving packets, sized to hold the biggest buffer we might need
+  static uint8_t radiobuf[SubPacket_size];
+  uint8_t rxlen;
+  uint8_t srcaddr, destaddr, id, flags;
 
+  // Poll to see if we've received a packet
+  if (manager.recvfromAckTimeout(radiobuf, &rxlen, 0, &srcaddr, &destaddr, &id, &flags))
+  {
+    // We received a packet
+    Serial.printf("Received packet from mesh src=%d,dest=%d,id=%d,len=%d\n", srcaddr, destaddr, id, rxlen);
+
+    MeshPacket *mp = pool.allocZeroed();
+    assert(mp); // FIXME
+
+    SubPacket *p = &mp->payload;
+
+    mp->from = srcaddr;
+    mp->to = destaddr;
+    pb_istream_t stream = pb_istream_from_buffer(radiobuf, rxlen);
+    if (!pb_decode(&stream, SubPacket_fields, p))
+    {
+      Serial.printf("Error: can't decode SubPacket %s\n", PB_GET_ERROR(&stream));
+      pool.release(mp);
+    }
+    else
+    {
+      // parsing was successful, queue for our recipient
+      mp->has_payload = true;
+      int res = rxDest.enqueue(mp, 0); // NOWAIT - fixme, if queue is full, delete older messages
+      assert(res == pdTRUE);
+    }
+  }
+
+  // Poll to see if we need to send any packets
+  MeshPacket *txp = txQueue.dequeuePtr(0); // nowait
+  if (txp)
+  {
+    Serial.println("sending queued packet on mesh");
+    assert(txp->has_payload);
+
+    pb_ostream_t stream = pb_ostream_from_buffer(radiobuf, sizeof(radiobuf));
+    if (!pb_encode(&stream, SubPacket_fields, &txp->payload))
+    {
+      Serial.printf("Error: can't encode SubPacket %s\n", PB_GET_ERROR(&stream));
+    }
+    else
+    {
+      int res = sendTo(txp->to, radiobuf, stream.bytes_written);
+      assert(res == ERRNO_OK);
+    }
+
+    pool.release(txp);
+  }
+}

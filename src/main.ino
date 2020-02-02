@@ -361,8 +361,6 @@ void setup()
   service.init();
   BLEServer *serve = initBLE(getDeviceName()); // FIXME, use a real name based on the macaddr
   BLEService *bts = createMeshBluetoothService(serve);
-  bts->start();
-  serve->getAdvertising()->addServiceUUID(bts->getUUID());
 }
 
 void loop()
