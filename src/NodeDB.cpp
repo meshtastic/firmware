@@ -7,8 +7,9 @@
 #include "mesh-pb-constants.h"
 #include "NodeDB.h"
 
-MyNodeInfo myNodeInfo;
+MyNodeInfo myNodeInfo = MyNodeInfo_init_zero;
 NodeDB nodeDB;
+User owner = User_init_zero;
 
 /**
  * get our starting (provisional) nodenum from flash.  But check first if anyone else is using it, by trying to send a message to it (arping)

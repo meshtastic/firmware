@@ -51,3 +51,4 @@ private:
 
 extern NodeDB nodeDB;
 extern MyNodeInfo myNodeInfo;
+extern User owner;

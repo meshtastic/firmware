@@ -5,19 +5,56 @@
 #include <Arduino.h>
 #include <assert.h>
 
-
 #include "mesh.pb.h"
 #include "MeshService.h"
 #include "mesh-pb-constants.h"
+#include "NodeDB.h"
+
+// This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in proccess at once
+static uint8_t trBytes[_max(_max(_max(_max(ToRadio_size, RadioConfig_size), User_size), MyNodeInfo_size), FromRadio_size)];
+
+class ProtobufCharacteristic : public BLECharacteristic, public BLECharacteristicCallbacks
+{
+    const pb_msgdesc_t *fields;
+    void *my_struct;
+
+public:
+    ProtobufCharacteristic(const char *uuid, uint32_t btprops, const pb_msgdesc_t *_fields, void *_my_struct)
+        : BLECharacteristic(uuid, btprops),
+          fields(_fields),
+          my_struct(_my_struct)
+    {
+        setCallbacks(this);
+    }
+
+    void onRead(BLECharacteristic *c)
+    {
+        Serial.println("Got proto read");
+        size_t numbytes = pb_encode_to_bytes(trBytes, sizeof(trBytes), fields, my_struct);
+        c->setValue(trBytes, numbytes);
+    }
+
+    void onWrite(BLECharacteristic *c)
+    {
+        // dumpCharacteristic(pCharacteristic);
+        Serial.println("Got on proto write");
+        std::string src = c->getValue();
+        if (pb_decode_from_bytes((const uint8_t *)src.c_str(), src.length(), fields, my_struct)) {
+            // Success, the bytes are now in our struct - do nothing else
+        }
+    }
+};
 
 static BLECharacteristic
     meshFromRadioCharacteristic("8ba2bcc2-ee02-4a55-a531-c525c5e454d5", BLECharacteristic::PROPERTY_READ),
     meshToRadioCharacteristic("f75c76d2-129e-4dad-a1dd-7866124401e7", BLECharacteristic::PROPERTY_WRITE),
     meshFromNumCharacteristic("ed9da18c-a800-4f66-a670-aa7547e34453", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY),
-    meshMyNodeCharacteristic("ea9f3f82-8dc4-4733-9452-1f6da28892a2", BLECharacteristic::PROPERTY_READ),
-    meshNodeInfoCharacteristic("d31e02e0-c8ab-4d3f-9cc9-0b8466bdabe8", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ),
-    meshRadioCharacteristic("b56786c8-839a-44a1-b98e-a1724c4a0262", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ),
-    meshOwnerCharacteristic("6ff1d8b6-e2de-41e3-8c0b-8fa384f64eb6", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ);
+    meshNodeInfoCharacteristic("d31e02e0-c8ab-4d3f-9cc9-0b8466bdabe8", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ);
+
+static ProtobufCharacteristic
+    meshMyNodeCharacteristic("ea9f3f82-8dc4-4733-9452-1f6da28892a2", BLECharacteristic::PROPERTY_READ, MyNodeInfo_fields, &myNodeInfo),
+    meshRadioCharacteristic("b56786c8-839a-44a1-b98e-a1724c4a0262", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ, RadioConfig_fields, &radioConfig),
+    meshOwnerCharacteristic("6ff1d8b6-e2de-41e3-8c0b-8fa384f64eb6", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ, User_fields, &owner);
 
 /**
  * Tell any bluetooth clients that the number of rx packets has changed
@@ -27,7 +64,6 @@ void bluetoothNotifyFromNum(uint32_t newValue)
     meshFromNumCharacteristic.setValue(newValue);
     meshFromNumCharacteristic.notify();
 }
-
 
 class BluetoothMeshCallbacks : public BLECharacteristicCallbacks
 {
@@ -58,8 +94,6 @@ class BluetoothMeshCallbacks : public BLECharacteristicCallbacks
                 fradio.variant.packet = *mp;
 
                 service.releaseToPool(mp); // we just copied the bytes, so don't need this buffer anymore
-
-                static uint8_t trBytes[ToRadio_size];
 
                 size_t numbytes = pb_encode_to_bytes(trBytes, sizeof(trBytes), FromRadio_fields, &fradio);
                 c->setValue(trBytes, numbytes);
@@ -157,6 +191,10 @@ BLEService *createMeshBluetoothService(BLEServer *server)
     meshFromRadioCharacteristic.setCallbacks(&btMeshCb);
     meshToRadioCharacteristic.setCallbacks(&btMeshCb);
     meshFromNumCharacteristic.setCallbacks(&btMeshCb);
+
+    addWithDesc(service, &meshMyNodeCharacteristic, "myNode");
+    addWithDesc(service, &meshRadioCharacteristic, "radio");
+    addWithDesc(service, &meshOwnerCharacteristic, "owner");
 
     meshFromNumCharacteristic.addDescriptor(new BLE2902()); // Needed so clients can request notification
 

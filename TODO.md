@@ -2,6 +2,7 @@
 
 * implement new ble characteristics
 * have MeshService keep a node DB by sniffing user messages
+* figure out why protobuf reads of Owner fail
 * have meshservice send location data on mesh (if device has a GPS)
 * implement getCurrentTime() - set based off gps but then updated locally
 * confirm second device receives that gps message and updates device db
