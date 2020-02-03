@@ -1,5 +1,6 @@
 # High priority
 
+* implement new ble characteristics
 * have MeshService keep a node DB by sniffing user messages
 * have meshservice send location data on mesh (if device has a GPS)
 * implement getCurrentTime() - set based off gps but then updated locally
@@ -29,6 +30,7 @@
 * do debug logging to android over bluetooth
 * break out my bluetooth OTA software as a seperate library so others can use it
 * never enter deep sleep while connected to USB power (but still go to other low power modes)
+* How do avalanche beacons work?  Could this do that as well?  possibly by using beacon mode feature of the RF95?
 
 # Pre-beta priority
 

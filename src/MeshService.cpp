@@ -2,8 +2,6 @@
 #include <Arduino.h>
 #include <assert.h>
 
-#include <pb_encode.h>
-#include <pb_decode.h>
 #include "mesh-pb-constants.h"
 #include "MeshService.h"
 #include "MeshBluetoothService.h"
@@ -67,29 +65,12 @@ void MeshService::handleToRadio(std::string s)
 {
     static ToRadio r; // this is a static scratch object, any data must be copied elsewhere before returning
 
-    pb_istream_t stream = pb_istream_from_buffer((const uint8_t *)s.c_str(), s.length());
-    if (!pb_decode(&stream, ToRadio_fields, &r))
-    {
-        Serial.printf("Error: can't decode ToRadio %s\n", PB_GET_ERROR(&stream));
-    }
-    else
+    if (pb_decode_from_bytes((const uint8_t *)s.c_str(), s.length(), ToRadio_fields, &r))
     {
         switch (r.which_variant)
         {
         case ToRadio_packet_tag:
             sendToMesh(r.variant.packet);
-            break;
-
-        case ToRadio_want_nodes_tag:
-            Serial.println("FIXME: ignoring want nodes");
-            break;
-
-        case ToRadio_set_radio_tag:
-            Serial.println("FIXME: ignoring set radio");
-            break;
-
-        case ToRadio_set_owner_tag:
-            Serial.println("FIXME: ignoring set owner");
             break;
 
         default:

@@ -52,3 +52,4 @@ private:
     void handleReceive(MeshPacket *p);
 };
 
+extern RadioConfig radioConfig;

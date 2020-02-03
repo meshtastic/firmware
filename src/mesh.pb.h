@@ -127,9 +127,6 @@ typedef struct _ToRadio {
     pb_size_t which_variant;
     union {
         MeshPacket packet;
-        ToRadio_WantNodes want_nodes;
-        RadioConfig set_radio;
-        User set_owner;
     } variant;
 } ToRadio;
 
@@ -219,9 +216,6 @@ typedef struct _ToRadio {
 #define FromRadio_packet_tag                     2
 #define FromRadio_num_tag                        1
 #define ToRadio_packet_tag                       1
-#define ToRadio_want_nodes_tag                   100
-#define ToRadio_set_radio_tag                    101
-#define ToRadio_set_owner_tag                    102
 
 /* Struct field encoding specification for nanopb */
 #define Position_FIELDLIST(X, a) \
@@ -336,16 +330,10 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (variant,packet,variant.packet),   2)
 #define FromRadio_variant_packet_MSGTYPE MeshPacket
 
 #define ToRadio_FIELDLIST(X, a) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,packet,variant.packet),   1) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,want_nodes,variant.want_nodes), 100) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_radio,variant.set_radio), 101) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_owner,variant.set_owner), 102)
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,packet,variant.packet),   1)
 #define ToRadio_CALLBACK NULL
 #define ToRadio_DEFAULT NULL
 #define ToRadio_variant_packet_MSGTYPE MeshPacket
-#define ToRadio_variant_want_nodes_MSGTYPE ToRadio_WantNodes
-#define ToRadio_variant_set_radio_MSGTYPE RadioConfig
-#define ToRadio_variant_set_owner_MSGTYPE User
 
 #define ToRadio_WantNodes_FIELDLIST(X, a) \
 

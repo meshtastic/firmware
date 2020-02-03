@@ -7,6 +7,7 @@
 #include "mesh-pb-constants.h"
 #include "NodeDB.h"
 
+MyNodeInfo myNodeInfo;
 NodeDB nodeDB;
 
 /**

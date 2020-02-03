@@ -45,7 +45,7 @@ PB_BIND(MyNodeInfo, MyNodeInfo, AUTO)
 PB_BIND(FromRadio, FromRadio, AUTO)
 
 
-PB_BIND(ToRadio, ToRadio, 2)
+PB_BIND(ToRadio, ToRadio, AUTO)
 
 
 PB_BIND(ToRadio_WantNodes, ToRadio_WantNodes, AUTO)

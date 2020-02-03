@@ -50,3 +50,4 @@ private:
 };
 
 extern NodeDB nodeDB;
+extern MyNodeInfo myNodeInfo;

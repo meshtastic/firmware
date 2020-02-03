@@ -9,9 +9,10 @@
 #include "configuration.h"
 #include "NodeDB.h"
 
-// Change to 434.0 or other frequency, must match RX's freq!
-#define RF95_FREQ 915.0
+// Change to 434.0 or other frequency, must match RX's freq!  FIXME, choose a better default value
+#define RF95_FREQ_US 915.0f
 
+RadioConfig radioConfig;
 
 MeshRadio::MeshRadio(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &_rxDest)
     : rf95(NSS_GPIO, DIO0_GPIO),
@@ -20,6 +21,8 @@ MeshRadio::MeshRadio(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &_r
       rxDest(_rxDest),
       txQueue(MAX_TX_QUEUE)
 {
+  radioConfig.tx_power = 23;
+  radioConfig.center_freq = RF95_FREQ_US; // FIXME, pull this config from flash
 }
 
 bool MeshRadio::init()
@@ -43,14 +46,13 @@ bool MeshRadio::init()
   Serial.println("LoRa radio init OK!");
 
   // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM
-  if (!rf95.setFrequency(RF95_FREQ))
+  if (!rf95.setFrequency(radioConfig.center_freq))
   {
     Serial.println("setFrequency failed");
     while (1)
       ;
   }
-  Serial.print("Set Freq to: ");
-  Serial.println(RF95_FREQ);
+  Serial.printf("Set Freq to: %f\n", radioConfig.center_freq);
 
   // Defaults after init are 434.0MHz, 13dBm, Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on
 
@@ -58,7 +60,7 @@ bool MeshRadio::init()
   // If you are using RFM95/96/97/98 modules which uses the PA_BOOST transmitter pin, then
   // you can set transmitter powers from 5 to 23 dBm:
   // FIXME - can we do this?  It seems to be in the Heltec board.
-  rf95.setTxPower(23, false);
+  rf95.setTxPower(radioConfig.tx_power, false);
 
   return true;
 }
@@ -89,6 +91,7 @@ void MeshRadio::handleReceive(MeshPacket *mp)
   int res = rxDest.enqueue(mp, 0); // NOWAIT - fixme, if queue is full, delete older messages
   assert(res == pdTRUE);
 }
+
 
 void MeshRadio::loop()
 {
@@ -121,10 +124,8 @@ static int16_t packetnum = 0;  // packet counter, we increment per xmission
 
     mp->from = srcaddr;
     mp->to = destaddr;
-    pb_istream_t stream = pb_istream_from_buffer(radiobuf, rxlen);
-    if (!pb_decode(&stream, SubPacket_fields, p))
+    if (!pb_decode_from_bytes(radiobuf, rxlen, SubPacket_fields, p))
     {
-      Serial.printf("Error: can't decode SubPacket %s\n", PB_GET_ERROR(&stream));
       pool.release(mp);
     }
     else
@@ -142,16 +143,10 @@ static int16_t packetnum = 0;  // packet counter, we increment per xmission
     Serial.println("sending queued packet on mesh");
     assert(txp->has_payload);
 
-    pb_ostream_t stream = pb_ostream_from_buffer(radiobuf, sizeof(radiobuf));
-    if (!pb_encode(&stream, SubPacket_fields, &txp->payload))
-    {
-      Serial.printf("Error: can't encode SubPacket %s\n", PB_GET_ERROR(&stream));
-    }
-    else
-    {
-      int res = sendTo(txp->to, radiobuf, stream.bytes_written);
-      assert(res == ERRNO_OK);
-    }
+    size_t numbytes = pb_encode_to_bytes(radiobuf, sizeof(radiobuf), SubPacket_fields, &txp->payload);
+
+    int res = sendTo(txp->to, radiobuf, numbytes);
+    assert(res == ERRNO_OK);
 
     bool loopbackTest = false; // if true we will pretend to receive any packets we just sent
     if (loopbackTest)

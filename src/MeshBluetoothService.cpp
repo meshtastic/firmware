@@ -5,22 +5,29 @@
 #include <Arduino.h>
 #include <assert.h>
 
-#include <pb_encode.h>
-#include <pb_decode.h>
+
 #include "mesh.pb.h"
 #include "MeshService.h"
+#include "mesh-pb-constants.h"
 
-static BLECharacteristic meshFromRadioCharacteristic("8ba2bcc2-ee02-4a55-a531-c525c5e454d5", BLECharacteristic::PROPERTY_READ);
-static BLECharacteristic meshToRadioCharacteristic("f75c76d2-129e-4dad-a1dd-7866124401e7", BLECharacteristic::PROPERTY_WRITE);
-static BLECharacteristic meshFromNumCharacteristic("ed9da18c-a800-4f66-a670-aa7547e34453", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic
+    meshFromRadioCharacteristic("8ba2bcc2-ee02-4a55-a531-c525c5e454d5", BLECharacteristic::PROPERTY_READ),
+    meshToRadioCharacteristic("f75c76d2-129e-4dad-a1dd-7866124401e7", BLECharacteristic::PROPERTY_WRITE),
+    meshFromNumCharacteristic("ed9da18c-a800-4f66-a670-aa7547e34453", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY),
+    meshMyNodeCharacteristic("ea9f3f82-8dc4-4733-9452-1f6da28892a2", BLECharacteristic::PROPERTY_READ),
+    meshNodeInfoCharacteristic("d31e02e0-c8ab-4d3f-9cc9-0b8466bdabe8", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ),
+    meshRadioCharacteristic("b56786c8-839a-44a1-b98e-a1724c4a0262", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ),
+    meshOwnerCharacteristic("6ff1d8b6-e2de-41e3-8c0b-8fa384f64eb6", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ);
 
 /**
  * Tell any bluetooth clients that the number of rx packets has changed
  */
-void bluetoothNotifyFromNum(uint32_t newValue) {
+void bluetoothNotifyFromNum(uint32_t newValue)
+{
     meshFromNumCharacteristic.setValue(newValue);
     meshFromNumCharacteristic.notify();
 }
+
 
 class BluetoothMeshCallbacks : public BLECharacteristicCallbacks
 {
@@ -54,15 +61,8 @@ class BluetoothMeshCallbacks : public BLECharacteristicCallbacks
 
                 static uint8_t trBytes[ToRadio_size];
 
-                pb_ostream_t stream = pb_ostream_from_buffer(trBytes, sizeof(trBytes));
-                if (!pb_encode(&stream, FromRadio_fields, &fradio))
-                {
-                    Serial.printf("Error: can't encode FromRadio %s\n", PB_GET_ERROR(&stream));
-                }
-                else
-                {
-                    c->setValue(trBytes, stream.bytes_written);
-                }
+                size_t numbytes = pb_encode_to_bytes(trBytes, sizeof(trBytes), FromRadio_fields, &fradio);
+                c->setValue(trBytes, numbytes);
             }
         }
         else
@@ -124,6 +124,18 @@ until it catches up with this number.
 callback was called, but before it arrives at the phone.  If the phone writes to this register the esp32 will discard older packets and put the next packet >= fromnum in fromradio.
 When the esp32 advances fromnum, it will delay doing the notify by 100ms, in the hopes that the notify will never actally need to be sent if the phone is already pulling from fromradio.
   Note: that if the phone ever sees this number decrease, it means the esp32 has rebooted.
+
+meshMyNodeCharacteristic("ea9f3f82-8dc4-4733-9452-1f6da28892a2", BLECharacteristic::PROPERTY_READ)
+mynode - read/write this to access a MyNodeInfo protobuf
+
+meshNodeInfoCharacteristic("d31e02e0-c8ab-4d3f-9cc9-0b8466bdabe8", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ),
+mynodeinfo - read this to get a series of node infos (ending with a null empty record), write to this to restart the read statemachine that returns all the node infos
+
+meshRadioCharacteristic("b56786c8-839a-44a1-b98e-a1724c4a0262", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ),
+radio - read/write this to access a RadioConfig protobuf
+
+meshOwnerCharacteristic("6ff1d8b6-e2de-41e3-8c0b-8fa384f64eb6", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ)
+owner - read/write this to access a User protobuf
 
 Re: queue management
 Not all messages are kept in the fromradio queue (filtered based on SubPacket):
