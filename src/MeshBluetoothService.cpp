@@ -48,7 +48,7 @@ class BluetoothMeshCallbacks : public BLECharacteristicCallbacks
                 // Encapsulate as a ToRadio packet
                 memset(&fradio, 0, sizeof(fradio));
                 fradio.which_variant = FromRadio_packet_tag;
-                memcpy(&fradio.variant.packet, mp, sizeof(*mp));
+                fradio.variant.packet = *mp;
 
                 service.releaseToPool(mp); // we just copied the bytes, so don't need this buffer anymore
 

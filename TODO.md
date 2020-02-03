@@ -4,6 +4,8 @@
 * have meshservice send location data on mesh (if device has a GPS)
 * implement getCurrentTime() - set based off gps but then updated locally
 * confirm second device receives that gps message and updates device db
+* pretty often send our position packet (but only if we've moved)
+* very occasionally send our position and user packet (if for nothing else so that other nodes update last_seen)
 * switch to my gui layout manager
 * have a state machine return the correct FromRadio packet to the phone, it isn't always going to be a MeshPacket.  Do a notify on fromnum to force the radio to read our state machine generated packets
 * send my_node_num when phone sends WantsNodes
@@ -26,6 +28,7 @@
 * fix the logo
 * do debug logging to android over bluetooth
 * break out my bluetooth OTA software as a seperate library so others can use it
+* never enter deep sleep while connected to USB power (but still go to other low power modes)
 
 # Pre-beta priority
 

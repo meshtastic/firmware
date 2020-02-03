@@ -43,7 +43,7 @@ public:
         T *p = dead.dequeuePtr(maxWait);
         
         if(p)
-            memcpy(p, &src, sizeof(T));
+            *p = src;
         return p;
     }
 
