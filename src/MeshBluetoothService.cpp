@@ -10,7 +10,6 @@
 #include "mesh.pb.h"
 #include "MeshService.h"
 
-
 static BLECharacteristic meshFromRadioCharacteristic("8ba2bcc2-ee02-4a55-a531-c525c5e454d5", BLECharacteristic::PROPERTY_READ);
 static BLECharacteristic meshToRadioCharacteristic("f75c76d2-129e-4dad-a1dd-7866124401e7", BLECharacteristic::PROPERTY_WRITE);
 static BLECharacteristic meshFromNumCharacteristic("ed9da18c-a800-4f66-a670-aa7547e34453", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
@@ -23,9 +22,41 @@ class BluetoothMeshCallbacks : public BLECharacteristicCallbacks
 
         if (c == &meshFromRadioCharacteristic)
         {
+            MeshPacket *mp = service.getForPhone();
+
             // Someone is going to read our value as soon as this callback returns.  So fill it with the next message in the queue
             // or make empty if the queue is empty
-            // c->setValue(byteptr, len);
+            if (!mp)
+            {
+                c->setValue((uint8_t *)"", 0);
+            }
+            else
+            {
+                static FromRadio fradio;
+
+                // Encapsulate as a ToRadio packet
+                memset(&fradio, 0, sizeof(fradio));
+                fradio.which_variant = FromRadio_packet_tag;
+                memcpy(&fradio.variant.packet, mp, sizeof(*mp));
+
+                service.releaseToPool(mp); // we just copied the bytes, so don't need this buffer anymore
+
+                static uint8_t trBytes[ToRadio_size];
+
+                pb_ostream_t stream = pb_ostream_from_buffer(trBytes, sizeof(trBytes));
+                if (!pb_encode(&stream, FromRadio_fields, &fradio))
+                {
+                    Serial.printf("Error: can't encode FromRadio %s\n", PB_GET_ERROR(&stream));
+                }
+                else
+                {
+                    c->setValue(trBytes, stream.bytes_written);
+                }
+            }
+        }
+        else
+        {
+            assert(0); // fixme not yet implemented
         }
     }
 
@@ -111,7 +142,3 @@ BLEService *createMeshBluetoothService(BLEServer *server)
 
     return service;
 }
-
-
-
-

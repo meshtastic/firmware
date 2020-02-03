@@ -251,6 +251,8 @@ void axp192Init()
     Serial.printf("DCDC3: %s\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
     Serial.printf("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
 
+    axp.debugCharging();
+    
     pinMode(PMU_IRQ, INPUT_PULLUP);
     attachInterrupt(PMU_IRQ, [] {
       pmu_irq = true;
@@ -378,10 +380,12 @@ void loop()
   digitalWrite(LED_PIN, ledon);
 #endif
 
+#ifdef T_BEAM_V10
   if(axp192_found) {
     // blink the axp led
     axp.setChgLEDMode(ledon ? AXP20X_LED_LOW_LEVEL : AXP20X_LED_OFF);
   }
+#endif
 
 #ifdef BUTTON_PIN
   // if user presses button for more than 3 secs, discard our network prefs and reboot (FIXME, use a debounce lib instead of this boilerplate)

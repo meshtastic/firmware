@@ -37,18 +37,22 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 
 // Select which T-Beam board is being used. Only uncomment one.
-#define T_BEAM_V10  // AKA Rev1 (second board released)
-// #define HELTEC_LORA32
+// #define T_BEAM_V10  // AKA Rev1 (second board released)
+#define HELTEC_LORA32
 
 #define DEBUG_PORT              Serial      // Serial debug port
 #define SERIAL_BAUD             115200      // Serial debug baud rate
 #define SLEEP_MSECS             (30 * 24 * 60 * 60 * 1000LL) // Sleep for these many millis (or a button press or a lora msg?)
+
 #define MESSAGE_TO_SLEEP_DELAY  5000        // Time after message before going to sleep
-#define LOGO_DELAY              5000        // Time to show logo on first boot
+
+#define LOGO_DELAY              2000        // Time to show logo on first boot
 #define REQUIRE_RADIO           true        // If true, we will fail to start if the radio is not found
 
 // If not defined, we will wait for lock forever
-#define MINWAKE_MSECS           (30 * 1000)  // Wait after every boot for GPS lock (may need longer than 5s because we turned the gps off during deep sleep)
+
+#define MINWAKE_MSECS           (30 * 60 * 1000) // stay awake a long time (30 mins) for debugging
+// #define MINWAKE_MSECS           (30 * 1000)  // Wait after every boot for GPS lock (may need longer than 5s because we turned the gps off during deep sleep)
 
 // -----------------------------------------------------------------------------
 // DEBUG

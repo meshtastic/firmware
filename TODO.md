@@ -37,6 +37,7 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * pick channel center frequency based on name? "dolphin" would hash to 900Mhz, "cat" to 905MHz etc?  Or is that too opaque?
 * scan to find channels with low background noise?
 * share channel settings over Signal (or qr code) by embedding an an URL which is handled by the MeshUtil app.
+* make jtag debugger id stable: https://askubuntu.com/questions/49910/how-to-distinguish-between-identical-usb-to-serial-adapters
 
 # Low priority
 

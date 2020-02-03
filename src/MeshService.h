@@ -36,27 +36,12 @@ public:
     /// Do idle processing (mostly processing messages which have been queued from the radio)
     void loop();
 
-#if 0
-    /**
-     * handle an incoming MeshPacket from the radio, update DB state and queue it for the phone
-     */
-    void handleFromRadio(NodeNum from, NodeNum to, const uint8_t *buf, size_t len) {
-        MeshPacket *p = packetPool.allocZeroed();
-        assert(p);
+    /// Return the next packet destined to the phone.  FIXME, somehow use fromNum to allow the phone to retry the
+    /// last few packets if needs to.
+    MeshPacket *getForPhone() { return toPhoneQueue.dequeuePtr(0); }
 
-        pb_istream_t stream = pb_istream_from_buffer(buf, len);
-        if (!pb_decode(&stream, MeshPacket_fields, p) || !p->has_payload)
-        {
-            Serial.printf("Error: can't decode MeshPacket %s\n", PB_GET_ERROR(&stream));
-        }
-        else
-        {
-            // FIXME - update DB state based on payload and show recevied texts
-
-            toPhoneQueue.enqueue(p);
-        }
-    }
-#endif
+    /// Allows the bluetooth handler to free packets after they have been sent
+    void releaseToPool(MeshPacket *p) { packetPool.release(p); }
 
     /// Given a ToRadio buffer (from bluetooth) parse it and properly handle it (setup radio, owner or send packet into the mesh)
     void handleToRadio(std::string s);
