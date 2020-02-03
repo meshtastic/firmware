@@ -1,20 +1,20 @@
 # High priority
 
-* make jtag work on second board
-* notify phone when rx packets arrive, currently the phone polls at startup only
-* when notified phone should download messages
-* have phone use our local node number as its node number (instead of hardwired)
 * have MeshService keep a node DB by sniffing user messages
 * have meshservice send location data on mesh (if device has a GPS)
+* have a state machine return the correct FromRadio packet to the phone, it isn't always going to be a MeshPacket.  Do a notify on fromnum to force the radio to read our state machine generated packets
+* send my_node_num when phone sends WantsNodes
+* make jtag work on second board
 * make basic gui. different screens: debug, one page for each user in the user db, last received text message
-* respond to the WantUsers message
+* respond to the WantNodes message
 
 # Medium priority
 
+* save our node db (and any rx packets waiting for phone) to flash
+* send correct hw vendor in the bluetooth info
 * use https://lastminuteengineers.com/esp32-sleep-modes-power-consumption/ association sleep pattern to save power - but see https://github.com/espressif/esp-idf/issues/2070 
 * correctly map nodeids to nodenums, currently we just do a proof of concept by always doing a broadcast
 * add interrupt detach/sleep mode config to lora radio so we can enable deepsleep without panicing
-* figure out if we can use PA_BOOST
 * scrub default radio config settings for bandwidth/range/speed
 * use a freertos thread to remain blocked reading from recvfromAckTimeout, so that we don't need to keep polling it from our main thread
 * override peekAtMessage so we can see any messages that pass through our node (even if not broadcast)?  would that be useful?
@@ -52,3 +52,5 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * make message send from android go to service, then to mesh radio
 * make message receive from radio go through to android
 * test loopback tx/rx path code without using radio
+* notify phone when rx packets arrive, currently the phone polls at startup only
+* figure out if we can use PA_BOOST - yes, it seems to be on both boards

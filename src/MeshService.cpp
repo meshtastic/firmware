@@ -6,6 +6,7 @@
 #include <pb_decode.h>
 #include "mesh.pb.h"
 #include "MeshService.h"
+#include "MeshBluetoothService.h"
 
 /*
 receivedPacketQueue - this is a queue of messages we've received from the mesh, which we are keeping to deliver to the phone.
@@ -50,8 +51,14 @@ MeshService service;
 
 #define MAX_PACKETS 32    // max number of packets which can be in flight (either queued from reception or queued for sending)
 #define MAX_RX_TOPHONE 16 // max number of packets which can be waiting for delivery to android
+#define MAX_RX_FROMRADIO 4 // max number of packets destined to our queue, we dispatch packets quickly so it doesn't need to be big
 
-MeshService::MeshService() : packetPool(MAX_PACKETS), toPhoneQueue(MAX_RX_TOPHONE), radio(packetPool, toPhoneQueue)
+MeshService::MeshService()
+    : packetPool(MAX_PACKETS), 
+    toPhoneQueue(MAX_RX_TOPHONE), 
+    fromRadioQueue(MAX_RX_FROMRADIO), 
+    fromNum(0),
+    radio(packetPool, fromRadioQueue)
 {
 }
 
@@ -65,6 +72,19 @@ void MeshService::init()
 void MeshService::loop()
 {
     radio.loop(); // FIXME, possibly move radio interaction to own thread
+
+    MeshPacket *mp;
+    uint32_t oldFromNum = fromNum;
+    while((mp = fromRadioQueue.dequeuePtr(0)) != NULL) {
+        // FIXME, process the packet locally to update our node DB, update the LCD screen etc...
+        Serial.printf("FIXME, skipping local processing of fromRadio\n");
+
+        fromNum++;
+        assert(toPhoneQueue.enqueue(mp , 0) == pdTRUE); // FIXME, instead of failing for full queue, delete the oldest mssages
+        
+    }
+    if(oldFromNum != fromNum) // We don't want to generate extra notifies for multiple new packets
+        bluetoothNotifyFromNum(fromNum);
 }
 
 /// Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)

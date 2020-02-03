@@ -19,11 +19,15 @@ class MeshService
     /// received packets waiting for the phone to process them
     /// FIXME, change to a DropOldestQueue and keep a count of the number of dropped packets to ensure
     /// we never hang because android hasn't been there in a while
+    /// FIXME - save this to flash on deep sleep
     PointerQueue<MeshPacket> toPhoneQueue;
 
     /// Packets which have just arrived from the radio, ready to be processed by this service and possibly
-    /// forwarded to the phone. Note: not using yet - seeing if I can just handle everything asap in handleFromRadio
-    // PointerQueue<MeshPacket> fromRadioQueue;
+    /// forwarded to the phone.
+    PointerQueue<MeshPacket> fromRadioQueue;
+
+    /// The current nonce for the newest packet which has been queued for the phone
+    uint32_t fromNum;
 
 public:
 

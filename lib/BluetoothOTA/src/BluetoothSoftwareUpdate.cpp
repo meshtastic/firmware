@@ -69,6 +69,7 @@ class UpdateCallbacks : public BLECharacteristicCallbacks
                 result = Update.getError();
             }
             swUpdateResultCharacteristic.setValue(&result, 1);
+            swUpdateResultCharacteristic.notify();
         }
         else {
             Serial.println("unexpected write");

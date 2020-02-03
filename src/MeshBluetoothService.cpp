@@ -14,6 +14,14 @@ static BLECharacteristic meshFromRadioCharacteristic("8ba2bcc2-ee02-4a55-a531-c5
 static BLECharacteristic meshToRadioCharacteristic("f75c76d2-129e-4dad-a1dd-7866124401e7", BLECharacteristic::PROPERTY_WRITE);
 static BLECharacteristic meshFromNumCharacteristic("ed9da18c-a800-4f66-a670-aa7547e34453", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
 
+/**
+ * Tell any bluetooth clients that the number of rx packets has changed
+ */
+void bluetoothNotifyFromNum(uint32_t newValue) {
+    meshFromNumCharacteristic.setValue(newValue);
+    meshFromNumCharacteristic.notify();
+}
+
 class BluetoothMeshCallbacks : public BLECharacteristicCallbacks
 {
     void onRead(BLECharacteristic *c)
