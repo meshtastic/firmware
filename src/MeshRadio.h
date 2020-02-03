@@ -51,5 +51,8 @@ private:
 
     /// low level send, might block for mutiple seconds
     ErrorCode sendTo(NodeNum dest, const uint8_t *buf, size_t len);
+
+    /// enqueue a received packet in rxDest
+    void handleReceive(MeshPacket *p);
 };
 

@@ -87,12 +87,19 @@ ErrorCode MeshRadio::sendTo(NodeNum dest, const uint8_t *buf, size_t len)
   // FIXME - for now we do all packets as broadcast
   dest = NODENUM_BROADCAST;
 
-  assert(len <= 255); // Make sure we don't overflow the tiny max packet size 
+  assert(len <= 255); // Make sure we don't overflow the tiny max packet size
 
   // Note: we don't use sendToWait here because we don't want to wait and for the time being don't require
   // reliable delivery
   // return manager.sendtoWait((uint8_t *) buf, len, dest);
   return manager.sendto((uint8_t *)buf, len, dest) ? ERRNO_OK : ERRNO_UNKNOWN;
+}
+
+/// enqueue a received packet in rxDest
+void MeshRadio::handleReceive(MeshPacket *mp)
+{
+  int res = rxDest.enqueue(mp, 0); // NOWAIT - fixme, if queue is full, delete older messages
+  assert(res == pdTRUE);
 }
 
 void MeshRadio::loop()
@@ -136,8 +143,7 @@ static int16_t packetnum = 0;  // packet counter, we increment per xmission
     {
       // parsing was successful, queue for our recipient
       mp->has_payload = true;
-      int res = rxDest.enqueue(mp, 0); // NOWAIT - fixme, if queue is full, delete older messages
-      assert(res == pdTRUE);
+      handleReceive(mp);
     }
   }
 
@@ -159,6 +165,10 @@ static int16_t packetnum = 0;  // packet counter, we increment per xmission
       assert(res == ERRNO_OK);
     }
 
-    pool.release(txp);
+    bool loopbackTest = false; // if true we will pretend to receive any packets we just sent
+    if (loopbackTest)
+      handleReceive(txp);
+    else
+      pool.release(txp);
   }
 }

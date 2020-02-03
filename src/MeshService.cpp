@@ -85,6 +85,18 @@ void MeshService::handleToRadio(std::string s)
             sendToMesh(r.variant.packet);
             break;
 
+        case ToRadio_want_nodes_tag:
+            Serial.println("FIXME: ignoring want nodes");
+            break;
+
+        case ToRadio_set_radio_tag:
+            Serial.println("FIXME: ignoring set radio");
+            break;
+
+        case ToRadio_set_owner_tag:
+            Serial.println("FIXME: ignoring set owner");
+            break;
+
         default:
             Serial.println("Error: unexpected ToRadio variant");
             break;

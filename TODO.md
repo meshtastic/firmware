@@ -2,12 +2,13 @@
 
 # High priority
 
-* solder debug headers to board
-* make message send from android go to service, then to mesh radio
-* make message receive from radio go through to android
-* test loopback tx/rx path code without using radio
+* make jtag work
+* notify phone when rx packets arrive
+* when notified phone should download messages
+* have phone use our local node number as its node number (instead of hardwired to 9)
 * have MeshService keep a node DB by sniffing user messages
 * have meshservice send location data on mesh (if device has a GPS)
+* make basic gui. different screens: debug, one page for each user in the user db, last received text message
 
 # Medium priority
 
@@ -49,3 +50,6 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * change the partition table to take advantage of the 4MB flash on the wroom: http://docs.platformio.org/en/latest/platforms/espressif32.html#partition-tables
 * wrap in nice MeshRadio class
 * add mesh send & rx
+* make message send from android go to service, then to mesh radio
+* make message receive from radio go through to android
+* test loopback tx/rx path code without using radio

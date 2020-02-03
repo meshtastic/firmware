@@ -28,10 +28,13 @@ class BluetoothMeshCallbacks : public BLECharacteristicCallbacks
             // or make empty if the queue is empty
             if (!mp)
             {
+                Serial.println("toPhone queue is empty");
                 c->setValue((uint8_t *)"", 0);
             }
             else
             {
+                Serial.println("delivering toPhone packet to phone");
+
                 static FromRadio fradio;
 
                 // Encapsulate as a ToRadio packet
