@@ -4,9 +4,10 @@
 
 #include <pb_encode.h>
 #include <pb_decode.h>
-#include "mesh.pb.h"
+#include "mesh-pb-constants.h"
 #include "MeshService.h"
 #include "MeshBluetoothService.h"
+#include "NodeDB.h"
 
 /*
 receivedPacketQueue - this is a queue of messages we've received from the mesh, which we are keeping to deliver to the phone.
@@ -17,40 +18,13 @@ of packets we can delete just as soon as we are sure the phone has acked those p
 mesh - an instance of Mesh class.  Which manages the interface to the mesh radio library, reception of packets from other nodes, arbitrating to select
 a node number and keeping the current nodedb.
 
-
-typedef in32_t NodeNum;
-
-class NodeInfo {
-    position;
-    last_seen
-    user
-};
-
-class NodeDB {
-    NodeNum provisionalNodeNum; // if we are trying to find a node num this is our current attempt
-
-    NodeNum ourNodeNum; // -1 if not yet found
-
-    HashMap<NodeNum, NodeInfo> nodes;
-public:
-    /// don't do mesh based algoritm for node id assignment (initially) - instead just store in flash - possibly even in the initial alpha release do this hack
-
-    /// if returns false, that means our node should send a DenyNodeNum response.  If true, we think the number is okay for use
-    // bool handleWantNodeNum(NodeNum n);
-
-    void handleDenyNodeNum(NodeNum FIXME read mesh proto docs, perhaps picking a random node num is not a great idea
-    and instead we should use a special 'im unconfigured node number' and include our desired node number in the wantnum message.  the
-    unconfigured node num would only be used while initially joining the mesh so low odds of conflicting (especially if we randomly select
-    from a small number of nodenums which can be used temporarily for this operation).  figure out what the lower level
-    mesh sw does if it does conflict?  would it be better for people who are replying with denynode num to just broadcast their denial?)
-};
-
 */
+
 
 MeshService service;
 
 #define MAX_PACKETS 32    // max number of packets which can be in flight (either queued from reception or queued for sending)
-#define MAX_RX_TOPHONE 16 // max number of packets which can be waiting for delivery to android
+
 #define MAX_RX_FROMRADIO 4 // max number of packets destined to our queue, we dispatch packets quickly so it doesn't need to be big
 
 MeshService::MeshService()
@@ -60,6 +34,7 @@ MeshService::MeshService()
     fromNum(0),
     radio(packetPool, fromRadioQueue)
 {
+    // assert(MAX_RX_TOPHONE == 32); // FIXME, delete this, just checking my clever macro
 }
 
 void MeshService::init()

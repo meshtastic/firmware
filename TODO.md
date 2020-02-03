@@ -2,6 +2,9 @@
 
 * have MeshService keep a node DB by sniffing user messages
 * have meshservice send location data on mesh (if device has a GPS)
+* implement getCurrentTime() - set based off gps but then updated locally
+* confirm second device receives that gps message and updates device db
+* switch to my gui layout manager
 * have a state machine return the correct FromRadio packet to the phone, it isn't always going to be a MeshPacket.  Do a notify on fromnum to force the radio to read our state machine generated packets
 * send my_node_num when phone sends WantsNodes
 * make jtag work on second board
@@ -10,8 +13,8 @@
 
 # Medium priority
 
-* save our node db (and any rx packets waiting for phone) to flash
-* send correct hw vendor in the bluetooth info
+* save our node db (and any rx packets waiting for phone) to flash - see DeviceState protobuf
+* send correct hw vendor in the bluetooth info - needed so the android app can update different radio models
 * use https://lastminuteengineers.com/esp32-sleep-modes-power-consumption/ association sleep pattern to save power - but see https://github.com/espressif/esp-idf/issues/2070 
 * correctly map nodeids to nodenums, currently we just do a proof of concept by always doing a broadcast
 * add interrupt detach/sleep mode config to lora radio so we can enable deepsleep without panicing

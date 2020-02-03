@@ -7,27 +7,15 @@
 #include <pb_decode.h>
 #include "MeshRadio.h"
 #include "configuration.h"
+#include "NodeDB.h"
 
 // Change to 434.0 or other frequency, must match RX's freq!
 #define RF95_FREQ 915.0
 
-/**
- * get our starting (provisional) nodenum from flash.  But check first if anyone else is using it, by trying to send a message to it (arping)
- */
-NodeNum getDesiredNodeNum()
-{
-  uint8_t dmac[6];
-  esp_efuse_mac_get_default(dmac);
-
-  // FIXME not the right way to guess node numes
-  uint8_t r = dmac[5];
-  assert(r != 0xff); // It better not be the broadcast address
-  return r;
-}
 
 MeshRadio::MeshRadio(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &_rxDest)
     : rf95(NSS_GPIO, DIO0_GPIO),
-      manager(rf95, getDesiredNodeNum()),
+      manager(rf95, nodeDB.getNodeNum()),
       pool(_pool),
       rxDest(_rxDest),
       txQueue(MAX_TX_QUEUE)
