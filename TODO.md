@@ -1,14 +1,13 @@
-
-
 # High priority
 
-* make jtag work
-* notify phone when rx packets arrive
+* make jtag work on second board
+* notify phone when rx packets arrive, currently the phone polls at startup only
 * when notified phone should download messages
-* have phone use our local node number as its node number (instead of hardwired to 9)
+* have phone use our local node number as its node number (instead of hardwired)
 * have MeshService keep a node DB by sniffing user messages
 * have meshservice send location data on mesh (if device has a GPS)
 * make basic gui. different screens: debug, one page for each user in the user db, last received text message
+* respond to the WantUsers message
 
 # Medium priority
 
