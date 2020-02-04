@@ -1,8 +1,7 @@
 # High priority
 
-* implement new ble characteristics
-* have MeshService keep a node DB by sniffing user messages
-* figure out why protobuf reads of Owner fail - possibly related to having the wrong number of chracterstics exported over bluetooth
+* implement regen user and radio prefs
+* figure out why protobuf reads of Owner fail - debug with jtag
 * have meshservice send location data on mesh (if device has a GPS)
 * implement getCurrentTime() - set based off gps but then updated locally
 * confirm second device receives that gps message and updates device db
@@ -65,3 +64,5 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * test loopback tx/rx path code without using radio
 * notify phone when rx packets arrive, currently the phone polls at startup only
 * figure out if we can use PA_BOOST - yes, it seems to be on both boards
+* implement new ble characteristics
+* have MeshService keep a node DB by sniffing user messages

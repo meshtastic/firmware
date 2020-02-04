@@ -122,7 +122,6 @@ static ProtobufCharacteristic
     meshMyNodeCharacteristic("ea9f3f82-8dc4-4733-9452-1f6da28892a2", BLECharacteristic::PROPERTY_READ, MyNodeInfo_fields, &myNodeInfo);
 
 static OwnerCharacteristic meshOwnerCharacteristic;
-
 static RadioCharacteristic meshRadioCharacteristic;
 
 /**
@@ -170,7 +169,7 @@ class BluetoothMeshCallbacks : public BLECharacteristicCallbacks
         }
         else
         {
-            assert(0); // fixme not yet implemented
+            // we are uninterested in the other reads
         }
     }
 
@@ -185,7 +184,7 @@ class BluetoothMeshCallbacks : public BLECharacteristicCallbacks
         }
         else
         {
-            assert(0); // Not yet implemented
+            // we are uninterested in the other writes
         }
     }
 };
@@ -250,8 +249,8 @@ A variable keepAllPackets, if set to true will suppress this behavior and instea
  */
 BLEService *createMeshBluetoothService(BLEServer *server)
 {
-    // Create the BLE Service
-    BLEService *service = server->createService("6ba1b218-15a8-461f-9fa8-5dcae273eafd");
+    // Create the BLE Service, we need more than the default of 15 handles
+    BLEService *service = server->createService(BLEUUID("6ba1b218-15a8-461f-9fa8-5dcae273eafd"), 25, 0);
 
     addWithDesc(service, &meshFromRadioCharacteristic, "fromRadio");
     addWithDesc(service, &meshToRadioCharacteristic, "toRadio");
@@ -270,6 +269,9 @@ BLEService *createMeshBluetoothService(BLEServer *server)
 
     service->start();
     server->getAdvertising()->addServiceUUID(service->getUUID());
+
+    Serial.println("*** Mesh service:");
+    service->dump();
 
     return service;
 }

@@ -109,6 +109,7 @@ void screen_update() {
 }
 
 void screen_setup() {
+#ifdef I2C_SDA
     // Display instance
     display = new SSD1306Wire(SSD1306_ADDRESS, I2C_SDA, I2C_SCL);
     display->init();
@@ -117,6 +118,7 @@ void screen_setup() {
 
     // Scroll buffer
     display->setLogBuffer(5, 30);
+#endif
 }
 
 void screen_loop() {

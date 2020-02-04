@@ -83,7 +83,7 @@ void doDeepSleep(uint64_t msecToWake)
 
     // No need to turn this off if the power draw in sleep mode really is just 0.2uA and turning it off would
     // leave floating input for the IRQ line
-    
+
     // If we want to leave the radio receving in would be 11.5mA current draw, but most of the time it is just waiting
     // in its sequencer (true?) so the average power draw should be much lower even if we were listinging for packets
     // all the time.
@@ -107,16 +107,19 @@ void doDeepSleep(uint64_t msecToWake)
 
   Note: we don't isolate pins that are used for the LORA, LED, i2c, spi or the wake button
   */
-  static const uint8_t rtcGpios[] = { /* 0, */ 2, 
-    /* 4, */ 12,13, /* 14, */ /* 15, */
-    /* 25, */ 26, /* 27, */
-    32,33,34,35,36,37,/* 38, */ 39 };
+  static const uint8_t rtcGpios[] = {/* 0, */ 2,
+  /* 4, */
+#ifndef USE_JTAG
+                                     12, 13, /* 14, */ /* 15, */
+#endif
+                                     /* 25, */ 26, /* 27, */
+                                     32, 33, 34, 35, 36, 37, /* 38, */ 39};
 
-  for(int i = 0; i < sizeof(rtcGpios); i++)
-    rtc_gpio_isolate((gpio_num_t) rtcGpios[i]);
+  for (int i = 0; i < sizeof(rtcGpios); i++)
+    rtc_gpio_isolate((gpio_num_t)rtcGpios[i]);
 
-    // FIXME, disable internal rtc pullups/pulldowns on the non isolated pins. for inputs that we aren't using
-    // to detect wake and in normal operation the external part drives them hard.
+  // FIXME, disable internal rtc pullups/pulldowns on the non isolated pins. for inputs that we aren't using
+  // to detect wake and in normal operation the external part drives them hard.
 
   // FIXME - use an external 10k pulldown so we can leave the RTC peripherals powered off
   // until then we need the following lines
@@ -252,7 +255,7 @@ void axp192Init()
     Serial.printf("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
 
     axp.debugCharging();
-    
+
     pinMode(PMU_IRQ, INPUT_PULLUP);
     attachInterrupt(PMU_IRQ, [] {
       pmu_irq = true;
@@ -291,7 +294,6 @@ void initDeepSleep()
   Serial.printf("booted, wake cause %d (boot count %d)\n", wakeCause, bootCount);
 }
 
-
 const char *getDeviceName()
 {
   uint8_t dmac[6];
@@ -299,10 +301,9 @@ const char *getDeviceName()
 
   // Meshtastic_ab3c
   static char name[20];
-  sprintf(name, "Meshtastic_%02x%02x", dmac[4], dmac[5]); 
+  sprintf(name, "Meshtastic_%02x%02x", dmac[4], dmac[5]);
   return name;
 }
-
 
 void setup()
 {
@@ -324,8 +325,10 @@ void setup()
   digitalWrite(RESET_OLED, 1);
 #endif
 
+#ifdef I2C_SDA
   Wire.begin(I2C_SDA, I2C_SCL);
   scanI2Cdevice();
+#endif
 
   axp192Init();
 
@@ -381,7 +384,8 @@ void loop()
 #endif
 
 #ifdef T_BEAM_V10
-  if(axp192_found) {
+  if (axp192_found)
+  {
     // blink the axp led
     axp.setChgLEDMode(ledon ? AXP20X_LED_LOW_LEVEL : AXP20X_LED_OFF);
   }

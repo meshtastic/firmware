@@ -37,7 +37,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 
 // Select which T-Beam board is being used. Only uncomment one.
-// #define T_BEAM_V10  // AKA Rev1 (second board released)
+//#define T_BEAM_V10  // AKA Rev1 (second board released)
 #define HELTEC_LORA32
 
 // If we are using the JTAG port for debugging, some pins must be left free for that (and things like GPS have to be disabled)
@@ -115,8 +115,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #elif defined(HELTEC_LORA32)
 #define HW_VENDOR       "Heltec"
 
+#ifndef USE_JTAG // gpio15 is TDO for JTAG, so no I2C on this board while doing jtag
 #define I2C_SDA         4
 #define I2C_SCL         15
+#endif
 
 #define RESET_OLED      16
 
