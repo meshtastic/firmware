@@ -79,6 +79,38 @@ public:
     }
 };
 
+// wrap our protobuf version with something that forces the service to reload the config
+class RadioCharacteristic : public ProtobufCharacteristic
+{
+public:
+    RadioCharacteristic()
+        : ProtobufCharacteristic("b56786c8-839a-44a1-b98e-a1724c4a0262", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ, RadioConfig_fields, &radioConfig)
+    {
+    }
+
+    void onWrite(BLECharacteristic *c)
+    {
+        ProtobufCharacteristic::onWrite(c);
+        service.reloadConfig();
+    }
+};
+
+// wrap our protobuf version with something that forces the service to reload the owner
+class OwnerCharacteristic : public ProtobufCharacteristic
+{
+public:
+    OwnerCharacteristic()
+        : ProtobufCharacteristic("6ff1d8b6-e2de-41e3-8c0b-8fa384f64eb6", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ, User_fields, &owner)
+    {
+    }
+
+    void onWrite(BLECharacteristic *c)
+    {
+        ProtobufCharacteristic::onWrite(c);
+        service.reloadOwner();
+    }
+};
+
 static BLECharacteristic
     meshFromRadioCharacteristic("8ba2bcc2-ee02-4a55-a531-c525c5e454d5", BLECharacteristic::PROPERTY_READ),
     meshToRadioCharacteristic("f75c76d2-129e-4dad-a1dd-7866124401e7", BLECharacteristic::PROPERTY_WRITE),
@@ -87,9 +119,11 @@ static BLECharacteristic
 static NodeInfoCharacteristic meshNodeInfoCharacteristic;
 
 static ProtobufCharacteristic
-    meshMyNodeCharacteristic("ea9f3f82-8dc4-4733-9452-1f6da28892a2", BLECharacteristic::PROPERTY_READ, MyNodeInfo_fields, &myNodeInfo),
-    meshRadioCharacteristic("b56786c8-839a-44a1-b98e-a1724c4a0262", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ, RadioConfig_fields, &radioConfig),
-    meshOwnerCharacteristic("6ff1d8b6-e2de-41e3-8c0b-8fa384f64eb6", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ, User_fields, &owner);
+    meshMyNodeCharacteristic("ea9f3f82-8dc4-4733-9452-1f6da28892a2", BLECharacteristic::PROPERTY_READ, MyNodeInfo_fields, &myNodeInfo);
+
+static OwnerCharacteristic meshOwnerCharacteristic;
+
+static RadioCharacteristic meshRadioCharacteristic;
 
 /**
  * Tell any bluetooth clients that the number of rx packets has changed

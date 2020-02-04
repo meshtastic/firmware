@@ -50,6 +50,12 @@ public:
     /// Given a ToRadio buffer (from bluetooth) parse it and properly handle it (setup radio, owner or send packet into the mesh)
     void handleToRadio(std::string s);
 
+    /// The radioConfig object just changed, call this to force the hw to change to the new settings
+    void reloadConfig() { radio.reloadConfig(); }
+
+    /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
+    void reloadOwner() { Serial.println("FIXME implement reloadOwner"); }
+    
 private:
 
     /// Send a packet into the mesh - note p is read only and should be copied into a pool based MeshPacket before

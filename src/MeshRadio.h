@@ -36,6 +36,9 @@ public:
     /// for received packets it will call the rx handler
     void loop();
 
+    /// The radioConfig object just changed, call this to force the hw to change to the new settings
+    void reloadConfig() { Serial.println("FIXME add reloadConfig"); }
+
 private:
     RH_RF95 rf95; // the raw radio interface
     RHMesh manager;
