@@ -9,6 +9,7 @@
 #include "MeshService.h"
 #include "mesh-pb-constants.h"
 #include "NodeDB.h"
+#include "configuration.h"
 
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in proccess at once
 static uint8_t trBytes[_max(_max(_max(_max(ToRadio_size, RadioConfig_size), User_size), MyNodeInfo_size), FromRadio_size)];
@@ -29,7 +30,7 @@ public:
 
     void onRead(BLECharacteristic *c)
     {
-        Serial.println("Got proto read");
+        DEBUG_MSG("Got proto read\n");
         size_t numbytes = pb_encode_to_bytes(trBytes, sizeof(trBytes), fields, my_struct);
         c->setValue(trBytes, numbytes);
     }
@@ -37,7 +38,7 @@ public:
     void onWrite(BLECharacteristic *c)
     {
         // dumpCharacteristic(pCharacteristic);
-        Serial.println("Got on proto write");
+        DEBUG_MSG("Got on proto write\n");
         std::string src = c->getValue();
         if (pb_decode_from_bytes((const uint8_t *)src.c_str(), src.length(), fields, my_struct))
         {
@@ -57,7 +58,7 @@ public:
 
     void onRead(BLECharacteristic *c)
     {
-        Serial.println("Got nodeinfo read");
+        DEBUG_MSG("Got nodeinfo read\n");
         const NodeInfo *info = nodeDB.readNextInfo();
 
         if (info)
@@ -74,7 +75,7 @@ public:
     void onWrite(BLECharacteristic *c)
     {
         // dumpCharacteristic(pCharacteristic);
-        Serial.println("Got on nodeinfo write");
+        DEBUG_MSG("Got on nodeinfo write\n");
         nodeDB.resetReadPointer();
     }
 };
@@ -137,7 +138,7 @@ class BluetoothMeshCallbacks : public BLECharacteristicCallbacks
 {
     void onRead(BLECharacteristic *c)
     {
-        Serial.println("Got on read");
+        DEBUG_MSG("Got on read\n");
 
         if (c == &meshFromRadioCharacteristic)
         {
@@ -147,12 +148,12 @@ class BluetoothMeshCallbacks : public BLECharacteristicCallbacks
             // or make empty if the queue is empty
             if (!mp)
             {
-                Serial.println("toPhone queue is empty");
+                DEBUG_MSG("toPhone queue is empty\n");
                 c->setValue((uint8_t *)"", 0);
             }
             else
             {
-                Serial.println("delivering toPhone packet to phone");
+                DEBUG_MSG("delivering toPhone packet to phone\n");
 
                 static FromRadio fradio;
 
@@ -176,7 +177,7 @@ class BluetoothMeshCallbacks : public BLECharacteristicCallbacks
     void onWrite(BLECharacteristic *c)
     {
         // dumpCharacteristic(pCharacteristic);
-        Serial.println("Got on write");
+        DEBUG_MSG("Got on write\n");
 
         if (c == &meshToRadioCharacteristic)
         {
@@ -270,7 +271,7 @@ BLEService *createMeshBluetoothService(BLEServer *server)
     service->start();
     server->getAdvertising()->addServiceUUID(service->getUUID());
 
-    Serial.println("*** Mesh service:");
+    DEBUG_MSG("*** Mesh service:\n");
     service->dump();
 
     return service;

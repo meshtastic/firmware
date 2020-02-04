@@ -4,6 +4,7 @@
 
 #include <pb_encode.h>
 #include <pb_decode.h>
+#include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "NodeDB.h"
 
@@ -50,7 +51,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
     if (mp.has_payload)
     {
         const SubPacket &p = mp.payload;
-        Serial.printf("Update DB node %x for %d\n", mp.from, p.which_variant);
+        DEBUG_MSG("Update DB node %x for %d\n", mp.from, p.which_variant);
         if (p.which_variant != SubPacket_want_node_tag) // we don't create nodeinfo records for someone that is just trying to claim a nodenum
         {
             int oldNumNodes = numNodes;

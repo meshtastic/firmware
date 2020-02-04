@@ -38,21 +38,20 @@ bool MeshRadio::init()
 
   if (!manager.init())
   {
-    Serial.println("LoRa radio init failed");
-    Serial.println("Uncomment '#define SERIAL_DEBUG' in RH_RF95.cpp for detailed debug info");
+    DEBUG_MSG("LoRa radio init failed\n");
+    DEBUG_MSG("Uncomment '#define SERIAL_DEBUG' in RH_RF95.cpp for detailed debug info\n");
     return false;
   }
 
-  Serial.println("LoRa radio init OK!");
+  DEBUG_MSG("LoRa radio init OK!\n");
 
   // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM
   if (!rf95.setFrequency(radioConfig.center_freq))
   {
-    Serial.println("setFrequency failed");
-    while (1)
-      ;
+    DEBUG_MSG("setFrequency failed\n");
+    assert(0); // fixme panic
   }
-  Serial.printf("Set Freq to: %f\n", radioConfig.center_freq);
+  DEBUG_MSG("Set Freq to: %f\n", radioConfig.center_freq);
 
   // Defaults after init are 434.0MHz, 13dBm, Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on
 
@@ -67,13 +66,13 @@ bool MeshRadio::init()
 
 ErrorCode MeshRadio::send(MeshPacket *p)
 {
-  Serial.println("enquing packet for sending on mesh");
+  DEBUG_MSG("enquing packet for sending on mesh\n");
   return txQueue.enqueue(p, 0); // nowait
 }
 
 ErrorCode MeshRadio::sendTo(NodeNum dest, const uint8_t *buf, size_t len)
 {
-  Serial.printf("mesh sendTo %d bytes to %d\n", len, dest);
+  DEBUG_MSG("mesh sendTo %d bytes to %d\n", len, dest);
   // FIXME - for now we do all packets as broadcast
   dest = NODENUM_BROADCAST;
 
@@ -115,7 +114,7 @@ static int16_t packetnum = 0;  // packet counter, we increment per xmission
   if (manager.recvfromAckTimeout(radiobuf, &rxlen, 0, &srcaddr, &destaddr, &id, &flags))
   {
     // We received a packet
-    Serial.printf("Received packet from mesh src=%d,dest=%d,id=%d,len=%d\n", srcaddr, destaddr, id, rxlen);
+    DEBUG_MSG("Received packet from mesh src=%d,dest=%d,id=%d,len=%d\n", srcaddr, destaddr, id, rxlen);
 
     MeshPacket *mp = pool.allocZeroed();
     assert(mp); // FIXME
@@ -140,7 +139,7 @@ static int16_t packetnum = 0;  // packet counter, we increment per xmission
   MeshPacket *txp = txQueue.dequeuePtr(0); // nowait
   if (txp)
   {
-    Serial.println("sending queued packet on mesh");
+    DEBUG_MSG("sending queued packet on mesh\n");
     assert(txp->has_payload);
 
     size_t numbytes = pb_encode_to_bytes(radiobuf, sizeof(radiobuf), SubPacket_fields, &txp->payload);

@@ -4,6 +4,7 @@
 #include <BLE2902.h>
 #include <Arduino.h>
 #include <Update.h>
+#include "configuration.h"
 
 static BLECharacteristic SWVersionCharacteristic(BLEUUID((uint16_t) ESP_GATT_UUID_SW_VERSION_STR), BLECharacteristic::PROPERTY_READ);
 static BLECharacteristic ManufacturerCharacteristic(BLEUUID((uint16_t) ESP_GATT_UUID_MANU_NAME), BLECharacteristic::PROPERTY_READ);
@@ -102,11 +103,11 @@ void dumpCharacteristic(BLECharacteristic *c) {
       std::string value = c->getValue();
 
       if (value.length() > 0) {
-        Serial.print("New value: ");
+        DEBUG_MSG("New value: ");
         for (int i = 0; i < value.length(); i++)
-          Serial.print(value[i]);
+          DEBUG_MSG("%c", value[i]);
 
-        Serial.println();
+        DEBUG_MSG("\n");
       }
 }
 

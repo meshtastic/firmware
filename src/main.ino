@@ -52,7 +52,7 @@ esp_sleep_source_t wakeCause; // the reason we booted this time
 
 void doDeepSleep(uint64_t msecToWake)
 {
-  Serial.printf("Entering deep sleep for %llu seconds\n", msecToWake / 1000);
+  DEBUG_MSG("Entering deep sleep for %llu seconds\n", msecToWake / 1000);
 
   // not using wifi yet, but once we are this is needed to shutoff the radio hw
   // esp_wifi_stop();
@@ -173,38 +173,32 @@ void scanI2Cdevice(void)
     err = Wire.endTransmission();
     if (err == 0)
     {
-      Serial.print("I2C device found at address 0x");
-      if (addr < 16)
-        Serial.print("0");
-      Serial.print(addr, HEX);
-      Serial.println(" !");
+      DEBUG_MSG("I2C device found at address 0x%x\n", addr);
+
       nDevices++;
 
       if (addr == SSD1306_ADDRESS)
       {
         ssd1306_found = true;
-        Serial.println("ssd1306 display found");
+        DEBUG_MSG("ssd1306 display found\n");
       }
 #ifdef T_BEAM_V10
       if (addr == AXP192_SLAVE_ADDRESS)
       {
         axp192_found = true;
-        Serial.println("axp192 PMU found");
+        DEBUG_MSG("axp192 PMU found\n");
       }
 #endif
     }
     else if (err == 4)
     {
-      Serial.print("Unknow error at address 0x");
-      if (addr < 16)
-        Serial.print("0");
-      Serial.println(addr, HEX);
+      DEBUG_MSG("Unknow error at address 0x%x\n", addr);
     }
   }
   if (nDevices == 0)
-    Serial.println("No I2C devices found\n");
+    DEBUG_MSG("No I2C devices found\n");
   else
-    Serial.println("done\n");
+    DEBUG_MSG("done\n");
 }
 
 /**
@@ -225,55 +219,56 @@ void axp192Init()
   {
     if (!axp.begin(Wire, AXP192_SLAVE_ADDRESS))
     {
-      Serial.println("AXP192 Begin PASS");
+      DEBUG_MSG("AXP192 Begin PASS\n");
+
+      // axp.setChgLEDMode(LED_BLINK_4HZ);
+      DEBUG_MSG("DCDC1: %s\n", axp.isDCDC1Enable() ? "ENABLE" : "DISABLE");
+      DEBUG_MSG("DCDC2: %s\n", axp.isDCDC2Enable() ? "ENABLE" : "DISABLE");
+      DEBUG_MSG("LDO2: %s\n", axp.isLDO2Enable() ? "ENABLE" : "DISABLE");
+      DEBUG_MSG("LDO3: %s\n", axp.isLDO3Enable() ? "ENABLE" : "DISABLE");
+      DEBUG_MSG("DCDC3: %s\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
+      DEBUG_MSG("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
+      DEBUG_MSG("----------------------------------------\n");
+
+      axp.setPowerOutPut(AXP192_LDO2, AXP202_ON); // LORA radio
+      axp.setPowerOutPut(AXP192_LDO3, AXP202_ON); // GPS main power
+      axp.setPowerOutPut(AXP192_DCDC2, AXP202_ON);
+      axp.setPowerOutPut(AXP192_EXTEN, AXP202_ON);
+      axp.setPowerOutPut(AXP192_DCDC1, AXP202_ON);
+      axp.setDCDC1Voltage(3300); // for the OLED power
+
+      DEBUG_MSG("DCDC1: %s\n", axp.isDCDC1Enable() ? "ENABLE" : "DISABLE");
+      DEBUG_MSG("DCDC2: %s\n", axp.isDCDC2Enable() ? "ENABLE" : "DISABLE");
+      DEBUG_MSG("LDO2: %s\n", axp.isLDO2Enable() ? "ENABLE" : "DISABLE");
+      DEBUG_MSG("LDO3: %s\n", axp.isLDO3Enable() ? "ENABLE" : "DISABLE");
+      DEBUG_MSG("DCDC3: %s\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
+      DEBUG_MSG("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
+
+      axp.debugCharging();
+
+      pinMode(PMU_IRQ, INPUT_PULLUP);
+      attachInterrupt(PMU_IRQ, [] {
+        pmu_irq = true;
+      },
+                      FALLING);
+
+      axp.adc1Enable(AXP202_BATT_CUR_ADC1, 1);
+      axp.enableIRQ(AXP202_VBUS_REMOVED_IRQ | AXP202_VBUS_CONNECT_IRQ | AXP202_BATT_REMOVED_IRQ | AXP202_BATT_CONNECT_IRQ, 1);
+      axp.clearIRQ();
+
+      if (axp.isChargeing())
+      {
+        baChStatus = "Charging";
+      }
     }
     else
     {
-      Serial.println("AXP192 Begin FAIL");
-    }
-    // axp.setChgLEDMode(LED_BLINK_4HZ);
-    Serial.printf("DCDC1: %s\n", axp.isDCDC1Enable() ? "ENABLE" : "DISABLE");
-    Serial.printf("DCDC2: %s\n", axp.isDCDC2Enable() ? "ENABLE" : "DISABLE");
-    Serial.printf("LDO2: %s\n", axp.isLDO2Enable() ? "ENABLE" : "DISABLE");
-    Serial.printf("LDO3: %s\n", axp.isLDO3Enable() ? "ENABLE" : "DISABLE");
-    Serial.printf("DCDC3: %s\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
-    Serial.printf("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
-    Serial.println("----------------------------------------");
-
-    axp.setPowerOutPut(AXP192_LDO2, AXP202_ON); // LORA radio
-    axp.setPowerOutPut(AXP192_LDO3, AXP202_ON); // GPS main power
-    axp.setPowerOutPut(AXP192_DCDC2, AXP202_ON);
-    axp.setPowerOutPut(AXP192_EXTEN, AXP202_ON);
-    axp.setPowerOutPut(AXP192_DCDC1, AXP202_ON);
-    axp.setDCDC1Voltage(3300); // for the OLED power
-
-    Serial.printf("DCDC1: %s\n", axp.isDCDC1Enable() ? "ENABLE" : "DISABLE");
-    Serial.printf("DCDC2: %s\n", axp.isDCDC2Enable() ? "ENABLE" : "DISABLE");
-    Serial.printf("LDO2: %s\n", axp.isLDO2Enable() ? "ENABLE" : "DISABLE");
-    Serial.printf("LDO3: %s\n", axp.isLDO3Enable() ? "ENABLE" : "DISABLE");
-    Serial.printf("DCDC3: %s\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
-    Serial.printf("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
-
-    axp.debugCharging();
-
-    pinMode(PMU_IRQ, INPUT_PULLUP);
-    attachInterrupt(PMU_IRQ, [] {
-      pmu_irq = true;
-    },
-                    FALLING);
-
-    axp.adc1Enable(AXP202_BATT_CUR_ADC1, 1);
-    axp.enableIRQ(AXP202_VBUS_REMOVED_IRQ | AXP202_VBUS_CONNECT_IRQ | AXP202_BATT_REMOVED_IRQ | AXP202_BATT_CONNECT_IRQ, 1);
-    axp.clearIRQ();
-
-    if (axp.isChargeing())
-    {
-      baChStatus = "Charging";
+      DEBUG_MSG("AXP192 Begin FAIL\n");
     }
   }
   else
   {
-    Serial.println("AXP192 not found");
+    DEBUG_MSG("AXP192 not found\n");
   }
 #endif
 }
@@ -291,7 +286,7 @@ void initDeepSleep()
         wakeButtons = ((uint64_t)1) << buttons.gpios[0];
     */
 
-  Serial.printf("booted, wake cause %d (boot count %d)\n", wakeCause, bootCount);
+  DEBUG_MSG("booted, wake cause %d (boot count %d)\n", wakeCause, bootCount);
 }
 
 const char *getDeviceName()
@@ -399,7 +394,7 @@ void loop()
   {
     if (!wasPressed)
     { // just started a new press
-      Serial.println("pressing");
+      DEBUG_MSG("pressing\n");
       wasPressed = true;
       minPressMs = millis() + 3000;
     }

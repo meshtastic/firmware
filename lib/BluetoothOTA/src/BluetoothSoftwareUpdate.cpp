@@ -1,5 +1,6 @@
 #include "BluetoothUtil.h"
 #include "BluetoothSoftwareUpdate.h"
+#include "configuration.h"
 #include <esp_gatt_defs.h>
 #include <BLE2902.h>
 #include <Arduino.h>
@@ -17,7 +18,7 @@ uint32_t rebootAtMsec = 0; // If not zero we will reboot at this time (used to r
 class UpdateCallbacks : public BLECharacteristicCallbacks
 {
     void onRead(BLECharacteristic *pCharacteristic) {
-        Serial.println("Got on read");
+        DEBUG_MSG("Got on read\n");
     }
 
     void onWrite(BLECharacteristic *pCharacteristic)
@@ -30,7 +31,7 @@ class UpdateCallbacks : public BLECharacteristicCallbacks
             uint32_t len = getValue32(pCharacteristic, 0);
             crc.reset();
             bool canBegin = Update.begin(len);
-            Serial.printf("Setting update size %u, result %d\n", len, canBegin);
+            DEBUG_MSG("Setting update size %u, result %d\n", len, canBegin);
             if(!canBegin)
                 // Indicate failure by forcing the size to 0
                 pCharacteristic->setValue(0UL);
@@ -40,31 +41,31 @@ class UpdateCallbacks : public BLECharacteristicCallbacks
             std::string value = pCharacteristic->getValue();
             uint32_t len = value.length();
             uint8_t *data = pCharacteristic->getData();
-            // Serial.printf("Writing %u\n", len);
+            // DEBUG_MSG("Writing %u\n", len);
             crc.update(data, len);
             Update.write(data, len);
         }
         else if (pCharacteristic == &swUpdateCRC32Characteristic)
         {
             uint32_t expectedCRC = getValue32(pCharacteristic, 0);
-            Serial.printf("expected CRC %u\n", expectedCRC);
+            DEBUG_MSG("expected CRC %u\n", expectedCRC);
 
             uint8_t result = 0xff;
 
             // Check the CRC before asking the update to happen.
             if(crc.finalize() != expectedCRC) {
-                Serial.println("Invalid CRC!");
+                DEBUG_MSG("Invalid CRC!\n");
                 result = 0xe0; // FIXME, use real error codes
             }
             else {
                 if (Update.end())
                 {
-                    Serial.println("OTA done, rebooting in 5 seconds!");
+                    DEBUG_MSG("OTA done, rebooting in 5 seconds!\n");
                     rebootAtMsec = millis() + 5000;
                 }
                 else
                 {
-                    Serial.println("Error Occurred. Error #: " + String(Update.getError()));
+                    DEBUG_MSG("Error Occurred. Error #: %d\n", Update.getError());
                 }
                 result = Update.getError();
             }
@@ -72,7 +73,7 @@ class UpdateCallbacks : public BLECharacteristicCallbacks
             swUpdateResultCharacteristic.notify();
         }
         else {
-            Serial.println("unexpected write");
+            DEBUG_MSG("unexpected write\n");
         }
     }
 };

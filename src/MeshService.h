@@ -54,7 +54,7 @@ public:
     void reloadConfig() { radio.reloadConfig(); }
 
     /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
-    void reloadOwner() { Serial.println("FIXME implement reloadOwner"); }
+    void reloadOwner() { DEBUG_MSG("FIXME implement reloadOwner\n"); }
     
 private:
 

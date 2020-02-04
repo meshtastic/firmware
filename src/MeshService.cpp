@@ -38,7 +38,7 @@ MeshService::MeshService()
 void MeshService::init()
 {
     if (!radio.init())
-        Serial.println("radio init failed");
+        DEBUG_MSG("radio init failed\n");
 }
 
 /// Do idle processing (mostly processing messages which have been queued from the radio)
@@ -73,7 +73,7 @@ void MeshService::handleToRadio(std::string s)
             break;
 
         default:
-            Serial.println("Error: unexpected ToRadio variant");
+            DEBUG_MSG("Error: unexpected ToRadio variant\n");
             break;
         }
     }
