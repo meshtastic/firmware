@@ -49,8 +49,7 @@ void MeshService::loop()
     MeshPacket *mp;
     uint32_t oldFromNum = fromNum;
     while((mp = fromRadioQueue.dequeuePtr(0)) != NULL) {
-        // FIXME, process the packet locally to update our node DB, update the LCD screen etc...
-        Serial.printf("FIXME, skipping local processing of fromRadio\n");
+        nodeDB.updateFrom(*mp);
 
         fromNum++;
         assert(toPhoneQueue.enqueue(mp , 0) == pdTRUE); // FIXME, instead of failing for full queue, delete the oldest mssages
