@@ -40,6 +40,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // #define T_BEAM_V10  // AKA Rev1 (second board released)
 #define HELTEC_LORA32
 
+// If we are using the JTAG port for debugging, some pins must be left free for that (and things like GPS have to be disabled)
+#define USE_JTAG
+
 #define DEBUG_PORT              Serial      // Serial debug port
 #define SERIAL_BAUD             115200      // Serial debug baud rate
 #define SLEEP_MSECS             (30 * 24 * 60 * 60 * 1000LL) // Sleep for these many millis (or a button press or a lora msg?)
@@ -93,11 +96,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define GPS_SERIAL_NUM  1
 #define GPS_BAUDRATE    9600
-#define USE_GPS         1
 
 #if defined(T_BEAM_V10)
 #define GPS_RX_PIN      34
+#ifdef USE_JTAG
+#define GPS_TX_PIN      -1 // We can't send bytes to the GPS while using JTAG (not a big deal)
+#else
 #define GPS_TX_PIN      12
+#endif
 #endif
 
 // -----------------------------------------------------------------------------
@@ -110,6 +116,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define NSS_GPIO        18
 
 #if defined(T_BEAM_V10)
+#define HW_VENDOR       "TTGO"
 
 #define I2C_SDA         21
 #define I2C_SCL         22
@@ -123,6 +130,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define PMU_IRQ         35
 
 #elif defined(HELTEC_LORA32)
+#define HW_VENDOR       "Heltec"
+
 #define I2C_SDA         4
 #define I2C_SCL         15
 

@@ -361,7 +361,7 @@ void setup()
   //}
 
   service.init();
-  BLEServer *serve = initBLE(getDeviceName()); // FIXME, use a real name based on the macaddr
+  BLEServer *serve = initBLE(getDeviceName(), HW_VENDOR, APP_VERSION); // FIXME, use a real name based on the macaddr
   createMeshBluetoothService(serve);
 }
 

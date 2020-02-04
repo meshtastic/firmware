@@ -13,7 +13,7 @@ static BLECharacteristic HardwareVersionCharacteristic(BLEUUID((uint16_t) ESP_GA
 /**
  * Create standard device info service
  **/
-BLEService *createDeviceInfomationService(BLEServer* server) {
+BLEService *createDeviceInfomationService(BLEServer* server, std::string hwVendor, std::string swVersion) {
     BLEService *deviceInfoService = server->createService(BLEUUID((uint16_t) ESP_GATT_UUID_DEVICE_INFO_SVC));
 
     /*
@@ -25,9 +25,9 @@ BLEService *createDeviceInfomationService(BLEServer* server) {
 	uint8_t pnp[] = { sig, (uint8_t) (vid >> 8), (uint8_t) vid, (uint8_t) (pid >> 8), (uint8_t) pid, (uint8_t) (version >> 8), (uint8_t) version };
 	m_pnpCharacteristic->setValue(pnp, sizeof(pnp));
     */
-    SWVersionCharacteristic.setValue("0.1");
+    SWVersionCharacteristic.setValue(swVersion);
     deviceInfoService->addCharacteristic(&SWVersionCharacteristic);
-    ManufacturerCharacteristic.setValue("TTGO");
+    ManufacturerCharacteristic.setValue(hwVendor);
     deviceInfoService->addCharacteristic(&ManufacturerCharacteristic);
     HardwareVersionCharacteristic.setValue("1.0");
     deviceInfoService->addCharacteristic(&HardwareVersionCharacteristic); 
@@ -122,13 +122,13 @@ uint32_t getValue32(BLECharacteristic *c, uint32_t defaultValue) {
 }
 
 
-BLEServer *initBLE(std::string deviceName) {
+BLEServer *initBLE(std::string deviceName, std::string hwVendor, std::string swVersion) {
     BLEDevice::init(deviceName);
     // Create the BLE Server
     BLEServer *pServer = BLEDevice::createServer();
     pServer->setCallbacks(new MyServerCallbacks());
 
-    BLEService *pDevInfo = createDeviceInfomationService(pServer);
+    BLEService *pDevInfo = createDeviceInfomationService(pServer, hwVendor, swVersion);
 
     // We now let users create the battery service only if they really want (not all devices have a battery)
     // BLEService *pBattery = createBatteryService(pServer);
