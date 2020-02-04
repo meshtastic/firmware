@@ -21,10 +21,6 @@ typedef enum _Data_Type {
 } Data_Type;
 
 /* Struct definitions */
-typedef struct _ToRadio_WantNodes {
-    char dummy_field;
-} ToRadio_WantNodes;
-
 typedef PB_BYTES_ARRAY_T(100) Data_payload_t;
 typedef struct _Data {
     Data_Type typ;
@@ -32,7 +28,7 @@ typedef struct _Data {
 } Data;
 
 typedef struct _DenyNodeNum {
-    char macaddr[6];
+    pb_byte_t macaddr[6];
 } DenyNodeNum;
 
 typedef struct _MyNodeInfo {
@@ -67,12 +63,12 @@ typedef struct _User {
     char id[16];
     char long_name[40];
     char short_name[4];
-    char macaddr[6];
+    pb_byte_t macaddr[6];
 } User;
 
 typedef struct _WantNodeNum {
     uint32_t desired_nodenum;
-    char macaddr[6];
+    pb_byte_t macaddr[6];
 } WantNodeNum;
 
 typedef struct _NodeInfo {
@@ -141,9 +137,9 @@ typedef struct _ToRadio {
 #define Position_init_default                    {0, 0, 0, 0, 0}
 #define Time_init_default                        {0}
 #define Data_init_default                        {_Data_Type_MIN, {0, {0}}}
-#define User_init_default                        {"", "", "", ""}
-#define WantNodeNum_init_default                 {0, ""}
-#define DenyNodeNum_init_default                 {""}
+#define User_init_default                        {"", "", "", {0}}
+#define WantNodeNum_init_default                 {0, {0}}
+#define DenyNodeNum_init_default                 {{0}}
 #define SubPacket_init_default                   {0, {Position_init_default}}
 #define MeshPacket_init_default                  {0, 0, false, SubPacket_init_default}
 #define RadioConfig_init_default                 {0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -152,13 +148,12 @@ typedef struct _ToRadio {
 #define MyNodeInfo_init_default                  {0}
 #define FromRadio_init_default                   {0, 0, {MeshPacket_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
-#define ToRadio_WantNodes_init_default           {0}
 #define Position_init_zero                       {0, 0, 0, 0, 0}
 #define Time_init_zero                           {0}
 #define Data_init_zero                           {_Data_Type_MIN, {0, {0}}}
-#define User_init_zero                           {"", "", "", ""}
-#define WantNodeNum_init_zero                    {0, ""}
-#define DenyNodeNum_init_zero                    {""}
+#define User_init_zero                           {"", "", "", {0}}
+#define WantNodeNum_init_zero                    {0, {0}}
+#define DenyNodeNum_init_zero                    {{0}}
 #define SubPacket_init_zero                      {0, {Position_init_zero}}
 #define MeshPacket_init_zero                     {0, 0, false, SubPacket_init_zero}
 #define RadioConfig_init_zero                    {0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -167,7 +162,6 @@ typedef struct _ToRadio {
 #define MyNodeInfo_init_zero                     {0}
 #define FromRadio_init_zero                      {0, 0, {MeshPacket_init_zero}}
 #define ToRadio_init_zero                        {0, {MeshPacket_init_zero}}
-#define ToRadio_WantNodes_init_zero              {0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define Data_typ_tag                             1
@@ -242,18 +236,18 @@ X(a, STATIC,   SINGULAR, BYTES,    payload,           2)
 X(a, STATIC,   SINGULAR, STRING,   id,                1) \
 X(a, STATIC,   SINGULAR, STRING,   long_name,         2) \
 X(a, STATIC,   SINGULAR, STRING,   short_name,        3) \
-X(a, STATIC,   SINGULAR, STRING,   macaddr,           4)
+X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, macaddr,           4)
 #define User_CALLBACK NULL
 #define User_DEFAULT NULL
 
 #define WantNodeNum_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   desired_nodenum,   1) \
-X(a, STATIC,   SINGULAR, STRING,   macaddr,           2)
+X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, macaddr,           2)
 #define WantNodeNum_CALLBACK NULL
 #define WantNodeNum_DEFAULT NULL
 
 #define DenyNodeNum_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, STRING,   macaddr,           1)
+X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, macaddr,           1)
 #define DenyNodeNum_CALLBACK NULL
 #define DenyNodeNum_DEFAULT NULL
 
@@ -335,11 +329,6 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (variant,packet,variant.packet),   1)
 #define ToRadio_DEFAULT NULL
 #define ToRadio_variant_packet_MSGTYPE MeshPacket
 
-#define ToRadio_WantNodes_FIELDLIST(X, a) \
-
-#define ToRadio_WantNodes_CALLBACK NULL
-#define ToRadio_WantNodes_DEFAULT NULL
-
 extern const pb_msgdesc_t Position_msg;
 extern const pb_msgdesc_t Time_msg;
 extern const pb_msgdesc_t Data_msg;
@@ -354,7 +343,6 @@ extern const pb_msgdesc_t DeviceState_msg;
 extern const pb_msgdesc_t MyNodeInfo_msg;
 extern const pb_msgdesc_t FromRadio_msg;
 extern const pb_msgdesc_t ToRadio_msg;
-extern const pb_msgdesc_t ToRadio_WantNodes_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define Position_fields &Position_msg
@@ -371,24 +359,22 @@ extern const pb_msgdesc_t ToRadio_WantNodes_msg;
 #define MyNodeInfo_fields &MyNodeInfo_msg
 #define FromRadio_fields &FromRadio_msg
 #define ToRadio_fields &ToRadio_msg
-#define ToRadio_WantNodes_fields &ToRadio_WantNodes_msg
 
 /* Maximum encoded size of messages (where known) */
 #define Position_size                            42
 #define Time_size                                11
 #define Data_size                                104
-#define User_size                                70
-#define WantNodeNum_size                         13
-#define DenyNodeNum_size                         7
+#define User_size                                71
+#define WantNodeNum_size                         14
+#define DenyNodeNum_size                         8
 #define SubPacket_size                           106
 #define MeshPacket_size                          130
 #define RadioConfig_size                         62
-#define NodeInfo_size                            151
-#define DeviceState_size                         9259
+#define NodeInfo_size                            152
+#define DeviceState_size                         9291
 #define MyNodeInfo_size                          11
 #define FromRadio_size                           139
 #define ToRadio_size                             133
-#define ToRadio_WantNodes_size                   0
 
 #ifdef __cplusplus
 } /* extern "C" */

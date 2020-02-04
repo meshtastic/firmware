@@ -61,6 +61,7 @@ class MyServerCallbacks : public BLEServerCallbacks {
 // Help routine to add a description to any BLECharacteristic and add it to the service
 void addWithDesc(BLEService *service, BLECharacteristic *c, const char *description) {
   BLEDescriptor *desc = new BLEDescriptor(BLEUUID((uint16_t) ESP_GATT_UUID_CHAR_DESCRIPTION), strlen(description) + 1);
+  assert(desc);
   desc->setValue(description);
   c->addDescriptor(desc);
   service->addCharacteristic(c);

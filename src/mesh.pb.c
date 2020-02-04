@@ -48,9 +48,6 @@ PB_BIND(FromRadio, FromRadio, AUTO)
 PB_BIND(ToRadio, ToRadio, AUTO)
 
 
-PB_BIND(ToRadio_WantNodes, ToRadio_WantNodes, AUTO)
-
-
 
 
 #ifndef PB_CONVERT_DOUBLE_FLOAT
