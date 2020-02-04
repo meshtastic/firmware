@@ -10,7 +10,7 @@ class NodeDB
 {
     // NodeNum provisionalNodeNum; // if we are trying to find a node num this is our current attempt
 
-    NodeNum ourNodeNum; 
+    NodeNum ourNodeNum = 0; 
 
     // A NodeInfo for every node we've seen
     // Eventually use a smarter datastructure
@@ -27,6 +27,9 @@ public:
     /// don't do mesh based algoritm for node id assignment (initially)
     /// instead just store in flash - possibly even in the initial alpha release do this hack
     NodeDB();
+
+    /// Called from service after app start, to do init which can only be done after OS load
+    void init();
 
     /// given a subpacket sniffed from the network, update our DB state
     /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw

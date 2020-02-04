@@ -10,30 +10,58 @@
 
 MyNodeInfo myNodeInfo = MyNodeInfo_init_zero;
 NodeDB nodeDB;
-User owner = User_init_zero;
+
+/** 
+ * 
+ * Normally userids are unique and start with +country code to look like Signal phone numbers.
+ * But there are some special ids used when we haven't yet been configured by a user.  In that case
+ * we use !macaddr (no colons).
+ */
+User owner = {"+1650xxxyyyy", "unset name", "????", {0}};
+
+static uint8_t ourMacAddr[6];
 
 /**
  * get our starting (provisional) nodenum from flash.  But check first if anyone else is using it, by trying to send a message to it (arping)
  */
 static NodeNum getDesiredNodeNum()
 {
-    uint8_t dmac[6];
-    esp_efuse_mac_get_default(dmac);
+    esp_efuse_mac_get_default(ourMacAddr);
 
     // FIXME not the right way to guess node numes
-    uint8_t r = dmac[5];
+    uint8_t r = ourMacAddr[5];
     assert(r != 0xff); // It better not be the broadcast address
     return r;
-}
-
-NodeDB::NodeDB() : ourNodeNum(getDesiredNodeNum())
-{
 }
 
 /// return number msecs since 1970
 uint64_t getCurrentTime()
 {
     return 4403; // FIXME
+}
+
+
+NodeDB::NodeDB() 
+{
+
+}
+
+
+void NodeDB::init() {
+    ourNodeNum = getDesiredNodeNum();
+
+    // Init our blank owner info to reasonable defaults
+    sprintf(owner.id, "!%02x%02x%02x%02x%02x%02x", ourMacAddr[0],
+            ourMacAddr[1], ourMacAddr[2], ourMacAddr[3], ourMacAddr[4], ourMacAddr[5]);
+    memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
+
+    // FIXME, read owner info from flash
+
+    // Include our owner in the node db under our nodenum
+    NodeInfo *info = getOrCreateNode(ourNodeNum);
+    info->user = owner;
+    info->has_user = true;
+    info->last_seen = getCurrentTime();
 }
 
 const NodeInfo *NodeDB::readNextInfo()
@@ -60,8 +88,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
             if (oldNumNodes != numNodes)
                 updateGUI = true; // we just created a nodeinfo
 
-            info->last_seen.msecs = getCurrentTime();
-            info->has_last_seen = true;
+            info->last_seen = getCurrentTime();
 
             switch (p.which_variant)
             {
@@ -99,7 +126,7 @@ NodeInfo *NodeDB::getOrCreateNode(NodeNum n)
 {
     NodeInfo *info = getNode(n);
 
-    if (!n)
+    if (!info)
     {
         // add the node
         assert(numNodes < MAX_NUM_NODES);

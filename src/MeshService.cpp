@@ -37,6 +37,8 @@ MeshService::MeshService()
 
 void MeshService::init()
 {
+    nodeDB.init();
+    
     if (!radio.init())
         DEBUG_MSG("radio init failed\n");
 }

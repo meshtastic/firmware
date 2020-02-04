@@ -9,9 +9,6 @@
 PB_BIND(Position, Position, AUTO)
 
 
-PB_BIND(Time, Time, AUTO)
-
-
 PB_BIND(Data, Data, AUTO)
 
 
