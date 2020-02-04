@@ -39,17 +39,52 @@ public:
         // dumpCharacteristic(pCharacteristic);
         Serial.println("Got on proto write");
         std::string src = c->getValue();
-        if (pb_decode_from_bytes((const uint8_t *)src.c_str(), src.length(), fields, my_struct)) {
+        if (pb_decode_from_bytes((const uint8_t *)src.c_str(), src.length(), fields, my_struct))
+        {
             // Success, the bytes are now in our struct - do nothing else
         }
+    }
+};
+
+class NodeInfoCharacteristic : public BLECharacteristic, public BLECharacteristicCallbacks
+{
+public:
+    NodeInfoCharacteristic()
+        : BLECharacteristic("d31e02e0-c8ab-4d3f-9cc9-0b8466bdabe8", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ)
+    {
+        setCallbacks(this);
+    }
+
+    void onRead(BLECharacteristic *c)
+    {
+        Serial.println("Got nodeinfo read");
+        const NodeInfo *info = nodeDB.readNextInfo();
+
+        if (info)
+        {
+            size_t numbytes = pb_encode_to_bytes(trBytes, sizeof(trBytes), NodeInfo_fields, info);
+            c->setValue(trBytes, numbytes);
+        }
+        else
+        {
+            c->setValue(trBytes, 0); // Send an empty response
+        }
+    }
+
+    void onWrite(BLECharacteristic *c)
+    {
+        // dumpCharacteristic(pCharacteristic);
+        Serial.println("Got on nodeinfo write");
+        nodeDB.resetReadPointer();
     }
 };
 
 static BLECharacteristic
     meshFromRadioCharacteristic("8ba2bcc2-ee02-4a55-a531-c525c5e454d5", BLECharacteristic::PROPERTY_READ),
     meshToRadioCharacteristic("f75c76d2-129e-4dad-a1dd-7866124401e7", BLECharacteristic::PROPERTY_WRITE),
-    meshFromNumCharacteristic("ed9da18c-a800-4f66-a670-aa7547e34453", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY),
-    meshNodeInfoCharacteristic("d31e02e0-c8ab-4d3f-9cc9-0b8466bdabe8", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ);
+    meshFromNumCharacteristic("ed9da18c-a800-4f66-a670-aa7547e34453", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+
+static NodeInfoCharacteristic meshNodeInfoCharacteristic;
 
 static ProtobufCharacteristic
     meshMyNodeCharacteristic("ea9f3f82-8dc4-4733-9452-1f6da28892a2", BLECharacteristic::PROPERTY_READ, MyNodeInfo_fields, &myNodeInfo),
@@ -163,7 +198,7 @@ meshMyNodeCharacteristic("ea9f3f82-8dc4-4733-9452-1f6da28892a2", BLECharacterist
 mynode - read/write this to access a MyNodeInfo protobuf
 
 meshNodeInfoCharacteristic("d31e02e0-c8ab-4d3f-9cc9-0b8466bdabe8", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ),
-mynodeinfo - read this to get a series of node infos (ending with a null empty record), write to this to restart the read statemachine that returns all the node infos
+nodeinfo - read this to get a series of node infos (ending with a null empty record), write to this to restart the read statemachine that returns all the node infos
 
 meshRadioCharacteristic("b56786c8-839a-44a1-b98e-a1724c4a0262", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ),
 radio - read/write this to access a RadioConfig protobuf
@@ -195,6 +230,7 @@ BLEService *createMeshBluetoothService(BLEServer *server)
     addWithDesc(service, &meshMyNodeCharacteristic, "myNode");
     addWithDesc(service, &meshRadioCharacteristic, "radio");
     addWithDesc(service, &meshOwnerCharacteristic, "owner");
+    addWithDesc(service, &meshNodeInfoCharacteristic, "nodeinfo");
 
     meshFromNumCharacteristic.addDescriptor(new BLE2902()); // Needed so clients can request notification
 

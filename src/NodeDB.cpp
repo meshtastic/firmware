@@ -25,13 +25,22 @@ static NodeNum getDesiredNodeNum()
     return r;
 }
 
-NodeDB::NodeDB() : ourNodeNum(getDesiredNodeNum()), numNodes(0)
+NodeDB::NodeDB() : ourNodeNum(getDesiredNodeNum())
 {
 }
 
 /// return number msecs since 1970
-uint64_t getCurrentTime() {
+uint64_t getCurrentTime()
+{
     return 4403; // FIXME
+}
+
+const NodeInfo *NodeDB::readNextInfo()
+{
+    if (readPointer < numNodes)
+        return &nodes[readPointer++];
+    else
+        return NULL;
 }
 
 /// given a subpacket sniffed from the network, update our DB state
@@ -52,7 +61,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
 
             info->last_seen.msecs = getCurrentTime();
             info->has_last_seen = true;
-            
+
             switch (p.which_variant)
             {
             case SubPacket_position_tag:

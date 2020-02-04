@@ -6,20 +6,23 @@
 #include "mesh-pb-constants.h"
 #include "MeshTypes.h"
 
-class NodeDB {
+class NodeDB
+{
     // NodeNum provisionalNodeNum; // if we are trying to find a node num this is our current attempt
 
-    NodeNum ourNodeNum; // -1 if not yet found
+    NodeNum ourNodeNum; 
 
     // A NodeInfo for every node we've seen
     // Eventually use a smarter datastructure
     // HashMap<NodeNum, NodeInfo> nodes;
     NodeInfo nodes[MAX_NUM_NODES];
-    int numNodes;
+    int numNodes = 0;
 
-    bool updateGUI; // we think the gui should definitely be redrawn
-    NodeInfo *updateGUIforNode; // if currently showing this node, we think you should update the GUI
-    
+    bool updateGUI = false;             // we think the gui should definitely be redrawn
+    NodeInfo *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
+
+    int readPointer = 0;
+
 public:
     /// don't do mesh based algoritm for node id assignment (initially)
     /// instead just store in flash - possibly even in the initial alpha release do this hack
@@ -41,11 +44,17 @@ public:
     mesh sw does if it does conflict?  would it be better for people who are replying with denynode num to just broadcast their denial?)
     */
 
+    /// Called from bluetooth when the user wants to start reading the node DB from scratch.
+    void resetReadPointer() { readPointer = 0; }
+
+    /// Allow the bluetooth layer to read our next nodeinfo record, or NULL if done reading
+    const NodeInfo *readNextInfo();
+
 private:
     /// Find a node in our DB, return null for missing
     NodeInfo *getNode(NodeNum n);
 
-        /// Find a node in our DB, create an empty NodeInfo if missing
+    /// Find a node in our DB, create an empty NodeInfo if missing
     NodeInfo *getOrCreateNode(NodeNum n);
 };
 

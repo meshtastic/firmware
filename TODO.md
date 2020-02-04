@@ -7,6 +7,7 @@
 * implement getCurrentTime() - set based off gps but then updated locally
 * confirm second device receives that gps message and updates device db
 * pretty often send our position packet (but only if we've moved)
+* port my graphics library over from the sw102, same screen controller and resolution
 * very occasionally send our position and user packet (if for nothing else so that other nodes update last_seen)
 * switch to my gui layout manager
 * have a state machine return the correct FromRadio packet to the phone, it isn't always going to be a MeshPacket.  Do a notify on fromnum to force the radio to read our state machine generated packets
