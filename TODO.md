@@ -1,7 +1,6 @@
 # High priority
 
 * implement regen user and radio prefs
-* figure out why protobuf reads of Owner fail - debug with jtag
 * have meshservice send location data on mesh (if device has a GPS)
 * implement getCurrentTime() - set based off gps but then updated locally
 * confirm second device receives that gps message and updates device db

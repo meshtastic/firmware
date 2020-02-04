@@ -229,7 +229,7 @@ When the esp32 advances fromnum, it will delay doing the notify by 100ms, in the
   Note: that if the phone ever sees this number decrease, it means the esp32 has rebooted.
 
 meshMyNodeCharacteristic("ea9f3f82-8dc4-4733-9452-1f6da28892a2", BLECharacteristic::PROPERTY_READ)
-mynode - read/write this to access a MyNodeInfo protobuf
+mynode - read this to access a MyNodeInfo protobuf
 
 meshNodeInfoCharacteristic("d31e02e0-c8ab-4d3f-9cc9-0b8466bdabe8", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ),
 nodeinfo - read this to get a series of node infos (ending with a null empty record), write to this to restart the read statemachine that returns all the node infos

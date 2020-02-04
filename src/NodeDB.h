@@ -6,11 +6,12 @@
 #include "mesh-pb-constants.h"
 #include "MeshTypes.h"
 
+extern MyNodeInfo myNodeInfo;
+extern User owner;
+
 class NodeDB
 {
     // NodeNum provisionalNodeNum; // if we are trying to find a node num this is our current attempt
-
-    NodeNum ourNodeNum = 0; 
 
     // A NodeInfo for every node we've seen
     // Eventually use a smarter datastructure
@@ -35,7 +36,7 @@ public:
     /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
     void updateFrom(const MeshPacket &p);
 
-    NodeNum getNodeNum() { return ourNodeNum; }
+    NodeNum getNodeNum() { return myNodeInfo.my_node_num; }
 
     /// if returns false, that means our node should send a DenyNodeNum response.  If true, we think the number is okay for use
     // bool handleWantNodeNum(NodeNum n);
@@ -62,5 +63,4 @@ private:
 };
 
 extern NodeDB nodeDB;
-extern MyNodeInfo myNodeInfo;
-extern User owner;
+

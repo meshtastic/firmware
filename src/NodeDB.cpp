@@ -43,12 +43,11 @@ uint64_t getCurrentTime()
 
 NodeDB::NodeDB() 
 {
-
 }
 
 
 void NodeDB::init() {
-    ourNodeNum = getDesiredNodeNum();
+    myNodeInfo.my_node_num = getDesiredNodeNum();
 
     // Init our blank owner info to reasonable defaults
     sprintf(owner.id, "!%02x%02x%02x%02x%02x%02x", ourMacAddr[0],
@@ -58,7 +57,7 @@ void NodeDB::init() {
     // FIXME, read owner info from flash
 
     // Include our owner in the node db under our nodenum
-    NodeInfo *info = getOrCreateNode(ourNodeNum);
+    NodeInfo *info = getOrCreateNode(getNodeNum());
     info->user = owner;
     info->has_user = true;
     info->last_seen = getCurrentTime();
