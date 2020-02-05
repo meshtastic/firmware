@@ -27,6 +27,7 @@ MeshRadio::MeshRadio(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &_r
 
 bool MeshRadio::init()
 {
+#ifdef RESET_GPIO
   pinMode(RESET_GPIO, OUTPUT); // Deassert reset
   digitalWrite(RESET_GPIO, HIGH);
 
@@ -35,6 +36,7 @@ bool MeshRadio::init()
   delay(10);
   digitalWrite(RESET_GPIO, HIGH);
   delay(10);
+#endif
 
   if (!manager.init())
   {

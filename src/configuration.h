@@ -36,9 +36,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Configuration
 // -----------------------------------------------------------------------------
 
-// Select which T-Beam board is being used. Only uncomment one.
-//#define T_BEAM_V10  // AKA Rev1 (second board released)
+// Select which T-Beam board is being used. Only uncomment one.  Note: these options now come from platformio standard build file flags
+#ifdef ARDUINO_T_Beam
+#define T_BEAM_V10  // AKA Rev1 (second board released)
+#endif 
+
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V2
 #define HELTEC_LORA32
+#endif
 
 // If we are using the JTAG port for debugging, some pins must be left free for that (and things like GPS have to be disabled)
 #define USE_JTAG
@@ -106,7 +111,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define BUTTON_PIN      38
 
+#ifndef USE_JTAG
 #define RESET_GPIO      14
+#endif
 #define DIO0_GPIO       26
 #define DIO1_GPIO       33 // Note: not really used on this board
 #define DIO2_GPIO       32 // Note: not really used on this board
@@ -126,7 +133,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LED_PIN         25
 #define BUTTON_PIN      0
 
+#ifndef USE_JTAG
 #define RESET_GPIO      14
+#endif
 #define DIO0_GPIO       26
 #define DIO1_GPIO       35 
 #define DIO2_GPIO       34 
