@@ -359,8 +359,14 @@ void setup()
   //}
 
   service.init();
-  BLEServer *serve = initBLE(getDeviceName(), HW_VENDOR, APP_VERSION); // FIXME, use a real name based on the macaddr
-  createMeshBluetoothService(serve);
+
+  bool useBluetooth = true;
+  if (useBluetooth)
+  {
+    DEBUG_MSG("Starting bluetooth\n");
+    BLEServer *serve = initBLE(getDeviceName(), HW_VENDOR, APP_VERSION); // FIXME, use a real name based on the macaddr
+    createMeshBluetoothService(serve);
+  }
 }
 
 void loop()

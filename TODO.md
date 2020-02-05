@@ -1,22 +1,20 @@
 # High priority
 
-* implement regen user and radio prefs
-* have meshservice send location data on mesh (if device has a GPS)
+* implement regen owner and radio prefs
+* have meshservice periodically send location data on mesh (if device has a GPS)
 * implement getCurrentTime() - set based off gps but then updated locally
 * confirm second device receives that gps message and updates device db
-* pretty often send our position packet (but only if we've moved)
+
+* save our node db (and any rx packets waiting for phone) to flash - see DeviceState protobuf
 * port my graphics library over from the sw102, same screen controller and resolution
 * very occasionally send our position and user packet (if for nothing else so that other nodes update last_seen)
 * switch to my gui layout manager
-* have a state machine return the correct FromRadio packet to the phone, it isn't always going to be a MeshPacket.  Do a notify on fromnum to force the radio to read our state machine generated packets
-* send my_node_num when phone sends WantsNodes
 * make jtag work on second board
 * make basic gui. different screens: debug, one page for each user in the user db, last received text message
-* respond to the WantNodes message
 
 # Medium priority
 
-* save our node db (and any rx packets waiting for phone) to flash - see DeviceState protobuf
+* don't send location packets if we haven't moved
 * send correct hw vendor in the bluetooth info - needed so the android app can update different radio models
 * use https://lastminuteengineers.com/esp32-sleep-modes-power-consumption/ association sleep pattern to save power - but see https://github.com/espressif/esp-idf/issues/2070 
 * correctly map nodeids to nodenums, currently we just do a proof of concept by always doing a broadcast
@@ -65,3 +63,5 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * figure out if we can use PA_BOOST - yes, it seems to be on both boards
 * implement new ble characteristics
 * have MeshService keep a node DB by sniffing user messages
+* have a state machine return the correct FromRadio packet to the phone, it isn't always going to be a MeshPacket.  Do a notify on fromnum to force the radio to read our state machine generated packets
+* send my_node_num when phone sends WantsNodes
