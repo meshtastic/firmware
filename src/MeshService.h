@@ -7,12 +7,13 @@
 #include "MeshRadio.h"
 #include "PointerQueue.h"
 #include "MemoryPool.h"
+#include "Observer.h"
 
 /**
  * Top level app for this service.  keeps the mesh, the radio config and the queue of received packets.
  * 
  */
-class MeshService
+class MeshService: private Observer
 {
     MemoryPool<MeshPacket> packetPool;
 
@@ -58,10 +59,14 @@ public:
     
 private:
 
-    /// Send a packet into the mesh - note p is read only and should be copied into a pool based MeshPacket before
-    /// sending.
-    void sendToMesh(const MeshPacket &p);
+    /// Send a packet into the mesh - note p must have been allocated from packetPool.  We will return it to that pool after sending.
+    /// This is the ONLY function you should use for sending messages into the mesh, because it also updates the nodedb cache
+    void sendToMesh(MeshPacket *p);
 
+    /// Called when our gps position has changed - updates nodedb and sends Location message out into the mesh
+    void onGPSChanged();
+
+    virtual void onNotify(Observable *o);
 };
 
 extern MeshService service;

@@ -17,6 +17,9 @@ public:
 
     void observe(Observable *o);
 
+private:
+    friend class Observable;
+
     virtual void onNotify(Observable *o) = 0;
 };
 

@@ -29,8 +29,17 @@ public:
         delete[] buf;
     }
 
-    /// Return a queable object which has been prefilled with zeros
-    T *allocZeroed(TickType_t maxWait = portMAX_DELAY) {
+    /// Return a queable object which has been prefilled with zeros.  Panic if no buffer is available
+    T *allocZeroed() {
+        T *p = allocZeroed(0);
+        
+        assert(p); // FIXME panic instead
+        return p;
+    }
+
+
+    /// Return a queable object which has been prefilled with zeros - allow timeout to wait for available buffers (you probably don't want this version)
+    T *allocZeroed(TickType_t maxWait) {
         T *p = dead.dequeuePtr(maxWait);
         
         if(p)

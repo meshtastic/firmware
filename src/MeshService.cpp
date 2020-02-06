@@ -6,6 +6,7 @@
 #include "MeshService.h"
 #include "MeshBluetoothService.h"
 #include "NodeDB.h"
+#include "GPS.h"
 
 /*
 receivedPacketQueue - this is a queue of messages we've received from the mesh, which we are keeping to deliver to the phone.
@@ -18,19 +19,18 @@ a node number and keeping the current nodedb.
 
 */
 
-
 MeshService service;
 
-#define MAX_PACKETS 32    // max number of packets which can be in flight (either queued from reception or queued for sending)
+#define MAX_PACKETS 32 // max number of packets which can be in flight (either queued from reception or queued for sending)
 
 #define MAX_RX_FROMRADIO 4 // max number of packets destined to our queue, we dispatch packets quickly so it doesn't need to be big
 
 MeshService::MeshService()
-    : packetPool(MAX_PACKETS), 
-    toPhoneQueue(MAX_RX_TOPHONE), 
-    fromRadioQueue(MAX_RX_FROMRADIO), 
-    fromNum(0),
-    radio(packetPool, fromRadioQueue)
+    : packetPool(MAX_PACKETS),
+      toPhoneQueue(MAX_RX_TOPHONE),
+      fromRadioQueue(MAX_RX_FROMRADIO),
+      fromNum(0),
+      radio(packetPool, fromRadioQueue)
 {
     // assert(MAX_RX_TOPHONE == 32); // FIXME, delete this, just checking my clever macro
 }
@@ -38,9 +38,11 @@ MeshService::MeshService()
 void MeshService::init()
 {
     nodeDB.init();
-    
+
     if (!radio.init())
         DEBUG_MSG("radio init failed\n");
+
+    gps.addObserver(this);
 }
 
 /// Do idle processing (mostly processing messages which have been queued from the radio)
@@ -50,14 +52,14 @@ void MeshService::loop()
 
     MeshPacket *mp;
     uint32_t oldFromNum = fromNum;
-    while((mp = fromRadioQueue.dequeuePtr(0)) != NULL) {
-        nodeDB.updateFrom(*mp);
+    while ((mp = fromRadioQueue.dequeuePtr(0)) != NULL)
+    {
+        nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
 
         fromNum++;
-        assert(toPhoneQueue.enqueue(mp , 0) == pdTRUE); // FIXME, instead of failing for full queue, delete the oldest mssages
-        
+        assert(toPhoneQueue.enqueue(mp, 0) == pdTRUE); // FIXME, instead of failing for full queue, delete the oldest mssages
     }
-    if(oldFromNum != fromNum) // We don't want to generate extra notifies for multiple new packets
+    if (oldFromNum != fromNum) // We don't want to generate extra notifies for multiple new packets
         bluetoothNotifyFromNum(fromNum);
 }
 
@@ -71,7 +73,7 @@ void MeshService::handleToRadio(std::string s)
         switch (r.which_variant)
         {
         case ToRadio_packet_tag:
-            sendToMesh(r.variant.packet);
+            sendToMesh(packetPool.allocCopy(r.variant.packet));
             break;
 
         default:
@@ -81,12 +83,31 @@ void MeshService::handleToRadio(std::string s)
     }
 }
 
-/// Send a packet into the mesh - note p is read only and should be copied into a pool based MeshPacket before
-/// sending.
-void MeshService::sendToMesh(const MeshPacket &pIn)
+void MeshService::sendToMesh(MeshPacket *p)
 {
-    MeshPacket *pOut = packetPool.allocCopy(pIn);
-    assert(pOut); // FIXME
+    nodeDB.updateFrom(*p);
+    assert(radio.send(p) == pdTRUE);
+}
 
-    assert(radio.send(pOut) == pdTRUE);
+void MeshService::onGPSChanged()
+{
+    MeshPacket *p = packetPool.allocZeroed();
+
+    p->has_payload = true;
+    p->from = nodeDB.getNodeNum();
+    p->to = NODENUM_BROADCAST;
+    p->payload.which_variant = SubPacket_position_tag;
+    Position &pos = p->payload.variant.position;
+    if (gps.altitude.isValid())
+        pos.altitude = gps.altitude.value();
+    pos.latitude = gps.location.lat();
+    pos.longitude = gps.location.lng();
+
+    sendToMesh(p);
+}
+
+void MeshService::onNotify(Observable *o)
+{
+    DEBUG_MSG("got gps notify\n");
+    onGPSChanged();
 }

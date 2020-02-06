@@ -59,6 +59,7 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 
 # Low priority
 
+* add a watchdog timer
 * fix GPS.zeroOffset calculation it is wrong
 * handle millis() rollover in GPS.getTime - otherwise we will break after 50 days
 * reneable the bluetooth battely level service on the T-BEAM, because we can read battery level there

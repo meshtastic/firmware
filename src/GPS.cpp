@@ -39,7 +39,7 @@ void GPS::loop()
                                24 * 60 * 60 * (date.month() * 31 + date.day() + 365 * (date.year() - 1970))) +
                      time.centisecond() * 10;
 
-        DEBUG_MSG("Setting time zero %lld", zeroOffset);
+        DEBUG_MSG("Setting time zero %lld\n", zeroOffset);
     }
 #endif
 }
