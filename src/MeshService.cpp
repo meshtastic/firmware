@@ -67,6 +67,11 @@ void MeshService::loop()
     while ((mp = fromRadioQueue.dequeuePtr(0)) != NULL)
     {
         nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
+        if(mp->has_payload && mp->payload.which_variant == SubPacket_user_tag && mp->to == NODENUM_BROADCAST) {
+            // Someone just sent us a User, reply with our Owner
+            DEBUG_MSG("Received broadcast Owner from 0x%x, replying with our owner\n", mp->from);
+            sendOurOwner(mp->from);
+        }
 
         fromNum++;
         assert(toPhoneQueue.enqueue(mp, 0) == pdTRUE); // FIXME, instead of failing for full queue, delete the oldest mssages

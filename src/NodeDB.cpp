@@ -76,7 +76,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
     if (mp.has_payload)
     {
         const SubPacket &p = mp.payload;
-        DEBUG_MSG("Update DB node %x for variant %d\n", mp.from, p.which_variant);
+        DEBUG_MSG("Update DB node 0x%x for variant %d\n", mp.from, p.which_variant);
         if (p.which_variant != SubPacket_want_node_tag) // we don't create nodeinfo records for someone that is just trying to claim a nodenum
         {
             int oldNumNodes = numNodes;

@@ -68,13 +68,13 @@ bool MeshRadio::init()
 
 ErrorCode MeshRadio::send(MeshPacket *p)
 {
-  DEBUG_MSG("enquing packet for send from=%d, to=%d\n", p->from, p->to);
+  DEBUG_MSG("enquing packet for send from=0x%x, to=0x%x\n", p->from, p->to);
   return txQueue.enqueue(p, 0); // nowait
 }
 
 ErrorCode MeshRadio::sendTo(NodeNum dest, const uint8_t *buf, size_t len)
 {
-  DEBUG_MSG("mesh sendTo %d bytes to %d\n", len, dest);
+  DEBUG_MSG("mesh sendTo %d bytes to 0x%x\n", len, dest);
   // FIXME - for now we do all packets as broadcast
   dest = NODENUM_BROADCAST;
 

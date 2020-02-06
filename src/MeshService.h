@@ -55,7 +55,7 @@ public:
     void reloadConfig() { radio.reloadConfig(); }
 
     /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
-    void reloadOwner() { DEBUG_MSG("FIXME implement reloadOwner\n"); }
+    void reloadOwner() { sendOurOwner(); }
     
     /// Allocate and return a meshpacket which defaults as send to broadcast from the current node.
     MeshPacket *allocForSending();
