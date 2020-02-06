@@ -42,7 +42,7 @@ void _screen_header() {
 
     // Datetime
     display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->drawString(display->getWidth()/2, 2, gps.getTime());
+    display->drawString(display->getWidth()/2, 2, gps.getTimeStr());
 
     // Satellite count
     display->setTextAlignment(TEXT_ALIGN_RIGHT);
@@ -135,7 +135,6 @@ void screen_loop() {
         if (axp.isVbusRemoveIRQ()) {
             baChStatus = "No Charging";
         }
-        DEBUG_MSG("%s\n", baChStatus); //Prints charging status to screen
         // This is not a GPIO actually connected on the tbeam board
         // digitalWrite(2, !digitalRead(2));
         axp.clearIRQ();

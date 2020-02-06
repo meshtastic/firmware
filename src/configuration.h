@@ -91,7 +91,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #if defined(T_BEAM_V10)
 #define GPS_RX_PIN      34
 #ifdef USE_JTAG
-#define GPS_TX_PIN      -1 // We can't send bytes to the GPS while using JTAG (not a big deal)
+#define GPS_TX_PIN      -1 
 #else
 #define GPS_TX_PIN      12
 #endif

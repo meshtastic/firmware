@@ -1,7 +1,10 @@
 
 #include "GPS.h"
 
+// stuff that really should be in in the instance instead...
 HardwareSerial _serial_gps(GPS_SERIAL_NUM);
+uint32_t timeStartMsec; // Once we have a GPS lock, this is where we hold the initial msec clock that corresponds to that time
+uint64_t zeroOffset;    // GPS based time in millis since 1970 - only updated once on initial lock
 
 GPS gps;
 
@@ -16,27 +19,49 @@ void GPS::setup()
 #endif
 }
 
+// for the time being we need to rapidly read from the serial port to prevent overruns
 void GPS::loop()
 {
     PeriodicTask::loop();
 
-#ifdef GPX_RX_PIN
+#ifdef GPS_RX_PIN
     while (_serial_gps.available())
     {
-        _gps.encode(_serial_gps.read());
+        encode(_serial_gps.read());
+    }
+
+    if (!timeStartMsec && time.isValid() && date.isValid())
+    {
+        timeStartMsec = millis();
+
+        // FIXME, this is a shit not right version of the standard def of unix time!!!
+        zeroOffset = 1000LL * (time.second() + time.minute() * 60 + time.hour() * 60 * 60 +
+                               24 * 60 * 60 * (date.month() * 31 + date.day() + 365 * (date.year() - 1970))) +
+                     time.centisecond() * 10;
+
+        DEBUG_MSG("Setting time zero %lld", zeroOffset);
     }
 #endif
 }
 
-void GPS::doTask()
-{
+uint64_t GPS::getTime() {
+    return (millis() - timeStartMsec) * 1000LL + zeroOffset;
 }
 
-String GPS::getTime()
+void GPS::doTask()
+{
+    if (location.isValid() && location.isUpdated())
+    { // we only notify if position has changed
+        // DEBUG_MSG("new gps pos\n");
+        notifyObservers();
+    }
+}
+
+
+String GPS::getTimeStr()
 {
     static char t[12]; // used to sprintf for Serial output
 
     snprintf(t, sizeof(t), "%02d:%02d:%02d", time.hour(), time.minute(), time.second());
     return t;
 }
-

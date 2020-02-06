@@ -7,6 +7,7 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "NodeDB.h"
+#include "GPS.h"
 
 MyNodeInfo myNodeInfo = MyNodeInfo_init_zero;
 NodeDB nodeDB;
@@ -34,11 +35,6 @@ static NodeNum getDesiredNodeNum()
     return r;
 }
 
-/// return number msecs since 1970
-uint64_t getCurrentTime()
-{
-    return 4403; // FIXME
-}
 
 
 NodeDB::NodeDB() 
@@ -60,7 +56,7 @@ void NodeDB::init() {
     NodeInfo *info = getOrCreateNode(getNodeNum());
     info->user = owner;
     info->has_user = true;
-    info->last_seen = getCurrentTime();
+    info->last_seen = 0; // haven't heard a real message yet
 }
 
 const NodeInfo *NodeDB::readNextInfo()
@@ -87,7 +83,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
             if (oldNumNodes != numNodes)
                 updateGUI = true; // we just created a nodeinfo
 
-            info->last_seen = getCurrentTime();
+            info->last_seen = gps.getTime();
 
             switch (p.which_variant)
             {

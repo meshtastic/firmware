@@ -14,7 +14,10 @@ class GPS : public PeriodicTask, public Observable, public TinyGPSPlus
 public:
     GPS();
 
-    String getTime();
+    /// Return time since 1970 in msecs.  Until we have a GPS lock we will be returning time based at zero
+    uint64_t getTime();
+
+    String getTimeStr();
 
     void setup();
 

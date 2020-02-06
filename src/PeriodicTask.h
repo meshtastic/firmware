@@ -27,7 +27,7 @@ public:
             // FIXME, this lets period slightly drift based on scheduling - not sure if that is always good
             prevMsec = now;
 
-            DEBUG_MSG("Calling periodic task\n");
+            // DEBUG_MSG("Calling periodic task\n");
             doTask();
         }
     }

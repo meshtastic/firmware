@@ -59,6 +59,8 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 
 # Low priority
 
+* fix GPS.zeroOffset calculation it is wrong
+* handle millis() rollover in GPS.getTime - otherwise we will break after 50 days
 * reneable the bluetooth battely level service on the T-BEAM, because we can read battery level there
 * report esp32 device code bugs back to the mothership via android
 
