@@ -29,6 +29,7 @@
 #include "BluetoothUtil.h"
 #include "MeshBluetoothService.h"
 #include "MeshService.h"
+#include "GPS.h"
 
 #ifdef T_BEAM_V10
 #include "axp20x.h"
@@ -348,7 +349,7 @@ void setup()
     screen_setup();
 
   // Init GPS
-  gps_setup();
+  gps.setup();
 
   // Show logo on first boot after removing battery
   //if (bootCount == 0) {
@@ -371,7 +372,7 @@ void setup()
 
 void loop()
 {
-  gps_loop();
+  gps.loop();
   screen_loop();
   service.loop();
   loopBLE();

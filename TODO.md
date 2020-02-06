@@ -33,8 +33,17 @@
 * How do avalanche beacons work?  Could this do that as well?  possibly by using beacon mode feature of the RF95?
 * use std::map<BLECharacteristic*, std::string> in node db
 
+# Low power consumption tasks
+
+* stop using loop() instead use a job queue and let cpu sleep
+* move lora rx/tx to own thread and block on IO
+* measure power consumption and calculate battery life assuming no deep sleep
+* do lowest sleep level possible where BT still works during normal sleeping, make sure cpu stays in that mode unless lora rx packet happens, bt rx packet happens or button press happens
+* optionally do lora messaging only during special scheduled intervals (unless nodes are told to go to low latency mode), then deep sleep except during those intervals - before implementing calculate what battery life would be with  this feature
+
 # Pre-beta priority
 
+* use variable length arduino Strings in protobufs (instead of current fixed buffers)
 * don't even power on bluetooth until we have some data to send to the android phone.  Most of the time we should be sleeping in a lowpower "listening for lora" only mode.  Once we have some packets for the phone, then power on bluetooth
 until the phone pulls those packets.  Ever so often power on bluetooth just so we can see if the phone wants to send some packets.  Possibly might need ULP processor to help with this wake process.
 * do hibernation mode to get power draw down to 2.5uA https://lastminuteengineers.com/esp32-sleep-modes-power-consumption/ 
