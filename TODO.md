@@ -1,8 +1,8 @@
 # High priority
 
-* implement regen owner and radio prefs
 * have meshservice periodically send location data on mesh (if device has a GPS)
 * implement getCurrentTime() - set based off gps but then updated locally
+* implement regen owner and radio prefs
 * confirm second device receives that gps message and updates device db
 
 * save our node db (and any rx packets waiting for phone) to flash - see DeviceState protobuf
@@ -14,7 +14,8 @@
 
 # Medium priority
 
-* Heltec LoRa32 has 8MB flash, use a bigger partition table if needed (Auto-detected Flash size: 8MB) - check to see what the TTGO board detects as
+* Heltec LoRa32 has 8MB flash, use a bigger partition table if needed - TTGO is 4MB but has PSRAM
+* use two different env flags for ttgo vs lora32. https://docs.platformio.org/en/latest/ide/vscode.html#key-bindings
 * don't send location packets if we haven't moved
 * send correct hw vendor in the bluetooth info - needed so the android app can update different radio models
 * use https://lastminuteengineers.com/esp32-sleep-modes-power-consumption/ association sleep pattern to save power - but see https://github.com/espressif/esp-idf/issues/2070 

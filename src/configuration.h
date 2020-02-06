@@ -29,7 +29,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Version
 // -----------------------------------------------------------------------------
 
-#define APP_NAME                "meshtastic-esp32"
+#define APP_NAME                "meshtastic"
 #define APP_VERSION             "0.0.1"
 
 // -----------------------------------------------------------------------------
@@ -46,7 +46,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 
 // If we are using the JTAG port for debugging, some pins must be left free for that (and things like GPS have to be disabled)
+// we don't support jtag on the ttgo - access to gpio 12 is a PITA
+#ifdef HELTEC_LORA32
 #define USE_JTAG
+#endif
 
 #define DEBUG_PORT              Serial      // Serial debug port
 #define SERIAL_BAUD             115200      // Serial debug baud rate
