@@ -68,7 +68,7 @@ bool MeshRadio::init()
 
 ErrorCode MeshRadio::send(MeshPacket *p)
 {
-  DEBUG_MSG("enquing packet for sending on mesh\n");
+  DEBUG_MSG("enquing packet for send from=%d, to=%d\n", p->from, p->to);
   return txQueue.enqueue(p, 0); // nowait
 }
 

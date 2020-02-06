@@ -31,7 +31,7 @@ static NodeNum getDesiredNodeNum()
 
     // FIXME not the right way to guess node numes
     uint8_t r = ourMacAddr[5];
-    assert(r != 0xff); // It better not be the broadcast address
+    assert(r != 0xff && r != 0); // It better not be the broadcast address or zero
     return r;
 }
 
@@ -50,6 +50,8 @@ void NodeDB::init() {
             ourMacAddr[1], ourMacAddr[2], ourMacAddr[3], ourMacAddr[4], ourMacAddr[5]);
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 
+    sprintf(owner.long_name, "Unknown %02x%02x", ourMacAddr[4], ourMacAddr[5]);
+    sprintf(owner.short_name, "?%02X", ourMacAddr[5]);
     // FIXME, read owner info from flash
 
     // Include our owner in the node db under our nodenum
@@ -74,7 +76,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
     if (mp.has_payload)
     {
         const SubPacket &p = mp.payload;
-        DEBUG_MSG("Update DB node %x for %d\n", mp.from, p.which_variant);
+        DEBUG_MSG("Update DB node %x for variant %d\n", mp.from, p.which_variant);
         if (p.which_variant != SubPacket_want_node_tag) // we don't create nodeinfo records for someone that is just trying to claim a nodenum
         {
             int oldNumNodes = numNodes;

@@ -57,6 +57,11 @@ public:
     /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
     void reloadOwner() { DEBUG_MSG("FIXME implement reloadOwner\n"); }
     
+    /// Allocate and return a meshpacket which defaults as send to broadcast from the current node.
+    MeshPacket *allocForSending();
+
+    /// Send our owner info to a particular node 
+    void sendOurOwner(NodeNum dest = NODENUM_BROADCAST);
 private:
 
     /// Send a packet into the mesh - note p must have been allocated from packetPool.  We will return it to that pool after sending.

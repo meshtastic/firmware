@@ -1,7 +1,6 @@
 # High priority
 
-* have meshservice periodically send location data on mesh (if device has a GPS)
-* implement getCurrentTime() - set based off gps but then updated locally
+* send our owner info at boot, reply if we see anyone send theirs
 * implement regen owner and radio prefs
 * confirm second device receives that gps message and updates device db
 
@@ -41,8 +40,17 @@
 * do lowest sleep level possible where BT still works during normal sleeping, make sure cpu stays in that mode unless lora rx packet happens, bt rx packet happens or button press happens
 * optionally do lora messaging only during special scheduled intervals (unless nodes are told to go to low latency mode), then deep sleep except during those intervals - before implementing calculate what battery life would be with  this feature
 
+# dynamic nodenum assignment tasks
+
+we currently do the following crap solution:
+hardwire nodenums based on macaddr.  when node boots it broadcasts its Owner info (which includes our macaddr).  If any node receives Owner messages, the other nodes reply with their owner info.
+Really should instead do something like: new node sends its owner info as a provisional request.  If any other node shows that nodenum in use by a different macaddr, they reply with NodeDeny.
+If the node doesn't get denied within X seconds it then sends the info as a non provisional message (and other nodes update their node db)  
+But fixme, think about this and look for standard solutions - it will have problems when meshes separate change and then rejoin.
+
 # Pre-beta priority
 
+* cope with nodes that have 0xff or 0x00 as the last byte of their mac
 * use variable length arduino Strings in protobufs (instead of current fixed buffers)
 * don't even power on bluetooth until we have some data to send to the android phone.  Most of the time we should be sleeping in a lowpower "listening for lora" only mode.  Once we have some packets for the phone, then power on bluetooth
 until the phone pulls those packets.  Ever so often power on bluetooth just so we can see if the phone wants to send some packets.  Possibly might need ULP processor to help with this wake process.
@@ -79,3 +87,6 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * have MeshService keep a node DB by sniffing user messages
 * have a state machine return the correct FromRadio packet to the phone, it isn't always going to be a MeshPacket.  Do a notify on fromnum to force the radio to read our state machine generated packets
 * send my_node_num when phone sends WantsNodes
+* have meshservice periodically send location data on mesh (if device has a GPS)
+* implement getCurrentTime() - set based off gps but then updated locally
+* make default owner record have valid usernames

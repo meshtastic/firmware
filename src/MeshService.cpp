@@ -43,6 +43,18 @@ void MeshService::init()
         DEBUG_MSG("radio init failed\n");
 
     gps.addObserver(this);
+    sendOurOwner();
+}
+
+void MeshService::sendOurOwner(NodeNum dest)
+{
+    MeshPacket *p = allocForSending();
+    p->to = dest;
+    p->payload.which_variant = SubPacket_user_tag;
+    User &u = p->payload.variant.user;
+    u = owner;
+
+    sendToMesh(p);
 }
 
 /// Do idle processing (mostly processing messages which have been queued from the radio)
@@ -89,13 +101,20 @@ void MeshService::sendToMesh(MeshPacket *p)
     assert(radio.send(p) == pdTRUE);
 }
 
-void MeshService::onGPSChanged()
+MeshPacket *MeshService::allocForSending()
 {
     MeshPacket *p = packetPool.allocZeroed();
 
     p->has_payload = true;
     p->from = nodeDB.getNodeNum();
     p->to = NODENUM_BROADCAST;
+
+    return p;
+}
+
+void MeshService::onGPSChanged()
+{
+    MeshPacket *p = allocForSending();
     p->payload.which_variant = SubPacket_position_tag;
     Position &pos = p->payload.variant.position;
     if (gps.altitude.isValid())
