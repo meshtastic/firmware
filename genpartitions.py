@@ -1,4 +1,4 @@
-
+#!/usr/bin/python2
 
 # This is a layout for 4MB of flash
 # Name,   Type, SubType, Offset,  Size, Flags
@@ -10,7 +10,7 @@
 
 start = 0x9000
 nvssys = 0x3000
-nvsuser = 0x3000
+nvsuser = 0x2000 # NOTE: ti seems total size of nvssys MUST be 0x5000 or device will bootloop
 nvs = nvssys + nvsuser
 ota = 0x2000
 # app = 0x1c0000
@@ -38,4 +38,4 @@ app0,     app,  ota_0,   , 0x{app:x},
 app1,     app,  ota_1,   , 0x{app:x},
 spiffs,   data, spiffs,  , 0x{spi:x} """.format(**locals())
 
-print table
+print(table)
