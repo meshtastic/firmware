@@ -1,8 +1,9 @@
 # High priority
 
 * make nice screens (boot, about to sleep, debug info (gps signal, #people), latest text, person info - one frame per person on network)
+* we are currently spinning like crazy in loop, instead sleep unless we have work to do
+* have radiohead ISR send messages to RX queue directly, to allow that thread to block until we have something to send
 * turn framerate from ui->state.frameState to 1 fps (or less) unless in transition
-* use a better font
 * very occasionally send our position and user packet (if for nothing else so that other nodes update last_seen)
 * switch to my gui layout manager
 * make basic gui. different screens: debug, one page for each user in the user db, last received text message
@@ -100,3 +101,4 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * add interrupt detach/sleep mode config to lora radio so we can enable deepsleep without panicing
 * make jtag work on second board
 * implement regen owner and radio prefs
+* use a better font

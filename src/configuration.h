@@ -29,7 +29,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Version
 // -----------------------------------------------------------------------------
 
-#define APP_NAME                "meshtastic"
+#define APP_NAME                "Meshtastic"
 #define APP_VERSION             "0.0.1"
 
 // -----------------------------------------------------------------------------

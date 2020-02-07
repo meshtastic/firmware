@@ -29,7 +29,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "OLEDDisplayUi.h"
 #include "screen.h"
 
-#define SCREEN_HEADER_HEIGHT 14
+#define FONT_HEIGHT 14 // actually 13 for "ariel 10" but want a little extra space
+
+#define SCREEN_WIDTH 128 
+#define SCREEN_HEIGHT 64 
 
 #ifdef I2C_SDA
 SSD1306Wire  dispdev(SSD1306_ADDRESS, I2C_SDA, I2C_SCL);
@@ -38,9 +41,9 @@ SSD1306Wire  dispdev(SSD1306_ADDRESS, 0, 0); // fake values to keep build happy,
 #endif 
 
 bool disp; // true if we are using display
-uint8_t _screen_line = SCREEN_HEADER_HEIGHT - 1;
 
 OLEDDisplayUi ui(&dispdev);
+
 
 void msOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
@@ -49,13 +52,19 @@ void msOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
     display->drawString(128, 0, String(millis()));
 }
 
-void drawFrame1(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     // draw an xbm image.
     // Please note that everything that should be transitioned
     // needs to be drawn relative to x and y
 
-    display->drawXbm(x + 34, y + 14, WiFi_Logo_width, WiFi_Logo_height, WiFi_Logo_bits);
+    display->drawXbm(x + 32, y, icon_width, icon_height,(const uint8_t *) icon_bits);
+
+    display->setFont(ArialMT_Plain_10);
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->drawString(64 + x, SCREEN_HEIGHT - FONT_HEIGHT, APP_NAME " " APP_VERSION);
+
+    ui.disableIndicator();
 }
 
 void drawFrame2(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -91,7 +100,8 @@ void drawFrame3(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int1
     display->drawString(128 + x, 33 + y, "Right aligned (128,33)");
 }
 
-void drawFrame4(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+/// Draw the last text message we received
+void drawLastTextFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     // Demo for drawStringMaxWidth:
     // with the third parameter you can define the width after which words will be wrapped.
@@ -107,14 +117,14 @@ void drawFrame5(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int1
 
 // This array keeps function pointers to all frames
 // frames are the single views that slide in
-FrameCallback frames[] = {drawFrame1, drawFrame2, drawFrame3, drawFrame4, drawFrame5};
+FrameCallback frames[] = {drawBootScreen, drawFrame2, drawFrame3, drawLastTextFrame, drawFrame5};
 
 // how many frames are there?
 int frameCount = 5;
+int overlaysCount = 1;
 
 // Overlays are statically drawn on top of a frame eg. a clock
 OverlayCallback overlays[] = {msOverlay};
-int overlaysCount = 1;
 
 void _screen_header()
 {
@@ -190,11 +200,11 @@ void screen_print(const char *text)
         return;
 
     dispdev.print(text);
-    if (_screen_line + 8 > dispdev.getHeight())
+    /* if (_screen_line + 8 > dispdev.getHeight())
     {
         // scroll
     }
-    _screen_line += 8;
+    _screen_line += 8; */
     screen_loop();
 }
 
@@ -236,7 +246,7 @@ void screen_setup()
     // Scroll buffer
     dispdev.setLogBuffer(5, 30);
 
-    dispdev.flipScreenVertically();
+    // dispdev.flipScreenVertically(); // looks better without this on lora32
     dispdev.setFont(Custom_ArialMT_Plain_10);
 #endif
 }
