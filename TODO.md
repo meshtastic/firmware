@@ -1,6 +1,8 @@
 # High priority
 
-* port my graphics library over from the sw102, same screen controller and resolution
+* make nice screens (boot, about to sleep, debug info (gps signal, #people), latest text, person info - one frame per person on network)
+* turn framerate from ui->state.frameState to 1 fps (or less) unless in transition
+* use a better font
 * very occasionally send our position and user packet (if for nothing else so that other nodes update last_seen)
 * switch to my gui layout manager
 * make basic gui. different screens: debug, one page for each user in the user db, last received text message
@@ -17,6 +19,7 @@
 * How do avalanche beacons work?  Could this do that as well?  possibly by using beacon mode feature of the RF95?
 * use std::map<BLECharacteristic*, std::string> in node db
 * first alpha release, article writeup
+* send pr https://github.com/ThingPulse/esp8266-oled-ssd1306 to tell them about this project
 
 # Low power consumption tasks
 
