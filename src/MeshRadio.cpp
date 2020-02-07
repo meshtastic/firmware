@@ -1,5 +1,5 @@
 #include <SPI.h>
-#include <RH_RF95.h>
+#include "RH_RF95.h"
 #include <RHMesh.h>
 #include <assert.h>
 
@@ -21,6 +21,7 @@ MeshRadio::MeshRadio(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &_r
       rxDest(_rxDest),
       txQueue(MAX_TX_QUEUE)
 {
+  radioConfig.modem_config = RadioConfig_ModemConfig_Bw125Cr45Sf128;
   radioConfig.tx_power = 23;
   radioConfig.center_freq = RF95_FREQ_US; // FIXME, pull this config from flash
 }
@@ -47,11 +48,29 @@ bool MeshRadio::init()
     return false;
   }
 
+  reloadConfig();
+
+  return true;
+}
+
+
+void MeshRadio::reloadConfig()
+{
+  DEBUG_MSG("configuring radio\n");
+
+  rf95.setModeIdle();
+
+  // Set up default configuration
+  // No Sync Words in LORA mode.
+  rf95.setModemConfig((RH_RF95::ModemConfigChoice) radioConfig.modem_config); // Radio default
+                                  //    setModemConfig(Bw125Cr48Sf4096); // slow and reliable?
+  // rf95.setPreambleLength(8);           // Default is 8
+
   // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM
   if (!rf95.setFrequency(radioConfig.center_freq))
   {
     DEBUG_MSG("setFrequency failed\n");
-    assert(0); // fixme panic
+    assert(0); // fixme panic 
   }
   DEBUG_MSG("Set Freq to: %f\n", radioConfig.center_freq);
 
@@ -64,8 +83,6 @@ bool MeshRadio::init()
   rf95.setTxPower(radioConfig.tx_power, false);
 
   DEBUG_MSG("LoRa radio init OK!\n");
-
-  return true;
 }
 
 ErrorCode MeshRadio::send(MeshPacket *p)
@@ -92,7 +109,6 @@ void MeshRadio::handleReceive(MeshPacket *mp)
   int res = rxDest.enqueue(mp, 0); // NOWAIT - fixme, if queue is full, delete older messages
   assert(res == pdTRUE);
 }
-
 
 void MeshRadio::loop()
 {
@@ -142,7 +158,7 @@ static int16_t packetnum = 0;  // packet counter, we increment per xmission
   MeshPacket *txp = txQueue.dequeuePtr(0); // nowait
   if (txp)
   {
-    DEBUG_MSG("sending queued packet on mesh (txGood=%d,rxGood=%d,rxBad=%d)\n", rf95.txGood(),rf95.rxGood(), rf95.rxBad());
+    DEBUG_MSG("sending queued packet on mesh (txGood=%d,rxGood=%d,rxBad=%d)\n", rf95.txGood(), rf95.rxGood(), rf95.rxBad());
     assert(txp->has_payload);
 
     size_t numbytes = pb_encode_to_bytes(radiobuf, sizeof(radiobuf), SubPacket_fields, &txp->payload);

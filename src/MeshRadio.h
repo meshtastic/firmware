@@ -38,7 +38,7 @@ public:
     void loop();
 
     /// The radioConfig object just changed, call this to force the hw to change to the new settings
-    void reloadConfig() { DEBUG_MSG("FIXME add reloadConfig\n"); }
+    void reloadConfig();
 
 private:
     RH_RF95 rf95; // the raw radio interface
