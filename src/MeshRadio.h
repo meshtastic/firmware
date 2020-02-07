@@ -43,9 +43,9 @@ public:
 private:
     RH_RF95 rf95; // the raw radio interface
 
-    RHDatagram manager;
+    // RHDatagram manager;
     // RHReliableDatagram manager; // don't use mesh yet
-    // RHMesh manager;
+    RHMesh manager;
     // MeshRXHandler rxHandler;
 
     MemoryPool<MeshPacket> &pool;

@@ -63,7 +63,6 @@ bool MeshRadio::init()
   // FIXME - can we do this?  It seems to be in the Heltec board.
   rf95.setTxPower(radioConfig.tx_power, false);
 
-
   DEBUG_MSG("LoRa radio init OK!\n");
 
   return true;
@@ -79,7 +78,7 @@ ErrorCode MeshRadio::sendTo(NodeNum dest, const uint8_t *buf, size_t len)
 {
   DEBUG_MSG("mesh sendTo %d bytes to 0x%x\n", len, dest);
 
-  assert(len <= 255); // Make sure we don't overflow the tiny max packet size
+  assert(len <= 251); // Make sure we don't overflow the tiny max packet size
 
   // Note: we don't use sendToWait here because we don't want to wait and for the time being don't require
   // reliable delivery

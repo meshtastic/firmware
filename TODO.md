@@ -1,48 +1,34 @@
 # High priority
 
-* check in my radiolib fixes
-* test raw device access without a manager in the way
-* sim gps data for nodes that don't have hardware
-* figure out what is busted with rx
-* send our owner info at boot, reply if we see anyone send theirs
 * implement regen owner and radio prefs
-* confirm second device receives that gps message and updates device db
 
-* save our node db (and any rx packets waiting for phone) to flash - see DeviceState protobuf
 * port my graphics library over from the sw102, same screen controller and resolution
 * very occasionally send our position and user packet (if for nothing else so that other nodes update last_seen)
 * switch to my gui layout manager
 * make jtag work on second board
 * make basic gui. different screens: debug, one page for each user in the user db, last received text message
+* save our node db (and any rx packets waiting for phone) to flash - see DeviceState protobuf
 
 # Medium priority
 
-* Heltec LoRa32 has 8MB flash, use a bigger partition table if needed - TTGO is 4MB but has PSRAM
-* use two different env flags for ttgo vs lora32. https://docs.platformio.org/en/latest/ide/vscode.html#key-bindings
 * don't send location packets if we haven't moved
-* send correct hw vendor in the bluetooth info - needed so the android app can update different radio models
-* use https://lastminuteengineers.com/esp32-sleep-modes-power-consumption/ association sleep pattern to save power - but see https://github.com/espressif/esp-idf/issues/2070 
-* correctly map nodeids to nodenums, currently we just do a proof of concept by always doing a broadcast
-* add interrupt detach/sleep mode config to lora radio so we can enable deepsleep without panicing
 * scrub default radio config settings for bandwidth/range/speed
-* use a freertos thread to remain blocked reading from recvfromAckTimeout, so that we don't need to keep polling it from our main thread
 * override peekAtMessage so we can see any messages that pass through our node (even if not broadcast)?  would that be useful?
 * sendToMesh can currently block for a long time, instead have it just queue a packet for a radio freertos thread
-* see section 7.3 of https://cdn.sparkfun.com/assets/learn_tutorials/8/0/4/RFM95_96_97_98W.pdf and have hope radio wake only when a valid packet is received.  Possibly even wake the ESP32 from deep sleep via GPIO.
 * fix the logo
-* do debug logging to android over bluetooth
-* break out my bluetooth OTA software as a seperate library so others can use it
-* never enter deep sleep while connected to USB power (but still go to other low power modes)
 * How do avalanche beacons work?  Could this do that as well?  possibly by using beacon mode feature of the RF95?
 * use std::map<BLECharacteristic*, std::string> in node db
 
 # Low power consumption tasks
 
+* use https://lastminuteengineers.com/esp32-sleep-modes-power-consumption/ association sleep pattern to save power - but see https://github.com/espressif/esp-idf/issues/2070 
 * stop using loop() instead use a job queue and let cpu sleep
 * move lora rx/tx to own thread and block on IO
 * measure power consumption and calculate battery life assuming no deep sleep
 * do lowest sleep level possible where BT still works during normal sleeping, make sure cpu stays in that mode unless lora rx packet happens, bt rx packet happens or button press happens
 * optionally do lora messaging only during special scheduled intervals (unless nodes are told to go to low latency mode), then deep sleep except during those intervals - before implementing calculate what battery life would be with  this feature
+* see section 7.3 of https://cdn.sparkfun.com/assets/learn_tutorials/8/0/4/RFM95_96_97_98W.pdf and have hope radio wake only when a valid packet is received.  Possibly even wake the ESP32 from deep sleep via GPIO.
+* never enter deep sleep while connected to USB power (but still go to other low power modes)
 
 # dynamic nodenum assignment tasks
 
@@ -54,6 +40,7 @@ But fixme, think about this and look for standard solutions - it will have probl
 
 # Pre-beta priority
 
+* turn on basic crypto
 * cope with nodes that have 0xff or 0x00 as the last byte of their mac
 * use variable length arduino Strings in protobufs (instead of current fixed buffers)
 * don't even power on bluetooth until we have some data to send to the android phone.  Most of the time we should be sleeping in a lowpower "listening for lora" only mode.  Once we have some packets for the phone, then power on bluetooth
@@ -71,6 +58,12 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 
 # Low priority
 
+* use two different env flags for ttgo vs lora32. https://docs.platformio.org/en/latest/ide/vscode.html#key-bindings
+* sim gps data for testing nodes that don't have hardware
+* have android provide position data for nodes that don't have gps
+* do debug serial logging to android over bluetooth
+* break out my bluetooth OTA software as a seperate library so others can use it
+* Heltec LoRa32 has 8MB flash, use a bigger partition table if needed - TTGO is 4MB but has PSRAM
 * add a watchdog timer
 * fix GPS.zeroOffset calculation it is wrong
 * handle millis() rollover in GPS.getTime - otherwise we will break after 50 days
@@ -95,3 +88,11 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * implement getCurrentTime() - set based off gps but then updated locally
 * make default owner record have valid usernames
 * message loop between node 0x28 and 0x7c
+* check in my radiolib fixes
+* figure out what is busted with rx
+* send our owner info at boot, reply if we see anyone send theirs
+* add manager layers
+* confirm second device receives that gps message and updates device db
+* send correct hw vendor in the bluetooth info - needed so the android app can update different radio models
+* correctly map nodeids to nodenums, currently we just do a proof of concept by always doing a broadcast
+* add interrupt detach/sleep mode config to lora radio so we can enable deepsleep without panicing
