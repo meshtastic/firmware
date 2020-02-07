@@ -8,6 +8,7 @@
 * switch to my gui layout manager
 * make basic gui. different screens: debug, one page for each user in the user db, last received text message
 * save our node db on entry to sleep
+* make a screen for bluetooth not yet configured
 
 # Medium priority
 
