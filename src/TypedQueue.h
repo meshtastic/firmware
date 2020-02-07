@@ -19,6 +19,10 @@ public:
         vQueueDelete(h);
     }
 
+    int numFree() {
+        return uxQueueSpacesAvailable(h);
+    }
+
     // pdTRUE for success else failure
     BaseType_t enqueue(T x, TickType_t maxWait = portMAX_DELAY) {
         return xQueueSendToBack(h, &x, maxWait);

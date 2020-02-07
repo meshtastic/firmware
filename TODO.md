@@ -1,5 +1,6 @@
 # High priority
 
+* check in my radiolib fixes
 * test raw device access without a manager in the way
 * sim gps data for nodes that don't have hardware
 * figure out what is busted with rx
@@ -93,3 +94,4 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * have meshservice periodically send location data on mesh (if device has a GPS)
 * implement getCurrentTime() - set based off gps but then updated locally
 * make default owner record have valid usernames
+* message loop between node 0x28 and 0x7c

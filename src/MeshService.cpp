@@ -74,6 +74,13 @@ void MeshService::loop()
         }
 
         fromNum++;
+
+        if(toPhoneQueue.numFree() == 0) {
+            DEBUG_MSG("NOTE: tophone queue is full, discarding oldest\n");
+            MeshPacket *d = toPhoneQueue.dequeuePtr(0);
+            if(d)
+                releaseToPool(d);
+        }
         assert(toPhoneQueue.enqueue(mp, 0) == pdTRUE); // FIXME, instead of failing for full queue, delete the oldest mssages
     }
     if (oldFromNum != fromNum) // We don't want to generate extra notifies for multiple new packets
