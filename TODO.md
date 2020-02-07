@@ -1,5 +1,8 @@
 # High priority
 
+* test raw device access without a manager in the way
+* sim gps data for nodes that don't have hardware
+* figure out what is busted with rx
 * send our owner info at boot, reply if we see anyone send theirs
 * implement regen owner and radio prefs
 * confirm second device receives that gps message and updates device db

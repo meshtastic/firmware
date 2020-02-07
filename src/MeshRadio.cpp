@@ -10,13 +10,13 @@
 #include "NodeDB.h"
 
 // Change to 434.0 or other frequency, must match RX's freq!  FIXME, choose a better default value
-#define RF95_FREQ_US 915.0f
+#define RF95_FREQ_US 902.0f
 
 RadioConfig radioConfig = RadioConfig_init_zero;
 
 MeshRadio::MeshRadio(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &_rxDest)
     : rf95(NSS_GPIO, DIO0_GPIO),
-      manager(rf95, nodeDB.getNodeNum()),
+      manager(rf95),
       pool(_pool),
       rxDest(_rxDest),
       txQueue(MAX_TX_QUEUE)
@@ -38,14 +38,14 @@ bool MeshRadio::init()
   delay(10);
 #endif
 
+  manager.setThisAddress(nodeDB.getNodeNum()); // Note: we must do this here, because the nodenum isn't inited at constructor time.
+
   if (!manager.init())
   {
     DEBUG_MSG("LoRa radio init failed\n");
     DEBUG_MSG("Uncomment '#define SERIAL_DEBUG' in RH_RF95.cpp for detailed debug info\n");
     return false;
   }
-
-  DEBUG_MSG("LoRa radio init OK!\n");
 
   // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM
   if (!rf95.setFrequency(radioConfig.center_freq))
@@ -62,6 +62,8 @@ bool MeshRadio::init()
   // you can set transmitter powers from 5 to 23 dBm:
   // FIXME - can we do this?  It seems to be in the Heltec board.
   rf95.setTxPower(radioConfig.tx_power, false);
+
+  DEBUG_MSG("LoRa radio init OK!\n");
 
   return true;
 }
@@ -113,10 +115,11 @@ static int16_t packetnum = 0;  // packet counter, we increment per xmission
   uint8_t srcaddr, destaddr, id, flags;
 
   // Poll to see if we've received a packet
-  if (manager.recvfromAckTimeout(radiobuf, &rxlen, 0, &srcaddr, &destaddr, &id, &flags))
+  //   if (manager.recvfromAckTimeout(radiobuf, &rxlen, 0, &srcaddr, &destaddr, &id, &flags))
+  if (manager.recvfrom(radiobuf, &rxlen, &srcaddr, &destaddr, &id, &flags))
   {
     // We received a packet
-    DEBUG_MSG("Received packet from mesh src=%d,dest=%d,id=%d,len=%d\n", srcaddr, destaddr, id, rxlen);
+    DEBUG_MSG("Received packet from mesh src=0x%x,dest=0x%x,id=%d,len=%d rxGood=%d,rxBad=%d\n", srcaddr, destaddr, id, rxlen, rf95.rxGood(), rf95.rxBad());
 
     MeshPacket *mp = pool.allocZeroed();
     assert(mp); // FIXME
@@ -141,7 +144,7 @@ static int16_t packetnum = 0;  // packet counter, we increment per xmission
   MeshPacket *txp = txQueue.dequeuePtr(0); // nowait
   if (txp)
   {
-    DEBUG_MSG("sending queued packet on mesh\n");
+    DEBUG_MSG("sending queued packet on mesh (txGood=%d,rxGood=%d,rxBad=%d)\n", rf95.txGood(),rf95.rxGood(), rf95.rxBad());
     assert(txp->has_payload);
 
     size_t numbytes = pb_encode_to_bytes(radiobuf, sizeof(radiobuf), SubPacket_fields, &txp->payload);
@@ -154,5 +157,7 @@ static int16_t packetnum = 0;  // packet counter, we increment per xmission
       handleReceive(txp);
     else
       pool.release(txp);
+
+    DEBUG_MSG("Done with send\n");
   }
 }
