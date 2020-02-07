@@ -6,8 +6,9 @@
 #include "mesh-pb-constants.h"
 #include "MeshTypes.h"
 
-extern MyNodeInfo myNodeInfo;
-extern User owner;
+extern MyNodeInfo &myNodeInfo;
+extern RadioConfig &radioConfig;
+extern User &owner;
 
 class NodeDB
 {
@@ -16,8 +17,9 @@ class NodeDB
     // A NodeInfo for every node we've seen
     // Eventually use a smarter datastructure
     // HashMap<NodeNum, NodeInfo> nodes;
-    NodeInfo nodes[MAX_NUM_NODES];
-    int numNodes = 0;
+    // Note: these two references just point into our static array we serialize to/from disk
+    NodeInfo *nodes;
+    pb_size_t *numNodes;
 
     bool updateGUI = false;             // we think the gui should definitely be redrawn
     NodeInfo *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
@@ -31,6 +33,9 @@ public:
 
     /// Called from service after app start, to do init which can only be done after OS load
     void init();
+
+    /// write to flash
+    void saveToDisk();
 
     /// given a subpacket sniffed from the network, update our DB state
     /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
@@ -60,6 +65,9 @@ private:
 
     /// Find a node in our DB, create an empty NodeInfo if missing
     NodeInfo *getOrCreateNode(NodeNum n);
+
+    /// read our db from flash
+    void loadFromDisk();
 };
 
 extern NodeDB nodeDB;

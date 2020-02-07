@@ -12,7 +12,6 @@
 // Change to 434.0 or other frequency, must match RX's freq!  FIXME, choose a better default value
 #define RF95_FREQ_US 902.0f
 
-RadioConfig radioConfig = RadioConfig_init_zero;
 
 MeshRadio::MeshRadio(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &_rxDest)
     : rf95(NSS_GPIO, DIO0_GPIO),

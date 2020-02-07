@@ -4,6 +4,7 @@
 #include <pb_encode.h>
 #include <pb_decode.h>
 #include <assert.h>
+#include "FS.h"
 
 /// helper function for encoding a record as a protobuf, any failures to encode are fatal and we will panic
 /// returns the encoded packet size
@@ -36,4 +37,34 @@ bool pb_decode_from_bytes(const uint8_t *srcbuf, size_t srcbufsize, const pb_msg
     {
         return true;
     }
+}
+
+
+/// Read from an Arduino File
+bool readcb(pb_istream_t *stream, uint8_t *buf, size_t count)
+{
+    File *file = (File *)stream->state;
+    bool status;
+
+    if (buf == NULL)
+    {
+        while (count-- && file->read() != EOF)
+            ;
+        return count == 0;
+    }
+
+    status = (file->read(buf, count) == count);
+
+    if (file->available() == 0)
+        stream->bytes_left = 0;
+
+    return status;
+}
+
+
+/// Write to an arduino file
+bool writecb(pb_ostream_t *stream, const uint8_t *buf, size_t count)
+{
+   File *file = (File*) stream->state;
+   return file->write(buf, count) == count;
 }

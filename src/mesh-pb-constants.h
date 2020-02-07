@@ -20,3 +20,9 @@ size_t pb_encode_to_bytes(uint8_t *destbuf, size_t destbufsize, const pb_msgdesc
 
 /// helper function for decoding a record as a protobuf, we will return false if the decoding failed
 bool pb_decode_from_bytes(const uint8_t *srcbuf, size_t srcbufsize, const pb_msgdesc_t *fields, void *dest_struct);
+
+/// Read from an Arduino File
+bool readcb(pb_istream_t *stream, uint8_t *buf, size_t count);
+
+/// Write to an arduino file
+bool writecb(pb_ostream_t *stream, const uint8_t *buf, size_t count);

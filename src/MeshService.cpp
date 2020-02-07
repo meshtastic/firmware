@@ -53,6 +53,7 @@ void MeshService::sendOurOwner(NodeNum dest)
     p->payload.which_variant = SubPacket_user_tag;
     User &u = p->payload.variant.user;
     u = owner;
+    DEBUG_MSG("sending owner %s/%s/%s\n", u.id, u.long_name, u.short_name);
 
     sendToMesh(p);
 }
