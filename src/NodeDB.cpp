@@ -92,16 +92,25 @@ const char *preftmp = "/db.proto.tmp";
 
 void NodeDB::loadFromDisk()
 {
+    static DeviceState scratch;
+
     File f = FS.open(preffile);
     if (f)
     {
         DEBUG_MSG("Loading saved preferences\n");
         pb_istream_t stream = {&readcb, &f, DeviceState_size};
 
-        if (!pb_decode(&stream, DeviceState_fields, &devicestate))
+        scratch = DeviceState_init_zero;
+        if (!pb_decode(&stream, DeviceState_fields, &scratch))
         {
             DEBUG_MSG("Error: can't decode protobuf %s\n", PB_GET_ERROR(&stream));
             // FIXME - report failure to phone
+        }
+        else {
+            if(scratch.version < DeviceState_Version_Minimum)
+                DEBUG_MSG("Warn: devicestate is old, discarding\n");
+            else
+                devicestate = scratch;
         }
 
         f.close();
@@ -120,6 +129,7 @@ void NodeDB::saveToDisk()
         DEBUG_MSG("Writing preferences\n");
         pb_ostream_t stream = {&writecb, &f, DeviceState_size, 0};
 
+        devicestate.version = DeviceState_Version_Current;
         if (!pb_encode(&stream, DeviceState_fields, &devicestate))
         {
             DEBUG_MSG("Error: can't write protobuf %s\n", PB_GET_ERROR(&stream));

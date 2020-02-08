@@ -2,10 +2,10 @@
 
 * have node info screen show real info (including distance and heading)
 * very occasionally send our position and user packet (if for nothing else so that other nodes update last_seen)
-* make a screen for bluetooth not yet configured
 
 # Medium priority
 
+* sent/received packets (especially if a node was just reset) have variant of zero sometimes - I think there is a bug (race-condtion?) in the radio send/rx path.
 * only BLE advertise for a short time after the screen is on and button pressed - to save power and prevent people for sniffing for our BT app.
 * use https://platformio.org/lib/show/1260/OneButton
 * make an about to sleep screen
@@ -15,7 +15,6 @@
 * add basic crypto - http://rweather.github.io/arduinolibs/crypto.html with speck https://www.airspayce.com/mikem/arduino/RadioHead/rf95_encrypted_client_8pde-example.html
 * override peekAtMessage so we can see any messages that pass through our node (even if not broadcast)?  would that be useful?
 * sendToMesh can currently block for a long time, instead have it just queue a packet for a radio freertos thread
-* fix the logo
 * How do avalanche beacons work?  Could this do that as well?  possibly by using beacon mode feature of the RF95?
 * use std::map<BLECharacteristic*, std::string> in node db
 * first alpha release, article writeup
@@ -44,6 +43,7 @@ But fixme, think about this and look for standard solutions - it will have probl
 
 # Pre-beta priority
 
+* make a screen for bluetooth not yet configured
 * swap out speck for accelerated full AES https://github.com/espressif/arduino-esp32/blob/master/tools/sdk/include/esp32/hwcrypto/aes.h
 * cope with nodes that have 0xff or 0x00 as the last byte of their mac
 * use variable length arduino Strings in protobufs (instead of current fixed buffers)
@@ -62,6 +62,7 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 
 # Low priority
 
+* We let anyone scan for us (FIXME, perhaps only allow that until we are paired with a phone and configured) 
 * use two different env flags for ttgo vs lora32. https://docs.platformio.org/en/latest/ide/vscode.html#key-bindings
 * sim gps data for testing nodes that don't have hardware
 * have android provide position data for nodes that don't have gps
@@ -109,3 +110,4 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * make basic gui. different screens: debug, one page for each user in the user db, last received text message
 * make button press cycle between screens
 * save our node db on entry to sleep
+* fix the logo
