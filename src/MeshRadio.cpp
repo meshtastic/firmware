@@ -47,6 +47,9 @@ bool MeshRadio::init()
     return false;
   }
 
+  // not needed - defaults on
+  // rf95.setPayloadCRC(true);
+
   reloadConfig();
 
   return true;
@@ -99,7 +102,14 @@ ErrorCode MeshRadio::sendTo(NodeNum dest, const uint8_t *buf, size_t len)
   // Note: we don't use sendToWait here because we don't want to wait and for the time being don't require
   // reliable delivery
   // return manager.sendtoWait((uint8_t *) buf, len, dest);
-  return manager.sendto((uint8_t *)buf, len, dest) ? ERRNO_OK : ERRNO_UNKNOWN;
+  ErrorCode res = manager.sendto((uint8_t *)buf, len, dest) ? ERRNO_OK : ERRNO_UNKNOWN;
+
+  // FIXME, we have to wait for sending to complete before freeing the buffer, otherwise it might get wiped
+  // instead just have the radiohead layer understand queues.
+  if(res == ERRNO_OK)
+    manager.waitPacketSent();
+
+  return res;
 }
 
 /// enqueue a received packet in rxDest
@@ -129,13 +139,14 @@ static int16_t packetnum = 0;  // packet counter, we increment per xmission
 
   // Poll to see if we've received a packet
   //   if (manager.recvfromAckTimeout(radiobuf, &rxlen, 0, &srcaddr, &destaddr, &id, &flags))
+  // prefill rxlen with the max length we can accept - very important
+  rxlen = sizeof(radiobuf);
   if (manager.recvfrom(radiobuf, &rxlen, &srcaddr, &destaddr, &id, &flags))
   {
     // We received a packet
     DEBUG_MSG("Received packet from mesh src=0x%x,dest=0x%x,id=%d,len=%d rxGood=%d,rxBad=%d\n", srcaddr, destaddr, id, rxlen, rf95.rxGood(), rf95.rxBad());
 
     MeshPacket *mp = pool.allocZeroed();
-    assert(mp); // FIXME
 
     SubPacket *p = &mp->payload;
 

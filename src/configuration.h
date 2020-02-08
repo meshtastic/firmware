@@ -38,11 +38,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // Select which T-Beam board is being used. Only uncomment one.  Note: these options now come from platformio standard build file flags
 //#ifdef ARDUINO_T_Beam
-#define T_BEAM_V10  // AKA Rev1 (second board released)
+//#define T_BEAM_V10  // AKA Rev1 (second board released)
 //#endif 
 
 //#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V2
-// #define HELTEC_LORA32
+#define HELTEC_LORA32
 //#endif
 
 // If we are using the JTAG port for debugging, some pins must be left free for that (and things like GPS have to be disabled)

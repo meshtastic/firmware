@@ -5,7 +5,6 @@
 
 # Medium priority
 
-* sent/received packets (especially if a node was just reset) have variant of zero sometimes - I think there is a bug (race-condtion?) in the radio send/rx path.
 * only BLE advertise for a short time after the screen is on and button pressed - to save power and prevent people for sniffing for our BT app.
 * use https://platformio.org/lib/show/1260/OneButton
 * make an about to sleep screen
@@ -112,3 +111,4 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * make button press cycle between screens
 * save our node db on entry to sleep
 * fix the logo
+* sent/received packets (especially if a node was just reset) have variant of zero sometimes - I think there is a bug (race-condtion?) in the radio send/rx path.

@@ -59,11 +59,9 @@ void MeshService::sendOurOwner(NodeNum dest)
     sendToMesh(p);
 }
 
-/// Do idle processing (mostly processing messages which have been queued from the radio)
-void MeshService::loop()
-{
-    radio.loop(); // FIXME, possibly move radio interaction to own thread
 
+void MeshService::handleFromRadio()
+{
     MeshPacket *mp;
     uint32_t oldFromNum = fromNum;
     while ((mp = fromRadioQueue.dequeuePtr(0)) != NULL)
@@ -90,6 +88,24 @@ void MeshService::loop()
     }
     if (oldFromNum != fromNum) // We don't want to generate extra notifies for multiple new packets
         bluetoothNotifyFromNum(fromNum);
+}
+
+
+
+/// Do idle processing (mostly processing messages which have been queued from the radio)
+void MeshService::loop()
+{
+    radio.loop(); // FIXME, possibly move radio interaction to own thread
+
+    handleFromRadio();
+
+    // FIXME, don't send user this often, but for now it is useful for testing
+    static uint32_t lastsend;
+    uint32_t now = millis(); 
+    if(now - lastsend > 20 * 1000) {
+        lastsend = now;
+        sendOurOwner();
+    }
 }
 
 /// Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)

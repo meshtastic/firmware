@@ -72,6 +72,9 @@ private:
     void onGPSChanged();
 
     virtual void onNotify(Observable *o);
+
+    /// handle packets that just arrived from the mesh radio
+    void handleFromRadio();
 };
 
 extern MeshService service;

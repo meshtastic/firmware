@@ -385,6 +385,8 @@ void loop()
   digitalWrite(LED_PIN, ledon);
 #endif
 
+  // DEBUG_MSG("led %d\n", ledon);
+
 #ifdef T_BEAM_V10
   if (axp192_found)
   {
