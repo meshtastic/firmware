@@ -1,17 +1,14 @@
 # High priority
 
-* make nice screens (boot, about to sleep, debug info (gps signal, #people), latest text, person info - one frame per person on network)
-* we are currently spinning like crazy in loop, instead sleep unless we have work to do
-* have radiohead ISR send messages to RX queue directly, to allow that thread to block until we have something to send
-* turn framerate from ui->state.frameState to 1 fps (or less) unless in transition
+* have node info screen show real info (including distance and heading)
 * very occasionally send our position and user packet (if for nothing else so that other nodes update last_seen)
-* switch to my gui layout manager
-* make basic gui. different screens: debug, one page for each user in the user db, last received text message
 * save our node db on entry to sleep
 * make a screen for bluetooth not yet configured
 
 # Medium priority
 
+* make an about to sleep screen
+* make a no bluetooth configured yet screen
 * don't send location packets if we haven't moved
 * scrub default radio config settings for bandwidth/range/speed
 * add basic crypto - http://rweather.github.io/arduinolibs/crypto.html with speck https://www.airspayce.com/mikem/arduino/RadioHead/rf95_encrypted_client_8pde-example.html
@@ -25,6 +22,7 @@
 
 # Low power consumption tasks
 
+* have radiohead ISR send messages to RX queue directly, to allow that thread to block until we have something to send
 * use https://lastminuteengineers.com/esp32-sleep-modes-power-consumption/ association sleep pattern to save power - but see https://github.com/espressif/esp-idf/issues/2070 
 * stop using loop() instead use a job queue and let cpu sleep
 * move lora rx/tx to own thread and block on IO
@@ -104,3 +102,8 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * make jtag work on second board
 * implement regen owner and radio prefs
 * use a better font
+* make nice screens (boot, about to sleep, debug info (gps signal, #people), latest text, person info - one frame per person on network)
+* turn framerate from ui->state.frameState to 1 fps (or less) unless in transition
+* switch to my gui layout manager
+* make basic gui. different screens: debug, one page for each user in the user db, last received text message
+* make button press cycle between screens

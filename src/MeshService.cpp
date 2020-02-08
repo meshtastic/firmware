@@ -74,7 +74,7 @@ void MeshService::loop()
             DEBUG_MSG("Received broadcast Owner from 0x%x, replying with our owner\n", mp->from);
             sendOurOwner(mp->from);
 
-            String lcd = String("Joined: ") + mp->payload.variant.user.long_name;
+            String lcd = String("Joined: ") + mp->payload.variant.user.long_name + "\n";
             screen_print(lcd.c_str());
         }
 

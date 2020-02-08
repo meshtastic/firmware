@@ -352,7 +352,7 @@ void setup()
   // Init GPS
   gps.setup();
 
-  screen_print("Started...");
+  screen_print("Started...\n");
 
   service.init();
 
@@ -401,6 +401,7 @@ void loop()
       DEBUG_MSG("pressing\n");
       wasPressed = true;
       minPressMs = millis() + 3000;
+      screen_press();
     }
   }
   else if (wasPressed)
@@ -427,5 +428,8 @@ void loop()
   // No GPS lock yet, let the OS put the main CPU in low power mode for 100ms (or until another interrupt comes in)
   // i.e. don't just keep spinning in loop as fast as we can.
   //DEBUG_MSG("msecs %d\n", msecstosleep);
+
+  // FIXME - until button press handling is done by interrupt (see polling above) we can't sleep very long at all or buttons feel slow
+  msecstosleep = 10;
   delay(msecstosleep);
 }

@@ -359,9 +359,17 @@ uint32_t screen_loop()
     if (showingBootScreen && ui.getUiState()->currentFrame == 1)
     {
         showingBootScreen = false;
-        ui.setFrames(nonBootFrames, frameCount - 1);
+        ui.setFrames(nonBootFrames, frameCount - 1); 
     }
 
     // If we are scrolling do 30fps, otherwise just 1 fps (to save CPU)
     return (ui.getUiState()->frameState == IN_TRANSITION ? 10 : 500);
+}
+
+
+/// handle press of the button
+void screen_press() {
+    // Once the user presses a button, stop auto scrolling between screens
+    ui.disableAutoTransition();  // we now require presses
+    ui.nextFrame();
 }
