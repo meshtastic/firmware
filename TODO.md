@@ -2,11 +2,12 @@
 
 * have node info screen show real info (including distance and heading)
 * very occasionally send our position and user packet (if for nothing else so that other nodes update last_seen)
-* save our node db on entry to sleep
 * make a screen for bluetooth not yet configured
 
 # Medium priority
 
+* only BLE advertise for a short time after the screen is on and button pressed - to save power and prevent people for sniffing for our BT app.
+* use https://platformio.org/lib/show/1260/OneButton
 * make an about to sleep screen
 * make a no bluetooth configured yet screen
 * don't send location packets if we haven't moved
@@ -107,3 +108,4 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * switch to my gui layout manager
 * make basic gui. different screens: debug, one page for each user in the user db, last received text message
 * make button press cycle between screens
+* save our node db on entry to sleep

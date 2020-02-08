@@ -66,6 +66,26 @@ void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, 
     ui.disableIndicator();
 }
 
+static char btPIN[16] = "888888";
+
+void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    // Demonstrates the 3 included default sizes. The fonts come from SSD1306Fonts.h file
+    // Besides the default fonts there will be a program to convert TrueType fonts into this format
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->setFont(ArialMT_Plain_16);
+    display->drawString(64 + x, 2 + y, "Bluetooth");
+
+    display->setFont(ArialMT_Plain_10);
+    display->drawString(64 + x, SCREEN_HEIGHT - FONT_HEIGHT + y, "Enter this code");
+
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->setFont(ArialMT_Plain_24);
+    display->drawString(64 + x, 22 + y, btPIN);
+
+    ui.disableIndicator();
+}
+
 void drawFrame2(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     // Demonstrates the 3 included default sizes. The fonts come from SSD1306Fonts.h file
@@ -209,12 +229,13 @@ OverlayCallback overlays[] = {/* msOverlay */};
 const int frameCount = sizeof(frames) / sizeof(frames[0]);
 const int overlaysCount = sizeof(overlays) / sizeof(overlays[0]);
 
+#if 0
 void _screen_header()
 {
     if (!disp)
         return;
 
-#if 0
+
     // Message count
     //snprintf(buffer, sizeof(buffer), "#%03d", ttn_get_count() % 1000);
     //display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -229,8 +250,8 @@ void _screen_header()
     char buffer[10];
     display->drawString(display->getWidth() - SATELLITE_IMAGE_WIDTH - 4, 2, itoa(gps.satellites.value(), buffer, 10));
     display->drawXbm(display->getWidth() - SATELLITE_IMAGE_WIDTH, 0, SATELLITE_IMAGE_WIDTH, SATELLITE_IMAGE_HEIGHT, SATELLITE_IMAGE);
-#endif
 }
+#endif
 
 void screen_off()
 {
@@ -259,10 +280,7 @@ static void screen_print(const char *text, uint8_t x, uint8_t y, uint8_t alignme
     dispdev.drawString(x, y, text);
 }
 
-static void screen_print(const char *text, uint8_t x, uint8_t y)
-{
-    screen_print(text, x, y, TEXT_ALIGN_LEFT);
-}
+
 
 void screen_print(const char *text)
 {
@@ -317,6 +335,8 @@ void screen_setup()
 #endif
 }
 
+static bool showingBluetooth;
+
 uint32_t screen_loop()
 {
     if (!disp)
@@ -356,19 +376,43 @@ uint32_t screen_loop()
     ui.update();
 
     // Once we finish showing the bootscreen, remove it from the loop
-    if (showingBootScreen && ui.getUiState()->currentFrame == 1)
+    if (showingBootScreen && !showingBluetooth && ui.getUiState()->currentFrame == 1)
     {
         showingBootScreen = false;
-        ui.setFrames(nonBootFrames, frameCount - 1); 
+        screen_set_frames();
     }
 
     // If we are scrolling do 30fps, otherwise just 1 fps (to save CPU)
     return (ui.getUiState()->frameState == IN_TRANSITION ? 10 : 500);
 }
 
+// Show the bluetooth PIN screen
+void screen_start_bluetooth(uint32_t pin) {
+    static FrameCallback btFrames[] = { drawFrameBluetooth };
+
+    snprintf(btPIN, sizeof(btPIN), "%06d", pin);
+
+    DEBUG_MSG("showing bluetooth screen\n");
+    showingBluetooth = true;
+
+    //screen_on(); // make sure the screen is not asleep - FIXME, this causes crap to draw on the screen
+    ui.disableAutoTransition();  // we now require presses
+    ui.setFrames(btFrames, 1); // Just show the bluetooth frame
+    // we rely on our main loop to show this screen (because we are invoked deep inside of bluetooth callbacks)
+    // ui.update(); // manually draw once, because I'm not sure if loop is getting called
+}
+
+// restore our regular frame list
+void screen_set_frames() {
+    DEBUG_MSG("showing standard frames\n");
+    ui.setFrames(nonBootFrames, frameCount - 1); 
+    showingBluetooth = false;
+}
 
 /// handle press of the button
 void screen_press() {
+    //screen_start_bluetooth(123456);
+
     // Once the user presses a button, stop auto scrolling between screens
     ui.disableAutoTransition();  // we now require presses
     ui.nextFrame();

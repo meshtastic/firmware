@@ -31,6 +31,7 @@
 #include "MeshService.h"
 #include "GPS.h"
 #include "screen.h"
+#include "NodeDB.h"
 
 #ifdef T_BEAM_V10
 #include "axp20x.h"
@@ -65,6 +66,8 @@ void doDeepSleep(uint64_t msecToWake)
 
   // Put radio in sleep mode (will still draw power but only 0.2uA)
   service.radio.sleep();
+
+  nodeDB.saveToDisk();
 
 #ifdef RESET_OLED
   digitalWrite(RESET_OLED, 1); // put the display in reset before killing its power
