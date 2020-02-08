@@ -62,6 +62,7 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 
 # Low priority
 
+* using the genpartitions based table doesn't work on TTGO so for now I stay with my old memory map
 * We let anyone scan for us (FIXME, perhaps only allow that until we are paired with a phone and configured) 
 * use two different env flags for ttgo vs lora32. https://docs.platformio.org/en/latest/ide/vscode.html#key-bindings
 * sim gps data for testing nodes that don't have hardware
