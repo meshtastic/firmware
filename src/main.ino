@@ -371,8 +371,10 @@ void setup()
 
 void loop()
 {
+  uint32_t msecstosleep = 1000 * 30; // How long can we sleep before we again need to service the main loop?
+
   gps.loop();
-  screen_loop();
+  msecstosleep = min(screen_loop(), msecstosleep);
   service.loop();
   loopBLE();
 
@@ -428,5 +430,6 @@ void loop()
 
   // No GPS lock yet, let the OS put the main CPU in low power mode for 100ms (or until another interrupt comes in)
   // i.e. don't just keep spinning in loop as fast as we can.
-  //delay(100);
+  DEBUG_MSG("msecs %d\n", msecstosleep);
+  delay(msecstosleep);
 }

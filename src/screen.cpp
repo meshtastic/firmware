@@ -259,10 +259,10 @@ void screen_setup()
 #endif
 }
 
-void screen_loop()
+uint32_t screen_loop()
 {
     if (!disp)
-        return;
+        return 30 * 1000;
 
 #ifdef T_BEAM_V10
     if (axp192_found && pmu_irq)
@@ -295,11 +295,17 @@ void screen_loop()
 #endif
     static bool showingBootScreen = true;
 
-    ui.update();
+
+    
+
+    uint32_t msecstosleep =     ui.update();
 
     // Once we finish showing the bootscreen, remove it from the loop
     if (showingBootScreen && ui.getUiState()->currentFrame == 1)
     {
         ui.setFrames(nonBootFrames, frameCount - 1);
     }
+
+    // If we are scrolling do 30fps, otherwise just 1 fps (to save CPU)
+    return (ui.getUiState()->frameState == IN_TRANSITION ? 10 : 500);
 }
