@@ -22,7 +22,9 @@ a node number and keeping the current nodedb.
 
 MeshService service;
 
-#define MAX_PACKETS 32 // max number of packets which can be in flight (either queued from reception or queued for sending)
+
+// I think this is right, one packet for each of the three fifos + one packet being currently assembled for TX or RX
+#define MAX_PACKETS (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + MAX_TX_QUEUE + 2) // max number of packets which can be in flight (either queued from reception or queued for sending)
 
 #define MAX_RX_FROMRADIO 4 // max number of packets destined to our queue, we dispatch packets quickly so it doesn't need to be big
 
