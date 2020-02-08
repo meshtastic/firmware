@@ -15,12 +15,6 @@ PB_BIND(Data, Data, AUTO)
 PB_BIND(User, User, AUTO)
 
 
-PB_BIND(WantNodeNum, WantNodeNum, AUTO)
-
-
-PB_BIND(DenyNodeNum, DenyNodeNum, AUTO)
-
-
 PB_BIND(SubPacket, SubPacket, AUTO)
 
 

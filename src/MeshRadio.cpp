@@ -95,6 +95,8 @@ ErrorCode MeshRadio::send(MeshPacket *p)
 
 ErrorCode MeshRadio::sendTo(NodeNum dest, const uint8_t *buf, size_t len)
 {
+  // We must do this before each send, because we might have just changed our nodenum
+  manager.setThisAddress(nodeDB.getNodeNum()); // Note: we must do this here, because the nodenum isn't inited at constructor time.
 
   assert(len <= 251); // Make sure we don't overflow the tiny max packet size
 
@@ -109,7 +111,7 @@ ErrorCode MeshRadio::sendTo(NodeNum dest, const uint8_t *buf, size_t len)
   if(res == ERRNO_OK)
     manager.waitPacketSent();
 
-  DEBUG_MSG("mesh sendTo %d bytes to 0x%x (%u msecs)\n", len, dest, millis() - start);
+  DEBUG_MSG("mesh sendTo %d bytes to 0x%x (%lu msecs)\n", len, dest, millis() - start);
 
   return res;
 }

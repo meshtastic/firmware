@@ -31,27 +31,12 @@ User &owner = devicestate.owner;
 
 static uint8_t ourMacAddr[6];
 
-/**
- * get our starting (provisional) nodenum from flash.  But check first if anyone else is using it, by trying to send a message to it (arping)
- */
-static NodeNum getDesiredNodeNum()
-{
-    esp_efuse_mac_get_default(ourMacAddr);
-
-    // FIXME not the right way to guess node numes
-    uint8_t r = ourMacAddr[5];
-    assert(r != 0xff && r != 0); // It better not be the broadcast address or zero
-    return r;
-}
-
 NodeDB::NodeDB() : nodes(devicestate.node_db), numNodes(&devicestate.node_db_count)
 {
 }
 
 void NodeDB::init()
 {
-    // Crummy guess at our nodenum
-    myNodeInfo.my_node_num = getDesiredNodeNum();
 
     // init our devicestate with valid flags so protobuf writing/reading will work
     devicestate.has_my_node = true;
@@ -61,13 +46,19 @@ void NodeDB::init()
     devicestate.receive_queue_count = 0;
 
     // Init our blank owner info to reasonable defaults
+    esp_efuse_mac_get_default(ourMacAddr);
     sprintf(owner.id, "!%02x%02x%02x%02x%02x%02x", ourMacAddr[0],
             ourMacAddr[1], ourMacAddr[2], ourMacAddr[3], ourMacAddr[4], ourMacAddr[5]);
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 
+    // make each node start with ad different random seed (but okay that the sequence is the same each boot)
+    randomSeed((ourMacAddr[2] << 24L) | (ourMacAddr[3] << 16L) | (ourMacAddr[4] << 8L) | ourMacAddr[5]);
+
     sprintf(owner.long_name, "Unknown %02x%02x", ourMacAddr[4], ourMacAddr[5]);
     sprintf(owner.short_name, "?%02X", ourMacAddr[5]);
-    // FIXME, read owner info from flash
+
+    // Crummy guess at our nodenum
+    pickNewNodeNum();
 
     // Include our owner in the node db under our nodenum
     NodeInfo *info = getOrCreateNode(getNodeNum());
@@ -85,6 +76,30 @@ void NodeDB::init()
     loadFromDisk();
 
     DEBUG_MSG("NODENUM=0x%x, dbsize=%d\n", myNodeInfo.my_node_num, *numNodes);
+}
+
+// We reserve a few nodenums for future use
+#define NUM_RESERVED 4
+
+/**
+ * get our starting (provisional) nodenum from flash. 
+ */
+void NodeDB::pickNewNodeNum()
+{
+    // FIXME not the right way to guess node numes
+    uint8_t r = ourMacAddr[5];
+    if (r == 0xff || r < NUM_RESERVED)
+        r = NUM_RESERVED; // don't pick a reserved node number
+
+    NodeInfo *found;
+    while ((found = getNode(r)) && memcmp(found->user.macaddr, owner.macaddr, sizeof(owner.macaddr)))
+    {
+        NodeNum n = random(NUM_RESERVED, NODENUM_BROADCAST); // try a new random choice
+        DEBUG_MSG("NOTE! Our desired nodenum 0x%x is in use, so trying for 0x%x\n", r, n);
+        r = n;
+    }
+
+    myNodeInfo.my_node_num = r;
 }
 
 const char *preffile = "/db.proto";
@@ -106,8 +121,9 @@ void NodeDB::loadFromDisk()
             DEBUG_MSG("Error: can't decode protobuf %s\n", PB_GET_ERROR(&stream));
             // FIXME - report failure to phone
         }
-        else {
-            if(scratch.version < DeviceState_Version_Minimum)
+        else
+        {
+            if (scratch.version < DeviceState_Version_Minimum)
                 DEBUG_MSG("Warn: devicestate is old, discarding\n");
             else
                 devicestate = scratch;
@@ -164,46 +180,44 @@ void NodeDB::updateFrom(const MeshPacket &mp)
     {
         const SubPacket &p = mp.payload;
         DEBUG_MSG("Update DB node 0x%x for variant %d\n", mp.from, p.which_variant);
-        if (p.which_variant != SubPacket_want_node_tag) // we don't create nodeinfo records for someone that is just trying to claim a nodenum
+
+        int oldNumNodes = *numNodes;
+        NodeInfo *info = getOrCreateNode(mp.from);
+
+        if (oldNumNodes != *numNodes)
+            updateGUI = true; // we just created a nodeinfo
+
+        info->last_seen = gps.getTime();
+
+        switch (p.which_variant)
         {
-            int oldNumNodes = *numNodes;
-            NodeInfo *info = getOrCreateNode(mp.from);
+        case SubPacket_position_tag:
+            info->position = p.variant.position;
+            info->has_position = true;
+            updateGUIforNode = info;
+            break;
 
-            if (oldNumNodes != *numNodes)
-                updateGUI = true; // we just created a nodeinfo
+        case SubPacket_user_tag:
+        {
+            DEBUG_MSG("old user %s/%s/%s\n", info->user.id, info->user.long_name, info->user.short_name);
 
-            info->last_seen = gps.getTime();
+            bool changed = memcmp(&info->user, &p.variant.user, sizeof(info->user)); // Both of these blocks start as filled with zero so I think this is okay
 
-            switch (p.which_variant)
+            info->user = p.variant.user;
+            DEBUG_MSG("updating changed=%d user %s/%s/%s\n", changed, info->user.id, info->user.long_name, info->user.short_name);
+            info->has_user = true;
+            updateGUIforNode = info;
+
+            if (changed)
             {
-            case SubPacket_position_tag:
-                info->position = p.variant.position;
-                info->has_position = true;
-                updateGUIforNode = info;
-                break;
-
-            case SubPacket_user_tag:
-            {
-                DEBUG_MSG("old user %s/%s/%s\n", info->user.id, info->user.long_name, info->user.short_name);
-
-                bool changed = memcmp(&info->user, &p.variant.user, sizeof(info->user)); // Both of these blocks start as filled with zero so I think this is okay
-
-                info->user = p.variant.user;
-                DEBUG_MSG("updating changed=%d user %s/%s/%s\n", changed, info->user.id, info->user.long_name, info->user.short_name);
-                info->has_user = true;
-                updateGUIforNode = info;
-
-                if (changed)
-                {
-                    // We just created a user for the first time, store our DB
-                    saveToDisk();
-                }
-                break;
+                // We just created a user for the first time, store our DB
+                saveToDisk();
             }
+            break;
+        }
 
-            default:
-                break; // Ignore other packet types
-            }
+        default:
+            break; // Ignore other packet types
         }
     }
 }

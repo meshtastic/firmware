@@ -29,8 +29,8 @@ typedef enum _RadioConfig_ModemConfig {
 
 typedef enum _DeviceState_Version {
     DeviceState_Version_Unset = 0,
-    DeviceState_Version_Minimum = 1,
-    DeviceState_Version_Current = 1
+    DeviceState_Version_Minimum = 2,
+    DeviceState_Version_Current = 2
 } DeviceState_Version;
 
 /* Struct definitions */
@@ -39,10 +39,6 @@ typedef struct _Data {
     Data_Type typ;
     Data_payload_t payload;
 } Data;
-
-typedef struct _DenyNodeNum {
-    pb_byte_t macaddr[6];
-} DenyNodeNum;
 
 typedef struct _MyNodeInfo {
     int32_t my_node_num;
@@ -75,11 +71,6 @@ typedef struct _User {
     pb_byte_t macaddr[6];
 } User;
 
-typedef struct _WantNodeNum {
-    uint32_t desired_nodenum;
-    pb_byte_t macaddr[6];
-} WantNodeNum;
-
 typedef struct _NodeInfo {
     int32_t num;
     bool has_user;
@@ -97,8 +88,6 @@ typedef struct _SubPacket {
         uint64_t time;
         Data data;
         User user;
-        WantNodeNum want_node;
-        DenyNodeNum deny_node;
     } variant;
 } SubPacket;
 
@@ -157,8 +146,6 @@ typedef struct _ToRadio {
 #define Position_init_default                    {0, 0, 0, 0, 0}
 #define Data_init_default                        {_Data_Type_MIN, {0, {0}}}
 #define User_init_default                        {"", "", "", {0}}
-#define WantNodeNum_init_default                 {0, {0}}
-#define DenyNodeNum_init_default                 {{0}}
 #define SubPacket_init_default                   {0, {Position_init_default}}
 #define MeshPacket_init_default                  {0, 0, false, SubPacket_init_default}
 #define RadioConfig_init_default                 {0, 0, 0, 0, _RadioConfig_ModemConfig_MIN, {0, {0}}, 0, 0}
@@ -170,8 +157,6 @@ typedef struct _ToRadio {
 #define Position_init_zero                       {0, 0, 0, 0, 0}
 #define Data_init_zero                           {_Data_Type_MIN, {0, {0}}}
 #define User_init_zero                           {"", "", "", {0}}
-#define WantNodeNum_init_zero                    {0, {0}}
-#define DenyNodeNum_init_zero                    {{0}}
 #define SubPacket_init_zero                      {0, {Position_init_zero}}
 #define MeshPacket_init_zero                     {0, 0, false, SubPacket_init_zero}
 #define RadioConfig_init_zero                    {0, 0, 0, 0, _RadioConfig_ModemConfig_MIN, {0, {0}}, 0, 0}
@@ -184,7 +169,6 @@ typedef struct _ToRadio {
 /* Field tags (for use in manual encoding/decoding) */
 #define Data_typ_tag                             1
 #define Data_payload_tag                         2
-#define DenyNodeNum_macaddr_tag                  1
 #define MyNodeInfo_my_node_num_tag               1
 #define Position_latitude_tag                    1
 #define Position_longitude_tag                   2
@@ -203,8 +187,6 @@ typedef struct _ToRadio {
 #define User_long_name_tag                       2
 #define User_short_name_tag                      3
 #define User_macaddr_tag                         4
-#define WantNodeNum_desired_nodenum_tag          1
-#define WantNodeNum_macaddr_tag                  2
 #define NodeInfo_num_tag                         1
 #define NodeInfo_user_tag                        2
 #define NodeInfo_position_tag                    3
@@ -214,8 +196,6 @@ typedef struct _ToRadio {
 #define SubPacket_time_tag                       2
 #define SubPacket_data_tag                       3
 #define SubPacket_user_tag                       4
-#define SubPacket_want_node_tag                  5
-#define SubPacket_deny_node_tag                  6
 #define MeshPacket_from_tag                      1
 #define MeshPacket_to_tag                        2
 #define MeshPacket_payload_tag                   3
@@ -253,31 +233,16 @@ X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, macaddr,           4)
 #define User_CALLBACK NULL
 #define User_DEFAULT NULL
 
-#define WantNodeNum_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UINT32,   desired_nodenum,   1) \
-X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, macaddr,           2)
-#define WantNodeNum_CALLBACK NULL
-#define WantNodeNum_DEFAULT NULL
-
-#define DenyNodeNum_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, macaddr,           1)
-#define DenyNodeNum_CALLBACK NULL
-#define DenyNodeNum_DEFAULT NULL
-
 #define SubPacket_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,position,variant.position),   1) \
 X(a, STATIC,   ONEOF,    UINT64,   (variant,time,variant.time),   2) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,data,variant.data),   3) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,user,variant.user),   4) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,want_node,variant.want_node),   5) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,deny_node,variant.deny_node),   6)
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,user,variant.user),   4)
 #define SubPacket_CALLBACK NULL
 #define SubPacket_DEFAULT NULL
 #define SubPacket_variant_position_MSGTYPE Position
 #define SubPacket_variant_data_MSGTYPE Data
 #define SubPacket_variant_user_MSGTYPE User
-#define SubPacket_variant_want_node_MSGTYPE WantNodeNum
-#define SubPacket_variant_deny_node_MSGTYPE DenyNodeNum
 
 #define MeshPacket_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, INT32,    from,              1) \
@@ -346,8 +311,6 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (variant,packet,variant.packet),   1)
 extern const pb_msgdesc_t Position_msg;
 extern const pb_msgdesc_t Data_msg;
 extern const pb_msgdesc_t User_msg;
-extern const pb_msgdesc_t WantNodeNum_msg;
-extern const pb_msgdesc_t DenyNodeNum_msg;
 extern const pb_msgdesc_t SubPacket_msg;
 extern const pb_msgdesc_t MeshPacket_msg;
 extern const pb_msgdesc_t RadioConfig_msg;
@@ -361,8 +324,6 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define Position_fields &Position_msg
 #define Data_fields &Data_msg
 #define User_fields &User_msg
-#define WantNodeNum_fields &WantNodeNum_msg
-#define DenyNodeNum_fields &DenyNodeNum_msg
 #define SubPacket_fields &SubPacket_msg
 #define MeshPacket_fields &MeshPacket_msg
 #define RadioConfig_fields &RadioConfig_msg
@@ -376,8 +337,6 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define Position_size                            42
 #define Data_size                                205
 #define User_size                                72
-#define WantNodeNum_size                         14
-#define DenyNodeNum_size                         8
 #define SubPacket_size                           208
 #define MeshPacket_size                          233
 #define RadioConfig_size                         70

@@ -59,6 +59,9 @@ public:
     /// Allow the bluetooth layer to read our next nodeinfo record, or NULL if done reading
     const NodeInfo *readNextInfo();
 
+    /// pick a provisional nodenum we hope no one is using
+    void pickNewNodeNum();
+
 private:
     /// Find a node in our DB, return null for missing
     NodeInfo *getNode(NodeNum n);

@@ -32,13 +32,6 @@
 * never enter deep sleep while connected to USB power (but still go to other low power modes)
 * when main cpu is idle (in loop), turn cpu clock rate down and/or activate special sleep modes.  We want almost everything shutdown until it gets an interrupt.
 
-# dynamic nodenum assignment tasks
-
-we currently do the following crap solution:
-hardwire nodenums based on macaddr.  when node boots it broadcasts its Owner info (which includes our macaddr).  If any node receives Owner messages, the other nodes reply with their owner info.
-Really should instead do something like: new node sends its owner info as a provisional request.  If any other node shows that nodenum in use by a different macaddr, they reply with NodeDeny.
-If the node doesn't get denied within X seconds it then sends the info as a non provisional message (and other nodes update their node db)  
-But fixme, think about this and look for standard solutions - it will have problems when meshes separate change and then rejoin.
 
 # Pre-beta priority
 
@@ -51,7 +44,6 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * do hibernation mode to get power draw down to 2.5uA https://lastminuteengineers.com/esp32-sleep-modes-power-consumption/ 
 * make sure main cpu is not woken for packets with bad crc or not addressed to this node - do that in the radio hw
 * enable fast init inside the gps chip
-* dynamically select node nums
 * triple check fcc compliance
 * allow setting full radio params from android
 * pick channel center frequency based on name? "dolphin" would hash to 900Mhz, "cat" to 905MHz etc?  Or is that too opaque?
@@ -112,3 +104,4 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * save our node db on entry to sleep
 * fix the logo
 * sent/received packets (especially if a node was just reset) have variant of zero sometimes - I think there is a bug (race-condtion?) in the radio send/rx path.
+* DONE dynamic nodenum assignment tasks
