@@ -337,6 +337,9 @@ void screen_setup()
 
 static bool showingBluetooth;
 
+/// If set to true (possibly from an ISR), we should turn on the screen the next time our idle loop runs.
+static bool wakeScreen;
+
 uint32_t screen_loop()
 {
     if (!disp)
@@ -365,12 +368,11 @@ uint32_t screen_loop()
     }
 #endif
 
-#if 0
-    display->clear();
-    _screen_header();
-    display->drawLogBuffer(0, SCREEN_HEADER_HEIGHT);
-    display->display();
-#endif
+if(wakeScreen) {
+      screen_on(); // make sure the screen is not asleep 
+      wakeScreen = false;
+}
+
     static bool showingBootScreen = true;
 
     ui.update();
@@ -394,8 +396,8 @@ void screen_start_bluetooth(uint32_t pin) {
 
     DEBUG_MSG("showing bluetooth screen\n");
     showingBluetooth = true;
+    wakeScreen = true; 
 
-    //screen_on(); // make sure the screen is not asleep - FIXME, this causes crap to draw on the screen
     ui.disableAutoTransition();  // we now require presses
     ui.setFrames(btFrames, 1); // Just show the bluetooth frame
     // we rely on our main loop to show this screen (because we are invoked deep inside of bluetooth callbacks)
@@ -411,7 +413,7 @@ void screen_set_frames() {
 
 /// handle press of the button
 void screen_press() {
-    //screen_start_bluetooth(123456);
+    // screen_start_bluetooth(123456);
 
     // Once the user presses a button, stop auto scrolling between screens
     ui.disableAutoTransition();  // we now require presses
