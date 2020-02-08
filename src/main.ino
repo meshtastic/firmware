@@ -352,11 +352,7 @@ void setup()
   // Init GPS
   gps.setup();
 
-  // Show logo on first boot after removing battery
-  //if (bootCount == 0) {
-  screen_print(APP_NAME " " APP_VERSION);
-  screen_show_logo();
-  //}
+  screen_print("Started...");
 
   service.init();
 
@@ -430,6 +426,6 @@ void loop()
 
   // No GPS lock yet, let the OS put the main CPU in low power mode for 100ms (or until another interrupt comes in)
   // i.e. don't just keep spinning in loop as fast as we can.
-  DEBUG_MSG("msecs %d\n", msecstosleep);
+  //DEBUG_MSG("msecs %d\n", msecstosleep);
   delay(msecstosleep);
 }

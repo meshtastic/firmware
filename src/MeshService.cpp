@@ -7,6 +7,7 @@
 #include "MeshBluetoothService.h"
 #include "NodeDB.h"
 #include "GPS.h"
+#include "screen.h"
 
 /*
 receivedPacketQueue - this is a queue of messages we've received from the mesh, which we are keeping to deliver to the phone.
@@ -72,6 +73,9 @@ void MeshService::loop()
             // Someone just sent us a User, reply with our Owner
             DEBUG_MSG("Received broadcast Owner from 0x%x, replying with our owner\n", mp->from);
             sendOurOwner(mp->from);
+
+            String lcd = String("Joined: ") + mp->payload.variant.user.long_name;
+            screen_print(lcd.c_str());
         }
 
         fromNum++;

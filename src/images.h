@@ -7,7 +7,11 @@ const uint8_t SATELLITE_IMAGE[] PROGMEM = {
 };
 
 
+const
 #include "icon.xbm"
+
+const
+#include "compass.xbm"
 
 #if 0
 const uint8_t activeSymbol[] PROGMEM = {

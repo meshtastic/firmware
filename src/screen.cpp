@@ -110,29 +110,104 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     String sender = "KH:";
     display->drawString(0 + x, 0 + y, sender);
     display->setFont(ArialMT_Plain_10);
-    display->drawStringMaxWidth(4 + x, 10 + y, 128, "            Lorem ipsum\n dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore.");
+    display->drawStringMaxWidth(4 + x, 10 + y, 128, "            Lorem ipsum\n dolor sit amet, consetetur sadipscing elitr, sed diam");
 
-    ui.disableIndicator();
+    // ui.disableIndicator();
 }
 
-void drawFrame5(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+/// Draw a series of fields in a column, wrapping to multiple colums if needed
+void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields)
 {
+    // The coordinates define the left starting point of the text
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    const char **f = fields;
+    int xo = x, yo = y;
+    while (*f)
+    {
+        display->drawString(xo, yo, *f);
+        yo += FONT_HEIGHT;
+        if (yo > SCREEN_HEIGHT - FONT_HEIGHT)
+        {
+            xo += SCREEN_WIDTH / 2;
+            yo = 0;
+        }
+        f++;
+    }
+}
+
+/// Draw a series of fields in a row, wrapping to multiple rows if needed
+/// @return the max y we ended up printing to
+uint32_t drawRows(OLEDDisplay *display, int16_t x, int16_t y, const char **fields)
+{
+    // The coordinates define the left starting point of the text
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    const char **f = fields;
+    int xo = x, yo = y;
+    while (*f)
+    {
+        display->drawString(xo, yo, *f);
+        xo += SCREEN_WIDTH / 2; // hardwired for two columns per row....
+        if (xo >= SCREEN_WIDTH)
+        {
+            yo += FONT_HEIGHT;
+            xo = 0;
+        }
+        f++;
+    }
+
+    yo += FONT_HEIGHT; // include the last line in our total
+
+    return yo;
+}
+
+void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->setFont(ArialMT_Plain_10);
+
+    // The coordinates define the left starting point of the text
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    const char *fields[] = {
+        "Kevin Hester (KH)",
+        "4.2 mi",
+        "Signal: good",
+        "24 minutes ago",
+        NULL};
+    drawColumns(display, x, y, fields);
+
+    display->drawXbm(x + (SCREEN_WIDTH - compass_width), y + (SCREEN_HEIGHT - compass_height) / 2, compass_width, compass_height, (const uint8_t *)compass_bits);
+}
+
+void drawDebugInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->setFont(ArialMT_Plain_10);
+
+    // The coordinates define the left starting point of the text
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    const char *fields[] = {
+        "Batt 89%",
+        "GPS 75%",
+        "Users 4/12",
+        NULL};
+    uint32_t yo = drawRows(display, x, y, fields);
+
+    display->drawLogBuffer(x, yo);
 }
 
 // This array keeps function pointers to all frames
 // frames are the single views that slide in
-FrameCallback frames[] = {drawBootScreen, drawTextMessageFrame};
+FrameCallback frames[] = {drawBootScreen, drawTextMessageFrame, drawNodeInfo, drawDebugInfo};
 FrameCallback *nonBootFrames = frames + 1;
 
-
 // Overlays are statically drawn on top of a frame eg. a clock
-OverlayCallback overlays[] = {msOverlay};
+OverlayCallback overlays[] = {/* msOverlay */};
 
 // how many frames are there?
 const int frameCount = sizeof(frames) / sizeof(frames[0]);
 const int overlaysCount = sizeof(overlays) / sizeof(overlays[0]);
-
-
 
 void _screen_header()
 {
@@ -154,18 +229,6 @@ void _screen_header()
     char buffer[10];
     display->drawString(display->getWidth() - SATELLITE_IMAGE_WIDTH - 4, 2, itoa(gps.satellites.value(), buffer, 10));
     display->drawXbm(display->getWidth() - SATELLITE_IMAGE_WIDTH, 0, SATELLITE_IMAGE_WIDTH, SATELLITE_IMAGE_HEIGHT, SATELLITE_IMAGE);
-#endif
-}
-
-void screen_show_logo()
-{
-    if (!disp)
-        return;
-
-#if 0
-    uint8_t x = (display->getWidth() - TTN_IMAGE_WIDTH) / 2;
-    uint8_t y = SCREEN_HEADER_HEIGHT + (display->getHeight() - SCREEN_HEADER_HEIGHT - TTN_IMAGE_HEIGHT) / 2 + 1;
-    display->drawXbm(x, y, TTN_IMAGE_WIDTH, TTN_IMAGE_HEIGHT, TTN_IMAGE);
 #endif
 }
 
@@ -208,12 +271,7 @@ void screen_print(const char *text)
         return;
 
     dispdev.print(text);
-    /* if (_screen_line + 8 > dispdev.getHeight())
-    {
-        // scroll
-    }
-    _screen_line += 8; */
-    screen_loop();
+    // ui.update();
 }
 
 void screen_setup()
@@ -242,8 +300,8 @@ void screen_setup()
     // SLIDE_LEFT, SLIDE_RIGHT, SLIDE_UP, SLIDE_DOWN
     ui.setFrameAnimation(SLIDE_LEFT);
 
-    // Add frames
-    ui.setFrames(frames, frameCount);
+    // Add frames - we subtract one from the framecount so there won't be a visual glitch when we take the boot screen out of the sequence.
+    ui.setFrames(frames, frameCount - 1);
 
     // Add overlays
     ui.setOverlays(overlays, overlaysCount);
@@ -252,7 +310,7 @@ void screen_setup()
     ui.init();
 
     // Scroll buffer
-    dispdev.setLogBuffer(5, 30);
+    dispdev.setLogBuffer(5, 32);
 
     // dispdev.flipScreenVertically(); // looks better without this on lora32
     // dispdev.setFont(Custom_ArialMT_Plain_10);
@@ -295,14 +353,12 @@ uint32_t screen_loop()
 #endif
     static bool showingBootScreen = true;
 
-
-    
-
-    uint32_t msecstosleep =     ui.update();
+    ui.update();
 
     // Once we finish showing the bootscreen, remove it from the loop
     if (showingBootScreen && ui.getUiState()->currentFrame == 1)
     {
+        showingBootScreen = false;
         ui.setFrames(nonBootFrames, frameCount - 1);
     }
 
