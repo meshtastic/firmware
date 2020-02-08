@@ -280,8 +280,6 @@ static void screen_print(const char *text, uint8_t x, uint8_t y, uint8_t alignme
     dispdev.drawString(x, y, text);
 }
 
-
-
 void screen_print(const char *text)
 {
     DEBUG_MSG("Screen: %s\n", text);
@@ -345,33 +343,11 @@ uint32_t screen_loop()
     if (!disp)
         return 30 * 1000;
 
-#ifdef T_BEAM_V10
-    if (axp192_found && pmu_irq)
+    if (wakeScreen)
     {
-        pmu_irq = false;
-        axp.readIRQ();
-        if (axp.isChargingIRQ())
-        {
-            baChStatus = "Charging";
-        }
-        else
-        {
-            baChStatus = "No Charging";
-        }
-        if (axp.isVbusRemoveIRQ())
-        {
-            baChStatus = "No Charging";
-        }
-        // This is not a GPIO actually connected on the tbeam board
-        // digitalWrite(2, !digitalRead(2));
-        axp.clearIRQ();
+        screen_on(); // make sure the screen is not asleep
+        wakeScreen = false;
     }
-#endif
-
-if(wakeScreen) {
-      screen_on(); // make sure the screen is not asleep 
-      wakeScreen = false;
-}
 
     static bool showingBootScreen = true;
 
@@ -389,33 +365,36 @@ if(wakeScreen) {
 }
 
 // Show the bluetooth PIN screen
-void screen_start_bluetooth(uint32_t pin) {
-    static FrameCallback btFrames[] = { drawFrameBluetooth };
+void screen_start_bluetooth(uint32_t pin)
+{
+    static FrameCallback btFrames[] = {drawFrameBluetooth};
 
     snprintf(btPIN, sizeof(btPIN), "%06d", pin);
 
     DEBUG_MSG("showing bluetooth screen\n");
     showingBluetooth = true;
-    wakeScreen = true; 
+    wakeScreen = true;
 
-    ui.disableAutoTransition();  // we now require presses
-    ui.setFrames(btFrames, 1); // Just show the bluetooth frame
+    ui.disableAutoTransition(); // we now require presses
+    ui.setFrames(btFrames, 1);  // Just show the bluetooth frame
     // we rely on our main loop to show this screen (because we are invoked deep inside of bluetooth callbacks)
     // ui.update(); // manually draw once, because I'm not sure if loop is getting called
 }
 
 // restore our regular frame list
-void screen_set_frames() {
+void screen_set_frames()
+{
     DEBUG_MSG("showing standard frames\n");
-    ui.setFrames(nonBootFrames, frameCount - 1); 
+    ui.setFrames(nonBootFrames, frameCount - 1);
     showingBluetooth = false;
 }
 
 /// handle press of the button
-void screen_press() {
+void screen_press()
+{
     // screen_start_bluetooth(123456);
 
     // Once the user presses a button, stop auto scrolling between screens
-    ui.disableAutoTransition();  // we now require presses
+    ui.disableAutoTransition(); // we now require presses
     ui.nextFrame();
 }

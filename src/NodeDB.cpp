@@ -100,7 +100,7 @@ void NodeDB::loadFromDisk()
         DEBUG_MSG("Loading saved preferences\n");
         pb_istream_t stream = {&readcb, &f, DeviceState_size};
 
-        scratch = DeviceState_init_zero;
+        memset(&scratch, 0, sizeof(scratch));
         if (!pb_decode(&stream, DeviceState_fields, &scratch))
         {
             DEBUG_MSG("Error: can't decode protobuf %s\n", PB_GET_ERROR(&stream));

@@ -390,6 +390,27 @@ void loop()
   {
     // blink the axp led
     axp.setChgLEDMode(ledon ? AXP20X_LED_LOW_LEVEL : AXP20X_LED_OFF);
+
+    if (pmu_irq)
+    {
+      pmu_irq = false;
+      axp.readIRQ();
+      if (axp.isChargingIRQ())
+      {
+        baChStatus = "Charging";
+      }
+      else
+      {
+        baChStatus = "No Charging";
+      }
+      if (axp.isVbusRemoveIRQ())
+      {
+        baChStatus = "No Charging";
+      }
+      // This is not a GPIO actually connected on the tbeam board
+      // digitalWrite(2, !digitalRead(2));
+      axp.clearIRQ();
+    }
   }
 #endif
 
