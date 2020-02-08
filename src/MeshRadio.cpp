@@ -137,6 +137,8 @@ static int16_t packetnum = 0;  // packet counter, we increment per xmission
   uint8_t rxlen;
   uint8_t srcaddr, destaddr, id, flags;
 
+  assert(SubPacket_size < 251); // a hard limit from the radio stack (including 4 bytes of headers)
+
   // Poll to see if we've received a packet
   //   if (manager.recvfromAckTimeout(radiobuf, &rxlen, 0, &srcaddr, &destaddr, &id, &flags))
   // prefill rxlen with the max length we can accept - very important

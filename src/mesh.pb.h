@@ -34,7 +34,7 @@ typedef enum _DeviceState_Version {
 } DeviceState_Version;
 
 /* Struct definitions */
-typedef PB_BYTES_ARRAY_T(100) Data_payload_t;
+typedef PB_BYTES_ARRAY_T(200) Data_payload_t;
 typedef struct _Data {
     Data_Type typ;
     Data_payload_t payload;
@@ -374,18 +374,18 @@ extern const pb_msgdesc_t ToRadio_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define Position_size                            42
-#define Data_size                                104
+#define Data_size                                205
 #define User_size                                72
 #define WantNodeNum_size                         14
 #define DenyNodeNum_size                         8
-#define SubPacket_size                           106
-#define MeshPacket_size                          130
+#define SubPacket_size                           208
+#define MeshPacket_size                          233
 #define RadioConfig_size                         70
 #define NodeInfo_size                            151
 #define MyNodeInfo_size                          11
-#define DeviceState_size                         9345
-#define FromRadio_size                           139
-#define ToRadio_size                             133
+#define DeviceState_size                         12641
+#define FromRadio_size                           242
+#define ToRadio_size                             236
 
 #ifdef __cplusplus
 } /* extern "C" */

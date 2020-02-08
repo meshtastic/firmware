@@ -36,7 +36,7 @@ PB_BIND(NodeInfo, NodeInfo, AUTO)
 PB_BIND(MyNodeInfo, MyNodeInfo, AUTO)
 
 
-PB_BIND(DeviceState, DeviceState, 2)
+PB_BIND(DeviceState, DeviceState, 4)
 
 
 PB_BIND(FromRadio, FromRadio, AUTO)
