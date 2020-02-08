@@ -206,7 +206,9 @@ BLEServer *initBLE(std::string deviceName, std::string hwVendor, std::string swV
   pUpdate->start();
 
   // Start advertising
-  pServer->getAdvertising()->start();
+  BLEAdvertising *advert = pServer->getAdvertising();
+  advert->setScanFilter(false, true); // We let anyone scan for us (FIXME, perhaps only allow that until we are paired with a phone and configured) but only let whitelist phones connect
+  advert->start();
 
   BLESecurity *pSecurity = new BLESecurity();
   pSecurity->setCapability(ESP_IO_CAP_OUT);
