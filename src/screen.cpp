@@ -282,7 +282,7 @@ static void screen_print(const char *text, uint8_t x, uint8_t y, uint8_t alignme
 
 void screen_print(const char *text)
 {
-    DEBUG_MSG("Screen: %s\n", text);
+    DEBUG_MSG("Screen: %s", text);
     if (!disp)
         return;
 

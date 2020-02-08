@@ -95,10 +95,10 @@ ErrorCode MeshRadio::send(MeshPacket *p)
 
 ErrorCode MeshRadio::sendTo(NodeNum dest, const uint8_t *buf, size_t len)
 {
-  DEBUG_MSG("mesh sendTo %d bytes to 0x%x\n", len, dest);
 
   assert(len <= 251); // Make sure we don't overflow the tiny max packet size
 
+  uint32_t start = millis();
   // Note: we don't use sendToWait here because we don't want to wait and for the time being don't require
   // reliable delivery
   // return manager.sendtoWait((uint8_t *) buf, len, dest);
@@ -108,6 +108,8 @@ ErrorCode MeshRadio::sendTo(NodeNum dest, const uint8_t *buf, size_t len)
   // instead just have the radiohead layer understand queues.
   if(res == ERRNO_OK)
     manager.waitPacketSent();
+
+  DEBUG_MSG("mesh sendTo %d bytes to 0x%x (%u msecs)\n", len, dest, millis() - start);
 
   return res;
 }
