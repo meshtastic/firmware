@@ -62,9 +62,10 @@ public:
     /// pick a provisional nodenum we hope no one is using
     void pickNewNodeNum();
 
-private:
     /// Find a node in our DB, return null for missing
     NodeInfo *getNode(NodeNum n);
+
+private:
 
     /// Find a node in our DB, create an empty NodeInfo if missing
     NodeInfo *getOrCreateNode(NodeNum n);

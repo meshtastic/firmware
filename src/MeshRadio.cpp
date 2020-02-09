@@ -12,7 +12,6 @@
 // Change to 434.0 or other frequency, must match RX's freq!  FIXME, choose a better default value
 #define RF95_FREQ_US 902.0f
 
-
 MeshRadio::MeshRadio(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &_rxDest)
     : rf95(NSS_GPIO, DIO0_GPIO),
       manager(rf95),
@@ -20,7 +19,10 @@ MeshRadio::MeshRadio(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &_r
       rxDest(_rxDest),
       txQueue(MAX_TX_QUEUE)
 {
-  radioConfig.modem_config = RadioConfig_ModemConfig_Bw125Cr45Sf128;
+  //radioConfig.modem_config = RadioConfig_ModemConfig_Bw125Cr45Sf128;  // medium range and fast
+  radioConfig.modem_config = RadioConfig_ModemConfig_Bw500Cr45Sf128;  // short range and fast, but wide bandwidth so incompatible radios can talk together
+  //radioConfig.modem_config = RadioConfig_ModemConfig_Bw125Cr48Sf4096; // slow and long range
+
   radioConfig.tx_power = 23;
   radioConfig.center_freq = RF95_FREQ_US; // FIXME, pull this config from flash
 }
@@ -55,26 +57,22 @@ bool MeshRadio::init()
   return true;
 }
 
-
 void MeshRadio::reloadConfig()
 {
-  DEBUG_MSG("configuring radio\n");
-
   rf95.setModeIdle();
 
   // Set up default configuration
   // No Sync Words in LORA mode.
-  rf95.setModemConfig((RH_RF95::ModemConfigChoice) radioConfig.modem_config); // Radio default
-                                  //    setModemConfig(Bw125Cr48Sf4096); // slow and reliable?
+  rf95.setModemConfig((RH_RF95::ModemConfigChoice)radioConfig.modem_config); // Radio default
+                                                                             //    setModemConfig(Bw125Cr48Sf4096); // slow and reliable?
   // rf95.setPreambleLength(8);           // Default is 8
 
   // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM
   if (!rf95.setFrequency(radioConfig.center_freq))
   {
     DEBUG_MSG("setFrequency failed\n");
-    assert(0); // fixme panic 
+    assert(0); // fixme panic
   }
-  DEBUG_MSG("Set Freq to: %f\n", radioConfig.center_freq);
 
   // Defaults after init are 434.0MHz, 13dBm, Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on
 
@@ -84,7 +82,7 @@ void MeshRadio::reloadConfig()
   // FIXME - can we do this?  It seems to be in the Heltec board.
   rf95.setTxPower(radioConfig.tx_power, false);
 
-  DEBUG_MSG("LoRa radio init OK!\n");
+  DEBUG_MSG("Set radio: config=%u, freq=%f, txpower=%d\n", radioConfig.modem_config, radioConfig.center_freq, radioConfig.tx_power);
 }
 
 ErrorCode MeshRadio::send(MeshPacket *p)
@@ -108,7 +106,7 @@ ErrorCode MeshRadio::sendTo(NodeNum dest, const uint8_t *buf, size_t len)
 
   // FIXME, we have to wait for sending to complete before freeing the buffer, otherwise it might get wiped
   // instead just have the radiohead layer understand queues.
-  if(res == ERRNO_OK)
+  if (res == ERRNO_OK)
     manager.waitPacketSent();
 
   DEBUG_MSG("mesh sendTo %d bytes to 0x%x (%lu msecs)\n", len, dest, millis() - start);
@@ -150,7 +148,9 @@ static int16_t packetnum = 0;  // packet counter, we increment per xmission
   if (manager.recvfrom(radiobuf, &rxlen, &srcaddr, &destaddr, &id, &flags))
   {
     // We received a packet
-    DEBUG_MSG("Received packet from mesh src=0x%x,dest=0x%x,id=%d,len=%d rxGood=%d,rxBad=%d\n", srcaddr, destaddr, id, rxlen, rf95.rxGood(), rf95.rxBad());
+    int32_t freqerr = rf95.frequencyError(), snr = rf95.lastSNR();
+    DEBUG_MSG("Received packet from mesh src=0x%x,dest=0x%x,id=%d,len=%d rxGood=%d,rxBad=%d,freqErr=%d,snr=%d\n",
+              srcaddr, destaddr, id, rxlen, rf95.rxGood(), rf95.rxBad(), freqerr, snr);
 
     MeshPacket *mp = pool.allocZeroed();
 
@@ -158,6 +158,17 @@ static int16_t packetnum = 0;  // packet counter, we increment per xmission
 
     mp->from = srcaddr;
     mp->to = destaddr;
+
+    // If we already have an entry in the DB for this nodenum, goahead and hide the snr/freqerr info there.
+    // Note: we can't create it at this point, because it might be a bogus User node allocation.  But odds are we will
+    // already have a record we can hide this debugging info in.
+    NodeInfo *info = nodeDB.getNode(mp->from);
+    if (info)
+    {
+      info->snr = snr;
+      info->frequency_error = freqerr;
+    }
+
     if (!pb_decode_from_bytes(radiobuf, rxlen, SubPacket_fields, p))
     {
       pool.release(mp);
