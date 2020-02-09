@@ -156,7 +156,7 @@ void MeshService::loop()
     // FIXME, don't send user this often, but for now it is useful for testing
     static uint32_t lastsend;
     uint32_t now = millis();
-    if (now - lastsend > 20 * 1000)
+    if (now - lastsend > 5 * 60 * 1000)
     {
         lastsend = now;
         sendOurOwner();
