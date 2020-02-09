@@ -207,7 +207,10 @@ BLEServer *initBLE(std::string deviceName, std::string hwVendor, std::string swV
 
   // Start advertising
   BLEAdvertising *advert = pServer->getAdvertising();
-  advert->setScanFilter(false, true); // We let anyone scan for us (FIXME, perhaps only allow that until we are paired with a phone and configured) but only let whitelist phones connect
+
+  // FIXME turn on this restriction only after the device is paired with a phone
+  // advert->setScanFilter(false, true); // We let anyone scan for us (FIXME, perhaps only allow that until we are paired with a phone and configured) but only let whitelist phones connect
+ 
   advert->start();
 
   BLESecurity *pSecurity = new BLESecurity();
