@@ -326,7 +326,7 @@ void screen_setup()
     ui.init();
 
     // Scroll buffer
-    dispdev.setLogBuffer(5, 32);
+    dispdev.setLogBuffer(3, 32);
 
 #ifdef BICOLOR_DISPLAY
     dispdev.flipScreenVertically(); // looks better without this on lora32
