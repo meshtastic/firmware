@@ -5,6 +5,7 @@
 
 # Medium priority
 
+* apply radio settings from android land
 * only BLE advertise for a short time after the screen is on and button pressed - to save power and prevent people for sniffing for our BT app.
 * use https://platformio.org/lib/show/1260/OneButton
 * make an about to sleep screen
@@ -49,10 +50,11 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * pick channel center frequency based on name? "dolphin" would hash to 900Mhz, "cat" to 905MHz etc?  Or is that too opaque?
 * scan to find channels with low background noise?
 * share channel settings over Signal (or qr code) by embedding an an URL which is handled by the MeshUtil app.
-* make jtag debugger id stable: https://askubuntu.com/questions/49910/how-to-distinguish-between-identical-usb-to-serial-adapters
+* good tips on which bands might be more free https://github.com/TheThingsNetwork/ttn/issues/119
 
 # Low priority
 
+* add receive timestamps to messages, inserted by esp32 when message is received but then shown on the phone
 * if radio params change fundamentally, discard the nodedb
 * discard very old nodedb records (> 1wk)
 * using the genpartitions based table doesn't work on TTGO so for now I stay with my old memory map
@@ -107,3 +109,4 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * fix the logo
 * sent/received packets (especially if a node was just reset) have variant of zero sometimes - I think there is a bug (race-condtion?) in the radio send/rx path.
 * DONE dynamic nodenum assignment tasks
+* make jtag debugger id stable: https://askubuntu.com/questions/49910/how-to-distinguish-between-identical-usb-to-serial-adapters
