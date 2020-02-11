@@ -43,6 +43,8 @@ public:
 
     NodeNum getNodeNum() { return myNodeInfo.my_node_num; }
 
+    size_t getNumNodes() { return *numNodes; }
+
     /// if returns false, that means our node should send a DenyNodeNum response.  If true, we think the number is okay for use
     // bool handleWantNodeNum(NodeNum n);
 
@@ -64,6 +66,8 @@ public:
 
     /// Find a node in our DB, return null for missing
     NodeInfo *getNode(NodeNum n);
+
+    NodeInfo *getNodeByIndex(size_t x) { assert(x < *numNodes); return &nodes[x]; }
 
 private:
 

@@ -28,6 +28,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "GPS.h"
 #include "OLEDDisplayUi.h"
 #include "screen.h"
+#include "mesh-pb-constants.h"
+#include "NodeDB.h"
 
 #define FONT_HEIGHT 14 // actually 13 for "ariel 10" but want a little extra space
 
@@ -43,6 +45,10 @@ SSD1306Wire dispdev(SSD1306_ADDRESS, 0, 0); // fake values to keep build happy, 
 bool disp; // true if we are using display
 
 OLEDDisplayUi ui(&dispdev);
+
+#define NUM_EXTRA_FRAMES 2 // text message and debug frame
+// A text message frame + debug frame + all the node infos
+FrameCallback nonBootFrames[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
 
 void msOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
@@ -188,7 +194,7 @@ class Point
 public:
     float x, y;
 
-    Point(float _x, float _y): x(_x), y(_y) {}
+    Point(float _x, float _y) : x(_x), y(_y) {}
 
     /// Apply a rotation around zero (standard rotation matrix math)
     void rotate(float radian)
@@ -196,38 +202,63 @@ public:
         float cos = cosf(radian),
               sin = sinf(radian);
         float rx = x * cos - y * sin,
-                ry = x * sin + y * cos;
+              ry = x * sin + y * cos;
 
         x = rx;
         y = ry;
     }
 
-    void translate(int16_t dx, int dy) {
+    void translate(int16_t dx, int dy)
+    {
         x += dx;
         y += dy;
     }
 
-    void scale(float f) {
+    void scale(float f)
+    {
         x *= f;
         y *= f;
     }
 };
 
-void drawLine(OLEDDisplay *d, const Point &p1, const Point &p2) {
+void drawLine(OLEDDisplay *d, const Point &p1, const Point &p2)
+{
     d->drawLine(p1.x, p1.y, p2.x, p2.y);
 }
 
 #define COMPASS_DIAM 44
 
+/// We will skip one node - the one for us, so we just blindly loop over all nodes
+static size_t nodeIndex;
+static uint8_t prevFrame = 0;
+
 void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    // We only advance our nodeIndex if the frame # has changed - because drawNodeInfo will be called repeatedly while the frame is shown
+    if (state->currentFrame != prevFrame)
+    {
+        prevFrame = state->currentFrame;
+
+        nodeIndex = (nodeIndex + 1) % nodeDB.getNumNodes();
+        NodeInfo *n = nodeDB.getNodeByIndex(nodeIndex);
+        if (n->num == nodeDB.getNodeNum())
+        {
+            // Don't show our node, just skip to next
+            nodeIndex = (nodeIndex + 1) % nodeDB.getNumNodes();
+        }
+    }
+
+    NodeInfo *node = nodeDB.getNodeByIndex(nodeIndex);
+
     display->setFont(ArialMT_Plain_10);
 
     // The coordinates define the left starting point of the text
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
+    const char *username = node->has_user ? node->user.long_name : "Unknown Name";
+
     const char *fields[] = {
-        "Kevin Hester (KH)",
+        username,
         "2.1 mi",
         "Signal: good",
         "12 minutes ago",
@@ -238,16 +269,17 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
     int16_t compassX = x + SCREEN_WIDTH - COMPASS_DIAM / 2 - 1, compassY = y + SCREEN_HEIGHT / 2;
     // display->drawXbm(compassX, compassY, compass_width, compass_height, (const uint8_t *)compass_bits);
 
-    Point tip(0.0f, 0.5f), tail(0.0f, -0.5f); // pointing up initially 
+    Point tip(0.0f, 0.5f), tail(0.0f, -0.5f); // pointing up initially
     float arrowOffsetX = 0.1f, arrowOffsetY = 0.1f;
     Point leftArrow(tip.x - arrowOffsetX, tip.y - arrowOffsetY), rightArrow(tip.x + arrowOffsetX, tip.y - arrowOffsetY);
 
     static float headingRadian;
     headingRadian += 0.1; // For testing
 
-    Point *points[] = { &tip, &tail, &leftArrow, &rightArrow };
+    Point *points[] = {&tip, &tail, &leftArrow, &rightArrow};
 
-    for(int i = 0; i < 4; i++) {
+    for (int i = 0; i < 4; i++)
+    {
         points[i]->rotate(headingRadian);
         points[i]->scale(COMPASS_DIAM * 0.6);
         points[i]->translate(compassX, compassY);
@@ -278,14 +310,13 @@ void drawDebugInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
 
 // This array keeps function pointers to all frames
 // frames are the single views that slide in
-FrameCallback frames[] = {drawBootScreen, drawTextMessageFrame, drawNodeInfo, drawDebugInfo};
-FrameCallback *nonBootFrames = frames + 1;
+FrameCallback bootFrames[] = {drawBootScreen, drawTextMessageFrame, drawDebugInfo};
 
 // Overlays are statically drawn on top of a frame eg. a clock
 OverlayCallback overlays[] = {/* msOverlay */};
 
 // how many frames are there?
-const int frameCount = sizeof(frames) / sizeof(frames[0]);
+const int bootFrameCount = sizeof(bootFrames) / sizeof(bootFrames[0]);
 const int overlaysCount = sizeof(overlays) / sizeof(overlays[0]);
 
 #if 0
@@ -376,7 +407,7 @@ void screen_setup()
     ui.setFrameAnimation(SLIDE_LEFT);
 
     // Add frames - we subtract one from the framecount so there won't be a visual glitch when we take the boot screen out of the sequence.
-    ui.setFrames(frames, frameCount - 1);
+    ui.setFrames(bootFrames, bootFrameCount);
 
     // Add overlays
     ui.setOverlays(overlays, overlaysCount);
@@ -416,9 +447,21 @@ uint32_t screen_loop()
     ui.update();
 
     // Once we finish showing the bootscreen, remove it from the loop
-    if (showingBootScreen && !showingBluetooth && ui.getUiState()->currentFrame == 1)
+    if (showingBootScreen && !showingBluetooth)
     {
-        showingBootScreen = false;
+        if (ui.getUiState()->currentFrame == 1)
+        {
+            showingBootScreen = false;
+            screen_set_frames();
+        }
+    }
+
+    static size_t oldnumnodes = 0;
+    size_t numnodes = nodeDB.getNumNodes();
+    if (numnodes != oldnumnodes)
+    {
+        // If the # nodes changes, we need to regen our list of screens
+        oldnumnodes = numnodes;
         screen_set_frames();
     }
 
@@ -447,7 +490,19 @@ void screen_start_bluetooth(uint32_t pin)
 void screen_set_frames()
 {
     DEBUG_MSG("showing standard frames\n");
-    ui.setFrames(nonBootFrames, frameCount - 1);
+
+    nonBootFrames[0] = drawTextMessageFrame;
+    nonBootFrames[1] = drawDebugInfo;
+
+    size_t numnodes = nodeDB.getNumNodes();
+    // We don't show the node info our our node (if we have it yet - we should)
+    if (numnodes > 0)
+        numnodes--;
+
+    for (size_t i = 0; i < numnodes; i++)
+        nonBootFrames[NUM_EXTRA_FRAMES + i] = drawNodeInfo;
+
+    ui.setFrames(nonBootFrames, NUM_EXTRA_FRAMES + numnodes);
     showingBluetooth = false;
 }
 
