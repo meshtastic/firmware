@@ -22,6 +22,7 @@
 
 # Low power consumption tasks
 
+* keep cpu 100% in sleep (some sort - deep?) Sleep until irq from radio wakes it (make plan based on power draw spreadsheet).  Then stay awake for 30 secs to attempt delivery to phone.  
 * have radiohead ISR send messages to RX queue directly, to allow that thread to block until we have something to send
 * use https://lastminuteengineers.com/esp32-sleep-modes-power-consumption/ association sleep pattern to save power - but see https://github.com/espressif/esp-idf/issues/2070 
 * stop using loop() instead use a job queue and let cpu sleep
@@ -110,3 +111,4 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * sent/received packets (especially if a node was just reset) have variant of zero sometimes - I think there is a bug (race-condtion?) in the radio send/rx path.
 * DONE dynamic nodenum assignment tasks
 * make jtag debugger id stable: https://askubuntu.com/questions/49910/how-to-distinguish-between-identical-usb-to-serial-adapters
+* reported altitude is crap

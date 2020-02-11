@@ -206,7 +206,7 @@ void MeshService::onGPSChanged()
     p->payload.which_variant = SubPacket_position_tag;
     Position &pos = p->payload.variant.position;
     if (gps.altitude.isValid())
-        pos.altitude = gps.altitude.value();
+        pos.altitude = gps.altitude.meters();
     pos.latitude = gps.location.lat();
     pos.longitude = gps.location.lng();
 
