@@ -1,7 +1,9 @@
 # High priority
 
-* have node info screen show real info (including distance and heading)
-* very occasionally send our position and user packet (if for nothing else so that other nodes update last_seen)
+* have node info screen show real info (including time since last contact, distance and heading)
+* make debug info screen show real data (including battery level & charging)
+* make real implementation of getNumOnlineNodes
+* very occasionally send our position and user packet based on the schedule in the radio info (if for nothing else so that other nodes update last_seen)
 
 # Medium priority
 
@@ -52,7 +54,6 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * pick channel center frequency based on name? "dolphin" would hash to 900Mhz, "cat" to 905MHz etc?  Or is that too opaque?
 * scan to find channels with low background noise?
 * share channel settings over Signal (or qr code) by embedding an an URL which is handled by the MeshUtil app.
-* good tips on which bands might be more free https://github.com/TheThingsNetwork/ttn/issues/119
 
 # Low priority
 
@@ -113,3 +114,4 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * DONE dynamic nodenum assignment tasks
 * make jtag debugger id stable: https://askubuntu.com/questions/49910/how-to-distinguish-between-identical-usb-to-serial-adapters
 * reported altitude is crap
+* good tips on which bands might be more free https://github.com/TheThingsNetwork/ttn/issues/119

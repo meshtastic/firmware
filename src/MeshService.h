@@ -52,7 +52,7 @@ public:
     void handleToRadio(std::string s);
 
     /// The radioConfig object just changed, call this to force the hw to change to the new settings
-    void reloadConfig() { radio.reloadConfig(); }
+    void reloadConfig();
 
     /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
     void reloadOwner() { sendOurOwner(); }

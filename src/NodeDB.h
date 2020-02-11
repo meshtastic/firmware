@@ -8,6 +8,7 @@
 
 extern MyNodeInfo &myNodeInfo;
 extern RadioConfig &radioConfig;
+extern ChannelSettings &channelSettings;
 extern User &owner;
 
 class NodeDB
@@ -68,6 +69,9 @@ public:
     NodeInfo *getNode(NodeNum n);
 
     NodeInfo *getNodeByIndex(size_t x) { assert(x < *numNodes); return &nodes[x]; }
+
+    /// Return the number of nodes we've heard from recently (within the last 2 hrs?)
+    size_t getNumOnlineNodes() { return getNumNodes() - 1; /* FIXME */ }
 
 private:
 

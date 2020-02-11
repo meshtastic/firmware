@@ -18,6 +18,7 @@ NodeDB nodeDB;
 DeviceState devicestate;
 MyNodeInfo &myNodeInfo = devicestate.my_node;
 RadioConfig &radioConfig = devicestate.radio;
+ChannelSettings &channelSettings = radioConfig.channel_settings;
 
 #define FS SPIFFS
 

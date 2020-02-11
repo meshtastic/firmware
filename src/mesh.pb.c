@@ -21,7 +21,13 @@ PB_BIND(SubPacket, SubPacket, AUTO)
 PB_BIND(MeshPacket, MeshPacket, AUTO)
 
 
-PB_BIND(RadioConfig, RadioConfig, 2)
+PB_BIND(ChannelSettings, ChannelSettings, AUTO)
+
+
+PB_BIND(RadioConfig, RadioConfig, AUTO)
+
+
+PB_BIND(RadioConfig_UserPreferences, RadioConfig_UserPreferences, 2)
 
 
 PB_BIND(NodeInfo, NodeInfo, AUTO)

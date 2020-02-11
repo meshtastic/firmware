@@ -8,6 +8,15 @@
 #include "MeshTypes.h"
 #include "configuration.h"
 
+// US channel settings
+#define CH0_US          903.08f // MHz
+#define CH_SPACING_US   2.16f // MHz
+#define NUM_CHANNELS_US    13
+
+// FIXME add defs for other regions and use them here
+#define CH0 CH0_US
+#define CH_SPACING CH_SPACING_US
+#define NUM_CHANNELS NUM_CHANNELS_US
 
 
 #define MAX_TX_QUEUE 8 // max number of packets which can be waiting for transmission

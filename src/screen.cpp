@@ -301,10 +301,13 @@ void drawDebugInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
     // The coordinates define the left starting point of the text
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
+    static char usersStr[20];
+    snprintf(usersStr, sizeof(usersStr), "Users %d/%d", nodeDB.getNumOnlineNodes(), nodeDB.getNumNodes());
+
     const char *fields[] = {
         "Batt 89%",
         "GPS 75%",
-        "Users 4/12",
+        usersStr,
         NULL};
     uint32_t yo = drawRows(display, x, y, fields);
 

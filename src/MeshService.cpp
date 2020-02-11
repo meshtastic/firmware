@@ -163,6 +163,14 @@ void MeshService::loop()
     }
 }
 
+/// The radioConfig object just changed, call this to force the hw to change to the new settings
+void MeshService::reloadConfig()
+{
+    // If we can successfully set this radio to these settings, save them to disk
+    radio.reloadConfig();
+    nodeDB.saveToDisk();
+}
+
 /// Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)
 void MeshService::handleToRadio(std::string s)
 {
