@@ -10,8 +10,11 @@ const uint8_t SATELLITE_IMAGE[] PROGMEM = {
 const
 #include "icon.xbm"
 
+// We now programmatically draw our compass
+#if 0
 const
 #include "compass.xbm"
+#endif 
 
 #if 0
 const uint8_t activeSymbol[] PROGMEM = {

@@ -182,6 +182,43 @@ uint32_t drawRows(OLEDDisplay *display, int16_t x, int16_t y, const char **field
     return yo;
 }
 
+/// A basic 2D point class for drawing
+class Point
+{
+public:
+    float x, y;
+
+    Point(float _x, float _y): x(_x), y(_y) {}
+
+    /// Apply a rotation around zero (standard rotation matrix math)
+    void rotate(float radian)
+    {
+        float cos = cosf(radian),
+              sin = sinf(radian);
+        float rx = x * cos - y * sin,
+                ry = x * sin + y * cos;
+
+        x = rx;
+        y = ry;
+    }
+
+    void translate(int16_t dx, int dy) {
+        x += dx;
+        y += dy;
+    }
+
+    void scale(float f) {
+        x *= f;
+        y *= f;
+    }
+};
+
+void drawLine(OLEDDisplay *d, const Point &p1, const Point &p2) {
+    d->drawLine(p1.x, p1.y, p2.x, p2.y);
+}
+
+#define COMPASS_DIAM 44
+
 void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->setFont(ArialMT_Plain_10);
@@ -191,13 +228,35 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
 
     const char *fields[] = {
         "Kevin Hester (KH)",
-        "4.2 mi",
+        "2.1 mi",
         "Signal: good",
-        "24 minutes ago",
+        "12 minutes ago",
         NULL};
     drawColumns(display, x, y, fields);
 
-    display->drawXbm(x + (SCREEN_WIDTH - compass_width), y + (SCREEN_HEIGHT - compass_height) / 2, compass_width, compass_height, (const uint8_t *)compass_bits);
+    // coordinates for the center of the compass
+    int16_t compassX = x + SCREEN_WIDTH - COMPASS_DIAM / 2 - 1, compassY = y + SCREEN_HEIGHT / 2;
+    // display->drawXbm(compassX, compassY, compass_width, compass_height, (const uint8_t *)compass_bits);
+
+    Point tip(0.0f, 0.5f), tail(0.0f, -0.5f); // pointing up initially 
+    float arrowOffsetX = 0.1f, arrowOffsetY = 0.1f;
+    Point leftArrow(tip.x - arrowOffsetX, tip.y - arrowOffsetY), rightArrow(tip.x + arrowOffsetX, tip.y - arrowOffsetY);
+
+    static float headingRadian;
+    headingRadian += 0.1; // For testing
+
+    Point *points[] = { &tip, &tail, &leftArrow, &rightArrow };
+
+    for(int i = 0; i < 4; i++) {
+        points[i]->rotate(headingRadian);
+        points[i]->scale(COMPASS_DIAM * 0.6);
+        points[i]->translate(compassX, compassY);
+    }
+    drawLine(display, tip, tail);
+    drawLine(display, leftArrow, tip);
+    drawLine(display, rightArrow, tip);
+
+    display->drawCircle(compassX, compassY, COMPASS_DIAM / 2);
 }
 
 void drawDebugInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
