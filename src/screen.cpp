@@ -136,7 +136,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     String sender = "KH:";
     display->drawString(0 + x, 0 + y, sender);
     display->setFont(ArialMT_Plain_10);
-    display->drawStringMaxWidth(4 + x, 10 + y, 128, "            Lorem ipsum\n dolor sit amet, consetetur sadipscing elitr, sed diam");
+    display->drawStringMaxWidth(4 + x, 10 + y, 128, "            Hey - I found the trail, but I've fallen and I can't get up. ;-)");
 
     // ui.disableIndicator();
 }
@@ -257,10 +257,13 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
 
     const char *username = node->has_user ? node->user.long_name : "Unknown Name";
 
+    static char signalStr[20];
+    snprintf(signalStr, sizeof(signalStr), "Signal: %d", node->snr);
+
     const char *fields[] = {
         username,
         "2.1 mi",
-        "Signal: good",
+        signalStr,
         "12 minutes ago",
         NULL};
     drawColumns(display, x, y, fields);

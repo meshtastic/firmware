@@ -5,6 +5,7 @@
 
 # Medium priority
 
+* show radio and gps signal strength as an image
 * apply radio settings from android land
 * only BLE advertise for a short time after the screen is on and button pressed - to save power and prevent people for sniffing for our BT app.
 * use https://platformio.org/lib/show/1260/OneButton
