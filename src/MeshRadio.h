@@ -35,7 +35,7 @@ public:
     bool init();
 
     /// Prepare the radio to enter sleep mode, where it should draw only 0.2 uA
-    void sleep() { rf95.sleep(); }
+    void sleep();
 
     /// Send a packet (possibly by enquing in a private fifo).  This routine will
     /// later free() the packet to pool.  This routine is not allowed to stall because it is called from

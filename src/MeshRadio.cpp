@@ -104,6 +104,15 @@ void MeshRadio::reloadConfig()
   DEBUG_MSG("Set radio: config=%u, ch=%d, txpower=%d\n", channelSettings.modem_config, channelSettings.channel_num, channelSettings.tx_power);
 }
 
+
+void MeshRadio::sleep() {
+  // we no longer care about interrupts from this device 
+  rf95.prepareDeepSleep();
+
+  // FIXME - leave the device state in rx mode instead
+  rf95.sleep();
+}
+
 ErrorCode MeshRadio::send(MeshPacket *p)
 {
   DEBUG_MSG("enquing packet for send from=0x%x, to=0x%x\n", p->from, p->to);

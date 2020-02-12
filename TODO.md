@@ -1,10 +1,12 @@
 # High priority
 
-* finish power measurements and est battery life
 * have node info screen show real info (including time since last contact, distance and heading)
 * make debug info screen show real data (including battery level & charging)
 * make real implementation of getNumOnlineNodes
 * very occasionally send our position and user packet based on the schedule in the radio info (if for nothing else so that other nodes update last_seen)
+* make screen advance only when a new node update arrives, a new text arrives or the user presses a button
+* show real text info on the text screen
+* retest BLE software update for both board types
 
 # Medium priority
 
@@ -59,6 +61,7 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 
 # Low priority
 
+* the AXP debug output says it is trying to charge at 700mA, but the max I've seen is 180mA, so AXP registers probably need to be set to tell them the circuit can only provide 300mAish max. So that the low charge rate kicks in faster and we don't wear out batteries.
 * increase the max charging rate a bit for 18650s, currently it limits to 180mA (at 4V).  Work backwards from the 500mA USB limit (at 5V) and let the AXP charge at that rate.
 * add receive timestamps to messages, inserted by esp32 when message is received but then shown on the phone
 * if radio params change fundamentally, discard the nodedb
@@ -118,3 +121,4 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * make jtag debugger id stable: https://askubuntu.com/questions/49910/how-to-distinguish-between-identical-usb-to-serial-adapters
 * reported altitude is crap
 * good tips on which bands might be more free https://github.com/TheThingsNetwork/ttn/issues/119
+* finish power measurements (GPS on during sleep vs LCD on during sleep vs LORA on during sleep) and est battery life
