@@ -49,6 +49,14 @@ void NodeDB::init()
     devicestate.node_db_count = 0;
     devicestate.receive_queue_count = 0;
 
+    radioConfig.preferences.send_owner_secs = 60 * 60; // default to once an hour
+    radioConfig.preferences.position_broadcast_secs = 15 * 60; // default to once every 15 mins
+
+#ifdef GPS_RX_PIN
+    // some hardware defaults to have a built in GPS
+    myNodeInfo.has_gps = true;
+#endif
+
     // Init our blank owner info to reasonable defaults
     esp_efuse_mac_get_default(ourMacAddr);
     sprintf(owner.id, "!%02x%02x%02x%02x%02x%02x", ourMacAddr[0],

@@ -153,10 +153,10 @@ void MeshService::loop()
 
     handleFromRadio();
 
-    // FIXME, don't send user this often, but for now it is useful for testing
+    // occasionally send our owner info
     static uint32_t lastsend;
     uint32_t now = millis();
-    if (now - lastsend > 5 * 60 * 1000)
+    if (now - lastsend > radioConfig.preferences.send_owner_secs * 1000)
     {
         lastsend = now;
         sendOurOwner();
@@ -193,7 +193,7 @@ void MeshService::handleToRadio(std::string s)
 
 void MeshService::sendToMesh(MeshPacket *p)
 {
-    nodeDB.updateFrom(*p);
+    nodeDB.updateFrom(*p); // update our local DB for this packet
     assert(radio.send(p) == pdTRUE);
 }
 
@@ -208,8 +208,33 @@ MeshPacket *MeshService::allocForSending()
     return p;
 }
 
+void MeshService::sendNetworkPing()
+{
+    NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
+    assert(node);
+
+    if (node->has_position)
+        sendOurPosition();
+    else
+        sendOurOwner();
+}
+
+void MeshService::sendOurPosition()
+{
+    NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
+    assert(node);
+    assert(node->has_position);
+
+    // Update our local node info with our position (even if we don't decide to update anyone else)
+    MeshPacket *p = allocForSending();
+    p->payload.which_variant = SubPacket_position_tag;
+    p->payload.variant.position = node->position;
+    sendToMesh(p);
+}
+
 void MeshService::onGPSChanged()
 {
+    // Update our local node info with our position (even if we don't decide to update anyone else)
     MeshPacket *p = allocForSending();
     p->payload.which_variant = SubPacket_position_tag;
     Position &pos = p->payload.variant.position;
@@ -218,7 +243,23 @@ void MeshService::onGPSChanged()
     pos.latitude = gps.location.lat();
     pos.longitude = gps.location.lng();
 
-    sendToMesh(p);
+    // We limit our GPS broadcasts to a max rate
+    static uint32_t lastGpsSend;
+    uint32_t now = millis();
+    if (lastGpsSend == 0 || now - lastGpsSend > radioConfig.preferences.position_broadcast_secs * 1000)
+    {
+        lastGpsSend = now;
+        DEBUG_MSG("Sending position to mesh\n");
+
+        sendToMesh(p);
+    }
+    else
+    {
+        // We don't need to send this packet to anyone else, but it still serves as a nice uniform way to update our local state
+        nodeDB.updateFrom(*p);
+
+        releaseToPool(p);
+    }
 }
 
 void MeshService::onNotify(Observable *o)

@@ -34,8 +34,8 @@ typedef enum _ChannelSettings_ModemConfig {
 
 typedef enum _DeviceState_Version {
     DeviceState_Version_Unset = 0,
-    DeviceState_Version_Minimum = 10,
-    DeviceState_Version_Current = 10
+    DeviceState_Version_Minimum = 11,
+    DeviceState_Version_Current = 11
 } DeviceState_Version;
 
 /* Struct definitions */
@@ -67,8 +67,8 @@ typedef struct _Position {
 } Position;
 
 typedef struct _RadioConfig_UserPreferences {
-    uint32_t position_broadcast_msec;
-    uint32_t min_broadcast_msec;
+    uint32_t position_broadcast_secs;
+    uint32_t send_owner_secs;
     bool keep_all_packets;
     bool promiscuous_mode;
 } RadioConfig_UserPreferences;
@@ -206,8 +206,8 @@ typedef struct _ToRadio {
 #define Position_altitude_tag                    3
 #define Position_battery_level_tag               4
 #define Position_from_hardware_tag               5
-#define RadioConfig_UserPreferences_position_broadcast_msec_tag 1
-#define RadioConfig_UserPreferences_min_broadcast_msec_tag 2
+#define RadioConfig_UserPreferences_position_broadcast_secs_tag 1
+#define RadioConfig_UserPreferences_send_owner_secs_tag 2
 #define RadioConfig_UserPreferences_keep_all_packets_tag 100
 #define RadioConfig_UserPreferences_promiscuous_mode_tag 101
 #define User_id_tag                              1
@@ -300,8 +300,8 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  channel_settings,   2)
 #define RadioConfig_channel_settings_MSGTYPE ChannelSettings
 
 #define RadioConfig_UserPreferences_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UINT32,   position_broadcast_msec,   1) \
-X(a, STATIC,   SINGULAR, UINT32,   min_broadcast_msec,   2) \
+X(a, STATIC,   SINGULAR, UINT32,   position_broadcast_secs,   1) \
+X(a, STATIC,   SINGULAR, UINT32,   send_owner_secs,   2) \
 X(a, STATIC,   SINGULAR, BOOL,     keep_all_packets, 100) \
 X(a, STATIC,   SINGULAR, BOOL,     promiscuous_mode, 101)
 #define RadioConfig_UserPreferences_CALLBACK NULL

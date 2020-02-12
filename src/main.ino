@@ -442,6 +442,7 @@ void loop()
       // esp_pm_dump_locks(stdout); // FIXME, do this someplace better
       wasPressed = true;
       minPressMs = millis() + 3000;
+      service.sendNetworkPing();
       screen_press();
     }
   }

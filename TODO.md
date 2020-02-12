@@ -1,11 +1,7 @@
 # High priority
 
-* send user and location events much less often
-* send location (or if not available user) when the user wakes the device from display sleep (both for testing and to improve user experience)
 * have node info screen show real info (including time since last contact, distance and heading)
 * make debug info screen show real data (including battery level & charging)
-* make real implementation of getNumOnlineNodes
-* very occasionally send our position and user packet based on the schedule in the radio info (if for nothing else so that other nodes update last_seen)
 * show real text info on the text screen
 * retest BLE software update for both board types
 * turn on screen when a new update arrives
@@ -127,3 +123,7 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * make screen sleep behavior work
 * make screen advance only when a new node update arrives, a new text arrives or the user presses a button, turn off screen after a while
 * after reboot, channel number is getting reset to zero! fix!
+* send user and location events much less often
+* send location (or if not available user) when the user wakes the device from display sleep (both for testing and to improve user experience)
+* make real implementation of getNumOnlineNodes
+* very occasionally send our position and user packet based on the schedule in the radio info (if for nothing else so that other nodes update last_seen)

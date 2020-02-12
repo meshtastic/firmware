@@ -60,9 +60,14 @@ public:
     /// Allocate and return a meshpacket which defaults as send to broadcast from the current node.
     MeshPacket *allocForSending();
 
+    /// Called when the user wakes up our GUI, normally sends our latest location to the mesh (if we have it), otherwise at least sends our owner
+    void sendNetworkPing();
+
     /// Send our owner info to a particular node 
     void sendOurOwner(NodeNum dest = NODENUM_BROADCAST);
 private:
+    /// Broadcasts our last known position
+    void sendOurPosition();
 
     /// Send a packet into the mesh - note p must have been allocated from packetPool.  We will return it to that pool after sending.
     /// This is the ONLY function you should use for sending messages into the mesh, because it also updates the nodedb cache
