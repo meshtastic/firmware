@@ -43,6 +43,9 @@ void NodeDB::init()
     devicestate.has_my_node = true;
     devicestate.has_radio = true;
     devicestate.has_owner = true;
+    devicestate.has_radio = true;
+    devicestate.radio.has_channel_settings = true;
+    devicestate.radio.has_preferences = true;
     devicestate.node_db_count = 0;
     devicestate.receive_queue_count = 0;
 
@@ -116,6 +119,8 @@ void NodeDB::loadFromDisk()
         DEBUG_MSG("Loading saved preferences\n");
         pb_istream_t stream = {&readcb, &f, DeviceState_size};
 
+        //DEBUG_MSG("Preload channel name=%s\n", channelSettings.name);
+
         memset(&scratch, 0, sizeof(scratch));
         if (!pb_decode(&stream, DeviceState_fields, &scratch))
         {
@@ -127,7 +132,11 @@ void NodeDB::loadFromDisk()
             if (scratch.version < DeviceState_Version_Minimum)
                 DEBUG_MSG("Warn: devicestate is old, discarding\n");
             else
+            {
                 devicestate = scratch;
+            }
+
+            //DEBUG_MSG("Postload channel name=%s\n", channelSettings.name);
         }
 
         f.close();
@@ -144,7 +153,10 @@ void NodeDB::saveToDisk()
     if (f)
     {
         DEBUG_MSG("Writing preferences\n");
-        pb_ostream_t stream = {&writecb, &f, DeviceState_size, 0};
+
+        pb_ostream_t stream = {&writecb, &f, SIZE_MAX, 0};
+
+        //DEBUG_MSG("Presave channel name=%s\n", channelSettings.name);
 
         devicestate.version = DeviceState_Version_Current;
         if (!pb_encode(&stream, DeviceState_fields, &devicestate))
@@ -156,8 +168,10 @@ void NodeDB::saveToDisk()
         f.close();
 
         // brief window of risk here ;-)
-        FS.remove(preffile);
-        FS.rename(preftmp, preffile);
+        if (!FS.remove(preffile))
+            DEBUG_MSG("Warning: Can't remove old pref file\n");
+        if (!FS.rename(preftmp, preffile))
+            DEBUG_MSG("Error: can't rename new pref file\n");
     }
     else
     {
@@ -187,13 +201,13 @@ uint32_t sinceLastSeen(const NodeInfo *n)
 
 #define NUM_ONLINE_SECS (60 * 2) // 2 hrs to consider someone offline
 
-size_t NodeDB::getNumOnlineNodes() 
-{ 
+size_t NodeDB::getNumOnlineNodes()
+{
     size_t numseen = 0;
 
     // FIXME this implementation is kinda expensive
-    for(int i = 0; i < *numNodes; i++)
-        if(sinceLastSeen(&nodes[i]) < NUM_ONLINE_SECS)
+    for (int i = 0; i < *numNodes; i++)
+        if (sinceLastSeen(&nodes[i]) < NUM_ONLINE_SECS)
             numseen++;
 
     return numseen;

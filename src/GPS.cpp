@@ -45,7 +45,7 @@ void GPS::loop()
 }
 
 uint64_t GPS::getTime() {
-    return (millis() - timeStartMsec) * 1000LL + zeroOffset;
+    return ((uint64_t) millis() - timeStartMsec) + zeroOffset;
 }
 
 void GPS::doTask()

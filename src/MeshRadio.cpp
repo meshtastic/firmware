@@ -41,10 +41,14 @@ MeshRadio::MeshRadio(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &_r
   channelSettings.channel_num = DEFAULT_CHANNEL_NUM;
   memcpy(&channelSettings.psk, &defaultpsk, sizeof(channelSettings.psk));
   strcpy(channelSettings.name, "Default");
+  // Can't print strings this early - serial not setup yet
+  // DEBUG_MSG("Set meshradio defaults name=%s\n", channelSettings.name);
 }
 
 bool MeshRadio::init()
 {
+  DEBUG_MSG("Starting meshradio init...\n");
+
 #ifdef RESET_GPIO
   pinMode(RESET_GPIO, OUTPUT); // Deassert reset
   digitalWrite(RESET_GPIO, HIGH);
@@ -101,7 +105,7 @@ void MeshRadio::reloadConfig()
   // FIXME - can we do this?  It seems to be in the Heltec board.
   rf95.setTxPower(channelSettings.tx_power, false);
 
-  DEBUG_MSG("Set radio: config=%u, ch=%d, txpower=%d\n", channelSettings.modem_config, channelSettings.channel_num, channelSettings.tx_power);
+  DEBUG_MSG("Set radio: name=%s. config=%u, ch=%d, txpower=%d\n", channelSettings.name, channelSettings.modem_config, channelSettings.channel_num, channelSettings.tx_power);
 }
 
 

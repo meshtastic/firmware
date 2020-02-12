@@ -66,5 +66,6 @@ bool readcb(pb_istream_t *stream, uint8_t *buf, size_t count)
 bool writecb(pb_ostream_t *stream, const uint8_t *buf, size_t count)
 {
    File *file = (File*) stream->state;
+   //DEBUG_MSG("writing %d bytes to protobuf file\n", count);
    return file->write(buf, count) == count;
 }

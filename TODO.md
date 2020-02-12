@@ -1,6 +1,7 @@
 # High priority
 
-* after reboot, channel number is getting reset to zero! fix!
+* send user and location events much less often
+* send location (or if not available user) when the user wakes the device from display sleep (both for testing and to improve user experience)
 * have node info screen show real info (including time since last contact, distance and heading)
 * make debug info screen show real data (including battery level & charging)
 * make real implementation of getNumOnlineNodes
@@ -125,3 +126,4 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * finish power measurements (GPS on during sleep vs LCD on during sleep vs LORA on during sleep) and est battery life
 * make screen sleep behavior work
 * make screen advance only when a new node update arrives, a new text arrives or the user presses a button, turn off screen after a while
+* after reboot, channel number is getting reset to zero! fix!

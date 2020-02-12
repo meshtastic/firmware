@@ -34,8 +34,8 @@ typedef enum _ChannelSettings_ModemConfig {
 
 typedef enum _DeviceState_Version {
     DeviceState_Version_Unset = 0,
-    DeviceState_Version_Minimum = 7,
-    DeviceState_Version_Current = 7
+    DeviceState_Version_Minimum = 10,
+    DeviceState_Version_Current = 10
 } DeviceState_Version;
 
 /* Struct definitions */
