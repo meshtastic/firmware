@@ -1,5 +1,7 @@
 # High priority
 
+* platformio sdkconfig CONFIG_PM and turn on modem sleep mode
+* finish power measurements and est battery life
 * have node info screen show real info (including time since last contact, distance and heading)
 * make debug info screen show real data (including battery level & charging)
 * make real implementation of getNumOnlineNodes
@@ -27,7 +29,7 @@
 
 * keep cpu 100% in sleep (some sort - deep?) Sleep until irq from radio wakes it (make plan based on power draw spreadsheet).  Then stay awake for 30 secs to attempt delivery to phone.  
 * have radiohead ISR send messages to RX queue directly, to allow that thread to block until we have something to send
-* use https://lastminuteengineers.com/esp32-sleep-modes-power-consumption/ association sleep pattern to save power - but see https://github.com/espressif/esp-idf/issues/2070 
+* use https://lastminuteengineers.com/esp32-sleep-modes-power-consumption/ association sleep pattern to save power - but see https://github.com/espressif/esp-idf/issues/2070 and https://esp32.com/viewtopic.php?f=13&t=12182 it seems with BLE on the 'easy' draw people are getting is 80mA
 * stop using loop() instead use a job queue and let cpu sleep
 * move lora rx/tx to own thread and block on IO
 * measure power consumption and calculate battery life assuming no deep sleep

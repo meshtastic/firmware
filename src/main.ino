@@ -145,6 +145,23 @@ void doDeepSleep(uint64_t msecToWake)
   esp_deep_sleep_start();                              // TBD mA sleep current (battery)
 }
 
+#include "esp32/pm.h"
+#include "esp_pm.h"
+
+/**
+ * enable modem sleep mode as needed and available.  Should lower our CPU current draw to an average of about 20mA.
+ * 
+ * per https://docs.espressif.com/projects/esp-idf/en/latest/api-reference/system/power_management.html
+ */
+void enableModemSleep() {
+  static esp_pm_config_esp32_t config; // filled with zeros because bss
+
+  config.max_freq_mhz = CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ;
+  config.min_freq_mhz = 10; // 10Mhz is minimum recommended
+  config.light_sleep_enable = false; 
+  DEBUG_MSG("Sleep request result %x\n", esp_pm_configure(&config));
+}
+
 void sleep()
 {
 #ifdef SLEEP_MSECS
@@ -366,6 +383,8 @@ void setup()
     BLEServer *serve = initBLE(getDeviceName(), HW_VENDOR, APP_VERSION); // FIXME, use a real name based on the macaddr
     createMeshBluetoothService(serve);
   }
+
+  enableModemSleep();
 }
 
 void loop()
@@ -425,6 +444,7 @@ void loop()
     if (!wasPressed)
     { // just started a new press
       DEBUG_MSG("pressing\n");
+      esp_pm_dump_locks(stdout); // FIXME, do this someplace better
       wasPressed = true;
       minPressMs = millis() + 3000;
       screen_press();
