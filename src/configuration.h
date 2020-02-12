@@ -38,11 +38,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // Select which T-Beam board is being used. Only uncomment one.  Note: these options now come from platformio standard build file flags
 //#ifdef ARDUINO_T_Beam
-//#define T_BEAM_V10  // AKA Rev1 (second board released)
+#define T_BEAM_V10  // AKA Rev1 (second board released)
 //#endif 
 
 //#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V2
-#define HELTEC_LORA32
+//#define HELTEC_LORA32
 //#endif
 
 // If we are using the JTAG port for debugging, some pins must be left free for that (and things like GPS have to be disabled)
@@ -62,7 +62,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // If not defined, we will wait for lock forever
 
-#define MINWAKE_MSECS           (30 * 60 * 1000) // stay awake a long time (30 mins) for debugging
+#define MINWAKE_MSECS           (30 * 1000) // stay awake a long time (30 mins) for debugging
 // #define MINWAKE_MSECS           (30 * 1000)  // Wait after every boot for GPS lock (may need longer than 5s because we turned the gps off during deep sleep)
 
 // -----------------------------------------------------------------------------
@@ -122,6 +122,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define DIO0_GPIO       26
 #define DIO1_GPIO       33 // Note: not really used on this board
 #define DIO2_GPIO       32 // Note: not really used on this board
+
+// Leave undefined to disable our PMU IRQ handler 
 #define PMU_IRQ         35
 
 #elif defined(HELTEC_LORA32)

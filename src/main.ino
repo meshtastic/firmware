@@ -37,8 +37,9 @@
 #include "axp20x.h"
 AXP20X_Class axp;
 bool pmu_irq = false;
-String baChStatus = "No charging";
 #endif
+bool isCharging = false;
+
 
 bool ssd1306_found = false;
 bool axp192_found = false;
@@ -268,6 +269,7 @@ void axp192Init()
 
       axp.debugCharging();
 
+#ifdef PMU_IRQ
       pinMode(PMU_IRQ, INPUT_PULLUP);
       attachInterrupt(PMU_IRQ, [] {
         pmu_irq = true;
@@ -277,11 +279,9 @@ void axp192Init()
       axp.adc1Enable(AXP202_BATT_CUR_ADC1, 1);
       axp.enableIRQ(AXP202_VBUS_REMOVED_IRQ | AXP202_VBUS_CONNECT_IRQ | AXP202_BATT_REMOVED_IRQ | AXP202_BATT_CONNECT_IRQ, 1);
       axp.clearIRQ();
+#endif
 
-      if (axp.isChargeing())
-      {
-        baChStatus = "Charging";
-      }
+      isCharging = axp.isChargeing();
     }
     else
     {
@@ -412,26 +412,21 @@ void loop()
     // blink the axp led
     axp.setChgLEDMode(ledon ? AXP20X_LED_LOW_LEVEL : AXP20X_LED_OFF);
 
+#ifdef PMU_IRQ
     if (pmu_irq)
     {
       pmu_irq = false;
       axp.readIRQ();
-      if (axp.isChargingIRQ())
-      {
-        baChStatus = "Charging";
-      }
-      else
-      {
-        baChStatus = "No Charging";
-      }
+      isCharging = axp.isChargingIRQ();
+
       if (axp.isVbusRemoveIRQ())
-      {
-        baChStatus = "No Charging";
-      }
+        isCharging = false;
+      
       // This is not a GPIO actually connected on the tbeam board
       // digitalWrite(2, !digitalRead(2));
       axp.clearIRQ();
     }
+#endif
   }
 #endif
 
@@ -465,7 +460,8 @@ void loop()
 #endif
 
 #ifdef MINWAKE_MSECS
-  if (millis() > MINWAKE_MSECS)
+  // Don't deepsleep if we have USB power
+  if (millis() > MINWAKE_MSECS && !isCharging)
   {
     sleep();
   }
