@@ -43,6 +43,7 @@ SSD1306Wire dispdev(SSD1306_ADDRESS, 0, 0); // fake values to keep build happy, 
 #endif
 
 bool disp; // true if we are using display
+bool screenOn; // true if the display is currently powered
 
 OLEDDisplayUi ui(&dispdev);
 
@@ -320,7 +321,7 @@ void drawDebugInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
 
 // This array keeps function pointers to all frames
 // frames are the single views that slide in
-FrameCallback bootFrames[] = {drawBootScreen, drawTextMessageFrame, drawDebugInfo};
+FrameCallback bootFrames[] = {drawBootScreen};
 
 // Overlays are statically drawn on top of a frame eg. a clock
 OverlayCallback overlays[] = {/* msOverlay */};
@@ -359,6 +360,7 @@ void screen_off()
         return;
 
     dispdev.displayOff();
+    screenOn = false;
 }
 
 void screen_on()
@@ -367,6 +369,7 @@ void screen_on()
         return;
 
     dispdev.displayOn();
+    screenOn = true;
 }
 
 static void screen_print(const char *text, uint8_t x, uint8_t y, uint8_t alignment)
@@ -428,11 +431,15 @@ void screen_setup()
     // Scroll buffer
     dispdev.setLogBuffer(3, 32);
 
+    screen_on(); // update our screenOn bool
+
 #ifdef BICOLOR_DISPLAY
     dispdev.flipScreenVertically(); // looks better without this on lora32
 #endif
 
     // dispdev.setFont(Custom_ArialMT_Plain_10);
+
+    ui.disableAutoTransition(); // we now require presses
 #endif
 }
 
@@ -441,10 +448,15 @@ static bool showingBluetooth;
 /// If set to true (possibly from an ISR), we should turn on the screen the next time our idle loop runs.
 static bool wakeScreen;
 
+uint32_t lastPressMs;
+
+/// Turn off the screen this many ms after last press or wake
+#define SCREEN_SLEEP_MS (60 * 1000)
+
 uint32_t screen_loop()
 {
-    if (!disp)
-        return 30 * 1000;
+    if (!disp) // If we don't have a screen, don't ever spend any CPU for us
+        return UINT32_MAX;
 
     if (wakeScreen)
     {
@@ -452,27 +464,41 @@ uint32_t screen_loop()
         wakeScreen = false;
     }
 
-    static bool showingBootScreen = true;
+    if(!screenOn) // If we didn't just wake and the screen is still off, then bail
+        return UINT32_MAX;
+
+    static bool showingBootScreen = true; // start by showing the bootscreen
 
     ui.update();
 
-    // Once we finish showing the bootscreen, remove it from the loop
-    if (showingBootScreen && !showingBluetooth)
+    // While showing the bluetooth pair screen all of our standard screen switching is stopped
+    if (!showingBluetooth)
     {
-        if (ui.getUiState()->currentFrame == 1)
+        // Once we finish showing the bootscreen, remove it from the loop
+        if (showingBootScreen)
         {
-            showingBootScreen = false;
-            screen_set_frames();
+            if (millis() > 5 * 1000) // we show the boot screen for a few seconds only
+            {
+                showingBootScreen = false;
+                screen_set_frames();
+            }
         }
-    }
+        else // standard screen loop handling ehre
+        {
+            // If the # nodes changes, we need to regen our list of screens
+            static size_t oldnumnodes = 0;
+            size_t numnodes = nodeDB.getNumNodes();
+            if (numnodes != oldnumnodes)
+            {
+                oldnumnodes = numnodes;
+                screen_set_frames();
+            }
 
-    static size_t oldnumnodes = 0;
-    size_t numnodes = nodeDB.getNumNodes();
-    if (numnodes != oldnumnodes)
-    {
-        // If the # nodes changes, we need to regen our list of screens
-        oldnumnodes = numnodes;
-        screen_set_frames();
+            if(millis() - lastPressMs > SCREEN_SLEEP_MS) {
+                DEBUG_MSG("screen timeout, turn it off for now...\n");
+                screen_off();
+            }
+        }
     }
 
     // If we are scrolling do 30fps, otherwise just 1 fps (to save CPU)
@@ -490,8 +516,7 @@ void screen_start_bluetooth(uint32_t pin)
     showingBluetooth = true;
     wakeScreen = true;
 
-    ui.disableAutoTransition(); // we now require presses
-    ui.setFrames(btFrames, 1);  // Just show the bluetooth frame
+    ui.setFrames(btFrames, 1); // Just show the bluetooth frame
     // we rely on our main loop to show this screen (because we are invoked deep inside of bluetooth callbacks)
     // ui.update(); // manually draw once, because I'm not sure if loop is getting called
 }
@@ -516,12 +541,17 @@ void screen_set_frames()
     showingBluetooth = false;
 }
 
+
+
 /// handle press of the button
 void screen_press()
 {
     // screen_start_bluetooth(123456);
 
-    // Once the user presses a button, stop auto scrolling between screens
-    ui.disableAutoTransition(); // we now require presses
-    ui.nextFrame();
+    lastPressMs = millis();
+    wakeScreen = true;
+
+    // If screen was off, just wake it, otherwise advance to next frame
+    if(screenOn)
+        ui.nextFrame();
 }

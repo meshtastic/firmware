@@ -4,9 +4,9 @@
 * make debug info screen show real data (including battery level & charging)
 * make real implementation of getNumOnlineNodes
 * very occasionally send our position and user packet based on the schedule in the radio info (if for nothing else so that other nodes update last_seen)
-* make screen advance only when a new node update arrives, a new text arrives or the user presses a button
 * show real text info on the text screen
 * retest BLE software update for both board types
+* turn on screen when a new update arrives
 
 # Medium priority
 
@@ -122,3 +122,5 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * reported altitude is crap
 * good tips on which bands might be more free https://github.com/TheThingsNetwork/ttn/issues/119
 * finish power measurements (GPS on during sleep vs LCD on during sleep vs LORA on during sleep) and est battery life
+* make screen sleep behavior work
+* make screen advance only when a new node update arrives, a new text arrives or the user presses a button, turn off screen after a while

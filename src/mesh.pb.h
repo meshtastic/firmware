@@ -14,6 +14,11 @@ extern "C" {
 #endif
 
 /* Enum definitions */
+typedef enum _Constants {
+    Constants_Unused = 0,
+    Constants_NumChannels = 13
+} Constants;
+
 typedef enum _Data_Type {
     Data_Type_SIGNAL_OPAQUE = 0,
     Data_Type_CLEAR_TEXT = 1,
@@ -141,6 +146,10 @@ typedef struct _ToRadio {
 
 
 /* Helper constants for enums */
+#define _Constants_MIN Constants_Unused
+#define _Constants_MAX Constants_NumChannels
+#define _Constants_ARRAYSIZE ((Constants)(Constants_NumChannels+1))
+
 #define _Data_Type_MIN Data_Type_SIGNAL_OPAQUE
 #define _Data_Type_MAX Data_Type_CLEAR_READACK
 #define _Data_Type_ARRAYSIZE ((Data_Type)(Data_Type_CLEAR_READACK+1))
