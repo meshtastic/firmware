@@ -34,8 +34,8 @@ typedef enum _ChannelSettings_ModemConfig {
 
 typedef enum _DeviceState_Version {
     DeviceState_Version_Unset = 0,
-    DeviceState_Version_Minimum = 6,
-    DeviceState_Version_Current = 6
+    DeviceState_Version_Minimum = 7,
+    DeviceState_Version_Current = 7
 } DeviceState_Version;
 
 /* Struct definitions */
@@ -86,7 +86,7 @@ typedef struct _NodeInfo {
     User user;
     bool has_position;
     Position position;
-    uint64_t last_seen;
+    uint32_t last_seen;
     int32_t snr;
     int32_t frequency_error;
 } NodeInfo;
@@ -311,7 +311,7 @@ X(a, STATIC,   SINGULAR, BOOL,     promiscuous_mode, 101)
 X(a, STATIC,   SINGULAR, INT32,    num,               1) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  user,              2) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  position,          3) \
-X(a, STATIC,   SINGULAR, UINT64,   last_seen,         4) \
+X(a, STATIC,   SINGULAR, UINT32,   last_seen,         4) \
 X(a, STATIC,   SINGULAR, INT32,    snr,               5) \
 X(a, STATIC,   SINGULAR, INT32,    frequency_error,   6)
 #define NodeInfo_CALLBACK NULL
@@ -391,9 +391,9 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define ChannelSettings_size                     50
 #define RadioConfig_size                         72
 #define RadioConfig_UserPreferences_size         18
-#define NodeInfo_size                            162
+#define NodeInfo_size                            157
 #define MyNodeInfo_size                          13
-#define DeviceState_size                         13349
+#define DeviceState_size                         13189
 #define FromRadio_size                           253
 #define ToRadio_size                             247
 

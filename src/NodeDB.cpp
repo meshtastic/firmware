@@ -173,6 +173,32 @@ const NodeInfo *NodeDB::readNextInfo()
         return NULL;
 }
 
+/// Given a node, return how many seconds in the past (vs now) that we last heard from it
+uint32_t sinceLastSeen(const NodeInfo *n)
+{
+    uint32_t now = gps.getTime() / 1000;
+
+    int delta = (int)(now - n->last_seen);
+    if (delta < 0) // our clock must be slightly off still - not set from GPS yet
+        delta = 0;
+
+    return delta;
+}
+
+#define NUM_ONLINE_SECS (60 * 2) // 2 hrs to consider someone offline
+
+size_t NodeDB::getNumOnlineNodes() 
+{ 
+    size_t numseen = 0;
+
+    // FIXME this implementation is kinda expensive
+    for(int i = 0; i < *numNodes; i++)
+        if(sinceLastSeen(&nodes[i]) < NUM_ONLINE_SECS)
+            numseen++;
+
+    return numseen;
+}
+
 /// given a subpacket sniffed from the network, update our DB state
 /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
 void NodeDB::updateFrom(const MeshPacket &mp)
@@ -188,7 +214,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
         if (oldNumNodes != *numNodes)
             updateGUI = true; // we just created a nodeinfo
 
-        info->last_seen = gps.getTime();
+        info->last_seen = gps.getTime() / 1000; // we keep time in seconds, not msecs
 
         switch (p.which_variant)
         {

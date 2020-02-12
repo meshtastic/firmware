@@ -11,6 +11,9 @@ extern RadioConfig &radioConfig;
 extern ChannelSettings &channelSettings;
 extern User &owner;
 
+/// Given a node, return how many seconds in the past (vs now) that we last heard from it
+uint32_t sinceLastSeen(const NodeInfo *n);
+
 class NodeDB
 {
     // NodeNum provisionalNodeNum; // if we are trying to find a node num this is our current attempt
@@ -71,7 +74,7 @@ public:
     NodeInfo *getNodeByIndex(size_t x) { assert(x < *numNodes); return &nodes[x]; }
 
     /// Return the number of nodes we've heard from recently (within the last 2 hrs?)
-    size_t getNumOnlineNodes() { return getNumNodes() - 1; /* FIXME */ }
+    size_t getNumOnlineNodes();
 
 private:
 

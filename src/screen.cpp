@@ -32,7 +32,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "NodeDB.h"
 
 #define FONT_HEIGHT 14 // actually 13 for "ariel 10" but want a little extra space
-
+#define FONT_HEIGHT_16 (ArialMT_Plain_16[1] + 1)
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 
@@ -42,7 +42,7 @@ SSD1306Wire dispdev(SSD1306_ADDRESS, I2C_SDA, I2C_SCL);
 SSD1306Wire dispdev(SSD1306_ADDRESS, 0, 0); // fake values to keep build happy, we won't ever init
 #endif
 
-bool disp; // true if we are using display
+bool disp;     // true if we are using display
 bool screenOn; // true if the display is currently powered
 
 OLEDDisplayUi ui(&dispdev);
@@ -66,9 +66,9 @@ void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, 
 
     display->drawXbm(x + 32, y, icon_width, icon_height, (const uint8_t *)icon_bits);
 
-    display->setFont(ArialMT_Plain_10);
+    display->setFont(ArialMT_Plain_16);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->drawString(64 + x, SCREEN_HEIGHT - FONT_HEIGHT, APP_NAME " " APP_VERSION);
+    display->drawString(64 + x, SCREEN_HEIGHT - FONT_HEIGHT_16, "meshtastic.org");
 
     ui.disableIndicator();
 }
@@ -261,11 +261,20 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
     static char signalStr[20];
     snprintf(signalStr, sizeof(signalStr), "Signal: %d", node->snr);
 
+    uint32_t agoSecs = sinceLastSeen(node);
+    static char lastStr[20];
+    if (agoSecs < 120) // last 2 mins?
+        snprintf(lastStr, sizeof(lastStr), "%d seconds ago", agoSecs);
+    else if (agoSecs < 120 * 60) // last 2 hrs
+        snprintf(lastStr, sizeof(lastStr), "%d minutes ago", agoSecs / 60);
+    else
+        snprintf(lastStr, sizeof(lastStr), "%d hours ago", agoSecs / 60 / 60);
+
     const char *fields[] = {
         username,
         "2.1 mi",
         signalStr,
-        "12 minutes ago",
+        lastStr,
         NULL};
     drawColumns(display, x, y, fields);
 
@@ -464,7 +473,7 @@ uint32_t screen_loop()
         wakeScreen = false;
     }
 
-    if(!screenOn) // If we didn't just wake and the screen is still off, then bail
+    if (!screenOn) // If we didn't just wake and the screen is still off, then bail
         return UINT32_MAX;
 
     static bool showingBootScreen = true; // start by showing the bootscreen
@@ -494,7 +503,8 @@ uint32_t screen_loop()
                 screen_set_frames();
             }
 
-            if(millis() - lastPressMs > SCREEN_SLEEP_MS) {
+            if (millis() - lastPressMs > SCREEN_SLEEP_MS)
+            {
                 DEBUG_MSG("screen timeout, turn it off for now...\n");
                 screen_off();
             }
@@ -541,8 +551,6 @@ void screen_set_frames()
     showingBluetooth = false;
 }
 
-
-
 /// handle press of the button
 void screen_press()
 {
@@ -552,6 +560,6 @@ void screen_press()
     wakeScreen = true;
 
     // If screen was off, just wake it, otherwise advance to next frame
-    if(screenOn)
+    if (screenOn)
         ui.nextFrame();
 }

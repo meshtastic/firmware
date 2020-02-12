@@ -1,5 +1,6 @@
 # High priority
 
+* after reboot, channel number is getting reset to zero! fix!
 * have node info screen show real info (including time since last contact, distance and heading)
 * make debug info screen show real data (including battery level & charging)
 * make real implementation of getNumOnlineNodes
