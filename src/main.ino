@@ -434,7 +434,7 @@ void loop()
   // if user presses button for more than 3 secs, discard our network prefs and reboot (FIXME, use a debounce lib instead of this boilerplate)
   static bool wasPressed = false;
   static uint32_t minPressMs; // what tick should we call this press long enough
-  static uint32_t lastPingMs;
+  static uint32_t lastPingMs, lastPressMs;
   if (!digitalRead(BUTTON_PIN))
   {
     if (!wasPressed)
@@ -444,6 +444,7 @@ void loop()
       wasPressed = true;
 
       uint32_t now = millis();
+      lastPressMs = now;
       minPressMs = now + 3000;
 
       if (now - lastPingMs > 60 * 1000)
@@ -470,8 +471,8 @@ void loop()
 #endif
 
 #ifdef MINWAKE_MSECS
-  // Don't deepsleep if we have USB power
-  if (millis() > MINWAKE_MSECS && !isCharging)
+  // Don't deepsleep if we have USB power or if the user as pressed a button recently
+  if (millis() - lastPressMs > MINWAKE_MSECS && !isCharging)
   {
     sleep();
   }
