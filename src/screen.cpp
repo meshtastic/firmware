@@ -273,7 +273,7 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
     // display->drawXbm(compassX, compassY, compass_width, compass_height, (const uint8_t *)compass_bits);
 
     Point tip(0.0f, 0.5f), tail(0.0f, -0.5f); // pointing up initially
-    float arrowOffsetX = 0.1f, arrowOffsetY = 0.1f;
+    float arrowOffsetX = 0.2f, arrowOffsetY = 0.2f;
     Point leftArrow(tip.x - arrowOffsetX, tip.y - arrowOffsetY), rightArrow(tip.x + arrowOffsetX, tip.y - arrowOffsetY);
 
     static float headingRadian;
@@ -305,7 +305,7 @@ void drawDebugInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
     snprintf(usersStr, sizeof(usersStr), "Users %d/%d", nodeDB.getNumOnlineNodes(), nodeDB.getNumNodes());
 
     static char channelStr[20];
-    snprintf(channelStr, sizeof(channelStr), "Channel %s", channelSettings.name);
+    snprintf(channelStr, sizeof(channelStr), "%s", channelSettings.name);
 
     const char *fields[] = {
         "Batt 89%",
