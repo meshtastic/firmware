@@ -112,7 +112,7 @@ typedef struct _MeshPacket {
     int32_t to;
     bool has_payload;
     SubPacket payload;
-    uint64_t rx_time;
+    uint32_t rx_time;
 } MeshPacket;
 
 typedef struct _DeviceState {
@@ -277,7 +277,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (variant,user,variant.user),   4)
 X(a, STATIC,   SINGULAR, INT32,    from,              1) \
 X(a, STATIC,   SINGULAR, INT32,    to,                2) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  payload,           3) \
-X(a, STATIC,   SINGULAR, UINT64,   rx_time,           4)
+X(a, STATIC,   SINGULAR, UINT32,   rx_time,           4)
 #define MeshPacket_CALLBACK NULL
 #define MeshPacket_DEFAULT NULL
 #define MeshPacket_payload_MSGTYPE SubPacket
@@ -387,15 +387,15 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define Data_size                                205
 #define User_size                                72
 #define SubPacket_size                           208
-#define MeshPacket_size                          244
+#define MeshPacket_size                          239
 #define ChannelSettings_size                     50
 #define RadioConfig_size                         72
 #define RadioConfig_UserPreferences_size         18
 #define NodeInfo_size                            157
 #define MyNodeInfo_size                          13
-#define DeviceState_size                         13189
-#define FromRadio_size                           253
-#define ToRadio_size                             247
+#define DeviceState_size                         13029
+#define FromRadio_size                           248
+#define ToRadio_size                             242
 
 #ifdef __cplusplus
 } /* extern "C" */

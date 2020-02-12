@@ -1,13 +1,15 @@
 # High priority
 
-* have node info screen show real info (including time since last contact, distance and heading)
+* have node info screen show real info (including distance and heading)
 * make debug info screen show real data (including battery level & charging)
 * show real text info on the text screen
+* update build to generate both board types
 * retest BLE software update for both board types
 * turn on screen when a new update arrives
 
 # Medium priority
 
+* answer to pings with our latest location
 * show radio and gps signal strength as an image
 * apply radio settings from android land
 * only BLE advertise for a short time after the screen is on and button pressed - to save power and prevent people for sniffing for our BT app.

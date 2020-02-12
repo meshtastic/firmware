@@ -81,6 +81,8 @@ void MeshService::handleFromRadio()
     uint32_t oldFromNum = fromNum;
     while ((mp = fromRadioQueue.dequeuePtr(0)) != NULL)
     {
+        mp->rx_time = gps.getTime() / 1000; // store the arrival timestamp for the phone
+        
         if (mp->has_payload && mp->payload.which_variant == SubPacket_user_tag)
         {
             bool wasBroadcast = mp->to == NODENUM_BROADCAST;
