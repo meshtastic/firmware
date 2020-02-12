@@ -40,7 +40,6 @@ bool pmu_irq = false;
 #endif
 bool isCharging = false;
 
-
 bool ssd1306_found = false;
 bool axp192_found = false;
 
@@ -154,12 +153,13 @@ void doDeepSleep(uint64_t msecToWake)
  * 
  * per https://docs.espressif.com/projects/esp-idf/en/latest/api-reference/system/power_management.html
  */
-void enableModemSleep() {
+void enableModemSleep()
+{
   static esp_pm_config_esp32_t config; // filled with zeros because bss
 
   config.max_freq_mhz = CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ;
   config.min_freq_mhz = 10; // 10Mhz is minimum recommended
-  config.light_sleep_enable = false; 
+  config.light_sleep_enable = false;
   DEBUG_MSG("Sleep request result %x\n", esp_pm_configure(&config));
 }
 
@@ -421,7 +421,7 @@ void loop()
 
       if (axp.isVbusRemoveIRQ())
         isCharging = false;
-      
+
       // This is not a GPIO actually connected on the tbeam board
       // digitalWrite(2, !digitalRead(2));
       axp.clearIRQ();
@@ -434,6 +434,7 @@ void loop()
   // if user presses button for more than 3 secs, discard our network prefs and reboot (FIXME, use a debounce lib instead of this boilerplate)
   static bool wasPressed = false;
   static uint32_t minPressMs; // what tick should we call this press long enough
+  static uint32_t lastPingMs;
   if (!digitalRead(BUTTON_PIN))
   {
     if (!wasPressed)
@@ -441,8 +442,16 @@ void loop()
       DEBUG_MSG("pressing\n");
       // esp_pm_dump_locks(stdout); // FIXME, do this someplace better
       wasPressed = true;
-      minPressMs = millis() + 3000;
-      service.sendNetworkPing();
+
+      uint32_t now = millis();
+      minPressMs = now + 3000;
+
+      if (now - lastPingMs > 60 * 1000)
+      { // if more than a minute since our last press, ask other nodes to update their state
+        service.sendNetworkPing();
+        lastPingMs = now;
+      }
+
       screen_press();
     }
   }
