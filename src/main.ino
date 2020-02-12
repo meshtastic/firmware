@@ -444,7 +444,7 @@ void loop()
     if (!wasPressed)
     { // just started a new press
       DEBUG_MSG("pressing\n");
-      esp_pm_dump_locks(stdout); // FIXME, do this someplace better
+      // esp_pm_dump_locks(stdout); // FIXME, do this someplace better
       wasPressed = true;
       minPressMs = millis() + 3000;
       screen_press();

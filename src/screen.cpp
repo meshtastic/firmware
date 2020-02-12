@@ -304,10 +304,14 @@ void drawDebugInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
     static char usersStr[20];
     snprintf(usersStr, sizeof(usersStr), "Users %d/%d", nodeDB.getNumOnlineNodes(), nodeDB.getNumNodes());
 
+    static char channelStr[20];
+    snprintf(channelStr, sizeof(channelStr), "Channel %s", channelSettings.name);
+
     const char *fields[] = {
         "Batt 89%",
         "GPS 75%",
         usersStr,
+        channelStr,
         NULL};
     uint32_t yo = drawRows(display, x, y, fields);
 

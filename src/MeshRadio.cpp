@@ -11,6 +11,10 @@
 
 #define DEFAULT_CHANNEL_NUM 3 // we randomly pick one
 
+
+/// 16 bytes of random PSK for our _public_ default channel that all devices power up on
+static const uint8_t defaultpsk[] = { 0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59, 0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0xbf };
+
 /**
  * ## LoRaWAN for North America
 
@@ -35,6 +39,8 @@ MeshRadio::MeshRadio(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &_r
 
   channelSettings.tx_power = 23;
   channelSettings.channel_num = DEFAULT_CHANNEL_NUM;
+  memcpy(&channelSettings.psk, &defaultpsk, sizeof(channelSettings.psk));
+  strcpy(channelSettings.name, "Default");
 }
 
 bool MeshRadio::init()
@@ -78,7 +84,7 @@ void MeshRadio::reloadConfig()
   // rf95.setPreambleLength(8);           // Default is 8
 
   assert(channelSettings.channel_num < NUM_CHANNELS); // If the phone tries to tell us to use an illegal channel then panic 
-  
+
   // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM
   float center_freq = CH0 + CH_SPACING * channelSettings.channel_num;
   if (!rf95.setFrequency(center_freq))
