@@ -236,7 +236,8 @@ void NodeDB::updateFrom(const MeshPacket &mp)
         if (oldNumNodes != *numNodes)
             updateGUI = true; // we just created a nodeinfo
 
-        info->last_seen = gps.getTime() / 1000; // we keep time in seconds, not msecs
+        if(mp.rx_time) // if the packet has a valid timestamp use it
+            info->last_seen = mp.rx_time; 
 
         switch (p.which_variant)
         {
@@ -245,6 +246,16 @@ void NodeDB::updateFrom(const MeshPacket &mp)
             info->has_position = true;
             updateGUIforNode = info;
             break;
+
+        case SubPacket_data_tag: {
+            // Keep a copy of the most recent text message.
+            if(p.variant.data.typ == Data_Type_CLEAR_TEXT) {
+                devicestate.rx_text_message = mp;
+                devicestate.has_rx_text_message = true;
+                updateTextMessage = true;
+            }
+            break;
+        }
 
         case SubPacket_user_tag:
         {
@@ -255,11 +266,12 @@ void NodeDB::updateFrom(const MeshPacket &mp)
             info->user = p.variant.user;
             DEBUG_MSG("updating changed=%d user %s/%s/%s\n", changed, info->user.id, info->user.long_name, info->user.short_name);
             info->has_user = true;
-            updateGUIforNode = info;
 
             if (changed)
             {
-                // We just created a user for the first time, store our DB
+                updateGUIforNode = info;
+
+                // We just changed something important about the user, store our DB
                 saveToDisk();
             }
             break;

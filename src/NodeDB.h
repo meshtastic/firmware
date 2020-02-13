@@ -6,6 +6,7 @@
 #include "mesh-pb-constants.h"
 #include "MeshTypes.h"
 
+extern DeviceState devicestate;
 extern MyNodeInfo &myNodeInfo;
 extern RadioConfig &radioConfig;
 extern ChannelSettings &channelSettings;
@@ -25,12 +26,13 @@ class NodeDB
     NodeInfo *nodes;
     pb_size_t *numNodes;
 
-    bool updateGUI = false;             // we think the gui should definitely be redrawn
-    NodeInfo *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
-
     int readPointer = 0;
 
 public:
+    bool updateGUI = false;             // we think the gui should definitely be redrawn, screen will clear this once handled
+    NodeInfo *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
+    bool updateTextMessage = false; // if true, the GUI should show a new text message
+
     /// don't do mesh based algoritm for node id assignment (initially)
     /// instead just store in flash - possibly even in the initial alpha release do this hack
     NodeDB();

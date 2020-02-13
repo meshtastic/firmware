@@ -129,15 +129,22 @@ void drawFrame3(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int1
 /// Draw the last text message we received
 void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    MeshPacket &mp = devicestate.rx_text_message; 
+    NodeInfo *node = nodeDB.getNode(mp.from);
+
     // Demo for drawStringMaxWidth:
     // with the third parameter you can define the width after which words will be wrapped.
     // Currently only spaces and "-" are allowed for wrapping
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(ArialMT_Plain_16);
-    String sender = "KH:";
+    String sender = (node && node->has_user) ? node->user.short_name : "???";
     display->drawString(0 + x, 0 + y, sender);
     display->setFont(ArialMT_Plain_10);
-    display->drawStringMaxWidth(4 + x, 10 + y, 128, "            Hey - I found the trail, but I've fallen and I can't get up. ;-)");
+    
+    static char tempBuf[96];
+    snprintf(tempBuf, sizeof(tempBuf), "         %s", mp.payload.variant.data.payload.bytes); // the max length of this buffer is much longer than we can possibly print
+
+    display->drawStringMaxWidth(4 + x, 10 + y, 128, tempBuf);
 
     // ui.disableIndicator();
 }
@@ -495,11 +502,9 @@ uint32_t screen_loop()
         else // standard screen loop handling ehre
         {
             // If the # nodes changes, we need to regen our list of screens
-            static size_t oldnumnodes = 0;
-            size_t numnodes = nodeDB.getNumNodes();
-            if (numnodes != oldnumnodes)
+            if (nodeDB.updateGUI)
             {
-                oldnumnodes = numnodes;
+                nodeDB.updateGUI = false;
                 screen_set_frames();
             }
 
@@ -536,18 +541,25 @@ void screen_set_frames()
 {
     DEBUG_MSG("showing standard frames\n");
 
-    nonBootFrames[0] = drawTextMessageFrame;
-    nonBootFrames[1] = drawDebugInfo;
-
     size_t numnodes = nodeDB.getNumNodes();
     // We don't show the node info our our node (if we have it yet - we should)
     if (numnodes > 0)
         numnodes--;
 
-    for (size_t i = 0; i < numnodes; i++)
-        nonBootFrames[NUM_EXTRA_FRAMES + i] = drawNodeInfo;
+    size_t numframes = 0;
 
-    ui.setFrames(nonBootFrames, NUM_EXTRA_FRAMES + numnodes);
+    // If we have a text message - show it first
+    if(devicestate.has_rx_text_message)
+        nonBootFrames[numframes++] = drawTextMessageFrame;
+
+    // then all the nodes
+    for (size_t i = 0; i < numnodes; i++)
+        nonBootFrames[numframes++] = drawNodeInfo;
+
+    // then the debug info
+    nonBootFrames[numframes++] = drawDebugInfo;
+
+    ui.setFrames(nonBootFrames, numframes);
     showingBluetooth = false;
 }
 

@@ -80,6 +80,9 @@ private:
 
     /// handle packets that just arrived from the mesh radio
     void handleFromRadio();
+
+    /// handle a user packet that just arrived on the radio, return NULL if we should not process this packet at all
+    MeshPacket *handleFromRadioUser(MeshPacket *mp);
 };
 
 extern MeshService service;

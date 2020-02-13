@@ -75,6 +75,52 @@ void MeshService::sendOurOwner(NodeNum dest)
     sendToMesh(p);
 }
 
+/// handle a user packet that just arrived on the radio, return NULL if we should not process this packet at all
+MeshPacket *MeshService::handleFromRadioUser(MeshPacket *mp)
+{
+    bool wasBroadcast = mp->to == NODENUM_BROADCAST;
+    bool isCollision = mp->from == myNodeInfo.my_node_num;
+
+    // we win if we have a lower macaddr
+    bool weWin = memcmp(&owner.macaddr, &mp->payload.variant.user.macaddr, sizeof(owner.macaddr)) < 0;
+
+    if (isCollision)
+    {
+        if (weWin)
+        {
+            DEBUG_MSG("NOTE! Received a nodenum collision and we are vetoing\n");
+
+            packetPool.release(mp); // discard it
+            mp = NULL;
+
+            sendOurOwner(); // send our owner as a _broadcast_ because that other guy is mistakenly using our nodenum
+        }
+        else
+        {
+            // we lost, we need to try for a new nodenum!
+            DEBUG_MSG("NOTE! Received a nodenum collision we lost, so picking a new nodenum\n");
+            nodeDB.updateFrom(*mp); // update the DB early - before trying to repick (so we don't select the same node number again)
+            nodeDB.pickNewNodeNum();
+            sendOurOwner(); // broadcast our new attempt at a node number
+        }
+    }
+    else if (wasBroadcast)
+    {
+        // If we haven't yet abandoned the packet and it was a broadcast, reply (just to them) with our User record so they can build their DB
+
+        // Someone just sent us a User, reply with our Owner
+        DEBUG_MSG("Received broadcast Owner from 0x%x, replying with our owner\n", mp->from);
+
+        sendOurOwner(mp->from);
+
+        String lcd = String("Joined: ") + mp->payload.variant.user.long_name + "\n";
+        screen_print(lcd.c_str());
+    }
+
+    return mp;
+}
+
+
 void MeshService::handleFromRadio()
 {
     MeshPacket *mp;
@@ -82,47 +128,10 @@ void MeshService::handleFromRadio()
     while ((mp = fromRadioQueue.dequeuePtr(0)) != NULL)
     {
         mp->rx_time = gps.getTime() / 1000; // store the arrival timestamp for the phone
-        
+
         if (mp->has_payload && mp->payload.which_variant == SubPacket_user_tag)
         {
-            bool wasBroadcast = mp->to == NODENUM_BROADCAST;
-            bool isCollision = mp->from == myNodeInfo.my_node_num;
-
-            // we win if we have a lower macaddr
-            bool weWin = memcmp(&owner.macaddr, &mp->payload.variant.user.macaddr, sizeof(owner.macaddr)) < 0;
-
-            if (isCollision)
-            {
-                if (weWin)
-                {
-                    DEBUG_MSG("NOTE! Received a nodenum collision and we are vetoing\n");
-
-                    packetPool.release(mp); // discard it
-                    mp = NULL;
-
-                    sendOurOwner(); // send our owner as a _broadcast_ because that other guy is mistakenly using our nodenum
-                }
-                else
-                {
-                    // we lost, we need to try for a new nodenum!
-                    DEBUG_MSG("NOTE! Received a nodenum collision we lost, so picking a new nodenum\n");
-                    nodeDB.updateFrom(*mp); // update the DB early - before trying to repick (so we don't select the same node number again)
-                    nodeDB.pickNewNodeNum();
-                    sendOurOwner(); // broadcast our new attempt at a node number
-                }
-            }
-            else if (wasBroadcast)
-            {
-                // If we haven't yet abandoned the packet and it was a broadcast, reply (just to them) with our User record so they can build their DB
-
-                // Someone just sent us a User, reply with our Owner
-                DEBUG_MSG("Received broadcast Owner from 0x%x, replying with our owner\n", mp->from);
-
-                sendOurOwner(mp->from);
-
-                String lcd = String("Joined: ") + mp->payload.variant.user.long_name + "\n";
-                screen_print(lcd.c_str());
-            }
+            mp = handleFromRadioUser(mp);
         }
 
         // If we veto a received User packet, we don't put it into the DB or forward it to the phone (to prevent confusing it)
@@ -206,6 +215,7 @@ MeshPacket *MeshService::allocForSending()
     p->has_payload = true;
     p->from = nodeDB.getNodeNum();
     p->to = NODENUM_BROADCAST;
+    p->rx_time = gps.getTime() / 1000; // Just in case we process the packet locally - make sure it has a valid timestamp
 
     return p;
 }

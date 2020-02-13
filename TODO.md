@@ -2,10 +2,10 @@
 
 * have node info screen show real info (including distance and heading)
 * make debug info screen show real data (including battery level & charging)
-* show real text info on the text screen
 * update build to generate both board types
 * retest BLE software update for both board types
 * turn on screen when a new update arrives
+* don't forward redundent pings or ping responses to the phone, it just wastes phone battery
 
 # Medium priority
 
@@ -129,3 +129,4 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * send location (or if not available user) when the user wakes the device from display sleep (both for testing and to improve user experience)
 * make real implementation of getNumOnlineNodes
 * very occasionally send our position and user packet based on the schedule in the radio info (if for nothing else so that other nodes update last_seen)
+* show real text info on the text screen
