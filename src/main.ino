@@ -382,6 +382,9 @@ void setup()
     DEBUG_MSG("Starting bluetooth\n");
     BLEServer *serve = initBLE(getDeviceName(), HW_VENDOR, APP_VERSION); // FIXME, use a real name based on the macaddr
     createMeshBluetoothService(serve);
+
+    // Start advertising - this must be done _after_ creating all services
+    serve->getAdvertising()->start();
   }
 
   enableModemSleep();
@@ -422,9 +425,12 @@ void loop()
       if (axp.isVbusRemoveIRQ())
         isCharging = false;
 
-      // This is not a GPIO actually connected on the tbeam board
-      // digitalWrite(2, !digitalRead(2));
-      axp.clearIRQ();
+      if (axp.isAcinPlugInIRQ())
+        fixme - cleanup all this is chrarging crap.just read the status registers then clear the irq
+                    isUSBPowered = true
+                                   // This is not a GPIO actually connected on the tbeam board
+                                   // digitalWrite(2, !digitalRead(2));
+                                   axp.clearIRQ();
     }
 #endif
   }

@@ -199,19 +199,17 @@ BLEServer *initBLE(std::string deviceName, std::string hwVendor, std::string swV
   // BLEService *pBattery = createBatteryService(pServer);
 
   BLEService *pUpdate = createUpdateService(pServer); // We need to advertise this so our android ble scan operation can see it
-  pServer->getAdvertising()->addServiceUUID(pUpdate->getUUID());
+  
+  // It seems only one service can be advertised - so for now don't advertise our updater
+  // pServer->getAdvertising()->addServiceUUID(pUpdate->getUUID());
 
   // start all our services (do this after creating all of them)
   pDevInfo->start();
   pUpdate->start();
 
-  // Start advertising
-  BLEAdvertising *advert = pServer->getAdvertising();
-
   // FIXME turn on this restriction only after the device is paired with a phone
   // advert->setScanFilter(false, true); // We let anyone scan for us (FIXME, perhaps only allow that until we are paired with a phone and configured) but only let whitelist phones connect
- 
-  advert->start();
+
 
   BLESecurity *pSecurity = new BLESecurity();
   pSecurity->setCapability(ESP_IO_CAP_OUT);
