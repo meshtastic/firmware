@@ -15,7 +15,7 @@ static BLECharacteristic HardwareVersionCharacteristic(BLEUUID((uint16_t)ESP_GAT
 /**
  * Create standard device info service
  **/
-BLEService *createDeviceInfomationService(BLEServer *server, std::string hwVendor, std::string swVersion)
+BLEService *createDeviceInfomationService(BLEServer *server, std::string hwVendor, std::string swVersion, std::string hwVersion)
 {
   BLEService *deviceInfoService = server->createService(BLEUUID((uint16_t)ESP_GATT_UUID_DEVICE_INFO_SVC));
 
@@ -32,7 +32,7 @@ BLEService *createDeviceInfomationService(BLEServer *server, std::string hwVendo
   deviceInfoService->addCharacteristic(&SWVersionCharacteristic);
   ManufacturerCharacteristic.setValue(hwVendor);
   deviceInfoService->addCharacteristic(&ManufacturerCharacteristic);
-  HardwareVersionCharacteristic.setValue("1.0");
+  HardwareVersionCharacteristic.setValue(hwVersion);
   deviceInfoService->addCharacteristic(&HardwareVersionCharacteristic);
   //SerialNumberCharacteristic.setValue("FIXME");
   //deviceInfoService->addCharacteristic(&SerialNumberCharacteristic);
@@ -179,7 +179,7 @@ class MySecurity : public BLESecurityCallbacks
   }
 };
 
-BLEServer *initBLE(std::string deviceName, std::string hwVendor, std::string swVersion)
+BLEServer *initBLE(std::string deviceName, std::string hwVendor, std::string swVersion, std::string hwVersion)
 {
   BLEDevice::init(deviceName);
   BLEDevice::setEncryptionLevel(ESP_BLE_SEC_ENCRYPT);
@@ -193,7 +193,7 @@ BLEServer *initBLE(std::string deviceName, std::string hwVendor, std::string swV
   BLEServer *pServer = BLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallbacks());
 
-  BLEService *pDevInfo = createDeviceInfomationService(pServer, hwVendor, swVersion);
+  BLEService *pDevInfo = createDeviceInfomationService(pServer, hwVendor, swVersion, hwVersion);
 
   // We now let users create the battery service only if they really want (not all devices have a battery)
   // BLEService *pBattery = createBatteryService(pServer);
@@ -209,7 +209,6 @@ BLEServer *initBLE(std::string deviceName, std::string hwVendor, std::string swV
 
   // FIXME turn on this restriction only after the device is paired with a phone
   // advert->setScanFilter(false, true); // We let anyone scan for us (FIXME, perhaps only allow that until we are paired with a phone and configured) but only let whitelist phones connect
-
 
   BLESecurity *pSecurity = new BLESecurity();
   pSecurity->setCapability(ESP_IO_CAP_OUT);
