@@ -39,6 +39,7 @@ AXP20X_Class axp;
 bool pmu_irq = false;
 #endif
 bool isCharging = false;
+bool isUSBPowered = false;
 
 bool ssd1306_found = false;
 bool axp192_found = false;
@@ -282,6 +283,7 @@ void axp192Init()
 #endif
 
       isCharging = axp.isChargeing();
+      isUSBPowered = axp.isVBUSPlug();
     }
     else
     {
@@ -380,7 +382,7 @@ void setup()
   if (useBluetooth)
   {
     DEBUG_MSG("Starting bluetooth\n");
-    BLEServer *serve = initBLE(getDeviceName(), HW_VENDOR, APP_VERSION); // FIXME, use a real name based on the macaddr
+    BLEServer *serve = initBLE(getDeviceName(), HW_VENDOR, APP_VERSION, HW_VERSION); // FIXME, use a real name based on the macaddr
     createMeshBluetoothService(serve);
 
     // Start advertising - this must be done _after_ creating all services
@@ -420,17 +422,11 @@ void loop()
     {
       pmu_irq = false;
       axp.readIRQ();
-      isCharging = axp.isChargingIRQ();
 
-      if (axp.isVbusRemoveIRQ())
-        isCharging = false;
+      isCharging = axp.isChargeing();
+      isUSBPowered = axp.isVBUSPlug();
 
-      if (axp.isAcinPlugInIRQ())
-        fixme - cleanup all this is chrarging crap.just read the status registers then clear the irq
-                    isUSBPowered = true
-                                   // This is not a GPIO actually connected on the tbeam board
-                                   // digitalWrite(2, !digitalRead(2));
-                                   axp.clearIRQ();
+      axp.clearIRQ();
     }
 #endif
   }
@@ -478,7 +474,7 @@ void loop()
 
 #ifdef MINWAKE_MSECS
   // Don't deepsleep if we have USB power or if the user as pressed a button recently
-  if (millis() - lastPressMs > MINWAKE_MSECS && !isCharging)
+  if (millis() - lastPressMs > MINWAKE_MSECS && !isUSBPowered)
   {
     sleep();
   }
