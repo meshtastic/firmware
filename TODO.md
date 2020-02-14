@@ -24,6 +24,7 @@
 * How do avalanche beacons work?  Could this do that as well?  possibly by using beacon mode feature of the RF95?
 * use std::map<BLECharacteristic*, std::string> in node db
 * first alpha release, article writeup
+* send note about Adafruit Clue
 * send pr https://github.com/ThingPulse/esp8266-oled-ssd1306 to tell them about this project
 
 # Low power consumption tasks
