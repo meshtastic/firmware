@@ -37,13 +37,19 @@ public:
 
     void onWrite(BLECharacteristic *c)
     {
+        writeToDest(c, my_struct);
+    }
+
+protected:
+    /// like onWrite, but we provide an different destination to write to, for use by subclasses that
+    /// want to optionally ignore parts of writes.
+    /// returns true for success
+    bool writeToDest(BLECharacteristic *c, void *dest)
+    {
         // dumpCharacteristic(pCharacteristic);
         DEBUG_MSG("Got on proto write\n");
         std::string src = c->getValue();
-        if (pb_decode_from_bytes((const uint8_t *)src.c_str(), src.length(), fields, my_struct))
-        {
-            // Success, the bytes are now in our struct - do nothing else
-        }
+        return pb_decode_from_bytes((const uint8_t *)src.c_str(), src.length(), fields, dest);
     }
 };
 
@@ -107,8 +113,18 @@ public:
 
     void onWrite(BLECharacteristic *c)
     {
-        ProtobufCharacteristic::onWrite(c);
-        service.reloadOwner();
+        static User o; // if the phone doesn't set ID we are careful to keep ours, we also always keep our macaddr
+        if (writeToDest(c, &o))
+        {
+            if (*o.long_name)
+                strcpy(owner.long_name, o.long_name);
+            if (*o.short_name)
+                strcpy(owner.short_name, o.short_name);
+            if (*o.id)
+                strcpy(owner.id, o.id);
+
+            service.reloadOwner();
+        }
     }
 };
 
