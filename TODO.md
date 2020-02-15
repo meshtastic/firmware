@@ -1,7 +1,6 @@
 # High priority
 Items to complete before the first alpha release.
 
-* have node info screen show real info (including distance and heading)
 * make debug info screen show real data (including battery level & charging)
 * retest BLE software update for both board types
 * first alpha release, article writeup for hackaday
@@ -135,3 +134,4 @@ Items after the first final candidate release.
 * allow setting full radio params from android
 * add receive timestamps to messages, inserted by esp32 when message is received but then shown on the phone
 * update build to generate both board types
+* have node info screen show real info (including distance and heading)

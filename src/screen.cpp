@@ -218,6 +218,35 @@ float latLongToMeter(double lat_a, double lng_a, double lat_b, double lng_b)
     return (float)(6366000 * tt);
 }
 
+inline double toRadians(double deg)
+{
+    return deg * PI / 180;
+}
+
+/**
+     * Computes the bearing in degrees between two points on Earth.
+     *
+     * @param lat1
+     * Latitude of the first point
+     * @param lon1
+     * Longitude of the first point
+     * @param lat2
+     * Latitude of the second point
+     * @param lon2
+     * Longitude of the second point
+     * @return Bearing between the two points in radians. A value of 0 means due
+     * north.
+     */
+float bearing(double lat1, double lon1, double lat2, double lon2)
+{
+    double lat1Rad = toRadians(lat1);
+    double lat2Rad = toRadians(lat2);
+    double deltaLonRad = toRadians(lon2 - lon1);
+    double y = sin(deltaLonRad) * cos(lat2Rad);
+    double x = cos(lat1Rad) * sin(lat2Rad) - (sin(lat1Rad) * cos(lat2Rad) * cos(deltaLonRad));
+    return atan2(y, x);
+}
+
 /// A basic 2D point class for drawing
 class Point
 {
@@ -299,8 +328,12 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
     else
         snprintf(lastStr, sizeof(lastStr), "%d hours ago", agoSecs / 60 / 60);
 
+    static float simRadian;
+    simRadian += 0.1; // For testing, have the compass spin unless both locations are valid
+
     static char distStr[20];
     *distStr = 0; // might not have location data
+    float headingRadian = simRadian;
     NodeInfo *ourNode = nodeDB.getNode(nodeDB.getNodeNum());
     if (ourNode && ourNode->has_position && node->has_position)
     {
@@ -310,6 +343,9 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
             snprintf(distStr, sizeof(distStr), "%.0f m", d);
         else
             snprintf(distStr, sizeof(distStr), "%.1f km", d / 1000);
+
+        // FIXME, also keep the guess at the operators heading and add/substract it.  currently we don't do this and instead draw north up only.
+        headingRadian = bearing(p.latitude, p.longitude, op.latitude, op.longitude);
     }
 
     const char *fields[] = {
@@ -327,9 +363,6 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
     Point tip(0.0f, 0.5f), tail(0.0f, -0.5f); // pointing up initially
     float arrowOffsetX = 0.2f, arrowOffsetY = 0.2f;
     Point leftArrow(tip.x - arrowOffsetX, tip.y - arrowOffsetY), rightArrow(tip.x + arrowOffsetX, tip.y - arrowOffsetY);
-
-    static float headingRadian;
-    headingRadian += 0.1; // For testing
 
     Point *points[] = {&tip, &tail, &leftArrow, &rightArrow};
 
