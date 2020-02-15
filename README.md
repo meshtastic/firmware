@@ -16,7 +16,7 @@ This project is currently pre-alpha, but if you have questions please join our c
 This software is 100% open source and developed by a group of hobbyist experimenters.  No warranty is provided, if you'd like to improve it - we'd love your help.  Please post in the chat.  
 
 ## Meshtastic Android app
-The source code for the Meshtastic Android app is [here](https://github.com/geeksville/Meshtastic-Android).
+The source code for the (optional) Meshtastic Android app is [here](https://github.com/geeksville/Meshtastic-Android).
 Soon our first alpha release of will be released here:
 [![Download at https://play.google.com/store/apps/details?id=com.geeksville.mesh](https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png)](https://play.google.com/store/apps/details?id=com.geeksville.mesh&referrer=utm_source%3Dgithub%26utm_medium%3Desp32-readme%26utm_campaign%3Dmeshtastic-esp32%2520readme%26anid%3Dadmob&pcampaignid=pcampaignidMKT-Other-global-all-co-prtnr-py-PartBadge-Mar2515-1)
 
@@ -25,7 +25,7 @@ We currently support two brands of radios.  The [TTGO T-Beam](https://www.aliexp
 sure to buy the frequency range which is legal for your country.  For the USA, you should buy the 915MHz version.  Getting a version that include a screen
 is optional, but highly recommended.
 
-We don't yet distribute prebuilt binaries.  But soon (by Feb 22) we will have a file that you can fairly easilly install on your radio via USB.  Once our software is installed, all future software updates happen over bluetooth from your phone.
+We don't yet distribute prebuilt binaries.  But soon (by Feb 22) we will have a file that you can fairly easily install on your radio via USB.  Once our software is installed, all future software updates happen over bluetooth from your phone.
 
 For a nice 3D printable case see this [design](https://www.thingiverse.com/thing:3773717) by [bsiege](https://www.thingiverse.com/bsiege).
 
