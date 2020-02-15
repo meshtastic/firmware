@@ -1,5 +1,4 @@
 # Meshtastic-esp32
-
 This is the device side code for the [meshtastic.org](https://www.meshtastic.org) project.  
 
 Meshtastic is a project that lets you use
@@ -17,15 +16,13 @@ This project is currently pre-alpha, but if you have questions please join our c
 This software is 100% open source and developed by a group of hobbyist experimenters.  No warranty is provided, if you'd like to improve it - we'd love your help.  Please post in the chat.  
 
 ## Meshtastic Android app
-
 The source code for the Meshtastic Android app is [here](https://github.com/geeksville/Meshtastic-Android).
 Soon our first alpha release of will be released here:
 
 [![Download at https://play.google.com/store/apps/details?id=com.geeksville.mesh](https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png)](https://play.google.com/store/apps/details?id=com.geeksville.mesh&referrer=utm_source%3Dgithub%26utm_medium%3Desp32-readme%26utm_campaign%3Dmeshtastic-esp32%2520readme%26anid%3Dadmob&pcampaignid=pcampaignidMKT-Other-global-all-co-prtnr-py-PartBadge-Mar2515-1)
 
 ## Supported hardware
-
-We currently support two brands ofradios.  The [TTGO T-Beam](https://www.aliexpress.com/item/4000119152086.html) and the [Heltec LoRa 32](https://heltec.org/project/wifi-lora-32/).  Most users should buy the T-Beam and a 18650 battery (total cost less than $35).  Make
+We currently support two brands of radios.  The [TTGO T-Beam](https://www.aliexpress.com/item/4000119152086.html) and the [Heltec LoRa 32](https://heltec.org/project/wifi-lora-32/).  Most users should buy the T-Beam and a 18650 battery (total cost less than $35).  Make
 sure to buy the frequency range which is legal for your country.  For the USA, you should buy the 915MHz version.  Getting a version that include a screen
 is optional, but highly recommended.
 
@@ -33,8 +30,13 @@ We don't yet distribute prebuilt binaries.  But soon (by Feb 22) we will have a 
 
 For a nice 3D printable case see [this design](https://www.thingiverse.com/thing:3773717) by [bsiege](https://www.thingiverse.com/bsiege).
 
-## Build instructions
+# Development
+The following sections are probably only interesting if you want to join us in developing the software.  
 
+## Power measurements
+Since one of the main goals of this project is long battery life, it is important to consider that in our software/protocol design.  Based on initial measurements it seems that the current source base should run about three days between charging, and with a bit more software work (see the [TODO list](TODO.md)) a battery life of eight days should be quite doable.  Our current power measurements/model is in [this spreadsheet](https://docs.google.com/spreadsheets/d/1ft1bS3iXqFKU8SApU8ZLTq9r7QQEGESYnVgdtvdT67k/edit?usp=sharing).
+
+## Build instructions
 This project uses the simple PlatformIO build system. You can use the IDE, but for brevity
 in these instructions I describe use of their command line tool.
 
