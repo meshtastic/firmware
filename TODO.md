@@ -1,16 +1,21 @@
 # High priority
+Items to complete before the first alpha release.
 
 * have node info screen show real info (including distance and heading)
 * make debug info screen show real data (including battery level & charging)
 * update build to generate both board types
 * retest BLE software update for both board types
 * don't forward redundent pings or ping responses to the phone, it just wastes phone battery
+* first alpha release, article writeup for hackaday
+* send note about Adafruit Clue
+* send pr https://github.com/ThingPulse/esp8266-oled-ssd1306 to tell them about this project
 
 # Medium priority
+Items to complete before the first beta release.
 
+* don't treat north as up, instead adjust shown bearings for our guess at the users heading (i.e. subtract one from the other)
 * answer to pings with our latest location
 * show radio and gps signal strength as an image
-* apply radio settings from android land
 * only BLE advertise for a short time after the screen is on and button pressed - to save power and prevent people for sniffing for our BT app.
 * use https://platformio.org/lib/show/1260/OneButton
 * make an about to sleep screen
@@ -21,12 +26,11 @@
 * override peekAtMessage so we can see any messages that pass through our node (even if not broadcast)?  would that be useful?
 * sendToMesh can currently block for a long time, instead have it just queue a packet for a radio freertos thread
 * How do avalanche beacons work?  Could this do that as well?  possibly by using beacon mode feature of the RF95?
-* use std::map<BLECharacteristic*, std::string> in node db
-* first alpha release, article writeup
-* send note about Adafruit Clue
-* send pr https://github.com/ThingPulse/esp8266-oled-ssd1306 to tell them about this project
+* use std::map<NodeInfo*, std::string> in node db
+
 
 # Low power consumption tasks
+General ideas to hit the power draws our spreadsheet predicts.  Do the easy ones before beta, the last 15% can be done after 1.0.
 
 * platformio sdkconfig CONFIG_PM and turn on modem sleep mode
 * keep cpu 100% in deepsleep until irq from radio wakes it.  Then stay awake for 30 secs to attempt delivery to phone.  
@@ -41,12 +45,10 @@
 * never enter deep sleep while connected to USB power (but still go to other low power modes)
 * when main cpu is idle (in loop), turn cpu clock rate down and/or activate special sleep modes.  We want almost everything shutdown until it gets an interrupt.
 
-
 # Pre-beta priority
+During the beta timeframe the following improvements 'would be nice' (and yeah - I guess some of these items count as features, but it is a hobby project ;-) )
 
-* make a screen for bluetooth not yet configured
-* swap out speck for accelerated full AES https://github.com/espressif/arduino-esp32/blob/master/tools/sdk/include/esp32/hwcrypto/aes.h
-* cope with nodes that have 0xff or 0x00 as the last byte of their mac
+* swap out speck for hw-accelerated full AES https://github.com/espressif/arduino-esp32/blob/master/tools/sdk/include/esp32/hwcrypto/aes.h
 * use variable length arduino Strings in protobufs (instead of current fixed buffers)
 * don't even power on bluetooth until we have some data to send to the android phone.  Most of the time we should be sleeping in a lowpower "listening for lora" only mode.  Once we have some packets for the phone, then power on bluetooth
 until the phone pulls those packets.  Ever so often power on bluetooth just so we can see if the phone wants to send some packets.  Possibly might need ULP processor to help with this wake process.
@@ -54,21 +56,20 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * make sure main cpu is not woken for packets with bad crc or not addressed to this node - do that in the radio hw
 * enable fast init inside the gps chip
 * triple check fcc compliance
-* allow setting full radio params from android
 * pick channel center frequency based on name? "dolphin" would hash to 900Mhz, "cat" to 905MHz etc?  Or is that too opaque?
 * scan to find channels with low background noise?
 * share channel settings over Signal (or qr code) by embedding an an URL which is handled by the MeshUtil app.
 
 # Low priority
+Items after the first final candidate release.
 
 * the AXP debug output says it is trying to charge at 700mA, but the max I've seen is 180mA, so AXP registers probably need to be set to tell them the circuit can only provide 300mAish max. So that the low charge rate kicks in faster and we don't wear out batteries.
 * increase the max charging rate a bit for 18650s, currently it limits to 180mA (at 4V).  Work backwards from the 500mA USB limit (at 5V) and let the AXP charge at that rate.
-* add receive timestamps to messages, inserted by esp32 when message is received but then shown on the phone
 * if radio params change fundamentally, discard the nodedb
 * discard very old nodedb records (> 1wk)
 * using the genpartitions based table doesn't work on TTGO so for now I stay with my old memory map
-* We let anyone scan for us (FIXME, perhaps only allow that until we are paired with a phone and configured) 
-* use two different env flags for ttgo vs lora32. https://docs.platformio.org/en/latest/ide/vscode.html#key-bindings
+* We let anyone BLE scan for us (FIXME, perhaps only allow that until we are paired with a phone and configured) 
+* use two different buildenv flags for ttgo vs lora32. https://docs.platformio.org/en/latest/ide/vscode.html#key-bindings
 * sim gps data for testing nodes that don't have hardware
 * have android provide position data for nodes that don't have gps
 * do debug serial logging to android over bluetooth
@@ -77,7 +78,7 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * add a watchdog timer
 * fix GPS.zeroOffset calculation it is wrong
 * handle millis() rollover in GPS.getTime - otherwise we will break after 50 days
-* reneable the bluetooth battely level service on the T-BEAM, because we can read battery level there
+* reneable the bluetooth battery level service on the T-BEAM, because we can read battery level there
 * report esp32 device code bugs back to the mothership via android
 
 # Done
@@ -130,3 +131,7 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * make real implementation of getNumOnlineNodes
 * very occasionally send our position and user packet based on the schedule in the radio info (if for nothing else so that other nodes update last_seen)
 * show real text info on the text screen
+* apply radio settings from android land
+* cope with nodes that have 0xff or 0x00 as the last byte of their mac
+* allow setting full radio params from android
+* add receive timestamps to messages, inserted by esp32 when message is received but then shown on the phone
