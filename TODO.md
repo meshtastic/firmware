@@ -1,16 +1,20 @@
 # High priority
 Items to complete before the first alpha release.
 
-* make debug info screen show real data (including battery level & charging)
+* post sample video to signal forum
 * retest BLE software update for both board types
+* default to enter deep sleep if no LORA received for two hours (indicates user has probably left the meshS)
 * first alpha release, article writeup for hackaday
 * send note about Adafruit Clue
 * send note to the guy who designed the cases
 * send pr https://github.com/ThingPulse/esp8266-oled-ssd1306 to tell them about this project
+* update the prebuilt bins for different regulatory regions
 
 # Medium priority
 Items to complete before the first beta release.
 
+* Use the Periodic class for both position and user periodic broadcasts
+* make debug info screen show real data (including battery level & charging)
 * don't forward redundent pings or ping responses to the phone, it just wastes phone battery
 * don't treat north as up, instead adjust shown bearings for our guess at the users heading (i.e. subtract one from the other)
 * answer to pings with our latest location
@@ -136,3 +140,4 @@ Items after the first final candidate release.
 * add receive timestamps to messages, inserted by esp32 when message is received but then shown on the phone
 * update build to generate both board types
 * have node info screen show real info (including distance and heading)
+* blink the power led less often

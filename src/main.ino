@@ -32,6 +32,7 @@
 #include "GPS.h"
 #include "screen.h"
 #include "NodeDB.h"
+#include "Periodic.h"
 
 #ifdef T_BEAM_V10
 #include "axp20x.h"
@@ -392,6 +393,29 @@ void setup()
   enableModemSleep();
 }
 
+
+uint32_t ledBlinker()
+{
+  static bool ledOn;
+  ledOn ^= 1;
+
+#ifdef LED_PIN
+  // toggle the led so we can get some rough sense of how often loop is pausing
+  digitalWrite(LED_PIN, ledOn);
+#endif
+
+  if (axp192_found)
+  {
+    // blink the axp led
+    axp.setChgLEDMode(ledOn ? AXP20X_LED_LOW_LEVEL : AXP20X_LED_OFF);
+  }
+
+  // have a very sparse duty cycle of LED being on
+  return ledOn ? 2 : 1000;
+}
+
+Periodic ledPeriodic(ledBlinker);
+
 void loop()
 {
   uint32_t msecstosleep = 1000 * 30; // How long can we sleep before we again need to service the main loop?
@@ -399,24 +423,13 @@ void loop()
   gps.loop();
   msecstosleep = min(screen_loop(), msecstosleep);
   service.loop();
+  ledPeriodic.loop();
   loopBLE();
 
-  static bool ledon;
-  ledon ^= 1;
-
-#ifdef LED_PIN
-  // toggle the led so we can get some rough sense of how often loop is pausing
-  digitalWrite(LED_PIN, ledon);
-#endif
-
-  // DEBUG_MSG("led %d\n", ledon);
 
 #ifdef T_BEAM_V10
   if (axp192_found)
   {
-    // blink the axp led
-    axp.setChgLEDMode(ledon ? AXP20X_LED_LOW_LEVEL : AXP20X_LED_OFF);
-
 #ifdef PMU_IRQ
     if (pmu_irq)
     {

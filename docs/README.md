@@ -30,6 +30,6 @@ We currently support two brands of radios.  The [TTGO T-Beam](https://www.aliexp
 sure to buy the frequency range which is legal for your country.  For the USA, you should buy the 915MHz version.  Getting a version that include a screen
 is optional, but highly recommended.
 
-We don't yet distribute prebuilt binaries.  But soon (by Feb 22) we will have a file that you can fairly easily install on your radio via USB.  Once our software is installed, all future software updates happen over bluetooth from your phone.
+We don't yet distribute prebuilt binaries.  But soon (by Feb 22) we will have a file that you can easily install on your radio via USB.  Once our software is installed, all future software updates happen over bluetooth from your phone.
 
 For a nice 3D printable case see this [design](https://www.thingiverse.com/thing:3773717) by [bsiege](https://www.thingiverse.com/bsiege).
