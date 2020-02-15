@@ -3,9 +3,7 @@ Items to complete before the first alpha release.
 
 * have node info screen show real info (including distance and heading)
 * make debug info screen show real data (including battery level & charging)
-* update build to generate both board types
 * retest BLE software update for both board types
-* don't forward redundent pings or ping responses to the phone, it just wastes phone battery
 * first alpha release, article writeup for hackaday
 * send note about Adafruit Clue
 * send pr https://github.com/ThingPulse/esp8266-oled-ssd1306 to tell them about this project
@@ -13,6 +11,7 @@ Items to complete before the first alpha release.
 # Medium priority
 Items to complete before the first beta release.
 
+* don't forward redundent pings or ping responses to the phone, it just wastes phone battery
 * don't treat north as up, instead adjust shown bearings for our guess at the users heading (i.e. subtract one from the other)
 * answer to pings with our latest location
 * show radio and gps signal strength as an image
@@ -135,3 +134,4 @@ Items after the first final candidate release.
 * cope with nodes that have 0xff or 0x00 as the last byte of their mac
 * allow setting full radio params from android
 * add receive timestamps to messages, inserted by esp32 when message is received but then shown on the phone
+* update build to generate both board types
