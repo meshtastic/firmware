@@ -23,6 +23,15 @@ Soon our first alpha release of will be released here:
 
 [![Download at https://play.google.com/store/apps/details?id=com.geeksville.mesh](https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png)](https://play.google.com/store/apps/details?id=com.geeksville.mesh&referrer=utm_source%3Dgithub%26utm_medium%3Desp32-readme%26utm_campaign%3Dmeshtastic-esp32%2520readme%26anid%3Dadmob&pcampaignid=pcampaignidMKT-Other-global-all-co-prtnr-py-PartBadge-Mar2515-1)
 
+## Supported hardware
+
+We currently support two brands ofradios.  The [TTGO T-Beam](https://www.aliexpress.com/item/4000119152086.html) and the [Heltec LoRa 32](https://heltec.org/project/wifi-lora-32/).  Most users should buy the T-Beam and a 18650 battery (total cost less than $35).  Make
+sure to buy the frequency range which is legal for your country.  For the USA, you should buy the 915MHz version.  Getting a version that include a screen
+is optional, but highly recommended.
+
+We don't yet distribute prebuilt binaries.  But soon we will have a file that you can fairly easilly install on your radio over USB.  Once our software is
+installed, all future software updates happen over bluetooth from your phone.
+
 ## Build instructions
 
 This project uses the simple PlatformIO build system. You can use the IDE, but for brevity
@@ -31,5 +40,6 @@ in these instructions I describe use of their command line tool.
 1. Purchase a suitable radio (about $30 from aliexpress)
 2. Install [PlatformIO](https://platformio.org/).
 3. Download this git repo and cd into it.
-4. pio run -t upload (This command will fetch dependencies, build the project and install it on the board via USB).
+4. Plug the radio into your USB port.
+4. Type "pio run -t upload" (This command will fetch dependencies, build the project and install it on the board via USB).
 5. Platform IO also installs a very nice VisualStudio Code based IDE, see their tutorial if you'd like to use it.
