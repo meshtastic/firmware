@@ -224,7 +224,7 @@ inline double toRadians(double deg)
 }
 
 /**
-     * Computes the bearing in degrees between two points on Earth.
+     * Computes the bearing in degrees between two points on Earth.  Ported from my old Gaggle android app.
      *
      * @param lat1
      * Latitude of the first point

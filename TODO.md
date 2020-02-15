@@ -5,6 +5,7 @@ Items to complete before the first alpha release.
 * retest BLE software update for both board types
 * first alpha release, article writeup for hackaday
 * send note about Adafruit Clue
+* send note to the guy who designed the cases
 * send pr https://github.com/ThingPulse/esp8266-oled-ssd1306 to tell them about this project
 
 # Medium priority
@@ -26,10 +27,10 @@ Items to complete before the first beta release.
 * How do avalanche beacons work?  Could this do that as well?  possibly by using beacon mode feature of the RF95?
 * use std::map<NodeInfo*, std::string> in node db
 
-
 # Low power consumption tasks
 General ideas to hit the power draws our spreadsheet predicts.  Do the easy ones before beta, the last 15% can be done after 1.0.
 
+* we currently poll the lora radio from loop(), which is really bad because it means we run loop every 10ms.  Instead have the rf95 driver enqueue received messages from the ISR.
 * platformio sdkconfig CONFIG_PM and turn on modem sleep mode
 * keep cpu 100% in deepsleep until irq from radio wakes it.  Then stay awake for 30 secs to attempt delivery to phone.  
 * have radiohead ISR send messages to RX queue directly, to allow that thread to block until we have something to send
