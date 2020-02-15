@@ -34,8 +34,8 @@ typedef enum _ChannelSettings_ModemConfig {
 
 typedef enum _DeviceState_Version {
     DeviceState_Version_Unset = 0,
-    DeviceState_Version_Minimum = 11,
-    DeviceState_Version_Current = 11
+    DeviceState_Version_Minimum = 12,
+    DeviceState_Version_Current = 12
 } DeviceState_Version;
 
 /* Struct definitions */
@@ -47,7 +47,7 @@ typedef struct _ChannelSettings {
     char name[12];
 } ChannelSettings;
 
-typedef PB_BYTES_ARRAY_T(200) Data_payload_t;
+typedef PB_BYTES_ARRAY_T(251) Data_payload_t;
 typedef struct _Data {
     Data_Type typ;
     Data_payload_t payload;
@@ -389,18 +389,18 @@ extern const pb_msgdesc_t ToRadio_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define Position_size                            42
-#define Data_size                                205
+#define Data_size                                256
 #define User_size                                72
-#define SubPacket_size                           208
-#define MeshPacket_size                          239
+#define SubPacket_size                           259
+#define MeshPacket_size                          290
 #define ChannelSettings_size                     50
 #define RadioConfig_size                         72
 #define RadioConfig_UserPreferences_size         18
 #define NodeInfo_size                            157
 #define MyNodeInfo_size                          13
-#define DeviceState_size                         13271
-#define FromRadio_size                           248
-#define ToRadio_size                             242
+#define DeviceState_size                         14954
+#define FromRadio_size                           299
+#define ToRadio_size                             293
 
 #ifdef __cplusplus
 } /* extern "C" */

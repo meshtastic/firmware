@@ -167,16 +167,15 @@ static int16_t packetnum = 0;  // packet counter, we increment per xmission
 #endif
 
   /// A temporary buffer used for sending/receving packets, sized to hold the biggest buffer we might need
-  static uint8_t radiobuf[SubPacket_size];
+  #define MAX_RHPACKETLEN 251
+  static uint8_t radiobuf[MAX_RHPACKETLEN];
   uint8_t rxlen;
   uint8_t srcaddr, destaddr, id, flags;
-
-  assert(SubPacket_size < 251); // a hard limit from the radio stack (including 4 bytes of headers)
 
   // Poll to see if we've received a packet
   //   if (manager.recvfromAckTimeout(radiobuf, &rxlen, 0, &srcaddr, &destaddr, &id, &flags))
   // prefill rxlen with the max length we can accept - very important
-  rxlen = sizeof(radiobuf);
+  rxlen = (uint8_t) MAX_RHPACKETLEN;
   if (manager.recvfrom(radiobuf, &rxlen, &srcaddr, &destaddr, &id, &flags))
   {
     // We received a packet
