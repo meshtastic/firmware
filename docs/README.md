@@ -17,6 +17,7 @@ This software is 100% open source and developed by a group of hobbyist experimen
 ## Meshtastic Android app
 The source code for the Meshtastic Android app is [here](https://github.com/geeksville/Meshtastic-Android).
 Soon our first alpha release of will be released here:
+
 [![Download at https://play.google.com/store/apps/details?id=com.geeksville.mesh](https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png)](https://play.google.com/store/apps/details?id=com.geeksville.mesh&referrer=utm_source%3Dhomepage%26anid%3Dadmob)
 
 ## Supported hardware
