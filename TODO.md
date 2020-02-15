@@ -4,7 +4,6 @@
 * make debug info screen show real data (including battery level & charging)
 * update build to generate both board types
 * retest BLE software update for both board types
-* turn on screen when a new update arrives
 * don't forward redundent pings or ping responses to the phone, it just wastes phone battery
 
 # Medium priority

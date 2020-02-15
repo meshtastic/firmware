@@ -129,7 +129,7 @@ void drawFrame3(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int1
 /// Draw the last text message we received
 void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    MeshPacket &mp = devicestate.rx_text_message; 
+    MeshPacket &mp = devicestate.rx_text_message;
     NodeInfo *node = nodeDB.getNode(mp.from);
 
     // Demo for drawStringMaxWidth:
@@ -140,7 +140,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     String sender = (node && node->has_user) ? node->user.short_name : "???";
     display->drawString(0 + x, 0 + y, sender);
     display->setFont(ArialMT_Plain_10);
-    
+
     static char tempBuf[96];
     snprintf(tempBuf, sizeof(tempBuf), "         %s", mp.payload.variant.data.payload.bytes); // the max length of this buffer is much longer than we can possibly print
 
@@ -194,6 +194,28 @@ uint32_t drawRows(OLEDDisplay *display, int16_t x, int16_t y, const char **field
     yo += FONT_HEIGHT; // include the last line in our total
 
     return yo;
+}
+
+/// Ported from my old java code, returns distance in meters along the globe surface (by magic?)
+float latLongToMeter(double lat_a, double lng_a, double lat_b, double lng_b)
+{
+    double pk = (180 / 3.14169);
+    double a1 = lat_a / pk;
+    double a2 = lng_a / pk;
+    double b1 = lat_b / pk;
+    double b2 = lng_b / pk;
+    double cos_b1 = cos(b1);
+    double cos_a1 = cos(a1);
+    double t1 =
+        cos_a1 * cos(a2) * cos_b1 * cos(b2);
+    double t2 =
+        cos_a1 * sin(a2) * cos_b1 * sin(b2);
+    double t3 = sin(a1) * sin(b1);
+    double tt = acos(t1 + t2 + t3);
+    if (isnan(tt))
+        tt = 0.0; // Must have been the same point?
+
+    return (float)(6366000 * tt);
 }
 
 /// A basic 2D point class for drawing
@@ -277,9 +299,22 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
     else
         snprintf(lastStr, sizeof(lastStr), "%d hours ago", agoSecs / 60 / 60);
 
+    static char distStr[20];
+    *distStr = 0; // might not have location data
+    NodeInfo *ourNode = nodeDB.getNode(nodeDB.getNodeNum());
+    if (ourNode && ourNode->has_position && node->has_position)
+    {
+        Position &op = ourNode->position, &p = node->position;
+        float d = latLongToMeter(p.latitude, p.longitude, op.latitude, op.longitude);
+        if (d < 2000)
+            snprintf(distStr, sizeof(distStr), "%.0f m", d);
+        else
+            snprintf(distStr, sizeof(distStr), "%.1f km", d / 1000);
+    }
+
     const char *fields[] = {
         username,
-        "2.1 mi",
+        distStr,
         signalStr,
         lastStr,
         NULL};
@@ -549,7 +584,7 @@ void screen_set_frames()
     size_t numframes = 0;
 
     // If we have a text message - show it first
-    if(devicestate.has_rx_text_message)
+    if (devicestate.has_rx_text_message)
         nonBootFrames[numframes++] = drawTextMessageFrame;
 
     // then all the nodes

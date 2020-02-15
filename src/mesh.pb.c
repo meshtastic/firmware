@@ -9,16 +9,16 @@
 PB_BIND(Position, Position, AUTO)
 
 
-PB_BIND(Data, Data, AUTO)
+PB_BIND(Data, Data, 2)
 
 
 PB_BIND(User, User, AUTO)
 
 
-PB_BIND(SubPacket, SubPacket, AUTO)
+PB_BIND(SubPacket, SubPacket, 2)
 
 
-PB_BIND(MeshPacket, MeshPacket, AUTO)
+PB_BIND(MeshPacket, MeshPacket, 2)
 
 
 PB_BIND(ChannelSettings, ChannelSettings, AUTO)
@@ -39,10 +39,10 @@ PB_BIND(MyNodeInfo, MyNodeInfo, AUTO)
 PB_BIND(DeviceState, DeviceState, 4)
 
 
-PB_BIND(FromRadio, FromRadio, AUTO)
+PB_BIND(FromRadio, FromRadio, 2)
 
 
-PB_BIND(ToRadio, ToRadio, AUTO)
+PB_BIND(ToRadio, ToRadio, 2)
 
 
 
