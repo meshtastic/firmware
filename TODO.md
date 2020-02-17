@@ -13,16 +13,17 @@ Items to complete before the first alpha release.
 # Medium priority
 Items to complete before the first beta release.
 
+* assign every "channel" a random shared 8 bit sync word (per 4.2.13.6 of datasheet) - use that word to filter packets before even checking CRC.  This will ensure our CPU will only wake for packets on our "channel"  
+* Note: we do not do address filtering at the chip level, because we might need to route for the mesh
 * Use the Periodic class for both position and user periodic broadcasts
 * make debug info screen show real data (including battery level & charging)
-* don't forward redundent pings or ping responses to the phone, it just wastes phone battery
+* don't forward redundant pings or ping responses to the phone, it just wastes phone battery
 * don't treat north as up, instead adjust shown bearings for our guess at the users heading (i.e. subtract one from the other)
-* answer to pings with our latest location
+* answer to pings (because some other user is looking at our nodeinfo) with our latest location
 * show radio and gps signal strength as an image
 * only BLE advertise for a short time after the screen is on and button pressed - to save power and prevent people for sniffing for our BT app.
-* use https://platformio.org/lib/show/1260/OneButton
+* use https://platformio.org/lib/show/1260/OneButton if necessary
 * make an about to sleep screen
-* make a no bluetooth configured yet screen
 * don't send location packets if we haven't moved
 * scrub default radio config settings for bandwidth/range/speed
 * add basic crypto - http://rweather.github.io/arduinolibs/crypto.html with speck https://www.airspayce.com/mikem/arduino/RadioHead/rf95_encrypted_client_8pde-example.html
@@ -34,6 +35,7 @@ Items to complete before the first beta release.
 # Low power consumption tasks
 General ideas to hit the power draws our spreadsheet predicts.  Do the easy ones before beta, the last 15% can be done after 1.0.
 
+* change to use RXcontinuous mode and config to drop packets with bad CRC (see section 6.4 of datasheet)
 * we currently poll the lora radio from loop(), which is really bad because it means we run loop every 10ms.  Instead have the rf95 driver enqueue received messages from the ISR.
 * platformio sdkconfig CONFIG_PM and turn on modem sleep mode
 * keep cpu 100% in deepsleep until irq from radio wakes it.  Then stay awake for 30 secs to attempt delivery to phone.  
@@ -66,6 +68,7 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 # Low priority
 Items after the first final candidate release.
 
+* make a no bluetooth configured yet screen - include this screen in the loop if the user hasn't yet paired
 * the AXP debug output says it is trying to charge at 700mA, but the max I've seen is 180mA, so AXP registers probably need to be set to tell them the circuit can only provide 300mAish max. So that the low charge rate kicks in faster and we don't wear out batteries.
 * increase the max charging rate a bit for 18650s, currently it limits to 180mA (at 4V).  Work backwards from the 500mA USB limit (at 5V) and let the AXP charge at that rate.
 * if radio params change fundamentally, discard the nodedb

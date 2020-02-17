@@ -116,14 +116,26 @@ public:
         static User o; // if the phone doesn't set ID we are careful to keep ours, we also always keep our macaddr
         if (writeToDest(c, &o))
         {
-            if (*o.long_name)
-                strcpy(owner.long_name, o.long_name);
-            if (*o.short_name)
-                strcpy(owner.short_name, o.short_name);
-            if (*o.id)
-                strcpy(owner.id, o.id);
+            int changed = 0;
 
-            service.reloadOwner();
+            if (*o.long_name)
+            {
+                changed |= strcmp(owner.long_name, o.long_name);
+                strcpy(owner.long_name, o.long_name);
+            }
+            if (*o.short_name)
+            {
+                changed |= strcmp(owner.short_name, o.short_name);
+                strcpy(owner.short_name, o.short_name);
+            }
+            if (*o.id)
+            {
+                changed |= strcmp(owner.id, o.id);
+                strcpy(owner.id, o.id);
+            }
+
+            if (changed) // If nothing really changed, don't broadcast on the network or write to flash
+                service.reloadOwner();
         }
     }
 };
