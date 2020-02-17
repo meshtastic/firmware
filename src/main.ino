@@ -269,6 +269,25 @@ void axp192Init()
       DEBUG_MSG("DCDC3: %s\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
       DEBUG_MSG("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
 
+#if 0
+      // cribbing from https://github.com/m5stack/M5StickC/blob/master/src/AXP192.cpp to fix charger to be more like 300ms.  
+      // I finally found an english datasheet.  Will look at this later - but suffice it to say the default code from TTGO has 'issues'
+
+      axp.adc1Enable(0xff, 1); // turn on all adcs
+      uint8_t val = 0xc2;
+      axp._writeByte(0x33, 1, &val); // Bat charge voltage to 4.2, Current 280mA
+      val = 0b11110010;
+      // Set ADC sample rate to 200hz
+      // axp._writeByte(0x84, 1, &val);
+
+      // Not connected
+      //val = 0xfc;
+      //axp._writeByte(AXP202_VHTF_CHGSET, 1, &val); // Set temperature protection
+
+      //not used
+      //val = 0x46;
+      //axp._writeByte(AXP202_OFF_CTL, 1, &val); // enable bat detection
+#endif
       axp.debugCharging();
 
 #ifdef PMU_IRQ
@@ -393,7 +412,6 @@ void setup()
   enableModemSleep();
 }
 
-
 uint32_t ledBlinker()
 {
   static bool ledOn;
@@ -410,11 +428,28 @@ uint32_t ledBlinker()
     axp.setChgLEDMode(ledOn ? AXP20X_LED_LOW_LEVEL : AXP20X_LED_OFF);
   }
 
-  // have a very sparse duty cycle of LED being on
-  return ledOn ? 2 : 1000;
+  // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
+  return isCharging ? 1000 : (ledOn ? 2 : 1000);
 }
 
 Periodic ledPeriodic(ledBlinker);
+
+#if 0
+// Turn off for now
+
+uint32_t axpReads()
+{
+  axp.debugCharging();
+  DEBUG_MSG("vbus current %f\n", axp.getVbusCurrent());
+  DEBUG_MSG("charge current %f\n", axp.getBattChargeCurrent());
+  DEBUG_MSG("bat voltage %f\n", axp.getBattVoltage());
+  DEBUG_MSG("batt pct %d\n", axp.getBattPercentage());
+
+  return 30 * 1000;
+}
+
+Periodic axpDebugOutput(axpReads);
+#endif 
 
 void loop()
 {
@@ -424,8 +459,8 @@ void loop()
   msecstosleep = min(screen_loop(), msecstosleep);
   service.loop();
   ledPeriodic.loop();
+  // axpDebugOutput.loop();
   loopBLE();
-
 
 #ifdef T_BEAM_V10
   if (axp192_found)
@@ -487,7 +522,8 @@ void loop()
 
 #ifdef MINWAKE_MSECS
   // Don't deepsleep if we have USB power or if the user as pressed a button recently
-  if (millis() - lastPressMs > MINWAKE_MSECS && !isUSBPowered)
+  // !isUSBPowered <- doesn't work yet because the axp192 isn't letting the battery fully charge when we are awake - FIXME
+  if (millis() - lastPressMs > MINWAKE_MSECS)
   {
     sleep();
   }
