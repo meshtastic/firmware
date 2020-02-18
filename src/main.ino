@@ -422,11 +422,13 @@ uint32_t ledBlinker()
   digitalWrite(LED_PIN, ledOn);
 #endif
 
+#ifdef T_BEAM_V10
   if (axp192_found)
   {
     // blink the axp led
     axp.setChgLEDMode(ledOn ? AXP20X_LED_LOW_LEVEL : AXP20X_LED_OFF);
   }
+#endif
 
   // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
   return isCharging ? 1000 : (ledOn ? 2 : 1000);

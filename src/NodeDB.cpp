@@ -250,6 +250,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
         case SubPacket_data_tag: {
             // Keep a copy of the most recent text message.
             if(p.variant.data.typ == Data_Type_CLEAR_TEXT) {
+                DEBUG_MSG("Received text msg from=0%0x, msg=%.*s\n", mp.from, p.variant.data.payload.size, p.variant.data.payload.bytes);
                 devicestate.rx_text_message = mp;
                 devicestate.has_rx_text_message = true;
                 updateTextMessage = true;
@@ -271,8 +272,9 @@ void NodeDB::updateFrom(const MeshPacket &mp)
             {
                 updateGUIforNode = info;
 
+                // Not really needed - we will save anyways when we go to sleep
                 // We just changed something important about the user, store our DB
-                saveToDisk();
+                // saveToDisk();
             }
             break;
         }
