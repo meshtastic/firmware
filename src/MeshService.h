@@ -78,8 +78,11 @@ private:
 
     virtual void onNotify(Observable *o);
 
-    /// handle packets that just arrived from the mesh radio
+    /// handle all the packets that just arrived from the mesh radio
     void handleFromRadio();
+
+    /// Handle a packet that just arrived from the radio
+    void handleFromRadio(MeshPacket *p);
 
     /// handle a user packet that just arrived on the radio, return NULL if we should not process this packet at all
     MeshPacket *handleFromRadioUser(MeshPacket *mp);
