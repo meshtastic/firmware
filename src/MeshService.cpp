@@ -120,6 +120,34 @@ MeshPacket *MeshService::handleFromRadioUser(MeshPacket *mp)
     return mp;
 }
 
+void MeshService::handleFromRadio(MeshPacket *mp)
+{
+    mp->rx_time = gps.getTime() / 1000; // store the arrival timestamp for the phone
+
+    if (mp->has_payload && mp->payload.which_variant == SubPacket_user_tag)
+    {
+        mp = handleFromRadioUser(mp);
+    }
+
+    // If we veto a received User packet, we don't put it into the DB or forward it to the phone (to prevent confusing it)
+    if (mp)
+    {
+        nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
+
+        fromNum++;
+
+        if (toPhoneQueue.numFree() == 0)
+        {
+            DEBUG_MSG("NOTE: tophone queue is full, discarding oldest\n");
+            MeshPacket *d = toPhoneQueue.dequeuePtr(0);
+            if (d)
+                releaseToPool(d);
+        }
+        assert(toPhoneQueue.enqueue(mp, 0) == pdTRUE); // FIXME, instead of failing for full queue, delete the oldest mssages
+    }
+    else
+        DEBUG_MSG("Dropping vetoed User message\n");
+}
 
 void MeshService::handleFromRadio()
 {
@@ -127,31 +155,7 @@ void MeshService::handleFromRadio()
     uint32_t oldFromNum = fromNum;
     while ((mp = fromRadioQueue.dequeuePtr(0)) != NULL)
     {
-        mp->rx_time = gps.getTime() / 1000; // store the arrival timestamp for the phone
-
-        if (mp->has_payload && mp->payload.which_variant == SubPacket_user_tag)
-        {
-            mp = handleFromRadioUser(mp);
-        }
-
-        // If we veto a received User packet, we don't put it into the DB or forward it to the phone (to prevent confusing it)
-        if (mp)
-        {
-            nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
-
-            fromNum++;
-
-            if (toPhoneQueue.numFree() == 0)
-            {
-                DEBUG_MSG("NOTE: tophone queue is full, discarding oldest\n");
-                MeshPacket *d = toPhoneQueue.dequeuePtr(0);
-                if (d)
-                    releaseToPool(d);
-            }
-            assert(toPhoneQueue.enqueue(mp, 0) == pdTRUE); // FIXME, instead of failing for full queue, delete the oldest mssages
-        }
-        else
-            DEBUG_MSG("Dropping vetoed User message\n");
+        handleFromRadio(mp);
     }
     if (oldFromNum != fromNum) // We don't want to generate extra notifies for multiple new packets
         bluetoothNotifyFromNum(fromNum);
@@ -192,9 +196,18 @@ void MeshService::handleToRadio(std::string s)
         switch (r.which_variant)
         {
         case ToRadio_packet_tag:
+        {
             sendToMesh(packetPool.allocCopy(r.variant.packet));
-            break;
 
+            bool loopback = false; // if true send any packet the phone sends back itself (for testing)
+            if (loopback)
+            {
+                MeshPacket *mp = packetPool.allocCopy(r.variant.packet);
+                handleFromRadio(mp);
+                bluetoothNotifyFromNum(fromNum); // tell the phone a new packet arrived
+            }
+            break;
+        }
         default:
             DEBUG_MSG("Error: unexpected ToRadio variant\n");
             break;
