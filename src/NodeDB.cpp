@@ -49,7 +49,7 @@ void NodeDB::init()
     devicestate.node_db_count = 0;
     devicestate.receive_queue_count = 0;
 
-    radioConfig.preferences.send_owner_secs = 60 * 60; // default to once an hour
+    radioConfig.preferences.send_owner_secs = 60 * 60;         // default to once an hour
     radioConfig.preferences.position_broadcast_secs = 15 * 60; // default to once every 15 mins
 
 #ifdef GPS_RX_PIN
@@ -236,8 +236,8 @@ void NodeDB::updateFrom(const MeshPacket &mp)
         if (oldNumNodes != *numNodes)
             updateGUI = true; // we just created a nodeinfo
 
-        if(mp.rx_time) // if the packet has a valid timestamp use it
-            info->last_seen = mp.rx_time; 
+        if (mp.rx_time) // if the packet has a valid timestamp use it
+            info->last_seen = mp.rx_time;
 
         switch (p.which_variant)
         {
@@ -247,13 +247,19 @@ void NodeDB::updateFrom(const MeshPacket &mp)
             updateGUIforNode = info;
             break;
 
-        case SubPacket_data_tag: {
+        case SubPacket_data_tag:
+        {
             // Keep a copy of the most recent text message.
-            if(p.variant.data.typ == Data_Type_CLEAR_TEXT) {
+            if (p.variant.data.typ == Data_Type_CLEAR_TEXT)
+            {
                 DEBUG_MSG("Received text msg from=0%0x, msg=%.*s\n", mp.from, p.variant.data.payload.size, p.variant.data.payload.bytes);
-                devicestate.rx_text_message = mp;
-                devicestate.has_rx_text_message = true;
-                updateTextMessage = true;
+                if (mp.to == NODENUM_BROADCAST || mp.to == nodeDB.getNodeNum())
+                {
+                    // We only store/display messages destined for us.
+                    devicestate.rx_text_message = mp;
+                    devicestate.has_rx_text_message = true;
+                    updateTextMessage = true;
+                }
             }
             break;
         }

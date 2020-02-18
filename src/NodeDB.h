@@ -47,6 +47,7 @@ public:
     /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
     void updateFrom(const MeshPacket &p);
 
+    /// @return our node number
     NodeNum getNodeNum() { return myNodeInfo.my_node_num; }
 
     size_t getNumNodes() { return *numNodes; }

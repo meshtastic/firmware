@@ -544,7 +544,8 @@ uint32_t screen_loop()
 
     if (wakeScreen || nodeDB.updateTextMessage) // If a new text message arrived, turn the screen on immedately
     {
-        screen_on(); // make sure the screen is not asleep
+        lastPressMs = millis(); // if we were told to wake the screen, reset the press timeout
+        screen_on();            // make sure the screen is not asleep
         wakeScreen = false;
     }
 
