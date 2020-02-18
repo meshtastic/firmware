@@ -542,7 +542,7 @@ uint32_t screen_loop()
     if (!disp) // If we don't have a screen, don't ever spend any CPU for us
         return UINT32_MAX;
 
-    if (wakeScreen)
+    if (wakeScreen || nodeDB.updateTextMessage) // If a new text message arrived, turn the screen on immedately
     {
         screen_on(); // make sure the screen is not asleep
         wakeScreen = false;
@@ -570,10 +570,11 @@ uint32_t screen_loop()
         else // standard screen loop handling ehre
         {
             // If the # nodes changes, we need to regen our list of screens
-            if (nodeDB.updateGUI)
+            if (nodeDB.updateGUI || nodeDB.updateTextMessage)
             {
-                nodeDB.updateGUI = false;
                 screen_set_frames();
+                nodeDB.updateGUI = false;
+                nodeDB.updateTextMessage = false;
             }
 
             if (millis() - lastPressMs > SCREEN_SLEEP_MS)
