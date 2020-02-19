@@ -15,6 +15,7 @@ Items to complete before the first alpha release.
 # Medium priority
 Items to complete before the first beta release.
 
+* GUI on oled hangs for a few seconds occasionally, but comes back
 * assign every "channel" a random shared 8 bit sync word (per 4.2.13.6 of datasheet) - use that word to filter packets before even checking CRC.  This will ensure our CPU will only wake for packets on our "channel"  
 * Note: we do not do address filtering at the chip level, because we might need to route for the mesh
 * Use the Periodic class for both position and user periodic broadcasts
@@ -38,14 +39,12 @@ Items to complete before the first beta release.
 General ideas to hit the power draws our spreadsheet predicts.  Do the easy ones before beta, the last 15% can be done after 1.0.
 
 * lower BT announce interval to save battery
-* change to use RXcontinuous mode and config to drop packets with bad CRC (see section 6.4 of datasheet)
-* we currently poll the lora radio from loop(), which is really bad because it means we run loop every 10ms.  Instead have the rf95 driver enqueue received messages from the ISR.
+* change to use RXcontinuous mode and config to drop packets with bad CRC (see section 6.4 of datasheet) - I think this is already the case
+* have mesh service run in a thread that stays blocked until a packet arrives from the RF95
 * platformio sdkconfig CONFIG_PM and turn on modem sleep mode
 * keep cpu 100% in deepsleep until irq from radio wakes it.  Then stay awake for 30 secs to attempt delivery to phone.  
-* have radiohead ISR send messages to RX queue directly, to allow that thread to block until we have something to send
 * use https://lastminuteengineers.com/esp32-sleep-modes-power-consumption/ association sleep pattern to save power - but see https://github.com/espressif/esp-idf/issues/2070 and https://esp32.com/viewtopic.php?f=13&t=12182 it seems with BLE on the 'easy' draw people are getting is 80mA
 * stop using loop() instead use a job queue and let cpu sleep
-* move lora rx/tx to own thread and block on IO
 * measure power consumption and calculate battery life assuming no deep sleep
 * do lowest sleep level possible where BT still works during normal sleeping, make sure cpu stays in that mode unless lora rx packet happens, bt rx packet happens or button press happens
 * optionally do lora messaging only during special scheduled intervals (unless nodes are told to go to low latency mode), then deep sleep except during those intervals - before implementing calculate what battery life would be with  this feature
@@ -56,6 +55,8 @@ General ideas to hit the power draws our spreadsheet predicts.  Do the easy ones
 # Pre-beta priority
 During the beta timeframe the following improvements 'would be nice' (and yeah - I guess some of these items count as features, but it is a hobby project ;-) )
 
+* fix the frequency error reading in the RF95 RX code (can't do floating point math in an ISR ;-) 
+* See CustomRF95::send and fix the problem of dropping partially received packets if we want to start sending
 * swap out speck for hw-accelerated full AES https://github.com/espressif/arduino-esp32/blob/master/tools/sdk/include/esp32/hwcrypto/aes.h
 * use variable length arduino Strings in protobufs (instead of current fixed buffers)
 * don't even power on bluetooth until we have some data to send to the android phone.  Most of the time we should be sleeping in a lowpower "listening for lora" only mode.  Once we have some packets for the phone, then power on bluetooth
@@ -147,3 +148,5 @@ Items after the first final candidate release.
 * update build to generate both board types
 * have node info screen show real info (including distance and heading)
 * blink the power led less often
+* have radiohead ISR send messages to RX queue directly, to allow that thread to block until we have something to send
+* move lora rx/tx to own thread and block on IO

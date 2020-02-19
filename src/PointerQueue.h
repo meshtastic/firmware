@@ -1,21 +1,31 @@
-#pragma once 
+#pragma once
 
 #include "TypedQueue.h"
-
 
 /**
  * A wrapper for freertos queues that assumes each element is a pointer
  */
-template <class T> class PointerQueue: public TypedQueue<T *> {
+template <class T>
+class PointerQueue : public TypedQueue<T *>
+{
 public:
-    PointerQueue(int maxElements) : TypedQueue<T *>(maxElements) {
+    PointerQueue(int maxElements) : TypedQueue<T *>(maxElements)
+    {
     }
 
-    // preturns a ptr or null if the queue was empty
-    T *dequeuePtr(TickType_t maxWait = portMAX_DELAY) {
+    // returns a ptr or null if the queue was empty
+    T *dequeuePtr(TickType_t maxWait = portMAX_DELAY)
+    {
         T *p;
-        
-        return this->dequeue(&p, maxWait)  == pdTRUE ? p : NULL;
+
+        return this->dequeue(&p, maxWait) == pdTRUE ? p : NULL;
+    }
+
+    // returns a ptr or null if the queue was empty
+    T *dequeuePtrFromISR(BaseType_t *higherPriWoken)
+    {
+        T *p;
+
+        return this->dequeueFromISR(&p, higherPriWoken) == pdTRUE ? p : NULL;
     }
 };
-

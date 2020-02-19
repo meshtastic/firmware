@@ -218,7 +218,7 @@ void MeshService::handleToRadio(std::string s)
 void MeshService::sendToMesh(MeshPacket *p)
 {
     nodeDB.updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
-    assert(radio.send(p) == pdTRUE);
+    assert(radio.send(p) == ERRNO_OK);
 }
 
 MeshPacket *MeshService::allocForSending()

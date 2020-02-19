@@ -292,6 +292,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
 }
 
 /// Find a node in our DB, return null for missing
+/// NOTE: This function might be called from an ISR
 NodeInfo *NodeDB::getNode(NodeNum n)
 {
     for (int i = 0; i < *numNodes; i++)
