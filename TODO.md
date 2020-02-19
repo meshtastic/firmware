@@ -15,6 +15,7 @@ Items to complete before the first alpha release.
 # Medium priority
 Items to complete before the first beta release.
 
+* for non GPS equipped devices, set time from phone
 * GUI on oled hangs for a few seconds occasionally, but comes back
 * assign every "channel" a random shared 8 bit sync word (per 4.2.13.6 of datasheet) - use that word to filter packets before even checking CRC.  This will ensure our CPU will only wake for packets on our "channel"  
 * Note: we do not do address filtering at the chip level, because we might need to route for the mesh
@@ -51,6 +52,27 @@ General ideas to hit the power draws our spreadsheet predicts.  Do the easy ones
 * see section 7.3 of https://cdn.sparkfun.com/assets/learn_tutorials/8/0/4/RFM95_96_97_98W.pdf and have hope radio wake only when a valid packet is received.  Possibly even wake the ESP32 from deep sleep via GPIO.
 * never enter deep sleep while connected to USB power (but still go to other low power modes)
 * when main cpu is idle (in loop), turn cpu clock rate down and/or activate special sleep modes.  We want almost everything shutdown until it gets an interrupt.
+
+# Mesh broadcast algoritm
+
+FIXME - instead look for standard solutions.  this approach seems really suboptimal, because too many nodes will try to rebroast.
+
+## approach 1
+* send all broadcasts with a TTL
+* periodically(?) do a survey to find the max TTL that is needed to fully cover the current network.
+* to do a study first send a broadcast (maybe our current initial user announcement?) with TTL set to one (so therefore no one will rebroadcast our request)
+* survey replies are sent unicast back to us (and intervening nodes will need to keep the route table that they have built up based on past packets)
+* count the number of replies to this TTL 1 attempt.  That is the number of nodes we can reach without any rebroadcasts
+* repeat the study with a TTL of 2 and then 3.  stop once the # of replies stops going up.
+* it is important for any node to do listen before talk to prevent stomping on other rebroadcasters...
+* For these little networks I bet a max TTL would never be higher than 3?
+
+## approach 2
+* send a TTL1 broadcast, the replies let us build a list of the nodes (stored as a bitvector?) that we can see (and their rssis)
+* we then broadcast out that bitvector (also TTL1) asking "can any of ya'll (even indirectly) see anyone else?"
+* if a node can see someone I missed (and they are the best person to see that node), they reply (unidirectionally) with the missing nodes and their rssis (other nodes might sniff (and update their db) based on this reply but they don't have to)
+* given that the max number of nodes in this mesh will be like 20 (for normal cases), I bet globally updating this db of "nodenums and who has the best rssi for packets from that node" would be useful
+* once the global DB is shared, when a node wants to broadcast, it just sends out its broadcast . the first level receivers then make a decision "am I the best to rebroadcast to someone who likely missed this packet?" if so, rebroadcast
 
 # Pre-beta priority
 During the beta timeframe the following improvements 'would be nice' (and yeah - I guess some of these items count as features, but it is a hobby project ;-) )
@@ -150,3 +172,4 @@ Items after the first final candidate release.
 * blink the power led less often
 * have radiohead ISR send messages to RX queue directly, to allow that thread to block until we have something to send
 * move lora rx/tx to own thread and block on IO
+* keep our pseudo time moving forward even if we enter deep sleep (use esp32 rtc)

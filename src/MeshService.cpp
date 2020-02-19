@@ -221,7 +221,7 @@ void MeshService::sendToMesh(MeshPacket *p)
 
     // Note: We might return !OK if our fifo was full, at that point the only option we have is to drop it
     if(radio.send(p) != ERRNO_OK)
-        DEBUG_MSG("Dropped packet because send queue was full!");
+        DEBUG_MSG("Dropped packet because send queue was full!\n");
 }
 
 MeshPacket *MeshService::allocForSending()

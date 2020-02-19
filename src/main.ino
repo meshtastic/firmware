@@ -33,6 +33,8 @@
 #include "screen.h"
 #include "NodeDB.h"
 #include "Periodic.h"
+#include "esp32/pm.h"
+#include "esp_pm.h"
 
 #ifdef T_BEAM_V10
 #include "axp20x.h"
@@ -147,8 +149,6 @@ void doDeepSleep(uint64_t msecToWake)
   esp_deep_sleep_start();                              // TBD mA sleep current (battery)
 }
 
-#include "esp32/pm.h"
-#include "esp_pm.h"
 
 /**
  * enable modem sleep mode as needed and available.  Should lower our CPU current draw to an average of about 20mA.
