@@ -122,7 +122,7 @@ MeshPacket *MeshService::handleFromRadioUser(MeshPacket *mp)
 
 void MeshService::handleFromRadio(MeshPacket *mp)
 {
-    mp->rx_time = gps.getTime() / 1000; // store the arrival timestamp for the phone
+    mp->rx_time = gps.getValidTime(); // store the arrival timestamp for the phone
 
     if (mp->has_payload && mp->payload.which_variant == SubPacket_user_tag)
     {
@@ -132,6 +132,7 @@ void MeshService::handleFromRadio(MeshPacket *mp)
     // If we veto a received User packet, we don't put it into the DB or forward it to the phone (to prevent confusing it)
     if (mp)
     {
+        DEBUG_MSG("Forwarding to phone, from=0x%x, rx_time=%u\n", mp->from, mp->rx_time);
         nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
 
         fromNum++;
@@ -197,6 +198,25 @@ void MeshService::handleToRadio(std::string s)
         {
         case ToRadio_packet_tag:
         {
+            // If our phone is sending a position, see if we can use it to set our RTC
+            if (r.variant.packet.has_payload && r.variant.packet.payload.which_variant == SubPacket_position_tag && r.variant.packet.payload.variant.position.time)
+            {
+                struct timeval tv;
+                uint32_t msecs = r.variant.packet.payload.variant.position.time;
+
+                // FIXME, this is a shit not right version of the standard def of unix time!!!
+                tv.tv_sec = msecs / 1000;
+                tv.tv_usec = (msecs % 1000) * 1000; // scale only the msecs portion of the timestamp (i.e. remainder after dividing by 1s)
+
+                gps.perhapsSetRTC(&tv);
+
+                // leave in for now FIXME
+                // r.variant.packet.payload.variant.position.time = 0; // Set it to the default value so that we don't waste bytes broadcasting it (other nodes will use their own time)
+            }
+
+            r.variant.packet.rx_time = gps.getValidTime(); // Record the time the packet arrived from the phone (so we update our nodedb for the local node)
+
+            // Send the packet into the mesh
             sendToMesh(packetPool.allocCopy(r.variant.packet));
 
             bool loopback = false; // if true send any packet the phone sends back itself (for testing)
@@ -220,7 +240,7 @@ void MeshService::sendToMesh(MeshPacket *p)
     nodeDB.updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
 
     // Note: We might return !OK if our fifo was full, at that point the only option we have is to drop it
-    if(radio.send(p) != ERRNO_OK)
+    if (radio.send(p) != ERRNO_OK)
         DEBUG_MSG("Dropped packet because send queue was full!\n");
 }
 
@@ -231,7 +251,7 @@ MeshPacket *MeshService::allocForSending()
     p->has_payload = true;
     p->from = nodeDB.getNodeNum();
     p->to = NODENUM_BROADCAST;
-    p->rx_time = gps.getTime() / 1000; // Just in case we process the packet locally - make sure it has a valid timestamp
+    p->rx_time = gps.getValidTime(); // Just in case we process the packet locally - make sure it has a valid timestamp
 
     return p;
 }
@@ -257,6 +277,8 @@ void MeshService::sendOurPosition()
     MeshPacket *p = allocForSending();
     p->payload.which_variant = SubPacket_position_tag;
     p->payload.variant.position = node->position;
+    // FIXME - for now we are leaving this in the sent packets (for debugging)
+    //p->payload.variant.position.time = 0; // No need to send time, other node won't trust it anyways
     sendToMesh(p);
 }
 
@@ -270,6 +292,7 @@ void MeshService::onGPSChanged()
         pos.altitude = gps.altitude.meters();
     pos.latitude = gps.location.lat();
     pos.longitude = gps.location.lng();
+    pos.time = gps.getValidTime();
 
     // We limit our GPS broadcasts to a max rate
     static uint32_t lastGpsSend;

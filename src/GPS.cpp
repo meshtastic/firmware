@@ -6,7 +6,7 @@
 // stuff that really should be in in the instance instead...
 HardwareSerial _serial_gps(GPS_SERIAL_NUM);
 uint32_t timeStartMsec; // Once we have a GPS lock, this is where we hold the initial msec clock that corresponds to that time
-uint64_t zeroOffset;    // GPS based time in millis since 1970 - only updated once on initial lock
+uint64_t zeroOffsetSecs;    // GPS based time in secs since 1970 - only updated once on initial lock
 bool timeSetFromGPS;    // We only reset our time once per wake
 
 GPS gps;
@@ -34,7 +34,19 @@ void GPS::readFromRTC()
 
         DEBUG_MSG("Read RTC time as %ld (cur millis %u)\n", tv.tv_sec, now);
         timeStartMsec = now;
-        zeroOffset = tv.tv_sec * 1000LL + tv.tv_usec / 1000LL;
+        zeroOffsetSecs = tv.tv_sec;
+    }
+}
+
+/// If we haven't yet set our RTC this boot, set it from a GPS derived time
+void GPS::perhapsSetRTC(const struct timeval *tv)
+{
+    if (!timeSetFromGPS)
+    {
+        timeSetFromGPS = true;
+        DEBUG_MSG("Setting RTC %ld secs\n", tv->tv_sec);
+        settimeofday(tv, NULL);
+        readFromRTC();
     }
 }
 
@@ -51,8 +63,6 @@ void GPS::loop()
 
     if (!timeSetFromGPS && time.isValid() && date.isValid())
     {
-        timeSetFromGPS = true;
-
         struct timeval tv;
 
         // FIXME, this is a shit not right version of the standard def of unix time!!!
@@ -61,16 +71,19 @@ void GPS::loop()
 
         tv.tv_usec = time.centisecond() * (10 / 1000);
 
-        DEBUG_MSG("Setting RTC %ld secs\n", tv.tv_sec);
-        settimeofday(&tv, NULL);
-        readFromRTC();
+        perhapsSetRTC(&tv);
     }
 #endif
 }
 
-uint64_t GPS::getTime()
+uint32_t GPS::getTime()
 {
-    return ((uint64_t)millis() - timeStartMsec) + zeroOffset;
+    return ((millis() - timeStartMsec) / 1000) + zeroOffsetSecs;
+}
+
+uint32_t GPS::getValidTime()
+{
+    return timeSetFromGPS ? getTime() : 0;
 }
 
 void GPS::doTask()
