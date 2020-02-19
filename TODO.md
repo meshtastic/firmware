@@ -39,6 +39,7 @@ Items to complete before the first beta release.
 # Low power consumption tasks
 General ideas to hit the power draws our spreadsheet predicts.  Do the easy ones before beta, the last 15% can be done after 1.0.
 
+* (possibly bad idea - better to have lora radio always listen - check spreadsheet) have every node wake at the same tick and do their position syncs then go back to deep sleep
 * lower BT announce interval to save battery
 * change to use RXcontinuous mode and config to drop packets with bad CRC (see section 6.4 of datasheet) - I think this is already the case
 * have mesh service run in a thread that stays blocked until a packet arrives from the RF95

@@ -24,6 +24,9 @@ public:
     virtual void loop();
 
     virtual void doTask();
+
+private:
+    void readFromRTC();
 };
 
 extern GPS gps;
