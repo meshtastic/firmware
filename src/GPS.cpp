@@ -7,7 +7,7 @@
 HardwareSerial _serial_gps(GPS_SERIAL_NUM);
 uint32_t timeStartMsec; // Once we have a GPS lock, this is where we hold the initial msec clock that corresponds to that time
 uint64_t zeroOffset;    // GPS based time in millis since 1970 - only updated once on initial lock
-bool timeSetFromGPS; // We only reset our time once per wake
+bool timeSetFromGPS;    // We only reset our time once per wake
 
 GPS gps;
 
@@ -16,6 +16,15 @@ GPS::GPS() : PeriodicTask(30 * 1000)
 }
 
 void GPS::setup()
+{
+    readFromRTC();
+
+#ifdef GPS_RX_PIN
+    _serial_gps.begin(GPS_BAUDRATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+#endif
+}
+
+void GPS::readFromRTC()
 {
     struct timeval tv; /* btw settimeofday() is helpfull here too*/
 
@@ -27,10 +36,6 @@ void GPS::setup()
         timeStartMsec = now;
         zeroOffset = tv.tv_sec * 1000LL + tv.tv_usec / 1000LL;
     }
-
-#ifdef GPS_RX_PIN
-    _serial_gps.begin(GPS_BAUDRATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
-#endif
 }
 
 // for the time being we need to rapidly read from the serial port to prevent overruns
@@ -47,14 +52,18 @@ void GPS::loop()
     if (!timeSetFromGPS && time.isValid() && date.isValid())
     {
         timeSetFromGPS = true;
-        timeStartMsec = millis();
+
+        struct timeval tv;
 
         // FIXME, this is a shit not right version of the standard def of unix time!!!
-        zeroOffset = 1000LL * (time.second() + time.minute() * 60 + time.hour() * 60 * 60 +
-                               24 * 60 * 60 * (date.month() * 31 + date.day() + 365 * (date.year() - 1970))) +
-                     time.centisecond() * 10;
+        tv.tv_sec = time.second() + time.minute() * 60 + time.hour() * 60 * 60 +
+                    24 * 60 * 60 * (date.month() * 31 + date.day() + 365 * (date.year() - 1970));
 
-        DEBUG_MSG("Setting time zero %lld\n", zeroOffset);
+        tv.tv_usec = time.centisecond() * (10 / 1000);
+
+        DEBUG_MSG("Setting RTC %ld secs\n", tv.tv_sec);
+        settimeofday(&tv, NULL);
+        readFromRTC();
     }
 #endif
 }
