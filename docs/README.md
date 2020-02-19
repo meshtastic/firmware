@@ -14,6 +14,8 @@ This project is currently pre-alpha, but if you have questions please join our c
 
 This software is 100% open source and developed by a group of hobbyist experimenters.  No warranty is provided, if you'd like to improve it - we'd love your help.  Please post in the chat.  
 
+[![Youtube video demo](desk-video-screenshot.png)](https://www.youtube.com/watch?v=WlNbMbVZlHI "Meshtastic early demo")
+
 ## Meshtastic Android app
 The source code for the Meshtastic Android app is [here](https://github.com/geeksville/Meshtastic-Android).
 Soon our first alpha release of will be released here:
