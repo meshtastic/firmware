@@ -202,11 +202,11 @@ void MeshService::handleToRadio(std::string s)
             if (r.variant.packet.has_payload && r.variant.packet.payload.which_variant == SubPacket_position_tag && r.variant.packet.payload.variant.position.time)
             {
                 struct timeval tv;
-                uint32_t msecs = r.variant.packet.payload.variant.position.time;
+                uint32_t secs = r.variant.packet.payload.variant.position.time;
 
                 // FIXME, this is a shit not right version of the standard def of unix time!!!
-                tv.tv_sec = msecs / 1000;
-                tv.tv_usec = (msecs % 1000) * 1000; // scale only the msecs portion of the timestamp (i.e. remainder after dividing by 1s)
+                tv.tv_sec = secs;
+                tv.tv_usec =  0; 
 
                 gps.perhapsSetRTC(&tv);
 
