@@ -402,7 +402,7 @@ void setup()
   if (useBluetooth)
   {
     DEBUG_MSG("Starting bluetooth\n");
-    BLEServer *serve = initBLE(getDeviceName(), HW_VENDOR, APP_VERSION, HW_VERSION); // FIXME, use a real name based on the macaddr
+    BLEServer *serve = initBLE(getDeviceName(), HW_VENDOR, APP_VERSION); // FIXME, use a real name based on the macaddr
     createMeshBluetoothService(serve);
 
     // Start advertising - this must be done _after_ creating all services

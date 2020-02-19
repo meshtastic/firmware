@@ -15,7 +15,7 @@ static BLECharacteristic HardwareVersionCharacteristic(BLEUUID((uint16_t)ESP_GAT
 /**
  * Create standard device info service
  **/
-BLEService *createDeviceInfomationService(BLEServer *server, std::string hwVendor, std::string swVersion, std::string hwVersion)
+BLEService *createDeviceInfomationService(BLEServer *server, std::string hwVendor, std::string swVersion, std::string hwVersion = "")
 {
   BLEService *deviceInfoService = server->createService(BLEUUID((uint16_t)ESP_GATT_UUID_DEVICE_INFO_SVC));
 
@@ -32,8 +32,11 @@ BLEService *createDeviceInfomationService(BLEServer *server, std::string hwVendo
   deviceInfoService->addCharacteristic(&SWVersionCharacteristic);
   ManufacturerCharacteristic.setValue(hwVendor);
   deviceInfoService->addCharacteristic(&ManufacturerCharacteristic);
-  HardwareVersionCharacteristic.setValue(hwVersion);
-  deviceInfoService->addCharacteristic(&HardwareVersionCharacteristic);
+  if (!hwVersion.empty())
+  {
+    HardwareVersionCharacteristic.setValue(hwVersion);
+    deviceInfoService->addCharacteristic(&HardwareVersionCharacteristic);
+  }
   //SerialNumberCharacteristic.setValue("FIXME");
   //deviceInfoService->addCharacteristic(&SerialNumberCharacteristic);
 
@@ -199,7 +202,7 @@ BLEServer *initBLE(std::string deviceName, std::string hwVendor, std::string swV
   // BLEService *pBattery = createBatteryService(pServer);
 
   BLEService *pUpdate = createUpdateService(pServer); // We need to advertise this so our android ble scan operation can see it
-  
+
   // It seems only one service can be advertised - so for now don't advertise our updater
   // pServer->getAdvertising()->addServiceUUID(pUpdate->getUUID());
 

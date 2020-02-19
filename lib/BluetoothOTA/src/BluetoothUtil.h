@@ -18,4 +18,4 @@ void dumpCharacteristic(BLECharacteristic *c);
 uint32_t getValue32(BLECharacteristic *c, uint32_t defaultValue);
 
 void loopBLE();
-BLEServer *initBLE(std::string devName, std::string hwVendor, std::string swVersion, std::string hwVersion);
+BLEServer *initBLE(std::string devName, std::string hwVendor, std::string swVersion, std::string hwVersion = "");

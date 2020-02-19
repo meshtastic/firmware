@@ -2,6 +2,8 @@
 Items to complete before the first alpha release.
 
 * post sample video to signal forum
+* support non US frequencies
+* make an install script to let novices install software on their boards
 * retest BLE software update for both board types
 * default to enter deep sleep if no LORA received for two hours (indicates user has probably left the meshS)
 * first alpha release, article writeup for hackaday
@@ -35,6 +37,7 @@ Items to complete before the first beta release.
 # Low power consumption tasks
 General ideas to hit the power draws our spreadsheet predicts.  Do the easy ones before beta, the last 15% can be done after 1.0.
 
+* lower BT announce interval to save battery
 * change to use RXcontinuous mode and config to drop packets with bad CRC (see section 6.4 of datasheet)
 * we currently poll the lora radio from loop(), which is really bad because it means we run loop every 10ms.  Instead have the rf95 driver enqueue received messages from the ISR.
 * platformio sdkconfig CONFIG_PM and turn on modem sleep mode
