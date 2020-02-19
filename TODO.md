@@ -15,8 +15,6 @@ Items to complete before the first alpha release.
 # Medium priority
 Items to complete before the first beta release.
 
-* for non GPS equipped devices, set time from phone
-* GUI on oled hangs for a few seconds occasionally, but comes back
 * assign every "channel" a random shared 8 bit sync word (per 4.2.13.6 of datasheet) - use that word to filter packets before even checking CRC.  This will ensure our CPU will only wake for packets on our "channel"  
 * Note: we do not do address filtering at the chip level, because we might need to route for the mesh
 * Use the Periodic class for both position and user periodic broadcasts
@@ -174,3 +172,9 @@ Items after the first final candidate release.
 * have radiohead ISR send messages to RX queue directly, to allow that thread to block until we have something to send
 * move lora rx/tx to own thread and block on IO
 * keep our pseudo time moving forward even if we enter deep sleep (use esp32 rtc)
+* for non GPS equipped devices, set time from phone
+* GUI on oled hangs for a few seconds occasionally, but comes back
+* update local GPS position (but do not broadcast) at whatever rate the GPS is giving it
+* don't send our times to other nodes
+* don't trust times from other nodes
+* draw compass rose based off local walking track
