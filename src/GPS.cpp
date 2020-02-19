@@ -1,10 +1,13 @@
 
 #include "GPS.h"
+#include "time.h"
+#include <sys/time.h>
 
 // stuff that really should be in in the instance instead...
 HardwareSerial _serial_gps(GPS_SERIAL_NUM);
 uint32_t timeStartMsec; // Once we have a GPS lock, this is where we hold the initial msec clock that corresponds to that time
 uint64_t zeroOffset;    // GPS based time in millis since 1970 - only updated once on initial lock
+bool timeSetFromGPS; // We only reset our time once per wake
 
 GPS gps;
 
@@ -14,6 +17,17 @@ GPS::GPS() : PeriodicTask(30 * 1000)
 
 void GPS::setup()
 {
+    struct timeval tv; /* btw settimeofday() is helpfull here too*/
+
+    if (!gettimeofday(&tv, NULL))
+    {
+        uint32_t now = millis();
+
+        DEBUG_MSG("Read RTC time as %ld (cur millis %u)\n", tv.tv_sec, now);
+        timeStartMsec = now;
+        zeroOffset = tv.tv_sec * 1000LL + tv.tv_usec / 1000LL;
+    }
+
 #ifdef GPS_RX_PIN
     _serial_gps.begin(GPS_BAUDRATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
 #endif
@@ -30,8 +44,9 @@ void GPS::loop()
         encode(_serial_gps.read());
     }
 
-    if (!timeStartMsec && time.isValid() && date.isValid())
+    if (!timeSetFromGPS && time.isValid() && date.isValid())
     {
+        timeSetFromGPS = true;
         timeStartMsec = millis();
 
         // FIXME, this is a shit not right version of the standard def of unix time!!!
@@ -44,8 +59,9 @@ void GPS::loop()
 #endif
 }
 
-uint64_t GPS::getTime() {
-    return ((uint64_t) millis() - timeStartMsec) + zeroOffset;
+uint64_t GPS::getTime()
+{
+    return ((uint64_t)millis() - timeStartMsec) + zeroOffset;
 }
 
 void GPS::doTask()
@@ -56,7 +72,6 @@ void GPS::doTask()
         notifyObservers();
     }
 }
-
 
 String GPS::getTimeStr()
 {

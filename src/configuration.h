@@ -66,7 +66,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // If not defined, we will wait for lock forever
 
-#define MINWAKE_MSECS           (5 * 60 * 1000) // stay awake a long time (30 mins) for debugging
+#define MINWAKE_MSECS           (10 * 60 * 1000) // stay awake a long time (30 mins) for debugging
 // #define MINWAKE_MSECS           (30 * 1000)  // Wait after every boot for GPS lock (may need longer than 5s because we turned the gps off during deep sleep)
 
 // -----------------------------------------------------------------------------
