@@ -223,6 +223,11 @@ inline double toRadians(double deg)
     return deg * PI / 180;
 }
 
+inline double toDegrees(double r)
+{
+    return r * 180 / PI;
+}
+
 /**
      * Computes the bearing in degrees between two points on Earth.  Ported from my old Gaggle android app.
      *
@@ -285,11 +290,41 @@ void drawLine(OLEDDisplay *d, const Point &p1, const Point &p2)
     d->drawLine(p1.x, p1.y, p2.x, p2.y);
 }
 
+/**
+ * Given a recent lat/lon return a guess of the heading the user is walking on.
+ * 
+ * We keep a series of "after you've gone 10 meters, what is your heading since the last reference point?"
+ */
+float estimatedHeading(double lat, double lon)
+{
+    static double oldLat, oldLon;
+    static float b;
+
+    if (oldLat == 0)
+    {
+        // just prepare for next time
+        oldLat = lat;
+        oldLon = lon;
+
+        return b;
+    }
+
+    float d = latLongToMeter(oldLat, oldLon, lat, lon);
+    if (d < 10) // haven't moved enough, just keep current bearing
+        return b;
+
+    b = bearing(oldLat, oldLon, lat, lon);
+    oldLat = lat;
+    oldLon = lon;
+
+    return b;
+}
+
 #define COMPASS_DIAM 44
 
 /// We will skip one node - the one for us, so we just blindly loop over all nodes
 static size_t nodeIndex;
-static uint8_t prevFrame = 0;
+static int8_t prevFrame = -1;
 
 void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -345,7 +380,9 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
             snprintf(distStr, sizeof(distStr), "%.1f km", d / 1000);
 
         // FIXME, also keep the guess at the operators heading and add/substract it.  currently we don't do this and instead draw north up only.
-        headingRadian = bearing(p.latitude, p.longitude, op.latitude, op.longitude);
+        float bearingToOther = bearing(p.latitude, p.longitude, op.latitude, op.longitude);
+        float myHeading = estimatedHeading(p.latitude, p.longitude);
+        headingRadian = bearingToOther - myHeading;
     }
 
     const char *fields[] = {
@@ -631,6 +668,8 @@ void screen_set_frames()
 
     ui.setFrames(nonBootFrames, numframes);
     showingBluetooth = false;
+
+    prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list just changed)
 }
 
 /// handle press of the button

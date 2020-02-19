@@ -209,9 +209,6 @@ void MeshService::handleToRadio(std::string s)
                 tv.tv_usec =  0; 
 
                 gps.perhapsSetRTC(&tv);
-
-                // leave in for now FIXME
-                // r.variant.packet.payload.variant.position.time = 0; // Set it to the default value so that we don't waste bytes broadcasting it (other nodes will use their own time)
             }
 
             r.variant.packet.rx_time = gps.getValidTime(); // Record the time the packet arrived from the phone (so we update our nodedb for the local node)
@@ -238,6 +235,10 @@ void MeshService::handleToRadio(std::string s)
 void MeshService::sendToMesh(MeshPacket *p)
 {
     nodeDB.updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
+
+    // Strip out any time information before sending packets to other  nodes - to keep the wire size small (and because other nodes shouldn't trust it anyways)
+    if(p->has_payload && p->payload.which_variant == SubPacket_position_tag)
+        p->payload.variant.position.time = 0; 
 
     // Note: We might return !OK if our fifo was full, at that point the only option we have is to drop it
     if (radio.send(p) != ERRNO_OK)
