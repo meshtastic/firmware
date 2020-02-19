@@ -33,9 +33,11 @@ MeshRadio::MeshRadio(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &_r
       rxDest(_rxDest),
       txQueue(MAX_TX_QUEUE)
 {
+  myNodeInfo.num_channels = NUM_CHANNELS;
+
   //radioConfig.modem_config = RadioConfig_ModemConfig_Bw125Cr45Sf128;  // medium range and fast
-  channelSettings.modem_config = ChannelSettings_ModemConfig_Bw500Cr45Sf128;  // short range and fast, but wide bandwidth so incompatible radios can talk together
-  //radioConfig.modem_config = RadioConfig_ModemConfig_Bw125Cr48Sf4096; // slow and long range
+  //channelSettings.modem_config = ChannelSettings_ModemConfig_Bw500Cr45Sf128;  // short range and fast, but wide bandwidth so incompatible radios can talk together
+  channelSettings.modem_config = ChannelSettings_ModemConfig_Bw125Cr48Sf4096; // slow and long range
 
   channelSettings.tx_power = 23;
   channelSettings.channel_num = DEFAULT_CHANNEL_NUM;
