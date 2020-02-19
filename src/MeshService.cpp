@@ -218,7 +218,10 @@ void MeshService::handleToRadio(std::string s)
 void MeshService::sendToMesh(MeshPacket *p)
 {
     nodeDB.updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
-    assert(radio.send(p) == ERRNO_OK);
+
+    // Note: We might return !OK if our fifo was full, at that point the only option we have is to drop it
+    if(radio.send(p) != ERRNO_OK)
+        DEBUG_MSG("Dropped packet because send queue was full!");
 }
 
 MeshPacket *MeshService::allocForSending()

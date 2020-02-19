@@ -7,6 +7,9 @@
 #include "PointerQueue.h"
 #include "MeshTypes.h"
 
+#define MAX_TX_QUEUE 16 // max number of packets which can be waiting for transmission
+
+
 /**
  * A version of the RF95 driver which is smart enough to manage packets via queues (no polling or blocking in user threads!)
  */

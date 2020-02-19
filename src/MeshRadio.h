@@ -49,8 +49,6 @@
 #error "HW_VERSION not set"
 #endif 
 
-#define MAX_TX_QUEUE 8 // max number of packets which can be waiting for transmission
-
 
 /**
  * A raw low level interface to our mesh.  Only understands nodenums and bytes (not protobufs or node ids)
