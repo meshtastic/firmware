@@ -11,9 +11,8 @@
 
 #define DEFAULT_CHANNEL_NUM 3 // we randomly pick one
 
-
 /// 16 bytes of random PSK for our _public_ default channel that all devices power up on
-static const uint8_t defaultpsk[] = { 0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59, 0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0xbf };
+static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59, 0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0xbf};
 
 /**
  * ## LoRaWAN for North America
@@ -27,11 +26,8 @@ Channel zero starts at 903.08 MHz center frequency.
 */
 
 MeshRadio::MeshRadio(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &_rxDest)
-    : rf95(NSS_GPIO, DIO0_GPIO),
-      manager(rf95),
-      pool(_pool),
-      rxDest(_rxDest),
-      txQueue(MAX_TX_QUEUE)
+    : rf95(_pool, _rxDest),
+      manager(rf95)
 {
   myNodeInfo.num_channels = NUM_CHANNELS;
 
@@ -81,15 +77,15 @@ bool MeshRadio::init()
 
 void MeshRadio::reloadConfig()
 {
-  rf95.setModeIdle();
+  rf95.setModeIdle(); // Need to be idle before doing init
 
   // Set up default configuration
   // No Sync Words in LORA mode.
   rf95.setModemConfig((RH_RF95::ModemConfigChoice)channelSettings.modem_config); // Radio default
-                                                                             //    setModemConfig(Bw125Cr48Sf4096); // slow and reliable?
+                                                                                 //    setModemConfig(Bw125Cr48Sf4096); // slow and reliable?
   // rf95.setPreambleLength(8);           // Default is 8
 
-  assert(channelSettings.channel_num < NUM_CHANNELS); // If the phone tries to tell us to use an illegal channel then panic 
+  assert(channelSettings.channel_num < NUM_CHANNELS); // If the phone tries to tell us to use an illegal channel then panic
 
   // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM
   float center_freq = CH0 + CH_SPACING * channelSettings.channel_num;
@@ -108,11 +104,14 @@ void MeshRadio::reloadConfig()
   rf95.setTxPower(channelSettings.tx_power, false);
 
   DEBUG_MSG("Set radio: name=%s. config=%u, ch=%d, txpower=%d\n", channelSettings.name, channelSettings.modem_config, channelSettings.channel_num, channelSettings.tx_power);
+
+  // Done with init tell radio to start receiving
+  rf95.setModeRx();
 }
 
-
-void MeshRadio::sleep() {
-  // we no longer care about interrupts from this device 
+void MeshRadio::sleep()
+{
+  // we no longer care about interrupts from this device
   rf95.prepareDeepSleep();
 
   // FIXME - leave the device state in rx mode instead
@@ -121,10 +120,15 @@ void MeshRadio::sleep() {
 
 ErrorCode MeshRadio::send(MeshPacket *p)
 {
+#if 1
+  return rf95.send(p);
+#else
   DEBUG_MSG("enquing packet for send from=0x%x, to=0x%x\n", p->from, p->to);
   return txQueue.enqueue(p, 0); // nowait
+#endif
 }
 
+#if 0
 ErrorCode MeshRadio::sendTo(NodeNum dest, const uint8_t *buf, size_t len)
 {
   // We must do this before each send, because we might have just changed our nodenum
@@ -154,6 +158,7 @@ void MeshRadio::handleReceive(MeshPacket *mp)
   int res = rxDest.enqueue(mp, 0); // NOWAIT - fixme, if queue is full, delete older messages
   assert(res == pdTRUE);
 }
+#endif
 
 void MeshRadio::loop()
 {
@@ -168,8 +173,9 @@ static int16_t packetnum = 0;  // packet counter, we increment per xmission
   assert(sendTo(NODENUM_BROADCAST, (uint8_t *)radiopacket, sizeof(radiopacket)) == ERRNO_OK);
 #endif
 
+#if 0
   /// A temporary buffer used for sending/receving packets, sized to hold the biggest buffer we might need
-  #define MAX_RHPACKETLEN 251
+#define MAX_RHPACKETLEN 251
   static uint8_t radiobuf[MAX_RHPACKETLEN];
   uint8_t rxlen;
   uint8_t srcaddr, destaddr, id, flags;
@@ -213,7 +219,9 @@ static int16_t packetnum = 0;  // packet counter, we increment per xmission
       handleReceive(mp);
     }
   }
+#endif
 
+#if 0
   // Poll to see if we need to send any packets
   MeshPacket *txp = txQueue.dequeuePtr(0); // nowait
   if (txp)
@@ -234,4 +242,5 @@ static int16_t packetnum = 0;  // packet counter, we increment per xmission
 
     DEBUG_MSG("Done with send\n");
   }
+#endif
 }

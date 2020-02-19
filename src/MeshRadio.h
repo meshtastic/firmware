@@ -1,6 +1,6 @@
 #pragma once
 
-#include <RH_RF95.h>
+#include "CustomRF95.h"
 #include <RHMesh.h>
 #include "MemoryPool.h"
 #include "mesh.pb.h"
@@ -80,16 +80,12 @@ public:
     void reloadConfig();
 
 private:
-    RH_RF95 rf95; // the raw radio interface
+    CustomRF95 rf95; // the raw radio interface
 
     // RHDatagram manager;
     // RHReliableDatagram manager; // don't use mesh yet
     RHMesh manager;
     // MeshRXHandler rxHandler;
-
-    MemoryPool<MeshPacket> &pool;
-    PointerQueue<MeshPacket> &rxDest;
-    PointerQueue<MeshPacket> txQueue;
 
     /// low level send, might block for mutiple seconds
     ErrorCode sendTo(NodeNum dest, const uint8_t *buf, size_t len);
