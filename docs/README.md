@@ -34,4 +34,5 @@ is optional, but highly recommended.
 
 We don't yet distribute prebuilt binaries.  But soon (by Feb 22) we will have a file that you can easily install on your radio via USB.  Once our software is installed, all future software updates happen over bluetooth from your phone.
 
-For a nice 3D printable case see this [design](https://www.thingiverse.com/thing:3773717) by [bsiege](https://www.thingiverse.com/bsiege).
+For a nice TTGO 3D printable case see this [design](https://www.thingiverse.com/thing:3773717) by [bsiege](https://www.thingiverse.com/bsiege).
+For a nice Heltec 3D printable case see this [design](https://www.thingiverse.com/thing:3125854) by [ornotermes](https://www.thingiverse.com/ornotermes).

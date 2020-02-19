@@ -64,17 +64,18 @@ public:
 
     void onRead(BLECharacteristic *c)
     {
-        DEBUG_MSG("Got nodeinfo read\n");
         const NodeInfo *info = nodeDB.readNextInfo();
 
         if (info)
         {
+            DEBUG_MSG("Sending nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s\n", info->num, info->position.time, info->user.id, info->user.long_name);
             size_t numbytes = pb_encode_to_bytes(trBytes, sizeof(trBytes), NodeInfo_fields, info);
             c->setValue(trBytes, numbytes);
         }
         else
         {
             c->setValue(trBytes, 0); // Send an empty response
+            DEBUG_MSG("Done sending nodeinfos\n");
         }
     }
 

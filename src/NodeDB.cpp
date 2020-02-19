@@ -76,7 +76,6 @@ void NodeDB::init()
     NodeInfo *info = getOrCreateNode(getNodeNum());
     info->user = owner;
     info->has_user = true;
-    info->last_seen = 0; // haven't heard a real message yet
 
     if (!FS.begin(true)) // FIXME - do this in main?
     {
@@ -198,9 +197,10 @@ const NodeInfo *NodeDB::readNextInfo()
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const NodeInfo *n)
 {
-    uint32_t now = gps.getTime() / 1000;
+    uint32_t now = gps.getTime();
 
-    int delta = (int)(now - n->last_seen);
+    uint32_t last_seen = n->position.time;
+    int delta = (int)(now - last_seen);
     if (delta < 0) // our clock must be slightly off still - not set from GPS yet
         delta = 0;
 
@@ -236,16 +236,23 @@ void NodeDB::updateFrom(const MeshPacket &mp)
         if (oldNumNodes != *numNodes)
             updateGUI = true; // we just created a nodeinfo
 
-        if (mp.rx_time) // if the packet has a valid timestamp use it
-            info->last_seen = mp.rx_time;
+        if (mp.rx_time)
+        {                              // if the packet has a valid timestamp use it to update our last_seen
+            info->has_position = true; // at least the time is valid
+            info->position.time = mp.rx_time;
+        }
 
         switch (p.which_variant)
         {
-        case SubPacket_position_tag:
+        case SubPacket_position_tag: {
+            // we carefully preserve the old time, because we always trust our local timestamps more
+            uint32_t oldtime = info->position.time;
             info->position = p.variant.position;
+            info->position.time = oldtime;
             info->has_position = true;
             updateGUIforNode = info;
             break;
+        }
 
         case SubPacket_data_tag:
         {
