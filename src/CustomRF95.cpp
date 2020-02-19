@@ -5,8 +5,6 @@
 #include "assert.h"
 #include "NodeDB.h"
 
-#define MAX_TX_QUEUE 8 // max number of packets which can be waiting for transmission
-
 /// A temporary buffer used for sending/receving packets, sized to hold the biggest buffer we might need
 #define MAX_RHPACKETLEN 251
 static uint8_t radiobuf[MAX_RHPACKETLEN];
@@ -47,7 +45,12 @@ ErrorCode CustomRF95::send(MeshPacket *p)
     else
     {
         DEBUG_MSG("enquing packet for send from=0x%x, to=0x%x\n", p->from, p->to);
-        return txQueue.enqueue(p, 0) ? ERRNO_OK : ERRNO_UNKNOWN; // nowait
+        ErrorCode res = txQueue.enqueue(p, 0) ? ERRNO_OK : ERRNO_UNKNOWN;
+
+        if (res != ERRNO_OK) // we weren't able to queue it, so we must drop it to prevent leaks
+            pool.release(p);
+
+        return res;
     }
 }
 
