@@ -15,19 +15,72 @@ This project is currently pre-alpha, but if you have questions please join our c
 
 This software is 100% open source and developed by a group of hobbyist experimenters.  No warranty is provided, if you'd like to improve it - we'd love your help.  Please post in the chat.  
 
-## Meshtastic Android app
-The source code for the (optional) Meshtastic Android app is [here](https://github.com/geeksville/Meshtastic-Android).
-Soon our first alpha release of will be released here:
-[![Download at https://play.google.com/store/apps/details?id=com.geeksville.mesh](https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png)](https://play.google.com/store/apps/details?id=com.geeksville.mesh&referrer=utm_source%3Dgithub%26utm_medium%3Desp32-readme%26utm_campaign%3Dmeshtastic-esp32%2520readme%26anid%3Dadmob&pcampaignid=pcampaignidMKT-Other-global-all-co-prtnr-py-PartBadge-Mar2515-1)
-
 ## Supported hardware
 We currently support two brands of radios.  The [TTGO T-Beam](https://www.aliexpress.com/item/4000119152086.html) and the [Heltec LoRa 32](https://heltec.org/project/wifi-lora-32/).  Most users should buy the T-Beam and a 18650 battery (total cost less than $35).  Make
 sure to buy the frequency range which is legal for your country.  For the USA, you should buy the 915MHz version.  Getting a version that include a screen
 is optional, but highly recommended.
 
-We don't yet distribute prebuilt binaries.  But soon (by Feb 22) we will have a file that you can fairly easily install on your radio via USB.  Once our software is installed, all future software updates happen over bluetooth from your phone.
+We don't yet distribute prebuilt binaries.  But soon (by Feb 22) we will have a file that you can fairly easily install on your radio via USB. 
 
 For a nice 3D printable case see this [design](https://www.thingiverse.com/thing:3773717) by [bsiege](https://www.thingiverse.com/bsiege).
+
+## Installing the firmware
+Prebuilt binaries for the supported radios is available in our [releases](https://github.com/geeksville/Meshtastic-esp32/releases).  Your initial installation has to happen over USB from your Mac, Windows or Linux PC.   Once our software is installed, all future software updates happen over bluetooth from your phone.
+
+The instructions currently require a few commmand lines, but it should be pretty straightforward.  Please post comments on our group chat if you have problems or successes.  Steps to install:
+
+1. Purchase a radio (see above) with the correct frequencies for your country (915MHz for US or JP, 470MHz for CN, 870MHz for EU).
+2. Install "pip".  Pip is the python package manager we use to get the esptool installer app.  Instructions [here](https://www.makeuseof.com/tag/install-pip-for-python/).
+3. Run "pip install --upgrade esptool" to get esptool installed on your machine
+4. Connect your radio to your USB port
+5. Confirm that your device is talking to your PC by running "esptool.py chip_id".  You should see something like:
+```
+mydir$ esptool.py chip_id
+esptool.py v2.6
+Found 2 serial ports
+Serial port /dev/ttyUSB0
+Connecting....
+Detecting chip type... ESP32
+Chip is ESP32D0WDQ6 (revision 1)
+Features: WiFi, BT, Dual Core, 240MHz, VRef calibration in efuse, Coding Scheme None
+MAC: 24:6f:28:b5:36:71
+Uploading stub...
+Running stub...
+Stub running...
+Warning: ESP32 has no Chip ID. Reading MAC instead.
+MAC: 24:6f:28:b5:36:71
+Hard resetting via RTS pin...
+```
+6. Install the correct firmware for your board with "esptool.py write_flash 0x10000 firmware-_board_-_country_.bin".  For instance "esptool.py write_flash 0x10000 release/firmware-HELTEC-US-0.0.3.bin". You should see something like this:
+```
+~/development/meshtastic/meshtastic-esp32$ esptool.py write_flash 0x10000 release/firmware-HELTEC-US-0.0.3.bin 
+esptool.py v2.6
+Found 2 serial ports
+Serial port /dev/ttyUSB0
+Connecting......
+Detecting chip type... ESP32
+Chip is ESP32D0WDQ6 (revision 1)
+Features: WiFi, BT, Dual Core, 240MHz, VRef calibration in efuse, Coding Scheme None
+MAC: 24:6f:28:b5:36:71
+Uploading stub...
+Running stub...
+Stub running...
+Configuring flash size...
+Auto-detected Flash size: 8MB
+Compressed 1184800 bytes to 652635...
+Wrote 1184800 bytes (652635 compressed) at 0x00010000 in 57.6 seconds (effective 164.5 kbit/s)...
+Hash of data verified.
+
+Leaving...
+Hard resetting via RTS pin...
+```
+7. The board will boot and show the Meshtastic logo.
+8. Please post a comment on our chat so we know if these instructions worked for you ;-).  If you find bugs/have-questions post there also - we will be rapidly iterating over the next few weeks.
+
+## Meshtastic Android app
+The source code for the (optional) Meshtastic Android app is [here](https://github.com/geeksville/Meshtastic-Android).
+Soon our first alpha release of will be released here:
+[![Download at https://play.google.com/store/apps/details?id=com.geeksville.mesh](https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png)](https://play.google.com/store/apps/details?id=com.geeksville.mesh&referrer=utm_source%3Dgithub%26utm_medium%3Desp32-readme%26utm_campaign%3Dmeshtastic-esp32%2520readme%26anid%3Dadmob&pcampaignid=pcampaignidMKT-Other-global-all-co-prtnr-py-PartBadge-Mar2515-1)
 
 # Development
 The following sections are probably only interesting if you want to join us in developing the software.  

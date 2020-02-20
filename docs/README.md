@@ -16,6 +16,10 @@ This software is 100% open source and developed by a group of hobbyist experimen
 
 [![Youtube video demo](desk-video-screenshot.png)](https://www.youtube.com/watch?v=WlNbMbVZlHI "Meshtastic early demo")
 
+# Update 1
+
+* 02/20/2020 - Our first alpha release of the radio software is ready for early users.  If you'd like to try it, we'd love your feedback.  Click [here](https://github.com/geeksville/Meshtastic-esp32/blob/master/README.md) for instructions.
+
 ## Meshtastic Android app
 The source code for the Meshtastic Android app is [here](https://github.com/geeksville/Meshtastic-Android).
 Soon our first alpha release of will be released here:

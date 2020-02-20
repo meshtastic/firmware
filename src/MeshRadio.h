@@ -19,12 +19,12 @@
 #define NUM_CHANNELS_EU 10
 
 // CN channel settings
-#define CH0_CN          470f // MHz
+#define CH0_CN          470.0f // MHz
 #define CH_SPACING_CN   2.0f // MHz FIXME, this is just a guess for 470-510
 #define NUM_CHANNELS_CN 20
 
 // CN channel settings
-#define CH0_JP          920f // MHz
+#define CH0_JP          920.0f // MHz
 #define CH_SPACING_JP   0.5f // MHz FIXME, this is just a guess for 920-925
 #define NUM_CHANNELS_JP 10
 
