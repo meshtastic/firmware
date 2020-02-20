@@ -7,7 +7,8 @@
 HardwareSerial _serial_gps(GPS_SERIAL_NUM);
 uint32_t timeStartMsec;  // Once we have a GPS lock, this is where we hold the initial msec clock that corresponds to that time
 uint64_t zeroOffsetSecs; // GPS based time in secs since 1970 - only updated once on initial lock
-bool timeSetFromGPS;     // We only reset our time once per wake
+
+RTC_DATA_ATTR bool timeSetFromGPS;     // We only reset our time once per _boot_ after that point just run from the internal clock (even across sleeps)
 
 GPS gps;
 
@@ -32,7 +33,7 @@ void GPS::readFromRTC()
     {
         uint32_t now = millis();
 
-        DEBUG_MSG("Read RTC time as %ld (cur millis %u)\n", tv.tv_sec, now);
+        DEBUG_MSG("Read RTC time as %ld (cur millis %u) valid=%d\n", tv.tv_sec, now, timeSetFromGPS);
         timeStartMsec = now;
         zeroOffsetSecs = tv.tv_sec;
     }
