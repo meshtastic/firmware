@@ -10,8 +10,8 @@ will optionally work with your phone, but no phone is required.
 
 ### Uses
 
-* Outdoor sports where cellular coverage is limited. (Hiking, Skiing, Paragliding etc..)
-* Applications where closed source GPS communicators just won't cut it (it is easy to add features for pilots etc...)
+* Outdoor sports where cellular coverage is limited. (Hiking, Skiing, Boating, Paragliding, Gliders etc..)
+* Applications where closed source GPS communicators just won't cut it (it is easy to add features for glider pilots etc...)
 * Secure long-range communication within groups without depending on cellular providers
 
 ### Features
@@ -37,15 +37,16 @@ This software is 100% open source and developed by a group of hobbyist experimen
 * 02/20/2020 - Our first alpha release of the radio software is ready for early users.  If you'd like to try it, we'd love your feedback.  Click [here](https://github.com/geeksville/Meshtastic-esp32/blob/master/README.md) for instructions.
 
 ## Meshtastic Android app
-The source code for the Meshtastic Android app is [here](https://github.com/geeksville/Meshtastic-Android).
-Soon our first alpha release of will be released here:
+Soon our (optional) companion Android application will be released here:
 
 [![Download at https://play.google.com/store/apps/details?id=com.geeksville.mesh](https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png)](https://play.google.com/store/apps/details?id=com.geeksville.mesh&referrer=utm_source%3Dhomepage%26anid%3Dadmob)
 
-If you would like to join our bleeding-edge alpha test group for this app, we'd love to have you.  Three steps:
+If you would like to join our super bleeding-edge alpha test group for this app, we'd love to have you.  Three steps:
 1. Join [this Google group](https://groups.google.com/forum/#!forum/meshtastic-alpha-testers) with the account you use in Google Play.
 2. Go to this [URL](https://play.google.com/apps/testing/com.geeksville.mesh) to opt-in to the alpha test.
 3. If you encounter any problems or have questions, post in our gitter chat and we'll help.
+
+If you'd like to help with development, the source code for the Android app is [here](https://github.com/geeksville/Meshtastic-Android).
 
 ## Supported hardware
 We currently support two brands of radios.  The [TTGO T-Beam](https://www.aliexpress.com/item/4000119152086.html) and the [Heltec LoRa 32](https://heltec.org/project/wifi-lora-32/).  Most users should buy the T-Beam and a 18650 battery (total cost less than $35).  Make
@@ -68,5 +69,6 @@ Most of these problems should be solved by the beta release:
 * The Android API needs to be documented better
 * The Bluetooth API needs to be documented better 
 * The mesh protocol is turned off for now, currently we only send packets one hop distant
+* No one has written an iOS app yet ;-)
 
-For more details see the [device software TODO](https://github.com/geeksville/Meshtastic-esp32/blob/master/TODO.md) or the Android app [TODO](https://github.com/geeksville/Meshtastic-Android/blob/master/TODO.md).
+For more details see the [device software TODO](https://github.com/geeksville/Meshtastic-esp32/blob/master/TODO.md) or the [Android app TODO](https://github.com/geeksville/Meshtastic-Android/blob/master/TODO.md).
