@@ -21,6 +21,7 @@ will optionally work with your phone, but no phone is required.
 
 * Very long battery life (should be about 8 days with the beta software)
 * Built in GPS and LORA radio, but we manage the radio automatically for you
+* Long range - a few miles per node but each node will forward packets as needed
 * Shows direction and distance to all members of your channel
 * Open and extensible codebase supporting multiple hardware vendors - no lock in to one vendor
 * Communication API for bluetooth devices (such as our Android app) to use the mesh
