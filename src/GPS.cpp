@@ -5,9 +5,9 @@
 
 // stuff that really should be in in the instance instead...
 HardwareSerial _serial_gps(GPS_SERIAL_NUM);
-uint32_t timeStartMsec; // Once we have a GPS lock, this is where we hold the initial msec clock that corresponds to that time
-uint64_t zeroOffsetSecs;    // GPS based time in secs since 1970 - only updated once on initial lock
-bool timeSetFromGPS;    // We only reset our time once per wake
+uint32_t timeStartMsec;  // Once we have a GPS lock, this is where we hold the initial msec clock that corresponds to that time
+uint64_t zeroOffsetSecs; // GPS based time in secs since 1970 - only updated once on initial lock
+bool timeSetFromGPS;     // We only reset our time once per wake
 
 GPS gps;
 
@@ -50,6 +50,8 @@ void GPS::perhapsSetRTC(const struct timeval *tv)
     }
 }
 
+#include <time.h>
+
 // for the time being we need to rapidly read from the serial port to prevent overruns
 void GPS::loop()
 {
@@ -65,11 +67,20 @@ void GPS::loop()
     {
         struct timeval tv;
 
-        // FIXME, this is a shit not right version of the standard def of unix time!!!
-        tv.tv_sec = time.second() + time.minute() * 60 + time.hour() * 60 * 60 +
-                    24 * 60 * 60 * (date.month() * 31 + date.day() + 365 * (date.year() - 1970));
-
-        tv.tv_usec = time.centisecond() * (10 / 1000);
+        /* Convert to unix time 
+        The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z). 
+        */
+        struct tm t;
+        t.tm_sec = time.second();
+        t.tm_min = time.minute();
+        t.tm_hour = time.hour();
+        t.tm_mday = date.day();
+        t.tm_mon = date.month() - 1;
+        t.tm_year = date.year() - 1900;
+        t.tm_isdst = false;
+        time_t res = mktime(&t);
+        tv.tv_sec = res;
+        tv.tv_usec = 0; // time.centisecond() * (10 / 1000);
 
         perhapsSetRTC(&tv);
     }

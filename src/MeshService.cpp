@@ -145,6 +145,9 @@ void MeshService::handleFromRadio(MeshPacket *mp)
                 releaseToPool(d);
         }
         assert(toPhoneQueue.enqueue(mp, 0) == pdTRUE); // FIXME, instead of failing for full queue, delete the oldest mssages
+
+        if(mp->payload.want_response)
+            sendNetworkPing(mp->from);
     }
     else
         DEBUG_MSG("Dropping vetoed User message\n");
@@ -206,7 +209,7 @@ void MeshService::handleToRadio(std::string s)
 
                 // FIXME, this is a shit not right version of the standard def of unix time!!!
                 tv.tv_sec = secs;
-                tv.tv_usec =  0; 
+                tv.tv_usec = 0;
 
                 gps.perhapsSetRTC(&tv);
             }
@@ -237,12 +240,18 @@ void MeshService::sendToMesh(MeshPacket *p)
     nodeDB.updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
 
     // Strip out any time information before sending packets to other  nodes - to keep the wire size small (and because other nodes shouldn't trust it anyways)
-    if(p->has_payload && p->payload.which_variant == SubPacket_position_tag)
-        p->payload.variant.position.time = 0; 
+    if (p->has_payload && p->payload.which_variant == SubPacket_position_tag)
+        p->payload.variant.position.time = 0;
 
-    // Note: We might return !OK if our fifo was full, at that point the only option we have is to drop it
-    if (radio.send(p) != ERRNO_OK)
-        DEBUG_MSG("Dropped packet because send queue was full!\n");
+    // If the phone sent a packet just to us, don't send it out into the network
+    if (p->to == nodeDB.getNodeNum())
+        DEBUG_MSG("Dropping locally processed message\n");
+    else
+    {
+        // Note: We might return !OK if our fifo was full, at that point the only option we have is to drop it
+        if (radio.send(p) != ERRNO_OK)
+            DEBUG_MSG("Dropped packet because send queue was full!\n");
+    }
 }
 
 MeshPacket *MeshService::allocForSending()
@@ -257,18 +266,18 @@ MeshPacket *MeshService::allocForSending()
     return p;
 }
 
-void MeshService::sendNetworkPing()
+void MeshService::sendNetworkPing(NodeNum dest)
 {
     NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
     assert(node);
 
     if (node->has_position)
-        sendOurPosition();
+        sendOurPosition(dest);
     else
-        sendOurOwner();
+        sendOurOwner(dest);
 }
 
-void MeshService::sendOurPosition()
+void MeshService::sendOurPosition(NodeNum dest)
 {
     NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
     assert(node);
@@ -276,6 +285,7 @@ void MeshService::sendOurPosition()
 
     // Update our local node info with our position (even if we don't decide to update anyone else)
     MeshPacket *p = allocForSending();
+    p->to = dest;
     p->payload.which_variant = SubPacket_position_tag;
     p->payload.variant.position = node->position;
     // FIXME - for now we are leaving this in the sent packets (for debugging)
