@@ -53,6 +53,9 @@ bool packetSent, packetQueued;
 RTC_DATA_ATTR int bootCount = 0;
 esp_sleep_source_t wakeCause; // the reason we booted this time
 
+     #define xstr(s) str(s)
+     #define str(s) #s
+
 // -----------------------------------------------------------------------------
 // Application
 // -----------------------------------------------------------------------------
@@ -382,7 +385,7 @@ void setup()
 #endif
 
   // Hello
-  DEBUG_MSG(APP_NAME " " APP_VERSION "\n");
+  DEBUG_MSG("%s %s\n", xstr(APP_NAME), str(APP_VERSION));
 
   // Don't init display if we don't have one or we are waking headless due to a timer event
   if (wakeCause == ESP_SLEEP_WAKEUP_TIMER)
@@ -402,7 +405,7 @@ void setup()
   if (useBluetooth)
   {
     DEBUG_MSG("Starting bluetooth\n");
-    BLEServer *serve = initBLE(getDeviceName(), HW_VENDOR, APP_VERSION); // FIXME, use a real name based on the macaddr
+    BLEServer *serve = initBLE(getDeviceName(), HW_VENDOR, str(APP_VERSION)); // FIXME, use a real name based on the macaddr
     createMeshBluetoothService(serve);
 
     // Start advertising - this must be done _after_ creating all services

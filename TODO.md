@@ -1,8 +1,6 @@
 # High priority
 Items to complete before the first alpha release.
 
-* rx signal measurements -3 marginal, -9 bad, 10 great
-* only send 10% of phone gps positions on the network
 * post sample video to signal forum
 * support non US frequencies
 * make an install script to let novices install software on their boards
@@ -17,6 +15,7 @@ Items to complete before the first alpha release.
 # Medium priority
 Items to complete before the first beta release.
 
+* rx signal measurements -3 marginal, -9 bad, 10 great, -10 means almost unusable.  So scale this into % signal strength.  preferably as a graph, with an X indicating loss of comms.  
 * assign every "channel" a random shared 8 bit sync word (per 4.2.13.6 of datasheet) - use that word to filter packets before even checking CRC.  This will ensure our CPU will only wake for packets on our "channel"  
 * Note: we do not do address filtering at the chip level, because we might need to route for the mesh
 * Use the Periodic class for both position and user periodic broadcasts
@@ -39,6 +38,7 @@ Items to complete before the first beta release.
 # Low power consumption tasks
 General ideas to hit the power draws our spreadsheet predicts.  Do the easy ones before beta, the last 15% can be done after 1.0.
 
+* don't even power on the gps until someone else wants our position, just stay in lora deep sleep until press or rxpacket (except for once an hour updates)
 * (possibly bad idea - better to have lora radio always listen - check spreadsheet) have every node wake at the same tick and do their position syncs then go back to deep sleep
 * lower BT announce interval to save battery
 * change to use RXcontinuous mode and config to drop packets with bad CRC (see section 6.4 of datasheet) - I think this is already the case
@@ -74,6 +74,12 @@ FIXME - instead look for standard solutions.  this approach seems really subopti
 * if a node can see someone I missed (and they are the best person to see that node), they reply (unidirectionally) with the missing nodes and their rssis (other nodes might sniff (and update their db) based on this reply but they don't have to)
 * given that the max number of nodes in this mesh will be like 20 (for normal cases), I bet globally updating this db of "nodenums and who has the best rssi for packets from that node" would be useful
 * once the global DB is shared, when a node wants to broadcast, it just sends out its broadcast . the first level receivers then make a decision "am I the best to rebroadcast to someone who likely missed this packet?" if so, rebroadcast
+
+# approach 3
+* when a node X wants to know other nodes positions, it broadcasts its position with want_replies=true.  Then each of the nodes that received that request broadcast their replies (possibly by using special timeslots?)
+* all nodes constantly update their local db based on replies they witnessed.
+* after 10s (or whatever) if node Y notices that it didn't hear a reply from node Z (that Y has heard from recently ) to that initial request, that means Z never heard the request from X.  Node Y will reply to X on Z's behalf.
+* could this work for more than one hop?  Is more than one hop needed?  Could it work for sending messages (i.e. for a msg sent to Z with want-reply set). 
 
 # Pre-beta priority
 During the beta timeframe the following improvements 'would be nice' (and yeah - I guess some of these items count as features, but it is a hobby project ;-) )
