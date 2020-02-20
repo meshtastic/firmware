@@ -35,6 +35,7 @@ Items to complete before the first beta release.
 * sendToMesh can currently block for a long time, instead have it just queue a packet for a radio freertos thread
 * How do avalanche beacons work?  Could this do that as well?  possibly by using beacon mode feature of the RF95?
 * use std::map<NodeInfo*, std::string> in node db
+* make a HAM build: yep - that's a great idea.  I'll add it to the TODO.  should be pretty painless - just a new frequency list, a bool to say 'never do encryption' and use hte callsign as that node's unique id.  -from Girts
 
 # Low power consumption tasks
 General ideas to hit the power draws our spreadsheet predicts.  Do the easy ones before beta, the last 15% can be done after 1.0.
