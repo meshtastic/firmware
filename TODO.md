@@ -1,6 +1,8 @@
 # High priority
 Items to complete before the first alpha release.
 
+* rx signal measurements -3 marginal, -9 bad, 10 great
+* only send 10% of phone gps positions on the network
 * post sample video to signal forum
 * support non US frequencies
 * make an install script to let novices install software on their boards
@@ -178,3 +180,4 @@ Items after the first final candidate release.
 * don't send our times to other nodes
 * don't trust times from other nodes
 * draw compass rose based off local walking track
+* add requestResponse optional bool - use for location broadcasts when sending tests

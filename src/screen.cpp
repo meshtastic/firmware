@@ -320,6 +320,10 @@ float estimatedHeading(double lat, double lon)
     return b;
 }
 
+/// Sometimes we will have Position objects that only have a time, so check for valid lat/lon
+bool hasPosition(NodeInfo *n) {
+    return n->has_position && (n->position.latitude != 0 || n->position.longitude != 0);
+}
 #define COMPASS_DIAM 44
 
 /// We will skip one node - the one for us, so we just blindly loop over all nodes
@@ -370,7 +374,7 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
     *distStr = 0; // might not have location data
     float headingRadian = simRadian;
     NodeInfo *ourNode = nodeDB.getNode(nodeDB.getNodeNum());
-    if (ourNode && ourNode->has_position && node->has_position)
+    if (ourNode && hasPosition(ourNode) && hasPosition(node))
     {
         Position &op = ourNode->position, &p = node->position;
         float d = latLongToMeter(p.latitude, p.longitude, op.latitude, op.longitude);
