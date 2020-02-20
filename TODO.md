@@ -3,7 +3,7 @@ Items to complete before the first alpha release.
 
 * post sample video to signal forum
 * support non US frequencies
-* make an install script to let novices install software on their boards
+
 * retest BLE software update for both board types
 * default to enter deep sleep if no LORA received for two hours (indicates user has probably left the meshS)
 * first alpha release, article writeup for hackaday
@@ -15,6 +15,7 @@ Items to complete before the first alpha release.
 # Medium priority
 Items to complete before the first beta release.
 
+* leave lora receiver always on
 * rx signal measurements -3 marginal, -9 bad, 10 great, -10 means almost unusable.  So scale this into % signal strength.  preferably as a graph, with an X indicating loss of comms.  
 * assign every "channel" a random shared 8 bit sync word (per 4.2.13.6 of datasheet) - use that word to filter packets before even checking CRC.  This will ensure our CPU will only wake for packets on our "channel"  
 * Note: we do not do address filtering at the chip level, because we might need to route for the mesh
@@ -84,6 +85,7 @@ FIXME - instead look for standard solutions.  this approach seems really subopti
 # Pre-beta priority
 During the beta timeframe the following improvements 'would be nice' (and yeah - I guess some of these items count as features, but it is a hobby project ;-) )
 
+* make an install script to let novices install software on their boards
 * fix the frequency error reading in the RF95 RX code (can't do floating point math in an ISR ;-) 
 * See CustomRF95::send and fix the problem of dropping partially received packets if we want to start sending
 * swap out speck for hw-accelerated full AES https://github.com/espressif/arduino-esp32/blob/master/tools/sdk/include/esp32/hwcrypto/aes.h
