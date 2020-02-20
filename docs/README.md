@@ -28,8 +28,6 @@ will optionally work with your phone, but no phone is required.
 * Communication API for bluetooth devices (such as our Android app) to use the mesh
 * Eventually (within a couple of months) we should have a modified version of Signal that works with this project.
  
-Typical time between recharging the radios should be about eight days.
- 
 This project is currently pre-alpha, but if you have questions please join our chat [![Join the chat at https://gitter.im/Meshtastic/community](https://badges.gitter.im/Meshtastic/community.svg)](https://gitter.im/Meshtastic/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge).
 
 This software is 100% open source and developed by a group of hobbyist experimenters.  No warranty is provided, if you'd like to improve it - we'd love your help.  Please post in the [chat](https://gitter.im/Meshtastic/community).  
