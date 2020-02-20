@@ -13,6 +13,7 @@ will optionally work with your phone, but no phone is required.
 * Outdoor sports where cellular coverage is limited. (Hiking, Skiing, Boating, Paragliding, Gliders etc..)
 * Applications where closed source GPS communicators just won't cut it (it is easy to add features for glider pilots etc...)
 * Secure long-range communication within groups without depending on cellular providers
+* Finding your lost kids ;-)
 
 [![Youtube video demo](desk-video-screenshot.png)](https://www.youtube.com/watch?v=WlNbMbVZlHI "Meshtastic early demo")
 
