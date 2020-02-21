@@ -323,7 +323,8 @@ float estimatedHeading(double lat, double lon)
 }
 
 /// Sometimes we will have Position objects that only have a time, so check for valid lat/lon
-bool hasPosition(NodeInfo *n) {
+bool hasPosition(NodeInfo *n)
+{
     return n->has_position && (n->position.latitude != 0 || n->position.longitude != 0);
 }
 #define COMPASS_DIAM 44
@@ -529,7 +530,8 @@ void screen_setup()
     // The ESP is capable of rendering 60fps in 80Mhz mode
     // but that won't give you much time for anything else
     // run it in 160Mhz mode or just set it to 30 fps
-    ui.setTargetFPS(30);
+    // We do this now in loop()
+    // ui.setTargetFPS(30);
 
     // Customize the active and inactive symbol
     //ui.setActiveSymbol(activeSymbol);
@@ -574,11 +576,17 @@ static bool showingBluetooth;
 
 /// If set to true (possibly from an ISR), we should turn on the screen the next time our idle loop runs.
 static bool wakeScreen;
+static bool showingBootScreen = true; // start by showing the bootscreen
 
 uint32_t lastPressMs;
 
 /// Turn off the screen this many ms after last press or wake
 #define SCREEN_SLEEP_MS (60 * 1000)
+
+#define TRANSITION_FRAMERATE 60 // fps
+#define IDLE_FRAMERATE 10       // in fps
+
+static uint32_t targetFramerate = IDLE_FRAMERATE;
 
 uint32_t screen_loop()
 {
@@ -595,8 +603,16 @@ uint32_t screen_loop()
     if (!screenOn) // If we didn't just wake and the screen is still off, then bail
         return UINT32_MAX;
 
-    static bool showingBootScreen = true; // start by showing the bootscreen
-
+    // Switch to a low framerate (to save CPU) when we are not in transition
+    // but we should only call setTargetFPS when framestate changes, because otherwise that breaks
+    // animations.
+    if (targetFramerate != IDLE_FRAMERATE && ui.getUiState()->frameState == FIXED)
+    {
+        // oldFrameState = ui.getUiState()->frameState;
+        DEBUG_MSG("Setting idle framerate\n");
+        targetFramerate = IDLE_FRAMERATE;
+        ui.setTargetFPS(targetFramerate);
+    }
     ui.update();
 
     // While showing the bluetooth pair screen all of our standard screen switching is stopped
@@ -629,8 +645,11 @@ uint32_t screen_loop()
         }
     }
 
-    // If we are scrolling do 30fps, otherwise just 1 fps (to save CPU)
-    return (ui.getUiState()->frameState == IN_TRANSITION ? 10 : 500);
+    // DEBUG_MSG("want fps %d, fixed=%d\n", targetFramerate, ui.getUiState()->frameState);
+    // If we are scrolling we need to be called soon, otherwise just 1 fps (to save CPU)
+    // We also ask to be called twice as fast as we really need so that any rounding errors still result
+    // with the correct framerate
+    return 1000 / targetFramerate / 2;
 }
 
 // Show the bluetooth PIN screen
@@ -687,6 +706,15 @@ void screen_press()
     wakeScreen = true;
 
     // If screen was off, just wake it, otherwise advance to next frame
-    if (screenOn)
+    // If we are in a transition, the press must have bounced, drop it.
+    if (screenOn && ui.getUiState()->frameState == FIXED)
+    {
         ui.nextFrame();
+
+        DEBUG_MSG("Setting fast framerate\n");
+
+        // We are about to start a transition so speed up fps
+        targetFramerate = TRANSITION_FRAMERATE;
+        ui.setTargetFPS(targetFramerate);
+    }
 }
