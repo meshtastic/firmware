@@ -60,6 +60,16 @@ esp_sleep_source_t wakeCause; // the reason we booted this time
 // Application
 // -----------------------------------------------------------------------------
 
+/**
+ * Control CPU core speed (80MHz vs 240MHz)
+ * 
+ * We leave CPU at full speed during init, but once loop is called switch to low speed (for a 50% power savings)
+ * 
+ */
+void setCPUFast(bool on) {
+  setCpuFrequencyMhz(on ? 240 : 80);
+}
+
 void doDeepSleep(uint64_t msecToWake)
 {
   DEBUG_MSG("Entering deep sleep for %llu seconds\n", msecToWake / 1000);
@@ -157,6 +167,8 @@ void doDeepSleep(uint64_t msecToWake)
  * enable modem sleep mode as needed and available.  Should lower our CPU current draw to an average of about 20mA.
  * 
  * per https://docs.espressif.com/projects/esp-idf/en/latest/api-reference/system/power_management.html
+ * 
+ * supposedly according to https://github.com/espressif/arduino-esp32/issues/475 this is already done in arduino
  */
 void enableModemSleep()
 {
@@ -412,7 +424,8 @@ void setup()
     serve->getAdvertising()->start();
   }
 
-  enableModemSleep();
+  // enableModemSleep();
+  setCPUFast(false);
 }
 
 uint32_t ledBlinker()

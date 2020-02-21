@@ -67,7 +67,7 @@ This project is still pretty young but moving at a pretty good pace.  Not all fe
 Most of these problems should be solved by the beta release:
 
 * Encryption is turned off for now
-* A number of (straightforward) software work items have to be completed before battery life matches our measurements, currently battery life is about two days.  Join us on chat if you want the spreadsheet on power measurements.
+* A number of (straightforward) software work items have to be completed before battery life matches our measurements, currently battery life is about two days.  Join us on chat if you want the spreadsheet of power measurements/calculations.
 * The current Android GUI is pretty ugly still
 * The Android API needs to be documented better
 * The Bluetooth API needs to be documented better 
