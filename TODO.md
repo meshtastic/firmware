@@ -2,7 +2,9 @@
 
 Items to complete before the first alpha release.
 
+* implement CustomRF95::canSleep
 * document rules for sleep wrt lora/bluetooth/screen/gps.  also: if I have text messages (only) for the phone, then give a few seconds in the hopes BLE can get it across before we have to go back to sleep.
+* wake from light sleep as needed for our next scheduled periodic task (needed for gps position broadcasts etc)
 * if the phone doesn't read fromradio mailbox within X seconds, assume the phone is gone and we can stop queing location msgs 
 for it (because it will redownload the nodedb when it comes back)
 * don't enter light sleep while the screen is on

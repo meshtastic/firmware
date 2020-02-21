@@ -35,6 +35,7 @@
 #include "Periodic.h"
 #include "esp32/pm.h"
 #include "esp_pm.h"
+#include "MeshRadio.h"
 
 #ifdef T_BEAM_V10
 #include "axp20x.h"
@@ -71,7 +72,8 @@ void setCPUFast(bool on)
   setCpuFrequencyMhz(on ? 240 : 80);
 }
 
-static void setLed(bool ledOn) {
+static void setLed(bool ledOn)
+{
 #ifdef LED_PIN
   // toggle the led so we can get some rough sense of how often loop is pausing
   digitalWrite(LED_PIN, ledOn);
@@ -98,7 +100,7 @@ void doDeepSleep(uint64_t msecToWake)
   screen_off(); // datasheet says this will draw only 10ua
 
   // Put radio in sleep mode (will still draw power but only 0.2uA)
-  service.radio.sleep();
+  service.radio.rf95.sleep();
 
   nodeDB.saveToDisk();
 
@@ -110,7 +112,7 @@ void doDeepSleep(uint64_t msecToWake)
   digitalWrite(VEXT_ENABLE, 1); // turn off the display power
 #endif
 
-setLed(false);
+  setLed(false);
 
 #ifdef T_BEAM_V10
   if (axp192_found)
@@ -175,6 +177,32 @@ setLed(false);
 
 #include "esp_bt_main.h"
 
+bool bluetoothOn = true; // we turn it on during setup() so default on
+
+void setBluetoothEnable(bool on)
+{
+  if (on != bluetoothOn)
+  {
+    DEBUG_MSG("Setting bluetooth enable=%d\n", on);
+
+    bluetoothOn = on;
+    if (on)
+    {
+      if (esp_bt_controller_enable(ESP_BT_MODE_BTDM) != ESP_OK)
+        DEBUG_MSG("error reenabling bt controller\n");
+      if (esp_bluedroid_enable() != ESP_OK)
+        DEBUG_MSG("error reenabling bluedroid\n");
+    }
+    else
+    {
+      if (esp_bluedroid_disable() != ESP_OK)
+        DEBUG_MSG("error disabling bluedroid\n");
+      if (esp_bt_controller_disable() != ESP_OK)
+        DEBUG_MSG("error disabling bt controller\n");
+    }
+  }
+}
+
 /**
  * enter light sleep (preserves ram but stops everything about CPU).
  * 
@@ -187,26 +215,20 @@ void doLightSleep(uint32_t sleepMsec = 20 * 1000) // FIXME, use a more reasonabl
 
   setLed(false); // Never leave led on while in light sleep
 
-  // ESP docs say we must disable bluetooth and wifi before light sleep
-  if (esp_bluedroid_disable() != ESP_OK)
-    DEBUG_MSG("error disabling bluedroid\n");
-  if (esp_bt_controller_disable() != ESP_OK)
-    DEBUG_MSG("error disabling bt controller\n");
+  // NOTE! ESP docs say we must disable bluetooth and wifi before light sleep
 
   // We want RTC peripherals to stay on
   esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
 
   gpio_wakeup_enable((gpio_num_t)BUTTON_PIN, GPIO_INTR_LOW_LEVEL); // when user presses, this button goes low
   gpio_wakeup_enable((gpio_num_t)DIO0_GPIO, GPIO_INTR_HIGH_LEVEL); // RF95 interrupt, active high
+#ifdef PMU_IRQ
+  gpio_wakeup_enable((gpio_num_t)PMU_IRQ, GPIO_INTR_LOW_LEVEL); // pmu irq
+#endif
   esp_sleep_enable_gpio_wakeup();
   esp_sleep_enable_timer_wakeup(sleepUsec);
   esp_light_sleep_start();
   DEBUG_MSG("Exit light sleep\n");
-
-  if (esp_bt_controller_enable(ESP_BT_MODE_BTDM) != ESP_OK)
-    DEBUG_MSG("error reenabling bt controller\n");
-  if (esp_bluedroid_enable() != ESP_OK)
-    DEBUG_MSG("error reenabling bluedroid\n");
 }
 
 /**
@@ -470,10 +492,8 @@ void setup()
     serve->getAdvertising()->start();
   }
 
-  // enableModemSleep();
-  setCPUFast(false);
-
-  // doLightSleep();
+  setBluetoothEnable(false);
+  setCPUFast(true); // FIXME, switch to low speed now
 }
 
 uint32_t ledBlinker()
@@ -482,7 +502,6 @@ uint32_t ledBlinker()
   ledOn ^= 1;
 
   setLed(ledOn);
-
 
   // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
   return isCharging ? 1000 : (ledOn ? 2 : 1000);
@@ -594,13 +613,12 @@ void loop()
   // FIXME - until button press handling is done by interrupt (see polling above) we can't sleep very long at all or buttons feel slow
   msecstosleep = 10;
 
-  bool bluetoothOn = false; // FIXME, leave bluetooth on per our power management policy (see doc)
-
   // while we have bluetooth on, we can't do light sleep, but once off stay in light_sleep all the time
   // we will wake from light sleep on button press or interrupt from the RF95 radio
-  if (!bluetoothOn && !is_screen_on())
+  if (!bluetoothOn && !is_screen_on() && service.radio.rf95.canSleep())
     doLightSleep(60 * 1000); // FIXME, wake up to briefly flash led, then go back to sleep (without repowering bluetooth)
-  else {
+  else
+  {
     delay(msecstosleep);
   }
 }

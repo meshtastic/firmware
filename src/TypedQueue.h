@@ -29,6 +29,11 @@ public:
         return uxQueueSpacesAvailable(h);
     }
 
+    bool isEmpty()
+    {
+        return uxQueueMessagesWaiting(h) == 0;
+    }
+
     // pdTRUE for success else failure
     BaseType_t enqueue(T x, TickType_t maxWait = portMAX_DELAY)
     {

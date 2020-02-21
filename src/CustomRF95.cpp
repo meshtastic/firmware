@@ -18,6 +18,20 @@ CustomRF95::CustomRF95(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &
 {
 }
 
+bool CustomRF95::canSleep()
+{
+    return (_mode == RHModeIdle || _mode == RHModeRx) && txQueue.isEmpty(); // FIXME - also check if we have started receiving
+}
+
+bool CustomRF95::sleep()
+{
+    // we no longer care about interrupts from this device
+    prepareDeepSleep();
+
+    // FIXME - leave the device state in rx mode instead
+    return RH_RF95::sleep();
+}
+
 bool CustomRF95::init()
 {
     bool ok = RH_RF95::init();
