@@ -88,6 +88,14 @@ static void setLed(bool ledOn)
 #endif
 }
 
+void setGPSPower(bool on)
+{
+#ifdef T_BEAM_V10
+  if (axp192_found)
+    axp.setPowerOutPut(AXP192_LDO3, on ? AXP202_ON : AXP202_OFF); // GPS main power
+#endif
+}
+
 void doDeepSleep(uint64_t msecToWake)
 {
   DEBUG_MSG("Entering deep sleep for %llu seconds\n", msecToWake / 1000);
@@ -126,7 +134,7 @@ void doDeepSleep(uint64_t msecToWake)
 
     // axp.setPowerOutPut(AXP192_LDO2, AXP202_OFF); // LORA radio
 
-    axp.setPowerOutPut(AXP192_LDO3, AXP202_OFF); // GPS main power
+    setGPSPower(false);
   }
 #endif
 
@@ -213,7 +221,8 @@ void doLightSleep(uint32_t sleepMsec = 20 * 1000) // FIXME, use a more reasonabl
   DEBUG_MSG("Enter light sleep\n");
   uint64_t sleepUsec = sleepMsec * 1000LL;
 
-  setLed(false); // Never leave led on while in light sleep
+  gps.prepareSleep(); // abandon in-process parsing
+  setLed(false);      // Never leave led on while in light sleep
 
   // NOTE! ESP docs say we must disable bluetooth and wifi before light sleep
 
@@ -621,7 +630,7 @@ void loop()
 
   // while we have bluetooth on, we can't do light sleep, but once off stay in light_sleep all the time
   // we will wake from light sleep on button press or interrupt from the RF95 radio
-  if (!bluetoothOn && !is_screen_on() && service.radio.rf95.canSleep())
+  if (!bluetoothOn && !is_screen_on() && service.radio.rf95.canSleep() && gps.canSleep())
     doLightSleep(60 * 1000); // FIXME, wake up to briefly flash led, then go back to sleep (without repowering bluetooth)
   else
   {

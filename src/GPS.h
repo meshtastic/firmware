@@ -32,6 +32,12 @@ public:
     /// If we haven't yet set our RTC this boot, set it from a GPS derived time
     void perhapsSetRTC(const struct timeval *tv);
 
+    /// Returns true if we think the board can enter deep or light sleep now (we might be trying to get a GPS lock)
+    bool canSleep();
+
+    /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
+    void prepareSleep();
+
 private:
     void readFromRTC();
 };
