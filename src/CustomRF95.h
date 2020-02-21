@@ -26,6 +26,16 @@ public:
      */
     CustomRF95(MemoryPool<MeshPacket> &pool, PointerQueue<MeshPacket> &rxDest);
 
+    /**
+     * Return true if we think the board can go to sleep (i.e. our tx queue is empty, we are not sending or receiving)
+     * 
+     * This method must be used before putting the CPU into deep or light sleep.
+     */
+    bool canSleep();
+
+    /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.
+    virtual bool sleep();
+
     /// Send a packet (possibly by enquing in a private fifo).  This routine will
     /// later free() the packet to pool.  This routine is not allowed to stall because it is called from
     /// bluetooth comms code.  If the txmit queue is empty it might return an error

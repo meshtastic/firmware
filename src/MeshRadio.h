@@ -55,15 +55,14 @@
  */
 class MeshRadio {
 public:
+    CustomRF95 rf95; // the raw radio interface - for now I'm leaving public - because this class is shrinking to be almost nothing
+
     /** pool is the pool we will alloc our rx packets from
      * rxDest is where we will send any rx packets, it becomes receivers responsibility to return packet to the pool
      */
     MeshRadio(MemoryPool<MeshPacket> &pool, PointerQueue<MeshPacket> &rxDest);
 
     bool init();
-
-    /// Prepare the radio to enter sleep mode, where it should draw only 0.2 uA
-    void sleep();
 
     /// Send a packet (possibly by enquing in a private fifo).  This routine will
     /// later free() the packet to pool.  This routine is not allowed to stall because it is called from
@@ -78,7 +77,6 @@ public:
     void reloadConfig();
 
 private:
-    CustomRF95 rf95; // the raw radio interface
 
     // RHDatagram manager;
     // RHReliableDatagram manager; // don't use mesh yet
