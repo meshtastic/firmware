@@ -1,4 +1,5 @@
 # High priority
+
 Items to complete before the first alpha release.
 
 * retest BLE software update for both board types
@@ -7,8 +8,10 @@ Items to complete before the first alpha release.
 * send note about Adafruit Clue
 * send note to the guy who designed the cases
 * update the prebuilt bins for different regulatory regions
+* remeasure wake time power draws now that we run CPU down at 80MHz
 
 # Medium priority
+
 Items to complete before the first beta release.
 
 * leave lora receiver always on
@@ -84,6 +87,7 @@ all else fails could always use the stock radiohead solution - though super inef
 * could this work for more than one hop?  Is more than one hop needed?  Could it work for sending messages (i.e. for a msg sent to Z with want-reply set). 
 
 ## approach 4
+
 look into the literature for this idea specifically.
 
 * don't view it as a mesh protocol as much as a "distributed db unification problem".  When nodes talk to nearby nodes they work together
@@ -92,9 +96,12 @@ other node.  This would nicely allow distant nodes to propogate their position t
 * handle group messages the same way, there would be a table of messages and time of creation.
 * when a node has a new position or message to send out, it does a broadcast.  All the adjacent nodes update their db instantly (this handles 90% of messages I'll bet).  
 * Occasionally a node might broadcast saying "anyone have anything newer than time X?"  If someone does, they send the diffs since that date.
-
+* essentially everything in this variant becomes broadcasts of "request db updates for >time X - for _all_ or for a particular nodenum" and nodes sending (either due to request or because they changed state) "here's a set of db updates".  Every node is constantly trying to
+build the most recent version of reality, and if some nodes are too far, then nodes closer in will eventually forward their changes to the distributed db.
+* construct non ambigious rules for who broadcasts to request db updates.  ideally the algorithm should nicely realize node X can see most other nodes, so they should just listen to all those nodes and minimize the # of broadcasts. the distributed picture of nodes rssi could be useful here?
 
 # Pre-beta priority
+
 During the beta timeframe the following improvements 'would be nice' (and yeah - I guess some of these items count as features, but it is a hobby project ;-) )
 
 * make an install script to let novices install software on their boards
@@ -113,6 +120,7 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * share channel settings over Signal (or qr code) by embedding an an URL which is handled by the MeshUtil app.
 
 # Low priority
+
 Items after the first final candidate release.
 
 * make a no bluetooth configured yet screen - include this screen in the loop if the user hasn't yet paired
