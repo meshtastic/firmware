@@ -4,6 +4,7 @@ Items to complete before the first alpha release.
 
 * implement CustomRF95::canSleep
 * document rules for sleep wrt lora/bluetooth/screen/gps.  also: if I have text messages (only) for the phone, then give a few seconds in the hopes BLE can get it across before we have to go back to sleep.
+* make gps prevent light sleep if we are waiting for data
 * wake from light sleep as needed for our next scheduled periodic task (needed for gps position broadcasts etc)
 * turn bluetooth off based on our sleep policy
 * if the phone doesn't read fromradio mailbox within X seconds, assume the phone is gone and we can stop queing location msgs 
@@ -45,6 +46,7 @@ Items to complete before the first beta release.
 * How do avalanche beacons work?  Could this do that as well?  possibly by using beacon mode feature of the RF95?
 * use std::map<NodeInfo*, std::string> in node db
 * make a HAM build: yep - that's a great idea.  I'll add it to the TODO.  should be pretty painless - just a new frequency list, a bool to say 'never do encryption' and use hte callsign as that node's unique id.  -from Girts
+* add frequency hopping 
 
 # Low power consumption tasks
 General ideas to hit the power draws our spreadsheet predicts.  Do the easy ones before beta, the last 15% can be done after 1.0.
