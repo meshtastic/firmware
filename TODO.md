@@ -1,15 +1,11 @@
 # High priority
 Items to complete before the first alpha release.
 
-* post sample video to signal forum
-* support non US frequencies
-
 * retest BLE software update for both board types
 * default to enter deep sleep if no LORA received for two hours (indicates user has probably left the meshS)
-* first alpha release, article writeup for hackaday
+* article writeup for hackaday?
 * send note about Adafruit Clue
 * send note to the guy who designed the cases
-* send pr https://github.com/ThingPulse/esp8266-oled-ssd1306 to tell them about this project
 * update the prebuilt bins for different regulatory regions
 
 # Medium priority
@@ -58,9 +54,11 @@ General ideas to hit the power draws our spreadsheet predicts.  Do the easy ones
 
 # Mesh broadcast algoritm
 
-FIXME - instead look for standard solutions.  this approach seems really suboptimal, because too many nodes will try to rebroast.
+FIXME - instead look for standard solutions.  this approach seems really suboptimal, because too many nodes will try to rebroast.  If
+all else fails could always use the stock radiohead solution - though super inefficent.
 
 ## approach 1
+
 * send all broadcasts with a TTL
 * periodically(?) do a survey to find the max TTL that is needed to fully cover the current network.
 * to do a study first send a broadcast (maybe our current initial user announcement?) with TTL set to one (so therefore no one will rebroadcast our request)
@@ -71,17 +69,30 @@ FIXME - instead look for standard solutions.  this approach seems really subopti
 * For these little networks I bet a max TTL would never be higher than 3?
 
 ## approach 2
+
 * send a TTL1 broadcast, the replies let us build a list of the nodes (stored as a bitvector?) that we can see (and their rssis)
 * we then broadcast out that bitvector (also TTL1) asking "can any of ya'll (even indirectly) see anyone else?"
 * if a node can see someone I missed (and they are the best person to see that node), they reply (unidirectionally) with the missing nodes and their rssis (other nodes might sniff (and update their db) based on this reply but they don't have to)
 * given that the max number of nodes in this mesh will be like 20 (for normal cases), I bet globally updating this db of "nodenums and who has the best rssi for packets from that node" would be useful
 * once the global DB is shared, when a node wants to broadcast, it just sends out its broadcast . the first level receivers then make a decision "am I the best to rebroadcast to someone who likely missed this packet?" if so, rebroadcast
 
-# approach 3
+## approach 3
+
 * when a node X wants to know other nodes positions, it broadcasts its position with want_replies=true.  Then each of the nodes that received that request broadcast their replies (possibly by using special timeslots?)
 * all nodes constantly update their local db based on replies they witnessed.
 * after 10s (or whatever) if node Y notices that it didn't hear a reply from node Z (that Y has heard from recently ) to that initial request, that means Z never heard the request from X.  Node Y will reply to X on Z's behalf.
 * could this work for more than one hop?  Is more than one hop needed?  Could it work for sending messages (i.e. for a msg sent to Z with want-reply set). 
+
+## approach 4
+look into the literature for this idea specifically.
+
+* don't view it as a mesh protocol as much as a "distributed db unification problem".  When nodes talk to nearby nodes they work together
+to update their nodedbs.  Each nodedb would have a last change date and any new changes that only one node has would get passed to the 
+other node.  This would nicely allow distant nodes to propogate their position to all other nodes (eventually).
+* handle group messages the same way, there would be a table of messages and time of creation.
+* when a node has a new position or message to send out, it does a broadcast.  All the adjacent nodes update their db instantly (this handles 90% of messages I'll bet).  
+* Occasionally a node might broadcast saying "anyone have anything newer than time X?"  If someone does, they send the diffs since that date.
+
 
 # Pre-beta priority
 During the beta timeframe the following improvements 'would be nice' (and yeah - I guess some of these items count as features, but it is a hobby project ;-) )
@@ -190,3 +201,6 @@ Items after the first final candidate release.
 * don't trust times from other nodes
 * draw compass rose based off local walking track
 * add requestResponse optional bool - use for location broadcasts when sending tests
+* post sample video to signal forum
+* support non US frequencies
+* send pr https://github.com/ThingPulse/esp8266-oled-ssd1306 to tell them about this project
