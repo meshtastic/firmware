@@ -3,34 +3,28 @@
 #include <Arduino.h>
 #include "configuration.h"
 
+/**
+ * A base class for tasks that want their doTask() method invoked periodically
+ * 
+ * FIXME: currently just syntatic sugar for polling in loop (you must call .loop), but eventually
+ * generalize with the freertos scheduler so we can save lots of power by having everything either in
+ * something like this or triggered off of an irq.
+ */
 class PeriodicTask
 {
-    /// we use prevMsec rather than nextMsec because it is easier to handle the uint32 rollover in that case, also changes in periodMsec take effect immediately
-    uint32_t prevMsec;
+    uint32_t lastMsec = 0;
+    uint32_t period = 1; // call soon after creation
 
 public:
     uint32_t periodMsec;
 
     virtual ~PeriodicTask() {}
 
-    PeriodicTask(uint32_t period) : periodMsec(period)
-    {
-        prevMsec = millis();
-    }
+    PeriodicTask(uint32_t initialPeriod = 1);
 
     /// call this from loop
-    virtual void loop()
-    {
-        uint32_t now = millis();
-        if (now > (prevMsec + periodMsec))
-        {
-            // FIXME, this lets period slightly drift based on scheduling - not sure if that is always good
-            prevMsec = now;
+    virtual void loop();
 
-            // DEBUG_MSG("Calling periodic task\n");
-            doTask();
-        }
-    }
-
-    virtual void doTask() = 0;
+protected: 
+    virtual uint32_t doTask() = 0;
 };
