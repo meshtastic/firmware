@@ -8,6 +8,7 @@
 #include "NodeDB.h"
 #include "GPS.h"
 #include "screen.h"
+#include "Periodic.h"
 
 /*
 receivedPacketQueue - this is a queue of messages we've received from the mesh, which we are keeping to deliver to the phone.
@@ -60,7 +61,9 @@ void MeshService::init()
         DEBUG_MSG("radio init failed\n");
 
     gps.addObserver(this);
-    sendOurOwner();
+
+    // No need to call this here, our periodic task will fire quite soon
+    // sendOwnerPeriod();
 }
 
 void MeshService::sendOurOwner(NodeNum dest)
@@ -165,6 +168,16 @@ void MeshService::handleFromRadio()
         bluetoothNotifyFromNum(fromNum);
 }
 
+
+uint32_t sendOwnerCb()
+{
+  service.sendOurOwner();
+
+  return radioConfig.preferences.send_owner_secs * 1000;
+}
+
+Periodic sendOwnerPeriod(sendOwnerCb);
+
 /// Do idle processing (mostly processing messages which have been queued from the radio)
 void MeshService::loop()
 {
@@ -173,13 +186,7 @@ void MeshService::loop()
     handleFromRadio();
 
     // occasionally send our owner info
-    static uint32_t lastsend;
-    uint32_t now = millis();
-    if (now - lastsend > radioConfig.preferences.send_owner_secs * 1000)
-    {
-        lastsend = now;
-        sendOurOwner();
-    }
+    sendOwnerPeriod.loop();
 }
 
 /// The radioConfig object just changed, call this to force the hw to change to the new settings

@@ -11,8 +11,9 @@ uint64_t zeroOffsetSecs; // GPS based time in secs since 1970 - only updated onc
 RTC_DATA_ATTR bool timeSetFromGPS;     // We only reset our time once per _boot_ after that point just run from the internal clock (even across sleeps)
 
 GPS gps;
+bool hasValidLocation; // default to false, until we complete our first read
 
-GPS::GPS() : PeriodicTask(30 * 1000)
+GPS::GPS() : PeriodicTask() 
 {
 }
 
@@ -57,8 +58,23 @@ void GPS::perhapsSetRTC(const struct timeval *tv)
 void GPS::loop()
 {
     PeriodicTask::loop();
+}
 
+uint32_t GPS::getTime()
+{
+    return ((millis() - timeStartMsec) / 1000) + zeroOffsetSecs;
+}
+
+uint32_t GPS::getValidTime()
+{
+    return timeSetFromGPS ? getTime() : 0;
+}
+
+uint32_t GPS::doTask()
+{
 #ifdef GPS_RX_PIN
+    // Consume all characters that have arrived
+
     while (_serial_gps.available())
     {
         encode(_serial_gps.read());
@@ -86,25 +102,16 @@ void GPS::loop()
         perhapsSetRTC(&tv);
     }
 #endif
-}
 
-uint32_t GPS::getTime()
-{
-    return ((millis() - timeStartMsec) / 1000) + zeroOffsetSecs;
-}
-
-uint32_t GPS::getValidTime()
-{
-    return timeSetFromGPS ? getTime() : 0;
-}
-
-void GPS::doTask()
-{
     if (location.isValid() && location.isUpdated())
     { // we only notify if position has changed
         // DEBUG_MSG("new gps pos\n");
+        hasValidLocation = true;
         notifyObservers();
     }
+
+    // Once we have sent a location we only poll the GPS rarely, otherwise check back every 100ms until we have something over the serial
+    return hasValidLocation ? 30 * 1000 : 100;
 }
 
 String GPS::getTimeStr()
