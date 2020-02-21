@@ -1,10 +1,12 @@
+
+
+
 # High priority
 
 Items to complete before the first alpha release.
 
 * have gps implement canSleep(), print nmea for debugging and discard buffers on the way into sleep
 * implement CustomRF95::canSleep
-* document rules for sleep wrt lora/bluetooth/screen/gps.  also: if I have text messages (only) for the phone, then give a few seconds in the hopes BLE can get it across before we have to go back to sleep.
 * make gps prevent light sleep if we are waiting for data
 * wake from light sleep as needed for our next scheduled periodic task (needed for gps position broadcasts etc)
 * turn bluetooth off based on our sleep policy
@@ -226,3 +228,4 @@ Items after the first final candidate release.
 * post sample video to signal forum
 * support non US frequencies
 * send pr https://github.com/ThingPulse/esp8266-oled-ssd1306 to tell them about this project
+* document rules for sleep wrt lora/bluetooth/screen/gps.  also: if I have text messages (only) for the phone, then give a few seconds in the hopes BLE can get it across before we have to go back to sleep.
