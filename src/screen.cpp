@@ -51,6 +51,15 @@ OLEDDisplayUi ui(&dispdev);
 // A text message frame + debug frame + all the node infos
 FrameCallback nonBootFrames[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
 
+Screen screen;
+static bool showingBluetooth;
+
+/// If set to true (possibly from an ISR), we should turn on the screen the next time our idle loop runs.
+static bool wakeScreen;
+static bool showingBootScreen = true; // start by showing the bootscreen
+
+uint32_t lastPressMs;
+
 bool is_screen_on() { return screenOn; }
 
 void msOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
@@ -521,7 +530,15 @@ void screen_print(const char *text)
     // ui.update();
 }
 
-void screen_setup()
+
+
+
+void Screen::doWakeScreen() {
+    wakeScreen = true;
+    setPeriod(1); // wake asap
+}
+
+void Screen::setup()
 {
 #ifdef I2C_SDA
     // Display instance
@@ -572,13 +589,6 @@ void screen_setup()
 #endif
 }
 
-static bool showingBluetooth;
-
-/// If set to true (possibly from an ISR), we should turn on the screen the next time our idle loop runs.
-static bool wakeScreen;
-static bool showingBootScreen = true; // start by showing the bootscreen
-
-uint32_t lastPressMs;
 
 /// Turn off the screen this many ms after last press or wake
 #define SCREEN_SLEEP_MS (60 * 1000)
@@ -588,20 +598,26 @@ uint32_t lastPressMs;
 
 static uint32_t targetFramerate = IDLE_FRAMERATE;
 
-uint32_t screen_loop()
-{
-    if (!disp) // If we don't have a screen, don't ever spend any CPU for us
-        return UINT32_MAX;
 
-    if (wakeScreen || nodeDB.updateTextMessage) // If a new text message arrived, turn the screen on immedately
+
+void Screen::doTask()
+{
+    if (!disp) { // If we don't have a screen, don't ever spend any CPU for us
+        setPeriod(0);
+        return;
+    }
+
+    if (wakeScreen) // If a new text message arrived, turn the screen on immedately
     {
         lastPressMs = millis(); // if we were told to wake the screen, reset the press timeout
         screen_on();            // make sure the screen is not asleep
         wakeScreen = false;
     }
 
-    if (!screenOn) // If we didn't just wake and the screen is still off, then bail
-        return UINT32_MAX;
+    if (!screenOn) { // If we didn't just wake and the screen is still off, then stop updating until it is on again
+        setPeriod(0);
+        return;
+    }
 
     // Switch to a low framerate (to save CPU) when we are not in transition
     // but we should only call setTargetFPS when framestate changes, because otherwise that breaks
@@ -649,7 +665,7 @@ uint32_t screen_loop()
     // If we are scrolling we need to be called soon, otherwise just 1 fps (to save CPU)
     // We also ask to be called twice as fast as we really need so that any rounding errors still result
     // with the correct framerate
-    return 1000 / targetFramerate / 2;
+    setPeriod(1000 / targetFramerate / 2);
 }
 
 // Show the bluetooth PIN screen
@@ -661,7 +677,7 @@ void screen_start_bluetooth(uint32_t pin)
 
     DEBUG_MSG("showing bluetooth screen\n");
     showingBluetooth = true;
-    wakeScreen = true;
+    screen.doWakeScreen();
 
     ui.setFrames(btFrames, 1); // Just show the bluetooth frame
     // we rely on our main loop to show this screen (because we are invoked deep inside of bluetooth callbacks)
@@ -703,7 +719,7 @@ void screen_press()
     // screen_start_bluetooth(123456);
 
     lastPressMs = millis();
-    wakeScreen = true;
+    screen.doWakeScreen();
 
     // If screen was off, just wake it, otherwise advance to next frame
     // If we are in a transition, the press must have bounced, drop it.
