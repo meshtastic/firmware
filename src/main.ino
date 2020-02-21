@@ -53,8 +53,8 @@ bool packetSent, packetQueued;
 RTC_DATA_ATTR int bootCount = 0;
 esp_sleep_source_t wakeCause; // the reason we booted this time
 
-     #define xstr(s) str(s)
-     #define str(s) #s
+#define xstr(s) str(s)
+#define str(s) #s
 
 // -----------------------------------------------------------------------------
 // Application
@@ -66,8 +66,24 @@ esp_sleep_source_t wakeCause; // the reason we booted this time
  * We leave CPU at full speed during init, but once loop is called switch to low speed (for a 50% power savings)
  * 
  */
-void setCPUFast(bool on) {
+void setCPUFast(bool on)
+{
   setCpuFrequencyMhz(on ? 240 : 80);
+}
+
+static void setLed(bool ledOn) {
+#ifdef LED_PIN
+  // toggle the led so we can get some rough sense of how often loop is pausing
+  digitalWrite(LED_PIN, ledOn);
+#endif
+
+#ifdef T_BEAM_V10
+  if (axp192_found)
+  {
+    // blink the axp led
+    axp.setChgLEDMode(ledOn ? AXP20X_LED_LOW_LEVEL : AXP20X_LED_OFF);
+  }
+#endif
 }
 
 void doDeepSleep(uint64_t msecToWake)
@@ -94,15 +110,11 @@ void doDeepSleep(uint64_t msecToWake)
   digitalWrite(VEXT_ENABLE, 1); // turn off the display power
 #endif
 
-#ifdef LED_PIN
-  digitalWrite(LED_PIN, 0); // turn off the led
-#endif
+setLed(false);
 
 #ifdef T_BEAM_V10
   if (axp192_found)
   {
-    axp.setChgLEDMode(AXP20X_LED_OFF); // turn off the AXP LED
-
     // No need to turn this off if the power draw in sleep mode really is just 0.2uA and turning it off would
     // leave floating input for the IRQ line
 
@@ -143,8 +155,7 @@ void doDeepSleep(uint64_t msecToWake)
   // FIXME, disable internal rtc pullups/pulldowns on the non isolated pins. for inputs that we aren't using
   // to detect wake and in normal operation the external part drives them hard.
 
-  // FIXME - use an external 10k pulldown so we can leave the RTC peripherals powered off
-  // until then we need the following lines
+  // We want RTC peripherals to stay on
   esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
 
 #ifdef BUTTON_PIN
@@ -162,6 +173,41 @@ void doDeepSleep(uint64_t msecToWake)
   esp_deep_sleep_start();                              // TBD mA sleep current (battery)
 }
 
+#include "esp_bt_main.h"
+
+/**
+ * enter light sleep (preserves ram but stops everything about CPU).
+ * 
+ * Returns (after restoring hw state) when the user presses a button or we get a LoRa interrupt
+ */
+void doLightSleep(uint32_t sleepMsec = 20 * 1000) // FIXME, use a more reasonable default
+{
+  DEBUG_MSG("Enter light sleep\n");
+  uint64_t sleepUsec = sleepMsec * 1000LL;
+
+  setLed(false); // Never leave led on while in light sleep
+
+  // ESP docs say we must disable bluetooth and wifi before light sleep
+  if (esp_bluedroid_disable() != ESP_OK)
+    DEBUG_MSG("error disabling bluedroid\n");
+  if (esp_bt_controller_disable() != ESP_OK)
+    DEBUG_MSG("error disabling bt controller\n");
+
+  // We want RTC peripherals to stay on
+  esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
+
+  gpio_wakeup_enable((gpio_num_t)BUTTON_PIN, GPIO_INTR_LOW_LEVEL); // when user presses, this button goes low
+  gpio_wakeup_enable((gpio_num_t)DIO0_GPIO, GPIO_INTR_HIGH_LEVEL); // RF95 interrupt, active high
+  esp_sleep_enable_gpio_wakeup();
+  esp_sleep_enable_timer_wakeup(sleepUsec);
+  esp_light_sleep_start();
+  DEBUG_MSG("Exit light sleep\n");
+
+  if (esp_bt_controller_enable(ESP_BT_MODE_BTDM) != ESP_OK)
+    DEBUG_MSG("error reenabling bt controller\n");
+  if (esp_bluedroid_enable() != ESP_OK)
+    DEBUG_MSG("error reenabling bluedroid\n");
+}
 
 /**
  * enable modem sleep mode as needed and available.  Should lower our CPU current draw to an average of about 20mA.
@@ -426,6 +472,8 @@ void setup()
 
   // enableModemSleep();
   setCPUFast(false);
+
+  // doLightSleep();
 }
 
 uint32_t ledBlinker()
@@ -433,18 +481,8 @@ uint32_t ledBlinker()
   static bool ledOn;
   ledOn ^= 1;
 
-#ifdef LED_PIN
-  // toggle the led so we can get some rough sense of how often loop is pausing
-  digitalWrite(LED_PIN, ledOn);
-#endif
+  setLed(ledOn);
 
-#ifdef T_BEAM_V10
-  if (axp192_found)
-  {
-    // blink the axp led
-    axp.setChgLEDMode(ledOn ? AXP20X_LED_LOW_LEVEL : AXP20X_LED_OFF);
-  }
-#endif
 
   // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
   return isCharging ? 1000 : (ledOn ? 2 : 1000);
@@ -467,7 +505,7 @@ uint32_t axpReads()
 }
 
 Periodic axpDebugOutput(axpReads);
-#endif 
+#endif
 
 void loop()
 {
@@ -508,6 +546,8 @@ void loop()
     if (!wasPressed)
     { // just started a new press
       DEBUG_MSG("pressing\n");
+
+      //doLightSleep();
       // esp_pm_dump_locks(stdout); // FIXME, do this someplace better
       wasPressed = true;
 
@@ -553,5 +593,14 @@ void loop()
 
   // FIXME - until button press handling is done by interrupt (see polling above) we can't sleep very long at all or buttons feel slow
   msecstosleep = 10;
-  delay(msecstosleep);
+
+  bool bluetoothOn = false; // FIXME, leave bluetooth on per our power management policy (see doc)
+
+  // while we have bluetooth on, we can't do light sleep, but once off stay in light_sleep all the time
+  // we will wake from light sleep on button press or interrupt from the RF95 radio
+  if (!bluetoothOn && !is_screen_on())
+    doLightSleep(60 * 1000); // FIXME, wake up to briefly flash led, then go back to sleep (without repowering bluetooth)
+  else {
+    delay(msecstosleep);
+  }
 }

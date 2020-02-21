@@ -51,6 +51,8 @@ OLEDDisplayUi ui(&dispdev);
 // A text message frame + debug frame + all the node infos
 FrameCallback nonBootFrames[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
 
+bool is_screen_on() { return screenOn; }
+
 void msOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
     display->setTextAlignment(TEXT_ALIGN_RIGHT);

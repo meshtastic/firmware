@@ -2,6 +2,13 @@
 
 Items to complete before the first alpha release.
 
+* document rules for sleep wrt lora/bluetooth/screen/gps.  also: if I have text messages (only) for the phone, then give a few seconds in the hopes BLE can get it across before we have to go back to sleep.
+* if the phone doesn't read fromradio mailbox within X seconds, assume the phone is gone and we can stop queing location msgs 
+for it (because it will redownload the nodedb when it comes back)
+* don't enter light sleep while the screen is on
+* any time we wake from light sleep, briefly blink the led
+
+* turn light sleep on agressively (while lora is on but BLE off)
 * retest BLE software update for both board types
 * default to enter deep sleep if no LORA received for two hours (indicates user has probably left the meshS)
 * article writeup for hackaday?
@@ -99,6 +106,7 @@ other node.  This would nicely allow distant nodes to propogate their position t
 * essentially everything in this variant becomes broadcasts of "request db updates for >time X - for _all_ or for a particular nodenum" and nodes sending (either due to request or because they changed state) "here's a set of db updates".  Every node is constantly trying to
 build the most recent version of reality, and if some nodes are too far, then nodes closer in will eventually forward their changes to the distributed db.
 * construct non ambigious rules for who broadcasts to request db updates.  ideally the algorithm should nicely realize node X can see most other nodes, so they should just listen to all those nodes and minimize the # of broadcasts. the distributed picture of nodes rssi could be useful here?
+* possibly view the BLE protocol to the radio the same way - just a process of reconverging the node/msgdb database.
 
 # Pre-beta priority
 
