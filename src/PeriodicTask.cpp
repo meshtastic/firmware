@@ -12,8 +12,12 @@ void PeriodicTask::loop()
     if (period && (now - lastMsec) >= period)
     {
         lastMsec = now;
-        period = doTask();
+        doTask();
     }
 }
 
-  uint32_t Periodic::doTask() { return callback(); }
+void Periodic::doTask()
+{
+    uint32_t p = callback();
+    setPeriod(p);
+}

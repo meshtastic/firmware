@@ -27,7 +27,7 @@ public:
 
     virtual void loop();
 
-    virtual uint32_t doTask();
+    virtual void doTask();
 
     /// If we haven't yet set our RTC this boot, set it from a GPS derived time
     void perhapsSetRTC(const struct timeval *tv);
