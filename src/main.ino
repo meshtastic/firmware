@@ -472,7 +472,7 @@ void setup()
     ssd1306_found = false; // forget we even have the hardware
 
   if (ssd1306_found)
-    screen_setup();
+    screen.setup();
 
   // Init GPS
   gps.setup();
@@ -531,8 +531,12 @@ void loop()
   uint32_t msecstosleep = 1000 * 30; // How long can we sleep before we again need to service the main loop?
 
   gps.loop();
-  msecstosleep = min(screen_loop(), msecstosleep);
+  screen.loop();
   service.loop();
+
+  if (nodeDB.updateGUI || nodeDB.updateTextMessage)
+    screen.doWakeScreen();
+
   ledPeriodic.loop();
   // axpDebugOutput.loop();
   loopBLE();
