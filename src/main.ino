@@ -493,7 +493,7 @@ void setup()
   }
 
   setBluetoothEnable(false);
-  setCPUFast(true); // FIXME, switch to low speed now
+  setCPUFast(false); // 80MHz is fine for our slow peripherals
 }
 
 uint32_t ledBlinker()

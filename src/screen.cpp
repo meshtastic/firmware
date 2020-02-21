@@ -554,6 +554,8 @@ void Screen::setup()
     //ui.setActiveSymbol(activeSymbol);
     //ui.setInactiveSymbol(inactiveSymbol);
 
+    ui.setTimePerTransition(300); // msecs
+
     // You can change this to
     // TOP, LEFT, BOTTOM, RIGHT
     ui.setIndicatorPosition(BOTTOM);
@@ -593,7 +595,7 @@ void Screen::setup()
 /// Turn off the screen this many ms after last press or wake
 #define SCREEN_SLEEP_MS (60 * 1000)
 
-#define TRANSITION_FRAMERATE 60 // fps
+#define TRANSITION_FRAMERATE 30 // fps
 #define IDLE_FRAMERATE 10       // in fps
 
 static uint32_t targetFramerate = IDLE_FRAMERATE;
@@ -637,7 +639,7 @@ void Screen::doTask()
         // Once we finish showing the bootscreen, remove it from the loop
         if (showingBootScreen)
         {
-            if (millis() > 5 * 1000) // we show the boot screen for a few seconds only
+            if (millis() > 3 * 1000) // we show the boot screen for a few seconds only
             {
                 showingBootScreen = false;
                 screen_set_frames();
@@ -665,7 +667,7 @@ void Screen::doTask()
     // If we are scrolling we need to be called soon, otherwise just 1 fps (to save CPU)
     // We also ask to be called twice as fast as we really need so that any rounding errors still result
     // with the correct framerate
-    setPeriod(1000 / targetFramerate / 2);
+    setPeriod(1000 / targetFramerate);
 }
 
 // Show the bluetooth PIN screen
