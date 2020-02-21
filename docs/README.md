@@ -1,7 +1,7 @@
 # What is Meshtastic?
 
 Meshtastic is a project that lets you use
-inexpensive ($30 ish) GPS mesh radios as an extensible, super long battery life mesh GPS communicator.  These radios are great for hiking, skiing, paragliding - 
+inexpensive ($30 ish) GPS radios as an extensible, super long battery life mesh GPS communicator.  These radios are great for hiking, skiing, paragliding - 
 essentially any hobby where you don't have reliable internet access.  Each member of your private mesh can always see the location and distance of all other
 members and any text messages sent to your group chat.
 
@@ -44,11 +44,12 @@ Soon our (optional) companion Android application will be released here:
 [![Download at https://play.google.com/store/apps/details?id=com.geeksville.mesh](https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png)](https://play.google.com/store/apps/details?id=com.geeksville.mesh&referrer=utm_source%3Dhomepage%26anid%3Dadmob)
 
 If you would like to join our super bleeding-edge alpha test group for this app, we'd love to have you.  Three steps:
+
 1. Join [this Google group](https://groups.google.com/forum/#!forum/meshtastic-alpha-testers) with the account you use in Google Play.
 2. Go to this [URL](https://play.google.com/apps/testing/com.geeksville.mesh) to opt-in to the alpha test.
 3. If you encounter any problems or have questions, post in our gitter chat and we'll help.
 
-If you'd like to help with development, the source code for the Android app is [here](https://github.com/geeksville/Meshtastic-Android).
+If you'd like to help with development, the source code is [on github](https://github.com/geeksville/Meshtastic-Android).
 
 ## Supported hardware
 We currently support two brands of radios.  The [TTGO T-Beam](https://www.aliexpress.com/item/4000119152086.html) and the [Heltec LoRa 32](https://heltec.org/project/wifi-lora-32/).  Most users should buy the T-Beam and a 18650 battery (total cost less than $35).  Make
@@ -66,7 +67,7 @@ This project is still pretty young but moving at a pretty good pace.  Not all fe
 Most of these problems should be solved by the beta release:
 
 * Encryption is turned off for now
-* A number of software work items have to be completed before battery life matches our measurements, currently battery life is about two days
+* A number of (straightforward) software work items have to be completed before battery life matches our measurements, currently battery life is about two days.  Join us on chat if you want the spreadsheet on power measurements.
 * The current Android GUI is pretty ugly still
 * The Android API needs to be documented better
 * The Bluetooth API needs to be documented better 
