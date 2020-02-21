@@ -12,3 +12,5 @@ void screen_start_bluetooth(uint32_t pin);
 
 // restore our regular frame list
 void screen_set_frames();
+
+bool is_screen_on();
