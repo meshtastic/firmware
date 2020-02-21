@@ -20,8 +20,8 @@ will optionally work with your phone, but no phone is required.
 ### Features
 Not all of these features are fully implemented yet - see below.  But they should be in by the time we decide to call this project beta (three months?)
 
-* Very long battery life (should be about 8 days with the beta software)
-* Built in GPS and LORA radio, but we manage the radio automatically for you
+* Very long battery life (should be about eight days with the beta software)
+* Built in GPS and [LoRa](https://en.wikipedia.org/wiki/LoRa) radio, but we manage the radio automatically for you
 * Long range - a few miles per node but each node will forward packets as needed
 * Shows direction and distance to all members of your channel
 * Directed or broadcast text messages for channel members
@@ -30,7 +30,7 @@ Not all of these features are fully implemented yet - see below.  But they shoul
 * Eventually (within a couple of months) we should have a modified version of Signal that works with this project.
 * Very easy sharing of private secured channels.  Just share a special link or QR code with other users and they can join your encrypted mesh
  
-This project is currently in early alpha, but if you have questions please join our chat [![Join the chat at https://gitter.im/Meshtastic/community](https://badges.gitter.im/Meshtastic/community.svg)](https://gitter.im/Meshtastic/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge).
+This project is currently in early alpha - if you have questions please join our chat [![Join the chat at https://gitter.im/Meshtastic/community](https://badges.gitter.im/Meshtastic/community.svg)](https://gitter.im/Meshtastic/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge).
 
 This software is 100% open source and developed by a group of hobbyist experimenters.  No warranty is provided, if you'd like to improve it - we'd love your help.  Please post in the [chat](https://gitter.im/Meshtastic/community).  
 
