@@ -2,6 +2,7 @@
 
 Items to complete before the first alpha release.
 
+* have gps implement canSleep(), print nmea for debugging and discard buffers on the way into sleep
 * implement CustomRF95::canSleep
 * document rules for sleep wrt lora/bluetooth/screen/gps.  also: if I have text messages (only) for the phone, then give a few seconds in the hopes BLE can get it across before we have to go back to sleep.
 * make gps prevent light sleep if we are waiting for data

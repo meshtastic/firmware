@@ -66,6 +66,7 @@ For a nice Heltec 3D printable case see this [design](https://www.thingiverse.co
 This project is still pretty young but moving at a pretty good pace.  Not all features are fully implemented in the current alpha builds.
 Most of these problems should be solved by the beta release:
 
+* We don't make these devices and they haven't been tested by UL or the FCC.  If you use them you are experimenting and we can't promise they won't burn your house down ;-)
 * Encryption is turned off for now
 * A number of (straightforward) software work items have to be completed before battery life matches our measurements, currently battery life is about two days.  Join us on chat if you want the spreadsheet of power measurements/calculations.
 * The current Android GUI is pretty ugly still

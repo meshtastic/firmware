@@ -8,12 +8,13 @@ HardwareSerial _serial_gps(GPS_SERIAL_NUM);
 uint32_t timeStartMsec;  // Once we have a GPS lock, this is where we hold the initial msec clock that corresponds to that time
 uint64_t zeroOffsetSecs; // GPS based time in secs since 1970 - only updated once on initial lock
 
-RTC_DATA_ATTR bool timeSetFromGPS;     // We only reset our time once per _boot_ after that point just run from the internal clock (even across sleeps)
+RTC_DATA_ATTR bool timeSetFromGPS; // We only reset our time once per _boot_ after that point just run from the internal clock (even across sleeps)
 
 GPS gps;
 bool hasValidLocation; // default to false, until we complete our first read
+bool wantNewLocation; 
 
-GPS::GPS() : PeriodicTask() 
+GPS::GPS() : PeriodicTask()
 {
 }
 
@@ -70,6 +71,25 @@ uint32_t GPS::getValidTime()
     return timeSetFromGPS ? getTime() : 0;
 }
 
+/// Returns true if we think the board can enter deep or light sleep now (we might be trying to get a GPS lock)
+bool GPS::canSleep()
+{
+    return !wantNewLocation;
+}
+
+/// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
+void GPS::prepareSleep()
+{
+    // discard all rx serial bytes so we don't try to parse them when we come back
+    while (_serial_gps.available())
+    {
+        _serial_gps.read();
+    }
+
+    // make the parser bail on whatever it was parsing
+    encode('\n');
+}
+
 void GPS::doTask()
 {
 #ifdef GPS_RX_PIN
@@ -107,11 +127,14 @@ void GPS::doTask()
     { // we only notify if position has changed
         // DEBUG_MSG("new gps pos\n");
         hasValidLocation = true;
+        wantNewLocation = false;
         notifyObservers();
     }
+    else // we didn't get a location update, go back to sleep and hope the characters show up
+        wantNewLocation = true;
 
-    // Once we have sent a location we only poll the GPS rarely, otherwise check back every 100ms until we have something over the serial
-    setPeriod(hasValidLocation ? 30 * 1000 : 100);
+    // Once we have sent a location once we only poll the GPS rarely, otherwise check back every 100ms until we have something over the serial
+    setPeriod(hasValidLocation && !wantNewLocation ? 30 * 1000 : 100);
 }
 
 String GPS::getTimeStr()
