@@ -223,7 +223,7 @@ void doLightSleep(uint32_t sleepMsec = 20 * 1000) // FIXME, use a more reasonabl
   gpio_wakeup_enable((gpio_num_t)BUTTON_PIN, GPIO_INTR_LOW_LEVEL); // when user presses, this button goes low
   gpio_wakeup_enable((gpio_num_t)DIO0_GPIO, GPIO_INTR_HIGH_LEVEL); // RF95 interrupt, active high
 #ifdef PMU_IRQ
-  gpio_wakeup_enable((gpio_num_t)PMU_IRQ, GPIO_INTR_LOW_LEVEL); // pmu irq
+  gpio_wakeup_enable((gpio_num_t)PMU_IRQ, GPIO_INTR_HIGH_LEVEL); // pmu irq
 #endif
   esp_sleep_enable_gpio_wakeup();
   esp_sleep_enable_timer_wakeup(sleepUsec);
@@ -378,7 +378,7 @@ void axp192Init()
       attachInterrupt(PMU_IRQ, [] {
         pmu_irq = true;
       },
-                      FALLING);
+                      RISING);
 
       axp.adc1Enable(AXP202_BATT_CUR_ADC1, 1);
       axp.enableIRQ(AXP202_VBUS_REMOVED_IRQ | AXP202_VBUS_CONNECT_IRQ | AXP202_BATT_REMOVED_IRQ | AXP202_BATT_CONNECT_IRQ, 1);
@@ -549,6 +549,8 @@ void loop()
     {
       pmu_irq = false;
       axp.readIRQ();
+
+      DEBUG_MSG("pmu irq!\n");
 
       isCharging = axp.isChargeing();
       isUSBPowered = axp.isVBUSPlug();
