@@ -25,6 +25,9 @@ public:
     /// call this from loop
     virtual void loop();
 
+    /// Set a new period in msecs (can be called from doTask or elsewhere and the scheduler will cope)
+    void setPeriod(uint32_t p) { period = p; }
+
 protected: 
-    virtual uint32_t doTask() = 0;
+    virtual void doTask() = 0;
 };

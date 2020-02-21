@@ -70,7 +70,7 @@ uint32_t GPS::getValidTime()
     return timeSetFromGPS ? getTime() : 0;
 }
 
-uint32_t GPS::doTask()
+void GPS::doTask()
 {
 #ifdef GPS_RX_PIN
     // Consume all characters that have arrived
@@ -111,7 +111,7 @@ uint32_t GPS::doTask()
     }
 
     // Once we have sent a location we only poll the GPS rarely, otherwise check back every 100ms until we have something over the serial
-    return hasValidLocation ? 30 * 1000 : 100;
+    setPeriod(hasValidLocation ? 30 * 1000 : 100);
 }
 
 String GPS::getTimeStr()

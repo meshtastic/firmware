@@ -18,5 +18,5 @@ public:
 
 protected:
 
-  uint32_t doTask();
+  void doTask();
 };
