@@ -49,14 +49,6 @@ void NodeDB::init()
     devicestate.node_db_count = 0;
     devicestate.receive_queue_count = 0;
 
-    radioConfig.preferences.send_owner_interval = 4; // per sw-design.md
-    radioConfig.preferences.position_broadcast_secs = 20; // 15 * 60;
-    radioConfig.preferences.wait_bluetooth_secs = 10; // 30;
-    radioConfig.preferences.screen_on_secs = 30;
-    radioConfig.preferences.mesh_sds_timeout_secs = 60 * 60;
-    radioConfig.preferences.phone_sds_timeout_sec = 60 * 60;
-    radioConfig.preferences.sds_secs = 60 * 60;
-
 #ifdef GPS_RX_PIN
     // some hardware defaults to have a built in GPS
     myNodeInfo.has_gps = true;
@@ -92,6 +84,17 @@ void NodeDB::init()
     loadFromDisk();
 
     DEBUG_MSG("NODENUM=0x%x, dbsize=%d\n", myNodeInfo.my_node_num, *numNodes);
+
+    // FIXME - move above
+    radioConfig.preferences.send_owner_interval = 4; // per sw-design.md
+    radioConfig.preferences.position_broadcast_secs = 20; // 15 * 60;
+    radioConfig.preferences.wait_bluetooth_secs = 10; // 30;
+    radioConfig.preferences.screen_on_secs = 30;
+    radioConfig.preferences.mesh_sds_timeout_secs = 60 * 60;
+    radioConfig.preferences.phone_sds_timeout_sec = 60 * 60;
+    radioConfig.preferences.sds_secs = 60 * 60;
+    radioConfig.preferences.ls_secs = 60 * 60;
+    radioConfig.preferences.phone_timeout_secs = 15 * 60;
 }
 
 // We reserve a few nodenums for future use
