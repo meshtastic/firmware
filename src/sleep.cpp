@@ -207,7 +207,7 @@ void setBluetoothEnable(bool on)
  * 
  * Returns (after restoring hw state) when the user presses a button or we get a LoRa interrupt
  */
-void doLightSleep(uint64_t sleepMsec) // FIXME, use a more reasonable default
+esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more reasonable default
 {
   DEBUG_MSG("Enter light sleep\n");
   uint64_t sleepUsec = sleepMsec * 1000LL;
@@ -225,10 +225,11 @@ void doLightSleep(uint64_t sleepMsec) // FIXME, use a more reasonable default
 #ifdef PMU_IRQ
   gpio_wakeup_enable((gpio_num_t)PMU_IRQ, GPIO_INTR_HIGH_LEVEL); // pmu irq
 #endif
-  esp_sleep_enable_gpio_wakeup();
-  esp_sleep_enable_timer_wakeup(sleepUsec);
-  esp_light_sleep_start();
+  assert(esp_sleep_enable_gpio_wakeup() == ESP_OK);
+  assert(esp_sleep_enable_timer_wakeup(sleepUsec) == ESP_OK);
+  assert(esp_light_sleep_start() == ESP_OK);
   DEBUG_MSG("Exit light sleep\n");
+  return esp_sleep_get_wakeup_cause();
 }
 
 #if 0

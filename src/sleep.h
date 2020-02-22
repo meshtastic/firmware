@@ -1,9 +1,10 @@
 #pragma once
 
 #include "Arduino.h"
+#include "esp_sleep.h"
 
 void doDeepSleep(uint64_t msecToWake);
-void doLightSleep(uint64_t msecToWake);
+esp_sleep_wakeup_cause_t doLightSleep(uint64_t msecToWake);
 void setBluetoothEnable(bool on);
 void setGPSPower(bool on);
 
