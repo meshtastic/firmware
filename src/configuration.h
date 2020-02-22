@@ -57,11 +57,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define DEBUG_PORT              Serial      // Serial debug port
 #define SERIAL_BAUD             115200      // Serial debug baud rate
-#define SLEEP_MSECS             (30 * 24 * 60 * 60 * 1000LL) // Sleep for these many millis (or a button press or a lora msg?)
 
-#define MESSAGE_TO_SLEEP_DELAY  5000        // Time after message before going to sleep
-
-#define LOGO_DELAY              2000        // Time to show logo on first boot
 #define REQUIRE_RADIO           true        // If true, we will fail to start if the radio is not found
 
 // If not defined, we will wait for lock forever
