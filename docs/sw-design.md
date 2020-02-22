@@ -41,7 +41,7 @@ off during light sleep, but there is a TODO item to fix this.
 * While in LS: Every send_owner_interval (defaults to 4, i.e. one hour), when we wake to send our position we _also_ broadcast our owner.  This lets new nodes on the network find out about us or correct duplicate node number assignments.
 * While in LS/NB/DARK: If the user presses a button (EVENT_PRESS) we go to full ON mode for screen_on_secs (default 30 seconds).  Multiple presses keeps resetting this timeout
 * While in LS/NB/DARK: If we receive new text messages (EVENT_RECEIVED_TEXT_MSG), we go to full ON mode for screen_on_secs (same as if user pressed a button)
-* While in LS: if we receive packets on the radio (EVENT_RECEIVED_PACKET) we will wake and handle them and stay awake in NB mode for min_wake_secs (default 10 seconds) 
+* While in LS: while we receive packets on the radio (EVENT_RECEIVED_PACKET) we will wake and handle them and stay awake in NB mode for min_wake_secs (default 10 seconds) 
 * While in NB: If we do have packets the phone (EVENT_PACKETS_FOR_PHONE) would want we transition to DARK mode for wait_bluetooth secs.
 
 ### events that decrease cpu activity
@@ -53,6 +53,7 @@ off during light sleep, but there is a TODO item to fix this.
 into either LS or SDS levels.  If either phone_sds_timeout_secs (default 1 hr) or mesh_sds_timeout_secs (default 1 hr) are exceeded we will lower into SDS mode for sds_secs (default 1 hr) (or a button press).  Otherwise we will lower into LS mode for ls_secs (default 1 hr) (or until an interrupt, button press)
 
 TODO: Eventually these scheduled intervals should be synchronized to the GPS clock, so that we can consider leaving the lora receiver off to save even more power.
+TODO: In NB mode we should put cpu into light sleep any time we really aren't that busy (without declaring LS state) - i.e. we should leave GPS on etc...
 
 # Low power consumption tasks
 
