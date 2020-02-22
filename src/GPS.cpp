@@ -12,7 +12,7 @@ RTC_DATA_ATTR bool timeSetFromGPS; // We only reset our time once per _boot_ aft
 
 GPS gps;
 bool hasValidLocation; // default to false, until we complete our first read
-bool wantNewLocation; 
+bool wantNewLocation = true; 
 
 GPS::GPS() : PeriodicTask()
 {
@@ -139,6 +139,7 @@ void GPS::doTask()
 
 void GPS::startLock() 
 {
+    DEBUG_MSG("Looking for GPS lock\n");
     wantNewLocation = true;
     setPeriod(1);
 }
