@@ -49,7 +49,7 @@ off during light sleep, but there is a TODO item to fix this.
 * While in ON: If PRESS event occurs, reset screen_on_secs timer and tell the screen to handle the pess
 * While in ON: If it has been more than screen_on_secs since a press, lower to DARK
 * While in DARK: If time since last contact by our phone exceeds phone_timeout_secs (15 minutes), we transition down into NB mode
-* While in DARK or NB: If nothing above is forcing us to stay in a higher mode (wait_bluetooth_secs, min_wake_secs) we will lower down
+* While in DARK or NB: If nothing above is forcing us to stay in a higher mode (wait_bluetooth_secs, min_wake_secs) we will lower down to LS state
 into either LS or SDS levels.  If either phone_sds_timeout_secs (default 1 hr) or mesh_sds_timeout_secs (default 1 hr) are exceeded we will lower into SDS mode for sds_secs (default 1 hr) (or a button press).  Otherwise we will lower into LS mode for ls_secs (default 1 hr) (or until an interrupt, button press)
 
 TODO: Eventually these scheduled intervals should be synchronized to the GPS clock, so that we can consider leaving the lora receiver off to save even more power.
