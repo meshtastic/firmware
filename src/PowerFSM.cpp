@@ -34,14 +34,21 @@ static void lsEnter()
     delay(msecstosleep);
   } */
 
+    while (!service.radio.rf95.canSleep())
+        delay(10); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
+
     gps.prepareSleep(); // abandon in-process parsing
     setGPSPower(false); // kill GPS power
-    doLightSleep(radioConfig.preferences.ls_secs * 1000LL);
 }
 
 static void lsIdle()
 {
+    doLightSleep(radioConfig.preferences.ls_secs * 1000LL);
+    
     // FIXME - blink led when we occasionally wake from timer, then go back to light sleep
+
+    // Regardless of why we woke (for now) just transition to NB
+    powerFSM.trigger(EVENT_WAKE_TIMER);
 }
 
 static void lsExit()
@@ -53,6 +60,8 @@ static void lsExit()
 static void nbEnter()
 {
     setBluetoothEnable(false);
+
+    // FIXME - check if we already have packets for phone and immediately trigger EVENT_PACKETS_FOR_PHONE
 }
 
 static void darkEnter()
@@ -90,10 +99,15 @@ void PowerFSM_setup()
 {
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_BOOT, NULL, "Boot");
     powerFSM.add_transition(&stateLS, &stateDARK, EVENT_WAKE_TIMER, wakeForPing, "Wake timer");
-    powerFSM.add_transition(&stateLS, &stateNB, EVENT_RECEIVED_PACKET, NULL, "Received packet");
+
+    // Note we don't really use this transition, because when we wake from light sleep we _always_ transition to NB and then it handles things
+    // powerFSM.add_transition(&stateLS, &stateNB, EVENT_RECEIVED_PACKET, NULL, "Received packet");
+
     powerFSM.add_transition(&stateNB, &stateNB, EVENT_RECEIVED_PACKET, NULL, "Received packet, resetting win wake");
 
-    powerFSM.add_transition(&stateLS, &stateON, EVENT_PRESS, NULL, "Press");
+    // Note we don't really use this transition, because when we wake from light sleep we _always_ transition to NB and then it handles things
+    // powerFSM.add_transition(&stateLS, &stateON, EVENT_PRESS, NULL, "Press");
+
     powerFSM.add_transition(&stateNB, &stateON, EVENT_PRESS, NULL, "Press");
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_PRESS, NULL, "Press");
     powerFSM.add_transition(&stateON, &stateON, EVENT_PRESS, screenPress, "Press"); // reenter On to restart our timers
