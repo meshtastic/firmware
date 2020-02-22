@@ -60,10 +60,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define REQUIRE_RADIO           true        // If true, we will fail to start if the radio is not found
 
-// If not defined, we will wait for lock forever
-
-#define MINWAKE_MSECS           (60 * 60 * 1000) // stay awake a long time (30 mins) for debugging - FIXME, change per the TBD sleep rules doc
-// #define MINWAKE_MSECS           (30 * 1000)  // Wait after every boot for GPS lock (may need longer than 5s because we turned the gps off during deep sleep)
 
 // -----------------------------------------------------------------------------
 // DEBUG

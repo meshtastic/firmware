@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Arduino.h"
+
 void doDeepSleep(uint64_t msecToWake);
 void doLightSleep(uint64_t msecToWake);
 void setBluetoothEnable(bool on);

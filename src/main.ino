@@ -37,6 +37,7 @@
 #include "esp_pm.h"
 #include "MeshRadio.h"
 #include "sleep.h"
+#include "PowerFSM.h"
 
 #ifdef T_BEAM_V10
 #include "axp20x.h"
@@ -337,7 +338,7 @@ void loop()
   // if user presses button for more than 3 secs, discard our network prefs and reboot (FIXME, use a debounce lib instead of this boilerplate)
   static bool wasPressed = false;
   static uint32_t minPressMs; // what tick should we call this press long enough
-  static uint32_t lastPingMs, lastPressMs;
+  static uint32_t lastPingMs;
   if (!digitalRead(BUTTON_PIN))
   {
     if (!wasPressed)
@@ -349,7 +350,6 @@ void loop()
       wasPressed = true;
 
       uint32_t now = millis();
-      lastPressMs = now;
       minPressMs = now + 3000;
 
       if (now - lastPingMs > 60 * 1000)
@@ -358,7 +358,7 @@ void loop()
         lastPingMs = now;
       }
 
-      screen_press();
+      powerFSM.trigger(EVENT_PRESS);
     }
   }
   else if (wasPressed)
@@ -375,15 +375,6 @@ void loop()
   }
 #endif
 
-#ifdef MINWAKE_MSECS
-  // Don't deepsleep if we have USB power or if the user as pressed a button recently
-  // !isUSBPowered <- doesn't work yet because the axp192 isn't letting the battery fully charge when we are awake - FIXME
-  if (millis() - lastPressMs > MINWAKE_MSECS)
-  {
-    doDeepSleep(radioConfig.preferences.sds_secs);
-  }
-#endif
-
   // No GPS lock yet, let the OS put the main CPU in low power mode for 100ms (or until another interrupt comes in)
   // i.e. don't just keep spinning in loop as fast as we can.
   //DEBUG_MSG("msecs %d\n", msecstosleep);
@@ -391,12 +382,5 @@ void loop()
   // FIXME - until button press handling is done by interrupt (see polling above) we can't sleep very long at all or buttons feel slow
   msecstosleep = 10;
 
-  // while we have bluetooth on, we can't do light sleep, but once off stay in light_sleep all the time
-  // we will wake from light sleep on button press or interrupt from the RF95 radio
-  if (!bluetoothOn && !is_screen_on() && service.radio.rf95.canSleep() && gps.canSleep())
-    doLightSleep(60 * 1000); // FIXME, wake up to briefly flash led, then go back to sleep (without repowering bluetooth)
-  else
-  {
-    delay(msecstosleep);
-  }
+  delay(msecstosleep);
 }

@@ -4,7 +4,6 @@
 
 void screen_print(const char * text);
 
-void screen_on(), screen_off(), screen_press();
 
 // Show the bluetooth PIN screen
 void screen_start_bluetooth(uint32_t pin); 
@@ -12,7 +11,6 @@ void screen_start_bluetooth(uint32_t pin);
 // restore our regular frame list
 void screen_set_frames();
 
-bool is_screen_on();
 
 /**
  * Slowly I'm moving screen crap into this class
@@ -27,6 +25,15 @@ public:
 
     /// Turn on the screen asap
     void doWakeScreen();
+
+    /// Is the screen currently on
+    bool isOn();
+
+    /// Turn the screen on/off
+    void setOn(bool on);
+
+    /// Handle a button press
+    void onPress();
 };
 
 extern Screen screen;

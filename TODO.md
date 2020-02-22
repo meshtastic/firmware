@@ -72,6 +72,7 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 
 Items after the first final candidate release.
 
+* read the PMU battery fault indicators and blink/led/warn user on screen
 * make a no bluetooth configured yet screen - include this screen in the loop if the user hasn't yet paired
 * the AXP debug output says it is trying to charge at 700mA, but the max I've seen is 180mA, so AXP registers probably need to be set to tell them the circuit can only provide 300mAish max. So that the low charge rate kicks in faster and we don't wear out batteries.
 * increase the max charging rate a bit for 18650s, currently it limits to 180mA (at 4V).  Work backwards from the 500mA USB limit (at 5V) and let the AXP charge at that rate.

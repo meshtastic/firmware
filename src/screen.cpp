@@ -60,7 +60,7 @@ static bool showingBootScreen = true; // start by showing the bootscreen
 
 uint32_t lastPressMs;
 
-bool is_screen_on() { return screenOn; }
+bool Screen::isOn() { return screenOn; }
 
 void msOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
@@ -491,22 +491,19 @@ void _screen_header()
 }
 #endif
 
-void screen_off()
+
+void Screen::setOn(bool on)
 {
     if (!disp)
         return;
 
-    dispdev.displayOff();
-    screenOn = false;
-}
-
-void screen_on()
-{
-    if (!disp)
-        return;
-
+    if(on != screenOn) {
+        if(on)
     dispdev.displayOn();
-    screenOn = true;
+    else
+    dispdev.displayOff();
+    screenOn = on;
+    }
 }
 
 static void screen_print(const char *text, uint8_t x, uint8_t y, uint8_t alignment)
@@ -579,7 +576,7 @@ void Screen::setup()
     // Scroll buffer
     dispdev.setLogBuffer(3, 32);
 
-    screen_on(); // update our screenOn bool
+    setOn(true); // update our screenOn bool
 
 #ifdef BICOLOR_DISPLAY
     dispdev.flipScreenVertically(); // looks better without this on lora32
@@ -612,7 +609,7 @@ void Screen::doTask()
     if (wakeScreen) // If a new text message arrived, turn the screen on immedately
     {
         lastPressMs = millis(); // if we were told to wake the screen, reset the press timeout
-        screen_on();            // make sure the screen is not asleep
+        screen.setOn(true);            // make sure the screen is not asleep
         wakeScreen = false;
     }
 
@@ -655,11 +652,12 @@ void Screen::doTask()
                 nodeDB.updateTextMessage = false;
             }
 
+/*
             if (millis() - lastPressMs > SCREEN_SLEEP_MS)
             {
                 DEBUG_MSG("screen timeout, turn it off for now...\n");
-                screen_off();
-            }
+                screen.setOn(false);
+            } */
         }
     }
 
@@ -716,7 +714,7 @@ void screen_set_frames()
 }
 
 /// handle press of the button
-void screen_press()
+void Screen::onPress()
 {
     // screen_start_bluetooth(123456);
 

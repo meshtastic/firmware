@@ -65,6 +65,8 @@ void setLed(bool ledOn)
 
 void setGPSPower(bool on)
 {
+    DEBUG_MSG("Setting GPS power=%d\n", on);
+
 #ifdef T_BEAM_V10
   if (axp192_found)
     axp.setPowerOutPut(AXP192_LDO3, on ? AXP202_ON : AXP202_OFF); // GPS main power
@@ -97,7 +99,7 @@ void doDeepSleep(uint64_t msecToWake)
 
   BLEDevice::deinit(false); // We are required to shutdown bluetooth before deep or light sleep
 
-  screen_off(); // datasheet says this will draw only 10ua
+  screen.setOn(false); // datasheet says this will draw only 10ua
 
   // Put radio in sleep mode (will still draw power but only 0.2uA)
   service.radio.rf95.sleep();
@@ -212,6 +214,7 @@ void doLightSleep(uint64_t sleepMsec) // FIXME, use a more reasonable default
 
   setBluetoothEnable(false); // has to be off before calling light sleep
   gps.prepareSleep(); // abandon in-process parsing
+  setGPSPower(false); // kill GPS power
   setLed(false);      // Never leave led on while in light sleep
 
   // NOTE! ESP docs say we must disable bluetooth and wifi before light sleep
@@ -228,6 +231,8 @@ void doLightSleep(uint64_t sleepMsec) // FIXME, use a more reasonable default
   esp_sleep_enable_timer_wakeup(sleepUsec);
   esp_light_sleep_start();
   DEBUG_MSG("Exit light sleep\n");
+
+  setGPSPower(true); // restore GPS power
 }
 
 #if 0
