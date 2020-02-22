@@ -12,3 +12,5 @@
 #define EVENT_BOOT 6
 
 extern Fsm powerFSM;
+
+void PowerFSM_setup();

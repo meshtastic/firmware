@@ -5,6 +5,7 @@
 #include "configuration.h"
 #include "screen.h"
 #include "PowerFSM.h"
+#include "GPS.h"
 
 static void sdsEnter()
 {
@@ -23,7 +24,7 @@ static void sdsEnter()
 
 static void lsEnter()
 {
-/*
+    /*
       // while we have bluetooth on, we can't do light sleep, but once off stay in light_sleep all the time
   // we will wake from light sleep on button press or interrupt from the RF95 radio
   if (!bluetoothOn && !is_screen_on() && service.radio.rf95.canSleep() && gps.canSleep())
@@ -33,6 +34,8 @@ static void lsEnter()
     delay(msecstosleep);
   } */
 
+    gps.prepareSleep(); // abandon in-process parsing
+    setGPSPower(false); // kill GPS power
     doLightSleep(radioConfig.preferences.ls_secs * 1000LL);
 }
 
@@ -43,7 +46,8 @@ static void lsIdle()
 
 static void lsExit()
 {
-    // nothing
+    setGPSPower(true); // restore GPS power
+    gps.startLock();
 }
 
 static void nbEnter()
@@ -54,7 +58,7 @@ static void nbEnter()
 static void darkEnter()
 {
     DEBUG_MSG("screen timeout, turn it off for now...\n");
-    screen.setOn(true);
+    screen.setOn(false);
 }
 
 static void onEnter()
@@ -76,31 +80,33 @@ static void screenPress()
     screen.onPress();
 }
 
-State stateSDS(sdsEnter, NULL, NULL);
-State stateLS(lsEnter, lsIdle, lsExit);
-State stateNB(nbEnter, NULL, NULL);
-State stateDARK(darkEnter, NULL, NULL);
-State stateON(onEnter, NULL, onExit);
+State stateSDS(sdsEnter, NULL, NULL, "SDS");
+State stateLS(lsEnter, lsIdle, lsExit, "LS");
+State stateNB(nbEnter, NULL, NULL, "NB");
+State stateDARK(darkEnter, NULL, NULL, "DARK");
+State stateON(onEnter, NULL, onExit, "ON");
 Fsm powerFSM(&stateDARK);
 
 void PowerFSM_setup()
 {
-    powerFSM.add_transition(&stateDARK, &stateON, EVENT_BOOT, NULL);
-    powerFSM.add_transition(&stateLS, &stateDARK, EVENT_WAKE_TIMER, wakeForPing);
-    powerFSM.add_transition(&stateLS, &stateNB, EVENT_RECEIVED_PACKET, NULL);
+    powerFSM.add_transition(&stateDARK, &stateON, EVENT_BOOT, NULL, "Boot");
+    powerFSM.add_transition(&stateLS, &stateDARK, EVENT_WAKE_TIMER, wakeForPing, "Wake timer");
+    powerFSM.add_transition(&stateLS, &stateNB, EVENT_RECEIVED_PACKET, NULL, "Received packet");
 
-    powerFSM.add_transition(&stateLS, &stateON, EVENT_PRESS, NULL);
-    powerFSM.add_transition(&stateNB, &stateON, EVENT_PRESS, NULL);
-    powerFSM.add_transition(&stateDARK, &stateON, EVENT_PRESS, NULL);
-    powerFSM.add_transition(&stateON, &stateON, EVENT_PRESS, screenPress); // reenter On to restart our timers
+    powerFSM.add_transition(&stateLS, &stateON, EVENT_PRESS, NULL, "Press");
+    powerFSM.add_transition(&stateNB, &stateON, EVENT_PRESS, NULL, "Press");
+    powerFSM.add_transition(&stateDARK, &stateON, EVENT_PRESS, NULL, "Press");
+    powerFSM.add_transition(&stateON, &stateON, EVENT_PRESS, screenPress, "Press"); // reenter On to restart our timers
 
-    powerFSM.add_transition(&stateLS, &stateON, EVENT_RECEIVED_TEXT_MSG, NULL);
-    powerFSM.add_transition(&stateNB, &stateON, EVENT_RECEIVED_TEXT_MSG, NULL);
-    powerFSM.add_transition(&stateDARK, &stateON, EVENT_RECEIVED_TEXT_MSG, NULL);
+    powerFSM.add_transition(&stateLS, &stateON, EVENT_RECEIVED_TEXT_MSG, NULL, "Received text");
+    powerFSM.add_transition(&stateNB, &stateON, EVENT_RECEIVED_TEXT_MSG, NULL, "Received text");
+    powerFSM.add_transition(&stateDARK, &stateON, EVENT_RECEIVED_TEXT_MSG, NULL, "Received text");
 
-    powerFSM.add_transition(&stateNB, &stateDARK, EVENT_PACKET_FOR_PHONE, NULL);
+    powerFSM.add_transition(&stateNB, &stateDARK, EVENT_PACKET_FOR_PHONE, NULL, "Packet for phone");
 
-    powerFSM.add_timed_transition(&stateON, &stateDARK, radioConfig.preferences.screen_on_secs, NULL);
+    powerFSM.add_timed_transition(&stateON, &stateDARK, radioConfig.preferences.screen_on_secs, NULL, "Screen-on timeout");
 
-    powerFSM.add_timed_transition(&stateDARK, &stateNB, radioConfig.preferences.phone_timeout_secs, NULL);
+    powerFSM.add_timed_transition(&stateDARK, &stateNB, radioConfig.preferences.phone_timeout_secs, NULL, "Phone timeout");
+
+    powerFSM.run_machine(); // run one interation of the state machine, so we run our on enter tasks for the initial DARK state
 }

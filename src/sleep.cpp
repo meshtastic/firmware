@@ -213,8 +213,6 @@ void doLightSleep(uint64_t sleepMsec) // FIXME, use a more reasonable default
   uint64_t sleepUsec = sleepMsec * 1000LL;
 
   setBluetoothEnable(false); // has to be off before calling light sleep
-  gps.prepareSleep(); // abandon in-process parsing
-  setGPSPower(false); // kill GPS power
   setLed(false);      // Never leave led on while in light sleep
 
   // NOTE! ESP docs say we must disable bluetooth and wifi before light sleep
@@ -231,8 +229,6 @@ void doLightSleep(uint64_t sleepMsec) // FIXME, use a more reasonable default
   esp_sleep_enable_timer_wakeup(sleepUsec);
   esp_light_sleep_start();
   DEBUG_MSG("Exit light sleep\n");
-
-  setGPSPower(true); // restore GPS power
 }
 
 #if 0
