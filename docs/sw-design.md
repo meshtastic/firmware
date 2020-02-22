@@ -7,44 +7,50 @@ This is a mini design doc for various core behaviors...
 From lower to higher power consumption.
 
 * Super-deep-sleep (SDS) - everything is off, CPU, radio, bluetooth, GPS.  Only wakes due to timer or button press
-
-* deep-sleep (DS) - CPU is off, radio is on, bluetooth and GPS is off.  Note: This mode is never used currently, because it only saves 1.5mA vs light-sleep
   onEntry: setBluetoothOn(false), call doDeepSleep
   onExit: (standard bootup code, starts in DARK)
 
+* deep-sleep (DS) - CPU is off, radio is on, bluetooth and GPS is off.  Note: This mode is never used currently, because it only saves 1.5mA vs light-sleep
+  (Not currently used)
+
 * light-sleep (LS) - CPU is suspended (RAM stays alive), radio is on, bluetooth is off, GPS is off.  Note: currently GPS is not turned 
 off during light sleep, but there is a TODO item to fix this.
-  onEntry: setBluetoothOn(false), setGPSPower(false), call doLightSleep
-  onExit: start trying to get gps lock: gps.startLock(), once lock arrives service.sendPosition(BROADCAST)
+  onEntry: setBluetoothOn(false), setGPSPower(false) - happens inside doLightSleep()
+  onIdle: (if we wake because our led blink timer has expired) blink the led then go back to sleep until we sleep for ls_secs
+  onExit: setGPSPower(true), start trying to get gps lock: gps.startLock(), once lock arrives service.sendPosition(BROADCAST)
 
 * No bluetooth (NB) - CPU is running, radio is on, GPS is on but bluetooth is off, screen is off.
-  onEntry: setGPSPower(true), setBluetoothOn(false)
+  onEntry: setBluetoothOn(false)
   onExit: 
 
 * running dark (DARK) - Everything is on except screen
   onEntry: setBluetoothOn(true)
-  onExit:
+  onExit: 
 
 * full on (ON) - Everything is on
   onEntry: setBluetoothOn(true), screen.setOn(true)
   onExit: screen.setOn(false)
-  
+
 ## Behavior
 
 ### events that increase CPU activity
 
+* At cold boot: The initial state (after setup() has run) is DARK
+* While in DARK: if we receive EVENT_BOOT, transition to ON (and show the bootscreen).  This event will be sent if we detect we woke due to reset (as opposed to deep sleep)
 * While in LS: Once every position_broadcast_secs (default 15 mins) - the unit will wake into DARK mode and broadcast a "networkPing" (our position) and stay alive for wait_bluetooth_secs (default 30 seconds).  This allows other nodes to have a record of our last known position if we go away and allows a paired phone to hear from us and download messages.
 * While in LS: Every send_owner_interval (defaults to 4, i.e. one hour), when we wake to send our position we _also_ broadcast our owner.  This lets new nodes on the network find out about us or correct duplicate node number assignments.
-* While in LS/NB/DARK: If the user presses a button we go to full ON mode for screen_on_secs (default 30 seconds).  Multiple presses keeps resetting this timeout
-* While in LS/NB/DARK: If we receive text messages, we go to full ON mode for screen_on_secs (same as if user pressed a button)
-* While in LS: if we receive packets on the radio we will wake and handle them and stay awake in NB mode for min_wake_secs (default 10 seconds) - if we don't have packets we need to deliver to our phone.  If we do have packets the phone would want we instead stay in DARK mode for wait_bluetooth secs.
+* While in LS/NB/DARK: If the user presses a button (EVENT_PRESS) we go to full ON mode for screen_on_secs (default 30 seconds).  Multiple presses keeps resetting this timeout
+* While in LS/NB/DARK: If we receive new text messages (EVENT_RECEIVED_TEXT_MSG), we go to full ON mode for screen_on_secs (same as if user pressed a button)
+* While in LS: if we receive packets on the radio (EVENT_RECEIVED_PACKET) we will wake and handle them and stay awake in NB mode for min_wake_secs (default 10 seconds) 
+* While in NB: If we do have packets the phone (EVENT_PACKETS_FOR_PHONE) would want we transition to DARK mode for wait_bluetooth secs.
 
 ### events that decrease cpu activity
 
+* While in ON: If PRESS event occurs, reset screen_on_secs timer and tell the screen to handle the pess
 * While in ON: If it has been more than screen_on_secs since a press, lower to DARK
 * While in DARK: If time since last contact by our phone exceeds phone_timeout_secs (15 minutes), we transition down into NB mode
 * While in DARK or NB: If nothing above is forcing us to stay in a higher mode (wait_bluetooth_secs, min_wake_secs) we will lower down
-into either LS or SDS levels.  If either phone_sds_timeout_secs (default 1 hr) or mesh_sds_timeout_secs (default 1 hr) are exceeded we will lower into SDS mode for sds_secs (or a button press).  Otherwise we will lower into LS mode for ls_secs (default 1 hr) (or until an interrupt, button press)
+into either LS or SDS levels.  If either phone_sds_timeout_secs (default 1 hr) or mesh_sds_timeout_secs (default 1 hr) are exceeded we will lower into SDS mode for sds_secs (default 1 hr) (or a button press).  Otherwise we will lower into LS mode for ls_secs (default 1 hr) (or until an interrupt, button press)
 
 TODO: Eventually these scheduled intervals should be synchronized to the GPS clock, so that we can consider leaving the lora receiver off to save even more power.
 
