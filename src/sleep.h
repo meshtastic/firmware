@@ -5,6 +5,7 @@
 void doDeepSleep(uint64_t msecToWake);
 void doLightSleep(uint64_t msecToWake);
 void setBluetoothEnable(bool on);
+void setGPSPower(bool on);
 
 // Perform power on init that we do on each wake from deep sleep
 void initDeepSleep();

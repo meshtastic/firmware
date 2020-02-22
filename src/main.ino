@@ -50,14 +50,12 @@ bool isUSBPowered = false;
 bool ssd1306_found = false;
 bool axp192_found = false;
 
-
 #define xstr(s) str(s)
 #define str(s) #s
 
 // -----------------------------------------------------------------------------
 // Application
 // -----------------------------------------------------------------------------
-
 
 void scanI2Cdevice(void)
 {
@@ -188,7 +186,6 @@ void axp192Init()
 #endif
 }
 
-
 const char *getDeviceName()
 {
   uint8_t dmac[6];
@@ -208,7 +205,6 @@ void setup()
 #endif
 
   initDeepSleep();
-  // delay(1000); FIXME - remove
 
 #ifdef VEXT_ENABLE
   pinMode(VEXT_ENABLE, OUTPUT);
@@ -267,6 +263,9 @@ void setup()
 
   setBluetoothEnable(false);
   setCPUFast(false); // 80MHz is fine for our slow peripherals
+
+  PowerFSM_setup();
+  powerFSM.trigger(EVENT_BOOT); // transition to ON, FIXME, only do this for cold boots, not waking from SDS
 }
 
 uint32_t ledBlinker()
@@ -303,6 +302,7 @@ void loop()
 {
   uint32_t msecstosleep = 1000 * 30; // How long can we sleep before we again need to service the main loop?
 
+  powerFSM.run_machine();
   gps.loop();
   screen.loop();
   service.loop();

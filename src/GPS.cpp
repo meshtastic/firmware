@@ -137,6 +137,12 @@ void GPS::doTask()
     setPeriod(hasValidLocation && !wantNewLocation ? 30 * 1000 : 100);
 }
 
+void GPS::startLock() 
+{
+    wantNewLocation = true;
+    setPeriod(1);
+}
+
 String GPS::getTimeStr()
 {
     static char t[12]; // used to sprintf for Serial output

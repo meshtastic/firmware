@@ -38,6 +38,9 @@ public:
     /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
     void prepareSleep();
 
+    /// Restart our lock attempt - try to get and broadcast a GPS reading ASAP
+    void startLock();
+
 private:
     void readFromRTC();
 };

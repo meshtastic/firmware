@@ -15,7 +15,7 @@ From lower to higher power consumption.
 
 * light-sleep (LS) - CPU is suspended (RAM stays alive), radio is on, bluetooth is off, GPS is off.  Note: currently GPS is not turned 
 off during light sleep, but there is a TODO item to fix this.
-  onEntry: setBluetoothOn(false), setGPSPower(false) - happens inside doLightSleep()
+  onEntry: setBluetoothOn(false), setGPSPower(false), doLightSleep()
   onIdle: (if we wake because our led blink timer has expired) blink the led then go back to sleep until we sleep for ls_secs
   onExit: setGPSPower(true), start trying to get gps lock: gps.startLock(), once lock arrives service.sendPosition(BROADCAST)
 
