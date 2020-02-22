@@ -1,8 +1,8 @@
-
 # High priority
 
 Items to complete before the first alpha release.
 
+* implement sleep state machine
 * have gps implement canSleep(), print nmea for debugging and discard buffers on the way into sleep
 * implement CustomRF95::canSleep
 * make gps prevent light sleep if we are waiting for data
@@ -13,10 +13,9 @@ for it (because it will redownload the nodedb when it comes back)
 * don't enter light sleep while the screen is on
 * any time we wake from light sleep, briefly blink the led
 
-* turn light sleep on agressively (while lora is on but BLE off)
+* turn light sleep on aggressively (while lora is on but BLE off)
 * retest BLE software update for both board types
 * default to enter deep sleep if no LORA received for two hours (indicates user has probably left the meshS)
-* article writeup for hackaday?
 * send note about Adafruit Clue
 * send note to the guy who designed the cases
 * update the prebuilt bins for different regulatory regions
@@ -47,7 +46,8 @@ Items to complete before the first beta release.
 * How do avalanche beacons work?  Could this do that as well?  possibly by using beacon mode feature of the RF95?
 * use std::map<NodeInfo*, std::string> in node db
 * make a HAM build: yep - that's a great idea.  I'll add it to the TODO.  should be pretty painless - just a new frequency list, a bool to say 'never do encryption' and use hte callsign as that node's unique id.  -from Girts
-* add frequency hopping 
+* add frequency hopping
+* publish update articles on the web
 
 # Pre-beta priority
 

@@ -173,7 +173,7 @@ uint32_t sendOwnerCb()
 {
   service.sendOurOwner();
 
-  return radioConfig.preferences.send_owner_secs * 1000;
+  return radioConfig.preferences.send_owner_interval * radioConfig.preferences.position_broadcast_secs * 1000;
 }
 
 Periodic sendOwnerPeriod(sendOwnerCb);
