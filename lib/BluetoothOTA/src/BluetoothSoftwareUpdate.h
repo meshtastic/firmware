@@ -4,4 +4,5 @@
 
 BLEService *createUpdateService(BLEServer* server);
 
+void destroyUpdateService();
 void bluetoothRebootCheck();

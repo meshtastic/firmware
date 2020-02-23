@@ -31,3 +31,12 @@ public:
 
 void *operator new(size_t size, SimpleAllocator &p);
 
+/**
+ * Temporarily makes the specified Allocator be used for _all_ allocations.  Useful when calling library routines
+ * that don't know about pools
+ */
+class AllocatorScope {
+public:
+    AllocatorScope(SimpleAllocator &a);
+    ~AllocatorScope();
+};

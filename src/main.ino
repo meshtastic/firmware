@@ -264,6 +264,10 @@ void setup()
 void initBluetooth()
 {
   DEBUG_MSG("Starting bluetooth\n");
+
+  // FIXME - we are leaking like crazy
+  // AllocatorScope scope(btPool);
+
   BLEServer *serve = initBLE(getDeviceName(), HW_VENDOR, str(APP_VERSION)); // FIXME, use a real name based on the macaddr
   createMeshBluetoothService(serve);
 
@@ -284,7 +288,8 @@ void setBluetoothEnable(bool on)
     }
     else
     {
-      // FIXME - we are leaking like crazy
+      // We have to totally teardown our bluetooth objects to prevent leaks
+      destroyMeshBluetoothService();
       deinitBLE();
     }
   }
