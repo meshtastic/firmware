@@ -314,7 +314,13 @@ BLEService *createMeshBluetoothService(BLEServer *server)
     meshFromNumCharacteristic->addDescriptor(new (btPool) BLE2902()); // Needed so clients can request notification
 
     service->start();
-    server->getAdvertising()->addServiceUUID(service->getUUID());
+
+    // We only add to advertisting once, because the ESP32 arduino code is dumb and that object never dies
+    static bool firstTime = true;
+    if(firstTime) {
+        firstTime = false;
+        server->getAdvertising()->addServiceUUID(service->getUUID());
+    }
 
     DEBUG_MSG("*** Mesh service:\n");
     service->dump();
