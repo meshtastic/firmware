@@ -2,6 +2,7 @@
 #include "GPS.h"
 #include "time.h"
 #include <sys/time.h>
+#include "configuration.h"
 
 // stuff that really should be in in the instance instead...
 HardwareSerial _serial_gps(GPS_SERIAL_NUM);
@@ -12,7 +13,7 @@ RTC_DATA_ATTR bool timeSetFromGPS; // We only reset our time once per _boot_ aft
 
 GPS gps;
 bool hasValidLocation; // default to false, until we complete our first read
-bool wantNewLocation = true; 
+bool wantNewLocation = true;
 
 GPS::GPS() : PeriodicTask()
 {
@@ -98,11 +99,14 @@ void GPS::doTask()
     while (_serial_gps.available())
     {
         encode(_serial_gps.read());
+        // DEBUG_MSG("Got GPS response\n");
     }
 
     if (!timeSetFromGPS && time.isValid() && date.isValid())
     {
         struct timeval tv;
+
+        DEBUG_MSG("Got time from GPS\n");
 
         /* Convert to unix time 
         The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z). 
@@ -137,7 +141,7 @@ void GPS::doTask()
     setPeriod(hasValidLocation && !wantNewLocation ? 30 * 1000 : 100);
 }
 
-void GPS::startLock() 
+void GPS::startLock()
 {
     DEBUG_MSG("Looking for GPS lock\n");
     wantNewLocation = true;

@@ -209,11 +209,11 @@ void setBluetoothEnable(bool on)
  */
 esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more reasonable default
 {
-  DEBUG_MSG("Enter light sleep\n");
+  //DEBUG_MSG("Enter light sleep\n");
   uint64_t sleepUsec = sleepMsec * 1000LL;
 
+  Serial.flush(); // send all our characters before we stop cpu clock
   setBluetoothEnable(false); // has to be off before calling light sleep
-  setLed(false);      // Never leave led on while in light sleep
 
   // NOTE! ESP docs say we must disable bluetooth and wifi before light sleep
 
@@ -228,7 +228,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
   assert(esp_sleep_enable_gpio_wakeup() == ESP_OK);
   assert(esp_sleep_enable_timer_wakeup(sleepUsec) == ESP_OK);
   assert(esp_light_sleep_start() == ESP_OK);
-  DEBUG_MSG("Exit light sleep\n");
+  //DEBUG_MSG("Exit light sleep\n");
   return esp_sleep_get_wakeup_cause();
 }
 

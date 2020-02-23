@@ -651,13 +651,6 @@ void Screen::doTask()
                 nodeDB.updateGUI = false;
                 nodeDB.updateTextMessage = false;
             }
-
-/*
-            if (millis() - lastPressMs > SCREEN_SLEEP_MS)
-            {
-                DEBUG_MSG("screen timeout, turn it off for now...\n");
-                screen.setOn(false);
-            } */
         }
     }
 
