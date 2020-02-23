@@ -2,6 +2,8 @@
 
 Items to complete before the first alpha release.
 
+* turn on gps https://github.com/sparkfun/SparkFun_Ublox_Arduino_Library/blob/master/examples/Example18_PowerSaveMode/Example18_PowerSaveMode.ino
+* switch gps to 38400 baud https://github.com/sparkfun/SparkFun_Ublox_Arduino_Library/blob/master/examples/Example11_ResetModule/Example2_FactoryDefaultsviaSerial/Example2_FactoryDefaultsviaSerial.ino
 * have state machine properly enter deep sleep based on loss of mesh and phone comms
 * have gps implement canSleep(), print nmea for debugging and discard buffers on the way into sleep
 * implement CustomRF95::canSleep
