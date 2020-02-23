@@ -149,7 +149,7 @@ void MeshService::handleFromRadio(MeshPacket *mp)
         }
         assert(toPhoneQueue.enqueue(mp, 0) == pdTRUE); // FIXME, instead of failing for full queue, delete the oldest mssages
 
-        if(mp->payload.want_response)
+        if (mp->payload.want_response)
             sendNetworkPing(mp->from);
     }
     else
@@ -168,12 +168,11 @@ void MeshService::handleFromRadio()
         bluetoothNotifyFromNum(fromNum);
 }
 
-
 uint32_t sendOwnerCb()
 {
-  service.sendOurOwner();
+    service.sendOurOwner();
 
-  return radioConfig.preferences.send_owner_interval * radioConfig.preferences.position_broadcast_secs * 1000;
+    return radioConfig.preferences.send_owner_interval * radioConfig.preferences.position_broadcast_secs * 1000;
 }
 
 Periodic sendOwnerPeriod(sendOwnerCb);
@@ -306,11 +305,13 @@ void MeshService::onGPSChanged()
     MeshPacket *p = allocForSending();
     p->payload.which_variant = SubPacket_position_tag;
     Position &pos = p->payload.variant.position;
+#if 0
     if (gps.altitude.isValid())
         pos.altitude = gps.altitude.meters();
     pos.latitude = gps.location.lat();
     pos.longitude = gps.location.lng();
     pos.time = gps.getValidTime();
+#endif
 
     // We limit our GPS broadcasts to a max rate
     static uint32_t lastGpsSend;
