@@ -9,17 +9,16 @@
 
 SimpleAllocator btPool;
 
-static BLECharacteristic SWVersionCharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_SW_VERSION_STR), BLECharacteristic::PROPERTY_READ);
-static BLECharacteristic ManufacturerCharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_MANU_NAME), BLECharacteristic::PROPERTY_READ);
-static BLECharacteristic HardwareVersionCharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_HW_VERSION_STR), BLECharacteristic::PROPERTY_READ);
-//static BLECharacteristic SerialNumberCharacteristic(BLEUUID((uint16_t) ESP_GATT_UUID_SERIAL_NUMBER_STR), BLECharacteristic::PROPERTY_READ);
-
 /**
  * Create standard device info service
  **/
 BLEService *createDeviceInfomationService(BLEServer *server, std::string hwVendor, std::string swVersion, std::string hwVersion = "")
 {
   BLEService *deviceInfoService = server->createService(BLEUUID((uint16_t)ESP_GATT_UUID_DEVICE_INFO_SVC));
+
+  BLECharacteristic *swC = new (btPool) BLECharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_SW_VERSION_STR), BLECharacteristic::PROPERTY_READ);
+  BLECharacteristic *mfC = new (btPool) BLECharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_MANU_NAME), BLECharacteristic::PROPERTY_READ);
+  // BLECharacteristic SerialNumberCharacteristic(BLEUUID((uint16_t) ESP_GATT_UUID_SERIAL_NUMBER_STR), BLECharacteristic::PROPERTY_READ);
 
   /*
 	 * Mandatory characteristic for device info service?
@@ -30,14 +29,15 @@ BLEService *createDeviceInfomationService(BLEServer *server, std::string hwVendo
 	uint8_t pnp[] = { sig, (uint8_t) (vid >> 8), (uint8_t) vid, (uint8_t) (pid >> 8), (uint8_t) pid, (uint8_t) (version >> 8), (uint8_t) version };
 	m_pnpCharacteristic->setValue(pnp, sizeof(pnp));
     */
-  SWVersionCharacteristic.setValue(swVersion);
-  deviceInfoService->addCharacteristic(&SWVersionCharacteristic);
-  ManufacturerCharacteristic.setValue(hwVendor);
-  deviceInfoService->addCharacteristic(&ManufacturerCharacteristic);
+  swC->setValue(swVersion);
+  deviceInfoService->addCharacteristic(swC);
+  mfC->setValue(hwVendor);
+  deviceInfoService->addCharacteristic(mfC);
   if (!hwVersion.empty())
   {
-    HardwareVersionCharacteristic.setValue(hwVersion);
-    deviceInfoService->addCharacteristic(&HardwareVersionCharacteristic);
+    BLECharacteristic *hwvC = new (btPool) BLECharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_HW_VERSION_STR), BLECharacteristic::PROPERTY_READ);
+    hwvC->setValue(hwVersion);
+    deviceInfoService->addCharacteristic(hwvC);
   }
   //SerialNumberCharacteristic.setValue("FIXME");
   //deviceInfoService->addCharacteristic(&SerialNumberCharacteristic);
@@ -68,17 +68,13 @@ class MyServerCallbacks : public BLEServerCallbacks
   }
 };
 
-
-
-
-
 // Help routine to add a description to any BLECharacteristic and add it to the service
 // We default to require an encrypted BOND for all these these characterstics
 void addWithDesc(BLEService *service, BLECharacteristic *c, const char *description)
 {
   c->setAccessPermissions(ESP_GATT_PERM_READ_ENCRYPTED | ESP_GATT_PERM_WRITE_ENCRYPTED);
 
-  BLEDescriptor *desc = new(btPool) BLEDescriptor(BLEUUID((uint16_t)ESP_GATT_UUID_CHAR_DESCRIPTION), strlen(description) + 1);
+  BLEDescriptor *desc = new (btPool) BLEDescriptor(BLEUUID((uint16_t)ESP_GATT_UUID_CHAR_DESCRIPTION), strlen(description) + 1);
   assert(desc);
   desc->setAccessPermissions(ESP_GATT_PERM_READ_ENCRYPTED | ESP_GATT_PERM_WRITE_ENCRYPTED);
   desc->setValue(description);
@@ -86,8 +82,7 @@ void addWithDesc(BLEService *service, BLECharacteristic *c, const char *descript
   service->addCharacteristic(c);
 }
 
-static BLECharacteristic BatteryLevelCharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_BATTERY_LEVEL), BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
-
+static BLECharacteristic *batteryLevelC;
 
 /**
  * Create a battery level service
@@ -97,8 +92,10 @@ BLEService *createBatteryService(BLEServer *server)
   // Create the BLE Service
   BLEService *pBattery = server->createService(BLEUUID((uint16_t)0x180F));
 
-  addWithDesc(pBattery, &BatteryLevelCharacteristic, "Percentage 0 - 100");
-  BatteryLevelCharacteristic.addDescriptor(new(btPool) BLE2902()); // Needed so clients can request notification
+  batteryLevelC = new (btPool) BLECharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_BATTERY_LEVEL), BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+
+  addWithDesc(pBattery, batteryLevelC, "Percentage 0 - 100");
+  batteryLevelC->addDescriptor(new (btPool) BLE2902()); // Needed so clients can request notification
 
   // I don't think we need to advertise this
   // server->getAdvertising()->addServiceUUID(pBattery->getUUID());
@@ -114,8 +111,11 @@ BLEService *createBatteryService(BLEServer *server)
 void updateBatteryLevel(uint8_t level)
 {
   // Pretend to update battery levels - fixme do elsewhere
-  BatteryLevelCharacteristic.setValue(&level, 1);
-  BatteryLevelCharacteristic.notify();
+  if (batteryLevelC)
+  {
+    batteryLevelC->setValue(&level, 1);
+    batteryLevelC->notify();
+  }
 }
 
 void dumpCharacteristic(BLECharacteristic *c)
@@ -188,6 +188,14 @@ class MySecurity : public BLESecurityCallbacks
     screen_set_frames();
   }
 };
+
+void deinitBLE()
+{
+  batteryLevelC = NULL; // Don't let anyone generate bogus notifies
+
+  BLEDevice::deinit(false);
+  btPool.reset();
+}
 
 BLEServer *initBLE(std::string deviceName, std::string hwVendor, std::string swVersion, std::string hwVersion)
 {

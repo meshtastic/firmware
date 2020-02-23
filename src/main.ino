@@ -285,8 +285,7 @@ void setBluetoothEnable(bool on)
     else
     {
       // FIXME - we are leaking like crazy
-      BLEDevice::deinit(false); 
-      btPool.reset();
+      deinitBLE();
     }
   }
 }
