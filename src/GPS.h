@@ -1,18 +1,23 @@
 #pragma once
 
-#include <TinyGPS++.h>
 #include "PeriodicTask.h"
 #include "Observer.h"
 #include "sys/time.h"
+#include "SparkFun_Ublox_Arduino_Library.h"
 
 /**
  * A gps class that only reads from the GPS periodically (and FIXME - eventually keeps the gps powered down except when reading)
  * 
  * When new data is available it will notify observers.
  */
-class GPS : public PeriodicTask, public Observable, public TinyGPSPlus
+class GPS : public PeriodicTask, public Observable
 {
+    SFE_UBLOX_GPS ublox;
+
 public:
+    double latitude, longitude;
+    uint32_t altitude;
+    
     GPS();
 
     /// Return time since 1970 in secs.  Until we have a GPS lock we will be returning time based at zero
@@ -20,8 +25,6 @@ public:
 
     /// Return time since 1970 in secs.  If we don't have a GPS lock return zero
     uint32_t getValidTime();
-
-    String getTimeStr();
 
     void setup();
 

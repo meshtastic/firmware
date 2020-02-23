@@ -21,10 +21,25 @@ GPS::GPS() : PeriodicTask()
 
 void GPS::setup()
 {
-    readFromRTC();
+    readFromRTC(); // read the main CPU RTC at first
 
 #ifdef GPS_RX_PIN
     _serial_gps.begin(GPS_BAUDRATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+    ublox.enableDebugging(Serial);
+
+    // note: the lib's implementation has the wrong docs for what the return val is
+    // it is not a bool, it returns zero for success
+    bool errCode = ublox.begin(_serial_gps);
+    assert(!errCode); // FIXME, report hw failure on screen
+
+    bool ok = ublox.setUART1Output(COM_TYPE_UBX); // Use native API
+    assert(ok);
+    ok = ublox.setNavigationFrequency(1); //Produce one solutions per second
+    assert(ok);
+    ok = ublox.setAutoPVT(true);
+    assert(ok);
+    // ublox.saveConfiguration(); 
+    assert(ok);
 #endif
 }
 
@@ -82,13 +97,7 @@ bool GPS::canSleep()
 void GPS::prepareSleep()
 {
     // discard all rx serial bytes so we don't try to parse them when we come back
-    while (_serial_gps.available())
-    {
-        _serial_gps.read();
-    }
 
-    // make the parser bail on whatever it was parsing
-    encode('\n');
 }
 
 void GPS::doTask()
@@ -96,46 +105,46 @@ void GPS::doTask()
 #ifdef GPS_RX_PIN
     // Consume all characters that have arrived
 
-    while (_serial_gps.available())
-    {
-        encode(_serial_gps.read());
-        // DEBUG_MSG("Got GPS response\n");
-    }
+      ublox.checkUblox(); //See if new data is available. Process bytes as they come in.
 
-    if (!timeSetFromGPS && time.isValid() && date.isValid())
+    if (ublox.getPVT())
+    { // we only notify if position has changed
+        if (!timeSetFromGPS)
     {
         struct timeval tv;
 
-        DEBUG_MSG("Got time from GPS\n");
+        DEBUG_MSG("Got time from GPS month=%d, year=%d\n", ublox.getMonth(), ublox.getYear());
 
         /* Convert to unix time 
         The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z). 
         */
         struct tm t;
-        t.tm_sec = time.second();
-        t.tm_min = time.minute();
-        t.tm_hour = time.hour();
-        t.tm_mday = date.day();
-        t.tm_mon = date.month() - 1;
-        t.tm_year = date.year() - 1900;
+        t.tm_sec = ublox.getSecond();
+        t.tm_min = ublox.getMinute();
+        t.tm_hour = ublox.getHour();
+        t.tm_mday = ublox.getDay();
+        t.tm_mon = ublox.getMonth() - 1;
+        t.tm_year = ublox.getYear() - 1900;
         t.tm_isdst = false;
         time_t res = mktime(&t);
         tv.tv_sec = res;
         tv.tv_usec = 0; // time.centisecond() * (10 / 1000);
 
-        perhapsSetRTC(&tv);
+        // FIXME
+        // perhapsSetRTC(&tv);
     }
-#endif
 
-    if (location.isValid() && location.isUpdated())
-    { // we only notify if position has changed
-        // DEBUG_MSG("new gps pos\n");
+        DEBUG_MSG("new gps pos\n");
+        latitude = ublox.getLatitude() * 10e-7;
+        longitude = ublox.getLongitude() * 10e-7;
+        altitude = ublox.getAltitude() / 1000; // in mm convert to meters
         hasValidLocation = true;
         wantNewLocation = false;
         notifyObservers();
     }
     else // we didn't get a location update, go back to sleep and hope the characters show up
         wantNewLocation = true;
+#endif 
 
     // Once we have sent a location once we only poll the GPS rarely, otherwise check back every 100ms until we have something over the serial
     setPeriod(hasValidLocation && !wantNewLocation ? 30 * 1000 : 100);
@@ -148,10 +157,3 @@ void GPS::startLock()
     setPeriod(1);
 }
 
-String GPS::getTimeStr()
-{
-    static char t[12]; // used to sprintf for Serial output
-
-    snprintf(t, sizeof(t), "%02d:%02d:%02d", time.hour(), time.minute(), time.second());
-    return t;
-}
