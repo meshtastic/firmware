@@ -16,7 +16,6 @@
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in proccess at once
 static uint8_t trBytes[_max(_max(_max(_max(ToRadio_size, RadioConfig_size), User_size), MyNodeInfo_size), FromRadio_size)];
 
-
 class ProtobufCharacteristic : public CallbackCharacteristic
 {
     const pb_msgdesc_t *fields;
@@ -222,25 +221,19 @@ public:
     }
 };
 
-static FromNumCharacteristic meshFromNumCharacteristic;
-
-static FromRadioCharacteristic meshFromRadioCharacteristic;
-static ToRadioCharacteristic meshToRadioCharacteristic;
-static NodeInfoCharacteristic meshNodeInfoCharacteristic;
-
-static ProtobufCharacteristic
-    meshMyNodeCharacteristic("ea9f3f82-8dc4-4733-9452-1f6da28892a2", BLECharacteristic::PROPERTY_READ, MyNodeInfo_fields, &myNodeInfo);
-
-static OwnerCharacteristic meshOwnerCharacteristic;
-static RadioCharacteristic meshRadioCharacteristic;
+FromNumCharacteristic *meshFromNumCharacteristic;
 
 /**
  * Tell any bluetooth clients that the number of rx packets has changed
  */
 void bluetoothNotifyFromNum(uint32_t newValue)
 {
-    meshFromNumCharacteristic.setValue(newValue);
-    meshFromNumCharacteristic.notify();
+    if (meshFromNumCharacteristic)
+    {
+        // if bt not running ignore
+        meshFromNumCharacteristic->setValue(newValue);
+        meshFromNumCharacteristic->notify();
+    }
 }
 
 /*
@@ -304,16 +297,19 @@ BLEService *createMeshBluetoothService(BLEServer *server)
     // Create the BLE Service, we need more than the default of 15 handles
     BLEService *service = server->createService(BLEUUID("6ba1b218-15a8-461f-9fa8-5dcae273eafd"), 25, 0);
 
-    addWithDesc(service, &meshFromRadioCharacteristic, "fromRadio");
-    addWithDesc(service, &meshToRadioCharacteristic, "toRadio");
-    addWithDesc(service, &meshFromNumCharacteristic, "fromNum");
+    assert(!meshFromNumCharacteristic);
+    meshFromNumCharacteristic = new (btPool) FromNumCharacteristic;
 
-    addWithDesc(service, &meshMyNodeCharacteristic, "myNode");
-    addWithDesc(service, &meshRadioCharacteristic, "radio");
-    addWithDesc(service, &meshOwnerCharacteristic, "owner");
-    addWithDesc(service, &meshNodeInfoCharacteristic, "nodeinfo");
+    addWithDesc(service, meshFromNumCharacteristic, "fromRadio");
+    addWithDesc(service, new (btPool) ToRadioCharacteristic, "toRadio");
+    addWithDesc(service, new (btPool) FromRadioCharacteristic, "fromNum");
 
-    meshFromNumCharacteristic.addDescriptor(new (btPool) BLE2902()); // Needed so clients can request notification
+    addWithDesc(service, new (btPool) ProtobufCharacteristic("ea9f3f82-8dc4-4733-9452-1f6da28892a2", BLECharacteristic::PROPERTY_READ, MyNodeInfo_fields, &myNodeInfo), "myNode");
+    addWithDesc(service, new (btPool) RadioCharacteristic, "radio");
+    addWithDesc(service, new (btPool) OwnerCharacteristic, "owner");
+    addWithDesc(service, new (btPool) NodeInfoCharacteristic, "nodeinfo");
+
+    meshFromNumCharacteristic->addDescriptor(new (btPool) BLE2902()); // Needed so clients can request notification
 
     service->start();
     server->getAdvertising()->addServiceUUID(service->getUUID());
