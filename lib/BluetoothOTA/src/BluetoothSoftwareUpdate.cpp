@@ -135,3 +135,7 @@ BLEService *createUpdateService(BLEServer *server)
 
     return service;
 }
+
+void destroyUpdateService() {
+    resultC = NULL;
+}

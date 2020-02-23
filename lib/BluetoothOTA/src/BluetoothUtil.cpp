@@ -192,7 +192,8 @@ class MySecurity : public BLESecurityCallbacks
 void deinitBLE()
 {
   batteryLevelC = NULL; // Don't let anyone generate bogus notifies
-
+  destroyUpdateService();
+  
   BLEDevice::deinit(false);
   btPool.reset();
 }
