@@ -24,16 +24,6 @@ static void sdsEnter()
 
 static void lsEnter()
 {
-    /*
-      // while we have bluetooth on, we can't do light sleep, but once off stay in light_sleep all the time
-  // we will wake from light sleep on button press or interrupt from the RF95 radio
-  if (!bluetoothOn && !is_screen_on() && service.radio.rf95.canSleep() && gps.canSleep())
-    doLightSleep(radioConfig.preferences.ls_secs); 
-  else
-  {
-    delay(msecstosleep);
-  } */
-
     while (!service.radio.rf95.canSleep())
         delay(10); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
 
@@ -140,6 +130,8 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateLS, &stateON, EVENT_RECEIVED_TEXT_MSG, NULL, "Received text");
     powerFSM.add_transition(&stateNB, &stateON, EVENT_RECEIVED_TEXT_MSG, NULL, "Received text");
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_RECEIVED_TEXT_MSG, NULL, "Received text");
+
+    powerFSM.add_transition(&stateDARK, &stateDARK, EVENT_CONTACT_FROM_PHONE, NULL, "Contact from phone");
 
     powerFSM.add_transition(&stateNB, &stateDARK, EVENT_PACKET_FOR_PHONE, NULL, "Packet for phone");
 
