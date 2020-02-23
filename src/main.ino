@@ -307,9 +307,6 @@ void loop()
   screen.loop();
   service.loop();
 
-  if (nodeDB.updateGUI || nodeDB.updateTextMessage)
-    screen.doWakeScreen();
-
   ledPeriodic.loop();
   // axpDebugOutput.loop();
   loopBLE();

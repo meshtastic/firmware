@@ -11,6 +11,7 @@
 #include "mesh-pb-constants.h"
 #include "NodeDB.h"
 #include "GPS.h"
+#include "PowerFSM.h"
 
 NodeDB nodeDB;
 
@@ -274,6 +275,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
                     devicestate.rx_text_message = mp;
                     devicestate.has_rx_text_message = true;
                     updateTextMessage = true;
+                    powerFSM.trigger(EVENT_NODEDB_UPDATED);
                 }
             }
             break;
@@ -292,6 +294,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
             if (changed)
             {
                 updateGUIforNode = info;
+                powerFSM.trigger(EVENT_NODEDB_UPDATED);
 
                 // Not really needed - we will save anyways when we go to sleep
                 // We just changed something important about the user, store our DB

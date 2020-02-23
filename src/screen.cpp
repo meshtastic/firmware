@@ -55,10 +55,7 @@ Screen screen;
 static bool showingBluetooth;
 
 /// If set to true (possibly from an ISR), we should turn on the screen the next time our idle loop runs.
-static bool wakeScreen;
 static bool showingBootScreen = true; // start by showing the bootscreen
-
-uint32_t lastPressMs;
 
 bool Screen::isOn() { return screenOn; }
 
@@ -491,18 +488,20 @@ void _screen_header()
 }
 #endif
 
-
 void Screen::setOn(bool on)
 {
     if (!disp)
         return;
 
-    if(on != screenOn) {
-        if(on)
-    dispdev.displayOn();
-    else
-    dispdev.displayOff();
-    screenOn = on;
+    if (on != screenOn)
+    {
+        if (on) {
+            dispdev.displayOn();
+            setPeriod(1); // redraw ASAP
+        }
+        else
+            dispdev.displayOff();
+        screenOn = on;
     }
 }
 
@@ -525,14 +524,6 @@ void screen_print(const char *text)
 
     dispdev.print(text);
     // ui.update();
-}
-
-
-
-
-void Screen::doWakeScreen() {
-    wakeScreen = true;
-    setPeriod(1); // wake asap
 }
 
 void Screen::setup()
@@ -588,32 +579,21 @@ void Screen::setup()
 #endif
 }
 
-
-/// Turn off the screen this many ms after last press or wake
-#define SCREEN_SLEEP_MS (60 * 1000)
-
 #define TRANSITION_FRAMERATE 30 // fps
 #define IDLE_FRAMERATE 10       // in fps
 
 static uint32_t targetFramerate = IDLE_FRAMERATE;
 
-
-
 void Screen::doTask()
 {
-    if (!disp) { // If we don't have a screen, don't ever spend any CPU for us
+    if (!disp)
+    { // If we don't have a screen, don't ever spend any CPU for us
         setPeriod(0);
         return;
     }
 
-    if (wakeScreen) // If a new text message arrived, turn the screen on immedately
-    {
-        lastPressMs = millis(); // if we were told to wake the screen, reset the press timeout
-        screen.setOn(true);            // make sure the screen is not asleep
-        wakeScreen = false;
-    }
-
-    if (!screenOn) { // If we didn't just wake and the screen is still off, then stop updating until it is on again
+    if (!screenOn)
+    { // If we didn't just wake and the screen is still off, then stop updating until it is on again
         setPeriod(0);
         return;
     }
@@ -661,6 +641,8 @@ void Screen::doTask()
     setPeriod(1000 / targetFramerate);
 }
 
+#include "PowerFSM.h"
+
 // Show the bluetooth PIN screen
 void screen_start_bluetooth(uint32_t pin)
 {
@@ -670,7 +652,7 @@ void screen_start_bluetooth(uint32_t pin)
 
     DEBUG_MSG("showing bluetooth screen\n");
     showingBluetooth = true;
-    screen.doWakeScreen();
+    powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
 
     ui.setFrames(btFrames, 1); // Just show the bluetooth frame
     // we rely on our main loop to show this screen (because we are invoked deep inside of bluetooth callbacks)
@@ -709,15 +691,11 @@ void screen_set_frames()
 /// handle press of the button
 void Screen::onPress()
 {
-    // screen_start_bluetooth(123456);
-
-    lastPressMs = millis();
-    screen.doWakeScreen();
-
     // If screen was off, just wake it, otherwise advance to next frame
     // If we are in a transition, the press must have bounced, drop it.
-    if (screenOn && ui.getUiState()->frameState == FIXED)
+    if (ui.getUiState()->frameState == FIXED)
     {
+        setPeriod(1); // redraw ASAP
         ui.nextFrame();
 
         DEBUG_MSG("Setting fast framerate\n");
