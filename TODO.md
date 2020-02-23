@@ -9,7 +9,7 @@ Items to complete before the first alpha release.
 for it (because it will redownload the nodedb when it comes back)
 * don't enter light sleep while the screen is on
 * any time we wake from light sleep, briefly blink the led
-
+* Use Neo-M8M API to put it in sleep mode
 * turn light sleep on aggressively (while lora is on but BLE off)
 * retest BLE software update for both board types
 * default to enter deep sleep if no LORA received for two hours (indicates user has probably left the meshS)
