@@ -2,20 +2,16 @@
 
 Items to complete before the first alpha release.
 
+* don't enter NB state if we've recently talked to the phone (to prevent breaking syncing or bluetooth sw update)
 * have state machine properly enter deep sleep based on loss of mesh and phone comms
-* have gps implement canSleep(), print nmea for debugging and discard buffers on the way into sleep
+* default to enter deep sleep if no LORA received for two hours (indicates user has probably left the meshS)
 * implement CustomRF95::canSleep
 * if the phone doesn't read fromradio mailbox within X seconds, assume the phone is gone and we can stop queing location msgs 
 for it (because it will redownload the nodedb when it comes back)
-* don't enter light sleep while the screen is on
-* any time we wake from light sleep, briefly blink the led
-* Use Neo-M8M API to put it in sleep mode
 * turn light sleep on aggressively (while lora is on but BLE off)
 * retest BLE software update for both board types
-* default to enter deep sleep if no LORA received for two hours (indicates user has probably left the meshS)
 * send note about Adafruit Clue
 * send note to the guy who designed the cases
-* update the prebuilt bins for different regulatory regions
 * remeasure wake time power draws now that we run CPU down at 80MHz
 
 # Medium priority
@@ -165,3 +161,5 @@ Items after the first final candidate release.
 * turn bluetooth off based on our sleep policy
 * blink LED while in LS sleep mode
 * scrolling between screens based on press is busted
+* Use Neo-M8M API to put it in sleep mode (on hold until my new boards arrive)
+* update the prebuilt bins for different regulatory regions
