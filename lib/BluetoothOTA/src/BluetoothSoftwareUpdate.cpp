@@ -123,6 +123,7 @@ BLEService *createUpdateService(BLEServer *server)
     // Create the BLE Service
     BLEService *service = server->createService("cb0b9a0b-a84c-4c0d-bdbb-442e3144ee30");
 
+    assert(!resultC);
     resultC = new (btPool) BLECharacteristic("5e134862-7411-4424-ac4a-210937432c77", BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
 
     addWithDesc(service, new (btPool) TotalSizeCharacteristic, "total image size");
