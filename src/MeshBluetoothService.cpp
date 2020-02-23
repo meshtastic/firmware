@@ -236,6 +236,8 @@ void bluetoothNotifyFromNum(uint32_t newValue)
     }
 }
 
+BLEService *meshService;
+
 /*
 MeshBluetoothService UUID 6ba1b218-15a8-461f-9fa8-5dcae273eafd
 
@@ -317,9 +319,13 @@ BLEService *createMeshBluetoothService(BLEServer *server)
     DEBUG_MSG("*** Mesh service:\n");
     service->dump();
 
+    meshService = service;
     return service;
 }
 
 void destroyMeshBluetoothService() {
+    assert(meshService);
+    delete meshService;
+    
     meshFromNumCharacteristic = NULL;
 }

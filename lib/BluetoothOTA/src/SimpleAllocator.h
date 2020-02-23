@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 
-#define POOL_SIZE 32768
+#define POOL_SIZE 16384
 
 /**
  * An allocator (and placement new operator) that allocates storage from a fixed sized buffer.

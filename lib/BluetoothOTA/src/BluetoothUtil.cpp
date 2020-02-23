@@ -189,12 +189,27 @@ class MySecurity : public BLESecurityCallbacks
   }
 };
 
+BLEServer *pServer;
+
+BLEService *pDevInfo, *pUpdate;
+
 void deinitBLE()
 {
+  assert(pServer);
+
+  // First shutdown bluetooth
+  BLEDevice::deinit(false);
+
+  // do not delete this - it is dynamically allocated, but only once - statically in BLEDevice
+  // delete pServer->getAdvertising();
+
+  delete pUpdate;
+  delete pDevInfo;
+  delete pServer;
+
   batteryLevelC = NULL; // Don't let anyone generate bogus notifies
   destroyUpdateService();
-  
-  BLEDevice::deinit(false);
+
   btPool.reset();
 }
 
@@ -210,16 +225,16 @@ BLEServer *initBLE(std::string deviceName, std::string hwVendor, std::string swV
   BLEDevice::setSecurityCallbacks(&mySecurity);
 
   // Create the BLE Server
-  BLEServer *pServer = BLEDevice::createServer();
+  pServer = BLEDevice::createServer();
   static MyServerCallbacks myCallbacks;
   pServer->setCallbacks(&myCallbacks);
 
-  BLEService *pDevInfo = createDeviceInfomationService(pServer, hwVendor, swVersion, hwVersion);
+  pDevInfo = createDeviceInfomationService(pServer, hwVendor, swVersion, hwVersion);
 
   // We now let users create the battery service only if they really want (not all devices have a battery)
   // BLEService *pBattery = createBatteryService(pServer);
 
-  BLEService *pUpdate = createUpdateService(pServer); // We need to advertise this so our android ble scan operation can see it
+  pUpdate = createUpdateService(pServer); // We need to advertise this so our android ble scan operation can see it
 
   // It seems only one service can be advertised - so for now don't advertise our updater
   // pServer->getAdvertising()->addServiceUUID(pUpdate->getUUID());
