@@ -2,8 +2,7 @@
 
 Items to complete before the first alpha release.
 
-* fix BLE wake so that we still are announcing
-* have sw update prevent BLE sleep
+* the BLE stack is leaking about 7KB each time we go to light sleep
 * have state machine properly enter deep sleep based on loss of mesh and phone comms
 * default to enter deep sleep if no LORA received for two hours (indicates user has probably left the meshS)
 * implement CustomRF95::canSleep
@@ -166,3 +165,4 @@ Items after the first final candidate release.
 * Use Neo-M8M API to put it in sleep mode (on hold until my new boards arrive)
 * update the prebuilt bins for different regulatory regions
 * don't enter NB state if we've recently talked to the phone (to prevent breaking syncing or bluetooth sw update)
+* have sw update prevent BLE sleep
