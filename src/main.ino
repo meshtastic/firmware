@@ -284,6 +284,7 @@ void setBluetoothEnable(bool on)
     bluetoothOn = on;
     if (on)
     {
+      Serial.printf("Pre BT: %u heap size", ESP.getFreeHeap());
       initBluetooth(); 
     }
     else
@@ -291,6 +292,7 @@ void setBluetoothEnable(bool on)
       // We have to totally teardown our bluetooth objects to prevent leaks
       destroyMeshBluetoothService();
       deinitBLE();
+      Serial.printf("Shutdown BT: %u heap size", ESP.getFreeHeap());
     }
   }
 }
