@@ -2,12 +2,10 @@
 
 Items to complete before the first alpha release.
 
-* implement sleep state machine
+* scrolling between screens based on press is busted
+* have state machine properly enter deep sleep based on loss of mesh and phone comms
 * have gps implement canSleep(), print nmea for debugging and discard buffers on the way into sleep
 * implement CustomRF95::canSleep
-* make gps prevent light sleep if we are waiting for data
-* wake from light sleep as needed for our next scheduled periodic task (needed for gps position broadcasts etc)
-* turn bluetooth off based on our sleep policy
 * if the phone doesn't read fromradio mailbox within X seconds, assume the phone is gone and we can stop queing location msgs 
 for it (because it will redownload the nodedb when it comes back)
 * don't enter light sleep while the screen is on
@@ -25,6 +23,7 @@ for it (because it will redownload the nodedb when it comes back)
 
 Items to complete before the first beta release.
 
+* use gps sleep mode instead of killing its power (to allow fast position when we wake)
 * leave lora receiver always on
 * rx signal measurements -3 marginal, -9 bad, 10 great, -10 means almost unusable.  So scale this into % signal strength.  preferably as a graph, with an X indicating loss of comms.  
 * assign every "channel" a random shared 8 bit sync word (per 4.2.13.6 of datasheet) - use that word to filter packets before even checking CRC.  This will ensure our CPU will only wake for packets on our "channel"  
@@ -163,3 +162,6 @@ Items after the first final candidate release.
 * support non US frequencies
 * send pr https://github.com/ThingPulse/esp8266-oled-ssd1306 to tell them about this project
 * document rules for sleep wrt lora/bluetooth/screen/gps.  also: if I have text messages (only) for the phone, then give a few seconds in the hopes BLE can get it across before we have to go back to sleep.
+* wake from light sleep as needed for our next scheduled periodic task (needed for gps position broadcasts etc)
+* turn bluetooth off based on our sleep policy
+* blink LED while in LS sleep mode

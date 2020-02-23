@@ -43,11 +43,27 @@ static void lsEnter()
 
 static void lsIdle()
 {
-    doLightSleep(radioConfig.preferences.ls_secs * 1000LL);
-    
-    // FIXME - blink led when we occasionally wake from timer, then go back to light sleep
+    uint32_t secsSlept = 0;
+    esp_sleep_source_t wakeCause = ESP_SLEEP_WAKEUP_UNDEFINED;
 
-    // Regardless of why we woke (for now) just transition to NB
+    while (secsSlept < radioConfig.preferences.ls_secs)
+    {
+        // Briefly come out of sleep long enough to blink the led once every few seconds
+        uint32_t sleepTime = 5;
+
+        setLed(false); // Never leave led on while in light sleep
+        wakeCause = doLightSleep(sleepTime * 1000LL);
+        if (wakeCause != ESP_SLEEP_WAKEUP_TIMER)
+            break;
+
+        setLed(true); // briefly turn on led
+        doLightSleep(1);
+        if (wakeCause != ESP_SLEEP_WAKEUP_TIMER)
+            break;
+    }
+    setLed(false);
+
+    // Regardless of why we woke (for now) just transition to NB (and that state will handle stuff like IRQs etc)
     powerFSM.trigger(EVENT_WAKE_TIMER);
 }
 
