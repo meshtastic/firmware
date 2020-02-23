@@ -56,8 +56,7 @@ public:
     }
 };
 
-static BLECharacteristic swUpdateResultCharacteristic("5e134862-7411-4424-ac4a-210937432c77", BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
-
+static BLECharacteristic *resultC;
 
 class CRC32Characteristic : public CallbackCharacteristic
 {
@@ -96,23 +95,17 @@ public:
             }
             result = Update.getError();
         }
-        swUpdateResultCharacteristic.setValue(&result, 1);
-        swUpdateResultCharacteristic.notify();
+        assert(resultC);
+        resultC->setValue(&result, 1);
+        resultC->notify();
     }
 };
-
-
-static TotalSizeCharacteristic swUpdateTotalSizeCharacteristic;
-static DataCharacteristic swUpdateDataCharacteristic;
-static CRC32Characteristic swUpdateCRC32Characteristic;
-
 
 void bluetoothRebootCheck()
 {
     if (rebootAtMsec && millis() > rebootAtMsec)
         ESP.restart();
 }
-
 
 /*
 SoftwareUpdateService UUID cb0b9a0b-a84c-4c0d-bdbb-442e3144ee30
@@ -130,12 +123,14 @@ BLEService *createUpdateService(BLEServer *server)
     // Create the BLE Service
     BLEService *service = server->createService("cb0b9a0b-a84c-4c0d-bdbb-442e3144ee30");
 
-    addWithDesc(service, &swUpdateTotalSizeCharacteristic, "total image size");
-    addWithDesc(service, &swUpdateDataCharacteristic, "data");
-    addWithDesc(service, &swUpdateCRC32Characteristic, "crc32");
-    addWithDesc(service, &swUpdateResultCharacteristic, "result code");
+    resultC = new (btPool) BLECharacteristic("5e134862-7411-4424-ac4a-210937432c77", BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
 
-    swUpdateResultCharacteristic.addDescriptor(new (btPool) BLE2902()); // Needed so clients can request notification
+    addWithDesc(service, new (btPool) TotalSizeCharacteristic, "total image size");
+    addWithDesc(service, new (btPool) DataCharacteristic, "data");
+    addWithDesc(service, new (btPool) CRC32Characteristic, "crc32");
+    addWithDesc(service, resultC, "result code");
+
+    resultC->addDescriptor(new (btPool) BLE2902()); // Needed so clients can request notification
 
     return service;
 }
