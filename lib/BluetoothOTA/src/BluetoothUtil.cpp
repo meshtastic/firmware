@@ -7,6 +7,8 @@
 #include "configuration.h"
 #include "screen.h"
 
+SimpleAllocator btPool;
+
 static BLECharacteristic SWVersionCharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_SW_VERSION_STR), BLECharacteristic::PROPERTY_READ);
 static BLECharacteristic ManufacturerCharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_MANU_NAME), BLECharacteristic::PROPERTY_READ);
 static BLECharacteristic HardwareVersionCharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_HW_VERSION_STR), BLECharacteristic::PROPERTY_READ);
@@ -66,13 +68,17 @@ class MyServerCallbacks : public BLEServerCallbacks
   }
 };
 
+
+
+
+
 // Help routine to add a description to any BLECharacteristic and add it to the service
 // We default to require an encrypted BOND for all these these characterstics
 void addWithDesc(BLEService *service, BLECharacteristic *c, const char *description)
 {
   c->setAccessPermissions(ESP_GATT_PERM_READ_ENCRYPTED | ESP_GATT_PERM_WRITE_ENCRYPTED);
 
-  BLEDescriptor *desc = new BLEDescriptor(BLEUUID((uint16_t)ESP_GATT_UUID_CHAR_DESCRIPTION), strlen(description) + 1);
+  BLEDescriptor *desc = new(btPool) BLEDescriptor(BLEUUID((uint16_t)ESP_GATT_UUID_CHAR_DESCRIPTION), strlen(description) + 1);
   assert(desc);
   desc->setAccessPermissions(ESP_GATT_PERM_READ_ENCRYPTED | ESP_GATT_PERM_WRITE_ENCRYPTED);
   desc->setValue(description);
@@ -81,6 +87,7 @@ void addWithDesc(BLEService *service, BLECharacteristic *c, const char *descript
 }
 
 static BLECharacteristic BatteryLevelCharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_BATTERY_LEVEL), BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+
 
 /**
  * Create a battery level service
@@ -91,7 +98,7 @@ BLEService *createBatteryService(BLEServer *server)
   BLEService *pBattery = server->createService(BLEUUID((uint16_t)0x180F));
 
   addWithDesc(pBattery, &BatteryLevelCharacteristic, "Percentage 0 - 100");
-  BatteryLevelCharacteristic.addDescriptor(new BLE2902()); // Needed so clients can request notification
+  BatteryLevelCharacteristic.addDescriptor(new(btPool) BLE2902()); // Needed so clients can request notification
 
   // I don't think we need to advertise this
   // server->getAdvertising()->addServiceUUID(pBattery->getUUID());
@@ -190,11 +197,13 @@ BLEServer *initBLE(std::string deviceName, std::string hwVendor, std::string swV
   /*
    * Required in authentication process to provide displaying and/or input passkey or yes/no butttons confirmation
    */
-  BLEDevice::setSecurityCallbacks(new MySecurity());
+  static MySecurity mySecurity;
+  BLEDevice::setSecurityCallbacks(&mySecurity);
 
   // Create the BLE Server
   BLEServer *pServer = BLEDevice::createServer();
-  pServer->setCallbacks(new MyServerCallbacks());
+  static MyServerCallbacks myCallbacks;
+  pServer->setCallbacks(&myCallbacks);
 
   BLEService *pDevInfo = createDeviceInfomationService(pServer, hwVendor, swVersion, hwVersion);
 
@@ -213,7 +222,8 @@ BLEServer *initBLE(std::string deviceName, std::string hwVendor, std::string swV
   // FIXME turn on this restriction only after the device is paired with a phone
   // advert->setScanFilter(false, true); // We let anyone scan for us (FIXME, perhaps only allow that until we are paired with a phone and configured) but only let whitelist phones connect
 
-  BLESecurity *pSecurity = new BLESecurity();
+  static BLESecurity security; // static to avoid allocs
+  BLESecurity *pSecurity = &security;
   pSecurity->setCapability(ESP_IO_CAP_OUT);
   pSecurity->setAuthenticationMode(ESP_LE_AUTH_REQ_SC_BOND);
   pSecurity->setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);

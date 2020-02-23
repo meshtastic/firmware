@@ -32,14 +32,27 @@ public:
     }
 };
 
-class ProtobufCharacteristic : public BLECharacteristic, public BLEKeepAliveCallbacks
+/**
+ * A characterstic with a set of overridable callbacks
+ */
+class CallbackCharacteristic : public BLECharacteristic, public BLEKeepAliveCallbacks
+{
+public:
+    CallbackCharacteristic(const char *uuid, uint32_t btprops)
+        : BLECharacteristic(uuid, btprops)
+    {
+        setCallbacks(this);
+    }
+};
+
+class ProtobufCharacteristic : public CallbackCharacteristic
 {
     const pb_msgdesc_t *fields;
     void *my_struct;
 
 public:
     ProtobufCharacteristic(const char *uuid, uint32_t btprops, const pb_msgdesc_t *_fields, void *_my_struct)
-        : BLECharacteristic(uuid, btprops),
+        : CallbackCharacteristic(uuid, btprops),
           fields(_fields),
           my_struct(_my_struct)
     {
@@ -165,11 +178,82 @@ public:
     }
 };
 
-static BLECharacteristic
-    meshFromRadioCharacteristic("8ba2bcc2-ee02-4a55-a531-c525c5e454d5", BLECharacteristic::PROPERTY_READ),
-    meshToRadioCharacteristic("f75c76d2-129e-4dad-a1dd-7866124401e7", BLECharacteristic::PROPERTY_WRITE),
-    meshFromNumCharacteristic("ed9da18c-a800-4f66-a670-aa7547e34453", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+class ToRadioCharacteristic : public CallbackCharacteristic
+{
+public:
+    ToRadioCharacteristic()
+        : CallbackCharacteristic("f75c76d2-129e-4dad-a1dd-7866124401e7", BLECharacteristic::PROPERTY_WRITE)
+    {
+    }
 
+    void onWrite(BLECharacteristic *c)
+    {
+        BLEKeepAliveCallbacks::onWrite(c);
+        DEBUG_MSG("Got on write\n");
+
+        service.handleToRadio(c->getValue());
+    }
+};
+
+class FromRadioCharacteristic : public CallbackCharacteristic
+{
+public:
+    FromRadioCharacteristic()
+        : CallbackCharacteristic("8ba2bcc2-ee02-4a55-a531-c525c5e454d5", BLECharacteristic::PROPERTY_READ)
+    {
+    }
+
+    void onRead(BLECharacteristic *c)
+    {
+        BLEKeepAliveCallbacks::onRead(c);
+        MeshPacket *mp = service.getForPhone();
+
+        // Someone is going to read our value as soon as this callback returns.  So fill it with the next message in the queue
+        // or make empty if the queue is empty
+        if (!mp)
+        {
+            DEBUG_MSG("toPhone queue is empty\n");
+            c->setValue((uint8_t *)"", 0);
+        }
+        else
+        {
+            DEBUG_MSG("delivering toPhone packet to phone\n");
+
+            static FromRadio fradio;
+
+            // Encapsulate as a ToRadio packet
+            memset(&fradio, 0, sizeof(fradio));
+            fradio.which_variant = FromRadio_packet_tag;
+            fradio.variant.packet = *mp;
+
+            service.releaseToPool(mp); // we just copied the bytes, so don't need this buffer anymore
+
+            size_t numbytes = pb_encode_to_bytes(trBytes, sizeof(trBytes), FromRadio_fields, &fradio);
+            c->setValue(trBytes, numbytes);
+        }
+    }
+};
+
+class FromNumCharacteristic : public CallbackCharacteristic
+{
+public:
+    FromNumCharacteristic()
+        : CallbackCharacteristic("ed9da18c-a800-4f66-a670-aa7547e34453",
+                                 BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY)
+    {
+    }
+
+    void onRead(BLECharacteristic *c)
+    {
+        BLEKeepAliveCallbacks::onRead(c);
+        DEBUG_MSG("FIXME implement fromnum read\n");
+    }
+};
+
+static FromNumCharacteristic meshFromNumCharacteristic;
+
+static FromRadioCharacteristic meshFromRadioCharacteristic;
+static ToRadioCharacteristic meshToRadioCharacteristic;
 static NodeInfoCharacteristic meshNodeInfoCharacteristic;
 
 static ProtobufCharacteristic
@@ -186,65 +270,6 @@ void bluetoothNotifyFromNum(uint32_t newValue)
     meshFromNumCharacteristic.setValue(newValue);
     meshFromNumCharacteristic.notify();
 }
-
-class BluetoothMeshCallbacks : public BLEKeepAliveCallbacks
-{
-    void onRead(BLECharacteristic *c)
-    {
-        BLEKeepAliveCallbacks::onRead(c);
-        DEBUG_MSG("Got on read\n");
-
-        if (c == &meshFromRadioCharacteristic)
-        {
-            MeshPacket *mp = service.getForPhone();
-
-            // Someone is going to read our value as soon as this callback returns.  So fill it with the next message in the queue
-            // or make empty if the queue is empty
-            if (!mp)
-            {
-                DEBUG_MSG("toPhone queue is empty\n");
-                c->setValue((uint8_t *)"", 0);
-            }
-            else
-            {
-                DEBUG_MSG("delivering toPhone packet to phone\n");
-
-                static FromRadio fradio;
-
-                // Encapsulate as a ToRadio packet
-                memset(&fradio, 0, sizeof(fradio));
-                fradio.which_variant = FromRadio_packet_tag;
-                fradio.variant.packet = *mp;
-
-                service.releaseToPool(mp); // we just copied the bytes, so don't need this buffer anymore
-
-                size_t numbytes = pb_encode_to_bytes(trBytes, sizeof(trBytes), FromRadio_fields, &fradio);
-                c->setValue(trBytes, numbytes);
-            }
-        }
-        else
-        {
-            // we are uninterested in the other reads
-        }
-    }
-
-    void onWrite(BLECharacteristic *c)
-    {
-        BLEKeepAliveCallbacks::onWrite(c);
-        DEBUG_MSG("Got on write\n");
-
-        if (c == &meshToRadioCharacteristic)
-        {
-            service.handleToRadio(c->getValue());
-        }
-        else
-        {
-            // we are uninterested in the other writes
-        }
-    }
-};
-
-static BluetoothMeshCallbacks btMeshCb;
 
 /*
 MeshBluetoothService UUID 6ba1b218-15a8-461f-9fa8-5dcae273eafd
@@ -311,16 +336,12 @@ BLEService *createMeshBluetoothService(BLEServer *server)
     addWithDesc(service, &meshToRadioCharacteristic, "toRadio");
     addWithDesc(service, &meshFromNumCharacteristic, "fromNum");
 
-    meshFromRadioCharacteristic.setCallbacks(&btMeshCb);
-    meshToRadioCharacteristic.setCallbacks(&btMeshCb);
-    meshFromNumCharacteristic.setCallbacks(&btMeshCb);
-
     addWithDesc(service, &meshMyNodeCharacteristic, "myNode");
     addWithDesc(service, &meshRadioCharacteristic, "radio");
     addWithDesc(service, &meshOwnerCharacteristic, "owner");
     addWithDesc(service, &meshNodeInfoCharacteristic, "nodeinfo");
 
-    meshFromNumCharacteristic.addDescriptor(new BLE2902()); // Needed so clients can request notification
+    meshFromNumCharacteristic.addDescriptor(new (btPool) BLE2902()); // Needed so clients can request notification
 
     service->start();
     server->getAdvertising()->addServiceUUID(service->getUUID());
