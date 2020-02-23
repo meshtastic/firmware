@@ -11,39 +11,11 @@
 #include "NodeDB.h"
 #include "configuration.h"
 #include "PowerFSM.h"
+#include "CallbackCharacteristic.h"
 
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in proccess at once
 static uint8_t trBytes[_max(_max(_max(_max(ToRadio_size, RadioConfig_size), User_size), MyNodeInfo_size), FromRadio_size)];
 
-/**
- * This mixin just lets the power management state machine know the phone is still talking to us
- */
-class BLEKeepAliveCallbacks : public BLECharacteristicCallbacks
-{
-public:
-    void onRead(BLECharacteristic *c)
-    {
-        powerFSM.trigger(EVENT_CONTACT_FROM_PHONE);
-    }
-
-    void onWrite(BLECharacteristic *c)
-    {
-        powerFSM.trigger(EVENT_CONTACT_FROM_PHONE);
-    }
-};
-
-/**
- * A characterstic with a set of overridable callbacks
- */
-class CallbackCharacteristic : public BLECharacteristic, public BLEKeepAliveCallbacks
-{
-public:
-    CallbackCharacteristic(const char *uuid, uint32_t btprops)
-        : BLECharacteristic(uuid, btprops)
-    {
-        setCallbacks(this);
-    }
-};
 
 class ProtobufCharacteristic : public CallbackCharacteristic
 {
