@@ -10,11 +10,29 @@
 #include "mesh-pb-constants.h"
 #include "NodeDB.h"
 #include "configuration.h"
+#include "PowerFSM.h"
 
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in proccess at once
 static uint8_t trBytes[_max(_max(_max(_max(ToRadio_size, RadioConfig_size), User_size), MyNodeInfo_size), FromRadio_size)];
 
-class ProtobufCharacteristic : public BLECharacteristic, public BLECharacteristicCallbacks
+/**
+ * This mixin just lets the power management state machine know the phone is still talking to us
+ */
+class BLEKeepAliveCallbacks : public BLECharacteristicCallbacks
+{
+public:
+    void onRead(BLECharacteristic *c)
+    {
+        powerFSM.trigger(EVENT_CONTACT_FROM_PHONE);
+    }
+
+    void onWrite(BLECharacteristic *c)
+    {
+        powerFSM.trigger(EVENT_CONTACT_FROM_PHONE);
+    }
+};
+
+class ProtobufCharacteristic : public BLECharacteristic, public BLEKeepAliveCallbacks
 {
     const pb_msgdesc_t *fields;
     void *my_struct;
@@ -30,6 +48,7 @@ public:
 
     void onRead(BLECharacteristic *c)
     {
+        BLEKeepAliveCallbacks::onRead(c);
         DEBUG_MSG("Got proto read\n");
         size_t numbytes = pb_encode_to_bytes(trBytes, sizeof(trBytes), fields, my_struct);
         c->setValue(trBytes, numbytes);
@@ -37,6 +56,7 @@ public:
 
     void onWrite(BLECharacteristic *c)
     {
+        BLEKeepAliveCallbacks::onWrite(c);
         writeToDest(c, my_struct);
     }
 
@@ -53,7 +73,7 @@ protected:
     }
 };
 
-class NodeInfoCharacteristic : public BLECharacteristic, public BLECharacteristicCallbacks
+class NodeInfoCharacteristic : public BLECharacteristic, public BLEKeepAliveCallbacks
 {
 public:
     NodeInfoCharacteristic()
@@ -64,6 +84,8 @@ public:
 
     void onRead(BLECharacteristic *c)
     {
+        BLEKeepAliveCallbacks::onRead(c);
+
         const NodeInfo *info = nodeDB.readNextInfo();
 
         if (info)
@@ -81,7 +103,7 @@ public:
 
     void onWrite(BLECharacteristic *c)
     {
-        // dumpCharacteristic(pCharacteristic);
+        BLEKeepAliveCallbacks::onWrite(c);
         DEBUG_MSG("Got on nodeinfo write\n");
         nodeDB.resetReadPointer();
     }
@@ -114,6 +136,8 @@ public:
 
     void onWrite(BLECharacteristic *c)
     {
+        BLEKeepAliveCallbacks::onWrite(c); // NOTE: We do not call the standard ProtobufCharacteristic superclass, because we want custom write behavior
+
         static User o; // if the phone doesn't set ID we are careful to keep ours, we also always keep our macaddr
         if (writeToDest(c, &o))
         {
@@ -163,10 +187,11 @@ void bluetoothNotifyFromNum(uint32_t newValue)
     meshFromNumCharacteristic.notify();
 }
 
-class BluetoothMeshCallbacks : public BLECharacteristicCallbacks
+class BluetoothMeshCallbacks : public BLEKeepAliveCallbacks
 {
     void onRead(BLECharacteristic *c)
     {
+        BLEKeepAliveCallbacks::onRead(c);
         DEBUG_MSG("Got on read\n");
 
         if (c == &meshFromRadioCharacteristic)
@@ -205,7 +230,7 @@ class BluetoothMeshCallbacks : public BLECharacteristicCallbacks
 
     void onWrite(BLECharacteristic *c)
     {
-        // dumpCharacteristic(pCharacteristic);
+        BLEKeepAliveCallbacks::onWrite(c);
         DEBUG_MSG("Got on write\n");
 
         if (c == &meshToRadioCharacteristic)

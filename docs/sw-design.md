@@ -45,6 +45,7 @@ off during light sleep, but there is a TODO item to fix this.
 * While in NB: If we do have packets the phone (EVENT_PACKETS_FOR_PHONE) would want we transition to DARK mode for wait_bluetooth secs.
 * While in DARK/ON: If we receive EVENT_BLUETOOTH_PAIR we transition to ON and start our screen_on_secs timeout
 * While in NB/DARK/ON: If we receive EVENT_NODEDB_UPDATED we transition to ON (so the new screen can be shown)
+* While in DARK: While the phone talks to us over BLE (EVENT_CONTACT_FROM_PHONE) reset any sleep timers and stay in DARK (needed for bluetooth sw update and nice user experience if the user is reading/replying to texts)
 
 ### events that decrease cpu activity
 
