@@ -19,6 +19,7 @@ uint32_t getValue32(BLECharacteristic *c, uint32_t defaultValue);
 
 void loopBLE();
 BLEServer *initBLE(std::string devName, std::string hwVendor, std::string swVersion, std::string hwVersion = "");
+void deinitBLE();
 
-/// Any bluetooth objects you allocate _must_ come from this pool if you want to be able to call destroyBLE()
+/// Any bluetooth objects you allocate _must_ come from this pool if you want to be able to call deinitBLE()
 extern SimpleAllocator btPool;
