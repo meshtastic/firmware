@@ -43,6 +43,8 @@ off during light sleep, but there is a TODO item to fix this.
 * While in LS/NB/DARK: If we receive new text messages (EVENT_RECEIVED_TEXT_MSG), we go to full ON mode for screen_on_secs (same as if user pressed a button)
 * While in LS: while we receive packets on the radio (EVENT_RECEIVED_PACKET) we will wake and handle them and stay awake in NB mode for min_wake_secs (default 10 seconds) 
 * While in NB: If we do have packets the phone (EVENT_PACKETS_FOR_PHONE) would want we transition to DARK mode for wait_bluetooth secs.
+* While in DARK/ON: If we receive EVENT_BLUETOOTH_PAIR we transition to ON and start our screen_on_secs timeout
+* While in NB/DARK/ON: If we receive EVENT_NODEDB_UPDATED we transition to ON (so the new screen can be shown)
 
 ### events that decrease cpu activity
 

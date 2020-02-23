@@ -60,6 +60,8 @@ static void lsIdle()
         doLightSleep(1);
         if (wakeCause != ESP_SLEEP_WAKEUP_TIMER)
             break;
+
+        secsSlept += sleepTime;
     }
     setLed(false);
 
@@ -127,6 +129,13 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateNB, &stateON, EVENT_PRESS, NULL, "Press");
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_PRESS, NULL, "Press");
     powerFSM.add_transition(&stateON, &stateON, EVENT_PRESS, screenPress, "Press"); // reenter On to restart our timers
+
+    powerFSM.add_transition(&stateNB, &stateON, EVENT_PRESS, NULL, "Bluetooth pairing");
+    powerFSM.add_transition(&stateON, &stateON, EVENT_PRESS, NULL, "Bluetooth pairing");
+
+    powerFSM.add_transition(&stateNB, &stateON, EVENT_NODEDB_UPDATED, NULL, "NodeDB update");
+    powerFSM.add_transition(&stateDARK, &stateON, EVENT_NODEDB_UPDATED, NULL, "NodeDB update");
+    powerFSM.add_transition(&stateON, &stateON, EVENT_NODEDB_UPDATED, NULL, "NodeDB update");
 
     powerFSM.add_transition(&stateLS, &stateON, EVENT_RECEIVED_TEXT_MSG, NULL, "Received text");
     powerFSM.add_transition(&stateNB, &stateON, EVENT_RECEIVED_TEXT_MSG, NULL, "Received text");

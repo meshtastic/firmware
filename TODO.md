@@ -2,7 +2,6 @@
 
 Items to complete before the first alpha release.
 
-* scrolling between screens based on press is busted
 * have state machine properly enter deep sleep based on loss of mesh and phone comms
 * have gps implement canSleep(), print nmea for debugging and discard buffers on the way into sleep
 * implement CustomRF95::canSleep
@@ -165,3 +164,4 @@ Items after the first final candidate release.
 * wake from light sleep as needed for our next scheduled periodic task (needed for gps position broadcasts etc)
 * turn bluetooth off based on our sleep policy
 * blink LED while in LS sleep mode
+* scrolling between screens based on press is busted
