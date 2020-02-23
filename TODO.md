@@ -48,6 +48,7 @@ Items to complete before the first beta release.
 
 During the beta timeframe the following improvements 'would be nice' (and yeah - I guess some of these items count as features, but it is a hobby project ;-) )
 
+* use BLEDevice::setPower to lower our BLE transmit power - extra range doesn't help us, it costs amps and it increases snoopability
 * make an install script to let novices install software on their boards
 * fix the frequency error reading in the RF95 RX code (can't do floating point math in an ISR ;-) 
 * See CustomRF95::send and fix the problem of dropping partially received packets if we want to start sending

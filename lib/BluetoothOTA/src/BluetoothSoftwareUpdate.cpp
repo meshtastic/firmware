@@ -109,7 +109,7 @@ BLEService *createUpdateService(BLEServer* server) {
     swUpdateDataCharacteristic.setCallbacks(&updateCb);
     swUpdateCRC32Characteristic.setCallbacks(&updateCb);
     
-    swUpdateResultCharacteristic.addDescriptor(new BLE2902()); // Needed so clients can request notification
+    swUpdateResultCharacteristic.addDescriptor(new(btPool) BLE2902()); // Needed so clients can request notification
 
     return service;
 }

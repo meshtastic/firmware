@@ -14,6 +14,7 @@
 #include "esp_pm.h"
 #include "MeshRadio.h"
 #include "main.h"
+#include "sleep.h"
 
 #ifdef T_BEAM_V10
 #include "axp20x.h"
@@ -27,9 +28,6 @@ esp_sleep_source_t wakeCause; // the reason we booted this time
 #define xstr(s) str(s)
 #define str(s) #s
 
-#include "esp_bt_main.h"
-
-bool bluetoothOn = true; // we turn it on during setup() so default on
 
 
 // -----------------------------------------------------------------------------
@@ -178,29 +176,7 @@ void doDeepSleep(uint64_t msecToWake)
 }
 
 
-void setBluetoothEnable(bool on)
-{
-  if (on != bluetoothOn)
-  {
-    DEBUG_MSG("Setting bluetooth enable=%d\n", on);
 
-    bluetoothOn = on;
-    if (on)
-    {
-      if (esp_bt_controller_enable(ESP_BT_MODE_BTDM) != ESP_OK)
-        DEBUG_MSG("error reenabling bt controller\n");
-      if (esp_bluedroid_enable() != ESP_OK)
-        DEBUG_MSG("error reenabling bluedroid\n");
-    }
-    else
-    {
-      if (esp_bluedroid_disable() != ESP_OK)
-        DEBUG_MSG("error disabling bluedroid\n");
-      if (esp_bt_controller_disable() != ESP_OK)
-        DEBUG_MSG("error disabling bt controller\n");
-    }
-  }
-}
 
 /**
  * enter light sleep (preserves ram but stops everything about CPU).
