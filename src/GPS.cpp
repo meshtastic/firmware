@@ -27,6 +27,7 @@ void GPS::setup()
     _serial_gps.begin(GPS_BAUDRATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
     ublox.enableDebugging(Serial);
 
+#if 0
     // note: the lib's implementation has the wrong docs for what the return val is
     // it is not a bool, it returns zero for success
     bool errCode = ublox.begin(_serial_gps);
@@ -38,8 +39,9 @@ void GPS::setup()
     assert(ok);
     ok = ublox.setAutoPVT(true);
     assert(ok);
-    // ublox.saveConfiguration(); 
+    // ublox.saveConfiguration();
     assert(ok);
+#endif
 #endif
 }
 
@@ -97,7 +99,6 @@ bool GPS::canSleep()
 void GPS::prepareSleep()
 {
     // discard all rx serial bytes so we don't try to parse them when we come back
-
 }
 
 void GPS::doTask()
@@ -105,34 +106,35 @@ void GPS::doTask()
 #ifdef GPS_RX_PIN
     // Consume all characters that have arrived
 
-      ublox.checkUblox(); //See if new data is available. Process bytes as they come in.
+#if 0
+    ublox.checkUblox(); //See if new data is available. Process bytes as they come in.
 
     if (ublox.getPVT())
     { // we only notify if position has changed
         if (!timeSetFromGPS)
-    {
-        struct timeval tv;
+        {
+            struct timeval tv;
 
-        DEBUG_MSG("Got time from GPS month=%d, year=%d\n", ublox.getMonth(), ublox.getYear());
+            DEBUG_MSG("Got time from GPS month=%d, year=%d\n", ublox.getMonth(), ublox.getYear());
 
-        /* Convert to unix time 
+            /* Convert to unix time 
         The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z). 
         */
-        struct tm t;
-        t.tm_sec = ublox.getSecond();
-        t.tm_min = ublox.getMinute();
-        t.tm_hour = ublox.getHour();
-        t.tm_mday = ublox.getDay();
-        t.tm_mon = ublox.getMonth() - 1;
-        t.tm_year = ublox.getYear() - 1900;
-        t.tm_isdst = false;
-        time_t res = mktime(&t);
-        tv.tv_sec = res;
-        tv.tv_usec = 0; // time.centisecond() * (10 / 1000);
+            struct tm t;
+            t.tm_sec = ublox.getSecond();
+            t.tm_min = ublox.getMinute();
+            t.tm_hour = ublox.getHour();
+            t.tm_mday = ublox.getDay();
+            t.tm_mon = ublox.getMonth() - 1;
+            t.tm_year = ublox.getYear() - 1900;
+            t.tm_isdst = false;
+            time_t res = mktime(&t);
+            tv.tv_sec = res;
+            tv.tv_usec = 0; // time.centisecond() * (10 / 1000);
 
-        // FIXME
-        // perhapsSetRTC(&tv);
-    }
+            // FIXME
+            // perhapsSetRTC(&tv);
+        }
 
         DEBUG_MSG("new gps pos\n");
         latitude = ublox.getLatitude() * 10e-7;
@@ -144,7 +146,8 @@ void GPS::doTask()
     }
     else // we didn't get a location update, go back to sleep and hope the characters show up
         wantNewLocation = true;
-#endif 
+#endif
+#endif
 
     // Once we have sent a location once we only poll the GPS rarely, otherwise check back every 100ms until we have something over the serial
     setPeriod(hasValidLocation && !wantNewLocation ? 30 * 1000 : 100);
@@ -156,4 +159,3 @@ void GPS::startLock()
     wantNewLocation = true;
     setPeriod(1);
 }
-
