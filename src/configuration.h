@@ -42,8 +42,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // Select which board is being used. If the outside build environment has sent a choice, just use that
 #if !defined(T_BEAM_V10) && !defined(HELTEC_LORA32)
-//#define T_BEAM_V10  // AKA Rev1 (second board released)
-#define HELTEC_LORA32
+#define T_BEAM_V10  // AKA Rev1 (second board released)
+//#define HELTEC_LORA32
 
 #define HW_VERSION_US // We encode the hardware freq range in the hw version string, so sw update can eventually install the correct build
 #endif
@@ -102,7 +102,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define NSS_GPIO        18
 
 #if defined(T_BEAM_V10)
-#define HW_VENDOR       "TTGO"
+// This string must exactly match the case used in release file names or the android updater won't work
+#define HW_VENDOR       "TBEAM"
 
 #define BICOLOR_DISPLAY // we have yellow at the top 16 lines
 
@@ -122,7 +123,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define PMU_IRQ         35
 
 #elif defined(HELTEC_LORA32)
-#define HW_VENDOR       "Heltec"
+// This string must exactly match the case used in release file names or the android updater won't work
+#define HW_VENDOR       "HELTEC"
 
 #ifndef USE_JTAG // gpio15 is TDO for JTAG, so no I2C on this board while doing jtag
 #define I2C_SDA         4
