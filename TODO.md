@@ -7,7 +7,10 @@ Items to complete before the first alpha release.
 * if the phone doesn't read fromradio mailbox within X seconds, assume the phone is gone and we can stop queing location msgs 
 for it (because it will redownload the nodedb when it comes back)
 
-* have CustomRF95::canSleep say no if we are busy receiving a message
+* lower wait_bluetooth_secs to 30 seconds once we have the GPS power on (but GPS in sleep mode) across light sleep.  For the time
+being I have it set at 2 minutes to ensure enough time for a GPS lock from scratch.
+
+F95::canSleep say no if we are busy receiving a message
 
 * retest BLE software update for both board types
 * send note about Adafruit Clue

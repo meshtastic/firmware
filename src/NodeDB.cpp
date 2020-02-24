@@ -52,7 +52,7 @@ void NodeDB::init()
 
     radioConfig.preferences.send_owner_interval = 4; // per sw-design.md
     radioConfig.preferences.position_broadcast_secs = 15 * 60;
-    radioConfig.preferences.wait_bluetooth_secs = 30;
+    radioConfig.preferences.wait_bluetooth_secs = 120;
     radioConfig.preferences.screen_on_secs = 30;
     radioConfig.preferences.mesh_sds_timeout_secs = 60 * 60;
     radioConfig.preferences.phone_sds_timeout_sec = 60 * 60;
