@@ -175,8 +175,8 @@ void axp192Init()
       axp.clearIRQ();
 #endif
 
-      isCharging = axp.isChargeing();
-      isUSBPowered = axp.isVBUSPlug();
+      isCharging = axp.isChargeing() ? 1 : 0;
+      isUSBPowered = axp.isVBUSPlug() ? 1 : 0;
     }
     else
     {
@@ -356,11 +356,15 @@ void loop()
 
       DEBUG_MSG("pmu irq!\n");
 
-      isCharging = axp.isChargeing();
-      isUSBPowered = axp.isVBUSPlug();
+      isCharging = axp.isChargeing() ? 1 : 0;
+      isUSBPowered = axp.isVBUSPlug() ? 1 : 0;
 
       axp.clearIRQ();
     }
+
+    // FIXME AXP192 interrupt is not firing, remove this temporary polling of battery state
+    isCharging = axp.isChargeing() ? 1 : 0;
+    isUSBPowered = axp.isVBUSPlug() ? 1 : 0;
 #endif
   }
 #endif

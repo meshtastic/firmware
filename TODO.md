@@ -24,6 +24,7 @@ being I have it set at 2 minutes to ensure enough time for a GPS lock from scrat
 
 Items to complete before the first beta release.
 
+* "AXP192 interrupt is not firing, remove this temporary polling of battery state"
 * make mesh aware network timing state machine (sync wake windows to gps time)
 * turn light sleep on aggressively (while lora is on but BLE off)
 * research and implement better mesh algorithm

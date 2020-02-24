@@ -6,6 +6,7 @@
 #include "screen.h"
 #include "PowerFSM.h"
 #include "GPS.h"
+#include "main.h"
 
 static void sdsEnter()
 {
@@ -28,6 +29,8 @@ static void lsEnter()
         delay(10); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
 
     gps.prepareSleep(); // abandon in-process parsing
+
+    if(!isUSBPowered) // FIXME - temp hack until we can put gps in sleep mode, if we have AC when we go to sleep then leave GPS on
     setGPSPower(false); // kill GPS power
 }
 
