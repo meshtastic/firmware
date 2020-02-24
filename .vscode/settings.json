@@ -41,7 +41,8 @@
         "utility": "cpp",
         "typeinfo": "cpp",
         "string": "cpp",
-        "*.xbm": "cpp"
+        "*.xbm": "cpp",
+        "list": "cpp"
     },
     "cSpell.words": [
         "Meshtastic",
