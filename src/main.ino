@@ -240,7 +240,7 @@ void setup()
 #endif
 
   // Hello
-  DEBUG_MSG("%s %s\n", str(APP_NAME), xstr(APP_VERSION));
+  DEBUG_MSG("Meshtastic swver=%s, hwver=%s\n", xstr(APP_VERSION), xstr(HW_VERSION));
 
   // Don't init display if we don't have one or we are waking headless due to a timer event
   if (wakeCause == ESP_SLEEP_WAKEUP_TIMER)
@@ -270,7 +270,7 @@ void initBluetooth()
   // FIXME - we are leaking like crazy
   // AllocatorScope scope(btPool);
 
-  BLEServer *serve = initBLE(getDeviceName(), HW_VENDOR, xstr(APP_VERSION)); // FIXME, use a real name based on the macaddr
+  BLEServer *serve = initBLE(getDeviceName(), HW_VENDOR, xstr(APP_VERSION), xstr(HW_VERSION)); // FIXME, use a real name based on the macaddr
   createMeshBluetoothService(serve);
 
   // Start advertising - this must be done _after_ creating all services
