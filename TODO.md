@@ -1,19 +1,22 @@
 # High priority
 
-Items to complete before the first alpha release.
+Items to complete soon (next couple of alpha releases).
 
-* have state machine properly enter deep sleep based on loss of mesh and phone comms
-* default to enter deep sleep if no LORA received for two hours (indicates user has probably left the meshS)
-* if the phone doesn't read fromradio mailbox within X seconds, assume the phone is gone and we can stop queing location msgs 
+* stay awake while charging
+* check gps battery voltage
+
+* The following three items are all the same:
+ Have state machine properly enter deep sleep based on loss of mesh and phone comms.
+ Default to enter deep sleep if no LORA received for two hours (indicates user has probably left the mesh).
+ If the phone doesn't read fromradio mailbox within X seconds, assume the phone is gone and we can stop queing location msgs 
 for it (because it will redownload the nodedb when it comes back)
 
 * lower wait_bluetooth_secs to 30 seconds once we have the GPS power on (but GPS in sleep mode) across light sleep.  For the time
 being I have it set at 2 minutes to ensure enough time for a GPS lock from scratch.
 
-F95::canSleep say no if we are busy receiving a message
-
 * retest BLE software update for both board types
 * send note about Adafruit Clue
+* report on wikifactory
 * send note to the guy who designed the cases
 * remeasure wake time power draws now that we run CPU down at 80MHz
 
@@ -21,12 +24,11 @@ F95::canSleep say no if we are busy receiving a message
 
 Items to complete before the first beta release.
 
+* make mesh aware network timing state machine (sync wake windows to gps time)
 * turn light sleep on aggressively (while lora is on but BLE off)
-* sync wake windows to gps time
 * research and implement better mesh algorithm
 * the BLE stack is leaking about 200 bytes each time we go to light sleep
 * use gps sleep mode instead of killing its power (to allow fast position when we wake)
-* leave lora receiver always on
 * rx signal measurements -3 marginal, -9 bad, 10 great, -10 means almost unusable.  So scale this into % signal strength.  preferably as a graph, with an X indicating loss of comms.  
 * assign every "channel" a random shared 8 bit sync word (per 4.2.13.6 of datasheet) - use that word to filter packets before even checking CRC.  This will ensure our CPU will only wake for packets on our "channel"  
 * Note: we do not do address filtering at the chip level, because we might need to route for the mesh
@@ -47,7 +49,7 @@ Items to complete before the first beta release.
 * How do avalanche beacons work?  Could this do that as well?  possibly by using beacon mode feature of the RF95?
 * use std::map<NodeInfo*, std::string> in node db
 * make a HAM build: yep - that's a great idea.  I'll add it to the TODO.  should be pretty painless - just a new frequency list, a bool to say 'never do encryption' and use hte callsign as that node's unique id.  -from Girts
-* add frequency hopping
+* add frequency hopping, dependent on the gps time, make the switch moment far from the time anyone is going to be transmitting
 * publish update articles on the web
 
 # Pre-beta priority
@@ -176,3 +178,4 @@ Items after the first final candidate release.
 * don't enter NB state if we've recently talked to the phone (to prevent breaking syncing or bluetooth sw update)
 * have sw update prevent BLE sleep
 * manually delete characteristics/descs
+* leave lora receiver always on
