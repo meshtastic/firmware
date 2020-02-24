@@ -224,6 +224,14 @@ void deinitBLE()
 {
   assert(pServer);
 
+  pServer->getAdvertising()->stop();
+
+  destroyUpdateService();
+
+  pUpdate->stop();
+  pDevInfo->stop();
+  pUpdate->stop(); // we delete them below
+
   // First shutdown bluetooth
   BLEDevice::deinit(false);
 
@@ -235,7 +243,6 @@ void deinitBLE()
   delete pServer;
 
   batteryLevelC = NULL; // Don't let anyone generate bogus notifies
-  destroyUpdateService();
 
   for (int i = 0; i < numChars; i++)
     delete chars[i];

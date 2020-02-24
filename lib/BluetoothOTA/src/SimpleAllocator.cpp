@@ -1,7 +1,6 @@
 #include "SimpleAllocator.h"
 #include "assert.h"
 
-SimpleAllocator *activeAllocator;
 
 SimpleAllocator::SimpleAllocator() { reset(); }
 
@@ -21,6 +20,11 @@ void *operator new(size_t size, SimpleAllocator &p)
 {
     return p.alloc(size);
 }
+
+#if 0 
+// This was a dumb idea, turn off for now
+
+SimpleAllocator *activeAllocator;
 
 AllocatorScope::AllocatorScope(SimpleAllocator &a)
 {
@@ -52,3 +56,5 @@ void operator delete(void *ptr) throw()
     else
         free(ptr);
 }
+
+#endif

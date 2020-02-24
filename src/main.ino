@@ -201,6 +201,8 @@ const char *getDeviceName()
   return name;
 }
 
+
+
 void setup()
 {
 // Debug
@@ -284,15 +286,18 @@ void setBluetoothEnable(bool on)
     bluetoothOn = on;
     if (on)
     {
-      Serial.printf("Pre BT: %u heap size", ESP.getFreeHeap());
+      Serial.printf("Pre BT: %u heap size\n", ESP.getFreeHeap());
+      //ESP_ERROR_CHECK( heap_trace_start(HEAP_TRACE_LEAKS) );
       initBluetooth(); 
     }
     else
     {
       // We have to totally teardown our bluetooth objects to prevent leaks
-      destroyMeshBluetoothService();
       deinitBLE();
-      Serial.printf("Shutdown BT: %u heap size", ESP.getFreeHeap());
+      destroyMeshBluetoothService(); // must do after deinit, because it frees our service
+      Serial.printf("Shutdown BT: %u heap size\n", ESP.getFreeHeap());
+      //ESP_ERROR_CHECK( heap_trace_stop() );
+      //heap_trace_dump();
     }
   }
 }
