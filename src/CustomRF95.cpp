@@ -21,7 +21,7 @@ CustomRF95::CustomRF95(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &
 bool CustomRF95::canSleep()
 {
     // We allow initializing mode, because sometimes while testing we don't ever call init() to turn on the hardware
-    return (_mode == RHModeInitialising || _mode == RHModeIdle || _mode == RHModeRx) && txQueue.isEmpty(); // FIXME - also check if we have started receiving
+    return (_mode == RHModeInitialising || _mode == RHModeIdle || _mode == RHModeRx) && !_isReceiving && txQueue.isEmpty(); 
 }
 
 bool CustomRF95::sleep()
@@ -45,12 +45,10 @@ bool CustomRF95::init()
 /// bluetooth comms code.  If the txmit queue is empty it might return an error
 ErrorCode CustomRF95::send(MeshPacket *p)
 {
-    // FIXME - we currently just slam over into send mode if the RF95 is in RX mode.  This is _probably_ safe given
-    // how quiet our network is, bu it would be better to wait _if_ we are partially though receiving a packet (rather than
-    // just merely waiting for one).
-    // This is doubly bad because not only do we drop the packet that was on the way in, we almost certainly guarantee no one
-    // outside will like the packet we are sending.
-    if (_mode == RHModeIdle || _mode == RHModeRx)
+    // We wait _if_ we are partially though receiving a packet (rather than just merely waiting for one).
+    // To do otherwise would be doubly bad because not only would we drop the packet that was on the way in, 
+    // we almost certainly guarantee no one outside will like the packet we are sending.
+    if (_mode == RHModeIdle || (_mode == RHModeRx && !_isReceiving))
     {
         // if the radio is idle, we can send right away
         DEBUG_MSG("immedate send on mesh (txGood=%d,rxGood=%d,rxBad=%d)\n", txGood(), rxGood(), rxBad());
@@ -142,7 +140,10 @@ void CustomRF95::handleInterrupt()
         portYIELD_FROM_ISR();
 }
 
-/// Return true if a higher pri task has woken
+/** The ISR doesn't have any good work to do, give a new assignment.
+ * 
+ * Return true if a higher pri task has woken
+ */
 bool CustomRF95::handleIdleISR()
 {
     BaseType_t higherPriWoken = false;
