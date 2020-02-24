@@ -30,6 +30,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "screen.h"
 #include "mesh-pb-constants.h"
 #include "NodeDB.h"
+#include "main.h"
 
 #define FONT_HEIGHT 14 // actually 13 for "ariel 10" but want a little extra space
 #define FONT_HEIGHT_16 (ArialMT_Plain_16[1] + 1)
@@ -442,8 +443,12 @@ void drawDebugInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
     static char channelStr[20];
     snprintf(channelStr, sizeof(channelStr), "%s", channelSettings.name);
 
+    // We don't show battery levels yet - for now just lie and show debug info
+    static char batStr[20];
+    snprintf(batStr, sizeof(channelStr), "Batt %x%%", (isCharging << 1) + isUSBPowered);
+
     const char *fields[] = {
-        "Batt 89%",
+        batStr,
         "GPS 75%",
         usersStr,
         channelStr,
