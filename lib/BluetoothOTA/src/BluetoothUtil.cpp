@@ -276,7 +276,7 @@ BLEServer *initBLE(std::string deviceName, std::string hwVendor, std::string swV
   // We now let users create the battery service only if they really want (not all devices have a battery)
   // BLEService *pBattery = createBatteryService(pServer);
 
-  pUpdate = createUpdateService(pServer); // We need to advertise this so our android ble scan operation can see it
+  pUpdate = createUpdateService(pServer, hwVendor, swVersion, hwVersion); // We need to advertise this so our android ble scan operation can see it
 
   // It seems only one service can be advertised - so for now don't advertise our updater
   // pServer->getAdvertising()->addServiceUUID(pUpdate->getUUID());
