@@ -2,7 +2,7 @@
 
 set -e
 
-VERSION=0.0.4
+source bin/version.sh
 
 COUNTRIES="US EU CN JP"
 
@@ -11,7 +11,8 @@ SRCBIN=.pio/build/esp32/firmware.bin
 
 for COUNTRY in $COUNTRIES; do 
 
-    COMMONOPTS="-DAPP_VERSION=$VERSION -DHW_VERSION_$COUNTRY -Wall -Wextra -Wno-missing-field-initializers -Isrc -Os -Wl,-Map,.pio/build/esp32/output.map -DAXP_DEBUG_PORT=Serial"
+    HWVERSTR="1.0-$COUNTRY"
+    COMMONOPTS="-DAPP_VERSION=$VERSION -DHW_VERSION_$COUNTRY -DHW_VERSION=$HWVERSTR -Wall -Wextra -Wno-missing-field-initializers -Isrc -Os -Wl,-Map,.pio/build/esp32/output.map -DAXP_DEBUG_PORT=Serial"
 
     export PLATFORMIO_BUILD_FLAGS="-DT_BEAM_V10 $COMMONOPTS"
     echo "Building with $PLATFORMIO_BUILD_FLAGS"
@@ -25,7 +26,6 @@ for COUNTRY in $COUNTRIES; do
     pio run # -v
     cp $SRCBIN release/firmware-HELTEC-$COUNTRY-$VERSION.bin
     cp $SRCMAP release/firmware-HELTEC-$COUNTRY-$VERSION.map
-
 done
 
 zip release/firmware-$VERSION.zip release/firmware-*-$VERSION.bin
