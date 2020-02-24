@@ -34,9 +34,10 @@ This project is currently in early alpha - if you have questions please join our
 
 This software is 100% open source and developed by a group of hobbyist experimenters.  No warranty is provided, if you'd like to improve it - we'd love your help.  Please post in the [chat](https://gitter.im/Meshtastic/community).  
 
-# Update 1
+# Updates
 
-* 02/20/2020 - Our first alpha release of the radio software is ready for early users.  If you'd like to try it, we'd love your feedback.  Click [here](https://github.com/geeksville/Meshtastic-esp32/blob/master/README.md) for instructions.
+* 02/23/2020 - 0.0.4 release.  Still very bleeding edge but much closer to the final power management, a charged T-BEAM should run for many days with this load.  If you'd like to try it, we'd love your feedback.  Click [here](https://github.com/geeksville/Meshtastic-esp32/blob/master/README.md) for instructions.
+* 02/20/2020 - Our first alpha release (0.0.3) of the radio software is ready for early users.  
 
 ## Meshtastic Android app
 Soon our (optional) companion Android application will be released here:
