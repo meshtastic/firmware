@@ -2,15 +2,13 @@
 
 Items to complete before the first alpha release.
 
-* the BLE stack is leaking about 7KB each time we go to light sleep
-* manually delete characteristics/descs
-* sync sleep windows to gps time
 * have state machine properly enter deep sleep based on loss of mesh and phone comms
 * default to enter deep sleep if no LORA received for two hours (indicates user has probably left the meshS)
-* implement CustomRF95::canSleep
 * if the phone doesn't read fromradio mailbox within X seconds, assume the phone is gone and we can stop queing location msgs 
 for it (because it will redownload the nodedb when it comes back)
-* turn light sleep on aggressively (while lora is on but BLE off)
+
+* have CustomRF95::canSleep say no if we are busy receiving a message
+
 * retest BLE software update for both board types
 * send note about Adafruit Clue
 * send note to the guy who designed the cases
@@ -20,6 +18,10 @@ for it (because it will redownload the nodedb when it comes back)
 
 Items to complete before the first beta release.
 
+* turn light sleep on aggressively (while lora is on but BLE off)
+* sync wake windows to gps time
+* research and implement better mesh algorithm
+* the BLE stack is leaking about 200 bytes each time we go to light sleep
 * use gps sleep mode instead of killing its power (to allow fast position when we wake)
 * leave lora receiver always on
 * rx signal measurements -3 marginal, -9 bad, 10 great, -10 means almost unusable.  So scale this into % signal strength.  preferably as a graph, with an X indicating loss of comms.  
@@ -49,6 +51,7 @@ Items to complete before the first beta release.
 
 During the beta timeframe the following improvements 'would be nice' (and yeah - I guess some of these items count as features, but it is a hobby project ;-) )
 
+* Figure out why the RF95 ISR is never seeing RH_RF95_VALID_HEADER, so it is not protecting our rx packets from getting stomped on by sends
 * use BLEDevice::setPower to lower our BLE transmit power - extra range doesn't help us, it costs amps and it increases snoopability
 * make an install script to let novices install software on their boards
 * fix the frequency error reading in the RF95 RX code (can't do floating point math in an ISR ;-) 
@@ -69,6 +72,7 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 
 Items after the first final candidate release.
 
+* Use CAD mode of the RF95 to automatically find low noise channels
 * read the PMU battery fault indicators and blink/led/warn user on screen
 * make a no bluetooth configured yet screen - include this screen in the loop if the user hasn't yet paired
 * the AXP debug output says it is trying to charge at 700mA, but the max I've seen is 180mA, so AXP registers probably need to be set to tell them the circuit can only provide 300mAish max. So that the low charge rate kicks in faster and we don't wear out batteries.
@@ -168,3 +172,4 @@ Items after the first final candidate release.
 * update the prebuilt bins for different regulatory regions
 * don't enter NB state if we've recently talked to the phone (to prevent breaking syncing or bluetooth sw update)
 * have sw update prevent BLE sleep
+* manually delete characteristics/descs
