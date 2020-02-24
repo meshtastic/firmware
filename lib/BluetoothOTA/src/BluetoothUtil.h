@@ -21,5 +21,11 @@ void loopBLE();
 BLEServer *initBLE(std::string devName, std::string hwVendor, std::string swVersion, std::string hwVersion = "");
 void deinitBLE();
 
+/// Add a characteristic that we will delete when we restart
+BLECharacteristic *addBLECharacteristic(BLECharacteristic *c);
+
+/// Add a characteristic that we will delete when we restart
+BLEDescriptor *addBLEDescriptor(BLEDescriptor *c);
+
 /// Any bluetooth objects you allocate _must_ come from this pool if you want to be able to call deinitBLE()
 extern SimpleAllocator btPool;

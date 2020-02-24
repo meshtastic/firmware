@@ -3,6 +3,8 @@
 Items to complete before the first alpha release.
 
 * the BLE stack is leaking about 7KB each time we go to light sleep
+* manually delete characteristics/descs
+* sync sleep windows to gps time
 * have state machine properly enter deep sleep based on loss of mesh and phone comms
 * default to enter deep sleep if no LORA received for two hours (indicates user has probably left the meshS)
 * implement CustomRF95::canSleep

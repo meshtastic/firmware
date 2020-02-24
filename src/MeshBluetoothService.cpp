@@ -300,24 +300,25 @@ BLEService *createMeshBluetoothService(BLEServer *server)
     BLEService *service = server->createService(BLEUUID("6ba1b218-15a8-461f-9fa8-5dcae273eafd"), 25, 0);
 
     assert(!meshFromNumCharacteristic);
-    meshFromNumCharacteristic = new (btPool) FromNumCharacteristic;
+    meshFromNumCharacteristic = new FromNumCharacteristic;
 
     addWithDesc(service, meshFromNumCharacteristic, "fromRadio");
-    addWithDesc(service, new (btPool) ToRadioCharacteristic, "toRadio");
-    addWithDesc(service, new (btPool) FromRadioCharacteristic, "fromNum");
+    addWithDesc(service, new ToRadioCharacteristic, "toRadio");
+    addWithDesc(service, new FromRadioCharacteristic, "fromNum");
 
-    addWithDesc(service, new (btPool) ProtobufCharacteristic("ea9f3f82-8dc4-4733-9452-1f6da28892a2", BLECharacteristic::PROPERTY_READ, MyNodeInfo_fields, &myNodeInfo), "myNode");
-    addWithDesc(service, new (btPool) RadioCharacteristic, "radio");
-    addWithDesc(service, new (btPool) OwnerCharacteristic, "owner");
-    addWithDesc(service, new (btPool) NodeInfoCharacteristic, "nodeinfo");
+    addWithDesc(service, new ProtobufCharacteristic("ea9f3f82-8dc4-4733-9452-1f6da28892a2", BLECharacteristic::PROPERTY_READ, MyNodeInfo_fields, &myNodeInfo), "myNode");
+    addWithDesc(service, new RadioCharacteristic, "radio");
+    addWithDesc(service, new OwnerCharacteristic, "owner");
+    addWithDesc(service, new NodeInfoCharacteristic, "nodeinfo");
 
-    meshFromNumCharacteristic->addDescriptor(new (btPool) BLE2902()); // Needed so clients can request notification
+    meshFromNumCharacteristic->addDescriptor(addBLEDescriptor(new BLE2902())); // Needed so clients can request notification
 
     service->start();
 
     // We only add to advertisting once, because the ESP32 arduino code is dumb and that object never dies
     static bool firstTime = true;
-    if(firstTime) {
+    if (firstTime)
+    {
         firstTime = false;
         server->getAdvertising()->addServiceUUID(service->getUUID());
     }
@@ -329,9 +330,10 @@ BLEService *createMeshBluetoothService(BLEServer *server)
     return service;
 }
 
-void destroyMeshBluetoothService() {
+void destroyMeshBluetoothService()
+{
     assert(meshService);
     delete meshService;
-    
+
     meshFromNumCharacteristic = NULL;
 }
