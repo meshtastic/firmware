@@ -124,18 +124,20 @@ BLEService *createUpdateService(BLEServer *server)
     BLEService *service = server->createService("cb0b9a0b-a84c-4c0d-bdbb-442e3144ee30");
 
     assert(!resultC);
-    resultC = new (btPool) BLECharacteristic("5e134862-7411-4424-ac4a-210937432c77", BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+    resultC = new BLECharacteristic("5e134862-7411-4424-ac4a-210937432c77", BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
 
-    addWithDesc(service, new (btPool) TotalSizeCharacteristic, "total image size");
-    addWithDesc(service, new (btPool) DataCharacteristic, "data");
-    addWithDesc(service, new (btPool) CRC32Characteristic, "crc32");
+    addWithDesc(service, new TotalSizeCharacteristic, "total image size");
+    addWithDesc(service, new DataCharacteristic, "data");
+    addWithDesc(service, new CRC32Characteristic, "crc32");
     addWithDesc(service, resultC, "result code");
 
-    resultC->addDescriptor(new (btPool) BLE2902()); // Needed so clients can request notification
+    resultC->addDescriptor(addBLEDescriptor(new BLE2902())); // Needed so clients can request notification
 
     return service;
 }
 
 void destroyUpdateService() {
+    assert(resultC);
+
     resultC = NULL;
 }
