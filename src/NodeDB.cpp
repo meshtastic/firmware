@@ -275,7 +275,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
                     devicestate.rx_text_message = mp;
                     devicestate.has_rx_text_message = true;
                     updateTextMessage = true;
-                    powerFSM.trigger(EVENT_NODEDB_UPDATED);
+                    powerFSM.trigger(EVENT_RECEIVED_TEXT_MSG);
                 }
             }
             break;
