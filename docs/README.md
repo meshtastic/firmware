@@ -36,15 +36,16 @@ This software is 100% open source and developed by a group of hobbyist experimen
 
 # Updates
 
+* 02/25/2020 - 0.0.4 of the Android app is released.  This is a very early alpha, see below to join the alpha-testers group.
 * 02/23/2020 - 0.0.4 release.  Still very bleeding edge but much closer to the final power management, a charged T-BEAM should run for many days with this load.  If you'd like to try it, we'd love your feedback.  Click [here](https://github.com/geeksville/Meshtastic-esp32/blob/master/README.md) for instructions.
 * 02/20/2020 - Our first alpha release (0.0.3) of the radio software is ready for early users.  
 
 ## Meshtastic Android app
-Soon our (optional) companion Android application will be released here:
+Once out of alpha the companion Android application will be released here:
 
 [![Download at https://play.google.com/store/apps/details?id=com.geeksville.mesh](https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png)](https://play.google.com/store/apps/details?id=com.geeksville.mesh&referrer=utm_source%3Dhomepage%26anid%3Dadmob)
 
-If you would like to join our super bleeding-edge alpha test group for this app, we'd love to have you.  Three steps:
+But if you want the bleeding edge app now, we'd love to have your help testing.  Three steps to opt-in to the alpha- test:
 
 1. Join [this Google group](https://groups.google.com/forum/#!forum/meshtastic-alpha-testers) with the account you use in Google Play.
 2. Go to this [URL](https://play.google.com/apps/testing/com.geeksville.mesh) to opt-in to the alpha test.

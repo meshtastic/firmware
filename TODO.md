@@ -3,6 +3,7 @@
 Items to complete soon (next couple of alpha releases).
 
 * text messages are not showing on local screen if screen was on
+* protobufs are sometimes corrupted after sleep!
 * stay awake while charging
 * check gps battery voltage
 
