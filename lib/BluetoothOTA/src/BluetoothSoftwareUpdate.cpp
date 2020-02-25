@@ -31,6 +31,13 @@ public:
         if (!canBegin)
             // Indicate failure by forcing the size to 0
             c->setValue(0UL);
+        else {
+            // This totally breaks abstraction to up up into the app layer for this, but quick hack to make sure we only
+            // talk to one service during the sw update.
+            //DEBUG_MSG("FIXME, crufty shutdown of mesh bluetooth for sw update.");
+            //void stopMeshBluetoothService();
+            //stopMeshBluetoothService();
+        }
     }
 };
 
@@ -100,6 +107,8 @@ public:
         resultC->notify();
     }
 };
+
+
 
 void bluetoothRebootCheck()
 {

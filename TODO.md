@@ -24,6 +24,7 @@ being I have it set at 2 minutes to ensure enough time for a GPS lock from scrat
 
 Items to complete before the first beta release.
 
+* use fuse bits to store the board type and region.  So one load can be used on all boards
 * "AXP192 interrupt is not firing, remove this temporary polling of battery state"
 * make mesh aware network timing state machine (sync wake windows to gps time)
 * turn light sleep on aggressively (while lora is on but BLE off)
@@ -78,6 +79,7 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 
 Items after the first final candidate release.
 
+* split out the software update utility so other projects can use it.  Have the appload specify the URL for downloads.
 * Use CAD mode of the RF95 to automatically find low noise channels
 * read the PMU battery fault indicators and blink/led/warn user on screen
 * make a no bluetooth configured yet screen - include this screen in the loop if the user hasn't yet paired
@@ -89,7 +91,6 @@ Items after the first final candidate release.
 * We let anyone BLE scan for us (FIXME, perhaps only allow that until we are paired with a phone and configured) 
 * use two different buildenv flags for ttgo vs lora32. https://docs.platformio.org/en/latest/ide/vscode.html#key-bindings
 * sim gps data for testing nodes that don't have hardware
-* have android provide position data for nodes that don't have gps
 * do debug serial logging to android over bluetooth
 * break out my bluetooth OTA software as a seperate library so others can use it
 * Heltec LoRa32 has 8MB flash, use a bigger partition table if needed - TTGO is 4MB but has PSRAM
