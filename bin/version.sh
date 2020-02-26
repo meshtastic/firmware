@@ -1,3 +1,3 @@
 
 
-export VERSION=0.0.5
+export VERSION=0.0.6
