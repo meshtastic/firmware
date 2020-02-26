@@ -123,9 +123,32 @@ MeshPacket *MeshService::handleFromRadioUser(MeshPacket *mp)
     return mp;
 }
 
+void MeshService::handleIncomingPosition(MeshPacket *mp)
+{
+    if (mp->has_payload && mp->payload.which_variant == SubPacket_position_tag)
+    {
+        DEBUG_MSG("handled incoming position time=%u\n", mp->payload.variant.position.time);
+
+        if (mp->payload.variant.position.time)
+        {
+            struct timeval tv;
+            uint32_t secs = mp->payload.variant.position.time;
+
+            tv.tv_sec = secs;
+            tv.tv_usec = 0;
+
+            gps.perhapsSetRTC(&tv);
+        }
+    }
+}
+
 void MeshService::handleFromRadio(MeshPacket *mp)
 {
     mp->rx_time = gps.getValidTime(); // store the arrival timestamp for the phone
+
+    // If it is a position packet, perhaps set our clock (if we don't have a GPS of our own, otherwise wait for that to work)
+    if(!myNodeInfo.has_gps)
+        handleIncomingPosition(mp); 
 
     if (mp->has_payload && mp->payload.which_variant == SubPacket_user_tag)
     {
@@ -149,7 +172,7 @@ void MeshService::handleFromRadio(MeshPacket *mp)
         }
         assert(toPhoneQueue.enqueue(mp, 0) == pdTRUE); // FIXME, instead of failing for full queue, delete the oldest mssages
 
-        if(mp->payload.want_response)
+        if (mp->payload.want_response)
             sendNetworkPing(mp->from);
     }
     else
@@ -168,12 +191,11 @@ void MeshService::handleFromRadio()
         bluetoothNotifyFromNum(fromNum);
 }
 
-
 uint32_t sendOwnerCb()
 {
-  service.sendOurOwner();
+    service.sendOurOwner();
 
-  return radioConfig.preferences.send_owner_interval * radioConfig.preferences.position_broadcast_secs * 1000;
+    return radioConfig.preferences.send_owner_interval * radioConfig.preferences.position_broadcast_secs * 1000;
 }
 
 Periodic sendOwnerPeriod(sendOwnerCb);
@@ -209,17 +231,7 @@ void MeshService::handleToRadio(std::string s)
         case ToRadio_packet_tag:
         {
             // If our phone is sending a position, see if we can use it to set our RTC
-            if (r.variant.packet.has_payload && r.variant.packet.payload.which_variant == SubPacket_position_tag && r.variant.packet.payload.variant.position.time)
-            {
-                struct timeval tv;
-                uint32_t secs = r.variant.packet.payload.variant.position.time;
-
-                // FIXME, this is a shit not right version of the standard def of unix time!!!
-                tv.tv_sec = secs;
-                tv.tv_usec = 0;
-
-                gps.perhapsSetRTC(&tv);
-            }
+            handleIncomingPosition(&r.variant.packet); // If it is a position packet, perhaps set our clock
 
             r.variant.packet.rx_time = gps.getValidTime(); // Record the time the packet arrived from the phone (so we update our nodedb for the local node)
 
@@ -247,8 +259,14 @@ void MeshService::sendToMesh(MeshPacket *p)
     nodeDB.updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
 
     // Strip out any time information before sending packets to other  nodes - to keep the wire size small (and because other nodes shouldn't trust it anyways)
+    // Note: for now, we allow a device with a local GPS to include the time, so that gpsless devices can get time.
     if (p->has_payload && p->payload.which_variant == SubPacket_position_tag)
-        p->payload.variant.position.time = 0;
+    {
+        if (!myNodeInfo.has_gps)
+            p->payload.variant.position.time = 0;
+        else
+            DEBUG_MSG("Providing time to mesh %u\n", p->payload.variant.position.time);
+    }
 
     // If the phone sent a packet just to us, don't send it out into the network
     if (p->to == nodeDB.getNodeNum())
@@ -295,8 +313,7 @@ void MeshService::sendOurPosition(NodeNum dest)
     p->to = dest;
     p->payload.which_variant = SubPacket_position_tag;
     p->payload.variant.position = node->position;
-    // FIXME - for now we are leaving this in the sent packets (for debugging)
-    //p->payload.variant.position.time = 0; // No need to send time, other node won't trust it anyways
+    p->payload.variant.position.time = gps.getValidTime(); // This nodedb timestamp might be stale, so update it if our clock is valid.
     sendToMesh(p);
 }
 
