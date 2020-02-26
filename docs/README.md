@@ -28,7 +28,7 @@ Not all of these features are fully implemented yet - see below.  But they shoul
 * Open and extensible codebase supporting multiple hardware vendors - no lock in to one vendor
 * Communication API for bluetooth devices (such as our Android app) to use the mesh.  So if you have some application that needs long range low power networking, this might work for you.
 * Eventually (within a couple of months) we should have a modified version of Signal that works with this project.
-* Very easy sharing of private secured channels.  Just share a special link or QR code with other users and they can join your encrypted mesh
+* Very easy sharing of private secured channels.  Just share a special link or QR code with friends and they can join your encrypted mesh
  
 This project is currently in early alpha - if you have questions please join our chat [![Join the chat at https://gitter.im/Meshtastic/community](https://badges.gitter.im/Meshtastic/community.svg)](https://gitter.im/Meshtastic/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge).
 
@@ -38,7 +38,7 @@ This software is 100% open source and developed by a group of hobbyist experimen
 
 * 02/25/2020 - 0.0.4 of the Android app is released.  This is a very early alpha, see below to join the alpha-testers group.
 * 02/23/2020 - 0.0.4 release.  Still very bleeding edge but much closer to the final power management, a charged T-BEAM should run for many days with this load.  If you'd like to try it, we'd love your feedback.  Click [here](https://github.com/geeksville/Meshtastic-esp32/blob/master/README.md) for instructions.
-* 02/20/2020 - Our first alpha release (0.0.3) of the radio software is ready for early users.  
+* 02/20/2020 - Our first alpha release (0.0.3) of the radio software is ready brave early people.  
 
 ## Meshtastic Android app
 Once out of alpha the companion Android application will be released here:
@@ -54,9 +54,8 @@ But if you want the bleeding edge app now, we'd love to have your help testing. 
 If you'd like to help with development, the source code is [on github](https://github.com/geeksville/Meshtastic-Android).
 
 ## Supported hardware
-We currently support two brands of radios.  The [TTGO T-Beam](https://www.aliexpress.com/item/4000119152086.html) and the [Heltec LoRa 32](https://heltec.org/project/wifi-lora-32/).  Most users should buy the T-Beam and a 18650 battery (total cost less than $35).  Make
-sure to buy the frequency range which is legal for your country.  For the USA, you should buy the 915MHz version.  Getting a version that include a screen
-is optional, but highly recommended.
+We currently support two brands of radios.  The [TTGO T-Beam](https://www.aliexpress.com/item/4000119152086.html) and the [Heltec LoRa 32](https://heltec.org/project/wifi-lora-32/).  Most people should buy the T-Beam and a 18650 battery (total cost less than $35).  Make
+sure to buy the frequency range which is legal for your country.  For the USA, you should buy the 915MHz version.  Getting a version that include a screen is optional, but highly recommended.
 
 Instructions for installing prebuilt firmware can be found [here](https://github.com/geeksville/Meshtastic-esp32/blob/master/README.md).
 
