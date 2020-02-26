@@ -33,8 +33,8 @@ public:
     void onRead(BLECharacteristic *c)
     {
         BLEKeepAliveCallbacks::onRead(c);
-        DEBUG_MSG("Got proto read\n");
         size_t numbytes = pb_encode_to_bytes(trBytes, sizeof(trBytes), fields, my_struct);
+        DEBUG_MSG("pbread from %s returns %d bytes\n", c->getUUID().toString().c_str(), numbytes);
         c->setValue(trBytes, numbytes);
     }
 
@@ -51,8 +51,8 @@ protected:
     bool writeToDest(BLECharacteristic *c, void *dest)
     {
         // dumpCharacteristic(pCharacteristic);
-        DEBUG_MSG("Got on proto write\n");
         std::string src = c->getValue();
+        DEBUG_MSG("pbwrite to %s of %d bytes\n", c->getUUID().toString().c_str(), src.length());
         return pb_decode_from_bytes((const uint8_t *)src.c_str(), src.length(), fields, dest);
     }
 };
@@ -88,7 +88,7 @@ public:
     void onWrite(BLECharacteristic *c)
     {
         BLEKeepAliveCallbacks::onWrite(c);
-        DEBUG_MSG("Got on nodeinfo write\n");
+        DEBUG_MSG("Reset nodeinfo read pointer\n");
         nodeDB.resetReadPointer();
     }
 };
@@ -188,18 +188,17 @@ public:
         }
         else
         {
-            DEBUG_MSG("delivering toPhone packet to phone\n");
-
-            static FromRadio fradio;
+            static FromRadio fRadio;
 
             // Encapsulate as a ToRadio packet
-            memset(&fradio, 0, sizeof(fradio));
-            fradio.which_variant = FromRadio_packet_tag;
-            fradio.variant.packet = *mp;
+            memset(&fRadio, 0, sizeof(fRadio));
+            fRadio.which_variant = FromRadio_packet_tag;
+            fRadio.variant.packet = *mp;
 
             service.releaseToPool(mp); // we just copied the bytes, so don't need this buffer anymore
 
-            size_t numbytes = pb_encode_to_bytes(trBytes, sizeof(trBytes), FromRadio_fields, &fradio);
+            size_t numbytes = pb_encode_to_bytes(trBytes, sizeof(trBytes), FromRadio_fields, &fRadio);
+            DEBUG_MSG("delivering toPhone packet to phone %d bytes\n", numbytes);
             c->setValue(trBytes, numbytes);
         }
     }

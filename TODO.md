@@ -3,9 +3,6 @@
 Items to complete soon (next couple of alpha releases).
 
 * text messages are not showing on local screen if screen was on
-* protobufs are sometimes corrupted after sleep!
-* stay awake while charging
-* check gps battery voltage
 
 * The following three items are all the same:
  Have state machine properly enter deep sleep based on loss of mesh and phone comms.
@@ -17,7 +14,6 @@ for it (because it will redownload the nodedb when it comes back)
 being I have it set at 2 minutes to ensure enough time for a GPS lock from scratch.
 
 * retest BLE software update for both board types
-* send note about Adafruit Clue
 * report on wikifactory
 * send note to the guy who designed the cases
 * remeasure wake time power draws now that we run CPU down at 80MHz
@@ -26,6 +22,7 @@ being I have it set at 2 minutes to ensure enough time for a GPS lock from scrat
 
 Items to complete before the first beta release.
 
+* check fcc rules on duty cycle.  we might not need to freq hop.  https://www.sunfiretesting.com/LoRa-FCC-Certification-Guide/
 * use fuse bits to store the board type and region.  So one load can be used on all boards
 * "AXP192 interrupt is not firing, remove this temporary polling of battery state"
 * make mesh aware network timing state machine (sync wake windows to gps time)
@@ -47,7 +44,7 @@ Items to complete before the first beta release.
 * make an about to sleep screen
 * don't send location packets if we haven't moved
 * scrub default radio config settings for bandwidth/range/speed
-* add basic crypto - http://rweather.github.io/arduinolibs/crypto.html with speck https://www.airspayce.com/mikem/arduino/RadioHead/rf95_encrypted_client_8pde-example.html
+* add basic crypto - https://github.com/chegewara/esp32-mbedtls-aes-test/blob/master/main/main.c https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation - use ECB at first (though it is shit) because it doesn't require us to send 16 bytes of IV with each packet.  Then OFB per example
 * override peekAtMessage so we can see any messages that pass through our node (even if not broadcast)?  would that be useful?
 * sendToMesh can currently block for a long time, instead have it just queue a packet for a radio freertos thread
 * How do avalanche beacons work?  Could this do that as well?  possibly by using beacon mode feature of the RF95?
@@ -65,7 +62,6 @@ During the beta timeframe the following improvements 'would be nice' (and yeah -
 * make an install script to let novices install software on their boards
 * fix the frequency error reading in the RF95 RX code (can't do floating point math in an ISR ;-) 
 * See CustomRF95::send and fix the problem of dropping partially received packets if we want to start sending
-* swap out speck for hw-accelerated full AES https://github.com/espressif/arduino-esp32/blob/master/tools/sdk/include/esp32/hwcrypto/aes.h
 * use variable length arduino Strings in protobufs (instead of current fixed buffers)
 * don't even power on bluetooth until we have some data to send to the android phone.  Most of the time we should be sleeping in a lowpower "listening for lora" only mode.  Once we have some packets for the phone, then power on bluetooth
 until the phone pulls those packets.  Ever so often power on bluetooth just so we can see if the phone wants to send some packets.  Possibly might need ULP processor to help with this wake process.
@@ -183,3 +179,7 @@ Items after the first final candidate release.
 * have sw update prevent BLE sleep
 * manually delete characteristics/descs
 * leave lora receiver always on
+* protobufs are sometimes corrupted after sleep!
+* stay awake while charging
+* check gps battery voltage
+* if a position report includes ground truth time and we don't have time yet, set our clock from that.  It is better than nothing.

@@ -33,8 +33,8 @@ typedef enum _ChannelSettings_ModemConfig {
 
 typedef enum _DeviceState_Version {
     DeviceState_Version_Unset = 0,
-    DeviceState_Version_Minimum = 16,
-    DeviceState_Version_Current = 16
+    DeviceState_Version_Minimum = 17,
+    DeviceState_Version_Current = 17
 } DeviceState_Version;
 
 /* Struct definitions */
@@ -63,7 +63,6 @@ typedef struct _Position {
     double longitude;
     int32_t altitude;
     int32_t battery_level;
-    bool from_hardware;
     uint32_t time;
 } Position;
 
@@ -176,7 +175,7 @@ typedef struct _ToRadio {
 
 
 /* Initializer values for message structs */
-#define Position_init_default                    {0, 0, 0, 0, 0, 0}
+#define Position_init_default                    {0, 0, 0, 0, 0}
 #define Data_init_default                        {_Data_Type_MIN, {0, {0}}}
 #define User_init_default                        {"", "", "", {0}}
 #define SubPacket_init_default                   {0, {Position_init_default}, 0}
@@ -189,7 +188,7 @@ typedef struct _ToRadio {
 #define DeviceState_init_default                 {false, RadioConfig_init_default, false, MyNodeInfo_init_default, false, User_init_default, 0, {NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default}, 0, {MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default}, _DeviceState_Version_MIN, false, MeshPacket_init_default}
 #define FromRadio_init_default                   {0, 0, {MeshPacket_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
-#define Position_init_zero                       {0, 0, 0, 0, 0, 0}
+#define Position_init_zero                       {0, 0, 0, 0, 0}
 #define Data_init_zero                           {_Data_Type_MIN, {0, {0}}}
 #define User_init_zero                           {"", "", "", {0}}
 #define SubPacket_init_zero                      {0, {Position_init_zero}, 0}
@@ -218,7 +217,6 @@ typedef struct _ToRadio {
 #define Position_longitude_tag                   2
 #define Position_altitude_tag                    3
 #define Position_battery_level_tag               4
-#define Position_from_hardware_tag               5
 #define Position_time_tag                        6
 #define RadioConfig_UserPreferences_position_broadcast_secs_tag 1
 #define RadioConfig_UserPreferences_send_owner_interval_tag 2
@@ -269,7 +267,6 @@ X(a, STATIC,   SINGULAR, DOUBLE,   latitude,          1) \
 X(a, STATIC,   SINGULAR, DOUBLE,   longitude,         2) \
 X(a, STATIC,   SINGULAR, INT32,    altitude,          3) \
 X(a, STATIC,   SINGULAR, INT32,    battery_level,     4) \
-X(a, STATIC,   SINGULAR, BOOL,     from_hardware,     5) \
 X(a, STATIC,   SINGULAR, UINT32,   time,              6)
 #define Position_CALLBACK NULL
 #define Position_DEFAULT NULL
@@ -420,7 +417,7 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define ToRadio_fields &ToRadio_msg
 
 /* Maximum encoded size of messages (where known) */
-#define Position_size                            48
+#define Position_size                            46
 #define Data_size                                256
 #define User_size                                72
 #define SubPacket_size                           261
@@ -428,9 +425,9 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define ChannelSettings_size                     50
 #define RadioConfig_size                         126
 #define RadioConfig_UserPreferences_size         72
-#define NodeInfo_size                            157
+#define NodeInfo_size                            155
 #define MyNodeInfo_size                          24
-#define DeviceState_size                         15085
+#define DeviceState_size                         15021
 #define FromRadio_size                           301
 #define ToRadio_size                             295
 
