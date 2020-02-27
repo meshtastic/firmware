@@ -10,7 +10,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@master
         with:
-          python-version: '3.x'
+          python-version: 3.x
       - name: Install Platform IO
         run: |
           python -m pip install --upgrade pip
