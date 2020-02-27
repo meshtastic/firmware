@@ -22,6 +22,7 @@ being I have it set at 2 minutes to ensure enough time for a GPS lock from scrat
 
 Items to complete before the first beta release.
 
+* investigate changing routing to https://github.com/sudomesh/LoRaLayer2 ?
 * check fcc rules on duty cycle.  we might not need to freq hop.  https://www.sunfiretesting.com/LoRa-FCC-Certification-Guide/
 * use fuse bits to store the board type and region.  So one load can be used on all boards
 * "AXP192 interrupt is not firing, remove this temporary polling of battery state"
@@ -72,6 +73,12 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * pick channel center frequency based on name? "dolphin" would hash to 900Mhz, "cat" to 905MHz etc?  Or is that too opaque?
 * scan to find channels with low background noise?
 * share channel settings over Signal (or qr code) by embedding an an URL which is handled by the MeshUtil app.
+
+# Spinoff project ideas
+
+* an open source version of https://www.burnair.ch/skynet/ 
+* a paragliding app like http://airwhere.co.uk/ 
+* a version with a solar cell for power, just mounted high to permanently provide routing for nodes in a valley.  Someone just pointed me at disaster.radio
 
 # Low priority
 
