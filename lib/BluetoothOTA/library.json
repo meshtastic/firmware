@@ -21,6 +21,10 @@
   "platforms": "*",
   "dependencies": [
     { "name": "Update" },
-    { "name": "ESP32 BLE Arduino" }
+    { "name": "ESP32 BLE Arduino" },
+    {
+      "name": "arduino-fsm",
+      "version": "https://github.com/geeksville/arduino-fsm.git"
+    }
   ]
 }
