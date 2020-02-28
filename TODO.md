@@ -13,10 +13,13 @@ for it (because it will redownload the nodedb when it comes back)
 * lower wait_bluetooth_secs to 30 seconds once we have the GPS power on (but GPS in sleep mode) across light sleep.  For the time
 being I have it set at 2 minutes to ensure enough time for a GPS lock from scratch.
 
-* retest BLE software update for both board types
-* report on wikifactory
-* send note to the guy who designed the cases
+* use gps sleep mode instead of killing its power (to allow fast position when we wake)
+* enable fast lock and low power inside the gps chip
 * remeasure wake time power draws now that we run CPU down at 80MHz
+
+# AXP192 tasks
+* "AXP192 interrupt is not firing, remove this temporary polling of battery state"
+* make debug info screen show real data (including battery level & charging) - close corresponding github issue
 
 # Medium priority
 
@@ -25,33 +28,14 @@ Items to complete before the first beta release.
 * investigate changing routing to https://github.com/sudomesh/LoRaLayer2 ?
 * check fcc rules on duty cycle.  we might not need to freq hop.  https://www.sunfiretesting.com/LoRa-FCC-Certification-Guide/
 * use fuse bits to store the board type and region.  So one load can be used on all boards
-* "AXP192 interrupt is not firing, remove this temporary polling of battery state"
-* make mesh aware network timing state machine (sync wake windows to gps time)
-* turn light sleep on aggressively (while lora is on but BLE off)
 * research and implement better mesh algorithm
 * the BLE stack is leaking about 200 bytes each time we go to light sleep
-* use gps sleep mode instead of killing its power (to allow fast position when we wake)
 * rx signal measurements -3 marginal, -9 bad, 10 great, -10 means almost unusable.  So scale this into % signal strength.  preferably as a graph, with an X indicating loss of comms.  
 * assign every "channel" a random shared 8 bit sync word (per 4.2.13.6 of datasheet) - use that word to filter packets before even checking CRC.  This will ensure our CPU will only wake for packets on our "channel"  
 * Note: we do not do address filtering at the chip level, because we might need to route for the mesh
-* Use the Periodic class for both position and user periodic broadcasts
-* make debug info screen show real data (including battery level & charging)
-* don't forward redundant pings or ping responses to the phone, it just wastes phone battery
-* don't treat north as up, instead adjust shown bearings for our guess at the users heading (i.e. subtract one from the other)
-* answer to pings (because some other user is looking at our nodeinfo) with our latest location
-* show radio and gps signal strength as an image
-* only BLE advertise for a short time after the screen is on and button pressed - to save power and prevent people for sniffing for our BT app.
-* use https://platformio.org/lib/show/1260/OneButton if necessary
-* make an about to sleep screen
-* don't send location packets if we haven't moved
-* scrub default radio config settings for bandwidth/range/speed
 * add basic crypto - https://github.com/chegewara/esp32-mbedtls-aes-test/blob/master/main/main.c https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation - use ECB at first (though it is shit) because it doesn't require us to send 16 bytes of IV with each packet.  Then OFB per example
-* override peekAtMessage so we can see any messages that pass through our node (even if not broadcast)?  would that be useful?
-* sendToMesh can currently block for a long time, instead have it just queue a packet for a radio freertos thread
-* How do avalanche beacons work?  Could this do that as well?  possibly by using beacon mode feature of the RF95?
-* use std::map<NodeInfo*, std::string> in node db
-* make a HAM build: yep - that's a great idea.  I'll add it to the TODO.  should be pretty painless - just a new frequency list, a bool to say 'never do encryption' and use hte callsign as that node's unique id.  -from Girts
 * add frequency hopping, dependent on the gps time, make the switch moment far from the time anyone is going to be transmitting
+* share channel settings over Signal (or qr code) by embedding an an URL which is handled by the MeshUtil app.
 * publish update articles on the web
 
 # Pre-beta priority
@@ -59,38 +43,45 @@ Items to complete before the first beta release.
 During the beta timeframe the following improvements 'would be nice' (and yeah - I guess some of these items count as features, but it is a hobby project ;-) )
 
 * Figure out why the RF95 ISR is never seeing RH_RF95_VALID_HEADER, so it is not protecting our rx packets from getting stomped on by sends
-* use BLEDevice::setPower to lower our BLE transmit power - extra range doesn't help us, it costs amps and it increases snoopability
-* make an install script to let novices install software on their boards
 * fix the frequency error reading in the RF95 RX code (can't do floating point math in an ISR ;-) 
 * See CustomRF95::send and fix the problem of dropping partially received packets if we want to start sending
-* use variable length arduino Strings in protobufs (instead of current fixed buffers)
-* don't even power on bluetooth until we have some data to send to the android phone.  Most of the time we should be sleeping in a lowpower "listening for lora" only mode.  Once we have some packets for the phone, then power on bluetooth
-until the phone pulls those packets.  Ever so often power on bluetooth just so we can see if the phone wants to send some packets.  Possibly might need ULP processor to help with this wake process.
-* do hibernation mode to get power draw down to 2.5uA https://lastminuteengineers.com/esp32-sleep-modes-power-consumption/ 
 * make sure main cpu is not woken for packets with bad crc or not addressed to this node - do that in the radio hw
-* enable fast init inside the gps chip
 * triple check fcc compliance
-* pick channel center frequency based on name? "dolphin" would hash to 900Mhz, "cat" to 905MHz etc?  Or is that too opaque?
-* scan to find channels with low background noise?
-* share channel settings over Signal (or qr code) by embedding an an URL which is handled by the MeshUtil app.
+* pick channel center frequency based on channel name? "dolphin" would hash to 900Mhz, "cat" to 905MHz etc?  allows us to hide the concept of channel # from hte user.
+* scan to find channels with low background noise? (Use CAD mode of the RF95 to automatically find low noise channels)
+* make a no bluetooth configured yet screen - include this screen in the loop if the user hasn't yet paired
+* if radio params change fundamentally, discard the nodedb
+* reneable the bluetooth battery level service on the T-BEAM, because we can read battery level there
 
 # Spinoff project ideas
 
 * an open source version of https://www.burnair.ch/skynet/ 
 * a paragliding app like http://airwhere.co.uk/ 
 * a version with a solar cell for power, just mounted high to permanently provide routing for nodes in a valley.  Someone just pointed me at disaster.radio
+* How do avalanche beacons work?  Could this do that as well?  possibly by using beacon mode feature of the RF95?
+* provide generalized (but slow) internet message forwarding servie if one of our nodes has internet connectivity
 
 # Low priority
 
 Items after the first final candidate release.
 
+* use variable length arduino Strings in protobufs (instead of current fixed buffers)
+* use BLEDevice::setPower to lower our BLE transmit power - extra range doesn't help us, it costs amps and it increases snoopability
+* make an install script to let novices install software on their boards
+* use std::map<NodeInfo*, std::string> in node db
+* make a HAM build: yep - that's a great idea.  I'll add it to the TODO.  should be pretty painless - just a new frequency list, a bool to say 'never do encryption' and use hte callsign as that node's unique id.  -from Girts
+* don't forward redundant pings or ping responses to the phone, it just wastes phone battery
+* use https://platformio.org/lib/show/1260/OneButton if necessary
+* don't send location packets if we haven't moved
+* scrub default radio config settings for bandwidth/range/speed
+* answer to pings (because some other user is looking at our nodeinfo) with our latest location (not a stale location)
+* show radio and gps signal strength as an image
+* only BLE advertise for a short time after the screen is on and button pressed - to save power and prevent people for sniffing for our BT app.
+* make mesh aware network timing state machine (sync wake windows to gps time)
 * split out the software update utility so other projects can use it.  Have the appload specify the URL for downloads.
-* Use CAD mode of the RF95 to automatically find low noise channels
 * read the PMU battery fault indicators and blink/led/warn user on screen
-* make a no bluetooth configured yet screen - include this screen in the loop if the user hasn't yet paired
 * the AXP debug output says it is trying to charge at 700mA, but the max I've seen is 180mA, so AXP registers probably need to be set to tell them the circuit can only provide 300mAish max. So that the low charge rate kicks in faster and we don't wear out batteries.
 * increase the max charging rate a bit for 18650s, currently it limits to 180mA (at 4V).  Work backwards from the 500mA USB limit (at 5V) and let the AXP charge at that rate.
-* if radio params change fundamentally, discard the nodedb
 * discard very old nodedb records (> 1wk)
 * using the genpartitions based table doesn't work on TTGO so for now I stay with my old memory map
 * We let anyone BLE scan for us (FIXME, perhaps only allow that until we are paired with a phone and configured) 
@@ -100,9 +91,7 @@ Items after the first final candidate release.
 * break out my bluetooth OTA software as a seperate library so others can use it
 * Heltec LoRa32 has 8MB flash, use a bigger partition table if needed - TTGO is 4MB but has PSRAM
 * add a watchdog timer
-* fix GPS.zeroOffset calculation it is wrong
 * handle millis() rollover in GPS.getTime - otherwise we will break after 50 days
-* reneable the bluetooth battery level service on the T-BEAM, because we can read battery level there
 * report esp32 device code bugs back to the mothership via android
 
 # Done
@@ -190,3 +179,14 @@ Items after the first final candidate release.
 * stay awake while charging
 * check gps battery voltage
 * if a position report includes ground truth time and we don't have time yet, set our clock from that.  It is better than nothing.
+* retest BLE software update for both board types
+* report on wikifactory
+* send note to the guy who designed the cases
+* turn light sleep on aggressively (while lora is on but BLE off)
+* Use the Periodic class for both position and user periodic broadcasts
+* don't treat north as up, instead adjust shown bearings for our guess at the users heading (i.e. subtract one from the other)
+* sendToMesh can currently block for a long time, instead have it just queue a packet for a radio freertos thread
+* don't even power on bluetooth until we have some data to send to the android phone.  Most of the time we should be sleeping in a lowpower "listening for lora" only mode.  Once we have some packets for the phone, then power on bluetooth
+until the phone pulls those packets.  Ever so often power on bluetooth just so we can see if the phone wants to send some packets.  Possibly might need ULP processor to help with this wake process.
+* do hibernation mode to get power draw down to 2.5uA https://lastminuteengineers.com/esp32-sleep-modes-power-consumption/ 
+* fix GPS.zeroOffset calculation it is wrong
