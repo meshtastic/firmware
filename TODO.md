@@ -25,6 +25,7 @@ being I have it set at 2 minutes to ensure enough time for a GPS lock from scrat
 
 Items to complete before the first beta release.
 
+* good source of battery/signal/gps icons https://materialdesignicons.com/
 * investigate changing routing to https://github.com/sudomesh/LoRaLayer2 ?
 * check fcc rules on duty cycle.  we might not need to freq hop.  https://www.sunfiretesting.com/LoRa-FCC-Certification-Guide/
 * use fuse bits to store the board type and region.  So one load can be used on all boards
