@@ -510,7 +510,7 @@ void Screen::setOn(bool on)
     }
 }
 
-static void screen_print(const char *text, uint8_t x, uint8_t y, uint8_t alignment)
+void screen_print(const char *text, uint8_t x, uint8_t y, uint8_t alignment)
 {
     DEBUG_MSG(text);
 

@@ -3,6 +3,7 @@
 #include "PeriodicTask.h"
 
 void screen_print(const char * text);
+void screen_print(const char * text, uint8_t x, uint8_t y, uint8_t alignment);
 
 
 // Show the bluetooth PIN screen
