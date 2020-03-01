@@ -18,7 +18,7 @@ This project is currently early-alpha, but if you have questions please join our
 This software is 100% open source and developed by a group of hobbyist experimenters.  No warranty is provided, if you'd like to improve it - we'd love your help.  Please post in the chat.  
 
 ## Supported hardware
-We currently support two brands of radios.  The [TTGO T-Beam](https://www.aliexpress.com/item/4000119152086.html) and the [Heltec LoRa 32](https://heltec.org/project/wifi-lora-32/).  Most users should buy the T-Beam and a 18650 battery (total cost less than $35).  Make
+We currently support two brands of radios.  The [TTGO T-Beam](https://www.aliexpress.com/item/4000119152086.html), [TTGO LORA32](https://www.banggood.com/LILYGO-TTGO-LORA32-868Mhz-SX1276-ESP32-Oled-Display-bluetooth-WIFI-Lora-Development-Module-Board-p-1248652.html?cur_warehouse=UK) and the [Heltec LoRa 32](https://heltec.org/project/wifi-lora-32/).  Most users should buy the T-Beam and a 18650 battery (total cost less than $35).  Make 
 sure to buy the frequency range which is legal for your country.  For the USA, you should buy the 915MHz version.  Getting a version that include a screen
 is optional, but highly recommended.
 
@@ -33,7 +33,7 @@ The instructions currently require a few commmand lines, but it should be pretty
 2. Install "pip".  Pip is the python package manager we use to get the esptool installer app.  Instructions [here](https://www.makeuseof.com/tag/install-pip-for-python/).
 3. Run "pip install --upgrade esptool" to get esptool installed on your machine
 4. Connect your radio to your USB port
-5. Confirm that your device is talking to your PC by running "esptool.py chip_id".  You should see something like:
+5. Confirm that your device is talking to your PC by running "esptool.py chip_id".  The Heltec build also works on the TTGO LORA32 radio. You should see something like:
 ```
 mydir$ esptool.py chip_id
 esptool.py v2.6
