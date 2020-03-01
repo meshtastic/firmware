@@ -1,6 +1,8 @@
 # Meshtastic-esp32
 This is the device side code for the [meshtastic.org](https://www.meshtastic.org) project.  
 
+![Continous Integration](https://github.com/meshtastic/Meshtastic-esp32/workflows/Continuous%20Integration/badge.svg)
+
 Meshtastic is a project that lets you use
 inexpensive GPS mesh radios as an extensible, super long battery life mesh GPS communicator.  These radios are great for hiking, skiing, paragliding - 
 essentially any hobby where you don't have reliable internet access.  Each member of your private mesh can always see the location and distance of all other

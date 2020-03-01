@@ -1,4 +1,4 @@
-name: Test Configuration
+name: Continous Integration
 on: push
 
 jobs:
