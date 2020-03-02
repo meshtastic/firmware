@@ -37,7 +37,7 @@ This software is 100% open source and developed by a group of hobbyist experimen
 # Updates
 
 * 02/25/2020 - 0.0.4 of the Android app is released.  This is a very early alpha, see below to join the alpha-testers group.
-* 02/23/2020 - 0.0.4 release.  Still very bleeding edge but much closer to the final power management, a charged T-BEAM should run for many days with this load.  If you'd like to try it, we'd love your feedback.  Click [here](https://github.com/geeksville/Meshtastic-esp32/blob/master/README.md) for instructions.
+* 02/23/2020 - 0.0.4 release.  Still very bleeding edge but much closer to the final power management, a charged T-BEAM should run for many days with this load.  If you'd like to try it, we'd love your feedback.  Click [here](https://github.com/meshtastic/Meshtastic-esp32/blob/master/README.md) for instructions.
 * 02/20/2020 - Our first alpha release (0.0.3) of the radio software is ready brave early people.  
 
 ## Meshtastic Android app
@@ -51,13 +51,13 @@ But if you want the bleeding edge app now, we'd love to have your help testing. 
 2. Go to this [URL](https://play.google.com/apps/testing/com.geeksville.mesh) to opt-in to the alpha test.
 3. If you encounter any problems or have questions, post in our gitter chat and we'll help.
 
-If you'd like to help with development, the source code is [on github](https://github.com/geeksville/Meshtastic-Android).
+If you'd like to help with development, the source code is [on github](https://github.com/meshtastic/Meshtastic-Android).
 
 ## Supported hardware
 We currently support two brands of radios.  The [TTGO T-Beam](https://www.aliexpress.com/item/4000119152086.html) and the [Heltec LoRa 32](https://heltec.org/project/wifi-lora-32/).  Most people should buy the T-Beam and a 18650 battery (total cost less than $35).  Make
 sure to buy the frequency range which is legal for your country.  For the USA, you should buy the 915MHz version.  Getting a version that include a screen is optional, but highly recommended.
 
-Instructions for installing prebuilt firmware can be found [here](https://github.com/geeksville/Meshtastic-esp32/blob/master/README.md).
+Instructions for installing prebuilt firmware can be found [here](https://github.com/meshtastic/Meshtastic-esp32/blob/master/README.md).
 
 For a nice TTGO 3D printable case see this [design](https://www.thingiverse.com/thing:3773717) by [bsiege](https://www.thingiverse.com/bsiege).
 For a nice Heltec 3D printable case see this [design](https://www.thingiverse.com/thing:3125854) by [ornotermes](https://www.thingiverse.com/ornotermes).
@@ -76,4 +76,4 @@ Most of these problems should be solved by the beta release:
 * The mesh protocol is turned off for now, currently we only send packets one hop distant
 * No one has written an iOS app yet ;-)
 
-For more details see the [device software TODO](https://github.com/geeksville/Meshtastic-esp32/blob/master/TODO.md) or the [Android app TODO](https://github.com/geeksville/Meshtastic-Android/blob/master/TODO.md).
+For more details see the [device software TODO](https://github.com/meshtastic/Meshtastic-esp32/blob/master/TODO.md) or the [Android app TODO](https://github.com/meshtastic/Meshtastic-Android/blob/master/TODO.md).
