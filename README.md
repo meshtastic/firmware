@@ -25,7 +25,7 @@ is optional, but highly recommended.
 See (meshtastic.org) for 3D printable cases.
 
 ## Installing the firmware
-Prebuilt binaries for the supported radios is available in our [releases](https://github.com/geeksville/Meshtastic-esp32/releases).  Your initial installation has to happen over USB from your Mac, Windows or Linux PC.   Once our software is installed, all future software updates happen over bluetooth from your phone.
+Prebuilt binaries for the supported radios is available in our [releases](https://github.com/meshtastic/Meshtastic-esp32/releases).  Your initial installation has to happen over USB from your Mac, Windows or Linux PC.   Once our software is installed, all future software updates happen over bluetooth from your phone.
 
 The instructions currently require a few commmand lines, but it should be pretty straightforward.  Please post comments on our group chat if you have problems or successes.  Steps to install:
 
@@ -78,7 +78,7 @@ Hard resetting via RTS pin...
 8. Please post a comment on our chat so we know if these instructions worked for you ;-).  If you find bugs/have-questions post there also - we will be rapidly iterating over the next few weeks.
 
 ## Meshtastic Android app
-The source code for the (optional) Meshtastic Android app is [here](https://github.com/geeksville/Meshtastic-Android).
+The source code for the (optional) Meshtastic Android app is [here](https://github.com/meshtastic/Meshtastic-Android).
 Soon our first alpha release of will be released here:
 [![Download at https://play.google.com/store/apps/details?id=com.geeksville.mesh](https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png)](https://play.google.com/store/apps/details?id=com.geeksville.mesh&referrer=utm_source%3Dgithub%26utm_medium%3Desp32-readme%26utm_campaign%3Dmeshtastic-esp32%2520readme%26anid%3Dadmob&pcampaignid=pcampaignidMKT-Other-global-all-co-prtnr-py-PartBadge-Mar2515-1)
 
