@@ -190,16 +190,16 @@ public:
         {
             static FromRadio fRadio;
 
-            // Encapsulate as a ToRadio packet
+            // Encapsulate as a FromRadio packet
             memset(&fRadio, 0, sizeof(fRadio));
             fRadio.which_variant = FromRadio_packet_tag;
             fRadio.variant.packet = *mp;
 
-            service.releaseToPool(mp); // we just copied the bytes, so don't need this buffer anymore
-
             size_t numbytes = pb_encode_to_bytes(trBytes, sizeof(trBytes), FromRadio_fields, &fRadio);
             DEBUG_MSG("delivering toPhone packet to phone %d bytes\n", numbytes);
             c->setValue(trBytes, numbytes);
+
+            service.releaseToPool(mp); // we just copied the bytes, so don't need this buffer anymore
         }
     }
 };
