@@ -337,15 +337,3 @@ void destroyMeshBluetoothService()
 
     meshFromNumCharacteristic = NULL;
 }
-
-/**
- * Super skanky FIXME - when we start a software update we force the mesh service to shutdown.
- * If the sw update fails, the user will have to manually reset the board to get things running again.
- */
-void stopMeshBluetoothService()
-{
-    if (meshService)
-        meshService->stop();
-
-    meshFromNumCharacteristic = NULL; // don't try to notify anymore
-}
