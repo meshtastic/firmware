@@ -52,10 +52,7 @@ bool isUSBPowered;
 bool ssd1306_found;
 bool axp192_found;
 
-bool bluetoothOn; 
-
-#define xstr(s) str(s)
-#define str(s) #s
+bool bluetoothOn;
 
 // -----------------------------------------------------------------------------
 // Application
@@ -201,8 +198,6 @@ const char *getDeviceName()
   return name;
 }
 
-
-
 void setup()
 {
 // Debug
@@ -288,7 +283,7 @@ void setBluetoothEnable(bool on)
     {
       Serial.printf("Pre BT: %u heap size\n", ESP.getFreeHeap());
       //ESP_ERROR_CHECK( heap_trace_start(HEAP_TRACE_LEAKS) );
-      initBluetooth(); 
+      initBluetooth();
     }
     else
     {
