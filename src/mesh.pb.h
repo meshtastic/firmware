@@ -31,12 +31,6 @@ typedef enum _ChannelSettings_ModemConfig {
     ChannelSettings_ModemConfig_Bw125Cr48Sf4096 = 3
 } ChannelSettings_ModemConfig;
 
-typedef enum _DeviceState_Version {
-    DeviceState_Version_Unset = 0,
-    DeviceState_Version_Minimum = 17,
-    DeviceState_Version_Current = 17
-} DeviceState_Version;
-
 /* Struct definitions */
 typedef struct _ChannelSettings {
     int32_t tx_power;
@@ -138,9 +132,9 @@ typedef struct _DeviceState {
     NodeInfo node_db[32];
     pb_size_t receive_queue_count;
     MeshPacket receive_queue[32];
-    DeviceState_Version version;
     bool has_rx_text_message;
     MeshPacket rx_text_message;
+    uint32_t version;
 } DeviceState;
 
 typedef struct _FromRadio {
@@ -172,10 +166,6 @@ typedef struct _ToRadio {
 #define _ChannelSettings_ModemConfig_MAX ChannelSettings_ModemConfig_Bw125Cr48Sf4096
 #define _ChannelSettings_ModemConfig_ARRAYSIZE ((ChannelSettings_ModemConfig)(ChannelSettings_ModemConfig_Bw125Cr48Sf4096+1))
 
-#define _DeviceState_Version_MIN DeviceState_Version_Unset
-#define _DeviceState_Version_MAX DeviceState_Version_Current
-#define _DeviceState_Version_ARRAYSIZE ((DeviceState_Version)(DeviceState_Version_Current+1))
-
 
 /* Initializer values for message structs */
 #define Position_init_default                    {0, 0, 0, 0, 0}
@@ -188,7 +178,7 @@ typedef struct _ToRadio {
 #define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0}
 #define MyNodeInfo_init_default                  {0, 0, 0, "", "", ""}
-#define DeviceState_init_default                 {false, RadioConfig_init_default, false, MyNodeInfo_init_default, false, User_init_default, 0, {NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default}, 0, {MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default}, _DeviceState_Version_MIN, false, MeshPacket_init_default}
+#define DeviceState_init_default                 {false, RadioConfig_init_default, false, MyNodeInfo_init_default, false, User_init_default, 0, {NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default}, 0, {MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default}, false, MeshPacket_init_default, 0}
 #define FromRadio_init_default                   {0, 0, {MeshPacket_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
 #define Position_init_zero                       {0, 0, 0, 0, 0}
@@ -201,7 +191,7 @@ typedef struct _ToRadio {
 #define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0}
 #define MyNodeInfo_init_zero                     {0, 0, 0, "", "", ""}
-#define DeviceState_init_zero                    {false, RadioConfig_init_zero, false, MyNodeInfo_init_zero, false, User_init_zero, 0, {NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero}, 0, {MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero}, _DeviceState_Version_MIN, false, MeshPacket_init_zero}
+#define DeviceState_init_zero                    {false, RadioConfig_init_zero, false, MyNodeInfo_init_zero, false, User_init_zero, 0, {NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero}, 0, {MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero}, false, MeshPacket_init_zero, 0}
 #define FromRadio_init_zero                      {0, 0, {MeshPacket_init_zero}}
 #define ToRadio_init_zero                        {0, {MeshPacket_init_zero}}
 
@@ -261,7 +251,7 @@ typedef struct _ToRadio {
 #define DeviceState_owner_tag                    3
 #define DeviceState_node_db_tag                  4
 #define DeviceState_receive_queue_tag            5
-#define DeviceState_version_tag                  6
+#define DeviceState_version_tag                  8
 #define DeviceState_rx_text_message_tag          7
 #define FromRadio_packet_tag                     2
 #define FromRadio_num_tag                        1
@@ -372,8 +362,8 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  my_node,           2) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  owner,             3) \
 X(a, STATIC,   REPEATED, MESSAGE,  node_db,           4) \
 X(a, STATIC,   REPEATED, MESSAGE,  receive_queue,     5) \
-X(a, STATIC,   SINGULAR, UENUM,    version,           6) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  rx_text_message,   7)
+X(a, STATIC,   OPTIONAL, MESSAGE,  rx_text_message,   7) \
+X(a, STATIC,   SINGULAR, UINT32,   version,           8)
 #define DeviceState_CALLBACK NULL
 #define DeviceState_DEFAULT NULL
 #define DeviceState_radio_MSGTYPE RadioConfig
@@ -436,7 +426,7 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define RadioConfig_UserPreferences_size         72
 #define NodeInfo_size                            155
 #define MyNodeInfo_size                          63
-#define DeviceState_size                         15060
+#define DeviceState_size                         15064
 #define FromRadio_size                           301
 #define ToRadio_size                             295
 
