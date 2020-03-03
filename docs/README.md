@@ -18,7 +18,7 @@ will optionally work with your phone, but no phone is required.
 [![Youtube video demo](desk-video-screenshot.png)](https://www.youtube.com/watch?v=WlNbMbVZlHI "Meshtastic early demo")
 
 ### Features
-Not all of these features are fully implemented yet - see below.  But they should be in by the time we decide to call this project beta (three months?)
+Not all of these features are fully implemented yet - see **important** disclaimers below.  But they should be in by the time we decide to call this project beta (three months?)
 
 * Very long battery life (should be about eight days with the beta software)
 * Built in GPS and [LoRa](https://en.wikipedia.org/wiki/LoRa) radio, but we manage the radio automatically for you
@@ -36,6 +36,9 @@ This software is 100% open source and developed by a group of hobbyist experimen
 
 # Updates
 
+Note: Updates are happening almost daily, only major updates are listed below.  For more details see our chat, github releases or the Android alpha tester emails.
+
+* 03/03/2020 - 0.0.9 of the Android app and device code is released.  Still an alpha but fairly functional.
 * 02/25/2020 - 0.0.4 of the Android app is released.  This is a very early alpha, see below to join the alpha-testers group.
 * 02/23/2020 - 0.0.4 release.  Still very bleeding edge but much closer to the final power management, a charged T-BEAM should run for many days with this load.  If you'd like to try it, we'd love your feedback.  Click [here](https://github.com/meshtastic/Meshtastic-esp32/blob/master/README.md) for instructions.
 * 02/20/2020 - Our first alpha release (0.0.3) of the radio software is ready brave early people.  
@@ -69,7 +72,7 @@ Most of these problems should be solved by the beta release:
 
 * We don't make these devices and they haven't been tested by UL or the FCC.  If you use them you are experimenting and we can't promise they won't burn your house down ;-)
 * Encryption is turned off for now
-* A number of (straightforward) software work items have to be completed before battery life matches our measurements, currently battery life is about two days.  Join us on chat if you want the spreadsheet of power measurements/calculations.
+* A number of (straightforward) software work items have to be completed before battery life matches our measurements, currently battery life is about three days.  Join us on chat if you want the spreadsheet of power measurements/calculations.
 * The current Android GUI is pretty ugly still
 * The Android API needs to be documented better
 * The Bluetooth API needs to be documented better 
