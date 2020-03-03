@@ -332,6 +332,7 @@ BLEService *createMeshBluetoothService(BLEServer *server)
 void destroyMeshBluetoothService()
 {
     assert(meshService);
+    meshService->stop();
     delete meshService;
 
     meshFromNumCharacteristic = NULL;
