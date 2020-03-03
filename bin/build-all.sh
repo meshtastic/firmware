@@ -26,13 +26,13 @@ for COUNTRY in $COUNTRIES; do
     rm -f $SRCBIN $SRCMAP
     pio run # -v
     cp $SRCBIN $OUTDIR/firmware-TBEAM-$COUNTRY-$VERSION.bin
-    cp $SRCMAP $ARCHIVEDIR/firmware-TBEAM-$COUNTRY-$VERSION.map
+    #cp $SRCMAP $ARCHIVEDIR/firmware-TBEAM-$COUNTRY-$VERSION.map
 
     export PLATFORMIO_BUILD_FLAGS="-DHELTEC_LORA32 $COMMONOPTS"
     rm -f $SRCBIN $SRCMAP
     pio run # -v
     cp $SRCBIN $OUTDIR/firmware-HELTEC-$COUNTRY-$VERSION.bin
-    cp $SRCMAP $ARCHIVEDIR/firmware-HELTEC-$COUNTRY-$VERSION.map
+    #cp $SRCMAP $ARCHIVEDIR/firmware-HELTEC-$COUNTRY-$VERSION.map
 done
 
 # keep the bins in archive also
