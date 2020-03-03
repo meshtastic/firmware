@@ -500,7 +500,8 @@ void Screen::setOn(bool on)
 
     if (on != screenOn)
     {
-        if (on) {
+        if (on)
+        {
             dispdev.displayOn();
             setPeriod(1); // redraw ASAP
         }
@@ -613,7 +614,6 @@ void Screen::doTask()
         targetFramerate = IDLE_FRAMERATE;
         ui.setTargetFPS(targetFramerate);
     }
-    ui.update();
 
     // While showing the bluetooth pair screen all of our standard screen switching is stopped
     if (!showingBluetooth)
@@ -638,6 +638,9 @@ void Screen::doTask()
             }
         }
     }
+
+    // This must be after we possibly do screen_set_frames() to ensure we draw the new data
+    ui.update();
 
     // DEBUG_MSG("want fps %d, fixed=%d\n", targetFramerate, ui.getUiState()->frameState);
     // If we are scrolling we need to be called soon, otherwise just 1 fps (to save CPU)
