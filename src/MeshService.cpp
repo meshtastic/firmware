@@ -9,6 +9,7 @@
 #include "GPS.h"
 #include "screen.h"
 #include "Periodic.h"
+#include "PowerFSM.h"
 
 /*
 receivedPacketQueue - this is a queue of messages we've received from the mesh, which we are keeping to deliver to the phone.
@@ -144,11 +145,13 @@ void MeshService::handleIncomingPosition(MeshPacket *mp)
 
 void MeshService::handleFromRadio(MeshPacket *mp)
 {
+    powerFSM.trigger(EVENT_RECEIVED_PACKET); // Possibly keep the node from sleeping
+
     mp->rx_time = gps.getValidTime(); // store the arrival timestamp for the phone
 
     // If it is a position packet, perhaps set our clock (if we don't have a GPS of our own, otherwise wait for that to work)
-    if(!myNodeInfo.has_gps)
-        handleIncomingPosition(mp); 
+    if (!myNodeInfo.has_gps)
+        handleIncomingPosition(mp);
 
     if (mp->has_payload && mp->payload.which_variant == SubPacket_user_tag)
     {

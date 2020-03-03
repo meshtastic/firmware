@@ -2,13 +2,11 @@
 
 Items to complete soon (next couple of alpha releases).
 
-* text messages are not showing on local screen if screen was on
+* (fixed I think) text messages are not showing on local screen if screen was on
 
-* The following three items are all the same:
+* (needs testing) fixed the following during a plane flight:
  Have state machine properly enter deep sleep based on loss of mesh and phone comms.
  Default to enter deep sleep if no LORA received for two hours (indicates user has probably left the mesh).
- If the phone doesn't read fromradio mailbox within X seconds, assume the phone is gone and we can stop queing location msgs 
-for it (because it will redownload the nodedb when it comes back)
 
 * lower wait_bluetooth_secs to 30 seconds once we have the GPS power on (but GPS in sleep mode) across light sleep.  For the time
 being I have it set at 2 minutes to ensure enough time for a GPS lock from scratch.
@@ -43,6 +41,8 @@ Items to complete before the first beta release.
 
 During the beta timeframe the following improvements 'would be nice' (and yeah - I guess some of these items count as features, but it is a hobby project ;-) )
 
+* If the phone doesn't read fromradio mailbox within X seconds, assume the phone is gone and we can stop queing location msgs 
+for it (because it will redownload the nodedb when it comes back)
 * Figure out why the RF95 ISR is never seeing RH_RF95_VALID_HEADER, so it is not protecting our rx packets from getting stomped on by sends
 * fix the frequency error reading in the RF95 RX code (can't do floating point math in an ISR ;-) 
 * See CustomRF95::send and fix the problem of dropping partially received packets if we want to start sending

@@ -54,9 +54,9 @@ void NodeDB::init()
     radioConfig.preferences.position_broadcast_secs = 15 * 60;
     radioConfig.preferences.wait_bluetooth_secs = 120;
     radioConfig.preferences.screen_on_secs = 30;
-    radioConfig.preferences.mesh_sds_timeout_secs = 60 * 60;
-    radioConfig.preferences.phone_sds_timeout_sec = 60 * 60;
-    radioConfig.preferences.sds_secs = 60 * 60;
+    radioConfig.preferences.mesh_sds_timeout_secs = 2 * 60 * 60;
+    radioConfig.preferences.phone_sds_timeout_sec = 2 * 260 * 60;
+    radioConfig.preferences.sds_secs = 365 * 24 * 60 * 60; // one year
     radioConfig.preferences.ls_secs = 60 * 60;
     radioConfig.preferences.phone_timeout_secs = 15 * 60;
 

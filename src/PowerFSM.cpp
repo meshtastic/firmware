@@ -30,16 +30,17 @@ static void lsEnter()
 
     gps.prepareSleep(); // abandon in-process parsing
 
-    if(!isUSBPowered) // FIXME - temp hack until we can put gps in sleep mode, if we have AC when we go to sleep then leave GPS on
-    setGPSPower(false); // kill GPS power
+    if (!isUSBPowered)      // FIXME - temp hack until we can put gps in sleep mode, if we have AC when we go to sleep then leave GPS on
+        setGPSPower(false); // kill GPS power
 }
 
 static void lsIdle()
 {
     uint32_t secsSlept = 0;
     esp_sleep_source_t wakeCause = ESP_SLEEP_WAKEUP_UNDEFINED;
+    bool reached_ls_secs = false;
 
-    while (secsSlept < radioConfig.preferences.ls_secs)
+    while (!reached_ls_secs)
     {
         // Briefly come out of sleep long enough to blink the led once every few seconds
         uint32_t sleepTime = 5;
@@ -55,11 +56,20 @@ static void lsIdle()
             break;
 
         secsSlept += sleepTime;
+        reached_ls_secs = secsSlept >= radioConfig.preferences.ls_secs;
     }
     setLed(false);
 
-    // Regardless of why we woke (for now) just transition to NB (and that state will handle stuff like IRQs etc)
-    powerFSM.trigger(EVENT_WAKE_TIMER);
+    if (reached_ls_secs)
+    {
+        // stay in LS mode but let loop check whatever it wants
+        DEBUG_MSG("reached ls_secs, servicing loop()\n");
+    }
+    else
+    {
+        // Regardless of why we woke just transition to NB (and that state will handle stuff like IRQs etc)
+        powerFSM.trigger(EVENT_WAKE_TIMER);
+    }
 }
 
 static void lsExit()
@@ -146,6 +156,9 @@ void PowerFSM_setup()
     powerFSM.add_timed_transition(&stateNB, &stateLS, radioConfig.preferences.min_wake_secs * 1000, NULL, "Min wake timeout");
 
     powerFSM.add_timed_transition(&stateDARK, &stateLS, radioConfig.preferences.wait_bluetooth_secs * 1000, NULL, "Bluetooth timeout");
+
+    powerFSM.add_timed_transition(&stateLS, &stateSDS, radioConfig.preferences.mesh_sds_timeout_secs * 1000, NULL, "mesh timeout");
+    powerFSM.add_timed_transition(&stateLS, &stateSDS, radioConfig.preferences.phone_sds_timeout_sec * 1000, NULL, "phone timeout");
 
     powerFSM.run_machine(); // run one interation of the state machine, so we run our on enter tasks for the initial DARK state
 }

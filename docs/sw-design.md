@@ -6,7 +6,7 @@ This is a mini design doc for various core behaviors...
 
 From lower to higher power consumption.
 
-* Super-deep-sleep (SDS) - everything is off, CPU, radio, bluetooth, GPS.  Only wakes due to timer or button press
+* Super-deep-sleep (SDS) - everything is off, CPU, radio, bluetooth, GPS.  Only wakes due to timer or button press.  We enter this mode only after no radio comms for a few hours, used to put the device into what is effectively "off" mode.
   onEntry: setBluetoothOn(false), call doDeepSleep
   onExit: (standard bootup code, starts in DARK)
 
@@ -53,8 +53,8 @@ off during light sleep, but there is a TODO item to fix this.
 * While in ON: If it has been more than screen_on_secs since a press, lower to DARK
 * While in DARK: If time since last contact by our phone exceeds phone_timeout_secs (15 minutes), we transition down into NB mode
 * While in DARK or NB: If nothing above is forcing us to stay in a higher mode (wait_bluetooth_secs, min_wake_secs) we will lower down to LS state
-* While in into LS: If either phone_sds_timeout_secs (default 1 hr) or mesh_sds_timeout_secs (default 1 hr) are exceeded we will lower into SDS mode for sds_secs (default 1 hr) (or a button press).  
-* Any time we enter LS mode: We stay in that mode for ls_secs (default 1 hr) (or until an interrupt, button press)
+* While in LS: If either phone_sds_timeout_secs (default 2 hr) or mesh_sds_timeout_secs (default 2 hr) are exceeded we will lower into SDS mode for sds_secs (default 1 yr) (or a button press).  
+* Any time we enter LS mode: We stay in that until an interrupt, button press or other state transition.  Every ls_secs (default 1 hr) and let the arduino loop() run one iteration (FIXME, not sure if we need this at all), and then immediately reenter lightsleep mode on the CPU.
 
 TODO: Eventually these scheduled intervals should be synchronized to the GPS clock, so that we can consider leaving the lora receiver off to save even more power.
 TODO: In NB mode we should put cpu into light sleep any time we really aren't that busy (without declaring LS state) - i.e. we should leave GPS on etc...
