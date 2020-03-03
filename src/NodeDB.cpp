@@ -21,6 +21,14 @@ MyNodeInfo &myNodeInfo = devicestate.my_node;
 RadioConfig &radioConfig = devicestate.radio;
 ChannelSettings &channelSettings = radioConfig.channel_settings;
 
+/*
+DeviceState versions used to be defined in the .proto file but really only this function cares.  So changed to a 
+#define here.
+*/
+
+#define DEVICESTATE_CUR_VER 1
+#define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
+
 #define FS SPIFFS
 
 /** 
@@ -147,7 +155,7 @@ void NodeDB::loadFromDisk()
         }
         else
         {
-            if (scratch.version < DeviceState_Version_Minimum)
+            if (scratch.version < DEVICESTATE_MIN_VER)
                 DEBUG_MSG("Warn: devicestate is old, discarding\n");
             else
             {
@@ -176,7 +184,7 @@ void NodeDB::saveToDisk()
 
         //DEBUG_MSG("Presave channel name=%s\n", channelSettings.name);
 
-        devicestate.version = DeviceState_Version_Current;
+        devicestate.version = DEVICESTATE_CUR_VER;
         if (!pb_encode(&stream, DeviceState_fields, &devicestate))
         {
             DEBUG_MSG("Error: can't write protobuf %s\n", PB_GET_ERROR(&stream));
