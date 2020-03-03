@@ -2,7 +2,6 @@
 
 Items to complete soon (next couple of alpha releases).
 
-* Serious but rare bug: after light sleep sometimes protocol bufs sent to phone are corrupted!!!
 * text messages are not showing on local screen if screen was on
 
 * The following three items are all the same:

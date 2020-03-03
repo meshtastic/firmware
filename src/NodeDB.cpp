@@ -64,6 +64,9 @@ void NodeDB::init()
     // some hardware defaults to have a built in GPS
     myNodeInfo.has_gps = true;
 #endif
+    strncpy(myNodeInfo.region, xstr(HW_VERSION), sizeof(myNodeInfo.region));
+    strncpy(myNodeInfo.firmware_version, xstr(APP_VERSION), sizeof(myNodeInfo.firmware_version));
+    strncpy(myNodeInfo.hw_model, HW_VENDOR, sizeof(myNodeInfo.hw_model));
 
     // Init our blank owner info to reasonable defaults
     esp_efuse_mac_get_default(ourMacAddr);
