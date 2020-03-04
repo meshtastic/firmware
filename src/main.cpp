@@ -288,6 +288,7 @@ void setBluetoothEnable(bool on)
     else
     {
       // We have to totally teardown our bluetooth objects to prevent leaks
+      stopMeshBluetoothService(); // Must do before shutting down bluetooth
       deinitBLE();
       destroyMeshBluetoothService(); // must do after deinit, because it frees our service
       Serial.printf("Shutdown BT: %u heap size\n", ESP.getFreeHeap());
