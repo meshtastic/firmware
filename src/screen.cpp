@@ -445,11 +445,17 @@ void drawDebugInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
 
     // We don't show battery levels yet - for now just lie and show debug info
     static char batStr[20];
-    snprintf(batStr, sizeof(channelStr), "Batt %x%%", (isCharging << 1) + isUSBPowered);
+    snprintf(batStr, sizeof(batStr), "Batt %x%%", (isCharging << 1) + isUSBPowered);
+
+    static char gpsStr[20];
+    if(myNodeInfo.has_gps)
+        snprintf(gpsStr, sizeof(gpsStr), "GPS %d%%", 75); // FIXME, use something based on hdop
+    else
+        gpsStr[0] = '\0'; // Just show emptystring
 
     const char *fields[] = {
         batStr,
-        "GPS 75%",
+        gpsStr,
         usersStr,
         channelStr,
         NULL};
