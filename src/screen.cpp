@@ -140,6 +140,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 {
     MeshPacket &mp = devicestate.rx_text_message;
     NodeInfo *node = nodeDB.getNode(mp.from);
+    // DEBUG_MSG("drawing text message from 0x%x: %s\n", mp.from, mp.payload.variant.data.payload.bytes);
 
     // Demo for drawStringMaxWidth:
     // with the third parameter you can define the width after which words will be wrapped.
@@ -448,7 +449,7 @@ void drawDebugInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
     snprintf(batStr, sizeof(batStr), "Batt %x%%", (isCharging << 1) + isUSBPowered);
 
     static char gpsStr[20];
-    if(myNodeInfo.has_gps)
+    if (myNodeInfo.has_gps)
         snprintf(gpsStr, sizeof(gpsStr), "GPS %d%%", 75); // FIXME, use something based on hdop
     else
         gpsStr[0] = '\0'; // Just show emptystring
@@ -508,11 +509,14 @@ void Screen::setOn(bool on)
     {
         if (on)
         {
+            DEBUG_MSG("Turning on screen\n");
             dispdev.displayOn();
             setPeriod(1); // redraw ASAP
         }
-        else
+        else {
+            DEBUG_MSG("Turning off screen\n");
             dispdev.displayOff();
+        }
         screenOn = on;
     }
 }
@@ -630,7 +634,7 @@ void Screen::doTask()
             if (millis() > 3 * 1000) // we show the boot screen for a few seconds only
             {
                 showingBootScreen = false;
-                screen_set_frames();
+                setFrames();
             }
         }
         else // standard screen loop handling ehre
@@ -638,7 +642,7 @@ void Screen::doTask()
             // If the # nodes changes, we need to regen our list of screens
             if (nodeDB.updateGUI || nodeDB.updateTextMessage)
             {
-                screen_set_frames();
+                setFrames();
                 nodeDB.updateGUI = false;
                 nodeDB.updateTextMessage = false;
             }
@@ -674,7 +678,7 @@ void screen_start_bluetooth(uint32_t pin)
 }
 
 // restore our regular frame list
-void screen_set_frames()
+void Screen::setFrames()
 {
     DEBUG_MSG("showing standard frames\n");
 

@@ -212,7 +212,7 @@ class MySecurity : public BLESecurityCallbacks
     }
 
     // Remove our custom screen
-    screen_set_frames();
+    screen.setFrames();
   }
 };
 

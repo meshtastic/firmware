@@ -35,6 +35,10 @@ public:
 
     /// Handle a button press
     void onPress();
+
+    /// Rebuilt our list of screens
+    void setFrames();
+private:
 };
 
 extern Screen screen;
