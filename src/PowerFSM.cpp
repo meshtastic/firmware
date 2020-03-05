@@ -25,6 +25,8 @@ static void sdsEnter()
 
 static void lsEnter()
 {
+    screen.setOn(false);
+    
     while (!service.radio.rf95.canSleep())
         delay(10); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
 
@@ -80,6 +82,7 @@ static void lsExit()
 
 static void nbEnter()
 {
+    screen.setOn(false);
     setBluetoothEnable(false);
 
     // FIXME - check if we already have packets for phone and immediately trigger EVENT_PACKETS_FOR_PHONE
@@ -96,10 +99,7 @@ static void onEnter()
     setBluetoothEnable(true);
 }
 
-static void onExit()
-{
-    screen.setOn(false);
-}
+
 static void wakeForPing()
 {
 }
@@ -113,7 +113,7 @@ State stateSDS(sdsEnter, NULL, NULL, "SDS");
 State stateLS(lsEnter, lsIdle, lsExit, "LS");
 State stateNB(nbEnter, NULL, NULL, "NB");
 State stateDARK(darkEnter, NULL, NULL, "DARK");
-State stateON(onEnter, NULL, onExit, "ON");
+State stateON(onEnter, NULL, NULL, "ON");
 Fsm powerFSM(&stateDARK);
 
 void PowerFSM_setup()

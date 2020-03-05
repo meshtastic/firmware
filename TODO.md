@@ -2,12 +2,6 @@
 
 Items to complete soon (next couple of alpha releases).
 
-* (fixed I think) text messages are not showing on local screen if screen was on
-
-* (needs testing) fixed the following during a plane flight:
- Have state machine properly enter deep sleep based on loss of mesh and phone comms.
- Default to enter deep sleep if no LORA received for two hours (indicates user has probably left the mesh).
-
 * lower wait_bluetooth_secs to 30 seconds once we have the GPS power on (but GPS in sleep mode) across light sleep.  For the time
 being I have it set at 2 minutes to ensure enough time for a GPS lock from scratch.
 
@@ -192,3 +186,7 @@ Items after the first final candidate release.
 until the phone pulls those packets.  Ever so often power on bluetooth just so we can see if the phone wants to send some packets.  Possibly might need ULP processor to help with this wake process.
 * do hibernation mode to get power draw down to 2.5uA https://lastminuteengineers.com/esp32-sleep-modes-power-consumption/ 
 * fix GPS.zeroOffset calculation it is wrong
+* (needs testing) fixed the following during a plane flight:
+ Have state machine properly enter deep sleep based on loss of mesh and phone comms.
+ Default to enter deep sleep if no LORA received for two hours (indicates user has probably left the mesh).
+* (fixed I think) text messages are not showing on local screen if screen was on
