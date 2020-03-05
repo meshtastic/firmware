@@ -26,7 +26,7 @@ static void sdsEnter()
 static void lsEnter()
 {
     screen.setOn(false);
-    
+
     while (!service.radio.rf95.canSleep())
         delay(10); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
 
@@ -158,7 +158,8 @@ void PowerFSM_setup()
     powerFSM.add_timed_transition(&stateDARK, &stateLS, radioConfig.preferences.wait_bluetooth_secs * 1000, NULL, "Bluetooth timeout");
 
     powerFSM.add_timed_transition(&stateLS, &stateSDS, radioConfig.preferences.mesh_sds_timeout_secs * 1000, NULL, "mesh timeout");
-    powerFSM.add_timed_transition(&stateLS, &stateSDS, radioConfig.preferences.phone_sds_timeout_sec * 1000, NULL, "phone timeout");
+    // removing for now, because some users don't even have phones
+    // powerFSM.add_timed_transition(&stateLS, &stateSDS, radioConfig.preferences.phone_sds_timeout_sec * 1000, NULL, "phone timeout");
 
     powerFSM.run_machine(); // run one interation of the state machine, so we run our on enter tasks for the initial DARK state
 }

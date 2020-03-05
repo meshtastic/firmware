@@ -53,7 +53,8 @@ off during light sleep, but there is a TODO item to fix this.
 * While in ON: If it has been more than screen_on_secs since a press, lower to DARK
 * While in DARK: If time since last contact by our phone exceeds phone_timeout_secs (15 minutes), we transition down into NB mode
 * While in DARK or NB: If nothing above is forcing us to stay in a higher mode (wait_bluetooth_secs, min_wake_secs) we will lower down to LS state
-* While in LS: If either phone_sds_timeout_secs (default 2 hr) or mesh_sds_timeout_secs (default 2 hr) are exceeded we will lower into SDS mode for sds_secs (default 1 yr) (or a button press).  
+* While in LS: If either phone_sds_timeout_secs (default 2 hr) or mesh_sds_timeout_secs (default 2 hr) are exceeded we will lower into SDS mode for sds_secs (default 1 yr) (or a button press).  (Note: phone_sds_timeout_secs is currently disabled for now, because most users 
+are using without a phone)
 * Any time we enter LS mode: We stay in that until an interrupt, button press or other state transition.  Every ls_secs (default 1 hr) and let the arduino loop() run one iteration (FIXME, not sure if we need this at all), and then immediately reenter lightsleep mode on the CPU.
 
 TODO: Eventually these scheduled intervals should be synchronized to the GPS clock, so that we can consider leaving the lora receiver off to save even more power.
