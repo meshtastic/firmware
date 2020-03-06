@@ -2,6 +2,10 @@
 
 i.e. sleep behavior
 
+## Power measurements
+
+Since one of the main goals of this project is long battery life, it is important to consider that in our software/protocol design.  Based on initial measurements it seems that the current code should run about three days between charging, and with a bit more software work (see the [TODO list](TODO.md)) a battery life of eight days should be quite doable.  Our current power measurements/model is in [this spreadsheet](https://docs.google.com/spreadsheets/d/1ft1bS3iXqFKU8SApU8ZLTq9r7QQEGESYnVgdtvdT67k/edit?usp=sharing).
+
 ## States
 
 From lower to higher power consumption.

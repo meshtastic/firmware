@@ -24,7 +24,7 @@ a phone connects to the device should be the following:
 * Read that new packet from "fromradio"
 * Whenever the phone has a packet to send write to "toradio"
 
-For definitions (and documentation) of FromRadio, ToRadio, MyNodeInfo, NodeInfo and User  protocol buffers see [mesh.proto](https://github.com/meshtastic/Meshtastic-protobufs/blob/master/mesh.proto)
+For definitions (and documentation) on FromRadio, ToRadio, MyNodeInfo, NodeInfo and User  protocol buffers see [mesh.proto](https://github.com/meshtastic/Meshtastic-protobufs/blob/master/mesh.proto)
 
 UUID for the service: 6ba1b218-15a8-461f-9fa8-5dcae273eafd
 

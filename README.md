@@ -86,23 +86,5 @@ After our rate of change slows a bit, we will make beta builds available here (w
 [![Download at https://play.google.com/store/apps/details?id=com.geeksville.mesh](https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png)](https://play.google.com/store/apps/details?id=com.geeksville.mesh&referrer=utm_source%3Dgithub%26utm_medium%3Desp32-readme%26utm_campaign%3Dmeshtastic-esp32%2520readme%26anid%3Dadmob&pcampaignid=pcampaignidMKT-Other-global-all-co-prtnr-py-PartBadge-Mar2515-1)
 
 # Development
-The following sections are probably only interesting if you want to join us in developing the software.  
 
-## Power measurements
-Since one of the main goals of this project is long battery life, it is important to consider that in our software/protocol design.  Based on initial measurements it seems that the current code should run about three days between charging, and with a bit more software work (see the [TODO list](TODO.md)) a battery life of eight days should be quite doable.  Our current power measurements/model is in [this spreadsheet](https://docs.google.com/spreadsheets/d/1ft1bS3iXqFKU8SApU8ZLTq9r7QQEGESYnVgdtvdT67k/edit?usp=sharing).
-
-## Build instructions
-This project uses the simple PlatformIO build system. You can use the IDE, but for brevity
-in these instructions I describe use of their command line tool.
-
-1. Purchase a suitable radio (see above)
-2. Install [PlatformIO](https://platformio.org/platformio-ide)
-3. Download this git repo and cd into it
-4. Edit configuration.h and comment out *one* of the following two lines (depending on which board you are using):
-```
-// #define T_BEAM_V10  
-#define HELTEC_LORA32
-```
-5. Plug the radio into your USB port
-6. Type "pio run -t upload" (This command will fetch dependencies, build the project and install it on the board via USB)
-7. Platform IO also installs a very nice VisualStudio Code based IDE, see their [tutorial](https://docs.platformio.org/en/latest/tutorials/espressif32/arduino_debugging_unit_testing.html) if you'd like to use it
+We'd love to have you join us on this merry little project.  Please see our [development documents](./docs/software/sw-design.md)
