@@ -93,7 +93,6 @@ Characteristics
 
 | UUID                                 | properties       | description|
 |--------------------------------------|------------------|------------|
-
 | e74dd9c0-a301-4a6f-95a1-f0e1dbea8e1e | write,read       | total image size, 32 bit, write this first, then read read back to see if it was acceptable (0 mean not accepted) |
 | e272ebac-d463-4b98-bc84-5cc1a39ee517 | write            | data, variable sized, recommended 512 bytes, write one for each block of file |
 | 4826129c-c22a-43a3-b066-ce8f0d5bacc6 | write            | crc32, write last - writing this will complete the OTA operation, now you can read result |
