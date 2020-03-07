@@ -87,4 +87,4 @@ After our rate of change slows a bit, we will make beta builds available here (w
 
 # Development
 
-We'd love to have you join us on this merry little project.  Please see our [development documents](./docs/software/sw-design.md)
+We'd love to have you join us on this merry little project.  Please see our [development documents](./docs/software/sw-design.md) and join us on the gitter chat above.
