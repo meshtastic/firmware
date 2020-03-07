@@ -3,10 +3,15 @@
 FIXME - instead look for standard solutions.  this approach seems really suboptimal, because too many nodes will try to rebroast.  If
 all else fails could always use the stock Radiohead solution - though super inefficient.
 
+great source of papers and class notes: http://www.cs.jhu.edu/~cs647/
+
 TODO:
 * reread the radiohead mesh implementation
-* read about general mesh flooding solutions
 * reread the disaster radio protocol docs
+* DONE read about mesh routing solutions (DSR and AODV)
+* DONE read about general mesh flooding solutions (naive, MPR, geo assisted)
+* update duty cycle spreadsheet for our typical usecase
+* generalize naive flooding on top of radiohead? (and fix radiohead to use my new driver)
 
 good description of batman protocol: https://www.open-mesh.org/projects/open-mesh/wiki/BATMANConcept
 
