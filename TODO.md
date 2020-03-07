@@ -2,12 +2,17 @@
 
 Items to complete soon (next couple of alpha releases).
 
+* add a getting started page
+* add links to todos
+* link to the kanban page
+* finish mesh alg reeval
 * lower wait_bluetooth_secs to 30 seconds once we have the GPS power on (but GPS in sleep mode) across light sleep.  For the time
 being I have it set at 2 minutes to ensure enough time for a GPS lock from scratch.
 
 * use gps sleep mode instead of killing its power (to allow fast position when we wake)
 * enable fast lock and low power inside the gps chip
 * remeasure wake time power draws now that we run CPU down at 80MHz
+* add a SF12 transmit option for _super_ long range
 
 # AXP192 tasks
 * "AXP192 interrupt is not firing, remove this temporary polling of battery state"
