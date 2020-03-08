@@ -2,8 +2,6 @@
 
 Items to complete soon (next couple of alpha releases).
 
-* add a getting started page
-* finish mesh alg reeval
 * lower wait_bluetooth_secs to 30 seconds once we have the GPS power on (but GPS in sleep mode) across light sleep.  For the time
 being I have it set at 2 minutes to ensure enough time for a GPS lock from scratch.
 
@@ -195,3 +193,5 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * (fixed I think) text messages are not showing on local screen if screen was on
 * add links to todos
 * link to the kanban page
+* add a getting started page
+* finish mesh alg reeval

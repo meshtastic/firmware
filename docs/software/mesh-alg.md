@@ -6,12 +6,12 @@ all else fails could always use the stock Radiohead solution - though super inef
 great source of papers and class notes: http://www.cs.jhu.edu/~cs647/
 
 TODO:
-* reread the radiohead mesh implementation
-* reread the disaster radio protocol docs
+* DONE reread the radiohead mesh implementation - hop to hop acknoledgement seems VERY expensive but otherwise it seems like DSR
 * DONE read about mesh routing solutions (DSR and AODV)
 * DONE read about general mesh flooding solutions (naive, MPR, geo assisted)
+* DONE reread the disaster radio protocol docs - seems based on Babel (which is AODVish)
 * update duty cycle spreadsheet for our typical usecase
-* generalize naive flooding on top of radiohead? (and fix radiohead to use my new driver)
+* generalize naive flooding on top of radiohead or disaster.radio? (and fix radiohead to use my new driver)
 
 good description of batman protocol: https://www.open-mesh.org/projects/open-mesh/wiki/BATMANConcept
 
