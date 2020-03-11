@@ -17,8 +17,14 @@ For more details see the [device software TODO](https://github.com/meshtastic/Me
 
 If you have a question missing from this faq, please ask on our gitter chat.  And if you are feeling extra generous send in a pull-request for this faq.md with whatever we answered ;-).
 
-Q: Which of the various supported radios should I buy?
-A: basically you just need the radio + (optional but recommended) battery. the TBEAM is usually better because it has gps and huge battery socket. The Heltec is basically the same hardware but without the gps (the phone provides position data to the radio in that case, so the behavior is similar - but it does burn some battery in the phone).. Also the battery for the Heltec can be smaller.  In addition to aliexpress, banggood.com usually has stock and faster shipping, or Amazon.  If buying a TTGO, make sure to buy a version that includes the oled screen - this project doesn't require the screen, but we use it if is installed.
+## Q: Which of the various supported radios should I buy?
 
-Q: Does this project use patented algorithms? (Kindly borrowed from the geeks at [ffmpeg](http://ffmpeg.org/legal.html))
-A: We do not know, we are not lawyers so we are not qualified to answer this. Also we have never read patents to implement any part of this, so even if we were qualified we could not answer it as we do not know what is patented. Furthermore the sheer number of software patents makes it impossible to read them all so no one (lawyer or not) could answer such a question with a definite no.  We are merely geeks experimenting on a fun and free project.
+Basically you just need the radio + (optional but recommended) battery. the TBEAM is usually better because it has gps and huge battery socket. The Heltec is basically the same hardware but without the gps (the phone provides position data to the radio in that case, so the behavior is similar - but it does burn some battery in the phone).  Also the battery for the Heltec can be smaller.  
+
+In addition to aliexpress, banggood.com usually has stock and faster shipping, or Amazon.  If buying a TTGO, make sure to buy a version that includes the OLED screen - this project doesn't require the screen, but we use it if is installed.
+
+## Q: Does this project use patented algorithms? 
+
+(Kindly borrowed from the geeks at [ffmpeg](http://ffmpeg.org/legal.html))
+
+We do not know, we are not lawyers so we are not qualified to answer this. Also we have never read patents to implement any part of this, so even if we were qualified we could not answer it as we do not know what is patented. Furthermore the sheer number of software patents makes it impossible to read them all so no one (lawyer or not) could answer such a question with a definite no.  We are merely geeks experimenting on a fun and free project.
