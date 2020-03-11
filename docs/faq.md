@@ -23,6 +23,8 @@ Basically you just need the radio + (optional but recommended) battery. the TBEA
 
 In addition to aliexpress, banggood.com usually has stock and faster shipping, or Amazon.  If buying a TTGO, make sure to buy a version that includes the OLED screen - this project doesn't require the screen, but we use it if is installed.
 
+@claesg has added links to various 3D printable cases, you can see them at (www.meshtastic.org).
+
 ## Q: Does this project use patented algorithms? 
 
 (Kindly borrowed from the geeks at [ffmpeg](http://ffmpeg.org/legal.html))
