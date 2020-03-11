@@ -94,3 +94,7 @@ We'd love to have you join us on this merry little project.  Please see our [dev
 This project is run by volunteers.  Past contributors include:
 * @claesg: Various documentation fixes and 3D print enclosures
 * @girtsf: So far our CI system, but soon lots of device improvements
+
+# IMPORTANT DISCLAIMERS AND FAQ
+
+For a listing of currently missing features and a FAQ click [here](docs/faq.md).

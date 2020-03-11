@@ -68,18 +68,6 @@ For a nice printable cases:
 2. TTGO T_Beam V1 see this [design](https://www.thingiverse.com/thing:3830711) by [rwanrooy](https://www.thingiverse.com/rwanrooy) or this [remix](https://www.thingiverse.com/thing:3949330) by [8ung](https://www.thingiverse.com/8ung)
 3. Heltec Lora32 see this [design](https://www.thingiverse.com/thing:3125854) by [ornotermes](https://www.thingiverse.com/ornotermes).
 
-# Disclaimers
+# IMPORTANT DISCLAIMERS AND FAQ
 
-This project is still pretty young but moving at a pretty good pace.  Not all features are fully implemented in the current alpha builds.
-Most of these problems should be solved by the beta release:
-
-* We don't make these devices and they haven't been tested by UL or the FCC.  If you use them you are experimenting and we can't promise they won't burn your house down ;-)
-* Encryption is turned off for now
-* A number of (straightforward) software work items have to be completed before battery life matches our measurements, currently battery life is about three days.  Join us on chat if you want the spreadsheet of power measurements/calculations.
-* The current Android GUI is pretty ugly still
-* The Android API needs to be documented better
-* The Bluetooth API needs to be documented better 
-* The mesh protocol is turned off for now, currently we only send packets one hop distant
-* No one has written an iOS app yet ;-)
-
-For more details see the [device software TODO](https://github.com/meshtastic/Meshtastic-esp32/blob/master/TODO.md) or the [Android app TODO](https://github.com/meshtastic/Meshtastic-Android/blob/master/TODO.md).
+For a listing of currently missing features and a FAQ click [here](faq.md).
