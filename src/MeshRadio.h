@@ -23,7 +23,7 @@
 #define CH_SPACING_CN   2.0f // MHz FIXME, this is just a guess for 470-510
 #define NUM_CHANNELS_CN 20
 
-// CN channel settings
+// JP channel settings
 #define CH0_JP          920.0f // MHz
 #define CH_SPACING_JP   0.5f // MHz FIXME, this is just a guess for 920-925
 #define NUM_CHANNELS_JP 10
