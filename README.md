@@ -92,6 +92,8 @@ We'd love to have you join us on this merry little project.  Please see our [dev
 # Credits
 
 This project is run by volunteers.  Past contributors include:
+
+* @astro-arphid: Added support for 433MHz radios in europe.
 * @claesg: Various documentation fixes and 3D print enclosures
 * @girtsf: So far our CI system, but soon lots of device improvements
 
