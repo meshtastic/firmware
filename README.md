@@ -29,7 +29,7 @@ Prebuilt binaries for the supported radios is available in our [releases](https:
 
 The instructions currently require a few commmand lines, but it should be pretty straightforward.  Please post comments on our group chat if you have problems or successes.  Steps to install:
 
-1. Purchase a radio (see above) with the correct frequencies for your country (915MHz for US or JP, 470MHz for CN, 870MHz for EU).
+1. Purchase a radio (see above) with the correct frequencies for your country (915MHz for US or JP, 470MHz for CN, 433MHz and 870MHz for EU).
 2. Install "pip".  Pip is the python package manager we use to get the esptool installer app.  Instructions [here](https://www.makeuseof.com/tag/install-pip-for-python/).
 3. Run "pip install --upgrade esptool" to get esptool installed on your machine
 4. Connect your radio to your USB port
