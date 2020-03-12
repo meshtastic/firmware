@@ -10,6 +10,13 @@ See [this site](https://www.rfwireless-world.com/Tutorials/LoRa-channels-list.ht
 
 The maximum power allowed is +14dBM.
 
+### 433 MHz
+
+There are eight channels defined with a 0.2 MHz gap between them.
+Channel zero starts at 433.175 MHz
+
+### 870 MHz
+
 There are eight channels defined with a 0.3 MHz gap between them.
 Channel zero starts at 865.20 MHz
 

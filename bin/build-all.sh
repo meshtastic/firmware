@@ -4,7 +4,7 @@ set -e
 
 source bin/version.sh
 
-COUNTRIES="US EU CN JP"
+COUNTRIES="US EU433 EU865 CN JP"
 # COUNTRIES=US
 
 SRCMAP=.pio/build/esp32/output.map
