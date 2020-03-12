@@ -19,11 +19,15 @@ If you have a question missing from this faq, please ask on our gitter chat.  An
 
 ## Q: Which of the various supported radios should I buy?
 
-Basically you just need the radio + (optional but recommended) battery. the TBEAM is usually better because it has gps and huge battery socket. The Heltec is basically the same hardware but without the gps (the phone provides position data to the radio in that case, so the behavior is similar - but it does burn some battery in the phone).  Also the battery for the Heltec can be smaller.  
+Basically you just need the radio + (optional but recommended) battery. The TBEAM is usually better because it has gps and huge battery socket. The Heltec is basically the same hardware but without the GPS (the phone provides position data to the radio in that case, so the behavior is similar - but it does burn some battery in the phone).  Also the battery for the Heltec can be smaller.  
 
-In addition to aliexpress, banggood.com usually has stock and faster shipping, or Amazon.  If buying a TTGO, make sure to buy a version that includes the OLED screen - this project doesn't require the screen, but we use it if is installed.
+In addition to Aliexpress, (banggood.com) usually has stock and faster shipping, or Amazon.  If buying a TBEAM, make sure to buy a version that includes the OLED screen - this project doesn't absolutely require the screen, but we use it if is installed.
 
 @claesg has added links to various 3D printable cases, you can see them at (www.meshtastic.org).
+
+## Q: Do you have plans to commercialize this project
+
+Nope. though if some other person/group wanted to use this software and a more customized device we think that would be awesome (as long as they obey the GPL license).
 
 ## Q: Does this project use patented algorithms? 
 
