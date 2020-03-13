@@ -30,9 +30,9 @@ Not all of these features are fully implemented yet - see **important** disclaim
 * Eventually (within a couple of months) we should have a modified version of Signal that works with this project.
 * Very easy sharing of private secured channels.  Just share a special link or QR code with friends and they can join your encrypted mesh
  
-This project is currently in early alpha - if you have questions please join our chat [![Join the chat at https://gitter.im/Meshtastic/community](https://badges.gitter.im/Meshtastic/community.svg)](https://gitter.im/Meshtastic/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge).
+This project is currently in early alpha - if you have questions please [join our discussion forum](https://meshtastic.discourse.group/).
 
-This software is 100% open source and developed by a group of hobbyist experimenters.  No warranty is provided, if you'd like to improve it - we'd love your help.  Please post in the [chat](https://gitter.im/Meshtastic/community).  
+This software is 100% open source and developed by a group of hobbyist experimenters.  No warranty is provided, if you'd like to improve it - we'd love your help.  Please post in the [forum](https://meshtastic.discourse.group/).
 
 # Updates
 
@@ -52,7 +52,7 @@ But if you want the bleeding edge app now, we'd love to have your help testing. 
 
 1. Join [this Google group](https://groups.google.com/forum/#!forum/meshtastic-alpha-testers) with the account you use in Google Play.
 2. Go to this [URL](https://play.google.com/apps/testing/com.geeksville.mesh) to opt-in to the alpha test.
-3. If you encounter any problems or have questions, post in our gitter chat and we'll help.
+3. If you encounter any problems or have questions, post in our [forum](https://meshtastic.discourse.group/) and we'll help.
 
 If you'd like to help with development, the source code is [on github](https://github.com/meshtastic/Meshtastic-Android).
 
