@@ -15,7 +15,7 @@ For more details see the [device software TODO](https://github.com/meshtastic/Me
 
 # FAQ
 
-If you have a question missing from this faq, please ask on our gitter chat.  And if you are feeling extra generous send in a pull-request for this faq.md with whatever we answered ;-).
+If you have a question missing from this faq, please [ask in our discussion forum](https://meshtastic.discourse.group/).  And if you are feeling extra generous send in a pull-request for this faq.md with whatever we answered ;-).
 
 ## Q: Which of the various supported radios should I buy?
 
