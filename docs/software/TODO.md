@@ -2,6 +2,7 @@
 
 Items to complete soon (next couple of alpha releases).
 
+* make girts gps work again with SparkFun Ublox Arduino Library_ID5746/examples/Example13_PVT/Example3_AssumeAutoPVTviaUart/Example3_AssumeAutoPVTviaUart.ino
 * turn on gps https://github.com/sparkfun/SparkFun_Ublox_Arduino_Library/blob/master/examples/Example18_PowerSaveMode/Example18_PowerSaveMode.ino
 * switch gps to 38400 baud https://github.com/sparkfun/SparkFun_Ublox_Arduino_Library/blob/master/examples/Example11_ResetModule/Example2_FactoryDefaultsviaSerial/Example2_FactoryDefaultsviaSerial.ino
 * Use Neo-M8M API to put it in sleep mode
