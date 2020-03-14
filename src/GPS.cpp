@@ -107,7 +107,7 @@ uint32_t GPS::getValidTime()
 /// Returns true if we think the board can enter deep or light sleep now (we might be trying to get a GPS lock)
 bool GPS::canSleep()
 {
-    return !wantNewLocation;
+    return true; // we leave GPS on during sleep now, so sleep is okay !wantNewLocation;
 }
 
 /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
