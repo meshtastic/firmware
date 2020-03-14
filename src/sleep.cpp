@@ -177,6 +177,10 @@ void doDeepSleep(uint64_t msecToWake)
   // Only GPIOs which are have RTC functionality can be used in this bit map: 0,2,4,12-15,25-27,32-39.
   uint64_t gpioMask = (1ULL << BUTTON_PIN);
 
+#ifdef BUTTON_NEED_PULLUP
+  gpio_pullup_en((gpio_num_t) BUTTON_PIN);
+#endif
+
   // Not needed because both of the current boards have external pullups
   // FIXME change polarity in hw so we can wake on ANY_HIGH instead - that would allow us to use all three buttons (instead of just the first)
   // gpio_pullup_en((gpio_num_t)BUTTON_PIN);
@@ -206,15 +210,20 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
   // We want RTC peripherals to stay on
   esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
 
+#ifdef BUTTON_NEED_PULLUP
+  gpio_pullup_en((gpio_num_t) BUTTON_PIN);
+#endif
+
   gpio_wakeup_enable((gpio_num_t)BUTTON_PIN, GPIO_INTR_LOW_LEVEL); // when user presses, this button goes low
   gpio_wakeup_enable((gpio_num_t)DIO0_GPIO, GPIO_INTR_HIGH_LEVEL); // RF95 interrupt, active high
 #ifdef PMU_IRQ
-  gpio_wakeup_enable((gpio_num_t)PMU_IRQ, GPIO_INTR_HIGH_LEVEL); // pmu irq
+  // FIXME, disable wake due to PMU because it seems to fire all the time?
+  // gpio_wakeup_enable((gpio_num_t)PMU_IRQ, GPIO_INTR_HIGH_LEVEL); // pmu irq
 #endif
   assert(esp_sleep_enable_gpio_wakeup() == ESP_OK);
   assert(esp_sleep_enable_timer_wakeup(sleepUsec) == ESP_OK);
   assert(esp_light_sleep_start() == ESP_OK);
-  //DEBUG_MSG("Exit light sleep\n");
+  //DEBUG_MSG("Exit light sleep b=%d, rf95=%d, pmu=%d\n", digitalRead(BUTTON_PIN), digitalRead(DIO0_GPIO), digitalRead(PMU_IRQ));
   return esp_sleep_get_wakeup_cause();
 }
 
