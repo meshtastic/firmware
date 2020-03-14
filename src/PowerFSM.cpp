@@ -32,8 +32,8 @@ static void lsEnter()
 
     gps.prepareSleep(); // abandon in-process parsing
 
-    if (!isUSBPowered)      // FIXME - temp hack until we can put gps in sleep mode, if we have AC when we go to sleep then leave GPS on
-        setGPSPower(false); // kill GPS power
+    //if (!isUSBPowered)      // FIXME - temp hack until we can put gps in sleep mode, if we have AC when we go to sleep then leave GPS on
+    //    setGPSPower(false); // kill GPS power
 }
 
 static void lsIdle()
@@ -76,7 +76,7 @@ static void lsIdle()
 
 static void lsExit()
 {
-    setGPSPower(true); // restore GPS power
+    // setGPSPower(true); // restore GPS power
     gps.startLock();
 }
 

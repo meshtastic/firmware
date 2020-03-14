@@ -17,6 +17,7 @@ class GPS : public PeriodicTask, public Observable
 public:
     double latitude, longitude;
     uint32_t altitude;
+    bool isConnected; // Do we have a GPS we are talking to
     
     GPS();
 
@@ -50,6 +51,3 @@ private:
 
 extern GPS gps;
 
-// Temporary support for the one TTGO in the world with a busted serial rx line (my old devboard)
-extern HardwareSerial _serial_gps;
-extern RTC_DATA_ATTR bool timeSetFromGPS; 

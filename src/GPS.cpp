@@ -4,7 +4,6 @@
 #include <sys/time.h>
 #include "configuration.h"
 
-
 HardwareSerial _serial_gps(GPS_SERIAL_NUM);
 
 RTC_DATA_ATTR bool timeSetFromGPS; // We only reset our time once per _boot_ after that point just run from the internal clock (even across sleeps)
@@ -28,23 +27,36 @@ void GPS::setup()
 
 #ifdef GPS_RX_PIN
     _serial_gps.begin(GPS_BAUDRATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
-    ublox.enableDebugging(Serial);
+    // ublox.enableDebugging(Serial);
 
-#if 0
     // note: the lib's implementation has the wrong docs for what the return val is
     // it is not a bool, it returns zero for success
-    bool errCode = ublox.begin(_serial_gps);
-    assert(!errCode); // FIXME, report hw failure on screen
+    isConnected = ublox.begin(_serial_gps);
+    if (isConnected)
+    {
+        DEBUG_MSG("Connected to GPS successfully\n");
 
-    bool ok = ublox.setUART1Output(COM_TYPE_UBX); // Use native API
-    assert(ok);
-    ok = ublox.setNavigationFrequency(1); //Produce one solutions per second
-    assert(ok);
-    ok = ublox.setAutoPVT(true);
-    assert(ok);
-    // ublox.saveConfiguration();
-    assert(ok);
-#endif
+        bool ok = ublox.setUART1Output(COM_TYPE_UBX); // Use native API
+        assert(ok);
+        ok = ublox.setNavigationFrequency(1); //Produce one solutions per second
+        assert(ok);
+        ok = ublox.setAutoPVT(false);
+        assert(ok);
+        ok = ublox.setDynamicModel(DYN_MODEL_BIKE); // probably PEDESTRIAN but just in case assume bike speeds
+        assert(ok);
+        ok = ublox.saveConfiguration();
+        assert(ok);
+    }
+    else
+    {
+        // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
+        // assume NEMA at 9600 baud.
+        DEBUG_MSG("ERROR: No bidirectional GPS found, hoping that it still might work\n");
+
+        // tell lib, we are expecting the module to send PVT messages by itself to our Rx pin
+        // you can set second parameter to "false" if you want to control the parsing and eviction of the data (need to call checkUblox cyclically)
+        ublox.assumeAutoPVT(true, true);
+    }
 #endif
 }
 
@@ -109,16 +121,18 @@ void GPS::doTask()
 #ifdef GPS_RX_PIN
     // Consume all characters that have arrived
 
-#if 0
-    ublox.checkUblox(); //See if new data is available. Process bytes as they come in.
+    // getPVT automatically calls checkUblox
+    // ublox.checkUblox(); //See if new data is available. Process bytes as they come in.
+    DEBUG_MSG("numsat %d, sec %d\n", ublox.getSIV(), ublox.getSecond());
 
+#if 0
     if (ublox.getPVT())
     { // we only notify if position has changed
+        isConnected = true; // We just received a packet, so we must have a GPS
+
         if (!timeSetFromGPS)
         {
             struct timeval tv;
-
-            DEBUG_MSG("Got time from GPS month=%d, year=%d\n", ublox.getMonth(), ublox.getYear());
 
             /* Convert to unix time 
         The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z). 
@@ -134,6 +148,8 @@ void GPS::doTask()
             time_t res = mktime(&t);
             tv.tv_sec = res;
             tv.tv_usec = 0; // time.centisecond() * (10 / 1000);
+
+            DEBUG_MSG("Got time from GPS month=%d, year=%d, unixtime=%ld\n", ublox.getMonth(), ublox.getYear(), tv.tv_sec);
 
             // FIXME
             // perhapsSetRTC(&tv);
