@@ -27,6 +27,7 @@ void GPS::setup()
 
 #ifdef GPS_RX_PIN
     _serial_gps.begin(GPS_BAUDRATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+    // _serial_gps.setRxBufferSize(1024); // the default is 256
     // ublox.enableDebugging(Serial);
 
     // note: the lib's implementation has the wrong docs for what the return val is
@@ -42,20 +43,23 @@ void GPS::setup()
 
         bool factoryReset = false;
         bool ok;
-        if(factoryReset) {
+        if (factoryReset)
+        {
             // It is useful to force back into factory defaults (9600baud, NEMA to test the behavior of boards that don't have GPS_TX connected)
             ublox.factoryReset();
             delay(2000);
             isConnected = ublox.begin(_serial_gps);
             DEBUG_MSG("Factory reset success=%d\n", isConnected);
-            if(isConnected) {
+            if (isConnected)
+            {
                 ublox.assumeAutoPVT(true, true); // Just parse NEMA for now
             }
         }
-        else {
-            ok = ublox.setUART1Output(COM_TYPE_UBX); // Use native API
+        else
+        {
+            ok = ublox.setUART1Output(COM_TYPE_UBX, 500); // Use native API
             assert(ok);
-            ok = ublox.setNavigationFrequency(4); //Produce 4x/sec to keep the amount of time we stall in getPVT low
+            ok = ublox.setNavigationFrequency(1, 500); //Produce 4x/sec to keep the amount of time we stall in getPVT low
             assert(ok);
             //ok = ublox.setAutoPVT(false); // Not implemented on NEO-6M
             //assert(ok);
@@ -147,7 +151,12 @@ void GPS::doTask()
     // DEBUG_MSG("sec %d\n", ublox.getSecond());
     // DEBUG_MSG("lat %d\n", ublox.getLatitude());
 
-    if (!timeSetFromGPS && ublox.getT())
+    // If we don't have a fix (a quick check), don't try waiting for a solution)
+    uint8_t fixtype = ublox.getFixType();
+    DEBUG_MSG("fix type %d\n", fixtype);
+
+    // any fix that has time
+    if ((fixtype >= 2 && fixtype <= 5) && !timeSetFromGPS && ublox.getT())
     {
         struct timeval tv;
 
@@ -173,8 +182,8 @@ void GPS::doTask()
         perhapsSetRTC(&tv);
     }
 
-    if (ublox.getP())
-    { 
+    if ((fixtype >= 3 && fixtype <= 4) && ublox.getP()) // rd fixes only
+    {
         // we only notify if position has changed
         isConnected = true; // We just received a packet, so we must have a GPS
 
@@ -182,17 +191,22 @@ void GPS::doTask()
         longitude = ublox.getLongitude() * 1e-7;
         altitude = ublox.getAltitude() / 1000; // in mm convert to meters
         DEBUG_MSG("new gps pos lat=%f, lon=%f, alt=%d\n", latitude, longitude, altitude);
-        hasValidLocation = true;
-        wantNewLocation = false;
-        notifyObservers();
-        //ublox.powerOff();
+
+        hasValidLocation = (latitude != 0) || (longitude != 0); // bogus lat lon is reported as 0,0
+        if (hasValidLocation)
+        {
+            wantNewLocation = false;
+            notifyObservers();
+            //ublox.powerOff();
+        }
     }
     else // we didn't get a location update, go back to sleep and hope the characters show up
         wantNewLocation = true;
-#endif 
 
-    // Once we have sent a location once we only poll the GPS rarely, otherwise check back every 100ms until we have something over the serial
-    setPeriod(hasValidLocation && !wantNewLocation ? 30 * 1000 : 100);
+#endif
+
+    // Once we have sent a location once we only poll the GPS rarely, otherwise check back every 1s until we have something over the serial
+    setPeriod(hasValidLocation && !wantNewLocation ? 30 * 1000 : 1000);
 }
 
 void GPS::startLock()
