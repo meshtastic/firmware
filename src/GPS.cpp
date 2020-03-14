@@ -32,19 +32,37 @@ void GPS::setup()
     // note: the lib's implementation has the wrong docs for what the return val is
     // it is not a bool, it returns zero for success
     isConnected = ublox.begin(_serial_gps);
+
+    // try a second time, the ublox lib serial parsing is buggy?
+    // if(!isConnected) isConnected = ublox.begin(_serial_gps);
+
     if (isConnected)
     {
-        DEBUG_MSG("Connected to GPS successfully\n");
+        DEBUG_MSG("Connected to GPS successfully, TXpin=%d\n", GPS_TX_PIN);
 
-        bool ok = ublox.setUART1Output(COM_TYPE_UBX); // Use native API
-        assert(ok);
-        ok = ublox.setNavigationFrequency(1); //Produce one solutions per second
-        assert(ok);
-        ok = ublox.setAutoPVT(false);
-        assert(ok);
-        ok = ublox.setDynamicModel(DYN_MODEL_BIKE); // probably PEDESTRIAN but just in case assume bike speeds
-        assert(ok);
-        ok = ublox.saveConfiguration();
+        bool factoryReset = false;
+        bool ok;
+        if(factoryReset) {
+            // It is useful to force back into factory defaults (9600baud, NEMA to test the behavior of boards that don't have GPS_TX connected)
+            ublox.factoryReset();
+            delay(2000);
+            isConnected = ublox.begin(_serial_gps);
+            DEBUG_MSG("Factory reset success=%d\n", isConnected);
+            if(isConnected) {
+                ublox.assumeAutoPVT(true, true); // Just parse NEMA for now
+            }
+        }
+        else {
+            ok = ublox.setUART1Output(COM_TYPE_UBX); // Use native API
+            assert(ok);
+            ok = ublox.setNavigationFrequency(4); //Produce 4x/sec to keep the amount of time we stall in getPVT low
+            assert(ok);
+            //ok = ublox.setAutoPVT(false); // Not implemented on NEO-6M
+            //assert(ok);
+            //ok = ublox.setDynamicModel(DYN_MODEL_BIKE); // probably PEDESTRIAN but just in case assume bike speeds
+            //assert(ok);
+        }
+        ok = ublox.saveConfiguration(2000);
         assert(ok);
     }
     else
@@ -122,51 +140,53 @@ void GPS::doTask()
     // Consume all characters that have arrived
 
     // getPVT automatically calls checkUblox
-    // ublox.checkUblox(); //See if new data is available. Process bytes as they come in.
-    DEBUG_MSG("numsat %d, sec %d\n", ublox.getSIV(), ublox.getSecond());
+    ublox.checkUblox(); //See if new data is available. Process bytes as they come in.
 
-#if 0
-    if (ublox.getPVT())
-    { // we only notify if position has changed
+    // DEBUG_MSG("sec %d\n", ublox.getSecond());
+    // DEBUG_MSG("lat %d\n", ublox.getLatitude());
+
+    if (!timeSetFromGPS && ublox.getT())
+    {
+        struct timeval tv;
+
         isConnected = true; // We just received a packet, so we must have a GPS
 
-        if (!timeSetFromGPS)
-        {
-            struct timeval tv;
+        /* Convert to unix time 
+    The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z). 
+    */
+        struct tm t;
+        t.tm_sec = ublox.getSecond();
+        t.tm_min = ublox.getMinute();
+        t.tm_hour = ublox.getHour();
+        t.tm_mday = ublox.getDay();
+        t.tm_mon = ublox.getMonth() - 1;
+        t.tm_year = ublox.getYear() - 1900;
+        t.tm_isdst = false;
+        time_t res = mktime(&t);
+        tv.tv_sec = res;
+        tv.tv_usec = 0; // time.centisecond() * (10 / 1000);
 
-            /* Convert to unix time 
-        The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z). 
-        */
-            struct tm t;
-            t.tm_sec = ublox.getSecond();
-            t.tm_min = ublox.getMinute();
-            t.tm_hour = ublox.getHour();
-            t.tm_mday = ublox.getDay();
-            t.tm_mon = ublox.getMonth() - 1;
-            t.tm_year = ublox.getYear() - 1900;
-            t.tm_isdst = false;
-            time_t res = mktime(&t);
-            tv.tv_sec = res;
-            tv.tv_usec = 0; // time.centisecond() * (10 / 1000);
+        DEBUG_MSG("Got time from GPS month=%d, year=%d, unixtime=%ld\n", t.tm_mon, t.tm_year, tv.tv_sec);
 
-            DEBUG_MSG("Got time from GPS month=%d, year=%d, unixtime=%ld\n", ublox.getMonth(), ublox.getYear(), tv.tv_sec);
+        perhapsSetRTC(&tv);
+    }
 
-            // FIXME
-            // perhapsSetRTC(&tv);
-        }
+    if (ublox.getP())
+    { 
+        // we only notify if position has changed
+        isConnected = true; // We just received a packet, so we must have a GPS
 
-        DEBUG_MSG("new gps pos\n");
-        latitude = ublox.getLatitude() * 10e-7;
-        longitude = ublox.getLongitude() * 10e-7;
+        latitude = ublox.getLatitude() * 1e-7;
+        longitude = ublox.getLongitude() * 1e-7;
         altitude = ublox.getAltitude() / 1000; // in mm convert to meters
+        DEBUG_MSG("new gps pos lat=%f, lon=%f, alt=%d\n", latitude, longitude, altitude);
         hasValidLocation = true;
         wantNewLocation = false;
         notifyObservers();
     }
     else // we didn't get a location update, go back to sleep and hope the characters show up
         wantNewLocation = true;
-#endif
-#endif
+#endif 
 
     // Once we have sent a location once we only poll the GPS rarely, otherwise check back every 100ms until we have something over the serial
     setPeriod(hasValidLocation && !wantNewLocation ? 30 * 1000 : 100);
