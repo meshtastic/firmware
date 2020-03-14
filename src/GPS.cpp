@@ -61,6 +61,8 @@ void GPS::setup()
             //assert(ok);
             //ok = ublox.setDynamicModel(DYN_MODEL_BIKE); // probably PEDESTRIAN but just in case assume bike speeds
             //assert(ok);
+            ok = ublox.powerSaveMode(); //use power save mode
+            assert(ok);
         }
         ok = ublox.saveConfiguration(2000);
         assert(ok);
@@ -131,7 +133,7 @@ bool GPS::canSleep()
 /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
 void GPS::prepareSleep()
 {
-    // discard all rx serial bytes so we don't try to parse them when we come back
+    ublox.powerOff();
 }
 
 void GPS::doTask()
@@ -183,6 +185,7 @@ void GPS::doTask()
         hasValidLocation = true;
         wantNewLocation = false;
         notifyObservers();
+        //ublox.powerOff();
     }
     else // we didn't get a location update, go back to sleep and hope the characters show up
         wantNewLocation = true;
