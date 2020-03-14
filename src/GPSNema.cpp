@@ -1,15 +1,11 @@
 
-#include "GPS.h"
+#include "GPSNema.h"
 #include "time.h"
 #include <sys/time.h>
 #include "configuration.h"
+#include "GPS.h"
 
-
-HardwareSerial _serial_gps(GPS_SERIAL_NUM);
-
-RTC_DATA_ATTR bool timeSetFromGPS; // We only reset our time once per _boot_ after that point just run from the internal clock (even across sleeps)
-
-GPS gps;
+// GPSNema gps;
 
 // stuff that really should be in in the instance instead...
 static uint32_t timeStartMsec;  // Once we have a GPS lock, this is where we hold the initial msec clock that corresponds to that time
@@ -18,37 +14,20 @@ static uint64_t zeroOffsetSecs; // GPS based time in secs since 1970 - only upda
 static bool hasValidLocation; // default to false, until we complete our first read
 static bool wantNewLocation = true;
 
-GPS::GPS() : PeriodicTask()
+GPSNema::GPSNema() : PeriodicTask()
 {
 }
 
-void GPS::setup()
+void GPSNema::setup()
 {
-    readFromRTC(); // read the main CPU RTC at first
+    readFromRTC();
 
 #ifdef GPS_RX_PIN
     _serial_gps.begin(GPS_BAUDRATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
-    ublox.enableDebugging(Serial);
-
-#if 0
-    // note: the lib's implementation has the wrong docs for what the return val is
-    // it is not a bool, it returns zero for success
-    bool errCode = ublox.begin(_serial_gps);
-    assert(!errCode); // FIXME, report hw failure on screen
-
-    bool ok = ublox.setUART1Output(COM_TYPE_UBX); // Use native API
-    assert(ok);
-    ok = ublox.setNavigationFrequency(1); //Produce one solutions per second
-    assert(ok);
-    ok = ublox.setAutoPVT(true);
-    assert(ok);
-    // ublox.saveConfiguration();
-    assert(ok);
-#endif
 #endif
 }
 
-void GPS::readFromRTC()
+void GPSNema::readFromRTC()
 {
     struct timeval tv; /* btw settimeofday() is helpfull here too*/
 
@@ -63,7 +42,7 @@ void GPS::readFromRTC()
 }
 
 /// If we haven't yet set our RTC this boot, set it from a GPS derived time
-void GPS::perhapsSetRTC(const struct timeval *tv)
+void GPSNema::perhapsSetRTC(const struct timeval *tv)
 {
     if (!timeSetFromGPS)
     {
@@ -77,88 +56,101 @@ void GPS::perhapsSetRTC(const struct timeval *tv)
 #include <time.h>
 
 // for the time being we need to rapidly read from the serial port to prevent overruns
-void GPS::loop()
+void GPSNema::loop()
 {
     PeriodicTask::loop();
 }
 
-uint32_t GPS::getTime()
+uint32_t GPSNema::getTime()
 {
     return ((millis() - timeStartMsec) / 1000) + zeroOffsetSecs;
 }
 
-uint32_t GPS::getValidTime()
+uint32_t GPSNema::getValidTime()
 {
     return timeSetFromGPS ? getTime() : 0;
 }
 
 /// Returns true if we think the board can enter deep or light sleep now (we might be trying to get a GPS lock)
-bool GPS::canSleep()
+bool GPSNema::canSleep()
 {
     return !wantNewLocation;
 }
 
 /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
-void GPS::prepareSleep()
+void GPSNema::prepareSleep()
 {
     // discard all rx serial bytes so we don't try to parse them when we come back
+    while (_serial_gps.available())
+    {
+        _serial_gps.read();
+    }
+
+    // make the parser bail on whatever it was parsing
+    encode('\n');
 }
 
-void GPS::doTask()
+void GPSNema::doTask()
 {
 #ifdef GPS_RX_PIN
     // Consume all characters that have arrived
 
-#if 0
-    ublox.checkUblox(); //See if new data is available. Process bytes as they come in.
+    while (_serial_gps.available())
+    {
+        encode(_serial_gps.read());
+        // DEBUG_MSG("Got GPS response\n");
+    }
 
-    if (ublox.getPVT())
-    { // we only notify if position has changed
-        if (!timeSetFromGPS)
-        {
-            struct timeval tv;
+    if (!timeSetFromGPS && time.isValid() && date.isValid())
+    {
+        struct timeval tv;
 
-            DEBUG_MSG("Got time from GPS month=%d, year=%d\n", ublox.getMonth(), ublox.getYear());
+        DEBUG_MSG("Got time from GPS\n");
 
-            /* Convert to unix time 
+        /* Convert to unix time 
         The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z). 
         */
-            struct tm t;
-            t.tm_sec = ublox.getSecond();
-            t.tm_min = ublox.getMinute();
-            t.tm_hour = ublox.getHour();
-            t.tm_mday = ublox.getDay();
-            t.tm_mon = ublox.getMonth() - 1;
-            t.tm_year = ublox.getYear() - 1900;
-            t.tm_isdst = false;
-            time_t res = mktime(&t);
-            tv.tv_sec = res;
-            tv.tv_usec = 0; // time.centisecond() * (10 / 1000);
+        struct tm t;
+        t.tm_sec = time.second();
+        t.tm_min = time.minute();
+        t.tm_hour = time.hour();
+        t.tm_mday = date.day();
+        t.tm_mon = date.month() - 1;
+        t.tm_year = date.year() - 1900;
+        t.tm_isdst = false;
+        time_t res = mktime(&t);
+        tv.tv_sec = res;
+        tv.tv_usec = 0; // time.centisecond() * (10 / 1000);
 
-            // FIXME
-            // perhapsSetRTC(&tv);
-        }
+        perhapsSetRTC(&tv);
+    }
+#endif
 
-        DEBUG_MSG("new gps pos\n");
-        latitude = ublox.getLatitude() * 10e-7;
-        longitude = ublox.getLongitude() * 10e-7;
-        altitude = ublox.getAltitude() / 1000; // in mm convert to meters
+    if (location.isValid() && location.isUpdated())
+    { // we only notify if position has changed
+        // DEBUG_MSG("new gps pos\n");
         hasValidLocation = true;
         wantNewLocation = false;
         notifyObservers();
     }
     else // we didn't get a location update, go back to sleep and hope the characters show up
         wantNewLocation = true;
-#endif
-#endif
 
     // Once we have sent a location once we only poll the GPS rarely, otherwise check back every 100ms until we have something over the serial
     setPeriod(hasValidLocation && !wantNewLocation ? 30 * 1000 : 100);
 }
 
-void GPS::startLock()
+void GPSNema::startLock()
 {
     DEBUG_MSG("Looking for GPS lock\n");
     wantNewLocation = true;
     setPeriod(1);
+}
+
+String GPSNema::getTimeStr()
+{
+    static char t[12]; // used to sprintf for Serial output
+
+    snprintf(t, sizeof(t), "%02d:%02d:%02d", time.hour(), time.minute(), time.second());
+    return t;
 }
