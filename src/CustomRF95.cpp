@@ -21,6 +21,7 @@ CustomRF95::CustomRF95(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &
 bool CustomRF95::canSleep()
 {
     // We allow initializing mode, because sometimes while testing we don't ever call init() to turn on the hardware
+    DEBUG_MSG("canSleep, mode=%d, isRx=%d, txEmpty=%d, txGood=%d\n", _mode, _isReceiving, txQueue.isEmpty(), _txGood);
     return (_mode == RHModeInitialising || _mode == RHModeIdle || _mode == RHModeRx) && !_isReceiving && txQueue.isEmpty(); 
 }
 

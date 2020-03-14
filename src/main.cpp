@@ -341,6 +341,9 @@ void loop()
   // axpDebugOutput.loop();
   loopBLE();
 
+  // for debug printing
+  // service.radio.rf95.canSleep();
+
 #ifdef T_BEAM_V10
   if (axp192_found)
   {
