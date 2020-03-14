@@ -25,6 +25,7 @@ static void sdsEnter()
 
 static void lsEnter()
 {
+    DEBUG_MSG("lsEnter begin\n");
     screen.setOn(false);
 
     while (!service.radio.rf95.canSleep())
@@ -34,10 +35,14 @@ static void lsEnter()
 
     //if (!isUSBPowered)      // FIXME - temp hack until we can put gps in sleep mode, if we have AC when we go to sleep then leave GPS on
     //    setGPSPower(false); // kill GPS power
+
+    DEBUG_MSG("lsEnter end\n");
 }
 
 static void lsIdle()
 {
+    DEBUG_MSG("lsIdle begin ls_secs=%u\n", radioConfig.preferences.ls_secs);
+
     uint32_t secsSlept = 0;
     esp_sleep_source_t wakeCause = ESP_SLEEP_WAKEUP_UNDEFINED;
     bool reached_ls_secs = false;
@@ -69,6 +74,8 @@ static void lsIdle()
     }
     else
     {
+        DEBUG_MSG("wakeCause %d\n", wakeCause);
+
         // Regardless of why we woke just transition to NB (and that state will handle stuff like IRQs etc)
         powerFSM.trigger(EVENT_WAKE_TIMER);
     }
