@@ -15,6 +15,8 @@
  */
 class CustomRF95 : public RH_RF95
 {
+    friend class MeshRadio; // for debugging we let that class touch pool
+
     MemoryPool<MeshPacket> &pool;
     PointerQueue<MeshPacket> &rxDest;
     PointerQueue<MeshPacket> txQueue;

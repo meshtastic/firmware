@@ -13,17 +13,22 @@
 #define CH_SPACING_US   2.16f // MHz
 #define NUM_CHANNELS_US 13
 
-// EU channel settings
-#define CH0_EU          865.2f // MHz
-#define CH_SPACING_EU   0.3f // MHz
-#define NUM_CHANNELS_EU 10
+// EU433 channel settings
+#define CH0_EU433          433.175f // MHz
+#define CH_SPACING_EU433   0.2f // MHz
+#define NUM_CHANNELS_EU433 8
+
+// EU865 channel settings
+#define CH0_EU865          865.2f // MHz
+#define CH_SPACING_EU865   0.3f // MHz
+#define NUM_CHANNELS_EU865 10
 
 // CN channel settings
 #define CH0_CN          470.0f // MHz
 #define CH_SPACING_CN   2.0f // MHz FIXME, this is just a guess for 470-510
 #define NUM_CHANNELS_CN 20
 
-// CN channel settings
+// JP channel settings
 #define CH0_JP          920.0f // MHz
 #define CH_SPACING_JP   0.5f // MHz FIXME, this is just a guess for 920-925
 #define NUM_CHANNELS_JP 10
@@ -33,10 +38,14 @@
 #define CH0 CH0_US
 #define CH_SPACING CH_SPACING_US
 #define NUM_CHANNELS NUM_CHANNELS_US
-#elif defined(HW_VERSION_EU)
-#define CH0 CH0_EU
-#define CH_SPACING CH_SPACING_EU
-#define NUM_CHANNELS NUM_CHANNELS_EU
+#elif defined(HW_VERSION_EU433)
+#define CH0 CH0_EU433
+#define CH_SPACING CH_SPACING_EU433
+#define NUM_CHANNELS NUM_CHANNELS_EU433
+#elif defined(HW_VERSION_EU865)
+#define CH0 CH0_EU865
+#define CH_SPACING CH_SPACING_EU865
+#define NUM_CHANNELS NUM_CHANNELS_EU865
 #elif defined(HW_VERSION_CN)
 #define CH0 CH0_CN
 #define CH_SPACING CH_SPACING_CN

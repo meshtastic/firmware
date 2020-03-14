@@ -25,6 +25,9 @@ The band is from 902 to 928 MHz. It mentions channel number and its respective c
 Channel zero starts at 903.08 MHz center frequency.
 */
 
+/// Sometimes while debugging it is useful to set this false, to disable rf95 accesses
+bool useHardware = true;
+
 MeshRadio::MeshRadio(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &_rxDest)
     : rf95(_pool, _rxDest),
       manager(rf95)
@@ -45,6 +48,9 @@ MeshRadio::MeshRadio(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &_r
 
 bool MeshRadio::init()
 {
+  if (!useHardware)
+    return true;
+
   DEBUG_MSG("Starting meshradio init...\n");
 
 #ifdef RESET_GPIO
@@ -109,13 +115,16 @@ void MeshRadio::reloadConfig()
   rf95.setModeRx();
 }
 
-
 ErrorCode MeshRadio::send(MeshPacket *p)
 {
-  return rf95.send(p);
+  if (useHardware)
+    return rf95.send(p);
+  else
+  {
+    rf95.pool.release(p);
+    return ERRNO_OK;
+  }
 }
-
-
 
 void MeshRadio::loop()
 {

@@ -6,6 +6,7 @@
 #include "screen.h"
 #include "PowerFSM.h"
 #include "GPS.h"
+#include "main.h"
 
 static void sdsEnter()
 {
@@ -24,29 +25,24 @@ static void sdsEnter()
 
 static void lsEnter()
 {
-    /*
-      // while we have bluetooth on, we can't do light sleep, but once off stay in light_sleep all the time
-  // we will wake from light sleep on button press or interrupt from the RF95 radio
-  if (!bluetoothOn && !is_screen_on() && service.radio.rf95.canSleep() && gps.canSleep())
-    doLightSleep(radioConfig.preferences.ls_secs); 
-  else
-  {
-    delay(msecstosleep);
-  } */
+    screen.setOn(false);
 
     while (!service.radio.rf95.canSleep())
         delay(10); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
 
     gps.prepareSleep(); // abandon in-process parsing
-    setGPSPower(false); // kill GPS power
+
+    if (!isUSBPowered)      // FIXME - temp hack until we can put gps in sleep mode, if we have AC when we go to sleep then leave GPS on
+        setGPSPower(false); // kill GPS power
 }
 
 static void lsIdle()
 {
     uint32_t secsSlept = 0;
     esp_sleep_source_t wakeCause = ESP_SLEEP_WAKEUP_UNDEFINED;
+    bool reached_ls_secs = false;
 
-    while (secsSlept < radioConfig.preferences.ls_secs)
+    while (!reached_ls_secs)
     {
         // Briefly come out of sleep long enough to blink the led once every few seconds
         uint32_t sleepTime = 5;
@@ -62,11 +58,20 @@ static void lsIdle()
             break;
 
         secsSlept += sleepTime;
+        reached_ls_secs = secsSlept >= radioConfig.preferences.ls_secs;
     }
     setLed(false);
 
-    // Regardless of why we woke (for now) just transition to NB (and that state will handle stuff like IRQs etc)
-    powerFSM.trigger(EVENT_WAKE_TIMER);
+    if (reached_ls_secs)
+    {
+        // stay in LS mode but let loop check whatever it wants
+        DEBUG_MSG("reached ls_secs, servicing loop()\n");
+    }
+    else
+    {
+        // Regardless of why we woke just transition to NB (and that state will handle stuff like IRQs etc)
+        powerFSM.trigger(EVENT_WAKE_TIMER);
+    }
 }
 
 static void lsExit()
@@ -77,6 +82,7 @@ static void lsExit()
 
 static void nbEnter()
 {
+    screen.setOn(false);
     setBluetoothEnable(false);
 
     // FIXME - check if we already have packets for phone and immediately trigger EVENT_PACKETS_FOR_PHONE
@@ -93,10 +99,7 @@ static void onEnter()
     setBluetoothEnable(true);
 }
 
-static void onExit()
-{
-    screen.setOn(false);
-}
+
 static void wakeForPing()
 {
 }
@@ -110,7 +113,7 @@ State stateSDS(sdsEnter, NULL, NULL, "SDS");
 State stateLS(lsEnter, lsIdle, lsExit, "LS");
 State stateNB(nbEnter, NULL, NULL, "NB");
 State stateDARK(darkEnter, NULL, NULL, "DARK");
-State stateON(onEnter, NULL, onExit, "ON");
+State stateON(onEnter, NULL, NULL, "ON");
 Fsm powerFSM(&stateDARK);
 
 void PowerFSM_setup()
@@ -130,8 +133,8 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_PRESS, NULL, "Press");
     powerFSM.add_transition(&stateON, &stateON, EVENT_PRESS, screenPress, "Press"); // reenter On to restart our timers
 
-    powerFSM.add_transition(&stateNB, &stateON, EVENT_PRESS, NULL, "Bluetooth pairing");
-    powerFSM.add_transition(&stateON, &stateON, EVENT_PRESS, NULL, "Bluetooth pairing");
+    powerFSM.add_transition(&stateDARK, &stateON, EVENT_BLUETOOTH_PAIR, NULL, "Bluetooth pairing");
+    powerFSM.add_transition(&stateON, &stateON, EVENT_BLUETOOTH_PAIR, NULL, "Bluetooth pairing");
 
     powerFSM.add_transition(&stateNB, &stateON, EVENT_NODEDB_UPDATED, NULL, "NodeDB update");
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_NODEDB_UPDATED, NULL, "NodeDB update");
@@ -140,6 +143,9 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateLS, &stateON, EVENT_RECEIVED_TEXT_MSG, NULL, "Received text");
     powerFSM.add_transition(&stateNB, &stateON, EVENT_RECEIVED_TEXT_MSG, NULL, "Received text");
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_RECEIVED_TEXT_MSG, NULL, "Received text");
+    powerFSM.add_transition(&stateON, &stateON, EVENT_RECEIVED_TEXT_MSG, NULL, "Received text"); // restarts the sleep timer
+
+    powerFSM.add_transition(&stateDARK, &stateDARK, EVENT_CONTACT_FROM_PHONE, NULL, "Contact from phone");
 
     powerFSM.add_transition(&stateNB, &stateDARK, EVENT_PACKET_FOR_PHONE, NULL, "Packet for phone");
 
@@ -150,6 +156,10 @@ void PowerFSM_setup()
     powerFSM.add_timed_transition(&stateNB, &stateLS, radioConfig.preferences.min_wake_secs * 1000, NULL, "Min wake timeout");
 
     powerFSM.add_timed_transition(&stateDARK, &stateLS, radioConfig.preferences.wait_bluetooth_secs * 1000, NULL, "Bluetooth timeout");
+
+    powerFSM.add_timed_transition(&stateLS, &stateSDS, radioConfig.preferences.mesh_sds_timeout_secs * 1000, NULL, "mesh timeout");
+    // removing for now, because some users don't even have phones
+    // powerFSM.add_timed_transition(&stateLS, &stateSDS, radioConfig.preferences.phone_sds_timeout_sec * 1000, NULL, "phone timeout");
 
     powerFSM.run_machine(); // run one interation of the state machine, so we run our on enter tasks for the initial DARK state
 }

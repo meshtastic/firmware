@@ -1,12 +1,16 @@
-This is a mini design doc for various core behaviors...
+# Power Management State Machine
 
-# Rules for sleep
+i.e. sleep behavior
+
+## Power measurements
+
+Since one of the main goals of this project is long battery life, it is important to consider that in our software/protocol design.  Based on initial measurements it seems that the current code should run about three days between charging, and with a bit more software work (see the [TODO list](TODO.md)) a battery life of eight days should be quite doable.  Our current power measurements/model is in [this spreadsheet](https://docs.google.com/spreadsheets/d/1ft1bS3iXqFKU8SApU8ZLTq9r7QQEGESYnVgdtvdT67k/edit?usp=sharing).
 
 ## States
 
 From lower to higher power consumption.
 
-* Super-deep-sleep (SDS) - everything is off, CPU, radio, bluetooth, GPS.  Only wakes due to timer or button press
+* Super-deep-sleep (SDS) - everything is off, CPU, radio, bluetooth, GPS.  Only wakes due to timer or button press.  We enter this mode only after no radio comms for a few hours, used to put the device into what is effectively "off" mode.
   onEntry: setBluetoothOn(false), call doDeepSleep
   onExit: (standard bootup code, starts in DARK)
 
@@ -45,6 +49,7 @@ off during light sleep, but there is a TODO item to fix this.
 * While in NB: If we do have packets the phone (EVENT_PACKETS_FOR_PHONE) would want we transition to DARK mode for wait_bluetooth secs.
 * While in DARK/ON: If we receive EVENT_BLUETOOTH_PAIR we transition to ON and start our screen_on_secs timeout
 * While in NB/DARK/ON: If we receive EVENT_NODEDB_UPDATED we transition to ON (so the new screen can be shown)
+* While in DARK: While the phone talks to us over BLE (EVENT_CONTACT_FROM_PHONE) reset any sleep timers and stay in DARK (needed for bluetooth sw update and nice user experience if the user is reading/replying to texts)
 
 ### events that decrease cpu activity
 
@@ -52,8 +57,9 @@ off during light sleep, but there is a TODO item to fix this.
 * While in ON: If it has been more than screen_on_secs since a press, lower to DARK
 * While in DARK: If time since last contact by our phone exceeds phone_timeout_secs (15 minutes), we transition down into NB mode
 * While in DARK or NB: If nothing above is forcing us to stay in a higher mode (wait_bluetooth_secs, min_wake_secs) we will lower down to LS state
-* While in into LS: If either phone_sds_timeout_secs (default 1 hr) or mesh_sds_timeout_secs (default 1 hr) are exceeded we will lower into SDS mode for sds_secs (default 1 hr) (or a button press).  
-* Any time we enter LS mode: We stay in that mode for ls_secs (default 1 hr) (or until an interrupt, button press)
+* While in LS: If either phone_sds_timeout_secs (default 2 hr) or mesh_sds_timeout_secs (default 2 hr) are exceeded we will lower into SDS mode for sds_secs (default 1 yr) (or a button press).  (Note: phone_sds_timeout_secs is currently disabled for now, because most users 
+are using without a phone)
+* Any time we enter LS mode: We stay in that until an interrupt, button press or other state transition.  Every ls_secs (default 1 hr) and let the arduino loop() run one iteration (FIXME, not sure if we need this at all), and then immediately reenter lightsleep mode on the CPU.
 
 TODO: Eventually these scheduled intervals should be synchronized to the GPS clock, so that we can consider leaving the lora receiver off to save even more power.
 TODO: In NB mode we should put cpu into light sleep any time we really aren't that busy (without declaring LS state) - i.e. we should leave GPS on etc...
@@ -77,49 +83,3 @@ General ideas to hit the power draws our spreadsheet predicts.  Do the easy ones
 * see section 7.3 of https://cdn.sparkfun.com/assets/learn_tutorials/8/0/4/RFM95_96_97_98W.pdf and have hope radio wake only when a valid packet is received.  Possibly even wake the ESP32 from deep sleep via GPIO.
 * never enter deep sleep while connected to USB power (but still go to other low power modes)
 * when main cpu is idle (in loop), turn cpu clock rate down and/or activate special sleep modes.  We want almost everything shutdown until it gets an interrupt.
-
-# Mesh broadcast algoritm
-
-FIXME - instead look for standard solutions.  this approach seems really suboptimal, because too many nodes will try to rebroast.  If
-all else fails could always use the stock radiohead solution - though super inefficent.
-
-## approach 1
-
-* send all broadcasts with a TTL
-* periodically(?) do a survey to find the max TTL that is needed to fully cover the current network.
-* to do a study first send a broadcast (maybe our current initial user announcement?) with TTL set to one (so therefore no one will rebroadcast our request)
-* survey replies are sent unicast back to us (and intervening nodes will need to keep the route table that they have built up based on past packets)
-* count the number of replies to this TTL 1 attempt.  That is the number of nodes we can reach without any rebroadcasts
-* repeat the study with a TTL of 2 and then 3.  stop once the # of replies stops going up.
-* it is important for any node to do listen before talk to prevent stomping on other rebroadcasters...
-* For these little networks I bet a max TTL would never be higher than 3?
-
-## approach 2
-
-* send a TTL1 broadcast, the replies let us build a list of the nodes (stored as a bitvector?) that we can see (and their rssis)
-* we then broadcast out that bitvector (also TTL1) asking "can any of ya'll (even indirectly) see anyone else?"
-* if a node can see someone I missed (and they are the best person to see that node), they reply (unidirectionally) with the missing nodes and their rssis (other nodes might sniff (and update their db) based on this reply but they don't have to)
-* given that the max number of nodes in this mesh will be like 20 (for normal cases), I bet globally updating this db of "nodenums and who has the best rssi for packets from that node" would be useful
-* once the global DB is shared, when a node wants to broadcast, it just sends out its broadcast . the first level receivers then make a decision "am I the best to rebroadcast to someone who likely missed this packet?" if so, rebroadcast
-
-## approach 3
-
-* when a node X wants to know other nodes positions, it broadcasts its position with want_replies=true.  Then each of the nodes that received that request broadcast their replies (possibly by using special timeslots?)
-* all nodes constantly update their local db based on replies they witnessed.
-* after 10s (or whatever) if node Y notices that it didn't hear a reply from node Z (that Y has heard from recently ) to that initial request, that means Z never heard the request from X.  Node Y will reply to X on Z's behalf.
-* could this work for more than one hop?  Is more than one hop needed?  Could it work for sending messages (i.e. for a msg sent to Z with want-reply set). 
-
-## approach 4
-
-look into the literature for this idea specifically.
-
-* don't view it as a mesh protocol as much as a "distributed db unification problem".  When nodes talk to nearby nodes they work together
-to update their nodedbs.  Each nodedb would have a last change date and any new changes that only one node has would get passed to the 
-other node.  This would nicely allow distant nodes to propogate their position to all other nodes (eventually).
-* handle group messages the same way, there would be a table of messages and time of creation.
-* when a node has a new position or message to send out, it does a broadcast.  All the adjacent nodes update their db instantly (this handles 90% of messages I'll bet).  
-* Occasionally a node might broadcast saying "anyone have anything newer than time X?"  If someone does, they send the diffs since that date.
-* essentially everything in this variant becomes broadcasts of "request db updates for >time X - for _all_ or for a particular nodenum" and nodes sending (either due to request or because they changed state) "here's a set of db updates".  Every node is constantly trying to
-build the most recent version of reality, and if some nodes are too far, then nodes closer in will eventually forward their changes to the distributed db.
-* construct non ambigious rules for who broadcasts to request db updates.  ideally the algorithm should nicely realize node X can see most other nodes, so they should just listen to all those nodes and minimize the # of broadcasts. the distributed picture of nodes rssi could be useful here?
-* possibly view the BLE protocol to the radio the same way - just a process of reconverging the node/msgdb database.

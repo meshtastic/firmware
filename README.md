@@ -1,6 +1,8 @@
 # Meshtastic-esp32
 This is the device side code for the [meshtastic.org](https://www.meshtastic.org) project.  
 
+![Continuous Integration](https://github.com/meshtastic/Meshtastic-esp32/workflows/Continuous%20Integration/badge.svg)
+
 Meshtastic is a project that lets you use
 inexpensive GPS mesh radios as an extensible, super long battery life mesh GPS communicator.  These radios are great for hiking, skiing, paragliding - 
 essentially any hobby where you don't have reliable internet access.  Each member of your private mesh can always see the location and distance of all other
@@ -11,27 +13,27 @@ will optionally work with your phone, but no phone is required.
 
 Typical time between recharging the radios should be about eight days.
 
-This project is currently early-alpha, but if you have questions please join our chat [![Join the chat at https://gitter.im/Meshtastic/community](https://badges.gitter.im/Meshtastic/community.svg)](https://gitter.im/Meshtastic/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge).
+This project is currently early-alpha, but if you have questions please [join our discussion forum](https://meshtastic.discourse.group/).
 
 This software is 100% open source and developed by a group of hobbyist experimenters.  No warranty is provided, if you'd like to improve it - we'd love your help.  Please post in the chat.  
 
 ## Supported hardware
-We currently support two brands of radios.  The [TTGO T-Beam](https://www.aliexpress.com/item/4000119152086.html) and the [Heltec LoRa 32](https://heltec.org/project/wifi-lora-32/).  Most users should buy the T-Beam and a 18650 battery (total cost less than $35).  Make
+We currently support three models of radios.  The [TTGO T-Beam](https://www.aliexpress.com/item/4000119152086.html), [TTGO LORA32](https://www.banggood.com/LILYGO-TTGO-LORA32-868Mhz-SX1276-ESP32-Oled-Display-bluetooth-WIFI-Lora-Development-Module-Board-p-1248652.html?cur_warehouse=UK) and the [Heltec LoRa 32](https://heltec.org/project/wifi-lora-32/).  Most users should buy the T-Beam and a 18650 battery (total cost less than $35).  Make 
 sure to buy the frequency range which is legal for your country.  For the USA, you should buy the 915MHz version.  Getting a version that include a screen
 is optional, but highly recommended.
 
 See (meshtastic.org) for 3D printable cases.
 
 ## Installing the firmware
-Prebuilt binaries for the supported radios is available in our [releases](https://github.com/geeksville/Meshtastic-esp32/releases).  Your initial installation has to happen over USB from your Mac, Windows or Linux PC.   Once our software is installed, all future software updates happen over bluetooth from your phone.
+Prebuilt binaries for the supported radios is available in our [releases](https://github.com/meshtastic/Meshtastic-esp32/releases).  Your initial installation has to happen over USB from your Mac, Windows or Linux PC.   Once our software is installed, all future software updates happen over bluetooth from your phone.
 
 The instructions currently require a few commmand lines, but it should be pretty straightforward.  Please post comments on our group chat if you have problems or successes.  Steps to install:
 
-1. Purchase a radio (see above) with the correct frequencies for your country (915MHz for US or JP, 470MHz for CN, 870MHz for EU).
+1. Purchase a radio (see above) with the correct frequencies for your country (915MHz for US or JP, 470MHz for CN, 433MHz and 870MHz for EU).
 2. Install "pip".  Pip is the python package manager we use to get the esptool installer app.  Instructions [here](https://www.makeuseof.com/tag/install-pip-for-python/).
 3. Run "pip install --upgrade esptool" to get esptool installed on your machine
 4. Connect your radio to your USB port
-5. Confirm that your device is talking to your PC by running "esptool.py chip_id".  You should see something like:
+5. Confirm that your device is talking to your PC by running "esptool.py chip_id".  The Heltec build also works on the TTGO LORA32 radio. You should see something like:
 ```
 mydir$ esptool.py chip_id
 esptool.py v2.6
@@ -76,23 +78,25 @@ Hard resetting via RTS pin...
 8. Please post a comment on our chat so we know if these instructions worked for you ;-).  If you find bugs/have-questions post there also - we will be rapidly iterating over the next few weeks.
 
 ## Meshtastic Android app
-The source code for the (optional) Meshtastic Android app is [here](https://github.com/geeksville/Meshtastic-Android).
-Soon our first alpha release of will be released here:
+The source code for the (optional) Meshtastic Android app is [here](https://github.com/meshtastic/Meshtastic-Android).  
+
+Alpha test builds are current available by opting into our alpha test group.  See (www.meshtastic.org) for instructions.  
+
+After our rate of change slows a bit, we will make beta builds available here (without needing to join the alphatest group):
 [![Download at https://play.google.com/store/apps/details?id=com.geeksville.mesh](https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png)](https://play.google.com/store/apps/details?id=com.geeksville.mesh&referrer=utm_source%3Dgithub%26utm_medium%3Desp32-readme%26utm_campaign%3Dmeshtastic-esp32%2520readme%26anid%3Dadmob&pcampaignid=pcampaignidMKT-Other-global-all-co-prtnr-py-PartBadge-Mar2515-1)
 
 # Development
-The following sections are probably only interesting if you want to join us in developing the software.  
 
-## Power measurements
-Since one of the main goals of this project is long battery life, it is important to consider that in our software/protocol design.  Based on initial measurements it seems that the current code should run about three days between charging, and with a bit more software work (see the [TODO list](TODO.md)) a battery life of eight days should be quite doable.  Our current power measurements/model is in [this spreadsheet](https://docs.google.com/spreadsheets/d/1ft1bS3iXqFKU8SApU8ZLTq9r7QQEGESYnVgdtvdT67k/edit?usp=sharing).
+We'd love to have you join us on this merry little project.  Please see our [development documents](./docs/software/sw-design.md) and [join us in our discussion forum](https://meshtastic.discourse.group/).
 
-## Build instructions
-This project uses the simple PlatformIO build system. You can use the IDE, but for brevity
-in these instructions I describe use of their command line tool.
+# Credits
 
-1. Purchase a suitable radio (see above)
-2. Install [PlatformIO](https://platformio.org/platformio-ide)
-3. Download this git repo and cd into it
-4. Plug the radio into your USB port
-4. Type "pio run -t upload" (This command will fetch dependencies, build the project and install it on the board via USB)
-5. Platform IO also installs a very nice VisualStudio Code based IDE, see their [tutorial](https://docs.platformio.org/en/latest/tutorials/espressif32/arduino_debugging_unit_testing.html) if you'd like to use it
+This project is run by volunteers.  Past contributors include:
+
+* @astro-arphid: Added support for 433MHz radios in europe.
+* @claesg: Various documentation fixes and 3D print enclosures
+* @girtsf: So far our CI system, but soon lots of device improvements
+
+# IMPORTANT DISCLAIMERS AND FAQ
+
+For a listing of currently missing features and a FAQ click [here](docs/faq.md).

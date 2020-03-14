@@ -86,6 +86,9 @@ private:
 
     /// handle a user packet that just arrived on the radio, return NULL if we should not process this packet at all
     MeshPacket *handleFromRadioUser(MeshPacket *mp);
+
+    /// look at inbound packets and if they contain a position with time, possibly set our clock
+    void handleIncomingPosition(MeshPacket *mp);
 };
 
 extern MeshService service;

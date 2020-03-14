@@ -14,11 +14,12 @@
 #include "esp_pm.h"
 #include "MeshRadio.h"
 #include "main.h"
+#include "sleep.h"
 
 #ifdef T_BEAM_V10
 #include "axp20x.h"
 extern AXP20X_Class axp;
-#endif 
+#endif
 
 // deep sleep support
 RTC_DATA_ATTR int bootCount = 0;
@@ -26,11 +27,6 @@ esp_sleep_source_t wakeCause; // the reason we booted this time
 
 #define xstr(s) str(s)
 #define str(s) #s
-
-#include "esp_bt_main.h"
-
-bool bluetoothOn = true; // we turn it on during setup() so default on
-
 
 // -----------------------------------------------------------------------------
 // Application
@@ -65,7 +61,7 @@ void setLed(bool ledOn)
 
 void setGPSPower(bool on)
 {
-    DEBUG_MSG("Setting GPS power=%d\n", on);
+  DEBUG_MSG("Setting GPS power=%d\n", on);
 
 #ifdef T_BEAM_V10
   if (axp192_found)
@@ -86,9 +82,24 @@ void initDeepSleep()
         wakeButtons = ((uint64_t)1) << buttons.gpios[0];
     */
 
-  DEBUG_MSG("booted, wake cause %d (boot count %d)\n", wakeCause, bootCount);
-}
+  // If we booted because our timer ran out or the user pressed reset, send those as fake events
+  const char *reason = "reset"; // our best guess
+  RESET_REASON hwReason = rtc_get_reset_reason(0);
 
+  if (hwReason == RTCWDT_BROWN_OUT_RESET)
+    reason = "brownout";
+
+  if (hwReason == TG0WDT_SYS_RESET)
+    reason = "taskWatchdog";
+
+  if (hwReason == TG1WDT_SYS_RESET)
+    reason = "intWatchdog";
+
+  if (wakeCause == ESP_SLEEP_WAKEUP_TIMER)
+    reason = "timeout";
+
+  DEBUG_MSG("booted, wake cause %d (boot count %d), reset_reason=%s\n", wakeCause, bootCount, reason);
+}
 
 void doDeepSleep(uint64_t msecToWake)
 {
@@ -177,31 +188,6 @@ void doDeepSleep(uint64_t msecToWake)
   esp_deep_sleep_start();                              // TBD mA sleep current (battery)
 }
 
-
-void setBluetoothEnable(bool on)
-{
-  if (on != bluetoothOn)
-  {
-    DEBUG_MSG("Setting bluetooth enable=%d\n", on);
-
-    bluetoothOn = on;
-    if (on)
-    {
-      if (esp_bt_controller_enable(ESP_BT_MODE_BTDM) != ESP_OK)
-        DEBUG_MSG("error reenabling bt controller\n");
-      if (esp_bluedroid_enable() != ESP_OK)
-        DEBUG_MSG("error reenabling bluedroid\n");
-    }
-    else
-    {
-      if (esp_bluedroid_disable() != ESP_OK)
-        DEBUG_MSG("error disabling bluedroid\n");
-      if (esp_bt_controller_disable() != ESP_OK)
-        DEBUG_MSG("error disabling bt controller\n");
-    }
-  }
-}
-
 /**
  * enter light sleep (preserves ram but stops everything about CPU).
  * 
@@ -212,7 +198,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
   //DEBUG_MSG("Enter light sleep\n");
   uint64_t sleepUsec = sleepMsec * 1000LL;
 
-  Serial.flush(); // send all our characters before we stop cpu clock
+  Serial.flush();            // send all our characters before we stop cpu clock
   setBluetoothEnable(false); // has to be off before calling light sleep
 
   // NOTE! ESP docs say we must disable bluetooth and wifi before light sleep
