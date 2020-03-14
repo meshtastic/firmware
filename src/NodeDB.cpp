@@ -68,10 +68,6 @@ void NodeDB::init()
     radioConfig.preferences.ls_secs = 60 * 60;
     radioConfig.preferences.phone_timeout_secs = 15 * 60;
 
-#ifdef GPS_RX_PIN
-    // some hardware defaults to have a built in GPS
-    myNodeInfo.has_gps = true;
-#endif
     strncpy(myNodeInfo.region, xstr(HW_VERSION), sizeof(myNodeInfo.region));
     strncpy(myNodeInfo.firmware_version, xstr(APP_VERSION), sizeof(myNodeInfo.firmware_version));
     strncpy(myNodeInfo.hw_model, HW_VENDOR, sizeof(myNodeInfo.hw_model));

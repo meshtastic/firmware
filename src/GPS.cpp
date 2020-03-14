@@ -3,6 +3,7 @@
 #include "time.h"
 #include <sys/time.h>
 #include "configuration.h"
+#include "NodeDB.h"
 
 // stuff that really should be in in the instance instead...
 HardwareSerial _serial_gps(GPS_SERIAL_NUM);
@@ -98,8 +99,16 @@ void GPS::doTask()
 
     while (_serial_gps.available())
     {
-        encode(_serial_gps.read());
-        // DEBUG_MSG("Got GPS response\n");
+        if (encode(_serial_gps.read()))
+        {
+            if (!myNodeInfo.has_gps)
+            {
+                // We successfully decoded a GPS message. Set the flag so that
+                // phone doesn't have to do GPS stuff.
+                DEBUG_MSG("Saw first GPS response\n");
+                myNodeInfo.has_gps = true;
+            }
+        }
     }
 
     if (!timeSetFromGPS && time.isValid() && date.isValid())
