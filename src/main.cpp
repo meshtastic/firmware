@@ -44,14 +44,15 @@
 AXP20X_Class axp;
 bool pmu_irq = false;
 #endif
-bool isCharging = false;
-bool isUSBPowered = false;
 
-bool ssd1306_found = false;
-bool axp192_found = false;
+// these flags are all in bss so they default false
+bool isCharging;
+bool isUSBPowered;
 
-#define xstr(s) str(s)
-#define str(s) #s
+bool ssd1306_found;
+bool axp192_found;
+
+bool bluetoothOn;
 
 // -----------------------------------------------------------------------------
 // Application
@@ -171,8 +172,8 @@ void axp192Init()
       axp.clearIRQ();
 #endif
 
-      isCharging = axp.isChargeing();
-      isUSBPowered = axp.isVBUSPlug();
+      isCharging = axp.isChargeing() ? 1 : 0;
+      isUSBPowered = axp.isVBUSPlug() ? 1 : 0;
     }
     else
     {
@@ -234,7 +235,7 @@ void setup()
 #endif
 
   // Hello
-  DEBUG_MSG("%s %s\n", xstr(APP_NAME), str(APP_VERSION));
+  DEBUG_MSG("Meshtastic swver=%s, hwver=%s\n", xstr(APP_VERSION), xstr(HW_VERSION));
 
   // Don't init display if we don't have one or we are waking headless due to a timer event
   if (wakeCause == ESP_SLEEP_WAKEUP_TIMER)
@@ -250,22 +251,51 @@ void setup()
 
   service.init();
 
-  bool useBluetooth = true;
-  if (useBluetooth)
-  {
-    DEBUG_MSG("Starting bluetooth\n");
-    BLEServer *serve = initBLE(getDeviceName(), HW_VENDOR, str(APP_VERSION)); // FIXME, use a real name based on the macaddr
-    createMeshBluetoothService(serve);
-
-    // Start advertising - this must be done _after_ creating all services
-    serve->getAdvertising()->start();
-  }
-
-  setBluetoothEnable(false);
+  // setBluetoothEnable(false); we now don't start bluetooth until we enter the proper state
   setCPUFast(false); // 80MHz is fine for our slow peripherals
 
   PowerFSM_setup();
   powerFSM.trigger(EVENT_BOOT); // transition to ON, FIXME, only do this for cold boots, not waking from SDS
+}
+
+void initBluetooth()
+{
+  DEBUG_MSG("Starting bluetooth\n");
+
+  // FIXME - we are leaking like crazy
+  // AllocatorScope scope(btPool);
+
+  BLEServer *serve = initBLE(getDeviceName(), HW_VENDOR, xstr(APP_VERSION), xstr(HW_VERSION)); // FIXME, use a real name based on the macaddr
+  createMeshBluetoothService(serve);
+
+  // Start advertising - this must be done _after_ creating all services
+  serve->getAdvertising()->start();
+}
+
+void setBluetoothEnable(bool on)
+{
+  if (on != bluetoothOn)
+  {
+    DEBUG_MSG("Setting bluetooth enable=%d\n", on);
+
+    bluetoothOn = on;
+    if (on)
+    {
+      Serial.printf("Pre BT: %u heap size\n", ESP.getFreeHeap());
+      //ESP_ERROR_CHECK( heap_trace_start(HEAP_TRACE_LEAKS) );
+      initBluetooth();
+    }
+    else
+    {
+      // We have to totally teardown our bluetooth objects to prevent leaks
+      stopMeshBluetoothService(); // Must do before shutting down bluetooth
+      deinitBLE();
+      destroyMeshBluetoothService(); // must do after deinit, because it frees our service
+      Serial.printf("Shutdown BT: %u heap size\n", ESP.getFreeHeap());
+      //ESP_ERROR_CHECK( heap_trace_stop() );
+      //heap_trace_dump();
+    }
+  }
 }
 
 uint32_t ledBlinker()
@@ -322,11 +352,15 @@ void loop()
 
       DEBUG_MSG("pmu irq!\n");
 
-      isCharging = axp.isChargeing();
-      isUSBPowered = axp.isVBUSPlug();
+      isCharging = axp.isChargeing() ? 1 : 0;
+      isUSBPowered = axp.isVBUSPlug() ? 1 : 0;
 
       axp.clearIRQ();
     }
+
+    // FIXME AXP192 interrupt is not firing, remove this temporary polling of battery state
+    isCharging = axp.isChargeing() ? 1 : 0;
+    isUSBPowered = axp.isVBUSPlug() ? 1 : 0;
 #endif
   }
 #endif
@@ -337,7 +371,7 @@ void loop()
   static uint32_t minPressMs; // what tick should we call this press long enough
   static uint32_t lastPingMs;
 
-  if (!digitalRead(BUTTON_PIN)) 
+  if (!digitalRead(BUTTON_PIN))
   {
     if (!wasPressed)
     { // just started a new press
@@ -371,7 +405,7 @@ void loop()
       // ESP.restart();
     }
   }
-  #endif
+#endif
 
   // No GPS lock yet, let the OS put the main CPU in low power mode for 100ms (or until another interrupt comes in)
   // i.e. don't just keep spinning in loop as fast as we can.

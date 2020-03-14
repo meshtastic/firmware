@@ -21,6 +21,14 @@ MyNodeInfo &myNodeInfo = devicestate.my_node;
 RadioConfig &radioConfig = devicestate.radio;
 ChannelSettings &channelSettings = radioConfig.channel_settings;
 
+/*
+DeviceState versions used to be defined in the .proto file but really only this function cares.  So changed to a 
+#define here.
+*/
+
+#define DEVICESTATE_CUR_VER 2
+#define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
+
 #define FS SPIFFS
 
 /** 
@@ -52,11 +60,11 @@ void NodeDB::init()
 
     radioConfig.preferences.send_owner_interval = 4; // per sw-design.md
     radioConfig.preferences.position_broadcast_secs = 15 * 60;
-    radioConfig.preferences.wait_bluetooth_secs = 30;
+    radioConfig.preferences.wait_bluetooth_secs = 120;
     radioConfig.preferences.screen_on_secs = 30;
-    radioConfig.preferences.mesh_sds_timeout_secs = 60 * 60;
-    radioConfig.preferences.phone_sds_timeout_sec = 60 * 60;
-    radioConfig.preferences.sds_secs = 60 * 60;
+    radioConfig.preferences.mesh_sds_timeout_secs = 2 * 60 * 60;
+    radioConfig.preferences.phone_sds_timeout_sec = 2 * 60 * 60;
+    radioConfig.preferences.sds_secs = 365 * 24 * 60 * 60; // one year
     radioConfig.preferences.ls_secs = 60 * 60;
     radioConfig.preferences.phone_timeout_secs = 15 * 60;
 
@@ -64,6 +72,9 @@ void NodeDB::init()
     // some hardware defaults to have a built in GPS
     myNodeInfo.has_gps = true;
 #endif
+    strncpy(myNodeInfo.region, xstr(HW_VERSION), sizeof(myNodeInfo.region));
+    strncpy(myNodeInfo.firmware_version, xstr(APP_VERSION), sizeof(myNodeInfo.firmware_version));
+    strncpy(myNodeInfo.hw_model, HW_VENDOR, sizeof(myNodeInfo.hw_model));
 
     // Init our blank owner info to reasonable defaults
     esp_efuse_mac_get_default(ourMacAddr);
@@ -144,7 +155,7 @@ void NodeDB::loadFromDisk()
         }
         else
         {
-            if (scratch.version < DeviceState_Version_Minimum)
+            if (scratch.version < DEVICESTATE_MIN_VER)
                 DEBUG_MSG("Warn: devicestate is old, discarding\n");
             else
             {
@@ -173,7 +184,7 @@ void NodeDB::saveToDisk()
 
         //DEBUG_MSG("Presave channel name=%s\n", channelSettings.name);
 
-        devicestate.version = DeviceState_Version_Current;
+        devicestate.version = DEVICESTATE_CUR_VER;
         if (!pb_encode(&stream, DeviceState_fields, &devicestate))
         {
             DEBUG_MSG("Error: can't write protobuf %s\n", PB_GET_ERROR(&stream));
@@ -275,7 +286,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
                     devicestate.rx_text_message = mp;
                     devicestate.has_rx_text_message = true;
                     updateTextMessage = true;
-                    powerFSM.trigger(EVENT_NODEDB_UPDATED);
+                    powerFSM.trigger(EVENT_RECEIVED_TEXT_MSG);
                 }
             }
             break;

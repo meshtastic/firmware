@@ -30,6 +30,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "screen.h"
 #include "mesh-pb-constants.h"
 #include "NodeDB.h"
+#include "main.h"
 
 #define FONT_HEIGHT 14 // actually 13 for "ariel 10" but want a little extra space
 #define FONT_HEIGHT_16 (ArialMT_Plain_16[1] + 1)
@@ -139,6 +140,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 {
     MeshPacket &mp = devicestate.rx_text_message;
     NodeInfo *node = nodeDB.getNode(mp.from);
+    // DEBUG_MSG("drawing text message from 0x%x: %s\n", mp.from, mp.payload.variant.data.payload.bytes);
 
     // Demo for drawStringMaxWidth:
     // with the third parameter you can define the width after which words will be wrapped.
@@ -442,9 +444,19 @@ void drawDebugInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
     static char channelStr[20];
     snprintf(channelStr, sizeof(channelStr), "%s", channelSettings.name);
 
+    // We don't show battery levels yet - for now just lie and show debug info
+    static char batStr[20];
+    snprintf(batStr, sizeof(batStr), "Batt %x%%", (isCharging << 1) + isUSBPowered);
+
+    static char gpsStr[20];
+    if (myNodeInfo.has_gps)
+        snprintf(gpsStr, sizeof(gpsStr), "GPS %d%%", 75); // FIXME, use something based on hdop
+    else
+        gpsStr[0] = '\0'; // Just show emptystring
+
     const char *fields[] = {
-        "Batt 89%",
-        "GPS 75%",
+        batStr,
+        gpsStr,
         usersStr,
         channelStr,
         NULL};
@@ -495,17 +507,21 @@ void Screen::setOn(bool on)
 
     if (on != screenOn)
     {
-        if (on) {
+        if (on)
+        {
+            DEBUG_MSG("Turning on screen\n");
             dispdev.displayOn();
             setPeriod(1); // redraw ASAP
         }
-        else
+        else {
+            DEBUG_MSG("Turning off screen\n");
             dispdev.displayOff();
+        }
         screenOn = on;
     }
 }
 
-static void screen_print(const char *text, uint8_t x, uint8_t y, uint8_t alignment)
+void screen_print(const char *text, uint8_t x, uint8_t y, uint8_t alignment)
 {
     DEBUG_MSG(text);
 
@@ -608,7 +624,6 @@ void Screen::doTask()
         targetFramerate = IDLE_FRAMERATE;
         ui.setTargetFPS(targetFramerate);
     }
-    ui.update();
 
     // While showing the bluetooth pair screen all of our standard screen switching is stopped
     if (!showingBluetooth)
@@ -619,7 +634,7 @@ void Screen::doTask()
             if (millis() > 3 * 1000) // we show the boot screen for a few seconds only
             {
                 showingBootScreen = false;
-                screen_set_frames();
+                setFrames();
             }
         }
         else // standard screen loop handling ehre
@@ -627,12 +642,15 @@ void Screen::doTask()
             // If the # nodes changes, we need to regen our list of screens
             if (nodeDB.updateGUI || nodeDB.updateTextMessage)
             {
-                screen_set_frames();
+                setFrames();
                 nodeDB.updateGUI = false;
                 nodeDB.updateTextMessage = false;
             }
         }
     }
+
+    // This must be after we possibly do screen_set_frames() to ensure we draw the new data
+    ui.update();
 
     // DEBUG_MSG("want fps %d, fixed=%d\n", targetFramerate, ui.getUiState()->frameState);
     // If we are scrolling we need to be called soon, otherwise just 1 fps (to save CPU)
@@ -660,7 +678,7 @@ void screen_start_bluetooth(uint32_t pin)
 }
 
 // restore our regular frame list
-void screen_set_frames()
+void Screen::setFrames()
 {
     DEBUG_MSG("showing standard frames\n");
 

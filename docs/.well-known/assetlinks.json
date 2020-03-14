@@ -1,0 +1,9 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.geeksville.mesh",
+    "sha256_cert_fingerprints":
+    ["D0:05:E7:8B:D2:1B:FA:94:56:1D:6B:90:EB:53:07:1A:74:4F:D9:C2:6F:13:87:6A:D9:17:4F:C2:59:48:02:9D"]
+  }
+}]

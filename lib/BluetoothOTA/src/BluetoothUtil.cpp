@@ -7,10 +7,7 @@
 #include "configuration.h"
 #include "screen.h"
 
-static BLECharacteristic SWVersionCharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_SW_VERSION_STR), BLECharacteristic::PROPERTY_READ);
-static BLECharacteristic ManufacturerCharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_MANU_NAME), BLECharacteristic::PROPERTY_READ);
-static BLECharacteristic HardwareVersionCharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_HW_VERSION_STR), BLECharacteristic::PROPERTY_READ);
-//static BLECharacteristic SerialNumberCharacteristic(BLEUUID((uint16_t) ESP_GATT_UUID_SERIAL_NUMBER_STR), BLECharacteristic::PROPERTY_READ);
+SimpleAllocator btPool;
 
 /**
  * Create standard device info service
@@ -18,6 +15,10 @@ static BLECharacteristic HardwareVersionCharacteristic(BLEUUID((uint16_t)ESP_GAT
 BLEService *createDeviceInfomationService(BLEServer *server, std::string hwVendor, std::string swVersion, std::string hwVersion = "")
 {
   BLEService *deviceInfoService = server->createService(BLEUUID((uint16_t)ESP_GATT_UUID_DEVICE_INFO_SVC));
+
+  BLECharacteristic *swC = new BLECharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_SW_VERSION_STR), BLECharacteristic::PROPERTY_READ);
+  BLECharacteristic *mfC = new BLECharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_MANU_NAME), BLECharacteristic::PROPERTY_READ);
+  // BLECharacteristic SerialNumberCharacteristic(BLEUUID((uint16_t) ESP_GATT_UUID_SERIAL_NUMBER_STR), BLECharacteristic::PROPERTY_READ);
 
   /*
 	 * Mandatory characteristic for device info service?
@@ -28,14 +29,15 @@ BLEService *createDeviceInfomationService(BLEServer *server, std::string hwVendo
 	uint8_t pnp[] = { sig, (uint8_t) (vid >> 8), (uint8_t) vid, (uint8_t) (pid >> 8), (uint8_t) pid, (uint8_t) (version >> 8), (uint8_t) version };
 	m_pnpCharacteristic->setValue(pnp, sizeof(pnp));
     */
-  SWVersionCharacteristic.setValue(swVersion);
-  deviceInfoService->addCharacteristic(&SWVersionCharacteristic);
-  ManufacturerCharacteristic.setValue(hwVendor);
-  deviceInfoService->addCharacteristic(&ManufacturerCharacteristic);
+  swC->setValue(swVersion);
+  deviceInfoService->addCharacteristic(addBLECharacteristic(swC));
+  mfC->setValue(hwVendor);
+  deviceInfoService->addCharacteristic(addBLECharacteristic(mfC));
   if (!hwVersion.empty())
   {
-    HardwareVersionCharacteristic.setValue(hwVersion);
-    deviceInfoService->addCharacteristic(&HardwareVersionCharacteristic);
+    BLECharacteristic *hwvC = new BLECharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_HW_VERSION_STR), BLECharacteristic::PROPERTY_READ);
+    hwvC->setValue(hwVersion);
+    deviceInfoService->addCharacteristic(addBLECharacteristic(hwvC));
   }
   //SerialNumberCharacteristic.setValue("FIXME");
   //deviceInfoService->addCharacteristic(&SerialNumberCharacteristic);
@@ -66,6 +68,31 @@ class MyServerCallbacks : public BLEServerCallbacks
   }
 };
 
+#define MAX_DESCRIPTORS 32
+#define MAX_CHARACTERISTICS 32
+
+static BLECharacteristic *chars[MAX_CHARACTERISTICS];
+static size_t numChars;
+static BLEDescriptor *descs[MAX_DESCRIPTORS];
+static size_t numDescs;
+
+/// Add a characteristic that we will delete when we restart
+BLECharacteristic *addBLECharacteristic(BLECharacteristic *c)
+{
+  assert(numChars < MAX_CHARACTERISTICS);
+  chars[numChars++] = c;
+  return c;
+}
+
+/// Add a characteristic that we will delete when we restart
+BLEDescriptor *addBLEDescriptor(BLEDescriptor *c)
+{
+  assert(numDescs < MAX_DESCRIPTORS);
+  descs[numDescs++] = c;
+
+  return c;
+}
+
 // Help routine to add a description to any BLECharacteristic and add it to the service
 // We default to require an encrypted BOND for all these these characterstics
 void addWithDesc(BLEService *service, BLECharacteristic *c, const char *description)
@@ -78,9 +105,11 @@ void addWithDesc(BLEService *service, BLECharacteristic *c, const char *descript
   desc->setValue(description);
   c->addDescriptor(desc);
   service->addCharacteristic(c);
+  addBLECharacteristic(c);
+  addBLEDescriptor(desc);
 }
 
-static BLECharacteristic BatteryLevelCharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_BATTERY_LEVEL), BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic *batteryLevelC;
 
 /**
  * Create a battery level service
@@ -90,8 +119,10 @@ BLEService *createBatteryService(BLEServer *server)
   // Create the BLE Service
   BLEService *pBattery = server->createService(BLEUUID((uint16_t)0x180F));
 
-  addWithDesc(pBattery, &BatteryLevelCharacteristic, "Percentage 0 - 100");
-  BatteryLevelCharacteristic.addDescriptor(new BLE2902()); // Needed so clients can request notification
+  batteryLevelC = new BLECharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_BATTERY_LEVEL), BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+
+  addWithDesc(pBattery, batteryLevelC, "Percentage 0 - 100");
+  batteryLevelC->addDescriptor(addBLEDescriptor(new BLE2902())); // Needed so clients can request notification
 
   // I don't think we need to advertise this
   // server->getAdvertising()->addServiceUUID(pBattery->getUUID());
@@ -107,8 +138,11 @@ BLEService *createBatteryService(BLEServer *server)
 void updateBatteryLevel(uint8_t level)
 {
   // Pretend to update battery levels - fixme do elsewhere
-  BatteryLevelCharacteristic.setValue(&level, 1);
-  BatteryLevelCharacteristic.notify();
+  if (batteryLevelC)
+  {
+    batteryLevelC->setValue(&level, 1);
+    batteryLevelC->notify();
+  }
 }
 
 void dumpCharacteristic(BLECharacteristic *c)
@@ -178,9 +212,48 @@ class MySecurity : public BLESecurityCallbacks
     }
 
     // Remove our custom screen
-    screen_set_frames();
+    screen.setFrames();
   }
 };
+
+BLEServer *pServer;
+
+BLEService *pDevInfo, *pUpdate;
+
+void deinitBLE()
+{
+  assert(pServer);
+
+  pServer->getAdvertising()->stop();
+
+  destroyUpdateService();
+
+  pUpdate->stop();
+  pDevInfo->stop();
+  pUpdate->stop(); // we delete them below
+
+  // First shutdown bluetooth
+  BLEDevice::deinit(false);
+
+  // do not delete this - it is dynamically allocated, but only once - statically in BLEDevice
+  // delete pServer->getAdvertising();
+
+  delete pUpdate;
+  delete pDevInfo;
+  delete pServer;
+
+  batteryLevelC = NULL; // Don't let anyone generate bogus notifies
+
+  for (int i = 0; i < numChars; i++)
+    delete chars[i];
+  numChars = 0;
+
+  for (int i = 0; i < numDescs; i++)
+    delete descs[i];
+  numDescs = 0;
+
+  btPool.reset();
+}
 
 BLEServer *initBLE(std::string deviceName, std::string hwVendor, std::string swVersion, std::string hwVersion)
 {
@@ -190,18 +263,20 @@ BLEServer *initBLE(std::string deviceName, std::string hwVendor, std::string swV
   /*
    * Required in authentication process to provide displaying and/or input passkey or yes/no butttons confirmation
    */
-  BLEDevice::setSecurityCallbacks(new MySecurity());
+  static MySecurity mySecurity;
+  BLEDevice::setSecurityCallbacks(&mySecurity);
 
   // Create the BLE Server
-  BLEServer *pServer = BLEDevice::createServer();
-  pServer->setCallbacks(new MyServerCallbacks());
+  pServer = BLEDevice::createServer();
+  static MyServerCallbacks myCallbacks;
+  pServer->setCallbacks(&myCallbacks);
 
-  BLEService *pDevInfo = createDeviceInfomationService(pServer, hwVendor, swVersion, hwVersion);
+  pDevInfo = createDeviceInfomationService(pServer, hwVendor, swVersion, hwVersion);
 
   // We now let users create the battery service only if they really want (not all devices have a battery)
   // BLEService *pBattery = createBatteryService(pServer);
 
-  BLEService *pUpdate = createUpdateService(pServer); // We need to advertise this so our android ble scan operation can see it
+  pUpdate = createUpdateService(pServer, hwVendor, swVersion, hwVersion); // We need to advertise this so our android ble scan operation can see it
 
   // It seems only one service can be advertised - so for now don't advertise our updater
   // pServer->getAdvertising()->addServiceUUID(pUpdate->getUUID());
@@ -213,7 +288,8 @@ BLEServer *initBLE(std::string deviceName, std::string hwVendor, std::string swV
   // FIXME turn on this restriction only after the device is paired with a phone
   // advert->setScanFilter(false, true); // We let anyone scan for us (FIXME, perhaps only allow that until we are paired with a phone and configured) but only let whitelist phones connect
 
-  BLESecurity *pSecurity = new BLESecurity();
+  static BLESecurity security; // static to avoid allocs
+  BLESecurity *pSecurity = &security;
   pSecurity->setCapability(ESP_IO_CAP_OUT);
   pSecurity->setAuthenticationMode(ESP_LE_AUTH_REQ_SC_BOND);
   pSecurity->setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
