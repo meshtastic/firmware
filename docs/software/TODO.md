@@ -43,6 +43,7 @@ Items to complete before the first beta release.
 
 During the beta timeframe the following improvements 'would be nice' (and yeah - I guess some of these items count as features, but it is a hobby project ;-) )
 
+* figure out why this fixme is needed: "FIXME, disable wake due to PMU because it seems to fire all the time?"
 * If the phone doesn't read fromradio mailbox within X seconds, assume the phone is gone and we can stop queing location msgs 
 for it (because it will redownload the nodedb when it comes back)
 * Figure out why the RF95 ISR is never seeing RH_RF95_VALID_HEADER, so it is not protecting our rx packets from getting stomped on by sends
