@@ -24,7 +24,6 @@
 #include "configuration.h"
 #include "rom/rtc.h"
 #include <driver/rtc_io.h>
-#include <TinyGPS++.h>
 #include <Wire.h>
 #include "BluetoothUtil.h"
 #include "MeshBluetoothService.h"
