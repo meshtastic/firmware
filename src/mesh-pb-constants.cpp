@@ -30,7 +30,7 @@ bool pb_decode_from_bytes(const uint8_t *srcbuf, size_t srcbufsize, const pb_msg
     pb_istream_t stream = pb_istream_from_buffer(srcbuf, srcbufsize);
     if (!pb_decode(&stream, fields, dest_struct))
     {
-        DEBUG_MSG("Error: can't decode protobuf %s\n", PB_GET_ERROR(&stream));
+        DEBUG_MSG("Error: can't decode protobuf %s, pb_msgdesc 0x%p\n", PB_GET_ERROR(&stream), fields);
         return false;
     }
     else

@@ -255,6 +255,9 @@ void MeshService::handleToRadio(std::string s)
             break;
         }
     }
+    else {
+        DEBUG_MSG("Error: ignoring malformed toradio\n");
+    }
 }
 
 void MeshService::sendToMesh(MeshPacket *p)
