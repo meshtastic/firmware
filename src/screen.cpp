@@ -21,8 +21,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <OLEDDisplay.h>
-#include <OLEDDisplayUi.h>
-#include <SSD1306Wire.h>
 #include <Wire.h>
 
 #include "GPS.h"
@@ -38,41 +36,21 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define FONT_HEIGHT_16 (ArialMT_Plain_16[1] + 1)
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
-
-#ifdef I2C_SDA
-SSD1306Wire dispdev(SSD1306_ADDRESS, I2C_SDA, I2C_SCL);
-#else
-SSD1306Wire dispdev(SSD1306_ADDRESS, 0, 0); // fake values to keep build happy, we won't ever init
-#endif
-
-bool disp;     // true if we are using display
-bool screenOn; // true if the display is currently powered
-
-OLEDDisplayUi ui(&dispdev);
+#define TRANSITION_FRAMERATE 30 // fps
+#define IDLE_FRAMERATE 10       // in fps
+#define COMPASS_DIAM 44
 
 #define NUM_EXTRA_FRAMES 2 // text message and debug frame
+
+namespace meshtastic
+{
+
 // A text message frame + debug frame + all the node infos
-FrameCallback nonBootFrames[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
+static FrameCallback normalFrames[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
+static uint32_t targetFramerate = IDLE_FRAMERATE;
+static char btPIN[16] = "888888";
 
-Screen screen;
-static bool showingBluetooth;
-
-/// If set to true (possibly from an ISR), we should turn on the screen the next time our idle loop runs.
-static bool showingBootScreen = true; // start by showing the bootscreen
-
-bool Screen::isOn()
-{
-    return screenOn;
-}
-
-void msOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
-{
-    display->setTextAlignment(TEXT_ALIGN_RIGHT);
-    display->setFont(ArialMT_Plain_10);
-    display->drawString(128, 0, String(millis()));
-}
-
-void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     // draw an xbm image.
     // Please note that everything that should be transitioned
@@ -83,16 +61,10 @@ void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, 
     display->setFont(ArialMT_Plain_16);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->drawString(64 + x, SCREEN_HEIGHT - FONT_HEIGHT_16, "meshtastic.org");
-
-    ui.disableIndicator();
 }
 
-static char btPIN[16] = "888888";
-
-void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    // Demonstrates the 3 included default sizes. The fonts come from SSD1306Fonts.h file
-    // Besides the default fonts there will be a program to convert TrueType fonts into this format
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(ArialMT_Plain_16);
     display->drawString(64 + x, 2 + y, "Bluetooth");
@@ -103,53 +75,19 @@ void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(ArialMT_Plain_24);
     display->drawString(64 + x, 22 + y, btPIN);
-
-    ui.disableIndicator();
-}
-
-void drawFrame2(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    // Demonstrates the 3 included default sizes. The fonts come from SSD1306Fonts.h file
-    // Besides the default fonts there will be a program to convert TrueType fonts into this format
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->setFont(ArialMT_Plain_10);
-    display->drawString(0 + x, 10 + y, "Arial 10");
-
-    display->setFont(ArialMT_Plain_16);
-    display->drawString(0 + x, 20 + y, "Arial 16");
-
-    display->setFont(ArialMT_Plain_24);
-    display->drawString(0 + x, 34 + y, "Arial 24");
-}
-
-void drawFrame3(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    // Text alignment demo
-    display->setFont(ArialMT_Plain_10);
-
-    // The coordinates define the left starting point of the text
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->drawString(0 + x, 11 + y, "Left aligned (0,10)");
-
-    // The coordinates define the center of the text
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->drawString(64 + x, 22 + y, "Center aligned (64,22)");
-
-    // The coordinates define the right end of the text
-    display->setTextAlignment(TEXT_ALIGN_RIGHT);
-    display->drawString(128 + x, 33 + y, "Right aligned (128,33)");
 }
 
 /// Draw the last text message we received
-void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     MeshPacket &mp = devicestate.rx_text_message;
     NodeInfo *node = nodeDB.getNode(mp.from);
-    // DEBUG_MSG("drawing text message from 0x%x: %s\n", mp.from, mp.payload.variant.data.payload.bytes);
+    // DEBUG_MSG("drawing text message from 0x%x: %s\n", mp.from,
+    // mp.payload.variant.data.payload.bytes);
 
     // Demo for drawStringMaxWidth:
-    // with the third parameter you can define the width after which words will be wrapped.
-    // Currently only spaces and "-" are allowed for wrapping
+    // with the third parameter you can define the width after which words will
+    // be wrapped. Currently only spaces and "-" are allowed for wrapping
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(ArialMT_Plain_16);
     String sender = (node && node->has_user) ? node->user.short_name : "???";
@@ -162,12 +100,10 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
              mp.payload.variant.data.payload.bytes);
 
     display->drawStringMaxWidth(4 + x, 10 + y, 128, tempBuf);
-
-    // ui.disableIndicator();
 }
 
 /// Draw a series of fields in a column, wrapping to multiple colums if needed
-void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields)
+static void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields)
 {
     // The coordinates define the left starting point of the text
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -187,19 +123,23 @@ void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields
 
 /// Draw a series of fields in a row, wrapping to multiple rows if needed
 /// @return the max y we ended up printing to
-uint32_t drawRows(OLEDDisplay *display, int16_t x, int16_t y, const char **fields)
+static uint32_t drawRows(OLEDDisplay *display, int16_t x, int16_t y, const char **fields)
 {
     // The coordinates define the left starting point of the text
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
     const char **f = fields;
     int xo = x, yo = y;
+    const int COLUMNS = 2; // hardwired for two columns per row....
+    int col = 0;           // track which column we are on
     while (*f) {
         display->drawString(xo, yo, *f);
-        xo += SCREEN_WIDTH / 2; // hardwired for two columns per row....
-        if (xo >= SCREEN_WIDTH) {
+        xo += SCREEN_WIDTH / COLUMNS;
+        // Wrap to next row, if needed.
+        if (++col > COLUMNS) {
+            xo = x;
             yo += FONT_HEIGHT;
-            xo = 0;
+            col = 0;
         }
         f++;
     }
@@ -209,8 +149,9 @@ uint32_t drawRows(OLEDDisplay *display, int16_t x, int16_t y, const char **field
     return yo;
 }
 
-/// Ported from my old java code, returns distance in meters along the globe surface (by magic?)
-float latLongToMeter(double lat_a, double lng_a, double lat_b, double lng_b)
+/// Ported from my old java code, returns distance in meters along the globe
+/// surface (by magic?)
+static float latLongToMeter(double lat_a, double lng_a, double lat_b, double lng_b)
 {
     double pk = (180 / 3.14169);
     double a1 = lat_a / pk;
@@ -229,18 +170,19 @@ float latLongToMeter(double lat_a, double lng_a, double lat_b, double lng_b)
     return (float)(6366000 * tt);
 }
 
-inline double toRadians(double deg)
+static inline double toRadians(double deg)
 {
     return deg * PI / 180;
 }
 
-inline double toDegrees(double r)
+static inline double toDegrees(double r)
 {
     return r * 180 / PI;
 }
 
 /**
- * Computes the bearing in degrees between two points on Earth.  Ported from my old Gaggle android app.
+ * Computes the bearing in degrees between two points on Earth.  Ported from my
+ * old Gaggle android app.
  *
  * @param lat1
  * Latitude of the first point
@@ -253,7 +195,7 @@ inline double toDegrees(double r)
  * @return Bearing between the two points in radians. A value of 0 means due
  * north.
  */
-float bearing(double lat1, double lon1, double lat2, double lon2)
+static float bearing(double lat1, double lon1, double lat2, double lon2)
 {
     double lat1Rad = toRadians(lat1);
     double lat2Rad = toRadians(lat2);
@@ -262,6 +204,9 @@ float bearing(double lat1, double lon1, double lat2, double lon2)
     double x = cos(lat1Rad) * sin(lat2Rad) - (sin(lat1Rad) * cos(lat2Rad) * cos(deltaLonRad));
     return atan2(y, x);
 }
+
+namespace
+{
 
 /// A basic 2D point class for drawing
 class Point
@@ -294,7 +239,9 @@ class Point
     }
 };
 
-void drawLine(OLEDDisplay *d, const Point &p1, const Point &p2)
+} // namespace
+
+static void drawLine(OLEDDisplay *d, const Point &p1, const Point &p2)
 {
     d->drawLine(p1.x, p1.y, p2.x, p2.y);
 }
@@ -302,9 +249,10 @@ void drawLine(OLEDDisplay *d, const Point &p1, const Point &p2)
 /**
  * Given a recent lat/lon return a guess of the heading the user is walking on.
  *
- * We keep a series of "after you've gone 10 meters, what is your heading since the last reference point?"
+ * We keep a series of "after you've gone 10 meters, what is your heading since
+ * the last reference point?"
  */
-float estimatedHeading(double lat, double lon)
+static float estimatedHeading(double lat, double lon)
 {
     static double oldLat, oldLon;
     static float b;
@@ -328,21 +276,22 @@ float estimatedHeading(double lat, double lon)
     return b;
 }
 
-/// Sometimes we will have Position objects that only have a time, so check for valid lat/lon
-bool hasPosition(NodeInfo *n)
+/// Sometimes we will have Position objects that only have a time, so check for
+/// valid lat/lon
+static bool hasPosition(NodeInfo *n)
 {
     return n->has_position && (n->position.latitude != 0 || n->position.longitude != 0);
 }
-#define COMPASS_DIAM 44
 
-/// We will skip one node - the one for us, so we just blindly loop over all nodes
+/// We will skip one node - the one for us, so we just blindly loop over all
+/// nodes
 static size_t nodeIndex;
 static int8_t prevFrame = -1;
 
-void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    // We only advance our nodeIndex if the frame # has changed - because drawNodeInfo will be called repeatedly while the frame
-    // is shown
+    // We only advance our nodeIndex if the frame # has changed - because
+    // drawNodeInfo will be called repeatedly while the frame is shown
     if (state->currentFrame != prevFrame) {
         prevFrame = state->currentFrame;
 
@@ -376,7 +325,8 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
         snprintf(lastStr, sizeof(lastStr), "%d hours ago", agoSecs / 60 / 60);
 
     static float simRadian;
-    simRadian += 0.1; // For testing, have the compass spin unless both locations are valid
+    simRadian += 0.1; // For testing, have the compass spin unless both
+                      // locations are valid
 
     static char distStr[20];
     *distStr = 0; // might not have location data
@@ -390,8 +340,8 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
         else
             snprintf(distStr, sizeof(distStr), "%.1f km", d / 1000);
 
-        // FIXME, also keep the guess at the operators heading and add/substract it.  currently we don't do this and instead draw
-        // north up only.
+        // FIXME, also keep the guess at the operators heading and add/substract
+        // it.  currently we don't do this and instead draw north up only.
         float bearingToOther = bearing(p.latitude, p.longitude, op.latitude, op.longitude);
         float myHeading = estimatedHeading(p.latitude, p.longitude);
         headingRadian = bearingToOther - myHeading;
@@ -402,7 +352,8 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
 
     // coordinates for the center of the compass
     int16_t compassX = x + SCREEN_WIDTH - COMPASS_DIAM / 2 - 1, compassY = y + SCREEN_HEIGHT / 2;
-    // display->drawXbm(compassX, compassY, compass_width, compass_height, (const uint8_t *)compass_bits);
+    // display->drawXbm(compassX, compassY, compass_width, compass_height,
+    // (const uint8_t *)compass_bits);
 
     Point tip(0.0f, 0.5f), tail(0.0f, -0.5f); // pointing up initially
     float arrowOffsetX = 0.2f, arrowOffsetY = 0.2f;
@@ -422,7 +373,7 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
     display->drawCircle(compassX, compassY, COMPASS_DIAM / 2);
 }
 
-void drawDebugInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+static void drawDebugInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->setFont(ArialMT_Plain_10);
 
@@ -441,7 +392,8 @@ void drawDebugInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
 
     static char gpsStr[20];
     if (myNodeInfo.has_gps)
-        snprintf(gpsStr, sizeof(gpsStr), "GPS %d%%", 75); // FIXME, use something based on hdop
+        snprintf(gpsStr, sizeof(gpsStr), "GPS %d%%",
+                 75); // FIXME, use something based on hdop
     else
         gpsStr[0] = '\0'; // Just show emptystring
 
@@ -450,17 +402,6 @@ void drawDebugInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
 
     display->drawLogBuffer(x, yo);
 }
-
-// This array keeps function pointers to all frames
-// frames are the single views that slide in
-FrameCallback bootFrames[] = {drawBootScreen};
-
-// Overlays are statically drawn on top of a frame eg. a clock
-OverlayCallback overlays[] = {/* msOverlay */};
-
-// how many frames are there?
-const int bootFrameCount = sizeof(bootFrames) / sizeof(bootFrames[0]);
-const int overlaysCount = sizeof(overlays) / sizeof(overlays[0]);
 
 #if 0
 void _screen_header()
@@ -486,16 +427,20 @@ void _screen_header()
 }
 #endif
 
-void Screen::setOn(bool on)
+Screen::Screen(uint8_t address, uint8_t sda, uint8_t scl)
+    : cmdQueue(32), useDisplay(sda || scl), dispdev(address, sda, scl), ui(&dispdev)
 {
-    if (!disp)
+}
+
+void Screen::handleSetOn(bool on)
+{
+    if (!useDisplay)
         return;
 
     if (on != screenOn) {
         if (on) {
             DEBUG_MSG("Turning on screen\n");
             dispdev.displayOn();
-            setPeriod(1); // redraw ASAP
         } else {
             DEBUG_MSG("Turning off screen\n");
             dispdev.displayOff();
@@ -504,102 +449,99 @@ void Screen::setOn(bool on)
     }
 }
 
-void screen_print(const char *text, uint8_t x, uint8_t y, uint8_t alignment)
-{
-    DEBUG_MSG(text);
-
-    if (!disp)
-        return;
-
-    dispdev.setTextAlignment((OLEDDISPLAY_TEXT_ALIGNMENT)alignment);
-    dispdev.drawString(x, y, text);
-}
-
-void screen_print(const char *text)
-{
-    DEBUG_MSG("Screen: %s", text);
-    if (!disp)
-        return;
-
-    dispdev.print(text);
-    // ui.update();
-}
-
 void Screen::setup()
 {
-#ifdef I2C_SDA
-    // Display instance
-    disp = true;
+    if (!useDisplay)
+        return;
 
-    // The ESP is capable of rendering 60fps in 80Mhz mode
-    // but that won't give you much time for anything else
-    // run it in 160Mhz mode or just set it to 30 fps
-    // We do this now in loop()
-    // ui.setTargetFPS(30);
-
-    // Customize the active and inactive symbol
-    // ui.setActiveSymbol(activeSymbol);
-    // ui.setInactiveSymbol(inactiveSymbol);
-
-    ui.setTimePerTransition(300); // msecs
-
-    // You can change this to
-    // TOP, LEFT, BOTTOM, RIGHT
-    ui.setIndicatorPosition(BOTTOM);
-
-    // Defines where the first frame is located in the bar.
-    ui.setIndicatorDirection(LEFT_RIGHT);
-
-    // You can change the transition that is used
-    // SLIDE_LEFT, SLIDE_RIGHT, SLIDE_UP, SLIDE_DOWN
-    ui.setFrameAnimation(SLIDE_LEFT);
-
-    // Add frames - we subtract one from the framecount so there won't be a visual glitch when we take the boot screen out of the
-    // sequence.
-    ui.setFrames(bootFrames, bootFrameCount);
-
-    // Add overlays
-    ui.setOverlays(overlays, overlaysCount);
-
-    // Initialising the UI will init the display too.
-    ui.init();
-
-    // Scroll buffer
-    dispdev.setLogBuffer(3, 32);
-
-    setOn(true); // update our screenOn bool
-
+// TODO(girts): how many of the devices come with the bicolor displays? With
+// this enabled, the logo looklooks nice, but the regular screens look a bit
+// wacky as the text crosses the color boundary and there's a 1px gap.
 #ifdef BICOLOR_DISPLAY
     dispdev.flipScreenVertically(); // looks better without this on lora32
 #endif
 
-    // dispdev.setFont(Custom_ArialMT_Plain_10);
+    // Initialising the UI will init the display too.
+    ui.init();
+    ui.setTimePerTransition(300); // msecs
+    ui.setIndicatorPosition(BOTTOM);
+    // Defines where the first frame is located in the bar.
+    ui.setIndicatorDirection(LEFT_RIGHT);
+    ui.setFrameAnimation(SLIDE_LEFT);
+    // Don't show the page swipe dots while in boot screen.
+    ui.disableAllIndicators();
 
-    ui.disableAutoTransition(); // we now require presses
-    ui.update(); // force an immediate draw of the bootscreen, because on some ssd1306 clones, the first draw command is discarded
-#endif
+    // Add frames.
+    static FrameCallback bootFrames[] = {drawBootScreen};
+    static const int bootFrameCount = sizeof(bootFrames) / sizeof(bootFrames[0]);
+    ui.setFrames(bootFrames, bootFrameCount);
+    // No overlays.
+    ui.setOverlays(nullptr, 0);
+
+    // Require presses to switch between frames.
+    ui.disableAutoTransition();
+
+    // Set up a log buffer with 3 lines, 32 chars each.
+    dispdev.setLogBuffer(3, 32);
+
+    // Turn on the display hardware.
+    handleSetOn(true);
+
+    // On some ssd1306 clones, the first draw command is discarded, so draw it
+    // twice initially.
+    ui.update();
+    ui.update();
 }
-
-#define TRANSITION_FRAMERATE 30 // fps
-#define IDLE_FRAMERATE 10       // in fps
-
-static uint32_t targetFramerate = IDLE_FRAMERATE;
 
 void Screen::doTask()
 {
-    if (!disp) { // If we don't have a screen, don't ever spend any CPU for us
+    // If we don't have a screen, don't ever spend any CPU for us.
+    if (!useDisplay) {
         setPeriod(0);
         return;
     }
 
-    if (!screenOn) { // If we didn't just wake and the screen is still off, then stop updating until it is on again
+    // Process incoming commands.
+    for (;;) {
+        CmdItem cmd;
+        if (!cmdQueue.dequeue(&cmd, 0)) {
+            break;
+        }
+        switch (cmd.cmd) {
+        case Cmd::SET_ON:
+            handleSetOn(true);
+            break;
+        case Cmd::SET_OFF:
+            handleSetOn(false);
+            break;
+        case Cmd::ON_PRESS:
+            handleOnPress();
+            break;
+        case Cmd::START_BLUETOOTH_PIN_SCREEN:
+            handleStartBluetoothPinScreen(cmd.bluetooth_pin);
+            break;
+        case Cmd::STOP_BLUETOOTH_PIN_SCREEN:
+        case Cmd::STOP_BOOT_SCREEN:
+            setFrames();
+            break;
+        case Cmd::PRINT:
+            handlePrint(cmd.print_text);
+            free(cmd.print_text);
+            break;
+        default:
+            DEBUG_MSG("BUG: invalid cmd");
+        }
+    }
+
+    if (!screenOn) { // If we didn't just wake and the screen is still off, then
+                     // stop updating until it is on again
         setPeriod(0);
         return;
     }
 
     // Switch to a low framerate (to save CPU) when we are not in transition
-    // but we should only call setTargetFPS when framestate changes, because otherwise that breaks
-    // animations.
+    // but we should only call setTargetFPS when framestate changes, because
+    // otherwise that breaks animations.
     if (targetFramerate != IDLE_FRAMERATE && ui.getUiState()->frameState == FIXED) {
         // oldFrameState = ui.getUiState()->frameState;
         DEBUG_MSG("Setting idle framerate\n");
@@ -607,58 +549,34 @@ void Screen::doTask()
         ui.setTargetFPS(targetFramerate);
     }
 
-    // While showing the bluetooth pair screen all of our standard screen switching is stopped
-    if (!showingBluetooth) {
-        // Once we finish showing the bootscreen, remove it from the loop
-        if (showingBootScreen) {
-            if (millis() > 3 * 1000) // we show the boot screen for a few seconds only
-            {
-                showingBootScreen = false;
-                setFrames();
-            }
-        } else // standard screen loop handling ehre
-        {
-            // If the # nodes changes, we need to regen our list of screens
-            if (nodeDB.updateGUI || nodeDB.updateTextMessage) {
-                setFrames();
-                nodeDB.updateGUI = false;
-                nodeDB.updateTextMessage = false;
-            }
+    // While showing the bootscreen or Bluetooth pair screen all of our
+    // standard screen switching is stopped.
+    if (showingNormalScreen) {
+        // TODO(girts): decouple nodeDB from screen.
+        // standard screen loop handling ehre
+        // If the # nodes changes, we need to regen our list of screens
+        if (nodeDB.updateGUI || nodeDB.updateTextMessage) {
+            setFrames();
+            nodeDB.updateGUI = false;
+            nodeDB.updateTextMessage = false;
         }
     }
 
-    // This must be after we possibly do screen_set_frames() to ensure we draw the new data
     ui.update();
 
-    // DEBUG_MSG("want fps %d, fixed=%d\n", targetFramerate, ui.getUiState()->frameState);
-    // If we are scrolling we need to be called soon, otherwise just 1 fps (to save CPU)
-    // We also ask to be called twice as fast as we really need so that any rounding errors still result
-    // with the correct framerate
+    // DEBUG_MSG("want fps %d, fixed=%d\n", targetFramerate,
+    // ui.getUiState()->frameState); If we are scrolling we need to be called
+    // soon, otherwise just 1 fps (to save CPU) We also ask to be called twice
+    // as fast as we really need so that any rounding errors still result with
+    // the correct framerate
     setPeriod(1000 / targetFramerate);
-}
-
-#include "PowerFSM.h"
-
-// Show the bluetooth PIN screen
-void screen_start_bluetooth(uint32_t pin)
-{
-    static FrameCallback btFrames[] = {drawFrameBluetooth};
-
-    snprintf(btPIN, sizeof(btPIN), "%06d", pin);
-
-    DEBUG_MSG("showing bluetooth screen\n");
-    showingBluetooth = true;
-    powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
-
-    ui.setFrames(btFrames, 1); // Just show the bluetooth frame
-    // we rely on our main loop to show this screen (because we are invoked deep inside of bluetooth callbacks)
-    // ui.update(); // manually draw once, because I'm not sure if loop is getting called
 }
 
 // restore our regular frame list
 void Screen::setFrames()
 {
     DEBUG_MSG("showing standard frames\n");
+    showingNormalScreen = true;
 
     size_t numnodes = nodeDB.getNumNodes();
     // We don't show the node info our our node (if we have it yet - we should)
@@ -669,23 +587,45 @@ void Screen::setFrames()
 
     // If we have a text message - show it first
     if (devicestate.has_rx_text_message)
-        nonBootFrames[numframes++] = drawTextMessageFrame;
+        normalFrames[numframes++] = drawTextMessageFrame;
 
     // then all the nodes
     for (size_t i = 0; i < numnodes; i++)
-        nonBootFrames[numframes++] = drawNodeInfo;
+        normalFrames[numframes++] = drawNodeInfo;
 
     // then the debug info
-    nonBootFrames[numframes++] = drawDebugInfo;
+    normalFrames[numframes++] = drawDebugInfo;
 
-    ui.setFrames(nonBootFrames, numframes);
-    showingBluetooth = false;
+    ui.setFrames(normalFrames, numframes);
+    ui.enableAllIndicators();
 
-    prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list just changed)
+    prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list
+                    // just changed)
 }
 
-/// handle press of the button
-void Screen::onPress()
+void Screen::handleStartBluetoothPinScreen(uint32_t pin)
+{
+    DEBUG_MSG("showing bluetooth screen\n");
+    showingNormalScreen = false;
+
+    static FrameCallback btFrames[] = {drawFrameBluetooth};
+
+    snprintf(btPIN, sizeof(btPIN), "%06d", pin);
+
+    ui.disableAllIndicators();
+    ui.setFrames(btFrames, 1);
+}
+
+void Screen::handlePrint(const char *text)
+{
+    DEBUG_MSG("Screen: %s", text);
+    if (!useDisplay)
+        return;
+
+    dispdev.print(text);
+}
+
+void Screen::handleOnPress()
 {
     // If screen was off, just wake it, otherwise advance to next frame
     // If we are in a transition, the press must have bounced, drop it.
@@ -700,3 +640,5 @@ void Screen::onPress()
         ui.setTargetFPS(targetFramerate);
     }
 }
+
+} // namespace meshtastic
