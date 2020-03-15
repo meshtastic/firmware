@@ -2,11 +2,6 @@
 
 Items to complete soon (next couple of alpha releases).
 
-* button is not waking from light sleep on the TTGOs
-* turn on gps https://github.com/sparkfun/SparkFun_Ublox_Arduino_Library/blob/master/examples/Example18_PowerSaveMode/Example18_PowerSaveMode.ino
-* switch gps to 38400 baud https://github.com/sparkfun/SparkFun_Ublox_Arduino_Library/blob/master/examples/Example11_ResetModule/Example2_FactoryDefaultsviaSerial/Example2_FactoryDefaultsviaSerial.ino
-* Use Neo-M8M API to put it in sleep mode
-
 * lower wait_bluetooth_secs to 30 seconds once we have the GPS power on (but GPS in sleep mode) across light sleep.  For the time
 being I have it set at 2 minutes to ensure enough time for a GPS lock from scratch.
 
@@ -202,3 +197,7 @@ until the phone pulls those packets.  Ever so often power on bluetooth just so w
 * link to the kanban page
 * add a getting started page
 * finish mesh alg reeval
+* ublox gps parsing seems a little buggy (we shouldn't be sending out read solution commands, the device is already broadcasting them)
+* turn on gps https://github.com/sparkfun/SparkFun_Ublox_Arduino_Library/blob/master/examples/Example18_PowerSaveMode/Example18_PowerSaveMode.ino
+* switch gps to 38400 baud https://github.com/sparkfun/SparkFun_Ublox_Arduino_Library/blob/master/examples/Example11_ResetModule/Example2_FactoryDefaultsviaSerial/Example2_FactoryDefaultsviaSerial.ino
+* Use Neo-M8M API to put it in sleep mode

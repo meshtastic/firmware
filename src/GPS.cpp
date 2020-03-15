@@ -206,7 +206,7 @@ void GPS::doTask()
 #endif
 
     // Once we have sent a location once we only poll the GPS rarely, otherwise check back every 1s until we have something over the serial
-    setPeriod(hasValidLocation && !wantNewLocation ? 30 * 1000 : 1000);
+    setPeriod(hasValidLocation && !wantNewLocation ? 30 * 1000 : 10 * 1000);
 }
 
 void GPS::startLock()
