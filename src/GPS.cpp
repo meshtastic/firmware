@@ -163,8 +163,6 @@ void GPS::doTask()
         {
             struct timeval tv;
 
-            isConnected = true; // We just received a packet, so we must have a GPS
-
             /* Convert to unix time 
     The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z). 
     */
@@ -188,8 +186,6 @@ void GPS::doTask()
         if ((fixtype >= 3 && fixtype <= 4) && ublox.getP()) // rd fixes only
         {
             // we only notify if position has changed
-            isConnected = true; // We just received a packet, so we must have a GPS
-
             latitude = ublox.getLatitude() * 1e-7;
             longitude = ublox.getLongitude() * 1e-7;
             altitude = ublox.getAltitude() / 1000; // in mm convert to meters
