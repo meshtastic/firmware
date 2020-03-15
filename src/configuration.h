@@ -41,8 +41,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // Select which board is being used. If the outside build environment has sent a choice, just use that
 #if !defined(T_BEAM_V10) && !defined(HELTEC_LORA32)
-// #define T_BEAM_V10  // AKA Rev1 (second board released)
-#define HELTEC_LORA32
+#define T_BEAM_V10  // AKA Rev1 (second board released)
+// #define HELTEC_LORA32
 
 #define HW_VERSION_US // We encode the hardware freq range in the hw version string, so sw update can eventually install the correct build
 #endif
@@ -107,6 +107,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HW_VENDOR "TBEAM"
 
 #define BICOLOR_DISPLAY // we have yellow at the top 16 lines
+
+// #define BUTTON_NEED_PULLUP // if set we need to turn on the internal CPU pullup during sleep
 
 #define I2C_SDA 21
 #define I2C_SCL 22
