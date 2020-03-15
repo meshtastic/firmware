@@ -44,6 +44,14 @@ AXP20X_Class axp;
 bool pmu_irq = false;
 #endif
 
+// Global Screen singleton
+#ifdef I2C_SDA
+meshtastic::Screen screen(SSD1306_ADDRESS, I2C_SDA, I2C_SCL);
+#else
+// Fake values for pins to keep build happy, we won't ever initialize it.
+meshtastic::Screen screen(SSD1306_ADDRESS, 0, 0);
+#endif
+
 // these flags are all in bss so they default false
 bool isCharging;
 bool isUSBPowered;
@@ -221,8 +229,6 @@ void setup()
   scanI2Cdevice();
 #endif
 
-  axp192Init();
-
   // Buttons & LED
 #ifdef BUTTON_PIN
   pinMode(BUTTON_PIN, INPUT_PULLUP);
@@ -240,13 +246,16 @@ void setup()
   if (wakeCause == ESP_SLEEP_WAKEUP_TIMER)
     ssd1306_found = false; // forget we even have the hardware
 
+  // Initialize the screen first so we can show the logo while we start up everything else.
   if (ssd1306_found)
     screen.setup();
+
+  axp192Init();
 
   // Init GPS
   gps.setup();
 
-  screen_print("Started...\n");
+  screen.print("Started...\n");
 
   service.init();
 
@@ -264,7 +273,14 @@ void initBluetooth()
   // FIXME - we are leaking like crazy
   // AllocatorScope scope(btPool);
 
-  BLEServer *serve = initBLE(getDeviceName(), HW_VENDOR, xstr(APP_VERSION), xstr(HW_VERSION)); // FIXME, use a real name based on the macaddr
+  // Note: these callbacks might be coming in from a different thread.
+  BLEServer *serve = initBLE(
+      [](uint8_t pin) {
+          powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
+          screen.startBluetoothPinScreen(pin);
+      },
+      []() { screen.stopBluetoothPinScreen(); },
+      getDeviceName(), HW_VENDOR, xstr(APP_VERSION), xstr(HW_VERSION)); // FIXME, use a real name based on the macaddr
   createMeshBluetoothService(serve);
 
   // Start advertising - this must be done _after_ creating all services
@@ -391,6 +407,14 @@ void loop()
     wasPressed = false;
   }
 #endif
+
+  // Show boot screen for first 3 seconds, then switch to normal operation.
+  static bool showingBootScreen = true;
+  if (showingBootScreen && (millis() > 3000))
+  {
+      screen.stopBootScreen();
+      showingBootScreen = false;
+  }
 
   // No GPS lock yet, let the OS put the main CPU in low power mode for 100ms (or until another interrupt comes in)
   // i.e. don't just keep spinning in loop as fast as we can.
