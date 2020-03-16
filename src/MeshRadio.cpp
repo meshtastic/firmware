@@ -9,8 +9,6 @@
 #include "configuration.h"
 #include "NodeDB.h"
 
-#define DEFAULT_CHANNEL_NUM 3 // we randomly pick one
-
 /// 16 bytes of random PSK for our _public_ default channel that all devices power up on
 static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59, 0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0xbf};
 
@@ -39,7 +37,6 @@ MeshRadio::MeshRadio(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &_r
   channelSettings.modem_config = ChannelSettings_ModemConfig_Bw125Cr48Sf4096; // slow and long range
 
   channelSettings.tx_power = 23;
-  channelSettings.channel_num = DEFAULT_CHANNEL_NUM;
   memcpy(&channelSettings.psk, &defaultpsk, sizeof(channelSettings.psk));
   strcpy(channelSettings.name, "Default");
   // Can't print strings this early - serial not setup yet
@@ -81,6 +78,22 @@ bool MeshRadio::init()
   return true;
 }
 
+/** hash a string into an integer
+ * 
+ * djb2 by Dan Bernstein.
+ * http://www.cse.yorku.ca/~oz/hash.html
+ */
+unsigned long hash(char *str)
+{
+  unsigned long hash = 5381;
+  int c;
+
+  while ((c = *str++) != 0)
+    hash = ((hash << 5) + hash) + (unsigned char)c; /* hash * 33 + c */
+
+  return hash;
+}
+
 void MeshRadio::reloadConfig()
 {
   rf95.setModeIdle(); // Need to be idle before doing init
@@ -91,10 +104,9 @@ void MeshRadio::reloadConfig()
                                                                                  //    setModemConfig(Bw125Cr48Sf4096); // slow and reliable?
   // rf95.setPreambleLength(8);           // Default is 8
 
-  assert(channelSettings.channel_num < NUM_CHANNELS); // If the phone tries to tell us to use an illegal channel then panic
-
   // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM
-  float center_freq = CH0 + CH_SPACING * channelSettings.channel_num;
+  int channel_num = hash(channelSettings.name) % NUM_CHANNELS;
+  float center_freq = CH0 + CH_SPACING * channel_num;
   if (!rf95.setFrequency(center_freq))
   {
     DEBUG_MSG("setFrequency failed\n");
@@ -109,7 +121,7 @@ void MeshRadio::reloadConfig()
   // FIXME - can we do this?  It seems to be in the Heltec board.
   rf95.setTxPower(channelSettings.tx_power, false);
 
-  DEBUG_MSG("Set radio: name=%s. config=%u, ch=%d, txpower=%d\n", channelSettings.name, channelSettings.modem_config, channelSettings.channel_num, channelSettings.tx_power);
+  DEBUG_MSG("Set radio: name=%s. config=%u, ch=%d, txpower=%d\n", channelSettings.name, channelSettings.modem_config, channel_num, channelSettings.tx_power);
 
   // Done with init tell radio to start receiving
   rf95.setModeRx();

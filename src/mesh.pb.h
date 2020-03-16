@@ -34,7 +34,6 @@ typedef enum _ChannelSettings_ModemConfig {
 /* Struct definitions */
 typedef struct _ChannelSettings {
     int32_t tx_power;
-    uint32_t channel_num;
     ChannelSettings_ModemConfig modem_config;
     pb_byte_t psk[16];
     char name[12];
@@ -173,7 +172,7 @@ typedef struct _ToRadio {
 #define User_init_default                        {"", "", "", {0}}
 #define SubPacket_init_default                   {0, {Position_init_default}, 0}
 #define MeshPacket_init_default                  {0, 0, false, SubPacket_init_default, 0}
-#define ChannelSettings_init_default             {0, 0, _ChannelSettings_ModemConfig_MIN, {0}, ""}
+#define ChannelSettings_init_default             {0, _ChannelSettings_ModemConfig_MIN, {0}, ""}
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default, false, ChannelSettings_init_default}
 #define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0}
@@ -186,7 +185,7 @@ typedef struct _ToRadio {
 #define User_init_zero                           {"", "", "", {0}}
 #define SubPacket_init_zero                      {0, {Position_init_zero}, 0}
 #define MeshPacket_init_zero                     {0, 0, false, SubPacket_init_zero, 0}
-#define ChannelSettings_init_zero                {0, 0, _ChannelSettings_ModemConfig_MIN, {0}, ""}
+#define ChannelSettings_init_zero                {0, _ChannelSettings_ModemConfig_MIN, {0}, ""}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero, false, ChannelSettings_init_zero}
 #define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0}
@@ -197,7 +196,6 @@ typedef struct _ToRadio {
 
 /* Field tags (for use in manual encoding/decoding) */
 #define ChannelSettings_tx_power_tag             1
-#define ChannelSettings_channel_num_tag          2
 #define ChannelSettings_modem_config_tag         3
 #define ChannelSettings_psk_tag                  4
 #define ChannelSettings_name_tag                 5
@@ -303,7 +301,6 @@ X(a, STATIC,   SINGULAR, UINT32,   rx_time,           4)
 
 #define ChannelSettings_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, INT32,    tx_power,          1) \
-X(a, STATIC,   SINGULAR, UINT32,   channel_num,       2) \
 X(a, STATIC,   SINGULAR, UENUM,    modem_config,      3) \
 X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, psk,               4) \
 X(a, STATIC,   SINGULAR, STRING,   name,              5)
@@ -421,12 +418,12 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define User_size                                72
 #define SubPacket_size                           261
 #define MeshPacket_size                          292
-#define ChannelSettings_size                     50
-#define RadioConfig_size                         126
+#define ChannelSettings_size                     44
+#define RadioConfig_size                         120
 #define RadioConfig_UserPreferences_size         72
 #define NodeInfo_size                            155
 #define MyNodeInfo_size                          63
-#define DeviceState_size                         15064
+#define DeviceState_size                         15058
 #define FromRadio_size                           301
 #define ToRadio_size                             295
 
