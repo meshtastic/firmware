@@ -173,7 +173,7 @@ void MeshService::handleFromRadio(MeshPacket *mp)
             if (d)
                 releaseToPool(d);
         }
-        assert(toPhoneQueue.enqueue(mp, 0) == pdTRUE); // FIXME, instead of failing for full queue, delete the oldest mssages
+        assert(toPhoneQueue.enqueue(mp, 0)); // FIXME, instead of failing for full queue, delete the oldest mssages
 
         if (mp->payload.want_response)
             sendNetworkPing(mp->from);
