@@ -137,72 +137,71 @@ bool GPS::canSleep()
 /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
 void GPS::prepareSleep()
 {
-    ublox.powerOff();
+    if (isConnected)
+        ublox.powerOff();
 }
 
 void GPS::doTask()
 {
 #ifdef GPS_RX_PIN
-    // Consume all characters that have arrived
-
-    // getPVT automatically calls checkUblox
-    ublox.checkUblox(); //See if new data is available. Process bytes as they come in.
-
-    // DEBUG_MSG("sec %d\n", ublox.getSecond());
-    // DEBUG_MSG("lat %d\n", ublox.getLatitude());
-
-    // If we don't have a fix (a quick check), don't try waiting for a solution)
-    uint8_t fixtype = ublox.getFixType();
-    DEBUG_MSG("fix type %d\n", fixtype);
-
-    // any fix that has time
-    if ((fixtype >= 2 && fixtype <= 5) && !timeSetFromGPS && ublox.getT())
+    if (isConnected)
     {
-        struct timeval tv;
+        // Consume all characters that have arrived
 
-        isConnected = true; // We just received a packet, so we must have a GPS
+        // getPVT automatically calls checkUblox
+        ublox.checkUblox(); //See if new data is available. Process bytes as they come in.
 
-        /* Convert to unix time 
+        // DEBUG_MSG("sec %d\n", ublox.getSecond());
+        // DEBUG_MSG("lat %d\n", ublox.getLatitude());
+
+        // If we don't have a fix (a quick check), don't try waiting for a solution)
+        uint8_t fixtype = ublox.getFixType();
+        DEBUG_MSG("fix type %d\n", fixtype);
+
+        // any fix that has time
+        if ((fixtype >= 2 && fixtype <= 5) && !timeSetFromGPS && ublox.getT())
+        {
+            struct timeval tv;
+
+            /* Convert to unix time 
     The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z). 
     */
-        struct tm t;
-        t.tm_sec = ublox.getSecond();
-        t.tm_min = ublox.getMinute();
-        t.tm_hour = ublox.getHour();
-        t.tm_mday = ublox.getDay();
-        t.tm_mon = ublox.getMonth() - 1;
-        t.tm_year = ublox.getYear() - 1900;
-        t.tm_isdst = false;
-        time_t res = mktime(&t);
-        tv.tv_sec = res;
-        tv.tv_usec = 0; // time.centisecond() * (10 / 1000);
+            struct tm t;
+            t.tm_sec = ublox.getSecond();
+            t.tm_min = ublox.getMinute();
+            t.tm_hour = ublox.getHour();
+            t.tm_mday = ublox.getDay();
+            t.tm_mon = ublox.getMonth() - 1;
+            t.tm_year = ublox.getYear() - 1900;
+            t.tm_isdst = false;
+            time_t res = mktime(&t);
+            tv.tv_sec = res;
+            tv.tv_usec = 0; // time.centisecond() * (10 / 1000);
 
-        DEBUG_MSG("Got time from GPS month=%d, year=%d, unixtime=%ld\n", t.tm_mon, t.tm_year, tv.tv_sec);
+            DEBUG_MSG("Got time from GPS month=%d, year=%d, unixtime=%ld\n", t.tm_mon, t.tm_year, tv.tv_sec);
 
-        perhapsSetRTC(&tv);
-    }
-
-    if ((fixtype >= 3 && fixtype <= 4) && ublox.getP()) // rd fixes only
-    {
-        // we only notify if position has changed
-        isConnected = true; // We just received a packet, so we must have a GPS
-
-        latitude = ublox.getLatitude() * 1e-7;
-        longitude = ublox.getLongitude() * 1e-7;
-        altitude = ublox.getAltitude() / 1000; // in mm convert to meters
-        DEBUG_MSG("new gps pos lat=%f, lon=%f, alt=%d\n", latitude, longitude, altitude);
-
-        hasValidLocation = (latitude != 0) || (longitude != 0); // bogus lat lon is reported as 0,0
-        if (hasValidLocation)
-        {
-            wantNewLocation = false;
-            notifyObservers();
-            //ublox.powerOff();
+            perhapsSetRTC(&tv);
         }
-    }
-    else // we didn't get a location update, go back to sleep and hope the characters show up
-        wantNewLocation = true;
 
+        if ((fixtype >= 3 && fixtype <= 4) && ublox.getP()) // rd fixes only
+        {
+            // we only notify if position has changed
+            latitude = ublox.getLatitude() * 1e-7;
+            longitude = ublox.getLongitude() * 1e-7;
+            altitude = ublox.getAltitude() / 1000; // in mm convert to meters
+            DEBUG_MSG("new gps pos lat=%f, lon=%f, alt=%d\n", latitude, longitude, altitude);
+
+            hasValidLocation = (latitude != 0) || (longitude != 0); // bogus lat lon is reported as 0,0
+            if (hasValidLocation)
+            {
+                wantNewLocation = false;
+                notifyObservers();
+                //ublox.powerOff();
+            }
+        }
+        else // we didn't get a location update, go back to sleep and hope the characters show up
+            wantNewLocation = true;
+    }
 #endif
 
     // Once we have sent a location once we only poll the GPS rarely, otherwise check back every 1s until we have something over the serial
