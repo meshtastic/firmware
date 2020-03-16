@@ -1,7 +1,7 @@
 #pragma once
 
-#include <FreeRTOS/FreeRTOS.h>
-#include <FreeRTOS/semphr.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 
 namespace meshtastic
 {
