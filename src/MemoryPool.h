@@ -66,16 +66,14 @@ public:
     /// Return a buffer for use by others
     void release(T *p)
     {
-        int res = dead.enqueue(p, 0);
-        assert(res == pdTRUE);
+        assert(dead.enqueue(p, 0));
         assert(p >= buf && (p - buf) < maxElements); // sanity check to make sure a programmer didn't free something that didn't come from this pool
     }
 
     /// Return a buffer from an ISR, if higherPriWoken is set to true you have some work to do ;-)
     void releaseFromISR(T *p, BaseType_t *higherPriWoken)
     {
-        int res = dead.enqueueFromISR(p, higherPriWoken);
-        assert(res == pdTRUE);
+        assert(dead.enqueueFromISR(p, higherPriWoken));
         assert(p >= buf && (p - buf) < maxElements); // sanity check to make sure a programmer didn't free something that didn't come from this pool
     }
 };
