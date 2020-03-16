@@ -18,7 +18,7 @@ public:
     {
         T *p;
 
-        return this->dequeue(&p, maxWait) == pdTRUE ? p : NULL;
+        return this->dequeue(&p, maxWait) ? p : nullptr;
     }
 
     // returns a ptr or null if the queue was empty
@@ -26,6 +26,6 @@ public:
     {
         T *p;
 
-        return this->dequeueFromISR(&p, higherPriWoken) == pdTRUE ? p : NULL;
+        return this->dequeueFromISR(&p, higherPriWoken) ? p : nullptr;
     }
 };

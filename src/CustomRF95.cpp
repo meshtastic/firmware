@@ -126,8 +126,7 @@ void CustomRF95::handleInterrupt()
                 // parsing was successful, queue for our recipient
                 mp->has_payload = true;
 
-                int res = rxDest.enqueueFromISR(mp, &higherPriWoken); // NOWAIT - fixme, if queue is full, delete older messages
-                assert(res == pdTRUE);
+                assert(rxDest.enqueueFromISR(mp, &higherPriWoken)); // NOWAIT - fixme, if queue is full, delete older messages
             }
 
             clearRxBuf(); // This message accepted and cleared
