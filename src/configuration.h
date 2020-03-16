@@ -41,8 +41,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // Select which board is being used. If the outside build environment has sent a choice, just use that
 #if !defined(T_BEAM_V10) && !defined(HELTEC_LORA32)
-#define T_BEAM_V10  // AKA Rev1 (second board released)
-// #define HELTEC_LORA32
+// #define T_BEAM_V10  // AKA Rev1 (second board released)
+#define HELTEC_LORA32
 
 #define HW_VERSION_US // We encode the hardware freq range in the hw version string, so sw update can eventually install the correct build
 #endif
@@ -84,13 +84,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define GPS_SERIAL_NUM 1
 #define GPS_BAUDRATE 9600
 
-#if defined(T_BEAM_V10)
 #define GPS_RX_PIN 34
 #ifdef USE_JTAG
 #define GPS_TX_PIN -1
 #else
 #define GPS_TX_PIN 12
-#endif
 #endif
 
 // -----------------------------------------------------------------------------
