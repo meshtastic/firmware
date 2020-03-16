@@ -1,18 +1,22 @@
 #pragma once
 
-#include <Arduino.h>
-#include <assert.h>
+#include <cassert>
+#include <type_traits>
+
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
 
 /**
- * A wrapper for freertos queues.  Note: each element object must be quite small, so T should be only
- * pointer types or ints
+ * A wrapper for freertos queues.  Note: each element object should be small
+ * and POD (Plain Old Data type) as elements are memcpied by value.
  */
 template <class T>
 class TypedQueue
 {
+    static_assert(std::is_pod<T>::value, "T must be pod");
     QueueHandle_t h;
 
-public:
+  public:
     TypedQueue(int maxElements)
     {
         h = xQueueCreate(maxElements, sizeof(T));
@@ -34,24 +38,22 @@ public:
         return uxQueueMessagesWaiting(h) == 0;
     }
 
-    // pdTRUE for success else failure
-    BaseType_t enqueue(T x, TickType_t maxWait = portMAX_DELAY)
+    bool enqueue(T x, TickType_t maxWait = portMAX_DELAY)
     {
-        return xQueueSendToBack(h, &x, maxWait);
+        return xQueueSendToBack(h, &x, maxWait) == pdTRUE;
     }
 
-    BaseType_t enqueueFromISR(T x, BaseType_t *higherPriWoken)
+    bool enqueueFromISR(T x, BaseType_t *higherPriWoken)
     {
-        return xQueueSendToBackFromISR(h, &x, higherPriWoken);
+        return xQueueSendToBackFromISR(h, &x, higherPriWoken) == pdTRUE;
     }
 
-    // pdTRUE for success else failure
-    BaseType_t dequeue(T *p, TickType_t maxWait = portMAX_DELAY)
+    bool dequeue(T *p, TickType_t maxWait = portMAX_DELAY)
     {
-        return xQueueReceive(h, p, maxWait);
+        return xQueueReceive(h, p, maxWait) == pdTRUE;
     }
 
-    BaseType_t dequeueFromISR(T *p, BaseType_t *higherPriWoken)
+    bool dequeueFromISR(T *p, BaseType_t *higherPriWoken)
     {
         return xQueueReceiveFromISR(h, p, higherPriWoken);
     }
