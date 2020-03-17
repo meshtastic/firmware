@@ -593,6 +593,7 @@ void Screen::setup()
     // dispdev.setFont(Custom_ArialMT_Plain_10);
 
     ui.disableAutoTransition(); // we now require presses
+    ui.update(); // force an immediate draw of the bootscreen, because on some ssd1306 clones, the first draw command is discarded
 #endif
 }
 
