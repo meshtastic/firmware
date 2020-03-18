@@ -146,7 +146,7 @@ void GPS::doTask()
         ublox.checkUblox(); // See if new data is available. Process bytes as they come in.
 
         // If we don't have a fix (a quick check), don't try waiting for a solution)
-        uint8_t fixtype = ublox.getFixType();
+        fixtype = ublox.getFixType();
         DEBUG_MSG("fix type %d\n", fixtype);
     }
 
