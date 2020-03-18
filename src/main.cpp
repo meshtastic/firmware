@@ -370,9 +370,8 @@ void loop()
 #ifdef BUTTON_PIN
   // if user presses button for more than 3 secs, discard our network prefs and reboot (FIXME, use a debounce lib instead of this boilerplate)
   static bool wasPressed = false;
-  static uint32_t minPressMs; // what tick should we call this press long enough
-  static uint32_t lastPingMs;
 
+ 
   if (!digitalRead(BUTTON_PIN))
   {
     if (!wasPressed)
@@ -383,15 +382,6 @@ void loop()
       // esp_pm_dump_locks(stdout); // FIXME, do this someplace better
       wasPressed = true;
 
-      uint32_t now = millis();
-      minPressMs = now + 3000;
-
-      if (now - lastPingMs > 60 * 1000)
-      { // if more than a minute since our last press, ask other nodes to update their state
-        service.sendNetworkPing();
-        lastPingMs = now;
-      }
-
       powerFSM.trigger(EVENT_PRESS);
     }
   }
@@ -399,13 +389,6 @@ void loop()
   {
     // we just did a release
     wasPressed = false;
-    if (millis() > minPressMs)
-    {
-      // held long enough
-      screen_print("Erasing prefs");
-      delay(5000); // Give some time to read the screen
-      // ESP.restart();
-    }
   }
 #endif
 
