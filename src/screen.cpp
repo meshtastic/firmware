@@ -57,7 +57,7 @@ Screen screen;
 static bool showingBluetooth;
 
 /// If set to true (possibly from an ISR), we should turn on the screen the next time our idle loop runs.
-static bool showingBootScreen = true; // start by showing the bootscreen
+static bool showingBootScreen = false; // start by showing the bootscreen
 
 bool Screen::isOn() { return screenOn; }
 
@@ -584,7 +584,7 @@ void Screen::setup()
     // Scroll buffer
     dispdev.setLogBuffer(3, 32);
 
-    setOn(true); // update our screenOn bool
+    setOn(false); // start with the screen off
 
 #ifdef BICOLOR_DISPLAY
     dispdev.flipScreenVertically(); // looks better without this on lora32
@@ -593,8 +593,20 @@ void Screen::setup()
     // dispdev.setFont(Custom_ArialMT_Plain_10);
 
     ui.disableAutoTransition(); // we now require presses
-    ui.update(); // force an immediate draw of the bootscreen, because on some ssd1306 clones, the first draw command is discarded
 #endif
+}
+
+void Screen::showBootscreen() {
+    if(!disp) 
+        return;
+        
+    showingBootScreen = true;
+    setOn(true);
+
+    // Add frames - we subtract one from the framecount so there won't be a visual glitch when we take the boot screen out of the sequence.
+    ui.setFrames(bootFrames, bootFrameCount);
+
+    ui.update(); // force an immediate draw of the bootscreen, because on some ssd1306 clones, the first draw command is discarded
 }
 
 #define TRANSITION_FRAMERATE 30 // fps

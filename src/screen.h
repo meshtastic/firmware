@@ -38,6 +38,9 @@ public:
 
     /// Rebuilt our list of screens
     void setFrames();
+
+    /// Show our logo (and turn the screen on)
+    void showBootscreen();
 private:
 };
 

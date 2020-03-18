@@ -25,7 +25,7 @@ static void sdsEnter()
 
 static void lsEnter()
 {
-    DEBUG_MSG("lsEnter begin\n");
+    DEBUG_MSG("lsEnter begin, ls_secs=%u\n", radioConfig.preferences.ls_secs);
     screen.setOn(false);
 
     while (!service.radio.rf95.canSleep())
@@ -124,16 +124,23 @@ static void screenPress()
     screen.onPress();
 }
 
+
+static void bootEnter() {
+}
+
 State stateSDS(sdsEnter, NULL, NULL, "SDS");
 State stateLS(lsEnter, lsIdle, lsExit, "LS");
 State stateNB(nbEnter, NULL, NULL, "NB");
 State stateDARK(darkEnter, NULL, NULL, "DARK");
+State stateBOOT(bootEnter , NULL,  NULL, "BOOT");
 State stateON(onEnter, NULL, NULL, "ON");
-Fsm powerFSM(&stateDARK);
+Fsm powerFSM(&stateBOOT);
 
 void PowerFSM_setup()
 {
-    powerFSM.add_transition(&stateDARK, &stateON, EVENT_BOOT, NULL, "Boot");
+    powerFSM.add_timed_transition(&stateBOOT, &stateON, 3 * 1000, NULL,
+                                  "boot timeout");
+
     powerFSM.add_transition(&stateLS, &stateDARK, EVENT_WAKE_TIMER, wakeForPing, "Wake timer");
 
     // Note we don't really use this transition, because when we wake from light sleep we _always_ transition to NB and then it
