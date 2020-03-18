@@ -52,7 +52,7 @@ void NodeDB::init()
     devicestate.has_my_node = true;
     devicestate.has_radio = true;
     devicestate.has_owner = true;
-    devicestate.has_radio = true;
+    devicestate.has_radio = false;
     devicestate.radio.has_channel_settings = true;
     devicestate.radio.has_preferences = true;
     devicestate.node_db_count = 0;
