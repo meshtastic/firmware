@@ -328,8 +328,9 @@ void MeshService::onGPSChanged()
     // Update our local node info with our position (even if we don't decide to update anyone else)
     MeshPacket *p = allocForSending();
     p->payload.which_variant = SubPacket_position_tag;
-    Position &pos = p->payload.variant.position;
+
 #if 0
+    Position &pos = p->payload.variant.position;
     if (gps.altitude.isValid())
         pos.altitude = gps.altitude.meters();
     pos.latitude = gps.location.lat();
