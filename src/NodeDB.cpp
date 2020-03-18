@@ -26,7 +26,7 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define here.
 */
 
-#define DEVICESTATE_CUR_VER 2
+#define DEVICESTATE_CUR_VER 6
 #define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
 
 #define FS SPIFFS
@@ -159,6 +159,7 @@ void NodeDB::loadFromDisk()
                 DEBUG_MSG("Warn: devicestate is old, discarding\n");
             else
             {
+                DEBUG_MSG("Loaded saved preferences version %d\n", scratch.version);
                 devicestate = scratch;
             }
 
