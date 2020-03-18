@@ -1,12 +1,12 @@
 
-#include "sleep.h"
+#include "PowerFSM.h"
+#include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "configuration.h"
-#include "screen.h"
-#include "PowerFSM.h"
-#include "GPS.h"
 #include "main.h"
+#include "screen.h"
+#include "sleep.h"
 
 static void sdsEnter()
 {
@@ -33,7 +33,8 @@ static void lsEnter()
 
     gps.prepareSleep(); // abandon in-process parsing
 
-    //if (!isUSBPowered)      // FIXME - temp hack until we can put gps in sleep mode, if we have AC when we go to sleep then leave GPS on
+    // if (!isUSBPowered)      // FIXME - temp hack until we can put gps in sleep mode, if we have AC when we go to sleep then
+    // leave GPS on
     //    setGPSPower(false); // kill GPS power
 
     DEBUG_MSG("lsEnter end\n");
@@ -47,8 +48,7 @@ static void lsIdle()
     esp_sleep_source_t wakeCause = ESP_SLEEP_WAKEUP_UNDEFINED;
     bool reached_ls_secs = false;
 
-    while (!reached_ls_secs)
-    {
+    while (!reached_ls_secs) {
         // Briefly come out of sleep long enough to blink the led once every few seconds
         uint32_t sleepTime = 5;
 
@@ -67,17 +67,19 @@ static void lsIdle()
     }
     setLed(false);
 
-    if (reached_ls_secs)
-    {
+    if (reached_ls_secs) {
         // stay in LS mode but let loop check whatever it wants
         DEBUG_MSG("reached ls_secs, servicing loop()\n");
-    }
-    else
-    {
+    } else {
         DEBUG_MSG("wakeCause %d\n", wakeCause);
 
-        // Regardless of why we woke just transition to NB (and that state will handle stuff like IRQs etc)
-        powerFSM.trigger(EVENT_WAKE_TIMER);
+        if (!digitalRead(BUTTON_PIN)) // If we woke because of press, instead generate a PRESS event.
+        {
+            powerFSM.trigger(EVENT_PRESS);
+        } else {
+            // Otherwise let the NB state handle the IRQ (and that state will handle stuff like IRQs etc)
+            powerFSM.trigger(EVENT_WAKE_TIMER);
+        }
     }
 }
 
@@ -104,12 +106,18 @@ static void onEnter()
 {
     screen.setOn(true);
     setBluetoothEnable(true);
+
+    static uint32_t lastPingMs;
+
+    uint32_t now = millis();
+
+    if (now - lastPingMs > 60 * 1000) { // if more than a minute since our last press, ask other nodes to update their state
+        service.sendNetworkPing();
+        lastPingMs = now;
+    }
 }
 
-
-static void wakeForPing()
-{
-}
+static void wakeForPing() {}
 
 static void screenPress()
 {
@@ -128,14 +136,13 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_BOOT, NULL, "Boot");
     powerFSM.add_transition(&stateLS, &stateDARK, EVENT_WAKE_TIMER, wakeForPing, "Wake timer");
 
-    // Note we don't really use this transition, because when we wake from light sleep we _always_ transition to NB and then it handles things
-    // powerFSM.add_transition(&stateLS, &stateNB, EVENT_RECEIVED_PACKET, NULL, "Received packet");
+    // Note we don't really use this transition, because when we wake from light sleep we _always_ transition to NB and then it
+    // handles things powerFSM.add_transition(&stateLS, &stateNB, EVENT_RECEIVED_PACKET, NULL, "Received packet");
 
     powerFSM.add_transition(&stateNB, &stateNB, EVENT_RECEIVED_PACKET, NULL, "Received packet, resetting win wake");
 
-    // Note we don't really use this transition, because when we wake from light sleep we _always_ transition to NB and then it handles things
-    // powerFSM.add_transition(&stateLS, &stateON, EVENT_PRESS, NULL, "Press");
-
+    // Handle press events
+    powerFSM.add_transition(&stateLS, &stateON, EVENT_PRESS, NULL, "Press");
     powerFSM.add_transition(&stateNB, &stateON, EVENT_PRESS, NULL, "Press");
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_PRESS, NULL, "Press");
     powerFSM.add_transition(&stateON, &stateON, EVENT_PRESS, screenPress, "Press"); // reenter On to restart our timers
@@ -162,11 +169,14 @@ void PowerFSM_setup()
 
     powerFSM.add_timed_transition(&stateNB, &stateLS, radioConfig.preferences.min_wake_secs * 1000, NULL, "Min wake timeout");
 
-    powerFSM.add_timed_transition(&stateDARK, &stateLS, radioConfig.preferences.wait_bluetooth_secs * 1000, NULL, "Bluetooth timeout");
+    powerFSM.add_timed_transition(&stateDARK, &stateLS, radioConfig.preferences.wait_bluetooth_secs * 1000, NULL,
+                                  "Bluetooth timeout");
 
-    powerFSM.add_timed_transition(&stateLS, &stateSDS, radioConfig.preferences.mesh_sds_timeout_secs * 1000, NULL, "mesh timeout");
+    powerFSM.add_timed_transition(&stateLS, &stateSDS, radioConfig.preferences.mesh_sds_timeout_secs * 1000, NULL,
+                                  "mesh timeout");
     // removing for now, because some users don't even have phones
-    // powerFSM.add_timed_transition(&stateLS, &stateSDS, radioConfig.preferences.phone_sds_timeout_sec * 1000, NULL, "phone timeout");
+    // powerFSM.add_timed_transition(&stateLS, &stateSDS, radioConfig.preferences.phone_sds_timeout_sec * 1000, NULL, "phone
+    // timeout");
 
     powerFSM.run_machine(); // run one interation of the state machine, so we run our on enter tasks for the initial DARK state
 }
