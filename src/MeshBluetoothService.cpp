@@ -13,6 +13,8 @@
 #include "PowerFSM.h"
 #include "CallbackCharacteristic.h"
 
+#include "GPS.h"
+
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in proccess at once
 static uint8_t trBytes[_max(_max(_max(_max(ToRadio_size, RadioConfig_size), User_size), MyNodeInfo_size), FromRadio_size)];
 
@@ -93,6 +95,7 @@ public:
     }
 };
 
+
 // wrap our protobuf version with something that forces the service to reload the config
 class RadioCharacteristic : public ProtobufCharacteristic
 {
@@ -100,6 +103,16 @@ public:
     RadioCharacteristic()
         : ProtobufCharacteristic("b56786c8-839a-44a1-b98e-a1724c4a0262", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ, RadioConfig_fields, &radioConfig)
     {
+    }
+
+    void onRead(BLECharacteristic *c)
+    {
+        DEBUG_MSG("Reading radio config\n");
+
+        // update gps connection state
+        devicestate.has_radio = gps.isConnected;
+
+        BLEKeepAliveCallbacks::onRead(c);
     }
 
     void onWrite(BLECharacteristic *c)
