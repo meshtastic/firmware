@@ -146,7 +146,9 @@ void GPS::doTask()
         ublox.checkUblox(); // See if new data is available. Process bytes as they come in.
 
         // If we don't have a fix (a quick check), don't try waiting for a solution)
-        fixtype = ublox.getFixType();
+        // Hmmm my fix type reading returns zeros for fix, which doesn't seem correct, because it is still sptting out positions
+        // turn off for now
+        // fixtype = ublox.getFixType();
         DEBUG_MSG("fix type %d\n", fixtype);
     }
 
@@ -154,7 +156,7 @@ void GPS::doTask()
     // DEBUG_MSG("lat %d\n", ublox.getLatitude());
 
     // any fix that has time
-    if ((fixtype >= 2 && fixtype <= 5) && !timeSetFromGPS && ublox.getT()) {
+    if (!timeSetFromGPS && ublox.getT()) {
         struct timeval tv;
 
         /* Convert to unix time

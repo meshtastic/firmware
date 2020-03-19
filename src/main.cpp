@@ -252,18 +252,18 @@ void setup()
 
   axp192Init();
 
+  screen.print("Started...\n");
+
   // Init GPS
   gps.setup();
 
-  screen.print("Started...\n");
-
   service.init();
+
+  // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
+  PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
 
   // setBluetoothEnable(false); we now don't start bluetooth until we enter the proper state
   setCPUFast(false); // 80MHz is fine for our slow peripherals
-
-  PowerFSM_setup();
-  powerFSM.trigger(EVENT_BOOT); // transition to ON, FIXME, only do this for cold boots, not waking from SDS
 }
 
 void initBluetooth()
