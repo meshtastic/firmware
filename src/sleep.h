@@ -15,7 +15,7 @@ void setCPUFast(bool on);
 void setLed(bool ledOn);
 
 extern int bootCount;
-extern esp_sleep_source_t wakeCause; 
+extern esp_sleep_source_t wakeCause;
 
 // is bluetooth sw currently running?
 extern bool bluetoothOn;

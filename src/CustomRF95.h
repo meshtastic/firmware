@@ -1,14 +1,13 @@
 #pragma once
 
-#include <RH_RF95.h>
-#include <RHMesh.h>
 #include "MemoryPool.h"
-#include "mesh.pb.h"
-#include "PointerQueue.h"
 #include "MeshTypes.h"
+#include "PointerQueue.h"
+#include "mesh.pb.h"
+#include <RHMesh.h>
+#include <RH_RF95.h>
 
 #define MAX_TX_QUEUE 16 // max number of packets which can be waiting for transmission
-
 
 /**
  * A version of the RF95 driver which is smart enough to manage packets via queues (no polling or blocking in user threads!)
@@ -22,7 +21,7 @@ class CustomRF95 : public RH_RF95
     PointerQueue<MeshPacket> txQueue;
 
     MeshPacket *sendingPacket; // The packet we are currently sending
-public:
+  public:
     /** pool is the pool we will alloc our rx packets from
      * rxDest is where we will send any rx packets, it becomes receivers responsibility to return packet to the pool
      */
@@ -30,7 +29,7 @@ public:
 
     /**
      * Return true if we think the board can go to sleep (i.e. our tx queue is empty, we are not sending or receiving)
-     * 
+     *
      * This method must be used before putting the CPU into deep or light sleep.
      */
     bool canSleep();
@@ -45,11 +44,12 @@ public:
 
     bool init();
 
-protected:
-    // After doing standard behavior, check to see if a new packet arrived or one was sent and start a new send or receive as necessary
+  protected:
+    // After doing standard behavior, check to see if a new packet arrived or one was sent and start a new send or receive as
+    // necessary
     virtual void handleInterrupt();
 
-private:
+  private:
     /// Send a new packet - this low level call can be called from either ISR or userspace
     void startSend(MeshPacket *txp);
 

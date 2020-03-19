@@ -10,14 +10,14 @@ class Observer
 {
     Observable *observed;
 
-public:
+  public:
     Observer() : observed(NULL) {}
 
     virtual ~Observer();
 
     void observe(Observable *o);
 
-private:
+  private:
     friend class Observable;
 
     virtual void onNotify(Observable *o) = 0;
@@ -27,23 +27,15 @@ class Observable
 {
     std::list<Observer *> observers;
 
-public:
+  public:
     void notifyObservers()
     {
-        for (std::list<Observer *>::const_iterator iterator = observers.begin(); iterator != observers.end(); ++iterator)
-        {
+        for (std::list<Observer *>::const_iterator iterator = observers.begin(); iterator != observers.end(); ++iterator) {
             (*iterator)->onNotify(this);
         }
     }
 
-    void addObserver(Observer *o)
-    {
-        observers.push_back(o);
-    }
+    void addObserver(Observer *o) { observers.push_back(o); }
 
-    void removeObserver(Observer *o)
-    {
-        observers.remove(o);
-    }
+    void removeObserver(Observer *o) { observers.remove(o); }
 };
-

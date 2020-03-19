@@ -21,22 +21,22 @@
 
 */
 
-#include "configuration.h"
-#include "rom/rtc.h"
-#include <driver/rtc_io.h>
-#include <Wire.h>
 #include "BluetoothUtil.h"
-#include "MeshBluetoothService.h"
-#include "MeshService.h"
 #include "GPS.h"
-#include "screen.h"
+#include "MeshBluetoothService.h"
+#include "MeshRadio.h"
+#include "MeshService.h"
 #include "NodeDB.h"
 #include "Periodic.h"
+#include "PowerFSM.h"
+#include "configuration.h"
 #include "esp32/pm.h"
 #include "esp_pm.h"
-#include "MeshRadio.h"
+#include "rom/rtc.h"
+#include "screen.h"
 #include "sleep.h"
-#include "PowerFSM.h"
+#include <Wire.h>
+#include <driver/rtc_io.h>
 
 #ifdef T_BEAM_V10
 #include "axp20x.h"
@@ -67,84 +67,74 @@ bool bluetoothOn;
 
 void scanI2Cdevice(void)
 {
-  byte err, addr;
-  int nDevices = 0;
-  for (addr = 1; addr < 127; addr++)
-  {
-    Wire.beginTransmission(addr);
-    err = Wire.endTransmission();
-    if (err == 0)
-    {
-      DEBUG_MSG("I2C device found at address 0x%x\n", addr);
+    byte err, addr;
+    int nDevices = 0;
+    for (addr = 1; addr < 127; addr++) {
+        Wire.beginTransmission(addr);
+        err = Wire.endTransmission();
+        if (err == 0) {
+            DEBUG_MSG("I2C device found at address 0x%x\n", addr);
 
-      nDevices++;
+            nDevices++;
 
-      if (addr == SSD1306_ADDRESS)
-      {
-        ssd1306_found = true;
-        DEBUG_MSG("ssd1306 display found\n");
-      }
+            if (addr == SSD1306_ADDRESS) {
+                ssd1306_found = true;
+                DEBUG_MSG("ssd1306 display found\n");
+            }
 #ifdef T_BEAM_V10
-      if (addr == AXP192_SLAVE_ADDRESS)
-      {
-        axp192_found = true;
-        DEBUG_MSG("axp192 PMU found\n");
-      }
+            if (addr == AXP192_SLAVE_ADDRESS) {
+                axp192_found = true;
+                DEBUG_MSG("axp192 PMU found\n");
+            }
 #endif
+        } else if (err == 4) {
+            DEBUG_MSG("Unknow error at address 0x%x\n", addr);
+        }
     }
-    else if (err == 4)
-    {
-      DEBUG_MSG("Unknow error at address 0x%x\n", addr);
-    }
-  }
-  if (nDevices == 0)
-    DEBUG_MSG("No I2C devices found\n");
-  else
-    DEBUG_MSG("done\n");
+    if (nDevices == 0)
+        DEBUG_MSG("No I2C devices found\n");
+    else
+        DEBUG_MSG("done\n");
 }
 
 /**
  * Init the power manager chip
- * 
- * axp192 power 
-    DCDC1 0.7-3.5V @ 1200mA max -> OLED // If you turn this off you'll lose comms to the axp192 because the OLED and the axp192 share the same i2c bus, instead use ssd1306 sleep mode
-    DCDC2 -> unused
-    DCDC3 0.7-3.5V @ 700mA max -> ESP32 (keep this on!)
-    LDO1 30mA -> charges GPS backup battery // charges the tiny J13 battery by the GPS to power the GPS ram (for a couple of days), can not be turned off
-    LDO2 200mA -> LORA
-    LDO3 200mA -> GPS
+ *
+ * axp192 power
+    DCDC1 0.7-3.5V @ 1200mA max -> OLED // If you turn this off you'll lose comms to the axp192 because the OLED and the axp192
+ share the same i2c bus, instead use ssd1306 sleep mode DCDC2 -> unused DCDC3 0.7-3.5V @ 700mA max -> ESP32 (keep this on!) LDO1
+ 30mA -> charges GPS backup battery // charges the tiny J13 battery by the GPS to power the GPS ram (for a couple of days), can
+ not be turned off LDO2 200mA -> LORA LDO3 200mA -> GPS
  */
 void axp192Init()
 {
 #ifdef T_BEAM_V10
-  if (axp192_found)
-  {
-    if (!axp.begin(Wire, AXP192_SLAVE_ADDRESS))
-    {
-      DEBUG_MSG("AXP192 Begin PASS\n");
+    if (axp192_found) {
+        if (!axp.begin(Wire, AXP192_SLAVE_ADDRESS)) {
+            DEBUG_MSG("AXP192 Begin PASS\n");
 
-      // axp.setChgLEDMode(LED_BLINK_4HZ);
-      DEBUG_MSG("DCDC1: %s\n", axp.isDCDC1Enable() ? "ENABLE" : "DISABLE");
-      DEBUG_MSG("DCDC2: %s\n", axp.isDCDC2Enable() ? "ENABLE" : "DISABLE");
-      DEBUG_MSG("LDO2: %s\n", axp.isLDO2Enable() ? "ENABLE" : "DISABLE");
-      DEBUG_MSG("LDO3: %s\n", axp.isLDO3Enable() ? "ENABLE" : "DISABLE");
-      DEBUG_MSG("DCDC3: %s\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
-      DEBUG_MSG("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
-      DEBUG_MSG("----------------------------------------\n");
+            // axp.setChgLEDMode(LED_BLINK_4HZ);
+            DEBUG_MSG("DCDC1: %s\n", axp.isDCDC1Enable() ? "ENABLE" : "DISABLE");
+            DEBUG_MSG("DCDC2: %s\n", axp.isDCDC2Enable() ? "ENABLE" : "DISABLE");
+            DEBUG_MSG("LDO2: %s\n", axp.isLDO2Enable() ? "ENABLE" : "DISABLE");
+            DEBUG_MSG("LDO3: %s\n", axp.isLDO3Enable() ? "ENABLE" : "DISABLE");
+            DEBUG_MSG("DCDC3: %s\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
+            DEBUG_MSG("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
+            DEBUG_MSG("----------------------------------------\n");
 
-      axp.setPowerOutPut(AXP192_LDO2, AXP202_ON); // LORA radio
-      axp.setPowerOutPut(AXP192_LDO3, AXP202_ON); // GPS main power
-      axp.setPowerOutPut(AXP192_DCDC2, AXP202_ON);
-      axp.setPowerOutPut(AXP192_EXTEN, AXP202_ON);
-      axp.setPowerOutPut(AXP192_DCDC1, AXP202_ON);
-      axp.setDCDC1Voltage(3300); // for the OLED power
+            axp.setPowerOutPut(AXP192_LDO2, AXP202_ON); // LORA radio
+            axp.setPowerOutPut(AXP192_LDO3, AXP202_ON); // GPS main power
+            axp.setPowerOutPut(AXP192_DCDC2, AXP202_ON);
+            axp.setPowerOutPut(AXP192_EXTEN, AXP202_ON);
+            axp.setPowerOutPut(AXP192_DCDC1, AXP202_ON);
+            axp.setDCDC1Voltage(3300); // for the OLED power
 
-      DEBUG_MSG("DCDC1: %s\n", axp.isDCDC1Enable() ? "ENABLE" : "DISABLE");
-      DEBUG_MSG("DCDC2: %s\n", axp.isDCDC2Enable() ? "ENABLE" : "DISABLE");
-      DEBUG_MSG("LDO2: %s\n", axp.isLDO2Enable() ? "ENABLE" : "DISABLE");
-      DEBUG_MSG("LDO3: %s\n", axp.isLDO3Enable() ? "ENABLE" : "DISABLE");
-      DEBUG_MSG("DCDC3: %s\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
-      DEBUG_MSG("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
+            DEBUG_MSG("DCDC1: %s\n", axp.isDCDC1Enable() ? "ENABLE" : "DISABLE");
+            DEBUG_MSG("DCDC2: %s\n", axp.isDCDC2Enable() ? "ENABLE" : "DISABLE");
+            DEBUG_MSG("LDO2: %s\n", axp.isLDO2Enable() ? "ENABLE" : "DISABLE");
+            DEBUG_MSG("LDO3: %s\n", axp.isLDO3Enable() ? "ENABLE" : "DISABLE");
+            DEBUG_MSG("DCDC3: %s\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
+            DEBUG_MSG("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
 
 #if 0
       // cribbing from https://github.com/m5stack/M5StickC/blob/master/src/AXP192.cpp to fix charger to be more like 300ms.  
@@ -165,163 +155,154 @@ void axp192Init()
       //val = 0x46;
       //axp._writeByte(AXP202_OFF_CTL, 1, &val); // enable bat detection
 #endif
-      axp.debugCharging();
+            axp.debugCharging();
 
 #ifdef PMU_IRQ
-      pinMode(PMU_IRQ, INPUT_PULLUP);
-      attachInterrupt(PMU_IRQ, [] {
-        pmu_irq = true;
-      },
-                      RISING);
+            pinMode(PMU_IRQ, INPUT_PULLUP);
+            attachInterrupt(
+                PMU_IRQ, [] { pmu_irq = true; }, RISING);
 
-      axp.adc1Enable(AXP202_BATT_CUR_ADC1, 1);
-      axp.enableIRQ(AXP202_VBUS_REMOVED_IRQ | AXP202_VBUS_CONNECT_IRQ | AXP202_BATT_REMOVED_IRQ | AXP202_BATT_CONNECT_IRQ, 1);
-      axp.clearIRQ();
+            axp.adc1Enable(AXP202_BATT_CUR_ADC1, 1);
+            axp.enableIRQ(AXP202_VBUS_REMOVED_IRQ | AXP202_VBUS_CONNECT_IRQ | AXP202_BATT_REMOVED_IRQ | AXP202_BATT_CONNECT_IRQ,
+                          1);
+            axp.clearIRQ();
 #endif
 
-      isCharging = axp.isChargeing() ? 1 : 0;
-      isUSBPowered = axp.isVBUSPlug() ? 1 : 0;
+            isCharging = axp.isChargeing() ? 1 : 0;
+            isUSBPowered = axp.isVBUSPlug() ? 1 : 0;
+        } else {
+            DEBUG_MSG("AXP192 Begin FAIL\n");
+        }
+    } else {
+        DEBUG_MSG("AXP192 not found\n");
     }
-    else
-    {
-      DEBUG_MSG("AXP192 Begin FAIL\n");
-    }
-  }
-  else
-  {
-    DEBUG_MSG("AXP192 not found\n");
-  }
 #endif
 }
 
 const char *getDeviceName()
 {
-  uint8_t dmac[6];
-  assert(esp_efuse_mac_get_default(dmac) == ESP_OK);
+    uint8_t dmac[6];
+    assert(esp_efuse_mac_get_default(dmac) == ESP_OK);
 
-  // Meshtastic_ab3c
-  static char name[20];
-  sprintf(name, "Meshtastic_%02x%02x", dmac[4], dmac[5]);
-  return name;
+    // Meshtastic_ab3c
+    static char name[20];
+    sprintf(name, "Meshtastic_%02x%02x", dmac[4], dmac[5]);
+    return name;
 }
 
 void setup()
 {
 // Debug
 #ifdef DEBUG_PORT
-  DEBUG_PORT.begin(SERIAL_BAUD);
+    DEBUG_PORT.begin(SERIAL_BAUD);
 #endif
 
-  initDeepSleep();
+    initDeepSleep();
 
 #ifdef VEXT_ENABLE
-  pinMode(VEXT_ENABLE, OUTPUT);
-  digitalWrite(VEXT_ENABLE, 0); // turn on the display power
+    pinMode(VEXT_ENABLE, OUTPUT);
+    digitalWrite(VEXT_ENABLE, 0); // turn on the display power
 #endif
 
 #ifdef RESET_OLED
-  pinMode(RESET_OLED, OUTPUT);
-  digitalWrite(RESET_OLED, 1);
+    pinMode(RESET_OLED, OUTPUT);
+    digitalWrite(RESET_OLED, 1);
 #endif
 
 #ifdef I2C_SDA
-  Wire.begin(I2C_SDA, I2C_SCL);
-  scanI2Cdevice();
+    Wire.begin(I2C_SDA, I2C_SCL);
+    scanI2Cdevice();
 #endif
 
-  // Buttons & LED
+    // Buttons & LED
 #ifdef BUTTON_PIN
-  pinMode(BUTTON_PIN, INPUT_PULLUP);
-  digitalWrite(BUTTON_PIN, 1);
+    pinMode(BUTTON_PIN, INPUT_PULLUP);
+    digitalWrite(BUTTON_PIN, 1);
 #endif
 #ifdef LED_PIN
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, 1); // turn on for now
+    pinMode(LED_PIN, OUTPUT);
+    digitalWrite(LED_PIN, 1); // turn on for now
 #endif
 
-  // Hello
-  DEBUG_MSG("Meshtastic swver=%s, hwver=%s\n", xstr(APP_VERSION), xstr(HW_VERSION));
+    // Hello
+    DEBUG_MSG("Meshtastic swver=%s, hwver=%s\n", xstr(APP_VERSION), xstr(HW_VERSION));
 
-  // Don't init display if we don't have one or we are waking headless due to a timer event
-  if (wakeCause == ESP_SLEEP_WAKEUP_TIMER)
-    ssd1306_found = false; // forget we even have the hardware
+    // Don't init display if we don't have one or we are waking headless due to a timer event
+    if (wakeCause == ESP_SLEEP_WAKEUP_TIMER)
+        ssd1306_found = false; // forget we even have the hardware
 
-  // Initialize the screen first so we can show the logo while we start up everything else.
-  if (ssd1306_found)
-    screen.setup();
+    // Initialize the screen first so we can show the logo while we start up everything else.
+    if (ssd1306_found)
+        screen.setup();
 
-  axp192Init();
+    axp192Init();
 
-  screen.print("Started...\n");
+    screen.print("Started...\n");
 
-  // Init GPS
-  gps.setup();
+    // Init GPS
+    gps.setup();
 
-  service.init();
+    service.init();
 
-  // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
-  PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
+    // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
+    PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
 
-  // setBluetoothEnable(false); we now don't start bluetooth until we enter the proper state
-  setCPUFast(false); // 80MHz is fine for our slow peripherals
+    // setBluetoothEnable(false); we now don't start bluetooth until we enter the proper state
+    setCPUFast(false); // 80MHz is fine for our slow peripherals
 }
 
 void initBluetooth()
 {
-  DEBUG_MSG("Starting bluetooth\n");
+    DEBUG_MSG("Starting bluetooth\n");
 
-  // FIXME - we are leaking like crazy
-  // AllocatorScope scope(btPool);
+    // FIXME - we are leaking like crazy
+    // AllocatorScope scope(btPool);
 
-  // Note: these callbacks might be coming in from a different thread.
-  BLEServer *serve = initBLE(
-      [](uint8_t pin) {
-          powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
-          screen.startBluetoothPinScreen(pin);
-      },
-      []() { screen.stopBluetoothPinScreen(); },
-      getDeviceName(), HW_VENDOR, xstr(APP_VERSION), xstr(HW_VERSION)); // FIXME, use a real name based on the macaddr
-  createMeshBluetoothService(serve);
+    // Note: these callbacks might be coming in from a different thread.
+    BLEServer *serve = initBLE(
+        [](uint8_t pin) {
+            powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
+            screen.startBluetoothPinScreen(pin);
+        },
+        []() { screen.stopBluetoothPinScreen(); }, getDeviceName(), HW_VENDOR, xstr(APP_VERSION),
+        xstr(HW_VERSION)); // FIXME, use a real name based on the macaddr
+    createMeshBluetoothService(serve);
 
-  // Start advertising - this must be done _after_ creating all services
-  serve->getAdvertising()->start();
+    // Start advertising - this must be done _after_ creating all services
+    serve->getAdvertising()->start();
 }
 
 void setBluetoothEnable(bool on)
 {
-  if (on != bluetoothOn)
-  {
-    DEBUG_MSG("Setting bluetooth enable=%d\n", on);
+    if (on != bluetoothOn) {
+        DEBUG_MSG("Setting bluetooth enable=%d\n", on);
 
-    bluetoothOn = on;
-    if (on)
-    {
-      Serial.printf("Pre BT: %u heap size\n", ESP.getFreeHeap());
-      //ESP_ERROR_CHECK( heap_trace_start(HEAP_TRACE_LEAKS) );
-      initBluetooth();
+        bluetoothOn = on;
+        if (on) {
+            Serial.printf("Pre BT: %u heap size\n", ESP.getFreeHeap());
+            // ESP_ERROR_CHECK( heap_trace_start(HEAP_TRACE_LEAKS) );
+            initBluetooth();
+        } else {
+            // We have to totally teardown our bluetooth objects to prevent leaks
+            stopMeshBluetoothService(); // Must do before shutting down bluetooth
+            deinitBLE();
+            destroyMeshBluetoothService(); // must do after deinit, because it frees our service
+            Serial.printf("Shutdown BT: %u heap size\n", ESP.getFreeHeap());
+            // ESP_ERROR_CHECK( heap_trace_stop() );
+            // heap_trace_dump();
+        }
     }
-    else
-    {
-      // We have to totally teardown our bluetooth objects to prevent leaks
-      stopMeshBluetoothService(); // Must do before shutting down bluetooth
-      deinitBLE();
-      destroyMeshBluetoothService(); // must do after deinit, because it frees our service
-      Serial.printf("Shutdown BT: %u heap size\n", ESP.getFreeHeap());
-      //ESP_ERROR_CHECK( heap_trace_stop() );
-      //heap_trace_dump();
-    }
-  }
 }
 
 uint32_t ledBlinker()
 {
-  static bool ledOn;
-  ledOn ^= 1;
+    static bool ledOn;
+    ledOn ^= 1;
 
-  setLed(ledOn);
+    setLed(ledOn);
 
-  // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
-  return isCharging ? 1000 : (ledOn ? 2 : 1000);
+    // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
+    return isCharging ? 1000 : (ledOn ? 2 : 1000);
 }
 
 Periodic ledPeriodic(ledBlinker);
@@ -345,83 +326,77 @@ Periodic axpDebugOutput(axpReads);
 
 void loop()
 {
-  uint32_t msecstosleep = 1000 * 30; // How long can we sleep before we again need to service the main loop?
+    uint32_t msecstosleep = 1000 * 30; // How long can we sleep before we again need to service the main loop?
 
-  powerFSM.run_machine();
-  gps.loop();
-  screen.loop();
-  service.loop();
+    powerFSM.run_machine();
+    gps.loop();
+    screen.loop();
+    service.loop();
 
-  ledPeriodic.loop();
-  // axpDebugOutput.loop();
-  loopBLE();
+    ledPeriodic.loop();
+    // axpDebugOutput.loop();
+    loopBLE();
 
-  // for debug printing
-  // service.radio.rf95.canSleep();
+    // for debug printing
+    // service.radio.rf95.canSleep();
 
 #ifdef T_BEAM_V10
-  if (axp192_found)
-  {
+    if (axp192_found) {
 #ifdef PMU_IRQ
-    if (pmu_irq)
-    {
-      pmu_irq = false;
-      axp.readIRQ();
+        if (pmu_irq) {
+            pmu_irq = false;
+            axp.readIRQ();
 
-      DEBUG_MSG("pmu irq!\n");
+            DEBUG_MSG("pmu irq!\n");
 
-      isCharging = axp.isChargeing() ? 1 : 0;
-      isUSBPowered = axp.isVBUSPlug() ? 1 : 0;
+            isCharging = axp.isChargeing() ? 1 : 0;
+            isUSBPowered = axp.isVBUSPlug() ? 1 : 0;
 
-      axp.clearIRQ();
-    }
+            axp.clearIRQ();
+        }
 
-    // FIXME AXP192 interrupt is not firing, remove this temporary polling of battery state
-    isCharging = axp.isChargeing() ? 1 : 0;
-    isUSBPowered = axp.isVBUSPlug() ? 1 : 0;
+        // FIXME AXP192 interrupt is not firing, remove this temporary polling of battery state
+        isCharging = axp.isChargeing() ? 1 : 0;
+        isUSBPowered = axp.isVBUSPlug() ? 1 : 0;
 #endif
-  }
+    }
 #endif
 
 #ifdef BUTTON_PIN
-  // if user presses button for more than 3 secs, discard our network prefs and reboot (FIXME, use a debounce lib instead of this boilerplate)
-  static bool wasPressed = false;
+    // if user presses button for more than 3 secs, discard our network prefs and reboot (FIXME, use a debounce lib instead of
+    // this boilerplate)
+    static bool wasPressed = false;
 
- 
-  if (!digitalRead(BUTTON_PIN))
-  {
-    if (!wasPressed)
-    { // just started a new press
-      DEBUG_MSG("pressing\n");
+    if (!digitalRead(BUTTON_PIN)) {
+        if (!wasPressed) { // just started a new press
+            DEBUG_MSG("pressing\n");
 
-      //doLightSleep();
-      // esp_pm_dump_locks(stdout); // FIXME, do this someplace better
-      wasPressed = true;
+            // doLightSleep();
+            // esp_pm_dump_locks(stdout); // FIXME, do this someplace better
+            wasPressed = true;
 
-      powerFSM.trigger(EVENT_PRESS);
+            powerFSM.trigger(EVENT_PRESS);
+        }
+    } else if (wasPressed) {
+        // we just did a release
+        wasPressed = false;
     }
-  }
-  else if (wasPressed)
-  {
-    // we just did a release
-    wasPressed = false;
-  }
 #endif
 
-  // Show boot screen for first 3 seconds, then switch to normal operation.
-  static bool showingBootScreen = true;
-  if (showingBootScreen && (millis() > 3000))
-  {
-      screen.stopBootScreen();
-      showingBootScreen = false;
-  }
+    // Show boot screen for first 3 seconds, then switch to normal operation.
+    static bool showingBootScreen = true;
+    if (showingBootScreen && (millis() > 3000)) {
+        screen.stopBootScreen();
+        showingBootScreen = false;
+    }
 
-  // No GPS lock yet, let the OS put the main CPU in low power mode for 100ms (or until another interrupt comes in)
-  // i.e. don't just keep spinning in loop as fast as we can.
-  //DEBUG_MSG("msecs %d\n", msecstosleep);
+    // No GPS lock yet, let the OS put the main CPU in low power mode for 100ms (or until another interrupt comes in)
+    // i.e. don't just keep spinning in loop as fast as we can.
+    // DEBUG_MSG("msecs %d\n", msecstosleep);
 
-  // FIXME - until button press handling is done by interrupt (see polling above) we can't sleep very long at all or buttons feel slow
-  msecstosleep = 10;
+    // FIXME - until button press handling is done by interrupt (see polling above) we can't sleep very long at all or buttons
+    // feel slow
+    msecstosleep = 10;
 
-  delay(msecstosleep);
+    delay(msecstosleep);
 }

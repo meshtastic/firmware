@@ -1,10 +1,10 @@
 #pragma once
 
-#include <BLEService.h>
-#include <BLEServer.h>
 #include <Arduino.h>
+#include <BLEServer.h>
+#include <BLEService.h>
 
-BLEService *createMeshBluetoothService(BLEServer* server);
+BLEService *createMeshBluetoothService(BLEServer *server);
 void destroyMeshBluetoothService();
 
 /**

@@ -124,22 +124,19 @@ static void screenPress()
     screen.onPress();
 }
 
-
-static void bootEnter() {
-}
+static void bootEnter() {}
 
 State stateSDS(sdsEnter, NULL, NULL, "SDS");
 State stateLS(lsEnter, lsIdle, lsExit, "LS");
 State stateNB(nbEnter, NULL, NULL, "NB");
 State stateDARK(darkEnter, NULL, NULL, "DARK");
-State stateBOOT(bootEnter , NULL,  NULL, "BOOT");
+State stateBOOT(bootEnter, NULL, NULL, "BOOT");
 State stateON(onEnter, NULL, NULL, "ON");
 Fsm powerFSM(&stateBOOT);
 
 void PowerFSM_setup()
 {
-    powerFSM.add_timed_transition(&stateBOOT, &stateON, 3 * 1000, NULL,
-                                  "boot timeout");
+    powerFSM.add_timed_transition(&stateBOOT, &stateON, 3 * 1000, NULL, "boot timeout");
 
     powerFSM.add_transition(&stateLS, &stateDARK, EVENT_WAKE_TIMER, wakeForPing, "Wake timer");
 
