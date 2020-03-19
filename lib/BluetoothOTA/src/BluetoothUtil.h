@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 #include <Arduino.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
@@ -17,8 +19,14 @@ void dumpCharacteristic(BLECharacteristic *c);
 /** converting endianness pull out a 32 bit value */
 uint32_t getValue32(BLECharacteristic *c, uint32_t defaultValue);
 
+// TODO(girts): create a class for the bluetooth utils helpers?
+using StartBluetoothPinScreenCallback = std::function<void(uint32_t pass_key)>;
+using StopBluetoothPinScreenCallback = std::function<void(void)>;
+
 void loopBLE();
-BLEServer *initBLE(std::string devName, std::string hwVendor, std::string swVersion, std::string hwVersion = "");
+BLEServer *initBLE(
+    StartBluetoothPinScreenCallback startBtPinScreen, StopBluetoothPinScreenCallback stopBtPinScreen,
+    std::string devName, std::string hwVendor, std::string swVersion, std::string hwVersion = "");
 void deinitBLE();
 
 /// Add a characteristic that we will delete when we restart

@@ -5,7 +5,6 @@
 #include <Arduino.h>
 #include <Update.h>
 #include "configuration.h"
-#include "screen.h"
 
 SimpleAllocator btPool;
 
@@ -173,7 +172,7 @@ uint32_t getValue32(BLECharacteristic *c, uint32_t defaultValue)
 
 class MySecurity : public BLESecurityCallbacks
 {
-
+ protected:
   bool onConfirmPIN(uint32_t pin)
   {
     Serial.printf("onConfirmPIN %u\n", pin);
@@ -189,7 +188,7 @@ class MySecurity : public BLESecurityCallbacks
   void onPassKeyNotify(uint32_t pass_key)
   {
     Serial.printf("onPassKeyNotify %u\n", pass_key);
-    screen_start_bluetooth(pass_key);
+    startCb(pass_key);
   }
 
   bool onSecurityRequest()
@@ -211,9 +210,13 @@ class MySecurity : public BLESecurityCallbacks
       Serial.printf("onAuthenticationComplete -> fail %d\n", cmpl.fail_reason);
     }
 
-    // Remove our custom screen
-    screen.setFrames();
+    // Remove our custom PIN request screen.
+    stopCb();
   }
+
+ public:
+  StartBluetoothPinScreenCallback startCb;
+  StopBluetoothPinScreenCallback stopCb;
 };
 
 BLEServer *pServer;
@@ -255,7 +258,10 @@ void deinitBLE()
   btPool.reset();
 }
 
-BLEServer *initBLE(std::string deviceName, std::string hwVendor, std::string swVersion, std::string hwVersion)
+BLEServer *initBLE(
+    StartBluetoothPinScreenCallback startBtPinScreen,
+    StopBluetoothPinScreenCallback stopBtPinScreen,
+    std::string deviceName, std::string hwVendor, std::string swVersion, std::string hwVersion)
 {
   BLEDevice::init(deviceName);
   BLEDevice::setEncryptionLevel(ESP_BLE_SEC_ENCRYPT);
@@ -264,6 +270,8 @@ BLEServer *initBLE(std::string deviceName, std::string hwVendor, std::string swV
    * Required in authentication process to provide displaying and/or input passkey or yes/no butttons confirmation
    */
   static MySecurity mySecurity;
+  mySecurity.startCb = startBtPinScreen;
+  mySecurity.stopCb = stopBtPinScreen;
   BLEDevice::setSecurityCallbacks(&mySecurity);
 
   // Create the BLE Server
