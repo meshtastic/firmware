@@ -20,18 +20,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 
+#include <OLEDDisplay.h>
+#include <OLEDDisplayUi.h>
+#include <SSD1306Wire.h>
 #include <Wire.h>
-#include "SSD1306Wire.h"
-#include "OLEDDisplay.h"
-#include "images.h"
-#include "fonts.h"
+
 #include "GPS.h"
-#include "OLEDDisplayUi.h"
-#include "screen.h"
-#include "mesh-pb-constants.h"
 #include "NodeDB.h"
-#include "main.h"
 #include "configuration.h"
+#include "fonts.h"
+#include "images.h"
+#include "main.h"
+#include "mesh-pb-constants.h"
+#include "screen.h"
 
 #define FONT_HEIGHT 14 // actually 13 for "ariel 10" but want a little extra space
 #define FONT_HEIGHT_16 (ArialMT_Plain_16[1] + 1)
@@ -59,7 +60,10 @@ static bool showingBluetooth;
 /// If set to true (possibly from an ISR), we should turn on the screen the next time our idle loop runs.
 static bool showingBootScreen = true; // start by showing the bootscreen
 
-bool Screen::isOn() { return screenOn; }
+bool Screen::isOn()
+{
+    return screenOn;
+}
 
 void msOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
@@ -152,8 +156,10 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     display->drawString(0 + x, 0 + y, sender);
     display->setFont(ArialMT_Plain_10);
 
+    // the max length of this buffer is much longer than we can possibly print
     static char tempBuf[96];
-    snprintf(tempBuf, sizeof(tempBuf), "         %s", mp.payload.variant.data.payload.bytes); // the max length of this buffer is much longer than we can possibly print
+    snprintf(tempBuf, sizeof(tempBuf), "         %s",
+             mp.payload.variant.data.payload.bytes);
 
     display->drawStringMaxWidth(4 + x, 10 + y, 128, tempBuf);
 
@@ -168,12 +174,10 @@ void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields
 
     const char **f = fields;
     int xo = x, yo = y;
-    while (*f)
-    {
+    while (*f) {
         display->drawString(xo, yo, *f);
         yo += FONT_HEIGHT;
-        if (yo > SCREEN_HEIGHT - FONT_HEIGHT)
-        {
+        if (yo > SCREEN_HEIGHT - FONT_HEIGHT) {
             xo += SCREEN_WIDTH / 2;
             yo = 0;
         }
@@ -190,12 +194,10 @@ uint32_t drawRows(OLEDDisplay *display, int16_t x, int16_t y, const char **field
 
     const char **f = fields;
     int xo = x, yo = y;
-    while (*f)
-    {
+    while (*f) {
         display->drawString(xo, yo, *f);
         xo += SCREEN_WIDTH / 2; // hardwired for two columns per row....
-        if (xo >= SCREEN_WIDTH)
-        {
+        if (xo >= SCREEN_WIDTH) {
             yo += FONT_HEIGHT;
             xo = 0;
         }
@@ -217,10 +219,8 @@ float latLongToMeter(double lat_a, double lng_a, double lat_b, double lng_b)
     double b2 = lng_b / pk;
     double cos_b1 = cos(b1);
     double cos_a1 = cos(a1);
-    double t1 =
-        cos_a1 * cos(a2) * cos_b1 * cos(b2);
-    double t2 =
-        cos_a1 * sin(a2) * cos_b1 * sin(b2);
+    double t1 = cos_a1 * cos(a2) * cos_b1 * cos(b2);
+    double t2 = cos_a1 * sin(a2) * cos_b1 * sin(b2);
     double t3 = sin(a1) * sin(b1);
     double tt = acos(t1 + t2 + t3);
     if (isnan(tt))
@@ -240,19 +240,19 @@ inline double toDegrees(double r)
 }
 
 /**
-     * Computes the bearing in degrees between two points on Earth.  Ported from my old Gaggle android app.
-     *
-     * @param lat1
-     * Latitude of the first point
-     * @param lon1
-     * Longitude of the first point
-     * @param lat2
-     * Latitude of the second point
-     * @param lon2
-     * Longitude of the second point
-     * @return Bearing between the two points in radians. A value of 0 means due
-     * north.
-     */
+ * Computes the bearing in degrees between two points on Earth.  Ported from my old Gaggle android app.
+ *
+ * @param lat1
+ * Latitude of the first point
+ * @param lon1
+ * Longitude of the first point
+ * @param lat2
+ * Latitude of the second point
+ * @param lon2
+ * Longitude of the second point
+ * @return Bearing between the two points in radians. A value of 0 means due
+ * north.
+ */
 float bearing(double lat1, double lon1, double lat2, double lon2)
 {
     double lat1Rad = toRadians(lat1);
@@ -266,7 +266,7 @@ float bearing(double lat1, double lon1, double lat2, double lon2)
 /// A basic 2D point class for drawing
 class Point
 {
-public:
+  public:
     float x, y;
 
     Point(float _x, float _y) : x(_x), y(_y) {}
@@ -274,10 +274,8 @@ public:
     /// Apply a rotation around zero (standard rotation matrix math)
     void rotate(float radian)
     {
-        float cos = cosf(radian),
-              sin = sinf(radian);
-        float rx = x * cos - y * sin,
-              ry = x * sin + y * cos;
+        float cos = cosf(radian), sin = sinf(radian);
+        float rx = x * cos - y * sin, ry = x * sin + y * cos;
 
         x = rx;
         y = ry;
@@ -303,7 +301,7 @@ void drawLine(OLEDDisplay *d, const Point &p1, const Point &p2)
 
 /**
  * Given a recent lat/lon return a guess of the heading the user is walking on.
- * 
+ *
  * We keep a series of "after you've gone 10 meters, what is your heading since the last reference point?"
  */
 float estimatedHeading(double lat, double lon)
@@ -311,8 +309,7 @@ float estimatedHeading(double lat, double lon)
     static double oldLat, oldLon;
     static float b;
 
-    if (oldLat == 0)
-    {
+    if (oldLat == 0) {
         // just prepare for next time
         oldLat = lat;
         oldLon = lon;
@@ -344,15 +341,14 @@ static int8_t prevFrame = -1;
 
 void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    // We only advance our nodeIndex if the frame # has changed - because drawNodeInfo will be called repeatedly while the frame is shown
-    if (state->currentFrame != prevFrame)
-    {
+    // We only advance our nodeIndex if the frame # has changed - because drawNodeInfo will be called repeatedly while the frame
+    // is shown
+    if (state->currentFrame != prevFrame) {
         prevFrame = state->currentFrame;
 
         nodeIndex = (nodeIndex + 1) % nodeDB.getNumNodes();
         NodeInfo *n = nodeDB.getNodeByIndex(nodeIndex);
-        if (n->num == nodeDB.getNodeNum())
-        {
+        if (n->num == nodeDB.getNodeNum()) {
             // Don't show our node, just skip to next
             nodeIndex = (nodeIndex + 1) % nodeDB.getNumNodes();
         }
@@ -386,8 +382,7 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
     *distStr = 0; // might not have location data
     float headingRadian = simRadian;
     NodeInfo *ourNode = nodeDB.getNode(nodeDB.getNodeNum());
-    if (ourNode && hasPosition(ourNode) && hasPosition(node))
-    {
+    if (ourNode && hasPosition(ourNode) && hasPosition(node)) {
         Position &op = ourNode->position, &p = node->position;
         float d = latLongToMeter(p.latitude, p.longitude, op.latitude, op.longitude);
         if (d < 2000)
@@ -395,18 +390,14 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
         else
             snprintf(distStr, sizeof(distStr), "%.1f km", d / 1000);
 
-        // FIXME, also keep the guess at the operators heading and add/substract it.  currently we don't do this and instead draw north up only.
+        // FIXME, also keep the guess at the operators heading and add/substract it.  currently we don't do this and instead draw
+        // north up only.
         float bearingToOther = bearing(p.latitude, p.longitude, op.latitude, op.longitude);
         float myHeading = estimatedHeading(p.latitude, p.longitude);
         headingRadian = bearingToOther - myHeading;
     }
 
-    const char *fields[] = {
-        username,
-        distStr,
-        signalStr,
-        lastStr,
-        NULL};
+    const char *fields[] = {username, distStr, signalStr, lastStr, NULL};
     drawColumns(display, x, y, fields);
 
     // coordinates for the center of the compass
@@ -419,8 +410,7 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
 
     Point *points[] = {&tip, &tail, &leftArrow, &rightArrow};
 
-    for (int i = 0; i < 4; i++)
-    {
+    for (int i = 0; i < 4; i++) {
         points[i]->rotate(headingRadian);
         points[i]->scale(COMPASS_DIAM * 0.6);
         points[i]->translate(compassX, compassY);
@@ -455,12 +445,7 @@ void drawDebugInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
     else
         gpsStr[0] = '\0'; // Just show emptystring
 
-    const char *fields[] = {
-        batStr,
-        gpsStr,
-        usersStr,
-        channelStr,
-        NULL};
+    const char *fields[] = {batStr, gpsStr, usersStr, channelStr, NULL};
     uint32_t yo = drawRows(display, x, y, fields);
 
     display->drawLogBuffer(x, yo);
@@ -506,15 +491,12 @@ void Screen::setOn(bool on)
     if (!disp)
         return;
 
-    if (on != screenOn)
-    {
-        if (on)
-        {
+    if (on != screenOn) {
+        if (on) {
             DEBUG_MSG("Turning on screen\n");
             dispdev.displayOn();
             setPeriod(1); // redraw ASAP
-        }
-        else {
+        } else {
             DEBUG_MSG("Turning off screen\n");
             dispdev.displayOff();
         }
@@ -556,8 +538,8 @@ void Screen::setup()
     // ui.setTargetFPS(30);
 
     // Customize the active and inactive symbol
-    //ui.setActiveSymbol(activeSymbol);
-    //ui.setInactiveSymbol(inactiveSymbol);
+    // ui.setActiveSymbol(activeSymbol);
+    // ui.setInactiveSymbol(inactiveSymbol);
 
     ui.setTimePerTransition(300); // msecs
 
@@ -572,7 +554,8 @@ void Screen::setup()
     // SLIDE_LEFT, SLIDE_RIGHT, SLIDE_UP, SLIDE_DOWN
     ui.setFrameAnimation(SLIDE_LEFT);
 
-    // Add frames - we subtract one from the framecount so there won't be a visual glitch when we take the boot screen out of the sequence.
+    // Add frames - we subtract one from the framecount so there won't be a visual glitch when we take the boot screen out of the
+    // sequence.
     ui.setFrames(bootFrames, bootFrameCount);
 
     // Add overlays
@@ -604,14 +587,12 @@ static uint32_t targetFramerate = IDLE_FRAMERATE;
 
 void Screen::doTask()
 {
-    if (!disp)
-    { // If we don't have a screen, don't ever spend any CPU for us
+    if (!disp) { // If we don't have a screen, don't ever spend any CPU for us
         setPeriod(0);
         return;
     }
 
-    if (!screenOn)
-    { // If we didn't just wake and the screen is still off, then stop updating until it is on again
+    if (!screenOn) { // If we didn't just wake and the screen is still off, then stop updating until it is on again
         setPeriod(0);
         return;
     }
@@ -619,8 +600,7 @@ void Screen::doTask()
     // Switch to a low framerate (to save CPU) when we are not in transition
     // but we should only call setTargetFPS when framestate changes, because otherwise that breaks
     // animations.
-    if (targetFramerate != IDLE_FRAMERATE && ui.getUiState()->frameState == FIXED)
-    {
+    if (targetFramerate != IDLE_FRAMERATE && ui.getUiState()->frameState == FIXED) {
         // oldFrameState = ui.getUiState()->frameState;
         DEBUG_MSG("Setting idle framerate\n");
         targetFramerate = IDLE_FRAMERATE;
@@ -628,22 +608,18 @@ void Screen::doTask()
     }
 
     // While showing the bluetooth pair screen all of our standard screen switching is stopped
-    if (!showingBluetooth)
-    {
+    if (!showingBluetooth) {
         // Once we finish showing the bootscreen, remove it from the loop
-        if (showingBootScreen)
-        {
+        if (showingBootScreen) {
             if (millis() > 3 * 1000) // we show the boot screen for a few seconds only
             {
                 showingBootScreen = false;
                 setFrames();
             }
-        }
-        else // standard screen loop handling ehre
+        } else // standard screen loop handling ehre
         {
             // If the # nodes changes, we need to regen our list of screens
-            if (nodeDB.updateGUI || nodeDB.updateTextMessage)
-            {
+            if (nodeDB.updateGUI || nodeDB.updateTextMessage) {
                 setFrames();
                 nodeDB.updateGUI = false;
                 nodeDB.updateTextMessage = false;
@@ -713,8 +689,7 @@ void Screen::onPress()
 {
     // If screen was off, just wake it, otherwise advance to next frame
     // If we are in a transition, the press must have bounced, drop it.
-    if (ui.getUiState()->frameState == FIXED)
-    {
+    if (ui.getUiState()->frameState == FIXED) {
         setPeriod(1); // redraw ASAP
         ui.nextFrame();
 
