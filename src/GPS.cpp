@@ -35,7 +35,8 @@ void GPS::setup()
     isConnected = ublox.begin(_serial_gps);
 
     // try a second time, the ublox lib serial parsing is buggy?
-    if(!isConnected) isConnected = ublox.begin(_serial_gps);
+    if (!isConnected)
+        isConnected = ublox.begin(_serial_gps);
 
     if (isConnected) {
         DEBUG_MSG("Connected to GPS successfully, TXpin=%d\n", GPS_TX_PIN);

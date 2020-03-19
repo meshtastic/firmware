@@ -41,10 +41,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // Select which board is being used. If the outside build environment has sent a choice, just use that
 #if !defined(T_BEAM_V10) && !defined(HELTEC_LORA32)
-// #define T_BEAM_V10  // AKA Rev1 (second board released)
-#define HELTEC_LORA32
+#define T_BEAM_V10 // AKA Rev1 (second board released)
+// #define HELTEC_LORA32
 
-#define HW_VERSION_US // We encode the hardware freq range in the hw version string, so sw update can eventually install the correct build
+#define HW_VERSION_US // We encode the hardware freq range in the hw version string, so sw update can eventually install the
+                      // correct build
 #endif
 
 // If we are using the JTAG port for debugging, some pins must be left free for that (and things like GPS have to be disabled)
