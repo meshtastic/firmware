@@ -3,17 +3,17 @@
 #include <Arduino.h>
 #include <assert.h>
 
-#include "mesh.pb.h"
-#include "MeshRadio.h"
-#include "PointerQueue.h"
 #include "MemoryPool.h"
+#include "MeshRadio.h"
 #include "Observer.h"
+#include "PointerQueue.h"
+#include "mesh.pb.h"
 
 /**
  * Top level app for this service.  keeps the mesh, the radio config and the queue of received packets.
- * 
+ *
  */
-class MeshService: private Observer
+class MeshService : private Observer
 {
     MemoryPool<MeshPacket> packetPool;
 
@@ -30,14 +30,13 @@ class MeshService: private Observer
     /// The current nonce for the newest packet which has been queued for the phone
     uint32_t fromNum;
 
-public:
-
+  public:
     MeshRadio radio;
 
     MeshService();
 
     void init();
-    
+
     /// Do idle processing (mostly processing messages which have been queued from the radio)
     void loop();
 
@@ -56,21 +55,24 @@ public:
 
     /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
     void reloadOwner() { sendOurOwner(); }
-    
+
     /// Allocate and return a meshpacket which defaults as send to broadcast from the current node.
     MeshPacket *allocForSending();
 
-    /// Called when the user wakes up our GUI, normally sends our latest location to the mesh (if we have it), otherwise at least sends our owner
+    /// Called when the user wakes up our GUI, normally sends our latest location to the mesh (if we have it), otherwise at least
+    /// sends our owner
     void sendNetworkPing(NodeNum dest = NODENUM_BROADCAST);
 
-    /// Send our owner info to a particular node 
+    /// Send our owner info to a particular node
     void sendOurOwner(NodeNum dest = NODENUM_BROADCAST);
-private:
+
+  private:
     /// Broadcasts our last known position
     void sendOurPosition(NodeNum dest = NODENUM_BROADCAST);
 
-    /// Send a packet into the mesh - note p must have been allocated from packetPool.  We will return it to that pool after sending.
-    /// This is the ONLY function you should use for sending messages into the mesh, because it also updates the nodedb cache
+    /// Send a packet into the mesh - note p must have been allocated from packetPool.  We will return it to that pool after
+    /// sending. This is the ONLY function you should use for sending messages into the mesh, because it also updates the nodedb
+    /// cache
     void sendToMesh(MeshPacket *p);
 
     /// Called when our gps position has changed - updates nodedb and sends Location message out into the mesh
@@ -92,4 +94,3 @@ private:
 };
 
 extern MeshService service;
-

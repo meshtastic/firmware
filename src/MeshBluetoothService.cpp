@@ -1,21 +1,22 @@
-#include "BluetoothUtil.h"
 #include "MeshBluetoothService.h"
-#include <esp_gatt_defs.h>
-#include <BLE2902.h>
+#include "BluetoothUtil.h"
 #include <Arduino.h>
+#include <BLE2902.h>
 #include <assert.h>
+#include <esp_gatt_defs.h>
 
-#include "mesh.pb.h"
-#include "MeshService.h"
-#include "mesh-pb-constants.h"
-#include "NodeDB.h"
-#include "configuration.h"
-#include "PowerFSM.h"
 #include "CallbackCharacteristic.h"
+#include "MeshService.h"
+#include "NodeDB.h"
+#include "PowerFSM.h"
+#include "configuration.h"
+#include "mesh-pb-constants.h"
+#include "mesh.pb.h"
 
 #include "GPS.h"
 
-// This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in proccess at once
+// This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in
+// proccess at once
 static uint8_t trBytes[_max(_max(_max(_max(ToRadio_size, RadioConfig_size), User_size), MyNodeInfo_size), FromRadio_size)];
 
 class ProtobufCharacteristic : public CallbackCharacteristic
@@ -23,11 +24,9 @@ class ProtobufCharacteristic : public CallbackCharacteristic
     const pb_msgdesc_t *fields;
     void *my_struct;
 
-public:
+  public:
     ProtobufCharacteristic(const char *uuid, uint32_t btprops, const pb_msgdesc_t *_fields, void *_my_struct)
-        : CallbackCharacteristic(uuid, btprops),
-          fields(_fields),
-          my_struct(_my_struct)
+        : CallbackCharacteristic(uuid, btprops), fields(_fields), my_struct(_my_struct)
     {
         setCallbacks(this);
     }
@@ -46,7 +45,7 @@ public:
         writeToDest(c, my_struct);
     }
 
-protected:
+  protected:
     /// like onWrite, but we provide an different destination to write to, for use by subclasses that
     /// want to optionally ignore parts of writes.
     /// returns true for success
@@ -61,9 +60,10 @@ protected:
 
 class NodeInfoCharacteristic : public BLECharacteristic, public BLEKeepAliveCallbacks
 {
-public:
+  public:
     NodeInfoCharacteristic()
-        : BLECharacteristic("d31e02e0-c8ab-4d3f-9cc9-0b8466bdabe8", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ)
+        : BLECharacteristic("d31e02e0-c8ab-4d3f-9cc9-0b8466bdabe8",
+                            BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ)
     {
         setCallbacks(this);
     }
@@ -74,14 +74,12 @@ public:
 
         const NodeInfo *info = nodeDB.readNextInfo();
 
-        if (info)
-        {
-            DEBUG_MSG("Sending nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s\n", info->num, info->position.time, info->user.id, info->user.long_name);
+        if (info) {
+            DEBUG_MSG("Sending nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s\n", info->num, info->position.time, info->user.id,
+                      info->user.long_name);
             size_t numbytes = pb_encode_to_bytes(trBytes, sizeof(trBytes), NodeInfo_fields, info);
             c->setValue(trBytes, numbytes);
-        }
-        else
-        {
+        } else {
             c->setValue(trBytes, 0); // Send an empty response
             DEBUG_MSG("Done sending nodeinfos\n");
         }
@@ -95,13 +93,14 @@ public:
     }
 };
 
-
 // wrap our protobuf version with something that forces the service to reload the config
 class RadioCharacteristic : public ProtobufCharacteristic
 {
-public:
+  public:
     RadioCharacteristic()
-        : ProtobufCharacteristic("b56786c8-839a-44a1-b98e-a1724c4a0262", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ, RadioConfig_fields, &radioConfig)
+        : ProtobufCharacteristic("b56786c8-839a-44a1-b98e-a1724c4a0262",
+                                 BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ, RadioConfig_fields,
+                                 &radioConfig)
     {
     }
 
@@ -125,33 +124,31 @@ public:
 // wrap our protobuf version with something that forces the service to reload the owner
 class OwnerCharacteristic : public ProtobufCharacteristic
 {
-public:
+  public:
     OwnerCharacteristic()
-        : ProtobufCharacteristic("6ff1d8b6-e2de-41e3-8c0b-8fa384f64eb6", BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ, User_fields, &owner)
+        : ProtobufCharacteristic("6ff1d8b6-e2de-41e3-8c0b-8fa384f64eb6",
+                                 BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ, User_fields, &owner)
     {
     }
 
     void onWrite(BLECharacteristic *c)
     {
-        BLEKeepAliveCallbacks::onWrite(c); // NOTE: We do not call the standard ProtobufCharacteristic superclass, because we want custom write behavior
+        BLEKeepAliveCallbacks::onWrite(
+            c); // NOTE: We do not call the standard ProtobufCharacteristic superclass, because we want custom write behavior
 
         static User o; // if the phone doesn't set ID we are careful to keep ours, we also always keep our macaddr
-        if (writeToDest(c, &o))
-        {
+        if (writeToDest(c, &o)) {
             int changed = 0;
 
-            if (*o.long_name)
-            {
+            if (*o.long_name) {
                 changed |= strcmp(owner.long_name, o.long_name);
                 strcpy(owner.long_name, o.long_name);
             }
-            if (*o.short_name)
-            {
+            if (*o.short_name) {
                 changed |= strcmp(owner.short_name, o.short_name);
                 strcpy(owner.short_name, o.short_name);
             }
-            if (*o.id)
-            {
+            if (*o.id) {
                 changed |= strcmp(owner.id, o.id);
                 strcpy(owner.id, o.id);
             }
@@ -164,11 +161,8 @@ public:
 
 class ToRadioCharacteristic : public CallbackCharacteristic
 {
-public:
-    ToRadioCharacteristic()
-        : CallbackCharacteristic("f75c76d2-129e-4dad-a1dd-7866124401e7", BLECharacteristic::PROPERTY_WRITE)
-    {
-    }
+  public:
+    ToRadioCharacteristic() : CallbackCharacteristic("f75c76d2-129e-4dad-a1dd-7866124401e7", BLECharacteristic::PROPERTY_WRITE) {}
 
     void onWrite(BLECharacteristic *c)
     {
@@ -181,9 +175,8 @@ public:
 
 class FromRadioCharacteristic : public CallbackCharacteristic
 {
-public:
-    FromRadioCharacteristic()
-        : CallbackCharacteristic("8ba2bcc2-ee02-4a55-a531-c525c5e454d5", BLECharacteristic::PROPERTY_READ)
+  public:
+    FromRadioCharacteristic() : CallbackCharacteristic("8ba2bcc2-ee02-4a55-a531-c525c5e454d5", BLECharacteristic::PROPERTY_READ)
     {
     }
 
@@ -194,13 +187,10 @@ public:
 
         // Someone is going to read our value as soon as this callback returns.  So fill it with the next message in the queue
         // or make empty if the queue is empty
-        if (!mp)
-        {
+        if (!mp) {
             DEBUG_MSG("toPhone queue is empty\n");
             c->setValue((uint8_t *)"", 0);
-        }
-        else
-        {
+        } else {
             static FromRadio fRadio;
 
             // Encapsulate as a FromRadio packet
@@ -219,10 +209,11 @@ public:
 
 class FromNumCharacteristic : public CallbackCharacteristic
 {
-public:
+  public:
     FromNumCharacteristic()
-        : CallbackCharacteristic("ed9da18c-a800-4f66-a670-aa7547e34453",
-                                 BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY)
+        : CallbackCharacteristic("ed9da18c-a800-4f66-a670-aa7547e34453", BLECharacteristic::PROPERTY_WRITE |
+                                                                             BLECharacteristic::PROPERTY_READ |
+                                                                             BLECharacteristic::PROPERTY_NOTIFY)
     {
     }
 
@@ -240,8 +231,7 @@ FromNumCharacteristic *meshFromNumCharacteristic;
  */
 void bluetoothNotifyFromNum(uint32_t newValue)
 {
-    if (meshFromNumCharacteristic)
-    {
+    if (meshFromNumCharacteristic) {
         // if bt not running ignore
         meshFromNumCharacteristic->setValue(newValue);
         meshFromNumCharacteristic->notify();
@@ -265,7 +255,10 @@ BLEService *createMeshBluetoothService(BLEServer *server)
     addWithDesc(service, new ToRadioCharacteristic, "toRadio");
     addWithDesc(service, new FromRadioCharacteristic, "fromNum");
 
-    addWithDesc(service, new ProtobufCharacteristic("ea9f3f82-8dc4-4733-9452-1f6da28892a2", BLECharacteristic::PROPERTY_READ, MyNodeInfo_fields, &myNodeInfo), "myNode");
+    addWithDesc(service,
+                new ProtobufCharacteristic("ea9f3f82-8dc4-4733-9452-1f6da28892a2", BLECharacteristic::PROPERTY_READ,
+                                           MyNodeInfo_fields, &myNodeInfo),
+                "myNode");
     addWithDesc(service, new RadioCharacteristic, "radio");
     addWithDesc(service, new OwnerCharacteristic, "owner");
     addWithDesc(service, new NodeInfoCharacteristic, "nodeinfo");
@@ -276,8 +269,7 @@ BLEService *createMeshBluetoothService(BLEServer *server)
 
     // We only add to advertisting once, because the ESP32 arduino code is dumb and that object never dies
     static bool firstTime = true;
-    if (firstTime)
-    {
+    if (firstTime) {
         firstTime = false;
         server->getAdvertising()->addServiceUUID(service->getUUID());
     }
@@ -294,8 +286,6 @@ void stopMeshBluetoothService()
     assert(meshService);
     meshService->stop();
 }
-
-
 
 void destroyMeshBluetoothService()
 {
