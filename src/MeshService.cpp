@@ -2,12 +2,12 @@
 #include <Arduino.h>
 #include <assert.h>
 
+#include "main.h"
 #include "mesh-pb-constants.h"
 #include "MeshService.h"
 #include "MeshBluetoothService.h"
 #include "NodeDB.h"
 #include "GPS.h"
-#include "screen.h"
 #include "Periodic.h"
 #include "PowerFSM.h"
 
@@ -118,7 +118,7 @@ MeshPacket *MeshService::handleFromRadioUser(MeshPacket *mp)
         sendOurOwner(mp->from);
 
         String lcd = String("Joined: ") + mp->payload.variant.user.long_name + "\n";
-        screen_print(lcd.c_str());
+        screen.print(lcd.c_str());
     }
 
     return mp;
