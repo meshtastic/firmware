@@ -108,6 +108,7 @@ class Screen : public PeriodicTask
     /// Rebuilds our list of frames (screens) to default ones.
     void setFrames();
 
+private:
     /// Queue of commands to execute in doTask.
     TypedQueue<CmdItem> cmdQueue;
     /// Whether we are using a display
