@@ -5,13 +5,13 @@
 #include "FS.h"
 #include "SPIFFS.h"
 
-#include <pb_encode.h>
-#include <pb_decode.h>
+#include "GPS.h"
+#include "NodeDB.h"
+#include "PowerFSM.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
-#include "NodeDB.h"
-#include "GPS.h"
-#include "PowerFSM.h"
+#include <pb_decode.h>
+#include <pb_encode.h>
 
 NodeDB nodeDB;
 
@@ -22,7 +22,7 @@ RadioConfig &radioConfig = devicestate.radio;
 ChannelSettings &channelSettings = radioConfig.channel_settings;
 
 /*
-DeviceState versions used to be defined in the .proto file but really only this function cares.  So changed to a 
+DeviceState versions used to be defined in the .proto file but really only this function cares.  So changed to a
 #define here.
 */
 
@@ -31,8 +31,8 @@ DeviceState versions used to be defined in the .proto file but really only this 
 
 #define FS SPIFFS
 
-/** 
- * 
+/**
+ *
  * Normally userids are unique and start with +country code to look like Signal phone numbers.
  * But there are some special ids used when we haven't yet been configured by a user.  In that case
  * we use !macaddr (no colons).
@@ -41,9 +41,7 @@ User &owner = devicestate.owner;
 
 static uint8_t ourMacAddr[6];
 
-NodeDB::NodeDB() : nodes(devicestate.node_db), numNodes(&devicestate.node_db_count)
-{
-}
+NodeDB::NodeDB() : nodes(devicestate.node_db), numNodes(&devicestate.node_db_count) {}
 
 void NodeDB::init()
 {
@@ -78,8 +76,8 @@ void NodeDB::init()
 
     // Init our blank owner info to reasonable defaults
     esp_efuse_mac_get_default(ourMacAddr);
-    sprintf(owner.id, "!%02x%02x%02x%02x%02x%02x", ourMacAddr[0],
-            ourMacAddr[1], ourMacAddr[2], ourMacAddr[3], ourMacAddr[4], ourMacAddr[5]);
+    sprintf(owner.id, "!%02x%02x%02x%02x%02x%02x", ourMacAddr[0], ourMacAddr[1], ourMacAddr[2], ourMacAddr[3], ourMacAddr[4],
+            ourMacAddr[5]);
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 
     // make each node start with ad different random seed (but okay that the sequence is the same each boot)
@@ -112,7 +110,7 @@ void NodeDB::init()
 #define NUM_RESERVED 4
 
 /**
- * get our starting (provisional) nodenum from flash. 
+ * get our starting (provisional) nodenum from flash.
  */
 void NodeDB::pickNewNodeNum()
 {
@@ -122,8 +120,7 @@ void NodeDB::pickNewNodeNum()
         r = NUM_RESERVED; // don't pick a reserved node number
 
     NodeInfo *found;
-    while ((found = getNode(r)) && memcmp(found->user.macaddr, owner.macaddr, sizeof(owner.macaddr)))
-    {
+    while ((found = getNode(r)) && memcmp(found->user.macaddr, owner.macaddr, sizeof(owner.macaddr))) {
         NodeNum n = random(NUM_RESERVED, NODENUM_BROADCAST); // try a new random choice
         DEBUG_MSG("NOTE! Our desired nodenum 0x%x is in use, so trying for 0x%x\n", r, n);
         r = n;
@@ -140,36 +137,29 @@ void NodeDB::loadFromDisk()
     static DeviceState scratch;
 
     File f = FS.open(preffile);
-    if (f)
-    {
+    if (f) {
         DEBUG_MSG("Loading saved preferences\n");
         pb_istream_t stream = {&readcb, &f, DeviceState_size};
 
-        //DEBUG_MSG("Preload channel name=%s\n", channelSettings.name);
+        // DEBUG_MSG("Preload channel name=%s\n", channelSettings.name);
 
         memset(&scratch, 0, sizeof(scratch));
-        if (!pb_decode(&stream, DeviceState_fields, &scratch))
-        {
+        if (!pb_decode(&stream, DeviceState_fields, &scratch)) {
             DEBUG_MSG("Error: can't decode protobuf %s\n", PB_GET_ERROR(&stream));
             // FIXME - report failure to phone
-        }
-        else
-        {
+        } else {
             if (scratch.version < DEVICESTATE_MIN_VER)
                 DEBUG_MSG("Warn: devicestate is old, discarding\n");
-            else
-            {
+            else {
                 DEBUG_MSG("Loaded saved preferences version %d\n", scratch.version);
                 devicestate = scratch;
             }
 
-            //DEBUG_MSG("Postload channel name=%s\n", channelSettings.name);
+            // DEBUG_MSG("Postload channel name=%s\n", channelSettings.name);
         }
 
         f.close();
-    }
-    else
-    {
+    } else {
         DEBUG_MSG("No saved preferences found\n");
     }
 }
@@ -177,17 +167,15 @@ void NodeDB::loadFromDisk()
 void NodeDB::saveToDisk()
 {
     File f = FS.open(preftmp, "w");
-    if (f)
-    {
+    if (f) {
         DEBUG_MSG("Writing preferences\n");
 
         pb_ostream_t stream = {&writecb, &f, SIZE_MAX, 0};
 
-        //DEBUG_MSG("Presave channel name=%s\n", channelSettings.name);
+        // DEBUG_MSG("Presave channel name=%s\n", channelSettings.name);
 
         devicestate.version = DEVICESTATE_CUR_VER;
-        if (!pb_encode(&stream, DeviceState_fields, &devicestate))
-        {
+        if (!pb_encode(&stream, DeviceState_fields, &devicestate)) {
             DEBUG_MSG("Error: can't write protobuf %s\n", PB_GET_ERROR(&stream));
             // FIXME - report failure to phone
         }
@@ -199,9 +187,7 @@ void NodeDB::saveToDisk()
             DEBUG_MSG("Warning: Can't remove old pref file\n");
         if (!FS.rename(preftmp, preffile))
             DEBUG_MSG("Error: can't rename new pref file\n");
-    }
-    else
-    {
+    } else {
         DEBUG_MSG("ERROR: can't write prefs\n"); // FIXME report to app
     }
 }
@@ -245,8 +231,7 @@ size_t NodeDB::getNumOnlineNodes()
 /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
 void NodeDB::updateFrom(const MeshPacket &mp)
 {
-    if (mp.has_payload)
-    {
+    if (mp.has_payload) {
         const SubPacket &p = mp.payload;
         DEBUG_MSG("Update DB node 0x%x for variant %d, rx_time=%u\n", mp.from, p.which_variant, mp.rx_time);
 
@@ -256,16 +241,13 @@ void NodeDB::updateFrom(const MeshPacket &mp)
         if (oldNumNodes != *numNodes)
             updateGUI = true; // we just created a nodeinfo
 
-        if (mp.rx_time)
-        {                              // if the packet has a valid timestamp use it to update our last_seen
+        if (mp.rx_time) {              // if the packet has a valid timestamp use it to update our last_seen
             info->has_position = true; // at least the time is valid
             info->position.time = mp.rx_time;
         }
 
-        switch (p.which_variant)
-        {
-        case SubPacket_position_tag:
-        {
+        switch (p.which_variant) {
+        case SubPacket_position_tag: {
             // we carefully preserve the old time, because we always trust our local timestamps more
             uint32_t oldtime = info->position.time;
             info->position = p.variant.position;
@@ -275,14 +257,12 @@ void NodeDB::updateFrom(const MeshPacket &mp)
             break;
         }
 
-        case SubPacket_data_tag:
-        {
+        case SubPacket_data_tag: {
             // Keep a copy of the most recent text message.
-            if (p.variant.data.typ == Data_Type_CLEAR_TEXT)
-            {
-                DEBUG_MSG("Received text msg from=0%0x, msg=%.*s\n", mp.from, p.variant.data.payload.size, p.variant.data.payload.bytes);
-                if (mp.to == NODENUM_BROADCAST || mp.to == nodeDB.getNodeNum())
-                {
+            if (p.variant.data.typ == Data_Type_CLEAR_TEXT) {
+                DEBUG_MSG("Received text msg from=0%0x, msg=%.*s\n", mp.from, p.variant.data.payload.size,
+                          p.variant.data.payload.bytes);
+                if (mp.to == NODENUM_BROADCAST || mp.to == nodeDB.getNodeNum()) {
                     // We only store/display messages destined for us.
                     devicestate.rx_text_message = mp;
                     devicestate.has_rx_text_message = true;
@@ -293,18 +273,17 @@ void NodeDB::updateFrom(const MeshPacket &mp)
             break;
         }
 
-        case SubPacket_user_tag:
-        {
+        case SubPacket_user_tag: {
             DEBUG_MSG("old user %s/%s/%s\n", info->user.id, info->user.long_name, info->user.short_name);
 
-            bool changed = memcmp(&info->user, &p.variant.user, sizeof(info->user)); // Both of these blocks start as filled with zero so I think this is okay
+            bool changed = memcmp(&info->user, &p.variant.user,
+                                  sizeof(info->user)); // Both of these blocks start as filled with zero so I think this is okay
 
             info->user = p.variant.user;
             DEBUG_MSG("updating changed=%d user %s/%s/%s\n", changed, info->user.id, info->user.long_name, info->user.short_name);
             info->has_user = true;
 
-            if (changed)
-            {
+            if (changed) {
                 updateGUIforNode = info;
                 powerFSM.trigger(EVENT_NODEDB_UPDATED);
 
@@ -337,8 +316,7 @@ NodeInfo *NodeDB::getOrCreateNode(NodeNum n)
 {
     NodeInfo *info = getNode(n);
 
-    if (!info)
-    {
+    if (!info) {
         // add the node
         assert(*numNodes < MAX_NUM_NODES);
         info = &nodes[(*numNodes)++];

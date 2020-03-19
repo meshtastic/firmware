@@ -3,8 +3,8 @@
 #include <Arduino.h>
 #include <assert.h>
 
-#include "mesh-pb-constants.h"
 #include "MeshTypes.h"
+#include "mesh-pb-constants.h"
 
 extern DeviceState devicestate;
 extern MyNodeInfo &myNodeInfo;
@@ -28,10 +28,10 @@ class NodeDB
 
     int readPointer = 0;
 
-public:
-    bool updateGUI = false;             // we think the gui should definitely be redrawn, screen will clear this once handled
+  public:
+    bool updateGUI = false;            // we think the gui should definitely be redrawn, screen will clear this once handled
     NodeInfo *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
-    bool updateTextMessage = false; // if true, the GUI should show a new text message
+    bool updateTextMessage = false;    // if true, the GUI should show a new text message
 
     /// don't do mesh based algoritm for node id assignment (initially)
     /// instead just store in flash - possibly even in the initial alpha release do this hack
@@ -56,10 +56,11 @@ public:
     // bool handleWantNodeNum(NodeNum n);
 
     /* void handleDenyNodeNum(NodeNum FIXME read mesh proto docs, perhaps picking a random node num is not a great idea
-    and instead we should use a special 'im unconfigured node number' and include our desired node number in the wantnum message.  the
-    unconfigured node num would only be used while initially joining the mesh so low odds of conflicting (especially if we randomly select
-    from a small number of nodenums which can be used temporarily for this operation).  figure out what the lower level
-    mesh sw does if it does conflict?  would it be better for people who are replying with denynode num to just broadcast their denial?)
+    and instead we should use a special 'im unconfigured node number' and include our desired node number in the wantnum message.
+    the unconfigured node num would only be used while initially joining the mesh so low odds of conflicting (especially if we
+    randomly select from a small number of nodenums which can be used temporarily for this operation).  figure out what the lower
+    level mesh sw does if it does conflict?  would it be better for people who are replying with denynode num to just broadcast
+    their denial?)
     */
 
     /// Called from bluetooth when the user wants to start reading the node DB from scratch.
@@ -74,13 +75,16 @@ public:
     /// Find a node in our DB, return null for missing
     NodeInfo *getNode(NodeNum n);
 
-    NodeInfo *getNodeByIndex(size_t x) { assert(x < *numNodes); return &nodes[x]; }
+    NodeInfo *getNodeByIndex(size_t x)
+    {
+        assert(x < *numNodes);
+        return &nodes[x];
+    }
 
     /// Return the number of nodes we've heard from recently (within the last 2 hrs?)
     size_t getNumOnlineNodes();
 
-private:
-
+  private:
     /// Find a node in our DB, create an empty NodeInfo if missing
     NodeInfo *getOrCreateNode(NodeNum n);
 
@@ -89,4 +93,3 @@ private:
 };
 
 extern NodeDB nodeDB;
-

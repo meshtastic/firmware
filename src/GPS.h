@@ -1,24 +1,24 @@
 #pragma once
 
-#include "PeriodicTask.h"
 #include "Observer.h"
-#include "sys/time.h"
+#include "PeriodicTask.h"
 #include "SparkFun_Ublox_Arduino_Library.h"
+#include "sys/time.h"
 
 /**
  * A gps class that only reads from the GPS periodically (and FIXME - eventually keeps the gps powered down except when reading)
- * 
+ *
  * When new data is available it will notify observers.
  */
 class GPS : public PeriodicTask, public Observable
 {
     SFE_UBLOX_GPS ublox;
 
-public:
+  public:
     double latitude, longitude;
     uint32_t altitude;
     bool isConnected; // Do we have a GPS we are talking to
-    
+
     GPS();
 
     /// Return time since 1970 in secs.  Until we have a GPS lock we will be returning time based at zero
@@ -45,9 +45,8 @@ public:
     /// Restart our lock attempt - try to get and broadcast a GPS reading ASAP
     void startLock();
 
-private:
+  private:
     void readFromRTC();
 };
 
 extern GPS gps;
-

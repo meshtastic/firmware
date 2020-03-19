@@ -1,36 +1,36 @@
 #pragma once
 
 #include "CustomRF95.h"
-#include <RHMesh.h>
 #include "MemoryPool.h"
-#include "mesh.pb.h"
-#include "PointerQueue.h"
 #include "MeshTypes.h"
+#include "PointerQueue.h"
 #include "configuration.h"
+#include "mesh.pb.h"
+#include <RHMesh.h>
 
 // US channel settings
-#define CH0_US          903.08f // MHz
-#define CH_SPACING_US   2.16f // MHz
+#define CH0_US 903.08f      // MHz
+#define CH_SPACING_US 2.16f // MHz
 #define NUM_CHANNELS_US 13
 
 // EU433 channel settings
-#define CH0_EU433          433.175f // MHz
-#define CH_SPACING_EU433   0.2f // MHz
+#define CH0_EU433 433.175f    // MHz
+#define CH_SPACING_EU433 0.2f // MHz
 #define NUM_CHANNELS_EU433 8
 
 // EU865 channel settings
-#define CH0_EU865          865.2f // MHz
-#define CH_SPACING_EU865   0.3f // MHz
+#define CH0_EU865 865.2f      // MHz
+#define CH_SPACING_EU865 0.3f // MHz
 #define NUM_CHANNELS_EU865 10
 
 // CN channel settings
-#define CH0_CN          470.0f // MHz
-#define CH_SPACING_CN   2.0f // MHz FIXME, this is just a guess for 470-510
+#define CH0_CN 470.0f      // MHz
+#define CH_SPACING_CN 2.0f // MHz FIXME, this is just a guess for 470-510
 #define NUM_CHANNELS_CN 20
 
 // JP channel settings
-#define CH0_JP          920.0f // MHz
-#define CH_SPACING_JP   0.5f // MHz FIXME, this is just a guess for 920-925
+#define CH0_JP 920.0f      // MHz
+#define CH_SPACING_JP 0.5f // MHz FIXME, this is just a guess for 920-925
 #define NUM_CHANNELS_JP 10
 
 // FIXME add defs for other regions and use them here
@@ -56,15 +56,16 @@
 #define NUM_CHANNELS NUM_CHANNELS_JP
 #else
 #error "HW_VERSION not set"
-#endif 
-
+#endif
 
 /**
  * A raw low level interface to our mesh.  Only understands nodenums and bytes (not protobufs or node ids)
  */
-class MeshRadio {
-public:
-    CustomRF95 rf95; // the raw radio interface - for now I'm leaving public - because this class is shrinking to be almost nothing
+class MeshRadio
+{
+  public:
+    CustomRF95
+        rf95; // the raw radio interface - for now I'm leaving public - because this class is shrinking to be almost nothing
 
     /** pool is the pool we will alloc our rx packets from
      * rxDest is where we will send any rx packets, it becomes receivers responsibility to return packet to the pool
@@ -85,8 +86,7 @@ public:
     /// The radioConfig object just changed, call this to force the hw to change to the new settings
     void reloadConfig();
 
-private:
-
+  private:
     // RHDatagram manager;
     // RHReliableDatagram manager; // don't use mesh yet
     RHMesh manager;
@@ -98,5 +98,3 @@ private:
     /// enqueue a received packet in rxDest
     void handleReceive(MeshPacket *p);
 };
-
-

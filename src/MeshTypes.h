@@ -1,6 +1,6 @@
 #pragma once
 
-// low level types 
+// low level types
 
 #include <Arduino.h>
 

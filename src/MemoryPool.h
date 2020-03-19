@@ -7,11 +7,10 @@
 
 /**
  * A pool based allocator
- * 
+ *
  * Eventually this routine will even be safe for ISR use...
  */
-template <class T>
-class MemoryPool
+template <class T> class MemoryPool
 {
     PointerQueue<T> dead;
 
@@ -19,7 +18,7 @@ class MemoryPool
 
     size_t maxElements;
 
-public:
+  public:
     MemoryPool(size_t _maxElements) : dead(_maxElements), maxElements(_maxElements)
     {
         buf = new T[maxElements];
@@ -29,10 +28,7 @@ public:
             release(&buf[i]);
     }
 
-    ~MemoryPool()
-    {
-        delete[] buf;
-    }
+    ~MemoryPool() { delete[] buf; }
 
     /// Return a queable object which has been prefilled with zeros.  Panic if no buffer is available
     T *allocZeroed()
@@ -43,7 +39,8 @@ public:
         return p;
     }
 
-    /// Return a queable object which has been prefilled with zeros - allow timeout to wait for available buffers (you probably don't want this version)
+    /// Return a queable object which has been prefilled with zeros - allow timeout to wait for available buffers (you probably
+    /// don't want this version)
     T *allocZeroed(TickType_t maxWait)
     {
         T *p = dead.dequeuePtr(maxWait);
@@ -67,13 +64,17 @@ public:
     void release(T *p)
     {
         assert(dead.enqueue(p, 0));
-        assert(p >= buf && (p - buf) < maxElements); // sanity check to make sure a programmer didn't free something that didn't come from this pool
+        assert(p >= buf &&
+               (p - buf) <
+                   maxElements); // sanity check to make sure a programmer didn't free something that didn't come from this pool
     }
 
     /// Return a buffer from an ISR, if higherPriWoken is set to true you have some work to do ;-)
     void releaseFromISR(T *p, BaseType_t *higherPriWoken)
     {
         assert(dead.enqueueFromISR(p, higherPriWoken));
-        assert(p >= buf && (p - buf) < maxElements); // sanity check to make sure a programmer didn't free something that didn't come from this pool
+        assert(p >= buf &&
+               (p - buf) <
+                   maxElements); // sanity check to make sure a programmer didn't free something that didn't come from this pool
     }
 };

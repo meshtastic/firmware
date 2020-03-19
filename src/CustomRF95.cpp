@@ -1,20 +1,16 @@
 #include "CustomRF95.h"
-#include <pb_encode.h>
-#include <pb_decode.h>
-#include "configuration.h"
-#include "assert.h"
 #include "NodeDB.h"
+#include "assert.h"
+#include "configuration.h"
+#include <pb_decode.h>
+#include <pb_encode.h>
 
 /// A temporary buffer used for sending/receving packets, sized to hold the biggest buffer we might need
 #define MAX_RHPACKETLEN 251
 static uint8_t radiobuf[MAX_RHPACKETLEN];
 
 CustomRF95::CustomRF95(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &_rxDest)
-    : RH_RF95(NSS_GPIO, DIO0_GPIO),
-      pool(_pool),
-      rxDest(_rxDest),
-      txQueue(MAX_TX_QUEUE),
-      sendingPacket(NULL)
+    : RH_RF95(NSS_GPIO, DIO0_GPIO), pool(_pool), rxDest(_rxDest), txQueue(MAX_TX_QUEUE), sendingPacket(NULL)
 {
 }
 
@@ -22,7 +18,7 @@ bool CustomRF95::canSleep()
 {
     // We allow initializing mode, because sometimes while testing we don't ever call init() to turn on the hardware
     DEBUG_MSG("canSleep, mode=%d, isRx=%d, txEmpty=%d, txGood=%d\n", _mode, _isReceiving, txQueue.isEmpty(), _txGood);
-    return (_mode == RHModeInitialising || _mode == RHModeIdle || _mode == RHModeRx) && !_isReceiving && txQueue.isEmpty(); 
+    return (_mode == RHModeInitialising || _mode == RHModeIdle || _mode == RHModeRx) && !_isReceiving && txQueue.isEmpty();
 }
 
 bool CustomRF95::sleep()
@@ -47,17 +43,14 @@ bool CustomRF95::init()
 ErrorCode CustomRF95::send(MeshPacket *p)
 {
     // We wait _if_ we are partially though receiving a packet (rather than just merely waiting for one).
-    // To do otherwise would be doubly bad because not only would we drop the packet that was on the way in, 
+    // To do otherwise would be doubly bad because not only would we drop the packet that was on the way in,
     // we almost certainly guarantee no one outside will like the packet we are sending.
-    if (_mode == RHModeIdle || (_mode == RHModeRx && !_isReceiving))
-    {
+    if (_mode == RHModeIdle || (_mode == RHModeRx && !_isReceiving)) {
         // if the radio is idle, we can send right away
         DEBUG_MSG("immedate send on mesh (txGood=%d,rxGood=%d,rxBad=%d)\n", txGood(), rxGood(), rxBad());
         startSend(p);
         return ERRNO_OK;
-    }
-    else
-    {
+    } else {
         DEBUG_MSG("enquing packet for send from=0x%x, to=0x%x\n", p->from, p->to);
         ErrorCode res = txQueue.enqueue(p, 0) ? ERRNO_OK : ERRNO_UNKNOWN;
 
@@ -68,7 +61,8 @@ ErrorCode CustomRF95::send(MeshPacket *p)
     }
 }
 
-// After doing standard behavior, check to see if a new packet arrived or one was sent and start a new send or receive as necessary
+// After doing standard behavior, check to see if a new packet arrived or one was sent and start a new send or receive as
+// necessary
 void CustomRF95::handleInterrupt()
 {
     RH_RF95::handleInterrupt();
@@ -85,8 +79,7 @@ void CustomRF95::handleInterrupt()
         }
 
         // If we just finished receiving a packet, forward it into a queue
-        if (_rxBufValid)
-        {
+        if (_rxBufValid) {
             // We received a packet
 
             // Skip the 4 headers that are at the beginning of the rxBuf
@@ -95,7 +88,7 @@ void CustomRF95::handleInterrupt()
 
             // FIXME - throws exception if called in ISR context: frequencyError() - probably the floating point math
             int32_t freqerr = -1, snr = lastSNR();
-            //DEBUG_MSG("Received packet from mesh src=0x%x,dest=0x%x,id=%d,len=%d rxGood=%d,rxBad=%d,freqErr=%d,snr=%d\n",
+            // DEBUG_MSG("Received packet from mesh src=0x%x,dest=0x%x,id=%d,len=%d rxGood=%d,rxBad=%d,freqErr=%d,snr=%d\n",
             //          srcaddr, destaddr, id, rxlen, rf95.rxGood(), rf95.rxBad(), freqerr, snr);
 
             MeshPacket *mp = pool.allocZeroed();
@@ -111,18 +104,14 @@ void CustomRF95::handleInterrupt()
             // Note: we can't create it at this point, because it might be a bogus User node allocation.  But odds are we will
             // already have a record we can hide this debugging info in.
             NodeInfo *info = nodeDB.getNode(mp->from);
-            if (info)
-            {
+            if (info) {
                 info->snr = snr;
                 info->frequency_error = freqerr;
             }
 
-            if (!pb_decode_from_bytes(payload, payloadLen, SubPacket_fields, p))
-            {
+            if (!pb_decode_from_bytes(payload, payloadLen, SubPacket_fields, p)) {
                 pool.releaseFromISR(mp, &higherPriWoken);
-            }
-            else
-            {
+            } else {
                 // parsing was successful, queue for our recipient
                 mp->has_payload = true;
 
@@ -141,7 +130,7 @@ void CustomRF95::handleInterrupt()
 }
 
 /** The ISR doesn't have any good work to do, give a new assignment.
- * 
+ *
  * Return true if a higher pri task has woken
  */
 bool CustomRF95::handleIdleISR()
@@ -152,8 +141,7 @@ bool CustomRF95::handleIdleISR()
     MeshPacket *txp = txQueue.dequeuePtrFromISR(0);
     if (txp)
         startSend(txp);
-    else
-    {
+    else {
         // Nothing to send, let's switch back to receive mode
         setModeRx();
     }
