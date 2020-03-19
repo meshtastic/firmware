@@ -329,14 +329,15 @@ void MeshService::onGPSChanged()
     MeshPacket *p = allocForSending();
     p->payload.which_variant = SubPacket_position_tag;
 
-#if 0
     Position &pos = p->payload.variant.position;
-    if (gps.altitude.isValid())
-        pos.altitude = gps.altitude.meters();
-    pos.latitude = gps.location.lat();
-    pos.longitude = gps.location.lng();
-    pos.time = gps.getValidTime();
-#endif
+    // !zero or !zero lat/long means valid
+    if(gps.latitude != 0 || gps.longitude != 0) {
+        if (gps.altitude != 0)
+            pos.altitude = gps.altitude;
+        pos.latitude = gps.latitude;
+        pos.longitude = gps.longitude;
+        pos.time = gps.getValidTime();
+    }
 
     // We limit our GPS broadcasts to a max rate
     static uint32_t lastGpsSend;
