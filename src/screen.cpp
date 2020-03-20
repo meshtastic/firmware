@@ -453,12 +453,7 @@ void Screen::setup()
     if (!useDisplay)
         return;
 
-// TODO(girts): how many of the devices come with the bicolor displays? With
-// this enabled, the logo looklooks nice, but the regular screens look a bit
-// wacky as the text crosses the color boundary and there's a 1px gap.
-#ifdef BICOLOR_DISPLAY
-    dispdev.flipScreenVertically(); // looks better without this on lora32
-#endif
+    dispdev.resetOrientation();
 
     // Initialising the UI will init the display too.
     ui.init();
@@ -483,7 +478,11 @@ void Screen::setup()
     // Set up a log buffer with 3 lines, 32 chars each.
     dispdev.setLogBuffer(3, 32);
 
-    // Turn on the display hardware.
+#ifdef FLIP_SCREEN_VERTICALLY
+    dispdev.flipScreenVertically();
+#endif
+
+    // Turn on the display.
     handleSetOn(true);
 
     // On some ssd1306 clones, the first draw command is discarded, so draw it
