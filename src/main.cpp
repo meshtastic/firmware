@@ -260,7 +260,7 @@ void initBluetooth()
 
     // Note: these callbacks might be coming in from a different thread.
     BLEServer *serve = initBLE(
-        [](uint8_t pin) {
+        [](uint32_t pin) {
             powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
             screen.startBluetoothPinScreen(pin);
         },
