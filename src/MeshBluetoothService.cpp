@@ -107,10 +107,6 @@ class RadioCharacteristic : public ProtobufCharacteristic
     void onRead(BLECharacteristic *c)
     {
         DEBUG_MSG("Reading radio config\n");
-
-        // update gps connection state
-        devicestate.has_radio = gps.isConnected;
-
         ProtobufCharacteristic::onRead(c);
     }
 
@@ -235,6 +231,9 @@ class MyNodeInfoCharacteristic : public ProtobufCharacteristic
 
     void onRead(BLECharacteristic *c)
     {
+        // update gps connection state
+        myNodeInfo.has_gps = gps.isConnected;
+
         ProtobufCharacteristic::onRead(c);
 
         myNodeInfo.error_code = 0; // The phone just read us, so throw it away
