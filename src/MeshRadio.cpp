@@ -130,6 +130,8 @@ void MeshRadio::reloadConfig()
 
 ErrorCode MeshRadio::send(MeshPacket *p)
 {
+    lastTxStart = millis();
+
     if (useHardware)
         return rf95.send(p);
     else {
@@ -138,7 +140,15 @@ ErrorCode MeshRadio::send(MeshPacket *p)
     }
 }
 
+#define TX_WATCHDOG_TIMEOUT 30 * 1000
+
 void MeshRadio::loop()
 {
-    // Currently does nothing, since we do it all in ISRs now
+    // It should never take us more than 30 secs to send a packet, if it does, we have a bug
+    uint32_t now = millis();
+    if (lastTxStart != 0 && (now - lastTxStart) > TX_WATCHDOG_TIMEOUT && rf95.mode() == RHGenericDriver::RHModeTx) {
+        DEBUG_MSG("ERROR! Bug! Tx packet took too long to send, forcing radio into rx mode");
+        rf95.setModeRx();
+        lastTxStart = 0; // Stop checking for now, because we just warned the developer
+    }
 }
