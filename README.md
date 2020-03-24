@@ -52,7 +52,11 @@ MAC: 24:6f:28:b5:36:71
 Hard resetting via RTS pin...
 ```
 6. cd into the directory where the release zip file was expanded.
-7. Install the correct firmware for your board with "device-install.sh firmware-_board_-_country_.bin".  For instance "./device-install.sh firmware-HELTEC-US-0.0.3.bin". You should see something like this:
+7. Install the correct firmware for your board with "device-install.sh firmware-_board_-_country_.bin".  For instance "./device-install.sh firmware-HELTEC-US-0.0.3.bin". 
+
+Note: If you have previously installed meshtastic, you don't need to run this full script instead just run "esptool.py --baud 921600 write_flash 0x10000 firmware-_board_-_country_.bin".  This will be faster, also all of your current preferences will be preserved.
+
+You should see something like this:
 ```
 kevinh@kevin-server:~/development/meshtastic/meshtastic-esp32/release/latest$ ./device-install.sh firmware-TBEAM-US-0.1.8.bin 
 Trying to flash firmware-TBEAM-US-0.1.8.bin, but first erasing and writing system information
