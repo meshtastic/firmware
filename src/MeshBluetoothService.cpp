@@ -111,7 +111,7 @@ class RadioCharacteristic : public ProtobufCharacteristic
         // update gps connection state
         devicestate.has_radio = gps.isConnected;
 
-        BLEKeepAliveCallbacks::onRead(c);
+        ProtobufCharacteristic::onRead(c);
     }
 
     void onWrite(BLECharacteristic *c)
