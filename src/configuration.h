@@ -78,6 +78,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define SSD1306_ADDRESS 0x3C
 
+// Flip the screen upside down by default as it makes more sense on T-BEAM
+// devices. Comment this out to not rotate screen 180 degrees.
+#define FLIP_SCREEN_VERTICALLY
+
 // -----------------------------------------------------------------------------
 // GPS
 // -----------------------------------------------------------------------------
@@ -104,8 +108,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #if defined(T_BEAM_V10)
 // This string must exactly match the case used in release file names or the android updater won't work
 #define HW_VENDOR "TBEAM"
-
-#define BICOLOR_DISPLAY // we have yellow at the top 16 lines
 
 // #define BUTTON_NEED_PULLUP // if set we need to turn on the internal CPU pullup during sleep
 
