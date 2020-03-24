@@ -9,6 +9,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "configuration.h"
+#include "error.h"
 #include "mesh-pb-constants.h"
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -327,4 +328,12 @@ NodeInfo *NodeDB::getOrCreateNode(NodeNum n)
     }
 
     return info;
+}
+
+/// Record an error that should be reported via analytics
+void recordCriticalError(CriticalErrorCode code, uint32_t address)
+{
+    myNodeInfo.error_code = code;
+    myNodeInfo.error_address = address;
+    myNodeInfo.error_count++;
 }

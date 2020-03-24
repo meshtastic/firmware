@@ -1,4 +1,5 @@
 #include "RH_RF95.h"
+#include "error.h"
 #include <RHMesh.h>
 #include <SPI.h>
 #include <assert.h>
@@ -149,6 +150,7 @@ void MeshRadio::loop()
     if (lastTxStart != 0 && (now - lastTxStart) > TX_WATCHDOG_TIMEOUT && rf95.mode() == RHGenericDriver::RHModeTx) {
         DEBUG_MSG("ERROR! Bug! Tx packet took too long to send, forcing radio into rx mode");
         rf95.setModeRx();
+        recordCriticalError(ErrTxWatchdog);
         lastTxStart = 0; // Stop checking for now, because we just warned the developer
     }
 }
