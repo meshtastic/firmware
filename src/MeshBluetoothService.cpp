@@ -224,6 +224,24 @@ class FromNumCharacteristic : public CallbackCharacteristic
     }
 };
 
+class MyNodeInfoCharacteristic : public ProtobufCharacteristic
+{
+  public:
+    MyNodeInfoCharacteristic()
+        : ProtobufCharacteristic("ea9f3f82-8dc4-4733-9452-1f6da28892a2", BLECharacteristic::PROPERTY_READ, MyNodeInfo_fields,
+                                 &myNodeInfo)
+    {
+    }
+
+    void onRead(BLECharacteristic *c)
+    {
+        ProtobufCharacteristic::onRead(c);
+
+        myNodeInfo.error_code = 0; // The phone just read us, so throw it away
+        myNodeInfo.error_address = 0;
+    }
+};
+
 FromNumCharacteristic *meshFromNumCharacteristic;
 
 /**
@@ -254,11 +272,7 @@ BLEService *createMeshBluetoothService(BLEServer *server)
     addWithDesc(service, meshFromNumCharacteristic, "fromRadio");
     addWithDesc(service, new ToRadioCharacteristic, "toRadio");
     addWithDesc(service, new FromRadioCharacteristic, "fromNum");
-
-    addWithDesc(service,
-                new ProtobufCharacteristic("ea9f3f82-8dc4-4733-9452-1f6da28892a2", BLECharacteristic::PROPERTY_READ,
-                                           MyNodeInfo_fields, &myNodeInfo),
-                "myNode");
+    addWithDesc(service, new MyNodeInfoCharacteristic, "myNode");
     addWithDesc(service, new RadioCharacteristic, "radio");
     addWithDesc(service, new OwnerCharacteristic, "owner");
     addWithDesc(service, new NodeInfoCharacteristic, "nodeinfo");
