@@ -87,10 +87,11 @@ class MeshRadio
     void reloadConfig();
 
   private:
-    // RHDatagram manager;
     // RHReliableDatagram manager; // don't use mesh yet
     RHMesh manager;
-    // MeshRXHandler rxHandler;
+
+    /// Used for the tx timer watchdog, to check for bugs in our transmit code, msec of last time we did a send
+    uint32_t lastTxStart = 0;
 
     /// low level send, might block for mutiple seconds
     ErrorCode sendTo(NodeNum dest, const uint8_t *buf, size_t len);
