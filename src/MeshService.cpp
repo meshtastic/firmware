@@ -71,10 +71,11 @@ void MeshService::init()
     // sendOwnerPeriod();
 }
 
-void MeshService::sendOurOwner(NodeNum dest)
+void MeshService::sendOurOwner(NodeNum dest, bool wantReplies)
 {
     MeshPacket *p = allocForSending();
     p->to = dest;
+    p->payload.want_response = wantReplies;
     p->payload.which_variant = SubPacket_user_tag;
     User &u = p->payload.variant.user;
     u = owner;
@@ -138,6 +139,8 @@ void MeshService::handleIncomingPosition(MeshPacket *mp)
 
             gps.perhapsSetRTC(&tv);
         }
+    } else {
+        DEBUG_MSG("Ignoring incoming packet - not a position\n");
     }
 }
 
@@ -150,6 +153,9 @@ void MeshService::handleFromRadio(MeshPacket *mp)
     // If it is a position packet, perhaps set our clock (if we don't have a GPS of our own, otherwise wait for that to work)
     if (!myNodeInfo.has_gps)
         handleIncomingPosition(mp);
+    else {
+        DEBUG_MSG("Ignoring incoming time, because we have a GPS\n");
+    }
 
     if (mp->has_payload && mp->payload.which_variant == SubPacket_user_tag) {
         mp = handleFromRadioUser(mp);
@@ -257,9 +263,10 @@ void MeshService::sendToMesh(MeshPacket *p)
     // nodes shouldn't trust it anyways) Note: for now, we allow a device with a local GPS to include the time, so that gpsless
     // devices can get time.
     if (p->has_payload && p->payload.which_variant == SubPacket_position_tag) {
-        if (!myNodeInfo.has_gps)
+        if (!myNodeInfo.has_gps) {
+            DEBUG_MSG("Stripping time %u from position send\n", p->payload.variant.position.time);
             p->payload.variant.position.time = 0;
-        else
+        } else
             DEBUG_MSG("Providing time to mesh %u\n", p->payload.variant.position.time);
     }
 
@@ -285,18 +292,19 @@ MeshPacket *MeshService::allocForSending()
     return p;
 }
 
-void MeshService::sendNetworkPing(NodeNum dest)
+void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
 {
     NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
     assert(node);
 
+    DEBUG_MSG("Sending network ping to 0x%x, with position=%d, wantReplies=%d\n", dest, node->has_position, wantReplies);
     if (node->has_position)
-        sendOurPosition(dest);
+        sendOurPosition(dest, wantReplies);
     else
-        sendOurOwner(dest);
+        sendOurOwner(dest, wantReplies);
 }
 
-void MeshService::sendOurPosition(NodeNum dest)
+void MeshService::sendOurPosition(NodeNum dest, bool wantReplies)
 {
     NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
     assert(node);
@@ -307,6 +315,7 @@ void MeshService::sendOurPosition(NodeNum dest)
     p->to = dest;
     p->payload.which_variant = SubPacket_position_tag;
     p->payload.variant.position = node->position;
+    p->payload.want_response = wantReplies;
     p->payload.variant.position.time =
         gps.getValidTime(); // This nodedb timestamp might be stale, so update it if our clock is valid.
     sendToMesh(p);
