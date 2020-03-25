@@ -344,6 +344,9 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         float bearingToOther = bearing(p.latitude, p.longitude, op.latitude, op.longitude);
         float myHeading = estimatedHeading(p.latitude, p.longitude);
         headingRadian = bearingToOther - myHeading;
+    } else {
+        // Debug info for gps lock errors
+        // DEBUG_MSG("ourNode %d, ourPos %d, theirPos %d\n", !!ourNode, ourNode && hasPosition(ourNode), hasPosition(node));
     }
 
     const char *fields[] = {username, distStr, signalStr, lastStr, NULL};
