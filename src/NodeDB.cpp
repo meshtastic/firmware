@@ -27,7 +27,7 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define here.
 */
 
-#define DEVICESTATE_CUR_VER 6
+#define DEVICESTATE_CUR_VER 7
 #define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
 
 #define FS SPIFFS
@@ -67,10 +67,9 @@ void NodeDB::init()
     radioConfig.preferences.ls_secs = 60 * 60;
     radioConfig.preferences.phone_timeout_secs = 15 * 60;
 
-#ifdef GPS_RX_PIN
-    // some hardware defaults to have a built in GPS
-    myNodeInfo.has_gps = true;
-#endif
+    // default to no GPS, until one has been found by probing
+    myNodeInfo.has_gps = false;
+
     strncpy(myNodeInfo.region, xstr(HW_VERSION), sizeof(myNodeInfo.region));
     strncpy(myNodeInfo.firmware_version, xstr(APP_VERSION), sizeof(myNodeInfo.firmware_version));
     strncpy(myNodeInfo.hw_model, HW_VENDOR, sizeof(myNodeInfo.hw_model));
@@ -333,6 +332,7 @@ NodeInfo *NodeDB::getOrCreateNode(NodeNum n)
 /// Record an error that should be reported via analytics
 void recordCriticalError(CriticalErrorCode code, uint32_t address)
 {
+    DEBUG_MSG("NOTE! Recording critical error %d, address=%x\n", code, address);
     myNodeInfo.error_code = code;
     myNodeInfo.error_address = address;
     myNodeInfo.error_count++;
