@@ -23,13 +23,22 @@ static void sdsEnter()
     doDeepSleep(radioConfig.preferences.sds_secs * 1000LL);
 }
 
+#include "error.h"
+
 static void lsEnter()
 {
     DEBUG_MSG("lsEnter begin, ls_secs=%u\n", radioConfig.preferences.ls_secs);
     screen.setOn(false);
 
-    while (!service.radio.rf95.canSleep())
+    uint32_t now = millis();
+    while (!service.radio.rf95.canSleep()) {
         delay(10); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
+
+        if (millis() - now > 30 * 1000) { // If we wait too long just report an error and go to sleep
+            recordCriticalError(ErrSleepEnterWait);
+            break;
+        }
+    }
 
     gps.prepareSleep(); // abandon in-process parsing
 
