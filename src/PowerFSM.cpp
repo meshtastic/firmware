@@ -121,7 +121,7 @@ static void onEnter()
     uint32_t now = millis();
 
     if (now - lastPingMs > 60 * 1000) { // if more than a minute since our last press, ask other nodes to update their state
-        service.sendNetworkPing();
+        service.sendNetworkPing(NODENUM_BROADCAST, true);
         lastPingMs = now;
     }
 }
