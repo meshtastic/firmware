@@ -145,11 +145,16 @@ ErrorCode MeshRadio::send(MeshPacket *p)
 
 void MeshRadio::loop()
 {
-    // It should never take us more than 30 secs to send a packet, if it does, we have a bug
+    // It should never take us more than 30 secs to send a packet, if it does, we have a bug, FIXME, move most of this
+    // into CustomRF95
     uint32_t now = millis();
     if (lastTxStart != 0 && (now - lastTxStart) > TX_WATCHDOG_TIMEOUT && rf95.mode() == RHGenericDriver::RHModeTx) {
         DEBUG_MSG("ERROR! Bug! Tx packet took too long to send, forcing radio into rx mode");
         rf95.setModeRx();
+        if (rf95.sendingPacket) { // There was probably a packet we were trying to send, free it
+            rf95.pool.release(rf95.sendingPacket);
+            rf95.sendingPacket = NULL;
+        }
         recordCriticalError(ErrTxWatchdog);
         lastTxStart = 0; // Stop checking for now, because we just warned the developer
     }
