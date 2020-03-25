@@ -139,6 +139,8 @@ void MeshService::handleIncomingPosition(MeshPacket *mp)
 
             gps.perhapsSetRTC(&tv);
         }
+    } else {
+        DEBUG_MSG("Ignoring incoming packet - not a position\n");
     }
 }
 
@@ -151,6 +153,9 @@ void MeshService::handleFromRadio(MeshPacket *mp)
     // If it is a position packet, perhaps set our clock (if we don't have a GPS of our own, otherwise wait for that to work)
     if (!myNodeInfo.has_gps)
         handleIncomingPosition(mp);
+    else {
+        DEBUG_MSG("Ignoring incoming time, because we have a GPS\n");
+    }
 
     if (mp->has_payload && mp->payload.which_variant == SubPacket_user_tag) {
         mp = handleFromRadioUser(mp);
