@@ -45,8 +45,13 @@ class GPS : public PeriodicTask, public Observable
     /// Restart our lock attempt - try to get and broadcast a GPS reading ASAP
     void startLock();
 
+    /// Returns ture if we have acquired GPS lock.
+    bool hasLock() const { return hasValidLocation; }
+
   private:
     void readFromRTC();
+
+    bool hasValidLocation = false; // default to false, until we complete our first read
 };
 
 extern GPS gps;
