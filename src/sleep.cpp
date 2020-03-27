@@ -155,17 +155,11 @@ void doDeepSleep(uint64_t msecToWake)
     static const uint8_t rtcGpios[] = {/* 0, */ 2,
     /* 4, */
 #ifndef USE_JTAG
-                                       12,
-                                       13,
-                                       /* 14, */ /* 15, */
+                                       12,           13,
+    /* 14, */ /* 15, */
 #endif
                                        /* 25, */ 26, /* 27, */
-                                       32,
-                                       33,
-                                       34,
-                                       35,
-                                       36,
-                                       37,
+                                       32,           33, 34, 35, 36, 37,
                                        /* 38, */ 39};
 
     for (int i = 0; i < sizeof(rtcGpios); i++)
@@ -222,7 +216,8 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     gpio_wakeup_enable((gpio_num_t)DIO0_GPIO, GPIO_INTR_HIGH_LEVEL); // RF95 interrupt, active high
 #ifdef PMU_IRQ
     // FIXME, disable wake due to PMU because it seems to fire all the time?
-    // gpio_wakeup_enable((gpio_num_t)PMU_IRQ, GPIO_INTR_HIGH_LEVEL); // pmu irq
+    if (axp192_found)
+        gpio_wakeup_enable((gpio_num_t)PMU_IRQ, GPIO_INTR_LOW_LEVEL); // pmu irq
 #endif
     assert(esp_sleep_enable_gpio_wakeup() == ESP_OK);
     assert(esp_sleep_enable_timer_wakeup(sleepUsec) == ESP_OK);

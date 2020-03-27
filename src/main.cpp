@@ -158,13 +158,15 @@ void axp192Init()
             axp.debugCharging();
 
 #ifdef PMU_IRQ
-            pinMode(PMU_IRQ, INPUT_PULLUP);
+            pinMode(PMU_IRQ, INPUT);
             attachInterrupt(
-                PMU_IRQ, [] { pmu_irq = true; }, RISING);
+                PMU_IRQ, [] { pmu_irq = true; }, FALLING);
 
             axp.adc1Enable(AXP202_BATT_CUR_ADC1, 1);
-            axp.enableIRQ(AXP202_VBUS_REMOVED_IRQ | AXP202_VBUS_CONNECT_IRQ | AXP202_BATT_REMOVED_IRQ | AXP202_BATT_CONNECT_IRQ,
+            axp.enableIRQ(AXP202_BATT_REMOVED_IRQ | AXP202_BATT_CONNECT_IRQ | AXP202_CHARGING_FINISHED_IRQ | AXP202_CHARGING_IRQ |
+                              AXP202_VBUS_REMOVED_IRQ | AXP202_VBUS_CONNECT_IRQ | AXP202_PEK_SHORTPRESS_IRQ,
                           1);
+
             axp.clearIRQ();
 #endif
 
@@ -349,9 +351,30 @@ void loop()
 
             DEBUG_MSG("pmu irq!\n");
 
+            if (axp.isChargingIRQ()) {
+                DEBUG_MSG("Battery start charging\n");
+            }
+            if (axp.isChargingDoneIRQ()) {
+                DEBUG_MSG("Battery fully charged\n");
+            }
+            if (axp.isVbusRemoveIRQ()) {
+                DEBUG_MSG("USB unplugged\n");
+            }
+            if (axp.isVbusPlugInIRQ()) {
+                DEBUG_MSG("USB plugged In\n");
+            }
+            if (axp.isBattPlugInIRQ()) {
+                DEBUG_MSG("Battery inserted\n");
+            }
+            if (axp.isBattRemoveIRQ()) {
+                DEBUG_MSG("Battery removed\n");
+            }
+            if (axp.isPEKShortPressIRQ()) {
+                DEBUG_MSG("PEK short button press\n");
+            }
+
             isCharging = axp.isChargeing() ? 1 : 0;
             isUSBPowered = axp.isVBUSPlug() ? 1 : 0;
-
             axp.clearIRQ();
         }
 
