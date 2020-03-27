@@ -32,6 +32,7 @@
 #include "configuration.h"
 #include "esp32/pm.h"
 #include "esp_pm.h"
+#include "power.h"
 #include "rom/rtc.h"
 #include "screen.h"
 #include "sleep.h"
@@ -52,9 +53,8 @@ meshtastic::Screen screen(SSD1306_ADDRESS, I2C_SDA, I2C_SCL);
 meshtastic::Screen screen(SSD1306_ADDRESS, 0, 0);
 #endif
 
-// these flags are all in bss so they default false
-bool isCharging;
-bool isUSBPowered;
+// Global power status singleton
+static meshtastic::PowerStatus powerStatus;
 
 bool ssd1306_found;
 bool axp192_found;
@@ -96,6 +96,21 @@ void scanI2Cdevice(void)
     else
         DEBUG_MSG("done\n");
 }
+
+#ifdef T_BEAM_V10
+/// Reads power status to powerStatus singleton.
+//
+// TODO(girts): move this and other axp stuff to power.h/power.cpp.
+void readPowerStatus()
+{
+    powerStatus.haveBattery = axp.isBatteryConnect();
+    if (powerStatus.haveBattery) {
+        powerStatus.batteryVoltageMv = axp.getBattVoltage();
+    }
+    powerStatus.usb = axp.isVBUSPlug();
+    powerStatus.charging = axp.isChargeing();
+}
+#endif // T_BEAM_V10
 
 /**
  * Init the power manager chip
@@ -167,9 +182,7 @@ void axp192Init()
                           1);
             axp.clearIRQ();
 #endif
-
-            isCharging = axp.isChargeing() ? 1 : 0;
-            isUSBPowered = axp.isVBUSPlug() ? 1 : 0;
+            readPowerStatus();
         } else {
             DEBUG_MSG("AXP192 Begin FAIL\n");
         }
@@ -302,7 +315,7 @@ uint32_t ledBlinker()
     setLed(ledOn);
 
     // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
-    return isCharging ? 1000 : (ledOn ? 2 : 1000);
+    return powerStatus.charging ? 1000 : (ledOn ? 2 : 1000);
 }
 
 Periodic ledPeriodic(ledBlinker);
@@ -310,18 +323,21 @@ Periodic ledPeriodic(ledBlinker);
 #if 0
 // Turn off for now
 
-uint32_t axpReads()
+uint32_t axpDebugRead()
 {
   axp.debugCharging();
   DEBUG_MSG("vbus current %f\n", axp.getVbusCurrent());
   DEBUG_MSG("charge current %f\n", axp.getBattChargeCurrent());
   DEBUG_MSG("bat voltage %f\n", axp.getBattVoltage());
   DEBUG_MSG("batt pct %d\n", axp.getBattPercentage());
+  DEBUG_MSG("is battery connected %d\n", axp.isBatteryConnect());
+  DEBUG_MSG("is USB connected %d\n", axp.isVBUSPlug());
+  DEBUG_MSG("is charging %d\n", axp.isChargeing());
 
   return 30 * 1000;
 }
 
-Periodic axpDebugOutput(axpReads);
+Periodic axpDebugOutput(axpDebugRead);
 #endif
 
 void loop()
@@ -330,7 +346,6 @@ void loop()
 
     powerFSM.run_machine();
     gps.loop();
-    screen.loop();
     service.loop();
 
     ledPeriodic.loop();
@@ -349,18 +364,16 @@ void loop()
 
             DEBUG_MSG("pmu irq!\n");
 
-            isCharging = axp.isChargeing() ? 1 : 0;
-            isUSBPowered = axp.isVBUSPlug() ? 1 : 0;
+            readPowerStatus();
 
             axp.clearIRQ();
         }
 
         // FIXME AXP192 interrupt is not firing, remove this temporary polling of battery state
-        isCharging = axp.isChargeing() ? 1 : 0;
-        isUSBPowered = axp.isVBUSPlug() ? 1 : 0;
-#endif
+        readPowerStatus();
+#endif // PMU_IRQ
     }
-#endif
+#endif // T_BEAM_V10
 
 #ifdef BUTTON_PIN
     // if user presses button for more than 3 secs, discard our network prefs and reboot (FIXME, use a debounce lib instead of
@@ -389,6 +402,14 @@ void loop()
         screen.stopBootScreen();
         showingBootScreen = false;
     }
+
+    // Update the screen last, after we've figured out what to show.
+    screen.debug()->setNodeNumbersStatus(nodeDB.getNumOnlineNodes(), nodeDB.getNumNodes());
+    screen.debug()->setChannelNameStatus(channelSettings.name);
+    screen.debug()->setPowerStatus(powerStatus);
+    // TODO(#4): use something based on hdop to show GPS "signal" strength.
+    screen.debug()->setGPSStatus(gps.hasLock() ? "ok" : ":(");
+    screen.loop();
 
     // No GPS lock yet, let the OS put the main CPU in low power mode for 100ms (or until another interrupt comes in)
     // i.e. don't just keep spinning in loop as fast as we can.
