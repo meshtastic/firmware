@@ -135,15 +135,17 @@ static uint32_t drawRows(OLEDDisplay *display, int16_t x, int16_t y, const char 
         display->drawString(xo, yo, *f);
         xo += SCREEN_WIDTH / COLUMNS;
         // Wrap to next row, if needed.
-        if (++col > COLUMNS) {
+        if (++col >= COLUMNS) {
             xo = x;
             yo += FONT_HEIGHT;
             col = 0;
         }
         f++;
     }
-
-    yo += FONT_HEIGHT; // include the last line in our total
+    if (col != 0) {
+        // Include last incomplete line in our total.
+        yo += FONT_HEIGHT;
+    }
 
     return yo;
 }
@@ -375,36 +377,6 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     display->drawCircle(compassX, compassY, COMPASS_DIAM / 2);
 }
 
-static void drawDebugInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    display->setFont(ArialMT_Plain_10);
-
-    // The coordinates define the left starting point of the text
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-
-    static char usersStr[20];
-    snprintf(usersStr, sizeof(usersStr), "Users %d/%d", nodeDB.getNumOnlineNodes(), nodeDB.getNumNodes());
-
-    static char channelStr[20];
-    snprintf(channelStr, sizeof(channelStr), "%s", channelSettings.name);
-
-    // We don't show battery levels yet - for now just lie and show debug info
-    static char batStr[20];
-    snprintf(batStr, sizeof(batStr), "Batt %x%%", (isCharging << 1) + isUSBPowered);
-
-    static char gpsStr[20];
-    if (gps.isConnected)
-        snprintf(gpsStr, sizeof(gpsStr), "GPS %d%%",
-                 75); // FIXME, use something based on hdop
-    else
-        gpsStr[0] = '\0'; // Just show emptystring
-
-    const char *fields[] = {batStr, gpsStr, usersStr, channelStr, NULL};
-    uint32_t yo = drawRows(display, x, y, fields);
-
-    display->drawLogBuffer(x, yo);
-}
-
 #if 0
 void _screen_header()
 {
@@ -467,6 +439,8 @@ void Screen::setup()
     ui.setFrameAnimation(SLIDE_LEFT);
     // Don't show the page swipe dots while in boot screen.
     ui.disableAllIndicators();
+    // Store a pointer to Screen so we can get to it from static functions.
+    ui.getUiState()->userData = this;
 
     // Add frames.
     static FrameCallback bootFrames[] = {drawBootScreen};
@@ -573,6 +547,12 @@ void Screen::doTask()
     setPeriod(1000 / targetFramerate);
 }
 
+void Screen::drawDebugInfoTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    Screen *screen = reinterpret_cast<Screen *>(state->userData);
+    screen->debugInfo.drawFrame(display, state, x, y);
+}
+
 // restore our regular frame list
 void Screen::setFrames()
 {
@@ -595,7 +575,10 @@ void Screen::setFrames()
         normalFrames[numframes++] = drawNodeInfo;
 
     // then the debug info
-    normalFrames[numframes++] = drawDebugInfo;
+    //
+    // Since frames are basic function pointers, we have to use a helper to
+    // call a method on debugInfo object.
+    normalFrames[numframes++] = &Screen::drawDebugInfoTrampoline;
 
     ui.setFrames(normalFrames, numframes);
     ui.enableAllIndicators();
@@ -640,6 +623,44 @@ void Screen::handleOnPress()
         targetFramerate = TRANSITION_FRAMERATE;
         ui.setTargetFPS(targetFramerate);
     }
+}
+
+void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->setFont(ArialMT_Plain_10);
+
+    // The coordinates define the left starting point of the text
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    char usersStr[20];
+    char channelStr[20];
+    char batStr[20];
+    char gpsStr[20];
+    {
+        LockGuard guard(&lock);
+        snprintf(usersStr, sizeof(usersStr), "Users %d/%d", nodesOnline, nodesTotal);
+        snprintf(channelStr, sizeof(channelStr), "%s", channelName.c_str());
+        if (powerStatus.haveBattery) {
+            // TODO: draw a battery icon instead of letter "B".
+            int batV = powerStatus.batteryVoltageMv / 1000;
+            int batCv = (powerStatus.batteryVoltageMv % 1000) / 10;
+            snprintf(batStr, sizeof(batStr), "B %01d.%02dV%c%c", batV, batCv, powerStatus.charging ? '+' : ' ',
+                     powerStatus.usb ? 'U' : ' ');
+        } else {
+            snprintf(batStr, sizeof(batStr), "%s", powerStatus.usb ? "USB" : "");
+        }
+
+        if (!gpsStatus.empty()) {
+            snprintf(gpsStr, sizeof(gpsStr), "GPS %s", gpsStatus.c_str());
+        } else {
+            gpsStr[0] = '\0'; // Just show empty string.
+        }
+    }
+
+    const char *fields[] = {batStr, gpsStr, usersStr, channelStr, nullptr};
+    uint32_t yo = drawRows(display, x, y, fields);
+
+    display->drawLogBuffer(x, yo);
 }
 
 } // namespace meshtastic

@@ -16,7 +16,6 @@ static uint32_t
     timeStartMsec; // Once we have a GPS lock, this is where we hold the initial msec clock that corresponds to that time
 static uint64_t zeroOffsetSecs; // GPS based time in secs since 1970 - only updated once on initial lock
 
-static bool hasValidLocation; // default to false, until we complete our first read
 static bool wantNewLocation = true;
 
 GPS::GPS() : PeriodicTask() {}
