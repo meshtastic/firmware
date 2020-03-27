@@ -17,6 +17,7 @@ Items to complete soon (next couple of alpha releases).
 
 Items to complete before the first beta release.
 
+- possibly switch to https://github.com/SlashDevin/NeoGPS for gps comms
 - good source of battery/signal/gps icons https://materialdesignicons.com/
 - research and implement better mesh algorithm - investigate changing routing to https://github.com/sudomesh/LoRaLayer2 ?
 - check fcc rules on duty cycle. we might not need to freq hop. https://www.sunfiretesting.com/LoRa-FCC-Certification-Guide/
