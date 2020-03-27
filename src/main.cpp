@@ -38,7 +38,7 @@
 #include <Wire.h>
 #include <driver/rtc_io.h>
 
-#ifdef T_BEAM_V10
+#ifdef ARDUINO_T_Beam
 #include "axp20x.h"
 AXP20X_Class axp;
 bool pmu_irq = false;
@@ -81,7 +81,7 @@ void scanI2Cdevice(void)
                 ssd1306_found = true;
                 DEBUG_MSG("ssd1306 display found\n");
             }
-#ifdef T_BEAM_V10
+#ifdef ARDUINO_T_Beam
             if (addr == AXP192_SLAVE_ADDRESS) {
                 axp192_found = true;
                 DEBUG_MSG("axp192 PMU found\n");
@@ -108,7 +108,7 @@ void scanI2Cdevice(void)
  */
 void axp192Init()
 {
-#ifdef T_BEAM_V10
+#ifdef ARDUINO_T_Beam
     if (axp192_found) {
         if (!axp.begin(Wire, AXP192_SLAVE_ADDRESS)) {
             DEBUG_MSG("AXP192 Begin PASS\n");

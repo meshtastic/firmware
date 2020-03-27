@@ -40,9 +40,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 
 // Select which board is being used. If the outside build environment has sent a choice, just use that
-#if !defined(T_BEAM_V10) && !defined(HELTEC_LORA32)
-#define T_BEAM_V10 // AKA Rev1 (second board released)
-// #define HELTEC_LORA32
+#if !defined(ARDUINO_T_Beam) && !defined(ARDUINO_HELTEC_WIFI_LORA_32_V2)
+// The platformio build environment should set this now
+// #define ARDUINO_T_Beam // AKA Rev1 (second board released)
+// #define ARDUINO_HELTEC_WIFI_LORA_32_V2
 
 #define HW_VERSION_US // We encode the hardware freq range in the hw version string, so sw update can eventually install the
                       // correct build
@@ -50,7 +51,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // If we are using the JTAG port for debugging, some pins must be left free for that (and things like GPS have to be disabled)
 // we don't support jtag on the ttgo - access to gpio 12 is a PITA
-#ifdef HELTEC_LORA32
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V2
 //#define USE_JTAG
 #endif
 
@@ -105,7 +106,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MOSI_GPIO 27
 #define NSS_GPIO 18
 
-#if defined(T_BEAM_V10)
+#if defined(ARDUINO_T_Beam)
 // This string must exactly match the case used in release file names or the android updater won't work
 #define HW_VENDOR "TBEAM"
 
@@ -126,7 +127,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Leave undefined to disable our PMU IRQ handler
 #define PMU_IRQ 35
 
-#elif defined(HELTEC_LORA32)
+#elif defined(ARDUINO_HELTEC_WIFI_LORA_32_V2)
 // This string must exactly match the case used in release file names or the android updater won't work
 #define HW_VENDOR "HELTEC"
 
