@@ -7,14 +7,84 @@
 
 #include "PeriodicTask.h"
 #include "TypedQueue.h"
+#include "lock.h"
+#include "power.h"
 
 namespace meshtastic
 {
+
+// Forward declarations
+class Screen;
+
+/// Handles gathering and displaying debug information.
+class DebugInfo
+{
+  public:
+    DebugInfo(const DebugInfo &) = delete;
+    DebugInfo &operator=(const DebugInfo &) = delete;
+
+    /// Sets user statistics.
+    void setNodeNumbersStatus(int online, int total)
+    {
+        LockGuard guard(&lock);
+        nodesOnline = online;
+        nodesTotal = total;
+    }
+
+    /// Sets the name of the channel.
+    void setChannelNameStatus(const char *name)
+    {
+        LockGuard guard(&lock);
+        channelName = name;
+    }
+
+    /// Sets battery/charging/etc status.
+    //
+    void setPowerStatus(const PowerStatus& status)
+    {
+        LockGuard guard(&lock);
+        powerStatus = status;
+    }
+
+    /// Sets GPS status.
+    //
+    // If this function never gets called, we assume GPS does not exist on this
+    // device.
+    // TODO(girts): figure out what the format should be.
+    void setGPSStatus(const char *status)
+    {
+        LockGuard guard(&lock);
+        gpsStatus = status;
+    }
+
+  private:
+    friend Screen;
+
+    DebugInfo() {}
+
+    /// Renders the debug screen.
+    void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+
+    int nodesOnline = 0;
+    int nodesTotal = 0;
+
+    PowerStatus powerStatus;
+
+    std::string channelName;
+
+    std::string gpsStatus;
+
+    /// Protects all of internal state.
+    Lock lock;
+};
 
 /// Deals with showing things on the screen of the device.
 //
 // Other than setup(), this class is thread-safe. All state-changing calls are
 // queued and executed when the main loop calls us.
+//
+// This class is thread-safe (as long as drawFrame is not called multiple times
+// simultaneously).
 class Screen : public PeriodicTask
 {
   public:
@@ -66,6 +136,11 @@ class Screen : public PeriodicTask
         }
     }
 
+    /// Returns a handle to the DebugInfo screen.
+    //
+    // Use this handle to set things like battery status, user count, GPS status, etc.
+    DebugInfo *debug() { return &debugInfo; }
+
   protected:
     /// Updates the UI.
     //
@@ -108,7 +183,9 @@ class Screen : public PeriodicTask
     /// Rebuilds our list of frames (screens) to default ones.
     void setFrames();
 
-  private:
+    /// Called when debug screen is to be drawn, calls through to debugInfo.drawFrame.
+    static void drawDebugInfoTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+
     /// Queue of commands to execute in doTask.
     TypedQueue<CmdItem> cmdQueue;
     /// Whether we are using a display
@@ -118,6 +195,9 @@ class Screen : public PeriodicTask
     // Whether we are showing the regular screen (as opposed to booth screen or
     // Bluetooth PIN screen)
     bool showingNormalScreen = false;
+
+    /// Holds state for debug information
+    DebugInfo debugInfo;
     /// Display device
     SSD1306Wire dispdev;
     /// UI helper for rendering to frames and switching between them
