@@ -15,6 +15,7 @@ ARCHIVEDIR=release/archive
 
 rm -f $OUTDIR/firmware*
 
+# build the named environment and copy the bins to the release directory
 function do_build {
     ENV_NAME=$1
     echo "Building for $ENV_NAME with $PLATFORMIO_BUILD_FLAGS"
@@ -33,6 +34,7 @@ for COUNTRY in $COUNTRIES; do
 
     export PLATFORMIO_BUILD_FLAGS="$COMMONOPTS"
 
+    do_build "ttgo-lora32-v1"
     do_build "tbeam"
     do_build "heltec"
 done
