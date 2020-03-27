@@ -342,46 +342,38 @@ void loop()
     // for debug printing
     // service.radio.rf95.canSleep();
 
-#ifdef T_BEAM_V10
-    if (axp192_found) {
 #ifdef PMU_IRQ
-        if (pmu_irq) {
-            pmu_irq = false;
-            axp.readIRQ();
+    if (pmu_irq) {
+        pmu_irq = false;
+        axp.readIRQ();
 
-            DEBUG_MSG("pmu irq!\n");
+        DEBUG_MSG("pmu irq!\n");
 
-            if (axp.isChargingIRQ()) {
-                DEBUG_MSG("Battery start charging\n");
-            }
-            if (axp.isChargingDoneIRQ()) {
-                DEBUG_MSG("Battery fully charged\n");
-            }
-            if (axp.isVbusRemoveIRQ()) {
-                DEBUG_MSG("USB unplugged\n");
-            }
-            if (axp.isVbusPlugInIRQ()) {
-                DEBUG_MSG("USB plugged In\n");
-            }
-            if (axp.isBattPlugInIRQ()) {
-                DEBUG_MSG("Battery inserted\n");
-            }
-            if (axp.isBattRemoveIRQ()) {
-                DEBUG_MSG("Battery removed\n");
-            }
-            if (axp.isPEKShortPressIRQ()) {
-                DEBUG_MSG("PEK short button press\n");
-            }
-
-            isCharging = axp.isChargeing() ? 1 : 0;
-            isUSBPowered = axp.isVBUSPlug() ? 1 : 0;
-            axp.clearIRQ();
+        if (axp.isChargingIRQ()) {
+            DEBUG_MSG("Battery start charging\n");
+        }
+        if (axp.isChargingDoneIRQ()) {
+            DEBUG_MSG("Battery fully charged\n");
+        }
+        if (axp.isVbusRemoveIRQ()) {
+            DEBUG_MSG("USB unplugged\n");
+        }
+        if (axp.isVbusPlugInIRQ()) {
+            DEBUG_MSG("USB plugged In\n");
+        }
+        if (axp.isBattPlugInIRQ()) {
+            DEBUG_MSG("Battery inserted\n");
+        }
+        if (axp.isBattRemoveIRQ()) {
+            DEBUG_MSG("Battery removed\n");
+        }
+        if (axp.isPEKShortPressIRQ()) {
+            DEBUG_MSG("PEK short button press\n");
         }
 
-        // FIXME AXP192 interrupt is not firing, remove this temporary polling of battery state
         isCharging = axp.isChargeing() ? 1 : 0;
         isUSBPowered = axp.isVBUSPlug() ? 1 : 0;
-#endif
+        axp.clearIRQ();
     }
 #endif
 
