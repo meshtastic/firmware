@@ -393,7 +393,7 @@ static void drawDebugInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     snprintf(batStr, sizeof(batStr), "Batt %x%%", (isCharging << 1) + isUSBPowered);
 
     static char gpsStr[20];
-    if (myNodeInfo.has_gps)
+    if (gps.isConnected)
         snprintf(gpsStr, sizeof(gpsStr), "GPS %d%%",
                  75); // FIXME, use something based on hdop
     else
