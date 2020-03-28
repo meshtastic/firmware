@@ -39,7 +39,7 @@
 #include <Wire.h>
 #include <driver/rtc_io.h>
 
-#ifdef T_BEAM_V10
+#ifdef ARDUINO_T_Beam
 #include "axp20x.h"
 AXP20X_Class axp;
 bool pmu_irq = false;
@@ -81,7 +81,7 @@ void scanI2Cdevice(void)
                 ssd1306_found = true;
                 DEBUG_MSG("ssd1306 display found\n");
             }
-#ifdef T_BEAM_V10
+#ifdef ARDUINO_T_Beam
             if (addr == AXP192_SLAVE_ADDRESS) {
                 axp192_found = true;
                 DEBUG_MSG("axp192 PMU found\n");
@@ -97,7 +97,7 @@ void scanI2Cdevice(void)
         DEBUG_MSG("done\n");
 }
 
-#ifdef T_BEAM_V10
+#ifdef ARDUINO_T_Beam
 /// Reads power status to powerStatus singleton.
 //
 // TODO(girts): move this and other axp stuff to power.h/power.cpp.
@@ -110,7 +110,7 @@ void readPowerStatus()
     powerStatus.usb = axp.isVBUSPlug();
     powerStatus.charging = axp.isChargeing();
 }
-#endif // T_BEAM_V10
+#endif // ARDUINO_T_Beam
 
 /**
  * Init the power manager chip
@@ -123,7 +123,7 @@ void readPowerStatus()
  */
 void axp192Init()
 {
-#ifdef T_BEAM_V10
+#ifdef ARDUINO_T_Beam
     if (axp192_found) {
         if (!axp.begin(Wire, AXP192_SLAVE_ADDRESS)) {
             DEBUG_MSG("AXP192 Begin PASS\n");
@@ -173,13 +173,15 @@ void axp192Init()
             axp.debugCharging();
 
 #ifdef PMU_IRQ
-            pinMode(PMU_IRQ, INPUT_PULLUP);
+            pinMode(PMU_IRQ, INPUT);
             attachInterrupt(
-                PMU_IRQ, [] { pmu_irq = true; }, RISING);
+                PMU_IRQ, [] { pmu_irq = true; }, FALLING);
 
             axp.adc1Enable(AXP202_BATT_CUR_ADC1, 1);
-            axp.enableIRQ(AXP202_VBUS_REMOVED_IRQ | AXP202_VBUS_CONNECT_IRQ | AXP202_BATT_REMOVED_IRQ | AXP202_BATT_CONNECT_IRQ,
+            axp.enableIRQ(AXP202_BATT_REMOVED_IRQ | AXP202_BATT_CONNECT_IRQ | AXP202_CHARGING_FINISHED_IRQ | AXP202_CHARGING_IRQ |
+                              AXP202_VBUS_REMOVED_IRQ | AXP202_VBUS_CONNECT_IRQ | AXP202_PEK_SHORTPRESS_IRQ,
                           1);
+
             axp.clearIRQ();
 #endif
             readPowerStatus();
@@ -355,23 +357,37 @@ void loop()
     // for debug printing
     // service.radio.rf95.canSleep();
 
-#ifdef T_BEAM_V10
-    if (axp192_found) {
 #ifdef PMU_IRQ
-        if (pmu_irq) {
-            pmu_irq = false;
-            axp.readIRQ();
+    if (pmu_irq) {
+        pmu_irq = false;
+        axp.readIRQ();
 
-            DEBUG_MSG("pmu irq!\n");
+        DEBUG_MSG("pmu irq!\n");
 
-            readPowerStatus();
-
-            axp.clearIRQ();
+        if (axp.isChargingIRQ()) {
+            DEBUG_MSG("Battery start charging\n");
+        }
+        if (axp.isChargingDoneIRQ()) {
+            DEBUG_MSG("Battery fully charged\n");
+        }
+        if (axp.isVbusRemoveIRQ()) {
+            DEBUG_MSG("USB unplugged\n");
+        }
+        if (axp.isVbusPlugInIRQ()) {
+            DEBUG_MSG("USB plugged In\n");
+        }
+        if (axp.isBattPlugInIRQ()) {
+            DEBUG_MSG("Battery inserted\n");
+        }
+        if (axp.isBattRemoveIRQ()) {
+            DEBUG_MSG("Battery removed\n");
+        }
+        if (axp.isPEKShortPressIRQ()) {
+            DEBUG_MSG("PEK short button press\n");
         }
 
-        // FIXME AXP192 interrupt is not firing, remove this temporary polling of battery state
         readPowerStatus();
-#endif // PMU_IRQ
+        axp.clearIRQ();
     }
 #endif // T_BEAM_V10
 

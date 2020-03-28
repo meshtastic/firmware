@@ -14,7 +14,7 @@
 #include <Wire.h>
 #include <driver/rtc_io.h>
 
-#ifdef T_BEAM_V10
+#ifdef ARDUINO_T_Beam
 #include "axp20x.h"
 extern AXP20X_Class axp;
 #endif
@@ -48,7 +48,7 @@ void setLed(bool ledOn)
     digitalWrite(LED_PIN, ledOn);
 #endif
 
-#ifdef T_BEAM_V10
+#ifdef ARDUINO_T_Beam
     if (axp192_found) {
         // blink the axp led
         axp.setChgLEDMode(ledOn ? AXP20X_LED_LOW_LEVEL : AXP20X_LED_OFF);
@@ -60,7 +60,7 @@ void setGPSPower(bool on)
 {
     DEBUG_MSG("Setting GPS power=%d\n", on);
 
-#ifdef T_BEAM_V10
+#ifdef ARDUINO_T_Beam
     if (axp192_found)
         axp.setPowerOutPut(AXP192_LDO3, on ? AXP202_ON : AXP202_OFF); // GPS main power
 #endif
@@ -124,7 +124,7 @@ void doDeepSleep(uint64_t msecToWake)
 
     setLed(false);
 
-#ifdef T_BEAM_V10
+#ifdef ARDUINO_T_Beam
     if (axp192_found) {
         // No need to turn this off if the power draw in sleep mode really is just 0.2uA and turning it off would
         // leave floating input for the IRQ line
@@ -155,17 +155,11 @@ void doDeepSleep(uint64_t msecToWake)
     static const uint8_t rtcGpios[] = {/* 0, */ 2,
     /* 4, */
 #ifndef USE_JTAG
-                                       12,
-                                       13,
-                                       /* 14, */ /* 15, */
+                                       12,           13,
+    /* 14, */ /* 15, */
 #endif
                                        /* 25, */ 26, /* 27, */
-                                       32,
-                                       33,
-                                       34,
-                                       35,
-                                       36,
-                                       37,
+                                       32,           33, 34, 35, 36, 37,
                                        /* 38, */ 39};
 
     for (int i = 0; i < sizeof(rtcGpios); i++)
@@ -222,7 +216,8 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     gpio_wakeup_enable((gpio_num_t)DIO0_GPIO, GPIO_INTR_HIGH_LEVEL); // RF95 interrupt, active high
 #ifdef PMU_IRQ
     // FIXME, disable wake due to PMU because it seems to fire all the time?
-    // gpio_wakeup_enable((gpio_num_t)PMU_IRQ, GPIO_INTR_HIGH_LEVEL); // pmu irq
+    if (axp192_found)
+        gpio_wakeup_enable((gpio_num_t)PMU_IRQ, GPIO_INTR_LOW_LEVEL); // pmu irq
 #endif
     assert(esp_sleep_enable_gpio_wakeup() == ESP_OK);
     assert(esp_sleep_enable_timer_wakeup(sleepUsec) == ESP_OK);
