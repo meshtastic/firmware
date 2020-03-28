@@ -7,9 +7,6 @@ source bin/version.sh
 COUNTRIES="US EU433 EU865 CN JP"
 #COUNTRIES=US
 
-SRCMAP=.pio/build/esp32/output.map
-SRCBIN=.pio/build/esp32/firmware.bin
-SRCELF=.pio/build/esp32/firmware.elf
 OUTDIR=release/latest
 
 # We keep all old builds (and their map files in the archive dir)
@@ -17,25 +14,28 @@ ARCHIVEDIR=release/archive
 
 rm -f $OUTDIR/firmware*
 
+# build the named environment and copy the bins to the release directory
+function do_build {
+    ENV_NAME=$1
+    echo "Building for $ENV_NAME with $PLATFORMIO_BUILD_FLAGS"
+    SRCBIN=.pio/build/$ENV_NAME/firmware.bin
+    SRCELF=.pio/build/$ENV_NAME/firmware.elf
+    rm -f $SRCBIN 
+    pio run --environment $ENV_NAME # -v
+    cp $SRCBIN $OUTDIR/firmware-$ENV_NAME-$COUNTRY-$VERSION.bin
+    cp $SRCELF $OUTDIR/firmware-$ENV_NAME-$COUNTRY-$VERSION.elf
+}
+
 for COUNTRY in $COUNTRIES; do 
 
     HWVERSTR="1.0-$COUNTRY"
-    COMMONOPTS="-DAPP_VERSION=$VERSION -DHW_VERSION_$COUNTRY -DHW_VERSION=$HWVERSTR -Wall -Wextra -Wno-missing-field-initializers -Isrc -Os -Wl,-Map,.pio/build/esp32/output.map -DAXP_DEBUG_PORT=Serial"
+    COMMONOPTS="-DAPP_VERSION=$VERSION -DHW_VERSION_$COUNTRY -DHW_VERSION=$HWVERSTR -Wall -Wextra -Wno-missing-field-initializers -Isrc -Os -DAXP_DEBUG_PORT=Serial"
 
-    export PLATFORMIO_BUILD_FLAGS="-DT_BEAM_V10 $COMMONOPTS"
-    echo "Building with $PLATFORMIO_BUILD_FLAGS"
-    rm -f $SRCBIN $SRCMAP
-    pio run # -v
-    cp $SRCBIN $OUTDIR/firmware-TBEAM-$COUNTRY-$VERSION.bin
-    cp $SRCELF $OUTDIR/firmware-TBEAM-$COUNTRY-$VERSION.elf    
-    #cp $SRCMAP $ARCHIVEDIR/firmware-TBEAM-$COUNTRY-$VERSION.map
+    export PLATFORMIO_BUILD_FLAGS="$COMMONOPTS"
 
-    export PLATFORMIO_BUILD_FLAGS="-DHELTEC_LORA32 $COMMONOPTS"
-    rm -f $SRCBIN $SRCMAP
-    pio run # -v
-    cp $SRCBIN $OUTDIR/firmware-HELTEC-$COUNTRY-$VERSION.bin
-    cp $SRCELF $OUTDIR/firmware-HELTEC-$COUNTRY-$VERSION.elf
-    #cp $SRCMAP $ARCHIVEDIR/firmware-HELTEC-$COUNTRY-$VERSION.map
+    do_build "ttgo-lora32-v1"
+    do_build "tbeam"
+    do_build "heltec"
 done
 
 # keep the bins in archive also

@@ -151,7 +151,7 @@ void MeshService::handleFromRadio(MeshPacket *mp)
     mp->rx_time = gps.getValidTime(); // store the arrival timestamp for the phone
 
     // If it is a position packet, perhaps set our clock (if we don't have a GPS of our own, otherwise wait for that to work)
-    if (!myNodeInfo.has_gps)
+    if (!gps.isConnected)
         handleIncomingPosition(mp);
     else {
         DEBUG_MSG("Ignoring incoming time, because we have a GPS\n");
@@ -263,7 +263,7 @@ void MeshService::sendToMesh(MeshPacket *p)
     // nodes shouldn't trust it anyways) Note: for now, we allow a device with a local GPS to include the time, so that gpsless
     // devices can get time.
     if (p->has_payload && p->payload.which_variant == SubPacket_position_tag) {
-        if (!myNodeInfo.has_gps) {
+        if (!gps.isConnected) {
             DEBUG_MSG("Stripping time %u from position send\n", p->payload.variant.position.time);
             p->payload.variant.position.time = 0;
         } else
