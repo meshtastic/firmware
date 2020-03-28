@@ -6,16 +6,10 @@ in these instructions I describe use of their command line tool.
 1. Purchase a suitable radio (see above)
 2. Install [PlatformIO](https://platformio.org/platformio-ide)
 3. Download this git repo and cd into it
-4. Edit configuration.h and comment out _one_ of the following two lines (depending on which board you are using):
-
-```
-// #define ARDUINO_T_Beam
-#define ARDUINO_HELTEC_WIFI_LORA_32_V2
-```
-
+4. If you are outside the USA, edit [platformio.ini](/platformio.ini) to set the correct frequency range for your country. The line you need to change starts with "hw_version" and instructions are provided above that line. Options are provided for EU433, EU835, CN, JP and US. Pull-requests eagerly accepted for other countries.
 5. Plug the radio into your USB port
-6. Type "pio run -t upload" (This command will fetch dependencies, build the project and install it on the board via USB)
-7. Platform IO also installs a very nice VisualStudio Code based IDE, see their [tutorial](https://docs.platformio.org/en/latest/tutorials/espressif32/arduino_debugging_unit_testing.html) if you'd like to use it
+6. Type "pio run --environment XXX -t upload" (This command will fetch dependencies, build the project and install it on the board via USB). For XXX, use the board type you have (either tbeam, heltec, ttgo-lora32-v1, ttgo-lora32-v2).
+7. Platform IO also installs a very nice VisualStudio Code based IDE, see their [tutorial](https://docs.platformio.org/en/latest/tutorials/espressif32/arduino_debugging_unit_testing.html) if you'd like to use it.
 
 ## Decoding stack traces
 
