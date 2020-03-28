@@ -7,7 +7,6 @@ source bin/version.sh
 COUNTRIES="US EU433 EU865 CN JP"
 #COUNTRIES=US
 
-
 OUTDIR=release/latest
 
 # We keep all old builds (and their map files in the archive dir)
@@ -21,7 +20,7 @@ function do_build {
     echo "Building for $ENV_NAME with $PLATFORMIO_BUILD_FLAGS"
     SRCBIN=.pio/build/$ENV_NAME/firmware.bin
     SRCELF=.pio/build/$ENV_NAME/firmware.elf
-    rm -f $SRCBIN $SRCMAP
+    rm -f $SRCBIN 
     pio run --environment $ENV_NAME # -v
     cp $SRCBIN $OUTDIR/firmware-$ENV_NAME-$COUNTRY-$VERSION.bin
     cp $SRCELF $OUTDIR/firmware-$ENV_NAME-$COUNTRY-$VERSION.elf
