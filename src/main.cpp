@@ -39,7 +39,7 @@
 #include <Wire.h>
 #include <driver/rtc_io.h>
 
-#ifdef ARDUINO_T_Beam
+#ifdef TBEAM_V10
 #include "axp20x.h"
 AXP20X_Class axp;
 bool pmu_irq = false;
@@ -81,7 +81,7 @@ void scanI2Cdevice(void)
                 ssd1306_found = true;
                 DEBUG_MSG("ssd1306 display found\n");
             }
-#ifdef ARDUINO_T_Beam
+#ifdef TBEAM_V10
             if (addr == AXP192_SLAVE_ADDRESS) {
                 axp192_found = true;
                 DEBUG_MSG("axp192 PMU found\n");
@@ -97,7 +97,7 @@ void scanI2Cdevice(void)
         DEBUG_MSG("done\n");
 }
 
-#ifdef ARDUINO_T_Beam
+#ifdef TBEAM_V10
 /// Reads power status to powerStatus singleton.
 //
 // TODO(girts): move this and other axp stuff to power.h/power.cpp.
@@ -110,7 +110,7 @@ void readPowerStatus()
     powerStatus.usb = axp.isVBUSPlug();
     powerStatus.charging = axp.isChargeing();
 }
-#endif // ARDUINO_T_Beam
+#endif // TBEAM_V10
 
 /**
  * Init the power manager chip
@@ -123,7 +123,7 @@ void readPowerStatus()
  */
 void axp192Init()
 {
-#ifdef ARDUINO_T_Beam
+#ifdef TBEAM_V10
     if (axp192_found) {
         if (!axp.begin(Wire, AXP192_SLAVE_ADDRESS)) {
             DEBUG_MSG("AXP192 Begin PASS\n");
