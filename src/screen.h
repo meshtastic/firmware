@@ -40,7 +40,7 @@ class DebugInfo
 
     /// Sets battery/charging/etc status.
     //
-    void setPowerStatus(const PowerStatus& status)
+    void setPowerStatus(const PowerStatus &status)
     {
         LockGuard guard(&lock);
         powerStatus = status;
@@ -169,9 +169,13 @@ class Screen : public PeriodicTask
     /// Enques given command item to be processed by main loop().
     bool enqueueCmd(const CmdItem &cmd)
     {
-        bool success = cmdQueue.enqueue(cmd, 0);
-        setPeriod(1); // handle ASAP
-        return success;
+        if (!useDisplay)
+            return true; // claim success if our display is not in use
+        else {
+            bool success = cmdQueue.enqueue(cmd, 0);
+            setPeriod(1); // handle ASAP
+            return success;
+        }
     }
 
     // Implementations of various commands, called from doTask().
