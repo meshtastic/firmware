@@ -33,6 +33,8 @@ for COUNTRY in $COUNTRIES; do
 
     export PLATFORMIO_BUILD_FLAGS="$COMMONOPTS"
 
+    do_build "tbeam0.7"
+    do_build "ttgo-lora32-v2"
     do_build "ttgo-lora32-v1"
     do_build "tbeam"
     do_build "heltec"

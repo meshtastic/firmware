@@ -14,7 +14,7 @@
 #include <Wire.h>
 #include <driver/rtc_io.h>
 
-#ifdef ARDUINO_T_Beam
+#ifdef TBEAM_V10
 #include "axp20x.h"
 extern AXP20X_Class axp;
 #endif
@@ -48,7 +48,7 @@ void setLed(bool ledOn)
     digitalWrite(LED_PIN, ledOn);
 #endif
 
-#ifdef ARDUINO_T_Beam
+#ifdef TBEAM_V10
     if (axp192_found) {
         // blink the axp led
         axp.setChgLEDMode(ledOn ? AXP20X_LED_LOW_LEVEL : AXP20X_LED_OFF);
@@ -60,7 +60,7 @@ void setGPSPower(bool on)
 {
     DEBUG_MSG("Setting GPS power=%d\n", on);
 
-#ifdef ARDUINO_T_Beam
+#ifdef TBEAM_V10
     if (axp192_found)
         axp.setPowerOutPut(AXP192_LDO3, on ? AXP202_ON : AXP202_OFF); // GPS main power
 #endif
@@ -124,7 +124,7 @@ void doDeepSleep(uint64_t msecToWake)
 
     setLed(false);
 
-#ifdef ARDUINO_T_Beam
+#ifdef TBEAM_V10
     if (axp192_found) {
         // No need to turn this off if the power draw in sleep mode really is just 0.2uA and turning it off would
         // leave floating input for the IRQ line
@@ -159,8 +159,9 @@ void doDeepSleep(uint64_t msecToWake)
     /* 14, */ /* 15, */
 #endif
                                        /* 25, */ 26, /* 27, */
-                                       32,           33, 34, 35, 36, 37,
-                                       /* 38, */ 39};
+                                       32,           33, 34, 35,
+                                       36,           37
+                                       /* 38, 39 */};
 
     for (int i = 0; i < sizeof(rtcGpios); i++)
         rtc_gpio_isolate((gpio_num_t)rtcGpios[i]);
