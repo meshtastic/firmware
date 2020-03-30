@@ -44,9 +44,37 @@ static uint8_t ourMacAddr[6];
 
 NodeDB::NodeDB() : nodes(devicestate.node_db), numNodes(&devicestate.node_db_count) {}
 
+void NodeDB::resetRadioConfig()
+{
+    /// 16 bytes of random PSK for our _public_ default channel that all devices power up on
+    static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
+                                         0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0xbf};
+
+    if (radioConfig.preferences.sds_secs == 0) {
+        DEBUG_MSG("RadioConfig reset!\n");
+        radioConfig.preferences.send_owner_interval = 4; // per sw-design.md
+        radioConfig.preferences.position_broadcast_secs = 15 * 60;
+        radioConfig.preferences.wait_bluetooth_secs = 120;
+        radioConfig.preferences.screen_on_secs = 30;
+        radioConfig.preferences.mesh_sds_timeout_secs = 2 * 60 * 60;
+        radioConfig.preferences.phone_sds_timeout_sec = 2 * 60 * 60;
+        radioConfig.preferences.sds_secs = 365 * 24 * 60 * 60; // one year
+        radioConfig.preferences.ls_secs = 60 * 60;
+        radioConfig.preferences.phone_timeout_secs = 15 * 60;
+
+        // radioConfig.modem_config = RadioConfig_ModemConfig_Bw125Cr45Sf128;  // medium range and fast
+        // channelSettings.modem_config = ChannelSettings_ModemConfig_Bw500Cr45Sf128;  // short range and fast, but wide bandwidth
+        // so incompatible radios can talk together
+        channelSettings.modem_config = ChannelSettings_ModemConfig_Bw125Cr48Sf4096; // slow and long range
+
+        channelSettings.tx_power = 23;
+        memcpy(&channelSettings.psk, &defaultpsk, sizeof(channelSettings.psk));
+        strcpy(channelSettings.name, "Default");
+    }
+}
+
 void NodeDB::init()
 {
-
     // init our devicestate with valid flags so protobuf writing/reading will work
     devicestate.has_my_node = true;
     devicestate.has_radio = true;
@@ -57,15 +85,7 @@ void NodeDB::init()
     devicestate.node_db_count = 0;
     devicestate.receive_queue_count = 0;
 
-    radioConfig.preferences.send_owner_interval = 4; // per sw-design.md
-    radioConfig.preferences.position_broadcast_secs = 15 * 60;
-    radioConfig.preferences.wait_bluetooth_secs = 120;
-    radioConfig.preferences.screen_on_secs = 30;
-    radioConfig.preferences.mesh_sds_timeout_secs = 2 * 60 * 60;
-    radioConfig.preferences.phone_sds_timeout_sec = 2 * 60 * 60;
-    radioConfig.preferences.sds_secs = 365 * 24 * 60 * 60; // one year
-    radioConfig.preferences.ls_secs = 60 * 60;
-    radioConfig.preferences.phone_timeout_secs = 15 * 60;
+    resetRadioConfig();
 
     // default to no GPS, until one has been found by probing
     myNodeInfo.has_gps = false;
@@ -102,6 +122,7 @@ void NodeDB::init()
 
     // saveToDisk();
     loadFromDisk();
+    resetRadioConfig(); // If bogus settings got saved, then fix them
 
     DEBUG_MSG("NODENUM=0x%x, dbsize=%d\n", myNodeInfo.my_node_num, *numNodes);
 }
