@@ -43,6 +43,9 @@ class NodeDB
     /// write to flash
     void saveToDisk();
 
+    // Reinit radio config if needed, because sometimes a buggy android app might send us bogus settings
+    void resetRadioConfig();
+
     /// given a subpacket sniffed from the network, update our DB state
     /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
     void updateFrom(const MeshPacket &p);
