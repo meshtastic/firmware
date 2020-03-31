@@ -61,6 +61,8 @@ void NodeDB::resetRadioConfig()
         radioConfig.preferences.sds_secs = 365 * 24 * 60 * 60; // one year
         radioConfig.preferences.ls_secs = 60 * 60;
         radioConfig.preferences.phone_timeout_secs = 15 * 60;
+        radioConfig.has_channel_settings = true;
+        radioConfig.has_preferences = true;
 
         // radioConfig.modem_config = RadioConfig_ModemConfig_Bw125Cr45Sf128;  // medium range and fast
         // channelSettings.modem_config = ChannelSettings_ModemConfig_Bw500Cr45Sf128;  // short range and fast, but wide bandwidth
