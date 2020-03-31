@@ -155,3 +155,5 @@ This project is run by volunteers. Past contributors include:
 # IMPORTANT DISCLAIMERS AND FAQ
 
 For a listing of currently missing features and a FAQ click [here](docs/faq.md).
+
+Copyright 2019 Geeksville Industries, LLC. GPL V3 Licensed.

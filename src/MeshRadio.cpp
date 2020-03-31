@@ -10,10 +10,6 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 
-/// 16 bytes of random PSK for our _public_ default channel that all devices power up on
-static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
-                                     0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0xbf};
-
 /**
  * ## LoRaWAN for North America
 
@@ -32,14 +28,6 @@ MeshRadio::MeshRadio(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &_r
 {
     myNodeInfo.num_channels = NUM_CHANNELS;
 
-    // radioConfig.modem_config = RadioConfig_ModemConfig_Bw125Cr45Sf128;  // medium range and fast
-    // channelSettings.modem_config = ChannelSettings_ModemConfig_Bw500Cr45Sf128;  // short range and fast, but wide bandwidth so
-    // incompatible radios can talk together
-    channelSettings.modem_config = ChannelSettings_ModemConfig_Bw125Cr48Sf4096; // slow and long range
-
-    channelSettings.tx_power = 23;
-    memcpy(&channelSettings.psk, &defaultpsk, sizeof(channelSettings.psk));
-    strcpy(channelSettings.name, "Default");
     // Can't print strings this early - serial not setup yet
     // DEBUG_MSG("Set meshradio defaults name=%s\n", channelSettings.name);
 }
@@ -122,7 +110,7 @@ void MeshRadio::reloadConfig()
     // FIXME - can we do this?  It seems to be in the Heltec board.
     rf95.setTxPower(channelSettings.tx_power, false);
 
-    DEBUG_MSG("Set radio: name=%s. config=%u, ch=%d, txpower=%d\n", channelSettings.name, channelSettings.modem_config,
+    DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, txpower=%d\n", channelSettings.name, channelSettings.modem_config,
               channel_num, channelSettings.tx_power);
 
     // Done with init tell radio to start receiving
