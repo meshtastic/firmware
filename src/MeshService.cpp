@@ -217,6 +217,7 @@ void MeshService::loop()
 void MeshService::reloadConfig()
 {
     // If we can successfully set this radio to these settings, save them to disk
+    nodeDB.resetRadioConfig(); // Don't let the phone send us fatally bad settings
     radio.reloadConfig();
     nodeDB.saveToDisk();
 }

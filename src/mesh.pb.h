@@ -50,7 +50,7 @@ typedef struct _MyNodeInfo {
     bool has_gps;
     int32_t num_channels;
     char region[12];
-    char hw_model[12];
+    char hw_model[16];
     char firmware_version[12];
     uint32_t error_code;
     uint32_t error_address;
@@ -431,8 +431,8 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define RadioConfig_size                         120
 #define RadioConfig_UserPreferences_size         72
 #define NodeInfo_size                            155
-#define MyNodeInfo_size                          81
-#define DeviceState_size                         15076
+#define MyNodeInfo_size                          85
+#define DeviceState_size                         15080
 #define FromRadio_size                           301
 #define ToRadio_size                             295
 

@@ -106,12 +106,13 @@ class RadioCharacteristic : public ProtobufCharacteristic
 
     void onRead(BLECharacteristic *c)
     {
-        DEBUG_MSG("Reading radio config\n");
+        DEBUG_MSG("Reading radio config, sdsecs %u\n", radioConfig.preferences.sds_secs);
         ProtobufCharacteristic::onRead(c);
     }
 
     void onWrite(BLECharacteristic *c)
     {
+        DEBUG_MSG("Writing radio config\n");
         ProtobufCharacteristic::onWrite(c);
         service.reloadConfig();
     }
@@ -263,7 +264,7 @@ See bluetooth-api.md for documentation.
 BLEService *createMeshBluetoothService(BLEServer *server)
 {
     // Create the BLE Service, we need more than the default of 15 handles
-    BLEService *service = server->createService(BLEUUID("6ba1b218-15a8-461f-9fa8-5dcae273eafd"), 25, 0);
+    BLEService *service = server->createService(BLEUUID("6ba1b218-15a8-461f-9fa8-5dcae273eafd"), 30, 0);
 
     assert(!meshFromNumCharacteristic);
     meshFromNumCharacteristic = new FromNumCharacteristic;
