@@ -5,12 +5,14 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 
+#ifdef RF95_IRQ_GPIO
+
 /// A temporary buffer used for sending/receving packets, sized to hold the biggest buffer we might need
 #define MAX_RHPACKETLEN 251
 static uint8_t radiobuf[MAX_RHPACKETLEN];
 
 CustomRF95::CustomRF95(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &_rxDest)
-    : RH_RF95(NSS_GPIO, DIO0_GPIO), pool(_pool), rxDest(_rxDest), txQueue(MAX_TX_QUEUE), sendingPacket(NULL)
+    : RH_RF95(NSS_GPIO, RF95_IRQ_GPIO), RadioInterface(_pool, _rxDest), txQueue(MAX_TX_QUEUE)
 {
 }
 
@@ -173,3 +175,5 @@ void CustomRF95::startSend(MeshPacket *txp)
     int res = RH_RF95::send(radiobuf, numbytes);
     assert(res);
 }
+
+#endif
