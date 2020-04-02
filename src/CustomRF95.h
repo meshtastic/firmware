@@ -1,8 +1,6 @@
 #pragma once
 
-#include "MemoryPool.h"
-#include "MeshTypes.h"
-#include "PointerQueue.h"
+#include "RadioInterface.h"
 #include "mesh.pb.h"
 #include <RHMesh.h>
 #include <RH_RF95.h>
@@ -12,15 +10,12 @@
 /**
  * A version of the RF95 driver which is smart enough to manage packets via queues (no polling or blocking in user threads!)
  */
-class CustomRF95 : public RH_RF95
+class CustomRF95 : public RH_RF95, public RadioInterface
 {
     friend class MeshRadio; // for debugging we let that class touch pool
 
-    MemoryPool<MeshPacket> &pool;
-    PointerQueue<MeshPacket> &rxDest;
     PointerQueue<MeshPacket> txQueue;
 
-    MeshPacket *sendingPacket; // The packet we are currently sending
   public:
     /** pool is the pool we will alloc our rx packets from
      * rxDest is where we will send any rx packets, it becomes receivers responsibility to return packet to the pool

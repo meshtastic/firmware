@@ -110,7 +110,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef USE_JTAG
 #define RESET_GPIO 14
 #endif
-#define DIO0_GPIO 26
+#define RF95_IRQ_GPIO 26
 #define DIO1_GPIO 33 // Note: not really used on this board
 #define DIO2_GPIO 32 // Note: not really used on this board
 
@@ -131,7 +131,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef USE_JTAG
 #define RESET_GPIO 23
 #endif
-#define DIO0_GPIO 26
+#define RF95_IRQ_GPIO 26
 #define DIO1_GPIO 33 // Note: not really used on this board
 #define DIO2_GPIO 32 // Note: not really used on this board
 
@@ -159,7 +159,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef USE_JTAG
 #define RESET_GPIO 14 // If defined, this pin will be used to reset the LORA radio
 #endif
-#define DIO0_GPIO 26
+#define RF95_IRQ_GPIO 26
 #define DIO1_GPIO 35 // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
 #define DIO2_GPIO 34 // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
 #elif defined(TTGO_LORA_V1)
@@ -175,10 +175,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LED_PIN 2     // If defined we will blink this LED
 #define BUTTON_PIN 0  // If defined, this will be used for user button presses
 
-#define RESET_GPIO 14 // If defined, this pin will be used to reset the LORA radio
-#define DIO0_GPIO 26  // IRQ line for the LORA radio
-#define DIO1_GPIO 35  // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
-#define DIO2_GPIO 34  // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
+#define RESET_GPIO 14    // If defined, this pin will be used to reset the LORA radio
+#define RF95_IRQ_GPIO 26 // IRQ line for the LORA radio
+#define DIO1_GPIO 35     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
+#define DIO2_GPIO 34     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
 #elif defined(TTGO_LORA_V2)
 // This string must exactly match the case used in release file names or the android updater won't work
 #define HW_VENDOR "ttgo-lora32-v2"
@@ -194,10 +194,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
     0 // If defined, this will be used for user button presses, if your board doesn't have a physical switch, you can wire one
 // between this pin and ground
 
-#define RESET_GPIO 14 // If defined, this pin will be used to reset the LORA radio
-#define DIO0_GPIO 26  // IRQ line for the LORA radio
-#define DIO1_GPIO 35  // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
-#define DIO2_GPIO 34  // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
+#define RESET_GPIO 14    // If defined, this pin will be used to reset the LORA radio
+#define RF95_IRQ_GPIO 26 // IRQ line for the LORA radio
+#define DIO1_GPIO 35     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
+#define DIO2_GPIO 34     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
+#elif defined(BARE_BOARD)
+// This string must exactly match the case used in release file names or the android updater won't work
+#define HW_VENDOR "bare"
+
 #endif
 
 // -----------------------------------------------------------------------------
