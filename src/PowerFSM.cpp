@@ -31,7 +31,7 @@ static void lsEnter()
     screen.setOn(false);
 
     uint32_t now = millis();
-    while (!service.radio.rf95.canSleep()) {
+    while (!service.radio.radioIf.canSleep()) {
         delay(10); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
 
         if (millis() - now > 30 * 1000) { // If we wait too long just report an error and go to sleep
@@ -82,7 +82,12 @@ static void lsIdle()
     } else {
         DEBUG_MSG("wakeCause %d\n", wakeCause);
 
-        if (!digitalRead(BUTTON_PIN)) // If we woke because of press, instead generate a PRESS event.
+#ifdef BUTTON_PIN
+        bool pressed = !digitalRead(BUTTON_PIN);
+#else
+        bool pressed = false;
+#endif
+        if (pressed) // If we woke because of press, instead generate a PRESS event.
         {
             powerFSM.trigger(EVENT_PRESS);
         } else {

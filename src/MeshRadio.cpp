@@ -24,7 +24,8 @@ separated by 2.16 MHz with respect to the adjacent channels. Channel zero starts
 /// Sometimes while debugging it is useful to set this false, to disable rf95 accesses
 bool useHardware = true;
 
-MeshRadio::MeshRadio(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &_rxDest) : rf95(_pool, _rxDest), manager(rf95)
+MeshRadio::MeshRadio(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &_rxDest)
+    : radioIf(_pool, _rxDest) // , manager(radioIf)
 {
     myNodeInfo.num_channels = NUM_CHANNELS;
 
@@ -50,10 +51,10 @@ bool MeshRadio::init()
     delay(10);
 #endif
 
-    manager.setThisAddress(
+    radioIf.setThisAddress(
         nodeDB.getNodeNum()); // Note: we must do this here, because the nodenum isn't inited at constructor time.
 
-    if (!manager.init()) {
+    if (!radioIf.init()) {
         DEBUG_MSG("LoRa radio init failed\n");
         DEBUG_MSG("Uncomment '#define SERIAL_DEBUG' in RH_RF95.cpp for detailed debug info\n");
         return false;
@@ -85,11 +86,11 @@ unsigned long hash(char *str)
 
 void MeshRadio::reloadConfig()
 {
-    rf95.setModeIdle(); // Need to be idle before doing init
+    radioIf.setModeIdle(); // Need to be idle before doing init
 
     // Set up default configuration
     // No Sync Words in LORA mode.
-    rf95.setModemConfig(
+    radioIf.setModemConfig(
         (RH_RF95::ModemConfigChoice)channelSettings.modem_config); // Radio default
                                                                    //    setModemConfig(Bw125Cr48Sf4096); // slow and reliable?
     // rf95.setPreambleLength(8);           // Default is 8
@@ -97,7 +98,7 @@ void MeshRadio::reloadConfig()
     // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM
     int channel_num = hash(channelSettings.name) % NUM_CHANNELS;
     float center_freq = CH0 + CH_SPACING * channel_num;
-    if (!rf95.setFrequency(center_freq)) {
+    if (!radioIf.setFrequency(center_freq)) {
         DEBUG_MSG("setFrequency failed\n");
         assert(0); // fixme panic
     }
@@ -108,13 +109,13 @@ void MeshRadio::reloadConfig()
     // If you are using RFM95/96/97/98 modules which uses the PA_BOOST transmitter pin, then
     // you can set transmitter powers from 5 to 23 dBm:
     // FIXME - can we do this?  It seems to be in the Heltec board.
-    rf95.setTxPower(channelSettings.tx_power, false);
+    radioIf.setTxPower(channelSettings.tx_power, false);
 
     DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, txpower=%d\n", channelSettings.name, channelSettings.modem_config,
               channel_num, channelSettings.tx_power);
 
     // Done with init tell radio to start receiving
-    rf95.setModeRx();
+    radioIf.setModeRx();
 }
 
 ErrorCode MeshRadio::send(MeshPacket *p)
@@ -122,9 +123,9 @@ ErrorCode MeshRadio::send(MeshPacket *p)
     lastTxStart = millis();
 
     if (useHardware)
-        return rf95.send(p);
+        return radioIf.send(p);
     else {
-        rf95.pool.release(p);
+        radioIf.pool.release(p);
         return ERRNO_OK;
     }
 }
@@ -136,12 +137,12 @@ void MeshRadio::loop()
     // It should never take us more than 30 secs to send a packet, if it does, we have a bug, FIXME, move most of this
     // into CustomRF95
     uint32_t now = millis();
-    if (lastTxStart != 0 && (now - lastTxStart) > TX_WATCHDOG_TIMEOUT && rf95.mode() == RHGenericDriver::RHModeTx) {
+    if (lastTxStart != 0 && (now - lastTxStart) > TX_WATCHDOG_TIMEOUT && radioIf.mode() == RHGenericDriver::RHModeTx) {
         DEBUG_MSG("ERROR! Bug! Tx packet took too long to send, forcing radio into rx mode");
-        rf95.setModeRx();
-        if (rf95.sendingPacket) { // There was probably a packet we were trying to send, free it
-            rf95.pool.release(rf95.sendingPacket);
-            rf95.sendingPacket = NULL;
+        radioIf.setModeRx();
+        if (radioIf.sendingPacket) { // There was probably a packet we were trying to send, free it
+            radioIf.pool.release(radioIf.sendingPacket);
+            radioIf.sendingPacket = NULL;
         }
         recordCriticalError(ErrTxWatchdog);
         lastTxStart = 0; // Stop checking for now, because we just warned the developer

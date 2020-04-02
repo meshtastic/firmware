@@ -110,7 +110,7 @@ void doDeepSleep(uint64_t msecToWake)
     screen.setOn(false); // datasheet says this will draw only 10ua
 
     // Put radio in sleep mode (will still draw power but only 0.2uA)
-    service.radio.rf95.sleep();
+    service.radio.radioIf.sleep();
 
     nodeDB.saveToDisk();
 
@@ -213,8 +213,12 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     gpio_pullup_en((gpio_num_t)BUTTON_PIN);
 #endif
 
+#ifdef BUTTON_PIN
     gpio_wakeup_enable((gpio_num_t)BUTTON_PIN, GPIO_INTR_LOW_LEVEL); // when user presses, this button goes low
-    gpio_wakeup_enable((gpio_num_t)DIO0_GPIO, GPIO_INTR_HIGH_LEVEL); // RF95 interrupt, active high
+#endif
+#ifdef RF95_IRQ_GPIO
+    gpio_wakeup_enable((gpio_num_t)RF95_IRQ_GPIO, GPIO_INTR_HIGH_LEVEL); // RF95 interrupt, active high
+#endif
 #ifdef PMU_IRQ
     // FIXME, disable wake due to PMU because it seems to fire all the time?
     if (axp192_found)
@@ -223,7 +227,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     assert(esp_sleep_enable_gpio_wakeup() == ESP_OK);
     assert(esp_sleep_enable_timer_wakeup(sleepUsec) == ESP_OK);
     assert(esp_light_sleep_start() == ESP_OK);
-    // DEBUG_MSG("Exit light sleep b=%d, rf95=%d, pmu=%d\n", digitalRead(BUTTON_PIN), digitalRead(DIO0_GPIO),
+    // DEBUG_MSG("Exit light sleep b=%d, rf95=%d, pmu=%d\n", digitalRead(BUTTON_PIN), digitalRead(RF95_IRQ_GPIO),
     // digitalRead(PMU_IRQ));
     return esp_sleep_get_wakeup_cause();
 }
