@@ -138,7 +138,7 @@ void MeshRadio::loop()
     // into CustomRF95
     uint32_t now = millis();
     if (lastTxStart != 0 && (now - lastTxStart) > TX_WATCHDOG_TIMEOUT && radioIf.mode() == RHGenericDriver::RHModeTx) {
-        DEBUG_MSG("ERROR! Bug! Tx packet took too long to send, forcing radio into rx mode");
+        DEBUG_MSG("ERROR! Bug! Tx packet took too long to send, forcing radio into rx mode\n");
         radioIf.setModeRx();
         if (radioIf.sendingPacket) { // There was probably a packet we were trying to send, free it
             radioIf.pool.release(radioIf.sendingPacket);
