@@ -97,7 +97,7 @@ MeshPacket *MeshService::handleFromRadioUser(MeshPacket *mp)
         if (weWin) {
             DEBUG_MSG("NOTE! Received a nodenum collision and we are vetoing\n");
 
-            packetPool.release(mp); // discard it
+            releaseToPool(mp); // discard it
             mp = NULL;
 
             sendOurOwner(); // send our owner as a _broadcast_ because that other guy is mistakenly using our nodenum
@@ -178,8 +178,9 @@ void MeshService::handleFromRadio(MeshPacket *mp)
 
         if (mp->payload.want_response)
             sendNetworkPing(mp->from);
-    } else
-        DEBUG_MSG("Dropping vetoed User message\n");
+    } else {
+        DEBUG_MSG("Not delivering vetoed User message\n");
+    }
 }
 
 void MeshService::handleFromRadio()
