@@ -15,6 +15,7 @@ ARCHIVEDIR=release/archive
 rm -f $OUTDIR/firmware*
 
 mkdir -p $OUTDIR/bins $OUTDIR/elfs
+rm -f $OUTDIR/bins/*
 
 # build the named environment and copy the bins to the release directory
 function do_build {
@@ -43,7 +44,7 @@ for COUNTRY in $COUNTRIES; do
 done
 
 # keep the bins in archive also
-cp $OUTDIR/firmware* $ARCHIVEDIR
+cp $OUTDIR/bins/firmware* $OUTDIR/elfs/firmware* $ARCHIVEDIR
 
 cat >$OUTDIR/curfirmwareversion.xml <<XML
 <?xml version="1.0" encoding="utf-8"?>
