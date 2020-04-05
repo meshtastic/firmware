@@ -176,8 +176,10 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         tv.tv_usec = 0; // time.centisecond() * (10 / 1000);
 
         DEBUG_MSG("Got time from GPS month=%d, year=%d, unixtime=%ld\n", t.tm_mon, t.tm_year, tv.tv_sec);
-
-        perhapsSetRTC(&tv);
+        if (t.tm_year < 0 || t.tm_year >= 300)
+            DEBUG_MSG("Ignoring invalid GPS time\n");
+        else
+            perhapsSetRTC(&tv);
     }
 
     if ((fixtype >= 3 && fixtype <= 4) && ublox.getP()) // rd fixes only
