@@ -83,7 +83,7 @@ class MeshService : private Observer
     /// handle all the packets that just arrived from the mesh radio
     void handleFromRadio();
 
-    /// Handle a packet that just arrived from the radio
+    /// Handle a packet that just arrived from the radio.  We will either eventually enqueue the message to the phone or return it to the free pool
     void handleFromRadio(MeshPacket *p);
 
     /// handle a user packet that just arrived on the radio, return NULL if we should not process this packet at all

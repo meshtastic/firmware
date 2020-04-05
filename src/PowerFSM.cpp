@@ -113,6 +113,7 @@ static void nbEnter()
 
 static void darkEnter()
 {
+    setBluetoothEnable(true);
     screen.setOn(false);
 }
 
