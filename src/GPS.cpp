@@ -6,8 +6,7 @@
 
 HardwareSerial _serial_gps(GPS_SERIAL_NUM);
 
-RTC_DATA_ATTR bool timeSetFromGPS; // We only reset our time once per _boot_ after that point just run from the internal clock
-                                   // (even across sleeps)
+bool timeSetFromGPS; // We try to set our time from GPS each time we wake from sleep
 
 GPS gps;
 
@@ -176,8 +175,10 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         tv.tv_usec = 0; // time.centisecond() * (10 / 1000);
 
         DEBUG_MSG("Got time from GPS month=%d, year=%d, unixtime=%ld\n", t.tm_mon, t.tm_year, tv.tv_sec);
-
-        perhapsSetRTC(&tv);
+        if (t.tm_year < 0 || t.tm_year >= 300)
+            DEBUG_MSG("Ignoring invalid GPS time\n");
+        else
+            perhapsSetRTC(&tv);
     }
 
     if ((fixtype >= 3 && fixtype <= 4) && ublox.getP()) // rd fixes only
