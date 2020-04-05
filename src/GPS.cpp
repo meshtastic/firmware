@@ -6,8 +6,7 @@
 
 HardwareSerial _serial_gps(GPS_SERIAL_NUM);
 
-RTC_DATA_ATTR bool timeSetFromGPS; // We only reset our time once per _boot_ after that point just run from the internal clock
-                                   // (even across sleeps)
+bool timeSetFromGPS; // We try to set our time from GPS each time we wake from sleep
 
 GPS gps;
 
