@@ -19,8 +19,9 @@ CustomRF95::CustomRF95(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &
 bool CustomRF95::canSleep()
 {
     // We allow initializing mode, because sometimes while testing we don't ever call init() to turn on the hardware
-    DEBUG_MSG("canSleep, mode=%d, isRx=%d, txEmpty=%d, txGood=%d\n", _mode, _isReceiving, txQueue.isEmpty(), _txGood);
-    return (_mode == RHModeInitialising || _mode == RHModeIdle || _mode == RHModeRx) && !_isReceiving && txQueue.isEmpty();
+    bool isRx = isReceiving();
+    DEBUG_MSG("canSleep, mode=%d, isRx=%d, txEmpty=%d, txGood=%d\n", _mode, isRx, txQueue.isEmpty(), _txGood);
+    return (_mode == RHModeInitialising || _mode == RHModeIdle || _mode == RHModeRx) && !isRx && txQueue.isEmpty();
 }
 
 bool CustomRF95::sleep()
@@ -47,7 +48,7 @@ ErrorCode CustomRF95::send(MeshPacket *p)
     // We wait _if_ we are partially though receiving a packet (rather than just merely waiting for one).
     // To do otherwise would be doubly bad because not only would we drop the packet that was on the way in,
     // we almost certainly guarantee no one outside will like the packet we are sending.
-    if (_mode == RHModeIdle || (_mode == RHModeRx && !_isReceiving)) {
+    if (_mode == RHModeIdle || (_mode == RHModeRx && !isReceiving())) {
         // if the radio is idle, we can send right away
         DEBUG_MSG("immedate send on mesh (txGood=%d,rxGood=%d,rxBad=%d)\n", txGood(), rxGood(), rxBad());
         startSend(p);
