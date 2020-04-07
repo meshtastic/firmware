@@ -20,23 +20,36 @@ This software is 100% open source and developed by a group of hobbyist experimen
 
 ## Supported hardware
 
-We currently support three models of radios. The [TTGO T-Beam](https://www.aliexpress.com/item/4000119152086.html), [TTGO LORA32](https://www.banggood.com/LILYGO-TTGO-LORA32-868Mhz-SX1276-ESP32-Oled-Display-bluetooth-WIFI-Lora-Development-Module-Board-p-1248652.html?cur_warehouse=UK) and the [Heltec LoRa 32](https://heltec.org/project/wifi-lora-32/). Most users should buy the T-Beam and a 18650 battery (total cost less than \$35). Make
-sure to buy the frequency range which is legal for your country. For the USA, you should buy the 915MHz version. Getting a version that include a screen
-is optional, but highly recommended.
+We currently support three models of radios. The [TTGO T-Beam](https://www.aliexpress.com/item/4000119152086.html), [TTGO LORA32](https://www.banggood.com/LILYGO-TTGO-LORA32-868Mhz-SX1276-ESP32-Oled-Display-bluetooth-WIFI-Lora-Development-Module-Board-p-1248652.html?cur_warehouse=UK) and the [Heltec LoRa 32](https://heltec.org/project/wifi-lora-32/). Most users should buy the T-Beam and an 18650 battery (total cost less than \$35). Make sure to buy the frequency range which is legal for your country (915MHz for US/JP/AU/NZ, 470MHz for CN, 433MHz and 870MHz for EU). Getting a version that includes a screen is optional, but highly recommended.
 
 See (meshtastic.org) for 3D printable cases.
 
-## Installing the firmware
+## Firmware Installation
 
-Prebuilt binaries for the supported radios is available in our [releases](https://github.com/meshtastic/Meshtastic-esp32/releases). Your initial installation has to happen over USB from your Mac, Windows or Linux PC. Once our software is installed, all future software updates happen over bluetooth from your phone.
+Prebuilt binaries for the supported radios are available in our [releases](https://github.com/meshtastic/Meshtastic-esp32/releases). Your initial installation has to happen over USB from your Mac, Windows or Linux PC. Once our software is installed, all future software updates happen over bluetooth from your phone.
 
-The instructions currently require a few commmand lines, but it should be pretty straightforward. Please post comments on our group chat if you have problems or successes. Steps to install:
+Please post comments on our [group chat](https://meshtastic.discourse.group/) if you have problems or successes.
 
-1. Purchase a radio (see above) with the correct frequencies for your country (915MHz for US or JP, 470MHz for CN, 433MHz and 870MHz for EU).
-2. Install "pip". Pip is the python package manager we use to get the esptool installer app. Instructions [here](https://www.makeuseof.com/tag/install-pip-for-python/). If you are using OS-X, see these [special instructions](docs/software/install-OSX.md).
-3. Run "pip install --upgrade esptool" to get esptool installed on your machine
-4. Connect your radio to your USB port
-5. Confirm that your device is talking to your PC by running "esptool.py chip_id". The Heltec build also works on the TTGO LORA32 radio. You should see something like:
+### Installing from a GUI - Windows and Mac
+
+1. Download and unzip the latest Meshtastic firmware [release](https://github.com/meshtastic/Meshtastic-esp32/releases).
+2. Download [ESPHome Flasher](https://github.com/esphome/esphome-flasher/releases) (either x86-32bit Windows or x64-64 bit Windows).
+3. Connect your radio to your USB port and open ESPHome Flasher.
+4. If your board is not showing under Serial Port then you likely need to install the drivers for the CP210X serial chip. In Windows you can check by searching “Device Manager” and ensuring the device is shown under “Ports”. 
+5. If there is an error, download the drivers [here](https://www.silabs.com/products/development-tools/software/usb-to-uart-bridge-vcp-drivers), then unzip and run the Installer application. 
+6. In ESPHome Flasher, refresh the serial ports and select your board.
+7. Browse to the previously downloaded firmware and select the correct firmware based on the board type, country and frequency.
+8. Select Flash ESP.
+9. Once finished, the terminal should start displaying debug messages including the Bluetooth passphrase when you try connect from your phone (handy if you don’t have a screen).
+
+### Installing from a commandline
+
+These instructions currently require a few commmand lines, but it should be pretty straightforward.
+
+1. Install "pip". Pip is the python package manager we use to get the esptool installer app. Instructions [here](https://www.makeuseof.com/tag/install-pip-for-python/). If you are using OS-X, see these [special instructions](docs/software/install-OSX.md).
+2. Run "pip install --upgrade esptool" to get esptool installed on your machine.
+3. Connect your radio to your USB port.
+4. Confirm that your device is talking to your PC by running "esptool.py chip_id". The Heltec build also works on the TTGO LORA32 radio. You should see something like:
 
 ```
 mydir$ esptool.py chip_id
@@ -56,8 +69,8 @@ MAC: 24:6f:28:b5:36:71
 Hard resetting via RTS pin...
 ```
 
-6. cd into the directory where the release zip file was expanded.
-7. Install the correct firmware for your board with "device-install.sh firmware-_board_-_country_.bin". For instance "./device-install.sh firmware-HELTEC-US-0.0.3.bin".
+5. cd into the directory where the release zip file was expanded.
+6. Install the correct firmware for your board with "device-install.sh firmware-_board_-_country_.bin". For instance "./device-install.sh firmware-HELTEC-US-0.0.3.bin".
 
 Note: If you have previously installed meshtastic, you don't need to run this full script instead just run "esptool.py --baud 921600 write*flash 0x10000 firmware-\_board*-_country_.bin". This will be faster, also all of your current preferences will be preserved.
 
@@ -127,8 +140,8 @@ Leaving...
 Hard resetting via RTS pin...
 ```
 
-8. The board will boot and show the Meshtastic logo.
-9. Please post a comment on our chat so we know if these instructions worked for you ;-). If you find bugs/have-questions post there also - we will be rapidly iterating over the next few weeks.
+7. The board will boot and show the Meshtastic logo.
+8. Please post a comment on our chat so we know if these instructions worked for you ;-). If you find bugs/have-questions post there also - we will be rapidly iterating over the next few weeks.
 
 ## Meshtastic Android app
 
