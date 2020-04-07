@@ -355,7 +355,7 @@ void loop()
     loopBLE();
 
     // for debug printing
-    // service.radio.rf95.canSleep();
+    // service.radio.radioIf.canSleep();
 
 #ifdef PMU_IRQ
     if (pmu_irq) {
