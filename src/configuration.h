@@ -202,6 +202,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // This string must exactly match the case used in release file names or the android updater won't work
 #define HW_VENDOR "bare"
 
+#define NO_ESP32 // Don't use ESP32 libs (mainly bluetooth)
+
 #endif
 
 // -----------------------------------------------------------------------------
