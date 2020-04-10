@@ -322,7 +322,7 @@ void MeshService::sendOurPosition(NodeNum dest, bool wantReplies)
     sendToMesh(p);
 }
 
-void MeshService::onGPSChanged(void *unused)
+int MeshService::onGPSChanged(void *unused)
 {
     DEBUG_MSG("got gps notify\n");
 
@@ -354,4 +354,6 @@ void MeshService::onGPSChanged(void *unused)
 
         releaseToPool(p);
     }
+
+    return 0;
 }

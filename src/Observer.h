@@ -24,7 +24,11 @@ template <class T> class Observer
     friend class Observable<T>;
 
   protected:
-    virtual void onNotify(T arg) = 0;
+    /**
+     * returns 0 if other observers should continue to be called
+     * returns !0 if the observe calls should be aborted and this result code returned for notifyObservers
+     **/
+    virtual int onNotify(T arg) = 0;
 };
 
 /**
@@ -32,7 +36,7 @@ template <class T> class Observer
  */
 template <class Callback, class T> class CallbackObserver : public Observer<T>
 {
-    typedef void (Callback::*ObserverCallback)(T arg);
+    typedef int (Callback::*ObserverCallback)(T arg);
 
     Callback *objPtr;
     ObserverCallback method;
@@ -41,7 +45,7 @@ template <class Callback, class T> class CallbackObserver : public Observer<T>
     CallbackObserver(Callback *_objPtr, ObserverCallback _method) : objPtr(_objPtr), method(_method) {}
 
   protected:
-    virtual void onNotify(T arg) { (objPtr->*method)(arg); }
+    virtual int onNotify(T arg) { return (objPtr->*method)(arg); }
 };
 
 /**
@@ -55,13 +59,19 @@ template <class T> class Observable
   public:
     /**
      * Tell all observers about a change, observers can process arg as they wish
+     *
+     * returns !0 if an observer chose to abort processing by returning this code
      */
-    void notifyObservers(T arg)
+    int notifyObservers(T arg)
     {
         for (typename std::list<Observer<T> *>::const_iterator iterator = observers.begin(); iterator != observers.end();
              ++iterator) {
-            (*iterator)->onNotify(arg);
+            int result = (*iterator)->onNotify(arg);
+            if (result != 0)
+                return result;
         }
+
+        return 0;
     }
 
   private:

@@ -222,10 +222,11 @@ class FromNumCharacteristic : public CallbackCharacteristic, public Observer<uin
     }
 
     /// If the mesh service tells us fromNum has changed, tell the phone
-    virtual void onNotify(uint32_t newValue)
+    virtual int onNotify(uint32_t newValue)
     {
         setValue(newValue);
         notify();
+        return 0;
     }
 };
 
