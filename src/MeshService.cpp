@@ -3,7 +3,7 @@
 #include <assert.h>
 
 #include "GPS.h"
-#include "MeshBluetoothService.h"
+//#include "MeshBluetoothService.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Periodic.h"
@@ -52,8 +52,7 @@ MeshService service;
     4 // max number of packets destined to our queue, we dispatch packets quickly so it doesn't need to be big
 
 MeshService::MeshService()
-    : packetPool(MAX_PACKETS), toPhoneQueue(MAX_RX_TOPHONE), fromRadioQueue(MAX_RX_FROMRADIO), fromNum(0),
-      radio(packetPool, fromRadioQueue)
+    : packetPool(MAX_PACKETS), toPhoneQueue(MAX_RX_TOPHONE), fromRadioQueue(MAX_RX_FROMRADIO), radio(packetPool, fromRadioQueue)
 {
     // assert(MAX_RX_TOPHONE == 32); // FIXME, delete this, just checking my clever macro
 }
@@ -65,7 +64,7 @@ void MeshService::init()
     if (!radio.init())
         DEBUG_MSG("radio init failed\n");
 
-    gps.addObserver(this);
+    gpsObserver.observe(&gps);
 
     // No need to call this here, our periodic task will fire quite soon
     // sendOwnerPeriod();
@@ -191,7 +190,7 @@ void MeshService::handleFromRadio()
         handleFromRadio(mp);
     }
     if (oldFromNum != fromNum) // We don't want to generate extra notifies for multiple new packets
-        bluetoothNotifyFromNum(fromNum);
+        fromNumChanged.notifyObservers(fromNum);
 }
 
 uint32_t sendOwnerCb()
@@ -244,7 +243,7 @@ void MeshService::handleToRadio(std::string s)
             if (loopback) {
                 MeshPacket *mp = packetPool.allocCopy(r.variant.packet);
                 handleFromRadio(mp);
-                bluetoothNotifyFromNum(fromNum); // tell the phone a new packet arrived
+                // handleFromRadio will tell the phone a new packet arrived
             }
             break;
         }
@@ -323,8 +322,10 @@ void MeshService::sendOurPosition(NodeNum dest, bool wantReplies)
     sendToMesh(p);
 }
 
-void MeshService::onGPSChanged()
+void MeshService::onGPSChanged(void *unused)
 {
+    DEBUG_MSG("got gps notify\n");
+
     // Update our local node info with our position (even if we don't decide to update anyone else)
     MeshPacket *p = allocForSending();
     p->payload.which_variant = SubPacket_position_tag;
@@ -353,10 +354,4 @@ void MeshService::onGPSChanged()
 
         releaseToPool(p);
     }
-}
-
-void MeshService::onNotify(Observable *o)
-{
-    DEBUG_MSG("got gps notify\n");
-    onGPSChanged();
 }

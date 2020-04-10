@@ -192,7 +192,7 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         hasValidLocation = (latitude != 0) || (longitude != 0); // bogus lat lon is reported as 0,0
         if (hasValidLocation) {
             wantNewLocation = false;
-            notifyObservers();
+            notifyObservers(NULL);
             // ublox.powerOff();
         }
     } else // we didn't get a location update, go back to sleep and hope the characters show up

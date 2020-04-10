@@ -1,7 +1,5 @@
 #include "sleep.h"
-#include "BluetoothUtil.h"
 #include "GPS.h"
-#include "MeshBluetoothService.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -11,8 +9,13 @@
 #include "esp_pm.h"
 #include "main.h"
 #include "rom/rtc.h"
+#include "target_specific.h"
 #include <Wire.h>
 #include <driver/rtc_io.h>
+
+#ifndef NO_ESP32
+#include "BluetoothUtil.h"
+#endif
 
 #ifdef TBEAM_V10
 #include "axp20x.h"
@@ -105,7 +108,9 @@ void doDeepSleep(uint64_t msecToWake)
     // not using wifi yet, but once we are this is needed to shutoff the radio hw
     // esp_wifi_stop();
 
+#ifndef NO_ESP32
     BLEDevice::deinit(false); // We are required to shutdown bluetooth before deep or light sleep
+#endif
 
     screen.setOn(false); // datasheet says this will draw only 10ua
 
