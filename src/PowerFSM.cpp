@@ -7,6 +7,7 @@
 #include "main.h"
 #include "screen.h"
 #include "sleep.h"
+#include "target_specific.h"
 
 static void sdsEnter()
 {

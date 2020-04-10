@@ -13,8 +13,10 @@
  * Top level app for this service.  keeps the mesh, the radio config and the queue of received packets.
  *
  */
-class MeshService : private Observer
+class MeshService
 {
+    CallbackObserver<MeshService, void *> gpsObserver = CallbackObserver<MeshService, void *>(this, &MeshService::onGPSChanged);
+
     MemoryPool<MeshPacket> packetPool;
 
     /// received packets waiting for the phone to process them
@@ -28,10 +30,12 @@ class MeshService : private Observer
     PointerQueue<MeshPacket> fromRadioQueue;
 
     /// The current nonce for the newest packet which has been queued for the phone
-    uint32_t fromNum;
+    uint32_t fromNum = 0;
 
   public:
     MeshRadio radio;
+
+    Observable<uint32_t> fromNumChanged;
 
     MeshService();
 
@@ -76,14 +80,13 @@ class MeshService : private Observer
     void sendToMesh(MeshPacket *p);
 
     /// Called when our gps position has changed - updates nodedb and sends Location message out into the mesh
-    void onGPSChanged();
-
-    virtual void onNotify(Observable *o);
+    void onGPSChanged(void *arg);
 
     /// handle all the packets that just arrived from the mesh radio
     void handleFromRadio();
 
-    /// Handle a packet that just arrived from the radio.  We will either eventually enqueue the message to the phone or return it to the free pool
+    /// Handle a packet that just arrived from the radio.  We will either eventually enqueue the message to the phone or return it
+    /// to the free pool
     void handleFromRadio(MeshPacket *p);
 
     /// handle a user packet that just arrived on the radio, return NULL if we should not process this packet at all
