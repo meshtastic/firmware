@@ -80,7 +80,8 @@ class MeshService
     void sendToMesh(MeshPacket *p);
 
     /// Called when our gps position has changed - updates nodedb and sends Location message out into the mesh
-    void onGPSChanged(void *arg);
+    /// returns 0 to allow futher processing
+    int onGPSChanged(void *arg);
 
     /// handle all the packets that just arrived from the mesh radio
     void handleFromRadio();
