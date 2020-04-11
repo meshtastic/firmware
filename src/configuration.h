@@ -166,8 +166,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // This string must exactly match the case used in release file names or the android updater won't work
 #define HW_VENDOR "ttgo-lora32-v1"
 
-#define I2C_SDA 21 // I2C pins for this board
-#define I2C_SCL 22
+#define I2C_SDA 4 // I2C pins for this board
+#define I2C_SCL 15
 
 #define RESET_OLED 16 // If defined, this pin will be used to reset the display controller
 
@@ -183,8 +183,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // This string must exactly match the case used in release file names or the android updater won't work
 #define HW_VENDOR "ttgo-lora32-v2"
 
-#define I2C_SDA 4 // I2C pins for this board
-#define I2C_SCL 15
+#define I2C_SDA 21 // I2C pins for this board
+#define I2C_SCL 22
 
 #define RESET_OLED 16 // If defined, this pin will be used to reset the display controller
 
