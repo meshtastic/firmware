@@ -17,6 +17,8 @@ Items to complete soon (next couple of alpha releases).
 
 Items to complete before the first beta release.
 
+- Don't store position packets in the to phone fifo if we are disconnected.  The phone will get that info for 'free' when it 
+fetches the fresh nodedb.
 - Use the RFM95 sequencer to stay in idle mode most of the time, then automatically go to receive mode and automatically go from transmit to receive mode.  See 4.2.8.2 of manual.
 - possibly switch to https://github.com/SlashDevin/NeoGPS for gps comms
 - good source of battery/signal/gps icons https://materialdesignicons.com/
