@@ -1,0 +1,21 @@
+In old lib code:
+* pass header all the way down to device
+* have device send header using the same code it uses to send payload
+* have device treat received header as identical to payload
+* use new MessageHeader in existing app (make sure it is packed properly)
+
+In the sudomesh code:
+* move this rf95 lib into the layer2 project
+* make RadioInterface the new layer one API (move over set radio options)
+* change meshtastic app to use new layer one API
+
+Now meshtastic is sharing layer one with disaster radio.
+* change mesthastic app to use new layer two API (make sure broadcast still works for max TTL of 1)
+
+Now meshtastic is sharing layer two with disaster radio.
+
+* make simulation code work with new API
+* make disaster radio app work with new API 
+
+much later:
+* allow packets to be filtered at the device level RX time based on dest addr (to avoid waking main CPU unnecessarily)
