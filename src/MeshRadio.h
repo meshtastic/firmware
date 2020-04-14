@@ -3,6 +3,7 @@
 #include "CustomRF95.h"
 #include "MemoryPool.h"
 #include "MeshTypes.h"
+#include "Observer.h"
 #include "PointerQueue.h"
 #include "configuration.h"
 #include "mesh.pb.h"
@@ -80,22 +81,42 @@ class MeshRadio
 
     bool init();
 
-    /// Send a packet (possibly by enquing in a private fifo).  This routine will
-    /// later free() the packet to pool.  This routine is not allowed to stall because it is called from
-    /// bluetooth comms code.  If the txmit queue is empty it might return an error
-    ErrorCode send(MeshPacket *p);
-
     /// Do loop callback operations (we currently FIXME poll the receive mailbox here)
     /// for received packets it will call the rx handler
     void loop();
 
-    /// The radioConfig object just changed, call this to force the hw to change to the new settings
-    void reloadConfig();
-
   private:
-    // RHReliableDatagram manager; // don't use mesh yet
-    // RHMesh manager;
-
     /// Used for the tx timer watchdog, to check for bugs in our transmit code, msec of last time we did a send
     uint32_t lastTxStart = 0;
+
+    CallbackObserver<MeshRadio, void *> configChangedObserver =
+        CallbackObserver<MeshRadio, void *>(this, &MeshRadio::reloadConfig);
+
+    CallbackObserver<MeshRadio, void *> preflightSleepObserver =
+        CallbackObserver<MeshRadio, void *>(this, &MeshRadio::preflightSleepCb);
+
+    CallbackObserver<MeshRadio, void *> notifyDeepSleepObserver =
+        CallbackObserver<MeshRadio, void *>(this, &MeshRadio::notifyDeepSleepDb);
+
+    CallbackObserver<MeshRadio, MeshPacket *> sendPacketObserver; /*  =
+        CallbackObserver<MeshRadio, MeshPacket *>(this, &MeshRadio::send); */
+
+    /// Send a packet (possibly by enquing in a private fifo).  This routine will
+    /// later free() the packet to pool.  This routine is not allowed to stall because it is called from
+    /// bluetooth comms code.  If the txmit queue is empty it might return an error.
+    ///
+    /// Returns 1 for success or 0 for failure (and if we fail it is the _callers_ responsibility to free the packet)
+    int send(MeshPacket *p);
+
+    /// The radioConfig object just changed, call this to force the hw to change to the new settings
+    int reloadConfig(void *unused = NULL);
+
+    /// Return 0 if sleep is okay
+    int preflightSleepCb(void *unused = NULL) { return radioIf.canSleep() ? 0 : 1; }
+
+    int notifyDeepSleepDb(void *unused = NULL)
+    {
+        radioIf.sleep();
+        return 0;
+    }
 };

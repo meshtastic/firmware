@@ -28,6 +28,7 @@
 #include "Periodic.h"
 #include "PowerFSM.h"
 #include "configuration.h"
+#include "error.h"
 #include "esp32/pm.h"
 #include "esp_pm.h"
 #include "power.h"
@@ -205,6 +206,8 @@ const char *getDeviceName()
     return name;
 }
 
+static MeshRadio *radio = NULL;
+
 void setup()
 {
 // Debug
@@ -259,6 +262,14 @@ void setup()
 
     service.init();
 
+#ifndef NO_ESP32
+    // MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
+    radio = new MeshRadio(service.packetPool, service.fromRadioQueue);
+#endif
+
+    if (radio && !radio->init())
+        recordCriticalError(ErrNoRadio);
+
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
 
@@ -307,6 +318,9 @@ void loop()
     gps.loop();
     service.loop();
 
+    if (radio)
+        radio->loop();
+
     ledPeriodic.loop();
     // axpDebugOutput.loop();
 
@@ -315,7 +329,7 @@ void loop()
 #endif
 
     // for debug printing
-    // service.radio.radioIf.canSleep();
+    // radio.radioIf.canSleep();
 
 #ifdef PMU_IRQ
     if (pmu_irq) {
