@@ -7,7 +7,6 @@
 #include "PointerQueue.h"
 #include "configuration.h"
 #include "mesh.pb.h"
-#include <RHMesh.h>
 
 // US channel settings
 #define CH0_US 903.08f      // MHz

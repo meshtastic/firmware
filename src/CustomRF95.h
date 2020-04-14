@@ -2,7 +2,6 @@
 
 #include "RadioInterface.h"
 #include "mesh.pb.h"
-#include <RHMesh.h>
 #include <RH_RF95.h>
 
 #define MAX_TX_QUEUE 16 // max number of packets which can be waiting for transmission

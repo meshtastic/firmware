@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Arduino.h>
+
 /// Error codes for critical error
 enum CriticalErrorCode { NoError, ErrTxWatchdog, ErrSleepEnterWait, ErrNoRadio };
 
