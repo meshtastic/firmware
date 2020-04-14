@@ -17,25 +17,31 @@ class MeshService
 {
     CallbackObserver<MeshService, void *> gpsObserver = CallbackObserver<MeshService, void *>(this, &MeshService::onGPSChanged);
 
-    MemoryPool<MeshPacket> packetPool;
-
     /// received packets waiting for the phone to process them
     /// FIXME, change to a DropOldestQueue and keep a count of the number of dropped packets to ensure
     /// we never hang because android hasn't been there in a while
     /// FIXME - save this to flash on deep sleep
     PointerQueue<MeshPacket> toPhoneQueue;
 
-    /// Packets which have just arrived from the radio, ready to be processed by this service and possibly
-    /// forwarded to the phone.
-    PointerQueue<MeshPacket> fromRadioQueue;
-
     /// The current nonce for the newest packet which has been queued for the phone
     uint32_t fromNum = 0;
 
   public:
-    MeshRadio radio;
+    MemoryPool<MeshPacket> packetPool;
 
+    /// Packets which have just arrived from the radio, ready to be processed by this service and possibly
+    /// forwarded to the phone.
+    PointerQueue<MeshPacket> fromRadioQueue;
+
+    /// Called when some new packets have arrived from one of the radios
     Observable<uint32_t> fromNumChanged;
+
+    /// Called when radio config has changed (radios should observe this and set their hardware as required)
+    Observable<void *> configChanged;
+
+    /// Radios should observe this and return 0 if they were unable to process the packet or 1 if they were (and therefore it
+    /// should not be offered to other radios)
+    Observable<MeshPacket *> sendViaRadio;
 
     MeshService();
 

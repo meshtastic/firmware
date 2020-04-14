@@ -31,22 +31,6 @@ static void lsEnter()
     DEBUG_MSG("lsEnter begin, ls_secs=%u\n", radioConfig.preferences.ls_secs);
     screen.setOn(false);
 
-    uint32_t now = millis();
-    while (!service.radio.radioIf.canSleep()) {
-        delay(10); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
-
-        if (millis() - now > 30 * 1000) { // If we wait too long just report an error and go to sleep
-            recordCriticalError(ErrSleepEnterWait);
-            break;
-        }
-    }
-
-    gps.prepareSleep(); // abandon in-process parsing
-
-    // if (!isUSBPowered)      // FIXME - temp hack until we can put gps in sleep mode, if we have AC when we go to sleep then
-    // leave GPS on
-    //    setGPSPower(false); // kill GPS power
-
     DEBUG_MSG("lsEnter end\n");
 }
 

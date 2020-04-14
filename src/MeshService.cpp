@@ -51,8 +51,7 @@ MeshService service;
 #define MAX_RX_FROMRADIO                                                                                                         \
     4 // max number of packets destined to our queue, we dispatch packets quickly so it doesn't need to be big
 
-MeshService::MeshService()
-    : packetPool(MAX_PACKETS), toPhoneQueue(MAX_RX_TOPHONE), fromRadioQueue(MAX_RX_FROMRADIO), radio(packetPool, fromRadioQueue)
+MeshService::MeshService() : toPhoneQueue(MAX_RX_TOPHONE), packetPool(MAX_PACKETS), fromRadioQueue(MAX_RX_FROMRADIO)
 {
     // assert(MAX_RX_TOPHONE == 32); // FIXME, delete this, just checking my clever macro
 }
@@ -60,9 +59,6 @@ MeshService::MeshService()
 void MeshService::init()
 {
     nodeDB.init();
-
-    if (!radio.init())
-        DEBUG_MSG("radio init failed\n");
 
     gpsObserver.observe(&gps);
 
@@ -205,8 +201,6 @@ Periodic sendOwnerPeriod(sendOwnerCb);
 /// Do idle processing (mostly processing messages which have been queued from the radio)
 void MeshService::loop()
 {
-    radio.loop(); // FIXME, possibly move radio interaction to own thread
-
     handleFromRadio();
 
     // occasionally send our owner info
@@ -218,7 +212,7 @@ void MeshService::reloadConfig()
 {
     // If we can successfully set this radio to these settings, save them to disk
     nodeDB.resetRadioConfig(); // Don't let the phone send us fatally bad settings
-    radio.reloadConfig();
+    configChanged.notifyObservers(NULL);
     nodeDB.saveToDisk();
 }
 
@@ -276,8 +270,12 @@ void MeshService::sendToMesh(MeshPacket *p)
         DEBUG_MSG("Dropping locally processed message\n");
     else {
         // Note: We might return !OK if our fifo was full, at that point the only option we have is to drop it
-        if (radio.send(p) != ERRNO_OK)
-            DEBUG_MSG("Dropped packet because send queue was full!\n");
+        int didSend = sendViaRadio.notifyObservers(p);
+        if (!didSend) {
+            DEBUG_MSG("No radio was able to send packet, discarding...");
+            releaseToPool(p);
+        }
+
     }
 }
 
