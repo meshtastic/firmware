@@ -10,7 +10,7 @@
  *
  * When new data is available it will notify observers.
  */
-class GPS : public PeriodicTask, public Observable
+class GPS : public PeriodicTask, public Observable<void *>
 {
     SFE_UBLOX_GPS ublox;
 
