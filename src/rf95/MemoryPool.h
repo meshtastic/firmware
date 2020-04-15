@@ -24,7 +24,7 @@ template <class T> class MemoryPool
         buf = new T[maxElements];
 
         // prefill dead
-        for (int i = 0; i < maxElements; i++)
+        for (size_t i = 0; i < maxElements; i++)
             release(&buf[i]);
     }
 
@@ -65,7 +65,7 @@ template <class T> class MemoryPool
     {
         assert(dead.enqueue(p, 0));
         assert(p >= buf &&
-               (p - buf) <
+               (size_t) (p - buf) <
                    maxElements); // sanity check to make sure a programmer didn't free something that didn't come from this pool
     }
 
@@ -74,7 +74,7 @@ template <class T> class MemoryPool
     {
         assert(dead.enqueueFromISR(p, higherPriWoken));
         assert(p >= buf &&
-               (p - buf) <
+               (size_t) (p - buf) <
                    maxElements); // sanity check to make sure a programmer didn't free something that didn't come from this pool
     }
 };

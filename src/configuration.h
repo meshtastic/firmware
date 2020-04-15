@@ -73,6 +73,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // devices. Comment this out to not rotate screen 180 degrees.
 #define FLIP_SCREEN_VERTICALLY
 
+// DEBUG LED
+
+#define LED_INVERTED 0 // define as 1 if LED is active low (on)
+
 // -----------------------------------------------------------------------------
 // GPS
 // -----------------------------------------------------------------------------
@@ -203,6 +207,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HW_VENDOR "bare"
 
 #define NO_ESP32 // Don't use ESP32 libs (mainly bluetooth)
+
+// Turn off GPS code for now
+#undef GPS_RX_PIN
+#undef GPS_TX_PIN
+
+// FIXME, not yet ready for NRF52
+#define RTC_DATA_ATTR
+
+#define LED_PIN PIN_LED1 // LED1 on nrf52840-DK
+#define BUTTON_PIN PIN_BUTTON1
+
+// This board uses 0 to be mean LED on
+#undef LED_INVERTED
+#define LED_INVERTED 1
 
 #endif
 

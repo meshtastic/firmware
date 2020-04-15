@@ -42,7 +42,12 @@
         "typeinfo": "cpp",
         "string": "cpp",
         "*.xbm": "cpp",
-        "list": "cpp"
+        "list": "cpp",
+        "atomic": "cpp",
+        "memory_resource": "cpp",
+        "optional": "cpp",
+        "string_view": "cpp",
+        "cassert": "cpp"
     },
     "cSpell.words": [
         "Meshtastic",

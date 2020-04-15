@@ -30,7 +30,12 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define DEVICESTATE_CUR_VER 7
 #define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
 
+#ifndef NO_ESP32
 #define FS SPIFFS
+#endif 
+
+// FIXME - move this somewhere else
+extern void getMacAddr(uint8_t *dmac);
 
 /**
  *
@@ -97,7 +102,7 @@ void NodeDB::init()
     strncpy(myNodeInfo.hw_model, HW_VENDOR, sizeof(myNodeInfo.hw_model));
 
     // Init our blank owner info to reasonable defaults
-    esp_efuse_mac_get_default(ourMacAddr);
+    getMacAddr(ourMacAddr);
     sprintf(owner.id, "!%02x%02x%02x%02x%02x%02x", ourMacAddr[0], ourMacAddr[1], ourMacAddr[2], ourMacAddr[3], ourMacAddr[4],
             ourMacAddr[5]);
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
@@ -115,12 +120,6 @@ void NodeDB::init()
     NodeInfo *info = getOrCreateNode(getNodeNum());
     info->user = owner;
     info->has_user = true;
-
-    if (!FS.begin(true)) // FIXME - do this in main?
-    {
-        DEBUG_MSG("ERROR SPIFFS Mount Failed\n");
-        // FIXME - report failure to phone
-    }
 
     // saveToDisk();
     loadFromDisk();
@@ -157,7 +156,14 @@ const char *preftmp = "/db.proto.tmp";
 
 void NodeDB::loadFromDisk()
 {
+#ifdef FS
     static DeviceState scratch;
+
+    if (!FS.begin(true)) // FIXME - do this in main?
+    {
+        DEBUG_MSG("ERROR SPIFFS Mount Failed\n");
+        // FIXME - report failure to phone
+    }
 
     File f = FS.open(preffile);
     if (f) {
@@ -185,10 +191,14 @@ void NodeDB::loadFromDisk()
     } else {
         DEBUG_MSG("No saved preferences found\n");
     }
+#else
+    DEBUG_MSG("ERROR: Filesystem not implemented\n");
+#endif
 }
 
 void NodeDB::saveToDisk()
 {
+#ifdef FS
     File f = FS.open(preftmp, "w");
     if (f) {
         DEBUG_MSG("Writing preferences\n");
@@ -213,6 +223,9 @@ void NodeDB::saveToDisk()
     } else {
         DEBUG_MSG("ERROR: can't write prefs\n"); // FIXME report to app
     }
+#else
+    DEBUG_MSG("ERROR filesystem not implemented\n");
+#endif
 }
 
 const NodeInfo *NodeDB::readNextInfo()

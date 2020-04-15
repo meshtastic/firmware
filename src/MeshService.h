@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <assert.h>
+#include <string>
 
 #include "MemoryPool.h"
 #include "MeshRadio.h"
