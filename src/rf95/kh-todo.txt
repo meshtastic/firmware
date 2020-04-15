@@ -17,5 +17,6 @@ Now meshtastic is sharing layer two with disaster radio.
 * make simulation code work with new API
 * make disaster radio app work with new API 
 
-much later:
+later:
+* implement naive flooding in the layer2 lib, use TTL limit max depth of broadcast
 * allow packets to be filtered at the device level RX time based on dest addr (to avoid waking main CPU unnecessarily)
