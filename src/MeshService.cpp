@@ -1,6 +1,7 @@
 
 #include <Arduino.h>
 #include <assert.h>
+#include <string>
 
 #include "GPS.h"
 //#include "MeshBluetoothService.h"

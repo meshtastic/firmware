@@ -2,9 +2,15 @@
 #include "GPS.h"
 #include "configuration.h"
 #include "time.h"
+#include <assert.h>
 #include <sys/time.h>
 
+#ifdef GPS_RX_PIN
 HardwareSerial _serial_gps(GPS_SERIAL_NUM);
+#else
+// Assume NRF52
+// Uart _serial_gps(GPS_SERIAL_NUM);
+#endif
 
 bool timeSetFromGPS; // We try to set our time from GPS each time we wake from sleep
 
@@ -97,7 +103,11 @@ void GPS::perhapsSetRTC(const struct timeval *tv)
     if (!timeSetFromGPS) {
         timeSetFromGPS = true;
         DEBUG_MSG("Setting RTC %ld secs\n", tv->tv_sec);
+#ifndef NO_ESP32
         settimeofday(tv, NULL);
+#else
+        assert(0);
+#endif
         readFromRTC();
     }
 }

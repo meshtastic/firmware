@@ -6,16 +6,20 @@
 #include "Periodic.h"
 #include "configuration.h"
 #include "error.h"
-#include "esp32/pm.h"
-#include "esp_pm.h"
+
 #include "main.h"
-#include "rom/rtc.h"
 #include "target_specific.h"
 #include <Wire.h>
-#include <driver/rtc_io.h>
 
 #ifndef NO_ESP32
+#include "rom/rtc.h"
+#include "esp32/pm.h"
+#include "esp_pm.h"
+#include <driver/rtc_io.h>
+
 #include "BluetoothUtil.h"
+
+esp_sleep_source_t wakeCause; // the reason we booted this time
 #endif
 
 #ifdef TBEAM_V10
@@ -31,7 +35,6 @@ Observable<void *> notifySleep, notifyDeepSleep;
 
 // deep sleep support
 RTC_DATA_ATTR int bootCount = 0;
-esp_sleep_source_t wakeCause; // the reason we booted this time
 
 #define xstr(s) str(s)
 #define str(s) #s
@@ -48,14 +51,16 @@ esp_sleep_source_t wakeCause; // the reason we booted this time
  */
 void setCPUFast(bool on)
 {
+#ifndef NO_ESP32
     setCpuFrequencyMhz(on ? 240 : 80);
+#endif
 }
 
 void setLed(bool ledOn)
 {
 #ifdef LED_PIN
     // toggle the led so we can get some rough sense of how often loop is pausing
-    digitalWrite(LED_PIN, ledOn);
+    digitalWrite(LED_PIN, ledOn ^ LED_INVERTED);
 #endif
 
 #ifdef TBEAM_V10
@@ -79,6 +84,7 @@ void setGPSPower(bool on)
 // Perform power on init that we do on each wake from deep sleep
 void initDeepSleep()
 {
+#ifndef NO_ESP32
     bootCount++;
     wakeCause = esp_sleep_get_wakeup_cause();
     /*
@@ -106,6 +112,7 @@ void initDeepSleep()
         reason = "timeout";
 
     DEBUG_MSG("booted, wake cause %d (boot count %d), reset_reason=%s\n", wakeCause, bootCount, reason);
+#endif
 }
 
 /// return true if sleep is allowed
@@ -148,6 +155,7 @@ void doDeepSleep(uint64_t msecToWake)
 {
     DEBUG_MSG("Entering deep sleep for %llu seconds\n", msecToWake / 1000);
 
+#ifndef NO_ESP32
     // not using wifi yet, but once we are this is needed to shutoff the radio hw
     // esp_wifi_stop();
     waitEnterSleep();
@@ -232,8 +240,10 @@ void doDeepSleep(uint64_t msecToWake)
 
     esp_sleep_enable_timer_wakeup(msecToWake * 1000ULL); // call expects usecs
     esp_deep_sleep_start();                              // TBD mA sleep current (battery)
+#endif
 }
 
+#ifndef NO_ESP32
 /**
  * enter light sleep (preserves ram but stops everything about CPU).
  *
@@ -274,6 +284,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // digitalRead(PMU_IRQ));
     return esp_sleep_get_wakeup_cause();
 }
+#endif
 
 #if 0
 // not legal on the stock android ESP build
