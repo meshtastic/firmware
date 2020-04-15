@@ -204,7 +204,7 @@ class FromRadioCharacteristic : public CallbackCharacteristic
     }
 };
 
-class FromNumCharacteristic : public CallbackCharacteristic
+class FromNumCharacteristic : public CallbackCharacteristic, public Observer<uint32_t>
 {
   public:
     FromNumCharacteristic()
@@ -212,12 +212,21 @@ class FromNumCharacteristic : public CallbackCharacteristic
                                                                              BLECharacteristic::PROPERTY_READ |
                                                                              BLECharacteristic::PROPERTY_NOTIFY)
     {
+        observe(&service.fromNumChanged);
     }
 
     void onRead(BLECharacteristic *c)
     {
         BLEKeepAliveCallbacks::onRead(c);
         DEBUG_MSG("FIXME implement fromnum read\n");
+    }
+
+    /// If the mesh service tells us fromNum has changed, tell the phone
+    virtual int onNotify(uint32_t newValue)
+    {
+        setValue(newValue);
+        notify();
+        return 0;
     }
 };
 
@@ -243,18 +252,6 @@ class MyNodeInfoCharacteristic : public ProtobufCharacteristic
 };
 
 FromNumCharacteristic *meshFromNumCharacteristic;
-
-/**
- * Tell any bluetooth clients that the number of rx packets has changed
- */
-void bluetoothNotifyFromNum(uint32_t newValue)
-{
-    if (meshFromNumCharacteristic) {
-        // if bt not running ignore
-        meshFromNumCharacteristic->setValue(newValue);
-        meshFromNumCharacteristic->notify();
-    }
-}
 
 BLEService *meshService;
 

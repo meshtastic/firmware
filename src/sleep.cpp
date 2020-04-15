@@ -1,23 +1,33 @@
 #include "sleep.h"
-#include "BluetoothUtil.h"
 #include "GPS.h"
-#include "MeshBluetoothService.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Periodic.h"
 #include "configuration.h"
+#include "error.h"
 #include "esp32/pm.h"
 #include "esp_pm.h"
 #include "main.h"
 #include "rom/rtc.h"
+#include "target_specific.h"
 #include <Wire.h>
 #include <driver/rtc_io.h>
+
+#ifndef NO_ESP32
+#include "BluetoothUtil.h"
+#endif
 
 #ifdef TBEAM_V10
 #include "axp20x.h"
 extern AXP20X_Class axp;
 #endif
+
+/// Called to ask any observers if they want to veto sleep. Return 1 to veto or 0 to allow sleep to happen
+Observable<void *> preflightSleep;
+
+/// Called to tell observers we are now entering sleep and you should prepare.  Must return 0
+Observable<void *> notifySleep, notifyDeepSleep;
 
 // deep sleep support
 RTC_DATA_ATTR int bootCount = 0;
@@ -98,19 +108,52 @@ void initDeepSleep()
     DEBUG_MSG("booted, wake cause %d (boot count %d), reset_reason=%s\n", wakeCause, bootCount, reason);
 }
 
+/// return true if sleep is allowed
+static bool doPreflightSleep()
+{
+    if (preflightSleep.notifyObservers(NULL) != 0)
+        return false; // vetoed
+    else
+        return true;
+}
+
+/// Tell devices we are going to sleep and wait for them to handle things
+static void waitEnterSleep()
+{
+    /*
+    former hardwired code - now moved into notifySleep callbacks:
+    // Put radio in sleep mode (will still draw power but only 0.2uA)
+    service.radio.radioIf.sleep();
+    */
+
+    uint32_t now = millis();
+    while (!doPreflightSleep()) {
+        delay(10); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
+
+        if (millis() - now > 30 * 1000) { // If we wait too long just report an error and go to sleep
+            recordCriticalError(ErrSleepEnterWait);
+            break;
+        }
+    }
+
+    // Code that still needs to be moved into notifyObservers
+    Serial.flush();            // send all our characters before we stop cpu clock
+    setBluetoothEnable(false); // has to be off before calling light sleep
+    gps.prepareSleep();        // abandon in-process parsing
+
+    notifySleep.notifyObservers(NULL);
+}
+
 void doDeepSleep(uint64_t msecToWake)
 {
     DEBUG_MSG("Entering deep sleep for %llu seconds\n", msecToWake / 1000);
 
     // not using wifi yet, but once we are this is needed to shutoff the radio hw
     // esp_wifi_stop();
-
-    BLEDevice::deinit(false); // We are required to shutdown bluetooth before deep or light sleep
+    waitEnterSleep();
+    notifyDeepSleep.notifyObservers(NULL);
 
     screen.setOn(false); // datasheet says this will draw only 10ua
-
-    // Put radio in sleep mode (will still draw power but only 0.2uA)
-    service.radio.radioIf.sleep();
 
     nodeDB.saveToDisk();
 
@@ -199,10 +242,10 @@ void doDeepSleep(uint64_t msecToWake)
 esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more reasonable default
 {
     // DEBUG_MSG("Enter light sleep\n");
-    uint64_t sleepUsec = sleepMsec * 1000LL;
 
-    Serial.flush();            // send all our characters before we stop cpu clock
-    setBluetoothEnable(false); // has to be off before calling light sleep
+    waitEnterSleep();
+
+    uint64_t sleepUsec = sleepMsec * 1000LL;
 
     // NOTE! ESP docs say we must disable bluetooth and wifi before light sleep
 

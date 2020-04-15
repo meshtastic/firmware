@@ -13,9 +13,9 @@
  * Top level app for this service.  keeps the mesh, the radio config and the queue of received packets.
  *
  */
-class MeshService : private Observer
+class MeshService
 {
-    MemoryPool<MeshPacket> packetPool;
+    CallbackObserver<MeshService, void *> gpsObserver = CallbackObserver<MeshService, void *>(this, &MeshService::onGPSChanged);
 
     /// received packets waiting for the phone to process them
     /// FIXME, change to a DropOldestQueue and keep a count of the number of dropped packets to ensure
@@ -23,15 +23,25 @@ class MeshService : private Observer
     /// FIXME - save this to flash on deep sleep
     PointerQueue<MeshPacket> toPhoneQueue;
 
+    /// The current nonce for the newest packet which has been queued for the phone
+    uint32_t fromNum = 0;
+
+  public:
+    MemoryPool<MeshPacket> packetPool;
+
     /// Packets which have just arrived from the radio, ready to be processed by this service and possibly
     /// forwarded to the phone.
     PointerQueue<MeshPacket> fromRadioQueue;
 
-    /// The current nonce for the newest packet which has been queued for the phone
-    uint32_t fromNum;
+    /// Called when some new packets have arrived from one of the radios
+    Observable<uint32_t> fromNumChanged;
 
-  public:
-    MeshRadio radio;
+    /// Called when radio config has changed (radios should observe this and set their hardware as required)
+    Observable<void *> configChanged;
+
+    /// Radios should observe this and return 0 if they were unable to process the packet or 1 if they were (and therefore it
+    /// should not be offered to other radios)
+    Observable<MeshPacket *> sendViaRadio;
 
     MeshService();
 
@@ -76,14 +86,14 @@ class MeshService : private Observer
     void sendToMesh(MeshPacket *p);
 
     /// Called when our gps position has changed - updates nodedb and sends Location message out into the mesh
-    void onGPSChanged();
-
-    virtual void onNotify(Observable *o);
+    /// returns 0 to allow futher processing
+    int onGPSChanged(void *arg);
 
     /// handle all the packets that just arrived from the mesh radio
     void handleFromRadio();
 
-    /// Handle a packet that just arrived from the radio.  We will either eventually enqueue the message to the phone or return it to the free pool
+    /// Handle a packet that just arrived from the radio.  We will either eventually enqueue the message to the phone or return it
+    /// to the free pool
     void handleFromRadio(MeshPacket *p);
 
     /// handle a user packet that just arrived on the radio, return NULL if we should not process this packet at all

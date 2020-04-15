@@ -5,8 +5,10 @@
 #include <assert.h>
 
 #include "MeshRadio.h"
+#include "MeshService.h"
 #include "NodeDB.h"
 #include "configuration.h"
+#include "sleep.h"
 #include <pb_decode.h>
 #include <pb_encode.h>
 
@@ -25,7 +27,7 @@ separated by 2.16 MHz with respect to the adjacent channels. Channel zero starts
 bool useHardware = true;
 
 MeshRadio::MeshRadio(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &_rxDest)
-    : radioIf(_pool, _rxDest) // , manager(radioIf)
+    : radioIf(_pool, _rxDest), sendPacketObserver(this, &MeshRadio::send) // , manager(radioIf)
 {
     myNodeInfo.num_channels = NUM_CHANNELS;
 
@@ -39,6 +41,11 @@ bool MeshRadio::init()
         return true;
 
     DEBUG_MSG("Starting meshradio init...\n");
+
+    configChangedObserver.observe(&service.configChanged);
+    sendPacketObserver.observe(&service.sendViaRadio);
+    preflightSleepObserver.observe(&preflightSleep);
+    notifyDeepSleepObserver.observe(&notifyDeepSleep);
 
 #ifdef RESET_GPIO
     pinMode(RESET_GPIO, OUTPUT); // Deassert reset
@@ -84,7 +91,7 @@ unsigned long hash(char *str)
     return hash;
 }
 
-void MeshRadio::reloadConfig()
+int MeshRadio::reloadConfig(void *unused)
 {
     radioIf.setModeIdle(); // Need to be idle before doing init
 
@@ -116,17 +123,21 @@ void MeshRadio::reloadConfig()
 
     // Done with init tell radio to start receiving
     radioIf.setModeRx();
+
+    return 0;
 }
 
-ErrorCode MeshRadio::send(MeshPacket *p)
+int MeshRadio::send(MeshPacket *p)
 {
     lastTxStart = millis();
 
-    if (useHardware)
-        return radioIf.send(p);
-    else {
-        radioIf.pool.release(p);
-        return ERRNO_OK;
+    if (useHardware) {
+        radioIf.send(p);
+        // Note: we ignore the error code, because no matter what the interface has already freed the packet.
+        return 1; // Indicate success - stop offering this packet to radios
+    } else {
+        // fail
+        return 0;
     }
 }
 
