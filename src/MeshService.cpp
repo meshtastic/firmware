@@ -214,20 +214,24 @@ void MeshService::handleToRadio(std::string s)
         switch (r.which_variant) {
         case ToRadio_packet_tag: {
             // If our phone is sending a position, see if we can use it to set our RTC
-            handleIncomingPosition(&r.variant.packet); // If it is a position packet, perhaps set our clock
+            MeshPacket &p = r.variant.packet;
+            handleIncomingPosition(&p); // If it is a position packet, perhaps set our clock
 
-            r.variant.packet.rx_time = gps.getValidTime(); // Record the time the packet arrived from the phone (so we update our
-                                                           // nodedb for the local node)
+            if (p.from == 0) // If the phone didn't set a sending node ID, use ours
+                p.from = nodeDB.getNodeNum();
+
+            p.rx_time = gps.getValidTime(); // Record the time the packet arrived from the phone
+                                            // (so we update our nodedb for the local node)
 
             // Send the packet into the mesh
-            sendToMesh(packetPool.allocCopy(r.variant.packet));
+
+            sendToMesh(packetPool.allocCopy(p));
 
             bool loopback = false; // if true send any packet the phone sends back itself (for testing)
             if (loopback) {
-                const MeshPacket *mp = &r.variant.packet;
                 // no need to copy anymore because handle from radio assumes it should _not_ delete
                 // packetPool.allocCopy(r.variant.packet);
-                handleFromRadio(mp);
+                handleFromRadio(&p);
                 // handleFromRadio will tell the phone a new packet arrived
             }
             break;
