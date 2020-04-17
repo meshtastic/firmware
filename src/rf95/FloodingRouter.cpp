@@ -38,7 +38,7 @@ void FloodingRouter::handleReceived(MeshPacket *p)
     } else {
         if (p->to == NODENUM_BROADCAST) {
             if (p->id != 0) {
-                DEBUG_MSG("Rebroadcasting received floodmsg to neighbors\n");
+                DEBUG_MSG("Rebroadcasting received floodmsg to neighbors fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
                 // FIXME, wait a random delay
 
                 MeshPacket *tosend = packetPool.allocCopy(*p);
