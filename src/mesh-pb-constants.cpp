@@ -35,8 +35,9 @@ bool pb_decode_from_bytes(const uint8_t *srcbuf, size_t srcbufsize, const pb_msg
 /// Read from an Arduino File
 bool readcb(pb_istream_t *stream, uint8_t *buf, size_t count)
 {
+    bool status = false;
+#ifndef NO_ESP32
     File *file = (File *)stream->state;
-    bool status;
 
     if (buf == NULL) {
         while (count-- && file->read() != EOF)
@@ -48,14 +49,18 @@ bool readcb(pb_istream_t *stream, uint8_t *buf, size_t count)
 
     if (file->available() == 0)
         stream->bytes_left = 0;
-
+#endif
     return status;
 }
 
 /// Write to an arduino file
 bool writecb(pb_ostream_t *stream, const uint8_t *buf, size_t count)
 {
+#ifndef NO_ESP32
     File *file = (File *)stream->state;
     // DEBUG_MSG("writing %d bytes to protobuf file\n", count);
     return file->write(buf, count) == count;
+#else
+    return false;
+#endif
 }

@@ -3,8 +3,7 @@
 #include <cassert>
 #include <type_traits>
 
-#include <freertos/FreeRTOS.h>
-#include <freertos/queue.h>
+#include "freertosinc.h"
 
 /**
  * A wrapper for freertos queues.  Note: each element object should be small

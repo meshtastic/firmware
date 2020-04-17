@@ -2,10 +2,15 @@
 
 #include "Arduino.h"
 #include "Observer.h"
-#include "esp_sleep.h"
+#include "configuration.h"
 
 void doDeepSleep(uint64_t msecToWake);
+#ifndef NO_ESP32
+#include "esp_sleep.h"
 esp_sleep_wakeup_cause_t doLightSleep(uint64_t msecToWake);
+
+extern esp_sleep_source_t wakeCause;
+#endif
 void setGPSPower(bool on);
 
 // Perform power on init that we do on each wake from deep sleep
@@ -15,7 +20,6 @@ void setCPUFast(bool on);
 void setLed(bool ledOn);
 
 extern int bootCount;
-extern esp_sleep_source_t wakeCause;
 
 // is bluetooth sw currently running?
 extern bool bluetoothOn;

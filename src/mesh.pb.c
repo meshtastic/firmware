@@ -15,6 +15,9 @@ PB_BIND(Data, Data, 2)
 PB_BIND(User, User, AUTO)
 
 
+PB_BIND(RouteDiscovery, RouteDiscovery, AUTO)
+
+
 PB_BIND(SubPacket, SubPacket, 2)
 
 

@@ -38,6 +38,7 @@ static void lsIdle()
 {
     DEBUG_MSG("lsIdle begin ls_secs=%u\n", radioConfig.preferences.ls_secs);
 
+#ifndef NO_ESP32
     uint32_t secsSlept = 0;
     esp_sleep_source_t wakeCause = ESP_SLEEP_WAKEUP_UNDEFINED;
     bool reached_ls_secs = false;
@@ -80,6 +81,7 @@ static void lsIdle()
             powerFSM.trigger(EVENT_WAKE_TIMER);
         }
     }
+#endif
 }
 
 static void lsExit()

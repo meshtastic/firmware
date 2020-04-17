@@ -32,6 +32,10 @@ typedef enum _ChannelSettings_ModemConfig {
 } ChannelSettings_ModemConfig;
 
 /* Struct definitions */
+typedef struct _RouteDiscovery {
+    pb_callback_t route;
+} RouteDiscovery;
+
 typedef struct _ChannelSettings {
     int32_t tx_power;
     ChannelSettings_ModemConfig modem_config;
@@ -106,12 +110,12 @@ typedef struct _RadioConfig {
 } RadioConfig;
 
 typedef struct _SubPacket {
-    pb_size_t which_variant;
-    union {
-        Position position;
-        Data data;
-        User user;
-    } variant;
+    bool has_position;
+    Position position;
+    bool has_data;
+    Data data;
+    bool has_user;
+    User user;
     bool want_response;
 } SubPacket;
 
@@ -121,6 +125,8 @@ typedef struct _MeshPacket {
     bool has_payload;
     SubPacket payload;
     uint32_t rx_time;
+    int32_t rx_snr;
+    uint32_t id;
 } MeshPacket;
 
 typedef struct _DeviceState {
@@ -173,8 +179,9 @@ typedef struct _ToRadio {
 #define Position_init_default                    {0, 0, 0, 0, 0}
 #define Data_init_default                        {_Data_Type_MIN, {0, {0}}}
 #define User_init_default                        {"", "", "", {0}}
-#define SubPacket_init_default                   {0, {Position_init_default}, 0}
-#define MeshPacket_init_default                  {0, 0, false, SubPacket_init_default, 0}
+#define RouteDiscovery_init_default              {{{NULL}, NULL}}
+#define SubPacket_init_default                   {false, Position_init_default, false, Data_init_default, false, User_init_default, 0}
+#define MeshPacket_init_default                  {0, 0, false, SubPacket_init_default, 0, 0, 0}
 #define ChannelSettings_init_default             {0, _ChannelSettings_ModemConfig_MIN, {0}, ""}
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default, false, ChannelSettings_init_default}
 #define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -186,8 +193,9 @@ typedef struct _ToRadio {
 #define Position_init_zero                       {0, 0, 0, 0, 0}
 #define Data_init_zero                           {_Data_Type_MIN, {0, {0}}}
 #define User_init_zero                           {"", "", "", {0}}
-#define SubPacket_init_zero                      {0, {Position_init_zero}, 0}
-#define MeshPacket_init_zero                     {0, 0, false, SubPacket_init_zero, 0}
+#define RouteDiscovery_init_zero                 {{{NULL}, NULL}}
+#define SubPacket_init_zero                      {false, Position_init_zero, false, Data_init_zero, false, User_init_zero, 0}
+#define MeshPacket_init_zero                     {0, 0, false, SubPacket_init_zero, 0, 0, 0}
 #define ChannelSettings_init_zero                {0, _ChannelSettings_ModemConfig_MIN, {0}, ""}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero, false, ChannelSettings_init_zero}
 #define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -198,6 +206,7 @@ typedef struct _ToRadio {
 #define ToRadio_init_zero                        {0, {MeshPacket_init_zero}}
 
 /* Field tags (for use in manual encoding/decoding) */
+#define RouteDiscovery_route_tag                 2
 #define ChannelSettings_tx_power_tag             1
 #define ChannelSettings_modem_config_tag         3
 #define ChannelSettings_psk_tag                  4
@@ -250,6 +259,8 @@ typedef struct _ToRadio {
 #define MeshPacket_to_tag                        2
 #define MeshPacket_payload_tag                   3
 #define MeshPacket_rx_time_tag                   4
+#define MeshPacket_rx_snr_tag                    5
+#define MeshPacket_id_tag                        6
 #define DeviceState_radio_tag                    1
 #define DeviceState_my_node_tag                  2
 #define DeviceState_owner_tag                    3
@@ -285,22 +296,29 @@ X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, macaddr,           4)
 #define User_CALLBACK NULL
 #define User_DEFAULT NULL
 
+#define RouteDiscovery_FIELDLIST(X, a) \
+X(a, CALLBACK, REPEATED, INT32,    route,             2)
+#define RouteDiscovery_CALLBACK pb_default_field_callback
+#define RouteDiscovery_DEFAULT NULL
+
 #define SubPacket_FIELDLIST(X, a) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,position,variant.position),   1) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,data,variant.data),   3) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,user,variant.user),   4) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  position,          1) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  data,              3) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  user,              4) \
 X(a, STATIC,   SINGULAR, BOOL,     want_response,     5)
 #define SubPacket_CALLBACK NULL
 #define SubPacket_DEFAULT NULL
-#define SubPacket_variant_position_MSGTYPE Position
-#define SubPacket_variant_data_MSGTYPE Data
-#define SubPacket_variant_user_MSGTYPE User
+#define SubPacket_position_MSGTYPE Position
+#define SubPacket_data_MSGTYPE Data
+#define SubPacket_user_MSGTYPE User
 
 #define MeshPacket_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, INT32,    from,              1) \
 X(a, STATIC,   SINGULAR, INT32,    to,                2) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  payload,           3) \
-X(a, STATIC,   SINGULAR, UINT32,   rx_time,           4)
+X(a, STATIC,   SINGULAR, UINT32,   rx_time,           4) \
+X(a, STATIC,   SINGULAR, SINT32,   rx_snr,            5) \
+X(a, STATIC,   SINGULAR, UINT32,   id,                6)
 #define MeshPacket_CALLBACK NULL
 #define MeshPacket_DEFAULT NULL
 #define MeshPacket_payload_MSGTYPE SubPacket
@@ -395,6 +413,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (variant,packet,variant.packet),   1)
 extern const pb_msgdesc_t Position_msg;
 extern const pb_msgdesc_t Data_msg;
 extern const pb_msgdesc_t User_msg;
+extern const pb_msgdesc_t RouteDiscovery_msg;
 extern const pb_msgdesc_t SubPacket_msg;
 extern const pb_msgdesc_t MeshPacket_msg;
 extern const pb_msgdesc_t ChannelSettings_msg;
@@ -410,6 +429,7 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define Position_fields &Position_msg
 #define Data_fields &Data_msg
 #define User_fields &User_msg
+#define RouteDiscovery_fields &RouteDiscovery_msg
 #define SubPacket_fields &SubPacket_msg
 #define MeshPacket_fields &MeshPacket_msg
 #define ChannelSettings_fields &ChannelSettings_msg
@@ -425,16 +445,17 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define Position_size                            46
 #define Data_size                                256
 #define User_size                                72
-#define SubPacket_size                           261
-#define MeshPacket_size                          292
+/* RouteDiscovery_size depends on runtime parameters */
+#define SubPacket_size                           383
+#define MeshPacket_size                          426
 #define ChannelSettings_size                     44
 #define RadioConfig_size                         120
 #define RadioConfig_UserPreferences_size         72
 #define NodeInfo_size                            155
 #define MyNodeInfo_size                          85
-#define DeviceState_size                         15080
-#define FromRadio_size                           301
-#define ToRadio_size                             295
+#define DeviceState_size                         19502
+#define FromRadio_size                           435
+#define ToRadio_size                             429
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -24,13 +24,14 @@ template <class T> class MemoryPool
         buf = new T[maxElements];
 
         // prefill dead
-        for (int i = 0; i < maxElements; i++)
+        for (size_t i = 0; i < maxElements; i++)
             release(&buf[i]);
     }
 
     ~MemoryPool() { delete[] buf; }
 
     /// Return a queable object which has been prefilled with zeros.  Panic if no buffer is available
+    /// Note: this method is safe to call from regular OR ISR code
     T *allocZeroed()
     {
         T *p = allocZeroed(0);
@@ -40,7 +41,7 @@ template <class T> class MemoryPool
     }
 
     /// Return a queable object which has been prefilled with zeros - allow timeout to wait for available buffers (you probably
-    /// don't want this version)
+    /// don't want this version).
     T *allocZeroed(TickType_t maxWait)
     {
         T *p = dead.dequeuePtr(maxWait);
@@ -65,7 +66,7 @@ template <class T> class MemoryPool
     {
         assert(dead.enqueue(p, 0));
         assert(p >= buf &&
-               (p - buf) <
+               (size_t)(p - buf) <
                    maxElements); // sanity check to make sure a programmer didn't free something that didn't come from this pool
     }
 
@@ -74,7 +75,7 @@ template <class T> class MemoryPool
     {
         assert(dead.enqueueFromISR(p, higherPriWoken));
         assert(p >= buf &&
-               (p - buf) <
+               (size_t)(p - buf) <
                    maxElements); // sanity check to make sure a programmer didn't free something that didn't come from this pool
     }
 };
