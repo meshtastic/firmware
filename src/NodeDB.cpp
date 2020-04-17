@@ -32,7 +32,7 @@ DeviceState versions used to be defined in the .proto file but really only this 
 
 #ifndef NO_ESP32
 #define FS SPIFFS
-#endif 
+#endif
 
 // FIXME - move this somewhere else
 extern void getMacAddr(uint8_t *dmac);
@@ -269,7 +269,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
 {
     if (mp.has_payload) {
         const SubPacket &p = mp.payload;
-        DEBUG_MSG("Update DB node 0x%x for variant %d, rx_time=%u\n", mp.from, p.which_variant, mp.rx_time);
+        DEBUG_MSG("Update DB node 0x%x, rx_time=%u\n", mp.from, mp.rx_time);
 
         int oldNumNodes = *numNodes;
         NodeInfo *info = getOrCreateNode(mp.from);
@@ -282,22 +282,19 @@ void NodeDB::updateFrom(const MeshPacket &mp)
             info->position.time = mp.rx_time;
         }
 
-        switch (p.which_variant) {
-        case SubPacket_position_tag: {
+        if (p.has_position) {
             // we carefully preserve the old time, because we always trust our local timestamps more
             uint32_t oldtime = info->position.time;
-            info->position = p.variant.position;
+            info->position = p.position;
             info->position.time = oldtime;
             info->has_position = true;
             updateGUIforNode = info;
-            break;
         }
 
-        case SubPacket_data_tag: {
+        if (p.has_data) {
             // Keep a copy of the most recent text message.
-            if (p.variant.data.typ == Data_Type_CLEAR_TEXT) {
-                DEBUG_MSG("Received text msg from=0%0x, msg=%.*s\n", mp.from, p.variant.data.payload.size,
-                          p.variant.data.payload.bytes);
+            if (p.data.typ == Data_Type_CLEAR_TEXT) {
+                DEBUG_MSG("Received text msg from=0%0x, msg=%.*s\n", mp.from, p.data.payload.size, p.data.payload.bytes);
                 if (mp.to == NODENUM_BROADCAST || mp.to == nodeDB.getNodeNum()) {
                     // We only store/display messages destined for us.
                     devicestate.rx_text_message = mp;
@@ -306,16 +303,15 @@ void NodeDB::updateFrom(const MeshPacket &mp)
                     powerFSM.trigger(EVENT_RECEIVED_TEXT_MSG);
                 }
             }
-            break;
         }
 
-        case SubPacket_user_tag: {
+        if (p.has_user) {
             DEBUG_MSG("old user %s/%s/%s\n", info->user.id, info->user.long_name, info->user.short_name);
 
-            bool changed = memcmp(&info->user, &p.variant.user,
+            bool changed = memcmp(&info->user, &p.user,
                                   sizeof(info->user)); // Both of these blocks start as filled with zero so I think this is okay
 
-            info->user = p.variant.user;
+            info->user = p.user;
             DEBUG_MSG("updating changed=%d user %s/%s/%s\n", changed, info->user.id, info->user.long_name, info->user.short_name);
             info->has_user = true;
 
@@ -327,11 +323,6 @@ void NodeDB::updateFrom(const MeshPacket &mp)
                 // We just changed something important about the user, store our DB
                 // saveToDisk();
             }
-            break;
-        }
-
-        default:
-            break; // Ignore other packet types
         }
     }
 }
