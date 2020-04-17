@@ -341,9 +341,6 @@ void loop()
     router.loop();
     service.loop();
 
-    if (radio)
-        radio->loop();
-
     ledPeriodic.loop();
     // axpDebugOutput.loop();
 

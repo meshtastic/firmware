@@ -40,10 +40,6 @@ class MeshService
     /// Called when radio config has changed (radios should observe this and set their hardware as required)
     Observable<void *> configChanged;
 
-    /// Radios should observe this and return 0 if they were unable to process the packet or 1 if they were (and therefore it
-    /// should not be offered to other radios)
-    Observable<MeshPacket *> sendViaRadio;
-
     MeshService();
 
     void init();

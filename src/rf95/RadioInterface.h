@@ -37,6 +37,8 @@ class RadioInterface
      */
     void setReceiver(PointerQueue<MeshPacket> *_rxDest) { rxDest = _rxDest; }
 
+    virtual void loop() {} // Idle processing
+
     /**
      * Send a packet (possibly by enquing in a private fifo).  This routine will
      * later free() the packet to pool.  This routine is not allowed to stall.
