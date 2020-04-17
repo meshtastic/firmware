@@ -17,8 +17,12 @@ bool CustomRF95::canSleep()
 {
     // We allow initializing mode, because sometimes while testing we don't ever call init() to turn on the hardware
     bool isRx = isReceiving();
-    DEBUG_MSG("canSleep, mode=%d, isRx=%d, txEmpty=%d, txGood=%d\n", _mode, isRx, txQueue.isEmpty(), _txGood);
-    return (_mode == RHModeInitialising || _mode == RHModeIdle || _mode == RHModeRx) && !isRx && txQueue.isEmpty();
+
+    bool res = (_mode == RHModeInitialising || _mode == RHModeIdle || _mode == RHModeRx) && !isRx && txQueue.isEmpty();
+    if (!res) // only print debug messages if we are vetoing sleep
+        DEBUG_MSG("canSleep, mode=%d, isRx=%d, txEmpty=%d, txGood=%d\n", _mode, isRx, txQueue.isEmpty(), _txGood);
+
+    return res;
 }
 
 bool CustomRF95::sleep()
