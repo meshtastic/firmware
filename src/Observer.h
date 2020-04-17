@@ -11,10 +11,9 @@ template <class T> class Observable;
  */
 template <class T> class Observer
 {
-    Observable<T> *observed;
+    Observable<T> *observed = NULL;
 
   public:
-    Observer() : observed(NULL) {}
 
     virtual ~Observer();
 
@@ -92,5 +91,9 @@ template <class T> Observer<T>::~Observer()
 
 template <class T> void Observer<T>::observe(Observable<T> *o)
 {
+    // We can only watch one thing at a time
+    assert(!observed);
+
+    observed = o;
     o->addObserver(this);
 }

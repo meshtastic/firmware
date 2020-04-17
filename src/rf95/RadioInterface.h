@@ -16,43 +16,40 @@
 class RadioInterface
 {
     friend class MeshRadio; // for debugging we let that class touch pool
+    PointerQueue<MeshPacket> *rxDest = NULL;
 
   protected:
-    MemoryPool<MeshPacket> &pool;
-    PointerQueue<MeshPacket> &rxDest;
-
     MeshPacket *sendingPacket = NULL; // The packet we are currently sending
+
+    /**
+     * Enqueue a received packet for the registered receiver
+     */
+    void deliverToReceiverISR(MeshPacket *p, BaseType_t *higherPriWoken);
+
   public:
     /** pool is the pool we will alloc our rx packets from
      * rxDest is where we will send any rx packets, it becomes receivers responsibility to return packet to the pool
      */
-    RadioInterface(MemoryPool<MeshPacket> &pool, PointerQueue<MeshPacket> &rxDest);
+    RadioInterface();
 
     /**
-     * Return true if we think the board can go to sleep (i.e. our tx queue is empty, we are not sending or receiving)
-     *
-     * This method must be used before putting the CPU into deep or light sleep.
+     * Set where to deliver received packets.  This method should only be used by the Router class
      */
-    virtual bool canSleep() { return true; }
+    void setReceiver(PointerQueue<MeshPacket> *_rxDest) { rxDest = _rxDest; }
 
-    /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.
-    /// return true for success
-    virtual bool sleep() { return true; }
+    virtual void loop() {} // Idle processing
 
-    /// Send a packet (possibly by enquing in a private fifo).  This routine will
-    /// later free() the packet to pool.  This routine is not allowed to stall because it is called from
-    /// bluetooth comms code.  If the txmit queue is empty it might return an error
+    /**
+     * Send a packet (possibly by enquing in a private fifo).  This routine will
+     * later free() the packet to pool.  This routine is not allowed to stall.
+     * If the txmit queue is full it might return an error
+     */
     virtual ErrorCode send(MeshPacket *p) = 0;
 };
 
 class SimRadio : public RadioInterface
 {
   public:
-    /** pool is the pool we will alloc our rx packets from
-     * rxDest is where we will send any rx packets, it becomes receivers responsibility to return packet to the pool
-     */
-    SimRadio(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &_rxDest) : RadioInterface(_pool, _rxDest) {}
-
     virtual ErrorCode send(MeshPacket *p);
 
     // methods from radiohead

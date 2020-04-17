@@ -30,7 +30,12 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define DEVICESTATE_CUR_VER 7
 #define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
 
+#ifndef NO_ESP32
 #define FS SPIFFS
+#endif
+
+// FIXME - move this somewhere else
+extern void getMacAddr(uint8_t *dmac);
 
 /**
  *
@@ -73,6 +78,12 @@ void NodeDB::resetRadioConfig()
         memcpy(&channelSettings.psk, &defaultpsk, sizeof(channelSettings.psk));
         strcpy(channelSettings.name, "Default");
     }
+
+    // temp hack for quicker testing
+    /*
+    radioConfig.preferences.screen_on_secs = 30;
+    radioConfig.preferences.wait_bluetooth_secs = 30;
+    */
 }
 
 void NodeDB::init()
@@ -97,7 +108,7 @@ void NodeDB::init()
     strncpy(myNodeInfo.hw_model, HW_VENDOR, sizeof(myNodeInfo.hw_model));
 
     // Init our blank owner info to reasonable defaults
-    esp_efuse_mac_get_default(ourMacAddr);
+    getMacAddr(ourMacAddr);
     sprintf(owner.id, "!%02x%02x%02x%02x%02x%02x", ourMacAddr[0], ourMacAddr[1], ourMacAddr[2], ourMacAddr[3], ourMacAddr[4],
             ourMacAddr[5]);
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
@@ -115,12 +126,6 @@ void NodeDB::init()
     NodeInfo *info = getOrCreateNode(getNodeNum());
     info->user = owner;
     info->has_user = true;
-
-    if (!FS.begin(true)) // FIXME - do this in main?
-    {
-        DEBUG_MSG("ERROR SPIFFS Mount Failed\n");
-        // FIXME - report failure to phone
-    }
 
     // saveToDisk();
     loadFromDisk();
@@ -157,7 +162,14 @@ const char *preftmp = "/db.proto.tmp";
 
 void NodeDB::loadFromDisk()
 {
+#ifdef FS
     static DeviceState scratch;
+
+    if (!FS.begin(true)) // FIXME - do this in main?
+    {
+        DEBUG_MSG("ERROR SPIFFS Mount Failed\n");
+        // FIXME - report failure to phone
+    }
 
     File f = FS.open(preffile);
     if (f) {
@@ -185,10 +197,14 @@ void NodeDB::loadFromDisk()
     } else {
         DEBUG_MSG("No saved preferences found\n");
     }
+#else
+    DEBUG_MSG("ERROR: Filesystem not implemented\n");
+#endif
 }
 
 void NodeDB::saveToDisk()
 {
+#ifdef FS
     File f = FS.open(preftmp, "w");
     if (f) {
         DEBUG_MSG("Writing preferences\n");
@@ -213,6 +229,9 @@ void NodeDB::saveToDisk()
     } else {
         DEBUG_MSG("ERROR: can't write prefs\n"); // FIXME report to app
     }
+#else
+    DEBUG_MSG("ERROR filesystem not implemented\n");
+#endif
 }
 
 const NodeInfo *NodeDB::readNextInfo()
@@ -256,7 +275,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
 {
     if (mp.has_payload) {
         const SubPacket &p = mp.payload;
-        DEBUG_MSG("Update DB node 0x%x for variant %d, rx_time=%u\n", mp.from, p.which_variant, mp.rx_time);
+        DEBUG_MSG("Update DB node 0x%x, rx_time=%u\n", mp.from, mp.rx_time);
 
         int oldNumNodes = *numNodes;
         NodeInfo *info = getOrCreateNode(mp.from);
@@ -269,22 +288,19 @@ void NodeDB::updateFrom(const MeshPacket &mp)
             info->position.time = mp.rx_time;
         }
 
-        switch (p.which_variant) {
-        case SubPacket_position_tag: {
+        if (p.has_position) {
             // we carefully preserve the old time, because we always trust our local timestamps more
             uint32_t oldtime = info->position.time;
-            info->position = p.variant.position;
+            info->position = p.position;
             info->position.time = oldtime;
             info->has_position = true;
             updateGUIforNode = info;
-            break;
         }
 
-        case SubPacket_data_tag: {
+        if (p.has_data) {
             // Keep a copy of the most recent text message.
-            if (p.variant.data.typ == Data_Type_CLEAR_TEXT) {
-                DEBUG_MSG("Received text msg from=0%0x, msg=%.*s\n", mp.from, p.variant.data.payload.size,
-                          p.variant.data.payload.bytes);
+            if (p.data.typ == Data_Type_CLEAR_TEXT) {
+                DEBUG_MSG("Received text msg from=0%0x, msg=%.*s\n", mp.from, p.data.payload.size, p.data.payload.bytes);
                 if (mp.to == NODENUM_BROADCAST || mp.to == nodeDB.getNodeNum()) {
                     // We only store/display messages destined for us.
                     devicestate.rx_text_message = mp;
@@ -293,16 +309,15 @@ void NodeDB::updateFrom(const MeshPacket &mp)
                     powerFSM.trigger(EVENT_RECEIVED_TEXT_MSG);
                 }
             }
-            break;
         }
 
-        case SubPacket_user_tag: {
+        if (p.has_user) {
             DEBUG_MSG("old user %s/%s/%s\n", info->user.id, info->user.long_name, info->user.short_name);
 
-            bool changed = memcmp(&info->user, &p.variant.user,
+            bool changed = memcmp(&info->user, &p.user,
                                   sizeof(info->user)); // Both of these blocks start as filled with zero so I think this is okay
 
-            info->user = p.variant.user;
+            info->user = p.user;
             DEBUG_MSG("updating changed=%d user %s/%s/%s\n", changed, info->user.id, info->user.long_name, info->user.short_name);
             info->has_user = true;
 
@@ -314,11 +329,6 @@ void NodeDB::updateFrom(const MeshPacket &mp)
                 // We just changed something important about the user, store our DB
                 // saveToDisk();
             }
-            break;
-        }
-
-        default:
-            break; // Ignore other packet types
         }
     }
 }

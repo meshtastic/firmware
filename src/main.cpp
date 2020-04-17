@@ -29,14 +29,13 @@
 #include "PowerFSM.h"
 #include "configuration.h"
 #include "error.h"
-#include "esp32/pm.h"
-#include "esp_pm.h"
 #include "power.h"
-#include "rom/rtc.h"
+// #include "rom/rtc.h"
+#include "FloodingRouter.h"
 #include "screen.h"
 #include "sleep.h"
 #include <Wire.h>
-#include <driver/rtc_io.h>
+// #include <driver/rtc_io.h>
 
 #ifndef NO_ESP32
 #include "BluetoothUtil.h"
@@ -61,6 +60,9 @@ static meshtastic::PowerStatus powerStatus;
 
 bool ssd1306_found;
 bool axp192_found;
+
+FloodingRouter realRouter;
+Router &router = realRouter; // Users of router don't care what sort of subclass implements that API
 
 // -----------------------------------------------------------------------------
 // Application
@@ -195,10 +197,25 @@ void axp192Init()
 #endif
 }
 
+void getMacAddr(uint8_t *dmac)
+{
+#ifndef NO_ESP32
+    assert(esp_efuse_mac_get_default(dmac) == ESP_OK);
+#else
+    dmac[0] = 0xde;
+    dmac[1] = 0xad;
+    dmac[2] = 0xbe;
+    dmac[3] = 0xef;
+    dmac[4] = 0x01;
+    dmac[5] = 0x02; // FIXME, macaddr stuff needed for NRF52
+#endif
+}
+
 const char *getDeviceName()
 {
     uint8_t dmac[6];
-    assert(esp_efuse_mac_get_default(dmac) == ESP_OK);
+
+    getMacAddr(dmac);
 
     // Meshtastic_ab3c
     static char name[20];
@@ -207,6 +224,8 @@ const char *getDeviceName()
 }
 
 static MeshRadio *radio = NULL;
+
+#include "Router.h"
 
 void setup()
 {
@@ -239,15 +258,17 @@ void setup()
 #endif
 #ifdef LED_PIN
     pinMode(LED_PIN, OUTPUT);
-    digitalWrite(LED_PIN, 1); // turn on for now
+    digitalWrite(LED_PIN, 1 ^ LED_INVERTED); // turn on for now
 #endif
 
     // Hello
     DEBUG_MSG("Meshtastic swver=%s, hwver=%s\n", xstr(APP_VERSION), xstr(HW_VERSION));
 
+#ifndef NO_ESP32
     // Don't init display if we don't have one or we are waking headless due to a timer event
     if (wakeCause == ESP_SLEEP_WAKEUP_TIMER)
         ssd1306_found = false; // forget we even have the hardware
+#endif
 
     // Initialize the screen first so we can show the logo while we start up everything else.
     if (ssd1306_found)
@@ -264,7 +285,8 @@ void setup()
 
 #ifndef NO_ESP32
     // MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
-    radio = new MeshRadio(service.packetPool, service.fromRadioQueue);
+    radio = new MeshRadio();
+    router.addInterface(&radio->radioIf);
 #endif
 
     if (radio && !radio->init())
@@ -316,10 +338,8 @@ void loop()
 
     powerFSM.run_machine();
     gps.loop();
+    router.loop();
     service.loop();
-
-    if (radio)
-        radio->loop();
 
     ledPeriodic.loop();
     // axpDebugOutput.loop();

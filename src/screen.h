@@ -9,6 +9,7 @@
 #include "TypedQueue.h"
 #include "lock.h"
 #include "power.h"
+#include <string>
 
 namespace meshtastic
 {
