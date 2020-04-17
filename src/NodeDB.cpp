@@ -78,6 +78,12 @@ void NodeDB::resetRadioConfig()
         memcpy(&channelSettings.psk, &defaultpsk, sizeof(channelSettings.psk));
         strcpy(channelSettings.name, "Default");
     }
+
+    // temp hack for quicker testing
+    /*
+    radioConfig.preferences.screen_on_secs = 30;
+    radioConfig.preferences.wait_bluetooth_secs = 30;
+    */
 }
 
 void NodeDB::init()
