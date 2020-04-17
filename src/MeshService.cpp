@@ -201,7 +201,7 @@ void MeshService::loop()
 {
     if (oldFromNum != fromNum) { // We don't want to generate extra notifies for multiple new packets
         fromNumChanged.notifyObservers(fromNum);
-        oldFromNum = true;
+        oldFromNum = fromNum;
     }
 
     // occasionally send our owner info
