@@ -72,8 +72,8 @@ void MeshService::sendOurOwner(NodeNum dest, bool wantReplies)
     MeshPacket *p = allocForSending();
     p->to = dest;
     p->payload.want_response = wantReplies;
-    p->payload.which_variant = SubPacket_user_tag;
-    User &u = p->payload.variant.user;
+    p->payload.has_user = true;
+    User &u = p->payload.user;
     u = owner;
     DEBUG_MSG("sending owner %s/%s/%s\n", u.id, u.long_name, u.short_name);
 
@@ -87,7 +87,7 @@ MeshPacket *MeshService::handleFromRadioUser(MeshPacket *mp)
     bool isCollision = mp->from == myNodeInfo.my_node_num;
 
     // we win if we have a lower macaddr
-    bool weWin = memcmp(&owner.macaddr, &mp->payload.variant.user.macaddr, sizeof(owner.macaddr)) < 0;
+    bool weWin = memcmp(&owner.macaddr, &mp->payload.user.macaddr, sizeof(owner.macaddr)) < 0;
 
     if (isCollision) {
         if (weWin) {
@@ -114,7 +114,7 @@ MeshPacket *MeshService::handleFromRadioUser(MeshPacket *mp)
 
         sendOurOwner(mp->from);
 
-        String lcd = String("Joined: ") + mp->payload.variant.user.long_name + "\n";
+        String lcd = String("Joined: ") + mp->payload.user.long_name + "\n";
         screen.print(lcd.c_str());
     }
 
@@ -123,12 +123,12 @@ MeshPacket *MeshService::handleFromRadioUser(MeshPacket *mp)
 
 void MeshService::handleIncomingPosition(MeshPacket *mp)
 {
-    if (mp->has_payload && mp->payload.which_variant == SubPacket_position_tag) {
-        DEBUG_MSG("handled incoming position time=%u\n", mp->payload.variant.position.time);
+    if (mp->has_payload && mp->payload.has_position) {
+        DEBUG_MSG("handled incoming position time=%u\n", mp->payload.position.time);
 
-        if (mp->payload.variant.position.time) {
+        if (mp->payload.position.time) {
             struct timeval tv;
-            uint32_t secs = mp->payload.variant.position.time;
+            uint32_t secs = mp->payload.position.time;
 
             tv.tv_sec = secs;
             tv.tv_usec = 0;
@@ -153,7 +153,7 @@ void MeshService::handleFromRadio(MeshPacket *mp)
         DEBUG_MSG("Ignoring incoming time, because we have a GPS\n");
     }
 
-    if (mp->has_payload && mp->payload.which_variant == SubPacket_user_tag) {
+    if (mp->has_payload && mp->payload.has_user) {
         mp = handleFromRadioUser(mp);
     }
 
@@ -258,12 +258,12 @@ void MeshService::sendToMesh(MeshPacket *p)
     // Strip out any time information before sending packets to other  nodes - to keep the wire size small (and because other
     // nodes shouldn't trust it anyways) Note: for now, we allow a device with a local GPS to include the time, so that gpsless
     // devices can get time.
-    if (p->has_payload && p->payload.which_variant == SubPacket_position_tag) {
+    if (p->has_payload && p->payload.has_position) {
         if (!gps.isConnected) {
-            DEBUG_MSG("Stripping time %u from position send\n", p->payload.variant.position.time);
-            p->payload.variant.position.time = 0;
+            DEBUG_MSG("Stripping time %u from position send\n", p->payload.position.time);
+            p->payload.position.time = 0;
         } else
-            DEBUG_MSG("Providing time to mesh %u\n", p->payload.variant.position.time);
+            DEBUG_MSG("Providing time to mesh %u\n", p->payload.position.time);
     }
 
     // If the phone sent a packet just to us, don't send it out into the network
@@ -312,11 +312,10 @@ void MeshService::sendOurPosition(NodeNum dest, bool wantReplies)
     // Update our local node info with our position (even if we don't decide to update anyone else)
     MeshPacket *p = allocForSending();
     p->to = dest;
-    p->payload.which_variant = SubPacket_position_tag;
-    p->payload.variant.position = node->position;
+    p->payload.has_position = true;
+    p->payload.position = node->position;
     p->payload.want_response = wantReplies;
-    p->payload.variant.position.time =
-        gps.getValidTime(); // This nodedb timestamp might be stale, so update it if our clock is valid.
+    p->payload.position.time = gps.getValidTime(); // This nodedb timestamp might be stale, so update it if our clock is valid.
     sendToMesh(p);
 }
 
@@ -326,9 +325,9 @@ int MeshService::onGPSChanged(void *unused)
 
     // Update our local node info with our position (even if we don't decide to update anyone else)
     MeshPacket *p = allocForSending();
-    p->payload.which_variant = SubPacket_position_tag;
+    p->payload.has_position = true;
 
-    Position &pos = p->payload.variant.position;
+    Position &pos = p->payload.position;
     // !zero or !zero lat/long means valid
     if (gps.latitude != 0 || gps.longitude != 0) {
         if (gps.altitude != 0)
