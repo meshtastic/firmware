@@ -36,13 +36,17 @@ void FloodingRouter::handleReceived(MeshPacket *p)
         DEBUG_MSG("Ignoring incoming floodmsg, because we've already seen it\n");
         packetPool.release(p);
     } else {
-        if (p->to == NODENUM_BROADCAST && p->id != 0) {
-            DEBUG_MSG("Rebroadcasting received floodmsg to neighbors\n");
-            // FIXME, wait a random delay
+        if (p->to == NODENUM_BROADCAST) {
+            if (p->id != 0) {
+                DEBUG_MSG("Rebroadcasting received floodmsg to neighbors\n");
+                // FIXME, wait a random delay
 
-            MeshPacket *tosend = packetPool.allocCopy(*p);
-            // Note: we are careful to resend using the original senders node id
-            Router::send(tosend); // We are careful not to call our hooked version of send()
+                MeshPacket *tosend = packetPool.allocCopy(*p);
+                // Note: we are careful to resend using the original senders node id
+                Router::send(tosend); // We are careful not to call our hooked version of send()
+            } else {
+                DEBUG_MSG("Ignoring a simple (0 hop) broadcast\n");
+            }
         }
 
         // handle the packet as normal
@@ -58,18 +62,22 @@ bool FloodingRouter::wasSeenRecently(const MeshPacket *p)
     if (p->to != NODENUM_BROADCAST)
         return false; // Not a broadcast, so we don't care
 
-    if (p->id == 0)
+    if (p->id == 0) {
+        DEBUG_MSG("Ignoring message with zero id\n");
         return false; // Not a floodable message ID, so we don't care
+    }
 
     uint32_t now = millis();
     for (int i = 0; i < recentBroadcasts.size();) {
         BroadcastRecord &r = recentBroadcasts[i];
 
         if ((now - r.rxTimeMsec) >= FLOOD_EXPIRE_TIME) {
-            DEBUG_MSG("Deleting old recentBroadcast %d\n", i);
+            DEBUG_MSG("Deleting old broadcast record %d\n", i);
             recentBroadcasts.erase(recentBroadcasts.begin() + i); // delete old record
         } else {
             if (r.id == p->id && r.sender == p->from) {
+                DEBUG_MSG("Found existing broadcast record for fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+
                 // Update the time on this record to now
                 r.rxTimeMsec = now;
                 return true;
@@ -85,6 +93,7 @@ bool FloodingRouter::wasSeenRecently(const MeshPacket *p)
     r.sender = p->from;
     r.rxTimeMsec = now;
     recentBroadcasts.push_back(r);
+    DEBUG_MSG("Adding broadcast record for fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
 
     return false;
 }

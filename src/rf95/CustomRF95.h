@@ -15,6 +15,8 @@ class CustomRF95 : public RH_RF95, public RadioInterface
 
     PointerQueue<MeshPacket> txQueue;
 
+    uint32_t lastTxStart = 0L;
+
   public:
     /** pool is the pool we will alloc our rx packets from
      * rxDest is where we will send any rx packets, it becomes receivers responsibility to return packet to the pool
@@ -37,6 +39,8 @@ class CustomRF95 : public RH_RF95, public RadioInterface
     ErrorCode send(MeshPacket *p);
 
     bool init();
+
+    void loop(); // Idle processing
 
   protected:
     // After doing standard behavior, check to see if a new packet arrived or one was sent and start a new send or receive as

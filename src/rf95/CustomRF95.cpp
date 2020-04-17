@@ -47,7 +47,9 @@ ErrorCode CustomRF95::send(MeshPacket *p)
     // we almost certainly guarantee no one outside will like the packet we are sending.
     if (_mode == RHModeIdle || (_mode == RHModeRx && !isReceiving())) {
         // if the radio is idle, we can send right away
-        DEBUG_MSG("immedate send on mesh (txGood=%d,rxGood=%d,rxBad=%d)\n", txGood(), rxGood(), rxBad());
+        DEBUG_MSG("immediate send on mesh fr=0x%x,to=0x%x,id=%d\n (txGood=%d,rxGood=%d,rxBad=%d)\n", p->from, p->to, p->id,
+                  txGood(), rxGood(), rxBad());
+
         startSend(p);
         return ERRNO_OK;
     } else {
@@ -159,6 +161,8 @@ void CustomRF95::startSend(MeshPacket *txp)
     // DEBUG_MSG("sending queued packet on mesh (txGood=%d,rxGood=%d,rxBad=%d)\n", rf95.txGood(), rf95.rxGood(), rf95.rxBad());
     assert(txp->has_payload);
 
+    lastTxStart = millis();
+
     size_t numbytes = pb_encode_to_bytes(radiobuf, sizeof(radiobuf), SubPacket_fields, &txp->payload);
 
     sendingPacket = txp;
@@ -176,6 +180,27 @@ void CustomRF95::startSend(MeshPacket *txp)
 
     int res = RH_RF95::send(radiobuf, numbytes);
     assert(res);
+}
+
+#define TX_WATCHDOG_TIMEOUT 30 * 1000
+
+#include "error.h"
+
+void CustomRF95::loop()
+{
+    // It should never take us more than 30 secs to send a packet, if it does, we have a bug, FIXME, move most of this
+    // into CustomRF95
+    uint32_t now = millis();
+    if (lastTxStart != 0 && (now - lastTxStart) > TX_WATCHDOG_TIMEOUT && mode() == RHGenericDriver::RHModeTx) {
+        DEBUG_MSG("ERROR! Bug! Tx packet took too long to send, forcing radio into rx mode\n");
+        setModeRx();
+        if (sendingPacket) { // There was probably a packet we were trying to send, free it
+            packetPool.release(sendingPacket);
+            sendingPacket = NULL;
+        }
+        recordCriticalError(ErrTxWatchdog);
+        lastTxStart = 0; // Stop checking for now, because we just warned the developer
+    }
 }
 
 #endif

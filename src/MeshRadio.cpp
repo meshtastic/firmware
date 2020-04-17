@@ -24,7 +24,7 @@ separated by 2.16 MHz with respect to the adjacent channels. Channel zero starts
 /// Sometimes while debugging it is useful to set this false, to disable rf95 accesses
 bool useHardware = true;
 
-MeshRadio::MeshRadio() : sendPacketObserver(this, &MeshRadio::send) // , manager(radioIf)
+MeshRadio::MeshRadio() // , manager(radioIf)
 {
     myNodeInfo.num_channels = NUM_CHANNELS;
 
@@ -40,7 +40,6 @@ bool MeshRadio::init()
     DEBUG_MSG("Starting meshradio init...\n");
 
     configChangedObserver.observe(&service.configChanged);
-    sendPacketObserver.observe(&service.sendViaRadio);
     preflightSleepObserver.observe(&preflightSleep);
     notifyDeepSleepObserver.observe(&notifyDeepSleep);
 
@@ -124,35 +123,3 @@ int MeshRadio::reloadConfig(void *unused)
     return 0;
 }
 
-int MeshRadio::send(MeshPacket *p)
-{
-    lastTxStart = millis();
-
-    if (useHardware) {
-        radioIf.send(p);
-        // Note: we ignore the error code, because no matter what the interface has already freed the packet.
-        return 1; // Indicate success - stop offering this packet to radios
-    } else {
-        // fail
-        return 0;
-    }
-}
-
-#define TX_WATCHDOG_TIMEOUT 30 * 1000
-
-void MeshRadio::loop()
-{
-    // It should never take us more than 30 secs to send a packet, if it does, we have a bug, FIXME, move most of this
-    // into CustomRF95
-    uint32_t now = millis();
-    if (lastTxStart != 0 && (now - lastTxStart) > TX_WATCHDOG_TIMEOUT && radioIf.mode() == RHGenericDriver::RHModeTx) {
-        DEBUG_MSG("ERROR! Bug! Tx packet took too long to send, forcing radio into rx mode\n");
-        radioIf.setModeRx();
-        if (radioIf.sendingPacket) { // There was probably a packet we were trying to send, free it
-            packetPool.release(radioIf.sendingPacket);
-            radioIf.sendingPacket = NULL;
-        }
-        recordCriticalError(ErrTxWatchdog);
-        lastTxStart = 0; // Stop checking for now, because we just warned the developer
-    }
-}

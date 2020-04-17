@@ -46,6 +46,18 @@ MeshService service;
 
 #include "Router.h"
 
+#define NUM_PACKET_ID 255 // 0 is consider invalid
+
+/// Generate a unique packet id
+// FIXME, move this someplace better
+PacketId generatePacketId()
+{
+    static uint32_t i;
+
+    i++;
+    return (i % NUM_PACKET_ID) + 1; // return number between 1 and 255
+}
+
 MeshService::MeshService() : toPhoneQueue(MAX_RX_TOPHONE)
 {
     // assert(MAX_RX_TOPHONE == 32); // FIXME, delete this, just checking my clever macro
@@ -220,6 +232,9 @@ void MeshService::handleToRadio(std::string s)
             if (p.from == 0) // If the phone didn't set a sending node ID, use ours
                 p.from = nodeDB.getNodeNum();
 
+            if (p.id == 0)
+                p.id = generatePacketId(); // If the phone didn't supply one, then pick one
+
             p.rx_time = gps.getValidTime(); // Record the time the packet arrived from the phone
                                             // (so we update our nodedb for the local node)
 
@@ -265,8 +280,7 @@ void MeshService::sendToMesh(MeshPacket *p)
         DEBUG_MSG("Dropping locally processed message\n");
     else {
         // Note: We might return !OK if our fifo was full, at that point the only option we have is to drop it
-        int didSend = sendViaRadio.notifyObservers(p);
-        if (!didSend) {
+        if (router.send(p) != ERRNO_OK) {
             DEBUG_MSG("No radio was able to send packet, discarding...\n");
             releaseToPool(p);
         }
@@ -280,6 +294,7 @@ MeshPacket *MeshService::allocForSending()
     p->has_payload = true;
     p->from = nodeDB.getNodeNum();
     p->to = NODENUM_BROADCAST;
+    p->id = generatePacketId();
     p->rx_time = gps.getValidTime(); // Just in case we process the packet locally - make sure it has a valid timestamp
 
     return p;

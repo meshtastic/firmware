@@ -35,6 +35,9 @@ Router::Router() : fromRadioQueue(MAX_RX_FROMRADIO) {}
  */
 void Router::loop()
 {
+    if (iface)
+        iface->loop();
+
     MeshPacket *mp;
     while ((mp = fromRadioQueue.dequeuePtr(0)) != NULL) {
         handleReceived(mp);
@@ -49,6 +52,7 @@ void Router::loop()
 ErrorCode Router::send(MeshPacket *p)
 {
     assert(iface);
+    DEBUG_MSG("Sending packet via interface fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
     return iface->send(p);
 }
 
@@ -64,7 +68,7 @@ void Router::handleReceived(MeshPacket *p)
     // Also, we should set the time from the ISR and it should have msec level resolution
     p->rx_time = gps.getValidTime(); // store the arrival timestamp for the phone
 
-    DEBUG_MSG("Notifying observers of received packet\n");
+    DEBUG_MSG("Notifying observers of received packet fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
     notifyPacketReceived.notifyObservers(p);
     packetPool.release(p);
 }
