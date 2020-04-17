@@ -8,8 +8,6 @@
 #include "mesh.pb.h"
 #include <RH_RF95.h>
 
-
-
 /**
  * A mesh aware router that supports multiple interfaces.
  */
@@ -56,7 +54,7 @@ class Router
      */
     virtual ErrorCode send(MeshPacket *p);
 
-  private:
+  protected:
     /**
      * Called from loop()
      * Handle any packet that is received by an interface on this node.
@@ -64,7 +62,7 @@ class Router
      *
      * Note: this method will free the provided packet
      */
-    void handleReceived(MeshPacket *p);
+    virtual void handleReceived(MeshPacket *p);
 };
 
-extern Router router;
+extern Router &router;

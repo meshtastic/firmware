@@ -1,5 +1,5 @@
 #include "CustomRF95.h"
-#include "NodeDB.h"
+#include "NodeDB.h" // FIXME, this class should not need to touch nodedb
 #include "assert.h"
 #include "configuration.h"
 #include <pb_decode.h>
@@ -97,6 +97,8 @@ void CustomRF95::handleInterrupt()
 
             mp->from = _rxHeaderFrom;
             mp->to = _rxHeaderTo;
+            mp->id = _rxHeaderId;
+
             //_rxHeaderId = _buf[2];
             //_rxHeaderFlags = _buf[3];
 
@@ -162,9 +164,11 @@ void CustomRF95::startSend(MeshPacket *txp)
     sendingPacket = txp;
 
     setHeaderTo(txp->to);
-    setHeaderFrom(nodeDB.getNodeNum()); // We must do this before each send, because we might have just changed our nodenum
+    setHeaderId(txp->id);
 
-    // setHeaderId(0);
+    // if the sender nodenum is zero, that means uninitialized
+    assert(txp->from);
+    setHeaderFrom(txp->from); // We must do this before each send, because we might have just changed our nodenum
 
     assert(numbytes <= 251); // Make sure we don't overflow the tiny max packet size
 
