@@ -11,10 +11,7 @@
 #define MAX_RHPACKETLEN 251
 static uint8_t radiobuf[MAX_RHPACKETLEN];
 
-CustomRF95::CustomRF95(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &_rxDest)
-    : RH_RF95(NSS_GPIO, RF95_IRQ_GPIO), RadioInterface(_pool, _rxDest), txQueue(MAX_TX_QUEUE)
-{
-}
+CustomRF95::CustomRF95() : RH_RF95(NSS_GPIO, RF95_IRQ_GPIO), txQueue(MAX_TX_QUEUE) {}
 
 bool CustomRF95::canSleep()
 {
@@ -58,7 +55,7 @@ ErrorCode CustomRF95::send(MeshPacket *p)
         ErrorCode res = txQueue.enqueue(p, 0) ? ERRNO_OK : ERRNO_UNKNOWN;
 
         if (res != ERRNO_OK) // we weren't able to queue it, so we must drop it to prevent leaks
-            pool.release(p);
+            packetPool.release(p);
 
         return res;
     }
@@ -76,7 +73,7 @@ void CustomRF95::handleInterrupt()
         if (sendingPacket) // Were we sending?
         {
             // We are done sending that packet, release it
-            pool.releaseFromISR(sendingPacket, &higherPriWoken);
+            packetPool.releaseFromISR(sendingPacket, &higherPriWoken);
             sendingPacket = NULL;
             // DEBUG_MSG("Done with send\n");
         }
@@ -94,7 +91,7 @@ void CustomRF95::handleInterrupt()
             // DEBUG_MSG("Received packet from mesh src=0x%x,dest=0x%x,id=%d,len=%d rxGood=%d,rxBad=%d,freqErr=%d,snr=%d\n",
             //          srcaddr, destaddr, id, rxlen, rf95.rxGood(), rf95.rxBad(), freqerr, snr);
 
-            MeshPacket *mp = pool.allocZeroed();
+            MeshPacket *mp = packetPool.allocZeroed();
 
             SubPacket *p = &mp->payload;
 
@@ -113,12 +110,12 @@ void CustomRF95::handleInterrupt()
             }
 
             if (!pb_decode_from_bytes(payload, payloadLen, SubPacket_fields, p)) {
-                pool.releaseFromISR(mp, &higherPriWoken);
+                packetPool.releaseFromISR(mp, &higherPriWoken);
             } else {
                 // parsing was successful, queue for our recipient
                 mp->has_payload = true;
 
-                assert(rxDest.enqueueFromISR(mp, &higherPriWoken)); // NOWAIT - fixme, if queue is full, delete older messages
+                deliverToReceiverISR(mp, &higherPriWoken);
             }
 
             clearRxBuf(); // This message accepted and cleared

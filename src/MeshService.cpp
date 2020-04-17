@@ -44,15 +44,9 @@ FIXME in the initial proof of concept we just skip the entire want/deny flow and
 
 MeshService service;
 
-// I think this is right, one packet for each of the three fifos + one packet being currently assembled for TX or RX
-#define MAX_PACKETS                                                                                                              \
-    (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + MAX_TX_QUEUE +                                                                          \
-     2) // max number of packets which can be in flight (either queued from reception or queued for sending)
+#include "Router.h"
 
-#define MAX_RX_FROMRADIO                                                                                                         \
-    4 // max number of packets destined to our queue, we dispatch packets quickly so it doesn't need to be big
-
-MeshService::MeshService() : toPhoneQueue(MAX_RX_TOPHONE), packetPool(MAX_PACKETS), fromRadioQueue(MAX_RX_FROMRADIO)
+MeshService::MeshService() : toPhoneQueue(MAX_RX_TOPHONE)
 {
     // assert(MAX_RX_TOPHONE == 32); // FIXME, delete this, just checking my clever macro
 }
@@ -62,6 +56,7 @@ void MeshService::init()
     nodeDB.init();
 
     gpsObserver.observe(&gps);
+    packetReceivedObserver.observe(&router.notifyPacketReceived);
 
     // No need to call this here, our periodic task will fire quite soon
     // sendOwnerPeriod();
@@ -81,7 +76,7 @@ void MeshService::sendOurOwner(NodeNum dest, bool wantReplies)
 }
 
 /// handle a user packet that just arrived on the radio, return NULL if we should not process this packet at all
-MeshPacket *MeshService::handleFromRadioUser(MeshPacket *mp)
+const MeshPacket *MeshService::handleFromRadioUser(const MeshPacket *mp)
 {
     bool wasBroadcast = mp->to == NODENUM_BROADCAST;
     bool isCollision = mp->from == myNodeInfo.my_node_num;
@@ -93,7 +88,6 @@ MeshPacket *MeshService::handleFromRadioUser(MeshPacket *mp)
         if (weWin) {
             DEBUG_MSG("NOTE! Received a nodenum collision and we are vetoing\n");
 
-            releaseToPool(mp); // discard it
             mp = NULL;
 
             sendOurOwner(); // send our owner as a _broadcast_ because that other guy is mistakenly using our nodenum
@@ -121,7 +115,7 @@ MeshPacket *MeshService::handleFromRadioUser(MeshPacket *mp)
     return mp;
 }
 
-void MeshService::handleIncomingPosition(MeshPacket *mp)
+void MeshService::handleIncomingPosition(const MeshPacket *mp)
 {
     if (mp->has_payload && mp->payload.has_position) {
         DEBUG_MSG("handled incoming position time=%u\n", mp->payload.position.time);
@@ -140,11 +134,9 @@ void MeshService::handleIncomingPosition(MeshPacket *mp)
     }
 }
 
-void MeshService::handleFromRadio(MeshPacket *mp)
+int MeshService::handleFromRadio(const MeshPacket *mp)
 {
     powerFSM.trigger(EVENT_RECEIVED_PACKET); // Possibly keep the node from sleeping
-
-    mp->rx_time = gps.getValidTime(); // store the arrival timestamp for the phone
 
     // If it is a position packet, perhaps set our clock (if we don't have a GPS of our own, otherwise wait for that to work)
     if (!gps.isConnected)
@@ -170,24 +162,17 @@ void MeshService::handleFromRadio(MeshPacket *mp)
             if (d)
                 releaseToPool(d);
         }
-        assert(toPhoneQueue.enqueue(mp, 0)); // FIXME, instead of failing for full queue, delete the oldest mssages
+
+        MeshPacket *copied = packetPool.allocCopy(*mp);
+        assert(toPhoneQueue.enqueue(copied, 0)); // FIXME, instead of failing for full queue, delete the oldest mssages
 
         if (mp->payload.want_response)
             sendNetworkPing(mp->from);
     } else {
         DEBUG_MSG("Not delivering vetoed User message\n");
     }
-}
 
-void MeshService::handleFromRadio()
-{
-    MeshPacket *mp;
-    uint32_t oldFromNum = fromNum;
-    while ((mp = fromRadioQueue.dequeuePtr(0)) != NULL) {
-        handleFromRadio(mp);
-    }
-    if (oldFromNum != fromNum) // We don't want to generate extra notifies for multiple new packets
-        fromNumChanged.notifyObservers(fromNum);
+    return 0;
 }
 
 uint32_t sendOwnerCb()
@@ -202,7 +187,10 @@ Periodic sendOwnerPeriod(sendOwnerCb);
 /// Do idle processing (mostly processing messages which have been queued from the radio)
 void MeshService::loop()
 {
-    handleFromRadio();
+    if (oldFromNum != fromNum) { // We don't want to generate extra notifies for multiple new packets
+        fromNumChanged.notifyObservers(fromNum);
+        oldFromNum = true;
+    }
 
     // occasionally send our owner info
     sendOwnerPeriod.loop();
@@ -236,7 +224,9 @@ void MeshService::handleToRadio(std::string s)
 
             bool loopback = false; // if true send any packet the phone sends back itself (for testing)
             if (loopback) {
-                MeshPacket *mp = packetPool.allocCopy(r.variant.packet);
+                const MeshPacket *mp = &r.variant.packet;
+                // no need to copy anymore because handle from radio assumes it should _not_ delete
+                // packetPool.allocCopy(r.variant.packet);
                 handleFromRadio(mp);
                 // handleFromRadio will tell the phone a new packet arrived
             }

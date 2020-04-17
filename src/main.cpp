@@ -193,7 +193,8 @@ void axp192Init()
 #endif
 }
 
-void getMacAddr(uint8_t *dmac) {
+void getMacAddr(uint8_t *dmac)
+{
 #ifndef NO_ESP32
     assert(esp_efuse_mac_get_default(dmac) == ESP_OK);
 #else
@@ -203,7 +204,7 @@ void getMacAddr(uint8_t *dmac) {
     dmac[3] = 0xef;
     dmac[4] = 0x01;
     dmac[5] = 0x02; // FIXME, macaddr stuff needed for NRF52
-#endif 
+#endif
 }
 
 const char *getDeviceName()
@@ -219,6 +220,8 @@ const char *getDeviceName()
 }
 
 static MeshRadio *radio = NULL;
+
+#include "Router.h"
 
 void setup()
 {
@@ -261,7 +264,7 @@ void setup()
     // Don't init display if we don't have one or we are waking headless due to a timer event
     if (wakeCause == ESP_SLEEP_WAKEUP_TIMER)
         ssd1306_found = false; // forget we even have the hardware
-#endif 
+#endif
 
     // Initialize the screen first so we can show the logo while we start up everything else.
     if (ssd1306_found)
@@ -278,7 +281,8 @@ void setup()
 
 #ifndef NO_ESP32
     // MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
-    radio = new MeshRadio(service.packetPool, service.fromRadioQueue);
+    radio = new MeshRadio();
+    router.addInterface(&radio->radioIf);
 #endif
 
     if (radio && !radio->init())
