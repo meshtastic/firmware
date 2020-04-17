@@ -334,6 +334,7 @@ void loop()
 
     powerFSM.run_machine();
     gps.loop();
+    router.loop();
     service.loop();
 
     if (radio)
