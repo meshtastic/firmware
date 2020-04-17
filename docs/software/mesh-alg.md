@@ -14,6 +14,7 @@ TODO:
 * update duty cycle spreadsheet for our typical usecase
 * generalize naive flooding on top of radiohead or disaster.radio? (and fix radiohead to use my new driver)
 
+a description of DSR: https://tools.ietf.org/html/rfc4728 
 good description of batman protocol: https://www.open-mesh.org/projects/open-mesh/wiki/BATMANConcept
 
 interesting paper on lora mesh: https://portal.research.lu.se/portal/files/45735775/paper.pdf
