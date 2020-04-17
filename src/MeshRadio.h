@@ -76,7 +76,7 @@ class MeshRadio
     /** pool is the pool we will alloc our rx packets from
      * rxDest is where we will send any rx packets, it becomes receivers responsibility to return packet to the pool
      */
-    MeshRadio(MemoryPool<MeshPacket> &pool, PointerQueue<MeshPacket> &rxDest);
+    MeshRadio();
 
     bool init();
 

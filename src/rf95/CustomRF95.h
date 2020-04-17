@@ -19,7 +19,7 @@ class CustomRF95 : public RH_RF95, public RadioInterface
     /** pool is the pool we will alloc our rx packets from
      * rxDest is where we will send any rx packets, it becomes receivers responsibility to return packet to the pool
      */
-    CustomRF95(MemoryPool<MeshPacket> &pool, PointerQueue<MeshPacket> &rxDest);
+    CustomRF95();
 
     /**
      * Return true if we think the board can go to sleep (i.e. our tx queue is empty, we are not sending or receiving)

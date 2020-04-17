@@ -6,6 +6,7 @@
 
 #include "MemoryPool.h"
 #include "MeshRadio.h"
+#include "MeshTypes.h"
 #include "Observer.h"
 #include "PointerQueue.h"
 #include "mesh.pb.h"
@@ -17,6 +18,8 @@
 class MeshService
 {
     CallbackObserver<MeshService, void *> gpsObserver = CallbackObserver<MeshService, void *>(this, &MeshService::onGPSChanged);
+    CallbackObserver<MeshService, const MeshPacket *> packetReceivedObserver =
+        CallbackObserver<MeshService, const MeshPacket *>(this, &MeshService::handleFromRadio);
 
     /// received packets waiting for the phone to process them
     /// FIXME, change to a DropOldestQueue and keep a count of the number of dropped packets to ensure
@@ -27,13 +30,10 @@ class MeshService
     /// The current nonce for the newest packet which has been queued for the phone
     uint32_t fromNum = 0;
 
+    /// Updated in loop() to detect when fromNum changes
+    uint32_t oldFromNum = 0;
+
   public:
-    MemoryPool<MeshPacket> packetPool;
-
-    /// Packets which have just arrived from the radio, ready to be processed by this service and possibly
-    /// forwarded to the phone.
-    PointerQueue<MeshPacket> fromRadioQueue;
-
     /// Called when some new packets have arrived from one of the radios
     Observable<uint32_t> fromNumChanged;
 
@@ -90,18 +90,15 @@ class MeshService
     /// returns 0 to allow futher processing
     int onGPSChanged(void *arg);
 
-    /// handle all the packets that just arrived from the mesh radio
-    void handleFromRadio();
-
-    /// Handle a packet that just arrived from the radio.  We will either eventually enqueue the message to the phone or return it
-    /// to the free pool
-    void handleFromRadio(MeshPacket *p);
+    /// Handle a packet that just arrived from the radio.  This method does _not_ free the provided packet.  If it needs
+    /// to keep the packet around it makes a copy
+    int handleFromRadio(const MeshPacket *p);
 
     /// handle a user packet that just arrived on the radio, return NULL if we should not process this packet at all
-    MeshPacket *handleFromRadioUser(MeshPacket *mp);
+    const MeshPacket *handleFromRadioUser(const MeshPacket *mp);
 
     /// look at inbound packets and if they contain a position with time, possibly set our clock
-    void handleIncomingPosition(MeshPacket *mp);
+    void handleIncomingPosition(const MeshPacket *mp);
 };
 
 extern MeshService service;

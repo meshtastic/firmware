@@ -24,8 +24,7 @@ separated by 2.16 MHz with respect to the adjacent channels. Channel zero starts
 /// Sometimes while debugging it is useful to set this false, to disable rf95 accesses
 bool useHardware = true;
 
-MeshRadio::MeshRadio(MemoryPool<MeshPacket> &_pool, PointerQueue<MeshPacket> &_rxDest)
-    : radioIf(_pool, _rxDest), sendPacketObserver(this, &MeshRadio::send) // , manager(radioIf)
+MeshRadio::MeshRadio() : sendPacketObserver(this, &MeshRadio::send) // , manager(radioIf)
 {
     myNodeInfo.num_channels = NUM_CHANNELS;
 
@@ -150,7 +149,7 @@ void MeshRadio::loop()
         DEBUG_MSG("ERROR! Bug! Tx packet took too long to send, forcing radio into rx mode\n");
         radioIf.setModeRx();
         if (radioIf.sendingPacket) { // There was probably a packet we were trying to send, free it
-            radioIf.pool.release(radioIf.sendingPacket);
+            packetPool.release(radioIf.sendingPacket);
             radioIf.sendingPacket = NULL;
         }
         recordCriticalError(ErrTxWatchdog);
