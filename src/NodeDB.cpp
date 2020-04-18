@@ -83,6 +83,7 @@ void NodeDB::resetRadioConfig()
     /*
     radioConfig.preferences.screen_on_secs = 30;
     radioConfig.preferences.wait_bluetooth_secs = 30;
+    radioConfig.preferences.position_broadcast_secs = 15;
     */
 }
 
