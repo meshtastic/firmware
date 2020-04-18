@@ -54,6 +54,11 @@ ErrorCode CustomRF95::send(MeshPacket *p)
         DEBUG_MSG("immediate send on mesh fr=0x%x,to=0x%x,id=%d\n (txGood=%d,rxGood=%d,rxBad=%d)\n", p->from, p->to, p->id,
                   txGood(), rxGood(), rxBad());
 
+        waitPacketSent(); // Make sure we dont interrupt an outgoing message
+
+        if (!waitCAD())
+            return false; // Check channel activity
+
         startSend(p);
         return ERRNO_OK;
     } else {

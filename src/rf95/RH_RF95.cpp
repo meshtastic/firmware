@@ -280,16 +280,13 @@ void RH_RF95::clearRxBuf()
     ATOMIC_BLOCK_END;
 }
 
+/// Note: This routine might be called from inside the RF95 ISR
 bool RH_RF95::send(const uint8_t *data, uint8_t len)
 {
     if (len > RH_RF95_MAX_MESSAGE_LEN)
         return false;
 
-    waitPacketSent(); // Make sure we dont interrupt an outgoing message
     setModeIdle();
-
-    if (!waitCAD())
-        return false; // Check channel activity
 
     // Position at the beginning of the FIFO
     spiWrite(RH_RF95_REG_0D_FIFO_ADDR_PTR, 0);
