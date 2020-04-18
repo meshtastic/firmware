@@ -135,7 +135,7 @@ static void waitEnterSleep()
 
     uint32_t now = millis();
     while (!doPreflightSleep()) {
-        delay(10); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
+        delay(100); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
 
         if (millis() - now > 30 * 1000) { // If we wait too long just report an error and go to sleep
             recordCriticalError(ErrSleepEnterWait);
