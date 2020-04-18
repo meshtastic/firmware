@@ -153,15 +153,14 @@ void RH_RF95::handleInterrupt()
     // Read the interrupt register
     uint8_t irq_flags = spiRead(RH_RF95_REG_12_IRQ_FLAGS);
 
-    // ack all interrupts, note - we did this already in the RX_DONE case above, and we don't want to do it twice
+    // ack all interrupts
+    // note from radiohead author wrt old code (with IMO wrong fix)
     // Sigh: on some processors, for some unknown reason, doing this only once does not actually
     // clear the radio's interrupt flag. So we do it twice. Why? (kevinh - I think the root cause we want level
     // triggered interrupts here - not edge.  Because edge allows us to miss handling secondard interrupts that occurred
     // while this ISR was running.  Better to instead, configure the interrupts as level triggered and clear pending
     // at the _beginning_ of the ISR.  If any interrupts occur while handling the ISR, the signal will remain asserted and
     // our ISR will be reinvoked to handle that case)
-    // kevinh: turn this off until root cause is known, because it can cause missed interrupts!
-    // spiWrite(RH_RF95_REG_12_IRQ_FLAGS, 0xff); // Clear all IRQ flags
     spiWrite(RH_RF95_REG_12_IRQ_FLAGS, 0xff); // Clear all IRQ flags
 
     // Note: there can be substantial latency between ISR assertion and this function being run, therefore
@@ -169,14 +168,10 @@ void RH_RF95::handleInterrupt()
 
     // Note: we are running the chip in continuous receive mode (currently, so RX_TIMEOUT shouldn't ever occur)
     bool haveRxError = irq_flags & (RH_RF95_RX_TIMEOUT | RH_RF95_PAYLOAD_CRC_ERROR);
-    if (haveRxError)
-    //    if (_mode == RHModeRx && irq_flags & (RH_RF95_RX_TIMEOUT | RH_RF95_PAYLOAD_CRC_ERROR))
-    {
+    if (haveRxError) {
         _rxBad++;
         clearRxBuf();
-    }
-
-    if ((irq_flags & RH_RF95_RX_DONE) && !haveRxError) {
+    } else if (irq_flags & RH_RF95_RX_DONE) {
         // Read the RegHopChannel register to check if CRC presence is signalled
         // in the header. If not it might be a stray (noise) packet.*
         uint8_t crc_present = spiRead(RH_RF95_REG_1C_HOP_CHANNEL) & RH_RF95_RX_PAYLOAD_CRC_IS_ON;
