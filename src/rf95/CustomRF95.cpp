@@ -20,7 +20,7 @@ bool CustomRF95::canSleep()
 
     bool res = (_mode == RHModeInitialising || _mode == RHModeIdle || _mode == RHModeRx) && !isRx && txQueue.isEmpty();
     if (!res) // only print debug messages if we are vetoing sleep
-        DEBUG_MSG("canSleep, mode=%d, isRx=%d, txEmpty=%d, txGood=%d\n", _mode, isRx, txQueue.isEmpty(), _txGood);
+        DEBUG_MSG("radio wait to sleep, mode=%d, isRx=%d, txEmpty=%d, txGood=%d\n", _mode, isRx, txQueue.isEmpty(), _txGood);
 
     return res;
 }
