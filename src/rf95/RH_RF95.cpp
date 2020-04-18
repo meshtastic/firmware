@@ -34,16 +34,12 @@ bool RH_RF95::init()
     if (!RHSPIDriver::init())
         return false;
 
-    // Determine the interrupt number that corresponds to the interruptPin
-    int interruptNumber = digitalPinToInterrupt(_interruptPin);
-    if (interruptNumber == NOT_AN_INTERRUPT)
-        return false;
 #ifdef RH_ATTACHINTERRUPT_TAKES_PIN_NUMBER
     interruptNumber = _interruptPin;
 #endif
 
     // Tell the low level SPI interface we will use SPI within this interrupt
-    spiUsingInterrupt(interruptNumber);
+    // spiUsingInterrupt(interruptNumber);
 
     // No way to check the device type :-(
 
@@ -114,6 +110,17 @@ bool RH_RF95::init()
             return false; // Too many devices, not enough interrupt vectors
     }
     _deviceForInterrupt[_myInterruptIndex] = this;
+
+    return enableInterrupt();
+}
+
+bool RH_RF95::enableInterrupt()
+{
+    // Determine the interrupt number that corresponds to the interruptPin
+    int interruptNumber = digitalPinToInterrupt(_interruptPin);
+    if (interruptNumber == NOT_AN_INTERRUPT)
+        return false;
+
     if (_myInterruptIndex == 0)
         attachInterrupt(interruptNumber, isr0, ONHIGH);
     else if (_myInterruptIndex == 1)
@@ -124,6 +131,12 @@ bool RH_RF95::init()
         return false; // Too many devices, not enough interrupt vectors
 
     return true;
+}
+
+void RH_INTERRUPT_ATTR RH_RF95::disableInterrupt()
+{
+    int interruptNumber = digitalPinToInterrupt(_interruptPin);
+    detachInterrupt(interruptNumber);
 }
 
 void RH_RF95::prepareDeepSleep()
@@ -141,6 +154,13 @@ bool RH_RF95::isReceiving()
     // Serial.printf("reg %x\n", reg);
     return _mode == RHModeRx && (reg & (RH_RF95_MODEM_STATUS_SIGNAL_DETECTED | RH_RF95_MODEM_STATUS_SIGNAL_SYNCHRONIZED |
                                         RH_RF95_MODEM_STATUS_HEADER_INFO_VALID)) != 0;
+}
+
+void RH_INTERRUPT_ATTR RH_RF95::handleInterruptLevel0()
+{
+    disableInterrupt(); // Disable our interrupt until our helper thread can run (because the IRQ will remain asserted until we
+                        // talk to it via SPI)
+    pendingInterrupt = true;
 }
 
 // C++ level interrupt handler for this instance
@@ -222,6 +242,16 @@ void RH_RF95::handleInterrupt()
         _cad = irq_flags & RH_RF95_CAD_DETECTED;
         setModeIdle();
     }
+
+    enableInterrupt(); // Let ISR run again
+}
+
+void RH_RF95::loop()
+{
+    while (pendingInterrupt) {
+        pendingInterrupt = false; // If the flag was set, it is _guaranteed_ the ISR won't be running, because it masked itself
+        handleInterrupt();
+    }
 }
 
 // These are low level functions that call the interrupt handler for the correct
@@ -230,17 +260,17 @@ void RH_RF95::handleInterrupt()
 void RH_INTERRUPT_ATTR RH_RF95::isr0()
 {
     if (_deviceForInterrupt[0])
-        _deviceForInterrupt[0]->handleInterrupt();
+        _deviceForInterrupt[0]->handleInterruptLevel0();
 }
 void RH_INTERRUPT_ATTR RH_RF95::isr1()
 {
     if (_deviceForInterrupt[1])
-        _deviceForInterrupt[1]->handleInterrupt();
+        _deviceForInterrupt[1]->handleInterruptLevel0();
 }
 void RH_INTERRUPT_ATTR RH_RF95::isr2()
 {
     if (_deviceForInterrupt[2])
-        _deviceForInterrupt[2]->handleInterrupt();
+        _deviceForInterrupt[2]->handleInterruptLevel0();
 }
 
 // Check whether the latest received message is complete and uncorrupted

@@ -15,8 +15,8 @@ ErrorCode SimRadio::send(MeshPacket *p)
     return ERRNO_OK;
 }
 
-void RadioInterface::deliverToReceiverISR(MeshPacket *p, BaseType_t *higherPriWoken)
+void RadioInterface::deliverToReceiver(MeshPacket *p)
 {
     assert(rxDest);
-    assert(rxDest->enqueueFromISR(p, higherPriWoken)); // NOWAIT - fixme, if queue is full, delete older messages
+    assert(rxDest->enqueue(p, 0)); // NOWAIT - fixme, if queue is full, delete older messages
 }

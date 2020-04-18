@@ -336,9 +336,9 @@ void loop()
 {
     uint32_t msecstosleep = 1000 * 30; // How long can we sleep before we again need to service the main loop?
 
-    powerFSM.run_machine();
     gps.loop();
     router.loop();
+    powerFSM.run_machine();
     service.loop();
 
     ledPeriodic.loop();
