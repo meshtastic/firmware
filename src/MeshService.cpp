@@ -69,9 +69,6 @@ void MeshService::init()
 
     gpsObserver.observe(&gps);
     packetReceivedObserver.observe(&router.notifyPacketReceived);
-
-    // No need to call this here, our periodic task will fire quite soon
-    // sendOwnerPeriod();
 }
 
 void MeshService::sendOurOwner(NodeNum dest, bool wantReplies)
