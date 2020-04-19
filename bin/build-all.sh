@@ -6,6 +6,10 @@ source bin/version.sh
 
 COUNTRIES="US EU433 EU865 CN JP"
 #COUNTRIES=US
+#COUNTRIES=CN
+
+BOARDS="ttgo-lora32-v2 ttgo-lora32-v1 tbeam heltec"
+#BOARDS=tbeam
 
 OUTDIR=release/latest
 
@@ -24,23 +28,21 @@ function do_build {
     SRCBIN=.pio/build/$ENV_NAME/firmware.bin
     SRCELF=.pio/build/$ENV_NAME/firmware.elf
     rm -f $SRCBIN 
-    pio run --environment $ENV_NAME # -v
+
+    # The shell vars the build tool expects to find
+    export HW_VERSION="1.0-$COUNTRY"
+    export APP_VERSION=$VERSION
+    export COUNTRY
+
+    pio run --jobs 4 --environment $ENV_NAME # -v
     cp $SRCBIN $OUTDIR/bins/firmware-$ENV_NAME-$COUNTRY-$VERSION.bin
     cp $SRCELF $OUTDIR/elfs/firmware-$ENV_NAME-$COUNTRY-$VERSION.elf
 }
 
 for COUNTRY in $COUNTRIES; do 
-
-    HWVERSTR="1.0-$COUNTRY"
-    COMMONOPTS="-DAPP_VERSION=$VERSION -DHW_VERSION_$COUNTRY -DHW_VERSION=$HWVERSTR -Wall -Wextra -Wno-missing-field-initializers -Isrc -Os -DAXP_DEBUG_PORT=Serial"
-
-    export PLATFORMIO_BUILD_FLAGS="$COMMONOPTS"
-
-    #do_build "tbeam0.7"
-    do_build "ttgo-lora32-v2"
-    do_build "ttgo-lora32-v1"
-    do_build "tbeam"
-    do_build "heltec"
+    for BOARD in $BOARDS; do
+        do_build $BOARD
+    done
 done
 
 # keep the bins in archive also
