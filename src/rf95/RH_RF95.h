@@ -806,11 +806,16 @@ class RH_RF95 : public RHSPIDriver
     /// Return true if we are currently receiving a packet
     bool isReceiving();
 
+    void loop(); // Perform idle processing
+
   protected:
     /// This is a low level function to handle the interrupts for one instance of RH_RF95.
     /// Called automatically by isr*()
     /// Should not need to be called by user code.
     virtual void handleInterrupt();
+
+    /// This is the only code called in ISR context, it just queues up our helper thread to run handleInterrupt();
+    void RH_INTERRUPT_ATTR handleInterruptLevel0();
 
     /// Examine the revceive buffer to determine whether the message is for this node
     void validateRxBuf();
@@ -846,6 +851,11 @@ class RH_RF95 : public RHSPIDriver
     /// Index of next interrupt number to use in _deviceForInterrupt
     static uint8_t _interruptCount;
 
+    bool enableInterrupt();  // enable our IRQ
+    void disableInterrupt(); // disable our IRQ
+
+    volatile bool pendingInterrupt = false;
+    
     /// The configured interrupt pin connected to this instance
     uint8_t _interruptPin;
 

@@ -52,5 +52,5 @@ class CustomRF95 : public RH_RF95, public RadioInterface
     void startSend(MeshPacket *txp);
 
     /// Return true if a higher pri task has woken
-    bool handleIdleISR();
+    void handleIdleISR();
 };

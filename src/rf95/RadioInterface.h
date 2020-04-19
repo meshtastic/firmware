@@ -24,7 +24,7 @@ class RadioInterface
     /**
      * Enqueue a received packet for the registered receiver
      */
-    void deliverToReceiverISR(MeshPacket *p, BaseType_t *higherPriWoken);
+    void deliverToReceiver(MeshPacket *p);
 
   public:
     /** pool is the pool we will alloc our rx packets from

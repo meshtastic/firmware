@@ -20,7 +20,7 @@ bool CustomRF95::canSleep()
 
     bool res = (_mode == RHModeInitialising || _mode == RHModeIdle || _mode == RHModeRx) && !isRx && txQueue.isEmpty();
     if (!res) // only print debug messages if we are vetoing sleep
-        DEBUG_MSG("canSleep, mode=%d, isRx=%d, txEmpty=%d, txGood=%d\n", _mode, isRx, txQueue.isEmpty(), _txGood);
+        DEBUG_MSG("radio wait to sleep, mode=%d, isRx=%d, txEmpty=%d, txGood=%d\n", _mode, isRx, txQueue.isEmpty(), _txGood);
 
     return res;
 }
@@ -78,13 +78,12 @@ void CustomRF95::handleInterrupt()
 {
     RH_RF95::handleInterrupt();
 
-    BaseType_t higherPriWoken = false;
     if (_mode == RHModeIdle) // We are now done sending or receiving
     {
         if (sendingPacket) // Were we sending?
         {
             // We are done sending that packet, release it
-            packetPool.releaseFromISR(sendingPacket, &higherPriWoken);
+            packetPool.release(sendingPacket);
             sendingPacket = NULL;
             // DEBUG_MSG("Done with send\n");
         }
@@ -123,43 +122,35 @@ void CustomRF95::handleInterrupt()
             }
 
             if (!pb_decode_from_bytes(payload, payloadLen, SubPacket_fields, p)) {
-                packetPool.releaseFromISR(mp, &higherPriWoken);
+                packetPool.release(mp);
             } else {
                 // parsing was successful, queue for our recipient
                 mp->has_payload = true;
 
-                deliverToReceiverISR(mp, &higherPriWoken);
+                deliverToReceiver(mp);
             }
 
             clearRxBuf(); // This message accepted and cleared
         }
 
-        higherPriWoken |= handleIdleISR();
+        handleIdleISR();
     }
-
-    // If we call this _IT WILL NOT RETURN_
-    if (higherPriWoken)
-        portYIELD_FROM_ISR();
 }
 
 /** The ISR doesn't have any good work to do, give a new assignment.
  *
  * Return true if a higher pri task has woken
  */
-bool CustomRF95::handleIdleISR()
+void CustomRF95::handleIdleISR()
 {
-    BaseType_t higherPriWoken = false;
-
     // First send any outgoing packets we have ready
-    MeshPacket *txp = txQueue.dequeuePtrFromISR(0);
+    MeshPacket *txp = txQueue.dequeuePtr(0);
     if (txp)
         startSend(txp);
     else {
         // Nothing to send, let's switch back to receive mode
         setModeRx();
     }
-
-    return higherPriWoken;
 }
 
 /// This routine might be called either from user space or ISR
@@ -197,6 +188,8 @@ void CustomRF95::startSend(MeshPacket *txp)
 
 void CustomRF95::loop()
 {
+    RH_RF95::loop();
+
     // It should never take us more than 30 secs to send a packet, if it does, we have a bug, FIXME, move most of this
     // into CustomRF95
     uint32_t now = millis();
