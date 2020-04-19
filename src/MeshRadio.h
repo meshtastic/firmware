@@ -55,7 +55,10 @@
 #define CH_SPACING CH_SPACING_JP
 #define NUM_CHANNELS NUM_CHANNELS_JP
 #else
-#error "HW_VERSION not set"
+// HW version not set - assume US
+#define CH0 CH0_US
+#define CH_SPACING CH_SPACING_US
+#define NUM_CHANNELS NUM_CHANNELS_US
 #endif
 
 /**
