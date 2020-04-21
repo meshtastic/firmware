@@ -36,8 +36,9 @@ This software is 100% open source and developed by a group of hobbyist experimen
 
 # Updates
 
-Note: Updates are happening almost daily, only major updates are listed below. For more details see our chat, github releases or the Android alpha tester emails.
+Note: Updates are happening almost daily, only major updates are listed below. For more details see our forum.
 
+- 04/20/2020 - 0.4.3 Pretty solid now both for the android app and the device code. Many people have donated translations and code. Probably going to call it a beta soon.
 - 03/03/2020 - 0.0.9 of the Android app and device code is released. Still an alpha but fairly functional.
 - 02/25/2020 - 0.0.4 of the Android app is released. This is a very early alpha, see below to join the alpha-testers group.
 - 02/23/2020 - 0.0.4 release. Still very bleeding edge but much closer to the final power management, a charged T-BEAM should run for many days with this load. If you'd like to try it, we'd love your feedback. Click [here](https://github.com/meshtastic/Meshtastic-esp32/blob/master/README.md) for instructions.
