@@ -42,6 +42,9 @@ PB_BIND(MyNodeInfo, MyNodeInfo, AUTO)
 PB_BIND(DeviceState, DeviceState, 4)
 
 
+PB_BIND(DebugString, DebugString, 2)
+
+
 PB_BIND(FromRadio, FromRadio, 2)
 
 
