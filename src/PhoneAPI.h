@@ -41,6 +41,9 @@ class PhoneAPI
 
     ToRadio toRadioScratch; // this is a static scratch object, any data must be copied elsewhere before returning
 
+    /// Use to ensure that clients don't get confused about old messages from the radio
+    uint32_t config_nonce = 0;
+
   public:
     PhoneAPI();
 
