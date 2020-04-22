@@ -6,18 +6,40 @@
 #include <esp_gatt_defs.h>
 
 #include "CallbackCharacteristic.h"
+#include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PhoneAPI.h"
 #include "PowerFSM.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "mesh.pb.h"
 
-#include "GPS.h"
-
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in
 // proccess at once
 static uint8_t trBytes[_max(_max(_max(_max(ToRadio_size, RadioConfig_size), User_size), MyNodeInfo_size), FromRadio_size)];
+
+static CallbackCharacteristic *meshFromNumCharacteristic;
+
+BLEService *meshService;
+
+class BluetoothPhoneAPI : public PhoneAPI
+{
+    /**
+     * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
+     */
+    virtual void onNowHasData(uint32_t fromRadioNum)
+    {
+        PhoneAPI::onNowHasData(fromRadioNum);
+
+        if (meshFromNumCharacteristic) { // this ptr might change from sleep to sleep, or even be null
+            meshFromNumCharacteristic->setValue(fromRadioNum);
+            meshFromNumCharacteristic->notify();
+        }
+    }
+};
+
+BluetoothPhoneAPI *bluetoothPhoneAPI;
 
 class ProtobufCharacteristic : public CallbackCharacteristic
 {
@@ -114,7 +136,7 @@ class RadioCharacteristic : public ProtobufCharacteristic
     {
         DEBUG_MSG("Writing radio config\n");
         ProtobufCharacteristic::onWrite(c);
-        service.reloadConfig();
+        bluetoothPhoneAPI->handleSetRadio(radioConfig);
     }
 };
 
@@ -135,23 +157,7 @@ class OwnerCharacteristic : public ProtobufCharacteristic
 
         static User o; // if the phone doesn't set ID we are careful to keep ours, we also always keep our macaddr
         if (writeToDest(c, &o)) {
-            int changed = 0;
-
-            if (*o.long_name) {
-                changed |= strcmp(owner.long_name, o.long_name);
-                strcpy(owner.long_name, o.long_name);
-            }
-            if (*o.short_name) {
-                changed |= strcmp(owner.short_name, o.short_name);
-                strcpy(owner.short_name, o.short_name);
-            }
-            if (*o.id) {
-                changed |= strcmp(owner.id, o.id);
-                strcpy(owner.id, o.id);
-            }
-
-            if (changed) // If nothing really changed, don't broadcast on the network or write to flash
-                service.reloadOwner();
+            bluetoothPhoneAPI->handleSetOwner(o);
         }
     }
 };
@@ -166,7 +172,7 @@ class ToRadioCharacteristic : public CallbackCharacteristic
         BLEKeepAliveCallbacks::onWrite(c);
         DEBUG_MSG("Got on write\n");
 
-        service.handleToRadio(c->getValue());
+        bluetoothPhoneAPI->handleToRadio(c->getData(), c->getValue().length());
     }
 };
 
@@ -180,31 +186,17 @@ class FromRadioCharacteristic : public CallbackCharacteristic
     void onRead(BLECharacteristic *c)
     {
         BLEKeepAliveCallbacks::onRead(c);
-        MeshPacket *mp = service.getForPhone();
+        size_t numBytes = bluetoothPhoneAPI->getFromRadio(trBytes);
 
         // Someone is going to read our value as soon as this callback returns.  So fill it with the next message in the queue
         // or make empty if the queue is empty
-        if (!mp) {
-            DEBUG_MSG("toPhone queue is empty\n");
-            c->setValue((uint8_t *)"", 0);
-        } else {
-            static FromRadio fRadio;
-
-            // Encapsulate as a FromRadio packet
-            memset(&fRadio, 0, sizeof(fRadio));
-            fRadio.which_variant = FromRadio_packet_tag;
-            fRadio.variant.packet = *mp;
-
-            size_t numbytes = pb_encode_to_bytes(trBytes, sizeof(trBytes), FromRadio_fields, &fRadio);
-            DEBUG_MSG("delivering toPhone packet to phone %d bytes\n", numbytes);
-            c->setValue(trBytes, numbytes);
-
-            service.releaseToPool(mp); // we just copied the bytes, so don't need this buffer anymore
+        if (numBytes) {
+            c->setValue(trBytes, numBytes);
         }
     }
 };
 
-class FromNumCharacteristic : public CallbackCharacteristic, public Observer<uint32_t>
+class FromNumCharacteristic : public CallbackCharacteristic
 {
   public:
     FromNumCharacteristic()
@@ -212,21 +204,13 @@ class FromNumCharacteristic : public CallbackCharacteristic, public Observer<uin
                                                                              BLECharacteristic::PROPERTY_READ |
                                                                              BLECharacteristic::PROPERTY_NOTIFY)
     {
-        observe(&service.fromNumChanged);
+        // observe(&service.fromNumChanged);
     }
 
     void onRead(BLECharacteristic *c)
     {
         BLEKeepAliveCallbacks::onRead(c);
         DEBUG_MSG("FIXME implement fromnum read\n");
-    }
-
-    /// If the mesh service tells us fromNum has changed, tell the phone
-    virtual int onNotify(uint32_t newValue)
-    {
-        setValue(newValue);
-        notify();
-        return 0;
     }
 };
 
@@ -251,15 +235,17 @@ class MyNodeInfoCharacteristic : public ProtobufCharacteristic
     }
 };
 
-FromNumCharacteristic *meshFromNumCharacteristic;
-
-BLEService *meshService;
-
 /*
 See bluetooth-api.md for documentation.
  */
 BLEService *createMeshBluetoothService(BLEServer *server)
 {
+    // Only create our phone API object once
+    if (!bluetoothPhoneAPI) {
+        bluetoothPhoneAPI = new BluetoothPhoneAPI();
+        bluetoothPhoneAPI->init();
+    }
+
     // Create the BLE Service, we need more than the default of 15 handles
     BLEService *service = server->createService(BLEUUID("6ba1b218-15a8-461f-9fa8-5dcae273eafd"), 30, 0);
 
