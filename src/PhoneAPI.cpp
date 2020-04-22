@@ -28,6 +28,22 @@ void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
             service.handleToRadio(p);
             break;
         }
+        case ToRadio_want_config_id_tag:
+            config_nonce = toRadioScratch.variant.want_config_id;
+            DEBUG_MSG("Client wants config, nonce=%u\n", config_nonce);
+            state = STATE_SEND_MY_NODEINFO;
+            break;
+
+        case ToRadio_set_owner_tag:
+            DEBUG_MSG("Client is setting owner\n");
+            handleSetOwner(toRadioScratch.variant.set_owner);
+            break;
+
+        case ToRadio_set_radio_tag:
+            DEBUG_MSG("Client is setting radio\n");
+            handleSetRadio(toRadioScratch.variant.set_radio);
+            break;
+
         default:
             DEBUG_MSG("Error: unexpected ToRadio variant\n");
             break;
