@@ -1,1 +1,1 @@
-pio device monitor -b 115200
+pio device monitor -b 921600
