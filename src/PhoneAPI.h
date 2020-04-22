@@ -18,15 +18,17 @@ class PhoneAPI
     : public Observer<uint32_t> // FIXME, we shouldn't be inheriting from Observer, instead use CallbackObserver as a member
 {
     enum State {
-        STATE_SEND_NOTHING, // Initial state, don't send anything until the client starts asking for config
-        STATE_SEND_MY_NODEINFO,
-        STATE_SEND_OWNER,
+        STATE_LEGACY,       // Temporary default state - until Android apps are all updated, uses the old BLE API
+        STATE_SEND_NOTHING, // (Eventual) Initial state, don't send anything until the client starts asking for config
+        STATE_SEND_MY_INFO, // send our my info record
         STATE_SEND_RADIO,
+        STATE_SEND_OWNER,
+        STATE_SEND_NODEINFO, // states progress in this order as the device sends to to the client
         STATE_SEND_COMPLETE_ID,
         STATE_SEND_PACKETS // send packets or debug strings
     };
 
-    State state = STATE_SEND_NOTHING;
+    State state = STATE_LEGACY;
 
     /**
      * Each packet sent to the phone has an incrementing count
@@ -82,11 +84,6 @@ class PhoneAPI
     void onNowHasData(uint32_t fromRadioNum) {}
 
   private:
-    /**
-     * The client wants to start a new set of config reads
-     */
-    void handleWantConfig(uint32_t nonce);
-
     /**
      * Handle a packet that the phone wants us to send.  It is our responsibility to free the packet to the pool
      */

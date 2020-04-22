@@ -31,7 +31,11 @@ void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
         case ToRadio_want_config_id_tag:
             config_nonce = toRadioScratch.variant.want_config_id;
             DEBUG_MSG("Client wants config, nonce=%u\n", config_nonce);
-            state = STATE_SEND_MY_NODEINFO;
+            state = STATE_SEND_MY_INFO;
+
+            DEBUG_MSG("Reset nodeinfo read pointer\n");
+            nodeDB.resetReadPointer(); // FIXME, this read pointer should be moved out of nodeDB and into this class - because
+                                       // this will break once we have multiple instances of PhoneAPI running independently
             break;
 
         case ToRadio_set_owner_tag:
@@ -57,28 +61,97 @@ void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
  * Get the next packet we want to send to the phone, or NULL if no such packet is available.
  *
  * We assume buf is at least FromRadio_size bytes long.
+ *
+ * Our sending states progress in the following sequence:
+ *      STATE_SEND_MY_INFO, // send our my info record
+        STATE_SEND_RADIO,
+        STATE_SEND_OWNER,
+        STATE_SEND_NODEINFO, // states progress in this order as the device sends to to the client
+        STATE_SEND_COMPLETE_ID,
+        STATE_SEND_PACKETS // send packets or debug strings
  */
 size_t PhoneAPI::getFromRadio(uint8_t *buf)
 {
     if (!available())
         return false;
 
+    // In case we send a FromRadio packet
+    memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
+
+    // Advance states as needed
+    switch (state) {
+    case STATE_SEND_NOTHING:
+        break;
+
+    case STATE_SEND_MY_INFO:
+        fromRadioScratch.which_variant = FromRadio_my_info_tag;
+        fromRadioScratch.variant.my_info = myNodeInfo;
+        state = STATE_SEND_RADIO;
+        break;
+
+    case STATE_SEND_RADIO:
+        fromRadioScratch.which_variant = FromRadio_radio_tag;
+        fromRadioScratch.variant.radio = radioConfig;
+        state = STATE_SEND_OWNER;
+        break;
+
+    case STATE_SEND_OWNER:
+        fromRadioScratch.which_variant = FromRadio_owner_tag;
+        fromRadioScratch.variant.owner = owner;
+        state = STATE_SEND_NODEINFO;
+        break;
+
+    case STATE_SEND_NODEINFO: {
+        const NodeInfo *info = nodeDB.readNextInfo();
+
+        if (info) {
+            DEBUG_MSG("Sending nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s\n", info->num, info->position.time, info->user.id,
+                      info->user.long_name);
+            fromRadioScratch.which_variant = FromRadio_node_info_tag;
+            fromRadioScratch.variant.node_info = *info;
+            // Stay in current state until done sending nodeinfos
+        } else {
+            DEBUG_MSG("Done sending nodeinfos\n");
+            state = STATE_SEND_COMPLETE_ID;
+            // Go ahead and send that ID right now
+            return getFromRadio(buf);
+        }
+        break;
+    }
+
+    case STATE_SEND_COMPLETE_ID:
+        fromRadioScratch.which_variant = FromRadio_config_complete_id_tag;
+        fromRadioScratch.variant.config_complete_id = config_nonce;
+        config_nonce = 0;
+        state = STATE_SEND_PACKETS;
+        break;
+
+    case STATE_LEGACY: // Treat as the same as send packets
+    case STATE_SEND_PACKETS:
+        // Do we have a message from the mesh?
+        if (packetForPhone) {
+            // Encapsulate as a FromRadio packet
+            fromRadioScratch.which_variant = FromRadio_packet_tag;
+            fromRadioScratch.variant.packet = *packetForPhone;
+
+            service.releaseToPool(packetForPhone); // we just copied the bytes, so don't need this buffer anymore
+            packetForPhone = NULL;
+        }
+        break;
+
+    default:
+        assert(0); // unexpected state - FIXME, make an error code and reboot
+    }
+
     // Do we have a message from the mesh?
-    if (packetForPhone) {
+    if (fromRadioScratch.which_variant != 0) {
         // Encapsulate as a FromRadio packet
-        memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
-        fromRadioScratch.which_variant = FromRadio_packet_tag;
-        fromRadioScratch.variant.packet = *packetForPhone;
-
         size_t numbytes = pb_encode_to_bytes(buf, sizeof(FromRadio_size), FromRadio_fields, &fromRadioScratch);
-        DEBUG_MSG("delivering toPhone packet to phone %d bytes\n", numbytes);
-
-        service.releaseToPool(packetForPhone); // we just copied the bytes, so don't need this buffer anymore
-        packetForPhone = NULL;
+        DEBUG_MSG("delivering toPhone packet to phone variant=%d, %d bytes\n", fromRadioScratch.which_variant, numbytes);
         return numbytes;
     }
 
-    DEBUG_MSG("toPhone queue is empty\n");
+    DEBUG_MSG("no FromRadio packet available\n");
     return 0;
 }
 
@@ -87,9 +160,37 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
  */
 bool PhoneAPI::available()
 {
-    packetForPhone = service.getForPhone();
+    switch (state) {
+    case STATE_SEND_NOTHING:
+        return false;
 
-    return true; // FIXME
+    case STATE_SEND_MY_INFO:
+        return true;
+
+    case STATE_SEND_NODEINFO:
+        return true;
+
+    case STATE_SEND_OWNER:
+        return true;
+
+    case STATE_SEND_RADIO:
+        return true;
+
+    case STATE_SEND_COMPLETE_ID:
+        return true;
+
+    case STATE_LEGACY: // Treat as the same as send packets
+    case STATE_SEND_PACKETS:
+        // Try to pull a new packet from the service (if we haven't already)
+        if (!packetForPhone)
+            packetForPhone = service.getForPhone();
+        return !!packetForPhone;
+
+    default:
+        assert(0); // unexpected state - FIXME, make an error code and reboot
+    }
+
+    return false;
 }
 
 //
@@ -124,10 +225,6 @@ void PhoneAPI::handleSetRadio(const RadioConfig &r)
     service.reloadConfig();
 }
 
-/**
- * The client wants to start a new set of config reads
- */
-void PhoneAPI::handleWantConfig(uint32_t nonce) {}
 
 /**
  * Handle a packet that the phone wants us to send.  It is our responsibility to free the packet to the pool
@@ -137,6 +234,11 @@ void PhoneAPI::handleToRadioPacket(MeshPacket *p) {}
 /// If the mesh service tells us fromNum has changed, tell the phone
 int PhoneAPI::onNotify(uint32_t newValue)
 {
-    onNowHasData(newValue);
+    if (state == STATE_SEND_PACKETS || state == STATE_LEGACY) {
+        DEBUG_MSG("Telling client we have new packets %u\n", newValue);
+        onNowHasData(newValue);
+    } else
+        DEBUG_MSG("(Client not yet interested in packets)\n");
+
     return 0;
 }
