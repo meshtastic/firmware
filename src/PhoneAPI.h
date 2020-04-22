@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Observer.h"
 #include "mesh-pb-constants.h"
 #include "mesh.pb.h"
 #include <string>
@@ -8,10 +9,13 @@
  * Provides our protobuf based API which phone/PC clients can use to talk to our device
  * over UDP, bluetooth or serial.
  *
+ * Subclass to customize behavior for particular type of transport (BLE, UDP, TCP, serial)
+ *
  * Eventually there should be once instance of this class for each live connection (because it has a bit of state
  * for that connection)
  */
 class PhoneAPI
+    : public Observer<uint32_t> // FIXME, we shouldn't be inheriting from Observer, instead use CallbackObserver as a member
 {
     enum State {
         STATE_SEND_NOTHING, // Initial state, don't send anything until the client starts asking for config
@@ -27,22 +31,34 @@ class PhoneAPI
     /**
      * Each packet sent to the phone has an incrementing count
      */
-    uint32_t fromRadioNum = 0; 
+    uint32_t fromRadioNum = 0;
+
+    /// We temporarily keep the packet here between the call to available and getFromRadio
+    MeshPacket *packetForPhone = NULL;
+
+    /// Our fromradio packet while it is being assembled
+    FromRadio fromRadioScratch;
+
+    ToRadio toRadioScratch; // this is a static scratch object, any data must be copied elsewhere before returning
 
   public:
     PhoneAPI();
 
+    /// Do late init that can't happen at constructor time
+    void init();
+
     /**
      * Handle a ToRadio protobuf
      */
-    void handleToRadio(const char *buf, size_t len);
+    void handleToRadio(const uint8_t *buf, size_t len);
 
     /**
-     * Get the next packet we want to send to the phone, or NULL if no such packet is available.
+     * Get the next packet we want to send to the phone
      *
      * We assume buf is at least FromRadio_size bytes long.
+     * Returns number of bytes in the FromRadio packet (or 0 if no packet available)
      */
-    bool getFromRadio(char *buf);
+    size_t getFromRadio(uint8_t *buf);
 
     /**
      * Return true if we have data available to send to the phone
@@ -57,7 +73,6 @@ class PhoneAPI
     void handleSetRadio(const RadioConfig &r);
 
   protected:
-
     /**
      * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
      */
@@ -73,4 +88,7 @@ class PhoneAPI
      * Handle a packet that the phone wants us to send.  It is our responsibility to free the packet to the pool
      */
     void handleToRadioPacket(MeshPacket *p);
+
+    /// If the mesh service tells us fromNum has changed, tell the phone
+    virtual int onNotify(uint32_t newValue);
 };
