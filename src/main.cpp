@@ -32,6 +32,7 @@
 #include "power.h"
 // #include "rom/rtc.h"
 #include "FloodingRouter.h"
+#include "main.h"
 #include "screen.h"
 #include "sleep.h"
 #include <Wire.h>
@@ -192,20 +193,6 @@ void axp192Init()
 #endif
 }
 
-void getMacAddr(uint8_t *dmac)
-{
-#ifndef NO_ESP32
-    assert(esp_efuse_mac_get_default(dmac) == ESP_OK);
-#else
-    dmac[0] = 0xde;
-    dmac[1] = 0xad;
-    dmac[2] = 0xbe;
-    dmac[3] = 0xef;
-    dmac[4] = 0x01;
-    dmac[5] = 0x02; // FIXME, macaddr stuff needed for NRF52
-#endif
-}
-
 const char *getDeviceName()
 {
     uint8_t dmac[6];
@@ -247,7 +234,6 @@ void setup()
     Wire.begin();
 #endif
     scanI2Cdevice();
-
 
     // Buttons & LED
 #ifdef BUTTON_PIN

@@ -12,3 +12,5 @@ extern meshtastic::Screen screen;
 
 // Return a human readable string of the form "Meshtastic_ab13"
 const char *getDeviceName();
+
+void getMacAddr(uint8_t *dmac);
