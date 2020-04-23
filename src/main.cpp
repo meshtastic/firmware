@@ -47,13 +47,8 @@ AXP20X_Class axp;
 bool pmu_irq = false;
 #endif
 
-// Global Screen singleton
-#ifdef I2C_SDA
-meshtastic::Screen screen(SSD1306_ADDRESS, I2C_SDA, I2C_SCL);
-#else
-// Fake values for pins to keep build happy, we won't ever initialize it.
+// We always create a screen object, but we only init it if we find the hardware
 meshtastic::Screen screen(SSD1306_ADDRESS);
-#endif
 
 // Global power status singleton
 static meshtastic::PowerStatus powerStatus;
