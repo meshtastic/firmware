@@ -9,7 +9,7 @@
 HardwareSerial _serial_gps(GPS_SERIAL_NUM);
 #else
 // Assume NRF52
-// Uart _serial_gps(GPS_SERIAL_NUM);
+HardwareSerial &_serial_gps = Serial1;
 #endif
 
 bool timeSetFromGPS; // We try to set our time from GPS each time we wake from sleep
@@ -31,6 +31,9 @@ void GPS::setup()
 
 #ifdef GPS_RX_PIN
     _serial_gps.begin(GPS_BAUDRATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+#else
+    _serial_gps.begin(GPS_BAUDRATE);
+#endif
     // _serial_gps.setRxBufferSize(1024); // the default is 256
     // ublox.enableDebugging(Serial);
 
@@ -43,7 +46,7 @@ void GPS::setup()
         isConnected = ublox.begin(_serial_gps);
 
     if (isConnected) {
-        DEBUG_MSG("Connected to GPS successfully, TXpin=%d\n", GPS_TX_PIN);
+        DEBUG_MSG("Connected to GPS successfully\n");
 
         bool factoryReset = false;
         bool ok;
@@ -81,7 +84,6 @@ void GPS::setup()
         // checkUblox cyclically)
         ublox.assumeAutoPVT(true, true);
     }
-#endif
 }
 
 void GPS::readFromRTC()
@@ -145,7 +147,6 @@ void GPS::prepareSleep()
 
 void GPS::doTask()
 {
-#ifdef GPS_RX_PIN
     uint8_t fixtype = 3; // If we are only using the RX pin, assume we have a 3d fix
 
     if (isConnected) {
@@ -207,7 +208,6 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         }
     } else // we didn't get a location update, go back to sleep and hope the characters show up
         wantNewLocation = true;
-#endif
 
     // Once we have sent a location once we only poll the GPS rarely, otherwise check back every 1s until we have something over
     // the serial
