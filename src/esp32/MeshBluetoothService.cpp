@@ -23,6 +23,9 @@ static CallbackCharacteristic *meshFromNumCharacteristic;
 
 BLEService *meshService;
 
+// If defined we will also support the old API
+#define SUPPORT_OLD_BLE_API
+
 class BluetoothPhoneAPI : public PhoneAPI
 {
     /**
@@ -80,6 +83,7 @@ class ProtobufCharacteristic : public CallbackCharacteristic
     }
 };
 
+#ifdef SUPPORT_OLD_BLE_API
 class NodeInfoCharacteristic : public BLECharacteristic, public BLEKeepAliveCallbacks
 {
   public:
@@ -162,6 +166,29 @@ class OwnerCharacteristic : public ProtobufCharacteristic
     }
 };
 
+class MyNodeInfoCharacteristic : public ProtobufCharacteristic
+{
+  public:
+    MyNodeInfoCharacteristic()
+        : ProtobufCharacteristic("ea9f3f82-8dc4-4733-9452-1f6da28892a2", BLECharacteristic::PROPERTY_READ, MyNodeInfo_fields,
+                                 &myNodeInfo)
+    {
+    }
+
+    void onRead(BLECharacteristic *c)
+    {
+        // update gps connection state
+        myNodeInfo.has_gps = gps.isConnected;
+
+        ProtobufCharacteristic::onRead(c);
+
+        myNodeInfo.error_code = 0; // The phone just read us, so throw it away
+        myNodeInfo.error_address = 0;
+    }
+};
+
+#endif
+
 class ToRadioCharacteristic : public CallbackCharacteristic
 {
   public:
@@ -216,27 +243,6 @@ class FromNumCharacteristic : public CallbackCharacteristic
     }
 };
 
-class MyNodeInfoCharacteristic : public ProtobufCharacteristic
-{
-  public:
-    MyNodeInfoCharacteristic()
-        : ProtobufCharacteristic("ea9f3f82-8dc4-4733-9452-1f6da28892a2", BLECharacteristic::PROPERTY_READ, MyNodeInfo_fields,
-                                 &myNodeInfo)
-    {
-    }
-
-    void onRead(BLECharacteristic *c)
-    {
-        // update gps connection state
-        myNodeInfo.has_gps = gps.isConnected;
-
-        ProtobufCharacteristic::onRead(c);
-
-        myNodeInfo.error_code = 0; // The phone just read us, so throw it away
-        myNodeInfo.error_address = 0;
-    }
-};
-
 /*
 See bluetooth-api.md for documentation.
  */
@@ -257,10 +263,12 @@ BLEService *createMeshBluetoothService(BLEServer *server)
     addWithDesc(service, meshFromNumCharacteristic, "fromRadio");
     addWithDesc(service, new ToRadioCharacteristic, "toRadio");
     addWithDesc(service, new FromRadioCharacteristic, "fromNum");
+#ifdef SUPPORT_OLD_BLE_API
     addWithDesc(service, new MyNodeInfoCharacteristic, "myNode");
     addWithDesc(service, new RadioCharacteristic, "radio");
     addWithDesc(service, new OwnerCharacteristic, "owner");
     addWithDesc(service, new NodeInfoCharacteristic, "nodeinfo");
+#endif
 
     meshFromNumCharacteristic->addDescriptor(addBLEDescriptor(new BLE2902())); // Needed so clients can request notification
 
