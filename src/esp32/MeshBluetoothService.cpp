@@ -6,18 +6,43 @@
 #include <esp_gatt_defs.h>
 
 #include "CallbackCharacteristic.h"
+#include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PhoneAPI.h"
 #include "PowerFSM.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "mesh.pb.h"
 
-#include "GPS.h"
-
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in
 // proccess at once
 static uint8_t trBytes[_max(_max(_max(_max(ToRadio_size, RadioConfig_size), User_size), MyNodeInfo_size), FromRadio_size)];
+
+static CallbackCharacteristic *meshFromNumCharacteristic;
+
+BLEService *meshService;
+
+// If defined we will also support the old API
+#define SUPPORT_OLD_BLE_API
+
+class BluetoothPhoneAPI : public PhoneAPI
+{
+    /**
+     * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
+     */
+    virtual void onNowHasData(uint32_t fromRadioNum)
+    {
+        PhoneAPI::onNowHasData(fromRadioNum);
+
+        if (meshFromNumCharacteristic) { // this ptr might change from sleep to sleep, or even be null
+            meshFromNumCharacteristic->setValue(fromRadioNum);
+            meshFromNumCharacteristic->notify();
+        }
+    }
+};
+
+BluetoothPhoneAPI *bluetoothPhoneAPI;
 
 class ProtobufCharacteristic : public CallbackCharacteristic
 {
@@ -58,6 +83,7 @@ class ProtobufCharacteristic : public CallbackCharacteristic
     }
 };
 
+#ifdef SUPPORT_OLD_BLE_API
 class NodeInfoCharacteristic : public BLECharacteristic, public BLEKeepAliveCallbacks
 {
   public:
@@ -114,7 +140,7 @@ class RadioCharacteristic : public ProtobufCharacteristic
     {
         DEBUG_MSG("Writing radio config\n");
         ProtobufCharacteristic::onWrite(c);
-        service.reloadConfig();
+        bluetoothPhoneAPI->handleSetRadio(radioConfig);
     }
 };
 
@@ -135,98 +161,8 @@ class OwnerCharacteristic : public ProtobufCharacteristic
 
         static User o; // if the phone doesn't set ID we are careful to keep ours, we also always keep our macaddr
         if (writeToDest(c, &o)) {
-            int changed = 0;
-
-            if (*o.long_name) {
-                changed |= strcmp(owner.long_name, o.long_name);
-                strcpy(owner.long_name, o.long_name);
-            }
-            if (*o.short_name) {
-                changed |= strcmp(owner.short_name, o.short_name);
-                strcpy(owner.short_name, o.short_name);
-            }
-            if (*o.id) {
-                changed |= strcmp(owner.id, o.id);
-                strcpy(owner.id, o.id);
-            }
-
-            if (changed) // If nothing really changed, don't broadcast on the network or write to flash
-                service.reloadOwner();
+            bluetoothPhoneAPI->handleSetOwner(o);
         }
-    }
-};
-
-class ToRadioCharacteristic : public CallbackCharacteristic
-{
-  public:
-    ToRadioCharacteristic() : CallbackCharacteristic("f75c76d2-129e-4dad-a1dd-7866124401e7", BLECharacteristic::PROPERTY_WRITE) {}
-
-    void onWrite(BLECharacteristic *c)
-    {
-        BLEKeepAliveCallbacks::onWrite(c);
-        DEBUG_MSG("Got on write\n");
-
-        service.handleToRadio(c->getValue());
-    }
-};
-
-class FromRadioCharacteristic : public CallbackCharacteristic
-{
-  public:
-    FromRadioCharacteristic() : CallbackCharacteristic("8ba2bcc2-ee02-4a55-a531-c525c5e454d5", BLECharacteristic::PROPERTY_READ)
-    {
-    }
-
-    void onRead(BLECharacteristic *c)
-    {
-        BLEKeepAliveCallbacks::onRead(c);
-        MeshPacket *mp = service.getForPhone();
-
-        // Someone is going to read our value as soon as this callback returns.  So fill it with the next message in the queue
-        // or make empty if the queue is empty
-        if (!mp) {
-            DEBUG_MSG("toPhone queue is empty\n");
-            c->setValue((uint8_t *)"", 0);
-        } else {
-            static FromRadio fRadio;
-
-            // Encapsulate as a FromRadio packet
-            memset(&fRadio, 0, sizeof(fRadio));
-            fRadio.which_variant = FromRadio_packet_tag;
-            fRadio.variant.packet = *mp;
-
-            size_t numbytes = pb_encode_to_bytes(trBytes, sizeof(trBytes), FromRadio_fields, &fRadio);
-            DEBUG_MSG("delivering toPhone packet to phone %d bytes\n", numbytes);
-            c->setValue(trBytes, numbytes);
-
-            service.releaseToPool(mp); // we just copied the bytes, so don't need this buffer anymore
-        }
-    }
-};
-
-class FromNumCharacteristic : public CallbackCharacteristic, public Observer<uint32_t>
-{
-  public:
-    FromNumCharacteristic()
-        : CallbackCharacteristic("ed9da18c-a800-4f66-a670-aa7547e34453", BLECharacteristic::PROPERTY_WRITE |
-                                                                             BLECharacteristic::PROPERTY_READ |
-                                                                             BLECharacteristic::PROPERTY_NOTIFY)
-    {
-        observe(&service.fromNumChanged);
-    }
-
-    void onRead(BLECharacteristic *c)
-    {
-        BLEKeepAliveCallbacks::onRead(c);
-        DEBUG_MSG("FIXME implement fromnum read\n");
-    }
-
-    /// If the mesh service tells us fromNum has changed, tell the phone
-    virtual int onNotify(uint32_t newValue)
-    {
-        setValue(newValue);
-        notify();
-        return 0;
     }
 };
 
@@ -251,15 +187,73 @@ class MyNodeInfoCharacteristic : public ProtobufCharacteristic
     }
 };
 
-FromNumCharacteristic *meshFromNumCharacteristic;
+#endif
 
-BLEService *meshService;
+class ToRadioCharacteristic : public CallbackCharacteristic
+{
+  public:
+    ToRadioCharacteristic() : CallbackCharacteristic("f75c76d2-129e-4dad-a1dd-7866124401e7", BLECharacteristic::PROPERTY_WRITE) {}
+
+    void onWrite(BLECharacteristic *c)
+    {
+        BLEKeepAliveCallbacks::onWrite(c);
+        DEBUG_MSG("Got on write\n");
+
+        bluetoothPhoneAPI->handleToRadio(c->getData(), c->getValue().length());
+    }
+};
+
+class FromRadioCharacteristic : public CallbackCharacteristic
+{
+  public:
+    FromRadioCharacteristic() : CallbackCharacteristic("8ba2bcc2-ee02-4a55-a531-c525c5e454d5", BLECharacteristic::PROPERTY_READ)
+    {
+    }
+
+    void onRead(BLECharacteristic *c)
+    {
+        BLEKeepAliveCallbacks::onRead(c);
+        size_t numBytes = bluetoothPhoneAPI->getFromRadio(trBytes);
+
+        // Someone is going to read our value as soon as this callback returns.  So fill it with the next message in the queue
+        // or make empty if the queue is empty
+        if (numBytes) {
+            c->setValue(trBytes, numBytes);
+        } else {
+            c->setValue((uint8_t *)"", 0);
+        }
+    }
+};
+
+class FromNumCharacteristic : public CallbackCharacteristic
+{
+  public:
+    FromNumCharacteristic()
+        : CallbackCharacteristic("ed9da18c-a800-4f66-a670-aa7547e34453", BLECharacteristic::PROPERTY_WRITE |
+                                                                             BLECharacteristic::PROPERTY_READ |
+                                                                             BLECharacteristic::PROPERTY_NOTIFY)
+    {
+        // observe(&service.fromNumChanged);
+    }
+
+    void onRead(BLECharacteristic *c)
+    {
+        BLEKeepAliveCallbacks::onRead(c);
+        DEBUG_MSG("FIXME implement fromnum read\n");
+    }
+};
 
 /*
 See bluetooth-api.md for documentation.
  */
 BLEService *createMeshBluetoothService(BLEServer *server)
 {
+    // Only create our phone API object once
+    if (!bluetoothPhoneAPI) {
+        bluetoothPhoneAPI = new BluetoothPhoneAPI();
+        bluetoothPhoneAPI->init();
+    }
+
     // Create the BLE Service, we need more than the default of 15 handles
     BLEService *service = server->createService(BLEUUID("6ba1b218-15a8-461f-9fa8-5dcae273eafd"), 30, 0);
 
@@ -269,10 +263,12 @@ BLEService *createMeshBluetoothService(BLEServer *server)
     addWithDesc(service, meshFromNumCharacteristic, "fromRadio");
     addWithDesc(service, new ToRadioCharacteristic, "toRadio");
     addWithDesc(service, new FromRadioCharacteristic, "fromNum");
+#ifdef SUPPORT_OLD_BLE_API
     addWithDesc(service, new MyNodeInfoCharacteristic, "myNode");
     addWithDesc(service, new RadioCharacteristic, "radio");
     addWithDesc(service, new OwnerCharacteristic, "owner");
     addWithDesc(service, new NodeInfoCharacteristic, "nodeinfo");
+#endif
 
     meshFromNumCharacteristic->addDescriptor(addBLEDescriptor(new BLE2902())); // Needed so clients can request notification
 
