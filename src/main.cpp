@@ -52,7 +52,7 @@ bool pmu_irq = false;
 meshtastic::Screen screen(SSD1306_ADDRESS, I2C_SDA, I2C_SCL);
 #else
 // Fake values for pins to keep build happy, we won't ever initialize it.
-meshtastic::Screen screen(SSD1306_ADDRESS, 0, 0);
+meshtastic::Screen screen(SSD1306_ADDRESS);
 #endif
 
 // Global power status singleton
@@ -248,8 +248,11 @@ void setup()
 
 #ifdef I2C_SDA
     Wire.begin(I2C_SDA, I2C_SCL);
-    scanI2Cdevice();
+#else
+    Wire.begin();
 #endif
+    scanI2Cdevice();
+
 
     // Buttons & LED
 #ifdef BUTTON_PIN
