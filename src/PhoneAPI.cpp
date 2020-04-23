@@ -97,6 +97,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
     case STATE_SEND_NODEINFO: {
         const NodeInfo *info = nodeInfoForPhone;
+        nodeInfoForPhone = NULL; // We just consumed a nodeinfo, will need a new one next time
 
         if (info) {
             DEBUG_MSG("Sending nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s\n", info->num, info->position.time, info->user.id,
@@ -140,8 +141,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     // Do we have a message from the mesh?
     if (fromRadioScratch.which_variant != 0) {
         // Encapsulate as a FromRadio packet
-        size_t numbytes = pb_encode_to_bytes(buf, sizeof(FromRadio_size), FromRadio_fields, &fromRadioScratch);
-        DEBUG_MSG("delivering toPhone packet to phone variant=%d, %d bytes\n", fromRadioScratch.which_variant, numbytes);
+        DEBUG_MSG("encoding toPhone packet to phone variant=%d", fromRadioScratch.which_variant);
+        size_t numbytes = pb_encode_to_bytes(buf, FromRadio_size, FromRadio_fields, &fromRadioScratch);
+        DEBUG_MSG(", %d bytes\n", numbytes);
         return numbytes;
     }
 
