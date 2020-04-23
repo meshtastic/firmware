@@ -51,3 +51,8 @@ void setBluetoothEnable(bool on)
         }
     }
 }
+
+void getMacAddr(uint8_t *dmac)
+{
+    assert(esp_efuse_mac_get_default(dmac) == ESP_OK);
+}
