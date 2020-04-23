@@ -156,7 +156,6 @@ typedef struct _FromRadio {
         MeshPacket packet;
         MyNodeInfo my_info;
         NodeInfo node_info;
-        User owner;
         RadioConfig radio;
         DebugString debug_string;
         uint32_t config_complete_id;
@@ -287,7 +286,6 @@ typedef struct _ToRadio {
 #define FromRadio_packet_tag                     2
 #define FromRadio_my_info_tag                    3
 #define FromRadio_node_info_tag                  4
-#define FromRadio_owner_tag                      5
 #define FromRadio_radio_tag                      6
 #define FromRadio_debug_string_tag               7
 #define FromRadio_config_complete_id_tag         8
@@ -432,7 +430,6 @@ X(a, STATIC,   SINGULAR, UINT32,   num,               1) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,packet,variant.packet),   2) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,my_info,variant.my_info),   3) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,node_info,variant.node_info),   4) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,owner,variant.owner),   5) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,radio,variant.radio),   6) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,debug_string,variant.debug_string),   7) \
 X(a, STATIC,   ONEOF,    UINT32,   (variant,config_complete_id,variant.config_complete_id),   8)
@@ -441,7 +438,6 @@ X(a, STATIC,   ONEOF,    UINT32,   (variant,config_complete_id,variant.config_co
 #define FromRadio_variant_packet_MSGTYPE MeshPacket
 #define FromRadio_variant_my_info_MSGTYPE MyNodeInfo
 #define FromRadio_variant_node_info_MSGTYPE NodeInfo
-#define FromRadio_variant_owner_MSGTYPE User
 #define FromRadio_variant_radio_MSGTYPE RadioConfig
 #define FromRadio_variant_debug_string_MSGTYPE DebugString
 

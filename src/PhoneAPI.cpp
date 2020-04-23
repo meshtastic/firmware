@@ -34,6 +34,7 @@ void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
             state = STATE_SEND_MY_INFO;
 
             DEBUG_MSG("Reset nodeinfo read pointer\n");
+            nodeInfoForPhone = NULL;   // Don't keep returning old nodeinfos
             nodeDB.resetReadPointer(); // FIXME, this read pointer should be moved out of nodeDB and into this class - because
                                        // this will break once we have multiple instances of PhoneAPI running independently
             break;
@@ -62,10 +63,9 @@ void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
  *
  * We assume buf is at least FromRadio_size bytes long.
  *
- * Our sending states progress in the following sequence:
+ * Our sending states progress in the following sequence (the client app ASSUMES THIS SEQUENCE, DO NOT CHANGE IT):
  *      STATE_SEND_MY_INFO, // send our my info record
         STATE_SEND_RADIO,
-        STATE_SEND_OWNER,
         STATE_SEND_NODEINFO, // states progress in this order as the device sends to to the client
         STATE_SEND_COMPLETE_ID,
         STATE_SEND_PACKETS // send packets or debug strings
@@ -92,17 +92,11 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     case STATE_SEND_RADIO:
         fromRadioScratch.which_variant = FromRadio_radio_tag;
         fromRadioScratch.variant.radio = radioConfig;
-        state = STATE_SEND_OWNER;
-        break;
-
-    case STATE_SEND_OWNER:
-        fromRadioScratch.which_variant = FromRadio_owner_tag;
-        fromRadioScratch.variant.owner = owner;
         state = STATE_SEND_NODEINFO;
         break;
 
     case STATE_SEND_NODEINFO: {
-        const NodeInfo *info = nodeDB.readNextInfo();
+        const NodeInfo *info = nodeInfoForPhone;
 
         if (info) {
             DEBUG_MSG("Sending nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s\n", info->num, info->position.time, info->user.id,
@@ -168,10 +162,9 @@ bool PhoneAPI::available()
         return true;
 
     case STATE_SEND_NODEINFO:
-        return true;
-
-    case STATE_SEND_OWNER:
-        return true;
+        if (!nodeInfoForPhone)
+            nodeInfoForPhone = nodeDB.readNextInfo();
+        return true; // Always say we have something, because we might need to advance our state machine
 
     case STATE_SEND_RADIO:
         return true;
@@ -224,7 +217,6 @@ void PhoneAPI::handleSetRadio(const RadioConfig &r)
 
     service.reloadConfig();
 }
-
 
 /**
  * Handle a packet that the phone wants us to send.  It is our responsibility to free the packet to the pool
