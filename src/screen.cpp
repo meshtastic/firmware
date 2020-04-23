@@ -315,7 +315,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     const char *username = node->has_user ? node->user.long_name : "Unknown Name";
 
     static char signalStr[20];
-    snprintf(signalStr, sizeof(signalStr), "Signal: %d", node->snr);
+    snprintf(signalStr, sizeof(signalStr), "Signal: %ld", node->snr);
 
     uint32_t agoSecs = sinceLastSeen(node);
     static char lastStr[20];
@@ -593,7 +593,7 @@ void Screen::handleStartBluetoothPinScreen(uint32_t pin)
 
     static FrameCallback btFrames[] = {drawFrameBluetooth};
 
-    snprintf(btPIN, sizeof(btPIN), "%06d", pin);
+    snprintf(btPIN, sizeof(btPIN), "%06lu", pin);
 
     ui.disableAllIndicators();
     ui.setFrames(btFrames, 1);
