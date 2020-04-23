@@ -54,8 +54,12 @@ class MeshService
     /// Allows the bluetooth handler to free packets after they have been sent
     void releaseToPool(MeshPacket *p) { packetPool.release(p); }
 
-    /// Given a ToRadio buffer (from bluetooth) parse it and properly handle it (setup radio, owner or send packet into the mesh)
-    void handleToRadio(std::string s);
+    /**
+     *  Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)
+     * Called by PhoneAPI.handleToRadio.  Note: p is a scratch buffer, this function is allowed to write to it but it can not keep
+     * a reference
+     */
+    void handleToRadio(MeshPacket &p);
 
     /// The radioConfig object just changed, call this to force the hw to change to the new settings
     void reloadConfig();

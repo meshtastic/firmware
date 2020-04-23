@@ -214,46 +214,33 @@ void MeshService::reloadConfig()
     nodeDB.saveToDisk();
 }
 
-/// Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)
-void MeshService::handleToRadio(std::string s)
+/**
+ *  Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)
+ * Called by PhoneAPI.handleToRadio.  Note: p is a scratch buffer, this function is allowed to write to it but it can not keep a reference
+ */
+void MeshService::handleToRadio(MeshPacket &p)
 {
-    static ToRadio r; // this is a static scratch object, any data must be copied elsewhere before returning
+    handleIncomingPosition(&p); // If it is a position packet, perhaps set our clock
 
-    if (pb_decode_from_bytes((const uint8_t *)s.c_str(), s.length(), ToRadio_fields, &r)) {
-        switch (r.which_variant) {
-        case ToRadio_packet_tag: {
-            // If our phone is sending a position, see if we can use it to set our RTC
-            MeshPacket &p = r.variant.packet;
-            handleIncomingPosition(&p); // If it is a position packet, perhaps set our clock
+    if (p.from == 0) // If the phone didn't set a sending node ID, use ours
+        p.from = nodeDB.getNodeNum();
 
-            if (p.from == 0) // If the phone didn't set a sending node ID, use ours
-                p.from = nodeDB.getNodeNum();
+    if (p.id == 0)
+        p.id = generatePacketId(); // If the phone didn't supply one, then pick one
 
-            if (p.id == 0)
-                p.id = generatePacketId(); // If the phone didn't supply one, then pick one
+    p.rx_time = gps.getValidTime(); // Record the time the packet arrived from the phone
+                                    // (so we update our nodedb for the local node)
 
-            p.rx_time = gps.getValidTime(); // Record the time the packet arrived from the phone
-                                            // (so we update our nodedb for the local node)
+    // Send the packet into the mesh
 
-            // Send the packet into the mesh
+    sendToMesh(packetPool.allocCopy(p));
 
-            sendToMesh(packetPool.allocCopy(p));
-
-            bool loopback = false; // if true send any packet the phone sends back itself (for testing)
-            if (loopback) {
-                // no need to copy anymore because handle from radio assumes it should _not_ delete
-                // packetPool.allocCopy(r.variant.packet);
-                handleFromRadio(&p);
-                // handleFromRadio will tell the phone a new packet arrived
-            }
-            break;
-        }
-        default:
-            DEBUG_MSG("Error: unexpected ToRadio variant\n");
-            break;
-        }
-    } else {
-        DEBUG_MSG("Error: ignoring malformed toradio\n");
+    bool loopback = false; // if true send any packet the phone sends back itself (for testing)
+    if (loopback) {
+        // no need to copy anymore because handle from radio assumes it should _not_ delete
+        // packetPool.allocCopy(r.variant.packet);
+        handleFromRadio(&p);
+        // handleFromRadio will tell the phone a new packet arrived
     }
 }
 
