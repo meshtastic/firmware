@@ -283,11 +283,9 @@ void setup()
 
     service.init();
 
-#ifndef NO_ESP32
     // MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
     radio = new MeshRadio();
     router.addInterface(&radio->radioIf);
-#endif
 
     if (radio && !radio->init())
         recordCriticalError(ErrNoRadio);
