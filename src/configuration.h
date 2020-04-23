@@ -58,10 +58,18 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // DEBUG
 // -----------------------------------------------------------------------------
 
+#ifndef NO_ESP32
+#define USE_SEGGER
+#endif
+#ifdef USE_SEGGER
+#include "SEGGER_RTT.h"
+#define DEBUG_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
+#else
 #ifdef DEBUG_PORT
 #define DEBUG_MSG(...) DEBUG_PORT.printf(__VA_ARGS__)
 #else
 #define DEBUG_MSG(...)
+#endif
 #endif
 
 // -----------------------------------------------------------------------------
