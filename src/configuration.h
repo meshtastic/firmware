@@ -55,24 +55,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define str(s) #s
 
 // -----------------------------------------------------------------------------
-// DEBUG
-// -----------------------------------------------------------------------------
-
-#ifndef NO_ESP32
-#define USE_SEGGER
-#endif
-#ifdef USE_SEGGER
-#include "SEGGER_RTT.h"
-#define DEBUG_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
-#else
-#ifdef DEBUG_PORT
-#define DEBUG_MSG(...) DEBUG_PORT.printf(__VA_ARGS__)
-#else
-#define DEBUG_MSG(...)
-#endif
-#endif
-
-// -----------------------------------------------------------------------------
 // OLED
 // -----------------------------------------------------------------------------
 
@@ -217,7 +199,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define NO_ESP32 // Don't use ESP32 libs (mainly bluetooth)
 
-// Turn off GPS code for now
+// We bind to the GPS using variant.h instead for this platform (Serial1)
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 
@@ -231,6 +213,24 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #undef LED_INVERTED
 #define LED_INVERTED 1
 
+#endif
+
+// -----------------------------------------------------------------------------
+// DEBUG
+// -----------------------------------------------------------------------------
+
+#ifdef NO_ESP32
+#define USE_SEGGER
+#endif
+#ifdef USE_SEGGER
+#include "SEGGER_RTT.h"
+#define DEBUG_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
+#else
+#ifdef DEBUG_PORT
+#define DEBUG_MSG(...) DEBUG_PORT.printf(__VA_ARGS__)
+#else
+#define DEBUG_MSG(...)
+#endif
 #endif
 
 // -----------------------------------------------------------------------------

@@ -402,7 +402,7 @@ void _screen_header()
 }
 #endif
 
-Screen::Screen(uint8_t address, uint8_t sda, uint8_t scl) : cmdQueue(32), dispdev(address, sda, scl), ui(&dispdev) {}
+Screen::Screen(uint8_t address, int sda, int scl) : cmdQueue(32), dispdev(address, sda, scl), ui(&dispdev) {}
 
 void Screen::handleSetOn(bool on)
 {
