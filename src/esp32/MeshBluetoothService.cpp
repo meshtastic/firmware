@@ -192,6 +192,8 @@ class FromRadioCharacteristic : public CallbackCharacteristic
         // or make empty if the queue is empty
         if (numBytes) {
             c->setValue(trBytes, numBytes);
+        } else {
+            c->setValue((uint8_t *)"", 0);
         }
     }
 };
