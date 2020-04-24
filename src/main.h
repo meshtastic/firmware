@@ -14,3 +14,5 @@ extern meshtastic::Screen screen;
 const char *getDeviceName();
 
 void getMacAddr(uint8_t *dmac);
+
+void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop();

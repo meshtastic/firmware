@@ -163,6 +163,10 @@ void setup()
     esp32Setup();
 #endif
 
+#ifdef NRF52_SERIES
+    nrf52Setup();
+#endif
+
     // Initialize the screen first so we can show the logo while we start up everything else.
     if (ssd1306_found)
         screen.setup();
