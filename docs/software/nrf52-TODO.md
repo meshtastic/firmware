@@ -15,6 +15,7 @@
 
 # Secondary work items
 
+- currently using soft device SD140, is that ideal?
 - turn on security for BLE
 - make power management/sleep work properly
 - make a settimeofday implementation
