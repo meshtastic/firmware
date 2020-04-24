@@ -46,9 +46,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //#define USE_JTAG
 #endif
 
-#define DEBUG_PORT Serial  // Serial debug port
-#define SERIAL_BAUD 921600 // Serial debug baud rate
-
 #define REQUIRE_RADIO true // If true, we will fail to start if the radio is not found
 
 #define xstr(s) str(s)
@@ -225,6 +222,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // DEBUG
 // -----------------------------------------------------------------------------
 
+#define SERIAL_BAUD 921600 // Serial debug baud rate
+
 #ifdef NO_ESP32
 #define USE_SEGGER
 #endif
@@ -232,6 +231,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "SEGGER_RTT.h"
 #define DEBUG_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
 #else
+#define DEBUG_PORT Serial  // Serial debug port
+
 #ifdef DEBUG_PORT
 #define DEBUG_MSG(...) DEBUG_PORT.printf(__VA_ARGS__)
 #else
