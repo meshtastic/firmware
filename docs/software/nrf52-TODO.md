@@ -8,9 +8,10 @@ Minimum items needed to make sure hardware is good.
 - DONE get old radio driver working on NRF52
 - DONE basic test of BLE
 - DONE get a debug 'serial' console working via the ICE passthrough feater
-- add PMU driver
-- add new radio driver - possibly start with https://os.mbed.com/teams/Semtech/code/SX126xLib/
-- added UC1701 LCD driver.  Still need to hook it to a subclass of (poorly named) OLEDDisplay, and override display() to stream bytes out to the screen.
+- Use the PMU driver
+- add a NEMA based GPS driver to test GPS
+- Use new radio driver - possibly start with https://os.mbed.com/teams/Semtech/code/SX126xLib/
+- Use UC1701 LCD driver.  Still need to create at startup and probe on SPI
 - test the LEDs
 - test the buttons
 - make a new boarddef with a variant.h file. Fix pins in that file. In particular (at least):
@@ -24,6 +25,7 @@ Minimum items needed to make sure hardware is good.
 
 Needed to be fully functional at least at the same level of the ESP32 boards. At this point users would probably want them.
 
+- use new LCD driver from screen.cpp. Still need to hook it to a subclass of (poorly named) OLEDDisplay, and override display() to stream bytes out to the screen.
 - get full BLE api working
 - we need to enable the external xtal for the sx1262 (on dio3)
 - figure out which regulator mode the sx1262 is operating in
@@ -45,6 +47,7 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 
 Nice ideas worth considering...
 
+- make Lorro_BQ25703A read/write operations atomic, current version could let other threads sneak in (once we start using threads)
 - turn on DFU assistance in the appload using the nordic DFU helper lib call
 - make the segger logbuffer larger, move it to RAM that is preserved across reboots and support reading it out at runtime (to allow full log messages to be included in crash reports).  Share this code with ESP32
 - convert hardfaults/panics/asserts/wd exceptions into fault codes sent to phone
