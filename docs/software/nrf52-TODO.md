@@ -1,4 +1,6 @@
-# Initial work items
+# NRF52 TODO
+
+## Initial work items
 
 Minimum items needed to make sure hardware is good.
 
@@ -8,7 +10,7 @@ Minimum items needed to make sure hardware is good.
 - DONE get a debug 'serial' console working via the ICE passthrough feater
 - add PMU driver
 - add new radio driver - possibly start with https://os.mbed.com/teams/Semtech/code/SX126xLib/
-- add LCD driver
+- added UC1701 LCD driver.  Still need to hook it to a subclass of (poorly named) OLEDDisplay, and override display() to stream bytes out to the screen.
 - test the LEDs
 - test the buttons
 - make a new boarddef with a variant.h file. Fix pins in that file. In particular (at least):
@@ -18,7 +20,7 @@ Minimum items needed to make sure hardware is good.
   #define PIN_WIRE_SDA (26)
   #define PIN_WIRE_SCL (27)
 
-# Secondary work items
+## Secondary work items
 
 Needed to be fully functional at least at the same level of the ESP32 boards. At this point users would probably want them.
 
@@ -32,10 +34,20 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 - make ble endpoints not require "start config", jsut have them start in config mode
 - measure power management and confirm battery life
 
-# Items to be 'feature complete'
+## Items to be 'feature complete'
 
 - use the new buttons in the UX
 - currently using soft device SD140, is that ideal?
+- turn on the watchdog timer, require servicing from key application threads
+- install a hardfault handler for null ptrs (if one isn't already installed)
+
+## Things to do 'someday'
+
+Nice ideas worth considering...
+
+- turn on DFU assistance in the appload using the nordic DFU helper lib call
+- make the segger logbuffer larger, move it to RAM that is preserved across reboots and support reading it out at runtime (to allow full log messages to be included in crash reports).  Share this code with ESP32
+- convert hardfaults/panics/asserts/wd exceptions into fault codes sent to phone
 
 ```
 /*
