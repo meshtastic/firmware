@@ -11,7 +11,7 @@ Minimum items needed to make sure hardware is good.
 - Use the PMU driver
 - add a NEMA based GPS driver to test GPS
 - Use new radio driver - possibly start with https://os.mbed.com/teams/Semtech/code/SX126xLib/
-- Use UC1701 LCD driver.  Still need to create at startup and probe on SPI
+- Use UC1701 LCD driver. Still need to create at startup and probe on SPI
 - test the LEDs
 - test the buttons
 - make a new boarddef with a variant.h file. Fix pins in that file. In particular (at least):
@@ -25,6 +25,9 @@ Minimum items needed to make sure hardware is good.
 
 Needed to be fully functional at least at the same level of the ESP32 boards. At this point users would probably want them.
 
+- enable BLE DFU somehow
+- set appversion/hwversion
+- report appversion/hwversion in BLE
 - use new LCD driver from screen.cpp. Still need to hook it to a subclass of (poorly named) OLEDDisplay, and override display() to stream bytes out to the screen.
 - get full BLE api working
 - we need to enable the external xtal for the sx1262 (on dio3)
@@ -35,9 +38,14 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 - make a file system implementation (preferably one that can see the files the bootloader also sees)
 - make ble endpoints not require "start config", jsut have them start in config mode
 - measure power management and confirm battery life
+- use new PMU to provide battery voltage/% full to app (both bluetooth and screen)
+- do initial power measurements
 
 ## Items to be 'feature complete'
 
+- call PMU set_ADC_CONV(0) during sleep, to stop reading PMU adcs and decrease current draw
+- do final power measurements
+- backport the common PMU API between AXP192 and PmuBQ25703A
 - use the new buttons in the UX
 - currently using soft device SD140, is that ideal?
 - turn on the watchdog timer, require servicing from key application threads
@@ -45,12 +53,15 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 
 ## Things to do 'someday'
 
-Nice ideas worth considering...
+Nice ideas worth considering someday...
 
+- in addition to the main CPU watchdog, use the PMU watchdog as a really big emergency hammer
+- turn on 'shipping mode' in the PMU when device is 'off' - to cut battery draw to essentially zero
 - make Lorro_BQ25703A read/write operations atomic, current version could let other threads sneak in (once we start using threads)
 - turn on DFU assistance in the appload using the nordic DFU helper lib call
-- make the segger logbuffer larger, move it to RAM that is preserved across reboots and support reading it out at runtime (to allow full log messages to be included in crash reports).  Share this code with ESP32
+- make the segger logbuffer larger, move it to RAM that is preserved across reboots and support reading it out at runtime (to allow full log messages to be included in crash reports). Share this code with ESP32
 - convert hardfaults/panics/asserts/wd exceptions into fault codes sent to phone
+- stop enumerating all i2c devices at boot, it wastes power & time
 
 ```
 /*

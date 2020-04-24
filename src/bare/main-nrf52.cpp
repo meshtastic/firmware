@@ -16,9 +16,10 @@ static inline void debugger_break(void)
 // handle standard gcc assert failures
 void __attribute__((noreturn)) __assert_func(const char *file, int line, const char *func, const char *failedexpr)
 {
+    DEBUG_MSG("assert failed %s: %d, %s, test=%s\n", file, line, func, failedexpr);
     debugger_break();
     while (1)
-        ;
+        ; // FIXME, reboot!
 }
 
 void getMacAddr(uint8_t *dmac)
@@ -56,4 +57,14 @@ void setBluetoothEnable(bool on)
         }
         bleOn = on;
     }
+}
+
+#include "PmuBQ25703A.h"
+
+PmuBQ25703A pmu;
+
+void nrf52Setup()
+{
+    // Not yet on board
+    // pmu.init();
 }
