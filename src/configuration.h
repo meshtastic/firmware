@@ -109,6 +109,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Leave undefined to disable our PMU IRQ handler
 #define PMU_IRQ 35
 
+#define AXP192_SLAVE_ADDRESS 0x34
+
 #elif defined(TBEAM_V07)
 // This string must exactly match the case used in release file names or the android updater won't work
 #define HW_VENDOR "tbeam0.7"
@@ -244,6 +246,5 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // AXP192 (Rev1-specific options)
 // -----------------------------------------------------------------------------
 
-// #define AXP192_SLAVE_ADDRESS  0x34 // Now defined in axp20x.h
 #define GPS_POWER_CTRL_CH 3
 #define LORA_POWER_CTRL_CH 2
