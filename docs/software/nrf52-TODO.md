@@ -8,10 +8,10 @@ Minimum items needed to make sure hardware is good.
 - DONE get old radio driver working on NRF52
 - DONE basic test of BLE
 - DONE get a debug 'serial' console working via the ICE passthrough feater
-- Use the PMU driver
+- Use the PMU driver on real hardware
 - add a NEMA based GPS driver to test GPS
-- Use new radio driver - possibly start with https://os.mbed.com/teams/Semtech/code/SX126xLib/
-- Use UC1701 LCD driver. Still need to create at startup and probe on SPI
+- Use new radio driver on real hardware - possibly start with https://os.mbed.com/teams/Semtech/code/SX126xLib/
+- Use UC1701 LCD driver on real hardware. Still need to create at startup and probe on SPI
 - test the LEDs
 - test the buttons
 - make a new boarddef with a variant.h file. Fix pins in that file. In particular (at least):
@@ -35,14 +35,15 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 - turn on security for BLE, make pairing work
 - make power management/sleep work properly
 - make a settimeofday implementation
-- make a file system implementation (preferably one that can see the files the bootloader also sees)
-- make ble endpoints not require "start config", jsut have them start in config mode
+- make a file system implementation (preferably one that can see the files the bootloader also sees) - use https://infocenter.nordicsemi.com/topic/com.nordic.infocenter.sdk5.v15.3.0/lib_fds_usage.html?cp=7_5_0_3_55_3
+- make ble endpoints not require "start config", just have them start in config mode
 - measure power management and confirm battery life
 - use new PMU to provide battery voltage/% full to app (both bluetooth and screen)
 - do initial power measurements
 
 ## Items to be 'feature complete'
 
+- good power management tips: https://devzone.nordicsemi.com/nordic/nordic-blog/b/blog/posts/optimizing-power-on-nrf52-designs
 - call PMU set_ADC_CONV(0) during sleep, to stop reading PMU adcs and decrease current draw
 - do final power measurements
 - backport the common PMU API between AXP192 and PmuBQ25703A
@@ -55,13 +56,17 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 
 Nice ideas worth considering someday...
 
+- Use NRF logger module (includes flash logging etc...) instead of DEBUG_MSG
+- Use "LED softblink" library on NRF52 to do nice pretty "breathing" LEDs. Don't whack LED from main thread anymore.
+- decrease BLE xmit power "At 0dBm with the DC/DC on, the nRF52832 transmitter draws 5.3mA. Increasing the TX power to +4dBm adds only 2.2mA. Decreasing it to -40 dBm saves only 2.6mA."
 - in addition to the main CPU watchdog, use the PMU watchdog as a really big emergency hammer
 - turn on 'shipping mode' in the PMU when device is 'off' - to cut battery draw to essentially zero
 - make Lorro_BQ25703A read/write operations atomic, current version could let other threads sneak in (once we start using threads)
 - turn on DFU assistance in the appload using the nordic DFU helper lib call
-- make the segger logbuffer larger, move it to RAM that is preserved across reboots and support reading it out at runtime (to allow full log messages to be included in crash reports). Share this code with ESP32
+- make the segger logbuffer larger, move it to RAM that is preserved across reboots and support reading it out at runtime (to allow full log messages to be included in crash reports). Share this code with ESP32 (use gcc noinit attribute)
 - convert hardfaults/panics/asserts/wd exceptions into fault codes sent to phone
 - stop enumerating all i2c devices at boot, it wastes power & time
+- consider using "SYSTEMOFF" deep sleep mode, without RAM retension. Only useful for 'truly off - wake only by button press' only saves 1.5uA vs SYSTEMON. (SYSTEMON only costs 1.5uA). Possibly put PMU into shipping mode?
 
 ```
 /*
