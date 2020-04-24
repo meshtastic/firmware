@@ -1,9 +1,9 @@
 # Initial work items
 
-- get old radio driver working on NRF52
+- DONE get old radio driver working on NRF52
 - get BLE working
 - add PMU driver
-- add new radio driver
+- add new radio driver - possibly start with https://os.mbed.com/teams/Semtech/code/SX126xLib/
 - make a file system implementation (preferably one that can see the files the bootloader also sees)
 - add LCD driver
 - make a new boarddef with a variant.h file. Fix pins in that file. In particular:
