@@ -1,5 +1,6 @@
 #include "NRF52Bluetooth.h"
 #include "configuration.h"
+#include "main.h"
 #include <bluefruit.h>
 
 /* HRM Service Definitions
@@ -153,7 +154,7 @@ void NRF52Bluetooth::setup()
     Bluefruit.begin();
 
     // Set the advertised device name (keep it short!)
-    Bluefruit.setName("Meshtastic52"); // FIXME
+    Bluefruit.setName(getDeviceName()); // FIXME
 
     // Set the connect/disconnect callback handlers
     Bluefruit.Periph.setConnectCallback(connect_callback);
