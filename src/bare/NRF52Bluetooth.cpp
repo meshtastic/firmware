@@ -153,7 +153,7 @@ void NRF52Bluetooth::setup()
     Bluefruit.begin();
 
     // Set the advertised device name (keep it short!)
-    Bluefruit.setName("Meshtastic52");
+    Bluefruit.setName("Meshtastic52"); // FIXME
 
     // Set the connect/disconnect callback handlers
     Bluefruit.Periph.setConnectCallback(connect_callback);
@@ -162,7 +162,7 @@ void NRF52Bluetooth::setup()
     // Configure and Start the Device Information Service
     DEBUG_MSG("Configuring the Device Information Service\n");
     bledis.setManufacturer("meshtastic.org");
-    bledis.setModel("NRF52-meshtastic");
+    bledis.setModel("NRF52-meshtastic"); // FIXME
     bledis.begin();
 
     // Start the BLE Battery Service and set it to 100%
