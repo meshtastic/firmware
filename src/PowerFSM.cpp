@@ -173,10 +173,13 @@ void PowerFSM_setup()
 
     powerFSM.add_timed_transition(&stateDARK, &stateNB, radioConfig.preferences.phone_timeout_secs * 1000, NULL, "Phone timeout");
 
+#ifndef NRF52_SERIES
+    // We never enter light-sleep state on NRF52 (because the CPU uses so little power normally)
     powerFSM.add_timed_transition(&stateNB, &stateLS, radioConfig.preferences.min_wake_secs * 1000, NULL, "Min wake timeout");
 
     powerFSM.add_timed_transition(&stateDARK, &stateLS, radioConfig.preferences.wait_bluetooth_secs * 1000, NULL,
                                   "Bluetooth timeout");
+#endif
 
     powerFSM.add_timed_transition(&stateLS, &stateSDS, radioConfig.preferences.mesh_sds_timeout_secs * 1000, NULL,
                                   "mesh timeout");
