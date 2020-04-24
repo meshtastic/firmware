@@ -30,8 +30,13 @@ void getMacAddr(uint8_t *dmac)
     assert(res == NRF_SUCCESS);
     memcpy(dmac, addr.addr, 6);
 #else
-    // FIXME - byte order might be wrong and high bits might be wrong
-    memcpy(dmac, (const void *)NRF_FICR->DEVICEADDR, 6);
+    const uint8_t *src = (const uint8_t *)NRF_FICR->DEVICEADDR;
+    dmac[5] = src[0];
+    dmac[4] = src[1];
+    dmac[3] = src[2];
+    dmac[2] = src[3];
+    dmac[1] = src[4];
+    dmac[0] = src[5] | 0xc0; // MSB high two bits get set elsewhere in the bluetooth stack
 #endif
 }
 
