@@ -1,3 +1,5 @@
+#include "NRF52Bluetooth.h"
+#include "configuration.h"
 #include <assert.h>
 #include <ble_gap.h>
 #include <memory.h>
@@ -31,4 +33,22 @@ void getMacAddr(uint8_t *dmac)
     // FIXME - byte order might be wrong and high bits might be wrong
     memcpy(dmac, (const void *)NRF_FICR->DEVICEADDR, 6);
 #endif
+}
+
+NRF52Bluetooth *nrf52Bluetooth;
+
+static bool bleOn = false;
+void setBluetoothEnable(bool on)
+{
+    if (on != bleOn) {
+        if (on) {
+            if (!nrf52Bluetooth) {
+                nrf52Bluetooth = new NRF52Bluetooth();
+                nrf52Bluetooth->setup();
+            }
+        } else {
+            DEBUG_MSG("FIXME: implement BLE disable\n");
+        }
+        bleOn = on;
+    }
 }

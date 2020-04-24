@@ -1,12 +1,26 @@
+# Initial work items
 
-* make a new boarddef with a variant.h file.  Fix pins in that file.  In particular:
-#define PIN_SPI_MISO         (46)
-#define PIN_SPI_MOSI         (45)
-#define PIN_SPI_SCK          (47)
-#define PIN_WIRE_SDA         (26)
-#define PIN_WIRE_SCL         (27)
+- get old radio driver working on NRF52
+- get BLE working
+- add PMU driver
+- add new radio driver
+- make a file system implementation (preferably one that can see the files the bootloader also sees)
+- add LCD driver
+- make a new boarddef with a variant.h file. Fix pins in that file. In particular:
+  #define PIN_SPI_MISO (46)
+  #define PIN_SPI_MOSI (45)
+  #define PIN_SPI_SCK (47)
+  #define PIN_WIRE_SDA (26)
+  #define PIN_WIRE_SCL (27)
 
+# Secondary work items
 
+- turn on security for BLE
+- make power management/sleep work properly
+- make a settimeofday implementation
+- make ble endpoints not require "start config", jsut have them start in config mode
+
+```
 /*
 per
 https://docs.platformio.org/en/latest/tutorials/nordicnrf52/arduino_debugging_unit_testing.html
@@ -57,3 +71,4 @@ https://learn.adafruit.com/bluefruit-nrf52-feather-learning-guide/custom-hrm
 good led ble demo:
 https://github.com/adafruit/Adafruit_nRF52_Arduino/blob/master/libraries/Bluefruit52Lib/examples/Peripheral/nrf_blinky/nrf_blinky.ino
 */
+```
