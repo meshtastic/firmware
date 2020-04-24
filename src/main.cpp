@@ -211,6 +211,10 @@ static MeshRadio *radio = NULL;
 
 void setup()
 {
+#ifdef USE_SEGGER
+    SEGGER_RTT_ConfigUpBuffer(0, NULL, NULL, 0, SEGGER_RTT_MODE_NO_BLOCK_TRIM);
+#endif
+ 
 // Debug
 #ifdef DEBUG_PORT
     DEBUG_PORT.begin(SERIAL_BAUD);
