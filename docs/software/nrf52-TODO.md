@@ -1,12 +1,17 @@
 # Initial work items
 
+Minimum items needed to make sure hardware is good.
+
+- DONE select and install a bootloader (adafruit)
 - DONE get old radio driver working on NRF52
-- get BLE working
+- DONE basic test of BLE
+- DONE get a debug 'serial' console working via the ICE passthrough feater
 - add PMU driver
 - add new radio driver - possibly start with https://os.mbed.com/teams/Semtech/code/SX126xLib/
-- make a file system implementation (preferably one that can see the files the bootloader also sees)
 - add LCD driver
-- make a new boarddef with a variant.h file. Fix pins in that file. In particular:
+- test the LEDs
+- test the buttons
+- make a new boarddef with a variant.h file. Fix pins in that file. In particular (at least):
   #define PIN_SPI_MISO (46)
   #define PIN_SPI_MOSI (45)
   #define PIN_SPI_SCK (47)
@@ -15,11 +20,22 @@
 
 # Secondary work items
 
-- currently using soft device SD140, is that ideal?
-- turn on security for BLE
+Needed to be fully functional at least at the same level of the ESP32 boards. At this point users would probably want them.
+
+- get full BLE api working
+- we need to enable the external xtal for the sx1262 (on dio3)
+- figure out which regulator mode the sx1262 is operating in
+- turn on security for BLE, make pairing work
 - make power management/sleep work properly
 - make a settimeofday implementation
+- make a file system implementation (preferably one that can see the files the bootloader also sees)
 - make ble endpoints not require "start config", jsut have them start in config mode
+- measure power management and confirm battery life
+
+# Items to be 'feature complete'
+
+- use the new buttons in the UX
+- currently using soft device SD140, is that ideal?
 
 ```
 /*
