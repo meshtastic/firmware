@@ -160,19 +160,19 @@ void NRF52Bluetooth::setup()
     Bluefruit.Periph.setDisconnectCallback(disconnect_callback);
 
     // Configure and Start the Device Information Service
-    DEBUG_MSG("Configuring the Device Information Service");
+    DEBUG_MSG("Configuring the Device Information Service\n");
     bledis.setManufacturer("meshtastic.org");
     bledis.setModel("NRF52-meshtastic");
     bledis.begin();
 
     // Start the BLE Battery Service and set it to 100%
-    DEBUG_MSG("Configuring the Battery Service");
+    DEBUG_MSG("Configuring the Battery Service\n");
     blebas.begin();
     blebas.write(42); // FIXME, report real power levels
 
     // Setup the Heart Rate Monitor service using
     // BLEService and BLECharacteristic classes
-    DEBUG_MSG("Configuring the Heart Rate Monitor Service");
+    DEBUG_MSG("Configuring the Heart Rate Monitor Service\n");
     setupHRM();
 
     // Setup the advertising packet(s)
