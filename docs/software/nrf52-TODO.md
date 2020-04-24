@@ -7,7 +7,9 @@ Minimum items needed to make sure hardware is good.
 - DONE select and install a bootloader (adafruit)
 - DONE get old radio driver working on NRF52
 - DONE basic test of BLE
-- DONE get a debug 'serial' console working via the ICE passthrough feater
+- DONE get a debug 'serial' console working via the ICE passthrough feature
+- use "variants" to get all gpio bindings
+- plug in correct variants for the real board
 - Use the PMU driver on real hardware
 - add a NEMA based GPS driver to test GPS
 - Use new radio driver on real hardware - possibly start with https://os.mbed.com/teams/Semtech/code/SX126xLib/
