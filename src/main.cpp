@@ -42,17 +42,11 @@
 #include "BluetoothUtil.h"
 #endif
 
-#ifdef TBEAM_V10
-#include "axp20x.h"
-AXP20X_Class axp;
-bool pmu_irq = false;
-#endif
-
 // We always create a screen object, but we only init it if we find the hardware
 meshtastic::Screen screen(SSD1306_ADDRESS);
 
 // Global power status singleton
-static meshtastic::PowerStatus powerStatus;
+meshtastic::PowerStatus powerStatus;
 
 bool ssd1306_found;
 bool axp192_found;
@@ -80,7 +74,7 @@ void scanI2Cdevice(void)
                 ssd1306_found = true;
                 DEBUG_MSG("ssd1306 display found\n");
             }
-#ifdef TBEAM_V10
+#ifdef AXP192_SLAVE_ADDRESS
             if (addr == AXP192_SLAVE_ADDRESS) {
                 axp192_found = true;
                 DEBUG_MSG("axp192 PMU found\n");

@@ -3,6 +3,7 @@
 #include "PowerFSM.h"
 #include "configuration.h"
 #include "main.h"
+#include "power.h"
 #include "target_specific.h"
 
 bool bluetoothOn;
@@ -58,6 +59,13 @@ void getMacAddr(uint8_t *dmac)
 }
 
 #ifdef TBEAM_V10
+
+// FIXME. nasty hack cleanup how we load axp192
+#undef AXP192_SLAVE_ADDRESS
+#include "axp20x.h"
+AXP20X_Class axp;
+bool pmu_irq = false;
+
 /// Reads power status to powerStatus singleton.
 //
 // TODO(girts): move this and other axp stuff to power.h/power.cpp.
