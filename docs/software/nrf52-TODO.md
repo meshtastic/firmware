@@ -56,6 +56,7 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 
 Nice ideas worth considering someday...
 
+- Currently we use Nordic's vendor ID, which is apparently okay: https://devzone.nordicsemi.com/f/nordic-q-a/44014/using-nordic-vid-and-pid-for-nrf52840 and I just picked a PID of 0x4403
 - Use NRF logger module (includes flash logging etc...) instead of DEBUG_MSG
 - Use "LED softblink" library on NRF52 to do nice pretty "breathing" LEDs. Don't whack LED from main thread anymore.
 - decrease BLE xmit power "At 0dBm with the DC/DC on, the nRF52832 transmitter draws 5.3mA. Increasing the TX power to +4dBm adds only 2.2mA. Decreasing it to -40 dBm saves only 2.6mA."
