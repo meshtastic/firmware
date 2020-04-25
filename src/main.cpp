@@ -297,6 +297,8 @@ void setup()
 
     service.init();
 
+    realRouter.setup(); // required for our periodic task (kinda skanky FIXME)
+
 #ifndef NO_ESP32
     // MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
     radio = new MeshRadio();
