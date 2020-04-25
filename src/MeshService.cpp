@@ -48,6 +48,15 @@ MeshService service;
 
 #define NUM_PACKET_ID 255 // 0 is consider invalid
 
+static uint32_t sendOwnerCb()
+{
+    service.sendOurOwner();
+
+    return radioConfig.preferences.send_owner_interval * radioConfig.preferences.position_broadcast_secs * 1000;
+}
+
+static Periodic sendOwnerPeriod(sendOwnerCb);
+
 /// Generate a unique packet id
 // FIXME, move this someplace better
 PacketId generatePacketId()
@@ -65,6 +74,7 @@ MeshService::MeshService() : toPhoneQueue(MAX_RX_TOPHONE)
 
 void MeshService::init()
 {
+    sendOwnerPeriod.setup();
     nodeDB.init();
 
     gpsObserver.observe(&gps);
@@ -184,15 +194,6 @@ int MeshService::handleFromRadio(const MeshPacket *mp)
     return 0;
 }
 
-uint32_t sendOwnerCb()
-{
-    service.sendOurOwner();
-
-    return radioConfig.preferences.send_owner_interval * radioConfig.preferences.position_broadcast_secs * 1000;
-}
-
-Periodic sendOwnerPeriod(sendOwnerCb);
-
 /// Do idle processing (mostly processing messages which have been queued from the radio)
 void MeshService::loop()
 {
@@ -200,9 +201,6 @@ void MeshService::loop()
         fromNumChanged.notifyObservers(fromNum);
         oldFromNum = fromNum;
     }
-
-    // occasionally send our owner info
-    sendOwnerPeriod.loop();
 }
 
 /// The radioConfig object just changed, call this to force the hw to change to the new settings
@@ -216,7 +214,8 @@ void MeshService::reloadConfig()
 
 /**
  *  Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)
- * Called by PhoneAPI.handleToRadio.  Note: p is a scratch buffer, this function is allowed to write to it but it can not keep a reference
+ * Called by PhoneAPI.handleToRadio.  Note: p is a scratch buffer, this function is allowed to write to it but it can not keep a
+ * reference
  */
 void MeshService::handleToRadio(MeshPacket &p)
 {
