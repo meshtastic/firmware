@@ -5,9 +5,10 @@
 /// We clear our old flood record five minute after we see the last of it
 #define FLOOD_EXPIRE_TIME (5 * 60 * 1000L)
 
-FloodingRouter::FloodingRouter()
+FloodingRouter::FloodingRouter() : toResend(MAX_NUM_NODES)
 {
     recentBroadcasts.reserve(MAX_NUM_NODES); // Prealloc the worst case # of records - to prevent heap fragmentation
+                                             // setup our periodic task
 }
 
 /**
@@ -21,6 +22,12 @@ ErrorCode FloodingRouter::send(MeshPacket *p)
     wasSeenRecently(p);
 
     return Router::send(p);
+}
+
+// Return a delay in msec before sending the next packet
+uint32_t getRandomDelay()
+{
+    return random(200, 10 * 1000L); // between 200ms and 10s
 }
 
 /**
@@ -38,12 +45,14 @@ void FloodingRouter::handleReceived(MeshPacket *p)
     } else {
         if (p->to == NODENUM_BROADCAST) {
             if (p->id != 0) {
-                DEBUG_MSG("Rebroadcasting received floodmsg to neighbors fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
-                // FIXME, wait a random delay
+                uint32_t delay = getRandomDelay();
+
+                DEBUG_MSG("Rebroadcasting received floodmsg to neighbors in %u msec, fr=0x%x,to=0x%x,id=%d\n", delay, p->from,
+                          p->to, p->id);
 
                 MeshPacket *tosend = packetPool.allocCopy(*p);
-                // Note: we are careful to resend using the original senders node id
-                Router::send(tosend); // We are careful not to call our hooked version of send()
+                toResend.enqueue(tosend);
+                setPeriod(delay); // This will work even if we were already waiting a random delay
             } else {
                 DEBUG_MSG("Ignoring a simple (0 hop) broadcast\n");
             }
@@ -51,6 +60,24 @@ void FloodingRouter::handleReceived(MeshPacket *p)
 
         // handle the packet as normal
         Router::handleReceived(p);
+    }
+}
+
+void FloodingRouter::doTask()
+{
+    MeshPacket *p = toResend.dequeuePtr(0);
+
+    DEBUG_MSG("Sending delayed message!\n");
+    if (p) {
+        // Note: we are careful to resend using the original senders node id
+        // We are careful not to call our hooked version of send() - because we don't want to check this again
+        Router::send(p);
+    }
+
+    if (toResend.isEmpty())
+        disable(); // no more work right now
+    else {
+        setPeriod(getRandomDelay());
     }
 }
 
