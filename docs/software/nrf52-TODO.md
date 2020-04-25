@@ -8,6 +8,7 @@ Minimum items needed to make sure hardware is good.
 - DONE get old radio driver working on NRF52
 - DONE basic test of BLE
 - DONE get a debug 'serial' console working via the ICE passthrough feature
+- switch to RadioLab? test it with current radio. https://github.com/jgromes/RadioLib
 - use "variants" to get all gpio bindings
 - plug in correct variants for the real board
 - Use the PMU driver on real hardware
