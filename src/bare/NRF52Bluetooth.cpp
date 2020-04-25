@@ -14,6 +14,7 @@ BLECharacteristic bslc = BLECharacteristic(UUID16_CHR_BODY_SENSOR_LOCATION);
 
 BLEDis bledis; // DIS (Device Information Service) helper class instance
 BLEBas blebas; // BAS (Battery Service) helper class instance
+BLEDfu bledfu; // DFU software update helper service
 
 uint8_t bps = 0;
 
@@ -171,6 +172,8 @@ void NRF52Bluetooth::setup()
     blebas.begin();
     blebas.write(42); // FIXME, report real power levels
 
+    bledfu.begin(); // Install the DFU helper
+
     // Setup the Heart Rate Monitor service using
     // BLEService and BLECharacteristic classes
     DEBUG_MSG("Configuring the Heart Rate Monitor Service\n");
@@ -203,5 +206,36 @@ void loop()
 
   // Only send update once per second
   delay(1000);
+}
+*/
+
+/*
+examples of advanced characteristics. use setReadAuthorizeCallback to prepare data for reads by others
+
+err_t BLEDfu::begin(void)
+{
+  // Invoke base class begin()
+  VERIFY_STATUS( BLEService::begin() );
+
+  // No need to keep packet & revision characteristics
+  BLECharacteristic chr_packet(UUID128_CHR_DFU_PACKET);
+  chr_packet.setTempMemory();
+  chr_packet.setProperties(CHR_PROPS_WRITE_WO_RESP);
+  chr_packet.setMaxLen(20);
+  VERIFY_STATUS( chr_packet.begin() );
+
+  _chr_control.setProperties(CHR_PROPS_WRITE | CHR_PROPS_NOTIFY);
+  _chr_control.setMaxLen(23);
+  _chr_control.setWriteAuthorizeCallback(bledfu_control_wr_authorize_cb);
+  VERIFY_STATUS( _chr_control.begin() );
+
+  BLECharacteristic chr_revision(UUID128_CHR_DFU_REVISON);
+  chr_revision.setTempMemory();
+  chr_revision.setProperties(CHR_PROPS_READ);
+  chr_revision.setFixedLen(2);
+  VERIFY_STATUS( chr_revision.begin());
+  chr_revision.write16(DFU_REV_APPMODE);
+
+  return ERROR_NONE;
 }
 */
