@@ -27,6 +27,8 @@ GPS::GPS() : PeriodicTask() {}
 
 void GPS::setup()
 {
+    PeriodicTask::setup();
+    
     readFromRTC(); // read the main CPU RTC at first
 
 #ifdef GPS_RX_PIN
@@ -115,12 +117,6 @@ void GPS::perhapsSetRTC(const struct timeval *tv)
 }
 
 #include <time.h>
-
-// for the time being we need to rapidly read from the serial port to prevent overruns
-void GPS::loop()
-{
-    PeriodicTask::loop();
-}
 
 uint32_t GPS::getTime()
 {

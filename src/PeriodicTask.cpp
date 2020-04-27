@@ -1,21 +1,39 @@
 #include "PeriodicTask.h"
 #include "Periodic.h"
+PeriodicScheduler periodicScheduler;
 
 PeriodicTask::PeriodicTask(uint32_t initialPeriod) : period(initialPeriod) {}
 
-/// call this from loop
-void PeriodicTask::loop()
+void PeriodicTask::setup()
 {
-    {
-        meshtastic::LockGuard lg(&lock);
-        uint32_t now = millis();
-        if (!period || (now - lastMsec) < period) {
-            return;
+    periodicScheduler.schedule(this);
+}
+
+/// call this from loop
+void PeriodicScheduler::loop()
+{
+    meshtastic::LockGuard lg(&lock);
+
+    uint32_t now = millis();
+    for (auto t : tasks) {
+        if (t->period && (now - t->lastMsec) >= t->period) {
+
+            t->doTask();
+            t->lastMsec = now;
         }
-        lastMsec = now;
     }
-    // Release the lock in case the task wants to change the period.
-    doTask();
+}
+
+void PeriodicScheduler::schedule(PeriodicTask *t)
+{
+    meshtastic::LockGuard lg(&lock);
+    tasks.insert(t);
+}
+
+void PeriodicScheduler::unschedule(PeriodicTask *t)
+{
+    meshtastic::LockGuard lg(&lock);
+    tasks.erase(t);
 }
 
 void Periodic::doTask()
