@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
-
+#include <assert.h>
 #include <list>
 
 template <class T> class Observable;
@@ -14,7 +14,6 @@ template <class T> class Observer
     Observable<T> *observed = NULL;
 
   public:
-
     virtual ~Observer();
 
     void observe(Observable<T> *o);

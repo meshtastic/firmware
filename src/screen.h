@@ -89,7 +89,7 @@ class DebugInfo
 class Screen : public PeriodicTask
 {
   public:
-    Screen(uint8_t address, uint8_t sda, uint8_t scl);
+    Screen(uint8_t address, int sda = -1, int scl = -1);
 
     Screen(const Screen &) = delete;
     Screen &operator=(const Screen &) = delete;

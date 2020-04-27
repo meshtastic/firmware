@@ -315,16 +315,16 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     const char *username = node->has_user ? node->user.long_name : "Unknown Name";
 
     static char signalStr[20];
-    snprintf(signalStr, sizeof(signalStr), "Signal: %d", node->snr);
+    snprintf(signalStr, sizeof(signalStr), "Signal: %ld", node->snr);
 
     uint32_t agoSecs = sinceLastSeen(node);
     static char lastStr[20];
     if (agoSecs < 120) // last 2 mins?
-        snprintf(lastStr, sizeof(lastStr), "%d seconds ago", agoSecs);
+        snprintf(lastStr, sizeof(lastStr), "%lu seconds ago", agoSecs);
     else if (agoSecs < 120 * 60) // last 2 hrs
-        snprintf(lastStr, sizeof(lastStr), "%d minutes ago", agoSecs / 60);
+        snprintf(lastStr, sizeof(lastStr), "%lu minutes ago", agoSecs / 60);
     else
-        snprintf(lastStr, sizeof(lastStr), "%d hours ago", agoSecs / 60 / 60);
+        snprintf(lastStr, sizeof(lastStr), "%lu hours ago", agoSecs / 60 / 60);
 
     static float simRadian;
     simRadian += 0.1; // For testing, have the compass spin unless both
@@ -401,7 +401,7 @@ void _screen_header()
 }
 #endif
 
-Screen::Screen(uint8_t address, uint8_t sda, uint8_t scl) : cmdQueue(32), dispdev(address, sda, scl), ui(&dispdev) {}
+Screen::Screen(uint8_t address, int sda, int scl) : cmdQueue(32), dispdev(address, sda, scl), ui(&dispdev) {}
 
 void Screen::handleSetOn(bool on)
 {
@@ -594,7 +594,7 @@ void Screen::handleStartBluetoothPinScreen(uint32_t pin)
 
     static FrameCallback btFrames[] = {drawFrameBluetooth};
 
-    snprintf(btPIN, sizeof(btPIN), "%06d", pin);
+    snprintf(btPIN, sizeof(btPIN), "%06lu", pin);
 
     ui.disableAllIndicators();
     ui.setFrames(btFrames, 1);

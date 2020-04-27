@@ -114,6 +114,11 @@ bool RH_RF95::init()
     return enableInterrupt();
 }
 
+// If on a platform without level trigger definitions, just use RISING and suck it up.
+#ifndef ONHIGH
+#define ONHIGH RISING
+#endif
+
 bool RH_RF95::enableInterrupt()
 {
     // Determine the interrupt number that corresponds to the interruptPin

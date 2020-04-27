@@ -33,6 +33,7 @@
 #include "power.h"
 // #include "rom/rtc.h"
 #include "FloodingRouter.h"
+#include "main.h"
 #include "screen.h"
 #include "sleep.h"
 #include <Wire.h>
@@ -42,22 +43,11 @@
 #include "BluetoothUtil.h"
 #endif
 
-#ifdef TBEAM_V10
-#include "axp20x.h"
-AXP20X_Class axp;
-bool pmu_irq = false;
-#endif
-
-// Global Screen singleton
-#ifdef I2C_SDA
-meshtastic::Screen screen(SSD1306_ADDRESS, I2C_SDA, I2C_SCL);
-#else
-// Fake values for pins to keep build happy, we won't ever initialize it.
-meshtastic::Screen screen(SSD1306_ADDRESS, 0, 0);
-#endif
+// We always create a screen object, but we only init it if we find the hardware
+meshtastic::Screen screen(SSD1306_ADDRESS);
 
 // Global power status singleton
-static meshtastic::PowerStatus powerStatus;
+meshtastic::PowerStatus powerStatus;
 
 bool ssd1306_found;
 bool axp192_found;
@@ -85,7 +75,7 @@ void scanI2Cdevice(void)
                 ssd1306_found = true;
                 DEBUG_MSG("ssd1306 display found\n");
             }
-#ifdef TBEAM_V10
+#ifdef AXP192_SLAVE_ADDRESS
             if (addr == AXP192_SLAVE_ADDRESS) {
                 axp192_found = true;
                 DEBUG_MSG("axp192 PMU found\n");
@@ -99,117 +89,6 @@ void scanI2Cdevice(void)
         DEBUG_MSG("No I2C devices found\n");
     else
         DEBUG_MSG("done\n");
-}
-
-#ifdef TBEAM_V10
-/// Reads power status to powerStatus singleton.
-//
-// TODO(girts): move this and other axp stuff to power.h/power.cpp.
-void readPowerStatus()
-{
-    powerStatus.haveBattery = axp.isBatteryConnect();
-    if (powerStatus.haveBattery) {
-        powerStatus.batteryVoltageMv = axp.getBattVoltage();
-    }
-    powerStatus.usb = axp.isVBUSPlug();
-    powerStatus.charging = axp.isChargeing();
-}
-#endif // TBEAM_V10
-
-/**
- * Init the power manager chip
- *
- * axp192 power
-    DCDC1 0.7-3.5V @ 1200mA max -> OLED // If you turn this off you'll lose comms to the axp192 because the OLED and the axp192
- share the same i2c bus, instead use ssd1306 sleep mode DCDC2 -> unused DCDC3 0.7-3.5V @ 700mA max -> ESP32 (keep this on!) LDO1
- 30mA -> charges GPS backup battery // charges the tiny J13 battery by the GPS to power the GPS ram (for a couple of days), can
- not be turned off LDO2 200mA -> LORA LDO3 200mA -> GPS
- */
-void axp192Init()
-{
-#ifdef TBEAM_V10
-    if (axp192_found) {
-        if (!axp.begin(Wire, AXP192_SLAVE_ADDRESS)) {
-            DEBUG_MSG("AXP192 Begin PASS\n");
-
-            // axp.setChgLEDMode(LED_BLINK_4HZ);
-            DEBUG_MSG("DCDC1: %s\n", axp.isDCDC1Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("DCDC2: %s\n", axp.isDCDC2Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("LDO2: %s\n", axp.isLDO2Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("LDO3: %s\n", axp.isLDO3Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("DCDC3: %s\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("----------------------------------------\n");
-
-            axp.setPowerOutPut(AXP192_LDO2, AXP202_ON); // LORA radio
-            axp.setPowerOutPut(AXP192_LDO3, AXP202_ON); // GPS main power
-            axp.setPowerOutPut(AXP192_DCDC2, AXP202_ON);
-            axp.setPowerOutPut(AXP192_EXTEN, AXP202_ON);
-            axp.setPowerOutPut(AXP192_DCDC1, AXP202_ON);
-            axp.setDCDC1Voltage(3300); // for the OLED power
-
-            DEBUG_MSG("DCDC1: %s\n", axp.isDCDC1Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("DCDC2: %s\n", axp.isDCDC2Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("LDO2: %s\n", axp.isLDO2Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("LDO3: %s\n", axp.isLDO3Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("DCDC3: %s\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
-
-#if 0
-      // cribbing from https://github.com/m5stack/M5StickC/blob/master/src/AXP192.cpp to fix charger to be more like 300ms.  
-      // I finally found an english datasheet.  Will look at this later - but suffice it to say the default code from TTGO has 'issues'
-
-      axp.adc1Enable(0xff, 1); // turn on all adcs
-      uint8_t val = 0xc2;
-      axp._writeByte(0x33, 1, &val); // Bat charge voltage to 4.2, Current 280mA
-      val = 0b11110010;
-      // Set ADC sample rate to 200hz
-      // axp._writeByte(0x84, 1, &val);
-
-      // Not connected
-      //val = 0xfc;
-      //axp._writeByte(AXP202_VHTF_CHGSET, 1, &val); // Set temperature protection
-
-      //not used
-      //val = 0x46;
-      //axp._writeByte(AXP202_OFF_CTL, 1, &val); // enable bat detection
-#endif
-            axp.debugCharging();
-
-#ifdef PMU_IRQ
-            pinMode(PMU_IRQ, INPUT);
-            attachInterrupt(
-                PMU_IRQ, [] { pmu_irq = true; }, FALLING);
-
-            axp.adc1Enable(AXP202_BATT_CUR_ADC1, 1);
-            axp.enableIRQ(AXP202_BATT_REMOVED_IRQ | AXP202_BATT_CONNECT_IRQ | AXP202_CHARGING_FINISHED_IRQ | AXP202_CHARGING_IRQ |
-                              AXP202_VBUS_REMOVED_IRQ | AXP202_VBUS_CONNECT_IRQ | AXP202_PEK_SHORTPRESS_IRQ,
-                          1);
-
-            axp.clearIRQ();
-#endif
-            readPowerStatus();
-        } else {
-            DEBUG_MSG("AXP192 Begin FAIL\n");
-        }
-    } else {
-        DEBUG_MSG("AXP192 not found\n");
-    }
-#endif
-}
-
-void getMacAddr(uint8_t *dmac)
-{
-#ifndef NO_ESP32
-    assert(esp_efuse_mac_get_default(dmac) == ESP_OK);
-#else
-    dmac[0] = 0xde;
-    dmac[1] = 0xad;
-    dmac[2] = 0xbe;
-    dmac[3] = 0xef;
-    dmac[4] = 0x01;
-    dmac[5] = 0x02; // FIXME, macaddr stuff needed for NRF52
-#endif
 }
 
 const char *getDeviceName()
@@ -241,6 +120,10 @@ Periodic ledPeriodic(ledBlinker);
 
 void setup()
 {
+#ifdef USE_SEGGER
+    SEGGER_RTT_ConfigUpBuffer(0, NULL, NULL, 0, SEGGER_RTT_MODE_NO_BLOCK_TRIM);
+#endif
+
 // Debug
 #ifdef DEBUG_PORT
     DEBUG_PORT.begin(SERIAL_BAUD);
@@ -260,8 +143,10 @@ void setup()
 
 #ifdef I2C_SDA
     Wire.begin(I2C_SDA, I2C_SCL);
-    scanI2Cdevice();
+#else
+    Wire.begin();
 #endif
+    scanI2Cdevice();
 
     // Buttons & LED
 #ifdef BUTTON_PIN
@@ -282,13 +167,17 @@ void setup()
     // Don't init display if we don't have one or we are waking headless due to a timer event
     if (wakeCause == ESP_SLEEP_WAKEUP_TIMER)
         ssd1306_found = false; // forget we even have the hardware
+
+    esp32Setup();
+#endif
+
+#ifdef NRF52_SERIES
+    nrf52Setup();
 #endif
 
     // Initialize the screen first so we can show the logo while we start up everything else.
     if (ssd1306_found)
         screen.setup();
-
-    axp192Init();
 
     screen.print("Started...\n");
 
@@ -299,11 +188,9 @@ void setup()
 
     realRouter.setup(); // required for our periodic task (kinda skanky FIXME)
 
-#ifndef NO_ESP32
     // MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
     radio = new MeshRadio();
     router.addInterface(&radio->radioIf);
-#endif
 
     if (radio && !radio->init())
         recordCriticalError(ErrNoRadio);
@@ -348,45 +235,8 @@ void loop()
     // axpDebugOutput.loop();
 
 #ifndef NO_ESP32
-    loopBLE();
+    esp32Loop();
 #endif
-
-    // for debug printing
-    // radio.radioIf.canSleep();
-
-#ifdef PMU_IRQ
-    if (pmu_irq) {
-        pmu_irq = false;
-        axp.readIRQ();
-
-        DEBUG_MSG("pmu irq!\n");
-
-        if (axp.isChargingIRQ()) {
-            DEBUG_MSG("Battery start charging\n");
-        }
-        if (axp.isChargingDoneIRQ()) {
-            DEBUG_MSG("Battery fully charged\n");
-        }
-        if (axp.isVbusRemoveIRQ()) {
-            DEBUG_MSG("USB unplugged\n");
-        }
-        if (axp.isVbusPlugInIRQ()) {
-            DEBUG_MSG("USB plugged In\n");
-        }
-        if (axp.isBattPlugInIRQ()) {
-            DEBUG_MSG("Battery inserted\n");
-        }
-        if (axp.isBattRemoveIRQ()) {
-            DEBUG_MSG("Battery removed\n");
-        }
-        if (axp.isPEKShortPressIRQ()) {
-            DEBUG_MSG("PEK short button press\n");
-        }
-
-        readPowerStatus();
-        axp.clearIRQ();
-    }
-#endif // T_BEAM_V10
 
 #ifdef BUTTON_PIN
     // if user presses button for more than 3 secs, discard our network prefs and reboot (FIXME, use a debounce lib instead of
