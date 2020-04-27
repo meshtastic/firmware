@@ -16,3 +16,5 @@ struct PowerStatus {
 };
 
 } // namespace meshtastic
+
+extern meshtastic::PowerStatus powerStatus;

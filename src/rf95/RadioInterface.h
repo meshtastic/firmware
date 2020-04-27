@@ -40,6 +40,16 @@ class RadioInterface
     virtual void loop() {} // Idle processing
 
     /**
+     * Return true if we think the board can go to sleep (i.e. our tx queue is empty, we are not sending or receiving)
+     *
+     * This method must be used before putting the CPU into deep or light sleep.
+     */
+    bool canSleep() { return true; }
+
+    /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.
+    virtual bool sleep() { return true; }
+
+    /**
      * Send a packet (possibly by enquing in a private fifo).  This routine will
      * later free() the packet to pool.  This routine is not allowed to stall.
      * If the txmit queue is full it might return an error

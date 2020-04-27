@@ -51,9 +51,13 @@ void Router::loop()
  */
 ErrorCode Router::send(MeshPacket *p)
 {
-    assert(iface);
-    DEBUG_MSG("Sending packet via interface fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
-    return iface->send(p);
+    if (iface) {
+        DEBUG_MSG("Sending packet via interface fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+        return iface->send(p);
+    } else {
+        DEBUG_MSG("Dropping packet - no interfaces - fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+        return ERRNO_NO_INTERFACES;
+    }
 }
 
 #include "GPS.h"

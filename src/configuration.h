@@ -46,23 +46,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //#define USE_JTAG
 #endif
 
-#define DEBUG_PORT Serial  // Serial debug port
-#define SERIAL_BAUD 921600 // Serial debug baud rate
-
 #define REQUIRE_RADIO true // If true, we will fail to start if the radio is not found
 
 #define xstr(s) str(s)
 #define str(s) #s
-
-// -----------------------------------------------------------------------------
-// DEBUG
-// -----------------------------------------------------------------------------
-
-#ifdef DEBUG_PORT
-#define DEBUG_MSG(...) DEBUG_PORT.printf(__VA_ARGS__)
-#else
-#define DEBUG_MSG(...)
-#endif
 
 // -----------------------------------------------------------------------------
 // OLED
@@ -121,6 +108,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // Leave undefined to disable our PMU IRQ handler
 #define PMU_IRQ 35
+
+#define AXP192_SLAVE_ADDRESS 0x34
 
 #elif defined(TBEAM_V07)
 // This string must exactly match the case used in release file names or the android updater won't work
@@ -199,17 +188,21 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
     0 // If defined, this will be used for user button presses, if your board doesn't have a physical switch, you can wire one
 // between this pin and ground
 
-#define RESET_GPIO 14    // If defined, this pin will be used to reset the LORA radio
-#define RF95_IRQ_GPIO 26 // IRQ line for the LORA radio
-#define DIO1_GPIO 35     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
-#define DIO2_GPIO 34     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
-#elif defined(BARE_BOARD)
+#define RESET_GPIO 14        // If defined, this pin will be used to reset the LORA radio
+#define RF95_IRQ_GPIO 26     // IRQ line for the LORA radio
+#define DIO1_GPIO 35         // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
+#define DIO2_GPIO 34         // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
+#elif defined(NRF52840_XXAA) // All of the NRF52 targets are configured using variant.h, so this section shouldn't need to be
+                             // board specific
+
+// FIXME, use variant.h defs for all of this!!!
+
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "bare"
+#define HW_VENDOR "nrf52"
 
 #define NO_ESP32 // Don't use ESP32 libs (mainly bluetooth)
 
-// Turn off GPS code for now
+// We bind to the GPS using variant.h instead for this platform (Serial1)
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 
@@ -223,12 +216,39 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #undef LED_INVERTED
 #define LED_INVERTED 1
 
+// Temporarily testing if we can build the RF95 driver for NRF52
+#define RESET_GPIO 14    // If defined, this pin will be used to reset the LORA radio
+#define RF95_IRQ_GPIO 26 // IRQ line for the LORA radio
+#define DIO1_GPIO 35     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
+#define DIO2_GPIO 34     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
+
+#endif
+
+// -----------------------------------------------------------------------------
+// DEBUG
+// -----------------------------------------------------------------------------
+
+#define SERIAL_BAUD 921600 // Serial debug baud rate
+
+#ifdef NO_ESP32
+#define USE_SEGGER
+#endif
+#ifdef USE_SEGGER
+#include "SEGGER_RTT.h"
+#define DEBUG_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
+#else
+#define DEBUG_PORT Serial // Serial debug port
+
+#ifdef DEBUG_PORT
+#define DEBUG_MSG(...) DEBUG_PORT.printf(__VA_ARGS__)
+#else
+#define DEBUG_MSG(...)
+#endif
 #endif
 
 // -----------------------------------------------------------------------------
 // AXP192 (Rev1-specific options)
 // -----------------------------------------------------------------------------
 
-// #define AXP192_SLAVE_ADDRESS  0x34 // Now defined in axp20x.h
 #define GPS_POWER_CTRL_CH 3
 #define LORA_POWER_CTRL_CH 2
