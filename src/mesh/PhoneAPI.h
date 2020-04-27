@@ -5,6 +5,9 @@
 #include "mesh.pb.h"
 #include <string>
 
+// Make sure that we never let our packets grow too large for one BLE packet
+#define MAX_TO_FROM_RADIO_SIZE 512
+
 /**
  * Provides our protobuf based API which phone/PC clients can use to talk to our device
  * over UDP, bluetooth or serial.
