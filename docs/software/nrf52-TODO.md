@@ -72,7 +72,22 @@ Nice ideas worth considering someday...
 - stop enumerating all i2c devices at boot, it wastes power & time
 - consider using "SYSTEMOFF" deep sleep mode, without RAM retension. Only useful for 'truly off - wake only by button press' only saves 1.5uA vs SYSTEMON. (SYSTEMON only costs 1.5uA). Possibly put PMU into shipping mode?
 
+## Old unorganized notes
+
+## Notes on PCA10059 Dongle
+
+- docs: https://infocenter.nordicsemi.com/pdf/nRF52840_Dongle_User_Guide_v1.0.pdf
+
+- Currently using Nordic PCA10059 Dongle hardware
+- https://community.platformio.org/t/same-bootloader-same-softdevice-different-board-different-pins/11411/9
+
+## Done
+
+- DONE add "DFU trigger library" to application load
+- DONE: using this: Possibly use this bootloader? https://github.com/adafruit/Adafruit_nRF52_Bootloader
+
 ```
+
 /*
 per
 https://docs.platformio.org/en/latest/tutorials/nordicnrf52/arduino_debugging_unit_testing.html
