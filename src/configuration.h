@@ -237,7 +237,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "SEGGER_RTT.h"
 #define DEBUG_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
 #else
-#define DEBUG_PORT Serial // Serial debug port
+#include "SerialConsole.h"
+
+#define DEBUG_PORT console // Serial debug port
 
 #ifdef DEBUG_PORT
 #define DEBUG_MSG(...) DEBUG_PORT.printf(__VA_ARGS__)

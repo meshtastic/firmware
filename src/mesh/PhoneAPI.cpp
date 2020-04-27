@@ -5,9 +5,8 @@
 
 PhoneAPI::PhoneAPI()
 {
-    // Make sure that we never let our packets grow too large for one BLE packet
-    assert(FromRadio_size <= 512);
-    assert(ToRadio_size <= 512);
+    assert(FromRadio_size <= MAX_TO_FROM_RADIO_SIZE);
+    assert(ToRadio_size <= MAX_TO_FROM_RADIO_SIZE);
 }
 
 void PhoneAPI::init()
