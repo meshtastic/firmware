@@ -27,6 +27,7 @@
 #include "NodeDB.h"
 #include "Periodic.h"
 #include "PowerFSM.h"
+#include "Router.h"
 #include "configuration.h"
 #include "error.h"
 #include "power.h"
@@ -104,7 +105,18 @@ const char *getDeviceName()
 
 static MeshRadio *radio = NULL;
 
-#include "Router.h"
+static uint32_t ledBlinker()
+{
+    static bool ledOn;
+    ledOn ^= 1;
+
+    setLed(ledOn);
+
+    // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
+    return powerStatus.charging ? 1000 : (ledOn ? 2 : 1000);
+}
+
+Periodic ledPeriodic(ledBlinker);
 
 void setup()
 {
@@ -146,6 +158,8 @@ void setup()
     digitalWrite(LED_PIN, 1 ^ LED_INVERTED); // turn on for now
 #endif
 
+    ledPeriodic.setup();
+
     // Hello
     DEBUG_MSG("Meshtastic swver=%s, hwver=%s\n", xstr(APP_VERSION), xstr(HW_VERSION));
 
@@ -172,6 +186,8 @@ void setup()
 
     service.init();
 
+    realRouter.setup(); // required for our periodic task (kinda skanky FIXME)
+
     // MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
     radio = new MeshRadio();
     router.addInterface(&radio->radioIf);
@@ -186,29 +202,36 @@ void setup()
     setCPUFast(false); // 80MHz is fine for our slow peripherals
 }
 
-uint32_t ledBlinker()
+#if 0
+// Turn off for now
+
+uint32_t axpDebugRead()
 {
-    static bool ledOn;
-    ledOn ^= 1;
+  axp.debugCharging();
+  DEBUG_MSG("vbus current %f\n", axp.getVbusCurrent());
+  DEBUG_MSG("charge current %f\n", axp.getBattChargeCurrent());
+  DEBUG_MSG("bat voltage %f\n", axp.getBattVoltage());
+  DEBUG_MSG("batt pct %d\n", axp.getBattPercentage());
+  DEBUG_MSG("is battery connected %d\n", axp.isBatteryConnect());
+  DEBUG_MSG("is USB connected %d\n", axp.isVBUSPlug());
+  DEBUG_MSG("is charging %d\n", axp.isChargeing());
 
-    setLed(ledOn);
-
-    // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
-    return powerStatus.charging ? 1000 : (ledOn ? 2 : 1000);
+  return 30 * 1000;
 }
 
-Periodic ledPeriodic(ledBlinker);
+Periodic axpDebugOutput(axpDebugRead);
+axpDebugOutput.setup();
+#endif
 
 void loop()
 {
     uint32_t msecstosleep = 1000 * 30; // How long can we sleep before we again need to service the main loop?
 
-    gps.loop();
     router.loop();
     powerFSM.run_machine();
     service.loop();
 
-    ledPeriodic.loop();
+    periodicScheduler.loop();
     // axpDebugOutput.loop();
 
 #ifndef NO_ESP32
@@ -249,7 +272,6 @@ void loop()
     screen.debug()->setPowerStatus(powerStatus);
     // TODO(#4): use something based on hdop to show GPS "signal" strength.
     screen.debug()->setGPSStatus(gps.hasLock() ? "ok" : ":(");
-    screen.loop();
 
     // No GPS lock yet, let the OS put the main CPU in low power mode for 100ms (or until another interrupt comes in)
     // i.e. don't just keep spinning in loop as fast as we can.

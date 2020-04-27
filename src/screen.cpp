@@ -384,7 +384,6 @@ void _screen_header()
     if (!disp)
         return;
 
-
     // Message count
     //snprintf(buffer, sizeof(buffer), "#%03d", ttn_get_count() % 1000);
     //display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -423,6 +422,8 @@ void Screen::handleSetOn(bool on)
 
 void Screen::setup()
 {
+    PeriodicTask::setup();
+
     // We don't set useDisplay until setup() is called, because some boards have a declaration of this object but the device
     // is never found when probing i2c and therefore we don't call setup and never want to do (invalid) accesses to this device.
     useDisplay = true;
