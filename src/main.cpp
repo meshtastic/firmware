@@ -126,7 +126,7 @@ void setup()
 
 // Debug
 #ifdef DEBUG_PORT
-    DEBUG_PORT.begin(SERIAL_BAUD);
+    DEBUG_PORT.init(); // Set serial baud rate and init our mesh console
 #endif
 
     initDeepSleep();
@@ -233,6 +233,10 @@ void loop()
 
     periodicScheduler.loop();
     // axpDebugOutput.loop();
+
+#ifdef DEBUG_PORT
+    DEBUG_PORT.loop(); // Send/receive protobufs over the serial port
+#endif
 
 #ifndef NO_ESP32
     esp32Loop();

@@ -12,9 +12,8 @@
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug",
-            "executable": "/home/kevinh/development/meshtastic/meshtastic-esp32/.pio/build/nrf52dk/firmware.elf",
-            "toolchainBinDir": "/home/kevinh/.platformio/packages/toolchain-gccarmnoneeabi/bin",
-            "svdPath": "/home/kevinh/.platformio/platforms/nordicnrf52/misc/svd/nrf52840.svd",
+            "executable": "/home/kevinh/development/meshtastic/meshtastic-esp32/.pio/build/tbeam/firmware.elf",
+            "toolchainBinDir": "/home/kevinh/.platformio/packages/toolchain-xtensa32/bin",
             "preLaunchTask": {
                 "type": "PlatformIO",
                 "task": "Pre-Debug"
@@ -25,9 +24,8 @@
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug (skip Pre-Debug)",
-            "executable": "/home/kevinh/development/meshtastic/meshtastic-esp32/.pio/build/nrf52dk/firmware.elf",
-            "toolchainBinDir": "/home/kevinh/.platformio/packages/toolchain-gccarmnoneeabi/bin",
-            "svdPath": "/home/kevinh/.platformio/platforms/nordicnrf52/misc/svd/nrf52840.svd",
+            "executable": "/home/kevinh/development/meshtastic/meshtastic-esp32/.pio/build/tbeam/firmware.elf",
+            "toolchainBinDir": "/home/kevinh/.platformio/packages/toolchain-xtensa32/bin",
             "internalConsoleOptions": "openOnSessionStart"
         }
     ]
