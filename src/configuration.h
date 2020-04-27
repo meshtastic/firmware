@@ -188,13 +188,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
     0 // If defined, this will be used for user button presses, if your board doesn't have a physical switch, you can wire one
 // between this pin and ground
 
-#define RESET_GPIO 14    // If defined, this pin will be used to reset the LORA radio
-#define RF95_IRQ_GPIO 26 // IRQ line for the LORA radio
-#define DIO1_GPIO 35     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
-#define DIO2_GPIO 34     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
-#elif defined(BARE_BOARD)
+#define RESET_GPIO 14        // If defined, this pin will be used to reset the LORA radio
+#define RF95_IRQ_GPIO 26     // IRQ line for the LORA radio
+#define DIO1_GPIO 35         // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
+#define DIO2_GPIO 34         // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
+#elif defined(NRF52840_XXAA) // All of the NRF52 targets are configured using variant.h, so this section shouldn't need to be
+                             // board specific
+
+// FIXME, use variant.h defs for all of this!!!
+
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "bare"
+#define HW_VENDOR "nrf52"
 
 #define NO_ESP32 // Don't use ESP32 libs (mainly bluetooth)
 
@@ -233,7 +237,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "SEGGER_RTT.h"
 #define DEBUG_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
 #else
-#define DEBUG_PORT Serial  // Serial debug port
+#define DEBUG_PORT Serial // Serial debug port
 
 #ifdef DEBUG_PORT
 #define DEBUG_MSG(...) DEBUG_PORT.printf(__VA_ARGS__)
