@@ -3,7 +3,6 @@
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "Periodic.h"
 #include "configuration.h"
 #include "error.h"
 

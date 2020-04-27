@@ -29,7 +29,6 @@ class GPS : public PeriodicTask, public Observable<void *>
 
     void setup();
 
-    virtual void loop();
 
     virtual void doTask();
 

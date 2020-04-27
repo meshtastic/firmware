@@ -1,5 +1,6 @@
 #pragma once
 
+#include "PeriodicTask.h"
 #include "Router.h"
 #include <vector>
 
@@ -35,10 +36,18 @@ struct BroadcastRecord {
   Any entries in recentBroadcasts that are older than X seconds (longer than the
   max time a flood can take) will be discarded.
  */
-class FloodingRouter : public Router
+class FloodingRouter : public Router, public PeriodicTask
 {
   private:
+    /** FIXME: really should be a std::unordered_set with the key being sender,id.
+     * This would make checking packets in wasSeenRecently faster.
+     */
     std::vector<BroadcastRecord> recentBroadcasts;
+
+    /**
+     * Packets we've received that we need to resend after a short delay
+     */
+    PointerQueue<MeshPacket> toResend;
 
   public:
     /**
@@ -63,6 +72,8 @@ class FloodingRouter : public Router
      * Note: this method will free the provided packet
      */
     virtual void handleReceived(MeshPacket *p);
+
+    virtual void doTask();
 
   private:
     /**
