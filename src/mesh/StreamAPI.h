@@ -37,15 +37,26 @@ class StreamAPI : public PhoneAPI
     uint8_t rxBuf[MAX_STREAM_BUF_SIZE];
     size_t rxPtr = 0;
 
+    uint8_t txBuf[MAX_STREAM_BUF_SIZE];
+
   public:
     StreamAPI(Stream *_stream) : stream(_stream) {}
 
     /**
-     * Currently we require frequent invocation from loop() to check for arrived serial packets.
+     * Currently we require frequent invocation from loop() to check for arrived serial packets and to send new packets to the
+     * phone.
      * FIXME, to support better power behavior instead move to a thread and block on serial reads.
      */
     void loop();
 
   private:
+    /**
+     * Read any rx chars from the link and call handleToRadio
+     */
     void readStream();
+
+    /**
+     * call getFromRadio() and deliver encapsulated packets to the Stream
+     */
+    void writeStream();
 };
