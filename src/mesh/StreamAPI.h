@@ -59,4 +59,8 @@ class StreamAPI : public PhoneAPI
      * call getFromRadio() and deliver encapsulated packets to the Stream
      */
     void writeStream();
+
+  protected:
+    /// Are we allowed to write packets to our output stream (subclasses can turn this off - i.e. SerialConsole)
+    bool canWrite = true;
 };

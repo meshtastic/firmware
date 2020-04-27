@@ -57,12 +57,12 @@ class PhoneAPI
     PhoneAPI();
 
     /// Do late init that can't happen at constructor time
-    void init();
+    virtual void init();
 
     /**
      * Handle a ToRadio protobuf
      */
-    void handleToRadio(const uint8_t *buf, size_t len);
+    virtual void handleToRadio(const uint8_t *buf, size_t len);
 
     /**
      * Get the next packet we want to send to the phone
