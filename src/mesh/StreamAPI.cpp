@@ -52,18 +52,19 @@ void StreamAPI::readStream()
  */
 void StreamAPI::writeStream()
 {
-    uint32_t len;
+    if (canWrite) {
+        uint32_t len;
+        do {
+            // Send every packet we can
+            len = getFromRadio(txBuf + HEADER_LEN);
+            if (len != 0) {
+                txBuf[0] = START1;
+                txBuf[1] = START2;
+                txBuf[2] = (len >> 8) & 0xff;
+                txBuf[3] = len & 0xff;
 
-    do {
-        // Send every packet we can
-        len = getFromRadio(txBuf + HEADER_LEN);
-        if (len != 0) {
-            txBuf[0] = START1;
-            txBuf[1] = START2;
-            txBuf[2] = (len >> 8) & 0xff;
-            txBuf[3] = len & 0xff;
-
-            stream->write(txBuf, len + HEADER_LEN);
-        }
-    } while (len);
+                stream->write(txBuf, len + HEADER_LEN);
+            }
+        } while (len);
+    }
 }
