@@ -46,11 +46,11 @@ Note: Updates are happening almost daily, only major updates are listed below. F
 
 ## Meshtastic Android app
 
-Once out of alpha the companion Android application will be released here:
+Our Android application is available here:
 
 [![Download at https://play.google.com/store/apps/details?id=com.geeksville.mesh](https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png)](https://play.google.com/store/apps/details?id=com.geeksville.mesh&referrer=utm_source%3Dhomepage%26anid%3Dadmob)
 
-But if you want the bleeding edge app now, we'd love to have your help testing. Three steps to opt-in to the alpha- test:
+The link above will return older more stable releases. We would prefer if you join our alpha-test group, because the application is rapidly improving. Three steps to opt-in to the alpha- test:
 
 1. Join [this Google group](https://groups.google.com/forum/#!forum/meshtastic-alpha-testers) with the account you use in Google Play.
 2. Go to this [URL](https://play.google.com/apps/testing/com.geeksville.mesh) to opt-in to the alpha test.
