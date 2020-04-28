@@ -39,9 +39,10 @@ void StreamAPI::readStream()
                     rxPtr = 0; // length is bogus, restart search for framing
             }
 
-            if (rxPtr != 0 && ptr == len + HEADER_LEN) {
+            if (rxPtr != 0 && ptr + 1 == len + HEADER_LEN) {
                 // If we didn't just fail the packet and we now have the right # of bytes, parse it
                 handleToRadio(rxBuf + HEADER_LEN, len);
+                rxPtr = 0; // start over again
             }
         }
     }
