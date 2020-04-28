@@ -19,7 +19,7 @@ typedef enum _Constants {
 } Constants;
 
 typedef enum _Data_Type {
-    Data_Type_SIGNAL_OPAQUE = 0,
+    Data_Type_OPAQUE = 0,
     Data_Type_CLEAR_TEXT = 1,
     Data_Type_CLEAR_READACK = 2
 } Data_Type;
@@ -178,7 +178,7 @@ typedef struct _ToRadio {
 #define _Constants_MAX Constants_Unused
 #define _Constants_ARRAYSIZE ((Constants)(Constants_Unused+1))
 
-#define _Data_Type_MIN Data_Type_SIGNAL_OPAQUE
+#define _Data_Type_MIN Data_Type_OPAQUE
 #define _Data_Type_MAX Data_Type_CLEAR_READACK
 #define _Data_Type_ARRAYSIZE ((Data_Type)(Data_Type_CLEAR_READACK+1))
 
