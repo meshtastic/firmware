@@ -2,7 +2,7 @@
 #include <configuration.h>
 
 // FIXME, we default to 4MHz SPI, SPI mode 0, check if the datasheet says it can really do that
-static SPISettings spiSettings;
+static SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 
 RadioLibInterface::RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy,
                                      SPIClass &spi)
@@ -23,7 +23,10 @@ bool RadioLibInterface::init()
     // FIXME, move this to main
     SPI.begin();
 
-    int res = lora.begin();
+    float tcxoVoltage = 0;        // None - we use an XTAL
+    bool useRegulatorLDO = false; // Seems to depend on the connection to pin 9/DCC_SW - if an inductor DCDC?
+
+    int res = lora.begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength, tcxoVoltage, useRegulatorLDO);
     DEBUG_MSG("LORA init result %d\n", res);
 
     return res == ERR_NONE;
@@ -36,42 +39,6 @@ bool RadioLibInterface::init()
 // include the library
 
 
-// SX1262 has the following connections:
-// NSS pin:   10
-// DIO1 pin:  2
-// NRST pin:  3
-// BUSY pin:  9
-SX1262 lora = new Module(10, 2, 3, 9);
-
-// or using RadioShield
-// https://github.com/jgromes/RadioShield
-//SX1262 lora = RadioShield.ModuleA;
-
-void setup() {
-  Serial.begin(9600);
-
-  // initialize SX1262 with default settings
-  Serial.print(F("[SX1262] Initializing ... "));
-  // carrier frequency:           434.0 MHz
-  // bandwidth:                   125.0 kHz
-  // spreading factor:            9
-  // coding rate:                 7
-  // sync word:                   0x12 (private network)
-  // output power:                14 dBm
-  // current limit:               60 mA
-  // preamble length:             8 symbols
-  // TCXO voltage:                1.6 V (set to 0 to not use TCXO)
-  // regulator:                   DC-DC (set to true to use LDO)
-  // CRC:                         enabled
-  int state = lora.begin();
-  if (state == ERR_NONE) {
-    Serial.println(F("success!"));
-  } else {
-    Serial.print(F("failed, code "));
-    Serial.println(state);
-    while (true);
-  }
-}
 
 void loop() {
   Serial.print(F("[SX1262] Transmitting packet ... "));

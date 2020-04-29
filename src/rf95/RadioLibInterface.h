@@ -79,4 +79,14 @@ class RadioLibInterface : public RadioInterface
     /// \param[in] useRFO If true, enables the use of the RFO transmitter pins instead of
     /// the PA_BOOST pin (false). Choose the correct setting for your module.
     void setTxPower(int8_t power, bool useRFO = false) {}
+
+  private:
+    float freq = 915.0; // FIXME, init all these params from suer setings
+    float bw = 125;
+    uint8_t sf = 9;
+    uint8_t cr = 7;
+    uint8_t syncWord = 0; // FIXME, use a meshtastic sync word, but hashed with the Channel name
+    int8_t power = 17;
+    float currentLimit = 100; // FIXME
+    uint16_t preambleLength = 8;
 };
