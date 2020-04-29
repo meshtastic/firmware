@@ -5,31 +5,14 @@
 static SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 
 RadioLibInterface::RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy,
-                                     SPIClass &spi)
-    : module(cs, irq, rst, busy, spi, spiSettings), lora(&module)
+                                     SPIClass &spi, PhysicalLayer *_iface)
+    : module(cs, irq, rst, busy, spi, spiSettings), iface(*_iface)
 {
 }
 
 ErrorCode RadioLibInterface::send(MeshPacket *p)
 {
     return ERR_NONE;
-}
-
-/// Initialise the Driver transport hardware and software.
-/// Make sure the Driver is properly configured before calling init().
-/// \return true if initialisation succeeded.
-bool RadioLibInterface::init()
-{
-    // FIXME, move this to main
-    SPI.begin();
-
-    float tcxoVoltage = 0;        // None - we use an XTAL
-    bool useRegulatorLDO = false; // Seems to depend on the connection to pin 9/DCC_SW - if an inductor DCDC?
-
-    int res = lora.begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength, tcxoVoltage, useRegulatorLDO);
-    DEBUG_MSG("LORA init result %d\n", res);
-
-    return res == ERR_NONE;
 }
 
 /**
