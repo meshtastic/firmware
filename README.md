@@ -1,4 +1,4 @@
-# Meshtastic-esp32
+# Meshtastic-device
 
 This is the device side code for the [meshtastic.org](https://www.meshtastic.org) project.
 
@@ -35,8 +35,8 @@ Please post comments on our [group chat](https://meshtastic.discourse.group/) if
 1. Download and unzip the latest Meshtastic firmware [release](https://github.com/meshtastic/Meshtastic-esp32/releases).
 2. Download [ESPHome Flasher](https://github.com/esphome/esphome-flasher/releases) (either x86-32bit Windows or x64-64 bit Windows).
 3. Connect your radio to your USB port and open ESPHome Flasher.
-4. If your board is not showing under Serial Port then you likely need to install the drivers for the CP210X serial chip. In Windows you can check by searching “Device Manager” and ensuring the device is shown under “Ports”. 
-5. If there is an error, download the drivers [here](https://www.silabs.com/products/development-tools/software/usb-to-uart-bridge-vcp-drivers), then unzip and run the Installer application. 
+4. If your board is not showing under Serial Port then you likely need to install the drivers for the CP210X serial chip. In Windows you can check by searching “Device Manager” and ensuring the device is shown under “Ports”.
+5. If there is an error, download the drivers [here](https://www.silabs.com/products/development-tools/software/usb-to-uart-bridge-vcp-drivers), then unzip and run the Installer application.
 6. In ESPHome Flasher, refresh the serial ports and select your board.
 7. Browse to the previously downloaded firmware and select the correct firmware based on the board type, country and frequency.
 8. Select Flash ESP.
