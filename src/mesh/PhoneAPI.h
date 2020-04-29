@@ -45,9 +45,6 @@ class PhoneAPI
     /// We temporarily keep the nodeInfo here between the call to available and getFromRadio
     const NodeInfo *nodeInfoForPhone = NULL;
 
-    /// Our fromradio packet while it is being assembled
-    FromRadio fromRadioScratch;
-
     ToRadio toRadioScratch; // this is a static scratch object, any data must be copied elsewhere before returning
 
     /// Use to ensure that clients don't get confused about old messages from the radio
@@ -85,6 +82,9 @@ class PhoneAPI
     void handleSetRadio(const RadioConfig &r);
 
   protected:
+    /// Our fromradio packet while it is being assembled
+    FromRadio fromRadioScratch;
+
     /**
      * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
      */
