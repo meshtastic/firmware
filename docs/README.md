@@ -13,6 +13,7 @@ Note: Questions after reading this? See our new [forum](https://meshtastic.disco
 - Applications where closed source GPS communicators just won't cut it (it is easy to add features for glider pilots etc...)
 - Secure long-range communication within groups without depending on cellular providers
 - Finding your lost kids ;-)
+- Through our [python API](https://pypi.org/project/meshtastic/) use these inexpensive radios to easily add mesh networking to your own projects.
 
 [![Youtube video demo](desk-video-screenshot.png)](https://www.youtube.com/watch?v=WlNbMbVZlHI "Meshtastic early demo")
 
@@ -38,6 +39,7 @@ This software is 100% open source and developed by a group of hobbyist experimen
 
 Note: Updates are happening almost daily, only major updates are listed below. For more details see our forum.
 
+- 04/28/2020 - 0.6.0 [Python API](https://pypi.org/project/meshtastic/) released. Makes it easy to use meshtastic devices as "zero config / just works" mesh transport adapters for other projects.
 - 04/20/2020 - 0.4.3 Pretty solid now both for the android app and the device code. Many people have donated translations and code. Probably going to call it a beta soon.
 - 03/03/2020 - 0.0.9 of the Android app and device code is released. Still an alpha but fairly functional.
 - 02/25/2020 - 0.0.4 of the Android app is released. This is a very early alpha, see below to join the alpha-testers group.
