@@ -143,14 +143,18 @@ Hard resetting via RTS pin...
 7. The board will boot and show the Meshtastic logo.
 8. Please post a comment on our chat so we know if these instructions worked for you ;-). If you find bugs/have-questions post there also - we will be rapidly iterating over the next few weeks.
 
-## Meshtastic Android app
+# Meshtastic Android app
 
 The source code for the (optional) Meshtastic Android app is [here](https://github.com/meshtastic/Meshtastic-Android).
 
-Alpha test builds are current available by opting into our alpha test group. See (www.meshtastic.org) for instructions.
+Alpha test builds available by opting into our alpha test group. See (www.meshtastic.org) for instructions.
 
-After our rate of change slows a bit, we will make beta builds available here (without needing to join the alphatest group):
+If you don't want to live on the 'bleeding edge' you can opt-in to the beta-test or use the released version:
 [![Download at https://play.google.com/store/apps/details?id=com.geeksville.mesh](https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png)](https://play.google.com/store/apps/details?id=com.geeksville.mesh&referrer=utm_source%3Dgithub%26utm_medium%3Desp32-readme%26utm_campaign%3Dmeshtastic-esp32%2520readme%26anid%3Dadmob&pcampaignid=pcampaignidMKT-Other-global-all-co-prtnr-py-PartBadge-Mar2515-1)
+
+# Python API
+
+We offer a [python API](https://github.com/meshtastic/Meshtastic-python) that makes it easy to use these devices to provide mesh networking for your custom projects.
 
 # Development
 
