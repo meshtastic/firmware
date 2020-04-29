@@ -63,23 +63,19 @@
 
 /**
  * A raw low level interface to our mesh.  Only understands nodenums and bytes (not protobufs or node ids)
+ * FIXME - REMOVE THIS CLASS
  */
 class MeshRadio
 {
   public:
     // Kinda ugly way of selecting different radio implementations, but soon this MeshRadio class will be going away
     // entirely.  At that point we can make things pretty.
-#ifdef RF95_IRQ_GPIO
-    CustomRF95
-        radioIf; // the raw radio interface - for now I'm leaving public - because this class is shrinking to be almost nothing
-#else
-    SimRadio radioIf;
-#endif
+    RadioInterface &radioIf;
 
     /** pool is the pool we will alloc our rx packets from
      * rxDest is where we will send any rx packets, it becomes receivers responsibility to return packet to the pool
      */
-    MeshRadio();
+    MeshRadio(RadioInterface *rIf);
 
     bool init();
 

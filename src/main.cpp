@@ -118,6 +118,9 @@ static uint32_t ledBlinker()
 
 Periodic ledPeriodic(ledBlinker);
 
+#include "RadioLibInterface.h"
+#include "variant.h"
+
 void setup()
 {
 #ifdef USE_SEGGER
@@ -189,7 +192,15 @@ void setup()
     realRouter.setup(); // required for our periodic task (kinda skanky FIXME)
 
     // MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
-    radio = new MeshRadio();
+    RadioInterface *rIf =
+#if defined(RF95_IRQ_GPIO)
+        new CustomRF95();
+#elif defined(SX1262_CS)
+        new RadioLibInterface(SX1262_CS, SX1262_DIO1, SX1262_RESET, SX1262_BUSY, SPI);
+#else
+        new SimRadio();
+#endif
+    radio = new MeshRadio(rIf);
     router.addInterface(&radio->radioIf);
 
     if (radio && !radio->init())

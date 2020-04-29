@@ -11,6 +11,7 @@ Minimum items needed to make sure hardware is good.
 - switch to RadioLab? test it with current radio. https://github.com/jgromes/RadioLib
 - use "variants" to get all gpio bindings
 - plug in correct variants for the real board
+- remove unused sx1262 lib from github
 - Use the PMU driver on real hardware
 - add a NEMA based GPS driver to test GPS
 - Use new radio driver on real hardware - possibly start with https://os.mbed.com/teams/Semtech/code/SX126xLib/

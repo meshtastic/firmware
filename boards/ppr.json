@@ -10,7 +10,7 @@
     "hwids": [["0x239A", "0x4403"]],
     "usb_product": "PPR",
     "mcu": "nrf52840",
-    "variant": "ppr",
+    "variant": "pca10056-rc-clock",
     "variants_dir": "variants",
     "bsp": {
       "name": "adafruit"

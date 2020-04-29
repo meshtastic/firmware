@@ -149,7 +149,7 @@ void CustomRF95::handleIdleISR()
         startSend(txp);
     else {
         // Nothing to send, let's switch back to receive mode
-        setModeRx();
+        RH_RF95::setModeRx();
     }
 }
 
@@ -193,9 +193,9 @@ void CustomRF95::loop()
     // It should never take us more than 30 secs to send a packet, if it does, we have a bug, FIXME, move most of this
     // into CustomRF95
     uint32_t now = millis();
-    if (lastTxStart != 0 && (now - lastTxStart) > TX_WATCHDOG_TIMEOUT && mode() == RHGenericDriver::RHModeTx) {
+    if (lastTxStart != 0 && (now - lastTxStart) > TX_WATCHDOG_TIMEOUT && RH_RF95::mode() == RHGenericDriver::RHModeTx) {
         DEBUG_MSG("ERROR! Bug! Tx packet took too long to send, forcing radio into rx mode\n");
-        setModeRx();
+        RH_RF95::setModeRx();
         if (sendingPacket) { // There was probably a packet we were trying to send, free it
             packetPool.release(sendingPacket);
             sendingPacket = NULL;

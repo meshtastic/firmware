@@ -24,7 +24,7 @@ separated by 2.16 MHz with respect to the adjacent channels. Channel zero starts
 /// Sometimes while debugging it is useful to set this false, to disable rf95 accesses
 bool useHardware = true;
 
-MeshRadio::MeshRadio() // , manager(radioIf)
+MeshRadio::MeshRadio(RadioInterface *rIf) : radioIf(*rIf) // , manager(radioIf)
 {
     myNodeInfo.num_channels = NUM_CHANNELS;
 
@@ -122,4 +122,3 @@ int MeshRadio::reloadConfig(void *unused)
 
     return 0;
 }
-
