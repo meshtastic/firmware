@@ -159,6 +159,7 @@ typedef struct _FromRadio {
         RadioConfig radio;
         DebugString debug_string;
         uint32_t config_complete_id;
+        bool rebooted;
     } variant;
 } FromRadio;
 
@@ -289,6 +290,7 @@ typedef struct _ToRadio {
 #define FromRadio_radio_tag                      6
 #define FromRadio_debug_string_tag               7
 #define FromRadio_config_complete_id_tag         8
+#define FromRadio_rebooted_tag                   9
 #define FromRadio_num_tag                        1
 #define ToRadio_packet_tag                       1
 #define ToRadio_want_config_id_tag               100
@@ -432,7 +434,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (variant,my_info,variant.my_info),   3) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,node_info,variant.node_info),   4) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,radio,variant.radio),   6) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,debug_string,variant.debug_string),   7) \
-X(a, STATIC,   ONEOF,    UINT32,   (variant,config_complete_id,variant.config_complete_id),   8)
+X(a, STATIC,   ONEOF,    UINT32,   (variant,config_complete_id,variant.config_complete_id),   8) \
+X(a, STATIC,   ONEOF,    BOOL,     (variant,rebooted,variant.rebooted),   9)
 #define FromRadio_CALLBACK NULL
 #define FromRadio_DEFAULT NULL
 #define FromRadio_variant_packet_MSGTYPE MeshPacket

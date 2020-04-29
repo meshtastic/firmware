@@ -17,6 +17,7 @@ void SerialConsole::init()
 {
     Port.begin(SERIAL_BAUD);
     StreamAPI::init();
+    emitRebooted();
 }
 
 /**
