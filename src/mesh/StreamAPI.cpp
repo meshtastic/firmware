@@ -1,4 +1,5 @@
 #include "StreamAPI.h"
+#include "configuration.h"
 
 #define START1 0x94
 #define START2 0xc3
@@ -58,14 +59,33 @@ void StreamAPI::writeStream()
         do {
             // Send every packet we can
             len = getFromRadio(txBuf + HEADER_LEN);
-            if (len != 0) {
-                txBuf[0] = START1;
-                txBuf[1] = START2;
-                txBuf[2] = (len >> 8) & 0xff;
-                txBuf[3] = len & 0xff;
-
-                stream->write(txBuf, len + HEADER_LEN);
-            }
+            emitTxBuffer(len);
         } while (len);
     }
+}
+
+/**
+ * Send the current txBuffer over our stream
+ */
+void StreamAPI::emitTxBuffer(size_t len)
+{
+    if (len != 0) {
+        txBuf[0] = START1;
+        txBuf[1] = START2;
+        txBuf[2] = (len >> 8) & 0xff;
+        txBuf[3] = len & 0xff;
+
+        stream->write(txBuf, len + HEADER_LEN);
+    }
+}
+
+void StreamAPI::emitRebooted()
+{
+    // In case we send a FromRadio packet
+    memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
+    fromRadioScratch.which_variant = FromRadio_rebooted_tag;
+    fromRadioScratch.variant.rebooted = true;
+
+    DEBUG_MSG("Emitting reboot packet for serial shell\n");
+    emitTxBuffer(pb_encode_to_bytes(txBuf + HEADER_LEN, FromRadio_size, FromRadio_fields, &fromRadioScratch));
 }

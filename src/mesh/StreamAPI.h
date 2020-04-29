@@ -37,8 +37,6 @@ class StreamAPI : public PhoneAPI
     uint8_t rxBuf[MAX_STREAM_BUF_SIZE];
     size_t rxPtr = 0;
 
-    uint8_t txBuf[MAX_STREAM_BUF_SIZE];
-
   public:
     StreamAPI(Stream *_stream) : stream(_stream) {}
 
@@ -61,6 +59,19 @@ class StreamAPI : public PhoneAPI
     void writeStream();
 
   protected:
+    /**
+     * Send a FromRadio.rebooted = true packet to the phone
+     */
+    void emitRebooted();
+    
+    /**
+     * Send the current txBuffer over our stream
+     */
+    void emitTxBuffer(size_t len);
+
     /// Are we allowed to write packets to our output stream (subclasses can turn this off - i.e. SerialConsole)
     bool canWrite = true;
+
+    /// Subclasses can use this scratch buffer if they wish
+    uint8_t txBuf[MAX_STREAM_BUF_SIZE];
 };
