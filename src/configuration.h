@@ -217,10 +217,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LED_INVERTED 1
 
 // Temporarily testing if we can build the RF95 driver for NRF52
+#if 0
 #define RESET_GPIO 14    // If defined, this pin will be used to reset the LORA radio
 #define RF95_IRQ_GPIO 26 // IRQ line for the LORA radio
 #define DIO1_GPIO 35     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
 #define DIO2_GPIO 34     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
+#endif
 
 #endif
 

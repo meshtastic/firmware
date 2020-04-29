@@ -142,6 +142,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // CUSTOM GPIOs the SX1262MB2CAS shield when installed on the NRF52840-DK development board
 #define SX1262_CS (32 + 8)      // P1.08
 #define SX1262_DIO1 (32 + 6)    // P1.06
+#define SX1262_BUSY (32 + 4)    // P1.04
 #define SX1262_RESET (0 + 3)    // P0.03
 #define SX1262_ANT_SW (32 + 10) // P1.10
 
