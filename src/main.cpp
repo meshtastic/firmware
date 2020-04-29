@@ -118,7 +118,7 @@ static uint32_t ledBlinker()
 
 Periodic ledPeriodic(ledBlinker);
 
-#include "RadioLibInterface.h"
+#include "SX1262Interface.h"
 #include "variant.h"
 
 void setup()
@@ -196,7 +196,7 @@ void setup()
 #if defined(RF95_IRQ_GPIO)
         new CustomRF95();
 #elif defined(SX1262_CS)
-        new RadioLibInterface(SX1262_CS, SX1262_DIO1, SX1262_RESET, SX1262_BUSY, SPI);
+        new SX1262Interface(SX1262_CS, SX1262_DIO1, SX1262_RESET, SX1262_BUSY, SPI);
 #else
         new SimRadio();
 #endif

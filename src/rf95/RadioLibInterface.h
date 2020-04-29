@@ -6,11 +6,27 @@
 
 class RadioLibInterface : public RadioInterface
 {
+  protected:
+    float freq = 915.0; // FIXME, init all these params from suer setings
+    float bw = 125;
+    uint8_t sf = 9;
+    uint8_t cr = 7;
+    uint8_t syncWord = 0; // FIXME, use a meshtastic sync word, but hashed with the Channel name
+    int8_t power = 17;
+    float currentLimit = 100; // FIXME
+    uint16_t preambleLength = 8;
+
     Module module; // The HW interface to the radio
-    SX1262 lora;
+
+    /**
+     * provides lowest common denominator RadioLib API
+     */
+    PhysicalLayer &iface;
 
   public:
-    RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy, SPIClass &spi);
+    RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy, 
+    SPIClass &spi,
+    PhysicalLayer *iface);
 
     virtual ErrorCode send(MeshPacket *p);
 
@@ -30,7 +46,7 @@ class RadioLibInterface : public RadioInterface
     /// Initialise the Driver transport hardware and software.
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
-    virtual bool init();
+    virtual bool init() { return true; }
 
     /// Sets the transmitter and receiver
     /// centre frequency.
@@ -79,14 +95,4 @@ class RadioLibInterface : public RadioInterface
     /// \param[in] useRFO If true, enables the use of the RFO transmitter pins instead of
     /// the PA_BOOST pin (false). Choose the correct setting for your module.
     void setTxPower(int8_t power, bool useRFO = false) {}
-
-  private:
-    float freq = 915.0; // FIXME, init all these params from suer setings
-    float bw = 125;
-    uint8_t sf = 9;
-    uint8_t cr = 7;
-    uint8_t syncWord = 0; // FIXME, use a meshtastic sync word, but hashed with the Channel name
-    int8_t power = 17;
-    float currentLimit = 100; // FIXME
-    uint16_t preambleLength = 8;
 };
