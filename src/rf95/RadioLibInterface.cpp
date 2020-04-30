@@ -89,6 +89,15 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
     }
 }
 
+bool RadioLibInterface::canSleep()
+{
+    bool res = txQueue.isEmpty();
+    if (!res) // only print debug messages if we are vetoing sleep
+        DEBUG_MSG("radio wait to sleep, txEmpty=%d\n", txQueue.isEmpty());
+
+    return res;
+}
+
 void RadioLibInterface::loop()
 {
     PendingISR wasPending = pending; // atomic read

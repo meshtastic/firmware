@@ -19,6 +19,9 @@ class SX1262Interface : public RadioLibInterface
     /// \return true if initialisation succeeded.
     virtual bool reconfigure();
 
+    /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.
+    virtual bool sleep();
+
   protected:
     /**
      * Glue functions called from ISR land
