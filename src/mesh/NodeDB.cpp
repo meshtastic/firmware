@@ -289,6 +289,8 @@ void NodeDB::updateFrom(const MeshPacket &mp)
             info->position.time = mp.rx_time;
         }
 
+        info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
+
         if (p.has_position) {
             // we carefully preserve the old time, because we always trust our local timestamps more
             uint32_t oldtime = info->position.time;
