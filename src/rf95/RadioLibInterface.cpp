@@ -73,8 +73,8 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
     // we almost certainly guarantee no one outside will like the packet we are sending.
     if (canSendImmediately()) {
         // if the radio is idle, we can send right away
-        DEBUG_MSG("immediate send on mesh fr=0x%x,to=0x%x,id=%d\n (txGood=%d,rxGood=%d,rxBad=%d)\n", p->from, p->to, p->id, -1,
-                  -1, -1);
+        DEBUG_MSG("immediate send on mesh fr=0x%x,to=0x%x,id=%d\n (txGood=%d,rxGood=%d,rxBad=%d)\n", p->from, p->to, p->id,
+                  txGood, rxGood, rxBad);
 
         startSend(p);
         return ERRNO_OK;
@@ -94,8 +94,6 @@ void RadioLibInterface::loop()
     PendingISR wasPending = pending; // atomic read
     if (wasPending) {
         pending = ISR_NONE; // If the flag was set, it is _guaranteed_ the ISR won't be running, because it masked itself
-
-        DEBUG_MSG("Handling a LORA interrupt %d!\n", wasPending);
 
         if (wasPending == ISR_TX)
             handleTransmitInterrupt();
@@ -122,6 +120,7 @@ void RadioLibInterface::startNextWork()
 
 void RadioLibInterface::handleTransmitInterrupt()
 {
+    DEBUG_MSG("handling lora TX interrupt\n");
     assert(sendingPacket); // Were we sending?
 
     completeSending();
@@ -130,6 +129,8 @@ void RadioLibInterface::handleTransmitInterrupt()
 void RadioLibInterface::completeSending()
 {
     if (sendingPacket) {
+        txGood++;
+
         // We are done sending that packet, release it
         packetPool.release(sendingPacket);
         sendingPacket = NULL;
@@ -142,12 +143,15 @@ void RadioLibInterface::handleReceiveInterrupt()
     assert(isReceiving);
     isReceiving = false;
 
+    DEBUG_MSG("handling lora RX interrupt\n");
+
     // read the number of actually received bytes
     size_t length = iface.getPacketLength();
 
     int state = iface.readData(radiobuf, length);
     if (state != ERR_NONE) {
         DEBUG_MSG("ignoring received packet due to error=%d\n", state);
+        rxBad++;
     } else {
         // Skip the 4 headers that are at the beginning of the rxBuf
         int32_t payloadLen = length - sizeof(PacketHeader);
@@ -167,9 +171,11 @@ void RadioLibInterface::handleReceiveInterrupt()
         if (!pb_decode_from_bytes(payload, payloadLen, SubPacket_fields, p)) {
             DEBUG_MSG("Invalid protobufs in received mesh packet, discarding.\n");
             packetPool.release(mp);
+            // rxBad++; not really a hw errpr
         } else {
             // parsing was successful, queue for our recipient
             mp->has_payload = true;
+            txGood++;
 
             deliverToReceiver(mp);
         }
