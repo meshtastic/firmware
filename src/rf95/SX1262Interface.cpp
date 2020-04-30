@@ -22,6 +22,8 @@ bool SX1262Interface::init()
     bool useRegulatorLDO = false; // Seems to depend on the connection to pin 9/DCC_SW - if an inductor DCDC?
 
     applyModemConfig();
+    if (power > 22) // This chip has lower power limits than some
+        power = 22;
     int res = lora.begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength, tcxoVoltage, useRegulatorLDO);
     DEBUG_MSG("LORA init result %d\n", res);
 
@@ -58,6 +60,8 @@ bool SX1262Interface::reconfigure()
     err = lora.setFrequency(freq);
     assert(err == ERR_NONE);
 
+    if (power > 22) // This chip has lower power limits than some
+        power = 22;
     err = lora.setOutputPower(power);
     assert(err == ERR_NONE);
 
