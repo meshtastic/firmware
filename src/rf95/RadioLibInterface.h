@@ -49,6 +49,9 @@ class RadioLibInterface : public RadioInterface
      */
     PhysicalLayer &iface;
 
+    /// are _trying_ to receive a packet currently (note - we might just be waiting for one)
+    bool isReceiving;
+
     /**
      * Glue functions called from ISR land
      */
@@ -108,4 +111,8 @@ class RadioLibInterface : public RadioInterface
      * Raw ISR handler that just calls our polymorphic method
      */
     static void isrRxLevel0();
+
+    /**
+     * If a send was in progress finish it and return the buffer to the pool */
+    void completeSending();
 };
