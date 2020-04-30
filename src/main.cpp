@@ -191,6 +191,12 @@ void setup()
 
     realRouter.setup(); // required for our periodic task (kinda skanky FIXME)
 
+#ifdef SX1262_ANT_SW
+    // make analog PA vs not PA switch on SX1262 eval board work properly
+    pinMode(SX1262_ANT_SW, OUTPUT);
+    digitalWrite(SX1262_ANT_SW, 1);
+#endif
+
     // MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
     RadioInterface *rIf =
 #if defined(RF95_IRQ_GPIO)

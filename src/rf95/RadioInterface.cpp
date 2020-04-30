@@ -20,3 +20,4 @@ void RadioInterface::deliverToReceiver(MeshPacket *p)
     assert(rxDest);
     assert(rxDest->enqueue(p, 0)); // NOWAIT - fixme, if queue is full, delete older messages
 }
+

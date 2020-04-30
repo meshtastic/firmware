@@ -38,6 +38,9 @@ bool CustomRF95::init()
 {
     bool ok = RH_RF95::init();
 
+    if (ok)
+        reconfigure(); // Finish our device setup
+
     return ok;
 }
 
@@ -205,4 +208,30 @@ void CustomRF95::loop()
     }
 }
 
+bool CustomRF95::reconfigure()
+{
+    radioIf.setModeIdle(); // Need to be idle before doing init
+
+    // Set up default configuration
+    // No Sync Words in LORA mode.
+    setModemConfig(modemConfig); // Radio default
+                                 //    setModemConfig(Bw125Cr48Sf4096); // slow and reliable?
+    // rf95.setPreambleLength(8);           // Default is 8
+
+    if (!setFrequency(freq)) {
+        DEBUG_MSG("setFrequency failed\n");
+        assert(0); // fixme panic
+    }
+
+    // Defaults after init are 434.0MHz, 13dBm, Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on
+
+    // The default transmitter power is 13dBm, using PA_BOOST.
+    // If you are using RFM95/96/97/98 modules which uses the PA_BOOST transmitter pin, then
+    // you can set transmitter powers from 5 to 23 dBm:
+    // FIXME - can we do this?  It seems to be in the Heltec board.
+    radioIf.setTxPower(tx_power, false);
+
+    // Done with init tell radio to start receiving
+    radioIf.setModeRx();
+}
 #endif
