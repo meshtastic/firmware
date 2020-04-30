@@ -26,7 +26,7 @@ class RadioLibInterface : public RadioInterface
     /**
      * Raw ISR handler that just calls our polymorphic method
      */
-    static void isrRxLevel0(), isrTxLevel0();
+    static void isrTxLevel0();
 
   protected:
     float bw = 125;
@@ -39,7 +39,7 @@ class RadioLibInterface : public RadioInterface
      */
     uint8_t syncWord = SX126X_SYNC_WORD_PRIVATE;
 
-    float currentLimit = 100; // FIXME
+    float currentLimit = 100;    // FIXME
     uint16_t preambleLength = 8; // 8 is default, but FIXME use longer to increase the amount of sleep time when receiving
 
     Module module; // The HW interface to the radio
@@ -78,12 +78,17 @@ class RadioLibInterface : public RadioInterface
     /// \param[in] thisAddress The address of this node.
     virtual void setThisAddress(uint8_t thisAddress) {}
 
-    /// Initialise the Driver transport hardware and software.
-    /// Make sure the Driver is properly configured before calling init().
-    /// \return true if initialisation succeeded.
-    virtual bool init() { return true; }
-
     virtual void loop(); // Idle processing
+
+  private:
+    /** start an immediate transmit */
+    void startSend(MeshPacket *txp);
+
+    /** start a queued transmit (if we have one), else start receiving */
+    void startNextWork();
+
+    void handleTransmitInterrupt();
+    void handleReceiveInterrupt();
 
   protected:
     /**
@@ -94,9 +99,13 @@ class RadioLibInterface : public RadioInterface
     /** Could we send right now (i.e. either not actively receiving or transmitting)? */
     virtual bool canSendImmediately() = 0;
 
-    /** start an immediate transmit */
-    void startSend(MeshPacket *txp);
+    /**
+     * Start waiting to receive a message
+     */
+    virtual void startReceive() = 0;
 
-    void handleTransmitInterrupt();
-    void handleReceiveInterrupt();
+    /**
+     * Raw ISR handler that just calls our polymorphic method
+     */
+    static void isrRxLevel0();
 };

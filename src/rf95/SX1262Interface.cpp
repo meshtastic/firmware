@@ -12,9 +12,6 @@ SX1262Interface::SX1262Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RA
 /// \return true if initialisation succeeded.
 bool SX1262Interface::init()
 {
-    if (!RadioLibInterface::init())
-        return false;
-
     // FIXME, move this to main
     SPI.begin();
 
@@ -30,7 +27,10 @@ bool SX1262Interface::init()
     if (res == ERR_NONE)
         res = lora.setCRC(SX126X_LORA_CRC_ON);
 
-    return res == ERR_NONE;
+    if (res == ERR_NONE)
+        startReceive(); // start receiving
+
+    return res;
 }
 
 bool SX1262Interface::reconfigure()
@@ -68,9 +68,18 @@ bool SX1262Interface::reconfigure()
     err = lora.setOutputPower(power);
     assert(err == ERR_NONE);
 
-    assert(0); // FIXME - set mode back to receive?
+    startReceive(); // restart receiving
 
-    return true;
+    return ERR_NONE;
+}
+
+void SX1262Interface::startReceive()
+{
+    int err = lora.startReceive();
+    assert(err == ERR_NONE);
+
+    // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
+    enableInterrupt(isrRxLevel0);
 }
 
 /** Could we send right now (i.e. either not actively receving or transmitting)? */
@@ -86,5 +95,5 @@ bool SX1262Interface::canSendImmediately()
         DEBUG_MSG("immediate send on mesh fr=0x%x,to=0x%x,id=%d\n (txGood=%d,rxGood=%d,rxBad=%d)\n", p->from, p->to, p->id,
                   txGood(), rxGood(), rxBad());
     }
-#endif 
+#endif
 }

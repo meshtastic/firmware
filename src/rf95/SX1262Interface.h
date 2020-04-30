@@ -32,4 +32,9 @@ class SX1262Interface : public RadioLibInterface
 
     /** Could we send right now (i.e. either not actively receiving or transmitting)? */
     virtual bool canSendImmediately();
+
+    /**
+     * Start waiting to receive a message
+     */
+    virtual void startReceive();
 };

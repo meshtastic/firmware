@@ -1,5 +1,9 @@
 #include "RadioLibInterface.h"
+#include "MeshTypes.h"
+#include "mesh-pb-constants.h"
 #include <configuration.h>
+#include <pb_decode.h>
+#include <pb_encode.h>
 
 // FIXME, we default to 4MHz SPI, SPI mode 0, check if the datasheet says it can really do that
 static SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
@@ -100,14 +104,19 @@ void RadioLibInterface::loop()
         else
             assert(0);
 
-        // First send any outgoing packets we have ready
-        MeshPacket *txp = txQueue.dequeuePtr(0);
-        if (txp)
-            startSend(txp);
-        else {
-            // Nothing to send, let's switch back to receive mode
-            // FIXME - RH_RF95::setModeRx();
-        }
+        startNextWork();
+    }
+}
+
+void RadioLibInterface::startNextWork()
+{
+    // First send any outgoing packets we have ready
+    MeshPacket *txp = txQueue.dequeuePtr(0);
+    if (txp)
+        startSend(txp);
+    else {
+        // Nothing to send, let's switch back to receive mode
+        startReceive();
     }
 }
 
@@ -125,69 +134,39 @@ void RadioLibInterface::handleTransmitInterrupt()
 
 void RadioLibInterface::handleReceiveInterrupt()
 {
-    // FIXME
-}
+    // read the number of actually received bytes
+    size_t length = iface.getPacketLength();
 
-#if 0
-// After doing standard behavior, check to see if a new packet arrived or one was sent and start a new send or receive as
-// necessary
-void CustomRF95::handleInterrupt()
-{
-    RH_RF95::handleInterrupt();
-    enableInterrupt(); // Let ISR run again
+    int state = iface.readData(radiobuf, length);
+    if (state != ERR_NONE) {
+        DEBUG_MSG("ignoring received packet due to error=%d\n", state);
+    } else {
+        // Skip the 4 headers that are at the beginning of the rxBuf
+        int32_t payloadLen = length - sizeof(PacketHeader);
+        const uint8_t *payload = radiobuf + sizeof(PacketHeader);
+        const PacketHeader *h = (PacketHeader *)radiobuf;
 
-    if (_mode == RHModeIdle) // We are now done sending or receiving
-    {
+        // fixme check for short packets
 
-        // If we just finished receiving a packet, forward it into a queue
-        if (_rxBufValid) {
-            // We received a packet
+        MeshPacket *mp = packetPool.allocZeroed();
 
-            // Skip the 4 headers that are at the beginning of the rxBuf
-            size_t payloadLen = _bufLen - RH_RF95_HEADER_LEN;
-            uint8_t *payload = _buf + RH_RF95_HEADER_LEN;
+        SubPacket *p = &mp->payload;
 
-            // FIXME - throws exception if called in ISR context: frequencyError() - probably the floating point math
-            int32_t freqerr = -1, snr = lastSNR();
-            // DEBUG_MSG("Received packet from mesh src=0x%x,dest=0x%x,id=%d,len=%d rxGood=%d,rxBad=%d,freqErr=%d,snr=%d\n",
-            //          srcaddr, destaddr, id, rxlen, rf95.rxGood(), rf95.rxBad(), freqerr, snr);
+        mp->from = h->from;
+        mp->to = h->to;
+        mp->id = h->id;
 
-            MeshPacket *mp = packetPool.allocZeroed();
+        if (!pb_decode_from_bytes(payload, payloadLen, SubPacket_fields, p)) {
+            DEBUG_MSG("Invalid protobufs in received mesh packet, discarding.\n");
+            packetPool.release(mp);
+        } else {
+            // parsing was successful, queue for our recipient
+            mp->has_payload = true;
 
-            SubPacket *p = &mp->payload;
-
-            mp->from = _rxHeaderFrom;
-            mp->to = _rxHeaderTo;
-            mp->id = _rxHeaderId;
-
-            //_rxHeaderId = _buf[2];
-            //_rxHeaderFlags = _buf[3];
-
-            // If we already have an entry in the DB for this nodenum, goahead and hide the snr/freqerr info there.
-            // Note: we can't create it at this point, because it might be a bogus User node allocation.  But odds are we will
-            // already have a record we can hide this debugging info in.
-            NodeInfo *info = nodeDB.getNode(mp->from);
-            if (info) {
-                info->snr = snr;
-                info->frequency_error = freqerr;
-            }
-
-            if (!pb_decode_from_bytes(payload, payloadLen, SubPacket_fields, p)) {
-                packetPool.release(mp);
-            } else {
-                // parsing was successful, queue for our recipient
-                mp->has_payload = true;
-
-                deliverToReceiver(mp);
-            }
-
-            clearRxBuf(); // This message accepted and cleared
+            deliverToReceiver(mp);
         }
-
-        handleIdleISR();
     }
 }
-#endif
 
 /** start an immediate transmit */
 void RadioLibInterface::startSend(MeshPacket *txp)
@@ -201,198 +180,3 @@ void RadioLibInterface::startSend(MeshPacket *txp)
     enableInterrupt(isrTxLevel0);
 }
 
-/**
- *
- *
- *
-// include the library
-
-
-// save transmission state between loops
-int transmissionState = ERR_NONE;
-
-void setup() {
-  Serial.begin(9600);
-
-  // initialize SX1262 with default settings
-  Serial.print(F("[SX1262] Initializing ... "));
-  // carrier frequency:           434.0 MHz
-  // bandwidth:                   125.0 kHz
-  // spreading factor:            9
-  // coding rate:                 7
-  // sync word:                   0x12 (private network)
-  // output power:                14 dBm
-  // current limit:               60 mA
-  // preamble length:             8 symbols
-  // TCXO voltage:                1.6 V (set to 0 to not use TCXO)
-  // regulator:                   DC-DC (set to true to use LDO)
-  // CRC:                         enabled
-  int state = lora.begin();
-  if (state == ERR_NONE) {
-    Serial.println(F("success!"));
-  } else {
-    Serial.print(F("failed, code "));
-    Serial.println(state);
-    while (true);
-  }
-
-  // set the function that will be called
-  // when packet transmission is finished
-  lora.setDio1Action(setFlag);
-
-  // start transmitting the first packet
-  Serial.print(F("[SX1262] Sending first packet ... "));
-
-  // you can transmit C-string or Arduino string up to
-  // 256 characters long
-  transmissionState = lora.startTransmit("Hello World!");
-
-  // you can also transmit byte array up to 256 bytes long
-
-    byte byteArr[] = {0x01, 0x23, 0x45, 0x67,
-                      0x89, 0xAB, 0xCD, 0xEF};
-    state = lora.startTransmit(byteArr, 8);
-
-}
-
-// flag to indicate that a packet was sent
-volatile bool transmittedFlag = false;
-
-// disable interrupt when it's not needed
-volatile bool enableInterrupt = true;
-
-// this function is called when a complete packet
-// is transmitted by the module
-// IMPORTANT: this function MUST be 'void' type
-//            and MUST NOT have any arguments!
-void setFlag(void)
-{
-    // check if the interrupt is enabled
-    if (!enableInterrupt) {
-        return;
-    }
-
-    // we sent a packet, set the flag
-    transmittedFlag = true;
-}
-
-void loop()
-{
-    // check if the previous transmission finished
-    if (transmittedFlag) {
-        // disable the interrupt service routine while
-        // processing the data
-        enableInterrupt = false;
-
-        // reset flag
-        transmittedFlag = false;
-
-        if (transmissionState == ERR_NONE) {
-            // packet was successfully sent
-            Serial.println(F("transmission finished!"));
-
-            // NOTE: when using interrupt-driven transmit method,
-            //       it is not possible to automatically measure
-            //       transmission data rate using getDataRate()
-
-        } else {
-            Serial.print(F("failed, code "));
-            Serial.println(transmissionState);
-        }
-
-        // wait a second before transmitting again
-        delay(1000);
-
-        // send another one
-        Serial.print(F("[SX1262] Sending another packet ... "));
-
-        // you can transmit C-string or Arduino string up to
-        // 256 characters long
-        transmissionState = lora.startTransmit("Hello World!");
-
-        // you can also transmit byte array up to 256 bytes long
-
-          byte byteArr[] = {0x01, 0x23, 0x45, 0x67,
-                            0x89, 0xAB, 0xCD, 0xEF};
-          int state = lora.startTransmit(byteArr, 8);
-
-
-// we're ready to send more packets,
-// enable interrupt service routine
-enableInterrupt = true;
-}
-}
-
-// this function is called when a complete packet
-// is received by the module
-// IMPORTANT: this function MUST be 'void' type
-//            and MUST NOT have any arguments!
-void setFlag(void)
-{
-    // check if the interrupt is enabled
-    if (!enableInterrupt) {
-        return;
-    }
-
-    // we got a packet, set the flag
-    receivedFlag = true;
-}
-
-void loop()
-{
-    // check if the flag is set
-    if (receivedFlag) {
-        // disable the interrupt service routine while
-        // processing the data
-        enableInterrupt = false;
-
-        // reset flag
-        receivedFlag = false;
-
-        // you can read received data as an Arduino String
-        String str;
-        int state = lora.readData(str);
-
-        // you can also read received data as byte array
-
-          byte byteArr[8];
-          int state = lora.readData(byteArr, 8);
-
-
-if (state == ERR_NONE) {
-    // packet was successfully received
-    Serial.println(F("[SX1262] Received packet!"));
-
-    // print data of the packet
-    Serial.print(F("[SX1262] Data:\t\t"));
-    Serial.println(str);
-
-    // print RSSI (Received Signal Strength Indicator)
-    Serial.print(F("[SX1262] RSSI:\t\t"));
-    Serial.print(lora.getRSSI());
-    Serial.println(F(" dBm"));
-
-    // print SNR (Signal-to-Noise Ratio)
-    Serial.print(F("[SX1262] SNR:\t\t"));
-    Serial.print(lora.getSNR());
-    Serial.println(F(" dB"));
-
-} else if (state == ERR_CRC_MISMATCH) {
-    // packet was received, but is malformed
-    Serial.println(F("CRC error!"));
-
-} else {
-    // some other error occurred
-    Serial.print(F("failed, code "));
-    Serial.println(state);
-}
-
-// put module back to listen mode
-lora.startReceive();
-
-// we're ready to receive more packets,
-// enable interrupt service routine
-enableInterrupt = true;
-}
-}
-*/
