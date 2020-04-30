@@ -27,7 +27,7 @@ bool SX1262Interface::init()
     int res = lora.begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength, tcxoVoltage, useRegulatorLDO);
     DEBUG_MSG("LORA init result %d\n", res);
 
-    if (res != ERR_NONE)
+    if (res == ERR_NONE)
         res = lora.setCRC(SX126X_LORA_CRC_ON);
 
     return res == ERR_NONE;

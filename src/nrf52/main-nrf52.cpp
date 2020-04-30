@@ -17,7 +17,7 @@ static inline void debugger_break(void)
 void __attribute__((noreturn)) __assert_func(const char *file, int line, const char *func, const char *failedexpr)
 {
     DEBUG_MSG("assert failed %s: %d, %s, test=%s\n", file, line, func, failedexpr);
-    debugger_break();
+    // debugger_break(); FIXME doesn't work, possibly not for segger
     while (1)
         ; // FIXME, reboot!
 }

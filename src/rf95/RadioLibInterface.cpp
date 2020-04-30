@@ -91,6 +91,8 @@ void RadioLibInterface::loop()
     if (wasPending) {
         pending = ISR_NONE; // If the flag was set, it is _guaranteed_ the ISR won't be running, because it masked itself
 
+        DEBUG_MSG("Handling a LORA interrupt %d!\n", wasPending);
+
         if (wasPending == ISR_TX)
             handleTransmitInterrupt();
         else if (wasPending == ISR_RX)
@@ -193,7 +195,7 @@ void RadioLibInterface::startSend(MeshPacket *txp)
     size_t numbytes = beginSending(txp);
 
     int res = iface.startTransmit(radiobuf, numbytes);
-    assert(res);
+    assert(res == ERR_NONE);
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrTxLevel0);
