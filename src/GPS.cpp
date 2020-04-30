@@ -28,7 +28,7 @@ GPS::GPS() : PeriodicTask() {}
 void GPS::setup()
 {
     PeriodicTask::setup();
-    
+
     readFromRTC(); // read the main CPU RTC at first
 
 #ifdef GPS_RX_PIN
@@ -110,7 +110,7 @@ void GPS::perhapsSetRTC(const struct timeval *tv)
 #ifndef NO_ESP32
         settimeofday(tv, NULL);
 #else
-        assert(0);
+        DEBUG_MSG("ERROR TIME SETTING NOT IMPLEMENTED!\n");
 #endif
         readFromRTC();
     }

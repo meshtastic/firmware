@@ -30,7 +30,7 @@ bool SX1262Interface::init()
     if (res == ERR_NONE)
         startReceive(); // start receiving
 
-    return res;
+    return res == ERR_NONE;
 }
 
 bool SX1262Interface::reconfigure()
@@ -38,11 +38,10 @@ bool SX1262Interface::reconfigure()
     applyModemConfig();
 
     // set mode to standby
-    int err = lora.standby();
-    assert(err == ERR_NONE);
+    setStandby();
 
     // configure publicly accessible settings
-    err = lora.setSpreadingFactor(sf);
+    int err = lora.setSpreadingFactor(sf);
     assert(err == ERR_NONE);
 
     err = lora.setBandwidth(bw);
@@ -73,10 +72,23 @@ bool SX1262Interface::reconfigure()
     return ERR_NONE;
 }
 
+void SX1262Interface::setStandby()
+{
+    int err = lora.standby();
+    assert(err == ERR_NONE);
+
+    isReceiving = false; // If we were receiving, not any more
+    completeSending();   // If we were sending, not anymore
+    disableInterrupt();
+}
+
 void SX1262Interface::startReceive()
 {
+    setStandby();
     int err = lora.startReceive();
     assert(err == ERR_NONE);
+
+    isReceiving = true;
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
@@ -85,15 +97,10 @@ void SX1262Interface::startReceive()
 /** Could we send right now (i.e. either not actively receving or transmitting)? */
 bool SX1262Interface::canSendImmediately()
 {
-    return true; // FIXME
-#if 0
     // We wait _if_ we are partially though receiving a packet (rather than just merely waiting for one).
     // To do otherwise would be doubly bad because not only would we drop the packet that was on the way in,
     // we almost certainly guarantee no one outside will like the packet we are sending.
-    if (_mode == RHModeIdle || isReceiving()) {
-        // if the radio is idle, we can send right away
-        DEBUG_MSG("immediate send on mesh fr=0x%x,to=0x%x,id=%d\n (txGood=%d,rxGood=%d,rxBad=%d)\n", p->from, p->to, p->id,
-                  txGood(), rxGood(), rxBad());
-    }
-#endif
+    bool busy = sendingPacket != NULL || (isReceiving && lora.getPacketLength() > 0);
+
+    return !busy;
 }

@@ -37,4 +37,7 @@ class SX1262Interface : public RadioLibInterface
      * Start waiting to receive a message
      */
     virtual void startReceive();
+
+  private:
+    void setStandby();
 };

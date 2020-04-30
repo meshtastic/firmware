@@ -124,16 +124,24 @@ void RadioLibInterface::handleTransmitInterrupt()
 {
     assert(sendingPacket); // Were we sending?
 
-    // FIXME - check result code from ISR
+    completeSending();
+}
 
-    // We are done sending that packet, release it
-    packetPool.release(sendingPacket);
-    sendingPacket = NULL;
-    // DEBUG_MSG("Done with send\n");
+void RadioLibInterface::completeSending()
+{
+    if (sendingPacket) {
+        // We are done sending that packet, release it
+        packetPool.release(sendingPacket);
+        sendingPacket = NULL;
+        // DEBUG_MSG("Done with send\n");
+    }
 }
 
 void RadioLibInterface::handleReceiveInterrupt()
 {
+    assert(isReceiving);
+    isReceiving = false;
+
     // read the number of actually received bytes
     size_t length = iface.getPacketLength();
 
@@ -179,4 +187,3 @@ void RadioLibInterface::startSend(MeshPacket *txp)
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrTxLevel0);
 }
-
