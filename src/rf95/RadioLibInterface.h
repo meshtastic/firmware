@@ -40,7 +40,7 @@ class RadioLibInterface : public RadioInterface
     uint8_t syncWord = SX126X_SYNC_WORD_PRIVATE;
 
     float currentLimit = 100; // FIXME
-    uint16_t preambleLength = 8;
+    uint16_t preambleLength = 8; // 8 is default, but FIXME use longer to increase the amount of sleep time when receiving
 
     Module module; // The HW interface to the radio
 

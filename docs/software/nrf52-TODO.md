@@ -10,6 +10,8 @@ Minimum items needed to make sure hardware is good.
 - DONE get a debug 'serial' console working via the ICE passthrough feature
 - add a hard fault handler
 - switch to RadioLab? test it with current radio. https://github.com/jgromes/RadioLib
+- at boot we are starting our message IDs at 1, rather we should start them at a random number. also, seed random based on timer. this could be the cause of our first message not seen bug
+- use SX126x::startReceiveDutyCycleAuto to save power by sleeping and briefly waking to check for preamble bits. Change xmit rules to have more preamble bits.
 - use "variants" to get all gpio bindings
 - plug in correct variants for the real board
 - remove unused sx1262 lib from github
@@ -30,6 +32,7 @@ Minimum items needed to make sure hardware is good.
 
 Needed to be fully functional at least at the same level of the ESP32 boards. At this point users would probably want them.
 
+- increase preamble length? - will break other clients? so all devices must update
 - enable BLE DFU somehow
 - set appversion/hwversion
 - report appversion/hwversion in BLE
@@ -49,7 +52,6 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 ## Items to be 'feature complete'
 
 - figure out what the correct current limit should be for the sx1262, currently we just use the default 100
-- use SX126x::startReceiveDutyCycleAuto to save power by sleeping and briefly waking to check for preamble bits. Change xmit rules to have more preamble bits.
 - put sx1262 in sleepmode when processor gets shutdown (or rebooted), ideally even for critical faults (to keep power draw low). repurpose deepsleep state for this.
 - good power management tips: https://devzone.nordicsemi.com/nordic/nordic-blog/b/blog/posts/optimizing-power-on-nrf52-designs
 - call PMU set_ADC_CONV(0) during sleep, to stop reading PMU adcs and decrease current draw
