@@ -49,7 +49,7 @@ ErrorCode CustomRF95::send(MeshPacket *p)
     // We wait _if_ we are partially though receiving a packet (rather than just merely waiting for one).
     // To do otherwise would be doubly bad because not only would we drop the packet that was on the way in,
     // we almost certainly guarantee no one outside will like the packet we are sending.
-    if (_mode == RHModeIdle || !isReceiving()) {
+    if (_mode == RHModeIdle || (_mode == RHModeRx && !isReceiving())) {
         // if the radio is idle, we can send right away
         DEBUG_MSG("immediate send on mesh fr=0x%x,to=0x%x,id=%d\n (txGood=%d,rxGood=%d,rxBad=%d)\n", p->from, p->to, p->id,
                   txGood(), rxGood(), rxBad());
@@ -60,7 +60,7 @@ ErrorCode CustomRF95::send(MeshPacket *p)
         startSend(p);
         return ERRNO_OK;
     } else {
-        DEBUG_MSG("enquing packet for send from=0x%x, to=0x%x\n", p->from, p->to);
+        DEBUG_MSG("enqueuing packet for send from=0x%x, to=0x%x\n", p->from, p->to);
         ErrorCode res = txQueue.enqueue(p, 0) ? ERRNO_OK : ERRNO_UNKNOWN;
 
         if (res != ERRNO_OK) // we weren't able to queue it, so we must drop it to prevent leaks
