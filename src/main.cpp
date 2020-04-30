@@ -118,8 +118,10 @@ static uint32_t ledBlinker()
 
 Periodic ledPeriodic(ledBlinker);
 
+#ifdef NO_ESP32
 #include "SX1262Interface.h"
 #include "variant.h"
+#endif
 
 void setup()
 {
