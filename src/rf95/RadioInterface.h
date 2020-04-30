@@ -81,16 +81,6 @@ class RadioInterface
 
     // methods from radiohead
 
-    /// Sets the address of this node. Defaults to 0xFF. Subclasses or the user may want to change this.
-    /// This will be used to test the adddress in incoming messages. In non-promiscuous mode,
-    /// only messages with a TO header the same as thisAddress or the broadcast addess (0xFF) will be accepted.
-    /// In promiscuous mode, all messages will be accepted regardless of the TO header.
-    /// In a conventional multinode system, all nodes will have a unique address
-    /// (which you could store in EEPROM).
-    /// You would normally set the header FROM address to be the same as thisAddress (though you dont have to,
-    /// allowing the possibilty of address spoofing).
-    /// \param[in] thisAddress The address of this node.
-    virtual void setThisAddress(uint8_t thisAddress) = 0;
 
     /// Initialise the Driver transport hardware and software.
     /// Make sure the Driver is properly configured before calling init().
@@ -117,17 +107,6 @@ class SimRadio : public RadioInterface
     virtual ErrorCode send(MeshPacket *p);
 
     // methods from radiohead
-
-    /// Sets the address of this node. Defaults to 0xFF. Subclasses or the user may want to change this.
-    /// This will be used to test the adddress in incoming messages. In non-promiscuous mode,
-    /// only messages with a TO header the same as thisAddress or the broadcast addess (0xFF) will be accepted.
-    /// In promiscuous mode, all messages will be accepted regardless of the TO header.
-    /// In a conventional multinode system, all nodes will have a unique address
-    /// (which you could store in EEPROM).
-    /// You would normally set the header FROM address to be the same as thisAddress (though you dont have to,
-    /// allowing the possibilty of address spoofing).
-    /// \param[in] thisAddress The address of this node.
-    virtual void setThisAddress(uint8_t thisAddress) {}
 
     /// Initialise the Driver transport hardware and software.
     /// Make sure the Driver is properly configured before calling init().

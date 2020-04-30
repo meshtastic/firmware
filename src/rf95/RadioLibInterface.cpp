@@ -1,6 +1,7 @@
 #include "RadioLibInterface.h"
 #include "MeshTypes.h"
 #include "mesh-pb-constants.h"
+#include <NodeDB.h> // FIXME, this class shouldn't need to look into nodedb
 #include <configuration.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -165,28 +166,38 @@ void RadioLibInterface::handleReceiveInterrupt()
         // Skip the 4 headers that are at the beginning of the rxBuf
         int32_t payloadLen = length - sizeof(PacketHeader);
         const uint8_t *payload = radiobuf + sizeof(PacketHeader);
-        const PacketHeader *h = (PacketHeader *)radiobuf;
 
-        // fixme check for short packets
-
-        MeshPacket *mp = packetPool.allocZeroed();
-
-        SubPacket *p = &mp->payload;
-
-        mp->from = h->from;
-        mp->to = h->to;
-        mp->id = h->id;
-
-        if (!pb_decode_from_bytes(payload, payloadLen, SubPacket_fields, p)) {
-            DEBUG_MSG("Invalid protobufs in received mesh packet, discarding.\n");
-            packetPool.release(mp);
-            // rxBad++; not really a hw errpr
+        // check for short packets
+        if (payloadLen < 0) {
+            DEBUG_MSG("ignoring received packet too short\n");
+            rxBad++;
         } else {
-            // parsing was successful, queue for our recipient
-            mp->has_payload = true;
-            txGood++;
+            const PacketHeader *h = (PacketHeader *)radiobuf;
+            uint8_t ourAddr = nodeDB.getNodeNum();
 
-            deliverToReceiver(mp);
+            if (h->to != 255 && h->to != ourAddr) {
+                DEBUG_MSG("ignoring packet not sent to us\n");
+            } else {
+                MeshPacket *mp = packetPool.allocZeroed();
+
+                SubPacket *p = &mp->payload;
+
+                mp->from = h->from;
+                mp->to = h->to;
+                mp->id = h->id;
+
+                if (!pb_decode_from_bytes(payload, payloadLen, SubPacket_fields, p)) {
+                    DEBUG_MSG("Invalid protobufs in received mesh packet, discarding.\n");
+                    packetPool.release(mp);
+                    // rxBad++; not really a hw error
+                } else {
+                    // parsing was successful, queue for our recipient
+                    mp->has_payload = true;
+                    txGood++;
+
+                    deliverToReceiver(mp);
+                }
+            }
         }
     }
 }

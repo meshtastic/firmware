@@ -34,6 +34,7 @@ bool CustomRF95::init()
 {
     bool ok = RH_RF95::init();
 
+    // this->setPromiscuous(true); // Make the old RH stack work like the new one, make make CPU check dest addr
     if (ok)
         reconfigure(); // Finish our device setup
 
@@ -73,6 +74,10 @@ ErrorCode CustomRF95::send(MeshPacket *p)
 // necessary
 void CustomRF95::handleInterrupt()
 {
+    setThisAddress(
+        nodeDB
+            .getNodeNum()); // temp hack to make sure we are looking for the right address.  This class is going away soon anyways
+
     RH_RF95::handleInterrupt();
 
     if (_mode == RHModeIdle) // We are now done sending or receiving
@@ -94,7 +99,7 @@ void CustomRF95::handleInterrupt()
             uint8_t *payload = _buf + RH_RF95_HEADER_LEN;
 
             // FIXME - throws exception if called in ISR context: frequencyError() - probably the floating point math
-            int32_t freqerr = -1, snr = lastSNR();
+            int32_t snr = lastSNR();
             // DEBUG_MSG("Received packet from mesh src=0x%x,dest=0x%x,id=%d,len=%d rxGood=%d,rxBad=%d,freqErr=%d,snr=%d\n",
             //          srcaddr, destaddr, id, rxlen, rf95.rxGood(), rf95.rxBad(), freqerr, snr);
 
@@ -105,18 +110,10 @@ void CustomRF95::handleInterrupt()
             mp->from = _rxHeaderFrom;
             mp->to = _rxHeaderTo;
             mp->id = _rxHeaderId;
+            mp->rx_snr = snr;
 
             //_rxHeaderId = _buf[2];
             //_rxHeaderFlags = _buf[3];
-
-            // If we already have an entry in the DB for this nodenum, goahead and hide the snr/freqerr info there.
-            // Note: we can't create it at this point, because it might be a bogus User node allocation.  But odds are we will
-            // already have a record we can hide this debugging info in.
-            NodeInfo *info = nodeDB.getNode(mp->from);
-            if (info) {
-                info->snr = snr;
-                info->frequency_error = freqerr;
-            }
 
             if (!pb_decode_from_bytes(payload, payloadLen, SubPacket_fields, p)) {
                 packetPool.release(mp);
@@ -195,7 +192,7 @@ void CustomRF95::loop()
 
 bool CustomRF95::reconfigure()
 {
-    radioIf.setModeIdle(); // Need to be idle before doing init
+    setModeIdle(); // Need to be idle before doing init
 
     // Set up default configuration
     // No Sync Words in LORA mode.
@@ -214,9 +211,11 @@ bool CustomRF95::reconfigure()
     // If you are using RFM95/96/97/98 modules which uses the PA_BOOST transmitter pin, then
     // you can set transmitter powers from 5 to 23 dBm:
     // FIXME - can we do this?  It seems to be in the Heltec board.
-    radioIf.setTxPower(tx_power, false);
+    setTxPower(power, false);
 
     // Done with init tell radio to start receiving
-    radioIf.setModeRx();
+    setModeRx();
+
+    return true;
 }
 #endif

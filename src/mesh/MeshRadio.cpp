@@ -54,8 +54,8 @@ bool MeshRadio::init()
     delay(10);
 #endif
 
-    radioIf.setThisAddress(
-        nodeDB.getNodeNum()); // Note: we must do this here, because the nodenum isn't inited at constructor time.
+    // we now expect interfaces to operate in promiscous mode
+    // radioIf.setThisAddress(nodeDB.getNodeNum()); // Note: we must do this here, because the nodenum isn't inited at constructor time.
 
     applySettings();
 

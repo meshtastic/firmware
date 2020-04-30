@@ -54,6 +54,7 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 
 ## Items to be 'feature complete'
 
+- turn back on in-radio destaddr checking for RF95
 - remove the MeshRadio wrapper - we don't need it anymore, just do everythin in RadioInterface subclasses.
 - figure out what the correct current limit should be for the sx1262, currently we just use the default 100
 - put sx1262 in sleepmode when processor gets shutdown (or rebooted), ideally even for critical faults (to keep power draw low). repurpose deepsleep state for this.
