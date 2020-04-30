@@ -40,6 +40,8 @@ class CustomRF95 : public RH_RF95, public RadioInterface
 
     bool init();
 
+    bool reconfigure();
+
     void loop(); // Idle processing
 
   protected:

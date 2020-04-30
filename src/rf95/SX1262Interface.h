@@ -13,4 +13,9 @@ class SX1262Interface : public RadioLibInterface
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
     virtual bool init();
+
+    /// Apply any radio provisioning changes
+    /// Make sure the Driver is properly configured before calling init().
+    /// \return true if initialisation succeeded.
+    virtual bool reconfigure();
 };

@@ -10,6 +10,37 @@ RadioLibInterface::RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq
 {
 }
 
+/**
+ * Convert our modemConfig enum into wf, sf, etc...
+ */
+void RadioLibInterface::applyModemConfig()
+{
+    switch (modemConfig) {
+    case RH_RF95::Bw125Cr45Sf128: ///< Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on. Default medium range
+        bw = 125;
+        cr = 5;
+        sf = 7;
+        break;
+    case RH_RF95::Bw500Cr45Sf128: ///< Bw = 500 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on. Fast+short range
+        bw = 500;
+        cr = 5;
+        sf = 7;
+        break;
+    case RH_RF95::Bw31_25Cr48Sf512: ///< Bw = 31.25 kHz, Cr = 4/8, Sf = 512chips/symbol, CRC on. Slow+long range
+        bw = 31.25;
+        cr = 8;
+        sf = 9;
+        break;
+    case RH_RF95::Bw125Cr48Sf4096:
+        bw = 125;
+        cr = 8;
+        sf = 12;
+        break;
+    default:
+        assert(0); // Unknown enum
+    }
+}
+
 ErrorCode RadioLibInterface::send(MeshPacket *p)
 {
     return ERR_NONE;

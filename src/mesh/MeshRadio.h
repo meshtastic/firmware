@@ -100,4 +100,9 @@ class MeshRadio
         radioIf.sleep();
         return 0;
     }
+
+    /**
+     * Pull our channel settings etc... from protobufs to the dumb interface settings
+     */
+    void applySettings();
 };
