@@ -4,8 +4,30 @@
 
 #include <RadioLib.h>
 
+// ESP32 has special rules about ISR code
+#ifdef ARDUINO_ARCH_ESP32
+#define INTERRUPT_ATTR IRAM_ATTR
+#else
+#define INTERRUPT_ATTR
+#endif
+
 class RadioLibInterface : public RadioInterface
 {
+    enum PendingISR { ISR_NONE = 0, ISR_RX, ISR_TX };
+
+    /**
+     * What sort of interrupt do we expect our helper thread to now handle */
+    volatile PendingISR pending;
+
+    /** Our ISR code currently needs this to find our active instance
+     */
+    static RadioLibInterface *instance;
+
+    /**
+     * Raw ISR handler that just calls our polymorphic method
+     */
+    static void isrRxLevel0(), isrTxLevel0();
+
   protected:
     float bw = 125;
     uint8_t sf = 9;
@@ -26,6 +48,16 @@ class RadioLibInterface : public RadioInterface
      * provides lowest common denominator RadioLib API
      */
     PhysicalLayer &iface;
+
+    /**
+     * Glue functions called from ISR land
+     */
+    virtual void disableInterrupt() = 0;
+
+    /**
+     * Enable a particular ISR callback glue function
+     */
+    virtual void enableInterrupt(void (*)()) = 0;
 
   public:
     RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy, SPIClass &spi,
@@ -51,9 +83,20 @@ class RadioLibInterface : public RadioInterface
     /// \return true if initialisation succeeded.
     virtual bool init() { return true; }
 
+    virtual void loop(); // Idle processing
+
   protected:
     /**
      * Convert our modemConfig enum into wf, sf, etc...
      */
     void applyModemConfig();
+
+    /** Could we send right now (i.e. either not actively receiving or transmitting)? */
+    virtual bool canSendImmediately() = 0;
+
+    /** start an immediate transmit */
+    void startSend(MeshPacket *txp);
+
+    void handleTransmitInterrupt();
+    void handleReceiveInterrupt();
 };

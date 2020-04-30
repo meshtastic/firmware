@@ -13,10 +13,6 @@ class CustomRF95 : public RH_RF95, public RadioInterface
 {
     friend class MeshRadio; // for debugging we let that class touch pool
 
-    PointerQueue<MeshPacket> txQueue;
-
-    uint32_t lastTxStart = 0L;
-
   public:
     /** pool is the pool we will alloc our rx packets from
      * rxDest is where we will send any rx packets, it becomes receivers responsibility to return packet to the pool

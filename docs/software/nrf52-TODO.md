@@ -47,6 +47,9 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 
 ## Items to be 'feature complete'
 
+- figure out what the correct current limit should be for the sx1262, currently we just use the default 100
+- use SX126x::startReceiveDutyCycleAuto to save power by sleeping and briefly waking to check for preamble bits. Change xmit rules to have more preamble bits.
+- put sx1262 in sleepmode when processor gets shutdown (or rebooted), ideally even for critical faults (to keep power draw low). repurpose deepsleep state for this.
 - good power management tips: https://devzone.nordicsemi.com/nordic/nordic-blog/b/blog/posts/optimizing-power-on-nrf52-designs
 - call PMU set_ADC_CONV(0) during sleep, to stop reading PMU adcs and decrease current draw
 - do final power measurements

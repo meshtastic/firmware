@@ -27,6 +27,9 @@ bool SX1262Interface::init()
     int res = lora.begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength, tcxoVoltage, useRegulatorLDO);
     DEBUG_MSG("LORA init result %d\n", res);
 
+    if (res != ERR_NONE)
+        res = lora.setCRC(SX126X_LORA_CRC_ON);
+
     return res == ERR_NONE;
 }
 
@@ -68,4 +71,20 @@ bool SX1262Interface::reconfigure()
     assert(0); // FIXME - set mode back to receive?
 
     return true;
+}
+
+/** Could we send right now (i.e. either not actively receving or transmitting)? */
+bool SX1262Interface::canSendImmediately()
+{
+    return true; // FIXME
+#if 0
+    // We wait _if_ we are partially though receiving a packet (rather than just merely waiting for one).
+    // To do otherwise would be doubly bad because not only would we drop the packet that was on the way in,
+    // we almost certainly guarantee no one outside will like the packet we are sending.
+    if (_mode == RHModeIdle || isReceiving()) {
+        // if the radio is idle, we can send right away
+        DEBUG_MSG("immediate send on mesh fr=0x%x,to=0x%x,id=%d\n (txGood=%d,rxGood=%d,rxBad=%d)\n", p->from, p->to, p->id,
+                  txGood(), rxGood(), rxBad());
+    }
+#endif 
 }
