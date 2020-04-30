@@ -17,7 +17,7 @@ class RadioLibInterface : public RadioInterface
 
     /**
      * What sort of interrupt do we expect our helper thread to now handle */
-    volatile PendingISR pending;
+    volatile PendingISR pending = ISR_NONE;
 
     /** Our ISR code currently needs this to find our active instance
      */
@@ -27,6 +27,11 @@ class RadioLibInterface : public RadioInterface
      * Raw ISR handler that just calls our polymorphic method
      */
     static void isrTxLevel0();
+
+    /**
+     * Debugging counts
+     */
+    uint32_t rxBad = 0, rxGood = 0, txGood = 0;
 
   protected:
     float bw = 125;

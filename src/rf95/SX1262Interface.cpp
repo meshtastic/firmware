@@ -100,7 +100,11 @@ bool SX1262Interface::canSendImmediately()
     // We wait _if_ we are partially though receiving a packet (rather than just merely waiting for one).
     // To do otherwise would be doubly bad because not only would we drop the packet that was on the way in,
     // we almost certainly guarantee no one outside will like the packet we are sending.
-    bool busy = sendingPacket != NULL || (isReceiving && lora.getPacketLength() > 0);
+    bool busyTx = sendingPacket != NULL;
+    bool busyRx = isReceiving && lora.getPacketLength() > 0;
 
-    return !busy;
+    if (busyTx || busyRx)
+        DEBUG_MSG("Can not set now, busyTx=%d, busyRx=%d\n", busyTx, busyRx);
+
+    return !busyTx && !busyRx;
 }
