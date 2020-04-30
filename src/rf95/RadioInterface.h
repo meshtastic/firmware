@@ -8,6 +8,18 @@
 
 #define MAX_TX_QUEUE 16 // max number of packets which can be waiting for transmission
 
+#define MAX_RHPACKETLEN 256
+
+/**
+ * This structure has to exactly match the wire layout when sent over the radio link.  Used to keep compatibility 
+ * wtih the old radiohead implementation.
+ */
+typedef struct {
+    uint8_t to, from, id, flags;
+} PacketHeader;
+
+
+
 /**
  * Basic operations all radio chipsets must implement.
  *
@@ -20,6 +32,13 @@ class RadioInterface
 
   protected:
     MeshPacket *sendingPacket = NULL; // The packet we are currently sending
+    PointerQueue<MeshPacket> txQueue;
+    uint32_t lastTxStart = 0L;
+
+    /**
+     * A temporary buffer used for sending/receving packets, sized to hold the biggest buffer we might need
+     * */
+    uint8_t radiobuf[MAX_RHPACKETLEN];
 
     /**
      * Enqueue a received packet for the registered receiver
@@ -82,6 +101,14 @@ class RadioInterface
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
     virtual bool reconfigure() = 0;
+
+  protected:
+    /***
+     * given a packet set sendingPacket and decode the protobufs into radiobuf.  Returns # of bytes to send (including the PacketHeader & payload).
+     * 
+     * Used as the first step of 
+     */
+    size_t beginSending(MeshPacket *p);
 };
 
 class SimRadio : public RadioInterface

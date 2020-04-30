@@ -7,11 +7,7 @@
 
 #ifdef RF95_IRQ_GPIO
 
-/// A temporary buffer used for sending/receving packets, sized to hold the biggest buffer we might need
-#define MAX_RHPACKETLEN 251
-static uint8_t radiobuf[MAX_RHPACKETLEN];
-
-CustomRF95::CustomRF95() : RH_RF95(NSS_GPIO, RF95_IRQ_GPIO), txQueue(MAX_TX_QUEUE) {}
+CustomRF95::CustomRF95() : RH_RF95(NSS_GPIO, RF95_IRQ_GPIO) {}
 
 bool CustomRF95::canSleep()
 {
@@ -52,12 +48,10 @@ ErrorCode CustomRF95::send(MeshPacket *p)
     // We wait _if_ we are partially though receiving a packet (rather than just merely waiting for one).
     // To do otherwise would be doubly bad because not only would we drop the packet that was on the way in,
     // we almost certainly guarantee no one outside will like the packet we are sending.
-    if (_mode == RHModeIdle || (_mode == RHModeRx && !isReceiving())) {
+    if (_mode == RHModeIdle || !isReceiving()) {
         // if the radio is idle, we can send right away
         DEBUG_MSG("immediate send on mesh fr=0x%x,to=0x%x,id=%d\n (txGood=%d,rxGood=%d,rxBad=%d)\n", p->from, p->to, p->id,
                   txGood(), rxGood(), rxBad());
-
-        waitPacketSent(); // Make sure we dont interrupt an outgoing message
 
         if (!waitCAD())
             return false; // Check channel activity
@@ -159,29 +153,20 @@ void CustomRF95::handleIdleISR()
 /// This routine might be called either from user space or ISR
 void CustomRF95::startSend(MeshPacket *txp)
 {
-    assert(!sendingPacket);
-
-    // DEBUG_MSG("sending queued packet on mesh (txGood=%d,rxGood=%d,rxBad=%d)\n", rf95.txGood(), rf95.rxGood(), rf95.rxBad());
-    assert(txp->has_payload);
-
-    lastTxStart = millis();
-
-    size_t numbytes = pb_encode_to_bytes(radiobuf, sizeof(radiobuf), SubPacket_fields, &txp->payload);
-
-    sendingPacket = txp;
+    size_t numbytes = beginSending(txp);
 
     setHeaderTo(txp->to);
     setHeaderId(txp->id);
 
     // if the sender nodenum is zero, that means uninitialized
-    assert(txp->from);
     setHeaderFrom(txp->from); // We must do this before each send, because we might have just changed our nodenum
 
     assert(numbytes <= 251); // Make sure we don't overflow the tiny max packet size
 
     // uint32_t start = millis(); // FIXME, store this in the class
 
-    int res = RH_RF95::send(radiobuf, numbytes);
+    // This legacy implementation doesn't use our inserted packet header
+    int res = RH_RF95::send(radiobuf + sizeof(PacketHeader), numbytes - sizeof(PacketHeader));
     assert(res);
 }
 
