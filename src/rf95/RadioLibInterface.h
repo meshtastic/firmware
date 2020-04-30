@@ -88,6 +88,13 @@ class RadioLibInterface : public RadioInterface
 
     virtual void loop(); // Idle processing
 
+    /**
+     * Return true if we think the board can go to sleep (i.e. our tx queue is empty, we are not sending or receiving)
+     *
+     * This method must be used before putting the CPU into deep or light sleep.
+     */
+    virtual bool canSleep();
+
   private:
     /** start an immediate transmit */
     void startSend(MeshPacket *txp);

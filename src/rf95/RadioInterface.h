@@ -67,7 +67,7 @@ class RadioInterface
      *
      * This method must be used before putting the CPU into deep or light sleep.
      */
-    bool canSleep() { return true; }
+    virtual bool canSleep() { return true; }
 
     /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.
     virtual bool sleep() { return true; }

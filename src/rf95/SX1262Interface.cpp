@@ -108,3 +108,14 @@ bool SX1262Interface::canSendImmediately()
 
     return !busyTx && !busyRx;
 }
+
+
+
+bool SX1262Interface::sleep()
+{
+    // we no longer care about interrupts from this device
+    // prepareDeepSleep();
+
+    // FIXME - put chipset into sleep mode
+    return false;
+}
