@@ -43,7 +43,10 @@ class SX1262Interface : public RadioLibInterface
      * Start waiting to receive a message
      */
     virtual void startReceive();
-
+    /**
+     * Add SNR data to received messages
+     */
+    virtual void addReceiveMetadata(MeshPacket *mp);
   private:
     void setStandby();
 };

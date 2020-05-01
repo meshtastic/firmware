@@ -87,6 +87,14 @@ bool RF95Interface::reconfigure()
     return ERR_NONE;
 }
 
+/**
+ * Add SNR data to received messages
+ */
+void RF95Interface::addReceiveMetadata(MeshPacket *mp)
+{
+    mp->rx_snr = lora->getSNR();
+}
+
 void RF95Interface::setStandby()
 {
     int err = lora->standby();
