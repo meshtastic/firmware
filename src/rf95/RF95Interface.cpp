@@ -18,9 +18,8 @@ bool RF95Interface::init()
     if (power > 20) // This chip has lower power limits than some
         power = 20;
 
-    auto dev = new RadioLibRF95(&module);
-    iface = lora = dev;
-    int res = dev->begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength);
+    iface = lora = new RadioLibRF95(&module);
+    int res = lora->begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength);
     DEBUG_MSG("LORA init result %d\n", res);
 
     if (res == ERR_NONE)
@@ -113,7 +112,7 @@ bool RF95Interface::canSendImmediately()
     // To do otherwise would be doubly bad because not only would we drop the packet that was on the way in,
     // we almost certainly guarantee no one outside will like the packet we are sending.
     bool busyTx = sendingPacket != NULL;
-    bool busyRx = false; // FIXME - use old impl.  isReceiving && lora->getPacketLength() > 0;
+    bool busyRx = isReceiving && lora->isReceiving();
 
     if (busyTx || busyRx)
         DEBUG_MSG("Can not set now, busyTx=%d, busyRx=%d\n", busyTx, busyRx);
