@@ -100,18 +100,9 @@ void SX1262Interface::startReceive()
 }
 
 /** Could we send right now (i.e. either not actively receving or transmitting)? */
-bool SX1262Interface::canSendImmediately()
+bool SX1262Interface::isActivelyReceiving()
 {
-    // We wait _if_ we are partially though receiving a packet (rather than just merely waiting for one).
-    // To do otherwise would be doubly bad because not only would we drop the packet that was on the way in,
-    // we almost certainly guarantee no one outside will like the packet we are sending.
-    bool busyTx = sendingPacket != NULL;
-    bool busyRx = isReceiving && lora.getPacketLength() > 0;
-
-    if (busyTx || busyRx)
-        DEBUG_MSG("Can not set now, busyTx=%d, busyRx=%d\n", busyTx, busyRx);
-
-    return !busyTx && !busyRx;
+    return lora.getPacketLength() > 0;
 }
 
 bool SX1262Interface::sleep()

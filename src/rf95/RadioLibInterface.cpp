@@ -64,6 +64,22 @@ void RadioLibInterface::applyModemConfig()
     }
 }
 
+/** Could we send right now (i.e. either not actively receving or transmitting)? */
+bool RadioLibInterface::canSendImmediately()
+{
+    // We wait _if_ we are partially though receiving a packet (rather than just merely waiting for one).
+    // To do otherwise would be doubly bad because not only would we drop the packet that was on the way in,
+    // we almost certainly guarantee no one outside will like the packet we are sending.
+    PendingISR isPending = pending;
+    bool busyTx = sendingPacket != NULL;
+    bool busyRx = isReceiving && isActivelyReceiving();
+
+    if (busyTx || busyRx || isPending)
+        DEBUG_MSG("Can not send yet, busyTx=%d, busyRx=%d, intPend=%d\n", busyTx, busyRx, isPending);
+
+    return !busyTx && !busyRx && !isPending;
+}
+
 /// Send a packet (possibly by enquing in a private fifo).  This routine will
 /// later free() the packet to pool.  This routine is not allowed to stall because it is called from
 /// bluetooth comms code.  If the txmit queue is empty it might return an error

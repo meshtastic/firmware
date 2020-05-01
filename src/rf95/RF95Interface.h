@@ -38,9 +38,9 @@ class RF95Interface : public RadioLibInterface
      */
     virtual void enableInterrupt(void (*callback)()) { lora->setDio0Action(callback); }
 
-    /** Could we send right now (i.e. either not actively receiving or transmitting)? */
-    virtual bool canSendImmediately();
-
+    /** are we actively receiving a packet (only called during receiving state) */
+    virtual bool isActivelyReceiving();
+    
     /**
      * Start waiting to receive a message
      */
