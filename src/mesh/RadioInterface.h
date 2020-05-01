@@ -3,6 +3,7 @@
 #include "MemoryPool.h"
 #include "MeshTypes.h"
 #include "PointerQueue.h"
+#include "WorkerThread.h"
 #include "mesh.pb.h"
 
 #define MAX_TX_QUEUE 16 // max number of packets which can be waiting for transmission
@@ -29,7 +30,7 @@ typedef enum {
  *
  * This defines the SOLE API for talking to radios (because soon we will have alternate radio implementations)
  */
-class RadioInterface
+class RadioInterface : protected NotifiedWorkerThread
 {
     friend class MeshRadio; // for debugging we let that class touch pool
     PointerQueue<MeshPacket> *rxDest = NULL;
@@ -64,8 +65,6 @@ class RadioInterface
      */
     void setReceiver(PointerQueue<MeshPacket> *_rxDest) { rxDest = _rxDest; }
 
-    virtual void loop() {} // Idle processing
-
     /**
      * Return true if we think the board can go to sleep (i.e. our tx queue is empty, we are not sending or receiving)
      *
@@ -88,7 +87,7 @@ class RadioInterface
     /// Initialise the Driver transport hardware and software.
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
-    virtual bool init() = 0;
+    virtual bool init();
 
     /// Apply any radio provisioning changes
     /// Make sure the Driver is properly configured before calling init().
@@ -103,6 +102,8 @@ class RadioInterface
      * Used as the first step of
      */
     size_t beginSending(MeshPacket *p);
+
+    virtual void loop() {} // Idle processing
 };
 
 class SimRadio : public RadioInterface

@@ -315,7 +315,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     const char *username = node->has_user ? node->user.long_name : "Unknown Name";
 
     static char signalStr[20];
-    snprintf(signalStr, sizeof(signalStr), "Signal: %ld", node->snr);
+    snprintf(signalStr, sizeof(signalStr), "Signal: %.0f", node->snr);
 
     uint32_t agoSecs = sinceLastSeen(node);
     static char lastStr[20];
