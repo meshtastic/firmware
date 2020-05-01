@@ -11,7 +11,7 @@ static SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 
 RadioLibInterface::RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy,
                                      SPIClass &spi, PhysicalLayer *_iface)
-    : module(cs, irq, rst, busy, spi, spiSettings), iface(*_iface)
+    : module(cs, irq, rst, busy, spi, spiSettings), iface(_iface)
 {
     assert(!instance); // We assume only one for now
     instance = this;
@@ -156,9 +156,9 @@ void RadioLibInterface::handleReceiveInterrupt()
     DEBUG_MSG("handling lora RX interrupt\n");
 
     // read the number of actually received bytes
-    size_t length = iface.getPacketLength();
+    size_t length = iface->getPacketLength();
 
-    int state = iface.readData(radiobuf, length);
+    int state = iface->readData(radiobuf, length);
     if (state != ERR_NONE) {
         DEBUG_MSG("ignoring received packet due to error=%d\n", state);
         rxBad++;
@@ -207,7 +207,7 @@ void RadioLibInterface::startSend(MeshPacket *txp)
 {
     size_t numbytes = beginSending(txp);
 
-    int res = iface.startTransmit(radiobuf, numbytes);
+    int res = iface->startTransmit(radiobuf, numbytes);
     assert(res == ERR_NONE);
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
