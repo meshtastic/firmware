@@ -24,14 +24,13 @@ bool RF95Interface::init()
      */
     if (CH0 < 500.0) {
         auto dev = new RFM96(&module);
-        lora = dev;
+        iface = lora = dev;
         res = dev->begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength);
     } else {
         auto dev = new RFM95(&module);
-        lora = dev;
+        iface = lora = dev;
         res = dev->begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength);
     }
-
     DEBUG_MSG("LORA init result %d\n", res);
 
     if (res == ERR_NONE)
