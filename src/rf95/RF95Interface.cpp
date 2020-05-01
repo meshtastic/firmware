@@ -1,6 +1,6 @@
 #include "RF95Interface.h"
 #include "MeshRadio.h" // kinda yucky, but we need to know which region we are in
-
+#include "RadioLibRF95.h"
 #include <configuration.h>
 
 RF95Interface::RF95Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, SPIClass &spi)
@@ -18,20 +18,9 @@ bool RF95Interface::init()
     if (power > 20) // This chip has lower power limits than some
         power = 20;
 
-    int res;
-    /**
-     * We do a nasty check on freq range to figure our RFM96 vs RFM95
-     *
-     */
-    if (CH0 < 530.0) {
-        auto dev = new RFM96(&module);
-        iface = lora = dev;
-        res = dev->begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength);
-    } else {
-        auto dev = new RFM95(&module);
-        iface = lora = dev;
-        res = dev->begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength);
-    }
+    auto dev = new RadioLibRF95(&module);
+    iface = lora = dev;
+    int res = dev->begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength);
     DEBUG_MSG("LORA init result %d\n", res);
 
     if (res == ERR_NONE)
