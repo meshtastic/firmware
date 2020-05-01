@@ -1,31 +1,44 @@
-#include "SX1262Interface.h"
+#include "RF95Interface.h"
+#include "MeshRadio.h" // kinda yucky, but we need to know which region we are in
+
 #include <configuration.h>
 
-SX1262Interface::SX1262Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy,
-                                 SPIClass &spi)
-    : RadioLibInterface(cs, irq, rst, busy, spi, &lora), lora(&module)
+RF95Interface::RF95Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, SPIClass &spi)
+    : RadioLibInterface(cs, irq, rst, 0, spi)
 {
+    // FIXME - we assume devices never get destroyed
 }
 
 /// Initialise the Driver transport hardware and software.
 /// Make sure the Driver is properly configured before calling init().
 /// \return true if initialisation succeeded.
-bool SX1262Interface::init()
+bool RF95Interface::init()
 {
     // FIXME, move this to main
     SPI.begin();
 
-    float tcxoVoltage = 0;        // None - we use an XTAL
-    bool useRegulatorLDO = false; // Seems to depend on the connection to pin 9/DCC_SW - if an inductor DCDC?
-
     applyModemConfig();
-    if (power > 22) // This chip has lower power limits than some
-        power = 22;
-    int res = lora.begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength, tcxoVoltage, useRegulatorLDO);
+    if (power > 20) // This chip has lower power limits than some
+        power = 20;
+
+    int res;
+    /**
+     * We do a nasty check on freq range to figure our RFM96 vs RFM95
+     */
+    if (CH0 < 500.0) {
+        auto dev = new RFM96(&module);
+        lora = dev;
+        res = dev->begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength);
+    } else {
+        auto dev = new RFM95(&module);
+        lora = dev;
+        res = dev->begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength);
+    }
+
     DEBUG_MSG("LORA init result %d\n", res);
 
     if (res == ERR_NONE)
-        res = lora.setCRC(SX126X_LORA_CRC_ON);
+        res = lora->setCRC(SX126X_LORA_CRC_ON);
 
     if (res == ERR_NONE)
         startReceive(); // start receiving
@@ -33,7 +46,7 @@ bool SX1262Interface::init()
     return res == ERR_NONE;
 }
 
-bool SX1262Interface::reconfigure()
+bool RF95Interface::reconfigure()
 {
     applyModemConfig();
 
@@ -41,30 +54,30 @@ bool SX1262Interface::reconfigure()
     setStandby();
 
     // configure publicly accessible settings
-    int err = lora.setSpreadingFactor(sf);
+    int err = lora->setSpreadingFactor(sf);
     assert(err == ERR_NONE);
 
-    err = lora.setBandwidth(bw);
+    err = lora->setBandwidth(bw);
     assert(err == ERR_NONE);
 
-    err = lora.setCodingRate(cr);
+    err = lora->setCodingRate(cr);
     assert(err == ERR_NONE);
 
-    err = lora.setSyncWord(syncWord);
+    err = lora->setSyncWord(syncWord);
     assert(err == ERR_NONE);
 
-    err = lora.setCurrentLimit(currentLimit);
+    err = lora->setCurrentLimit(currentLimit);
     assert(err == ERR_NONE);
 
-    err = lora.setPreambleLength(preambleLength);
+    err = lora->setPreambleLength(preambleLength);
     assert(err == ERR_NONE);
 
-    err = lora.setFrequency(freq);
+    err = lora->setFrequency(freq);
     assert(err == ERR_NONE);
 
-    if (power > 22) // This chip has lower power limits than some
-        power = 22;
-    err = lora.setOutputPower(power);
+    if (power > 20) // This chip has lower power limits than some
+        power = 20;
+    err = lora->setOutputPower(power);
     assert(err == ERR_NONE);
 
     startReceive(); // restart receiving
@@ -72,9 +85,9 @@ bool SX1262Interface::reconfigure()
     return ERR_NONE;
 }
 
-void SX1262Interface::setStandby()
+void RF95Interface::setStandby()
 {
-    int err = lora.standby();
+    int err = lora->standby();
     assert(err == ERR_NONE);
 
     isReceiving = false; // If we were receiving, not any more
@@ -82,10 +95,10 @@ void SX1262Interface::setStandby()
     disableInterrupt();
 }
 
-void SX1262Interface::startReceive()
+void RF95Interface::startReceive()
 {
     setStandby();
-    int err = lora.startReceive();
+    int err = lora->startReceive();
     assert(err == ERR_NONE);
 
     isReceiving = true;
@@ -95,13 +108,13 @@ void SX1262Interface::startReceive()
 }
 
 /** Could we send right now (i.e. either not actively receving or transmitting)? */
-bool SX1262Interface::canSendImmediately()
+bool RF95Interface::canSendImmediately()
 {
     // We wait _if_ we are partially though receiving a packet (rather than just merely waiting for one).
     // To do otherwise would be doubly bad because not only would we drop the packet that was on the way in,
     // we almost certainly guarantee no one outside will like the packet we are sending.
     bool busyTx = sendingPacket != NULL;
-    bool busyRx = isReceiving && lora.getPacketLength() > 0;
+    bool busyRx = isReceiving && lora->getPacketLength() > 0;
 
     if (busyTx || busyRx)
         DEBUG_MSG("Can not set now, busyTx=%d, busyRx=%d\n", busyTx, busyRx);
@@ -109,11 +122,11 @@ bool SX1262Interface::canSendImmediately()
     return !busyTx && !busyRx;
 }
 
-bool SX1262Interface::sleep()
+bool RF95Interface::sleep()
 {
     // put chipset into sleep mode
     disableInterrupt();
-    lora.sleep();
+    lora->sleep();
 
     return true;
 }

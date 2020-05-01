@@ -52,7 +52,7 @@ class RadioLibInterface : public RadioInterface
     /**
      * provides lowest common denominator RadioLib API
      */
-    PhysicalLayer &iface;
+    PhysicalLayer *iface;
 
     /// are _trying_ to receive a packet currently (note - we might just be waiting for one)
     bool isReceiving;
@@ -69,7 +69,7 @@ class RadioLibInterface : public RadioInterface
 
   public:
     RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy, SPIClass &spi,
-                      PhysicalLayer *iface);
+                      PhysicalLayer *iface = NULL);
 
     virtual ErrorCode send(MeshPacket *p);
 
