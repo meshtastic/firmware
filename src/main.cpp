@@ -118,8 +118,10 @@ static uint32_t ledBlinker()
 
 Periodic ledPeriodic(ledBlinker);
 
-#ifdef NO_ESP32
+#include "RF95Interface.h"
 #include "SX1262Interface.h"
+
+#ifdef NO_ESP32
 #include "variant.h"
 #endif
 
@@ -199,10 +201,20 @@ void setup()
     digitalWrite(SX1262_ANT_SW, 1);
 #endif
 
+    // Init our SPI controller
+#ifdef NRF52_SERIES
+    SPI.begin();
+#else
+    // ESP32
+    SPI.begin(SCK_GPIO, MISO_GPIO, MOSI_GPIO, NSS_GPIO);
+    SPI.setFrequency(4000000);
+#endif
+
     // MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
     RadioInterface *rIf =
 #if defined(RF95_IRQ_GPIO)
-        new CustomRF95();
+        // new CustomRF95(); old Radiohead based driver
+        new RF95Interface(NSS_GPIO, RF95_IRQ_GPIO, RESET_GPIO, SPI);
 #elif defined(SX1262_CS)
         new SX1262Interface(SX1262_CS, SX1262_DIO1, SX1262_RESET, SX1262_BUSY, SPI);
 #else

@@ -30,7 +30,7 @@ class RF95Interface : public RadioLibInterface
     /**
      * Glue functions called from ISR land
      */
-    virtual void INTERRUPT_ATTR disableInterrupt() { lora->clearDio0Action(); }
+    virtual void disableInterrupt();
 
     /**
      * Enable a particular ISR callback glue function
