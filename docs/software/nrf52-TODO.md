@@ -4,20 +4,10 @@
 
 Minimum items needed to make sure hardware is good.
 
-- DONE select and install a bootloader (adafruit)
-- DONE get old radio driver working on NRF52
-- DONE basic test of BLE
-- DONE get a debug 'serial' console working via the ICE passthrough feature
 - add a hard fault handler
-- DONE switch to RadioLab? test it with current radio. https://github.com/jgromes/RadioLib
-- change rx95 to radiolib
-- track rxbad, rxgood, txgood
-- neg 7 error code from receive
-- at boot we are starting our message IDs at 1, rather we should start them at a random number. also, seed random based on timer. this could be the cause of our first message not seen bug
-- use SX126x::startReceiveDutyCycleAuto to save power by sleeping and briefly waking to check for preamble bits. Change xmit rules to have more preamble bits.
+- at boot we are starting our message IDs at 1, rather we should start them at a random number. also, seed random based on timer. this could be the cause of our first message not seen bug. keep packet sequence number in **attribute** ((section (".noinit")))
 - use "variants" to get all gpio bindings
 - plug in correct variants for the real board
-- remove unused sx1262 lib from github
 - Use the PMU driver on real hardware
 - add a NEMA based GPS driver to test GPS
 - Use new radio driver on real hardware - possibly start with https://os.mbed.com/teams/Semtech/code/SX126xLib/
@@ -54,6 +44,7 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 
 ## Items to be 'feature complete'
 
+- use SX126x::startReceiveDutyCycleAuto to save power by sleeping and briefly waking to check for preamble bits. Change xmit rules to have more preamble bits.
 - turn back on in-radio destaddr checking for RF95
 - remove the MeshRadio wrapper - we don't need it anymore, just do everythin in RadioInterface subclasses.
 - figure out what the correct current limit should be for the sx1262, currently we just use the default 100
@@ -97,6 +88,15 @@ Nice ideas worth considering someday...
 
 - DONE add "DFU trigger library" to application load
 - DONE: using this: Possibly use this bootloader? https://github.com/adafruit/Adafruit_nRF52_Bootloader
+- DONE select and install a bootloader (adafruit)
+- DONE get old radio driver working on NRF52
+- DONE basic test of BLE
+- DONE get a debug 'serial' console working via the ICE passthrough feature
+- DONE switch to RadioLab? test it with current radio. https://github.com/jgromes/RadioLib
+- DONE change rx95 to radiolib
+- DONE track rxbad, rxgood, txgood
+- DONE neg 7 error code from receive
+- DONE remove unused sx1262 lib from github
 
 ```
 
