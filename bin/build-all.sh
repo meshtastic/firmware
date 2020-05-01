@@ -4,12 +4,12 @@ set -e
 
 source bin/version.sh
 
-COUNTRIES="US EU433 EU865 CN JP"
-#COUNTRIES=US
+#COUNTRIES="US EU433 EU865 CN JP"
+COUNTRIES=US
 #COUNTRIES=CN
 
-BOARDS="ttgo-lora32-v2 ttgo-lora32-v1 tbeam heltec"
-#BOARDS=tbeam
+#BOARDS="ttgo-lora32-v2 ttgo-lora32-v1 tbeam heltec"
+BOARDS=tbeam
 
 OUTDIR=release/latest
 
