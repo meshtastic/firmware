@@ -61,7 +61,8 @@ static Periodic sendOwnerPeriod(sendOwnerCb);
 // FIXME, move this someplace better
 PacketId generatePacketId()
 {
-    static uint32_t i;
+    static uint32_t i __attribute__((
+        section(".noinit"))); // We try to keep this in noinit so that hopefully it keeps increasing even across reboots
 
     i++;
     return (i % NUM_PACKET_ID) + 1; // return number between 1 and 255

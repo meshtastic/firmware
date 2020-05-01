@@ -89,8 +89,8 @@ void RF95Interface::setStandby()
     assert(err == ERR_NONE);
 
     isReceiving = false; // If we were receiving, not any more
-    completeSending();   // If we were sending, not anymore
     disableInterrupt();
+    completeSending(); // If we were sending, not anymore
 }
 
 void RF95Interface::startReceive()

@@ -101,8 +101,8 @@ bool RadioLibInterface::canSleep()
 
 void RadioLibInterface::loop()
 {
-    PendingISR wasPending = pending; // atomic read
-    if (wasPending) {
+    PendingISR wasPending;
+    while ((wasPending = pending) != 0) { // atomic read
         pending = ISR_NONE; // If the flag was set, it is _guaranteed_ the ISR won't be running, because it masked itself
 
         if (wasPending == ISR_TX)
@@ -130,8 +130,8 @@ void RadioLibInterface::startNextWork()
 
 void RadioLibInterface::handleTransmitInterrupt()
 {
-    DEBUG_MSG("handling lora TX interrupt\n");
-    assert(sendingPacket); // Were we sending?
+    // DEBUG_MSG("handling lora TX interrupt\n");
+    assert(sendingPacket); // Were we sending? - FIXME, this was null coming out of light sleep due to RF95 ISR!
 
     completeSending();
 }
@@ -140,6 +140,7 @@ void RadioLibInterface::completeSending()
 {
     if (sendingPacket) {
         txGood++;
+        DEBUG_MSG("Completed sending to=0x%x, id=%u\n", sendingPacket->to, sendingPacket->id);
 
         // We are done sending that packet, release it
         packetPool.release(sendingPacket);
@@ -152,8 +153,6 @@ void RadioLibInterface::handleReceiveInterrupt()
 {
     assert(isReceiving);
     isReceiving = false;
-
-    DEBUG_MSG("handling lora RX interrupt\n");
 
     // read the number of actually received bytes
     size_t length = iface->getPacketLength();
@@ -195,6 +194,7 @@ void RadioLibInterface::handleReceiveInterrupt()
                     // parsing was successful, queue for our recipient
                     mp->has_payload = true;
                     rxGood++;
+                    DEBUG_MSG("Lora RX interrupt from=0x%x, id=%u\n", mp->from, mp->id);
 
                     deliverToReceiver(mp);
                 }
