@@ -98,7 +98,7 @@ bool RadioLibInterface::canSendImmediately()
     bool busyRx = isReceiving && isActivelyReceiving();
 
     if (busyTx || busyRx || isPending)
-        DEBUG_MSG("Can not send yet, busyTx=%d, busyRx=%d, intPend=%d\n", busyTx, busyRx, isPending);
+        DEBUG_MSG("Can not send yet, busyTx=%d, busyRx=%d, intPend=%d\r\n", busyTx, busyRx, isPending);
 
     return !busyTx && !busyRx && !isPending;
 }
@@ -113,13 +113,13 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
     // we almost certainly guarantee no one outside will like the packet we are sending.
     if (canSendImmediately()) {
         // if the radio is idle, we can send right away
-        DEBUG_MSG("immediate send on mesh fr=0x%x,to=0x%x,id=%d\n (txGood=%d,rxGood=%d,rxBad=%d)\n", p->from, p->to, p->id,
+        DEBUG_MSG("immediate send on mesh fr=0x%x,to=0x%x,id=%d\r\n (txGood=%d,rxGood=%d,rxBad=%d)\r\n", p->from, p->to, p->id,
                   txGood, rxGood, rxBad);
 
         startSend(p);
         return ERRNO_OK;
     } else {
-        DEBUG_MSG("enqueuing packet for send from=0x%x, to=0x%x\n", p->from, p->to);
+        DEBUG_MSG("enqueuing packet for send from=0x%x, to=0x%x\r\n", p->from, p->to);
         ErrorCode res = txQueue.enqueue(p, 0) ? ERRNO_OK : ERRNO_UNKNOWN;
 
         if (res != ERRNO_OK) // we weren't able to queue it, so we must drop it to prevent leaks
@@ -133,7 +133,7 @@ bool RadioLibInterface::canSleep()
 {
     bool res = txQueue.isEmpty();
     if (!res) // only print debug messages if we are vetoing sleep
-        DEBUG_MSG("radio wait to sleep, txEmpty=%d\n", txQueue.isEmpty());
+        DEBUG_MSG("radio wait to sleep, txEmpty=%d\r\n", txQueue.isEmpty());
 
     return res;
 }
@@ -167,7 +167,7 @@ void RadioLibInterface::startNextWork()
 
 void RadioLibInterface::handleTransmitInterrupt()
 {
-    // DEBUG_MSG("handling lora TX interrupt\n");
+    // DEBUG_MSG("handling lora TX interrupt\r\n");
     assert(sendingPacket); // Were we sending? - FIXME, this was null coming out of light sleep due to RF95 ISR!
 
     completeSending();
@@ -177,12 +177,12 @@ void RadioLibInterface::completeSending()
 {
     if (sendingPacket) {
         txGood++;
-        DEBUG_MSG("Completed sending to=0x%x, id=%u\n", sendingPacket->to, sendingPacket->id);
+        DEBUG_MSG("Completed sending to=0x%x, id=%u\r\n", sendingPacket->to, sendingPacket->id);
 
         // We are done sending that packet, release it
         packetPool.release(sendingPacket);
         sendingPacket = NULL;
-        // DEBUG_MSG("Done with send\n");
+        // DEBUG_MSG("Done with send\r\n");
     }
 }
 
@@ -196,7 +196,7 @@ void RadioLibInterface::handleReceiveInterrupt()
 
     int state = iface->readData(radiobuf, length);
     if (state != ERR_NONE) {
-        DEBUG_MSG("ignoring received packet due to error=%d\n", state);
+        DEBUG_MSG("ignoring received packet due to error=%d\r\n", state);
         rxBad++;
     } else {
         // Skip the 4 headers that are at the beginning of the rxBuf
@@ -205,14 +205,14 @@ void RadioLibInterface::handleReceiveInterrupt()
 
         // check for short packets
         if (payloadLen < 0) {
-            DEBUG_MSG("ignoring received packet too short\n");
+            DEBUG_MSG("ignoring received packet too short\r\n");
             rxBad++;
         } else {
             const PacketHeader *h = (PacketHeader *)radiobuf;
             uint8_t ourAddr = nodeDB.getNodeNum();
 
             if (h->to != 255 && h->to != ourAddr) {
-                DEBUG_MSG("ignoring packet not sent to us\n");
+                DEBUG_MSG("ignoring packet not sent to us\r\n");
             } else {
                 MeshPacket *mp = packetPool.allocZeroed();
 
@@ -224,14 +224,14 @@ void RadioLibInterface::handleReceiveInterrupt()
                 addReceiveMetadata(mp);
 
                 if (!pb_decode_from_bytes(payload, payloadLen, SubPacket_fields, p)) {
-                    DEBUG_MSG("Invalid protobufs in received mesh packet, discarding.\n");
+                    DEBUG_MSG("Invalid protobufs in received mesh packet, discarding.\r\n");
                     packetPool.release(mp);
                     // rxBad++; not really a hw error
                 } else {
                     // parsing was successful, queue for our recipient
                     mp->has_payload = true;
                     rxGood++;
-                    DEBUG_MSG("Lora RX interrupt from=0x%x, id=%u\n", mp->from, mp->id);
+                    DEBUG_MSG("Lora RX interrupt from=0x%x, id=%u\r\n", mp->from, mp->id);
 
                     deliverToReceiver(mp);
                 }

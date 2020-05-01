@@ -11,7 +11,7 @@ bool bluetoothOn;
 // This routine is called multiple times, once each time we come back from sleep
 void reinitBluetooth()
 {
-    DEBUG_MSG("Starting bluetooth\n");
+    DEBUG_MSG("Starting bluetooth\r\n");
 
     // FIXME - we are leaking like crazy
     // AllocatorScope scope(btPool);
@@ -34,11 +34,11 @@ void reinitBluetooth()
 void setBluetoothEnable(bool on)
 {
     if (on != bluetoothOn) {
-        DEBUG_MSG("Setting bluetooth enable=%d\n", on);
+        DEBUG_MSG("Setting bluetooth enable=%d\r\n", on);
 
         bluetoothOn = on;
         if (on) {
-            Serial.printf("Pre BT: %u heap size\n", ESP.getFreeHeap());
+            Serial.printf("Pre BT: %u heap size\r\n", ESP.getFreeHeap());
             // ESP_ERROR_CHECK( heap_trace_start(HEAP_TRACE_LEAKS) );
             reinitBluetooth();
         } else {
@@ -46,7 +46,7 @@ void setBluetoothEnable(bool on)
             stopMeshBluetoothService(); // Must do before shutting down bluetooth
             deinitBLE();
             destroyMeshBluetoothService(); // must do after deinit, because it frees our service
-            Serial.printf("Shutdown BT: %u heap size\n", ESP.getFreeHeap());
+            Serial.printf("Shutdown BT: %u heap size\r\n", ESP.getFreeHeap());
             // ESP_ERROR_CHECK( heap_trace_stop() );
             // heap_trace_dump();
         }
@@ -94,16 +94,16 @@ void axp192Init()
 {
     if (axp192_found) {
         if (!axp.begin(Wire, AXP192_SLAVE_ADDRESS)) {
-            DEBUG_MSG("AXP192 Begin PASS\n");
+            DEBUG_MSG("AXP192 Begin PASS\r\n");
 
             // axp.setChgLEDMode(LED_BLINK_4HZ);
-            DEBUG_MSG("DCDC1: %s\n", axp.isDCDC1Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("DCDC2: %s\n", axp.isDCDC2Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("LDO2: %s\n", axp.isLDO2Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("LDO3: %s\n", axp.isLDO3Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("DCDC3: %s\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("----------------------------------------\n");
+            DEBUG_MSG("DCDC1: %s\r\n", axp.isDCDC1Enable() ? "ENABLE" : "DISABLE");
+            DEBUG_MSG("DCDC2: %s\r\n", axp.isDCDC2Enable() ? "ENABLE" : "DISABLE");
+            DEBUG_MSG("LDO2: %s\r\n", axp.isLDO2Enable() ? "ENABLE" : "DISABLE");
+            DEBUG_MSG("LDO3: %s\r\n", axp.isLDO3Enable() ? "ENABLE" : "DISABLE");
+            DEBUG_MSG("DCDC3: %s\r\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
+            DEBUG_MSG("Exten: %s\r\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
+            DEBUG_MSG("----------------------------------------\r\n");
 
             axp.setPowerOutPut(AXP192_LDO2, AXP202_ON); // LORA radio
             axp.setPowerOutPut(AXP192_LDO3, AXP202_ON); // GPS main power
@@ -112,12 +112,12 @@ void axp192Init()
             axp.setPowerOutPut(AXP192_DCDC1, AXP202_ON);
             axp.setDCDC1Voltage(3300); // for the OLED power
 
-            DEBUG_MSG("DCDC1: %s\n", axp.isDCDC1Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("DCDC2: %s\n", axp.isDCDC2Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("LDO2: %s\n", axp.isLDO2Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("LDO3: %s\n", axp.isLDO3Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("DCDC3: %s\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
+            DEBUG_MSG("DCDC1: %s\r\n", axp.isDCDC1Enable() ? "ENABLE" : "DISABLE");
+            DEBUG_MSG("DCDC2: %s\r\n", axp.isDCDC2Enable() ? "ENABLE" : "DISABLE");
+            DEBUG_MSG("LDO2: %s\r\n", axp.isLDO2Enable() ? "ENABLE" : "DISABLE");
+            DEBUG_MSG("LDO3: %s\r\n", axp.isLDO3Enable() ? "ENABLE" : "DISABLE");
+            DEBUG_MSG("DCDC3: %s\r\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
+            DEBUG_MSG("Exten: %s\r\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
 
 #if 0
       // cribbing from https://github.com/m5stack/M5StickC/blob/master/src/AXP192.cpp to fix charger to be more like 300ms.  
@@ -154,10 +154,10 @@ void axp192Init()
 #endif
             readPowerStatus();
         } else {
-            DEBUG_MSG("AXP192 Begin FAIL\n");
+            DEBUG_MSG("AXP192 Begin FAIL\r\n");
         }
     } else {
-        DEBUG_MSG("AXP192 not found\n");
+        DEBUG_MSG("AXP192 not found\r\n");
     }
 }
 #endif
@@ -177,13 +177,13 @@ void esp32Setup()
 uint32_t axpDebugRead()
 {
   axp.debugCharging();
-  DEBUG_MSG("vbus current %f\n", axp.getVbusCurrent());
-  DEBUG_MSG("charge current %f\n", axp.getBattChargeCurrent());
-  DEBUG_MSG("bat voltage %f\n", axp.getBattVoltage());
-  DEBUG_MSG("batt pct %d\n", axp.getBattPercentage());
-  DEBUG_MSG("is battery connected %d\n", axp.isBatteryConnect());
-  DEBUG_MSG("is USB connected %d\n", axp.isVBUSPlug());
-  DEBUG_MSG("is charging %d\n", axp.isChargeing());
+  DEBUG_MSG("vbus current %f\r\n", axp.getVbusCurrent());
+  DEBUG_MSG("charge current %f\r\n", axp.getBattChargeCurrent());
+  DEBUG_MSG("bat voltage %f\r\n", axp.getBattVoltage());
+  DEBUG_MSG("batt pct %d\r\n", axp.getBattPercentage());
+  DEBUG_MSG("is battery connected %d\r\n", axp.isBatteryConnect());
+  DEBUG_MSG("is USB connected %d\r\n", axp.isVBUSPlug());
+  DEBUG_MSG("is charging %d\r\n", axp.isChargeing());
 
   return 30 * 1000;
 }
@@ -204,28 +204,28 @@ void esp32Loop()
         pmu_irq = false;
         axp.readIRQ();
 
-        DEBUG_MSG("pmu irq!\n");
+        DEBUG_MSG("pmu irq!\r\n");
 
         if (axp.isChargingIRQ()) {
-            DEBUG_MSG("Battery start charging\n");
+            DEBUG_MSG("Battery start charging\r\n");
         }
         if (axp.isChargingDoneIRQ()) {
-            DEBUG_MSG("Battery fully charged\n");
+            DEBUG_MSG("Battery fully charged\r\n");
         }
         if (axp.isVbusRemoveIRQ()) {
-            DEBUG_MSG("USB unplugged\n");
+            DEBUG_MSG("USB unplugged\r\n");
         }
         if (axp.isVbusPlugInIRQ()) {
-            DEBUG_MSG("USB plugged In\n");
+            DEBUG_MSG("USB plugged In\r\n");
         }
         if (axp.isBattPlugInIRQ()) {
-            DEBUG_MSG("Battery inserted\n");
+            DEBUG_MSG("Battery inserted\r\n");
         }
         if (axp.isBattRemoveIRQ()) {
-            DEBUG_MSG("Battery removed\n");
+            DEBUG_MSG("Battery removed\r\n");
         }
         if (axp.isPEKShortPressIRQ()) {
-            DEBUG_MSG("PEK short button press\n");
+            DEBUG_MSG("PEK short button press\r\n");
         }
 
         readPowerStatus();

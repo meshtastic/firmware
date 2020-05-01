@@ -67,28 +67,28 @@ void scanI2Cdevice(void)
         Wire.beginTransmission(addr);
         err = Wire.endTransmission();
         if (err == 0) {
-            DEBUG_MSG("I2C device found at address 0x%x\n", addr);
+            DEBUG_MSG("I2C device found at address 0x%x\r\n", addr);
 
             nDevices++;
 
             if (addr == SSD1306_ADDRESS) {
                 ssd1306_found = true;
-                DEBUG_MSG("ssd1306 display found\n");
+                DEBUG_MSG("ssd1306 display found\r\n");
             }
 #ifdef AXP192_SLAVE_ADDRESS
             if (addr == AXP192_SLAVE_ADDRESS) {
                 axp192_found = true;
-                DEBUG_MSG("axp192 PMU found\n");
+                DEBUG_MSG("axp192 PMU found\r\n");
             }
 #endif
         } else if (err == 4) {
-            DEBUG_MSG("Unknow error at address 0x%x\n", addr);
+            DEBUG_MSG("Unknow error at address 0x%x\r\n", addr);
         }
     }
     if (nDevices == 0)
-        DEBUG_MSG("No I2C devices found\n");
+        DEBUG_MSG("No I2C devices found\r\n");
     else
-        DEBUG_MSG("done\n");
+        DEBUG_MSG("done\r\n");
 }
 
 const char *getDeviceName()
@@ -168,7 +168,7 @@ void setup()
     ledPeriodic.setup();
 
     // Hello
-    DEBUG_MSG("Meshtastic swver=%s, hwver=%s\n", xstr(APP_VERSION), xstr(HW_VERSION));
+    DEBUG_MSG("Meshtastic swver=%s, hwver=%s\r\n", xstr(APP_VERSION), xstr(HW_VERSION));
 
 #ifndef NO_ESP32
     // Don't init display if we don't have one or we are waking headless due to a timer event
@@ -186,7 +186,7 @@ void setup()
     if (ssd1306_found)
         screen.setup();
 
-    screen.print("Started...\n");
+    screen.print("Started...\r\n");
 
     // Init GPS
     gps.setup();
@@ -239,13 +239,13 @@ void setup()
 uint32_t axpDebugRead()
 {
   axp.debugCharging();
-  DEBUG_MSG("vbus current %f\n", axp.getVbusCurrent());
-  DEBUG_MSG("charge current %f\n", axp.getBattChargeCurrent());
-  DEBUG_MSG("bat voltage %f\n", axp.getBattVoltage());
-  DEBUG_MSG("batt pct %d\n", axp.getBattPercentage());
-  DEBUG_MSG("is battery connected %d\n", axp.isBatteryConnect());
-  DEBUG_MSG("is USB connected %d\n", axp.isVBUSPlug());
-  DEBUG_MSG("is charging %d\n", axp.isChargeing());
+  DEBUG_MSG("vbus current %f\r\n", axp.getVbusCurrent());
+  DEBUG_MSG("charge current %f\r\n", axp.getBattChargeCurrent());
+  DEBUG_MSG("bat voltage %f\r\n", axp.getBattVoltage());
+  DEBUG_MSG("batt pct %d\r\n", axp.getBattPercentage());
+  DEBUG_MSG("is battery connected %d\r\n", axp.isBatteryConnect());
+  DEBUG_MSG("is USB connected %d\r\n", axp.isVBUSPlug());
+  DEBUG_MSG("is charging %d\r\n", axp.isChargeing());
 
   return 30 * 1000;
 }
@@ -280,7 +280,7 @@ void loop()
 
     if (!digitalRead(BUTTON_PIN)) {
         if (!wasPressed) { // just started a new press
-            DEBUG_MSG("pressing\n");
+            DEBUG_MSG("pressing\r\n");
 
             // doLightSleep();
             // esp_pm_dump_locks(stdout); // FIXME, do this someplace better
@@ -310,7 +310,7 @@ void loop()
 
     // No GPS lock yet, let the OS put the main CPU in low power mode for 100ms (or until another interrupt comes in)
     // i.e. don't just keep spinning in loop as fast as we can.
-    // DEBUG_MSG("msecs %d\n", msecstosleep);
+    // DEBUG_MSG("msecs %d\r\n", msecstosleep);
 
     // FIXME - until button press handling is done by interrupt (see polling above) we can't sleep very long at all or buttons
     // feel slow

@@ -56,7 +56,7 @@ void NodeDB::resetRadioConfig()
                                          0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0xbf};
 
     if (radioConfig.preferences.sds_secs == 0) {
-        DEBUG_MSG("RadioConfig reset!\n");
+        DEBUG_MSG("RadioConfig reset!\r\n");
         radioConfig.preferences.send_owner_interval = 4; // per sw-design.md
         radioConfig.preferences.position_broadcast_secs = 15 * 60;
         radioConfig.preferences.wait_bluetooth_secs = 120;
@@ -132,7 +132,7 @@ void NodeDB::init()
     loadFromDisk();
     resetRadioConfig(); // If bogus settings got saved, then fix them
 
-    DEBUG_MSG("NODENUM=0x%x, dbsize=%d\n", myNodeInfo.my_node_num, *numNodes);
+    DEBUG_MSG("NODENUM=0x%x, dbsize=%d\r\n", myNodeInfo.my_node_num, *numNodes);
 }
 
 // We reserve a few nodenums for future use
@@ -151,7 +151,7 @@ void NodeDB::pickNewNodeNum()
     NodeInfo *found;
     while ((found = getNode(r)) && memcmp(found->user.macaddr, owner.macaddr, sizeof(owner.macaddr))) {
         NodeNum n = random(NUM_RESERVED, NODENUM_BROADCAST); // try a new random choice
-        DEBUG_MSG("NOTE! Our desired nodenum 0x%x is in use, so trying for 0x%x\n", r, n);
+        DEBUG_MSG("NOTE! Our desired nodenum 0x%x is in use, so trying for 0x%x\r\n", r, n);
         r = n;
     }
 
@@ -168,38 +168,38 @@ void NodeDB::loadFromDisk()
 
     if (!FS.begin(true)) // FIXME - do this in main?
     {
-        DEBUG_MSG("ERROR SPIFFS Mount Failed\n");
+        DEBUG_MSG("ERROR SPIFFS Mount Failed\r\n");
         // FIXME - report failure to phone
     }
 
     File f = FS.open(preffile);
     if (f) {
-        DEBUG_MSG("Loading saved preferences\n");
+        DEBUG_MSG("Loading saved preferences\r\n");
         pb_istream_t stream = {&readcb, &f, DeviceState_size};
 
-        // DEBUG_MSG("Preload channel name=%s\n", channelSettings.name);
+        // DEBUG_MSG("Preload channel name=%s\r\n", channelSettings.name);
 
         memset(&scratch, 0, sizeof(scratch));
         if (!pb_decode(&stream, DeviceState_fields, &scratch)) {
-            DEBUG_MSG("Error: can't decode protobuf %s\n", PB_GET_ERROR(&stream));
+            DEBUG_MSG("Error: can't decode protobuf %s\r\n", PB_GET_ERROR(&stream));
             // FIXME - report failure to phone
         } else {
             if (scratch.version < DEVICESTATE_MIN_VER)
-                DEBUG_MSG("Warn: devicestate is old, discarding\n");
+                DEBUG_MSG("Warn: devicestate is old, discarding\r\n");
             else {
-                DEBUG_MSG("Loaded saved preferences version %d\n", scratch.version);
+                DEBUG_MSG("Loaded saved preferences version %d\r\n", scratch.version);
                 devicestate = scratch;
             }
 
-            // DEBUG_MSG("Postload channel name=%s\n", channelSettings.name);
+            // DEBUG_MSG("Postload channel name=%s\r\n", channelSettings.name);
         }
 
         f.close();
     } else {
-        DEBUG_MSG("No saved preferences found\n");
+        DEBUG_MSG("No saved preferences found\r\n");
     }
 #else
-    DEBUG_MSG("ERROR: Filesystem not implemented\n");
+    DEBUG_MSG("ERROR: Filesystem not implemented\r\n");
 #endif
 }
 
@@ -208,15 +208,15 @@ void NodeDB::saveToDisk()
 #ifdef FS
     File f = FS.open(preftmp, "w");
     if (f) {
-        DEBUG_MSG("Writing preferences\n");
+        DEBUG_MSG("Writing preferences\r\n");
 
         pb_ostream_t stream = {&writecb, &f, SIZE_MAX, 0};
 
-        // DEBUG_MSG("Presave channel name=%s\n", channelSettings.name);
+        // DEBUG_MSG("Presave channel name=%s\r\n", channelSettings.name);
 
         devicestate.version = DEVICESTATE_CUR_VER;
         if (!pb_encode(&stream, DeviceState_fields, &devicestate)) {
-            DEBUG_MSG("Error: can't write protobuf %s\n", PB_GET_ERROR(&stream));
+            DEBUG_MSG("Error: can't write protobuf %s\r\n", PB_GET_ERROR(&stream));
             // FIXME - report failure to phone
         }
 
@@ -224,14 +224,14 @@ void NodeDB::saveToDisk()
 
         // brief window of risk here ;-)
         if (!FS.remove(preffile))
-            DEBUG_MSG("Warning: Can't remove old pref file\n");
+            DEBUG_MSG("Warning: Can't remove old pref file\r\n");
         if (!FS.rename(preftmp, preffile))
-            DEBUG_MSG("Error: can't rename new pref file\n");
+            DEBUG_MSG("Error: can't rename new pref file\r\n");
     } else {
-        DEBUG_MSG("ERROR: can't write prefs\n"); // FIXME report to app
+        DEBUG_MSG("ERROR: can't write prefs\r\n"); // FIXME report to app
     }
 #else
-    DEBUG_MSG("ERROR filesystem not implemented\n");
+    DEBUG_MSG("ERROR filesystem not implemented\r\n");
 #endif
 }
 
@@ -276,7 +276,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
 {
     if (mp.has_payload) {
         const SubPacket &p = mp.payload;
-        DEBUG_MSG("Update DB node 0x%x, rx_time=%u\n", mp.from, mp.rx_time);
+        DEBUG_MSG("Update DB node 0x%x, rx_time=%u\r\n", mp.from, mp.rx_time);
 
         int oldNumNodes = *numNodes;
         NodeInfo *info = getOrCreateNode(mp.from);
@@ -303,7 +303,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
         if (p.has_data) {
             // Keep a copy of the most recent text message.
             if (p.data.typ == Data_Type_CLEAR_TEXT) {
-                DEBUG_MSG("Received text msg from=0%0x, msg=%.*s\n", mp.from, p.data.payload.size, p.data.payload.bytes);
+                DEBUG_MSG("Received text msg from=0%0x, msg=%.*s\r\n", mp.from, p.data.payload.size, p.data.payload.bytes);
                 if (mp.to == NODENUM_BROADCAST || mp.to == nodeDB.getNodeNum()) {
                     // We only store/display messages destined for us.
                     devicestate.rx_text_message = mp;
@@ -315,13 +315,13 @@ void NodeDB::updateFrom(const MeshPacket &mp)
         }
 
         if (p.has_user) {
-            DEBUG_MSG("old user %s/%s/%s\n", info->user.id, info->user.long_name, info->user.short_name);
+            DEBUG_MSG("old user %s/%s/%s\r\n", info->user.id, info->user.long_name, info->user.short_name);
 
             bool changed = memcmp(&info->user, &p.user,
                                   sizeof(info->user)); // Both of these blocks start as filled with zero so I think this is okay
 
             info->user = p.user;
-            DEBUG_MSG("updating changed=%d user %s/%s/%s\n", changed, info->user.id, info->user.long_name, info->user.short_name);
+            DEBUG_MSG("updating changed=%d user %s/%s/%s\r\n", changed, info->user.id, info->user.long_name, info->user.short_name);
             info->has_user = true;
 
             if (changed) {
@@ -368,7 +368,7 @@ NodeInfo *NodeDB::getOrCreateNode(NodeNum n)
 /// Record an error that should be reported via analytics
 void recordCriticalError(CriticalErrorCode code, uint32_t address)
 {
-    DEBUG_MSG("NOTE! Recording critical error %d, address=%x\n", code, address);
+    DEBUG_MSG("NOTE! Recording critical error %d, address=%x\r\n", code, address);
     myNodeInfo.error_code = code;
     myNodeInfo.error_address = address;
     myNodeInfo.error_count++;

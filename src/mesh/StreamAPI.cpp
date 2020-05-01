@@ -86,6 +86,6 @@ void StreamAPI::emitRebooted()
     fromRadioScratch.which_variant = FromRadio_rebooted_tag;
     fromRadioScratch.variant.rebooted = true;
 
-    DEBUG_MSG("Emitting reboot packet for serial shell\n");
+    DEBUG_MSG("Emitting reboot packet for serial shell\r\n");
     emitTxBuffer(pb_encode_to_bytes(txBuf + HEADER_LEN, FromRadio_size, FromRadio_fields, &fromRadioScratch));
 }

@@ -22,7 +22,7 @@ bool RF95Interface::init()
 
     iface = lora = new RadioLibRF95(&module);
     int res = lora->begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength);
-    DEBUG_MSG("LORA init result %d\n", res);
+    DEBUG_MSG("LORA init result %d\r\n", res);
 
     if (res == ERR_NONE)
         res = lora->setCRC(SX126X_LORA_CRC_ON);

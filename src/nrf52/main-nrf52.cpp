@@ -9,14 +9,14 @@
 
 static inline void debugger_break(void)
 {
-    __asm volatile("bkpt #0x01\n\t"
-                   "mov pc, lr\n\t");
+    __asm volatile("bkpt #0x01\r\n\t"
+                   "mov pc, lr\r\n\t");
 }
 
 // handle standard gcc assert failures
 void __attribute__((noreturn)) __assert_func(const char *file, int line, const char *func, const char *failedexpr)
 {
-    DEBUG_MSG("assert failed %s: %d, %s, test=%s\n", file, line, func, failedexpr);
+    DEBUG_MSG("assert failed %s: %d, %s, test=%s\r\n", file, line, func, failedexpr);
     // debugger_break(); FIXME doesn't work, possibly not for segger
     while (1)
         ; // FIXME, reboot!
@@ -53,7 +53,7 @@ void setBluetoothEnable(bool on)
                 nrf52Bluetooth->setup();
             }
         } else {
-            DEBUG_MSG("FIXME: implement BLE disable\n");
+            DEBUG_MSG("FIXME: implement BLE disable\r\n");
         }
         bleOn = on;
     }
@@ -67,5 +67,5 @@ void nrf52Setup()
 {
     // Not yet on board
     // pmu.init();
-    DEBUG_MSG("FIXME, need to call randomSeed on nrf52!\n");
+    DEBUG_MSG("FIXME, need to call randomSeed on nrf52!\r\n");
 }

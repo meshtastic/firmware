@@ -82,7 +82,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
 {
     MeshPacket &mp = devicestate.rx_text_message;
     NodeInfo *node = nodeDB.getNode(mp.from);
-    // DEBUG_MSG("drawing text message from 0x%x: %s\n", mp.from,
+    // DEBUG_MSG("drawing text message from 0x%x: %s\r\n", mp.from,
     // mp.payload.variant.data.payload.bytes);
 
     // Demo for drawStringMaxWidth:
@@ -349,7 +349,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         headingRadian = bearingToOther - myHeading;
     } else {
         // Debug info for gps lock errors
-        // DEBUG_MSG("ourNode %d, ourPos %d, theirPos %d\n", !!ourNode, ourNode && hasPosition(ourNode), hasPosition(node));
+        // DEBUG_MSG("ourNode %d, ourPos %d, theirPos %d\r\n", !!ourNode, ourNode && hasPosition(ourNode), hasPosition(node));
     }
 
     const char *fields[] = {username, distStr, signalStr, lastStr, NULL};
@@ -410,10 +410,10 @@ void Screen::handleSetOn(bool on)
 
     if (on != screenOn) {
         if (on) {
-            DEBUG_MSG("Turning on screen\n");
+            DEBUG_MSG("Turning on screen\r\n");
             dispdev.displayOn();
         } else {
-            DEBUG_MSG("Turning off screen\n");
+            DEBUG_MSG("Turning off screen\r\n");
             dispdev.displayOff();
         }
         screenOn = on;
@@ -519,7 +519,7 @@ void Screen::doTask()
     // otherwise that breaks animations.
     if (targetFramerate != IDLE_FRAMERATE && ui.getUiState()->frameState == FIXED) {
         // oldFrameState = ui.getUiState()->frameState;
-        DEBUG_MSG("Setting idle framerate\n");
+        DEBUG_MSG("Setting idle framerate\r\n");
         targetFramerate = IDLE_FRAMERATE;
         ui.setTargetFPS(targetFramerate);
     }
@@ -539,7 +539,7 @@ void Screen::doTask()
 
     ui.update();
 
-    // DEBUG_MSG("want fps %d, fixed=%d\n", targetFramerate,
+    // DEBUG_MSG("want fps %d, fixed=%d\r\n", targetFramerate,
     // ui.getUiState()->frameState); If we are scrolling we need to be called
     // soon, otherwise just 1 fps (to save CPU) We also ask to be called twice
     // as fast as we really need so that any rounding errors still result with
@@ -556,7 +556,7 @@ void Screen::drawDebugInfoTrampoline(OLEDDisplay *display, OLEDDisplayUiState *s
 // restore our regular frame list
 void Screen::setFrames()
 {
-    DEBUG_MSG("showing standard frames\n");
+    DEBUG_MSG("showing standard frames\r\n");
     showingNormalScreen = true;
 
     size_t numnodes = nodeDB.getNumNodes();
@@ -589,7 +589,7 @@ void Screen::setFrames()
 
 void Screen::handleStartBluetoothPinScreen(uint32_t pin)
 {
-    DEBUG_MSG("showing bluetooth screen\n");
+    DEBUG_MSG("showing bluetooth screen\r\n");
     showingNormalScreen = false;
 
     static FrameCallback btFrames[] = {drawFrameBluetooth};
@@ -617,7 +617,7 @@ void Screen::handleOnPress()
         setPeriod(1); // redraw ASAP
         ui.nextFrame();
 
-        DEBUG_MSG("Setting fast framerate\n");
+        DEBUG_MSG("Setting fast framerate\r\n");
 
         // We are about to start a transition so speed up fps
         targetFramerate = TRANSITION_FRAMERATE;

@@ -48,7 +48,7 @@ void GPS::setup()
         isConnected = ublox.begin(_serial_gps);
 
     if (isConnected) {
-        DEBUG_MSG("Connected to GPS successfully\n");
+        DEBUG_MSG("Connected to GPS successfully\r\n");
 
         bool factoryReset = false;
         bool ok;
@@ -58,7 +58,7 @@ void GPS::setup()
             ublox.factoryReset();
             delay(2000);
             isConnected = ublox.begin(_serial_gps);
-            DEBUG_MSG("Factory reset success=%d\n", isConnected);
+            DEBUG_MSG("Factory reset success=%d\r\n", isConnected);
             if (isConnected) {
                 ublox.assumeAutoPVT(true, true); // Just parse NEMA for now
             }
@@ -79,7 +79,7 @@ void GPS::setup()
     } else {
         // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
         // assume NEMA at 9600 baud.
-        DEBUG_MSG("ERROR: No bidirectional GPS found, hoping that it still might work\n");
+        DEBUG_MSG("ERROR: No bidirectional GPS found, hoping that it still might work\r\n");
 
         // tell lib, we are expecting the module to send PVT messages by itself to our Rx pin
         // you can set second parameter to "false" if you want to control the parsing and eviction of the data (need to call
@@ -95,7 +95,7 @@ void GPS::readFromRTC()
     if (!gettimeofday(&tv, NULL)) {
         uint32_t now = millis();
 
-        DEBUG_MSG("Read RTC time as %ld (cur millis %u) valid=%d\n", tv.tv_sec, now, timeSetFromGPS);
+        DEBUG_MSG("Read RTC time as %ld (cur millis %u) valid=%d\r\n", tv.tv_sec, now, timeSetFromGPS);
         timeStartMsec = now;
         zeroOffsetSecs = tv.tv_sec;
     }
@@ -106,11 +106,11 @@ void GPS::perhapsSetRTC(const struct timeval *tv)
 {
     if (!timeSetFromGPS) {
         timeSetFromGPS = true;
-        DEBUG_MSG("Setting RTC %ld secs\n", tv->tv_sec);
+        DEBUG_MSG("Setting RTC %ld secs\r\n", tv->tv_sec);
 #ifndef NO_ESP32
         settimeofday(tv, NULL);
 #else
-        DEBUG_MSG("ERROR TIME SETTING NOT IMPLEMENTED!\n");
+        DEBUG_MSG("ERROR TIME SETTING NOT IMPLEMENTED!\r\n");
 #endif
         readFromRTC();
     }
@@ -155,11 +155,11 @@ void GPS::doTask()
         // Hmmm my fix type reading returns zeros for fix, which doesn't seem correct, because it is still sptting out positions
         // turn off for now
         // fixtype = ublox.getFixType();
-        DEBUG_MSG("fix type %d\n", fixtype);
+        DEBUG_MSG("fix type %d\r\n", fixtype);
     }
 
-    // DEBUG_MSG("sec %d\n", ublox.getSecond());
-    // DEBUG_MSG("lat %d\n", ublox.getLatitude());
+    // DEBUG_MSG("sec %d\r\n", ublox.getSecond());
+    // DEBUG_MSG("lat %d\r\n", ublox.getLatitude());
 
     // any fix that has time
     if (!timeSetFromGPS && ublox.getT()) {
@@ -181,9 +181,9 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         tv.tv_sec = res;
         tv.tv_usec = 0; // time.centisecond() * (10 / 1000);
 
-        DEBUG_MSG("Got time from GPS month=%d, year=%d, unixtime=%ld\n", t.tm_mon, t.tm_year, tv.tv_sec);
+        DEBUG_MSG("Got time from GPS month=%d, year=%d, unixtime=%ld\r\n", t.tm_mon, t.tm_year, tv.tv_sec);
         if (t.tm_year < 0 || t.tm_year >= 300)
-            DEBUG_MSG("Ignoring invalid GPS time\n");
+            DEBUG_MSG("Ignoring invalid GPS time\r\n");
         else
             perhapsSetRTC(&tv);
     }
@@ -194,7 +194,7 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         latitude = ublox.getLatitude() * 1e-7;
         longitude = ublox.getLongitude() * 1e-7;
         altitude = ublox.getAltitude() / 1000; // in mm convert to meters
-        DEBUG_MSG("new gps pos lat=%f, lon=%f, alt=%d\n", latitude, longitude, altitude);
+        DEBUG_MSG("new gps pos lat=%f, lon=%f, alt=%d\r\n", latitude, longitude, altitude);
 
         hasValidLocation = (latitude != 0) || (longitude != 0); // bogus lat lon is reported as 0,0
         if (hasValidLocation) {
@@ -212,7 +212,7 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
 
 void GPS::startLock()
 {
-    DEBUG_MSG("Looking for GPS lock\n");
+    DEBUG_MSG("Looking for GPS lock\r\n");
     wantNewLocation = true;
     setPeriod(1);
 }

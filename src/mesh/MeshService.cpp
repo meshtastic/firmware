@@ -96,7 +96,7 @@ void MeshService::sendOurOwner(NodeNum dest, bool wantReplies)
     p->payload.has_user = true;
     User &u = p->payload.user;
     u = owner;
-    DEBUG_MSG("sending owner %s/%s/%s\n", u.id, u.long_name, u.short_name);
+    DEBUG_MSG("sending owner %s/%s/%s\r\n", u.id, u.long_name, u.short_name);
 
     sendToMesh(p);
 }
@@ -112,14 +112,14 @@ const MeshPacket *MeshService::handleFromRadioUser(const MeshPacket *mp)
 
     if (isCollision) {
         if (weWin) {
-            DEBUG_MSG("NOTE! Received a nodenum collision and we are vetoing\n");
+            DEBUG_MSG("NOTE! Received a nodenum collision and we are vetoing\r\n");
 
             mp = NULL;
 
             sendOurOwner(); // send our owner as a _broadcast_ because that other guy is mistakenly using our nodenum
         } else {
             // we lost, we need to try for a new nodenum!
-            DEBUG_MSG("NOTE! Received a nodenum collision we lost, so picking a new nodenum\n");
+            DEBUG_MSG("NOTE! Received a nodenum collision we lost, so picking a new nodenum\r\n");
             nodeDB.updateFrom(
                 *mp); // update the DB early - before trying to repick (so we don't select the same node number again)
             nodeDB.pickNewNodeNum();
@@ -130,11 +130,11 @@ const MeshPacket *MeshService::handleFromRadioUser(const MeshPacket *mp)
         // build their DB
 
         // Someone just sent us a User, reply with our Owner
-        DEBUG_MSG("Received broadcast Owner from 0x%x, replying with our owner\n", mp->from);
+        DEBUG_MSG("Received broadcast Owner from 0x%x, replying with our owner\r\n", mp->from);
 
         sendOurOwner(mp->from);
 
-        String lcd = String("Joined: ") + mp->payload.user.long_name + "\n";
+        String lcd = String("Joined: ") + mp->payload.user.long_name + "\r\n";
         screen.print(lcd.c_str());
     }
 
@@ -144,7 +144,7 @@ const MeshPacket *MeshService::handleFromRadioUser(const MeshPacket *mp)
 void MeshService::handleIncomingPosition(const MeshPacket *mp)
 {
     if (mp->has_payload && mp->payload.has_position) {
-        DEBUG_MSG("handled incoming position time=%u\n", mp->payload.position.time);
+        DEBUG_MSG("handled incoming position time=%u\r\n", mp->payload.position.time);
 
         if (mp->payload.position.time) {
             struct timeval tv;
@@ -156,7 +156,7 @@ void MeshService::handleIncomingPosition(const MeshPacket *mp)
             gps.perhapsSetRTC(&tv);
         }
     } else {
-        DEBUG_MSG("Ignoring incoming packet - not a position\n");
+        DEBUG_MSG("Ignoring incoming packet - not a position\r\n");
     }
 }
 
@@ -168,7 +168,7 @@ int MeshService::handleFromRadio(const MeshPacket *mp)
     if (!gps.isConnected)
         handleIncomingPosition(mp);
     else {
-        DEBUG_MSG("Ignoring incoming time, because we have a GPS\n");
+        DEBUG_MSG("Ignoring incoming time, because we have a GPS\r\n");
     }
 
     if (mp->has_payload && mp->payload.has_user) {
@@ -177,13 +177,13 @@ int MeshService::handleFromRadio(const MeshPacket *mp)
 
     // If we veto a received User packet, we don't put it into the DB or forward it to the phone (to prevent confusing it)
     if (mp) {
-        DEBUG_MSG("Forwarding to phone, from=0x%x, rx_time=%u\n", mp->from, mp->rx_time);
+        DEBUG_MSG("Forwarding to phone, from=0x%x, rx_time=%u\r\n", mp->from, mp->rx_time);
         nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
 
         fromNum++;
 
         if (toPhoneQueue.numFree() == 0) {
-            DEBUG_MSG("NOTE: tophone queue is full, discarding oldest\n");
+            DEBUG_MSG("NOTE: tophone queue is full, discarding oldest\r\n");
             MeshPacket *d = toPhoneQueue.dequeuePtr(0);
             if (d)
                 releaseToPool(d);
@@ -195,7 +195,7 @@ int MeshService::handleFromRadio(const MeshPacket *mp)
         if (mp->payload.want_response)
             sendNetworkPing(mp->from);
     } else {
-        DEBUG_MSG("Not delivering vetoed User message\n");
+        DEBUG_MSG("Not delivering vetoed User message\r\n");
     }
 
     return 0;
@@ -259,19 +259,19 @@ void MeshService::sendToMesh(MeshPacket *p)
     // devices can get time.
     if (p->has_payload && p->payload.has_position) {
         if (!gps.isConnected) {
-            DEBUG_MSG("Stripping time %u from position send\n", p->payload.position.time);
+            DEBUG_MSG("Stripping time %u from position send\r\n", p->payload.position.time);
             p->payload.position.time = 0;
         } else
-            DEBUG_MSG("Providing time to mesh %u\n", p->payload.position.time);
+            DEBUG_MSG("Providing time to mesh %u\r\n", p->payload.position.time);
     }
 
     // If the phone sent a packet just to us, don't send it out into the network
     if (p->to == nodeDB.getNodeNum())
-        DEBUG_MSG("Dropping locally processed message\n");
+        DEBUG_MSG("Dropping locally processed message\r\n");
     else {
         // Note: We might return !OK if our fifo was full, at that point the only option we have is to drop it
         if (router.send(p) != ERRNO_OK) {
-            DEBUG_MSG("No radio was able to send packet, discarding...\n");
+            DEBUG_MSG("No radio was able to send packet, discarding...\r\n");
             releaseToPool(p);
         }
     }
@@ -295,7 +295,7 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
     NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
     assert(node);
 
-    DEBUG_MSG("Sending network ping to 0x%x, with position=%d, wantReplies=%d\n", dest, node->has_position, wantReplies);
+    DEBUG_MSG("Sending network ping to 0x%x, with position=%d, wantReplies=%d\r\n", dest, node->has_position, wantReplies);
     if (node->has_position)
         sendOurPosition(dest, wantReplies);
     else
@@ -320,7 +320,7 @@ void MeshService::sendOurPosition(NodeNum dest, bool wantReplies)
 
 int MeshService::onGPSChanged(void *unused)
 {
-    // DEBUG_MSG("got gps notify\n");
+    // DEBUG_MSG("got gps notify\r\n");
 
     // Update our local node info with our position (even if we don't decide to update anyone else)
     MeshPacket *p = allocForSending();
@@ -341,7 +341,7 @@ int MeshService::onGPSChanged(void *unused)
     uint32_t now = millis();
     if (lastGpsSend == 0 || now - lastGpsSend > radioConfig.preferences.position_broadcast_secs * 1000) {
         lastGpsSend = now;
-        DEBUG_MSG("Sending position to mesh\n");
+        DEBUG_MSG("Sending position to mesh\r\n");
 
         sendToMesh(p);
     } else {

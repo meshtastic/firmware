@@ -29,31 +29,31 @@ void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
         }
         case ToRadio_want_config_id_tag:
             config_nonce = toRadioScratch.variant.want_config_id;
-            DEBUG_MSG("Client wants config, nonce=%u\n", config_nonce);
+            DEBUG_MSG("Client wants config, nonce=%u\r\n", config_nonce);
             state = STATE_SEND_MY_INFO;
 
-            DEBUG_MSG("Reset nodeinfo read pointer\n");
+            DEBUG_MSG("Reset nodeinfo read pointer\r\n");
             nodeInfoForPhone = NULL;   // Don't keep returning old nodeinfos
             nodeDB.resetReadPointer(); // FIXME, this read pointer should be moved out of nodeDB and into this class - because
                                        // this will break once we have multiple instances of PhoneAPI running independently
             break;
 
         case ToRadio_set_owner_tag:
-            DEBUG_MSG("Client is setting owner\n");
+            DEBUG_MSG("Client is setting owner\r\n");
             handleSetOwner(toRadioScratch.variant.set_owner);
             break;
 
         case ToRadio_set_radio_tag:
-            DEBUG_MSG("Client is setting radio\n");
+            DEBUG_MSG("Client is setting radio\r\n");
             handleSetRadio(toRadioScratch.variant.set_radio);
             break;
 
         default:
-            DEBUG_MSG("Error: unexpected ToRadio variant\n");
+            DEBUG_MSG("Error: unexpected ToRadio variant\r\n");
             break;
         }
     } else {
-        DEBUG_MSG("Error: ignoring malformed toradio\n");
+        DEBUG_MSG("Error: ignoring malformed toradio\r\n");
     }
 }
 
@@ -99,13 +99,13 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         nodeInfoForPhone = NULL; // We just consumed a nodeinfo, will need a new one next time
 
         if (info) {
-            DEBUG_MSG("Sending nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s\n", info->num, info->position.time, info->user.id,
+            DEBUG_MSG("Sending nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s\r\n", info->num, info->position.time, info->user.id,
                       info->user.long_name);
             fromRadioScratch.which_variant = FromRadio_node_info_tag;
             fromRadioScratch.variant.node_info = *info;
             // Stay in current state until done sending nodeinfos
         } else {
-            DEBUG_MSG("Done sending nodeinfos\n");
+            DEBUG_MSG("Done sending nodeinfos\r\n");
             state = STATE_SEND_COMPLETE_ID;
             // Go ahead and send that ID right now
             return getFromRadio(buf);
@@ -142,11 +142,11 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         // Encapsulate as a FromRadio packet
         DEBUG_MSG("encoding toPhone packet to phone variant=%d", fromRadioScratch.which_variant);
         size_t numbytes = pb_encode_to_bytes(buf, FromRadio_size, FromRadio_fields, &fromRadioScratch);
-        DEBUG_MSG(", %d bytes\n", numbytes);
+        DEBUG_MSG(", %d bytes\r\n", numbytes);
         return numbytes;
     }
 
-    DEBUG_MSG("no FromRadio packet available\n");
+    DEBUG_MSG("no FromRadio packet available\r\n");
     return 0;
 }
 
@@ -228,10 +228,10 @@ void PhoneAPI::handleToRadioPacket(MeshPacket *p) {}
 int PhoneAPI::onNotify(uint32_t newValue)
 {
     if (state == STATE_SEND_PACKETS || state == STATE_LEGACY) {
-        DEBUG_MSG("Telling client we have new packets %u\n", newValue);
+        DEBUG_MSG("Telling client we have new packets %u\r\n", newValue);
         onNowHasData(newValue);
     } else
-        DEBUG_MSG("(Client not yet interested in packets)\n");
+        DEBUG_MSG("(Client not yet interested in packets)\r\n");
 
     return 0;
 }

@@ -26,7 +26,7 @@ void connect_callback(uint16_t conn_handle)
     char central_name[32] = {0};
     connection->getPeerName(central_name, sizeof(central_name));
 
-    DEBUG_MSG("Connected to %s\n", central_name);
+    DEBUG_MSG("Connected to %s\r\n", central_name);
 }
 
 /**
@@ -39,21 +39,21 @@ void disconnect_callback(uint16_t conn_handle, uint8_t reason)
     (void)conn_handle;
     (void)reason;
 
-    DEBUG_MSG("Disconnected, reason = 0x%x\n", reason);
+    DEBUG_MSG("Disconnected, reason = 0x%x\r\n", reason);
 }
 
 void cccd_callback(uint16_t conn_hdl, BLECharacteristic *chr, uint16_t cccd_value)
 {
     // Display the raw request packet
-    DEBUG_MSG("CCCD Updated: %u\n", cccd_value);
+    DEBUG_MSG("CCCD Updated: %u\r\n", cccd_value);
 
     // Check the characteristic this CCCD update is associated with in case
     // this handler is used for multiple CCCD records.
     if (chr->uuid == hrmc.uuid) {
         if (chr->notifyEnabled(conn_hdl)) {
-            DEBUG_MSG("Heart Rate Measurement 'Notify' enabled\n");
+            DEBUG_MSG("Heart Rate Measurement 'Notify' enabled\r\n");
         } else {
-            DEBUG_MSG("Heart Rate Measurement 'Notify' disabled\n");
+            DEBUG_MSG("Heart Rate Measurement 'Notify' disabled\r\n");
         }
     }
 }
@@ -151,7 +151,7 @@ void setupHRM(void)
 void NRF52Bluetooth::setup()
 {
     // Initialise the Bluefruit module
-    DEBUG_MSG("Initialise the Bluefruit nRF52 module\n");
+    DEBUG_MSG("Initialise the Bluefruit nRF52 module\r\n");
     Bluefruit.begin();
 
     // Set the advertised device name (keep it short!)
@@ -162,13 +162,13 @@ void NRF52Bluetooth::setup()
     Bluefruit.Periph.setDisconnectCallback(disconnect_callback);
 
     // Configure and Start the Device Information Service
-    DEBUG_MSG("Configuring the Device Information Service\n");
+    DEBUG_MSG("Configuring the Device Information Service\r\n");
     bledis.setManufacturer("meshtastic.org");
     bledis.setModel("NRF52-meshtastic"); // FIXME
     bledis.begin();
 
     // Start the BLE Battery Service and set it to 100%
-    DEBUG_MSG("Configuring the Battery Service\n");
+    DEBUG_MSG("Configuring the Battery Service\r\n");
     blebas.begin();
     blebas.write(42); // FIXME, report real power levels
 
@@ -176,14 +176,14 @@ void NRF52Bluetooth::setup()
 
     // Setup the Heart Rate Monitor service using
     // BLEService and BLECharacteristic classes
-    DEBUG_MSG("Configuring the Heart Rate Monitor Service\n");
+    DEBUG_MSG("Configuring the Heart Rate Monitor Service\r\n");
     setupHRM();
 
     // Setup the advertising packet(s)
-    DEBUG_MSG("Setting up the advertising payload(s)\n");
+    DEBUG_MSG("Setting up the advertising payload(s)\r\n");
     startAdv();
 
-    DEBUG_MSG("Advertising\n");
+    DEBUG_MSG("Advertising\r\n");
 }
 
 /*

@@ -13,7 +13,7 @@ size_t pb_encode_to_bytes(uint8_t *destbuf, size_t destbufsize, const pb_msgdesc
 
     pb_ostream_t stream = pb_ostream_from_buffer(destbuf, destbufsize);
     if (!pb_encode(&stream, fields, src_struct)) {
-        DEBUG_MSG("Error: can't encode protobuf %s\n", PB_GET_ERROR(&stream));
+        DEBUG_MSG("Error: can't encode protobuf %s\r\n", PB_GET_ERROR(&stream));
         assert(0); // FIXME - panic
     } else {
         return stream.bytes_written;
@@ -25,7 +25,7 @@ bool pb_decode_from_bytes(const uint8_t *srcbuf, size_t srcbufsize, const pb_msg
 {
     pb_istream_t stream = pb_istream_from_buffer(srcbuf, srcbufsize);
     if (!pb_decode(&stream, fields, dest_struct)) {
-        DEBUG_MSG("Error: can't decode protobuf %s, pb_msgdesc 0x%p\n", PB_GET_ERROR(&stream), fields);
+        DEBUG_MSG("Error: can't decode protobuf %s, pb_msgdesc 0x%p\r\n", PB_GET_ERROR(&stream), fields);
         return false;
     } else {
         return true;
@@ -58,7 +58,7 @@ bool writecb(pb_ostream_t *stream, const uint8_t *buf, size_t count)
 {
 #ifndef NO_ESP32
     File *file = (File *)stream->state;
-    // DEBUG_MSG("writing %d bytes to protobuf file\n", count);
+    // DEBUG_MSG("writing %d bytes to protobuf file\r\n", count);
     return file->write(buf, count) == count;
 #else
     return false;

@@ -29,7 +29,7 @@ MeshRadio::MeshRadio(RadioInterface *rIf) : radioIf(*rIf) // , manager(radioIf)
     myNodeInfo.num_channels = NUM_CHANNELS;
 
     // Can't print strings this early - serial not setup yet
-    // DEBUG_MSG("Set meshradio defaults name=%s\n", channelSettings.name);
+    // DEBUG_MSG("Set meshradio defaults name=%s\r\n", channelSettings.name);
 }
 
 bool MeshRadio::init()
@@ -37,7 +37,7 @@ bool MeshRadio::init()
     if (!useHardware)
         return true;
 
-    DEBUG_MSG("Starting meshradio init...\n");
+    DEBUG_MSG("Starting meshradio init...\r\n");
 
     configChangedObserver.observe(&service.configChanged);
     preflightSleepObserver.observe(&preflightSleep);
@@ -61,7 +61,7 @@ bool MeshRadio::init()
     applySettings();
 
     if (!radioIf.init()) {
-        DEBUG_MSG("LoRa radio init failed\n");
+        DEBUG_MSG("LoRa radio init failed\r\n");
         return false;
     }
 
@@ -100,7 +100,7 @@ void MeshRadio::applySettings()
     radioIf.freq = CH0 + CH_SPACING * channel_num;
     radioIf.power = channelSettings.tx_power;
 
-    DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, txpower=%d\n", channelSettings.name, channelSettings.modem_config,
+    DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, txpower=%d\r\n", channelSettings.name, channelSettings.modem_config,
               channel_num, channelSettings.tx_power);
 }
 

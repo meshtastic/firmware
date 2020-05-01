@@ -72,7 +72,7 @@ void setLed(bool ledOn)
 
 void setGPSPower(bool on)
 {
-    DEBUG_MSG("Setting GPS power=%d\n", on);
+    DEBUG_MSG("Setting GPS power=%d\r\n", on);
 
 #ifdef TBEAM_V10
     if (axp192_found)
@@ -110,7 +110,7 @@ void initDeepSleep()
     if (wakeCause == ESP_SLEEP_WAKEUP_TIMER)
         reason = "timeout";
 
-    DEBUG_MSG("booted, wake cause %d (boot count %d), reset_reason=%s\n", wakeCause, bootCount, reason);
+    DEBUG_MSG("booted, wake cause %d (boot count %d), reset_reason=%s\r\n", wakeCause, bootCount, reason);
 #endif
 }
 
@@ -152,7 +152,7 @@ static void waitEnterSleep()
 
 void doDeepSleep(uint64_t msecToWake)
 {
-    DEBUG_MSG("Entering deep sleep for %llu seconds\n", msecToWake / 1000);
+    DEBUG_MSG("Entering deep sleep for %llu seconds\r\n", msecToWake / 1000);
 
 #ifndef NO_ESP32
     // not using wifi yet, but once we are this is needed to shutoff the radio hw
@@ -250,7 +250,7 @@ void doDeepSleep(uint64_t msecToWake)
  */
 esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more reasonable default
 {
-    // DEBUG_MSG("Enter light sleep\n");
+    // DEBUG_MSG("Enter light sleep\r\n");
 
     waitEnterSleep();
 
@@ -282,7 +282,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 
     esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
     if (cause == ESP_SLEEP_WAKEUP_GPIO)
-        DEBUG_MSG("Exit light sleep gpio: btn=%d, rf95=%d\n", !digitalRead(BUTTON_PIN), digitalRead(RF95_IRQ_GPIO));
+        DEBUG_MSG("Exit light sleep gpio: btn=%d, rf95=%d\r\n", !digitalRead(BUTTON_PIN), digitalRead(RF95_IRQ_GPIO));
 
     return cause;
 }
@@ -305,6 +305,6 @@ void enableModemSleep()
   config.max_freq_mhz = CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ;
   config.min_freq_mhz = 10; // 10Mhz is minimum recommended
   config.light_sleep_enable = false;
-  DEBUG_MSG("Sleep request result %x\n", esp_pm_configure(&config));
+  DEBUG_MSG("Sleep request result %x\r\n", esp_pm_configure(&config));
 }
 #endif

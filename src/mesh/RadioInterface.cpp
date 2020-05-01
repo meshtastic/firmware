@@ -24,7 +24,7 @@ bool RadioInterface::init()
 
 ErrorCode SimRadio::send(MeshPacket *p)
 {
-    DEBUG_MSG("SimRadio.send\n");
+    DEBUG_MSG("SimRadio.send\r\n");
     packetPool.release(p);
     return ERRNO_OK;
 }
@@ -42,7 +42,7 @@ size_t RadioInterface::beginSending(MeshPacket *p)
 {
     assert(!sendingPacket);
 
-    // DEBUG_MSG("sending queued packet on mesh (txGood=%d,rxGood=%d,rxBad=%d)\n", rf95.txGood(), rf95.rxGood(), rf95.rxBad());
+    // DEBUG_MSG("sending queued packet on mesh (txGood=%d,rxGood=%d,rxBad=%d)\r\n", rf95.txGood(), rf95.rxGood(), rf95.rxBad());
     assert(p->has_payload);
 
     lastTxStart = millis();

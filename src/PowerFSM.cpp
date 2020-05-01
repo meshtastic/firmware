@@ -28,15 +28,15 @@ static void sdsEnter()
 
 static void lsEnter()
 {
-    DEBUG_MSG("lsEnter begin, ls_secs=%u\n", radioConfig.preferences.ls_secs);
+    DEBUG_MSG("lsEnter begin, ls_secs=%u\r\n", radioConfig.preferences.ls_secs);
     screen.setOn(false);
 
-    DEBUG_MSG("lsEnter end\n");
+    DEBUG_MSG("lsEnter end\r\n");
 }
 
 static void lsIdle()
 {
-    DEBUG_MSG("lsIdle begin ls_secs=%u\n", radioConfig.preferences.ls_secs);
+    DEBUG_MSG("lsIdle begin ls_secs=%u\r\n", radioConfig.preferences.ls_secs);
 
 #ifndef NO_ESP32
     uint32_t secsSlept = 0;
@@ -64,9 +64,9 @@ static void lsIdle()
 
     if (reached_ls_secs) {
         // stay in LS mode but let loop check whatever it wants
-        DEBUG_MSG("reached ls_secs, servicing loop()\n");
+        DEBUG_MSG("reached ls_secs, servicing loop()\r\n");
     } else {
-        DEBUG_MSG("wakeCause %d\n", wakeCause);
+        DEBUG_MSG("wakeCause %d\r\n", wakeCause);
 
 #ifdef BUTTON_PIN
         bool pressed = !digitalRead(BUTTON_PIN);

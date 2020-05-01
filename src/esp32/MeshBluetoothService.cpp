@@ -60,7 +60,7 @@ class ProtobufCharacteristic : public CallbackCharacteristic
     {
         BLEKeepAliveCallbacks::onRead(c);
         size_t numbytes = pb_encode_to_bytes(trBytes, sizeof(trBytes), fields, my_struct);
-        DEBUG_MSG("pbread from %s returns %d bytes\n", c->getUUID().toString().c_str(), numbytes);
+        DEBUG_MSG("pbread from %s returns %d bytes\r\n", c->getUUID().toString().c_str(), numbytes);
         c->setValue(trBytes, numbytes);
     }
 
@@ -78,7 +78,7 @@ class ProtobufCharacteristic : public CallbackCharacteristic
     {
         // dumpCharacteristic(pCharacteristic);
         std::string src = c->getValue();
-        DEBUG_MSG("pbwrite to %s of %d bytes\n", c->getUUID().toString().c_str(), src.length());
+        DEBUG_MSG("pbwrite to %s of %d bytes\r\n", c->getUUID().toString().c_str(), src.length());
         return pb_decode_from_bytes((const uint8_t *)src.c_str(), src.length(), fields, dest);
     }
 };
@@ -101,20 +101,20 @@ class NodeInfoCharacteristic : public BLECharacteristic, public BLEKeepAliveCall
         const NodeInfo *info = nodeDB.readNextInfo();
 
         if (info) {
-            DEBUG_MSG("Sending nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s\n", info->num, info->position.time, info->user.id,
+            DEBUG_MSG("Sending nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s\r\n", info->num, info->position.time, info->user.id,
                       info->user.long_name);
             size_t numbytes = pb_encode_to_bytes(trBytes, sizeof(trBytes), NodeInfo_fields, info);
             c->setValue(trBytes, numbytes);
         } else {
             c->setValue(trBytes, 0); // Send an empty response
-            DEBUG_MSG("Done sending nodeinfos\n");
+            DEBUG_MSG("Done sending nodeinfos\r\n");
         }
     }
 
     void onWrite(BLECharacteristic *c)
     {
         BLEKeepAliveCallbacks::onWrite(c);
-        DEBUG_MSG("Reset nodeinfo read pointer\n");
+        DEBUG_MSG("Reset nodeinfo read pointer\r\n");
         nodeDB.resetReadPointer();
     }
 };
@@ -132,13 +132,13 @@ class RadioCharacteristic : public ProtobufCharacteristic
 
     void onRead(BLECharacteristic *c)
     {
-        DEBUG_MSG("Reading radio config, sdsecs %u\n", radioConfig.preferences.sds_secs);
+        DEBUG_MSG("Reading radio config, sdsecs %u\r\n", radioConfig.preferences.sds_secs);
         ProtobufCharacteristic::onRead(c);
     }
 
     void onWrite(BLECharacteristic *c)
     {
-        DEBUG_MSG("Writing radio config\n");
+        DEBUG_MSG("Writing radio config\r\n");
         ProtobufCharacteristic::onWrite(c);
         bluetoothPhoneAPI->handleSetRadio(radioConfig);
     }
@@ -197,7 +197,7 @@ class ToRadioCharacteristic : public CallbackCharacteristic
     void onWrite(BLECharacteristic *c)
     {
         BLEKeepAliveCallbacks::onWrite(c);
-        DEBUG_MSG("Got on write\n");
+        DEBUG_MSG("Got on write\r\n");
 
         bluetoothPhoneAPI->handleToRadio(c->getData(), c->getValue().length());
     }
@@ -239,7 +239,7 @@ class FromNumCharacteristic : public CallbackCharacteristic
     void onRead(BLECharacteristic *c)
     {
         BLEKeepAliveCallbacks::onRead(c);
-        DEBUG_MSG("FIXME implement fromnum read\n");
+        DEBUG_MSG("FIXME implement fromnum read\r\n");
     }
 };
 
@@ -281,7 +281,7 @@ BLEService *createMeshBluetoothService(BLEServer *server)
         server->getAdvertising()->addServiceUUID(service->getUUID());
     }
 
-    DEBUG_MSG("*** Mesh service:\n");
+    DEBUG_MSG("*** Mesh service:\r\n");
     service->dump();
 
     meshService = service;
