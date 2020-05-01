@@ -36,8 +36,8 @@ class SX1262Interface : public RadioLibInterface
      */
     virtual void enableInterrupt(void (*callback)()) { lora.setDio1Action(callback); }
 
-    /** Could we send right now (i.e. either not actively receiving or transmitting)? */
-    virtual bool canSendImmediately();
+    /** are we actively receiving a packet (only called during receiving state) */
+    virtual bool isActivelyReceiving();
 
     /**
      * Start waiting to receive a message
@@ -47,6 +47,7 @@ class SX1262Interface : public RadioLibInterface
      * Add SNR data to received messages
      */
     virtual void addReceiveMetadata(MeshPacket *mp);
+
   private:
     void setStandby();
 };
