@@ -116,4 +116,9 @@ class RadioLibInterface : public RadioInterface
     /**
      * If a send was in progress finish it and return the buffer to the pool */
     void completeSending();
+
+    /**
+     * Add SNR data to received messages
+     */
+    virtual void addReceiveMetadata(MeshPacket *mp) = 0;
 };

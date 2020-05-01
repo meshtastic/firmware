@@ -79,6 +79,13 @@ void SX1262Interface::setStandby()
     disableInterrupt();
 }
 
+/**
+ * Add SNR data to received messages
+ */
+void SX1262Interface::addReceiveMetadata(MeshPacket *mp) {
+    mp->rx_snr = lora.getSNR();
+}
+
 void SX1262Interface::startReceive()
 {
     setStandby();

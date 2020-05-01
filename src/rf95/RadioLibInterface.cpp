@@ -185,6 +185,7 @@ void RadioLibInterface::handleReceiveInterrupt()
                 mp->from = h->from;
                 mp->to = h->to;
                 mp->id = h->id;
+                addReceiveMetadata(mp);
 
                 if (!pb_decode_from_bytes(payload, payloadLen, SubPacket_fields, p)) {
                     DEBUG_MSG("Invalid protobufs in received mesh packet, discarding.\n");
@@ -193,7 +194,7 @@ void RadioLibInterface::handleReceiveInterrupt()
                 } else {
                     // parsing was successful, queue for our recipient
                     mp->has_payload = true;
-                    txGood++;
+                    rxGood++;
 
                     deliverToReceiver(mp);
                 }
