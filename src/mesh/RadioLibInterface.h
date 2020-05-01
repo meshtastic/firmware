@@ -13,10 +13,9 @@
 
 class RadioLibInterface : public RadioInterface
 {
+    /// Used as our notification from the ISR
     enum PendingISR { ISR_NONE = 0, ISR_RX, ISR_TX };
 
-    /**
-     * What sort of interrupt do we expect our helper thread to now handle */
     volatile PendingISR pending = ISR_NONE;
 
     /** Our ISR code currently needs this to find our active instance
@@ -73,10 +72,6 @@ class RadioLibInterface : public RadioInterface
 
     virtual ErrorCode send(MeshPacket *p);
 
-    // methods from radiohead
-
-    virtual void loop(); // Idle processing
-
     /**
      * Return true if we think the board can go to sleep (i.e. our tx queue is empty, we are not sending or receiving)
      *
@@ -124,4 +119,6 @@ class RadioLibInterface : public RadioInterface
      * Add SNR data to received messages
      */
     virtual void addReceiveMetadata(MeshPacket *mp) = 0;
+
+    virtual void loop(); // Idle processing
 };

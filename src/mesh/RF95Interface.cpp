@@ -14,6 +14,8 @@ RF95Interface::RF95Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOL
 /// \return true if initialisation succeeded.
 bool RF95Interface::init()
 {
+    RadioLibInterface::init();
+    
     applyModemConfig();
     if (power > 20) // This chip has lower power limits than some
         power = 20;
@@ -25,7 +27,7 @@ bool RF95Interface::init()
     if (res == ERR_NONE)
         res = lora->setCRC(SX126X_LORA_CRC_ON);
 
-    if (res == ERR_NONE)
+    if (res == ERR_NONE) 
         startReceive(); // start receiving
 
     return res == ERR_NONE;

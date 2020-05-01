@@ -17,16 +17,39 @@ RadioLibInterface::RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq
     instance = this;
 }
 
+#ifndef NO_ESP32
+// ESP32 doesn't use that flag
+#define YIELD_FROM_ISR(x) portYIELD_FROM_ISR()
+#else
+#define YIELD_FROM_ISR(x) portYIELD_FROM_ISR(x)
+#endif
+
 void INTERRUPT_ATTR RadioLibInterface::isrRxLevel0()
 {
-    instance->pending = ISR_RX;
     instance->disableInterrupt();
+
+    instance->pending = ISR_RX;
+    BaseType_t xHigherPriorityTaskWoken;
+    instance->notifyFromISR(&xHigherPriorityTaskWoken);
+
+    /* Force a context switch if xHigherPriorityTaskWoken is now set to pdTRUE.
+    The macro used to do this is dependent on the port and may be called
+    portEND_SWITCHING_ISR. */
+    YIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
 void INTERRUPT_ATTR RadioLibInterface::isrTxLevel0()
 {
-    instance->pending = ISR_TX;
     instance->disableInterrupt();
+
+    instance->pending = ISR_TX;
+    BaseType_t xHigherPriorityTaskWoken;
+    instance->notifyFromISR(&xHigherPriorityTaskWoken);
+
+    /* Force a context switch if xHigherPriorityTaskWoken is now set to pdTRUE.
+    The macro used to do this is dependent on the port and may be called
+    portEND_SWITCHING_ISR. */
+    YIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
 /** Our ISR code currently needs this to find our active instance
@@ -117,19 +140,17 @@ bool RadioLibInterface::canSleep()
 
 void RadioLibInterface::loop()
 {
-    PendingISR wasPending;
-    while ((wasPending = pending) != 0) { // atomic read
-        pending = ISR_NONE; // If the flag was set, it is _guaranteed_ the ISR won't be running, because it masked itself
+    PendingISR wasPending = pending;
+    pending = ISR_NONE;
 
-        if (wasPending == ISR_TX)
-            handleTransmitInterrupt();
-        else if (wasPending == ISR_RX)
-            handleReceiveInterrupt();
-        else
-            assert(0);
+    if (wasPending == ISR_TX)
+        handleTransmitInterrupt();
+    else if (wasPending == ISR_RX)
+        handleReceiveInterrupt();
+    else
+        assert(0); // We expected to receive a valid notification from the ISR
 
-        startNextWork();
-    }
+    startNextWork();
 }
 
 void RadioLibInterface::startNextWork()

@@ -62,6 +62,8 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 
 Nice ideas worth considering someday...
 
+- make/find a multithread safe debug logging class (include remote logging and timestamps and levels). make each log event atomic.
+- turn on freertos stack size checking
 - Currently we use Nordic's vendor ID, which is apparently okay: https://devzone.nordicsemi.com/f/nordic-q-a/44014/using-nordic-vid-and-pid-for-nrf52840 and I just picked a PID of 0x4403
 - Use NRF logger module (includes flash logging etc...) instead of DEBUG_MSG
 - Use "LED softblink" library on NRF52 to do nice pretty "breathing" LEDs. Don't whack LED from main thread anymore.
