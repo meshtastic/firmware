@@ -24,7 +24,7 @@ separated by 2.16 MHz with respect to the adjacent channels. Channel zero starts
 /// Sometimes while debugging it is useful to set this false, to disable rf95 accesses
 bool useHardware = true;
 
-MeshRadio::MeshRadio() // , manager(radioIf)
+MeshRadio::MeshRadio(RadioInterface *rIf) : radioIf(*rIf) // , manager(radioIf)
 {
     myNodeInfo.num_channels = NUM_CHANNELS;
 
@@ -54,19 +54,18 @@ bool MeshRadio::init()
     delay(10);
 #endif
 
-    radioIf.setThisAddress(
-        nodeDB.getNodeNum()); // Note: we must do this here, because the nodenum isn't inited at constructor time.
+    // we now expect interfaces to operate in promiscous mode
+    // radioIf.setThisAddress(nodeDB.getNodeNum()); // Note: we must do this here, because the nodenum isn't inited at constructor
+    // time.
+
+    applySettings();
 
     if (!radioIf.init()) {
         DEBUG_MSG("LoRa radio init failed\n");
-        DEBUG_MSG("Uncomment '#define SERIAL_DEBUG' in RH_RF95.cpp for detailed debug info\n");
         return false;
     }
 
-    // not needed - defaults on
-    // rf95.setPayloadCRC(true);
-
-    reloadConfig();
+    // No need to call this now, init is supposed to do same.  reloadConfig();
 
     return true;
 }
@@ -87,39 +86,28 @@ unsigned long hash(char *str)
     return hash;
 }
 
-int MeshRadio::reloadConfig(void *unused)
+/**
+ * Pull our channel settings etc... from protobufs to the dumb interface settings
+ */
+void MeshRadio::applySettings()
 {
-    radioIf.setModeIdle(); // Need to be idle before doing init
-
     // Set up default configuration
     // No Sync Words in LORA mode.
-    radioIf.setModemConfig(
-        (RH_RF95::ModemConfigChoice)channelSettings.modem_config); // Radio default
-                                                                   //    setModemConfig(Bw125Cr48Sf4096); // slow and reliable?
-    // rf95.setPreambleLength(8);           // Default is 8
+    radioIf.modemConfig = (ModemConfigChoice)channelSettings.modem_config;
 
     // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM
     int channel_num = hash(channelSettings.name) % NUM_CHANNELS;
-    float center_freq = CH0 + CH_SPACING * channel_num;
-    if (!radioIf.setFrequency(center_freq)) {
-        DEBUG_MSG("setFrequency failed\n");
-        assert(0); // fixme panic
-    }
-
-    // Defaults after init are 434.0MHz, 13dBm, Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on
-
-    // The default transmitter power is 13dBm, using PA_BOOST.
-    // If you are using RFM95/96/97/98 modules which uses the PA_BOOST transmitter pin, then
-    // you can set transmitter powers from 5 to 23 dBm:
-    // FIXME - can we do this?  It seems to be in the Heltec board.
-    radioIf.setTxPower(channelSettings.tx_power, false);
+    radioIf.freq = CH0 + CH_SPACING * channel_num;
+    radioIf.power = channelSettings.tx_power;
 
     DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, txpower=%d\n", channelSettings.name, channelSettings.modem_config,
               channel_num, channelSettings.tx_power);
+}
 
-    // Done with init tell radio to start receiving
-    radioIf.setModeRx();
+int MeshRadio::reloadConfig(void *unused)
+{
+    applySettings();
+    radioIf.reconfigure();
 
     return 0;
 }
-
