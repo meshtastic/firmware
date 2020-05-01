@@ -74,7 +74,7 @@ void GPS::setup()
             ok = ublox.powerSaveMode(); // use power save mode
             assert(ok);
         }
-        ok = ublox.saveConfiguration(2000);
+        ok = ublox.saveConfiguration(3000);
         assert(ok);
     } else {
         // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
