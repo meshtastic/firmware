@@ -14,9 +14,6 @@ RF95Interface::RF95Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOL
 /// \return true if initialisation succeeded.
 bool RF95Interface::init()
 {
-    // FIXME, move this to main
-    SPI.begin();
-
     applyModemConfig();
     if (power > 20) // This chip has lower power limits than some
         power = 20;
@@ -44,6 +41,11 @@ bool RF95Interface::init()
         startReceive(); // start receiving
 
     return res == ERR_NONE;
+}
+
+void INTERRUPT_ATTR RF95Interface::disableInterrupt()
+{
+    lora->clearDio0Action();
 }
 
 bool RF95Interface::reconfigure()
