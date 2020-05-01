@@ -2,13 +2,14 @@
 
 #include "MeshRadio.h" // kinda yucky, but we need to know which region we are in
 #include "RadioLibInterface.h"
+#include "RadioLibRF95.h"
 
 /**
  * Our new not radiohead adapter for RF95 style radios
  */
 class RF95Interface : public RadioLibInterface
 {
-    SX1278 *lora; // Either a RFM95 or RFM96 depending on what was stuffed on this board
+    RadioLibRF95 *lora; // Either a RFM95 or RFM96 depending on what was stuffed on this board
 
   public:
     RF95Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, SPIClass &spi);

@@ -59,6 +59,9 @@ class RadioLibRF95: public SX1278 {
     */
     int16_t setFrequency(float freq);
 
+    // Return true if we are actively receiving a message currently
+    bool isReceiving();
+
 #ifndef RADIOLIB_GODMODE
   private:
 #endif
