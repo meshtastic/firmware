@@ -28,7 +28,7 @@ GPS::GPS() : PeriodicTask() {}
 void GPS::setup()
 {
     PeriodicTask::setup();
-    
+
     readFromRTC(); // read the main CPU RTC at first
 
 #ifdef GPS_RX_PIN
@@ -74,7 +74,7 @@ void GPS::setup()
             ok = ublox.powerSaveMode(); // use power save mode
             assert(ok);
         }
-        ok = ublox.saveConfiguration(2000);
+        ok = ublox.saveConfiguration(3000);
         assert(ok);
     } else {
         // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
@@ -110,7 +110,7 @@ void GPS::perhapsSetRTC(const struct timeval *tv)
 #ifndef NO_ESP32
         settimeofday(tv, NULL);
 #else
-        assert(0);
+        DEBUG_MSG("ERROR TIME SETTING NOT IMPLEMENTED!\n");
 #endif
         readFromRTC();
     }

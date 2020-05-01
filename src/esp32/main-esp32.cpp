@@ -164,6 +164,8 @@ void axp192Init()
 
 void esp32Setup()
 {
+    randomSeed(esp_random()); // ESP docs say this is fairly random
+
 #ifdef AXP192_SLAVE_ADDRESS
     axp192Init();
 #endif

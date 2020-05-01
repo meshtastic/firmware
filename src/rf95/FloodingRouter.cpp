@@ -99,7 +99,7 @@ bool FloodingRouter::wasSeenRecently(const MeshPacket *p)
         BroadcastRecord &r = recentBroadcasts[i];
 
         if ((now - r.rxTimeMsec) >= FLOOD_EXPIRE_TIME) {
-            DEBUG_MSG("Deleting old broadcast record %d\n", i);
+            // DEBUG_MSG("Deleting old broadcast record %d\n", i);
             recentBroadcasts.erase(recentBroadcasts.begin() + i); // delete old record
         } else {
             if (r.id == p->id && r.sender == p->from) {
