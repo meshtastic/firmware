@@ -21,8 +21,9 @@ bool RF95Interface::init()
     int res;
     /**
      * We do a nasty check on freq range to figure our RFM96 vs RFM95
+     *
      */
-    if (CH0 < 500.0) {
+    if (CH0 < 530.0) {
         auto dev = new RFM96(&module);
         iface = lora = dev;
         res = dev->begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength);
@@ -115,7 +116,7 @@ bool RF95Interface::canSendImmediately()
     // To do otherwise would be doubly bad because not only would we drop the packet that was on the way in,
     // we almost certainly guarantee no one outside will like the packet we are sending.
     bool busyTx = sendingPacket != NULL;
-    bool busyRx = isReceiving && lora->getPacketLength() > 0;
+    bool busyRx = false; // FIXME - use old impl.  isReceiving && lora->getPacketLength() > 0;
 
     if (busyTx || busyRx)
         DEBUG_MSG("Can not set now, busyTx=%d, busyRx=%d\n", busyTx, busyRx);
