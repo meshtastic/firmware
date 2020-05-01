@@ -7,9 +7,18 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 
+#define RADIO_STACK_SIZE 4096
+
 RadioInterface::RadioInterface() : txQueue(MAX_TX_QUEUE)
 {
     assert(sizeof(PacketHeader) == 4); // make sure the compiler did what we expected
+}
+
+bool RadioInterface::init()
+{
+    start("radio", RADIO_STACK_SIZE); // Start our worker thread
+
+    return true;
 }
 
 ErrorCode SimRadio::send(MeshPacket *p)
