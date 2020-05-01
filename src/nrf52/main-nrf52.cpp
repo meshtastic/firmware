@@ -67,4 +67,5 @@ void nrf52Setup()
 {
     // Not yet on board
     // pmu.init();
+    DEBUG_MSG("FIXME, need to call randomSeed on nrf52!\n");
 }
