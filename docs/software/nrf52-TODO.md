@@ -5,7 +5,6 @@
 Minimum items needed to make sure hardware is good.
 
 - add a hard fault handler
-- at boot we are starting our message IDs at 1, rather we should start them at a random number. also, seed random based on timer. this could be the cause of our first message not seen bug. 
 - use "variants" to get all gpio bindings
 - plug in correct variants for the real board
 - Use the PMU driver on real hardware
@@ -57,6 +56,7 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 - currently using soft device SD140, is that ideal?
 - turn on the watchdog timer, require servicing from key application threads
 - install a hardfault handler for null ptrs (if one isn't already installed)
+- nrf52setup should call randomSeed(tbd)
 
 ## Things to do 'someday'
 
@@ -97,6 +97,7 @@ Nice ideas worth considering someday...
 - DONE track rxbad, rxgood, txgood
 - DONE neg 7 error code from receive
 - DONE remove unused sx1262 lib from github
+- at boot we are starting our message IDs at 1, rather we should start them at a random number. also, seed random based on timer. this could be the cause of our first message not seen bug.
 
 ```
 

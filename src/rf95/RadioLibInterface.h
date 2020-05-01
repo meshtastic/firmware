@@ -101,7 +101,7 @@ class RadioLibInterface : public RadioInterface
     void applyModemConfig();
 
     /** Could we send right now (i.e. either not actively receiving or transmitting)? */
-    virtual bool canSendImmediately();
+    bool canSendImmediately();
 
     /** are we actively receiving a packet (only called during receiving state) */
     virtual bool isActivelyReceiving() = 0;
