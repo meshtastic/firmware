@@ -314,7 +314,7 @@ void MeshService::sendOurPosition(NodeNum dest, bool wantReplies)
 
 int MeshService::onGPSChanged(void *unused)
 {
-    DEBUG_MSG("got gps notify\n");
+    // DEBUG_MSG("got gps notify\n");
 
     // Update our local node info with our position (even if we don't decide to update anyone else)
     MeshPacket *p = allocForSending();
