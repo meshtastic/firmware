@@ -21,7 +21,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <OLEDDisplay.h>
-#include <Wire.h>
 
 #include "GPS.h"
 #include "NodeDB.h"
@@ -55,7 +54,6 @@ static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     // draw an xbm image.
     // Please note that everything that should be transitioned
     // needs to be drawn relative to x and y
-
     display->drawXbm(x + 32, y, icon_width, icon_height, (const uint8_t *)icon_bits);
 
     display->setFont(ArialMT_Plain_16);
@@ -320,11 +318,11 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     uint32_t agoSecs = sinceLastSeen(node);
     static char lastStr[20];
     if (agoSecs < 120) // last 2 mins?
-        snprintf(lastStr, sizeof(lastStr), "%lu seconds ago", agoSecs);
+        snprintf(lastStr, sizeof(lastStr), "%u seconds ago", agoSecs);
     else if (agoSecs < 120 * 60) // last 2 hrs
-        snprintf(lastStr, sizeof(lastStr), "%lu minutes ago", agoSecs / 60);
+        snprintf(lastStr, sizeof(lastStr), "%u minutes ago", agoSecs / 60);
     else
-        snprintf(lastStr, sizeof(lastStr), "%lu hours ago", agoSecs / 60 / 60);
+        snprintf(lastStr, sizeof(lastStr), "%u hours ago", agoSecs / 60 / 60);
 
     static float simRadian;
     simRadian += 0.1; // For testing, have the compass spin unless both
@@ -411,6 +409,7 @@ void Screen::handleSetOn(bool on)
     if (on != screenOn) {
         if (on) {
             DEBUG_MSG("Turning on screen\n");
+            dispdev.displayOn();
             dispdev.displayOn();
         } else {
             DEBUG_MSG("Turning off screen\n");
@@ -594,7 +593,7 @@ void Screen::handleStartBluetoothPinScreen(uint32_t pin)
 
     static FrameCallback btFrames[] = {drawFrameBluetooth};
 
-    snprintf(btPIN, sizeof(btPIN), "%06lu", pin);
+    snprintf(btPIN, sizeof(btPIN), "%06u", pin);
 
     ui.disableAllIndicators();
     ui.setFrames(btFrames, 1);
