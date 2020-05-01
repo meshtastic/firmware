@@ -4,21 +4,25 @@
 #include "MeshTypes.h"
 #include "PointerQueue.h"
 #include "mesh.pb.h"
-#include <RH_RF95.h>
 
 #define MAX_TX_QUEUE 16 // max number of packets which can be waiting for transmission
 
 #define MAX_RHPACKETLEN 256
 
 /**
- * This structure has to exactly match the wire layout when sent over the radio link.  Used to keep compatibility 
+ * This structure has to exactly match the wire layout when sent over the radio link.  Used to keep compatibility
  * wtih the old radiohead implementation.
  */
 typedef struct {
     uint8_t to, from, id, flags;
 } PacketHeader;
 
-
+typedef enum {
+    Bw125Cr45Sf128 = 0, ///< Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on. Default medium range
+    Bw500Cr45Sf128,     ///< Bw = 500 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on. Fast+short range
+    Bw31_25Cr48Sf512,   ///< Bw = 31.25 kHz, Cr = 4/8, Sf = 512chips/symbol, CRC on. Slow+long range
+    Bw125Cr48Sf4096,    ///< Bw = 125 kHz, Cr = 4/8, Sf = 4096chips/symbol, CRC on. Slow+long range
+} ModemConfigChoice;
 
 /**
  * Basic operations all radio chipsets must implement.
@@ -48,7 +52,7 @@ class RadioInterface
   public:
     float freq = 915.0; // FIXME, init all these params from user setings
     int8_t power = 17;
-    RH_RF95::ModemConfigChoice modemConfig;
+    ModemConfigChoice modemConfig;
 
     /** pool is the pool we will alloc our rx packets from
      * rxDest is where we will send any rx packets, it becomes receivers responsibility to return packet to the pool
@@ -81,7 +85,6 @@ class RadioInterface
 
     // methods from radiohead
 
-
     /// Initialise the Driver transport hardware and software.
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
@@ -94,9 +97,10 @@ class RadioInterface
 
   protected:
     /***
-     * given a packet set sendingPacket and decode the protobufs into radiobuf.  Returns # of bytes to send (including the PacketHeader & payload).
-     * 
-     * Used as the first step of 
+     * given a packet set sendingPacket and decode the protobufs into radiobuf.  Returns # of bytes to send (including the
+     * PacketHeader & payload).
+     *
+     * Used as the first step of
      */
     size_t beginSending(MeshPacket *p);
 };
@@ -112,16 +116,4 @@ class SimRadio : public RadioInterface
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
     virtual bool init() { return true; }
-
-    /// If current mode is Rx or Tx changes it to Idle. If the transmitter or receiver is running,
-    /// disables them.
-    void setModeIdle() {}
-
-    /// If current mode is Tx or Idle, changes it to Rx.
-    /// Starts the receiver in the RF95/96/97/98.
-    void setModeRx() {}
-
-    /// Returns the operating mode of the library.
-    /// \return the current mode, one of RF69_MODE_*
-    virtual RHGenericDriver::RHMode mode() { return RHGenericDriver::RHModeIdle; }
 };

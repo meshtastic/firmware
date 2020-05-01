@@ -6,7 +6,6 @@
 #include "PointerQueue.h"
 #include "RadioInterface.h"
 #include "mesh.pb.h"
-#include <RH_RF95.h>
 
 /**
  * A mesh aware router that supports multiple interfaces.

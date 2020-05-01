@@ -1,10 +1,10 @@
 #pragma once
 
-#include "CustomRF95.h"
 #include "MemoryPool.h"
 #include "MeshTypes.h"
 #include "Observer.h"
 #include "PointerQueue.h"
+#include "RadioInterface.h"
 #include "configuration.h"
 #include "mesh.pb.h"
 
