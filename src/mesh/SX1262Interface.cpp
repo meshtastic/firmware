@@ -12,6 +12,8 @@ SX1262Interface::SX1262Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RA
 /// \return true if initialisation succeeded.
 bool SX1262Interface::init()
 {
+    RadioLibInterface::init();
+
     float tcxoVoltage = 0;        // None - we use an XTAL
     bool useRegulatorLDO = false; // Seems to depend on the connection to pin 9/DCC_SW - if an inductor DCDC?
 

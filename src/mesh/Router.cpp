@@ -35,9 +35,6 @@ Router::Router() : fromRadioQueue(MAX_RX_FROMRADIO) {}
  */
 void Router::loop()
 {
-    if (iface)
-        iface->loop();
-
     MeshPacket *mp;
     while ((mp = fromRadioQueue.dequeuePtr(0)) != NULL) {
         handleReceived(mp);
