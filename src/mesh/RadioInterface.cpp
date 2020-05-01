@@ -7,6 +7,7 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 
+// 1kb was too small
 #define RADIO_STACK_SIZE 4096
 
 RadioInterface::RadioInterface() : txQueue(MAX_TX_QUEUE)
