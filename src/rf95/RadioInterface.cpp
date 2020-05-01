@@ -1,4 +1,5 @@
-#include "CustomRF95.h"
+
+#include "RadioInterface.h"
 #include "NodeDB.h"
 #include "assert.h"
 #include "configuration.h"
@@ -46,7 +47,8 @@ size_t RadioInterface::beginSending(MeshPacket *p)
     // if the sender nodenum is zero, that means uninitialized
     assert(h->from);
 
-    size_t numbytes = pb_encode_to_bytes(radiobuf + sizeof(PacketHeader), sizeof(radiobuf), SubPacket_fields, &p->payload) + sizeof(PacketHeader);
+    size_t numbytes = pb_encode_to_bytes(radiobuf + sizeof(PacketHeader), sizeof(radiobuf), SubPacket_fields, &p->payload) +
+                      sizeof(PacketHeader);
 
     assert(numbytes <= MAX_RHPACKETLEN);
 

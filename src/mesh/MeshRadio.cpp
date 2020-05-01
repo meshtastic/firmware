@@ -55,13 +55,13 @@ bool MeshRadio::init()
 #endif
 
     // we now expect interfaces to operate in promiscous mode
-    // radioIf.setThisAddress(nodeDB.getNodeNum()); // Note: we must do this here, because the nodenum isn't inited at constructor time.
+    // radioIf.setThisAddress(nodeDB.getNodeNum()); // Note: we must do this here, because the nodenum isn't inited at constructor
+    // time.
 
     applySettings();
 
     if (!radioIf.init()) {
         DEBUG_MSG("LoRa radio init failed\n");
-        DEBUG_MSG("Uncomment '#define SERIAL_DEBUG' in RH_RF95.cpp for detailed debug info\n");
         return false;
     }
 
@@ -93,7 +93,7 @@ void MeshRadio::applySettings()
 {
     // Set up default configuration
     // No Sync Words in LORA mode.
-    radioIf.modemConfig = (RH_RF95::ModemConfigChoice)channelSettings.modem_config;
+    radioIf.modemConfig = (ModemConfigChoice)channelSettings.modem_config;
 
     // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM
     int channel_num = hash(channelSettings.name) % NUM_CHANNELS;
