@@ -5,7 +5,7 @@
 Minimum items needed to make sure hardware is good.
 
 - add a hard fault handler
-- at boot we are starting our message IDs at 1, rather we should start them at a random number. also, seed random based on timer. this could be the cause of our first message not seen bug. keep packet sequence number in **attribute** ((section (".noinit")))
+- at boot we are starting our message IDs at 1, rather we should start them at a random number. also, seed random based on timer. this could be the cause of our first message not seen bug. 
 - use "variants" to get all gpio bindings
 - plug in correct variants for the real board
 - Use the PMU driver on real hardware
