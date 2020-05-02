@@ -24,13 +24,13 @@ RadioLibInterface::RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq
 #define YIELD_FROM_ISR(x) portYIELD_FROM_ISR(x)
 #endif
 
-void INTERRUPT_ATTR RadioLibInterface::isrRxLevel0()
+void INTERRUPT_ATTR RadioLibInterface::isrLevel0Common(PendingISR cause)
 {
     instance->disableInterrupt();
 
-    instance->pending = ISR_RX;
+    instance->pending = cause;
     BaseType_t xHigherPriorityTaskWoken;
-    instance->notifyFromISR(&xHigherPriorityTaskWoken);
+    instance->notifyFromISR(&xHigherPriorityTaskWoken, cause, eSetValueWithOverwrite);
 
     /* Force a context switch if xHigherPriorityTaskWoken is now set to pdTRUE.
     The macro used to do this is dependent on the port and may be called
@@ -38,18 +38,14 @@ void INTERRUPT_ATTR RadioLibInterface::isrRxLevel0()
     YIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
+void INTERRUPT_ATTR RadioLibInterface::isrRxLevel0()
+{
+    isrLevel0Common(ISR_RX);
+}
+
 void INTERRUPT_ATTR RadioLibInterface::isrTxLevel0()
 {
-    instance->disableInterrupt();
-
-    instance->pending = ISR_TX;
-    BaseType_t xHigherPriorityTaskWoken;
-    instance->notifyFromISR(&xHigherPriorityTaskWoken);
-
-    /* Force a context switch if xHigherPriorityTaskWoken is now set to pdTRUE.
-    The macro used to do this is dependent on the port and may be called
-    portEND_SWITCHING_ISR. */
-    YIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    isrLevel0Common(ISR_TX);
 }
 
 /** Our ISR code currently needs this to find our active instance
@@ -108,25 +104,18 @@ bool RadioLibInterface::canSendImmediately()
 /// bluetooth comms code.  If the txmit queue is empty it might return an error
 ErrorCode RadioLibInterface::send(MeshPacket *p)
 {
-    // We wait _if_ we are partially though receiving a packet (rather than just merely waiting for one).
-    // To do otherwise would be doubly bad because not only would we drop the packet that was on the way in,
-    // we almost certainly guarantee no one outside will like the packet we are sending.
-    if (canSendImmediately()) {
-        // if the radio is idle, we can send right away
-        DEBUG_MSG("immediate send on mesh fr=0x%x,to=0x%x,id=%d\n (txGood=%d,rxGood=%d,rxBad=%d)\n", p->from, p->to, p->id,
-                  txGood, rxGood, rxBad);
+    DEBUG_MSG("enqueuing for send on mesh fr=0x%x,to=0x%x,id=%d\n (txGood=%d,rxGood=%d,rxBad=%d)\n", p->from, p->to, p->id,
+              txGood, rxGood, rxBad);
+    ErrorCode res = txQueue.enqueue(p, 0) ? ERRNO_OK : ERRNO_UNKNOWN;
 
-        startSend(p);
-        return ERRNO_OK;
-    } else {
-        DEBUG_MSG("enqueuing packet for send from=0x%x, to=0x%x\n", p->from, p->to);
-        ErrorCode res = txQueue.enqueue(p, 0) ? ERRNO_OK : ERRNO_UNKNOWN;
-
-        if (res != ERRNO_OK) // we weren't able to queue it, so we must drop it to prevent leaks
-            packetPool.release(p);
-
+    if (res != ERRNO_OK) { // we weren't able to queue it, so we must drop it to prevent leaks
+        packetPool.release(p);
         return res;
     }
+
+    startTransmitTimer(false); // We want all sending/receiving to be done by our daemon thread
+
+    return res;
 }
 
 bool RadioLibInterface::canSleep()
@@ -138,30 +127,75 @@ bool RadioLibInterface::canSleep()
     return res;
 }
 
+/** radio helper thread callback.
+
+We never immediately transmit after any operation (either rx or tx).  Instead we should start receiving and
+wait a random delay of 50 to 200 ms to make sure we are not stomping on someone else.  The 50ms delay at the beginning ensures all
+possible listeners have had time to finish processing the previous packet and now have their radio in RX state.  The up to 200ms
+random delay gives a chance for all possible senders to have high odds of detecting that someone else started transmitting first
+and then they will wait until that packet finishes.
+
+NOTE: the large flood rebroadcast delay might still be needed even with this approach.  Because we might not be able to hear other
+transmitters that we are potentially stomping on.  Requires further thought.
+
+FIXME, the 50ms and 200ms values should be tuned via logic analyzer later.
+*/
 void RadioLibInterface::loop()
 {
-    PendingISR wasPending = pending;
     pending = ISR_NONE;
 
-    if (wasPending == ISR_TX)
+    switch (notification) {
+    case ISR_TX:
         handleTransmitInterrupt();
-    else if (wasPending == ISR_RX)
+        startReceive();
+        startTransmitTimer();
+        break;
+    case ISR_RX:
         handleReceiveInterrupt();
-    else
-        assert(0); // We expected to receive a valid notification from the ISR
+        startReceive();
+        startTransmitTimer();
+        break;
+    case TRANSMIT_DELAY_COMPLETED:
+        // If we are not currently in receive mode, then restart the timer and try again later (this can happen if the main thread
+        // has placed the unit into standby)  FIXME, how will this work if the chipset is in sleep mode?
+        if (!txQueue.isEmpty()) {
+            if (!canSendImmediately()) {
+                startTransmitTimer(); // try again in a little while
+            } else {
+                DEBUG_MSG("Transmit timer completed!\n");
 
-    startNextWork();
+                // Send any outgoing packets we have ready
+                MeshPacket *txp = txQueue.dequeuePtr(0);
+                assert(txp);
+                startSend(txp);
+            }
+        }
+        break;
+    default:
+        assert(0); // We expected to receive a valid notification from the ISR
+    }
 }
 
-void RadioLibInterface::startNextWork()
+#include "OSTimer.h"
+
+void RadioLibInterface::timerCallback(void *p1, uint32_t p2)
 {
-    // First send any outgoing packets we have ready
-    MeshPacket *txp = txQueue.dequeuePtr(0);
-    if (txp)
-        startSend(txp);
-    else {
-        // Nothing to send, let's switch back to receive mode
-        startReceive();
+    RadioLibInterface *t = (RadioLibInterface *)p1;
+
+    t->timerRunning = false;
+
+    // We use without overwrite, so that if there is already an interrupt pending to be handled, that gets handle properly (the
+    // ISR handler will restart our timer)
+    t->notify(TRANSMIT_DELAY_COMPLETED, eSetValueWithoutOverwrite);
+}
+
+void RadioLibInterface::startTransmitTimer(bool withDelay)
+{
+    // If we have work to do and the timer wasn't already scheduled, schedule it now
+    if (!timerRunning && !txQueue.isEmpty()) {
+        timerRunning = true;
+        uint32_t delay = withDelay ? 0 : random(50, 200); // See documentation for loop() wrt these values
+        scheduleCallback(timerCallback, this, 0, delay);
     }
 }
 

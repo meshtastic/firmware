@@ -71,6 +71,13 @@ class NotifiedWorkerThread : public WorkerThread
     uint32_t notification = 0;
 
     /**
+     * What notification bits should be cleared just after we read and return them in notification?
+     *
+     * Defaults to clear all of them.
+     */
+    uint32_t clearOnRead = ULONG_MAX;
+
+    /**
      * A method that should block execution - either waiting ona queue/mutex or a "task notification"
      */
     virtual void block();

@@ -38,7 +38,6 @@ void NotifiedWorkerThread::notifyFromISR(BaseType_t *highPriWoken, uint32_t v, e
 
 void NotifiedWorkerThread::block()
 {
-    xTaskNotifyWait(0,                             // don't clear notification on entry
-                    0,                             //  do not reset notification value on read
-                    &notification, portMAX_DELAY); // Wait forever
+    xTaskNotifyWait(0,                                          // don't clear notification on entry
+                    clearOnRead, &notification, portMAX_DELAY); // Wait forever
 }
