@@ -39,6 +39,9 @@ function do_build {
     cp $SRCELF $OUTDIR/elfs/firmware-$ENV_NAME-$COUNTRY-$VERSION.elf
 }
 
+# Important to pull latest version of libs into all device flavors, otherwise some devices might be stale
+platformio lib update 
+
 for COUNTRY in $COUNTRIES; do 
     for BOARD in $BOARDS; do
         do_build $BOARD

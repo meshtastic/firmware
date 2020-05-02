@@ -8,7 +8,6 @@
 
 #include "main.h"
 #include "target_specific.h"
-#include <Wire.h>
 
 #ifndef NO_ESP32
 #include "esp32/pm.h"
