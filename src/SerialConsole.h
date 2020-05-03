@@ -19,6 +19,13 @@ class SerialConsole : public StreamAPI, public RedirectablePrint
      * debug serial output.
      */
     virtual void handleToRadio(const uint8_t *buf, size_t len);
+
+    virtual size_t write(uint8_t c)
+    {
+        if (c == '\n') // prefix any newlines with carriage return
+            RedirectablePrint::write('\r');
+        return RedirectablePrint::write(c);
+    }
 };
 
 extern SerialConsole console;
