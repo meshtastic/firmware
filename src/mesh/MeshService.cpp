@@ -266,8 +266,10 @@ void MeshService::sendToMesh(MeshPacket *p)
     }
 
     // If the phone sent a packet just to us, don't send it out into the network
-    if (p->to == nodeDB.getNodeNum())
+    if (p->to == nodeDB.getNodeNum()) {
         DEBUG_MSG("Dropping locally processed message\n");
+        releaseToPool(p);
+    }
     else {
         // Note: We might return !OK if our fifo was full, at that point the only option we have is to drop it
         if (router.send(p) != ERRNO_OK) {

@@ -44,15 +44,16 @@ void Router::loop()
 /**
  * Send a packet on a suitable interface.  This routine will
  * later free() the packet to pool.  This routine is not allowed to stall.
- * If the txmit queue is full it might return an error
+ * If the txmit queue is full it might return an error.  
  */
 ErrorCode Router::send(MeshPacket *p)
 {
     if (iface) {
-        DEBUG_MSG("Sending packet via interface fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+        // DEBUG_MSG("Sending packet via interface fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
         return iface->send(p);
     } else {
         DEBUG_MSG("Dropping packet - no interfaces - fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+        packetPool.release(p);
         return ERRNO_NO_INTERFACES;
     }
 }

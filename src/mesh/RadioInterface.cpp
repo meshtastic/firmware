@@ -17,7 +17,8 @@ RadioInterface::RadioInterface() : txQueue(MAX_TX_QUEUE)
 
 bool RadioInterface::init()
 {
-    start("radio", RADIO_STACK_SIZE); // Start our worker thread
+    // we want this thread to run at very high priority, because it is effectively running as a user space ISR 
+    start("radio", RADIO_STACK_SIZE, configMAX_PRIORITIES - 1); // Start our worker thread
 
     return true;
 }

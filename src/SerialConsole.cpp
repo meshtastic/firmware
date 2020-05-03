@@ -21,8 +21,8 @@ void SerialConsole::init()
 }
 
 /**
- * we override this to notice when we've received a protobuf over the serial stream.  Then we shunt off
- * debug serial output.
+ * we override this to notice when we've received a protobuf over the serial
+ * stream.  Then we shunt off debug serial output.
  */
 void SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
 {
