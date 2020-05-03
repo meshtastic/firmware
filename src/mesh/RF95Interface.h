@@ -40,7 +40,7 @@ class RF95Interface : public RadioLibInterface
 
     /** are we actively receiving a packet (only called during receiving state) */
     virtual bool isActivelyReceiving();
-    
+
     /**
      * Start waiting to receive a message
      */
@@ -50,6 +50,6 @@ class RF95Interface : public RadioLibInterface
      * Add SNR data to received messages
      */
     virtual void addReceiveMetadata(MeshPacket *mp);
-  private:
-    void setStandby();
+
+    virtual void setStandby();
 };

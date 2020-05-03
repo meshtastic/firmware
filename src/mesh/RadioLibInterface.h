@@ -85,8 +85,8 @@ class RadioLibInterface : public RadioInterface
     void startSend(MeshPacket *txp);
 
     /** if we have something waiting to send, start a short random timer so we can come check for collision before actually doing
-     * the transmit 
-     * 
+     * the transmit
+     *
      * If the timer was already running, we just wait for that one to occur.
      * */
     void startTransmitTimer(bool withDelay = true);
@@ -103,7 +103,7 @@ class RadioLibInterface : public RadioInterface
     void applyModemConfig();
 
     /** Could we send right now (i.e. either not actively receiving or transmitting)? */
-    bool canSendImmediately();
+    virtual bool canSendImmediately();
 
     /** are we actively receiving a packet (only called during receiving state) */
     virtual bool isActivelyReceiving() = 0;
@@ -128,4 +128,6 @@ class RadioLibInterface : public RadioInterface
     virtual void addReceiveMetadata(MeshPacket *mp) = 0;
 
     virtual void loop(); // Idle processing
+
+    virtual void setStandby() = 0;
 };

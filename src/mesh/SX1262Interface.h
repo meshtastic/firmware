@@ -48,6 +48,8 @@ class SX1262Interface : public RadioLibInterface
      */
     virtual void addReceiveMetadata(MeshPacket *mp);
 
+    virtual void setStandby();
+
   private:
-    void setStandby();
+
 };
