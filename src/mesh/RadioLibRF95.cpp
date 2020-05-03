@@ -56,8 +56,13 @@ int16_t RadioLibRF95::setFrequency(float freq)
 bool RadioLibRF95::isReceiving()
 {
     // 0x0b == Look for header info valid, signal synchronized or signal detected
-    uint8_t reg = _mod->SPIreadRegister(SX127X_REG_MODEM_STAT) & 0x1f;
+    uint8_t reg = readReg(SX127X_REG_MODEM_STAT);
     // Serial.printf("reg %x\n", reg);
     return (reg & (RH_RF95_MODEM_STATUS_SIGNAL_DETECTED | RH_RF95_MODEM_STATUS_SIGNAL_SYNCHRONIZED |
-                                        RH_RF95_MODEM_STATUS_HEADER_INFO_VALID)) != 0;
+                   RH_RF95_MODEM_STATUS_HEADER_INFO_VALID)) != 0;
+}
+
+uint8_t RadioLibRF95::readReg(uint8_t addr)
+{
+    return _mod->SPIreadRegister(addr);
 }

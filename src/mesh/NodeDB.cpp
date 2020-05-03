@@ -303,7 +303,8 @@ void NodeDB::updateFrom(const MeshPacket &mp)
         if (p.has_data) {
             // Keep a copy of the most recent text message.
             if (p.data.typ == Data_Type_CLEAR_TEXT) {
-                DEBUG_MSG("Received text msg from=0%0x, msg=%.*s\n", mp.from, p.data.payload.size, p.data.payload.bytes);
+                DEBUG_MSG("Received text msg from=0x%0x, id=%d, msg=%.*s\n", mp.from, mp.id, p.data.payload.size,
+                          p.data.payload.bytes);
                 if (mp.to == NODENUM_BROADCAST || mp.to == nodeDB.getNodeNum()) {
                     // We only store/display messages destined for us.
                     devicestate.rx_text_message = mp;

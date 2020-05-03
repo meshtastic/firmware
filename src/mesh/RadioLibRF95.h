@@ -62,6 +62,9 @@ class RadioLibRF95: public SX1278 {
     // Return true if we are actively receiving a message currently
     bool isReceiving();
 
+    /// For debugging
+    uint8_t readReg(uint8_t addr); 
+
 #ifndef RADIOLIB_GODMODE
   private:
 #endif

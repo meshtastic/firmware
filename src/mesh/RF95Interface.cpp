@@ -3,6 +3,9 @@
 #include "RadioLibRF95.h"
 #include <configuration.h>
 
+#define MAX_POWER 17
+// if we use 20 we are limited to 1% duty cycle or hw might overheat.  For continuous operation set a limit of 17
+
 RF95Interface::RF95Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, SPIClass &spi)
     : RadioLibInterface(cs, irq, rst, 0, spi)
 {
@@ -15,10 +18,10 @@ RF95Interface::RF95Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOL
 bool RF95Interface::init()
 {
     RadioLibInterface::init();
-    
+
     applyModemConfig();
-    if (power > 20) // This chip has lower power limits than some
-        power = 20;
+    if (power > MAX_POWER) // This chip has lower power limits than some
+        power = MAX_POWER;
 
     iface = lora = new RadioLibRF95(&module);
     int res = lora->begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength);
@@ -27,7 +30,7 @@ bool RF95Interface::init()
     if (res == ERR_NONE)
         res = lora->setCRC(SX126X_LORA_CRC_ON);
 
-    if (res == ERR_NONE) 
+    if (res == ERR_NONE)
         startReceive(); // start receiving
 
     return res == ERR_NONE;
@@ -67,8 +70,8 @@ bool RF95Interface::reconfigure()
     err = lora->setFrequency(freq);
     assert(err == ERR_NONE);
 
-    if (power > 20) // This chip has lower power limits than some
-        power = 20;
+    if (power > MAX_POWER) // This chip has lower power limits than some
+        power = MAX_POWER;
     err = lora->setOutputPower(power);
     assert(err == ERR_NONE);
 
