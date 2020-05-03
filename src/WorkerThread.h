@@ -75,7 +75,7 @@ class NotifiedWorkerThread : public WorkerThread
      *
      * Defaults to clear all of them.
      */
-    uint32_t clearOnRead = ULONG_MAX;
+    uint32_t clearOnRead = UINT32_MAX;
 
     /**
      * A method that should block execution - either waiting ona queue/mutex or a "task notification"
