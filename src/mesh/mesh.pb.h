@@ -300,8 +300,8 @@ typedef struct _ToRadio {
 X(a, STATIC,   SINGULAR, INT32,    altitude,          3) \
 X(a, STATIC,   SINGULAR, INT32,    battery_level,     4) \
 X(a, STATIC,   SINGULAR, UINT32,   time,              6) \
-X(a, STATIC,   SINGULAR, INT32,    latitude_i,        7) \
-X(a, STATIC,   SINGULAR, INT32,    longitude_i,       8)
+X(a, STATIC,   SINGULAR, SINT32,   latitude_i,        7) \
+X(a, STATIC,   SINGULAR, SINT32,   longitude_i,       8)
 #define Position_CALLBACK NULL
 #define Position_DEFAULT NULL
 
@@ -486,21 +486,21 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define ToRadio_fields &ToRadio_msg
 
 /* Maximum encoded size of messages (where known) */
-#define Position_size                            50
+#define Position_size                            40
 #define Data_size                                256
 #define User_size                                72
 /* RouteDiscovery_size depends on runtime parameters */
-#define SubPacket_size                           387
-#define MeshPacket_size                          429
+#define SubPacket_size                           377
+#define MeshPacket_size                          419
 #define ChannelSettings_size                     44
 #define RadioConfig_size                         120
 #define RadioConfig_UserPreferences_size         72
-#define NodeInfo_size                            142
+#define NodeInfo_size                            132
 #define MyNodeInfo_size                          85
-#define DeviceState_size                         19185
+#define DeviceState_size                         18535
 #define DebugString_size                         258
-#define FromRadio_size                           438
-#define ToRadio_size                             432
+#define FromRadio_size                           428
+#define ToRadio_size                             422
 
 #ifdef __cplusplus
 } /* extern "C" */

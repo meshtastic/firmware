@@ -28,8 +28,8 @@ class GPS : public Observable<void *>
     static HardwareSerial &_serial_gps;
 
   public:
-    uint32_t latitude = 0, longitude = 0; // as an int mult by 1e-7 to get value as double
-    uint32_t altitude = 0;
+    int32_t latitude = 0, longitude = 0; // as an int mult by 1e-7 to get value as double
+    int32_t altitude = 0;
     bool isConnected = false; // Do we have a GPS we are talking to
 
     virtual ~GPS() {}
