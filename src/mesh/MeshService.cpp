@@ -84,7 +84,7 @@ void MeshService::init()
     sendOwnerPeriod.setup();
     nodeDB.init();
 
-    gpsObserver.observe(&gps);
+    gpsObserver.observe(gps);
     packetReceivedObserver.observe(&router.notifyPacketReceived);
 }
 
@@ -153,7 +153,7 @@ void MeshService::handleIncomingPosition(const MeshPacket *mp)
             tv.tv_sec = secs;
             tv.tv_usec = 0;
 
-            gps.perhapsSetRTC(&tv);
+            perhapsSetRTC(&tv);
         }
     } else {
         DEBUG_MSG("Ignoring incoming packet - not a position\n");
@@ -165,7 +165,7 @@ int MeshService::handleFromRadio(const MeshPacket *mp)
     powerFSM.trigger(EVENT_RECEIVED_PACKET); // Possibly keep the node from sleeping
 
     // If it is a position packet, perhaps set our clock (if we don't have a GPS of our own, otherwise wait for that to work)
-    if (!gps.isConnected)
+    if (!gps->isConnected)
         handleIncomingPosition(mp);
     else {
         DEBUG_MSG("Ignoring incoming time, because we have a GPS\n");
@@ -234,8 +234,8 @@ void MeshService::handleToRadio(MeshPacket &p)
     if (p.id == 0)
         p.id = generatePacketId(); // If the phone didn't supply one, then pick one
 
-    p.rx_time = gps.getValidTime(); // Record the time the packet arrived from the phone
-                                    // (so we update our nodedb for the local node)
+    p.rx_time = getValidTime(); // Record the time the packet arrived from the phone
+                                // (so we update our nodedb for the local node)
 
     // Send the packet into the mesh
 
@@ -258,7 +258,7 @@ void MeshService::sendToMesh(MeshPacket *p)
     // nodes shouldn't trust it anyways) Note: for now, we allow a device with a local GPS to include the time, so that gpsless
     // devices can get time.
     if (p->has_payload && p->payload.has_position) {
-        if (!gps.isConnected) {
+        if (!gps->isConnected) {
             DEBUG_MSG("Stripping time %u from position send\n", p->payload.position.time);
             p->payload.position.time = 0;
         } else
@@ -286,7 +286,7 @@ MeshPacket *MeshService::allocForSending()
     p->from = nodeDB.getNodeNum();
     p->to = NODENUM_BROADCAST;
     p->id = generatePacketId();
-    p->rx_time = gps.getValidTime(); // Just in case we process the packet locally - make sure it has a valid timestamp
+    p->rx_time = getValidTime(); // Just in case we process the packet locally - make sure it has a valid timestamp
 
     return p;
 }
@@ -315,7 +315,7 @@ void MeshService::sendOurPosition(NodeNum dest, bool wantReplies)
     p->payload.has_position = true;
     p->payload.position = node->position;
     p->payload.want_response = wantReplies;
-    p->payload.position.time = gps.getValidTime(); // This nodedb timestamp might be stale, so update it if our clock is valid.
+    p->payload.position.time = getValidTime(); // This nodedb timestamp might be stale, so update it if our clock is valid.
     sendToMesh(p);
 }
 
@@ -329,12 +329,12 @@ int MeshService::onGPSChanged(void *unused)
 
     Position &pos = p->payload.position;
     // !zero or !zero lat/long means valid
-    if (gps.latitude != 0 || gps.longitude != 0) {
-        if (gps.altitude != 0)
-            pos.altitude = gps.altitude;
-        pos.latitude_i = gps.latitude;
-        pos.longitude_i = gps.longitude;
-        pos.time = gps.getValidTime();
+    if (gps->latitude != 0 || gps->longitude != 0) {
+        if (gps->altitude != 0)
+            pos.altitude = gps->altitude;
+        pos.latitude_i = gps->latitude;
+        pos.longitude_i = gps->longitude;
+        pos.time = getValidTime();
     }
 
     // We limit our GPS broadcasts to a max rate

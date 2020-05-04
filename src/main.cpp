@@ -21,13 +21,13 @@
 
 */
 
-#include "GPS.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Periodic.h"
 #include "PowerFSM.h"
 #include "Router.h"
+#include "UBloxGPS.h"
 #include "configuration.h"
 #include "error.h"
 #include "power.h"
@@ -188,8 +188,13 @@ void setup()
 
     screen.print("Started...\n");
 
-    // Init GPS
-    gps.setup();
+    readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
+
+    // Init GPS - first try ublox
+    gps = new UBloxGPS();
+    if (!gps->setup()) {
+        // FIXME - fallback to NEMA
+    }
 
     service.init();
 
@@ -306,7 +311,7 @@ void loop()
     screen.debug()->setChannelNameStatus(channelSettings.name);
     screen.debug()->setPowerStatus(powerStatus);
     // TODO(#4): use something based on hdop to show GPS "signal" strength.
-    screen.debug()->setGPSStatus(gps.hasLock() ? "ok" : ":(");
+    screen.debug()->setGPSStatus(gps->hasLock() ? "good" : "bad");
 
     // No GPS lock yet, let the OS put the main CPU in low power mode for 100ms (or until another interrupt comes in)
     // i.e. don't just keep spinning in loop as fast as we can.

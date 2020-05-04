@@ -50,7 +50,9 @@
         "cassert": "cpp"
     },
     "cSpell.words": [
+        "Blox",
         "Meshtastic",
+        "Ublox",
         "descs",
         "protobufs"
     ]
