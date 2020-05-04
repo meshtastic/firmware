@@ -9,7 +9,7 @@ Minimum items needed to make sure hardware is good.
 - plug in correct variants for the real board
 - Use the PMU driver on real hardware
 - add a NEMA based GPS driver to test GPS
-- Use new radio driver on real hardware - possibly start with https://os.mbed.com/teams/Semtech/code/SX126xLib/
+- Use new radio driver on real hardware 
 - Use UC1701 LCD driver on real hardware. Still need to create at startup and probe on SPI
 - test the LEDs
 - test the buttons

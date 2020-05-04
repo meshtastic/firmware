@@ -269,8 +269,7 @@ void MeshService::sendToMesh(MeshPacket *p)
     if (p->to == nodeDB.getNodeNum()) {
         DEBUG_MSG("Dropping locally processed message\n");
         releaseToPool(p);
-    }
-    else {
+    } else {
         // Note: We might return !OK if our fifo was full, at that point the only option we have is to drop it
         if (router.send(p) != ERRNO_OK) {
             DEBUG_MSG("No radio was able to send packet, discarding...\n");
@@ -333,8 +332,8 @@ int MeshService::onGPSChanged(void *unused)
     if (gps.latitude != 0 || gps.longitude != 0) {
         if (gps.altitude != 0)
             pos.altitude = gps.altitude;
-        pos.latitude = gps.latitude;
-        pos.longitude = gps.longitude;
+        pos.latitude_i = gps.latitude;
+        pos.longitude_i = gps.longitude;
         pos.time = gps.getValidTime();
     }
 
