@@ -15,7 +15,7 @@ class GPS : public PeriodicTask, public Observable<void *>
     SFE_UBLOX_GPS ublox;
 
   public:
-    double latitude, longitude;
+    uint32_t latitude, longitude; // as an int mult by 1e-7 to get value as double
     uint32_t altitude;
     bool isConnected; // Do we have a GPS we are talking to
 
@@ -28,7 +28,6 @@ class GPS : public PeriodicTask, public Observable<void *>
     uint32_t getValidTime();
 
     void setup();
-
 
     virtual void doTask();
 

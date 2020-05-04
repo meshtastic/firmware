@@ -280,13 +280,16 @@ static float estimatedHeading(double lat, double lon)
 /// valid lat/lon
 static bool hasPosition(NodeInfo *n)
 {
-    return n->has_position && (n->position.latitude != 0 || n->position.longitude != 0);
+    return n->has_position && (n->position.latitude_i != 0 || n->position.longitude_i != 0);
 }
 
 /// We will skip one node - the one for us, so we just blindly loop over all
 /// nodes
 static size_t nodeIndex;
 static int8_t prevFrame = -1;
+
+/// Convert an integer GPS coords to a floating point
+#define DegD(i) (i * 1e-7)
 
 static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -334,7 +337,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     NodeInfo *ourNode = nodeDB.getNode(nodeDB.getNodeNum());
     if (ourNode && hasPosition(ourNode) && hasPosition(node)) {
         Position &op = ourNode->position, &p = node->position;
-        float d = latLongToMeter(p.latitude, p.longitude, op.latitude, op.longitude);
+        float d = latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
         if (d < 2000)
             snprintf(distStr, sizeof(distStr), "%.0f m", d);
         else
@@ -342,8 +345,8 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 
         // FIXME, also keep the guess at the operators heading and add/substract
         // it.  currently we don't do this and instead draw north up only.
-        float bearingToOther = bearing(p.latitude, p.longitude, op.latitude, op.longitude);
-        float myHeading = estimatedHeading(p.latitude, p.longitude);
+        float bearingToOther = bearing(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
+        float myHeading = estimatedHeading(DegD(p.latitude_i), DegD(p.longitude_i));
         headingRadian = bearingToOther - myHeading;
     } else {
         // Debug info for gps lock errors

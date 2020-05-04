@@ -66,11 +66,11 @@ typedef struct _MyNodeInfo {
 } MyNodeInfo;
 
 typedef struct _Position {
-    double latitude;
-    double longitude;
     int32_t altitude;
     int32_t battery_level;
     uint32_t time;
+    int32_t latitude_i;
+    int32_t longitude_i;
 } Position;
 
 typedef struct _RadioConfig_UserPreferences {
@@ -237,8 +237,8 @@ typedef struct _ToRadio {
 #define MyNodeInfo_error_code_tag                7
 #define MyNodeInfo_error_address_tag             8
 #define MyNodeInfo_error_count_tag               9
-#define Position_latitude_tag                    1
-#define Position_longitude_tag                   2
+#define Position_latitude_i_tag                  7
+#define Position_longitude_i_tag                 8
 #define Position_altitude_tag                    3
 #define Position_battery_level_tag               4
 #define Position_time_tag                        6
@@ -297,11 +297,11 @@ typedef struct _ToRadio {
 
 /* Struct field encoding specification for nanopb */
 #define Position_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, DOUBLE,   latitude,          1) \
-X(a, STATIC,   SINGULAR, DOUBLE,   longitude,         2) \
 X(a, STATIC,   SINGULAR, INT32,    altitude,          3) \
 X(a, STATIC,   SINGULAR, INT32,    battery_level,     4) \
-X(a, STATIC,   SINGULAR, UINT32,   time,              6)
+X(a, STATIC,   SINGULAR, UINT32,   time,              6) \
+X(a, STATIC,   SINGULAR, INT32,    latitude_i,        7) \
+X(a, STATIC,   SINGULAR, INT32,    longitude_i,       8)
 #define Position_CALLBACK NULL
 #define Position_DEFAULT NULL
 
@@ -486,21 +486,21 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define ToRadio_fields &ToRadio_msg
 
 /* Maximum encoded size of messages (where known) */
-#define Position_size                            46
+#define Position_size                            50
 #define Data_size                                256
 #define User_size                                72
 /* RouteDiscovery_size depends on runtime parameters */
-#define SubPacket_size                           383
-#define MeshPacket_size                          425
+#define SubPacket_size                           387
+#define MeshPacket_size                          429
 #define ChannelSettings_size                     44
 #define RadioConfig_size                         120
 #define RadioConfig_UserPreferences_size         72
-#define NodeInfo_size                            138
+#define NodeInfo_size                            142
 #define MyNodeInfo_size                          85
-#define DeviceState_size                         18925
+#define DeviceState_size                         19185
 #define DebugString_size                         258
-#define FromRadio_size                           434
-#define ToRadio_size                             428
+#define FromRadio_size                           438
+#define ToRadio_size                             432
 
 #ifdef __cplusplus
 } /* extern "C" */

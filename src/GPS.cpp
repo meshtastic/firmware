@@ -48,7 +48,7 @@ void GPS::setup()
         isConnected = ublox.begin(_serial_gps);
 
     if (isConnected) {
-        DEBUG_MSG("Connected to GPS successfully\n");
+        DEBUG_MSG("Connected to UBLOX GPS successfully\n");
 
         bool factoryReset = false;
         bool ok;
@@ -191,10 +191,10 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
     if ((fixtype >= 3 && fixtype <= 4) && ublox.getP()) // rd fixes only
     {
         // we only notify if position has changed
-        latitude = ublox.getLatitude() * 1e-7;
-        longitude = ublox.getLongitude() * 1e-7;
+        latitude = ublox.getLatitude();
+        longitude = ublox.getLongitude();
         altitude = ublox.getAltitude() / 1000; // in mm convert to meters
-        DEBUG_MSG("new gps pos lat=%f, lon=%f, alt=%d\n", latitude, longitude, altitude);
+        DEBUG_MSG("new gps pos lat=%f, lon=%f, alt=%d\n", latitude * 1e-7, longitude * 1e-7, altitude);
 
         hasValidLocation = (latitude != 0) || (longitude != 0); // bogus lat lon is reported as 0,0
         if (hasValidLocation) {
