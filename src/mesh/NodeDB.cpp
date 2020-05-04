@@ -246,7 +246,7 @@ const NodeInfo *NodeDB::readNextInfo()
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const NodeInfo *n)
 {
-    uint32_t now = gps.getTime();
+    uint32_t now = getTime();
 
     uint32_t last_seen = n->position.time;
     int delta = (int)(now - last_seen);
