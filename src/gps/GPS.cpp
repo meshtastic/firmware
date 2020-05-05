@@ -61,7 +61,7 @@ void perhapsSetRTC(struct tm &t)
     tv.tv_sec = res;
     tv.tv_usec = 0; // time.centisecond() * (10 / 1000);
 
-    DEBUG_MSG("Got time from GPS month=%d, year=%d, unixtime=%ld\n", t.tm_mon, t.tm_year, tv.tv_sec);
+    // DEBUG_MSG("Got time from GPS month=%d, year=%d, unixtime=%ld\n", t.tm_mon, t.tm_year, tv.tv_sec);
     if (t.tm_year < 0 || t.tm_year >= 300)
         DEBUG_MSG("Ignoring invalid GPS time\n");
     else
