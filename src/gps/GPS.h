@@ -6,6 +6,7 @@
 
 /// If we haven't yet set our RTC this boot, set it from a GPS derived time
 void perhapsSetRTC(const struct timeval *tv);
+void perhapsSetRTC(struct tm &t);
 
 /// Return time since 1970 in secs.  Until we have a GPS lock we will be returning time based at zero
 uint32_t getTime();
@@ -37,7 +38,10 @@ class GPS : public Observable<void *>
     /**
      * Returns true if we succeeded
      */
-    virtual bool setup() = 0;
+    virtual bool setup() { return true; }
+
+    /// A loop callback for subclasses that need it.  FIXME, instead just block on serial reads
+    virtual void loop() {}
 
     /// Returns ture if we have acquired GPS lock.
     bool hasLock() const { return hasValidLocation; }

@@ -50,6 +50,24 @@ void perhapsSetRTC(const struct timeval *tv)
     }
 }
 
+void perhapsSetRTC(struct tm &t)
+{
+    /* Convert to unix time
+    The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970
+    (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
+    */
+    time_t res = mktime(&t);
+    struct timeval tv;
+    tv.tv_sec = res;
+    tv.tv_usec = 0; // time.centisecond() * (10 / 1000);
+
+    DEBUG_MSG("Got time from GPS month=%d, year=%d, unixtime=%ld\n", t.tm_mon, t.tm_year, tv.tv_sec);
+    if (t.tm_year < 0 || t.tm_year >= 300)
+        DEBUG_MSG("Ignoring invalid GPS time\n");
+    else
+        perhapsSetRTC(&tv);
+}
+
 #include <time.h>
 
 uint32_t getTime()
