@@ -8,8 +8,7 @@ Minimum items needed to make sure hardware is good.
 - use "variants" to get all gpio bindings
 - plug in correct variants for the real board
 - Use the PMU driver on real hardware
-- add a NEMA based GPS driver to test GPS
-- Use new radio driver on real hardware - possibly start with https://os.mbed.com/teams/Semtech/code/SX126xLib/
+- Use new radio driver on real hardware
 - Use UC1701 LCD driver on real hardware. Still need to create at startup and probe on SPI
 - test the LEDs
 - test the buttons
@@ -24,6 +23,7 @@ Minimum items needed to make sure hardware is good.
 
 Needed to be fully functional at least at the same level of the ESP32 boards. At this point users would probably want them.
 
+- stop polling for GPS characters, instead stay blocked on read in a thread
 - increase preamble length? - will break other clients? so all devices must update
 - enable BLE DFU somehow
 - set appversion/hwversion
@@ -100,6 +100,7 @@ Nice ideas worth considering someday...
 - DONE neg 7 error code from receive
 - DONE remove unused sx1262 lib from github
 - at boot we are starting our message IDs at 1, rather we should start them at a random number. also, seed random based on timer. this could be the cause of our first message not seen bug.
+- add a NEMA based GPS driver to test GPS
 
 ```
 

@@ -178,7 +178,7 @@ class MyNodeInfoCharacteristic : public ProtobufCharacteristic
     void onRead(BLECharacteristic *c)
     {
         // update gps connection state
-        myNodeInfo.has_gps = gps.isConnected;
+        myNodeInfo.has_gps = gps->isConnected;
 
         ProtobufCharacteristic::onRead(c);
 
