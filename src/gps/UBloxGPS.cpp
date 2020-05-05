@@ -28,7 +28,7 @@ bool UBloxGPS::setup()
     if (isConnected) {
         DEBUG_MSG("Connected to UBLOX GPS successfully\n");
 
-        bool factoryReset = true;
+        bool factoryReset = false;
         bool ok;
         if (factoryReset) {
             // It is useful to force back into factory defaults (9600baud, NEMA to test the behavior of boards that don't have

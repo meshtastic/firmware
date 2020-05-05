@@ -13,6 +13,8 @@
 class NEMAGPS : public GPS
 {
     TinyGPSPlus reader;
+    
+    uint32_t lastUpdateMsec = 0;
 
   public:
     virtual void loop();
