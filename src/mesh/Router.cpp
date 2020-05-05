@@ -68,7 +68,7 @@ void Router::handleReceived(MeshPacket *p)
 {
     // FIXME, this class shouldn't EVER need to know about the GPS, move getValidTime() into a non gps dependent function
     // Also, we should set the time from the ISR and it should have msec level resolution
-    p->rx_time = gps.getValidTime(); // store the arrival timestamp for the phone
+    p->rx_time = getValidTime(); // store the arrival timestamp for the phone
 
     DEBUG_MSG("Notifying observers of received packet fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
     notifyPacketReceived.notifyObservers(p);

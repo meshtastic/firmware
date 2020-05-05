@@ -87,7 +87,7 @@ static void lsIdle()
 static void lsExit()
 {
     // setGPSPower(true); // restore GPS power
-    gps.startLock();
+    gps->startLock();
 }
 
 static void nbEnter()

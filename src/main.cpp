@@ -21,13 +21,14 @@
 
 */
 
-#include "GPS.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
+#include "NEMAGPS.h"
 #include "NodeDB.h"
 #include "Periodic.h"
 #include "PowerFSM.h"
 #include "Router.h"
+#include "UBloxGPS.h"
 #include "configuration.h"
 #include "error.h"
 #include "power.h"
@@ -188,8 +189,18 @@ void setup()
 
     screen.print("Started...\n");
 
-    // Init GPS
-    gps.setup();
+    readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
+
+    // Init GPS - first try ublox
+    gps = new UBloxGPS();
+    if (!gps->setup()) {
+        // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
+        // assume NEMA at 9600 baud.
+        DEBUG_MSG("ERROR: No UBLOX GPS found, hoping that NEMA might work\n");
+        delete gps;
+        gps = new NEMAGPS();
+        gps->setup();
+    }
 
     service.init();
 
@@ -258,6 +269,7 @@ void loop()
 {
     uint32_t msecstosleep = 1000 * 30; // How long can we sleep before we again need to service the main loop?
 
+    gps->loop(); // FIXME, remove from main, instead block on read
     router.loop();
     powerFSM.run_machine();
     service.loop();
@@ -306,7 +318,7 @@ void loop()
     screen.debug()->setChannelNameStatus(channelSettings.name);
     screen.debug()->setPowerStatus(powerStatus);
     // TODO(#4): use something based on hdop to show GPS "signal" strength.
-    screen.debug()->setGPSStatus(gps.hasLock() ? "ok" : ":(");
+    screen.debug()->setGPSStatus(gps->hasLock() ? "good" : "bad");
 
     // No GPS lock yet, let the OS put the main CPU in low power mode for 100ms (or until another interrupt comes in)
     // i.e. don't just keep spinning in loop as fast as we can.

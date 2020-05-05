@@ -29,6 +29,7 @@ extern AXP20X_Class axp;
 Observable<void *> preflightSleep;
 
 /// Called to tell observers we are now entering sleep and you should prepare.  Must return 0
+/// notifySleep will be called for light or deep sleep, notifyDeepSleep is only called for deep sleep
 Observable<void *> notifySleep, notifyDeepSleep;
 
 // deep sleep support
@@ -125,12 +126,6 @@ static bool doPreflightSleep()
 /// Tell devices we are going to sleep and wait for them to handle things
 static void waitEnterSleep()
 {
-    /*
-    former hardwired code - now moved into notifySleep callbacks:
-    // Put radio in sleep mode (will still draw power but only 0.2uA)
-    service.radio.radioIf.sleep();
-    */
-
     uint32_t now = millis();
     while (!doPreflightSleep()) {
         delay(100); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
@@ -144,7 +139,6 @@ static void waitEnterSleep()
     // Code that still needs to be moved into notifyObservers
     Serial.flush();            // send all our characters before we stop cpu clock
     setBluetoothEnable(false); // has to be off before calling light sleep
-    gps.prepareSleep();        // abandon in-process parsing
 
     notifySleep.notifyObservers(NULL);
 }
@@ -157,6 +151,7 @@ void doDeepSleep(uint64_t msecToWake)
     // not using wifi yet, but once we are this is needed to shutoff the radio hw
     // esp_wifi_stop();
     waitEnterSleep();
+    notifySleep.notifyObservers(NULL); // also tell the regular sleep handlers
     notifyDeepSleep.notifyObservers(NULL);
 
     screen.setOn(false); // datasheet says this will draw only 10ua
