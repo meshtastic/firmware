@@ -23,6 +23,7 @@
 
 #include "MeshRadio.h"
 #include "MeshService.h"
+#include "NEMAGPS.h"
 #include "NodeDB.h"
 #include "Periodic.h"
 #include "PowerFSM.h"
@@ -193,7 +194,12 @@ void setup()
     // Init GPS - first try ublox
     gps = new UBloxGPS();
     if (!gps->setup()) {
-        // FIXME - fallback to NEMA
+        // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
+        // assume NEMA at 9600 baud.
+        DEBUG_MSG("ERROR: No UBLOX GPS found, hoping that NEMA might work\n");
+        delete gps;
+        gps = new NEMAGPS();
+        gps->setup();
     }
 
     service.init();
@@ -263,6 +269,7 @@ void loop()
 {
     uint32_t msecstosleep = 1000 * 30; // How long can we sleep before we again need to service the main loop?
 
+    gps->loop(); // FIXME, remove from main, instead block on read
     router.loop();
     powerFSM.run_machine();
     service.loop();

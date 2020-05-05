@@ -9,8 +9,6 @@ UBloxGPS::UBloxGPS() : PeriodicTask()
 
 bool UBloxGPS::setup()
 {
-    PeriodicTask::setup();
-
 #ifdef GPS_RX_PIN
     _serial_gps.begin(GPS_BAUDRATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
 #else
@@ -30,18 +28,18 @@ bool UBloxGPS::setup()
     if (isConnected) {
         DEBUG_MSG("Connected to UBLOX GPS successfully\n");
 
-        bool factoryReset = false;
+        bool factoryReset = true;
         bool ok;
         if (factoryReset) {
             // It is useful to force back into factory defaults (9600baud, NEMA to test the behavior of boards that don't have
             // GPS_TX connected)
             ublox.factoryReset();
-            delay(2000);
+            delay(3000);
             isConnected = ublox.begin(_serial_gps);
             DEBUG_MSG("Factory reset success=%d\n", isConnected);
-            if (isConnected) {
-                ublox.assumeAutoPVT(true, true); // Just parse NEMA for now
-            }
+            ok = ublox.saveConfiguration(3000);
+            assert(ok);
+            return false;
         } else {
             ok = ublox.setUART1Output(COM_TYPE_UBX, 500); // Use native API
             assert(ok);
@@ -57,12 +55,10 @@ bool UBloxGPS::setup()
         ok = ublox.saveConfiguration(3000);
         assert(ok);
 
+        PeriodicTask::setup(); // We don't start our periodic task unless we actually found the device
+
         return true;
     } else {
-        // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
-        // assume NEMA at 9600 baud.
-        DEBUG_MSG("ERROR: No bidirectional GPS found, hoping that it still might work\n");
-
         return false;
     }
 }
@@ -80,26 +76,24 @@ void UBloxGPS::doTask()
 {
     uint8_t fixtype = 3; // If we are only using the RX pin, assume we have a 3d fix
 
-    if (isConnected) {
-        // Consume all characters that have arrived
+    assert(isConnected);
 
-        // getPVT automatically calls checkUblox
-        ublox.checkUblox(); // See if new data is available. Process bytes as they come in.
+    // Consume all characters that have arrived
 
-        // If we don't have a fix (a quick check), don't try waiting for a solution)
-        // Hmmm my fix type reading returns zeros for fix, which doesn't seem correct, because it is still sptting out positions
-        // turn off for now
-        // fixtype = ublox.getFixType();
-        DEBUG_MSG("fix type %d\n", fixtype);
-    }
+    // getPVT automatically calls checkUblox
+    ublox.checkUblox(); // See if new data is available. Process bytes as they come in.
+
+    // If we don't have a fix (a quick check), don't try waiting for a solution)
+    // Hmmm my fix type reading returns zeros for fix, which doesn't seem correct, because it is still sptting out positions
+    // turn off for now
+    // fixtype = ublox.getFixType();
+    DEBUG_MSG("fix type %d\n", fixtype);
 
     // DEBUG_MSG("sec %d\n", ublox.getSecond());
     // DEBUG_MSG("lat %d\n", ublox.getLatitude());
 
     // any fix that has time
     if (ublox.getT()) {
-        struct timeval tv;
-
         /* Convert to unix time
 The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970
 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
@@ -112,15 +106,7 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         t.tm_mon = ublox.getMonth() - 1;
         t.tm_year = ublox.getYear() - 1900;
         t.tm_isdst = false;
-        time_t res = mktime(&t);
-        tv.tv_sec = res;
-        tv.tv_usec = 0; // time.centisecond() * (10 / 1000);
-
-        DEBUG_MSG("Got time from GPS month=%d, year=%d, unixtime=%ld\n", t.tm_mon, t.tm_year, tv.tv_sec);
-        if (t.tm_year < 0 || t.tm_year >= 300)
-            DEBUG_MSG("Ignoring invalid GPS time\n");
-        else
-            perhapsSetRTC(&tv);
+        perhapsSetRTC(t);
     }
 
     if ((fixtype >= 3 && fixtype <= 4) && ublox.getP()) // rd fixes only

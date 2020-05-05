@@ -9,7 +9,7 @@ Minimum items needed to make sure hardware is good.
 - plug in correct variants for the real board
 - Use the PMU driver on real hardware
 - add a NEMA based GPS driver to test GPS
-- Use new radio driver on real hardware 
+- Use new radio driver on real hardware
 - Use UC1701 LCD driver on real hardware. Still need to create at startup and probe on SPI
 - test the LEDs
 - test the buttons
@@ -24,6 +24,7 @@ Minimum items needed to make sure hardware is good.
 
 Needed to be fully functional at least at the same level of the ESP32 boards. At this point users would probably want them.
 
+- stop polling for GPS characters, instead stay blocked on read in a thread
 - increase preamble length? - will break other clients? so all devices must update
 - enable BLE DFU somehow
 - set appversion/hwversion
