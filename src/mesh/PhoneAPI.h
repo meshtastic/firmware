@@ -88,7 +88,7 @@ class PhoneAPI
     /**
      * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
      */
-    void onNowHasData(uint32_t fromRadioNum) {}
+    virtual void onNowHasData(uint32_t fromRadioNum) {}
 
   private:
     /**
