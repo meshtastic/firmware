@@ -58,6 +58,8 @@ RadioLibInterface *RadioLibInterface::instance;
  */
 void RadioLibInterface::applyModemConfig()
 {
+    RadioInterface::applyModemConfig();
+
     switch (modemConfig) {
     case Bw125Cr45Sf128: ///< Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on. Default medium range
         bw = 125;
