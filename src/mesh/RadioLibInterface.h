@@ -99,8 +99,10 @@ class RadioLibInterface : public RadioInterface
   protected:
     /**
      * Convert our modemConfig enum into wf, sf, etc...
+     *
+     * These paramaters will be pull from the channelSettings global
      */
-    void applyModemConfig();
+    virtual void applyModemConfig();
 
     /** Could we send right now (i.e. either not actively receiving or transmitting)? */
     virtual bool canSendImmediately();
