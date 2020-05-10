@@ -32,7 +32,7 @@ The per-message nonce (or information sufficient to reconstruct it) needs to be 
 Note that for both stategies, sizes are measured in blocks and that an AES block is 16 bytes.
 ```
 
-## Example code links
+## Remaining todo
 
-- Example code for [NRF52](https://infocenter.nordicsemi.com/topic/com.nordic.infocenter.sdk5.v15.0.0/lib_crypto_aes.html#sub_aes_ctr)
-- Example code for [ESP32](https://github.com/chegewara/esp32-mbedtls-aes-test/blob/master/main/main.c)
+- Make the packet numbers 32 bit
+- Implement for NRF52 [NRF52](https://infocenter.nordicsemi.com/topic/com.nordic.infocenter.sdk5.v15.0.0/lib_crypto_aes.html#sub_aes_ctr)
