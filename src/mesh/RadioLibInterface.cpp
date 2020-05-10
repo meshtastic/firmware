@@ -197,6 +197,9 @@ void RadioLibInterface::loop()
 
 #ifndef NO_ESP32
 #define USE_HW_TIMER
+#else
+// Not needed on NRF52
+#define IRAM_ATTR
 #endif
 
 void IRAM_ATTR RadioLibInterface::timerCallback(void *p1, uint32_t p2)
