@@ -4,8 +4,6 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 
-CryptoEngine *crypto = new CryptoEngine();
-
 /**
  * Router todo
  *
