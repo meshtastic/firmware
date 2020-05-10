@@ -274,8 +274,8 @@ size_t NodeDB::getNumOnlineNodes()
 /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
 void NodeDB::updateFrom(const MeshPacket &mp)
 {
-    if (mp.has_payload) {
-        const SubPacket &p = mp.payload;
+    if (mp.which_payload == MeshPacket_decoded_tag) {
+        const SubPacket &p = mp.decoded;
         DEBUG_MSG("Update DB node 0x%x, rx_time=%u\n", mp.from, mp.rx_time);
 
         int oldNumNodes = *numNodes;

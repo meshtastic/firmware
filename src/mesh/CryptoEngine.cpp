@@ -11,6 +11,12 @@ void CryptoEngine::setKey(size_t numBytes, const uint8_t *bytes)
  *
  * @param bytes is updated in place
  */
-void CryptoEngine::encrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes) {}
+void CryptoEngine::encrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes)
+{
+    DEBUG_MSG("WARNING: noop encryption!\n");
+}
 
-void CryptoEngine::decrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes) {}
+void CryptoEngine::decrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes)
+{
+    DEBUG_MSG("WARNING: noop decryption!\n");
+}

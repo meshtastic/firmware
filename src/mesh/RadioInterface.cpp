@@ -107,7 +107,7 @@ size_t RadioInterface::beginSending(MeshPacket *p)
     assert(!sendingPacket);
 
     // DEBUG_MSG("sending queued packet on mesh (txGood=%d,rxGood=%d,rxBad=%d)\n", rf95.txGood(), rf95.rxGood(), rf95.rxBad());
-    assert(p->has_payload);
+    assert(p->which_payload == MeshPacket_encrypted_tag); // It should have already been encoded by now
 
     lastTxStart = millis();
 
@@ -121,11 +121,8 @@ size_t RadioInterface::beginSending(MeshPacket *p)
     // if the sender nodenum is zero, that means uninitialized
     assert(h->from);
 
-    size_t numbytes = pb_encode_to_bytes(radiobuf + sizeof(PacketHeader), sizeof(radiobuf), SubPacket_fields, &p->payload) +
-                      sizeof(PacketHeader);
-
-    assert(numbytes <= MAX_RHPACKETLEN);
+    memcpy(radiobuf + sizeof(PacketHeader), p->encrypted.bytes, p->encrypted.size);
 
     sendingPacket = p;
-    return numbytes;
+    return p->encrypted.size + sizeof(PacketHeader);
 }

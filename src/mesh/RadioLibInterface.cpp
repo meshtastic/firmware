@@ -289,24 +289,19 @@ void RadioLibInterface::handleReceiveInterrupt()
             } else {
                 MeshPacket *mp = packetPool.allocZeroed();
 
-                SubPacket *p = &mp->payload;
-
                 mp->from = h->from;
                 mp->to = h->to;
                 mp->id = h->id;
                 addReceiveMetadata(mp);
 
-                if (!pb_decode_from_bytes(payload, payloadLen, SubPacket_fields, p)) {
-                    DEBUG_MSG("Invalid protobufs in received mesh packet, discarding.\n");
-                    packetPool.release(mp);
-                    // rxBad++; not really a hw error
-                } else {
-                    // parsing was successful, queue for our recipient
-                    mp->has_payload = true;
-                    DEBUG_MSG("Lora RX interrupt from=0x%x, id=%u\n", mp->from, mp->id);
+                mp->which_payload = MeshPacket_encrypted_tag; // Mark that the payload is still encrypted at this point
+                assert(payloadLen <= sizeof(mp->encrypted.bytes));
+                memcpy(mp->encrypted.bytes, payload, payloadLen);
+                mp->encrypted.size = payloadLen;
 
-                    deliverToReceiver(mp);
-                }
+                DEBUG_MSG("Lora RX interrupt from=0x%x, id=%u\n", mp->from, mp->id);
+
+                deliverToReceiver(mp);
             }
         }
     }

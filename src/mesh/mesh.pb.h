@@ -122,11 +122,15 @@ typedef struct _SubPacket {
     bool want_response;
 } SubPacket;
 
+typedef PB_BYTES_ARRAY_T(256) MeshPacket_encrypted_t;
 typedef struct _MeshPacket {
     int32_t from;
     int32_t to;
-    bool has_payload;
-    SubPacket payload;
+    pb_size_t which_payload;
+    union {
+        SubPacket decoded;
+        MeshPacket_encrypted_t encrypted;
+    };
     uint32_t rx_time;
     uint32_t id;
     float rx_snr;
@@ -193,7 +197,7 @@ typedef struct _ToRadio {
 #define User_init_default                        {"", "", "", {0}}
 #define RouteDiscovery_init_default              {{{NULL}, NULL}}
 #define SubPacket_init_default                   {false, Position_init_default, false, Data_init_default, false, User_init_default, 0}
-#define MeshPacket_init_default                  {0, 0, false, SubPacket_init_default, 0, 0, 0}
+#define MeshPacket_init_default                  {0, 0, 0, {SubPacket_init_default}, 0, 0, 0}
 #define ChannelSettings_init_default             {0, _ChannelSettings_ModemConfig_MIN, {0}, ""}
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default, false, ChannelSettings_init_default}
 #define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -208,7 +212,7 @@ typedef struct _ToRadio {
 #define User_init_zero                           {"", "", "", {0}}
 #define RouteDiscovery_init_zero                 {{{NULL}, NULL}}
 #define SubPacket_init_zero                      {false, Position_init_zero, false, Data_init_zero, false, User_init_zero, 0}
-#define MeshPacket_init_zero                     {0, 0, false, SubPacket_init_zero, 0, 0, 0}
+#define MeshPacket_init_zero                     {0, 0, 0, {SubPacket_init_zero}, 0, 0, 0}
 #define ChannelSettings_init_zero                {0, _ChannelSettings_ModemConfig_MIN, {0}, ""}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero, false, ChannelSettings_init_zero}
 #define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -269,9 +273,10 @@ typedef struct _ToRadio {
 #define SubPacket_data_tag                       3
 #define SubPacket_user_tag                       4
 #define SubPacket_want_response_tag              5
+#define MeshPacket_decoded_tag                   3
+#define MeshPacket_encrypted_tag                 8
 #define MeshPacket_from_tag                      1
 #define MeshPacket_to_tag                        2
-#define MeshPacket_payload_tag                   3
 #define MeshPacket_rx_time_tag                   4
 #define MeshPacket_id_tag                        6
 #define MeshPacket_rx_snr_tag                    7
@@ -338,13 +343,14 @@ X(a, STATIC,   SINGULAR, BOOL,     want_response,     5)
 #define MeshPacket_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, INT32,    from,              1) \
 X(a, STATIC,   SINGULAR, INT32,    to,                2) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  payload,           3) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,decoded,decoded),   3) \
+X(a, STATIC,   ONEOF,    BYTES,    (payload,encrypted,encrypted),   8) \
 X(a, STATIC,   SINGULAR, UINT32,   rx_time,           4) \
 X(a, STATIC,   SINGULAR, UINT32,   id,                6) \
 X(a, STATIC,   SINGULAR, FLOAT,    rx_snr,            7)
 #define MeshPacket_CALLBACK NULL
 #define MeshPacket_DEFAULT NULL
-#define MeshPacket_payload_MSGTYPE SubPacket
+#define MeshPacket_payload_decoded_MSGTYPE SubPacket
 
 #define ChannelSettings_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, INT32,    tx_power,          1) \
