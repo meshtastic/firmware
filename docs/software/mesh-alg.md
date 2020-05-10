@@ -11,9 +11,9 @@ TODO:
 - DONE read about mesh routing solutions (DSR and AODV)
 - DONE read about general mesh flooding solutions (naive, MPR, geo assisted)
 - DONE reread the disaster radio protocol docs - seems based on Babel (which is AODVish)
-- possibly dash7? https://www.slideshare.net/MaartenWeyn1/dash7-alliance-protocol-technical-presentation https://github.com/MOSAIC-LoPoW/dash7-ap-open-source-stack - does the opensource stack implement multihop routing? flooding? their discussion mailing list looks dead-dead
+- REJECTED - seems dying - possibly dash7? https://www.slideshare.net/MaartenWeyn1/dash7-alliance-protocol-technical-presentation https://github.com/MOSAIC-LoPoW/dash7-ap-open-source-stack - does the opensource stack implement multihop routing? flooding? their discussion mailing list looks dead-dead
 - update duty cycle spreadsheet for our typical usecase
-- generalize naive flooding on top of radiohead or disaster.radio? (and fix radiohead to use my new driver)
+- DONE generalize naive flooding 
 
 a description of DSR: https://tools.ietf.org/html/rfc4728 good slides here: https://www.slideshare.net/ashrafmath/dynamic-source-routing
 good description of batman protocol: https://www.open-mesh.org/projects/open-mesh/wiki/BATMANConcept
@@ -76,7 +76,6 @@ look into the literature for this idea specifically.
 # Old notes
 
 FIXME, merge into the above:
-
 
 good description of batman protocol: https://www.open-mesh.org/projects/open-mesh/wiki/BATMANConcept
 

@@ -189,6 +189,8 @@ void setup()
 
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 
+// If we know we have a L80 GPS, don't try UBLOX
+#ifndef L80_RESET
     // Init GPS - first try ublox
     gps = new UBloxGPS();
     if (!gps->setup()) {
@@ -199,6 +201,10 @@ void setup()
         gps = new NEMAGPS();
         gps->setup();
     }
+#else
+    gps = new NEMAGPS();
+    gps->setup();
+#endif
 
     service.init();
 

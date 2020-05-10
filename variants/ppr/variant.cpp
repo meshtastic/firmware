@@ -19,31 +19,24 @@
 */
 
 #include "variant.h"
+#include "nrf.h"
 #include "wiring_constants.h"
 #include "wiring_digital.h"
-#include "nrf.h"
 
-const uint32_t g_ADigitalPinMap[] =
-{
-  // P0
-  0 , 1 , 2 , 3 , 4 , 5 , 6 , 7 ,
-  8 , 9 , 10, 11, 12, 13, 14, 15,
-  16, 17, 18, 19, 20, 21, 22, 23,
-  24, 25, 26, 27, 28, 29, 30, 31,
+const uint32_t g_ADigitalPinMap[] = {
+    // P0
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0xff, 12, 13, 0xff, 15, 0xff, 17, 18, 0xff, 20, 0xff, 22, 0xff, 24, 0xff, 26, 0xff, 28, 29,
+    30, 31,
 
-  // P1
-  32, 33, 34, 35, 36, 37, 38, 39,
-  40, 41, 42, 43, 44, 45, 46, 47
-};
-
+    // P1
+    32, 0xff, 34, 0xff, 36, 0xff, 38, 0xff, 0xff, 41, 42, 43, 0xff, 45};
 
 void initVariant()
 {
-  // LED1 & LED2
-  pinMode(PIN_LED1, OUTPUT);
-  ledOff(PIN_LED1);
+    // LED1 & LED2
+    pinMode(PIN_LED1, OUTPUT);
+    ledOff(PIN_LED1);
 
-  pinMode(PIN_LED2, OUTPUT);
-  ledOff(PIN_LED2);;
+    pinMode(PIN_LED2, OUTPUT);
+    ledOff(PIN_LED2);
 }
-
