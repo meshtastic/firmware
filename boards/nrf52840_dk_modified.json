@@ -5,12 +5,12 @@
     },
     "core": "nRF5",
     "cpu": "cortex-m4",
-    "extra_flags": "-DARDUINO_NRF52840_PPR -DNRF52840_XXAA",
+    "extra_flags": "-DARDUINO_NRF52840_PCA10056 -DNRF52840_XXAA",
     "f_cpu": "64000000L",
-    "hwids": [["0x239A", "0x4403"]],
-    "usb_product": "PPR",
+    "hwids": [["0x239A", "0x4404"]],
+    "usb_product": "SimPPR",
     "mcu": "nrf52840",
-    "variant": "ppr",
+    "variant": "pca10056-rc-clock",
     "variants_dir": "variants",
     "bsp": {
       "name": "adafruit"
@@ -32,7 +32,7 @@
     "svd_path": "nrf52840.svd"
   },
   "frameworks": ["arduino"],
-  "name": "Meshtastic PPR (Adafruit BSP)",
+  "name": "A modified NRF52840-DK devboard (Adafruit BSP)",
   "upload": {
     "maximum_ram_size": 248832,
     "maximum_size": 815104,
@@ -42,5 +42,5 @@
     "protocols": ["jlink", "nrfjprog", "stlink"]
   },
   "url": "https://meshtastic.org/",
-  "vendor": "Othernet"
+  "vendor": "Nordic Semi"
 }

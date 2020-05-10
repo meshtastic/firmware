@@ -5,8 +5,6 @@
 Minimum items needed to make sure hardware is good.
 
 - add a hard fault handler
-- use "variants" to get all gpio bindings
-- plug in correct variants for the real board
 - Use the PMU driver on real hardware
 - Use new radio driver on real hardware
 - Use UC1701 LCD driver on real hardware. Still need to create at startup and probe on SPI
@@ -62,6 +60,8 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 
 Nice ideas worth considering someday...
 
+- Hook Segger RTT to the nordic logging framework. https://devzone.nordicsemi.com/nordic/nordic-blog/b/blog/posts/debugging-with-real-time-terminal
+- Use nordic logging for DEBUG_MSG
 - use the Jumper simulator to run meshes of simulated hardware: https://docs.jumper.io/docs/install.html
 - make/find a multithread safe debug logging class (include remote logging and timestamps and levels). make each log event atomic.
 - turn on freertos stack size checking
@@ -102,6 +102,8 @@ Nice ideas worth considering someday...
 - DONE remove unused sx1262 lib from github
 - at boot we are starting our message IDs at 1, rather we should start them at a random number. also, seed random based on timer. this could be the cause of our first message not seen bug.
 - add a NEMA based GPS driver to test GPS
+- DONE use "variants" to get all gpio bindings
+- DONE plug in correct variants for the real board
 
 ```
 
