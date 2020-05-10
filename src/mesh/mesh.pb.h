@@ -69,9 +69,9 @@ typedef struct _MyNodeInfo {
 typedef struct _Position {
     int32_t altitude;
     int32_t battery_level;
-    uint32_t time;
     int32_t latitude_i;
     int32_t longitude_i;
+    uint32_t time;
 } Position;
 
 typedef struct _RadioConfig_UserPreferences {
@@ -125,16 +125,16 @@ typedef struct _SubPacket {
 
 typedef PB_BYTES_ARRAY_T(256) MeshPacket_encrypted_t;
 typedef struct _MeshPacket {
-    int32_t from;
-    int32_t to;
+    uint32_t from;
+    uint32_t to;
     pb_size_t which_payload;
     union {
         SubPacket decoded;
         MeshPacket_encrypted_t encrypted;
     };
-    uint32_t rx_time;
     uint32_t id;
     float rx_snr;
+    uint32_t rx_time;
 } MeshPacket;
 
 typedef struct _DeviceState {
@@ -246,7 +246,7 @@ typedef struct _ToRadio {
 #define Position_longitude_i_tag                 8
 #define Position_altitude_tag                    3
 #define Position_battery_level_tag               4
-#define Position_time_tag                        6
+#define Position_time_tag                        9
 #define RadioConfig_UserPreferences_position_broadcast_secs_tag 1
 #define RadioConfig_UserPreferences_send_owner_interval_tag 2
 #define RadioConfig_UserPreferences_num_missed_to_fail_tag 3
@@ -278,7 +278,7 @@ typedef struct _ToRadio {
 #define MeshPacket_encrypted_tag                 8
 #define MeshPacket_from_tag                      1
 #define MeshPacket_to_tag                        2
-#define MeshPacket_rx_time_tag                   4
+#define MeshPacket_rx_time_tag                   9
 #define MeshPacket_id_tag                        6
 #define MeshPacket_rx_snr_tag                    7
 #define DeviceState_radio_tag                    1
@@ -305,9 +305,9 @@ typedef struct _ToRadio {
 #define Position_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, INT32,    altitude,          3) \
 X(a, STATIC,   SINGULAR, INT32,    battery_level,     4) \
-X(a, STATIC,   SINGULAR, UINT32,   time,              6) \
 X(a, STATIC,   SINGULAR, SINT32,   latitude_i,        7) \
-X(a, STATIC,   SINGULAR, SINT32,   longitude_i,       8)
+X(a, STATIC,   SINGULAR, SINT32,   longitude_i,       8) \
+X(a, STATIC,   SINGULAR, FIXED32,  time,              9)
 #define Position_CALLBACK NULL
 #define Position_DEFAULT NULL
 
@@ -342,13 +342,13 @@ X(a, STATIC,   SINGULAR, BOOL,     want_response,     5)
 #define SubPacket_user_MSGTYPE User
 
 #define MeshPacket_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, INT32,    from,              1) \
-X(a, STATIC,   SINGULAR, INT32,    to,                2) \
+X(a, STATIC,   SINGULAR, UINT32,   from,              1) \
+X(a, STATIC,   SINGULAR, UINT32,   to,                2) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,decoded,decoded),   3) \
 X(a, STATIC,   ONEOF,    BYTES,    (payload,encrypted,encrypted),   8) \
-X(a, STATIC,   SINGULAR, UINT32,   rx_time,           4) \
 X(a, STATIC,   SINGULAR, UINT32,   id,                6) \
-X(a, STATIC,   SINGULAR, FLOAT,    rx_snr,            7)
+X(a, STATIC,   SINGULAR, FLOAT,    rx_snr,            7) \
+X(a, STATIC,   SINGULAR, FIXED32,  rx_time,           9)
 #define MeshPacket_CALLBACK NULL
 #define MeshPacket_DEFAULT NULL
 #define MeshPacket_payload_decoded_MSGTYPE SubPacket
@@ -493,21 +493,21 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define ToRadio_fields &ToRadio_msg
 
 /* Maximum encoded size of messages (where known) */
-#define Position_size                            40
+#define Position_size                            39
 #define Data_size                                256
 #define User_size                                72
 /* RouteDiscovery_size depends on runtime parameters */
-#define SubPacket_size                           377
-#define MeshPacket_size                          419
+#define SubPacket_size                           376
+#define MeshPacket_size                          407
 #define ChannelSettings_size                     60
 #define RadioConfig_size                         136
 #define RadioConfig_UserPreferences_size         72
-#define NodeInfo_size                            132
+#define NodeInfo_size                            131
 #define MyNodeInfo_size                          85
-#define DeviceState_size                         18552
+#define DeviceState_size                         18124
 #define DebugString_size                         258
-#define FromRadio_size                           428
-#define ToRadio_size                             422
+#define FromRadio_size                           416
+#define ToRadio_size                             410
 
 #ifdef __cplusplus
 } /* extern "C" */
