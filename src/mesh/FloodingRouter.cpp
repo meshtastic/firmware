@@ -116,7 +116,7 @@ bool FloodingRouter::wasSeenRecently(const MeshPacket *p)
     }
 
     uint32_t now = millis();
-    for (int i = 0; i < recentBroadcasts.size();) {
+    for (size_t i = 0; i < recentBroadcasts.size();) {
         BroadcastRecord &r = recentBroadcasts[i];
 
         if ((now - r.rxTimeMsec) >= FLOOD_EXPIRE_TIME) {
