@@ -5,6 +5,7 @@
 #include "FS.h"
 #include "SPIFFS.h"
 
+#include "CryptoEngine.h"
 #include "GPS.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -51,7 +52,7 @@ NodeDB::NodeDB() : nodes(devicestate.node_db), numNodes(&devicestate.node_db_cou
 
 void NodeDB::resetRadioConfig()
 {
-    /// 16 bytes of random PSK for our _public_ default channel that all devices power up on
+    /// 16 bytes of random PSK for our _public_ default channel that all devices power up on (AES128)
     static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
                                          0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0xbf};
 
@@ -75,9 +76,13 @@ void NodeDB::resetRadioConfig()
         channelSettings.modem_config = ChannelSettings_ModemConfig_Bw125Cr48Sf4096; // slow and long range
 
         channelSettings.tx_power = 23;
-        memcpy(&channelSettings.psk, &defaultpsk, sizeof(channelSettings.psk));
+        memcpy(&channelSettings.psk.bytes, &defaultpsk, sizeof(channelSettings.psk));
+        channelSettings.psk.size = sizeof(defaultpsk);
         strcpy(channelSettings.name, "Default");
     }
+
+    // Tell our crypto engine about the psk
+    crypto->setKey(channelSettings.psk.size, channelSettings.psk.bytes);
 
     // temp hack for quicker testing
     /*
