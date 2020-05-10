@@ -16,15 +16,12 @@
  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-#ifndef _VARIANT_PCA10056_
-#define _VARIANT_PCA10056_
+#pragma once
 
 /** Master clock frequency */
 #define VARIANT_MCK (64000000ul)
 
-// This file is the same as the standard pac10056 variant, except that @geeksville broke the xtal on his devboard so
-// he has to use a RC clock.
-
+// This board does not have a 32khz crystal
 // #define USE_LFXO // Board uses 32khz crystal for LF
 #define USE_LFRC // Board uses RC for LF
 
@@ -157,5 +154,3 @@ static const uint8_t SCK = PIN_SPI_SCK;
 /*----------------------------------------------------------------------------
  *        Arduino objects - C++ only
  *----------------------------------------------------------------------------*/
-
-#endif
