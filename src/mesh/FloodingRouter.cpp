@@ -4,9 +4,7 @@
 
 static bool supportFlooding = true; // Sometimes to simplify debugging we want jusT simple broadcast only
 
-FloodingRouter::FloodingRouter() : toResend(MAX_NUM_NODES)
-{
-}
+FloodingRouter::FloodingRouter() : toResend(MAX_NUM_NODES) {}
 
 /**
  * Send a packet on a suitable interface.  This routine will
@@ -21,18 +19,6 @@ ErrorCode FloodingRouter::send(MeshPacket *p)
 
     return Router::send(p);
 }
-
-// Return a delay in msec before sending the next packet
-uint32_t getRandomDelay()
-{
-    return random(200, 10 * 1000L); // between 200ms and 10s
-}
-
-/**
- * Now that our generalized packet send code has a random delay - I don't think we need to wait here
- * But I'm leaving this bool until I rip the code out for good.
- */
-bool needDelay = false;
 
 /**
  * Called from loop()
@@ -52,21 +38,11 @@ void FloodingRouter::handleReceived(MeshPacket *p)
                 if (p->id != 0) {
                     MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
 
-                    if (needDelay) {
-                        uint32_t delay = getRandomDelay();
+                    DEBUG_MSG("Rebroadcasting received floodmsg to neighbors, fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+                    // Note: we are careful to resend using the original senders node id
+                    // We are careful not to call our hooked version of send() - because we don't want to check this again
+                    Router::send(tosend);
 
-                        DEBUG_MSG("Rebroadcasting received floodmsg to neighbors in %u msec, fr=0x%x,to=0x%x,id=%d\n", delay,
-                                  p->from, p->to, p->id);
-
-                        toResend.enqueue(tosend);
-                        setPeriod(delay); // This will work even if we were already waiting a random delay
-                    } else {
-                        DEBUG_MSG("Rebroadcasting received floodmsg to neighbors, fr=0x%x,to=0x%x,id=%d\n", p->from, p->to,
-                                  p->id);
-                        // Note: we are careful to resend using the original senders node id
-                        // We are careful not to call our hooked version of send() - because we don't want to check this again
-                        Router::send(tosend);
-                    }
                 } else {
                     DEBUG_MSG("Ignoring a simple (0 hop) broadcast\n");
                 }
@@ -77,22 +53,4 @@ void FloodingRouter::handleReceived(MeshPacket *p)
         }
     } else
         Router::handleReceived(p);
-}
-
-void FloodingRouter::doTask()
-{
-    MeshPacket *p = toResend.dequeuePtr(0);
-
-    if (p) {
-        DEBUG_MSG("Sending delayed message!\n");
-        // Note: we are careful to resend using the original senders node id
-        // We are careful not to call our hooked version of send() - because we don't want to check this again
-        Router::send(p);
-    }
-
-    if (toResend.isEmpty())
-        disable(); // no more work right now
-    else {
-        setPeriod(getRandomDelay());
-    }
 }

@@ -4,7 +4,6 @@
 #include "PeriodicTask.h"
 #include "Router.h"
 
-
 /**
  * This is a mixin that extends Router with the ability to do Naive Flooding (in the standard mesh protocol sense)
  *
@@ -28,10 +27,9 @@
   Any entries in recentBroadcasts that are older than X seconds (longer than the
   max time a flood can take) will be discarded.
  */
-class FloodingRouter : public Router, public PeriodicTask, private PacketHistory
+class FloodingRouter : public Router, private PacketHistory
 {
   private:
-
     /**
      * Packets we've received that we need to resend after a short delay
      */
@@ -60,6 +58,4 @@ class FloodingRouter : public Router, public PeriodicTask, private PacketHistory
      * Note: this method will free the provided packet
      */
     virtual void handleReceived(MeshPacket *p);
-
-    virtual void doTask();
 };
