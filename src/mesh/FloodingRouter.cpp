@@ -2,15 +2,10 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 
-/// We clear our old flood record five minute after we see the last of it
-#define FLOOD_EXPIRE_TIME (5 * 60 * 1000L)
-
 static bool supportFlooding = true; // Sometimes to simplify debugging we want jusT simple broadcast only
 
 FloodingRouter::FloodingRouter() : toResend(MAX_NUM_NODES)
 {
-    recentBroadcasts.reserve(MAX_NUM_NODES); // Prealloc the worst case # of records - to prevent heap fragmentation
-                                             // setup our periodic task
 }
 
 /**
@@ -100,48 +95,4 @@ void FloodingRouter::doTask()
     else {
         setPeriod(getRandomDelay());
     }
-}
-
-/**
- * Update recentBroadcasts and return true if we have already seen this packet
- */
-bool FloodingRouter::wasSeenRecently(const MeshPacket *p)
-{
-    if (p->to != NODENUM_BROADCAST)
-        return false; // Not a broadcast, so we don't care
-
-    if (p->id == 0) {
-        DEBUG_MSG("Ignoring message with zero id\n");
-        return false; // Not a floodable message ID, so we don't care
-    }
-
-    uint32_t now = millis();
-    for (size_t i = 0; i < recentBroadcasts.size();) {
-        BroadcastRecord &r = recentBroadcasts[i];
-
-        if ((now - r.rxTimeMsec) >= FLOOD_EXPIRE_TIME) {
-            // DEBUG_MSG("Deleting old broadcast record %d\n", i);
-            recentBroadcasts.erase(recentBroadcasts.begin() + i); // delete old record
-        } else {
-            if (r.id == p->id && r.sender == p->from) {
-                DEBUG_MSG("Found existing broadcast record for fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
-
-                // Update the time on this record to now
-                r.rxTimeMsec = now;
-                return true;
-            }
-
-            i++;
-        }
-    }
-
-    // Didn't find an existing record, make one
-    BroadcastRecord r;
-    r.id = p->id;
-    r.sender = p->from;
-    r.rxTimeMsec = now;
-    recentBroadcasts.push_back(r);
-    DEBUG_MSG("Adding broadcast record for fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
-
-    return false;
 }

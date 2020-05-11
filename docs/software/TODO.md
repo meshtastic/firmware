@@ -11,6 +11,7 @@ Items to complete before the first beta release.
 
 - Use 32 bits for message IDs
 - Use fixed32 for node IDs
+- Remove the "want node" node number arbitration process
 - Don't store position packets in the to phone fifo if we are disconnected. The phone will get that info for 'free' when it
   fetches the fresh nodedb.
 - Use the RFM95 sequencer to stay in idle mode most of the time, then automatically go to receive mode and automatically go from transmit to receive mode. See 4.2.8.2 of manual.
