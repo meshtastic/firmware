@@ -208,8 +208,6 @@ void setup()
 
     service.init();
 
-    realRouter.setup(); // required for our periodic task (kinda skanky FIXME)
-
 #ifdef SX1262_ANT_SW
     // make analog PA vs not PA switch on SX1262 eval board work properly
     pinMode(SX1262_ANT_SW, OUTPUT);
