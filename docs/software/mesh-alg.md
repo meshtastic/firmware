@@ -5,15 +5,63 @@ all else fails could always use the stock Radiohead solution - though super inef
 
 great source of papers and class notes: http://www.cs.jhu.edu/~cs647/
 
+reliable messaging tasks (stage one for DSR):
+
+- add a 'messagePeek' hook for all messages that pass through our node.
+- use the same 'recentmessages' array used for broadcast msgs to detect duplicate retransmitted messages.
+- keep possible retries in the list with rebroadcast messages?
+- for each message keep a count of # retries (max of three)
+- delay some random time for each retry (large enough to allow for acks to come in)
+- once an ack comes in, remove the packet from the retry list and deliver the ack to the original sender
+- after three retries, deliver a no-ack packet to the original sender (i.e. the phone app or mesh router service)
+- add a max hops parameter, use it for broadcast as well (0 means adjacent only, 1 is one forward etc...). Store as two bits in the header.
+
+dsr tasks
+
+- do "hop by hop" routing
+- when sending, if destnodeinfo.next_hop is zero (and no message is already waiting for an arp for that node), startRouteDiscovery() for that node. Queue the message in the 'waiting for arp queue' so we can send it later when then the arp completes.
+- otherwise, use next_hop and start sending a message (with ack request) towards that node.
+
+when we receive any packet
+
+- sniff and update tables (especially useful to find adjacent nodes). Update user, network and position info.
+- if we need to route() that packet, resend it to the next_hop based on our nodedb.
+- if it is broadcast or destined for our node, deliver locally
+- handle routereply/routeerror/routediscovery messages as described below
+- then free it
+
+routeDiscovery
+
+- if we've already passed through us (or is from us), then it ignore it
+- use the nodes already mentioned in the request to update our routing table
+- if they were looking for us, send back a routereply
+- if max_hops is zero and they weren't looking for us, drop (FIXME, send back error - I think not though?)
+- if we receive a discovery packet, we use it to populate next_hop (if needed) towards the requester (after decrementing max_hops)
+- if we receive a discovery packet, and we have a next_hop in our nodedb for that destination we send a (reliable) we send a route reply towards the requester
+
+when sending any reliable packet
+
+- if we get back a nak, send a routeError message back towards the original requester. all nodes eavesdrop on that packet and update their route caches
+
+when we receive a routereply packet
+
+- update next_hop on the node, if the new reply needs fewer hops than the existing one (we prefer shorter paths). fixme, someday use a better heuristic
+
+when we receive a routeError packet
+
+- delete the route for that failed recipient, restartRouteDiscovery()
+- if we receive routeerror in response to a discovery,
+- fixme, eventually keep caches of possible other routes.
+
 TODO:
 
-- DONE reread the radiohead mesh implementation - hop to hop acknoledgement seems VERY expensive but otherwise it seems like DSR
+- DONE reread the radiohead mesh implementation - hop to hop acknowledgement seems VERY expensive but otherwise it seems like DSR
 - DONE read about mesh routing solutions (DSR and AODV)
 - DONE read about general mesh flooding solutions (naive, MPR, geo assisted)
 - DONE reread the disaster radio protocol docs - seems based on Babel (which is AODVish)
 - REJECTED - seems dying - possibly dash7? https://www.slideshare.net/MaartenWeyn1/dash7-alliance-protocol-technical-presentation https://github.com/MOSAIC-LoPoW/dash7-ap-open-source-stack - does the opensource stack implement multihop routing? flooding? their discussion mailing list looks dead-dead
 - update duty cycle spreadsheet for our typical usecase
-- DONE generalize naive flooding 
+- DONE generalize naive flooding
 
 a description of DSR: https://tools.ietf.org/html/rfc4728 good slides here: https://www.slideshare.net/ashrafmath/dynamic-source-routing
 good description of batman protocol: https://www.open-mesh.org/projects/open-mesh/wiki/BATMANConcept

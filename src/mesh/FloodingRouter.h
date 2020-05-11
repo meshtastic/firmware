@@ -1,17 +1,9 @@
 #pragma once
 
+#include "PacketHistory.h"
 #include "PeriodicTask.h"
 #include "Router.h"
-#include <vector>
 
-/**
- * A record of a recent message broadcast
- */
-struct BroadcastRecord {
-    NodeNum sender;
-    PacketId id;
-    uint32_t rxTimeMsec; // Unix time in msecs - the time we received it
-};
 
 /**
  * This is a mixin that extends Router with the ability to do Naive Flooding (in the standard mesh protocol sense)
@@ -36,13 +28,9 @@ struct BroadcastRecord {
   Any entries in recentBroadcasts that are older than X seconds (longer than the
   max time a flood can take) will be discarded.
  */
-class FloodingRouter : public Router, public PeriodicTask
+class FloodingRouter : public Router, public PeriodicTask, private PacketHistory
 {
   private:
-    /** FIXME: really should be a std::unordered_set with the key being sender,id.
-     * This would make checking packets in wasSeenRecently faster.
-     */
-    std::vector<BroadcastRecord> recentBroadcasts;
 
     /**
      * Packets we've received that we need to resend after a short delay
@@ -74,10 +62,4 @@ class FloodingRouter : public Router, public PeriodicTask
     virtual void handleReceived(MeshPacket *p);
 
     virtual void doTask();
-
-  private:
-    /**
-     * Update recentBroadcasts and return true if we have already seen this packet
-     */
-    bool wasSeenRecently(const MeshPacket *p);
 };
