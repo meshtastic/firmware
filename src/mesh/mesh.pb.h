@@ -116,18 +116,15 @@ typedef struct _RadioConfig {
 } RadioConfig;
 
 typedef struct _SubPacket {
-    bool has_position;
-    Position position;
-    bool has_data;
-    Data data;
-    bool has_user;
-    User user;
-    bool want_response;
-    pb_size_t which_route;
+    pb_size_t which_payload;
     union {
+        Position position;
+        Data data;
+        User user;
         RouteDiscovery request;
         RouteDiscovery reply;
-    } route;
+    };
+    bool want_response;
     uint32_t dest;
     pb_size_t which_ack;
     union {
@@ -211,7 +208,7 @@ typedef struct _ToRadio {
 #define Data_init_default                        {_Data_Type_MIN, {0, {0}}}
 #define User_init_default                        {"", "", "", {0}}
 #define RouteDiscovery_init_default              {0, {0, 0, 0, 0, 0, 0, 0, 0}}
-#define SubPacket_init_default                   {false, Position_init_default, false, Data_init_default, false, User_init_default, 0, 0, {RouteDiscovery_init_default}, 0, 0, {0}}
+#define SubPacket_init_default                   {0, {Position_init_default}, 0, 0, 0, {0}}
 #define MeshPacket_init_default                  {0, 0, 0, {SubPacket_init_default}, 0, 0, 0, 0}
 #define ChannelSettings_init_default             {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, ""}
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default, false, ChannelSettings_init_default}
@@ -226,7 +223,7 @@ typedef struct _ToRadio {
 #define Data_init_zero                           {_Data_Type_MIN, {0, {0}}}
 #define User_init_zero                           {"", "", "", {0}}
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
-#define SubPacket_init_zero                      {false, Position_init_zero, false, Data_init_zero, false, User_init_zero, 0, 0, {RouteDiscovery_init_zero}, 0, 0, {0}}
+#define SubPacket_init_zero                      {0, {Position_init_zero}, 0, 0, 0, {0}}
 #define MeshPacket_init_zero                     {0, 0, 0, {SubPacket_init_zero}, 0, 0, 0, 0}
 #define ChannelSettings_init_zero                {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, ""}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero, false, ChannelSettings_init_zero}
@@ -285,13 +282,13 @@ typedef struct _ToRadio {
 #define NodeInfo_next_hop_tag                    5
 #define RadioConfig_preferences_tag              1
 #define RadioConfig_channel_settings_tag         2
-#define SubPacket_success_id_tag                 10
-#define SubPacket_fail_id_tag                    11
-#define SubPacket_request_tag                    6
-#define SubPacket_reply_tag                      7
 #define SubPacket_position_tag                   1
 #define SubPacket_data_tag                       3
 #define SubPacket_user_tag                       4
+#define SubPacket_request_tag                    6
+#define SubPacket_reply_tag                      7
+#define SubPacket_success_id_tag                 10
+#define SubPacket_fail_id_tag                    11
 #define SubPacket_want_response_tag              5
 #define SubPacket_dest_tag                       9
 #define MeshPacket_decoded_tag                   3
@@ -352,22 +349,22 @@ X(a, STATIC,   REPEATED, INT32,    route,             2)
 #define RouteDiscovery_DEFAULT NULL
 
 #define SubPacket_FIELDLIST(X, a) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  position,          1) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  data,              3) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  user,              4) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,position,position),   1) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,data,data),   3) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,user,user),   4) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,request,request),   6) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,reply,reply),   7) \
 X(a, STATIC,   SINGULAR, BOOL,     want_response,     5) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (route,request,route.request),   6) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (route,reply,route.reply),   7) \
 X(a, STATIC,   SINGULAR, UINT32,   dest,              9) \
 X(a, STATIC,   ONEOF,    UINT32,   (ack,success_id,ack.success_id),  10) \
 X(a, STATIC,   ONEOF,    UINT32,   (ack,fail_id,ack.fail_id),  11)
 #define SubPacket_CALLBACK NULL
 #define SubPacket_DEFAULT NULL
-#define SubPacket_position_MSGTYPE Position
-#define SubPacket_data_MSGTYPE Data
-#define SubPacket_user_MSGTYPE User
-#define SubPacket_route_request_MSGTYPE RouteDiscovery
-#define SubPacket_route_reply_MSGTYPE RouteDiscovery
+#define SubPacket_payload_position_MSGTYPE Position
+#define SubPacket_payload_data_MSGTYPE Data
+#define SubPacket_payload_user_MSGTYPE User
+#define SubPacket_payload_request_MSGTYPE RouteDiscovery
+#define SubPacket_payload_reply_MSGTYPE RouteDiscovery
 
 #define MeshPacket_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   from,              1) \
@@ -527,17 +524,17 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define Data_size                                256
 #define User_size                                72
 #define RouteDiscovery_size                      88
-#define SubPacket_size                           478
-#define MeshPacket_size                          515
+#define SubPacket_size                           273
+#define MeshPacket_size                          310
 #define ChannelSettings_size                     60
 #define RadioConfig_size                         136
 #define RadioConfig_UserPreferences_size         72
 #define NodeInfo_size                            132
 #define MyNodeInfo_size                          85
-#define DeviceState_size                         21720
+#define DeviceState_size                         14955
 #define DebugString_size                         258
-#define FromRadio_size                           524
-#define ToRadio_size                             518
+#define FromRadio_size                           319
+#define ToRadio_size                             313
 
 #ifdef __cplusplus
 } /* extern "C" */

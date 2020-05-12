@@ -296,16 +296,18 @@ void NodeDB::updateFrom(const MeshPacket &mp)
 
         info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
 
-        if (p.has_position) {
+        switch (p.which_payload) {
+        case SubPacket_position_tag: {
             // we carefully preserve the old time, because we always trust our local timestamps more
             uint32_t oldtime = info->position.time;
             info->position = p.position;
             info->position.time = oldtime;
             info->has_position = true;
             updateGUIforNode = info;
+            break;
         }
 
-        if (p.has_data) {
+        case SubPacket_data_tag: {
             // Keep a copy of the most recent text message.
             if (p.data.typ == Data_Type_CLEAR_TEXT) {
                 DEBUG_MSG("Received text msg from=0x%0x, id=%d, msg=%.*s\n", mp.from, mp.id, p.data.payload.size,
@@ -318,9 +320,10 @@ void NodeDB::updateFrom(const MeshPacket &mp)
                     powerFSM.trigger(EVENT_RECEIVED_TEXT_MSG);
                 }
             }
+            break;
         }
 
-        if (p.has_user) {
+        case SubPacket_user_tag: {
             DEBUG_MSG("old user %s/%s/%s\n", info->user.id, info->user.long_name, info->user.short_name);
 
             bool changed = memcmp(&info->user, &p.user,
@@ -338,6 +341,8 @@ void NodeDB::updateFrom(const MeshPacket &mp)
                 // We just changed something important about the user, store our DB
                 // saveToDisk();
             }
+            break;
+        }
         }
     }
 }

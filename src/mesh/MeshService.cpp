@@ -93,7 +93,7 @@ void MeshService::sendOurOwner(NodeNum dest, bool wantReplies)
     MeshPacket *p = allocForSending();
     p->to = dest;
     p->decoded.want_response = wantReplies;
-    p->decoded.has_user = true;
+    p->decoded.which_payload = SubPacket_user_tag;
     User &u = p->decoded.user;
     u = owner;
     DEBUG_MSG("sending owner %s/%s/%s\n", u.id, u.long_name, u.short_name);
@@ -143,7 +143,7 @@ const MeshPacket *MeshService::handleFromRadioUser(const MeshPacket *mp)
 
 void MeshService::handleIncomingPosition(const MeshPacket *mp)
 {
-    if (mp->which_payload == MeshPacket_decoded_tag && mp->decoded.has_position) {
+    if (mp->which_payload == MeshPacket_decoded_tag && mp->decoded.which_payload == SubPacket_position_tag) {
         DEBUG_MSG("handled incoming position time=%u\n", mp->decoded.position.time);
 
         if (mp->decoded.position.time) {
@@ -171,7 +171,7 @@ int MeshService::handleFromRadio(const MeshPacket *mp)
         DEBUG_MSG("Ignoring incoming time, because we have a GPS\n");
     }
 
-    if (mp->which_payload == MeshPacket_decoded_tag && mp->decoded.has_user) {
+    if (mp->which_payload == MeshPacket_decoded_tag && mp->decoded.which_payload == SubPacket_user_tag) {
         mp = handleFromRadioUser(mp);
     }
 
@@ -257,7 +257,7 @@ void MeshService::sendToMesh(MeshPacket *p)
     // Strip out any time information before sending packets to other  nodes - to keep the wire size small (and because other
     // nodes shouldn't trust it anyways) Note: for now, we allow a device with a local GPS to include the time, so that gpsless
     // devices can get time.
-    if (p->which_payload == MeshPacket_decoded_tag && p->decoded.has_position) {
+    if (p->which_payload == MeshPacket_decoded_tag && p->decoded.which_payload == SubPacket_position_tag) {
         if (!gps->isConnected) {
             DEBUG_MSG("Stripping time %u from position send\n", p->decoded.position.time);
             p->decoded.position.time = 0;
@@ -312,7 +312,7 @@ void MeshService::sendOurPosition(NodeNum dest, bool wantReplies)
     // Update our local node info with our position (even if we don't decide to update anyone else)
     MeshPacket *p = allocForSending();
     p->to = dest;
-    p->decoded.has_position = true;
+    p->decoded.which_payload = SubPacket_position_tag;
     p->decoded.position = node->position;
     p->decoded.want_response = wantReplies;
     p->decoded.position.time = getValidTime(); // This nodedb timestamp might be stale, so update it if our clock is valid.
@@ -325,7 +325,7 @@ int MeshService::onGPSChanged(void *unused)
 
     // Update our local node info with our position (even if we don't decide to update anyone else)
     MeshPacket *p = allocForSending();
-    p->decoded.has_position = true;
+    p->decoded.which_payload = SubPacket_position_tag;
 
     Position &pos = p->decoded.position;
     // !zero or !zero lat/long means valid
