@@ -94,7 +94,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
 
     // the max length of this buffer is much longer than we can possibly print
     static char tempBuf[96];
-    assert(mp.decoded.has_data);
+    assert(mp.decoded.which_payload == SubPacket_data_tag);
     snprintf(tempBuf, sizeof(tempBuf), "         %s", mp.decoded.data.payload.bytes);
 
     display->drawStringMaxWidth(4 + x, 10 + y, 128, tempBuf);
