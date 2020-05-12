@@ -2,9 +2,7 @@
 
 #include "MemoryPool.h"
 #include "MeshTypes.h"
-#include "Observer.h"
 #include "PointerQueue.h"
-#include "RadioInterface.h"
 #include "configuration.h"
 #include "mesh.pb.h"
 
@@ -61,48 +59,3 @@
 #define NUM_CHANNELS NUM_CHANNELS_US
 #endif
 
-/**
- * A raw low level interface to our mesh.  Only understands nodenums and bytes (not protobufs or node ids)
- * FIXME - REMOVE THIS CLASS
- */
-class MeshRadio
-{
-  public:
-    // Kinda ugly way of selecting different radio implementations, but soon this MeshRadio class will be going away
-    // entirely.  At that point we can make things pretty.
-    RadioInterface &radioIf;
-
-    /** pool is the pool we will alloc our rx packets from
-     * rxDest is where we will send any rx packets, it becomes receivers responsibility to return packet to the pool
-     */
-    MeshRadio(RadioInterface *rIf);
-
-    bool init();
-
-  private:
-    CallbackObserver<MeshRadio, void *> configChangedObserver =
-        CallbackObserver<MeshRadio, void *>(this, &MeshRadio::reloadConfig);
-
-    CallbackObserver<MeshRadio, void *> preflightSleepObserver =
-        CallbackObserver<MeshRadio, void *>(this, &MeshRadio::preflightSleepCb);
-
-    CallbackObserver<MeshRadio, void *> notifyDeepSleepObserver =
-        CallbackObserver<MeshRadio, void *>(this, &MeshRadio::notifyDeepSleepDb);
-
-    /// The radioConfig object just changed, call this to force the hw to change to the new settings
-    int reloadConfig(void *unused = NULL);
-
-    /// Return 0 if sleep is okay
-    int preflightSleepCb(void *unused = NULL) { return radioIf.canSleep() ? 0 : 1; }
-
-    int notifyDeepSleepDb(void *unused = NULL)
-    {
-        radioIf.sleep();
-        return 0;
-    }
-
-    /**
-     * Pull our channel settings etc... from protobufs to the dumb interface settings
-     */
-    void applySettings();
-};

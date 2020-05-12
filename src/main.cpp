@@ -104,8 +104,6 @@ const char *getDeviceName()
     return name;
 }
 
-static MeshRadio *radio = NULL;
-
 static uint32_t ledBlinker()
 {
     static bool ledOn;
@@ -231,10 +229,10 @@ void setup()
 #else
         new SimRadio();
 #endif
-    radio = new MeshRadio(rIf);
-    router.addInterface(&radio->radioIf);
 
-    if (radio && !radio->init())
+    router.addInterface(rIf);
+
+    if (!rIf->init())
         recordCriticalError(ErrNoRadio);
 
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
