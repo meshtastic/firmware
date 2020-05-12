@@ -2,6 +2,7 @@
 
 #include "MemoryPool.h"
 #include "MeshTypes.h"
+#include "Observer.h"
 #include "PointerQueue.h"
 #include "WorkerThread.h"
 #include "mesh.pb.h"
@@ -34,6 +35,15 @@ class RadioInterface : protected NotifiedWorkerThread
 {
     friend class MeshRadio; // for debugging we let that class touch pool
     PointerQueue<MeshPacket> *rxDest = NULL;
+
+    CallbackObserver<RadioInterface, void *> configChangedObserver =
+        CallbackObserver<RadioInterface, void *>(this, &RadioInterface::reloadConfig);
+
+    CallbackObserver<RadioInterface, void *> preflightSleepObserver =
+        CallbackObserver<RadioInterface, void *>(this, &RadioInterface::preflightSleepCb);
+
+    CallbackObserver<RadioInterface, void *> notifyDeepSleepObserver =
+        CallbackObserver<RadioInterface, void *>(this, &RadioInterface::notifyDeepSleepDb);
 
   protected:
     MeshPacket *sendingPacket = NULL; // The packet we are currently sending
@@ -104,6 +114,29 @@ class RadioInterface : protected NotifiedWorkerThread
     size_t beginSending(MeshPacket *p);
 
     virtual void loop() {} // Idle processing
+
+    /**
+     * Convert our modemConfig enum into wf, sf, etc...
+     *
+     * These paramaters will be pull from the channelSettings global
+     */
+    virtual void applyModemConfig();
+
+  private:
+    /// Return 0 if sleep is okay
+    int preflightSleepCb(void *unused = NULL) { return canSleep() ? 0 : 1; }
+
+    int notifyDeepSleepDb(void *unused = NULL)
+    {
+        sleep();
+        return 0;
+    }
+
+    int reloadConfig(void *unused)
+    {
+        reconfigure();
+        return 0;
+    }
 };
 
 class SimRadio : public RadioInterface
