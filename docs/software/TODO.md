@@ -29,7 +29,6 @@ fetches the fresh nodedb.
 - rx signal measurements -3 marginal, -9 bad, 10 great, -10 means almost unusable. So scale this into % signal strength. preferably as a graph, with an X indicating loss of comms.
 - assign every "channel" a random shared 8 bit sync word (per 4.2.13.6 of datasheet) - use that word to filter packets before even checking CRC. This will ensure our CPU will only wake for packets on our "channel"
 - Note: we do not do address filtering at the chip level, because we might need to route for the mesh
-- add basic crypto - https://github.com/chegewara/esp32-mbedtls-aes-test/blob/master/main/main.c https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation - use ECB at first (though it is shit) because it doesn't require us to send 16 bytes of IV with each packet. Then OFB per example. Possibly do this crypto at the data payload level only, so that all of the packet routing metadata
   is in cleartext (so that nodes will route for other radios that are cryptoed with a key we don't know)
 - add frequency hopping, dependent on the gps time, make the switch moment far from the time anyone is going to be transmitting
 - share channel settings over Signal (or qr code) by embedding an an URL which is handled by the MeshUtil app.
