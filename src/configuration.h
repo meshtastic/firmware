@@ -48,8 +48,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define REQUIRE_RADIO true // If true, we will fail to start if the radio is not found
 
+/// Convert a preprocessor name into a quoted string
 #define xstr(s) str(s)
 #define str(s) #s
+
+/// Convert a preprocessor name into a quoted string and if that string is empty use "unset"
+#define optstr(s) (xstr(s)[0] ? xstr(s) : "unset")
 
 #ifdef NRF52840_XXAA // All of the NRF52 targets are configured using variant.h, so this section shouldn't need to be
                      // board specific

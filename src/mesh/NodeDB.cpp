@@ -109,10 +109,6 @@ void NodeDB::init()
     // default to no GPS, until one has been found by probing
     myNodeInfo.has_gps = false;
 
-    strncpy(myNodeInfo.region, xstr(HW_VERSION), sizeof(myNodeInfo.region));
-    strncpy(myNodeInfo.firmware_version, xstr(APP_VERSION), sizeof(myNodeInfo.firmware_version));
-    strncpy(myNodeInfo.hw_model, HW_VENDOR, sizeof(myNodeInfo.hw_model));
-
     // Init our blank owner info to reasonable defaults
     getMacAddr(ourMacAddr);
     sprintf(owner.id, "!%02x%02x%02x%02x%02x%02x", ourMacAddr[0], ourMacAddr[1], ourMacAddr[2], ourMacAddr[3], ourMacAddr[4],
@@ -135,6 +131,13 @@ void NodeDB::init()
 
     // saveToDisk();
     loadFromDisk();
+
+    // We set these _after_ loading from disk - because they come from the build and are more trusted than
+    // what is stored in flash
+    strncpy(myNodeInfo.region, optstr(HW_VERSION), sizeof(myNodeInfo.region));
+    strncpy(myNodeInfo.firmware_version, optstr(APP_VERSION), sizeof(myNodeInfo.firmware_version));
+    strncpy(myNodeInfo.hw_model, HW_VENDOR, sizeof(myNodeInfo.hw_model));
+
     resetRadioConfig(); // If bogus settings got saved, then fix them
 
     DEBUG_MSG("NODENUM=0x%x, dbsize=%d\n", myNodeInfo.my_node_num, *numNodes);

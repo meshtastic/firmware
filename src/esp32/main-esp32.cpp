@@ -22,8 +22,8 @@ void reinitBluetooth()
             powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
             screen.startBluetoothPinScreen(pin);
         },
-        []() { screen.stopBluetoothPinScreen(); }, getDeviceName(), HW_VENDOR, xstr(APP_VERSION),
-        xstr(HW_VERSION)); // FIXME, use a real name based on the macaddr
+        []() { screen.stopBluetoothPinScreen(); }, getDeviceName(), HW_VENDOR, optstr(APP_VERSION),
+        optstr(HW_VERSION)); // FIXME, use a real name based on the macaddr
     createMeshBluetoothService(serve);
 
     // Start advertising - this must be done _after_ creating all services
