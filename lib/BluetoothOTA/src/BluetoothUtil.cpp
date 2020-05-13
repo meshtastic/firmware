@@ -184,7 +184,7 @@ class MySecurity : public BLESecurityCallbacks
 
     void onPassKeyNotify(uint32_t pass_key)
     {
-        Serial.printf("onPassKeyNotify %u\n", pass_key);
+        Serial.printf("onPassKeyNotify %06u\n", pass_key);
         startCb(pass_key);
     }
 
