@@ -167,7 +167,7 @@ void setup()
     ledPeriodic.setup();
 
     // Hello
-    DEBUG_MSG("Meshtastic swver=%s, hwver=%s\n", xstr(APP_VERSION), xstr(HW_VERSION));
+    DEBUG_MSG("Meshtastic swver=%s, hwver=%s\n", optstr(APP_VERSION), optstr(HW_VERSION));
 
 #ifndef NO_ESP32
     // Don't init display if we don't have one or we are waking headless due to a timer event
