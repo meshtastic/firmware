@@ -31,7 +31,7 @@ We currently support three models of radios.
 - [TTGO LORA32](https://www.aliexpress.com/item/4000211331316.html) - No GPS
 
 - [Heltec LoRa 32](https://heltec.org/project/wifi-lora-32/) - No GPS
-  - [3D Printable case](https://www.thingiverse.com/thing:3125854)
+    - [3D Printable case](https://www.thingiverse.com/thing:3125854)
 
 **Make sure to get the frequency for your country**
   - US/JP/AU/NZ - 915MHz
