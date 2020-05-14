@@ -19,10 +19,6 @@ class RadioLibInterface : public RadioInterface
     volatile PendingISR pending = ISR_NONE;
     volatile bool timerRunning = false;
 
-    /** Our ISR code currently needs this to find our active instance
-     */
-    static RadioLibInterface *instance;
-
     /**
      * Raw ISR handler that just calls our polymorphic method
      */
@@ -57,6 +53,11 @@ class RadioLibInterface : public RadioInterface
     /// are _trying_ to receive a packet currently (note - we might just be waiting for one)
     bool isReceiving;
 
+  public:
+    /** Our ISR code currently needs this to find our active instance
+     */
+    static RadioLibInterface *instance;
+
     /**
      * Glue functions called from ISR land
      */
@@ -79,6 +80,13 @@ class RadioLibInterface : public RadioInterface
      * This method must be used before putting the CPU into deep or light sleep.
      */
     virtual bool canSleep();
+
+    /**
+     * Start waiting to receive a message
+     *
+     * External functions can call this method to wake the device from sleep.
+     */
+    virtual void startReceive() = 0;
 
   private:
     /** start an immediate transmit */
@@ -109,11 +117,6 @@ class RadioLibInterface : public RadioInterface
 
     /** are we actively receiving a packet (only called during receiving state) */
     virtual bool isActivelyReceiving() = 0;
-
-    /**
-     * Start waiting to receive a message
-     */
-    virtual void startReceive() = 0;
 
     /**
      * Raw ISR handler that just calls our polymorphic method
