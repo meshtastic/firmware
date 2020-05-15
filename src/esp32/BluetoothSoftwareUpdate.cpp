@@ -40,10 +40,11 @@ class TotalSizeCharacteristic : public CallbackCharacteristic
         crc.reset();
         bool canBegin = Update.begin(len);
         DEBUG_MSG("Setting update size %u, result %d\n", len, canBegin);
-        if (!canBegin)
+        if (!canBegin) {
             // Indicate failure by forcing the size to 0
-            c->setValue(0UL);
-        else {
+            uint32_t zero = 0;
+            c->setValue(zero);
+        } else {
             // This totally breaks abstraction to up up into the app layer for this, but quick hack to make sure we only
             // talk to one service during the sw update.
             // DEBUG_MSG("FIXME, crufty shutdown of mesh bluetooth for sw update.");
@@ -113,12 +114,13 @@ class CRC32Characteristic : public CallbackCharacteristic
                 rebootAtMsec = millis() + 5000;
             } else {
                 DEBUG_MSG("Error Occurred. Error #: %d\n", Update.getError());
-
-                if (RadioLibInterface::instance)
-                    RadioLibInterface::instance->startReceive(); // Resume radio
             }
             result = Update.getError();
         }
+
+        if (RadioLibInterface::instance)
+            RadioLibInterface::instance->startReceive(); // Resume radio
+
         assert(resultC);
         resultC->setValue(&result, 1);
         resultC->notify();
