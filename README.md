@@ -20,9 +20,25 @@ This software is 100% open source and developed by a group of hobbyist experimen
 
 ## Supported hardware
 
-We currently support three models of radios. The [TTGO T-Beam](https://www.aliexpress.com/item/4000119152086.html), [TTGO LORA32](https://www.banggood.com/LILYGO-TTGO-LORA32-868Mhz-SX1276-ESP32-Oled-Display-bluetooth-WIFI-Lora-Development-Module-Board-p-1248652.html?cur_warehouse=UK) and the [Heltec LoRa 32](https://heltec.org/project/wifi-lora-32/). Most users should buy the T-Beam and an 18650 battery (total cost less than \$35). Make sure to buy the frequency range which is legal for your country (915MHz for US/JP/AU/NZ, 470MHz for CN, 433MHz and 870MHz for EU). Getting a version that includes a screen is optional, but highly recommended.
+We currently support three models of radios.
+- TTGO T-Beam
+    - [T-Beam V1.0 w/ NEO-M8N](https://www.aliexpress.com/item/33047631119.html) (Recommended)
+    - [T-Beam V1.0 w/ NEO-6M](https://www.aliexpress.com/item/33050391850.html)
+    - 3D printable cases
+      - [T-Beam V0](https://www.thingiverse.com/thing:3773717)
+      - [T-Beam V1](https://www.thingiverse.com/thing:3830711)
 
-See (meshtastic.org) for 3D printable cases.
+- [TTGO LORA32](https://www.aliexpress.com/item/4000211331316.html) - No GPS
+
+- [Heltec LoRa 32](https://heltec.org/project/wifi-lora-32/) - No GPS
+    - [3D Printable case](https://www.thingiverse.com/thing:3125854)
+
+**Make sure to get the frequency for your country**
+  - US/JP/AU/NZ - 915MHz
+  - CN - 470MHz
+  - EU - 870MHz
+  
+Getting a version that includes a screen is optional, but highly recommended.
 
 ## Firmware Installation
 
