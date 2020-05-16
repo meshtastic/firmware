@@ -1,21 +1,20 @@
 # NRF52 TODO
 
+## Misc work items
+
+* on node 0x1c transmit complete interrupt never comes in - though other nodes receive the packet
+
 ## Initial work items
 
 Minimum items needed to make sure hardware is good.
 
+- test my hackedup bootloader on the real hardware
 - add a hard fault handler
 - Use the PMU driver on real hardware
 - Use new radio driver on real hardware
 - Use UC1701 LCD driver on real hardware. Still need to create at startup and probe on SPI
 - test the LEDs
 - test the buttons
-- make a new boarddef with a variant.h file. Fix pins in that file. In particular (at least):
-  #define PIN_SPI_MISO (46)
-  #define PIN_SPI_MOSI (45)
-  #define PIN_SPI_SCK (47)
-  #define PIN_WIRE_SDA (26)
-  #define PIN_WIRE_SCL (27)
 
 ## Secondary work items
 
@@ -60,6 +59,7 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 
 Nice ideas worth considering someday...
 
+- make a Mfg Controller and device under test classes as examples of custom app code for third party devs.  Make a post about this.  Use a custom payload type code.  Have device under test send a broadcast with max hopcount of 0 for the 'mfgcontroller' payload type.  mfg controller will read SNR and reply.  DOT will declare failure/success and switch to the regular app screen.
 - Hook Segger RTT to the nordic logging framework. https://devzone.nordicsemi.com/nordic/nordic-blog/b/blog/posts/debugging-with-real-time-terminal
 - Use nordic logging for DEBUG_MSG
 - use the Jumper simulator to run meshes of simulated hardware: https://docs.jumper.io/docs/install.html
@@ -72,11 +72,14 @@ Nice ideas worth considering someday...
 - in addition to the main CPU watchdog, use the PMU watchdog as a really big emergency hammer
 - turn on 'shipping mode' in the PMU when device is 'off' - to cut battery draw to essentially zero
 - make Lorro_BQ25703A read/write operations atomic, current version could let other threads sneak in (once we start using threads)
-- turn on DFU assistance in the appload using the nordic DFU helper lib call
 - make the segger logbuffer larger, move it to RAM that is preserved across reboots and support reading it out at runtime (to allow full log messages to be included in crash reports). Share this code with ESP32 (use gcc noinit attribute)
 - convert hardfaults/panics/asserts/wd exceptions into fault codes sent to phone
 - stop enumerating all i2c devices at boot, it wastes power & time
 - consider using "SYSTEMOFF" deep sleep mode, without RAM retension. Only useful for 'truly off - wake only by button press' only saves 1.5uA vs SYSTEMON. (SYSTEMON only costs 1.5uA). Possibly put PMU into shipping mode?
+- change the BLE protocol to be more symmetric. Have the phone _also_ host a GATT service which receives writes to
+  'fromradio'. This would allow removing the 'fromnum' mailbox/notify scheme of the current approach and decrease the number of packet handoffs when a packet is received.
+- Using the preceeding, make a generalized 'nrf52/esp32 ble to internet' bridge service. To let nrf52 apps do MQTT/UDP/HTTP POST/HTTP GET operations to web services.
+- lower advertise interval to save power, lower ble transmit power to save power
 
 ## Old unorganized notes
 
@@ -104,6 +107,14 @@ Nice ideas worth considering someday...
 - add a NEMA based GPS driver to test GPS
 - DONE use "variants" to get all gpio bindings
 - DONE plug in correct variants for the real board
+- turn on DFU assistance in the appload using the nordic DFU helper lib call
+- make a new boarddef with a variant.h file. Fix pins in that file. In particular (at least):
+  #define PIN_SPI_MISO (46)
+  #define PIN_SPI_MOSI (45)
+  #define PIN_SPI_SCK (47)
+  #define PIN_WIRE_SDA (26)
+  #define PIN_WIRE_SCL (27)
+- customize the bootloader to use proper button bindings
 
 ```
 
