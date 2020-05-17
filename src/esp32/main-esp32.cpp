@@ -183,7 +183,7 @@ uint32_t axpDebugRead()
 Periodic axpDebugOutput(axpDebugRead);
 #endif
 
-#define MIN_BAT_MILLIVOLTS 5000 // 3690 // millivolts. 10% per https://blog.ampow.com/lipo-voltage-chart/
+#define MIN_BAT_MILLIVOLTS 3690 // millivolts. 10% per https://blog.ampow.com/lipo-voltage-chart/
 
 /// loop code specific to ESP32 targets
 void esp32Loop()
