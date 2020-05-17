@@ -100,7 +100,14 @@ class Screen : public PeriodicTask
     void setup();
 
     /// Turns the screen on/off.
-    void setOn(bool on) { enqueueCmd(CmdItem{.cmd = on ? Cmd::SET_ON : Cmd::SET_OFF}); }
+    void setOn(bool on)
+    {
+        if (!on)
+            handleSetOn(
+                false); // We handle off commands immediately, because they might be called because the CPU is shutting down
+        else
+            enqueueCmd(CmdItem{.cmd = on ? Cmd::SET_ON : Cmd::SET_OFF});
+    }
 
     /// Handles a button press.
     void onPress() { enqueueCmd(CmdItem{.cmd = Cmd::ON_PRESS}); }
