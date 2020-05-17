@@ -119,16 +119,8 @@ void axp192Init()
             DEBUG_MSG("DCDC3: %s\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
             DEBUG_MSG("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
 
+            axp.setChargeControlCur(AXP1XX_CHARGE_CUR_1320MA); // actual limit (in HW) on the tbeam is 450mA
 #if 0
-      // cribbing from https://github.com/m5stack/M5StickC/blob/master/src/AXP192.cpp to fix charger to be more like 300ms.  
-      // I finally found an english datasheet.  Will look at this later - but suffice it to say the default code from TTGO has 'issues'
-
-      axp.adc1Enable(0xff, 1); // turn on all adcs
-      uint8_t val = 0xc2;
-      axp._writeByte(0x33, 1, &val); // Bat charge voltage to 4.2, Current 280mA
-      val = 0b11110010;
-      // Set ADC sample rate to 200hz
-      // axp._writeByte(0x84, 1, &val);
 
       // Not connected
       //val = 0xfc;
@@ -191,6 +183,8 @@ uint32_t axpDebugRead()
 Periodic axpDebugOutput(axpDebugRead);
 #endif
 
+#define MIN_BAT_MILLIVOLTS 3690 // millivolts. 10% per https://blog.ampow.com/lipo-voltage-chart/
+
 /// loop code specific to ESP32 targets
 void esp32Loop()
 {
@@ -231,5 +225,11 @@ void esp32Loop()
         readPowerStatus();
         axp.clearIRQ();
     }
+
+    float v = axp.getBattVoltage();
+    DEBUG_MSG("Bat volt %f\n", v);
+    //if(v >= MIN_BAT_MILLIVOLTS / 2 && v < MIN_BAT_MILLIVOLTS) // If we have a battery at all and it is less than 10% full, force deep sleep
+    //    powerFSM.trigger(EVENT_LOW_BATTERY);
+
 #endif // T_BEAM_V10
 }
