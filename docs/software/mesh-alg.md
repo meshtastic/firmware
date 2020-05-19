@@ -14,7 +14,8 @@ reliable messaging tasks (stage one for DSR):
 - DONE delay some random time for each retry (large enough to allow for acks to come in)
 - DONE once an ack comes in, remove the packet from the retry list and deliver the ack to the original sender
 - DONE after three retries, deliver a no-ack packet to the original sender (i.e. the phone app or mesh router service)
-- test one hop ack/nak with the python framework
+- DONE test one hop ack/nak with the python framework
+- Do stress test with acks
 
 dsr tasks
 
@@ -22,7 +23,7 @@ dsr tasks
 - when sending, if destnodeinfo.next_hop is zero (and no message is already waiting for an arp for that node), startRouteDiscovery() for that node. Queue the message in the 'waiting for arp queue' so we can send it later when then the arp completes.
 - otherwise, use next_hop and start sending a message (with ack request) towards that node.
 - Don't use broadcasts for the network pings (close open github issue)
-- add ignoreSenders to myNodeInfo to allow testing different mesh topologies by refusing to see certain senders
+- add ignoreSenders to radioconfig to allow testing different mesh topologies by refusing to see certain senders
 - test multihop delivery with the python framework
 
 optimizations / low priority:

@@ -46,7 +46,7 @@ void ReliableRouter::handleReceived(MeshPacket *p)
 
             // we are careful to only read/update wasSeenRecently _after_ confirming this is an ack (to not mess
             // up broadcasts)
-            if ((ackId || nakId) && !wasSeenRecently(p)) {
+            if ((ackId || nakId) && !wasSeenRecently(p, false)) {
                 if (ackId) {
                     DEBUG_MSG("Received a ack=%d, stopping retransmissions\n", ackId);
                     stopRetransmission(p->to, ackId);
