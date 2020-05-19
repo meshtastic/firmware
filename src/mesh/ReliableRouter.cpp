@@ -83,17 +83,72 @@ void ReliableRouter::sendAckNak(bool isAck, NodeNum to, PacketId idFrom)
     send(p);
 }
 
+#define NUM_RETRANSMISSIONS 3
+
+PendingPacket::PendingPacket(MeshPacket *p)
+{
+    packet = p;
+    numRetransmissions = NUM_RETRANSMISSIONS - 1; // We subtract one, because we assume the user just did the first send
+    setNextTx();
+}
+
 /**
  * Stop any retransmissions we are doing of the specified node/packet ID pair
  */
-void ReliableRouter::stopRetransmission(NodeNum from, PacketId id) {}
+void ReliableRouter::stopRetransmission(NodeNum from, PacketId id)
+{
+    auto key = GlobalPacketId(from, id);
+    stopRetransmission(key);
+}
 
+void ReliableRouter::stopRetransmission(GlobalPacketId key)
+{
+    auto old = pending.find(key); // If we have an old record, someone messed up because id got reused
+    if (old != pending.end()) {
+        auto numErased = pending.erase(key);
+        assert(numErased == 1);
+        packetPool.release(old->second.packet);
+    }
+}
 /**
  * Add p to the list of packets to retransmit occasionally.  We will free it once we stop retransmitting.
  */
-void ReliableRouter::startRetransmission(MeshPacket *p) {}
+void ReliableRouter::startRetransmission(MeshPacket *p)
+{
+    auto id = GlobalPacketId(p);
+    auto rec = PendingPacket(p);
+
+    stopRetransmission(p->from, p->id);
+    pending[id] = rec;
+}
 
 /**
  * Do any retransmissions that are scheduled (FIXME - for the time being called from loop)
  */
-void ReliableRouter::doRetransmissions() {}
+void ReliableRouter::doRetransmissions()
+{
+    uint32_t now = millis();
+
+    // FIXME, we should use a better datastructure rather than walking through this map.
+    // for(auto el: pending) {
+    for (auto it = pending.begin(), nextIt = it; it != pending.end(); it = nextIt) {
+        ++nextIt; // we use this odd pattern because we might be deleting it...
+        auto &p = it->second;
+
+        // FIXME, handle 51 day rolloever here!!!
+        if (p.nextTxMsec <= now) {
+            if (p.numRetransmissions == 0) {
+                DEBUG_MSG("Reliable send failed, returning a nak\n");
+                sendAckNak(false, p.packet->from, p.packet->id);
+                stopRetransmission(it->first);
+            } else {
+                DEBUG_MSG("Sending reliable retransmission\n");
+                send(packetPool.allocCopy(*p.packet));
+
+                // Queue again
+                --p.numRetransmissions;
+                p.setNextTx();
+            }
+        }
+    }
+}
