@@ -1,12 +1,10 @@
 # Mesh broadcast algorithm
 
-FIXME - instead look for standard solutions. this approach seems really suboptimal, because too many nodes will try to rebroast. If
-all else fails could always use the stock Radiohead solution - though super inefficient.
-
 great source of papers and class notes: http://www.cs.jhu.edu/~cs647/
 
 reliable messaging tasks (stage one for DSR):
 
+- fix FIXME - should snoop packet not sent to us
 - add a 'messagePeek' hook for all messages that pass through our node.
 - DONE use the same 'recentmessages' array used for broadcast msgs to detect duplicate retransmitted messages.
 - keep possible retries in the list with to be rebroadcast messages?
@@ -14,7 +12,6 @@ reliable messaging tasks (stage one for DSR):
 - delay some random time for each retry (large enough to allow for acks to come in)
 - once an ack comes in, remove the packet from the retry list and deliver the ack to the original sender
 - after three retries, deliver a no-ack packet to the original sender (i.e. the phone app or mesh router service)
-- add a max hops parameter, use it for broadcast as well (0 means adjacent only, 1 is one forward etc...). Store as three bits in the header.
 
 dsr tasks
 
@@ -55,6 +52,8 @@ when we receive a routeError packet
 
 TODO:
 
+- optimize our generalized flooding with heuristics, possibly have particular nodes self mark as 'router' nodes.
+
 - DONE reread the radiohead mesh implementation - hop to hop acknowledgement seems VERY expensive but otherwise it seems like DSR
 - DONE read about mesh routing solutions (DSR and AODV)
 - DONE read about general mesh flooding solutions (naive, MPR, geo assisted)
@@ -62,6 +61,7 @@ TODO:
 - REJECTED - seems dying - possibly dash7? https://www.slideshare.net/MaartenWeyn1/dash7-alliance-protocol-technical-presentation https://github.com/MOSAIC-LoPoW/dash7-ap-open-source-stack - does the opensource stack implement multihop routing? flooding? their discussion mailing list looks dead-dead
 - update duty cycle spreadsheet for our typical usecase
 - DONE generalize naive flooding
+- DONE add a max hops parameter, use it for broadcast as well (0 means adjacent only, 1 is one forward etc...). Store as three bits in the header.
 
 a description of DSR: https://tools.ietf.org/html/rfc4728 good slides here: https://www.slideshare.net/ashrafmath/dynamic-source-routing
 good description of batman protocol: https://www.open-mesh.org/projects/open-mesh/wiki/BATMANConcept

@@ -2,8 +2,6 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 
-static bool supportFlooding = true; // Sometimes to simplify debugging we want jusT simple broadcast only
-
 FloodingRouter::FloodingRouter() : toResend(MAX_NUM_NODES) {}
 
 /**
@@ -13,9 +11,7 @@ FloodingRouter::FloodingRouter() : toResend(MAX_NUM_NODES) {}
  */
 ErrorCode FloodingRouter::send(MeshPacket *p)
 {
-    // We update our table of recent broadcasts, even for messages we send
-    if (supportFlooding)
-        wasSeenRecently(p);
+    wasSeenRecently(p);
 
     return Router::send(p);
 }
@@ -29,28 +25,28 @@ ErrorCode FloodingRouter::send(MeshPacket *p)
  */
 void FloodingRouter::handleReceived(MeshPacket *p)
 {
-    if (supportFlooding) {
-        if (wasSeenRecently(p)) {
-            DEBUG_MSG("Ignoring incoming floodmsg, because we've already seen it\n");
-            packetPool.release(p);
-        } else {
-            if (p->to == NODENUM_BROADCAST) {
-                if (p->id != 0) {
-                    MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
+    if (wasSeenRecently(p)) {
+        DEBUG_MSG("Ignoring incoming msg, because we've already seen it\n");
+        packetPool.release(p);
+    } else {
+        if (p->to == NODENUM_BROADCAST && p->hop_limit > 0) {
+            if (p->id != 0) {
+                MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
 
-                    DEBUG_MSG("Rebroadcasting received floodmsg to neighbors, fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
-                    // Note: we are careful to resend using the original senders node id
-                    // We are careful not to call our hooked version of send() - because we don't want to check this again
-                    Router::send(tosend);
+                tosend->hop_limit--; // bump down the hop count
 
-                } else {
-                    DEBUG_MSG("Ignoring a simple (0 hop) broadcast\n");
-                }
+                DEBUG_MSG("Rebroadcasting received floodmsg to neighbors, fr=0x%x,to=0x%x,id=%d,hop_limit=%d\n", p->from, p->to,
+                          p->id, tosend->hop_limit);
+                // Note: we are careful to resend using the original senders node id
+                // We are careful not to call our hooked version of send() - because we don't want to check this again
+                Router::send(tosend);
+
+            } else {
+                DEBUG_MSG("Ignoring a simple (0 id) broadcast\n");
             }
-
-            // handle the packet as normal
-            Router::handleReceived(p);
         }
-    } else
+
+        // handle the packet as normal
         Router::handleReceived(p);
+    }
 }

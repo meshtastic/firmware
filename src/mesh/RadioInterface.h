@@ -16,7 +16,14 @@
  * wtih the old radiohead implementation.
  */
 typedef struct {
-    uint8_t to, from, id, flags;
+    uint8_t to, from, id;
+
+    /**
+     * Usage of flags:
+     *
+     * The bottom three bits of flags are use to store hop_limit when sent over the wire.
+     **/
+    uint8_t flags;
 } PacketHeader;
 
 typedef enum {

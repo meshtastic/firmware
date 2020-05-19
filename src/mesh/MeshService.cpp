@@ -285,6 +285,7 @@ MeshPacket *MeshService::allocForSending()
     p->which_payload = MeshPacket_decoded_tag; // Assume payload is decoded at start.
     p->from = nodeDB.getNodeNum();
     p->to = NODENUM_BROADCAST;
+    p->hop_limit = HOP_MAX;
     p->id = generatePacketId();
     p->rx_time = getValidTime(); // Just in case we process the packet locally - make sure it has a valid timestamp
 
