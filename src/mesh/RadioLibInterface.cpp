@@ -288,13 +288,16 @@ void RadioLibInterface::handleReceiveInterrupt()
 
             rxGood++;
             if (h->to != 255 && h->to != ourAddr) {
-                DEBUG_MSG("ignoring packet not sent to us\n");
+                DEBUG_MSG("FIXME - should snoop packet not sent to us\n");
             } else {
                 MeshPacket *mp = packetPool.allocZeroed();
 
                 mp->from = h->from;
                 mp->to = h->to;
                 mp->id = h->id;
+                assert(HOP_MAX <= 0x07); // If hopmax changes, carefully check this code
+                mp->hop_limit = h->flags & 0x07;
+
                 addReceiveMetadata(mp);
 
                 mp->which_payload = MeshPacket_encrypted_tag; // Mark that the payload is still encrypted at this point
