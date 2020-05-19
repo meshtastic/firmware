@@ -3,6 +3,7 @@
 #include "GPS.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
+#include <NodeDB.h>
 
 /**
  * Router todo
@@ -81,6 +82,15 @@ ErrorCode Router::send(MeshPacket *p)
 }
 
 /**
+ * Every (non duplicate) packet this node receives will be passed through this method.  This allows subclasses to
+ * update routing tables etc... based on what we overhear (even for messages not destined to our node)
+ */
+void Router::sniffReceived(MeshPacket *p)
+{
+    DEBUG_MSG("Sniffing packet not sent to us fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+}
+
+/**
  * Handle any packet that is received by an interface on this node.
  * Note: some packets may merely being passed through this node and will be forwarded elsewhere.
  */
@@ -93,6 +103,8 @@ void Router::handleReceived(MeshPacket *p)
     assert(p->which_payload ==
            MeshPacket_encrypted_tag); // I _think_ the only thing that pushes to us is raw devices that just received packets
 
+    // FIXME - someday don't send routing packets encrypted.  That would allow us to route for other channels without
+    // being able to decrypt their data.
     // Try to decrypt the packet if we can
     static uint8_t bytes[MAX_RHPACKETLEN];
     memcpy(bytes, p->encrypted.bytes,
@@ -106,8 +118,12 @@ void Router::handleReceived(MeshPacket *p)
         // parsing was successful, queue for our recipient
         p->which_payload = MeshPacket_decoded_tag;
 
-        DEBUG_MSG("Notifying observers of received packet fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
-        notifyPacketReceived.notifyObservers(p);
+        sniffReceived(p);
+        uint8_t ourAddr = nodeDB.getNodeNum();
+        if (p->to == NODENUM_BROADCAST || p->to == ourAddr) {
+            DEBUG_MSG("Notifying observers of received packet fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+            notifyPacketReceived.notifyObservers(p);
+        }
     }
 
     packetPool.release(p);

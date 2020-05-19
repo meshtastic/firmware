@@ -29,6 +29,7 @@ void FloodingRouter::handleReceived(MeshPacket *p)
         DEBUG_MSG("Ignoring incoming msg, because we've already seen it\n");
         packetPool.release(p);
     } else {
+        // If a broadcast, possibly _also_ send copies out into the mesh. (FIXME, do something smarter than naive flooding here)
         if (p->to == NODENUM_BROADCAST && p->hop_limit > 0) {
             if (p->id != 0) {
                 MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
