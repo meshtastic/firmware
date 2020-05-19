@@ -44,7 +44,7 @@ class Router
      * do idle processing
      * Mostly looking in our incoming rxPacket queue and calling handleReceived.
      */
-    void loop();
+    virtual void loop();
 
     /**
      * Send a packet on a suitable interface.  This routine will
@@ -52,6 +52,13 @@ class Router
      * If the txmit queue is full it might return an error
      */
     virtual ErrorCode send(MeshPacket *p);
+
+    /// Allocate and return a meshpacket which defaults as send to broadcast from the current node.
+    MeshPacket *allocForSending();
+
+    /**
+     * @return our local nodenum */
+    NodeNum getNodeNum();
 
   protected:
     /**
@@ -65,10 +72,21 @@ class Router
     virtual void handleReceived(MeshPacket *p);
 
     /**
-     * Every (non duplicate) packet this node receives will be passed through this method.  This allows subclasses to 
+     * Every (non duplicate) packet this node receives will be passed through this method.  This allows subclasses to
      * update routing tables etc... based on what we overhear (even for messages not destined to our node)
      */
     virtual void sniffReceived(MeshPacket *p);
+
+    /**
+     * Remove any encryption and decode the protobufs inside this packet (if necessary).
+     *
+     * @return true for success, false for corrupt packet.
+     */
+    bool perhapsDecode(MeshPacket *p);
 };
 
 extern Router &router;
+
+/// Generate a unique packet id
+// FIXME, move this someplace better
+PacketId generatePacketId();
