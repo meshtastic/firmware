@@ -33,7 +33,7 @@
 #include "error.h"
 #include "power.h"
 // #include "rom/rtc.h"
-#include "FloodingRouter.h"
+#include "ReliableRouter.h"
 #include "main.h"
 #include "screen.h"
 #include "sleep.h"
@@ -53,7 +53,7 @@ meshtastic::PowerStatus powerStatus;
 bool ssd1306_found;
 bool axp192_found;
 
-FloodingRouter realRouter;
+ReliableRouter realRouter;
 Router &router = realRouter; // Users of router don't care what sort of subclass implements that API
 
 // -----------------------------------------------------------------------------
@@ -167,7 +167,7 @@ void setup()
     ledPeriodic.setup();
 
     // Hello
-    DEBUG_MSG("Meshtastic swver=%s, hwver=%s\n", xstr(APP_VERSION), xstr(HW_VERSION));
+    DEBUG_MSG("Meshtastic swver=%s, hwver=%s\n", optstr(APP_VERSION), optstr(HW_VERSION));
 
 #ifndef NO_ESP32
     // Don't init display if we don't have one or we are waking headless due to a timer event
@@ -189,6 +189,8 @@ void setup()
 
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 
+// If we know we have a L80 GPS, don't try UBLOX
+#ifndef L80_RESET
     // Init GPS - first try ublox
     gps = new UBloxGPS();
     if (!gps->setup()) {
@@ -199,10 +201,12 @@ void setup()
         gps = new NEMAGPS();
         gps->setup();
     }
+#else
+    gps = new NEMAGPS();
+    gps->setup();
+#endif
 
     service.init();
-
-    realRouter.setup(); // required for our periodic task (kinda skanky FIXME)
 
 #ifdef SX1262_ANT_SW
     // make analog PA vs not PA switch on SX1262 eval board work properly

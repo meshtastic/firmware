@@ -35,9 +35,6 @@ Observable<void *> notifySleep, notifyDeepSleep;
 // deep sleep support
 RTC_DATA_ATTR int bootCount = 0;
 
-#define xstr(s) str(s)
-#define str(s) #s
-
 // -----------------------------------------------------------------------------
 // Application
 // -----------------------------------------------------------------------------

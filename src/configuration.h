@@ -48,30 +48,38 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define REQUIRE_RADIO true // If true, we will fail to start if the radio is not found
 
+/// Convert a preprocessor name into a quoted string
 #define xstr(s) str(s)
 #define str(s) #s
 
-// -----------------------------------------------------------------------------
-// OLED
-// -----------------------------------------------------------------------------
+/// Convert a preprocessor name into a quoted string and if that string is empty use "unset"
+#define optstr(s) (xstr(s)[0] ? xstr(s) : "unset")
 
-#define SSD1306_ADDRESS 0x3C
+#ifdef NRF52840_XXAA // All of the NRF52 targets are configured using variant.h, so this section shouldn't need to be
+                     // board specific
 
-// Flip the screen upside down by default as it makes more sense on T-BEAM
-// devices. Comment this out to not rotate screen 180 degrees.
-#define FLIP_SCREEN_VERTICALLY
+//
+// Standard definitions for NRF52 targets
+//
 
-// DEBUG LED
+#define NO_ESP32 // Don't use ESP32 libs (mainly bluetooth)
 
-#define LED_INVERTED 0 // define as 1 if LED is active low (on)
+// We bind to the GPS using variant.h instead for this platform (Serial1)
 
-// -----------------------------------------------------------------------------
-// GPS
-// -----------------------------------------------------------------------------
+// FIXME, not yet ready for NRF52
+#define RTC_DATA_ATTR
+
+#define LED_PIN PIN_LED1 // LED1 on nrf52840-DK
+#define BUTTON_PIN PIN_BUTTON1
+
+// FIXME, use variant.h defs for all of this!!! (even on the ESP32 targets)
+#else
+
+//
+// Standard definitions for ESP32 targets
+//
 
 #define GPS_SERIAL_NUM 1
-#define GPS_BAUDRATE 9600
-
 #define GPS_RX_PIN 34
 #ifdef USE_JTAG
 #define GPS_TX_PIN -1
@@ -87,6 +95,27 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MISO_GPIO 19
 #define MOSI_GPIO 27
 #define NSS_GPIO 18
+
+#endif
+
+// -----------------------------------------------------------------------------
+// OLED
+// -----------------------------------------------------------------------------
+
+#define SSD1306_ADDRESS 0x3C
+
+// Flip the screen upside down by default as it makes more sense on T-BEAM
+// devices. Comment this out to not rotate screen 180 degrees.
+#define FLIP_SCREEN_VERTICALLY
+
+// DEBUG LED
+#define LED_INVERTED 0 // define as 1 if LED is active low (on)
+
+// -----------------------------------------------------------------------------
+// GPS
+// -----------------------------------------------------------------------------
+
+#define GPS_BAUDRATE 9600
 
 #if defined(TBEAM_V10)
 // This string must exactly match the case used in release file names or the android updater won't work
@@ -188,41 +217,32 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
     0 // If defined, this will be used for user button presses, if your board doesn't have a physical switch, you can wire one
 // between this pin and ground
 
-#define RESET_GPIO 14        // If defined, this pin will be used to reset the LORA radio
-#define RF95_IRQ_GPIO 26     // IRQ line for the LORA radio
-#define DIO1_GPIO 35         // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
-#define DIO2_GPIO 34         // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
-#elif defined(NRF52840_XXAA) // All of the NRF52 targets are configured using variant.h, so this section shouldn't need to be
-                             // board specific
+#define RESET_GPIO 14    // If defined, this pin will be used to reset the LORA radio
+#define RF95_IRQ_GPIO 26 // IRQ line for the LORA radio
+#define DIO1_GPIO 35     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
+#define DIO2_GPIO 34     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
+#endif
 
-// FIXME, use variant.h defs for all of this!!!
+#ifdef ARDUINO_NRF52840_PCA10056
 
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "nrf52"
-
-#define NO_ESP32 // Don't use ESP32 libs (mainly bluetooth)
-
-// We bind to the GPS using variant.h instead for this platform (Serial1)
-#undef GPS_RX_PIN
-#undef GPS_TX_PIN
-
-// FIXME, not yet ready for NRF52
-#define RTC_DATA_ATTR
-
-#define LED_PIN PIN_LED1 // LED1 on nrf52840-DK
-#define BUTTON_PIN PIN_BUTTON1
+#define HW_VENDOR "nrf52dk"
 
 // This board uses 0 to be mean LED on
 #undef LED_INVERTED
 #define LED_INVERTED 1
 
-// Temporarily testing if we can build the RF95 driver for NRF52
+// Uncomment to confirm if we can build the RF95 driver for NRF52
 #if 0
 #define RESET_GPIO 14    // If defined, this pin will be used to reset the LORA radio
 #define RF95_IRQ_GPIO 26 // IRQ line for the LORA radio
 #define DIO1_GPIO 35     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
 #define DIO2_GPIO 34     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
 #endif
+
+#elif defined(ARDUINO_NRF52840_PPR)
+
+#define HW_VENDOR "ppr"
 
 #endif
 

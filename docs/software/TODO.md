@@ -5,21 +5,16 @@ Items to complete soon (next couple of alpha releases).
 - lower wait_bluetooth_secs to 30 seconds once we have the GPS power on (but GPS in sleep mode) across light sleep. For the time
   being I have it set at 2 minutes to ensure enough time for a GPS lock from scratch.
 
-- remeasure wake time power draws now that we run CPU down at 80MHz
-
-# AXP192 tasks
-
-- figure out why this fixme is needed: "FIXME, disable wake due to PMU because it seems to fire all the time?"
-- "AXP192 interrupt is not firing, remove this temporary polling of battery state"
-- make debug info screen show real data (including battery level & charging) - close corresponding github issue
-
 # Medium priority
 
 Items to complete before the first beta release.
 
-- Don't store position packets in the to phone fifo if we are disconnected.  The phone will get that info for 'free' when it 
-fetches the fresh nodedb.
-- Use the RFM95 sequencer to stay in idle mode most of the time, then automatically go to receive mode and automatically go from transmit to receive mode.  See 4.2.8.2 of manual.
+- Use 32 bits for message IDs
+- Use fixed32 for node IDs
+- Remove the "want node" node number arbitration process
+- Don't store position packets in the to phone fifo if we are disconnected. The phone will get that info for 'free' when it
+  fetches the fresh nodedb.
+- Use the RFM95 sequencer to stay in idle mode most of the time, then automatically go to receive mode and automatically go from transmit to receive mode. See 4.2.8.2 of manual.
 - possibly switch to https://github.com/SlashDevin/NeoGPS for gps comms
 - good source of battery/signal/gps icons https://materialdesignicons.com/
 - research and implement better mesh algorithm - investigate changing routing to https://github.com/sudomesh/LoRaLayer2 ?
@@ -204,3 +199,7 @@ Items after the first final candidate release.
 - enable fast lock and low power inside the gps chip
 - Make a FAQ
 - add a SF12 transmit option for _super_ long range
+- figure out why this fixme is needed: "FIXME, disable wake due to PMU because it seems to fire all the time?"
+- "AXP192 interrupt is not firing, remove this temporary polling of battery state"
+- make debug info screen show real data (including battery level & charging) - close corresponding github issue
+- remeasure wake time power draws now that we run CPU down at 80MHz

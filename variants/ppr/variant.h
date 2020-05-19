@@ -16,15 +16,12 @@
  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-#ifndef _VARIANT_PCA10056_
-#define _VARIANT_PCA10056_
+#pragma once
 
 /** Master clock frequency */
 #define VARIANT_MCK (64000000ul)
 
-// This file is the same as the standard pac10056 variant, except that @geeksville broke the xtal on his devboard so
-// he has to use a RC clock.
-
+// This board does not have a 32khz crystal
 // #define USE_LFXO // Board uses 32khz crystal for LF
 #define USE_LFRC // Board uses RC for LF
 
@@ -39,40 +36,44 @@ extern "C" {
 #endif // __cplusplus
 
 // Number of pins defined in PinDescription array
-#define PINS_COUNT (48)
-#define NUM_DIGITAL_PINS (48)
-#define NUM_ANALOG_INPUTS (6)
+#define PINS_COUNT (46)
+#define NUM_DIGITAL_PINS (46)
+#define NUM_ANALOG_INPUTS (0)
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs
-#define PIN_LED1 (13)
-#define PIN_LED2 (14)
+#define PIN_LED1 (0)
+#define PIN_LED2 (1)
 
 #define LED_BUILTIN PIN_LED1
 #define LED_CONN PIN_LED2
 
 #define LED_RED PIN_LED1
-#define LED_BLUE PIN_LED2
+#define LED_GREEN PIN_LED2
 
-#define LED_STATE_ON 0 // State when LED is litted
+// FIXME, bluefruit automatically blinks this led while connected.  call AdafruitBluefruit::autoConnLed to change this.
+#define LED_BLUE LED_GREEN
+
+#define LED_STATE_ON 1 // State when LED is litted
 
 /*
  * Buttons
  */
-#define PIN_BUTTON1 11
-#define PIN_BUTTON2 12
-#define PIN_BUTTON3 24
-#define PIN_BUTTON4 25
+#define PIN_BUTTON1 4 // center
+#define PIN_BUTTON2 2
+#define PIN_BUTTON3 3
+#define PIN_BUTTON4 5
+#define PIN_BUTTON5 6
 
 /*
  * Analog pins
  */
-#define PIN_A0 (3)
-#define PIN_A1 (4)
-#define PIN_A2 (28)
-#define PIN_A3 (29)
-#define PIN_A4 (30)
-#define PIN_A5 (31)
+#define PIN_A0 (0xff)
+#define PIN_A1 (0xff)
+#define PIN_A2 (0xff)
+#define PIN_A3 (0xff)
+#define PIN_A4 (0xff)
+#define PIN_A5 (0xff)
 #define PIN_A6 (0xff)
 #define PIN_A7 (0xff)
 
@@ -87,9 +88,9 @@ static const uint8_t A7 = PIN_A7;
 #define ADC_RESOLUTION 14
 
 // Other pins
-#define PIN_AREF (2)
-#define PIN_NFC1 (9)
-#define PIN_NFC2 (10)
+#define PIN_AREF (0xff)
+//#define PIN_NFC1 (9)
+//#define PIN_NFC2 (10)
 
 static const uint8_t AREF = PIN_AREF;
 
@@ -97,24 +98,24 @@ static const uint8_t AREF = PIN_AREF;
  * Serial interfaces
  */
 
-// Arduino Header D0, D1
-#define PIN_SERIAL1_RX (33) // P1.01
-#define PIN_SERIAL1_TX (34) // P1.02
+// GPS is on Serial1
+#define PIN_SERIAL1_RX (8)
+#define PIN_SERIAL1_TX (9)
 
 // Connected to Jlink CDC
-#define PIN_SERIAL2_RX (8)
-#define PIN_SERIAL2_TX (6)
+//#define PIN_SERIAL2_RX (8)
+//#define PIN_SERIAL2_TX (6)
 
 /*
  * SPI Interfaces
  */
 #define SPI_INTERFACES_COUNT 1
 
-#define PIN_SPI_MISO (46)
-#define PIN_SPI_MOSI (45)
-#define PIN_SPI_SCK (47)
+#define PIN_SPI_MISO (15)
+#define PIN_SPI_MOSI (13)
+#define PIN_SPI_SCK (12)
 
-static const uint8_t SS = 44;
+// static const uint8_t SS = 44;
 static const uint8_t MOSI = PIN_SPI_MOSI;
 static const uint8_t MISO = PIN_SPI_MISO;
 static const uint8_t SCK = PIN_SPI_SCK;
@@ -124,8 +125,27 @@ static const uint8_t SCK = PIN_SPI_SCK;
  */
 #define WIRE_INTERFACES_COUNT 1
 
-#define PIN_WIRE_SDA (26)
-#define PIN_WIRE_SCL (27)
+#define PIN_WIRE_SDA (32 + 2)
+#define PIN_WIRE_SCL (32)
+
+// CUSTOM GPIOs the SX1262
+#define SX1262_CS (10)
+#define SX1262_DIO1 (20)
+#define SX1262_DIO2 (26)
+#define SX1262_BUSY (18)
+#define SX1262_RESET (17)
+// #define SX1262_ANT_SW (32 + 10)
+#define SX1262_RXEN (22)
+#define SX1262_TXEN (24)
+
+// ERC12864-10 LCD
+#define ERC12864_CS (32 + 4)
+#define ERC12864_RESET (32 + 6)
+#define ERC12864_CD (32 + 9)
+
+// L80 GPS
+#define L80_PPS (28)
+#define L80_RESET (29)
 
 #ifdef __cplusplus
 }
@@ -134,5 +154,3 @@ static const uint8_t SCK = PIN_SPI_SCK;
 /*----------------------------------------------------------------------------
  *        Arduino objects - C++ only
  *----------------------------------------------------------------------------*/
-
-#endif
