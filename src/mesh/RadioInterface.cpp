@@ -117,7 +117,7 @@ size_t RadioInterface::beginSending(MeshPacket *p)
     h->to = p->to;
     h->id = p->id;
     assert(p->hop_limit <= HOP_MAX);
-    h->flags = p->hop_limit;
+    h->flags = p->hop_limit | (p->want_ack ? PACKET_FLAGS_WANT_ACK_MASK : 0);
 
     // if the sender nodenum is zero, that means uninitialized
     assert(h->from);
