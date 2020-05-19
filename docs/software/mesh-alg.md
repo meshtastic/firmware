@@ -8,13 +8,13 @@ great source of papers and class notes: http://www.cs.jhu.edu/~cs647/
 reliable messaging tasks (stage one for DSR):
 
 - add a 'messagePeek' hook for all messages that pass through our node.
-- use the same 'recentmessages' array used for broadcast msgs to detect duplicate retransmitted messages.
-- keep possible retries in the list with rebroadcast messages?
+- DONE use the same 'recentmessages' array used for broadcast msgs to detect duplicate retransmitted messages.
+- keep possible retries in the list with to be rebroadcast messages?
 - for each message keep a count of # retries (max of three)
 - delay some random time for each retry (large enough to allow for acks to come in)
 - once an ack comes in, remove the packet from the retry list and deliver the ack to the original sender
 - after three retries, deliver a no-ack packet to the original sender (i.e. the phone app or mesh router service)
-- add a max hops parameter, use it for broadcast as well (0 means adjacent only, 1 is one forward etc...). Store as two bits in the header.
+- add a max hops parameter, use it for broadcast as well (0 means adjacent only, 1 is one forward etc...). Store as three bits in the header.
 
 dsr tasks
 
