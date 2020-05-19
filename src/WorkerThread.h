@@ -61,8 +61,13 @@ class NotifiedWorkerThread : public WorkerThread
 
     /**
      * Notify from an ISR
+     *
+     * This must be inline or IRAM_ATTR on ESP32
      */
-    void notifyFromISR(BaseType_t *highPriWoken, uint32_t v = 0, eNotifyAction action = eNoAction);
+    inline void notifyFromISR(BaseType_t *highPriWoken, uint32_t v = 0, eNotifyAction action = eNoAction)
+    {
+        xTaskNotifyFromISR(taskHandle, v, action, highPriWoken);
+    }
 
   protected:
     /**

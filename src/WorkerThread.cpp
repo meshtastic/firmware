@@ -28,13 +28,7 @@ void NotifiedWorkerThread::notify(uint32_t v, eNotifyAction action)
     xTaskNotify(taskHandle, v, action);
 }
 
-/**
- * Notify from an ISR
- */
-void NotifiedWorkerThread::notifyFromISR(BaseType_t *highPriWoken, uint32_t v, eNotifyAction action)
-{
-    xTaskNotifyFromISR(taskHandle, v, action, highPriWoken);
-}
+
 
 void NotifiedWorkerThread::block()
 {

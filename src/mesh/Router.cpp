@@ -3,6 +3,7 @@
 #include "GPS.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
+#include <NodeDB.h>
 
 /**
  * Router todo
@@ -43,6 +44,39 @@ void Router::loop()
     }
 }
 
+#define NUM_PACKET_ID 255 // 0 is consider invalid
+
+/// Generate a unique packet id
+// FIXME, move this someplace better
+PacketId generatePacketId()
+{
+    static uint32_t i; // Note: trying to keep this in noinit didn't help for working across reboots
+    static bool didInit = false;
+
+    if (!didInit) {
+        didInit = true;
+        i = random(0, NUM_PACKET_ID +
+                          1); // pick a random initial sequence number at boot (to prevent repeated reboots always starting at 0)
+    }
+
+    i++;
+    return (i % NUM_PACKET_ID) + 1; // return number between 1 and 255
+}
+
+MeshPacket *Router::allocForSending()
+{
+    MeshPacket *p = packetPool.allocZeroed();
+
+    p->which_payload = MeshPacket_decoded_tag; // Assume payload is decoded at start.
+    p->from = nodeDB.getNodeNum();
+    p->to = NODENUM_BROADCAST;
+    p->hop_limit = HOP_RELIABLE;
+    p->id = generatePacketId();
+    p->rx_time = getValidTime(); // Just in case we process the packet locally - make sure it has a valid timestamp
+
+    return p;
+}
+
 /**
  * Send a packet on a suitable interface.  This routine will
  * later free() the packet to pool.  This routine is not allowed to stall.
@@ -50,34 +84,81 @@ void Router::loop()
  */
 ErrorCode Router::send(MeshPacket *p)
 {
-    // If the packet hasn't yet been encrypted, do so now (it might already be encrypted if we are just forwarding it)
-
-    assert(p->which_payload == MeshPacket_encrypted_tag ||
-           p->which_payload == MeshPacket_decoded_tag); // I _think_ all packets should have a payload by now
-
-    // First convert from protobufs to raw bytes
-    if (p->which_payload == MeshPacket_decoded_tag) {
-        static uint8_t bytes[MAX_RHPACKETLEN]; // we have to use a scratch buffer because a union
-
-        size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), SubPacket_fields, &p->decoded);
-
-        assert(numbytes <= MAX_RHPACKETLEN);
-        crypto->encrypt(p->from, p->id, numbytes, bytes);
-
-        // Copy back into the packet and set the variant type
-        memcpy(p->encrypted.bytes, bytes, numbytes);
-        p->encrypted.size = numbytes;
-        p->which_payload = MeshPacket_encrypted_tag;
-    }
-
-    if (iface) {
-        // DEBUG_MSG("Sending packet via interface fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
-        return iface->send(p);
-    } else {
-        DEBUG_MSG("Dropping packet - no interfaces - fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+    // If this packet was destined only to apps on our node, don't send it out into the network
+    if (p->to == nodeDB.getNodeNum()) {
+        DEBUG_MSG("Dropping locally processed message\n");
         packetPool.release(p);
-        return ERRNO_NO_INTERFACES;
+        return ERRNO_OK;
+    } else {
+        // If the packet hasn't yet been encrypted, do so now (it might already be encrypted if we are just forwarding it)
+
+        assert(p->which_payload == MeshPacket_encrypted_tag ||
+               p->which_payload == MeshPacket_decoded_tag); // I _think_ all packets should have a payload by now
+
+        // First convert from protobufs to raw bytes
+        if (p->which_payload == MeshPacket_decoded_tag) {
+            static uint8_t bytes[MAX_RHPACKETLEN]; // we have to use a scratch buffer because a union
+
+            size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), SubPacket_fields, &p->decoded);
+
+            assert(numbytes <= MAX_RHPACKETLEN);
+            crypto->encrypt(p->from, p->id, numbytes, bytes);
+
+            // Copy back into the packet and set the variant type
+            memcpy(p->encrypted.bytes, bytes, numbytes);
+            p->encrypted.size = numbytes;
+            p->which_payload = MeshPacket_encrypted_tag;
+        }
+
+        if (iface) {
+            // DEBUG_MSG("Sending packet via interface fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+            return iface->send(p);
+        } else {
+            DEBUG_MSG("Dropping packet - no interfaces - fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+            packetPool.release(p);
+            return ERRNO_NO_INTERFACES;
+        }
     }
+}
+
+/**
+ * Every (non duplicate) packet this node receives will be passed through this method.  This allows subclasses to
+ * update routing tables etc... based on what we overhear (even for messages not destined to our node)
+ */
+void Router::sniffReceived(MeshPacket *p)
+{
+    DEBUG_MSG("Sniffing packet not sent to us fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+}
+
+bool Router::perhapsDecode(MeshPacket *p)
+{
+    if (p->which_payload == MeshPacket_decoded_tag)
+        return true; // If packet was already decoded just return
+
+    assert(p->which_payload == MeshPacket_encrypted_tag);
+
+    // FIXME - someday don't send routing packets encrypted.  That would allow us to route for other channels without
+    // being able to decrypt their data.
+    // Try to decrypt the packet if we can
+    static uint8_t bytes[MAX_RHPACKETLEN];
+    memcpy(bytes, p->encrypted.bytes,
+           p->encrypted.size); // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf
+    crypto->decrypt(p->from, p->id, p->encrypted.size, bytes);
+
+    // Take those raw bytes and convert them back into a well structured protobuf we can understand
+    if (!pb_decode_from_bytes(bytes, p->encrypted.size, SubPacket_fields, &p->decoded)) {
+        DEBUG_MSG("Invalid protobufs in received mesh packet!\n");
+        return false;
+    } else {
+        // parsing was successful
+        p->which_payload = MeshPacket_decoded_tag;
+        return true;
+    }
+}
+
+NodeNum Router::getNodeNum()
+{
+    return nodeDB.getNodeNum();
 }
 
 /**
@@ -90,24 +171,16 @@ void Router::handleReceived(MeshPacket *p)
     // Also, we should set the time from the ISR and it should have msec level resolution
     p->rx_time = getValidTime(); // store the arrival timestamp for the phone
 
-    assert(p->which_payload ==
-           MeshPacket_encrypted_tag); // I _think_ the only thing that pushes to us is raw devices that just received packets
-
-    // Try to decrypt the packet if we can
-    static uint8_t bytes[MAX_RHPACKETLEN];
-    memcpy(bytes, p->encrypted.bytes,
-           p->encrypted.size); // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf
-    crypto->decrypt(p->from, p->id, p->encrypted.size, bytes);
-
     // Take those raw bytes and convert them back into a well structured protobuf we can understand
-    if (!pb_decode_from_bytes(bytes, p->encrypted.size, SubPacket_fields, &p->decoded)) {
-        DEBUG_MSG("Invalid protobufs in received mesh packet, discarding.\n");
-    } else {
+    if (perhapsDecode(p)) {
         // parsing was successful, queue for our recipient
-        p->which_payload = MeshPacket_decoded_tag;
 
-        DEBUG_MSG("Notifying observers of received packet fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
-        notifyPacketReceived.notifyObservers(p);
+        sniffReceived(p);
+
+        if (p->to == NODENUM_BROADCAST || p->to == getNodeNum()) {
+            DEBUG_MSG("Notifying observers of received packet fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+            notifyPacketReceived.notifyObservers(p);
+        }
     }
 
     packetPool.release(p);
