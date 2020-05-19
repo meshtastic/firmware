@@ -2,7 +2,7 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 
-FloodingRouter::FloodingRouter() : toResend(MAX_NUM_NODES) {}
+FloodingRouter::FloodingRouter() {}
 
 /**
  * Send a packet on a suitable interface.  This routine will
@@ -11,7 +11,8 @@ FloodingRouter::FloodingRouter() : toResend(MAX_NUM_NODES) {}
  */
 ErrorCode FloodingRouter::send(MeshPacket *p)
 {
-    wasSeenRecently(p);
+    // Add any messages _we_ send to the seen message list
+    wasSeenRecently(p); // FIXME, move this to a sniffSent method
 
     return Router::send(p);
 }
@@ -29,7 +30,8 @@ void FloodingRouter::handleReceived(MeshPacket *p)
         DEBUG_MSG("Ignoring incoming msg, because we've already seen it\n");
         packetPool.release(p);
     } else {
-        // If a broadcast, possibly _also_ send copies out into the mesh. (FIXME, do something smarter than naive flooding here)
+        // If a broadcast, possibly _also_ send copies out into the mesh.
+        // (FIXME, do something smarter than naive flooding here)
         if (p->to == NODENUM_BROADCAST && p->hop_limit > 0) {
             if (p->id != 0) {
                 MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it

@@ -30,10 +30,6 @@
 class FloodingRouter : public Router, private PacketHistory
 {
   private:
-    /**
-     * Packets we've received that we need to resend after a short delay
-     */
-    PointerQueue<MeshPacket> toResend;
 
   public:
     /**

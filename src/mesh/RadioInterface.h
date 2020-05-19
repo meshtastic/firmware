@@ -11,6 +11,9 @@
 
 #define MAX_RHPACKETLEN 256
 
+#define PACKET_FLAGS_HOP_MASK 0x07
+#define PACKET_FLAGS_WANT_ACK_MASK 0x08
+
 /**
  * This structure has to exactly match the wire layout when sent over the radio link.  Used to keep compatibility
  * wtih the old radiohead implementation.

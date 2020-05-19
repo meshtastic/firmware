@@ -8,9 +8,9 @@ reliable messaging tasks (stage one for DSR):
 - DONE add a max hops parameter, use it for broadcast as well (0 means adjacent only, 1 is one forward etc...). Store as three bits in the header.
 - DONE add a 'snoopReceived' hook for all messages that pass through our node.
 - DONE use the same 'recentmessages' array used for broadcast msgs to detect duplicate retransmitted messages.
-- keep possible retries in the list with to be rebroadcast messages?
-- for each message keep a count of # retries (max of three). allow this to _also_ work for broadcasts.
-- Don't use broadcasts for the network pings (close open github issue)
+- in the router receive path?, send an ack packet if want_ack was set and we are the final destination. FIXME, for now don't handle multihop or merging of data replies with these acks.
+- keep a list of packets waiting for acks
+- for each message keep a count of # retries (max of three). Local to the node, only for the most immediate hop, ignorant of multihop routing.
 - delay some random time for each retry (large enough to allow for acks to come in)
 - once an ack comes in, remove the packet from the retry list and deliver the ack to the original sender
 - after three retries, deliver a no-ack packet to the original sender (i.e. the phone app or mesh router service)
@@ -20,6 +20,11 @@ dsr tasks
 - do "hop by hop" routing
 - when sending, if destnodeinfo.next_hop is zero (and no message is already waiting for an arp for that node), startRouteDiscovery() for that node. Queue the message in the 'waiting for arp queue' so we can send it later when then the arp completes.
 - otherwise, use next_hop and start sending a message (with ack request) towards that node.
+- Don't use broadcasts for the network pings (close open github issue)
+
+optimizations:
+
+- use a priority queue for the messages waiting to send. Send acks first, then routing messages, then data messages, then broadcasts?
 
 when we receive any packet
 
