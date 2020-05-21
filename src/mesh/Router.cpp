@@ -90,6 +90,10 @@ ErrorCode Router::send(MeshPacket *p)
         packetPool.release(p);
         return ERRNO_OK;
     } else {
+        // Never set the want_ack flag on broadcast packets sent over the air.
+        if (p->to == NODENUM_BROADCAST)
+            p->want_ack = false;
+
         // If the packet hasn't yet been encrypted, do so now (it might already be encrypted if we are just forwarding it)
 
         assert(p->which_payload == MeshPacket_encrypted_tag ||
@@ -125,9 +129,10 @@ ErrorCode Router::send(MeshPacket *p)
  * Every (non duplicate) packet this node receives will be passed through this method.  This allows subclasses to
  * update routing tables etc... based on what we overhear (even for messages not destined to our node)
  */
-void Router::sniffReceived(MeshPacket *p)
+void Router::sniffReceived(const MeshPacket *p)
 {
-    DEBUG_MSG("Sniffing packet not sent to us fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+    DEBUG_MSG("FIXME-update-db Sniffing packet fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+
 }
 
 bool Router::perhapsDecode(MeshPacket *p)
