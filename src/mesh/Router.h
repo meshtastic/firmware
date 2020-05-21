@@ -75,7 +75,7 @@ class Router
      * Every (non duplicate) packet this node receives will be passed through this method.  This allows subclasses to
      * update routing tables etc... based on what we overhear (even for messages not destined to our node)
      */
-    virtual void sniffReceived(MeshPacket *p);
+    virtual void sniffReceived(const MeshPacket *p);
 
     /**
      * Remove any encryption and decode the protobufs inside this packet (if necessary).
