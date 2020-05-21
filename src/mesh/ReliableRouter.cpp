@@ -33,7 +33,17 @@ ErrorCode ReliableRouter::send(MeshPacket *p)
  */
 void ReliableRouter::handleReceived(MeshPacket *p)
 {
-    if (p->to == getNodeNum()) { // ignore ack/nak/want_ack packets that are not address to us (for now)
+    NodeNum ourNode = getNodeNum();
+
+    if (p->from == ourNode && p->to == NODENUM_BROADCAST) {
+        // We are seeing someone rebroadcast one of our broadcast attempts.
+        // If this is the first time we saw this, cancel any retransmissions we have queued up and generate an internal ack for
+        // the original sending process.
+        if (stopRetransmission(p->from, p->id)) {
+            DEBUG_MSG("Someone is retransmitting for us, generate implicit ack");
+            sendAckNak(true, p->from, p->id);
+        }
+    } else if (p->to == ourNode) { // ignore ack/nak/want_ack packets that are not address to us (for now)
         if (p->want_ack) {
             sendAckNak(true, p->from, p->id);
         }
@@ -95,20 +105,22 @@ PendingPacket::PendingPacket(MeshPacket *p)
 /**
  * Stop any retransmissions we are doing of the specified node/packet ID pair
  */
-void ReliableRouter::stopRetransmission(NodeNum from, PacketId id)
+bool ReliableRouter::stopRetransmission(NodeNum from, PacketId id)
 {
     auto key = GlobalPacketId(from, id);
     stopRetransmission(key);
 }
 
-void ReliableRouter::stopRetransmission(GlobalPacketId key)
+bool ReliableRouter::stopRetransmission(GlobalPacketId key)
 {
     auto old = pending.find(key); // If we have an old record, someone messed up because id got reused
     if (old != pending.end()) {
         auto numErased = pending.erase(key);
         assert(numErased == 1);
         packetPool.release(old->second.packet);
-    }
+        return true;
+    } else
+        return false;
 }
 /**
  * Add p to the list of packets to retransmit occasionally.  We will free it once we stop retransmitting.
