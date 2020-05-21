@@ -12,6 +12,11 @@
 ErrorCode ReliableRouter::send(MeshPacket *p)
 {
     if (p->want_ack) {
+        // If someone asks for acks on broadcast, we need the hop limit to be at least one, so that first node that receives our
+        // message will rebroadcast
+        if (p->to == NODENUM_BROADCAST && p->hop_limit == 0)
+            p->hop_limit = 1;
+
         auto copy = packetPool.allocCopy(*p);
         startRetransmission(copy);
     }
@@ -42,7 +47,7 @@ void ReliableRouter::handleReceived(MeshPacket *p)
         // If this is the first time we saw this, cancel any retransmissions we have queued up and generate an internal ack for
         // the original sending process.
         if (stopRetransmission(p->from, p->id)) {
-            DEBUG_MSG("Someone is retransmitting for us, generate implicit ack");
+            DEBUG_MSG("Someone is retransmitting for us, generate implicit ack\n");
             sendAckNak(true, p->from, p->id);
         }
     } else if (p->to == ourNode) { // ignore ack/nak/want_ack packets that are not address to us (for now)
@@ -79,10 +84,10 @@ void ReliableRouter::handleReceived(MeshPacket *p)
  */
 void ReliableRouter::sendAckNak(bool isAck, NodeNum to, PacketId idFrom)
 {
-    DEBUG_MSG("Sending an ack=%d,to=%d,idFrom=%d\n", isAck, to, idFrom);
     auto p = allocForSending();
     p->hop_limit = 0; // Assume just immediate neighbors for now
     p->to = to;
+    DEBUG_MSG("Sending an ack=0x%x,to=0x%x,idFrom=%d,id=%d\n", isAck, to, idFrom, p->id);
 
     if (isAck) {
         p->decoded.ack.success_id = idFrom;
@@ -92,7 +97,7 @@ void ReliableRouter::sendAckNak(bool isAck, NodeNum to, PacketId idFrom)
         p->decoded.which_ack = SubPacket_fail_id_tag;
     }
 
-    send(p);
+    sendLocal(p); // we sometimes send directly to the local node
 }
 
 #define NUM_RETRANSMISSIONS 3

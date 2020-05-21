@@ -47,11 +47,9 @@ class Router
     virtual void loop();
 
     /**
-     * Send a packet on a suitable interface.  This routine will
-     * later free() the packet to pool.  This routine is not allowed to stall.
-     * If the txmit queue is full it might return an error
+     * Works like send, but if we are sending to the local node, we directly put the message in the receive queue
      */
-    virtual ErrorCode send(MeshPacket *p);
+    ErrorCode sendLocal(MeshPacket *p);
 
     /// Allocate and return a meshpacket which defaults as send to broadcast from the current node.
     MeshPacket *allocForSending();
@@ -61,6 +59,13 @@ class Router
     NodeNum getNodeNum();
 
   protected:
+    /**
+     * Send a packet on a suitable interface.  This routine will
+     * later free() the packet to pool.  This routine is not allowed to stall.
+     * If the txmit queue is full it might return an error
+     */
+    virtual ErrorCode send(MeshPacket *p);
+
     /**
      * Called from loop()
      * Handle any packet that is received by an interface on this node.
