@@ -36,6 +36,8 @@ void ReliableRouter::handleReceived(MeshPacket *p)
     NodeNum ourNode = getNodeNum();
 
     if (p->from == ourNode && p->to == NODENUM_BROADCAST) {
+        DEBUG_MSG("Received someone rebroadcasting for us fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+
         // We are seeing someone rebroadcast one of our broadcast attempts.
         // If this is the first time we saw this, cancel any retransmissions we have queued up and generate an internal ack for
         // the original sending process.
@@ -77,7 +79,7 @@ void ReliableRouter::handleReceived(MeshPacket *p)
  */
 void ReliableRouter::sendAckNak(bool isAck, NodeNum to, PacketId idFrom)
 {
-    DEBUG_MSG("Sending an ack=%d,to=%d,idFrom=%d", isAck, to, idFrom);
+    DEBUG_MSG("Sending an ack=%d,to=%d,idFrom=%d\n", isAck, to, idFrom);
     auto p = allocForSending();
     p->hop_limit = 0; // Assume just immediate neighbors for now
     p->to = to;
@@ -108,7 +110,7 @@ PendingPacket::PendingPacket(MeshPacket *p)
 bool ReliableRouter::stopRetransmission(NodeNum from, PacketId id)
 {
     auto key = GlobalPacketId(from, id);
-    stopRetransmission(key);
+    return stopRetransmission(key);
 }
 
 bool ReliableRouter::stopRetransmission(GlobalPacketId key)
@@ -150,12 +152,17 @@ void ReliableRouter::doRetransmissions()
         // FIXME, handle 51 day rolloever here!!!
         if (p.nextTxMsec <= now) {
             if (p.numRetransmissions == 0) {
-                DEBUG_MSG("Reliable send failed, returning a nak\n");
+                DEBUG_MSG("Reliable send failed, returning a nak fr=0x%x,to=0x%x,id=%d\n", p.packet->from, p.packet->to,
+                          p.packet->id);
                 sendAckNak(false, p.packet->from, p.packet->id);
                 stopRetransmission(it->first);
             } else {
-                DEBUG_MSG("Sending reliable retransmission\n");
-                send(packetPool.allocCopy(*p.packet));
+                DEBUG_MSG("Sending reliable retransmission fr=0x%x,to=0x%x,id=%d, tries left=%d\n", p.packet->from, p.packet->to,
+                          p.packet->id, p.numRetransmissions);
+
+                // Note: we call the superclass version because we don't want to have our version of send() add a new
+                // retransmission record
+                FloodingRouter::send(packetPool.allocCopy(*p.packet));
 
                 // Queue again
                 --p.numRetransmissions;
