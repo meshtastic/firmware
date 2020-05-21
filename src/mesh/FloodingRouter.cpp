@@ -11,7 +11,7 @@ FloodingRouter::FloodingRouter() {}
  */
 ErrorCode FloodingRouter::send(MeshPacket *p)
 {
-    // Add any messages _we_ send to the seen message list
+    // Add any messages _we_ send to the seen message list (so we will ignore all retransmissions we see)
     wasSeenRecently(p); // FIXME, move this to a sniffSent method
 
     return Router::send(p);

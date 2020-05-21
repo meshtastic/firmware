@@ -2,6 +2,10 @@
 
 great source of papers and class notes: http://www.cs.jhu.edu/~cs647/
 
+flood routing improvements
+
+- DONE if we don't see anyone rebroadcast our want_ack=true broadcasts, retry as needed.
+
 reliable messaging tasks (stage one for DSR):
 
 - DONE generalize naive flooding
@@ -19,9 +23,6 @@ reliable messaging tasks (stage one for DSR):
 
 dsr tasks
 
-- do "hop by hop" routing
-- when sending, if destnodeinfo.next_hop is zero (and no message is already waiting for an arp for that node), startRouteDiscovery() for that node. Queue the message in the 'waiting for arp queue' so we can send it later when then the arp completes.
-- otherwise, use next_hop and start sending a message (with ack request) towards that node.
 - Don't use broadcasts for the network pings (close open github issue)
 - add ignoreSenders to radioconfig to allow testing different mesh topologies by refusing to see certain senders
 - test multihop delivery with the python framework
@@ -33,6 +34,12 @@ optimizations / low priority:
 - bump up PacketPool size for all the new ack/nak/routing packets
 - handle 51 day rollover in doRetransmissions
 - use a priority queue for the messages waiting to send. Send acks first, then routing messages, then data messages, then broadcasts?
+
+when we send a packet
+
+- do "hop by hop" routing
+- when sending, if destnodeinfo.next_hop is zero (and no message is already waiting for an arp for that node), startRouteDiscovery() for that node. Queue the message in the 'waiting for arp queue' so we can send it later when then the arp completes.
+- otherwise, use next_hop and start sending a message (with ack request) towards that node (starting with next_hop).
 
 when we receive any packet
 
@@ -47,13 +54,13 @@ routeDiscovery
 - if we've already passed through us (or is from us), then it ignore it
 - use the nodes already mentioned in the request to update our routing table
 - if they were looking for us, send back a routereply
-- if max_hops is zero and they weren't looking for us, drop (FIXME, send back error - I think not though?)
-- if we receive a discovery packet, we use it to populate next_hop (if needed) towards the requester (after decrementing max_hops)
+- NOT DOING FOR NOW -if max_hops is zero and they weren't looking for us, drop (FIXME, send back error - I think not though?)
+- if we receive a discovery packet, and we don't have next_hop set in our nodedb, we use it to populate next_hop (if needed) towards the requester (after decrementing max_hops)
 - if we receive a discovery packet, and we have a next_hop in our nodedb for that destination we send a (reliable) we send a route reply towards the requester
 
 when sending any reliable packet
 
-- if we get back a nak, send a routeError message back towards the original requester. all nodes eavesdrop on that packet and update their route caches
+- if timeout doing retries, send a routeError (nak) message back towards the original requester. all nodes eavesdrop on that packet and update their route caches.
 
 when we receive a routereply packet
 
