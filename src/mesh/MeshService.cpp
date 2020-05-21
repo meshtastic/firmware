@@ -247,7 +247,7 @@ void MeshService::sendToMesh(MeshPacket *p)
     }
 
     // Note: We might return !OK if our fifo was full, at that point the only option we have is to drop it
-    if (router.send(p) != ERRNO_OK) {
+    if (router.sendLocal(p) != ERRNO_OK) {
         DEBUG_MSG("No radio was able to send packet, discarding...\n");
         releaseToPool(p);
     }
