@@ -4,36 +4,31 @@
 
 Minimum items needed to make sure hardware is good.
 
+- test new bootloader on real hardware
 - add a hard fault handler
 - Use the PMU driver on real hardware
 - Use new radio driver on real hardware
-- Use UC1701 LCD driver on real hardware. Still need to create at startup and probe on SPI
+- Use UC1701 LCD driver on real hardware. Still need to create at startup and probe on SPI. Make sure SPI is atomic.
 - test the LEDs
 - test the buttons
-- make a new boarddef with a variant.h file. Fix pins in that file. In particular (at least):
-  #define PIN_SPI_MISO (46)
-  #define PIN_SPI_MOSI (45)
-  #define PIN_SPI_SCK (47)
-  #define PIN_WIRE_SDA (26)
-  #define PIN_WIRE_SCL (27)
+- DONE make a new boarddef with a variant.h file. Fix pins in that file.
 
 ## Secondary work items
 
 Needed to be fully functional at least at the same level of the ESP32 boards. At this point users would probably want them.
 
-- stop polling for GPS characters, instead stay blocked on read in a thread
-- increase preamble length? - will break other clients? so all devices must update
-- enable BLE DFU somehow
+- get full BLE api working
+- make a file system implementation (preferably one that can see the files the bootloader also sees) - use https://infocenter.nordicsemi.com/topic/com.nordic.infocenter.sdk5.v15.3.0/lib_fds_usage.html?cp=7_5_0_3_55_3
+- make power management/sleep work properly
+- make a settimeofday implementation
+- DONE increase preamble length? - will break other clients? so all devices must update
+- DONE enable BLE DFU somehow
 - set appversion/hwversion
 - report appversion/hwversion in BLE
 - use new LCD driver from screen.cpp. Still need to hook it to a subclass of (poorly named) OLEDDisplay, and override display() to stream bytes out to the screen.
-- get full BLE api working
 - we need to enable the external xtal for the sx1262 (on dio3)
 - figure out which regulator mode the sx1262 is operating in
 - turn on security for BLE, make pairing work
-- make power management/sleep work properly
-- make a settimeofday implementation
-- make a file system implementation (preferably one that can see the files the bootloader also sees) - use https://infocenter.nordicsemi.com/topic/com.nordic.infocenter.sdk5.v15.3.0/lib_fds_usage.html?cp=7_5_0_3_55_3
 - make ble endpoints not require "start config", just have them start in config mode
 - measure power management and confirm battery life
 - use new PMU to provide battery voltage/% full to app (both bluetooth and screen)
@@ -41,6 +36,8 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 
 ## Items to be 'feature complete'
 
+- check datasheet about sx1262 temperature compensation
+- stop polling for GPS characters, instead stay blocked on read in a thread
 - use SX126x::startReceiveDutyCycleAuto to save power by sleeping and briefly waking to check for preamble bits. Change xmit rules to have more preamble bits.
 - turn back on in-radio destaddr checking for RF95
 - remove the MeshRadio wrapper - we don't need it anymore, just do everythin in RadioInterface subclasses.

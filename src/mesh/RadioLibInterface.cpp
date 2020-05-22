@@ -298,7 +298,7 @@ void RadioLibInterface::handleReceiveInterrupt()
                 addReceiveMetadata(mp);
 
                 mp->which_payload = MeshPacket_encrypted_tag; // Mark that the payload is still encrypted at this point
-                assert(payloadLen <= sizeof(mp->encrypted.bytes));
+                assert(payloadLen <= (int32_t)sizeof(mp->encrypted.bytes));
                 memcpy(mp->encrypted.bytes, payload, payloadLen);
                 mp->encrypted.size = payloadLen;
 
