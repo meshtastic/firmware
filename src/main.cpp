@@ -21,45 +21,40 @@
 
 */
 
-#include "BluetoothUtil.h"
-#include "GPS.h"
-#include "MeshBluetoothService.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
+#include "NEMAGPS.h"
 #include "NodeDB.h"
 #include "Periodic.h"
 #include "PowerFSM.h"
+#include "Router.h"
+#include "UBloxGPS.h"
 #include "configuration.h"
-#include "esp32/pm.h"
-#include "esp_pm.h"
+#include "error.h"
 #include "power.h"
-#include "rom/rtc.h"
+// #include "rom/rtc.h"
+#include "ReliableRouter.h"
+#include "main.h"
 #include "screen.h"
 #include "sleep.h"
 #include <Wire.h>
-#include <driver/rtc_io.h>
+// #include <driver/rtc_io.h>
 
-#ifdef TBEAM_V10
-#include "axp20x.h"
-AXP20X_Class axp;
-bool pmu_irq = false;
+#ifndef NO_ESP32
+#include "BluetoothUtil.h"
 #endif
 
-// Global Screen singleton
-#ifdef I2C_SDA
-meshtastic::Screen screen(SSD1306_ADDRESS, I2C_SDA, I2C_SCL);
-#else
-// Fake values for pins to keep build happy, we won't ever initialize it.
-meshtastic::Screen screen(SSD1306_ADDRESS, 0, 0);
-#endif
+// We always create a screen object, but we only init it if we find the hardware
+meshtastic::Screen screen(SSD1306_ADDRESS);
 
 // Global power status singleton
-static meshtastic::PowerStatus powerStatus;
+meshtastic::PowerStatus powerStatus;
 
 bool ssd1306_found;
 bool axp192_found;
 
-bool bluetoothOn;
+ReliableRouter realRouter;
+Router &router = realRouter; // Users of router don't care what sort of subclass implements that API
 
 // -----------------------------------------------------------------------------
 // Application
@@ -81,7 +76,7 @@ void scanI2Cdevice(void)
                 ssd1306_found = true;
                 DEBUG_MSG("ssd1306 display found\n");
             }
-#ifdef TBEAM_V10
+#ifdef AXP192_SLAVE_ADDRESS
             if (addr == AXP192_SLAVE_ADDRESS) {
                 axp192_found = true;
                 DEBUG_MSG("axp192 PMU found\n");
@@ -97,107 +92,11 @@ void scanI2Cdevice(void)
         DEBUG_MSG("done\n");
 }
 
-#ifdef TBEAM_V10
-/// Reads power status to powerStatus singleton.
-//
-// TODO(girts): move this and other axp stuff to power.h/power.cpp.
-void readPowerStatus()
-{
-    powerStatus.haveBattery = axp.isBatteryConnect();
-    if (powerStatus.haveBattery) {
-        powerStatus.batteryVoltageMv = axp.getBattVoltage();
-    }
-    powerStatus.usb = axp.isVBUSPlug();
-    powerStatus.charging = axp.isChargeing();
-}
-#endif // TBEAM_V10
-
-/**
- * Init the power manager chip
- *
- * axp192 power
-    DCDC1 0.7-3.5V @ 1200mA max -> OLED // If you turn this off you'll lose comms to the axp192 because the OLED and the axp192
- share the same i2c bus, instead use ssd1306 sleep mode DCDC2 -> unused DCDC3 0.7-3.5V @ 700mA max -> ESP32 (keep this on!) LDO1
- 30mA -> charges GPS backup battery // charges the tiny J13 battery by the GPS to power the GPS ram (for a couple of days), can
- not be turned off LDO2 200mA -> LORA LDO3 200mA -> GPS
- */
-void axp192Init()
-{
-#ifdef TBEAM_V10
-    if (axp192_found) {
-        if (!axp.begin(Wire, AXP192_SLAVE_ADDRESS)) {
-            DEBUG_MSG("AXP192 Begin PASS\n");
-
-            // axp.setChgLEDMode(LED_BLINK_4HZ);
-            DEBUG_MSG("DCDC1: %s\n", axp.isDCDC1Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("DCDC2: %s\n", axp.isDCDC2Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("LDO2: %s\n", axp.isLDO2Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("LDO3: %s\n", axp.isLDO3Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("DCDC3: %s\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("----------------------------------------\n");
-
-            axp.setPowerOutPut(AXP192_LDO2, AXP202_ON); // LORA radio
-            axp.setPowerOutPut(AXP192_LDO3, AXP202_ON); // GPS main power
-            axp.setPowerOutPut(AXP192_DCDC2, AXP202_ON);
-            axp.setPowerOutPut(AXP192_EXTEN, AXP202_ON);
-            axp.setPowerOutPut(AXP192_DCDC1, AXP202_ON);
-            axp.setDCDC1Voltage(3300); // for the OLED power
-
-            DEBUG_MSG("DCDC1: %s\n", axp.isDCDC1Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("DCDC2: %s\n", axp.isDCDC2Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("LDO2: %s\n", axp.isLDO2Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("LDO3: %s\n", axp.isLDO3Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("DCDC3: %s\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
-
-#if 0
-      // cribbing from https://github.com/m5stack/M5StickC/blob/master/src/AXP192.cpp to fix charger to be more like 300ms.  
-      // I finally found an english datasheet.  Will look at this later - but suffice it to say the default code from TTGO has 'issues'
-
-      axp.adc1Enable(0xff, 1); // turn on all adcs
-      uint8_t val = 0xc2;
-      axp._writeByte(0x33, 1, &val); // Bat charge voltage to 4.2, Current 280mA
-      val = 0b11110010;
-      // Set ADC sample rate to 200hz
-      // axp._writeByte(0x84, 1, &val);
-
-      // Not connected
-      //val = 0xfc;
-      //axp._writeByte(AXP202_VHTF_CHGSET, 1, &val); // Set temperature protection
-
-      //not used
-      //val = 0x46;
-      //axp._writeByte(AXP202_OFF_CTL, 1, &val); // enable bat detection
-#endif
-            axp.debugCharging();
-
-#ifdef PMU_IRQ
-            pinMode(PMU_IRQ, INPUT);
-            attachInterrupt(
-                PMU_IRQ, [] { pmu_irq = true; }, FALLING);
-
-            axp.adc1Enable(AXP202_BATT_CUR_ADC1, 1);
-            axp.enableIRQ(AXP202_BATT_REMOVED_IRQ | AXP202_BATT_CONNECT_IRQ | AXP202_CHARGING_FINISHED_IRQ | AXP202_CHARGING_IRQ |
-                              AXP202_VBUS_REMOVED_IRQ | AXP202_VBUS_CONNECT_IRQ | AXP202_PEK_SHORTPRESS_IRQ,
-                          1);
-
-            axp.clearIRQ();
-#endif
-            readPowerStatus();
-        } else {
-            DEBUG_MSG("AXP192 Begin FAIL\n");
-        }
-    } else {
-        DEBUG_MSG("AXP192 not found\n");
-    }
-#endif
-}
-
 const char *getDeviceName()
 {
     uint8_t dmac[6];
-    assert(esp_efuse_mac_get_default(dmac) == ESP_OK);
+
+    getMacAddr(dmac);
 
     // Meshtastic_ab3c
     static char name[20];
@@ -205,11 +104,35 @@ const char *getDeviceName()
     return name;
 }
 
+static uint32_t ledBlinker()
+{
+    static bool ledOn;
+    ledOn ^= 1;
+
+    setLed(ledOn);
+
+    // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
+    return powerStatus.charging ? 1000 : (ledOn ? 2 : 1000);
+}
+
+Periodic ledPeriodic(ledBlinker);
+
+#include "RF95Interface.h"
+#include "SX1262Interface.h"
+
+#ifdef NO_ESP32
+#include "variant.h"
+#endif
+
 void setup()
 {
+#ifdef USE_SEGGER
+    SEGGER_RTT_ConfigUpBuffer(0, NULL, NULL, 0, SEGGER_RTT_MODE_NO_BLOCK_TRIM);
+#endif
+
 // Debug
 #ifdef DEBUG_PORT
-    DEBUG_PORT.begin(SERIAL_BAUD);
+    DEBUG_PORT.init(); // Set serial baud rate and init our mesh console
 #endif
 
     initDeepSleep();
@@ -226,8 +149,10 @@ void setup()
 
 #ifdef I2C_SDA
     Wire.begin(I2C_SDA, I2C_SCL);
-    scanI2Cdevice();
+#else
+    Wire.begin();
 #endif
+    scanI2Cdevice();
 
     // Buttons & LED
 #ifdef BUTTON_PIN
@@ -236,28 +161,83 @@ void setup()
 #endif
 #ifdef LED_PIN
     pinMode(LED_PIN, OUTPUT);
-    digitalWrite(LED_PIN, 1); // turn on for now
+    digitalWrite(LED_PIN, 1 ^ LED_INVERTED); // turn on for now
 #endif
 
-    // Hello
-    DEBUG_MSG("Meshtastic swver=%s, hwver=%s\n", xstr(APP_VERSION), xstr(HW_VERSION));
+    ledPeriodic.setup();
 
+    // Hello
+    DEBUG_MSG("Meshtastic swver=%s, hwver=%s\n", optstr(APP_VERSION), optstr(HW_VERSION));
+
+#ifndef NO_ESP32
     // Don't init display if we don't have one or we are waking headless due to a timer event
     if (wakeCause == ESP_SLEEP_WAKEUP_TIMER)
         ssd1306_found = false; // forget we even have the hardware
+
+    esp32Setup();
+#endif
+
+#ifdef NRF52_SERIES
+    nrf52Setup();
+#endif
 
     // Initialize the screen first so we can show the logo while we start up everything else.
     if (ssd1306_found)
         screen.setup();
 
-    axp192Init();
-
     screen.print("Started...\n");
 
-    // Init GPS
-    gps.setup();
+    readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
+
+// If we know we have a L80 GPS, don't try UBLOX
+#ifndef L80_RESET
+    // Init GPS - first try ublox
+    gps = new UBloxGPS();
+    if (!gps->setup()) {
+        // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
+        // assume NEMA at 9600 baud.
+        DEBUG_MSG("ERROR: No UBLOX GPS found, hoping that NEMA might work\n");
+        delete gps;
+        gps = new NEMAGPS();
+        gps->setup();
+    }
+#else
+    gps = new NEMAGPS();
+    gps->setup();
+#endif
 
     service.init();
+
+#ifdef SX1262_ANT_SW
+    // make analog PA vs not PA switch on SX1262 eval board work properly
+    pinMode(SX1262_ANT_SW, OUTPUT);
+    digitalWrite(SX1262_ANT_SW, 1);
+#endif
+
+    // Init our SPI controller
+#ifdef NRF52_SERIES
+    SPI.begin();
+#else
+    // ESP32
+    SPI.begin(SCK_GPIO, MISO_GPIO, MOSI_GPIO, NSS_GPIO);
+    SPI.setFrequency(4000000);
+#endif
+
+    // MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
+    RadioInterface *rIf =
+#if defined(RF95_IRQ_GPIO)
+        // new CustomRF95(); old Radiohead based driver
+        new RF95Interface(NSS_GPIO, RF95_IRQ_GPIO, RESET_GPIO, SPI);
+#elif defined(SX1262_CS)
+        new SX1262Interface(SX1262_CS, SX1262_DIO1, SX1262_RESET, SX1262_BUSY, SPI);
+#else
+        new SimRadio();
+#endif
+
+    router.addInterface(rIf);
+
+    if (!rIf->init())
+        recordCriticalError(ErrNoRadio);
 
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
@@ -265,62 +245,6 @@ void setup()
     // setBluetoothEnable(false); we now don't start bluetooth until we enter the proper state
     setCPUFast(false); // 80MHz is fine for our slow peripherals
 }
-
-void initBluetooth()
-{
-    DEBUG_MSG("Starting bluetooth\n");
-
-    // FIXME - we are leaking like crazy
-    // AllocatorScope scope(btPool);
-
-    // Note: these callbacks might be coming in from a different thread.
-    BLEServer *serve = initBLE(
-        [](uint32_t pin) {
-            powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
-            screen.startBluetoothPinScreen(pin);
-        },
-        []() { screen.stopBluetoothPinScreen(); }, getDeviceName(), HW_VENDOR, xstr(APP_VERSION),
-        xstr(HW_VERSION)); // FIXME, use a real name based on the macaddr
-    createMeshBluetoothService(serve);
-
-    // Start advertising - this must be done _after_ creating all services
-    serve->getAdvertising()->start();
-}
-
-void setBluetoothEnable(bool on)
-{
-    if (on != bluetoothOn) {
-        DEBUG_MSG("Setting bluetooth enable=%d\n", on);
-
-        bluetoothOn = on;
-        if (on) {
-            Serial.printf("Pre BT: %u heap size\n", ESP.getFreeHeap());
-            // ESP_ERROR_CHECK( heap_trace_start(HEAP_TRACE_LEAKS) );
-            initBluetooth();
-        } else {
-            // We have to totally teardown our bluetooth objects to prevent leaks
-            stopMeshBluetoothService(); // Must do before shutting down bluetooth
-            deinitBLE();
-            destroyMeshBluetoothService(); // must do after deinit, because it frees our service
-            Serial.printf("Shutdown BT: %u heap size\n", ESP.getFreeHeap());
-            // ESP_ERROR_CHECK( heap_trace_stop() );
-            // heap_trace_dump();
-        }
-    }
-}
-
-uint32_t ledBlinker()
-{
-    static bool ledOn;
-    ledOn ^= 1;
-
-    setLed(ledOn);
-
-    // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
-    return powerStatus.charging ? 1000 : (ledOn ? 2 : 1000);
-}
-
-Periodic ledPeriodic(ledBlinker);
 
 #if 0
 // Turn off for now
@@ -340,56 +264,28 @@ uint32_t axpDebugRead()
 }
 
 Periodic axpDebugOutput(axpDebugRead);
+axpDebugOutput.setup();
 #endif
 
 void loop()
 {
     uint32_t msecstosleep = 1000 * 30; // How long can we sleep before we again need to service the main loop?
 
+    gps->loop(); // FIXME, remove from main, instead block on read
+    router.loop();
     powerFSM.run_machine();
-    gps.loop();
     service.loop();
 
-    ledPeriodic.loop();
+    periodicScheduler.loop();
     // axpDebugOutput.loop();
-    loopBLE();
 
-    // for debug printing
-    // service.radio.radioIf.canSleep();
+#ifdef DEBUG_PORT
+    DEBUG_PORT.loop(); // Send/receive protobufs over the serial port
+#endif
 
-#ifdef PMU_IRQ
-    if (pmu_irq) {
-        pmu_irq = false;
-        axp.readIRQ();
-
-        DEBUG_MSG("pmu irq!\n");
-
-        if (axp.isChargingIRQ()) {
-            DEBUG_MSG("Battery start charging\n");
-        }
-        if (axp.isChargingDoneIRQ()) {
-            DEBUG_MSG("Battery fully charged\n");
-        }
-        if (axp.isVbusRemoveIRQ()) {
-            DEBUG_MSG("USB unplugged\n");
-        }
-        if (axp.isVbusPlugInIRQ()) {
-            DEBUG_MSG("USB plugged In\n");
-        }
-        if (axp.isBattPlugInIRQ()) {
-            DEBUG_MSG("Battery inserted\n");
-        }
-        if (axp.isBattRemoveIRQ()) {
-            DEBUG_MSG("Battery removed\n");
-        }
-        if (axp.isPEKShortPressIRQ()) {
-            DEBUG_MSG("PEK short button press\n");
-        }
-
-        readPowerStatus();
-        axp.clearIRQ();
-    }
-#endif // T_BEAM_V10
+#ifndef NO_ESP32
+    esp32Loop();
+#endif
 
 #ifdef BUTTON_PIN
     // if user presses button for more than 3 secs, discard our network prefs and reboot (FIXME, use a debounce lib instead of
@@ -424,8 +320,7 @@ void loop()
     screen.debug()->setChannelNameStatus(channelSettings.name);
     screen.debug()->setPowerStatus(powerStatus);
     // TODO(#4): use something based on hdop to show GPS "signal" strength.
-    screen.debug()->setGPSStatus(gps.hasLock() ? "ok" : ":(");
-    screen.loop();
+    screen.debug()->setGPSStatus(gps->hasLock() ? "good" : "bad");
 
     // No GPS lock yet, let the OS put the main CPU in low power mode for 100ms (or until another interrupt comes in)
     // i.e. don't just keep spinning in loop as fast as we can.

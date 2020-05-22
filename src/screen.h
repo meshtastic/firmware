@@ -9,6 +9,7 @@
 #include "TypedQueue.h"
 #include "lock.h"
 #include "power.h"
+#include <string>
 
 namespace meshtastic
 {
@@ -88,7 +89,7 @@ class DebugInfo
 class Screen : public PeriodicTask
 {
   public:
-    Screen(uint8_t address, uint8_t sda, uint8_t scl);
+    Screen(uint8_t address, int sda = -1, int scl = -1);
 
     Screen(const Screen &) = delete;
     Screen &operator=(const Screen &) = delete;
@@ -99,7 +100,14 @@ class Screen : public PeriodicTask
     void setup();
 
     /// Turns the screen on/off.
-    void setOn(bool on) { enqueueCmd(CmdItem{.cmd = on ? Cmd::SET_ON : Cmd::SET_OFF}); }
+    void setOn(bool on)
+    {
+        if (!on)
+            handleSetOn(
+                false); // We handle off commands immediately, because they might be called because the CPU is shutting down
+        else
+            enqueueCmd(CmdItem{.cmd = on ? Cmd::SET_ON : Cmd::SET_OFF});
+    }
 
     /// Handles a button press.
     void onPress() { enqueueCmd(CmdItem{.cmd = Cmd::ON_PRESS}); }

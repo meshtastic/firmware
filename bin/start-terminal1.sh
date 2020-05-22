@@ -1,1 +1,1 @@
-pio device monitor -p /dev/ttyUSB1 -b 115200
+pio device monitor -p /dev/ttyUSB1 -b 921600

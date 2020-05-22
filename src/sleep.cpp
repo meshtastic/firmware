@@ -1,30 +1,39 @@
 #include "sleep.h"
-#include "BluetoothUtil.h"
 #include "GPS.h"
-#include "MeshBluetoothService.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "Periodic.h"
 #include "configuration.h"
+#include "error.h"
+
+#include "main.h"
+#include "target_specific.h"
+
+#ifndef NO_ESP32
 #include "esp32/pm.h"
 #include "esp_pm.h"
-#include "main.h"
 #include "rom/rtc.h"
-#include <Wire.h>
 #include <driver/rtc_io.h>
+
+#include "BluetoothUtil.h"
+
+esp_sleep_source_t wakeCause; // the reason we booted this time
+#endif
 
 #ifdef TBEAM_V10
 #include "axp20x.h"
 extern AXP20X_Class axp;
 #endif
 
+/// Called to ask any observers if they want to veto sleep. Return 1 to veto or 0 to allow sleep to happen
+Observable<void *> preflightSleep;
+
+/// Called to tell observers we are now entering sleep and you should prepare.  Must return 0
+/// notifySleep will be called for light or deep sleep, notifyDeepSleep is only called for deep sleep
+Observable<void *> notifySleep, notifyDeepSleep;
+
 // deep sleep support
 RTC_DATA_ATTR int bootCount = 0;
-esp_sleep_source_t wakeCause; // the reason we booted this time
-
-#define xstr(s) str(s)
-#define str(s) #s
 
 // -----------------------------------------------------------------------------
 // Application
@@ -38,14 +47,16 @@ esp_sleep_source_t wakeCause; // the reason we booted this time
  */
 void setCPUFast(bool on)
 {
+#ifndef NO_ESP32
     setCpuFrequencyMhz(on ? 240 : 80);
+#endif
 }
 
 void setLed(bool ledOn)
 {
 #ifdef LED_PIN
     // toggle the led so we can get some rough sense of how often loop is pausing
-    digitalWrite(LED_PIN, ledOn);
+    digitalWrite(LED_PIN, ledOn ^ LED_INVERTED);
 #endif
 
 #ifdef TBEAM_V10
@@ -69,6 +80,7 @@ void setGPSPower(bool on)
 // Perform power on init that we do on each wake from deep sleep
 void initDeepSleep()
 {
+#ifndef NO_ESP32
     bootCount++;
     wakeCause = esp_sleep_get_wakeup_cause();
     /*
@@ -96,21 +108,50 @@ void initDeepSleep()
         reason = "timeout";
 
     DEBUG_MSG("booted, wake cause %d (boot count %d), reset_reason=%s\n", wakeCause, bootCount, reason);
+#endif
+}
+
+/// return true if sleep is allowed
+static bool doPreflightSleep()
+{
+    if (preflightSleep.notifyObservers(NULL) != 0)
+        return false; // vetoed
+    else
+        return true;
+}
+
+/// Tell devices we are going to sleep and wait for them to handle things
+static void waitEnterSleep()
+{
+    uint32_t now = millis();
+    while (!doPreflightSleep()) {
+        delay(100); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
+
+        if (millis() - now > 30 * 1000) { // If we wait too long just report an error and go to sleep
+            recordCriticalError(ErrSleepEnterWait);
+            break;
+        }
+    }
+
+    // Code that still needs to be moved into notifyObservers
+    Serial.flush();            // send all our characters before we stop cpu clock
+    setBluetoothEnable(false); // has to be off before calling light sleep
+
+    notifySleep.notifyObservers(NULL);
 }
 
 void doDeepSleep(uint64_t msecToWake)
 {
     DEBUG_MSG("Entering deep sleep for %llu seconds\n", msecToWake / 1000);
 
+#ifndef NO_ESP32
     // not using wifi yet, but once we are this is needed to shutoff the radio hw
     // esp_wifi_stop();
-
-    BLEDevice::deinit(false); // We are required to shutdown bluetooth before deep or light sleep
+    waitEnterSleep();
+    notifySleep.notifyObservers(NULL); // also tell the regular sleep handlers
+    notifyDeepSleep.notifyObservers(NULL);
 
     screen.setOn(false); // datasheet says this will draw only 10ua
-
-    // Put radio in sleep mode (will still draw power but only 0.2uA)
-    service.radio.radioIf.sleep();
 
     nodeDB.saveToDisk();
 
@@ -189,8 +230,10 @@ void doDeepSleep(uint64_t msecToWake)
 
     esp_sleep_enable_timer_wakeup(msecToWake * 1000ULL); // call expects usecs
     esp_deep_sleep_start();                              // TBD mA sleep current (battery)
+#endif
 }
 
+#ifndef NO_ESP32
 /**
  * enter light sleep (preserves ram but stops everything about CPU).
  *
@@ -199,10 +242,10 @@ void doDeepSleep(uint64_t msecToWake)
 esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more reasonable default
 {
     // DEBUG_MSG("Enter light sleep\n");
-    uint64_t sleepUsec = sleepMsec * 1000LL;
 
-    Serial.flush();            // send all our characters before we stop cpu clock
-    setBluetoothEnable(false); // has to be off before calling light sleep
+    waitEnterSleep();
+
+    uint64_t sleepUsec = sleepMsec * 1000LL;
 
     // NOTE! ESP docs say we must disable bluetooth and wifi before light sleep
 
@@ -227,10 +270,14 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     assert(esp_sleep_enable_gpio_wakeup() == ESP_OK);
     assert(esp_sleep_enable_timer_wakeup(sleepUsec) == ESP_OK);
     assert(esp_light_sleep_start() == ESP_OK);
-    // DEBUG_MSG("Exit light sleep b=%d, rf95=%d, pmu=%d\n", digitalRead(BUTTON_PIN), digitalRead(RF95_IRQ_GPIO),
-    // digitalRead(PMU_IRQ));
-    return esp_sleep_get_wakeup_cause();
+
+    esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+    if (cause == ESP_SLEEP_WAKEUP_GPIO)
+        DEBUG_MSG("Exit light sleep gpio: btn=%d, rf95=%d\n", !digitalRead(BUTTON_PIN), digitalRead(RF95_IRQ_GPIO));
+
+    return cause;
 }
+#endif
 
 #if 0
 // not legal on the stock android ESP build
