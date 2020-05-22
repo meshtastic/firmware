@@ -4,8 +4,8 @@
 
 Minimum items needed to make sure hardware is good.
 
+- install a hardfault handler for null ptrs (if one isn't already installed)
 - test new bootloader on real hardware
-- add a hard fault handler
 - Use the PMU driver on real hardware
 - Use new radio driver on real hardware
 - Use UC1701 LCD driver on real hardware. Still need to create at startup and probe on SPI. Make sure SPI is atomic.
@@ -50,7 +50,6 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 - use the new buttons in the UX
 - currently using soft device SD140, is that ideal?
 - turn on the watchdog timer, require servicing from key application threads
-- install a hardfault handler for null ptrs (if one isn't already installed)
 - nrf52setup should call randomSeed(tbd)
 
 ## Things to do 'someday'
