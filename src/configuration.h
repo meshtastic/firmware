@@ -31,8 +31,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // If app version is not specified we assume we are not being invoked by the build script
 #ifndef APP_VERSION
-#define APP_VERSION 0.0.0   // this def normally comes from build-all.sh
-#define HW_VERSION 1.0 - US // normally comes from build-all.sh and contains the region code
+#error APP_VERSION, HW_VERSION, and HW_VERSION_countryname must be set by the build environment
+//#define APP_VERSION 0.0.0   // this def normally comes from build-all.sh
+//#define HW_VERSION 1.0 - US // normally comes from build-all.sh and contains the region code
 #endif
 
 // -----------------------------------------------------------------------------
@@ -45,41 +46,40 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //#define USE_JTAG
 #endif
 
-#define DEBUG_PORT Serial  // Serial debug port
-#define SERIAL_BAUD 115200 // Serial debug baud rate
-
 #define REQUIRE_RADIO true // If true, we will fail to start if the radio is not found
 
+/// Convert a preprocessor name into a quoted string
 #define xstr(s) str(s)
 #define str(s) #s
 
-// -----------------------------------------------------------------------------
-// DEBUG
-// -----------------------------------------------------------------------------
+/// Convert a preprocessor name into a quoted string and if that string is empty use "unset"
+#define optstr(s) (xstr(s)[0] ? xstr(s) : "unset")
 
-#ifdef DEBUG_PORT
-#define DEBUG_MSG(...) DEBUG_PORT.printf(__VA_ARGS__)
+#ifdef NRF52840_XXAA // All of the NRF52 targets are configured using variant.h, so this section shouldn't need to be
+                     // board specific
+
+//
+// Standard definitions for NRF52 targets
+//
+
+#define NO_ESP32 // Don't use ESP32 libs (mainly bluetooth)
+
+// We bind to the GPS using variant.h instead for this platform (Serial1)
+
+// FIXME, not yet ready for NRF52
+#define RTC_DATA_ATTR
+
+#define LED_PIN PIN_LED1 // LED1 on nrf52840-DK
+#define BUTTON_PIN PIN_BUTTON1
+
+// FIXME, use variant.h defs for all of this!!! (even on the ESP32 targets)
 #else
-#define DEBUG_MSG(...)
-#endif
 
-// -----------------------------------------------------------------------------
-// OLED
-// -----------------------------------------------------------------------------
-
-#define SSD1306_ADDRESS 0x3C
-
-// Flip the screen upside down by default as it makes more sense on T-BEAM
-// devices. Comment this out to not rotate screen 180 degrees.
-#define FLIP_SCREEN_VERTICALLY
-
-// -----------------------------------------------------------------------------
-// GPS
-// -----------------------------------------------------------------------------
+//
+// Standard definitions for ESP32 targets
+//
 
 #define GPS_SERIAL_NUM 1
-#define GPS_BAUDRATE 9600
-
 #define GPS_RX_PIN 34
 #ifdef USE_JTAG
 #define GPS_TX_PIN -1
@@ -95,6 +95,27 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MISO_GPIO 19
 #define MOSI_GPIO 27
 #define NSS_GPIO 18
+
+#endif
+
+// -----------------------------------------------------------------------------
+// OLED
+// -----------------------------------------------------------------------------
+
+#define SSD1306_ADDRESS 0x3C
+
+// Flip the screen upside down by default as it makes more sense on T-BEAM
+// devices. Comment this out to not rotate screen 180 degrees.
+#define FLIP_SCREEN_VERTICALLY
+
+// DEBUG LED
+#define LED_INVERTED 0 // define as 1 if LED is active low (on)
+
+// -----------------------------------------------------------------------------
+// GPS
+// -----------------------------------------------------------------------------
+
+#define GPS_BAUDRATE 9600
 
 #if defined(TBEAM_V10)
 // This string must exactly match the case used in release file names or the android updater won't work
@@ -116,6 +137,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // Leave undefined to disable our PMU IRQ handler
 #define PMU_IRQ 35
+
+#define AXP192_SLAVE_ADDRESS 0x34
 
 #elif defined(TBEAM_V07)
 // This string must exactly match the case used in release file names or the android updater won't work
@@ -198,16 +221,58 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define RF95_IRQ_GPIO 26 // IRQ line for the LORA radio
 #define DIO1_GPIO 35     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
 #define DIO2_GPIO 34     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
-#elif defined(BARE_BOARD)
-// This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "bare"
+#endif
 
+#ifdef ARDUINO_NRF52840_PCA10056
+
+// This string must exactly match the case used in release file names or the android updater won't work
+#define HW_VENDOR "nrf52dk"
+
+// This board uses 0 to be mean LED on
+#undef LED_INVERTED
+#define LED_INVERTED 1
+
+// Uncomment to confirm if we can build the RF95 driver for NRF52
+#if 0
+#define RESET_GPIO 14    // If defined, this pin will be used to reset the LORA radio
+#define RF95_IRQ_GPIO 26 // IRQ line for the LORA radio
+#define DIO1_GPIO 35     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
+#define DIO2_GPIO 34     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
+#endif
+
+#elif defined(ARDUINO_NRF52840_PPR)
+
+#define HW_VENDOR "ppr"
+
+#endif
+
+// -----------------------------------------------------------------------------
+// DEBUG
+// -----------------------------------------------------------------------------
+
+#define SERIAL_BAUD 921600 // Serial debug baud rate
+
+#ifdef NO_ESP32
+#define USE_SEGGER
+#endif
+#ifdef USE_SEGGER
+#include "SEGGER_RTT.h"
+#define DEBUG_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
+#else
+#include "SerialConsole.h"
+
+#define DEBUG_PORT console // Serial debug port
+
+#ifdef DEBUG_PORT
+#define DEBUG_MSG(...) DEBUG_PORT.printf(__VA_ARGS__)
+#else
+#define DEBUG_MSG(...)
+#endif
 #endif
 
 // -----------------------------------------------------------------------------
 // AXP192 (Rev1-specific options)
 // -----------------------------------------------------------------------------
 
-// #define AXP192_SLAVE_ADDRESS  0x34 // Now defined in axp20x.h
 #define GPS_POWER_CTRL_CH 3
 #define LORA_POWER_CTRL_CH 2

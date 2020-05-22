@@ -1,7 +1,7 @@
 # What is Meshtastic?
 
 Meshtastic is a project that lets you use
-inexpensive (\$30 ish) GPS radios as an extensible, super long battery life mesh GPS communicator. These radios are great for hiking, skiing, paragliding - essentially any hobby where you don't have reliable internet access. Each member of your private mesh can always see the location and distance of all other members and any text messages sent to your group chat.
+inexpensive (\$30 ish) GPS radios as an extensible, long battery life, secure, mesh GPS communicator. These radios are great for hiking, skiing, paragliding - essentially any hobby where you don't have reliable internet access. Each member of your private mesh can always see the location and distance of all other members and any text messages sent to your group chat.
 
 The radios automatically create a mesh to forward packets as needed, so everyone in the group can receive messages from even the furthest member. The radios will optionally work with your phone, but no phone is required.
 
@@ -13,6 +13,7 @@ Note: Questions after reading this? See our new [forum](https://meshtastic.disco
 - Applications where closed source GPS communicators just won't cut it (it is easy to add features for glider pilots etc...)
 - Secure long-range communication within groups without depending on cellular providers
 - Finding your lost kids ;-)
+- Through our [python API](https://pypi.org/project/meshtastic/) use these inexpensive radios to easily add mesh networking to your own projects.
 
 [![Youtube video demo](desk-video-screenshot.png)](https://www.youtube.com/watch?v=WlNbMbVZlHI "Meshtastic early demo")
 
@@ -36,8 +37,10 @@ This software is 100% open source and developed by a group of hobbyist experimen
 
 # Updates
 
-Note: Updates are happening almost daily, only major updates are listed below. For more details see our chat, github releases or the Android alpha tester emails.
+Note: Updates are happening almost daily, only major updates are listed below. For more details see our forum.
 
+- 04/28/2020 - 0.6.0 [Python API](https://pypi.org/project/meshtastic/) released. Makes it easy to use meshtastic devices as "zero config / just works" mesh transport adapters for other projects.
+- 04/20/2020 - 0.4.3 Pretty solid now both for the android app and the device code. Many people have donated translations and code. Probably going to call it a beta soon.
 - 03/03/2020 - 0.0.9 of the Android app and device code is released. Still an alpha but fairly functional.
 - 02/25/2020 - 0.0.4 of the Android app is released. This is a very early alpha, see below to join the alpha-testers group.
 - 02/23/2020 - 0.0.4 release. Still very bleeding edge but much closer to the final power management, a charged T-BEAM should run for many days with this load. If you'd like to try it, we'd love your feedback. Click [here](https://github.com/meshtastic/Meshtastic-esp32/blob/master/README.md) for instructions.
@@ -45,11 +48,11 @@ Note: Updates are happening almost daily, only major updates are listed below. F
 
 ## Meshtastic Android app
 
-Once out of alpha the companion Android application will be released here:
+Our Android application is available here:
 
 [![Download at https://play.google.com/store/apps/details?id=com.geeksville.mesh](https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png)](https://play.google.com/store/apps/details?id=com.geeksville.mesh&referrer=utm_source%3Dhomepage%26anid%3Dadmob)
 
-But if you want the bleeding edge app now, we'd love to have your help testing. Three steps to opt-in to the alpha- test:
+The link above will return older more stable releases. We would prefer if you join our alpha-test group, because the application is rapidly improving. Three steps to opt-in to the alpha- test:
 
 1. Join [this Google group](https://groups.google.com/forum/#!forum/meshtastic-alpha-testers) with the account you use in Google Play.
 2. Go to this [URL](https://play.google.com/apps/testing/com.geeksville.mesh) to opt-in to the alpha test.

@@ -7,6 +7,7 @@
 #include "main.h"
 #include "screen.h"
 #include "sleep.h"
+#include "target_specific.h"
 
 static void sdsEnter()
 {
@@ -30,22 +31,6 @@ static void lsEnter()
     DEBUG_MSG("lsEnter begin, ls_secs=%u\n", radioConfig.preferences.ls_secs);
     screen.setOn(false);
 
-    uint32_t now = millis();
-    while (!service.radio.radioIf.canSleep()) {
-        delay(10); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
-
-        if (millis() - now > 30 * 1000) { // If we wait too long just report an error and go to sleep
-            recordCriticalError(ErrSleepEnterWait);
-            break;
-        }
-    }
-
-    gps.prepareSleep(); // abandon in-process parsing
-
-    // if (!isUSBPowered)      // FIXME - temp hack until we can put gps in sleep mode, if we have AC when we go to sleep then
-    // leave GPS on
-    //    setGPSPower(false); // kill GPS power
-
     DEBUG_MSG("lsEnter end\n");
 }
 
@@ -53,6 +38,7 @@ static void lsIdle()
 {
     DEBUG_MSG("lsIdle begin ls_secs=%u\n", radioConfig.preferences.ls_secs);
 
+#ifndef NO_ESP32
     uint32_t secsSlept = 0;
     esp_sleep_source_t wakeCause = ESP_SLEEP_WAKEUP_UNDEFINED;
     bool reached_ls_secs = false;
@@ -95,12 +81,13 @@ static void lsIdle()
             powerFSM.trigger(EVENT_WAKE_TIMER);
         }
     }
+#endif
 }
 
 static void lsExit()
 {
     // setGPSPower(true); // restore GPS power
-    gps.startLock();
+    gps->startLock();
 }
 
 static void nbEnter()
@@ -166,6 +153,13 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_PRESS, NULL, "Press");
     powerFSM.add_transition(&stateON, &stateON, EVENT_PRESS, screenPress, "Press"); // reenter On to restart our timers
 
+    // Handle critically low power battery by forcing deep sleep
+    powerFSM.add_transition(&stateBOOT, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
+    powerFSM.add_transition(&stateLS, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
+    powerFSM.add_transition(&stateNB, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
+    powerFSM.add_transition(&stateDARK, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
+    powerFSM.add_transition(&stateON, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
+
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_BLUETOOTH_PAIR, NULL, "Bluetooth pairing");
     powerFSM.add_transition(&stateON, &stateON, EVENT_BLUETOOTH_PAIR, NULL, "Bluetooth pairing");
 
@@ -186,10 +180,13 @@ void PowerFSM_setup()
 
     powerFSM.add_timed_transition(&stateDARK, &stateNB, radioConfig.preferences.phone_timeout_secs * 1000, NULL, "Phone timeout");
 
+#ifndef NRF52_SERIES
+    // We never enter light-sleep state on NRF52 (because the CPU uses so little power normally)
     powerFSM.add_timed_transition(&stateNB, &stateLS, radioConfig.preferences.min_wake_secs * 1000, NULL, "Min wake timeout");
 
     powerFSM.add_timed_transition(&stateDARK, &stateLS, radioConfig.preferences.wait_bluetooth_secs * 1000, NULL,
                                   "Bluetooth timeout");
+#endif
 
     powerFSM.add_timed_transition(&stateLS, &stateSDS, radioConfig.preferences.mesh_sds_timeout_secs * 1000, NULL,
                                   "mesh timeout");

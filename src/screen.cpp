@@ -21,7 +21,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <OLEDDisplay.h>
-#include <Wire.h>
 
 #include "GPS.h"
 #include "NodeDB.h"
@@ -55,7 +54,6 @@ static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     // draw an xbm image.
     // Please note that everything that should be transitioned
     // needs to be drawn relative to x and y
-
     display->drawXbm(x + 32, y, icon_width, icon_height, (const uint8_t *)icon_bits);
 
     display->setFont(ArialMT_Plain_16);
@@ -83,7 +81,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     MeshPacket &mp = devicestate.rx_text_message;
     NodeInfo *node = nodeDB.getNode(mp.from);
     // DEBUG_MSG("drawing text message from 0x%x: %s\n", mp.from,
-    // mp.payload.variant.data.payload.bytes);
+    // mp.decoded.variant.data.decoded.bytes);
 
     // Demo for drawStringMaxWidth:
     // with the third parameter you can define the width after which words will
@@ -96,7 +94,8 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
 
     // the max length of this buffer is much longer than we can possibly print
     static char tempBuf[96];
-    snprintf(tempBuf, sizeof(tempBuf), "         %s", mp.payload.variant.data.payload.bytes);
+    assert(mp.decoded.which_payload == SubPacket_data_tag);
+    snprintf(tempBuf, sizeof(tempBuf), "         %s", mp.decoded.data.payload.bytes);
 
     display->drawStringMaxWidth(4 + x, 10 + y, 128, tempBuf);
 }
@@ -281,13 +280,16 @@ static float estimatedHeading(double lat, double lon)
 /// valid lat/lon
 static bool hasPosition(NodeInfo *n)
 {
-    return n->has_position && (n->position.latitude != 0 || n->position.longitude != 0);
+    return n->has_position && (n->position.latitude_i != 0 || n->position.longitude_i != 0);
 }
 
 /// We will skip one node - the one for us, so we just blindly loop over all
 /// nodes
 static size_t nodeIndex;
 static int8_t prevFrame = -1;
+
+/// Convert an integer GPS coords to a floating point
+#define DegD(i) (i * 1e-7)
 
 static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -314,16 +316,16 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     const char *username = node->has_user ? node->user.long_name : "Unknown Name";
 
     static char signalStr[20];
-    snprintf(signalStr, sizeof(signalStr), "Signal: %d", node->snr);
+    snprintf(signalStr, sizeof(signalStr), "Signal: %.0f", node->snr);
 
     uint32_t agoSecs = sinceLastSeen(node);
     static char lastStr[20];
     if (agoSecs < 120) // last 2 mins?
-        snprintf(lastStr, sizeof(lastStr), "%d seconds ago", agoSecs);
+        snprintf(lastStr, sizeof(lastStr), "%u seconds ago", agoSecs);
     else if (agoSecs < 120 * 60) // last 2 hrs
-        snprintf(lastStr, sizeof(lastStr), "%d minutes ago", agoSecs / 60);
+        snprintf(lastStr, sizeof(lastStr), "%u minutes ago", agoSecs / 60);
     else
-        snprintf(lastStr, sizeof(lastStr), "%d hours ago", agoSecs / 60 / 60);
+        snprintf(lastStr, sizeof(lastStr), "%u hours ago", agoSecs / 60 / 60);
 
     static float simRadian;
     simRadian += 0.1; // For testing, have the compass spin unless both
@@ -335,7 +337,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     NodeInfo *ourNode = nodeDB.getNode(nodeDB.getNodeNum());
     if (ourNode && hasPosition(ourNode) && hasPosition(node)) {
         Position &op = ourNode->position, &p = node->position;
-        float d = latLongToMeter(p.latitude, p.longitude, op.latitude, op.longitude);
+        float d = latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
         if (d < 2000)
             snprintf(distStr, sizeof(distStr), "%.0f m", d);
         else
@@ -343,8 +345,8 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 
         // FIXME, also keep the guess at the operators heading and add/substract
         // it.  currently we don't do this and instead draw north up only.
-        float bearingToOther = bearing(p.latitude, p.longitude, op.latitude, op.longitude);
-        float myHeading = estimatedHeading(p.latitude, p.longitude);
+        float bearingToOther = bearing(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
+        float myHeading = estimatedHeading(DegD(p.latitude_i), DegD(p.longitude_i));
         headingRadian = bearingToOther - myHeading;
     } else {
         // Debug info for gps lock errors
@@ -383,7 +385,6 @@ void _screen_header()
     if (!disp)
         return;
 
-
     // Message count
     //snprintf(buffer, sizeof(buffer), "#%03d", ttn_get_count() % 1000);
     //display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -401,7 +402,7 @@ void _screen_header()
 }
 #endif
 
-Screen::Screen(uint8_t address, uint8_t sda, uint8_t scl) : cmdQueue(32), dispdev(address, sda, scl), ui(&dispdev) {}
+Screen::Screen(uint8_t address, int sda, int scl) : cmdQueue(32), dispdev(address, sda, scl), ui(&dispdev) {}
 
 void Screen::handleSetOn(bool on)
 {
@@ -411,6 +412,7 @@ void Screen::handleSetOn(bool on)
     if (on != screenOn) {
         if (on) {
             DEBUG_MSG("Turning on screen\n");
+            dispdev.displayOn();
             dispdev.displayOn();
         } else {
             DEBUG_MSG("Turning off screen\n");
@@ -422,6 +424,8 @@ void Screen::handleSetOn(bool on)
 
 void Screen::setup()
 {
+    PeriodicTask::setup();
+
     // We don't set useDisplay until setup() is called, because some boards have a declaration of this object but the device
     // is never found when probing i2c and therefore we don't call setup and never want to do (invalid) accesses to this device.
     useDisplay = true;
@@ -592,7 +596,7 @@ void Screen::handleStartBluetoothPinScreen(uint32_t pin)
 
     static FrameCallback btFrames[] = {drawFrameBluetooth};
 
-    snprintf(btPIN, sizeof(btPIN), "%06d", pin);
+    snprintf(btPIN, sizeof(btPIN), "%06u", pin);
 
     ui.disableAllIndicators();
     ui.setFrames(btFrames, 1);

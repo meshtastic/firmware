@@ -1,4 +1,4 @@
-# Meshtastic-esp32
+# Meshtastic-device
 
 This is the device side code for the [meshtastic.org](https://www.meshtastic.org) project.
 
@@ -20,9 +20,25 @@ This software is 100% open source and developed by a group of hobbyist experimen
 
 ## Supported hardware
 
-We currently support three models of radios. The [TTGO T-Beam](https://www.aliexpress.com/item/4000119152086.html), [TTGO LORA32](https://www.banggood.com/LILYGO-TTGO-LORA32-868Mhz-SX1276-ESP32-Oled-Display-bluetooth-WIFI-Lora-Development-Module-Board-p-1248652.html?cur_warehouse=UK) and the [Heltec LoRa 32](https://heltec.org/project/wifi-lora-32/). Most users should buy the T-Beam and an 18650 battery (total cost less than \$35). Make sure to buy the frequency range which is legal for your country (915MHz for US/JP/AU/NZ, 470MHz for CN, 433MHz and 870MHz for EU). Getting a version that includes a screen is optional, but highly recommended.
+We currently support three models of radios.
+- TTGO T-Beam
+    - [T-Beam V1.0 w/ NEO-M8N](https://www.aliexpress.com/item/33047631119.html) (Recommended)
+    - [T-Beam V1.0 w/ NEO-6M](https://www.aliexpress.com/item/33050391850.html)
+    - 3D printable cases
+      - [T-Beam V0](https://www.thingiverse.com/thing:3773717)
+      - [T-Beam V1](https://www.thingiverse.com/thing:3830711)
 
-See (meshtastic.org) for 3D printable cases.
+- [TTGO LORA32](https://www.aliexpress.com/item/4000211331316.html) - No GPS
+
+- [Heltec LoRa 32](https://heltec.org/project/wifi-lora-32/) - No GPS
+    - [3D Printable case](https://www.thingiverse.com/thing:3125854)
+
+**Make sure to get the frequency for your country**
+  - US/JP/AU/NZ - 915MHz
+  - CN - 470MHz
+  - EU - 870MHz
+  
+Getting a version that includes a screen is optional, but highly recommended.
 
 ## Firmware Installation
 
@@ -35,12 +51,13 @@ Please post comments on our [group chat](https://meshtastic.discourse.group/) if
 1. Download and unzip the latest Meshtastic firmware [release](https://github.com/meshtastic/Meshtastic-esp32/releases).
 2. Download [ESPHome Flasher](https://github.com/esphome/esphome-flasher/releases) (either x86-32bit Windows or x64-64 bit Windows).
 3. Connect your radio to your USB port and open ESPHome Flasher.
-4. If your board is not showing under Serial Port then you likely need to install the drivers for the CP210X serial chip. In Windows you can check by searching “Device Manager” and ensuring the device is shown under “Ports”. 
-5. If there is an error, download the drivers [here](https://www.silabs.com/products/development-tools/software/usb-to-uart-bridge-vcp-drivers), then unzip and run the Installer application. 
+4. If your board is not showing under Serial Port then you likely need to install the drivers for the CP210X serial chip. In Windows you can check by searching “Device Manager” and ensuring the device is shown under “Ports”.
+5. If there is an error, download the drivers [here](https://www.silabs.com/products/development-tools/software/usb-to-uart-bridge-vcp-drivers), then unzip and run the Installer application.
 6. In ESPHome Flasher, refresh the serial ports and select your board.
 7. Browse to the previously downloaded firmware and select the correct firmware based on the board type, country and frequency.
 8. Select Flash ESP.
-9. Once finished, the terminal should start displaying debug messages including the Bluetooth passphrase when you try connect from your phone (handy if you don’t have a screen).
+9. Once complete, “Done! Flashing is complete!” will be shown.
+10. Debug messages sent from the Meshtastic device can be viewed with a terminal program such as [PuTTY](https://www.putty.org/) (Windows only). Within PuTTY, click “Serial”, enter the “Serial line” com port (can be found at step 4), enter “Speed” as 921600, then click “Open”. 
 
 ### Installing from a commandline
 
@@ -70,7 +87,10 @@ Hard resetting via RTS pin...
 ```
 
 5. cd into the directory where the release zip file was expanded.
-6. Install the correct firmware for your board with "device-install.sh firmware-_board_-_country_.bin". For instance "./device-install.sh firmware-HELTEC-US-0.0.3.bin".
+6. Install the correct firmware for your board with `device-install.sh firmware-_board_-_country_.bin`. 
+    - Example: `./device-install.sh firmware-HELTEC-US-0.0.3.bin`.
+7. To update run `device-update.sh firmware-_board_-_country_.bin`
+    - Example: `./device-update.sh firmware-HELTEC-US-0.0.3.bin`.
 
 Note: If you have previously installed meshtastic, you don't need to run this full script instead just run "esptool.py --baud 921600 write*flash 0x10000 firmware-\_board*-_country_.bin". This will be faster, also all of your current preferences will be preserved.
 
@@ -143,14 +163,18 @@ Hard resetting via RTS pin...
 7. The board will boot and show the Meshtastic logo.
 8. Please post a comment on our chat so we know if these instructions worked for you ;-). If you find bugs/have-questions post there also - we will be rapidly iterating over the next few weeks.
 
-## Meshtastic Android app
+# Meshtastic Android app
 
 The source code for the (optional) Meshtastic Android app is [here](https://github.com/meshtastic/Meshtastic-Android).
 
-Alpha test builds are current available by opting into our alpha test group. See (www.meshtastic.org) for instructions.
+Alpha test builds available by opting into our alpha test group. See (www.meshtastic.org) for instructions.
 
-After our rate of change slows a bit, we will make beta builds available here (without needing to join the alphatest group):
+If you don't want to live on the 'bleeding edge' you can opt-in to the beta-test or use the released version:
 [![Download at https://play.google.com/store/apps/details?id=com.geeksville.mesh](https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png)](https://play.google.com/store/apps/details?id=com.geeksville.mesh&referrer=utm_source%3Dgithub%26utm_medium%3Desp32-readme%26utm_campaign%3Dmeshtastic-esp32%2520readme%26anid%3Dadmob&pcampaignid=pcampaignidMKT-Other-global-all-co-prtnr-py-PartBadge-Mar2515-1)
+
+# Python API
+
+We offer a [python API](https://github.com/meshtastic/Meshtastic-python) that makes it easy to use these devices to provide mesh networking for your custom projects.
 
 # Development
 
