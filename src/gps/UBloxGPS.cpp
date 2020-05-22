@@ -87,7 +87,7 @@ void UBloxGPS::doTask()
     // Hmmm my fix type reading returns zeros for fix, which doesn't seem correct, because it is still sptting out positions
     // turn off for now
     // fixtype = ublox.getFixType();
-    DEBUG_MSG("fix type %d\n", fixtype);
+    // DEBUG_MSG("fix type %d\n", fixtype);
 
     // DEBUG_MSG("sec %d\n", ublox.getSecond());
     // DEBUG_MSG("lat %d\n", ublox.getLatitude());

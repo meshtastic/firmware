@@ -61,6 +61,8 @@ class PacketHistory
 
     /**
      * Update recentBroadcasts and return true if we have already seen this packet
+     *
+     * @param withUpdate if true and not found we add an entry to recentPackets
      */
-    bool wasSeenRecently(const MeshPacket *p);
+    bool wasSeenRecently(const MeshPacket *p, bool withUpdate = true);
 };

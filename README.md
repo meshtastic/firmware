@@ -56,7 +56,8 @@ Please post comments on our [group chat](https://meshtastic.discourse.group/) if
 6. In ESPHome Flasher, refresh the serial ports and select your board.
 7. Browse to the previously downloaded firmware and select the correct firmware based on the board type, country and frequency.
 8. Select Flash ESP.
-9. Once finished, the terminal should start displaying debug messages including the Bluetooth passphrase when you try connect from your phone (handy if you don’t have a screen).
+9. Once complete, “Done! Flashing is complete!” will be shown.
+10. Debug messages sent from the Meshtastic device can be viewed with a terminal program such as [PuTTY](https://www.putty.org/) (Windows only). Within PuTTY, click “Serial”, enter the “Serial line” com port (can be found at step 4), enter “Speed” as 921600, then click “Open”. 
 
 ### Installing from a commandline
 
