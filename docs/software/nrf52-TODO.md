@@ -17,13 +17,13 @@ Minimum items needed to make sure hardware is good.
 
 Needed to be fully functional at least at the same level of the ESP32 boards. At this point users would probably want them.
 
+- DONE get serial API working
 - get full BLE api working
 - make a file system implementation (preferably one that can see the files the bootloader also sees) - use https://infocenter.nordicsemi.com/topic/com.nordic.infocenter.sdk5.v15.3.0/lib_fds_usage.html?cp=7_5_0_3_55_3
 - make power management/sleep work properly
 - make a settimeofday implementation
 - DONE increase preamble length? - will break other clients? so all devices must update
 - DONE enable BLE DFU somehow
-- set appversion/hwversion
 - report appversion/hwversion in BLE
 - use new LCD driver from screen.cpp. Still need to hook it to a subclass of (poorly named) OLEDDisplay, and override display() to stream bytes out to the screen.
 - we need to enable the external xtal for the sx1262 (on dio3)
@@ -83,6 +83,8 @@ Nice ideas worth considering someday...
 
 - Currently using Nordic PCA10059 Dongle hardware
 - https://community.platformio.org/t/same-bootloader-same-softdevice-different-board-different-pins/11411/9
+
+- To make Segger JLink more reliable, turn off its fake filesystem. "JLinkExe MSDDisable" per https://learn.adafruit.com/circuitpython-on-the-nrf52/nrf52840-bootloader
 
 ## Done
 
