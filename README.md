@@ -92,7 +92,7 @@ Hard resetting via RTS pin...
 7. To update run `device-update.sh firmware-_board_-_country_.bin`
     - Example: `./device-update.sh firmware-HELTEC-US-0.0.3.bin`.
 
-Note: If you have previously installed meshtastic, you don't need to run this full script instead just run "esptool.py --baud 921600 write*flash 0x10000 firmware-\_board*-_country_.bin". This will be faster, also all of your current preferences will be preserved.
+Note: If you have previously installed meshtastic, you don't need to run this full script instead just run `esptool.py --baud 921600 write_flash 0x10000 firmware-_board_-_country_-_version_.bin`. This will be faster, also all of your current preferences will be preserved.
 
 You should see something like this:
 
