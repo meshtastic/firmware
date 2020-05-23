@@ -36,7 +36,7 @@ ErrorCode ReliableRouter::send(MeshPacket *p)
  *
  * Otherwise, let superclass handle it.
  */
-void ReliableRouter::handleReceived(MeshPacket *p)
+void ReliableRouter::sniffReceived(const MeshPacket *p)
 {
     NodeNum ourNode = getNodeNum();
 
@@ -55,28 +55,26 @@ void ReliableRouter::handleReceived(MeshPacket *p)
             sendAckNak(true, p->from, p->id);
         }
 
-        if (perhapsDecode(p)) {
-            // If the payload is valid, look for ack/nak
+        // If the payload is valid, look for ack/nak
 
-            PacketId ackId = p->decoded.which_ack == SubPacket_success_id_tag ? p->decoded.ack.success_id : 0;
-            PacketId nakId = p->decoded.which_ack == SubPacket_fail_id_tag ? p->decoded.ack.fail_id : 0;
+        PacketId ackId = p->decoded.which_ack == SubPacket_success_id_tag ? p->decoded.ack.success_id : 0;
+        PacketId nakId = p->decoded.which_ack == SubPacket_fail_id_tag ? p->decoded.ack.fail_id : 0;
 
-            // we are careful to only read/update wasSeenRecently _after_ confirming this is an ack (to not mess
-            // up broadcasts)
-            if ((ackId || nakId) && !wasSeenRecently(p, false)) {
-                if (ackId) {
-                    DEBUG_MSG("Received a ack=%d, stopping retransmissions\n", ackId);
-                    stopRetransmission(p->to, ackId);
-                } else {
-                    DEBUG_MSG("Received a nak=%d, stopping retransmissions\n", nakId);
-                    stopRetransmission(p->to, nakId);
-                }
+        // we are careful to only read/update wasSeenRecently _after_ confirming this is an ack (to not mess
+        // up broadcasts)
+        if ((ackId || nakId) && !wasSeenRecently(p, false)) {
+            if (ackId) {
+                DEBUG_MSG("Received a ack=%d, stopping retransmissions\n", ackId);
+                stopRetransmission(p->to, ackId);
+            } else {
+                DEBUG_MSG("Received a nak=%d, stopping retransmissions\n", nakId);
+                stopRetransmission(p->to, nakId);
             }
         }
     }
 
     // handle the packet as normal
-    FloodingRouter::handleReceived(p);
+    FloodingRouter::sniffReceived(p);
 }
 
 /**

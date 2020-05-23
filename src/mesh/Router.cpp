@@ -40,7 +40,7 @@ void Router::loop()
 {
     MeshPacket *mp;
     while ((mp = fromRadioQueue.dequeuePtr(0)) != NULL) {
-        handleReceived(mp);
+        perhapsHandleReceived(mp);
     }
 }
 
@@ -191,6 +191,12 @@ void Router::handleReceived(MeshPacket *p)
             notifyPacketReceived.notifyObservers(p);
         }
     }
+}
+
+void Router::perhapsHandleReceived(MeshPacket *p)
+{
+    if (!shouldFilterReceived(p))
+        handleReceived(p);
 
     packetPool.release(p);
 }
