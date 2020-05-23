@@ -2,7 +2,6 @@
 #include "MeshTypes.h"
 #include "OSTimer.h"
 #include "mesh-pb-constants.h"
-#include <NodeDB.h> // FIXME, this class shouldn't need to look into nodedb
 #include <configuration.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -284,28 +283,31 @@ void RadioLibInterface::handleReceiveInterrupt()
             rxBad++;
         } else {
             const PacketHeader *h = (PacketHeader *)radiobuf;
-            uint8_t ourAddr = nodeDB.getNodeNum();
 
             rxGood++;
-            if (h->to != 255 && h->to != ourAddr) {
-                DEBUG_MSG("ignoring packet not sent to us\n");
-            } else {
-                MeshPacket *mp = packetPool.allocZeroed();
 
-                mp->from = h->from;
-                mp->to = h->to;
-                mp->id = h->id;
-                addReceiveMetadata(mp);
+            // Note: we deliver _all_ packets to our router (i.e. our interface is intentionally promiscuous).
+            // This allows the router and other apps on our node to sniff packets (usually routing) between other
+            // nodes.
+            MeshPacket *mp = packetPool.allocZeroed();
 
-                mp->which_payload = MeshPacket_encrypted_tag; // Mark that the payload is still encrypted at this point
-                assert(payloadLen <= sizeof(mp->encrypted.bytes));
-                memcpy(mp->encrypted.bytes, payload, payloadLen);
-                mp->encrypted.size = payloadLen;
+            mp->from = h->from;
+            mp->to = h->to;
+            mp->id = h->id;
+            assert(HOP_MAX <= PACKET_FLAGS_HOP_MASK); // If hopmax changes, carefully check this code
+            mp->hop_limit = h->flags & PACKET_FLAGS_HOP_MASK;
+            mp->want_ack = !!(h->flags & PACKET_FLAGS_WANT_ACK_MASK);
 
-                DEBUG_MSG("Lora RX interrupt from=0x%x, id=%u\n", mp->from, mp->id);
+            addReceiveMetadata(mp);
 
-                deliverToReceiver(mp);
-            }
+            mp->which_payload = MeshPacket_encrypted_tag; // Mark that the payload is still encrypted at this point
+            assert(payloadLen <= sizeof(mp->encrypted.bytes));
+            memcpy(mp->encrypted.bytes, payload, payloadLen);
+            mp->encrypted.size = payloadLen;
+
+            DEBUG_MSG("Lora RX interrupt from=0x%x, id=%u\n", mp->from, mp->id);
+
+            deliverToReceiver(mp);
         }
     }
 }
@@ -313,7 +315,7 @@ void RadioLibInterface::handleReceiveInterrupt()
 /** start an immediate transmit */
 void RadioLibInterface::startSend(MeshPacket *txp)
 {
-    DEBUG_MSG("Starting low level send from=0x%x, id=%u!\n", txp->from, txp->id);
+    DEBUG_MSG("Starting low level send from=0x%x, id=%u, want_ack=%d\n", txp->from, txp->id, txp->want_ack);
     setStandby(); // Cancel any already in process receives
 
     size_t numbytes = beginSending(txp);
