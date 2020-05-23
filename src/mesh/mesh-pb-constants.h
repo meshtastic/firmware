@@ -25,3 +25,13 @@ bool readcb(pb_istream_t *stream, uint8_t *buf, size_t count);
 
 /// Write to an arduino file
 bool writecb(pb_ostream_t *stream, const uint8_t *buf, size_t count);
+
+/** is_in_repeated is a macro/function that returns true if a specified word appears in a repeated protobuf array.
+ * It relies on the following naming conventions from nanopb:
+ * 
+ * pb_size_t ignore_incoming_count;
+ * uint32_t ignore_incoming[3];
+ */
+bool is_in_helper(uint32_t n, const uint32_t *array, pb_size_t count);
+
+#define is_in_repeated(name, n) is_in_helper(n, name, name##_count)

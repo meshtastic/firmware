@@ -195,7 +195,15 @@ void Router::handleReceived(MeshPacket *p)
 
 void Router::perhapsHandleReceived(MeshPacket *p)
 {
-    if (!shouldFilterReceived(p))
+    assert(radioConfig.has_preferences);
+    bool inIgnore = is_in_repeated(radioConfig.preferences.ignore_incoming, p->from);
+
+    if (inIgnore)
+        DEBUG_MSG("Ignoring incoming message, 0x%x is in our ignore list\n", p->from);
+
+    // Note: we avoid calling shouldFilterReceived if we are supposed to ignore certain nodes - because some overrides might
+    // cache/learn of the existence of nodes (i.e. FloodRouter) that they should not
+    if (!inIgnore && !shouldFilterReceived(p))
         handleReceived(p);
 
     packetPool.release(p);
