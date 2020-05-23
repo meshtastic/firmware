@@ -36,4 +36,11 @@ class DSRRouter : public ReliableRouter
     /** Not in our route cache, rebroadcast on their behalf (after adding ourselves to the request route)
      */
     void resendRouteRequest(const MeshPacket *p);
+
+    /**
+     * Record that forwarder can reach dest for us, but they will need numHops to get there.
+     * If our routing tables already have something that can reach that node in fewer hops we will keep the existing route
+     * instead.
+     */
+    void setRoute(NodeNum dest, NodeNum forwarder, uint8_t numHops);
 };
