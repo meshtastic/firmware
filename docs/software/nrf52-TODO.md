@@ -37,6 +37,7 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 
 ## Items to be 'feature complete'
 
+- change packet numbers to be 32 bits
 - check datasheet about sx1262 temperature compensation
 - stop polling for GPS characters, instead stay blocked on read in a thread
 - use SX126x::startReceiveDutyCycleAuto to save power by sleeping and briefly waking to check for preamble bits. Change xmit rules to have more preamble bits.
