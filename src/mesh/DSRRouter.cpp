@@ -48,7 +48,8 @@ void DSRRouter::sniffReceived(const MeshPacket *p)
         if (weAreInRoute(p->decoded.request)) {
             DEBUG_MSG("Ignoring a route request that contains us\n");
         } else {
-            updateRoutes(p->decoded.request, false); // Update our routing tables based on the route that came in so far on this request
+            updateRoutes(p->decoded.request,
+                         false); // Update our routing tables based on the route that came in so far on this request
 
             if (p->decoded.dest == getNodeNum()) {
                 // They were looking for us, send back a route reply (the sender address will be first in the list)
@@ -67,12 +68,17 @@ void DSRRouter::sniffReceived(const MeshPacket *p)
         }
     }
 
+    // Handle route reply packets
+    if (p->decoded.which_payload == SubPacket_reply_tag) {
+        updateRoutes(p->decoded.reply, true);
+    }
+
     // Handle regular packets
     if (p->to == getNodeNum()) { // Destined for us (at least for this hop)
 
-        // We need to route this packet
-        if (p->decoded.dest != p->to) {
-            // FIXME
+        // We need to route this packet to some other node
+        if (p->decoded.dest && p->decoded.dest != p->to) {
+            // FIXME if we have a route out, resend the packet to the next hop, otherwise return a nak with no-route available
         }
     }
 
