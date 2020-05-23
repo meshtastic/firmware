@@ -315,7 +315,7 @@ void RadioLibInterface::handleReceiveInterrupt()
 /** start an immediate transmit */
 void RadioLibInterface::startSend(MeshPacket *txp)
 {
-    DEBUG_MSG("Starting low level send from=0x%x, id=%u, want_ack=%d\n", txp->from, txp->id, txp->want_ack);
+    DEBUG_MSG("Starting low level send from=0x%x, to=0x%x, id=%u, want_ack=%d\n", txp->from, txp->to, txp->id, txp->want_ack);
     setStandby(); // Cancel any already in process receives
 
     size_t numbytes = beginSending(txp);

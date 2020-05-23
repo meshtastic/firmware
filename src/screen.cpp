@@ -23,6 +23,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <OLEDDisplay.h>
 
 #include "GPS.h"
+#include "MeshService.h"
 #include "NodeDB.h"
 #include "configuration.h"
 #include "fonts.h"
@@ -78,6 +79,8 @@ static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, 
 /// Draw the last text message we received
 static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    displayedNodeNum = 0; // Not currently showing a node pane
+
     MeshPacket &mp = devicestate.rx_text_message;
     NodeInfo *node = nodeDB.getNode(mp.from);
     // DEBUG_MSG("drawing text message from 0x%x: %s\n", mp.from,
@@ -303,7 +306,12 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         if (n->num == nodeDB.getNodeNum()) {
             // Don't show our node, just skip to next
             nodeIndex = (nodeIndex + 1) % nodeDB.getNumNodes();
+            n = nodeDB.getNodeByIndex(nodeIndex);
         }
+
+        // We just changed to a new node screen, ask that node for updated state
+        displayedNodeNum = n->num;
+        service.sendNetworkPing(displayedNodeNum, true);
     }
 
     NodeInfo *node = nodeDB.getNodeByIndex(nodeIndex);
@@ -629,6 +637,8 @@ void Screen::handleOnPress()
 
 void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    displayedNodeNum = 0; // Not currently showing a node pane
+
     display->setFont(ArialMT_Plain_10);
 
     // The coordinates define the left starting point of the text
