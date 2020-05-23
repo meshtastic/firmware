@@ -92,6 +92,12 @@ class ReliableRouter : public FloodingRouter
      */
     virtual void sniffReceived(const MeshPacket *p);
 
+    /**
+     * Try to find the pending packet record for this ID (or NULL if not found)
+     */
+    PendingPacket *findPendingPacket(NodeNum from, PacketId id) { return findPendingPacket(GlobalPacketId(from, id)); }
+    PendingPacket *findPendingPacket(GlobalPacketId p);
+
   private:
     /**
      * Send an ack or a nak packet back towards whoever sent idFrom
