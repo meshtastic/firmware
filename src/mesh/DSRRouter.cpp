@@ -73,6 +73,15 @@ void DSRRouter::sniffReceived(const MeshPacket *p)
         updateRoutes(p->decoded.reply, true);
     }
 
+    // Learn 0 hop routes by just hearing any adjacent nodes
+    // But treat broadcasts carefully, because when flood broadcasts go out they keep the same original "from".  So we want to
+    // ignore rebroadcasts.
+    if (p->to != NODENUM_BROADCAST || p->hop_limit != HOP_RELIABLE) {
+        setRoute(p->from, p->from, 0); // We are adjacent with zero hops
+    }
+
+    // FIXME - handle any naks we receive (either because they are passing by us or someone naked a message we sent)
+
     // Handle regular packets
     if (p->to == getNodeNum()) { // Destined for us (at least for this hop)
 
@@ -80,6 +89,8 @@ void DSRRouter::sniffReceived(const MeshPacket *p)
         if (p->decoded.dest && p->decoded.dest != p->to) {
             // FIXME if we have a route out, resend the packet to the next hop, otherwise return a nak with no-route available
         }
+
+        // FIXME - handle naks from our adjacent nodes - convert them to route error packets
     }
 
     return ReliableRouter::sniffReceived(p);
