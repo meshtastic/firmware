@@ -42,24 +42,24 @@ void DSRRouter::sniffReceived(const MeshPacket *p)
     // FIXME, update nodedb
 
     // Handle route discovery packets (will be a broadcast message)
-    if (p->decoded.which_payload == SubPacket_request_tag) {
+    if (p->decoded.which_payload == SubPacket_route_request_tag) {
         // FIXME - always start request with the senders nodenum
 
-        if (weAreInRoute(p->decoded.request)) {
+        if (weAreInRoute(p->decoded.route_request)) {
             DEBUG_MSG("Ignoring a route request that contains us\n");
         } else {
-            updateRoutes(p->decoded.request,
+            updateRoutes(p->decoded.route_request,
                          false); // Update our routing tables based on the route that came in so far on this request
 
             if (p->decoded.dest == getNodeNum()) {
                 // They were looking for us, send back a route reply (the sender address will be first in the list)
-                sendRouteReply(p->decoded.request);
+                sendRouteReply(p->decoded.route_request);
             } else {
                 // They were looking for someone else, forward it along (as a zero hop broadcast)
                 NodeNum nextHop = getNextHop(p->decoded.dest);
                 if (nextHop) {
                     // in our route cache, reply to the requester (the sender address will be first in the list)
-                    sendRouteReply(p->decoded.request, nextHop);
+                    sendRouteReply(p->decoded.route_request, nextHop);
                 } else {
                     // Not in our route cache, rebroadcast on their behalf (after adding ourselves to the request route)
                     resendRouteRequest(p);
@@ -69,28 +69,55 @@ void DSRRouter::sniffReceived(const MeshPacket *p)
     }
 
     // Handle route reply packets
-    if (p->decoded.which_payload == SubPacket_reply_tag) {
-        updateRoutes(p->decoded.reply, true);
+    if (p->decoded.which_payload == SubPacket_route_reply_tag) {
+        updateRoutes(p->decoded.route_reply, true);
+    }
+
+    // Handle route error packets
+    if (p->decoded.which_payload == SubPacket_route_error_tag) {
+        // FIXME
     }
 
     // Learn 0 hop routes by just hearing any adjacent nodes
     // But treat broadcasts carefully, because when flood broadcasts go out they keep the same original "from".  So we want to
     // ignore rebroadcasts.
     if (p->to != NODENUM_BROADCAST || p->hop_limit != HOP_RELIABLE) {
-        setRoute(p->from, p->from, 0); // We are adjacent with zero hops
+        addRoute(p->from, p->from, 0); // We are adjacent with zero hops
     }
 
-    // FIXME - handle any naks we receive (either because they are passing by us or someone naked a message we sent)
+    // We simply ignore ACKs - because ReliableRouter will delete the pending packet for us
 
     // Handle regular packets
     if (p->to == getNodeNum()) { // Destined for us (at least for this hop)
 
         // We need to route this packet to some other node
         if (p->decoded.dest && p->decoded.dest != p->to) {
-            // FIXME if we have a route out, resend the packet to the next hop, otherwise return a nak with no-route available
+            // FIXME if we have a route out, resend the packet to the next hop, otherwise return RouteError no-route available
+
+            NodeNum nextHop = getNextHop(p->decoded.dest);
+            if (nextHop) {
+                sendNextHop(nextHop, p); // start a reliable single hop send
+            } else {
+                // We don't have a route out
+                assert(p->decoded.source); // I think this is guaranteed by now
+
+                sendRouteError(p, RouteError_NO_ROUTE);
+            }
+
+            // FIXME, stop local processing of this packet
         }
 
-        // FIXME - handle naks from our adjacent nodes - convert them to route error packets
+        // handle naks - convert them to route error packets
+        // All naks are generated locally, because we failed resending the packet too many times
+        PacketId nakId = p->decoded.which_ack == SubPacket_fail_id_tag ? p->decoded.ack.fail_id : 0;
+        if (nakId) {
+            auto pending = findPendingPacket(p->to, nakId);
+            if (pending && pending->packet->decoded.source) { // if source not set, this was not a multihop packet, just ignore
+                removeRoute(pending->packet->decoded.dest, p->to); // We no longer have a route to the specified node
+
+                sendRouteError(p, RouteError_GOT_NAK);
+            }
+        }
     }
 
     return ReliableRouter::sniffReceived(p);

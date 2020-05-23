@@ -96,6 +96,10 @@ ErrorCode Router::send(MeshPacket *p)
 {
     assert(p->to != nodeDB.getNodeNum()); // should have already been handled by sendLocal
 
+    PacketId nakId = p->decoded.which_ack == SubPacket_fail_id_tag ? p->decoded.ack.fail_id : 0;
+    assert(
+        !nakId); // I don't think we ever send 0hop naks over the wire (other than to the phone), test that assumption with assert
+
     // Never set the want_ack flag on broadcast packets sent over the air.
     if (p->to == NODENUM_BROADCAST)
         p->want_ack = false;

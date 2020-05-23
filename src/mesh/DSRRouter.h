@@ -42,5 +42,20 @@ class DSRRouter : public ReliableRouter
      * If our routing tables already have something that can reach that node in fewer hops we will keep the existing route
      * instead.
      */
-    void setRoute(NodeNum dest, NodeNum forwarder, uint8_t numHops);
+    void addRoute(NodeNum dest, NodeNum forwarder, uint8_t numHops);
+
+    /**
+     * Record that the specified forwarder no longer has a route to the dest
+     */
+    void removeRoute(NodeNum dest, NodeNum forwarder);
+
+    /**
+     * Forward the specified packet to the specified node
+     */
+    void sendNextHop(NodeNum n, const MeshPacket *p);
+
+    /**
+     * Send a route error packet towards whoever originally sent this message
+     */
+    void sendRouteError(const MeshPacket *p, RouteError err);
 };
