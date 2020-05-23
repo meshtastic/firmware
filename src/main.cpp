@@ -33,7 +33,7 @@
 #include "error.h"
 #include "power.h"
 // #include "rom/rtc.h"
-#include "FloodingRouter.h"
+#include "ReliableRouter.h"
 #include "main.h"
 #include "screen.h"
 #include "sleep.h"
@@ -53,7 +53,7 @@ meshtastic::PowerStatus powerStatus;
 bool ssd1306_found;
 bool axp192_found;
 
-FloodingRouter realRouter;
+ReliableRouter realRouter;
 Router &router = realRouter; // Users of router don't care what sort of subclass implements that API
 
 // -----------------------------------------------------------------------------

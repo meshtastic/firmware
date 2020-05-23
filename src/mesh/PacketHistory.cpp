@@ -1,5 +1,6 @@
 #include "PacketHistory.h"
 #include "configuration.h"
+#include "mesh-pb-constants.h"
 
 /// We clear our old flood record five minute after we see the last of it
 #define FLOOD_EXPIRE_TIME (5 * 60 * 1000L)
@@ -13,7 +14,7 @@ PacketHistory::PacketHistory()
 /**
  * Update recentBroadcasts and return true if we have already seen this packet
  */
-bool PacketHistory::wasSeenRecently(const MeshPacket *p)
+bool PacketHistory::wasSeenRecently(const MeshPacket *p, bool withUpdate)
 {
     if (p->id == 0) {
         DEBUG_MSG("Ignoring message with zero id\n");
@@ -29,10 +30,11 @@ bool PacketHistory::wasSeenRecently(const MeshPacket *p)
             recentPackets.erase(recentPackets.begin() + i); // delete old record
         } else {
             if (r.id == p->id && r.sender == p->from) {
-                DEBUG_MSG("Found existing broadcast record for fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+                DEBUG_MSG("Found existing packet record for fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
 
                 // Update the time on this record to now
-                r.rxTimeMsec = now;
+                if (withUpdate)
+                    r.rxTimeMsec = now;
                 return true;
             }
 
@@ -41,12 +43,14 @@ bool PacketHistory::wasSeenRecently(const MeshPacket *p)
     }
 
     // Didn't find an existing record, make one
-    PacketRecord r;
-    r.id = p->id;
-    r.sender = p->from;
-    r.rxTimeMsec = now;
-    recentPackets.push_back(r);
-    DEBUG_MSG("Adding broadcast record for fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+    if (withUpdate) {
+        PacketRecord r;
+        r.id = p->id;
+        r.sender = p->from;
+        r.rxTimeMsec = now;
+        recentPackets.push_back(r);
+        DEBUG_MSG("Adding packet record for fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+    }
 
     return false;
 }

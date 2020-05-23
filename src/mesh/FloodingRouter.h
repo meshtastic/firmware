@@ -27,14 +27,9 @@
   Any entries in recentBroadcasts that are older than X seconds (longer than the
   max time a flood can take) will be discarded.
  */
-class FloodingRouter : public Router, private PacketHistory
+class FloodingRouter : public Router, protected PacketHistory
 {
   private:
-    /**
-     * Packets we've received that we need to resend after a short delay
-     */
-    PointerQueue<MeshPacket> toResend;
-
   public:
     /**
      * Constructor
