@@ -17,7 +17,8 @@ extern "C" {
 typedef enum _RouteError {
     RouteError_NONE = 0,
     RouteError_NO_ROUTE = 1,
-    RouteError_GOT_NAK = 2
+    RouteError_GOT_NAK = 2,
+    RouteError_TIMEOUT = 3
 } RouteError;
 
 typedef enum _Constants {
@@ -140,6 +141,7 @@ typedef struct _SubPacket {
         RouteDiscovery route_reply;
         RouteError route_error;
     };
+    uint32_t original_id;
     bool want_response;
     uint32_t dest;
     pb_size_t which_ack;
@@ -209,8 +211,8 @@ typedef struct _ToRadio {
 
 /* Helper constants for enums */
 #define _RouteError_MIN RouteError_NONE
-#define _RouteError_MAX RouteError_GOT_NAK
-#define _RouteError_ARRAYSIZE ((RouteError)(RouteError_GOT_NAK+1))
+#define _RouteError_MAX RouteError_TIMEOUT
+#define _RouteError_ARRAYSIZE ((RouteError)(RouteError_TIMEOUT+1))
 
 #define _Constants_MIN Constants_Unused
 #define _Constants_MAX Constants_Unused
@@ -230,7 +232,7 @@ typedef struct _ToRadio {
 #define Data_init_default                        {_Data_Type_MIN, {0, {0}}}
 #define User_init_default                        {"", "", "", {0}}
 #define RouteDiscovery_init_default              {0, {0, 0, 0, 0, 0, 0, 0, 0}}
-#define SubPacket_init_default                   {0, {Position_init_default}, 0, 0, 0, {0}, 0}
+#define SubPacket_init_default                   {0, {Position_init_default}, 0, 0, 0, 0, {0}, 0}
 #define MeshPacket_init_default                  {0, 0, 0, {SubPacket_init_default}, 0, 0, 0, 0, 0}
 #define ChannelSettings_init_default             {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, ""}
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default, false, ChannelSettings_init_default}
@@ -246,7 +248,7 @@ typedef struct _ToRadio {
 #define Data_init_zero                           {_Data_Type_MIN, {0, {0}}}
 #define User_init_zero                           {"", "", "", {0}}
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
-#define SubPacket_init_zero                      {0, {Position_init_zero}, 0, 0, 0, {0}, 0}
+#define SubPacket_init_zero                      {0, {Position_init_zero}, 0, 0, 0, 0, {0}, 0}
 #define MeshPacket_init_zero                     {0, 0, 0, {SubPacket_init_zero}, 0, 0, 0, 0, 0}
 #define ChannelSettings_init_zero                {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, ""}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero, false, ChannelSettings_init_zero}
@@ -322,6 +324,7 @@ typedef struct _ToRadio {
 #define SubPacket_want_response_tag              5
 #define SubPacket_dest_tag                       9
 #define SubPacket_source_tag                     12
+#define SubPacket_original_id_tag                2
 #define MeshPacket_decoded_tag                   3
 #define MeshPacket_encrypted_tag                 8
 #define MeshPacket_from_tag                      1
@@ -387,6 +390,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload,user,user),   4) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,route_request,route_request),   6) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,route_reply,route_reply),   7) \
 X(a, STATIC,   ONEOF,    ENUM,     (payload,route_error,route_error),  13) \
+X(a, STATIC,   SINGULAR, UINT32,   original_id,       2) \
 X(a, STATIC,   SINGULAR, BOOL,     want_response,     5) \
 X(a, STATIC,   SINGULAR, UINT32,   dest,              9) \
 X(a, STATIC,   ONEOF,    UINT32,   (ack,success_id,ack.success_id),  10) \
@@ -570,17 +574,17 @@ extern const pb_msgdesc_t ManufacturingData_msg;
 #define Data_size                                256
 #define User_size                                72
 #define RouteDiscovery_size                      88
-#define SubPacket_size                           279
-#define MeshPacket_size                          318
+#define SubPacket_size                           285
+#define MeshPacket_size                          324
 #define ChannelSettings_size                     60
 #define RadioConfig_size                         157
 #define RadioConfig_UserPreferences_size         93
 #define NodeInfo_size                            132
 #define MyNodeInfo_size                          80
-#define DeviceState_size                         15235
+#define DeviceState_size                         15433
 #define DebugString_size                         258
-#define FromRadio_size                           327
-#define ToRadio_size                             321
+#define FromRadio_size                           333
+#define ToRadio_size                             327
 /* ManufacturingData_size depends on runtime parameters */
 
 #ifdef __cplusplus

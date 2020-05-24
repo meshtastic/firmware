@@ -141,6 +141,7 @@ ErrorCode Router::send(MeshPacket *p)
 void Router::sniffReceived(const MeshPacket *p)
 {
     DEBUG_MSG("FIXME-update-db Sniffing packet fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+    // FIXME, update nodedb
 }
 
 bool Router::perhapsDecode(MeshPacket *p)
