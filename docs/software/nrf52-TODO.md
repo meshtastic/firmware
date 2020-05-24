@@ -6,6 +6,7 @@
 
 Minimum items needed to make sure hardware is good.
 
+- find out why we reboot while  debugging
 - install a hardfault handler for null ptrs (if one isn't already installed)
 - test my hackedup bootloader on the real hardware
 - Use the PMU driver on real hardware
@@ -20,7 +21,7 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 
 - DONE get serial API working
 - get full BLE api working
-- make a file system implementation (preferably one that can see the files the bootloader also sees) - use https://infocenter.nordicsemi.com/topic/com.nordic.infocenter.sdk5.v15.3.0/lib_fds_usage.html?cp=7_5_0_3_55_3
+- make a file system implementation (preferably one that can see the files the bootloader also sees) - preferably https://github.com/adafruit/Adafruit_nRF52_Arduino/blob/master/libraries/InternalFileSytem/examples/Internal_ReadWrite/Internal_ReadWrite.ino else use https://infocenter.nordicsemi.com/topic/com.nordic.infocenter.sdk5.v15.3.0/lib_fds_usage.html?cp=7_5_0_3_55_3
 - make power management/sleep work properly
 - make a settimeofday implementation
 - DONE increase preamble length? - will break other clients? so all devices must update
