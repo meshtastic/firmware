@@ -23,8 +23,9 @@ reliable messaging tasks (stage one for DSR):
 
 dsr tasks
 
-- Don't use broadcasts for the network pings (close open github issue)
-- add ignoreSenders to radioconfig to allow testing different mesh topologies by refusing to see certain senders
+- oops I might have broken message reception
+- DONE Don't use broadcasts for the network pings (close open github issue)
+- DONE add ignoreSenders to radioconfig to allow testing different mesh topologies by refusing to see certain senders
 - test multihop delivery with the python framework
 
 optimizations / low priority:
