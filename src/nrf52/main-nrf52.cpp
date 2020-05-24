@@ -67,6 +67,10 @@ PmuBQ25703A pmu;
 
 void nrf52Setup()
 {
+
+    auto why = NRF_POWER->RESETREAS;
+    DEBUG_MSG("Reset reason: 0x%x\n", why);
+
     // Not yet on board
     // pmu.init();
     DEBUG_MSG("FIXME, need to call randomSeed on nrf52!\n");
