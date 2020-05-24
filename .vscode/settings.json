@@ -51,9 +51,12 @@
     },
     "cSpell.words": [
         "Blox",
+        "HFSR",
         "Meshtastic",
         "NEMAGPS",
         "Ublox",
+        "bkpt",
+        "cfsr",
         "descs",
         "ocrypto",
         "protobufs"
