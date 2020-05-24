@@ -7,7 +7,7 @@
 Minimum items needed to make sure hardware is good.
 
 - find out why we reboot while  debugging
-- install a hardfault handler for null ptrs (if one isn't already installed)
+- DONE install a hardfault handler for null ptrs (if one isn't already installed)
 - test my hackedup bootloader on the real hardware
 - Use the PMU driver on real hardware
 - Use new radio driver on real hardware
