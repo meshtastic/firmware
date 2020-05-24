@@ -11,7 +11,7 @@
 #include "crypto/aes_wrap.h"
 #include "mbedtls/aes.h"
 
-#define MAX_BLOCKSIZE 256
+
 
 class ESP32CryptoEngine : public CryptoEngine
 {
