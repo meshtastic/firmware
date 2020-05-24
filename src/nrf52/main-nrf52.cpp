@@ -69,6 +69,7 @@ void nrf52Setup()
 {
 
     auto why = NRF_POWER->RESETREAS;
+    // per https://infocenter.nordicsemi.com/index.jsp?topic=%2Fcom.nordic.infocenter.nrf52832.ps.v1.1%2Fpower.html
     DEBUG_MSG("Reset reason: 0x%x\n", why);
 
     // Not yet on board
