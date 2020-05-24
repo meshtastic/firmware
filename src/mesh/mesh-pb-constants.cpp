@@ -67,7 +67,7 @@ bool writecb(pb_ostream_t *stream, const uint8_t *buf, size_t count)
 
 bool is_in_helper(uint32_t n, const uint32_t *array, pb_size_t count)
 {
-    for (int i = 0; i < count; i++)
+    for (pb_size_t i = 0; i < count; i++)
         if (array[i] == n)
             return true;
 
