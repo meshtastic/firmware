@@ -234,10 +234,10 @@ void setup()
         new SimRadio();
 #endif
 
-    router.addInterface(rIf);
-
     if (!rIf->init())
         recordCriticalError(ErrNoRadio);
+    else
+        router.addInterface(rIf);
 
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
