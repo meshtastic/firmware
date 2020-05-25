@@ -88,13 +88,15 @@ class ReliableRouter : public FloodingRouter
 
   protected:
     /**
-     * Called from loop()
-     * Handle any packet that is received by an interface on this node.
-     * Note: some packets may merely being passed through this node and will be forwarded elsewhere.
-     *
-     * Note: this method will free the provided packet
+     * Look for acks/naks or someone retransmitting us
      */
-    virtual void handleReceived(MeshPacket *p);
+    virtual void sniffReceived(const MeshPacket *p);
+
+    /**
+     * Try to find the pending packet record for this ID (or NULL if not found)
+     */
+    PendingPacket *findPendingPacket(NodeNum from, PacketId id) { return findPendingPacket(GlobalPacketId(from, id)); }
+    PendingPacket *findPendingPacket(GlobalPacketId p);
 
   private:
     /**

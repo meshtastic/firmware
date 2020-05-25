@@ -89,21 +89,32 @@ void SX1262Interface::addReceiveMetadata(MeshPacket *mp)
     mp->rx_snr = lora.getSNR();
 }
 
+// For power draw measurements, helpful to force radio to stay sleeping
+// #define SLEEP_ONLY
+
 void SX1262Interface::startReceive()
 {
+#ifdef SLEEP_ONLY
+    sleep();
+#else
     setStandby();
-    int err = lora.startReceive();
+    // int err = lora.startReceive();
+    int err = lora.startReceiveDutyCycleAuto(); // We use a 32 bit preamble so this should save some power by letting radio sit in
+                                                // standby mostly.
     assert(err == ERR_NONE);
 
     isReceiving = true;
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
+#endif
 }
 
 /** Could we send right now (i.e. either not actively receving or transmitting)? */
 bool SX1262Interface::isActivelyReceiving()
 {
+    // return false; // FIXME
+    // FIXME this is not correct? - often always true - need to add an extra conditional
     return lora.getPacketLength() > 0;
 }
 

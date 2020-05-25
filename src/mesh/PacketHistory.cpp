@@ -1,5 +1,6 @@
 #include "PacketHistory.h"
 #include "configuration.h"
+#include "mesh-pb-constants.h"
 
 /// We clear our old flood record five minute after we see the last of it
 #define FLOOD_EXPIRE_TIME (5 * 60 * 1000L)
