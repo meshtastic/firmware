@@ -1,6 +1,7 @@
 #pragma once
 
 #include "lock.h"
+#include <Arduino.h>
 #include <cstdint>
 #include <unordered_set>
 
@@ -66,7 +67,13 @@ class PeriodicTask
      * Set a new period in msecs (can be called from doTask or elsewhere and the scheduler will cope)
      * While zero this task is disabled and will not run
      */
-    void setPeriod(uint32_t p) { period = p; }
+    void setPeriod(uint32_t p)
+    {
+        lastMsec = millis(); // reset starting from now
+        period = p;
+    }
+
+    uint32_t getPeriod() const { return period; }
 
     /**
      * Syntatic sugar for suspending tasks

@@ -113,9 +113,9 @@ void SX1262Interface::startReceive()
 /** Could we send right now (i.e. either not actively receving or transmitting)? */
 bool SX1262Interface::isActivelyReceiving()
 {
-    return false; // FIXME
-    // FIXME this is not correct - often always true - need to add an extra conditional
-    // return lora.getPacketLength() > 0;
+    // return false; // FIXME
+    // FIXME this is not correct? - often always true - need to add an extra conditional
+    return lora.getPacketLength() > 0;
 }
 
 bool SX1262Interface::sleep()

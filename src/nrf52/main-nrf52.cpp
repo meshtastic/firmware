@@ -43,12 +43,15 @@ void getMacAddr(uint8_t *dmac)
 
 NRF52Bluetooth *nrf52Bluetooth;
 
+// FIXME, turn off soft device access for debugging
+static bool isSoftDeviceAllowed = false;
+
 static bool bleOn = false;
 void setBluetoothEnable(bool on)
 {
     if (on != bleOn) {
         if (on) {
-            if (!nrf52Bluetooth) {
+            if (!nrf52Bluetooth && isSoftDeviceAllowed) {
                 nrf52Bluetooth = new NRF52Bluetooth();
                 nrf52Bluetooth->setup();
             }
