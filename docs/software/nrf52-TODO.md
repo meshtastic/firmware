@@ -6,11 +6,12 @@
 
 Minimum items needed to make sure hardware is good.
 
+- write UC1701 wrapper
+- Test hardfault handler for null ptrs (if one isn't already installed)
 - test my hackedup bootloader on the real hardware
-- add a hard fault handler
 - Use the PMU driver on real hardware
 - Use new radio driver on real hardware
-- Use UC1701 LCD driver on real hardware. Still need to create at startup and probe on SPI
+- Use UC1701 LCD driver on real hardware. Still need to create at startup and probe on SPI. Make sure SPI is atomic.
 - test the LEDs
 - test the buttons
 
@@ -18,28 +19,29 @@ Minimum items needed to make sure hardware is good.
 
 Needed to be fully functional at least at the same level of the ESP32 boards. At this point users would probably want them.
 
-- stop polling for GPS characters, instead stay blocked on read in a thread
-- increase preamble length? - will break other clients? so all devices must update
-- enable BLE DFU somehow
-- set appversion/hwversion
+- DONE get serial API working
+- get full BLE api working
+- make power management/sleep work properly
+- make a settimeofday implementation
+- DONE increase preamble length? - will break other clients? so all devices must update
+- DONE enable BLE DFU somehow
 - report appversion/hwversion in BLE
 - use new LCD driver from screen.cpp. Still need to hook it to a subclass of (poorly named) OLEDDisplay, and override display() to stream bytes out to the screen.
-- get full BLE api working
 - we need to enable the external xtal for the sx1262 (on dio3)
 - figure out which regulator mode the sx1262 is operating in
 - turn on security for BLE, make pairing work
-- make power management/sleep work properly
-- make a settimeofday implementation
-- make a file system implementation (preferably one that can see the files the bootloader also sees) - use https://infocenter.nordicsemi.com/topic/com.nordic.infocenter.sdk5.v15.3.0/lib_fds_usage.html?cp=7_5_0_3_55_3
 - make ble endpoints not require "start config", just have them start in config mode
 - measure power management and confirm battery life
 - use new PMU to provide battery voltage/% full to app (both bluetooth and screen)
-- do initial power measurements
+- do initial power measurements, measure effects of more preamble bits
+- fix activelyReceiving for sx1262
 
 ## Items to be 'feature complete'
 
-- use SX126x::startReceiveDutyCycleAuto to save power by sleeping and briefly waking to check for preamble bits. Change xmit rules to have more preamble bits.
-- turn back on in-radio destaddr checking for RF95
+- change packet numbers to be 32 bits
+- check datasheet about sx1262 temperature compensation
+- enable brownout detection and watchdog
+- stop polling for GPS characters, instead stay blocked on read in a thread
 - figure out what the correct current limit should be for the sx1262, currently we just use the default 100
 - put sx1262 in sleepmode when processor gets shutdown (or rebooted), ideally even for critical faults (to keep power draw low). repurpose deepsleep state for this.
 - good power management tips: https://devzone.nordicsemi.com/nordic/nordic-blog/b/blog/posts/optimizing-power-on-nrf52-designs
@@ -49,7 +51,6 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 - use the new buttons in the UX
 - currently using soft device SD140, is that ideal?
 - turn on the watchdog timer, require servicing from key application threads
-- install a hardfault handler for null ptrs (if one isn't already installed)
 - nrf52setup should call randomSeed(tbd)
 
 ## Things to do 'someday'
@@ -58,7 +59,9 @@ Nice ideas worth considering someday...
 
 - Use flego to me an iOS/linux app? https://felgo.com/doc/qt/qtbluetooth-index/ or
 - Use flutter to make an iOS/linux app? https://github.com/Polidea/FlutterBleLib
-- make a Mfg Controller and device under test classes as examples of custom app code for third party devs.  Make a post about this.  Use a custom payload type code.  Have device under test send a broadcast with max hopcount of 0 for the 'mfgcontroller' payload type.  mfg controller will read SNR and reply.  DOT will declare failure/success and switch to the regular app screen.
+- enable monitor mode debuggin (need to use real jlink): https://devzone.nordicsemi.com/nordic/nordic-blog/b/blog/posts/monitor-mode-debugging-with-j-link-and-gdbeclipse
+- Improve efficiency of PeriodicTimer by only checking the next queued timer event, and carefully sorting based on schedule
+- make a Mfg Controller and device under test classes as examples of custom app code for third party devs. Make a post about this. Use a custom payload type code. Have device under test send a broadcast with max hopcount of 0 for the 'mfgcontroller' payload type. mfg controller will read SNR and reply. DOT will declare failure/success and switch to the regular app screen.
 - Hook Segger RTT to the nordic logging framework. https://devzone.nordicsemi.com/nordic/nordic-blog/b/blog/posts/debugging-with-real-time-terminal
 - Use nordic logging for DEBUG_MSG
 - use the Jumper simulator to run meshes of simulated hardware: https://docs.jumper.io/docs/install.html
@@ -79,6 +82,7 @@ Nice ideas worth considering someday...
   'fromradio'. This would allow removing the 'fromnum' mailbox/notify scheme of the current approach and decrease the number of packet handoffs when a packet is received.
 - Using the preceeding, make a generalized 'nrf52/esp32 ble to internet' bridge service. To let nrf52 apps do MQTT/UDP/HTTP POST/HTTP GET operations to web services.
 - lower advertise interval to save power, lower ble transmit power to save power
+- the SX126x class does SPI transfers on a byte by byte basis, which is very ineffecient.  Much better to do block writes/reads.
 
 ## Old unorganized notes
 
@@ -88,6 +92,8 @@ Nice ideas worth considering someday...
 
 - Currently using Nordic PCA10059 Dongle hardware
 - https://community.platformio.org/t/same-bootloader-same-softdevice-different-board-different-pins/11411/9
+
+- To make Segger JLink more reliable, turn off its fake filesystem. "JLinkExe MSDDisable" per https://learn.adafruit.com/circuitpython-on-the-nrf52/nrf52840-bootloader
 
 ## Done
 
@@ -115,6 +121,10 @@ Nice ideas worth considering someday...
   #define PIN_WIRE_SCL (27)
 - customize the bootloader to use proper button bindings
 - remove the MeshRadio wrapper - we don't need it anymore, just do everything in RadioInterface subclasses.
+- DONE use SX126x::startReceiveDutyCycleAuto to save power by sleeping and briefly waking to check for preamble bits. Change xmit rules to have more preamble bits.
+- scheduleOSCallback doesn't work yet - it is way too fast (causes rapid polling of busyTx, high power draw etc...)
+- find out why we reboot while debugging - it was bluetooth/softdevice
+- make a file system implementation (preferably one that can see the files the bootloader also sees) - preferably https://github.com/adafruit/Adafruit_nRF52_Arduino/blob/master/libraries/InternalFileSytem/examples/Internal_ReadWrite/Internal_ReadWrite.ino else use https://infocenter.nordicsemi.com/topic/com.nordic.infocenter.sdk5.v15.3.0/lib_fds_usage.html?cp=7_5_0_3_55_3
 
 ```
 

@@ -40,7 +40,7 @@ void Router::loop()
 {
     MeshPacket *mp;
     while ((mp = fromRadioQueue.dequeuePtr(0)) != NULL) {
-        handleReceived(mp);
+        perhapsHandleReceived(mp);
     }
 }
 
@@ -96,6 +96,10 @@ ErrorCode Router::send(MeshPacket *p)
 {
     assert(p->to != nodeDB.getNodeNum()); // should have already been handled by sendLocal
 
+    PacketId nakId = p->decoded.which_ack == SubPacket_fail_id_tag ? p->decoded.ack.fail_id : 0;
+    assert(
+        !nakId); // I don't think we ever send 0hop naks over the wire (other than to the phone), test that assumption with assert
+
     // Never set the want_ack flag on broadcast packets sent over the air.
     if (p->to == NODENUM_BROADCAST)
         p->want_ack = false;
@@ -137,6 +141,7 @@ ErrorCode Router::send(MeshPacket *p)
 void Router::sniffReceived(const MeshPacket *p)
 {
     DEBUG_MSG("FIXME-update-db Sniffing packet fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+    // FIXME, update nodedb
 }
 
 bool Router::perhapsDecode(MeshPacket *p)
@@ -191,6 +196,23 @@ void Router::handleReceived(MeshPacket *p)
             notifyPacketReceived.notifyObservers(p);
         }
     }
+}
+
+void Router::perhapsHandleReceived(MeshPacket *p)
+{
+    assert(radioConfig.has_preferences);
+    bool ignore = is_in_repeated(radioConfig.preferences.ignore_incoming, p->from);
+
+    if (ignore)
+        DEBUG_MSG("Ignoring incoming message, 0x%x is in our ignore list\n", p->from);
+    else if (ignore |= shouldFilterReceived(p)) {
+        // DEBUG_MSG("Incoming message was filtered 0x%x\n", p->from);
+    }
+
+    // Note: we avoid calling shouldFilterReceived if we are supposed to ignore certain nodes - because some overrides might
+    // cache/learn of the existence of nodes (i.e. FloodRouter) that they should not
+    if (!ignore)
+        handleReceived(p);
 
     packetPool.release(p);
 }

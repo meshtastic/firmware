@@ -43,12 +43,15 @@ void getMacAddr(uint8_t *dmac)
 
 NRF52Bluetooth *nrf52Bluetooth;
 
+// FIXME, turn off soft device access for debugging
+static bool isSoftDeviceAllowed = false;
+
 static bool bleOn = false;
 void setBluetoothEnable(bool on)
 {
     if (on != bleOn) {
         if (on) {
-            if (!nrf52Bluetooth) {
+            if (!nrf52Bluetooth && isSoftDeviceAllowed) {
                 nrf52Bluetooth = new NRF52Bluetooth();
                 nrf52Bluetooth->setup();
             }
@@ -59,12 +62,19 @@ void setBluetoothEnable(bool on)
     }
 }
 
+#ifdef ARDUINO_NRF52840_PPR
 #include "PmuBQ25703A.h"
 
 PmuBQ25703A pmu;
+#endif
 
 void nrf52Setup()
 {
+
+    auto why = NRF_POWER->RESETREAS;
+    // per https://infocenter.nordicsemi.com/index.jsp?topic=%2Fcom.nordic.infocenter.nrf52832.ps.v1.1%2Fpower.html
+    DEBUG_MSG("Reset reason: 0x%x\n", why);
+
     // Not yet on board
     // pmu.init();
     DEBUG_MSG("FIXME, need to call randomSeed on nrf52!\n");
