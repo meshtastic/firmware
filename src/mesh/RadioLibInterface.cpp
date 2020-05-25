@@ -1,6 +1,5 @@
 #include "RadioLibInterface.h"
 #include "MeshTypes.h"
-#include "OSTimer.h"
 #include "mesh-pb-constants.h"
 #include <configuration.h>
 #include <pb_decode.h>
