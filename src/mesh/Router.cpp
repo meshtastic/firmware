@@ -205,8 +205,9 @@ void Router::perhapsHandleReceived(MeshPacket *p)
 
     if (ignore)
         DEBUG_MSG("Ignoring incoming message, 0x%x is in our ignore list\n", p->from);
-    else if (ignore |= shouldFilterReceived(p))
-        DEBUG_MSG("Incoming message was filtered 0x%x\n", p->from);
+    else if (ignore |= shouldFilterReceived(p)) {
+        // DEBUG_MSG("Incoming message was filtered 0x%x\n", p->from);
+    }
 
     // Note: we avoid calling shouldFilterReceived if we are supposed to ignore certain nodes - because some overrides might
     // cache/learn of the existence of nodes (i.e. FloodRouter) that they should not
