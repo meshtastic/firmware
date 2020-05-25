@@ -33,6 +33,14 @@ DeviceState versions used to be defined in the .proto file but really only this 
 
 #ifndef NO_ESP32
 #define FS SPIFFS
+#define FSBegin() FS.begin(true)
+#define FILE_O_WRITE "w"
+#define FILE_O_READ "r"
+#else
+#include "InternalFileSystem.h"
+#define FS InternalFS
+#define FSBegin() FS.begin()
+using namespace Adafruit_LittleFS_Namespace;
 #endif
 
 // FIXME - move this somewhere else
@@ -135,8 +143,15 @@ void NodeDB::init()
     info->user = owner;
     info->has_user = true;
 
+    if (!FSBegin()) // FIXME - do this in main?
+    {
+        DEBUG_MSG("ERROR filesystem mount Failed\n");
+        // FIXME - report failure to phone
+    }
+
     // saveToDisk();
     loadFromDisk();
+    // saveToDisk();
 
     // We set these _after_ loading from disk - because they come from the build and are more trusted than
     // what is stored in flash
@@ -180,13 +195,7 @@ void NodeDB::loadFromDisk()
 #ifdef FS
     static DeviceState scratch;
 
-    if (!FS.begin(true)) // FIXME - do this in main?
-    {
-        DEBUG_MSG("ERROR SPIFFS Mount Failed\n");
-        // FIXME - report failure to phone
-    }
-
-    File f = FS.open(preffile);
+    auto f = FS.open(preffile);
     if (f) {
         DEBUG_MSG("Loading saved preferences\n");
         pb_istream_t stream = {&readcb, &f, DeviceState_size};
@@ -220,7 +229,7 @@ void NodeDB::loadFromDisk()
 void NodeDB::saveToDisk()
 {
 #ifdef FS
-    File f = FS.open(preftmp, "w");
+    auto f = FS.open(preftmp, FILE_O_WRITE);
     if (f) {
         DEBUG_MSG("Writing preferences\n");
 

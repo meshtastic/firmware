@@ -21,7 +21,6 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 
 - DONE get serial API working
 - get full BLE api working
-- make a file system implementation (preferably one that can see the files the bootloader also sees) - preferably https://github.com/adafruit/Adafruit_nRF52_Arduino/blob/master/libraries/InternalFileSytem/examples/Internal_ReadWrite/Internal_ReadWrite.ino else use https://infocenter.nordicsemi.com/topic/com.nordic.infocenter.sdk5.v15.3.0/lib_fds_usage.html?cp=7_5_0_3_55_3
 - make power management/sleep work properly
 - make a settimeofday implementation
 - DONE increase preamble length? - will break other clients? so all devices must update
@@ -125,6 +124,7 @@ Nice ideas worth considering someday...
 - DONE use SX126x::startReceiveDutyCycleAuto to save power by sleeping and briefly waking to check for preamble bits. Change xmit rules to have more preamble bits.
 - scheduleOSCallback doesn't work yet - it is way too fast (causes rapid polling of busyTx, high power draw etc...)
 - find out why we reboot while debugging - it was bluetooth/softdevice
+- make a file system implementation (preferably one that can see the files the bootloader also sees) - preferably https://github.com/adafruit/Adafruit_nRF52_Arduino/blob/master/libraries/InternalFileSytem/examples/Internal_ReadWrite/Internal_ReadWrite.ino else use https://infocenter.nordicsemi.com/topic/com.nordic.infocenter.sdk5.v15.3.0/lib_fds_usage.html?cp=7_5_0_3_55_3
 
 ```
 
