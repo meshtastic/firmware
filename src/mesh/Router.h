@@ -48,6 +48,8 @@ class Router
 
     /**
      * Works like send, but if we are sending to the local node, we directly put the message in the receive queue
+     *
+     * NOTE: This method will free the provided packet (even if we return an error code)
      */
     ErrorCode sendLocal(MeshPacket *p);
 
@@ -63,6 +65,8 @@ class Router
      * Send a packet on a suitable interface.  This routine will
      * later free() the packet to pool.  This routine is not allowed to stall.
      * If the txmit queue is full it might return an error
+     *
+     * NOTE: This method will free the provided packet (even if we return an error code)
      */
     virtual ErrorCode send(MeshPacket *p);
 
