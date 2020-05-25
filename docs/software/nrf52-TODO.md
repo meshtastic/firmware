@@ -7,7 +7,7 @@
 Minimum items needed to make sure hardware is good.
 
 - write UC1701 wrapper
-- DONE install a hardfault handler for null ptrs (if one isn't already installed)
+- Test hardfault handler for null ptrs (if one isn't already installed)
 - test my hackedup bootloader on the real hardware
 - Use the PMU driver on real hardware
 - Use new radio driver on real hardware
@@ -42,7 +42,6 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 - check datasheet about sx1262 temperature compensation
 - enable brownout detection and watchdog
 - stop polling for GPS characters, instead stay blocked on read in a thread
-- turn back on in-radio destaddr checking for RF95
 - figure out what the correct current limit should be for the sx1262, currently we just use the default 100
 - put sx1262 in sleepmode when processor gets shutdown (or rebooted), ideally even for critical faults (to keep power draw low). repurpose deepsleep state for this.
 - good power management tips: https://devzone.nordicsemi.com/nordic/nordic-blog/b/blog/posts/optimizing-power-on-nrf52-designs
@@ -83,6 +82,7 @@ Nice ideas worth considering someday...
   'fromradio'. This would allow removing the 'fromnum' mailbox/notify scheme of the current approach and decrease the number of packet handoffs when a packet is received.
 - Using the preceeding, make a generalized 'nrf52/esp32 ble to internet' bridge service. To let nrf52 apps do MQTT/UDP/HTTP POST/HTTP GET operations to web services.
 - lower advertise interval to save power, lower ble transmit power to save power
+- the SX126x class does SPI transfers on a byte by byte basis, which is very ineffecient.  Much better to do block writes/reads.
 
 ## Old unorganized notes
 
