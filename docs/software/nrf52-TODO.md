@@ -7,8 +7,6 @@
 Minimum items needed to make sure hardware is good.
 
 - write UC1701 wrapper
-- scheduleOSCallback doesn't work yet - it is way too fast (causes rapid polling of busyTx, high power draw etc...)
-- find out why we reboot while debugging - seems to be power? try using external supply
 - DONE install a hardfault handler for null ptrs (if one isn't already installed)
 - test my hackedup bootloader on the real hardware
 - Use the PMU driver on real hardware
@@ -43,6 +41,7 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 
 - change packet numbers to be 32 bits
 - check datasheet about sx1262 temperature compensation
+- enable brownout detection and watchdog
 - stop polling for GPS characters, instead stay blocked on read in a thread
 - turn back on in-radio destaddr checking for RF95
 - figure out what the correct current limit should be for the sx1262, currently we just use the default 100
@@ -63,6 +62,7 @@ Nice ideas worth considering someday...
 - Use flego to me an iOS/linux app? https://felgo.com/doc/qt/qtbluetooth-index/ or
 - Use flutter to make an iOS/linux app? https://github.com/Polidea/FlutterBleLib
 - enable monitor mode debuggin (need to use real jlink): https://devzone.nordicsemi.com/nordic/nordic-blog/b/blog/posts/monitor-mode-debugging-with-j-link-and-gdbeclipse
+- Improve efficiency of PeriodicTimer by only checking the next queued timer event, and carefully sorting based on schedule
 - make a Mfg Controller and device under test classes as examples of custom app code for third party devs. Make a post about this. Use a custom payload type code. Have device under test send a broadcast with max hopcount of 0 for the 'mfgcontroller' payload type. mfg controller will read SNR and reply. DOT will declare failure/success and switch to the regular app screen.
 - Hook Segger RTT to the nordic logging framework. https://devzone.nordicsemi.com/nordic/nordic-blog/b/blog/posts/debugging-with-real-time-terminal
 - Use nordic logging for DEBUG_MSG
@@ -123,6 +123,8 @@ Nice ideas worth considering someday...
 - customize the bootloader to use proper button bindings
 - remove the MeshRadio wrapper - we don't need it anymore, just do everything in RadioInterface subclasses.
 - DONE use SX126x::startReceiveDutyCycleAuto to save power by sleeping and briefly waking to check for preamble bits. Change xmit rules to have more preamble bits.
+- scheduleOSCallback doesn't work yet - it is way too fast (causes rapid polling of busyTx, high power draw etc...)
+- find out why we reboot while debugging - it was bluetooth/softdevice
 
 ```
 
