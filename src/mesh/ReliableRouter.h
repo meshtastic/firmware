@@ -98,6 +98,11 @@ class ReliableRouter : public FloodingRouter
     PendingPacket *findPendingPacket(NodeNum from, PacketId id) { return findPendingPacket(GlobalPacketId(from, id)); }
     PendingPacket *findPendingPacket(GlobalPacketId p);
 
+    /**
+     * We hook this method so we can see packets before FloodingRouter says they should be discarded
+     */
+    virtual bool shouldFilterReceived(const MeshPacket *p);
+
   private:
     /**
      * Send an ack or a nak packet back towards whoever sent idFrom
