@@ -6,7 +6,8 @@
 
 Minimum items needed to make sure hardware is good.
 
-- fix activelyReceiving for sx1262
+- write UC1701 wrapper
+- scheduleOSCallback doesn't work yet - it is way too fast (causes rapid polling of busyTx, high power draw etc...)
 - find out why we reboot while debugging - seems to be power? try using external supply
 - DONE install a hardfault handler for null ptrs (if one isn't already installed)
 - test my hackedup bootloader on the real hardware
@@ -35,14 +36,14 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 - make ble endpoints not require "start config", just have them start in config mode
 - measure power management and confirm battery life
 - use new PMU to provide battery voltage/% full to app (both bluetooth and screen)
-- do initial power measurements
+- do initial power measurements, measure effects of more preamble bits
+- fix activelyReceiving for sx1262
 
 ## Items to be 'feature complete'
 
 - change packet numbers to be 32 bits
 - check datasheet about sx1262 temperature compensation
 - stop polling for GPS characters, instead stay blocked on read in a thread
-- use SX126x::startReceiveDutyCycleAuto to save power by sleeping and briefly waking to check for preamble bits. Change xmit rules to have more preamble bits.
 - turn back on in-radio destaddr checking for RF95
 - figure out what the correct current limit should be for the sx1262, currently we just use the default 100
 - put sx1262 in sleepmode when processor gets shutdown (or rebooted), ideally even for critical faults (to keep power draw low). repurpose deepsleep state for this.
@@ -61,6 +62,7 @@ Nice ideas worth considering someday...
 
 - Use flego to me an iOS/linux app? https://felgo.com/doc/qt/qtbluetooth-index/ or
 - Use flutter to make an iOS/linux app? https://github.com/Polidea/FlutterBleLib
+- enable monitor mode debuggin (need to use real jlink): https://devzone.nordicsemi.com/nordic/nordic-blog/b/blog/posts/monitor-mode-debugging-with-j-link-and-gdbeclipse
 - make a Mfg Controller and device under test classes as examples of custom app code for third party devs. Make a post about this. Use a custom payload type code. Have device under test send a broadcast with max hopcount of 0 for the 'mfgcontroller' payload type. mfg controller will read SNR and reply. DOT will declare failure/success and switch to the regular app screen.
 - Hook Segger RTT to the nordic logging framework. https://devzone.nordicsemi.com/nordic/nordic-blog/b/blog/posts/debugging-with-real-time-terminal
 - Use nordic logging for DEBUG_MSG
@@ -120,6 +122,7 @@ Nice ideas worth considering someday...
   #define PIN_WIRE_SCL (27)
 - customize the bootloader to use proper button bindings
 - remove the MeshRadio wrapper - we don't need it anymore, just do everything in RadioInterface subclasses.
+- DONE use SX126x::startReceiveDutyCycleAuto to save power by sleeping and briefly waking to check for preamble bits. Change xmit rules to have more preamble bits.
 
 ```
 
