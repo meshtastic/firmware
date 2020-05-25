@@ -27,14 +27,12 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 - DONE enable BLE DFU somehow
 - report appversion/hwversion in BLE
 - use new LCD driver from screen.cpp. Still need to hook it to a subclass of (poorly named) OLEDDisplay, and override display() to stream bytes out to the screen.
-- we need to enable the external xtal for the sx1262 (on dio3)
+- we need to enable the external tcxo for the sx1262 (on dio3)?
 - figure out which regulator mode the sx1262 is operating in
 - turn on security for BLE, make pairing work
 - make ble endpoints not require "start config", just have them start in config mode
-- measure power management and confirm battery life
 - use new PMU to provide battery voltage/% full to app (both bluetooth and screen)
-- do initial power measurements, measure effects of more preamble bits
-- fix activelyReceiving for sx1262
+- do initial power measurements, measure effects of more preamble bits, measure power management and confirm battery life
 
 ## Items to be 'feature complete'
 
@@ -59,7 +57,7 @@ Nice ideas worth considering someday...
 
 - Use flego to me an iOS/linux app? https://felgo.com/doc/qt/qtbluetooth-index/ or
 - Use flutter to make an iOS/linux app? https://github.com/Polidea/FlutterBleLib
-- enable monitor mode debuggin (need to use real jlink): https://devzone.nordicsemi.com/nordic/nordic-blog/b/blog/posts/monitor-mode-debugging-with-j-link-and-gdbeclipse
+- enable monitor mode debugging (need to use real jlink): https://devzone.nordicsemi.com/nordic/nordic-blog/b/blog/posts/monitor-mode-debugging-with-j-link-and-gdbeclipse
 - Improve efficiency of PeriodicTimer by only checking the next queued timer event, and carefully sorting based on schedule
 - make a Mfg Controller and device under test classes as examples of custom app code for third party devs. Make a post about this. Use a custom payload type code. Have device under test send a broadcast with max hopcount of 0 for the 'mfgcontroller' payload type. mfg controller will read SNR and reply. DOT will declare failure/success and switch to the regular app screen.
 - Hook Segger RTT to the nordic logging framework. https://devzone.nordicsemi.com/nordic/nordic-blog/b/blog/posts/debugging-with-real-time-terminal
@@ -82,7 +80,7 @@ Nice ideas worth considering someday...
   'fromradio'. This would allow removing the 'fromnum' mailbox/notify scheme of the current approach and decrease the number of packet handoffs when a packet is received.
 - Using the preceeding, make a generalized 'nrf52/esp32 ble to internet' bridge service. To let nrf52 apps do MQTT/UDP/HTTP POST/HTTP GET operations to web services.
 - lower advertise interval to save power, lower ble transmit power to save power
-- the SX126x class does SPI transfers on a byte by byte basis, which is very ineffecient.  Much better to do block writes/reads.
+- the SX126x class does SPI transfers on a byte by byte basis, which is very ineffecient. Much better to do block writes/reads.
 
 ## Old unorganized notes
 
