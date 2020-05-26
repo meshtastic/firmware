@@ -148,6 +148,9 @@ void setupHRM(void)
     bslc.write8(2); // Set the characteristic to 'Wrist' (2)
 }
 
+// FIXME, turn off soft device access for debugging
+static bool isSoftDeviceAllowed = false;
+
 void NRF52Bluetooth::setup()
 {
     // Initialise the Bluefruit module
@@ -179,11 +182,14 @@ void NRF52Bluetooth::setup()
     DEBUG_MSG("Configuring the Heart Rate Monitor Service\n");
     setupHRM();
 
-    // Setup the advertising packet(s)
-    DEBUG_MSG("Setting up the advertising payload(s)\n");
-    startAdv();
+    // Supposedly debugging works with soft device if you disable advertising
+    if (isSoftDeviceAllowed) {
+        // Setup the advertising packet(s)
+        DEBUG_MSG("Setting up the advertising payload(s)\n");
+        startAdv();
 
-    DEBUG_MSG("Advertising\n");
+        DEBUG_MSG("Advertising\n");
+    }
 }
 
 /*
