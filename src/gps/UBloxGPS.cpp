@@ -49,7 +49,7 @@ bool UBloxGPS::setup()
             // assert(ok);
             // ok = ublox.setDynamicModel(DYN_MODEL_BIKE); // probably PEDESTRIAN but just in case assume bike speeds
             // assert(ok);
-            ok = ublox.powerSaveMode(); // use power save mode
+            ok = ublox.powerSaveMode(true, 2000); // use power save mode, the default timeout (1100ms seems a bit too tight)
             assert(ok);
         }
         ok = ublox.saveConfiguration(3000);
