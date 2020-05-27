@@ -6,12 +6,15 @@
 
 Minimum items needed to make sure hardware is good.
 
+- set power UICR per https://devzone.nordicsemi.com/f/nordic-q-a/28562/nrf52840-regulator-configuration
+- switch charge controller into / out of performance mode (see 8.3.1 in datasheet)
 - write UC1701 wrapper
 - Test hardfault handler for null ptrs (if one isn't already installed)
 - test my hackedup bootloader on the real hardware
 - Use the PMU driver on real hardware
 - Use new radio driver on real hardware
 - Use UC1701 LCD driver on real hardware. Still need to create at startup and probe on SPI. Make sure SPI is atomic.
+- set vbus voltage per https://infocenter.nordicsemi.com/topic/ps_nrf52840/power.html?cp=4_0_0_4_2
 - test the LEDs
 - test the buttons
 
@@ -33,6 +36,7 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 - make ble endpoints not require "start config", just have them start in config mode
 - use new PMU to provide battery voltage/% full to app (both bluetooth and screen)
 - do initial power measurements, measure effects of more preamble bits, measure power management and confirm battery life
+- set UICR.CUSTOMER to indicate board model & version
 
 ## Items to be 'feature complete'
 
@@ -50,6 +54,7 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 - currently using soft device SD140, is that ideal?
 - turn on the watchdog timer, require servicing from key application threads
 - nrf52setup should call randomSeed(tbd)
+- implement SYSTEMOFF behavior per https://infocenter.nordicsemi.com/topic/ps_nrf52840/power.html?cp=4_0_0_4_2
 
 ## Things to do 'someday'
 
