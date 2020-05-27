@@ -38,9 +38,26 @@ when we receive a routeError packet
 
 ErrorCode DSRRouter::send(MeshPacket *p)
 {
-    // If we have an entry in our routing tables, just send it, otherwise start a route discovery
+    // We only consider multihop routing packets (i.e. those with dest set)
+    if (p->decoded.dest) {
+        // add an entry for this pending message
+        auto pending = startRetransmission(p);
+        // FIXME - when acks come in for this packet, we should _not_ delete the record unless the ack was from
+        // the final dest.  We need to keep that record around until FIXME
+        // Also we should not retransmit multihop entries in that table at all
 
-    return ReliableRouter::send(p);
+        // If we have an entry in our routing tables, just send it, otherwise start a route discovery
+        NodeNum nextHop = getNextHop(p->decoded.dest);
+        if (nextHop) {
+            sendNextHop(nextHop, p); // start a reliable single hop send
+        } else {
+            pending->wantRoute = true;
+
+            // start discovery, but only if we don't already a discovery in progress for that node number
+            startDiscovery(p->decoded.dest);
+        }
+    } else
+        return ReliableRouter::send(p);
 }
 
 void DSRRouter::sniffReceived(const MeshPacket *p)

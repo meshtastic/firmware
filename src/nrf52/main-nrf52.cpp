@@ -78,5 +78,12 @@ void nrf52Setup()
 
     // Not yet on board
     // pmu.init();
-    DEBUG_MSG("FIXME, need to call randomSeed on nrf52!\n");
+
+    // Init random seed
+    // FIXME - use this to get random numbers
+    // #include "nrf_rng.h"
+    // uint32_t r;
+    // ble_controller_rand_vector_get_blocking(&r, sizeof(r));
+    // randomSeed(r);
+    DEBUG_MSG("FIXME, call randomSeed\n");
 }

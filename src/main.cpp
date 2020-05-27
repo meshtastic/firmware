@@ -27,13 +27,12 @@
 #include "NodeDB.h"
 #include "Periodic.h"
 #include "PowerFSM.h"
-#include "Router.h"
 #include "UBloxGPS.h"
 #include "configuration.h"
 #include "error.h"
 #include "power.h"
 // #include "rom/rtc.h"
-#include "ReliableRouter.h"
+#include "DSRRouter.h"
 #include "main.h"
 #include "screen.h"
 #include "sleep.h"
@@ -53,7 +52,7 @@ meshtastic::PowerStatus powerStatus;
 bool ssd1306_found;
 bool axp192_found;
 
-ReliableRouter realRouter;
+DSRRouter realRouter;
 Router &router = realRouter; // Users of router don't care what sort of subclass implements that API
 
 // -----------------------------------------------------------------------------
