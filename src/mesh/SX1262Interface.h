@@ -29,7 +29,7 @@ class SX1262Interface : public RadioLibInterface
     /**
      * Glue functions called from ISR land
      */
-    virtual void INTERRUPT_ATTR disableInterrupt() { lora.clearDio1Action(); }
+    virtual void disableInterrupt();
 
     /**
      * Enable a particular ISR callback glue function
