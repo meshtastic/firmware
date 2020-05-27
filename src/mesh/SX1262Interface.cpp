@@ -71,6 +71,11 @@ bool SX1262Interface::reconfigure()
     return ERR_NONE;
 }
 
+void INTERRUPT_ATTR SX1262Interface::disableInterrupt()
+{
+    lora.clearDio1Action();
+}
+
 void SX1262Interface::setStandby()
 {
     int err = lora.standby();
