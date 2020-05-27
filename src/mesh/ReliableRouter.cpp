@@ -146,13 +146,15 @@ bool ReliableRouter::stopRetransmission(GlobalPacketId key)
 /**
  * Add p to the list of packets to retransmit occasionally.  We will free it once we stop retransmitting.
  */
-void ReliableRouter::startRetransmission(MeshPacket *p)
+PendingPacket *ReliableRouter::startRetransmission(MeshPacket *p)
 {
     auto id = GlobalPacketId(p);
     auto rec = PendingPacket(p);
 
     stopRetransmission(p->from, p->id);
     pending[id] = rec;
+
+    return &pending[id];
 }
 
 /**
