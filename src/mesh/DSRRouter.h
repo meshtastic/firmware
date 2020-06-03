@@ -71,4 +71,10 @@ class DSRRouter : public ReliableRouter
      * Send a route error packet towards whoever originally sent this message
      */
     void sendRouteError(const MeshPacket *p, RouteError err);
+
+    /** make a copy of p, start discovery, but only if we don't
+     *  already a discovery in progress for that node number.  Caller has already scheduled this message for retransmission
+     *  when the discovery is complete.
+     */
+    void startDiscovery(NodeNum dest);
 };

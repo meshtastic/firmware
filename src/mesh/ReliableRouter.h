@@ -98,6 +98,16 @@ class ReliableRouter : public FloodingRouter
     PendingPacket *findPendingPacket(NodeNum from, PacketId id) { return findPendingPacket(GlobalPacketId(from, id)); }
     PendingPacket *findPendingPacket(GlobalPacketId p);
 
+    /**
+     * We hook this method so we can see packets before FloodingRouter says they should be discarded
+     */
+    virtual bool shouldFilterReceived(const MeshPacket *p);
+
+    /**
+     * Add p to the list of packets to retransmit occasionally.  We will free it once we stop retransmitting.
+     */
+    PendingPacket *startRetransmission(MeshPacket *p);
+
   private:
     /**
      * Send an ack or a nak packet back towards whoever sent idFrom
@@ -111,11 +121,6 @@ class ReliableRouter : public FloodingRouter
      */
     bool stopRetransmission(NodeNum from, PacketId id);
     bool stopRetransmission(GlobalPacketId p);
-
-    /**
-     * Add p to the list of packets to retransmit occasionally.  We will free it once we stop retransmitting.
-     */
-    void startRetransmission(MeshPacket *p);
 
     /**
      * Do any retransmissions that are scheduled (FIXME - for the time being called from loop)
