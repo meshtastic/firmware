@@ -8,7 +8,9 @@
 #include "CryptoEngine.h"
 #include "GPS.h"
 #include "NodeDB.h"
+#include "PacketHistory.h"
 #include "PowerFSM.h"
+#include "Router.h"
 #include "configuration.h"
 #include "error.h"
 #include "mesh-pb-constants.h"
@@ -122,6 +124,10 @@ void NodeDB::init()
 
     // default to no GPS, until one has been found by probing
     myNodeInfo.has_gps = false;
+    myNodeInfo.node_num_bits = sizeof(NodeNum) * 8;
+    myNodeInfo.packet_id_bits = sizeof(PacketId) * 8;
+    myNodeInfo.message_timeout_msec = FLOOD_EXPIRE_TIME;
+    generatePacketId(); // FIXME - ugly way to init current_packet_id;
 
     // Init our blank owner info to reasonable defaults
     getMacAddr(ourMacAddr);
