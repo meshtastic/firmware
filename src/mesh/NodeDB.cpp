@@ -178,8 +178,10 @@ void NodeDB::init()
  */
 void NodeDB::pickNewNodeNum()
 {
-    // FIXME not the right way to guess node numes
-    uint8_t r = ourMacAddr[5];
+    // Pick an initial nodenum based on the macaddr
+    NodeNum r = sizeof(NodeNum) == 1 ? ourMacAddr[5]
+                                     : ((ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5]);
+
     if (r == 0xff || r < NUM_RESERVED)
         r = NUM_RESERVED; // don't pick a reserved node number
 

@@ -51,7 +51,8 @@ PacketId generatePacketId()
     static uint32_t i; // Note: trying to keep this in noinit didn't help for working across reboots
     static bool didInit = false;
 
-    uint32_t numPacketId = 255; // 0 is consider invalid
+    assert(sizeof(PacketId) == 4 || sizeof(PacketId) == 1);                // only supported values
+    uint32_t numPacketId = sizeof(PacketId) == 1 ? UINT8_MAX : UINT32_MAX; // 0 is consider invalid
 
     if (!didInit) {
         didInit = true;
@@ -60,7 +61,7 @@ PacketId generatePacketId()
     }
 
     i++;
-    PacketId id = (i % numPacketId) + 1; // return number between 1 and 255 (ie - never zero)
+    PacketId id = (i % numPacketId) + 1; // return number between 1 and numPacketId (ie - never zero)
     myNodeInfo.current_packet_id = id;   // Kinda crufty - we keep updating this so the phone can see a current value
     return id;
 }

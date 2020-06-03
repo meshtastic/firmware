@@ -19,7 +19,9 @@
  * wtih the old radiohead implementation.
  */
 typedef struct {
-    uint8_t to, from, id;
+    NodeNum to, from; // can be 1 byte or four bytes
+
+    PacketId id; // can be 1 byte or 4 bytes
 
     /**
      * Usage of flags:

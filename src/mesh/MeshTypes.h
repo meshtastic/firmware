@@ -9,7 +9,7 @@
 typedef uint8_t NodeNum;
 typedef uint8_t PacketId; // A packet sequence number
 
-#define NODENUM_BROADCAST 255
+#define NODENUM_BROADCAST (sizeof(NodeNum) == 4 ? UINT32_MAX : UINT8_MAX)
 #define ERRNO_OK 0
 #define ERRNO_NO_INTERFACES 33
 #define ERRNO_UNKNOWN 32 // pick something that doesn't conflict with RH_ROUTER_ERROR_UNABLE_TO_DELIVER
