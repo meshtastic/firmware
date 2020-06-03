@@ -127,6 +127,7 @@ void NodeDB::init()
     myNodeInfo.node_num_bits = sizeof(NodeNum) * 8;
     myNodeInfo.packet_id_bits = sizeof(PacketId) * 8;
     myNodeInfo.message_timeout_msec = FLOOD_EXPIRE_TIME;
+    myNodeInfo.min_app_version = 167;
     generatePacketId(); // FIXME - ugly way to init current_packet_id;
 
     // Init our blank owner info to reasonable defaults
