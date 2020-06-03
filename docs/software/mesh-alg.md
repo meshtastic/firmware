@@ -31,6 +31,9 @@ dsr tasks
 optimizations / low priority:
 
 - read @cyclomies long email with good ideas on optimizations and reply
+- Remove NodeNum assignment algorithm (now that we use 4 byte node nums)
+- make android app warn if firmware is too old or too new to talk to
+- change nodenums and packetids in protobuf to be fixed32
 - low priority: think more careful about reliable retransmit intervals
 - make ReliableRouter.pending threadsafe
 - bump up PacketPool size for all the new ack/nak/routing packets
