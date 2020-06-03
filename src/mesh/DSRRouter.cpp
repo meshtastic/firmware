@@ -38,9 +38,28 @@ when we receive a routeError packet
 
 ErrorCode DSRRouter::send(MeshPacket *p)
 {
-    // If we have an entry in our routing tables, just send it, otherwise start a route discovery
+    // We only consider multihop routing packets (i.e. those with dest set)
+    if (p->decoded.dest) {
+        // add an entry for this pending message
+        auto pending = startRetransmission(p);
+        // FIXME - when acks come in for this packet, we should _not_ delete the record unless the ack was from
+        // the final dest.  We need to keep that record around until FIXME
+        // Also we should not retransmit multihop entries in that table at all
 
-    return ReliableRouter::send(p);
+        // If we have an entry in our routing tables, just send it, otherwise start a route discovery
+        NodeNum nextHop = getNextHop(p->decoded.dest);
+        if (nextHop) {
+            sendNextHop(nextHop, p); // start a reliable single hop send
+        } else {
+            pending->wantRoute = true;
+
+            // start discovery, but only if we don't already a discovery in progress for that node number
+            startDiscovery(p->decoded.dest);
+        }
+
+        return ERRNO_OK;
+    } else
+        return ReliableRouter::send(p);
 }
 
 void DSRRouter::sniffReceived(const MeshPacket *p)
@@ -132,4 +151,95 @@ void DSRRouter::sniffReceived(const MeshPacket *p)
     }
 
     return ReliableRouter::sniffReceived(p);
+}
+
+/**
+ * Does our node appear in the specified route
+ */
+bool DSRRouter::weAreInRoute(const RouteDiscovery &route)
+{
+    return true; // FIXME
+}
+
+/**
+ * Given a DSR route, use that route to update our DB of possible routes
+ *
+ * Note: routes are always listed in the same order - from sender to receipient (i.e. route_replies also use this some order)
+ *
+ * @param isRequest is true if we are looking at a route request, else we are looking at a reply
+ **/
+void DSRRouter::updateRoutes(const RouteDiscovery &route, bool isRequest)
+{
+    DEBUG_MSG("FIXME not implemented");
+}
+
+/**
+ * send back a route reply (the sender address will be first in the list)
+ */
+void DSRRouter::sendRouteReply(const RouteDiscovery &route, NodeNum toAppend)
+{
+    DEBUG_MSG("FIXME not implemented");
+}
+
+/**
+ * Given a nodenum return the next node we should forward to if we want to reach that node.
+ *
+ * @return 0 if no route found
+ */
+NodeNum DSRRouter::getNextHop(NodeNum dest)
+{
+    DEBUG_MSG("FIXME not implemented");
+    return 0;
+}
+
+/** Not in our route cache, rebroadcast on their behalf (after adding ourselves to the request route)
+ *
+ * We will bump down hop_limit in this call.
+ */
+void DSRRouter::resendRouteRequest(const MeshPacket *p)
+{
+    DEBUG_MSG("FIXME not implemented");
+}
+
+/**
+ * Record that forwarder can reach dest for us, but they will need numHops to get there.
+ * If our routing tables already have something that can reach that node in fewer hops we will keep the existing route
+ * instead.
+ */
+void DSRRouter::addRoute(NodeNum dest, NodeNum forwarder, uint8_t numHops)
+{
+    DEBUG_MSG("FIXME not implemented");
+}
+
+/**
+ * Record that we no longer have a route to the dest
+ */
+void DSRRouter::removeRoute(NodeNum dest)
+{
+    DEBUG_MSG("FIXME not implemented");
+}
+
+/**
+ * Forward the specified packet to the specified node
+ */
+void DSRRouter::sendNextHop(NodeNum n, const MeshPacket *p)
+{
+    DEBUG_MSG("FIXME not implemented");
+}
+
+/**
+ * Send a route error packet towards whoever originally sent this message
+ */
+void DSRRouter::sendRouteError(const MeshPacket *p, RouteError err)
+{
+    DEBUG_MSG("FIXME not implemented");
+}
+
+/** make a copy of p, start discovery, but only if we don't
+ *  already a discovery in progress for that node number.  Caller has already scheduled this message for retransmission
+ *  when the discovery is complete.
+ */
+void DSRRouter::startDiscovery(NodeNum dest)
+{
+    DEBUG_MSG("FIXME not implemented");
 }

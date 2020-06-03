@@ -19,8 +19,9 @@ ErrorCode FloodingRouter::send(MeshPacket *p)
 
 bool FloodingRouter::shouldFilterReceived(const MeshPacket *p)
 {
-    if (wasSeenRecently(p)) {
-        DEBUG_MSG("Ignoring incoming msg, because we've already seen it\n");
+    if (wasSeenRecently(p)) { // Note: this will also add a recent packet record
+        DEBUG_MSG("Ignoring incoming msg, because we've already seen it: fr=0x%x,to=0x%x,id=%d,hop_limit=%d\n", p->from, p->to,
+                  p->id, p->hop_limit);
         return true;
     }
 

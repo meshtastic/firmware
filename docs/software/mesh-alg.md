@@ -30,6 +30,7 @@ dsr tasks
 
 optimizations / low priority:
 
+- read @cyclomies long email with good ideas on optimizations and reply
 - low priority: think more careful about reliable retransmit intervals
 - make ReliableRouter.pending threadsafe
 - bump up PacketPool size for all the new ack/nak/routing packets

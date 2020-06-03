@@ -24,6 +24,23 @@ ErrorCode ReliableRouter::send(MeshPacket *p)
     return FloodingRouter::send(p);
 }
 
+bool ReliableRouter::shouldFilterReceived(const MeshPacket *p)
+{
+    if (p->to == NODENUM_BROADCAST && p->from == getNodeNum()) {
+        DEBUG_MSG("Received someone rebroadcasting for us fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+
+        // We are seeing someone rebroadcast one of our broadcast attempts.
+        // If this is the first time we saw this, cancel any retransmissions we have queued up and generate an internal ack for
+        // the original sending process.
+        if (stopRetransmission(p->from, p->id)) {
+            DEBUG_MSG("Someone is retransmitting for us, generate implicit ack\n");
+            sendAckNak(true, p->from, p->id);
+        }
+    }
+
+    return FloodingRouter::shouldFilterReceived(p);
+}
+
 /**
  * If we receive a want_ack packet (do not check for wasSeenRecently), send back an ack (this might generate multiple ack sends in
  * case the our first ack gets lost)
@@ -40,18 +57,8 @@ void ReliableRouter::sniffReceived(const MeshPacket *p)
 {
     NodeNum ourNode = getNodeNum();
 
-    if (p->from == ourNode && p->to == NODENUM_BROADCAST) {
-        DEBUG_MSG("Received someone rebroadcasting for us fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
-
-        // We are seeing someone rebroadcast one of our broadcast attempts.
-        // If this is the first time we saw this, cancel any retransmissions we have queued up and generate an internal ack for
-        // the original sending process.
-        if (stopRetransmission(p->from, p->id)) {
-            DEBUG_MSG("Someone is retransmitting for us, generate implicit ack\n");
-            sendAckNak(true, p->from, p->id);
-        }
-    } else if (p->to == ourNode) { // ignore ack/nak/want_ack packets that are not address to us (we only handle 0 hop reliability
-                                   // - not DSR routing)
+    if (p->to == ourNode) { // ignore ack/nak/want_ack packets that are not address to us (we only handle 0 hop reliability
+                            // - not DSR routing)
         if (p->want_ack) {
             sendAckNak(true, p->from, p->id);
         }
@@ -61,8 +68,8 @@ void ReliableRouter::sniffReceived(const MeshPacket *p)
         PacketId ackId = p->decoded.which_ack == SubPacket_success_id_tag ? p->decoded.ack.success_id : 0;
         PacketId nakId = p->decoded.which_ack == SubPacket_fail_id_tag ? p->decoded.ack.fail_id : 0;
 
-        // we are careful to only read wasSeenRecently - not update it (to not mess up broadcasts)
-        if ((ackId || nakId) && !wasSeenRecently(p, false)) {
+        // We intentionally don't check wasSeenRecently, because it is harmless to delete non existent retransmission records
+        if (ackId || nakId) {
             if (ackId) {
                 DEBUG_MSG("Received a ack=%d, stopping retransmissions\n", ackId);
                 stopRetransmission(p->to, ackId);
@@ -139,13 +146,15 @@ bool ReliableRouter::stopRetransmission(GlobalPacketId key)
 /**
  * Add p to the list of packets to retransmit occasionally.  We will free it once we stop retransmitting.
  */
-void ReliableRouter::startRetransmission(MeshPacket *p)
+PendingPacket *ReliableRouter::startRetransmission(MeshPacket *p)
 {
     auto id = GlobalPacketId(p);
     auto rec = PendingPacket(p);
 
     stopRetransmission(p->from, p->id);
     pending[id] = rec;
+
+    return &pending[id];
 }
 
 /**
@@ -169,7 +178,7 @@ void ReliableRouter::doRetransmissions()
                 sendAckNak(false, p.packet->from, p.packet->id);
                 // Note: we don't stop retransmission here, instead the Nak packet gets processed in sniffReceived - which
                 // allows the DSR version to still be able to look at the PendingPacket
-                // stopRetransmission(it->first);
+                stopRetransmission(it->first);
             } else {
                 DEBUG_MSG("Sending reliable retransmission fr=0x%x,to=0x%x,id=%d, tries left=%d\n", p.packet->from, p.packet->to,
                           p.packet->id, p.numRetransmissions);
