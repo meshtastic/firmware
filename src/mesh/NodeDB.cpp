@@ -134,15 +134,12 @@ void NodeDB::init()
     sprintf(owner.id, "!%02x%02x%02x%02x%02x%02x", ourMacAddr[0], ourMacAddr[1], ourMacAddr[2], ourMacAddr[3], ourMacAddr[4],
             ourMacAddr[5]);
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
-
-    // make each node start with ad different random seed (but okay that the sequence is the same each boot)
-    randomSeed((ourMacAddr[2] << 24L) | (ourMacAddr[3] << 16L) | (ourMacAddr[4] << 8L) | ourMacAddr[5]);
-
     sprintf(owner.long_name, "Unknown %02x%02x", ourMacAddr[4], ourMacAddr[5]);
-    sprintf(owner.short_name, "?%02X", ourMacAddr[5]);
 
     // Crummy guess at our nodenum
     pickNewNodeNum();
+
+    sprintf(owner.short_name, "?%02X", myNodeInfo.my_node_num & 0xff);
 
     // Include our owner in the node db under our nodenum
     NodeInfo *info = getOrCreateNode(getNodeNum());
@@ -182,7 +179,7 @@ void NodeDB::pickNewNodeNum()
     NodeNum r = sizeof(NodeNum) == 1 ? ourMacAddr[5]
                                      : ((ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5]);
 
-    if (r == 0xff || r < NUM_RESERVED)
+    if (r == NODENUM_BROADCAST || r < NUM_RESERVED)
         r = NUM_RESERVED; // don't pick a reserved node number
 
     NodeInfo *found;
