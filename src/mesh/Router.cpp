@@ -44,8 +44,6 @@ void Router::loop()
     }
 }
 
-#define NUM_PACKET_ID 255 // 0 is consider invalid
-
 /// Generate a unique packet id
 // FIXME, move this someplace better
 PacketId generatePacketId()
@@ -53,14 +51,19 @@ PacketId generatePacketId()
     static uint32_t i; // Note: trying to keep this in noinit didn't help for working across reboots
     static bool didInit = false;
 
+    assert(sizeof(PacketId) == 4 || sizeof(PacketId) == 1);                // only supported values
+    uint32_t numPacketId = sizeof(PacketId) == 1 ? UINT8_MAX : UINT32_MAX; // 0 is consider invalid
+
     if (!didInit) {
         didInit = true;
-        i = random(0, NUM_PACKET_ID +
+        i = random(0, numPacketId +
                           1); // pick a random initial sequence number at boot (to prevent repeated reboots always starting at 0)
     }
 
     i++;
-    return (i % NUM_PACKET_ID) + 1; // return number between 1 and 255
+    PacketId id = (i % numPacketId) + 1; // return number between 1 and numPacketId (ie - never zero)
+    myNodeInfo.current_packet_id = id;   // Kinda crufty - we keep updating this so the phone can see a current value
+    return id;
 }
 
 MeshPacket *Router::allocForSending()

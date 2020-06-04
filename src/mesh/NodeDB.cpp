@@ -8,7 +8,9 @@
 #include "CryptoEngine.h"
 #include "GPS.h"
 #include "NodeDB.h"
+#include "PacketHistory.h"
 #include "PowerFSM.h"
+#include "Router.h"
 #include "configuration.h"
 #include "error.h"
 #include "mesh-pb-constants.h"
@@ -28,7 +30,7 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define here.
 */
 
-#define DEVICESTATE_CUR_VER 7
+#define DEVICESTATE_CUR_VER 8
 #define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
 
 #ifndef NO_ESP32
@@ -122,21 +124,23 @@ void NodeDB::init()
 
     // default to no GPS, until one has been found by probing
     myNodeInfo.has_gps = false;
+    myNodeInfo.node_num_bits = sizeof(NodeNum) * 8;
+    myNodeInfo.packet_id_bits = sizeof(PacketId) * 8;
+    myNodeInfo.message_timeout_msec = FLOOD_EXPIRE_TIME;
+    myNodeInfo.min_app_version = 167;
+    generatePacketId(); // FIXME - ugly way to init current_packet_id;
 
     // Init our blank owner info to reasonable defaults
     getMacAddr(ourMacAddr);
     sprintf(owner.id, "!%02x%02x%02x%02x%02x%02x", ourMacAddr[0], ourMacAddr[1], ourMacAddr[2], ourMacAddr[3], ourMacAddr[4],
             ourMacAddr[5]);
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
-
-    // make each node start with ad different random seed (but okay that the sequence is the same each boot)
-    randomSeed((ourMacAddr[2] << 24L) | (ourMacAddr[3] << 16L) | (ourMacAddr[4] << 8L) | ourMacAddr[5]);
-
     sprintf(owner.long_name, "Unknown %02x%02x", ourMacAddr[4], ourMacAddr[5]);
-    sprintf(owner.short_name, "?%02X", ourMacAddr[5]);
 
     // Crummy guess at our nodenum
     pickNewNodeNum();
+
+    sprintf(owner.short_name, "?%02X", myNodeInfo.my_node_num & 0xff);
 
     // Include our owner in the node db under our nodenum
     NodeInfo *info = getOrCreateNode(getNodeNum());
@@ -172,9 +176,11 @@ void NodeDB::init()
  */
 void NodeDB::pickNewNodeNum()
 {
-    // FIXME not the right way to guess node numes
-    uint8_t r = ourMacAddr[5];
-    if (r == 0xff || r < NUM_RESERVED)
+    // Pick an initial nodenum based on the macaddr
+    NodeNum r = sizeof(NodeNum) == 1 ? ourMacAddr[5]
+                                     : ((ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5]);
+
+    if (r == NODENUM_BROADCAST || r < NUM_RESERVED)
         r = NUM_RESERVED; // don't pick a reserved node number
 
     NodeInfo *found;

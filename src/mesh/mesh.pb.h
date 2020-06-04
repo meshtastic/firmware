@@ -74,6 +74,11 @@ typedef struct _MyNodeInfo {
     uint32_t error_code;
     uint32_t error_address;
     uint32_t error_count;
+    uint32_t packet_id_bits;
+    uint32_t current_packet_id;
+    uint32_t node_num_bits;
+    uint32_t message_timeout_msec;
+    uint32_t min_app_version;
 } MyNodeInfo;
 
 typedef struct _Position {
@@ -238,7 +243,7 @@ typedef struct _ToRadio {
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default, false, ChannelSettings_init_default}
 #define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}}
 #define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0}
-#define MyNodeInfo_init_default                  {0, 0, 0, "", "", "", 0, 0, 0}
+#define MyNodeInfo_init_default                  {0, 0, 0, "", "", "", 0, 0, 0, 0, 0, 0, 0, 0}
 #define DeviceState_init_default                 {false, RadioConfig_init_default, false, MyNodeInfo_init_default, false, User_init_default, 0, {NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default}, 0, {MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default}, false, MeshPacket_init_default, 0}
 #define DebugString_init_default                 {""}
 #define FromRadio_init_default                   {0, 0, {MeshPacket_init_default}}
@@ -254,7 +259,7 @@ typedef struct _ToRadio {
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero, false, ChannelSettings_init_zero}
 #define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}}
 #define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0}
-#define MyNodeInfo_init_zero                     {0, 0, 0, "", "", "", 0, 0, 0}
+#define MyNodeInfo_init_zero                     {0, 0, 0, "", "", "", 0, 0, 0, 0, 0, 0, 0, 0}
 #define DeviceState_init_zero                    {false, RadioConfig_init_zero, false, MyNodeInfo_init_zero, false, User_init_zero, 0, {NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero}, 0, {MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero}, false, MeshPacket_init_zero, 0}
 #define DebugString_init_zero                    {""}
 #define FromRadio_init_zero                      {0, 0, {MeshPacket_init_zero}}
@@ -282,6 +287,11 @@ typedef struct _ToRadio {
 #define MyNodeInfo_error_code_tag                7
 #define MyNodeInfo_error_address_tag             8
 #define MyNodeInfo_error_count_tag               9
+#define MyNodeInfo_packet_id_bits_tag            10
+#define MyNodeInfo_current_packet_id_tag         11
+#define MyNodeInfo_node_num_bits_tag             12
+#define MyNodeInfo_message_timeout_msec_tag      13
+#define MyNodeInfo_min_app_version_tag           14
 #define Position_latitude_i_tag                  7
 #define Position_longitude_i_tag                 8
 #define Position_altitude_tag                    3
@@ -472,7 +482,12 @@ X(a, STATIC,   SINGULAR, STRING,   hw_model,          5) \
 X(a, STATIC,   SINGULAR, STRING,   firmware_version,   6) \
 X(a, STATIC,   SINGULAR, UINT32,   error_code,        7) \
 X(a, STATIC,   SINGULAR, UINT32,   error_address,     8) \
-X(a, STATIC,   SINGULAR, UINT32,   error_count,       9)
+X(a, STATIC,   SINGULAR, UINT32,   error_count,       9) \
+X(a, STATIC,   SINGULAR, UINT32,   packet_id_bits,   10) \
+X(a, STATIC,   SINGULAR, UINT32,   current_packet_id,  11) \
+X(a, STATIC,   SINGULAR, UINT32,   node_num_bits,    12) \
+X(a, STATIC,   SINGULAR, UINT32,   message_timeout_msec,  13) \
+X(a, STATIC,   SINGULAR, UINT32,   min_app_version,  14)
 #define MyNodeInfo_CALLBACK NULL
 #define MyNodeInfo_DEFAULT NULL
 
@@ -580,8 +595,8 @@ extern const pb_msgdesc_t ManufacturingData_msg;
 #define RadioConfig_size                         157
 #define RadioConfig_UserPreferences_size         93
 #define NodeInfo_size                            132
-#define MyNodeInfo_size                          80
-#define DeviceState_size                         15433
+#define MyNodeInfo_size                          110
+#define DeviceState_size                         15463
 #define DebugString_size                         258
 #define FromRadio_size                           333
 #define ToRadio_size                             327
