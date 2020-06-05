@@ -151,7 +151,8 @@ void setup()
 #else
     Wire.begin();
 #endif
-    scanI2Cdevice();
+    // i2c still busted on new board
+    // scanI2Cdevice();
 
     // Buttons & LED
 #ifdef BUTTON_PIN
@@ -179,6 +180,9 @@ void setup()
 #ifdef NRF52_SERIES
     nrf52Setup();
 #endif
+
+    extern void testLCD();
+    // testLCD();
 
     // Initialize the screen first so we can show the logo while we start up everything else.
     if (ssd1306_found)
@@ -233,7 +237,7 @@ void setup()
         new SimRadio();
 #endif
 
-    if (!rIf->init())
+    if (!rIf || !rIf->init())
         recordCriticalError(ErrNoRadio);
     else
         router.addInterface(rIf);
