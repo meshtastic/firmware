@@ -6,8 +6,8 @@
 # mon exec SetMonModeDebug=1
 # mon exec SetMonModeVTableAddr=0x26000
 
-echo setting RTTAddr
-eval "monitor exec SetRTTAddr %p", &_SEGGER_RTT
+# echo setting RTTAddr
+# eval "monitor exec SetRTTAddr %p", &_SEGGER_RTT
 
 # the jlink debugger seems to want a pause after reset before we tell it to start running
 define restart

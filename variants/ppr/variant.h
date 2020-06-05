@@ -132,7 +132,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define SX1262_CS (10)
 #define SX1262_DIO1 (20)
 #define SX1262_DIO2 (26)
-#define SX1262_BUSY (18)
+#define SX1262_BUSY (31) // Supposed to be P0.18 but because of reworks, now on P0.31 (18)
 #define SX1262_RESET (17)
 // #define SX1262_ANT_SW (32 + 10)
 #define SX1262_RXEN (22)
