@@ -34,3 +34,17 @@ class UC1701Spi : public OLEDDisplay
 
   private:
 };
+
+#include "variant.h"
+#include <UC1701.h>
+static UC1701 lcd(PIN_SPI_SCK, PIN_SPI_MOSI, ERC12864_CS, ERC12864_CD);
+
+
+void testLCD() {
+  // PCD8544-compatible displays may have a different resolution...
+  lcd.begin();
+
+  // Write a piece of text on the first line...
+  lcd.setCursor(0, 0);
+  lcd.print("Hello, World!");
+}
