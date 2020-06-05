@@ -1,6 +1,6 @@
 # What is Meshtastic?
 
-Meshtastic is a project that lets you use
+Meshtastic™ is a project that lets you use
 inexpensive (\$30 ish) GPS radios as an extensible, long battery life, secure, mesh GPS communicator. These radios are great for hiking, skiing, paragliding - essentially any hobby where you don't have reliable internet access. Each member of your private mesh can always see the location and distance of all other members and any text messages sent to your group chat.
 
 The radios automatically create a mesh to forward packets as needed, so everyone in the group can receive messages from even the furthest member. The radios will optionally work with your phone, but no phone is required.
