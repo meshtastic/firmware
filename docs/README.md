@@ -1,6 +1,6 @@
 # What is Meshtastic?
 
-Meshtastic is a project that lets you use
+Meshtastic™ is a project that lets you use
 inexpensive (\$30 ish) GPS radios as an extensible, long battery life, secure, mesh GPS communicator. These radios are great for hiking, skiing, paragliding - essentially any hobby where you don't have reliable internet access. Each member of your private mesh can always see the location and distance of all other members and any text messages sent to your group chat.
 
 The radios automatically create a mesh to forward packets as needed, so everyone in the group can receive messages from even the furthest member. The radios will optionally work with your phone, but no phone is required.
@@ -24,11 +24,11 @@ Not all of these features are fully implemented yet - see **important** disclaim
 - Very long battery life (should be about eight days with the beta software)
 - Built in GPS and [LoRa](https://en.wikipedia.org/wiki/LoRa) radio, but we manage the radio automatically for you
 - Long range - a few miles per node but each node will forward packets as needed
+- Secure - channels are encrypted by AES256 (But see important disclaimers below wrt this feature)
 - Shows direction and distance to all members of your channel
 - Directed or broadcast text messages for channel members
 - Open and extensible codebase supporting multiple hardware vendors - no lock in to one vendor
-- Communication API for bluetooth devices (such as our Android app) to use the mesh. So if you have some application that needs long range low power networking, this might work for you.
-- Eventually (within a couple of months) we should have a modified version of Signal that works with this project.
+- Communication API for bluetooth devices (such as our Android app) to use the mesh. An iOS application is in the works.  And [Meshtastic-python](https://pypi.org/project/meshtastic/) provides access from desktop computers.
 - Very easy sharing of private secured channels. Just share a special link or QR code with friends and they can join your encrypted mesh
 
 This project is currently in beta testing but it is fairly stable and feature complete - if you have questions please [join our discussion forum](https://meshtastic.discourse.group/).
@@ -39,6 +39,7 @@ This software is 100% open source and developed by a group of hobbyist experimen
 
 Note: Updates are happening almost daily, only major updates are listed below. For more details see our forum.
 
+- 06/04/2020 - 0.6.7 Beta releases of both the application and the device code are released. Features are fairly solid now with a sizable number of users.
 - 04/28/2020 - 0.6.0 [Python API](https://pypi.org/project/meshtastic/) released. Makes it easy to use meshtastic devices as "zero config / just works" mesh transport adapters for other projects.
 - 04/20/2020 - 0.4.3 Pretty solid now both for the android app and the device code. Many people have donated translations and code. Probably going to call it a beta soon.
 - 03/03/2020 - 0.0.9 of the Android app and device code is released. Still an alpha but fairly functional.
