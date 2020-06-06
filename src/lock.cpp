@@ -5,6 +5,7 @@
 namespace meshtastic
 {
 
+#ifdef configUSE_PREEMPTION
 Lock::Lock()
 {
     handle = xSemaphoreCreateBinary();
@@ -21,6 +22,20 @@ void Lock::unlock()
 {
     assert(xSemaphoreGive(handle));
 }
+#else
+Lock::Lock()
+{
+}
+
+void Lock::lock()
+{
+}
+
+void Lock::unlock()
+{
+}
+#endif 
+
 
 LockGuard::LockGuard(Lock *lock) : lock(lock)
 {

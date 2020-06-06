@@ -1,5 +1,8 @@
 #include <Arduino.h>
 
+// FIXME - ugly check to see if we have freertos
+#ifdef configUSE_PREEMPTION
+
 class Thread
 {
   protected:
@@ -87,3 +90,5 @@ class NotifiedWorkerThread : public WorkerThread
      */
     virtual void block();
 };
+
+#endif
