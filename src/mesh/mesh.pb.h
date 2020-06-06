@@ -47,7 +47,7 @@ typedef struct _ChannelSettings {
     char name[12];
 } ChannelSettings;
 
-typedef PB_BYTES_ARRAY_T(251) Data_payload_t;
+typedef PB_BYTES_ARRAY_T(240) Data_payload_t;
 typedef struct _Data {
     Data_Type typ;
     Data_payload_t payload;
@@ -586,20 +586,20 @@ extern const pb_msgdesc_t ManufacturingData_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define Position_size                            39
-#define Data_size                                256
+#define Data_size                                245
 #define User_size                                72
 #define RouteDiscovery_size                      88
-#define SubPacket_size                           285
-#define MeshPacket_size                          324
+#define SubPacket_size                           274
+#define MeshPacket_size                          313
 #define ChannelSettings_size                     60
 #define RadioConfig_size                         157
 #define RadioConfig_UserPreferences_size         93
 #define NodeInfo_size                            132
 #define MyNodeInfo_size                          110
-#define DeviceState_size                         15463
+#define DeviceState_size                         15100
 #define DebugString_size                         258
-#define FromRadio_size                           333
-#define ToRadio_size                             327
+#define FromRadio_size                           322
+#define ToRadio_size                             316
 /* ManufacturingData_size depends on runtime parameters */
 
 #ifdef __cplusplus
