@@ -9,7 +9,7 @@
 PB_BIND(Position, Position, AUTO)
 
 
-PB_BIND(Data, Data, 2)
+PB_BIND(Data, Data, AUTO)
 
 
 PB_BIND(User, User, AUTO)
