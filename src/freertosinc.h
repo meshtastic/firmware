@@ -9,8 +9,11 @@
 #include <freertos/semphr.h>
 #include <freertos/queue.h>
 #else
+// not yet supported on cubecell
+#ifndef CubeCell_BoardPlus
 #include <FreeRTOS.h>
 #include <task.h>
 #include <semphr.h>
 #include <queue.h>
+#endif
 #endif

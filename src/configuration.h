@@ -73,6 +73,22 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BUTTON_PIN PIN_BUTTON1
 
 // FIXME, use variant.h defs for all of this!!! (even on the ESP32 targets)
+#elif defined(CubeCell_BoardPlus)
+
+//
+// Standard definitions for CubeCell targets
+//
+
+#define NO_ESP32 // Don't use ESP32 libs (mainly bluetooth)
+
+// We bind to the GPS using variant.h instead for this platform (Serial1)
+
+// FIXME, not yet ready for NRF52
+#define RTC_DATA_ATTR
+
+#define LED_PIN PIN_LED1 // LED1 on nrf52840-DK
+#define BUTTON_PIN PIN_BUTTON1
+
 #else
 
 //
@@ -256,9 +272,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define DEBUG_PORT console // Serial debug port
 
-#ifdef NO_ESP32
+// What platforms should use SEGGER?
+#ifdef NRF52_SERIES
 #define USE_SEGGER
 #endif
+
 #ifdef USE_SEGGER
 #include "SEGGER_RTT.h"
 #define DEBUG_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)

@@ -25,7 +25,9 @@ class Lock
     void unlock();
 
   private:
+#ifdef configUSE_PREEMPTION
     SemaphoreHandle_t handle;
+#endif
 };
 
 // RAII lock guard.
