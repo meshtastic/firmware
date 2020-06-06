@@ -136,15 +136,7 @@ void NodeDB::init()
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
     sprintf(owner.long_name, "Unknown %02x%02x", ourMacAddr[4], ourMacAddr[5]);
 
-    // Crummy guess at our nodenum (but we will check against the nodedb to avoid conflicts)
-    pickNewNodeNum();
-
     sprintf(owner.short_name, "?%02X", myNodeInfo.my_node_num & 0xff);
-
-    // Include our owner in the node db under our nodenum
-    NodeInfo *info = getOrCreateNode(getNodeNum());
-    info->user = owner;
-    info->has_user = true;
 
     if (!FSBegin()) // FIXME - do this in main?
     {
@@ -155,6 +147,15 @@ void NodeDB::init()
     // saveToDisk();
     loadFromDisk();
     // saveToDisk();
+
+    // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we won't
+    // keep using that nodenum forever. Crummy guess at our nodenum (but we will check against the nodedb to avoid conflicts)
+    pickNewNodeNum();
+
+    // Include our owner in the node db under our nodenum
+    NodeInfo *info = getOrCreateNode(getNodeNum());
+    info->user = owner;
+    info->has_user = true;
 
     // We set these _after_ loading from disk - because they come from the build and are more trusted than
     // what is stored in flash
@@ -175,9 +176,12 @@ void NodeDB::init()
  */
 void NodeDB::pickNewNodeNum()
 {
-    // Pick an initial nodenum based on the macaddr
-    NodeNum r = sizeof(NodeNum) == 1 ? ourMacAddr[5]
-                                     : ((ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5]);
+    NodeNum r = myNodeInfo.my_node_num;
+
+    // If we don't have a nodenum at app - pick an initial nodenum based on the macaddr
+    if (r == 0)
+        r = sizeof(NodeNum) == 1 ? ourMacAddr[5]
+                                 : ((ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5]);
 
     if (r == NODENUM_BROADCAST || r < NUM_RESERVED)
         r = NUM_RESERVED; // don't pick a reserved node number
@@ -246,15 +250,18 @@ void NodeDB::saveToDisk()
         if (!pb_encode(&stream, DeviceState_fields, &devicestate)) {
             DEBUG_MSG("Error: can't write protobuf %s\n", PB_GET_ERROR(&stream));
             // FIXME - report failure to phone
+
+            f.close();
+        } else {
+            // Success - replace the old file
+            f.close();
+
+            // brief window of risk here ;-)
+            if (!FS.remove(preffile))
+                DEBUG_MSG("Warning: Can't remove old pref file\n");
+            if (!FS.rename(preftmp, preffile))
+                DEBUG_MSG("Error: can't rename new pref file\n");
         }
-
-        f.close();
-
-        // brief window of risk here ;-)
-        if (!FS.remove(preffile))
-            DEBUG_MSG("Warning: Can't remove old pref file\n");
-        if (!FS.rename(preftmp, preffile))
-            DEBUG_MSG("Error: can't rename new pref file\n");
     } else {
         DEBUG_MSG("ERROR: can't write prefs\n"); // FIXME report to app
     }
