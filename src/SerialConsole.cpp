@@ -1,6 +1,6 @@
 #include "SerialConsole.h"
+#include "PowerFSM.h"
 #include "configuration.h"
-#include "target_specific.h"
 #include <Arduino.h>
 
 #define Port Serial
@@ -40,5 +40,9 @@ void SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
 /// Hookable to find out when connection changes
 void SerialConsole::onConnectionChanged(bool connected)
 {
-    setBluetoothEnable(!connected); // To prevent user confusion, turn off bluetooth while using the serial port api
+    if (connected) { // To prevent user confusion, turn off bluetooth while using the serial port api
+        powerFSM.trigger(EVENT_SERIAL_CONNECTED);
+    } else {
+        powerFSM.trigger(EVENT_SERIAL_DISCONNECTED);
+    }
 }

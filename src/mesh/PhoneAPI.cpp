@@ -18,7 +18,7 @@ void PhoneAPI::init()
 void PhoneAPI::checkConnectionTimeout()
 {
     if (isConnected) {
-        bool newConnected = (millis() - lastContactMsec < radioConfig.preferences.phone_timeout_secs);
+        bool newConnected = (millis() - lastContactMsec < radioConfig.preferences.phone_timeout_secs * 1000L);
         if (!newConnected) {
             isConnected = false;
             onConnectionChanged(isConnected);
@@ -247,8 +247,9 @@ void PhoneAPI::handleToRadioPacket(MeshPacket *p) {}
 /// If the mesh service tells us fromNum has changed, tell the phone
 int PhoneAPI::onNotify(uint32_t newValue)
 {
-    checkConnectionTimeout(); // a handy place to check if we've heard from the phone (since the BLE version doesn't call this from idle)
-    
+    checkConnectionTimeout(); // a handy place to check if we've heard from the phone (since the BLE version doesn't call this
+                              // from idle)
+
     if (state == STATE_SEND_PACKETS || state == STATE_LEGACY) {
         DEBUG_MSG("Telling client we have new packets %u\n", newValue);
         onNowHasData(newValue);
