@@ -39,7 +39,7 @@ We currently support three models of radios.
 
 - US/JP/AU/NZ - 915MHz
 - CN - 470MHz
-- EU - 870MHz
+- EU - 868MHz, 433MHz
 
 Getting a version that includes a screen is optional, but highly recommended.
 
