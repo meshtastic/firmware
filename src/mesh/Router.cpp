@@ -56,8 +56,11 @@ PacketId generatePacketId()
 
     if (!didInit) {
         didInit = true;
-        i = random(0, numPacketId +
-                          1); // pick a random initial sequence number at boot (to prevent repeated reboots always starting at 0)
+
+        // pick a random initial sequence number at boot (to prevent repeated reboots always starting at 0)
+        // Note: we mask the high order bit to ensure that we never pass a 'negative' number to random
+        i = random(numPacketId & 0x7fffffff);
+        DEBUG_MSG("Initial packet id %u, numPacketId %u\n", i, numPacketId);
     }
 
     i++;
