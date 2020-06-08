@@ -30,7 +30,7 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define here.
 */
 
-#define DEVICESTATE_CUR_VER 8
+#define DEVICESTATE_CUR_VER 9
 #define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
 
 #ifndef NO_ESP32
@@ -134,8 +134,11 @@ void NodeDB::init()
     sprintf(owner.id, "!%02x%02x%02x%02x%02x%02x", ourMacAddr[0], ourMacAddr[1], ourMacAddr[2], ourMacAddr[3], ourMacAddr[4],
             ourMacAddr[5]);
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
-    sprintf(owner.long_name, "Unknown %02x%02x", ourMacAddr[4], ourMacAddr[5]);
 
+    // Set default owner name
+    pickNewNodeNum(); // Note: we will repick later, just in case the settings are corrupted, but we need a valid
+    // owner.short_name now
+    sprintf(owner.long_name, "Unknown %02x%02x", ourMacAddr[4], ourMacAddr[5]);
     sprintf(owner.short_name, "?%02X", myNodeInfo.my_node_num & 0xff);
 
     if (!FSBegin()) // FIXME - do this in main?
