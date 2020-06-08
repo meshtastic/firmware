@@ -123,8 +123,6 @@ void NodeDB::init()
 
     // default to no GPS, until one has been found by probing
     myNodeInfo.has_gps = false;
-    myNodeInfo.node_num_bits = sizeof(NodeNum) * 8;
-    myNodeInfo.packet_id_bits = sizeof(PacketId) * 8;
     myNodeInfo.message_timeout_msec = FLOOD_EXPIRE_TIME;
     myNodeInfo.min_app_version = 167;
     generatePacketId(); // FIXME - ugly way to init current_packet_id;
@@ -147,6 +145,11 @@ void NodeDB::init()
     // saveToDisk();
     loadFromDisk();
     // saveToDisk();
+
+    // We set node_num and packet_id _after_ loading from disk, because we always want to use the values this
+    // rom was compiled for, not what happens to be in the save file.
+    myNodeInfo.node_num_bits = sizeof(NodeNum) * 8;
+    myNodeInfo.packet_id_bits = sizeof(PacketId) * 8;
 
     // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we won't
     // keep using that nodenum forever. Crummy guess at our nodenum (but we will check against the nodedb to avoid conflicts)
