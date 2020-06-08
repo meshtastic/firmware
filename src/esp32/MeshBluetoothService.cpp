@@ -58,17 +58,12 @@ class ProtobufCharacteristic : public CallbackCharacteristic
 
     void onRead(BLECharacteristic *c)
     {
-        BLEKeepAliveCallbacks::onRead(c);
         size_t numbytes = pb_encode_to_bytes(trBytes, sizeof(trBytes), fields, my_struct);
         DEBUG_MSG("pbread from %s returns %d bytes\n", c->getUUID().toString().c_str(), numbytes);
         c->setValue(trBytes, numbytes);
     }
 
-    void onWrite(BLECharacteristic *c)
-    {
-        BLEKeepAliveCallbacks::onWrite(c);
-        writeToDest(c, my_struct);
-    }
+    void onWrite(BLECharacteristic *c) { writeToDest(c, my_struct); }
 
   protected:
     /// like onWrite, but we provide an different destination to write to, for use by subclasses that
@@ -84,7 +79,7 @@ class ProtobufCharacteristic : public CallbackCharacteristic
 };
 
 #ifdef SUPPORT_OLD_BLE_API
-class NodeInfoCharacteristic : public BLECharacteristic, public BLEKeepAliveCallbacks
+class NodeInfoCharacteristic : public BLECharacteristic, public BLECharacteristicCallbacks
 {
   public:
     NodeInfoCharacteristic()
@@ -96,8 +91,6 @@ class NodeInfoCharacteristic : public BLECharacteristic, public BLEKeepAliveCall
 
     void onRead(BLECharacteristic *c)
     {
-        BLEKeepAliveCallbacks::onRead(c);
-
         const NodeInfo *info = nodeDB.readNextInfo();
 
         if (info) {
@@ -113,7 +106,6 @@ class NodeInfoCharacteristic : public BLECharacteristic, public BLEKeepAliveCall
 
     void onWrite(BLECharacteristic *c)
     {
-        BLEKeepAliveCallbacks::onWrite(c);
         DEBUG_MSG("Reset nodeinfo read pointer\n");
         nodeDB.resetReadPointer();
     }
@@ -156,8 +148,7 @@ class OwnerCharacteristic : public ProtobufCharacteristic
 
     void onWrite(BLECharacteristic *c)
     {
-        BLEKeepAliveCallbacks::onWrite(
-            c); // NOTE: We do not call the standard ProtobufCharacteristic superclass, because we want custom write behavior
+        // NOTE: We do not call the standard ProtobufCharacteristic superclass, because we want custom write behavior
 
         static User o; // if the phone doesn't set ID we are careful to keep ours, we also always keep our macaddr
         if (writeToDest(c, &o)) {
@@ -196,7 +187,6 @@ class ToRadioCharacteristic : public CallbackCharacteristic
 
     void onWrite(BLECharacteristic *c)
     {
-        BLEKeepAliveCallbacks::onWrite(c);
         DEBUG_MSG("Got on write\n");
 
         bluetoothPhoneAPI->handleToRadio(c->getData(), c->getValue().length());
@@ -212,7 +202,6 @@ class FromRadioCharacteristic : public CallbackCharacteristic
 
     void onRead(BLECharacteristic *c)
     {
-        BLEKeepAliveCallbacks::onRead(c);
         size_t numBytes = bluetoothPhoneAPI->getFromRadio(trBytes);
 
         // Someone is going to read our value as soon as this callback returns.  So fill it with the next message in the queue
@@ -236,11 +225,7 @@ class FromNumCharacteristic : public CallbackCharacteristic
         // observe(&service.fromNumChanged);
     }
 
-    void onRead(BLECharacteristic *c)
-    {
-        BLEKeepAliveCallbacks::onRead(c);
-        DEBUG_MSG("FIXME implement fromnum read\n");
-    }
+    void onRead(BLECharacteristic *c) { DEBUG_MSG("FIXME implement fromnum read\n"); }
 };
 
 /*
