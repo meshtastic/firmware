@@ -30,7 +30,7 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define here.
 */
 
-#define DEVICESTATE_CUR_VER 8
+#define DEVICESTATE_CUR_VER 9
 #define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
 
 #ifndef NO_ESP32
@@ -123,8 +123,6 @@ void NodeDB::init()
 
     // default to no GPS, until one has been found by probing
     myNodeInfo.has_gps = false;
-    myNodeInfo.node_num_bits = sizeof(NodeNum) * 8;
-    myNodeInfo.packet_id_bits = sizeof(PacketId) * 8;
     myNodeInfo.message_timeout_msec = FLOOD_EXPIRE_TIME;
     myNodeInfo.min_app_version = 167;
     generatePacketId(); // FIXME - ugly way to init current_packet_id;
@@ -134,8 +132,11 @@ void NodeDB::init()
     sprintf(owner.id, "!%02x%02x%02x%02x%02x%02x", ourMacAddr[0], ourMacAddr[1], ourMacAddr[2], ourMacAddr[3], ourMacAddr[4],
             ourMacAddr[5]);
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
-    sprintf(owner.long_name, "Unknown %02x%02x", ourMacAddr[4], ourMacAddr[5]);
 
+    // Set default owner name
+    pickNewNodeNum(); // Note: we will repick later, just in case the settings are corrupted, but we need a valid
+    // owner.short_name now
+    sprintf(owner.long_name, "Unknown %02x%02x", ourMacAddr[4], ourMacAddr[5]);
     sprintf(owner.short_name, "?%02X", myNodeInfo.my_node_num & 0xff);
 
     if (!FSBegin()) // FIXME - do this in main?
@@ -147,6 +148,11 @@ void NodeDB::init()
     // saveToDisk();
     loadFromDisk();
     // saveToDisk();
+
+    // We set node_num and packet_id _after_ loading from disk, because we always want to use the values this
+    // rom was compiled for, not what happens to be in the save file.
+    myNodeInfo.node_num_bits = sizeof(NodeNum) * 8;
+    myNodeInfo.packet_id_bits = sizeof(PacketId) * 8;
 
     // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we won't
     // keep using that nodenum forever. Crummy guess at our nodenum (but we will check against the nodedb to avoid conflicts)
