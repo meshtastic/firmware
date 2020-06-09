@@ -29,6 +29,8 @@ class RadioLibInterface : public RadioInterface, private PeriodicTask
      */
     uint32_t rxBad = 0, rxGood = 0, txGood = 0;
 
+    PointerQueue<MeshPacket> txQueue = PointerQueue<MeshPacket>(MAX_TX_QUEUE);
+
   protected:
     float bw = 125;
     uint8_t sf = 9;
