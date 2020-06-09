@@ -27,11 +27,8 @@ void SerialConsole::init()
  */
 void SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
 {
-    // Note: for the time being we could _allow_ debug printing to keep going out the console
-    // I _think_ this is okay because we currently only print debug msgs from loop() and we are only
-    // dispatching serial protobuf msgs from loop() as well.  When things are more threaded in the future this
-    // will need to change.
-    // setDestination(&noopPrint);
+    // Turn off debug serial printing once the API is activated, because other threads could print and corrupt packets
+    setDestination(&noopPrint);
     canWrite = true;
 
     StreamAPI::handleToRadio(buf, len);
