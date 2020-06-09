@@ -129,6 +129,7 @@ static void waitEnterSleep()
 
         if (millis() - now > 30 * 1000) { // If we wait too long just report an error and go to sleep
             recordCriticalError(ErrSleepEnterWait);
+            ESP.restart(); // FIXME - for now we just restart, need to fix bug #167
             break;
         }
     }
