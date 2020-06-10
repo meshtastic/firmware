@@ -124,7 +124,7 @@ void NodeDB::init()
     // default to no GPS, until one has been found by probing
     myNodeInfo.has_gps = false;
     myNodeInfo.message_timeout_msec = FLOOD_EXPIRE_TIME;
-    myNodeInfo.min_app_version = 167;
+    myNodeInfo.min_app_version = 172;
     generatePacketId(); // FIXME - ugly way to init current_packet_id;
 
     // Init our blank owner info to reasonable defaults
