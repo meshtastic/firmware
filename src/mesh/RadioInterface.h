@@ -59,7 +59,6 @@ class RadioInterface : protected NotifiedWorkerThread
 
   protected:
     MeshPacket *sendingPacket = NULL; // The packet we are currently sending
-    PointerQueue<MeshPacket> txQueue;
     uint32_t lastTxStart = 0L;
 
     /**
