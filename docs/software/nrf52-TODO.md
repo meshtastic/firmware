@@ -48,7 +48,6 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 
 ## Items to be 'feature complete'
 
-- change packet numbers to be 32 bits
 - check datasheet about sx1262 temperature compensation
 - enable brownout detection and watchdog
 - stop polling for GPS characters, instead stay blocked on read in a thread
@@ -136,6 +135,7 @@ Nice ideas worth considering someday...
 - scheduleOSCallback doesn't work yet - it is way too fast (causes rapid polling of busyTx, high power draw etc...)
 - find out why we reboot while debugging - it was bluetooth/softdevice
 - make a file system implementation (preferably one that can see the files the bootloader also sees) - preferably https://github.com/adafruit/Adafruit_nRF52_Arduino/blob/master/libraries/InternalFileSytem/examples/Internal_ReadWrite/Internal_ReadWrite.ino else use https://infocenter.nordicsemi.com/topic/com.nordic.infocenter.sdk5.v15.3.0/lib_fds_usage.html?cp=7_5_0_3_55_3
+- change packet numbers to be 32 bits
 
 ```
 

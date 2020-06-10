@@ -26,6 +26,10 @@ class SerialConsole : public StreamAPI, public RedirectablePrint
             RedirectablePrint::write('\r');
         return RedirectablePrint::write(c);
     }
+
+  protected:
+    /// Hookable to find out when connection changes
+    virtual void onConnectionChanged(bool connected);
 };
 
 extern SerialConsole console;

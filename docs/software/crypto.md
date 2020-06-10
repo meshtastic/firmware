@@ -34,7 +34,4 @@ Note that for both stategies, sizes are measured in blocks and that an AES block
 
 ## Remaining todo
 
-- Make the packet numbers 32 bit
-- Confirm the packet #s are stored in flash across deep sleep (and otherwise in in RAM)
 - Have the app change the crypto key when the user generates a new channel
-- Implement for NRF52 [NRF52](https://infocenter.nordicsemi.com/topic/com.nordic.infocenter.sdk5.v15.0.0/lib_crypto_aes.html#sub_aes_ctr)
