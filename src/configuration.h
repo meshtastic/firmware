@@ -258,7 +258,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #ifdef NO_ESP32
 #define USE_SEGGER
+#else
+#define SERIAL0_RX_GPIO 3 // Always GPIO3 on ESP32
 #endif
+
 #ifdef USE_SEGGER
 #include "SEGGER_RTT.h"
 #define DEBUG_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)

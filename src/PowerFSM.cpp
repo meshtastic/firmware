@@ -62,8 +62,13 @@ static void lsIdle()
 
                 secsSlept += sleepTime;
                 // DEBUG_MSG("sleeping, flash led!\n");
+            }
+            if (wakeCause == ESP_SLEEP_WAKEUP_UART) {
+                // Not currently used (because uart triggers in hw have problems)
+                powerFSM.trigger(EVENT_SERIAL_CONNECTED);
             } else {
                 // We woke for some other reason (button press, uart, device interrupt)
+                //uint64_t status = esp_sleep_get_ext1_wakeup_status();
                 DEBUG_MSG("wakeCause %d\n", wakeCause);
 
 #ifdef BUTTON_PIN
