@@ -86,12 +86,14 @@ void MeshService::sendOurOwner(NodeNum dest, bool wantReplies)
 const MeshPacket *MeshService::handleFromRadioUser(const MeshPacket *mp)
 {
     bool wasBroadcast = mp->to == NODENUM_BROADCAST;
-    bool isCollision = mp->from == myNodeInfo.my_node_num;
 
-    // we win if we have a lower macaddr
-    bool weWin = memcmp(&owner.macaddr, &mp->decoded.user.macaddr, sizeof(owner.macaddr)) < 0;
+    // Disable this collision testing if we use 32 bit nodenums
+    bool isCollision = (sizeof(NodeNum) == 1) && (mp->from == myNodeInfo.my_node_num);
 
     if (isCollision) {
+        // we win if we have a lower macaddr
+        bool weWin = memcmp(&owner.macaddr, &mp->decoded.user.macaddr, sizeof(owner.macaddr)) < 0;
+
         if (weWin) {
             DEBUG_MSG("NOTE! Received a nodenum collision and we are vetoing\n");
 
