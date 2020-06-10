@@ -134,7 +134,7 @@ bool RadioLibInterface::canSleep()
 {
     bool res = txQueue.isEmpty();
     if (!res) // only print debug messages if we are vetoing sleep
-        DEBUG_MSG("radio wait to sleep, txEmpty=%d\n", txQueue.isEmpty());
+        DEBUG_MSG("radio wait to sleep, txEmpty=%d\n", res);
 
     return res;
 }
@@ -173,11 +173,13 @@ void RadioLibInterface::loop()
     case ISR_TX:
         handleTransmitInterrupt();
         startReceive();
+        // DEBUG_MSG("tx complete - starting timer\n");
         startTransmitTimer();
         break;
     case ISR_RX:
         handleReceiveInterrupt();
         startReceive();
+        // DEBUG_MSG("rx complete - starting timer\n");
         startTransmitTimer();
         break;
     case TRANSMIT_DELAY_COMPLETED:
@@ -192,6 +194,8 @@ void RadioLibInterface::loop()
                 assert(txp);
                 startSend(txp);
             }
+        } else {
+            // DEBUG_MSG("done with txqueue\n");
         }
         break;
     default:
@@ -216,7 +220,7 @@ void RadioLibInterface::startTransmitTimer(bool withDelay)
         uint32_t delay =
             !withDelay ? 1 : random(MIN_TX_WAIT_MSEC, MAX_TX_WAIT_MSEC); // See documentation for loop() wrt these values
                                                                          // DEBUG_MSG("xmit timer %d\n", delay);
-
+        // DEBUG_MSG("delaying %u\n", delay);
         setPeriod(delay);
     }
 }

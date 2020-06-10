@@ -111,8 +111,8 @@ void initDeepSleep()
 #endif
 }
 
-/// return true if sleep is allowed
-static bool doPreflightSleep()
+
+bool doPreflightSleep()
 {
     if (preflightSleep.notifyObservers(NULL) != 0)
         return false; // vetoed

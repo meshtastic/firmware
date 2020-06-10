@@ -19,6 +19,9 @@ void initDeepSleep();
 void setCPUFast(bool on);
 void setLed(bool ledOn);
 
+/** return true if sleep is allowed right now */
+bool doPreflightSleep();
+
 extern int bootCount;
 
 // is bluetooth sw currently running?
