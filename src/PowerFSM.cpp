@@ -68,7 +68,7 @@ static void lsIdle()
                 powerFSM.trigger(EVENT_SERIAL_CONNECTED);
             } else {
                 // We woke for some other reason (button press, uart, device interrupt)
-                //uint64_t status = esp_sleep_get_ext1_wakeup_status();
+                // uint64_t status = esp_sleep_get_ext1_wakeup_status();
                 DEBUG_MSG("wakeCause %d\n", wakeCause);
 
 #ifdef BUTTON_PIN
@@ -84,6 +84,9 @@ static void lsIdle()
                     powerFSM.trigger(EVENT_WAKE_TIMER);
                 }
             }
+        } else {
+            // Someone says we can't sleep now, so just save some power by sleeping the CPU for 100ms or so
+            delay(100);
         }
     } else {
         // Time to stop sleeping!
