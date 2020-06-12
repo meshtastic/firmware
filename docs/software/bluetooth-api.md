@@ -10,19 +10,28 @@ This device will work with any MTU size, but it is highly recommended that you c
 
 This is the main bluetooth service for the device and provides the API your app should use to get information about the mesh, send packets or provision the radio.
 
-For a reference implementation of a client that uses this service see [RadioInterfaceService](https://github.com/meshtastic/Meshtastic-Android/blob/master/app/src/main/java/com/geeksville/mesh/service/RadioInterfaceService.kt). Typical flow when
-a phone connects to the device should be the following:
+For a reference implementation of a client that uses this service see [RadioInterfaceService](https://github.com/meshtastic/Meshtastic-Android/blob/master/app/src/main/java/com/geeksville/mesh/service/RadioInterfaceService.kt).
 
+Typical flow when a phone connects to the device should be the following (if you want to watch this flow from the python app just run "meshtastic --debug --info" - the flow over BLE is identical):
+
+- There are only three relevant endpoints (and they have built in BLE documentation - so use a BLE tool of your choice to watch them): FromRadio, FromNum (sends notifies when new data is available in FromRadio) and ToRadio
 - SetMTU size to 512
+- Write a ToRadio.startConfig protobuf to the "ToRadio" endpoint" - this tells the radio you are a new connection and you need the entire NodeDB sent down.
+- Read repeatedly from the "FromRadio" endpoint. Each time you read you will get back a FromRadio protobuf (see Meshtatastic-protobuf). Keep reading from this endpoint until you get back and empty buffer.
+- See below for the expected sequence for your initial download.
+- After the initial download, you should subscribe for BLE "notify" on the "FromNum" endpoint. If a notification arrives, that means there are now one or more FromRadio packets waiting inside FromRadio. Read from FromRadio until you get back an empty packet.
+- Any time you want to send packets to the radio, you should write a ToRadio packet into ToRadio.
+
+Expected sequence for initial download:
+
+- After your send startConfig, you will receive a series of FromRadio packets. The sequence of these packets will be as follows (but you are best not counting on this, instead just update your model for whatever packet you receive - based on looking at the type)
 - Read a RadioConfig from "radio" - used to get the channel and radio settings
-- Read (and write if incorrect) a User from "user" - to get the username for this node
+- Read a User from "user" - to get the username for this node
 - Read a MyNodeInfo from "mynode" to get information about this local device
 - Write an empty record to "nodeinfo" to restart the nodeinfo reading state machine
-- Read from "nodeinfo" until it returns empty to build the phone's copy of the current NodeDB for the mesh
-- Read from "fromradio" until it returns empty to get any messages that arrived for this node while the phone was away
-- Subscribe to notify on "fromnum" to get notified whenever the device has a new received packet
-- Read that new packet from "fromradio"
-- Whenever the phone has a packet to send write to "toradio"
+- Read a series of NodeInfo packets to build the phone's copy of the current NodeDB for the mesh
+- Read a endConfig packet that indicates that the entire state you need has been sent.
+- Read a series of MeshPackets until it returns empty to get any messages that arrived for this node while the phone was away
 
 For definitions (and documentation) on FromRadio, ToRadio, MyNodeInfo, NodeInfo and User protocol buffers see [mesh.proto](https://github.com/meshtastic/Meshtastic-protobufs/blob/master/mesh.proto)
 
