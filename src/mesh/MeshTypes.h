@@ -29,4 +29,4 @@ typedef uint32_t PacketId; // A packet sequence number
 typedef int ErrorCode;
 
 /// Alloc and free packets to our global, ISR safe pool
-extern MemoryPool<MeshPacket> packetPool;
+extern Allocator<MeshPacket> &packetPool;

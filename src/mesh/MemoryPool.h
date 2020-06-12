@@ -5,12 +5,58 @@
 
 #include "PointerQueue.h"
 
+template <class T> class Allocator
+{
+
+  public:
+    virtual ~Allocator() {}
+
+    /// Return a queable object which has been prefilled with zeros.  Panic if no buffer is available
+    /// Note: this method is safe to call from regular OR ISR code
+    T *allocZeroed()
+    {
+        T *p = allocZeroed(0);
+
+        assert(p); // FIXME panic instead
+        return p;
+    }
+
+    /// Return a queable object which has been prefilled with zeros - allow timeout to wait for available buffers (you probably
+    /// don't want this version).
+    T *allocZeroed(TickType_t maxWait)
+    {
+        T *p = alloc(maxWait);
+        assert(p);
+
+        if (p)
+            memset(p, 0, sizeof(T));
+        return p;
+    }
+
+    /// Return a queable object which is a copy of some other object
+    T *allocCopy(const T &src, TickType_t maxWait = portMAX_DELAY)
+    {
+        T *p = alloc(maxWait);
+        assert(p);
+
+        if (p)
+            *p = src;
+        return p;
+    }
+
+    /// Return a buffer for use by others
+    virtual void release(T *p) = 0;
+
+  protected:
+    // Alloc some storage
+    virtual T *alloc(TickType_t maxWait) = 0;
+};
+
 /**
  * A pool based allocator
  *
- * Eventually this routine will even be safe for ISR use...
  */
-template <class T> class MemoryPool
+template <class T> class MemoryPool : public Allocator<T>
 {
     PointerQueue<T> dead;
 
@@ -30,39 +76,8 @@ template <class T> class MemoryPool
 
     ~MemoryPool() { delete[] buf; }
 
-    /// Return a queable object which has been prefilled with zeros.  Panic if no buffer is available
-    /// Note: this method is safe to call from regular OR ISR code
-    T *allocZeroed()
-    {
-        T *p = allocZeroed(0);
-
-        assert(p); // FIXME panic instead
-        return p;
-    }
-
-    /// Return a queable object which has been prefilled with zeros - allow timeout to wait for available buffers (you probably
-    /// don't want this version).
-    T *allocZeroed(TickType_t maxWait)
-    {
-        T *p = dead.dequeuePtr(maxWait);
-
-        if (p)
-            memset(p, 0, sizeof(T));
-        return p;
-    }
-
-    /// Return a queable object which is a copy of some other object
-    T *allocCopy(const T &src, TickType_t maxWait = portMAX_DELAY)
-    {
-        T *p = dead.dequeuePtr(maxWait);
-
-        if (p)
-            *p = src;
-        return p;
-    }
-
     /// Return a buffer for use by others
-    void release(T *p)
+    virtual void release(T *p)
     {
         assert(dead.enqueue(p, 0));
         assert(p >= buf &&
@@ -78,4 +93,9 @@ template <class T> class MemoryPool
                (size_t)(p - buf) <
                    maxElements); // sanity check to make sure a programmer didn't free something that didn't come from this pool
     }
+
+  protected:
+    /// Return a queable object which has been prefilled with zeros - allow timeout to wait for available buffers (you
+    /// probably don't want this version).
+    virtual T *alloc(TickType_t maxWait) { return dead.dequeuePtr(maxWait); }
 };
