@@ -35,7 +35,7 @@ Items after the first final candidate release.
 - Don't store position packets in the to phone fifo if we are disconnected. The phone will get that info for 'free' when it
   fetches the fresh nodedb.
 - Use the RFM95 sequencer to stay in idle mode most of the time, then automatically go to receive mode and automatically go from transmit to receive mode. See 4.2.8.2 of manual.
-- Use fixed32 for node IDs, packetIDs and lat/lon - will require all nodes to be updated, but make messages slightly smaller.
+- Use fixed32 for node IDs, packetIDs, successid, failid, and lat/lon - will require all nodes to be updated, but make messages slightly smaller.
 - add "store and forward" support for messages, or move to the DB sync model. This would allow messages to be eventually delivered even if nodes are out of contact at the moment.
 - use variable length Strings in protobufs (instead of current fixed buffers). This would save lots of RAM
 - use BLEDevice::setPower to lower our BLE transmit power - extra range doesn't help us, it costs amps and it increases snoopability
