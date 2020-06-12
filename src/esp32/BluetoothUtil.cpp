@@ -223,11 +223,14 @@ void deinitBLE()
 
     pServer->getAdvertising()->stop();
 
-    destroyUpdateService();
+    if (pUpdate != NULL) {
+        destroyUpdateService();
 
-    pUpdate->stop();
+        pUpdate->stop();
+        pUpdate->stop(); // we delete them below
+    }
+
     pDevInfo->stop();
-    pUpdate->stop(); // we delete them below
 
     // First shutdown bluetooth
     BLEDevice::deinit(false);
@@ -235,7 +238,8 @@ void deinitBLE()
     // do not delete this - it is dynamically allocated, but only once - statically in BLEDevice
     // delete pServer->getAdvertising();
 
-    delete pUpdate;
+    if (pUpdate != NULL)
+        delete pUpdate;
     delete pDevInfo;
     delete pServer;
 
@@ -276,15 +280,18 @@ BLEServer *initBLE(StartBluetoothPinScreenCallback startBtPinScreen, StopBluetoo
     // We now let users create the battery service only if they really want (not all devices have a battery)
     // BLEService *pBattery = createBatteryService(pServer);
 
+#ifdef BLE_SOFTWARE_UPDATE // Disable for now
     pUpdate = createUpdateService(pServer, hwVendor, swVersion,
                                   hwVersion); // We need to advertise this so our android ble scan operation can see it
+
+    pUpdate->start();
+#endif
 
     // It seems only one service can be advertised - so for now don't advertise our updater
     // pServer->getAdvertising()->addServiceUUID(pUpdate->getUUID());
 
     // start all our services (do this after creating all of them)
     pDevInfo->start();
-    pUpdate->start();
 
     // FIXME turn on this restriction only after the device is paired with a phone
     // advert->setScanFilter(false, true); // We let anyone scan for us (FIXME, perhaps only allow that until we are paired with a
