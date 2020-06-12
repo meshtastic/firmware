@@ -26,7 +26,6 @@ template <class T> class Allocator
     T *allocZeroed(TickType_t maxWait)
     {
         T *p = alloc(maxWait);
-        assert(p);
 
         if (p)
             memset(p, 0, sizeof(T));
@@ -50,6 +49,25 @@ template <class T> class Allocator
   protected:
     // Alloc some storage
     virtual T *alloc(TickType_t maxWait) = 0;
+};
+
+/**
+ * An allocator that just uses regular free/malloc
+ */
+template <class T> class MemoryDynamic : public Allocator<T>
+{
+  public:
+    /// Return a buffer for use by others
+    virtual void release(T *p)
+    {
+        assert(p);
+        free(p);
+    }
+
+  protected:
+    /// Return a queable object which has been prefilled with zeros - allow timeout to wait for available buffers (you
+    /// probably don't want this version).
+    virtual T *alloc(TickType_t maxWait) { return (T *)malloc(sizeof(T)); }
 };
 
 /**
