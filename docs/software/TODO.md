@@ -58,6 +58,7 @@ During the beta timeframe the following improvements 'would be nice' (and yeah -
 
 Items after the first final candidate release.
 
+- add "store and forward" support for messages, or move to the DB sync model.  This would allow messages to be eventually delivered even if nodes are out of contact at the moment.
 - use variable length arduino Strings in protobufs (instead of current fixed buffers)
 - use BLEDevice::setPower to lower our BLE transmit power - extra range doesn't help us, it costs amps and it increases snoopability
 - make an install script to let novices install software on their boards
