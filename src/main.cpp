@@ -33,6 +33,7 @@
 #include "power.h"
 // #include "rom/rtc.h"
 #include "DSRRouter.h"
+#include "debug.h"
 #include "main.h"
 #include "screen.h"
 #include "sleep.h"
@@ -313,6 +314,14 @@ void loop()
         screen.stopBootScreen();
         showingBootScreen = false;
     }
+
+#ifdef DEBUG_STACK
+    static uint32_t lastPrint = 0;
+    if (millis() - lastPrint > 10 * 1000L) {
+        lastPrint = millis();
+        meshtastic::printThreadInfo("main");
+    }
+#endif
 
     // Update the screen last, after we've figured out what to show.
     screen.debug()->setNodeNumbersStatus(nodeDB.getNumOnlineNodes(), nodeDB.getNumNodes());
