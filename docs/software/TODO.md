@@ -24,6 +24,7 @@ During the beta timeframe the following improvements 'would be nice'
 
 Items after the first final candidate release.
 
+- Change back to using a fixed sized MemoryPool rather than MemoryDynamic (see bug #149)
 - scan to find channels with low background noise? (Use CAD mode of the RF95 to automatically find low noise channels)
 - If the phone doesn't read fromradio mailbox within X seconds, assume the phone is gone and we can stop queing location msgs
   for it (because it will redownload the nodedb when it comes back)
