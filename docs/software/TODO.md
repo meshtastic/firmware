@@ -1,9 +1,15 @@
 # High priority
 
+- why is the net so chatty now?
+- E22 bringup
+- encryption review findings writeup
+- turn on modem-sleep mode
+
 # Medium priority
 
 Items to complete before the first beta release.
 
+- turn on watchdog timer (because lib code seems buggy)
 - show battery level as % full
 - rx signal measurements -3 marginal, -9 bad, 10 great, -10 means almost unusable. So scale this into % signal strength. preferably as a graph, with an X indicating loss of comms.
 
