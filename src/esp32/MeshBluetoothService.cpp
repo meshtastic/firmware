@@ -49,8 +49,6 @@ class ToRadioCharacteristic : public CallbackCharacteristic
 
     void onWrite(BLECharacteristic *c)
     {
-        DEBUG_MSG("Got on write\n");
-
         bluetoothPhoneAPI->handleToRadio(c->getData(), c->getValue().length());
     }
 };
