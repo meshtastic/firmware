@@ -19,8 +19,9 @@
     4 // max number of packets destined to our queue, we dispatch packets quickly so it doesn't need to be big
 
 // I think this is right, one packet for each of the three fifos + one packet being currently assembled for TX or RX
+// And every TX packet might have a retransmission packet or an ack alive at any moment
 #define MAX_PACKETS                                                                                                              \
-    (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + MAX_TX_QUEUE +                                                                          \
+    (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
      2) // max number of packets which can be in flight (either queued from reception or queued for sending)
 
 // static MemoryPool<MeshPacket> staticPool(MAX_PACKETS);
