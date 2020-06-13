@@ -65,9 +65,13 @@ template <class T> class MemoryDynamic : public Allocator<T>
     }
 
   protected:
-    /// Return a queable object which has been prefilled with zeros - allow timeout to wait for available buffers (you
-    /// probably don't want this version).
-    virtual T *alloc(TickType_t maxWait) { return (T *)malloc(sizeof(T)); }
+    // Alloc some storage
+    virtual T *alloc(TickType_t maxWait)
+    {
+        T *p = (T *)malloc(sizeof(T));
+        assert(p);
+        return p;
+    }
 };
 
 /**
