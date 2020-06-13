@@ -283,6 +283,8 @@ void loop()
     DEBUG_PORT.loop(); // Send/receive protobufs over the serial port
 #endif
 
+    // heap_caps_check_integrity_all(true); // FIXME - disable this expensive check
+
 #ifndef NO_ESP32
     esp32Loop();
 #endif

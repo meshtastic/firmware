@@ -91,8 +91,12 @@ void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
  */
 size_t PhoneAPI::getFromRadio(uint8_t *buf)
 {
-    if (!available())
+    if (!available()) {
+        DEBUG_MSG("getFromRadio, !available\n");
         return false;
+    } else {
+        DEBUG_MSG("getFromRadio, state=%d\n", state);
+    }
 
     // In case we send a FromRadio packet
     memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
