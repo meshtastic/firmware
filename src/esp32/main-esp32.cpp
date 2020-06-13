@@ -160,6 +160,11 @@ void esp32Setup()
     DEBUG_MSG("Setting random seed %u\n", seed);
     randomSeed(seed); // ESP docs say this is fairly random
 
+    DEBUG_MSG("Total heap: %d\n", ESP.getHeapSize());
+    DEBUG_MSG("Free heap: %d\n", ESP.getFreeHeap());
+    DEBUG_MSG("Total PSRAM: %d\n", ESP.getPsramSize());
+    DEBUG_MSG("Free PSRAM: %d\n", ESP.getFreePsram());
+
 #ifdef AXP192_SLAVE_ADDRESS
     axp192Init();
 #endif
