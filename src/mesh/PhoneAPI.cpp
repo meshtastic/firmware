@@ -42,8 +42,9 @@ void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
     if (pb_decode_from_bytes(buf, bufLength, ToRadio_fields, &toRadioScratch)) {
         switch (toRadioScratch.which_variant) {
         case ToRadio_packet_tag: {
-            // If our phone is sending a position, see if we can use it to set our RTC
             MeshPacket &p = toRadioScratch.variant.packet;
+            DEBUG_MSG("PACKET FROM PHONE: id=%d, to=%x, want_ack=%d, which1=%d, which2=%d, typ=%d, buflen=%d\n", p.id, p.to, p.want_ack, p.which_payload,
+            p.decoded.which_payload, p.decoded.data.typ, bufLength);
             service.handleToRadio(p);
             break;
         }

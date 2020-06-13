@@ -1,7 +1,9 @@
 # High priority
 
 - why is the net so chatty now?
+- three bakc to back sends are getting overritten - shows up as three separate writes with the same payload - might be a bug on the android side or the device side - probably android
 - do a release
+- device wakes, turns BLE on and phone doesn't notice (while phone was sitting in auto-connect)
 - E22 bringup
 - encryption review findings writeup
 - turn on modem-sleep mode - https://github.com/espressif/arduino-esp32/issues/1142#issuecomment-512428852
