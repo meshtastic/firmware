@@ -1,9 +1,17 @@
 # High priority
 
+- why is the net so chatty now?
+- do a release
+- device wakes, turns BLE on and phone doesn't notice (while phone was sitting in auto-connect)
+- E22 bringup
+- encryption review findings writeup
+- turn on modem-sleep mode - https://github.com/espressif/arduino-esp32/issues/1142#issuecomment-512428852
+
 # Medium priority
 
 Items to complete before the first beta release.
 
+- turn on watchdog timer (because lib code seems buggy)
 - show battery level as % full
 - rx signal measurements -3 marginal, -9 bad, 10 great, -10 means almost unusable. So scale this into % signal strength. preferably as a graph, with an X indicating loss of comms.
 
@@ -24,6 +32,7 @@ During the beta timeframe the following improvements 'would be nice'
 
 Items after the first final candidate release.
 
+- Change back to using a fixed sized MemoryPool rather than MemoryDynamic (see bug #149)
 - scan to find channels with low background noise? (Use CAD mode of the RF95 to automatically find low noise channels)
 - If the phone doesn't read fromradio mailbox within X seconds, assume the phone is gone and we can stop queing location msgs
   for it (because it will redownload the nodedb when it comes back)
@@ -34,7 +43,7 @@ Items after the first final candidate release.
 - Don't store position packets in the to phone fifo if we are disconnected. The phone will get that info for 'free' when it
   fetches the fresh nodedb.
 - Use the RFM95 sequencer to stay in idle mode most of the time, then automatically go to receive mode and automatically go from transmit to receive mode. See 4.2.8.2 of manual.
-- Use fixed32 for node IDs, packetIDs and lat/lon - will require all nodes to be updated, but make messages slightly smaller.
+- Use fixed32 for node IDs, packetIDs, successid, failid, and lat/lon - will require all nodes to be updated, but make messages slightly smaller.
 - add "store and forward" support for messages, or move to the DB sync model. This would allow messages to be eventually delivered even if nodes are out of contact at the moment.
 - use variable length Strings in protobufs (instead of current fixed buffers). This would save lots of RAM
 - use BLEDevice::setPower to lower our BLE transmit power - extra range doesn't help us, it costs amps and it increases snoopability
