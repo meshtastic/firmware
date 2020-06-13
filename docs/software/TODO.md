@@ -1,9 +1,10 @@
 # High priority
 
 - why is the net so chatty now?
+- do a release
 - E22 bringup
 - encryption review findings writeup
-- turn on modem-sleep mode
+- turn on modem-sleep mode - https://github.com/espressif/arduino-esp32/issues/1142#issuecomment-512428852
 
 # Medium priority
 
