@@ -133,6 +133,7 @@ void stopMeshBluetoothService()
 {
     assert(meshService);
     meshService->stop();
+    meshService->executeDelete();
 }
 
 void destroyMeshBluetoothService()
