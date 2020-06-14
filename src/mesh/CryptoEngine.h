@@ -7,6 +7,8 @@
  *
  */
 
+#define MAX_BLOCKSIZE 256
+
 class CryptoEngine
 {
   protected:

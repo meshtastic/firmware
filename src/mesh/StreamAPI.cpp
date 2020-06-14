@@ -9,6 +9,7 @@ void StreamAPI::loop()
 {
     writeStream();
     readStream();
+    checkConnectionTimeout();
 }
 
 /**

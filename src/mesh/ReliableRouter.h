@@ -88,13 +88,25 @@ class ReliableRouter : public FloodingRouter
 
   protected:
     /**
-     * Called from loop()
-     * Handle any packet that is received by an interface on this node.
-     * Note: some packets may merely being passed through this node and will be forwarded elsewhere.
-     *
-     * Note: this method will free the provided packet
+     * Look for acks/naks or someone retransmitting us
      */
-    virtual void handleReceived(MeshPacket *p);
+    virtual void sniffReceived(const MeshPacket *p);
+
+    /**
+     * Try to find the pending packet record for this ID (or NULL if not found)
+     */
+    PendingPacket *findPendingPacket(NodeNum from, PacketId id) { return findPendingPacket(GlobalPacketId(from, id)); }
+    PendingPacket *findPendingPacket(GlobalPacketId p);
+
+    /**
+     * We hook this method so we can see packets before FloodingRouter says they should be discarded
+     */
+    virtual bool shouldFilterReceived(const MeshPacket *p);
+
+    /**
+     * Add p to the list of packets to retransmit occasionally.  We will free it once we stop retransmitting.
+     */
+    PendingPacket *startRetransmission(MeshPacket *p);
 
   private:
     /**
@@ -109,11 +121,6 @@ class ReliableRouter : public FloodingRouter
      */
     bool stopRetransmission(NodeNum from, PacketId id);
     bool stopRetransmission(GlobalPacketId p);
-
-    /**
-     * Add p to the list of packets to retransmit occasionally.  We will free it once we stop retransmitting.
-     */
-    void startRetransmission(MeshPacket *p);
 
     /**
      * Do any retransmissions that are scheduled (FIXME - for the time being called from loop)

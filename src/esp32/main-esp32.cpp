@@ -156,7 +156,14 @@ void axp192Init()
 
 void esp32Setup()
 {
-    randomSeed(esp_random()); // ESP docs say this is fairly random
+    uint32_t seed = esp_random();
+    DEBUG_MSG("Setting random seed %u\n", seed);
+    randomSeed(seed); // ESP docs say this is fairly random
+
+    DEBUG_MSG("Total heap: %d\n", ESP.getHeapSize());
+    DEBUG_MSG("Free heap: %d\n", ESP.getFreeHeap());
+    DEBUG_MSG("Total PSRAM: %d\n", ESP.getPsramSize());
+    DEBUG_MSG("Free PSRAM: %d\n", ESP.getFreePsram());
 
 #ifdef AXP192_SLAVE_ADDRESS
     axp192Init();
@@ -183,7 +190,15 @@ uint32_t axpDebugRead()
 Periodic axpDebugOutput(axpDebugRead);
 #endif
 
-#define MIN_BAT_MILLIVOLTS 3690 // millivolts. 10% per https://blog.ampow.com/lipo-voltage-chart/
+/**
+ * Per @spattinson
+ * MIN_BAT_MILLIVOLTS seems high. Typical 18650 are different chemistry to LiPo, even for LiPos that chart seems a bit off, other
+ * charts put 3690mV at about 30% for a lipo, for 18650 i think 10% remaining iis in the region of 3.2-3.3V. Reference 1st graph
+ * in [this test report](https://lygte-info.dk/review/batteries2012/Samsung%20INR18650-30Q%203000mAh%20%28Pink%29%20UK.html)
+ * looking at the red line - discharge at 0.2A - he gets a capacity of 2900mah, 90% of 2900 = 2610, that point in the graph looks
+ * to be a shade above 3.2V
+ */
+#define MIN_BAT_MILLIVOLTS 3250 // millivolts. 10% per https://blog.ampow.com/lipo-voltage-chart/
 
 /// loop code specific to ESP32 targets
 void esp32Loop()

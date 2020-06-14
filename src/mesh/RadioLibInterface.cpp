@@ -1,6 +1,5 @@
 #include "RadioLibInterface.h"
 #include "MeshTypes.h"
-#include "OSTimer.h"
 #include "mesh-pb-constants.h"
 #include <configuration.h>
 #include <pb_decode.h>
@@ -11,10 +10,16 @@ static SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 
 RadioLibInterface::RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy,
                                      SPIClass &spi, PhysicalLayer *_iface)
-    : module(cs, irq, rst, busy, spi, spiSettings), iface(_iface)
+    : PeriodicTask(0), module(cs, irq, rst, busy, spi, spiSettings), iface(_iface)
 {
     assert(!instance); // We assume only one for now
     instance = this;
+}
+
+bool RadioLibInterface::init()
+{
+    setup(); // init our timer
+    return RadioInterface::init();
 }
 
 #ifndef NO_ESP32
@@ -129,7 +134,7 @@ bool RadioLibInterface::canSleep()
 {
     bool res = txQueue.isEmpty();
     if (!res) // only print debug messages if we are vetoing sleep
-        DEBUG_MSG("radio wait to sleep, txEmpty=%d\n", txQueue.isEmpty());
+        DEBUG_MSG("radio wait to sleep, txEmpty=%d\n", res);
 
     return res;
 }
@@ -168,11 +173,13 @@ void RadioLibInterface::loop()
     case ISR_TX:
         handleTransmitInterrupt();
         startReceive();
+        // DEBUG_MSG("tx complete - starting timer\n");
         startTransmitTimer();
         break;
     case ISR_RX:
         handleReceiveInterrupt();
         startReceive();
+        // DEBUG_MSG("rx complete - starting timer\n");
         startTransmitTimer();
         break;
     case TRANSMIT_DELAY_COMPLETED:
@@ -187,6 +194,8 @@ void RadioLibInterface::loop()
                 assert(txp);
                 startSend(txp);
             }
+        } else {
+            // DEBUG_MSG("done with txqueue\n");
         }
         break;
     default:
@@ -194,48 +203,25 @@ void RadioLibInterface::loop()
     }
 }
 
-#ifndef NO_ESP32
-#define USE_HW_TIMER
-#else
-// Not needed on NRF52
-#define IRAM_ATTR
-#endif
-
-void IRAM_ATTR RadioLibInterface::timerCallback(void *p1, uint32_t p2)
+void RadioLibInterface::doTask()
 {
-    RadioLibInterface *t = (RadioLibInterface *)p1;
-
-    t->timerRunning = false;
+    disable(); // Don't call this callback again
 
     // We use without overwrite, so that if there is already an interrupt pending to be handled, that gets handle properly (the
     // ISR handler will restart our timer)
-#ifndef USE_HW_TIMER
-    t->notify(TRANSMIT_DELAY_COMPLETED, eSetValueWithoutOverwrite);
-#else
-    BaseType_t xHigherPriorityTaskWoken;
-    instance->notifyFromISR(&xHigherPriorityTaskWoken, TRANSMIT_DELAY_COMPLETED, eSetValueWithoutOverwrite);
 
-    /* Force a context switch if xHigherPriorityTaskWoken is now set to pdTRUE.
-    The macro used to do this is dependent on the port and may be called
-    portEND_SWITCHING_ISR. */
-    YIELD_FROM_ISR(xHigherPriorityTaskWoken);
-#endif
+    notify(TRANSMIT_DELAY_COMPLETED, eSetValueWithoutOverwrite);
 }
 
 void RadioLibInterface::startTransmitTimer(bool withDelay)
 {
     // If we have work to do and the timer wasn't already scheduled, schedule it now
-    if (!timerRunning && !txQueue.isEmpty()) {
-        timerRunning = true;
+    if (getPeriod() == 0 && !txQueue.isEmpty()) {
         uint32_t delay =
-            !withDelay ? 0 : random(MIN_TX_WAIT_MSEC, MAX_TX_WAIT_MSEC); // See documentation for loop() wrt these values
+            !withDelay ? 1 : random(MIN_TX_WAIT_MSEC, MAX_TX_WAIT_MSEC); // See documentation for loop() wrt these values
                                                                          // DEBUG_MSG("xmit timer %d\n", delay);
-#ifdef USE_HW_TIMER
-        bool okay = scheduleHWCallback(timerCallback, this, 0, delay);
-#else
-        bool okay = scheduleOSCallback(timerCallback, this, 0, delay);
-#endif
-        assert(okay);
+        // DEBUG_MSG("delaying %u\n", delay);
+        setPeriod(delay);
     }
 }
 
@@ -315,7 +301,7 @@ void RadioLibInterface::handleReceiveInterrupt()
 /** start an immediate transmit */
 void RadioLibInterface::startSend(MeshPacket *txp)
 {
-    DEBUG_MSG("Starting low level send from=0x%x, id=%u, want_ack=%d\n", txp->from, txp->id, txp->want_ack);
+    DEBUG_MSG("Starting low level send from=0x%x, to=0x%x, id=%u, want_ack=%d\n", txp->from, txp->to, txp->id, txp->want_ack);
     setStandby(); // Cancel any already in process receives
 
     size_t numbytes = beginSending(txp);

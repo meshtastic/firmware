@@ -19,11 +19,15 @@
     4 // max number of packets destined to our queue, we dispatch packets quickly so it doesn't need to be big
 
 // I think this is right, one packet for each of the three fifos + one packet being currently assembled for TX or RX
+// And every TX packet might have a retransmission packet or an ack alive at any moment
 #define MAX_PACKETS                                                                                                              \
-    (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + MAX_TX_QUEUE +                                                                          \
+    (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
      2) // max number of packets which can be in flight (either queued from reception or queued for sending)
 
-MemoryPool<MeshPacket> packetPool(MAX_PACKETS);
+static MemoryPool<MeshPacket> staticPool(MAX_PACKETS);
+// static MemoryDynamic<MeshPacket> staticPool;
+
+Allocator<MeshPacket> &packetPool = staticPool;
 
 /**
  * Constructor
@@ -40,11 +44,9 @@ void Router::loop()
 {
     MeshPacket *mp;
     while ((mp = fromRadioQueue.dequeuePtr(0)) != NULL) {
-        handleReceived(mp);
+        perhapsHandleReceived(mp);
     }
 }
-
-#define NUM_PACKET_ID 255 // 0 is consider invalid
 
 /// Generate a unique packet id
 // FIXME, move this someplace better
@@ -53,14 +55,22 @@ PacketId generatePacketId()
     static uint32_t i; // Note: trying to keep this in noinit didn't help for working across reboots
     static bool didInit = false;
 
+    assert(sizeof(PacketId) == 4 || sizeof(PacketId) == 1);                // only supported values
+    uint32_t numPacketId = sizeof(PacketId) == 1 ? UINT8_MAX : UINT32_MAX; // 0 is consider invalid
+
     if (!didInit) {
         didInit = true;
-        i = random(0, NUM_PACKET_ID +
-                          1); // pick a random initial sequence number at boot (to prevent repeated reboots always starting at 0)
+
+        // pick a random initial sequence number at boot (to prevent repeated reboots always starting at 0)
+        // Note: we mask the high order bit to ensure that we never pass a 'negative' number to random
+        i = random(numPacketId & 0x7fffffff);
+        DEBUG_MSG("Initial packet id %u, numPacketId %u\n", i, numPacketId);
     }
 
     i++;
-    return (i % NUM_PACKET_ID) + 1; // return number between 1 and 255
+    PacketId id = (i % numPacketId) + 1; // return number between 1 and numPacketId (ie - never zero)
+    myNodeInfo.current_packet_id = id;   // Kinda crufty - we keep updating this so the phone can see a current value
+    return id;
 }
 
 MeshPacket *Router::allocForSending()
@@ -95,6 +105,10 @@ ErrorCode Router::sendLocal(MeshPacket *p)
 ErrorCode Router::send(MeshPacket *p)
 {
     assert(p->to != nodeDB.getNodeNum()); // should have already been handled by sendLocal
+
+    PacketId nakId = p->decoded.which_ack == SubPacket_fail_id_tag ? p->decoded.ack.fail_id : 0;
+    assert(
+        !nakId); // I don't think we ever send 0hop naks over the wire (other than to the phone), test that assumption with assert
 
     // Never set the want_ack flag on broadcast packets sent over the air.
     if (p->to == NODENUM_BROADCAST)
@@ -137,6 +151,7 @@ ErrorCode Router::send(MeshPacket *p)
 void Router::sniffReceived(const MeshPacket *p)
 {
     DEBUG_MSG("FIXME-update-db Sniffing packet fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+    // FIXME, update nodedb
 }
 
 bool Router::perhapsDecode(MeshPacket *p)
@@ -191,6 +206,23 @@ void Router::handleReceived(MeshPacket *p)
             notifyPacketReceived.notifyObservers(p);
         }
     }
+}
+
+void Router::perhapsHandleReceived(MeshPacket *p)
+{
+    assert(radioConfig.has_preferences);
+    bool ignore = is_in_repeated(radioConfig.preferences.ignore_incoming, p->from);
+
+    if (ignore)
+        DEBUG_MSG("Ignoring incoming message, 0x%x is in our ignore list\n", p->from);
+    else if (ignore |= shouldFilterReceived(p)) {
+        // DEBUG_MSG("Incoming message was filtered 0x%x\n", p->from);
+    }
+
+    // Note: we avoid calling shouldFilterReceived if we are supposed to ignore certain nodes - because some overrides might
+    // cache/learn of the existence of nodes (i.e. FloodRouter) that they should not
+    if (!ignore)
+        handleReceived(p);
 
     packetPool.release(p);
 }

@@ -23,12 +23,17 @@ reliable messaging tasks (stage one for DSR):
 
 dsr tasks
 
-- Don't use broadcasts for the network pings (close open github issue)
-- add ignoreSenders to radioconfig to allow testing different mesh topologies by refusing to see certain senders
+- oops I might have broken message reception
+- DONE Don't use broadcasts for the network pings (close open github issue)
+- DONE add ignoreSenders to radioconfig to allow testing different mesh topologies by refusing to see certain senders
 - test multihop delivery with the python framework
 
 optimizations / low priority:
 
+- read @cyclomies long email with good ideas on optimizations and reply
+- Remove NodeNum assignment algorithm (now that we use 4 byte node nums)
+- make android app warn if firmware is too old or too new to talk to
+- change nodenums and packetids in protobuf to be fixed32
 - low priority: think more careful about reliable retransmit intervals
 - make ReliableRouter.pending threadsafe
 - bump up PacketPool size for all the new ack/nak/routing packets
