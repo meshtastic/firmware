@@ -8,7 +8,6 @@
 
 SimpleAllocator btPool;
 
-
 bool _BLEClientConnected = false;
 
 class MyServerCallbacks : public BLEServerCallbacks
@@ -67,7 +66,8 @@ BLEService *createDeviceInfomationService(BLEServer *server, std::string hwVendo
 {
     BLEService *deviceInfoService = server->createService(BLEUUID((uint16_t)ESP_GATT_UUID_DEVICE_INFO_SVC));
 
-    BLECharacteristic *swC = new BLECharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_SW_VERSION_STR), BLECharacteristic::PROPERTY_READ);
+    BLECharacteristic *swC =
+        new BLECharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_SW_VERSION_STR), BLECharacteristic::PROPERTY_READ);
     BLECharacteristic *mfC = new BLECharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_MANU_NAME), BLECharacteristic::PROPERTY_READ);
     // BLECharacteristic SerialNumberCharacteristic(BLEUUID((uint16_t) ESP_GATT_UUID_SERIAL_NUMBER_STR),
     // BLECharacteristic::PROPERTY_READ);
@@ -105,7 +105,6 @@ BLEService *createDeviceInfomationService(BLEServer *server, std::string hwVendo
     // caller must call service->start();
     return deviceInfoService;
 }
-
 
 static BLECharacteristic *batteryLevelC;
 
@@ -304,7 +303,11 @@ BLEServer *initBLE(StartBluetoothPinScreenCallback startBtPinScreen, StopBluetoo
     static BLESecurity security; // static to avoid allocs
     BLESecurity *pSecurity = &security;
     pSecurity->setCapability(ESP_IO_CAP_OUT);
-    pSecurity->setAuthenticationMode(ESP_LE_AUTH_REQ_SC_BOND);
+
+    // FIXME - really should be ESP_LE_AUTH_REQ_SC_BOND but it seems there is a bug right now causing that bonding info to be lost
+    // occasionally
+    pSecurity->setAuthenticationMode(ESP_LE_AUTH_BOND);
+
     pSecurity->setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
 
     return pServer;
