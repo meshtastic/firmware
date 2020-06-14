@@ -1,7 +1,7 @@
 # High priority
 
 - why is the net so chatty now?
-- do a release
+- CONFIG_CLASSIC_BT_ENABLED=n
 - device wakes, turns BLE on and phone doesn't notice (while phone was sitting in auto-connect)
 - E22 bringup
 - encryption review findings writeup
@@ -60,6 +60,7 @@ Items after the first final candidate release.
 - add a watchdog timer
 - handle millis() rollover in GPS.getTime - otherwise we will break after 50 days
 - report esp32 device code bugs back to the mothership via android
+- change BLE bonding to something more secure. see comment by pSecurity->setAuthenticationMode(ESP_LE_AUTH_BOND)
 
 # Spinoff project ideas
 

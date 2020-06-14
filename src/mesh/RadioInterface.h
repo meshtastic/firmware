@@ -162,3 +162,6 @@ class SimRadio : public RadioInterface
     /// \return true if initialisation succeeded.
     virtual bool init() { return true; }
 };
+
+/// Debug printing for packets
+void printPacket(const char *prefix, const MeshPacket *p);
