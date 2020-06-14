@@ -30,7 +30,7 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define here.
 */
 
-#define DEVICESTATE_CUR_VER 9
+#define DEVICESTATE_CUR_VER 10
 #define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
 
 #ifndef NO_ESP32
