@@ -3,7 +3,12 @@
 #include <cstring>
 
 #include <OLEDDisplayUi.h>
+
+#ifdef USE_SH1106
+#include <SH1106Wire.h>
+#else
 #include <SSD1306Wire.h>
+#endif
 
 #include "PeriodicTask.h"
 #include "TypedQueue.h"
@@ -211,7 +216,11 @@ class Screen : public PeriodicTask
     /// Holds state for debug information
     DebugInfo debugInfo;
     /// Display device
+#ifdef USE_SH1106
+    SH1106Wire dispdev;
+#else
     SSD1306Wire dispdev;
+#endif
     /// UI helper for rendering to frames and switching between them
     OLEDDisplayUi ui;
 };
