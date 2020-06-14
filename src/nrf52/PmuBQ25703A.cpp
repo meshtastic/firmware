@@ -1,3 +1,4 @@
+#ifdef ARDUINO_NRF52840_PPR
 #include "PmuBQ25703A.h"
 #include <assert.h>
 
@@ -35,6 +36,8 @@ void PmuBQ25703A::init()
     assert(writeRegEx(regs.aDCOption));
     delay(15);
 }
+
+#endif
 
 /*
 

@@ -24,9 +24,9 @@ separated by 2.16 MHz with respect to the adjacent channels. Channel zero starts
 // 1kb was too small
 #define RADIO_STACK_SIZE 4096
 
-RadioInterface::RadioInterface() : txQueue(MAX_TX_QUEUE)
+RadioInterface::RadioInterface()
 {
-    assert(sizeof(PacketHeader) == 4); // make sure the compiler did what we expected
+    assert(sizeof(PacketHeader) == 4 || sizeof(PacketHeader) == 16); // make sure the compiler did what we expected
 
     myNodeInfo.num_channels = NUM_CHANNELS;
 

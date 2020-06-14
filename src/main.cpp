@@ -27,13 +27,13 @@
 #include "NodeDB.h"
 #include "Periodic.h"
 #include "PowerFSM.h"
-#include "Router.h"
 #include "UBloxGPS.h"
 #include "configuration.h"
 #include "error.h"
 #include "power.h"
 // #include "rom/rtc.h"
-#include "ReliableRouter.h"
+#include "DSRRouter.h"
+#include "debug.h"
 #include "main.h"
 #include "screen.h"
 #include "sleep.h"
@@ -53,7 +53,7 @@ meshtastic::PowerStatus powerStatus;
 bool ssd1306_found;
 bool axp192_found;
 
-ReliableRouter realRouter;
+DSRRouter realRouter;
 Router &router = realRouter; // Users of router don't care what sort of subclass implements that API
 
 // -----------------------------------------------------------------------------
@@ -234,10 +234,10 @@ void setup()
         new SimRadio();
 #endif
 
-    router.addInterface(rIf);
-
     if (!rIf->init())
         recordCriticalError(ErrNoRadio);
+    else
+        router.addInterface(rIf);
 
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
@@ -283,6 +283,8 @@ void loop()
     DEBUG_PORT.loop(); // Send/receive protobufs over the serial port
 #endif
 
+    // heap_caps_check_integrity_all(true); // FIXME - disable this expensive check
+
 #ifndef NO_ESP32
     esp32Loop();
 #endif
@@ -314,6 +316,14 @@ void loop()
         screen.stopBootScreen();
         showingBootScreen = false;
     }
+
+#ifdef DEBUG_STACK
+    static uint32_t lastPrint = 0;
+    if (millis() - lastPrint > 10 * 1000L) {
+        lastPrint = millis();
+        meshtastic::printThreadInfo("main");
+    }
+#endif
 
     // Update the screen last, after we've figured out what to show.
     screen.debug()->setNodeNumbersStatus(nodeDB.getNumOnlineNodes(), nodeDB.getNumNodes());

@@ -1,6 +1,7 @@
 #include "PhoneAPI.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PowerFSM.h"
 #include <assert.h>
 
 PhoneAPI::PhoneAPI()
@@ -14,16 +15,36 @@ void PhoneAPI::init()
     observe(&service.fromNumChanged);
 }
 
+void PhoneAPI::checkConnectionTimeout()
+{
+    if (isConnected) {
+        bool newConnected = (millis() - lastContactMsec < radioConfig.preferences.phone_timeout_secs * 1000L);
+        if (!newConnected) {
+            isConnected = false;
+            onConnectionChanged(isConnected);
+        }
+    }
+}
+
 /**
  * Handle a ToRadio protobuf
  */
 void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 {
+    powerFSM.trigger(EVENT_CONTACT_FROM_PHONE); // As long as the phone keeps talking to us, don't let the radio go to sleep
+    lastContactMsec = millis();
+    if (!isConnected) {
+        isConnected = true;
+        onConnectionChanged(isConnected);
+    }
+    // return (lastContactMsec != 0) &&
+
     if (pb_decode_from_bytes(buf, bufLength, ToRadio_fields, &toRadioScratch)) {
         switch (toRadioScratch.which_variant) {
         case ToRadio_packet_tag: {
-            // If our phone is sending a position, see if we can use it to set our RTC
             MeshPacket &p = toRadioScratch.variant.packet;
+            DEBUG_MSG("PACKET FROM PHONE: id=%d, to=%x, want_ack=%d, which1=%d, which2=%d, typ=%d, buflen=%d\n", p.id, p.to, p.want_ack, p.which_payload,
+            p.decoded.which_payload, p.decoded.data.typ, bufLength);
             service.handleToRadio(p);
             break;
         }
@@ -71,8 +92,12 @@ void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
  */
 size_t PhoneAPI::getFromRadio(uint8_t *buf)
 {
-    if (!available())
+    if (!available()) {
+        DEBUG_MSG("getFromRadio, !available\n");
         return false;
+    } else {
+        DEBUG_MSG("getFromRadio, state=%d\n", state);
+    }
 
     // In case we send a FromRadio packet
     memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
@@ -227,6 +252,9 @@ void PhoneAPI::handleToRadioPacket(MeshPacket *p) {}
 /// If the mesh service tells us fromNum has changed, tell the phone
 int PhoneAPI::onNotify(uint32_t newValue)
 {
+    checkConnectionTimeout(); // a handy place to check if we've heard from the phone (since the BLE version doesn't call this
+                              // from idle)
+
     if (state == STATE_SEND_PACKETS || state == STATE_LEGACY) {
         DEBUG_MSG("Telling client we have new packets %u\n", newValue);
         onNowHasData(newValue);

@@ -252,17 +252,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define SERIAL_BAUD 921600 // Serial debug baud rate
 
-#ifdef NO_ESP32
-#define USE_SEGGER
-#endif
-#ifdef USE_SEGGER
-#include "SEGGER_RTT.h"
-#define DEBUG_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
-#else
 #include "SerialConsole.h"
 
 #define DEBUG_PORT console // Serial debug port
 
+#ifdef NO_ESP32
+#define USE_SEGGER
+#else
+#define SERIAL0_RX_GPIO 3 // Always GPIO3 on ESP32
+#endif
+
+#ifdef USE_SEGGER
+#include "SEGGER_RTT.h"
+#define DEBUG_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
+#else
 #ifdef DEBUG_PORT
 #define DEBUG_MSG(...) DEBUG_PORT.printf(__VA_ARGS__)
 #else

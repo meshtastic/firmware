@@ -30,8 +30,6 @@ class TotalSizeCharacteristic : public CallbackCharacteristic
 
     void onWrite(BLECharacteristic *c)
     {
-        BLEKeepAliveCallbacks::onWrite(c);
-
         LockGuard g(updateLock);
         // Check if there is enough to OTA Update
         uint32_t len = getValue32(c, 0);
@@ -67,8 +65,6 @@ class DataCharacteristic : public CallbackCharacteristic
 
     void onWrite(BLECharacteristic *c)
     {
-        BLEKeepAliveCallbacks::onWrite(c);
-
         LockGuard g(updateLock);
         std::string value = c->getValue();
         uint32_t len = value.length();
@@ -92,8 +88,6 @@ class CRC32Characteristic : public CallbackCharacteristic
 
     void onWrite(BLECharacteristic *c)
     {
-        BLEKeepAliveCallbacks::onWrite(c);
-
         LockGuard g(updateLock);
         uint32_t expectedCRC = getValue32(c, 0);
         uint32_t actualCRC = crc.finalize();

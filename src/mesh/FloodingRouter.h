@@ -46,11 +46,15 @@ class FloodingRouter : public Router, protected PacketHistory
 
   protected:
     /**
-     * Called from loop()
-     * Handle any packet that is received by an interface on this node.
-     * Note: some packets may merely being passed through this node and will be forwarded elsewhere.
+     * Should this incoming filter be dropped?
      *
-     * Note: this method will free the provided packet
+     * Called immedately on receiption, before any further processing.
+     * @return true to abandon the packet
      */
-    virtual void handleReceived(MeshPacket *p);
+    virtual bool shouldFilterReceived(const MeshPacket *p);
+
+    /**
+     * Look for broadcasts we need to rebroadcast
+     */
+    virtual void sniffReceived(const MeshPacket *p);
 };
