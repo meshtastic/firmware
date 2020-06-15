@@ -152,7 +152,10 @@ void setup()
 #else
     Wire.begin();
 #endif
+    // i2c still busted on new board
+#ifndef ARDUINO_NRF52840_PPR
     scanI2Cdevice();
+#endif
 
     // Buttons & LED
 #ifdef BUTTON_PIN
@@ -234,7 +237,7 @@ void setup()
         new SimRadio();
 #endif
 
-    if (!rIf->init())
+    if (!rIf || !rIf->init())
         recordCriticalError(ErrNoRadio);
     else
         router.addInterface(rIf);

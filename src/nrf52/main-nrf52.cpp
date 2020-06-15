@@ -59,12 +59,6 @@ void setBluetoothEnable(bool on)
     }
 }
 
-#ifdef ARDUINO_NRF52840_PPR
-#include "PmuBQ25703A.h"
-
-PmuBQ25703A pmu;
-#endif
-
 void nrf52Setup()
 {
 
