@@ -26,60 +26,73 @@ static void sdsEnter()
 
 #include "error.h"
 
+static uint32_t secsSlept;
+
 static void lsEnter()
 {
     DEBUG_MSG("lsEnter begin, ls_secs=%u\n", radioConfig.preferences.ls_secs);
     screen.setOn(false);
+    secsSlept = 0; // How long have we been sleeping this time
 
     DEBUG_MSG("lsEnter end\n");
 }
 
 static void lsIdle()
 {
-    DEBUG_MSG("lsIdle begin ls_secs=%u\n", radioConfig.preferences.ls_secs);
+    // DEBUG_MSG("lsIdle begin ls_secs=%u\n", radioConfig.preferences.ls_secs);
 
 #ifndef NO_ESP32
-    uint32_t secsSlept = 0;
     esp_sleep_source_t wakeCause = ESP_SLEEP_WAKEUP_UNDEFINED;
-    bool reached_ls_secs = false;
 
-    while (!reached_ls_secs) {
+    // Do we have more sleeping to do?
+    if (secsSlept < radioConfig.preferences.ls_secs) {
         // Briefly come out of sleep long enough to blink the led once every few seconds
-        uint32_t sleepTime = 5;
+        uint32_t sleepTime = 30;
 
-        setLed(false); // Never leave led on while in light sleep
-        wakeCause = doLightSleep(sleepTime * 1000LL);
-        if (wakeCause != ESP_SLEEP_WAKEUP_TIMER)
-            break;
+        // If some other service would stall sleep, don't let sleep happen yet
+        if (doPreflightSleep()) {
+            setLed(false); // Never leave led on while in light sleep
+            wakeCause = doLightSleep(sleepTime * 1000LL);
 
-        setLed(true); // briefly turn on led
-        doLightSleep(1);
-        if (wakeCause != ESP_SLEEP_WAKEUP_TIMER)
-            break;
+            if (wakeCause == ESP_SLEEP_WAKEUP_TIMER) {
+                // Normal case: timer expired, we should just go back to sleep ASAP
 
-        secsSlept += sleepTime;
-        reached_ls_secs = secsSlept >= radioConfig.preferences.ls_secs;
-    }
-    setLed(false);
+                setLed(true);                // briefly turn on led
+                wakeCause = doLightSleep(1); // leave led on for 1ms
 
-    if (reached_ls_secs) {
-        // stay in LS mode but let loop check whatever it wants
-        DEBUG_MSG("reached ls_secs, servicing loop()\n");
-    } else {
-        DEBUG_MSG("wakeCause %d\n", wakeCause);
+                secsSlept += sleepTime;
+                // DEBUG_MSG("sleeping, flash led!\n");
+            }
+            if (wakeCause == ESP_SLEEP_WAKEUP_UART) {
+                // Not currently used (because uart triggers in hw have problems)
+                powerFSM.trigger(EVENT_SERIAL_CONNECTED);
+            } else {
+                // We woke for some other reason (button press, uart, device interrupt)
+                // uint64_t status = esp_sleep_get_ext1_wakeup_status();
+                DEBUG_MSG("wakeCause %d\n", wakeCause);
 
 #ifdef BUTTON_PIN
-        bool pressed = !digitalRead(BUTTON_PIN);
+                bool pressed = !digitalRead(BUTTON_PIN);
 #else
-        bool pressed = false;
+                bool pressed = false;
 #endif
-        if (pressed) // If we woke because of press, instead generate a PRESS event.
-        {
-            powerFSM.trigger(EVENT_PRESS);
+                if (pressed) // If we woke because of press, instead generate a PRESS event.
+                {
+                    powerFSM.trigger(EVENT_PRESS);
+                } else {
+                    // Otherwise let the NB state handle the IRQ (and that state will handle stuff like IRQs etc)
+                    powerFSM.trigger(EVENT_WAKE_TIMER);
+                }
+            }
         } else {
-            // Otherwise let the NB state handle the IRQ (and that state will handle stuff like IRQs etc)
-            powerFSM.trigger(EVENT_WAKE_TIMER);
+            // Someone says we can't sleep now, so just save some power by sleeping the CPU for 100ms or so
+            delay(100);
         }
+    } else {
+        // Time to stop sleeping!
+        setLed(false);
+        DEBUG_MSG("reached ls_secs, servicing loop()\n");
+        powerFSM.trigger(EVENT_WAKE_TIMER);
     }
 #endif
 }
@@ -102,6 +115,12 @@ static void darkEnter()
 {
     setBluetoothEnable(true);
     screen.setOn(false);
+}
+
+static void serialEnter()
+{
+    setBluetoothEnable(false);
+    screen.setOn(true);
 }
 
 static void onEnter()
@@ -133,6 +152,7 @@ State stateSDS(sdsEnter, NULL, NULL, "SDS");
 State stateLS(lsEnter, lsIdle, lsExit, "LS");
 State stateNB(nbEnter, NULL, NULL, "NB");
 State stateDARK(darkEnter, NULL, NULL, "DARK");
+State stateSERIAL(serialEnter, NULL, NULL, "SERIAL");
 State stateBOOT(bootEnter, NULL, NULL, "BOOT");
 State stateON(onEnter, NULL, NULL, "ON");
 Fsm powerFSM(&stateBOOT);
@@ -148,7 +168,7 @@ void PowerFSM_setup()
 
     powerFSM.add_transition(&stateNB, &stateNB, EVENT_RECEIVED_PACKET, NULL, "Received packet, resetting win wake");
 
-    // Handle press events
+    // Handle press events - note: we ignore button presses when in API mode
     powerFSM.add_transition(&stateLS, &stateON, EVENT_PRESS, NULL, "Press");
     powerFSM.add_transition(&stateNB, &stateON, EVENT_PRESS, NULL, "Press");
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_PRESS, NULL, "Press");
@@ -160,6 +180,7 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateNB, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
     powerFSM.add_transition(&stateDARK, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
     powerFSM.add_transition(&stateON, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
+    powerFSM.add_transition(&stateSERIAL, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
 
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_BLUETOOTH_PAIR, NULL, "Bluetooth pairing");
     powerFSM.add_transition(&stateON, &stateON, EVENT_BLUETOOTH_PAIR, NULL, "Bluetooth pairing");
@@ -172,6 +193,13 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateNB, &stateON, EVENT_RECEIVED_TEXT_MSG, NULL, "Received text");
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_RECEIVED_TEXT_MSG, NULL, "Received text");
     powerFSM.add_transition(&stateON, &stateON, EVENT_RECEIVED_TEXT_MSG, NULL, "Received text"); // restarts the sleep timer
+
+    powerFSM.add_transition(&stateLS, &stateSERIAL, EVENT_SERIAL_CONNECTED, NULL, "serial API");
+    powerFSM.add_transition(&stateNB, &stateSERIAL, EVENT_SERIAL_CONNECTED, NULL, "serial API");
+    powerFSM.add_transition(&stateDARK, &stateSERIAL, EVENT_SERIAL_CONNECTED, NULL, "serial API");
+    powerFSM.add_transition(&stateON, &stateSERIAL, EVENT_SERIAL_CONNECTED, NULL, "serial API");
+
+    powerFSM.add_transition(&stateSERIAL, &stateNB, EVENT_SERIAL_DISCONNECTED, NULL, "serial disconnect");
 
     powerFSM.add_transition(&stateDARK, &stateDARK, EVENT_CONTACT_FROM_PHONE, NULL, "Contact from phone");
 

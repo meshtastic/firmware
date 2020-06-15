@@ -40,7 +40,6 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 
 ## Items to be 'feature complete'
 
-- change packet numbers to be 32 bits
 - check datasheet about sx1262 temperature compensation
 - enable brownout detection and watchdog
 - stop polling for GPS characters, instead stay blocked on read in a thread
@@ -60,8 +59,6 @@ Needed to be fully functional at least at the same level of the ESP32 boards. At
 
 Nice ideas worth considering someday...
 
-- Use flego to me an iOS/linux app? https://felgo.com/doc/qt/qtbluetooth-index/ or
-- Use flutter to make an iOS/linux app? https://github.com/Polidea/FlutterBleLib
 - enable monitor mode debugging (need to use real jlink): https://devzone.nordicsemi.com/nordic/nordic-blog/b/blog/posts/monitor-mode-debugging-with-j-link-and-gdbeclipse
 - Improve efficiency of PeriodicTimer by only checking the next queued timer event, and carefully sorting based on schedule
 - make a Mfg Controller and device under test classes as examples of custom app code for third party devs. Make a post about this. Use a custom payload type code. Have device under test send a broadcast with max hopcount of 0 for the 'mfgcontroller' payload type. mfg controller will read SNR and reply. DOT will declare failure/success and switch to the regular app screen.
@@ -128,6 +125,7 @@ Nice ideas worth considering someday...
 - scheduleOSCallback doesn't work yet - it is way too fast (causes rapid polling of busyTx, high power draw etc...)
 - find out why we reboot while debugging - it was bluetooth/softdevice
 - make a file system implementation (preferably one that can see the files the bootloader also sees) - preferably https://github.com/adafruit/Adafruit_nRF52_Arduino/blob/master/libraries/InternalFileSytem/examples/Internal_ReadWrite/Internal_ReadWrite.ino else use https://infocenter.nordicsemi.com/topic/com.nordic.infocenter.sdk5.v15.3.0/lib_fds_usage.html?cp=7_5_0_3_55_3
+- change packet numbers to be 32 bits
 
 ```
 

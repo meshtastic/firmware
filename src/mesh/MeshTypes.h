@@ -6,8 +6,8 @@
 #include "mesh.pb.h"
 #include <Arduino.h>
 
-typedef uint8_t NodeNum;
-typedef uint8_t PacketId; // A packet sequence number
+typedef uint32_t NodeNum;
+typedef uint32_t PacketId; // A packet sequence number
 
 #define NODENUM_BROADCAST (sizeof(NodeNum) == 4 ? UINT32_MAX : UINT8_MAX)
 #define ERRNO_OK 0
@@ -29,4 +29,4 @@ typedef uint8_t PacketId; // A packet sequence number
 typedef int ErrorCode;
 
 /// Alloc and free packets to our global, ISR safe pool
-extern MemoryPool<MeshPacket> packetPool;
+extern Allocator<MeshPacket> &packetPool;

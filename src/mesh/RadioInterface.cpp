@@ -24,7 +24,53 @@ separated by 2.16 MHz with respect to the adjacent channels. Channel zero starts
 // 1kb was too small
 #define RADIO_STACK_SIZE 4096
 
-RadioInterface::RadioInterface() : txQueue(MAX_TX_QUEUE)
+void printPacket(const char *prefix, const MeshPacket *p)
+{
+    DEBUG_MSG("%s (id=0x%08x Fr0x%02x To0x%02x, WantAck%d, HopLim%d", prefix, p->id, p->from & 0xff, p->to & 0xff, p->want_ack,
+              p->hop_limit);
+    if (p->which_payload == MeshPacket_decoded_tag) {
+        auto &s = p->decoded;
+        switch (s.which_payload) {
+        case SubPacket_data_tag:
+            DEBUG_MSG(" Payload:Data");
+            break;
+        case SubPacket_position_tag:
+            DEBUG_MSG(" Payload:Position");
+            break;
+        case SubPacket_user_tag:
+            DEBUG_MSG(" Payload:User");
+            break;
+        case 0:
+            DEBUG_MSG(" Payload:None");
+            break;
+        default:
+            DEBUG_MSG(" Payload:%d", s.which_payload);
+            break;
+        }
+        if (s.want_response)
+            DEBUG_MSG(" WANTRESP");
+
+        if (s.source != 0)
+            DEBUG_MSG(" source=%08x", s.source);
+
+        if (s.dest != 0)
+            DEBUG_MSG(" dest=%08x", s.dest);
+
+        if (s.which_ack == SubPacket_success_id_tag)
+            DEBUG_MSG(" successId=%08x", s.ack.success_id);
+        else if (s.which_ack == SubPacket_fail_id_tag)
+            DEBUG_MSG(" failId=%08x", s.ack.fail_id);
+    } else {
+        DEBUG_MSG(" encrypted");
+    }
+
+    if (p->rx_time != 0) {
+        DEBUG_MSG(" rxtime=%u", p->rx_time);
+    }
+    DEBUG_MSG(")\n");
+}
+
+RadioInterface::RadioInterface()
 {
     assert(sizeof(PacketHeader) == 4 || sizeof(PacketHeader) == 16); // make sure the compiler did what we expected
 
