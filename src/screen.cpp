@@ -34,7 +34,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define FONT_HEIGHT 14 // actually 13 for "ariel 10" but want a little extra space
 #define FONT_HEIGHT_16 (ArialMT_Plain_16[1] + 1)
+#ifdef USE_SH1106
+#define SCREEN_WIDTH 132
+#else
 #define SCREEN_WIDTH 128
+#endif
 #define SCREEN_HEIGHT 64
 #define TRANSITION_FRAMERATE 30 // fps
 #define IDLE_FRAMERATE 10       // in fps

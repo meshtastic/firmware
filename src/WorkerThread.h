@@ -18,6 +18,8 @@ class Thread
 
     virtual ~Thread() { vTaskDelete(taskHandle); }
 
+    uint32_t getStackHighwaterMark() { return uxTaskGetStackHighWaterMark(taskHandle); }
+
   protected:
     /**
      * The method that will be called when start is called.

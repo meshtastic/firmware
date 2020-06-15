@@ -19,6 +19,9 @@ void initDeepSleep();
 void setCPUFast(bool on);
 void setLed(bool ledOn);
 
+/** return true if sleep is allowed right now */
+bool doPreflightSleep();
+
 extern int bootCount;
 
 // is bluetooth sw currently running?
@@ -32,3 +35,5 @@ extern Observable<void *> notifySleep;
 
 /// Called to tell observers we are now entering (deep) sleep and you should prepare.  Must return 0
 extern Observable<void *> notifyDeepSleep;
+
+void enableModemSleep();

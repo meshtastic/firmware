@@ -86,12 +86,14 @@ void MeshService::sendOurOwner(NodeNum dest, bool wantReplies)
 const MeshPacket *MeshService::handleFromRadioUser(const MeshPacket *mp)
 {
     bool wasBroadcast = mp->to == NODENUM_BROADCAST;
-    bool isCollision = mp->from == myNodeInfo.my_node_num;
 
-    // we win if we have a lower macaddr
-    bool weWin = memcmp(&owner.macaddr, &mp->decoded.user.macaddr, sizeof(owner.macaddr)) < 0;
+    // Disable this collision testing if we use 32 bit nodenums
+    bool isCollision = (sizeof(NodeNum) == 1) && (mp->from == myNodeInfo.my_node_num);
 
     if (isCollision) {
+        // we win if we have a lower macaddr
+        bool weWin = memcmp(&owner.macaddr, &mp->decoded.user.macaddr, sizeof(owner.macaddr)) < 0;
+
         if (weWin) {
             DEBUG_MSG("NOTE! Received a nodenum collision and we are vetoing\n");
 
@@ -158,7 +160,7 @@ int MeshService::handleFromRadio(const MeshPacket *mp)
 
     // If we veto a received User packet, we don't put it into the DB or forward it to the phone (to prevent confusing it)
     if (mp) {
-        DEBUG_MSG("Forwarding to phone, from=0x%x, rx_time=%u\n", mp->from, mp->rx_time);
+        printPacket("Forwarding to phone", mp);
         nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
 
         fromNum++;

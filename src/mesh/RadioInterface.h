@@ -59,7 +59,6 @@ class RadioInterface : protected NotifiedWorkerThread
 
   protected:
     MeshPacket *sendingPacket = NULL; // The packet we are currently sending
-    PointerQueue<MeshPacket> txQueue;
     uint32_t lastTxStart = 0L;
 
     /**
@@ -163,3 +162,6 @@ class SimRadio : public RadioInterface
     /// \return true if initialisation succeeded.
     virtual bool init() { return true; }
 };
+
+/// Debug printing for packets
+void printPacket(const char *prefix, const MeshPacket *p);

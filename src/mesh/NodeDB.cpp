@@ -30,7 +30,7 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define here.
 */
 
-#define DEVICESTATE_CUR_VER 8
+#define DEVICESTATE_CUR_VER 10
 #define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
 
 #ifndef NO_ESP32
@@ -101,10 +101,12 @@ void NodeDB::resetRadioConfig()
     crypto->setKey(channelSettings.psk.size, channelSettings.psk.bytes);
 
     // temp hack for quicker testing
+
     /*
     radioConfig.preferences.screen_on_secs = 30;
     radioConfig.preferences.wait_bluetooth_secs = 30;
-    radioConfig.preferences.position_broadcast_secs = 15;
+    radioConfig.preferences.position_broadcast_secs = 6 * 60;
+    radioConfig.preferences.ls_secs = 60;
     */
 }
 
@@ -114,7 +116,6 @@ void NodeDB::init()
     devicestate.has_my_node = true;
     devicestate.has_radio = true;
     devicestate.has_owner = true;
-    devicestate.has_radio = false;
     devicestate.radio.has_channel_settings = true;
     devicestate.radio.has_preferences = true;
     devicestate.node_db_count = 0;
@@ -124,10 +125,8 @@ void NodeDB::init()
 
     // default to no GPS, until one has been found by probing
     myNodeInfo.has_gps = false;
-    myNodeInfo.node_num_bits = sizeof(NodeNum) * 8;
-    myNodeInfo.packet_id_bits = sizeof(PacketId) * 8;
     myNodeInfo.message_timeout_msec = FLOOD_EXPIRE_TIME;
-    myNodeInfo.min_app_version = 167;
+    myNodeInfo.min_app_version = 172;
     generatePacketId(); // FIXME - ugly way to init current_packet_id;
 
     // Init our blank owner info to reasonable defaults
@@ -135,17 +134,12 @@ void NodeDB::init()
     sprintf(owner.id, "!%02x%02x%02x%02x%02x%02x", ourMacAddr[0], ourMacAddr[1], ourMacAddr[2], ourMacAddr[3], ourMacAddr[4],
             ourMacAddr[5]);
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
+
+    // Set default owner name
+    pickNewNodeNum(); // Note: we will repick later, just in case the settings are corrupted, but we need a valid
+    // owner.short_name now
     sprintf(owner.long_name, "Unknown %02x%02x", ourMacAddr[4], ourMacAddr[5]);
-
-    // Crummy guess at our nodenum
-    pickNewNodeNum();
-
     sprintf(owner.short_name, "?%02X", myNodeInfo.my_node_num & 0xff);
-
-    // Include our owner in the node db under our nodenum
-    NodeInfo *info = getOrCreateNode(getNodeNum());
-    info->user = owner;
-    info->has_user = true;
 
     if (!FSBegin()) // FIXME - do this in main?
     {
@@ -156,6 +150,20 @@ void NodeDB::init()
     // saveToDisk();
     loadFromDisk();
     // saveToDisk();
+
+    // We set node_num and packet_id _after_ loading from disk, because we always want to use the values this
+    // rom was compiled for, not what happens to be in the save file.
+    myNodeInfo.node_num_bits = sizeof(NodeNum) * 8;
+    myNodeInfo.packet_id_bits = sizeof(PacketId) * 8;
+
+    // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we won't
+    // keep using that nodenum forever. Crummy guess at our nodenum (but we will check against the nodedb to avoid conflicts)
+    pickNewNodeNum();
+
+    // Include our owner in the node db under our nodenum
+    NodeInfo *info = getOrCreateNode(getNodeNum());
+    info->user = owner;
+    info->has_user = true;
 
     // We set these _after_ loading from disk - because they come from the build and are more trusted than
     // what is stored in flash
@@ -176,9 +184,12 @@ void NodeDB::init()
  */
 void NodeDB::pickNewNodeNum()
 {
-    // Pick an initial nodenum based on the macaddr
-    NodeNum r = sizeof(NodeNum) == 1 ? ourMacAddr[5]
-                                     : ((ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5]);
+    NodeNum r = myNodeInfo.my_node_num;
+
+    // If we don't have a nodenum at app - pick an initial nodenum based on the macaddr
+    if (r == 0)
+        r = sizeof(NodeNum) == 1 ? ourMacAddr[5]
+                                 : ((ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5]);
 
     if (r == NODENUM_BROADCAST || r < NUM_RESERVED)
         r = NUM_RESERVED; // don't pick a reserved node number
@@ -247,15 +258,18 @@ void NodeDB::saveToDisk()
         if (!pb_encode(&stream, DeviceState_fields, &devicestate)) {
             DEBUG_MSG("Error: can't write protobuf %s\n", PB_GET_ERROR(&stream));
             // FIXME - report failure to phone
+
+            f.close();
+        } else {
+            // Success - replace the old file
+            f.close();
+
+            // brief window of risk here ;-)
+            if (!FS.remove(preffile))
+                DEBUG_MSG("Warning: Can't remove old pref file\n");
+            if (!FS.rename(preftmp, preffile))
+                DEBUG_MSG("Error: can't rename new pref file\n");
         }
-
-        f.close();
-
-        // brief window of risk here ;-)
-        if (!FS.remove(preffile))
-            DEBUG_MSG("Warning: Can't remove old pref file\n");
-        if (!FS.rename(preftmp, preffile))
-            DEBUG_MSG("Error: can't rename new pref file\n");
     } else {
         DEBUG_MSG("ERROR: can't write prefs\n"); // FIXME report to app
     }
