@@ -104,6 +104,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define SSD1306_ADDRESS 0x3C
 
+// The SH1106 controller is almost, but not quite, the same as SSD1306
+// Define this if you know you have that controller or your "SSD1306" misbehaves.
+//#define USE_SH1106
+
 // Flip the screen upside down by default as it makes more sense on T-BEAM
 // devices. Comment this out to not rotate screen 180 degrees.
 #define FLIP_SCREEN_VERTICALLY
