@@ -150,8 +150,8 @@ ErrorCode Router::send(MeshPacket *p)
  */
 void Router::sniffReceived(const MeshPacket *p)
 {
-    DEBUG_MSG("FIXME-update-db Sniffing packet fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
-    // FIXME, update nodedb
+    DEBUG_MSG("FIXME-update-db Sniffing packet\n");
+    // FIXME, update nodedb here for any packet that passes through us
 }
 
 bool Router::perhapsDecode(MeshPacket *p)
@@ -202,7 +202,7 @@ void Router::handleReceived(MeshPacket *p)
         sniffReceived(p);
 
         if (p->to == NODENUM_BROADCAST || p->to == getNodeNum()) {
-            DEBUG_MSG("Notifying observers of received packet fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+            printPacket("Delivering rx packet", p);
             notifyPacketReceived.notifyObservers(p);
         }
     }

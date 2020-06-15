@@ -2,6 +2,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "RadioInterface.h"
 #include <assert.h>
 
 PhoneAPI::PhoneAPI()
@@ -43,8 +44,7 @@ void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
         switch (toRadioScratch.which_variant) {
         case ToRadio_packet_tag: {
             MeshPacket &p = toRadioScratch.variant.packet;
-            DEBUG_MSG("PACKET FROM PHONE: id=%d, to=%x, want_ack=%d, which1=%d, which2=%d, typ=%d, buflen=%d\n", p.id, p.to, p.want_ack, p.which_payload,
-            p.decoded.which_payload, p.decoded.data.typ, bufLength);
+            printPacket("PACKET FROM PHONE", &p);
             service.handleToRadio(p);
             break;
         }
