@@ -91,9 +91,6 @@ class RadioLibInterface : public RadioInterface, private PeriodicTask
     virtual void startReceive() = 0;
 
   private:
-    /** start an immediate transmit */
-    void startSend(MeshPacket *txp);
-
     /** if we have something waiting to send, start a short random timer so we can come check for collision before actually doing
      * the transmit
      *
@@ -113,7 +110,12 @@ class RadioLibInterface : public RadioInterface, private PeriodicTask
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
     virtual bool init();
-    
+
+    /** start an immediate transmit
+     *  This method is virtual so subclasses can hook as needed, subclasses should not call directly
+     */
+    virtual void startSend(MeshPacket *txp);
+
     /**
      * Convert our modemConfig enum into wf, sf, etc...
      *
