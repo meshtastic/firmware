@@ -153,7 +153,9 @@ void setup()
     Wire.begin();
 #endif
     // i2c still busted on new board
-    // scanI2Cdevice();
+#ifndef ARDUINO_NRF52840_PPR
+    scanI2Cdevice();
+#endif
 
     // Buttons & LED
 #ifdef BUTTON_PIN
@@ -181,9 +183,6 @@ void setup()
 #ifdef NRF52_SERIES
     nrf52Setup();
 #endif
-
-    extern void testLCD();
-    // testLCD();
 
     // Initialize the screen first so we can show the logo while we start up everything else.
     if (ssd1306_found)
