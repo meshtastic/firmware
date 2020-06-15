@@ -137,6 +137,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // #define SX1262_ANT_SW (32 + 10)
 #define SX1262_RXEN (22)
 #define SX1262_TXEN (24)
+#define SX1262_E22  // Indicates this SX1262 is inside of an ebyte E22 module and special config should be done for that
 
 // ERC12864-10 LCD
 #define ERC12864_CS (32 + 4)
