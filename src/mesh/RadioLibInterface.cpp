@@ -114,8 +114,8 @@ bool RadioLibInterface::canSendImmediately()
 /// bluetooth comms code.  If the txmit queue is empty it might return an error
 ErrorCode RadioLibInterface::send(MeshPacket *p)
 {
-    DEBUG_MSG("enqueuing for send on mesh fr=0x%x,to=0x%x,id=%d (txGood=%d,rxGood=%d,rxBad=%d)\n", p->from, p->to, p->id, txGood,
-              rxGood, rxBad);
+    printPacket("enqueuing for send", p);
+    DEBUG_MSG("txGood=%d,rxGood=%d,rxBad=%d\n", txGood, rxGood, rxBad);
     ErrorCode res = txQueue.enqueue(p, 0) ? ERRNO_OK : ERRNO_UNKNOWN;
 
     if (res != ERRNO_OK) { // we weren't able to queue it, so we must drop it to prevent leaks
@@ -237,7 +237,7 @@ void RadioLibInterface::completeSending()
 {
     if (sendingPacket) {
         txGood++;
-        DEBUG_MSG("Completed sending to=0x%x, id=%u\n", sendingPacket->to, sendingPacket->id);
+        printPacket("Completed sending", sendingPacket);
 
         // We are done sending that packet, release it
         packetPool.release(sendingPacket);
@@ -291,7 +291,7 @@ void RadioLibInterface::handleReceiveInterrupt()
             memcpy(mp->encrypted.bytes, payload, payloadLen);
             mp->encrypted.size = payloadLen;
 
-            DEBUG_MSG("Lora RX interrupt from=0x%x, id=%u\n", mp->from, mp->id);
+            printPacket("Lora RX", mp);
 
             deliverToReceiver(mp);
         }
@@ -301,7 +301,7 @@ void RadioLibInterface::handleReceiveInterrupt()
 /** start an immediate transmit */
 void RadioLibInterface::startSend(MeshPacket *txp)
 {
-    DEBUG_MSG("Starting low level send from=0x%x, to=0x%x, id=%u, want_ack=%d\n", txp->from, txp->to, txp->id, txp->want_ack);
+    printPacket("Starting low level send", txp);
     setStandby(); // Cancel any already in process receives
 
     size_t numbytes = beginSending(txp);

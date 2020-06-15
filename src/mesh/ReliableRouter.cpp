@@ -27,7 +27,7 @@ ErrorCode ReliableRouter::send(MeshPacket *p)
 bool ReliableRouter::shouldFilterReceived(const MeshPacket *p)
 {
     if (p->to == NODENUM_BROADCAST && p->from == getNodeNum()) {
-        DEBUG_MSG("Received someone rebroadcasting for us fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+        printPacket("Rx someone rebroadcasting for us", p);
 
         // We are seeing someone rebroadcast one of our broadcast attempts.
         // If this is the first time we saw this, cancel any retransmissions we have queued up and generate an internal ack for
