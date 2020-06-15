@@ -30,7 +30,7 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define here.
 */
 
-#define DEVICESTATE_CUR_VER 9
+#define DEVICESTATE_CUR_VER 10
 #define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
 
 #ifndef NO_ESP32
@@ -101,10 +101,12 @@ void NodeDB::resetRadioConfig()
     crypto->setKey(channelSettings.psk.size, channelSettings.psk.bytes);
 
     // temp hack for quicker testing
+
     /*
     radioConfig.preferences.screen_on_secs = 30;
     radioConfig.preferences.wait_bluetooth_secs = 30;
-    radioConfig.preferences.position_broadcast_secs = 15;
+    radioConfig.preferences.position_broadcast_secs = 6 * 60;
+    radioConfig.preferences.ls_secs = 60;
     */
 }
 

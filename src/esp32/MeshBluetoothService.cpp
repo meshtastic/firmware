@@ -41,39 +41,6 @@ class BluetoothPhoneAPI : public PhoneAPI
 
 BluetoothPhoneAPI *bluetoothPhoneAPI;
 
-class ProtobufCharacteristic : public CallbackCharacteristic
-{
-    const pb_msgdesc_t *fields;
-    void *my_struct;
-
-  public:
-    ProtobufCharacteristic(const char *uuid, uint32_t btprops, const pb_msgdesc_t *_fields, void *_my_struct)
-        : CallbackCharacteristic(uuid, btprops), fields(_fields), my_struct(_my_struct)
-    {
-        setCallbacks(this);
-    }
-
-    void onRead(BLECharacteristic *c)
-    {
-        size_t numbytes = pb_encode_to_bytes(trBytes, sizeof(trBytes), fields, my_struct);
-        DEBUG_MSG("pbread from %s returns %d bytes\n", c->getUUID().toString().c_str(), numbytes);
-        c->setValue(trBytes, numbytes);
-    }
-
-    void onWrite(BLECharacteristic *c) { writeToDest(c, my_struct); }
-
-  protected:
-    /// like onWrite, but we provide an different destination to write to, for use by subclasses that
-    /// want to optionally ignore parts of writes.
-    /// returns true for success
-    bool writeToDest(BLECharacteristic *c, void *dest)
-    {
-        // dumpCharacteristic(pCharacteristic);
-        std::string src = c->getValue();
-        DEBUG_MSG("pbwrite to %s of %d bytes\n", c->getUUID().toString().c_str(), src.length());
-        return pb_decode_from_bytes((const uint8_t *)src.c_str(), src.length(), fields, dest);
-    }
-};
 
 class ToRadioCharacteristic : public CallbackCharacteristic
 {
@@ -82,8 +49,6 @@ class ToRadioCharacteristic : public CallbackCharacteristic
 
     void onWrite(BLECharacteristic *c)
     {
-        DEBUG_MSG("Got on write\n");
-
         bluetoothPhoneAPI->handleToRadio(c->getData(), c->getValue().length());
     }
 };
@@ -166,6 +131,7 @@ void stopMeshBluetoothService()
 {
     assert(meshService);
     meshService->stop();
+    meshService->executeDelete();
 }
 
 void destroyMeshBluetoothService()

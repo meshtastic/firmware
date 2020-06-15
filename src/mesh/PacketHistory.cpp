@@ -2,8 +2,6 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 
-
-
 PacketHistory::PacketHistory()
 {
     recentPackets.reserve(MAX_NUM_NODES); // Prealloc the worst case # of records - to prevent heap fragmentation
@@ -48,7 +46,7 @@ bool PacketHistory::wasSeenRecently(const MeshPacket *p, bool withUpdate)
         r.sender = p->from;
         r.rxTimeMsec = now;
         recentPackets.push_back(r);
-        DEBUG_MSG("Adding packet record for fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+        printPacket("Adding packet record", p);
     }
 
     return false;

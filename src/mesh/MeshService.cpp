@@ -160,7 +160,7 @@ int MeshService::handleFromRadio(const MeshPacket *mp)
 
     // If we veto a received User packet, we don't put it into the DB or forward it to the phone (to prevent confusing it)
     if (mp) {
-        DEBUG_MSG("Forwarding to phone, from=0x%x, rx_time=%u\n", mp->from, mp->rx_time);
+        printPacket("Forwarding to phone", mp);
         nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
 
         fromNum++;

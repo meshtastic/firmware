@@ -19,11 +19,15 @@
     4 // max number of packets destined to our queue, we dispatch packets quickly so it doesn't need to be big
 
 // I think this is right, one packet for each of the three fifos + one packet being currently assembled for TX or RX
+// And every TX packet might have a retransmission packet or an ack alive at any moment
 #define MAX_PACKETS                                                                                                              \
-    (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + MAX_TX_QUEUE +                                                                          \
+    (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
      2) // max number of packets which can be in flight (either queued from reception or queued for sending)
 
-MemoryPool<MeshPacket> packetPool(MAX_PACKETS);
+static MemoryPool<MeshPacket> staticPool(MAX_PACKETS);
+// static MemoryDynamic<MeshPacket> staticPool;
+
+Allocator<MeshPacket> &packetPool = staticPool;
 
 /**
  * Constructor
@@ -146,8 +150,8 @@ ErrorCode Router::send(MeshPacket *p)
  */
 void Router::sniffReceived(const MeshPacket *p)
 {
-    DEBUG_MSG("FIXME-update-db Sniffing packet fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
-    // FIXME, update nodedb
+    DEBUG_MSG("FIXME-update-db Sniffing packet\n");
+    // FIXME, update nodedb here for any packet that passes through us
 }
 
 bool Router::perhapsDecode(MeshPacket *p)
@@ -198,7 +202,7 @@ void Router::handleReceived(MeshPacket *p)
         sniffReceived(p);
 
         if (p->to == NODENUM_BROADCAST || p->to == getNodeNum()) {
-            DEBUG_MSG("Notifying observers of received packet fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+            printPacket("Delivering rx packet", p);
             notifyPacketReceived.notifyObservers(p);
         }
     }

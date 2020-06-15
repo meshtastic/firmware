@@ -2,6 +2,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "RadioInterface.h"
 #include <assert.h>
 
 PhoneAPI::PhoneAPI()
@@ -42,8 +43,8 @@ void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
     if (pb_decode_from_bytes(buf, bufLength, ToRadio_fields, &toRadioScratch)) {
         switch (toRadioScratch.which_variant) {
         case ToRadio_packet_tag: {
-            // If our phone is sending a position, see if we can use it to set our RTC
             MeshPacket &p = toRadioScratch.variant.packet;
+            printPacket("PACKET FROM PHONE", &p);
             service.handleToRadio(p);
             break;
         }
@@ -91,8 +92,12 @@ void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
  */
 size_t PhoneAPI::getFromRadio(uint8_t *buf)
 {
-    if (!available())
+    if (!available()) {
+        DEBUG_MSG("getFromRadio, !available\n");
         return false;
+    } else {
+        DEBUG_MSG("getFromRadio, state=%d\n", state);
+    }
 
     // In case we send a FromRadio packet
     memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
