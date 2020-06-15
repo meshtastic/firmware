@@ -4,6 +4,7 @@
 #include "configuration.h"
 #include "main.h"
 #include "power.h"
+#include "sleep.h"
 #include "target_specific.h"
 
 bool bluetoothOn;
@@ -176,6 +177,8 @@ void esp32Setup()
     DEBUG_MSG("Free heap: %d\n", ESP.getFreeHeap());
     DEBUG_MSG("Total PSRAM: %d\n", ESP.getPsramSize());
     DEBUG_MSG("Free PSRAM: %d\n", ESP.getFreePsram());
+
+    // enableModemSleep();
 
 #ifdef AXP192_SLAVE_ADDRESS
     axp192Init();
