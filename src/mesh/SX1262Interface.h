@@ -43,6 +43,12 @@ class SX1262Interface : public RadioLibInterface
      * Start waiting to receive a message
      */
     virtual void startReceive();
+
+    /** start an immediate transmit
+     *  We override to turn on transmitter power as needed.
+     */
+    virtual void startSend(MeshPacket *txp);
+
     /**
      * Add SNR data to received messages
      */
