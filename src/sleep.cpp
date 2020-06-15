@@ -291,7 +291,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 }
 #endif
 
-#if 0
+
 // not legal on the stock android ESP build
 
 /**
@@ -306,8 +306,8 @@ void enableModemSleep()
   static esp_pm_config_esp32_t config; // filled with zeros because bss
 
   config.max_freq_mhz = CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ;
-  config.min_freq_mhz = 10; // 10Mhz is minimum recommended
+  config.min_freq_mhz = 20; // 10Mhz is minimum recommended
   config.light_sleep_enable = false;
   DEBUG_MSG("Sleep request result %x\n", esp_pm_configure(&config));
 }
-#endif
+
