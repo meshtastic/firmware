@@ -35,3 +35,5 @@ extern Observable<void *> notifySleep;
 
 /// Called to tell observers we are now entering (deep) sleep and you should prepare.  Must return 0
 extern Observable<void *> notifyDeepSleep;
+
+void enableModemSleep();
