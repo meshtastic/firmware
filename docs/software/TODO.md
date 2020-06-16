@@ -1,19 +1,22 @@
 # High priority
 
-- why is the net so chatty now?
-- modem sleep should work if we lower serial rate to 115kb?
-- device wakes, turns BLE on and phone doesn't notice (while phone was sitting in auto-connect)
-- E22 bringup
+- nrf52 free memory https://learn.adafruit.com/bluefruit-nrf52-feather-learning-guide/hathach-memory-map
 - encryption review findings writeup
+- NRF52 BLE
+- cubecell
+- DSR
 
 - turn on modem-sleep mode - https://github.com/espressif/arduino-esp32/issues/1142#issuecomment-512428852
-last EDF release in arduino is: https://github.com/espressif/arduino-esp32/commit/1977370e6fc069e93ffd8818798fbfda27ae7d99
-IDF release/v3.3 46b12a560
-IDF release/v3.3 367c3c09c
-https://docs.espressif.com/projects/esp-idf/en/release-v3.3/get-started/linux-setup.html
-kevinh@kevin-server:~/development/meshtastic/esp32-arduino-lib-builder$ python /home/kevinh/development/meshtastic/esp32-arduino-lib-builder/esp-idf/components/esptool_py/esptool/esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 921600 --before default_reset --after hard_reset write_flash -z --flash_mode dout --flash_freq 40m --flash_size detect 0x1000 /home/kevinh/development/meshtastic/esp32-arduino-lib-builder/build/bootloader/bootloader.bin
-cp -a out/tools/sdk/* components/arduino/tools/sdk
-cp -ar components/arduino/* ~/.platformio/packages/framework-arduinoespressif32@src-fba9d33740f719f712e9f8b07da6ea13/
+
+```
+  last EDF release in arduino is: https://github.com/espressif/arduino-esp32/commit/1977370e6fc069e93ffd8818798fbfda27ae7d99
+  IDF release/v3.3 46b12a560
+  IDF release/v3.3 367c3c09c
+  https://docs.espressif.com/projects/esp-idf/en/release-v3.3/get-started/linux-setup.html
+  kevinh@kevin-server:~/development/meshtastic/esp32-arduino-lib-builder\$ python /home/kevinh/development/meshtastic/esp32-arduino-lib-builder/esp-idf/components/esptool*py/esptool/esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 921600 --before default_reset --after hard_reset write_flash -z --flash_mode dout --flash_freq 40m --flash_size detect 0x1000 /home/kevinh/development/meshtastic/esp32-arduino-lib-builder/build/bootloader/bootloader.bin
+  cp -a out/tools/sdk/* components/arduino/tools/sdk
+  cp -ar components/arduino/ ~/.platformio/packages/framework-arduinoespressif32@src-fba9d33740f719f712e9f8b07da6ea13/
+```
 
 # Medium priority
 
@@ -40,6 +43,7 @@ During the beta timeframe the following improvements 'would be nice'
 
 Items after the first final candidate release.
 
+- dynamic frequency scaling could save a lot of power on ESP32, but it seems to corrupt uart (even with ref_tick set correctly)
 - Change back to using a fixed sized MemoryPool rather than MemoryDynamic (see bug #149)
 - scan to find channels with low background noise? (Use CAD mode of the RF95 to automatically find low noise channels)
 - If the phone doesn't read fromradio mailbox within X seconds, assume the phone is gone and we can stop queing location msgs

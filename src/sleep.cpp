@@ -129,7 +129,7 @@ static void waitEnterSleep()
 
         if (millis() - now > 30 * 1000) { // If we wait too long just report an error and go to sleep
             recordCriticalError(ErrSleepEnterWait);
-            ESP.restart(); // FIXME - for now we just restart, need to fix bug #167
+            assert(0); // FIXME - for now we just restart, need to fix bug #167
             break;
         }
     }
@@ -289,8 +289,6 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 
     return cause;
 }
-#endif
-
 
 // not legal on the stock android ESP build
 
@@ -310,4 +308,4 @@ void enableModemSleep()
   config.light_sleep_enable = false;
   DEBUG_MSG("Sleep request result %x\n", esp_pm_configure(&config));
 }
-
+#endif

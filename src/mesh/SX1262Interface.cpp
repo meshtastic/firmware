@@ -14,7 +14,19 @@ bool SX1262Interface::init()
 {
     RadioLibInterface::init();
 
-    float tcxoVoltage = 0;        // None - we use an XTAL
+#ifdef SX1262_RXEN // set not rx or tx mode
+    pinMode(SX1262_RXEN, OUTPUT);
+#endif
+#ifdef SX1262_TXEN
+    pinMode(SX1262_TXEN, OUTPUT);
+#endif
+
+#ifndef SX1262_E22
+    float tcxoVoltage = 0; // None - we use an XTAL
+#else
+    float tcxoVoltage =
+        1.8; // E22 uses DIO3 to power tcxo per https://github.com/jgromes/RadioLib/issues/12#issuecomment-520695575
+#endif
     bool useRegulatorLDO = false; // Seems to depend on the connection to pin 9/DCC_SW - if an inductor DCDC?
 
     applyModemConfig();
@@ -22,6 +34,12 @@ bool SX1262Interface::init()
         power = 22;
     int res = lora.begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength, tcxoVoltage, useRegulatorLDO);
     DEBUG_MSG("LORA init result %d\n", res);
+
+#ifdef SX1262_TXEN
+    // lora.begin sets Dio2 as RF switch control, which is not true if we are manually controlling RX and TX
+    if (res == ERR_NONE)
+        res = lora.setDio2AsRfSwitch(false);
+#endif
 
     if (res == ERR_NONE)
         res = lora.setCRC(SX126X_LORA_CRC_ON);
@@ -81,6 +99,13 @@ void SX1262Interface::setStandby()
     int err = lora.standby();
     assert(err == ERR_NONE);
 
+#ifdef SX1262_RXEN // we have RXEN/TXEN control - turn off RX and TX power
+    digitalWrite(SX1262_RXEN, LOW);
+#endif
+#ifdef SX1262_TXEN
+    digitalWrite(SX1262_TXEN, LOW);
+#endif
+
     isReceiving = false; // If we were receiving, not any more
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
@@ -94,6 +119,18 @@ void SX1262Interface::addReceiveMetadata(MeshPacket *mp)
     mp->rx_snr = lora.getSNR();
 }
 
+/** start an immediate transmit
+ *  We override to turn on transmitter power as needed.
+ */
+void SX1262Interface::configHardwareForSend()
+{
+#ifdef SX1262_TXEN // we have RXEN/TXEN control - turn on TX power / off RX power
+    digitalWrite(SX1262_TXEN, HIGH);
+#endif
+
+    RadioLibInterface::configHardwareForSend();
+}
+
 // For power draw measurements, helpful to force radio to stay sleeping
 // #define SLEEP_ONLY
 
@@ -102,7 +139,13 @@ void SX1262Interface::startReceive()
 #ifdef SLEEP_ONLY
     sleep();
 #else
+
     setStandby();
+
+#ifdef SX1262_RXEN // we have RXEN/TXEN control - turn on RX power / off TX power
+    digitalWrite(SX1262_RXEN, HIGH);
+#endif
+
     // int err = lora.startReceive();
     int err = lora.startReceiveDutyCycleAuto(); // We use a 32 bit preamble so this should save some power by letting radio sit in
                                                 // standby mostly.

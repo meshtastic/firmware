@@ -2,11 +2,24 @@
 
 ## Misc work items
 
+RAM investigation.
+nRF52832-QFAA 64KB ram, 512KB flash vs
+nrf52832-QFAB 32KB ram, 512kb flash
+nrf52840 256KB RAM, 1MB flash
+
+platform.json
+
+    "framework-arduinoadafruitnrf52": {
+      "type": "framework",
+      "optional": true,
+      "version": "https://github.com/meshtastic/Adafruit_nRF52_Arduino.git"
+    },
+
 ## Initial work items
 
 Minimum items needed to make sure hardware is good.
 
-- set power UICR per https://devzone.nordicsemi.com/f/nordic-q-a/28562/nrf52840-regulator-configuration
+- DONE set power UICR per https://devzone.nordicsemi.com/f/nordic-q-a/28562/nrf52840-regulator-configuration
 - switch charge controller into / out of performance mode (see 8.3.1 in datasheet)
 - write UC1701 wrapper
 - Test hardfault handler for null ptrs (if one isn't already installed)

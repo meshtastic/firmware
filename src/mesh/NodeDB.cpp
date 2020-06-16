@@ -110,8 +110,10 @@ void NodeDB::resetRadioConfig()
     */
 }
 
-void NodeDB::init()
+void NodeDB::installDefaultDeviceState()
 {
+    memset(&devicestate, 0, sizeof(devicestate));
+
     // init our devicestate with valid flags so protobuf writing/reading will work
     devicestate.has_my_node = true;
     devicestate.has_radio = true;
@@ -119,7 +121,7 @@ void NodeDB::init()
     devicestate.radio.has_channel_settings = true;
     devicestate.radio.has_preferences = true;
     devicestate.node_db_count = 0;
-    devicestate.receive_queue_count = 0;
+    devicestate.receive_queue_count = 0; // Not yet implemented FIXME
 
     resetRadioConfig();
 
@@ -139,12 +141,17 @@ void NodeDB::init()
     pickNewNodeNum(); // Note: we will repick later, just in case the settings are corrupted, but we need a valid
     // owner.short_name now
     sprintf(owner.long_name, "Unknown %02x%02x", ourMacAddr[4], ourMacAddr[5]);
-    sprintf(owner.short_name, "?%02X", myNodeInfo.my_node_num & 0xff);
+    sprintf(owner.short_name, "?%02X", (unsigned)(myNodeInfo.my_node_num & 0xff));
+}
+
+void NodeDB::init()
+{
+    installDefaultDeviceState();
 
     if (!FSBegin()) // FIXME - do this in main?
     {
         DEBUG_MSG("ERROR filesystem mount Failed\n");
-        // FIXME - report failure to phone
+        assert(0); // FIXME - report failure to phone
     }
 
     // saveToDisk();
@@ -210,7 +217,7 @@ const char *preftmp = "/db.proto.tmp";
 void NodeDB::loadFromDisk()
 {
 #ifdef FS
-    static DeviceState scratch;
+    // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
 
     auto f = FS.open(preffile);
     if (f) {
@@ -219,16 +226,17 @@ void NodeDB::loadFromDisk()
 
         // DEBUG_MSG("Preload channel name=%s\n", channelSettings.name);
 
-        memset(&scratch, 0, sizeof(scratch));
-        if (!pb_decode(&stream, DeviceState_fields, &scratch)) {
+        memset(&devicestate, 0, sizeof(devicestate));
+        if (!pb_decode(&stream, DeviceState_fields, &devicestate)) {
             DEBUG_MSG("Error: can't decode protobuf %s\n", PB_GET_ERROR(&stream));
+            installDefaultDeviceState(); // Our in RAM copy might now be corrupt
             // FIXME - report failure to phone
         } else {
-            if (scratch.version < DEVICESTATE_MIN_VER)
+            if (devicestate.version < DEVICESTATE_MIN_VER) {
                 DEBUG_MSG("Warn: devicestate is old, discarding\n");
-            else {
-                DEBUG_MSG("Loaded saved preferences version %d\n", scratch.version);
-                devicestate = scratch;
+                installDefaultDeviceState();
+            } else {
+                DEBUG_MSG("Loaded saved preferences version %d\n", devicestate.version);
             }
 
             // DEBUG_MSG("Postload channel name=%s\n", channelSettings.name);
@@ -238,6 +246,7 @@ void NodeDB::loadFromDisk()
     } else {
         DEBUG_MSG("No saved preferences found\n");
     }
+
 #else
     DEBUG_MSG("ERROR: Filesystem not implemented\n");
 #endif
