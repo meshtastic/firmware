@@ -16,9 +16,9 @@ bool SX1262Interface::init()
 
 #ifdef SX1262_RXEN // set not rx or tx mode
     pinMode(SX1262_RXEN, OUTPUT);
+#endif
+#ifdef SX1262_TXEN
     pinMode(SX1262_TXEN, OUTPUT);
-    digitalWrite(SX1262_RXEN, LOW);
-    digitalWrite(SX1262_TXEN, LOW);
 #endif
 
 #ifndef SX1262_E22
@@ -36,7 +36,7 @@ bool SX1262Interface::init()
     DEBUG_MSG("LORA init result %d\n", res);
 
 #ifdef SX1262_RXEN
-    // lora.begin assumes Dio2 is RF switch control, which is not true if we are manually controlling RX and TX
+    // lora.begin sets Dio2 as RF switch control, which is not true if we are manually controlling RX and TX
     if (res == ERR_NONE)
         res = lora.setDio2AsRfSwitch(false);
 #endif
@@ -101,6 +101,8 @@ void SX1262Interface::setStandby()
 
 #ifdef SX1262_RXEN // we have RXEN/TXEN control - turn off RX and TX power
     digitalWrite(SX1262_RXEN, LOW);
+#endif 
+#ifdef SX1262_TXEN
     digitalWrite(SX1262_TXEN, LOW);
 #endif
 
@@ -120,14 +122,13 @@ void SX1262Interface::addReceiveMetadata(MeshPacket *mp)
 /** start an immediate transmit
  *  We override to turn on transmitter power as needed.
  */
-void SX1262Interface::startSend(MeshPacket *txp)
+void SX1262Interface::configHardwareForSend()
 {
-#ifdef SX1262_RXEN // we have RXEN/TXEN control - turn on TX power / off RX power
-    digitalWrite(SX1262_RXEN, LOW);
+#ifdef SX1262_TXEN // we have RXEN/TXEN control - turn on TX power / off RX power
     digitalWrite(SX1262_TXEN, HIGH);
 #endif
 
-    RadioLibInterface::startSend(txp);
+    RadioLibInterface::configHardwareForSend();
 }
 
 // For power draw measurements, helpful to force radio to stay sleeping
@@ -139,12 +140,12 @@ void SX1262Interface::startReceive()
     sleep();
 #else
 
+    setStandby();
+
 #ifdef SX1262_RXEN // we have RXEN/TXEN control - turn on RX power / off TX power
     digitalWrite(SX1262_RXEN, HIGH);
-    digitalWrite(SX1262_TXEN, LOW);
 #endif
 
-    setStandby();
     // int err = lora.startReceive();
     int err = lora.startReceiveDutyCycleAuto(); // We use a 32 bit preamble so this should save some power by letting radio sit in
                                                 // standby mostly.
