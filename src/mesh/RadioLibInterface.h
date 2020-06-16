@@ -105,16 +105,19 @@ class RadioLibInterface : public RadioInterface, private PeriodicTask
 
     virtual void doTask();
 
+    /** start an immediate transmit
+     *  This method is virtual so subclasses can hook as needed, subclasses should not call directly
+     */
+    virtual void startSend(MeshPacket *txp);
+
   protected:
     /// Initialise the Driver transport hardware and software.
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
     virtual bool init();
 
-    /** start an immediate transmit
-     *  This method is virtual so subclasses can hook as needed, subclasses should not call directly
-     */
-    virtual void startSend(MeshPacket *txp);
+    /** Do any hardware setup needed on entry into send configuration for the radio.  Subclasses can customize */
+    virtual void configHardwareForSend() {}
 
     /**
      * Convert our modemConfig enum into wf, sf, etc...
