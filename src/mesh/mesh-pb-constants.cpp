@@ -6,6 +6,11 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 
+#ifdef NO_ESP32
+#include "Adafruit_LittleFS.h"
+using namespace Adafruit_LittleFS_Namespace; // To get File type
+#endif 
+
 /// helper function for encoding a record as a protobuf, any failures to encode are fatal and we will panic
 /// returns the encoded packet size
 size_t pb_encode_to_bytes(uint8_t *destbuf, size_t destbufsize, const pb_msgdesc_t *fields, const void *src_struct)
@@ -36,7 +41,6 @@ bool pb_decode_from_bytes(const uint8_t *srcbuf, size_t srcbufsize, const pb_msg
 bool readcb(pb_istream_t *stream, uint8_t *buf, size_t count)
 {
     bool status = false;
-#ifndef NO_ESP32
     File *file = (File *)stream->state;
 
     if (buf == NULL) {
@@ -45,22 +49,27 @@ bool readcb(pb_istream_t *stream, uint8_t *buf, size_t count)
         return count == 0;
     }
 
-    status = (file->read(buf, count) == count);
+    status = (file->read(buf, count) == (int) count);
 
     if (file->available() == 0)
         stream->bytes_left = 0;
-#endif
+
     return status;
 }
 
 /// Write to an arduino file
 bool writecb(pb_ostream_t *stream, const uint8_t *buf, size_t count)
 {
-#ifndef NO_ESP32
     File *file = (File *)stream->state;
     // DEBUG_MSG("writing %d bytes to protobuf file\n", count);
     return file->write(buf, count) == count;
-#else
+}
+
+bool is_in_helper(uint32_t n, const uint32_t *array, pb_size_t count)
+{
+    for (pb_size_t i = 0; i < count; i++)
+        if (array[i] == n)
+            return true;
+
     return false;
-#endif
 }

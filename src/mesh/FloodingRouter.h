@@ -1,17 +1,8 @@
 #pragma once
 
+#include "PacketHistory.h"
 #include "PeriodicTask.h"
 #include "Router.h"
-#include <vector>
-
-/**
- * A record of a recent message broadcast
- */
-struct BroadcastRecord {
-    NodeNum sender;
-    PacketId id;
-    uint32_t rxTimeMsec; // Unix time in msecs - the time we received it
-};
 
 /**
  * This is a mixin that extends Router with the ability to do Naive Flooding (in the standard mesh protocol sense)
@@ -36,19 +27,9 @@ struct BroadcastRecord {
   Any entries in recentBroadcasts that are older than X seconds (longer than the
   max time a flood can take) will be discarded.
  */
-class FloodingRouter : public Router, public PeriodicTask
+class FloodingRouter : public Router, protected PacketHistory
 {
   private:
-    /** FIXME: really should be a std::unordered_set with the key being sender,id.
-     * This would make checking packets in wasSeenRecently faster.
-     */
-    std::vector<BroadcastRecord> recentBroadcasts;
-
-    /**
-     * Packets we've received that we need to resend after a short delay
-     */
-    PointerQueue<MeshPacket> toResend;
-
   public:
     /**
      * Constructor
@@ -65,19 +46,15 @@ class FloodingRouter : public Router, public PeriodicTask
 
   protected:
     /**
-     * Called from loop()
-     * Handle any packet that is received by an interface on this node.
-     * Note: some packets may merely being passed through this node and will be forwarded elsewhere.
+     * Should this incoming filter be dropped?
      *
-     * Note: this method will free the provided packet
+     * Called immedately on receiption, before any further processing.
+     * @return true to abandon the packet
      */
-    virtual void handleReceived(MeshPacket *p);
+    virtual bool shouldFilterReceived(const MeshPacket *p);
 
-    virtual void doTask();
-
-  private:
     /**
-     * Update recentBroadcasts and return true if we have already seen this packet
+     * Look for broadcasts we need to rebroadcast
      */
-    bool wasSeenRecently(const MeshPacket *p);
+    virtual void sniffReceived(const MeshPacket *p);
 };

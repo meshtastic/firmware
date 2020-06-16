@@ -11,12 +11,24 @@
 
 #define MAX_RHPACKETLEN 256
 
+#define PACKET_FLAGS_HOP_MASK 0x07
+#define PACKET_FLAGS_WANT_ACK_MASK 0x08
+
 /**
  * This structure has to exactly match the wire layout when sent over the radio link.  Used to keep compatibility
  * wtih the old radiohead implementation.
  */
 typedef struct {
-    uint8_t to, from, id, flags;
+    NodeNum to, from; // can be 1 byte or four bytes
+
+    PacketId id; // can be 1 byte or 4 bytes
+
+    /**
+     * Usage of flags:
+     *
+     * The bottom three bits of flags are use to store hop_limit when sent over the wire.
+     **/
+    uint8_t flags;
 } PacketHeader;
 
 typedef enum {
@@ -47,7 +59,6 @@ class RadioInterface : protected NotifiedWorkerThread
 
   protected:
     MeshPacket *sendingPacket = NULL; // The packet we are currently sending
-    PointerQueue<MeshPacket> txQueue;
     uint32_t lastTxStart = 0L;
 
     /**
@@ -151,3 +162,6 @@ class SimRadio : public RadioInterface
     /// \return true if initialisation succeeded.
     virtual bool init() { return true; }
 };
+
+/// Debug printing for packets
+void printPacket(const char *prefix, const MeshPacket *p);

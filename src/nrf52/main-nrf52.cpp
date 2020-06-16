@@ -59,13 +59,25 @@ void setBluetoothEnable(bool on)
     }
 }
 
-#include "PmuBQ25703A.h"
-
-PmuBQ25703A pmu;
-
 void nrf52Setup()
 {
+
+    auto why = NRF_POWER->RESETREAS;
+    // per https://infocenter.nordicsemi.com/index.jsp?topic=%2Fcom.nordic.infocenter.nrf52832.ps.v1.1%2Fpower.html
+    DEBUG_MSG("Reset reason: 0x%x\n", why);
+
+    // Per https://devzone.nordicsemi.com/nordic/nordic-blog/b/blog/posts/monitor-mode-debugging-with-j-link-and-gdbeclipse
+    // This is the recommended setting for Monitor Mode Debugging
+    NVIC_SetPriority(DebugMonitor_IRQn, 6UL);
+
     // Not yet on board
     // pmu.init();
-    DEBUG_MSG("FIXME, need to call randomSeed on nrf52!\n");
+
+    // Init random seed
+    // FIXME - use this to get random numbers
+    // #include "nrf_rng.h"
+    // uint32_t r;
+    // ble_controller_rand_vector_get_blocking(&r, sizeof(r));
+    // randomSeed(r);
+    DEBUG_MSG("FIXME, call randomSeed\n");
 }

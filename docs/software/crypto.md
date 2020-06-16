@@ -4,8 +4,8 @@ Cryptography is tricky, so we've tried to 'simply' apply standard crypto solutio
 the project developers are not cryptography experts. Therefore we ask two things:
 
 - If you are a cryptography expert, please review these notes and our questions below. Can you help us by reviewing our
-  notes below and offering advice? We will happily give as much or as little credit as you wish as our thanks ;-).
-- Consider our existing solution 'alpha' and probably fairly secure against an not very aggressive adversary. But until
+  notes below and offering advice? We will happily give as much or as little credit as you wish ;-).
+- Consider our existing solution 'alpha' and probably fairly secure against a not particularly aggressive adversary. But until
   it is reviewed by someone smarter than us, assume it might have flaws.
 
 ## Notes on implementation
@@ -16,7 +16,7 @@ the project developers are not cryptography experts. Therefore we ask two things
 
 Parameters for our CTR implementation:
 
-- Our AES key is 256 bits, shared as part of the 'Channel' specification.
+- Our AES key is 128 or 256 bits, shared as part of the 'Channel' specification.
 - Each SubPacket will be sent as a series of 16 byte BLOCKS.
 - The node number concatenated with the packet number is used as the NONCE. This counter will be stored in flash in the device and should essentially never repeat. If the user makes a new 'Channel' (i.e. picking a new random 256 bit key), the packet number will start at zero. The packet number is sent
   in cleartext with each packet. The node number can be derived from the "from" field of each packet.
@@ -34,5 +34,4 @@ Note that for both stategies, sizes are measured in blocks and that an AES block
 
 ## Remaining todo
 
-- Make the packet numbers 32 bit
-- Implement for NRF52 [NRF52](https://infocenter.nordicsemi.com/topic/com.nordic.infocenter.sdk5.v15.0.0/lib_crypto_aes.html#sub_aes_ctr)
+- Have the app change the crypto key when the user generates a new channel

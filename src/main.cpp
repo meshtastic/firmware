@@ -27,13 +27,13 @@
 #include "NodeDB.h"
 #include "Periodic.h"
 #include "PowerFSM.h"
-#include "Router.h"
 #include "UBloxGPS.h"
 #include "configuration.h"
 #include "error.h"
 #include "power.h"
 // #include "rom/rtc.h"
-#include "FloodingRouter.h"
+#include "DSRRouter.h"
+#include "debug.h"
 #include "main.h"
 #include "screen.h"
 #include "sleep.h"
@@ -53,7 +53,7 @@ meshtastic::PowerStatus powerStatus;
 bool ssd1306_found;
 bool axp192_found;
 
-FloodingRouter realRouter;
+DSRRouter realRouter;
 Router &router = realRouter; // Users of router don't care what sort of subclass implements that API
 
 // -----------------------------------------------------------------------------
@@ -152,7 +152,10 @@ void setup()
 #else
     Wire.begin();
 #endif
+    // i2c still busted on new board
+#ifndef ARDUINO_NRF52840_PPR
     scanI2Cdevice();
+#endif
 
     // Buttons & LED
 #ifdef BUTTON_PIN
@@ -167,7 +170,7 @@ void setup()
     ledPeriodic.setup();
 
     // Hello
-    DEBUG_MSG("Meshtastic swver=%s, hwver=%s\n", xstr(APP_VERSION), xstr(HW_VERSION));
+    DEBUG_MSG("Meshtastic swver=%s, hwver=%s\n", optstr(APP_VERSION), optstr(HW_VERSION));
 
 #ifndef NO_ESP32
     // Don't init display if we don't have one or we are waking headless due to a timer event
@@ -189,6 +192,8 @@ void setup()
 
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 
+// If we know we have a L80 GPS, don't try UBLOX
+#ifndef L80_RESET
     // Init GPS - first try ublox
     gps = new UBloxGPS();
     if (!gps->setup()) {
@@ -199,10 +204,12 @@ void setup()
         gps = new NEMAGPS();
         gps->setup();
     }
+#else
+    gps = new NEMAGPS();
+    gps->setup();
+#endif
 
     service.init();
-
-    realRouter.setup(); // required for our periodic task (kinda skanky FIXME)
 
 #ifdef SX1262_ANT_SW
     // make analog PA vs not PA switch on SX1262 eval board work properly
@@ -230,10 +237,10 @@ void setup()
         new SimRadio();
 #endif
 
-    router.addInterface(rIf);
-
-    if (!rIf->init())
+    if (!rIf || !rIf->init())
         recordCriticalError(ErrNoRadio);
+    else
+        router.addInterface(rIf);
 
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
@@ -279,6 +286,8 @@ void loop()
     DEBUG_PORT.loop(); // Send/receive protobufs over the serial port
 #endif
 
+    // heap_caps_check_integrity_all(true); // FIXME - disable this expensive check
+
 #ifndef NO_ESP32
     esp32Loop();
 #endif
@@ -310,6 +319,14 @@ void loop()
         screen.stopBootScreen();
         showingBootScreen = false;
     }
+
+#ifdef DEBUG_STACK
+    static uint32_t lastPrint = 0;
+    if (millis() - lastPrint > 10 * 1000L) {
+        lastPrint = millis();
+        meshtastic::printThreadInfo("main");
+    }
+#endif
 
     // Update the screen last, after we've figured out what to show.
     screen.debug()->setNodeNumbersStatus(nodeDB.getNumOnlineNodes(), nodeDB.getNumNodes());
