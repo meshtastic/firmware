@@ -35,7 +35,7 @@ bool SX1262Interface::init()
     int res = lora.begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength, tcxoVoltage, useRegulatorLDO);
     DEBUG_MSG("LORA init result %d\n", res);
 
-#ifdef SX1262_RXEN
+#ifdef SX1262_TXEN
     // lora.begin sets Dio2 as RF switch control, which is not true if we are manually controlling RX and TX
     if (res == ERR_NONE)
         res = lora.setDio2AsRfSwitch(false);
