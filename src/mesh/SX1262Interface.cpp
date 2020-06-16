@@ -25,7 +25,7 @@ bool SX1262Interface::init()
     float tcxoVoltage = 0; // None - we use an XTAL
 #else
     float tcxoVoltage =
-        2.4; // E22 uses DIO3 to power tcxo per https://github.com/jgromes/RadioLib/issues/12#issuecomment-520695575
+        1.8; // E22 uses DIO3 to power tcxo per https://github.com/jgromes/RadioLib/issues/12#issuecomment-520695575
 #endif
     bool useRegulatorLDO = false; // Seems to depend on the connection to pin 9/DCC_SW - if an inductor DCDC?
 
@@ -101,7 +101,7 @@ void SX1262Interface::setStandby()
 
 #ifdef SX1262_RXEN // we have RXEN/TXEN control - turn off RX and TX power
     digitalWrite(SX1262_RXEN, LOW);
-#endif 
+#endif
 #ifdef SX1262_TXEN
     digitalWrite(SX1262_TXEN, LOW);
 #endif
