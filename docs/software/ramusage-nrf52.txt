@@ -4,7 +4,9 @@
 
 therefore: 
 a) we should store all ToPhone message queued messages compressed as protobufs (since they will become that anyways)
-b) a smarter MeshPacket in memory representation would save about 4KB of RAM?
+b) shrink packet pool size because none of that storage will be used for ToPhone packets
+c) don't allocate any storage in RAM for the tophone messages we save inside device state, instead just use nanopb callbacks to save/load those
+d) a smarter MeshPacket in memory representation would save about 4KB of RAM?
 
 2000790c 00003558 B devicestate  // 16KB
 2000b53c 00001000 b _cache_buffer // 4KB flash filesystem support 
