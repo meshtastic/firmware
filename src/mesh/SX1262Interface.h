@@ -43,6 +43,12 @@ class SX1262Interface : public RadioLibInterface
      * Start waiting to receive a message
      */
     virtual void startReceive();
+
+    /**
+     *  We override to turn on transmitter power as needed.
+     */
+    virtual void configHardwareForSend();
+
     /**
      * Add SNR data to received messages
      */
@@ -51,5 +57,4 @@ class SX1262Interface : public RadioLibInterface
     virtual void setStandby();
 
   private:
-
 };

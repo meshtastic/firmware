@@ -28,7 +28,7 @@ Not all of these features are fully implemented yet - see **important** disclaim
 - Shows direction and distance to all members of your channel
 - Directed or broadcast text messages for channel members
 - Open and extensible codebase supporting multiple hardware vendors - no lock in to one vendor
-- Communication API for bluetooth devices (such as our Android app) to use the mesh. An iOS application is in the works.  And [Meshtastic-python](https://pypi.org/project/meshtastic/) provides access from desktop computers.
+- Communication API for bluetooth devices (such as our Android app) to use the mesh. An iOS application is in the works. And [Meshtastic-python](https://pypi.org/project/meshtastic/) provides access from desktop computers.
 - Very easy sharing of private secured channels. Just share a special link or QR code with friends and they can join your encrypted mesh
 
 This project is currently in beta testing but it is fairly stable and feature complete - if you have questions please [join our discussion forum](https://meshtastic.discourse.group/).
@@ -51,7 +51,7 @@ Note: Updates are happening almost daily, only major updates are listed below. F
 
 Our Android application is available here:
 
-[![Download at https://play.google.com/store/apps/details?id=com.geeksville.mesh](https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png)](https://play.google.com/store/apps/details?id=com.geeksville.mesh&referrer=utm_source%3Dhomepage%26anid%3Dadmob)
+[![Download at https://play.google.com/store/apps/details?id=com.geeksville.mesh](https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png)](https://play.google.com/store/apps/details?id=com.geeksville.mesh&referrer=utm_source%3Dgithub-homepage)
 
 The link above will return older more stable releases. We would prefer if you join our alpha-test group, because the application is rapidly improving. Three steps to opt-in to the alpha- test:
 
