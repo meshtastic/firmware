@@ -304,6 +304,8 @@ void RadioLibInterface::startSend(MeshPacket *txp)
     printPacket("Starting low level send", txp);
     setStandby(); // Cancel any already in process receives
 
+    configHardwareForSend(); // must be after setStandby
+
     size_t numbytes = beginSending(txp);
 
     int res = iface->startTransmit(radiobuf, numbytes);
