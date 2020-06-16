@@ -9,7 +9,7 @@
 PB_BIND(Position, Position, AUTO)
 
 
-PB_BIND(Data, Data, 2)
+PB_BIND(Data, Data, AUTO)
 
 
 PB_BIND(User, User, AUTO)
@@ -49,6 +49,10 @@ PB_BIND(FromRadio, FromRadio, 2)
 
 
 PB_BIND(ToRadio, ToRadio, 2)
+
+
+PB_BIND(ManufacturingData, ManufacturingData, AUTO)
+
 
 
 

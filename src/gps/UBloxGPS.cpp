@@ -49,7 +49,7 @@ bool UBloxGPS::setup()
             // assert(ok);
             // ok = ublox.setDynamicModel(DYN_MODEL_BIKE); // probably PEDESTRIAN but just in case assume bike speeds
             // assert(ok);
-            ok = ublox.powerSaveMode(); // use power save mode
+            ok = ublox.powerSaveMode(true, 2000); // use power save mode, the default timeout (1100ms seems a bit too tight)
             assert(ok);
         }
         ok = ublox.saveConfiguration(3000);
@@ -87,7 +87,7 @@ void UBloxGPS::doTask()
     // Hmmm my fix type reading returns zeros for fix, which doesn't seem correct, because it is still sptting out positions
     // turn off for now
     // fixtype = ublox.getFixType();
-    DEBUG_MSG("fix type %d\n", fixtype);
+    // DEBUG_MSG("fix type %d\n", fixtype);
 
     // DEBUG_MSG("sec %d\n", ublox.getSecond());
     // DEBUG_MSG("lat %d\n", ublox.getLatitude());

@@ -3,7 +3,12 @@
 #include <cstring>
 
 #include <OLEDDisplayUi.h>
+
+#ifdef USE_SH1106
+#include <SH1106Wire.h>
+#else
 #include <SSD1306Wire.h>
+#endif
 
 #include "PeriodicTask.h"
 #include "TypedQueue.h"
@@ -100,7 +105,14 @@ class Screen : public PeriodicTask
     void setup();
 
     /// Turns the screen on/off.
-    void setOn(bool on) { enqueueCmd(CmdItem{.cmd = on ? Cmd::SET_ON : Cmd::SET_OFF}); }
+    void setOn(bool on)
+    {
+        if (!on)
+            handleSetOn(
+                false); // We handle off commands immediately, because they might be called because the CPU is shutting down
+        else
+            enqueueCmd(CmdItem{.cmd = on ? Cmd::SET_ON : Cmd::SET_OFF});
+    }
 
     /// Handles a button press.
     void onPress() { enqueueCmd(CmdItem{.cmd = Cmd::ON_PRESS}); }
@@ -204,7 +216,11 @@ class Screen : public PeriodicTask
     /// Holds state for debug information
     DebugInfo debugInfo;
     /// Display device
+#ifdef USE_SH1106
+    SH1106Wire dispdev;
+#else
     SSD1306Wire dispdev;
+#endif
     /// UI helper for rendering to frames and switching between them
     OLEDDisplayUi ui;
 };

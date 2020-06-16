@@ -14,6 +14,13 @@ extern "C" {
 #endif
 
 /* Enum definitions */
+typedef enum _RouteError {
+    RouteError_NONE = 0,
+    RouteError_NO_ROUTE = 1,
+    RouteError_GOT_NAK = 2,
+    RouteError_TIMEOUT = 3
+} RouteError;
+
 typedef enum _Constants {
     Constants_Unused = 0
 } Constants;
@@ -32,10 +39,6 @@ typedef enum _ChannelSettings_ModemConfig {
 } ChannelSettings_ModemConfig;
 
 /* Struct definitions */
-typedef struct _RouteDiscovery {
-    pb_callback_t route;
-} RouteDiscovery;
-
 typedef PB_BYTES_ARRAY_T(32) ChannelSettings_psk_t;
 typedef struct _ChannelSettings {
     int32_t tx_power;
@@ -44,7 +47,7 @@ typedef struct _ChannelSettings {
     char name[12];
 } ChannelSettings;
 
-typedef PB_BYTES_ARRAY_T(251) Data_payload_t;
+typedef PB_BYTES_ARRAY_T(240) Data_payload_t;
 typedef struct _Data {
     Data_Type typ;
     Data_payload_t payload;
@@ -54,8 +57,15 @@ typedef struct _DebugString {
     char message[256];
 } DebugString;
 
+typedef struct _ManufacturingData {
+    uint32_t fradioFreq;
+    pb_callback_t hw_model;
+    pb_callback_t hw_version;
+    int32_t selftest_result;
+} ManufacturingData;
+
 typedef struct _MyNodeInfo {
-    int32_t my_node_num;
+    uint32_t my_node_num;
     bool has_gps;
     int32_t num_channels;
     char region[12];
@@ -64,14 +74,19 @@ typedef struct _MyNodeInfo {
     uint32_t error_code;
     uint32_t error_address;
     uint32_t error_count;
+    uint32_t packet_id_bits;
+    uint32_t current_packet_id;
+    uint32_t node_num_bits;
+    uint32_t message_timeout_msec;
+    uint32_t min_app_version;
 } MyNodeInfo;
 
 typedef struct _Position {
     int32_t altitude;
     int32_t battery_level;
-    uint32_t time;
     int32_t latitude_i;
     int32_t longitude_i;
+    uint32_t time;
 } Position;
 
 typedef struct _RadioConfig_UserPreferences {
@@ -88,7 +103,14 @@ typedef struct _RadioConfig_UserPreferences {
     uint32_t min_wake_secs;
     bool keep_all_packets;
     bool promiscuous_mode;
+    pb_size_t ignore_incoming_count;
+    uint32_t ignore_incoming[3];
 } RadioConfig_UserPreferences;
+
+typedef struct _RouteDiscovery {
+    pb_size_t route_count;
+    int32_t route[8];
+} RouteDiscovery;
 
 typedef struct _User {
     char id[16];
@@ -98,11 +120,12 @@ typedef struct _User {
 } User;
 
 typedef struct _NodeInfo {
-    int32_t num;
+    uint32_t num;
     bool has_user;
     User user;
     bool has_position;
     Position position;
+    uint32_t next_hop;
     float snr;
 } NodeInfo;
 
@@ -114,27 +137,40 @@ typedef struct _RadioConfig {
 } RadioConfig;
 
 typedef struct _SubPacket {
-    bool has_position;
-    Position position;
-    bool has_data;
-    Data data;
-    bool has_user;
-    User user;
+    pb_size_t which_payload;
+    union {
+        Position position;
+        Data data;
+        User user;
+        RouteDiscovery route_request;
+        RouteDiscovery route_reply;
+        RouteError route_error;
+    };
+    uint32_t original_id;
     bool want_response;
+    uint32_t dest;
+    pb_size_t which_ack;
+    union {
+        uint32_t success_id;
+        uint32_t fail_id;
+    } ack;
+    uint32_t source;
 } SubPacket;
 
 typedef PB_BYTES_ARRAY_T(256) MeshPacket_encrypted_t;
 typedef struct _MeshPacket {
-    int32_t from;
-    int32_t to;
+    uint32_t from;
+    uint32_t to;
     pb_size_t which_payload;
     union {
         SubPacket decoded;
         MeshPacket_encrypted_t encrypted;
     };
-    uint32_t rx_time;
     uint32_t id;
     float rx_snr;
+    uint32_t rx_time;
+    uint32_t hop_limit;
+    bool want_ack;
 } MeshPacket;
 
 typedef struct _DeviceState {
@@ -179,6 +215,10 @@ typedef struct _ToRadio {
 
 
 /* Helper constants for enums */
+#define _RouteError_MIN RouteError_NONE
+#define _RouteError_MAX RouteError_TIMEOUT
+#define _RouteError_ARRAYSIZE ((RouteError)(RouteError_TIMEOUT+1))
+
 #define _Constants_MIN Constants_Unused
 #define _Constants_MAX Constants_Unused
 #define _Constants_ARRAYSIZE ((Constants)(Constants_Unused+1))
@@ -196,36 +236,37 @@ typedef struct _ToRadio {
 #define Position_init_default                    {0, 0, 0, 0, 0}
 #define Data_init_default                        {_Data_Type_MIN, {0, {0}}}
 #define User_init_default                        {"", "", "", {0}}
-#define RouteDiscovery_init_default              {{{NULL}, NULL}}
-#define SubPacket_init_default                   {false, Position_init_default, false, Data_init_default, false, User_init_default, 0}
-#define MeshPacket_init_default                  {0, 0, 0, {SubPacket_init_default}, 0, 0, 0}
+#define RouteDiscovery_init_default              {0, {0, 0, 0, 0, 0, 0, 0, 0}}
+#define SubPacket_init_default                   {0, {Position_init_default}, 0, 0, 0, 0, {0}, 0}
+#define MeshPacket_init_default                  {0, 0, 0, {SubPacket_init_default}, 0, 0, 0, 0, 0}
 #define ChannelSettings_init_default             {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, ""}
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default, false, ChannelSettings_init_default}
-#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0}
-#define MyNodeInfo_init_default                  {0, 0, 0, "", "", "", 0, 0, 0}
+#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}}
+#define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0}
+#define MyNodeInfo_init_default                  {0, 0, 0, "", "", "", 0, 0, 0, 0, 0, 0, 0, 0}
 #define DeviceState_init_default                 {false, RadioConfig_init_default, false, MyNodeInfo_init_default, false, User_init_default, 0, {NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default}, 0, {MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default, MeshPacket_init_default}, false, MeshPacket_init_default, 0}
 #define DebugString_init_default                 {""}
 #define FromRadio_init_default                   {0, 0, {MeshPacket_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
+#define ManufacturingData_init_default           {0, {{NULL}, NULL}, {{NULL}, NULL}, 0}
 #define Position_init_zero                       {0, 0, 0, 0, 0}
 #define Data_init_zero                           {_Data_Type_MIN, {0, {0}}}
 #define User_init_zero                           {"", "", "", {0}}
-#define RouteDiscovery_init_zero                 {{{NULL}, NULL}}
-#define SubPacket_init_zero                      {false, Position_init_zero, false, Data_init_zero, false, User_init_zero, 0}
-#define MeshPacket_init_zero                     {0, 0, 0, {SubPacket_init_zero}, 0, 0, 0}
+#define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
+#define SubPacket_init_zero                      {0, {Position_init_zero}, 0, 0, 0, 0, {0}, 0}
+#define MeshPacket_init_zero                     {0, 0, 0, {SubPacket_init_zero}, 0, 0, 0, 0, 0}
 #define ChannelSettings_init_zero                {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, ""}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero, false, ChannelSettings_init_zero}
-#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0}
-#define MyNodeInfo_init_zero                     {0, 0, 0, "", "", "", 0, 0, 0}
+#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}}
+#define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0}
+#define MyNodeInfo_init_zero                     {0, 0, 0, "", "", "", 0, 0, 0, 0, 0, 0, 0, 0}
 #define DeviceState_init_zero                    {false, RadioConfig_init_zero, false, MyNodeInfo_init_zero, false, User_init_zero, 0, {NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero}, 0, {MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero, MeshPacket_init_zero}, false, MeshPacket_init_zero, 0}
 #define DebugString_init_zero                    {""}
 #define FromRadio_init_zero                      {0, 0, {MeshPacket_init_zero}}
 #define ToRadio_init_zero                        {0, {MeshPacket_init_zero}}
+#define ManufacturingData_init_zero              {0, {{NULL}, NULL}, {{NULL}, NULL}, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define RouteDiscovery_route_tag                 2
 #define ChannelSettings_tx_power_tag             1
 #define ChannelSettings_modem_config_tag         3
 #define ChannelSettings_psk_tag                  4
@@ -233,6 +274,10 @@ typedef struct _ToRadio {
 #define Data_typ_tag                             1
 #define Data_payload_tag                         2
 #define DebugString_message_tag                  1
+#define ManufacturingData_fradioFreq_tag         1
+#define ManufacturingData_hw_model_tag           2
+#define ManufacturingData_hw_version_tag         3
+#define ManufacturingData_selftest_result_tag    4
 #define MyNodeInfo_my_node_num_tag               1
 #define MyNodeInfo_has_gps_tag                   2
 #define MyNodeInfo_num_channels_tag              3
@@ -242,11 +287,16 @@ typedef struct _ToRadio {
 #define MyNodeInfo_error_code_tag                7
 #define MyNodeInfo_error_address_tag             8
 #define MyNodeInfo_error_count_tag               9
+#define MyNodeInfo_packet_id_bits_tag            10
+#define MyNodeInfo_current_packet_id_tag         11
+#define MyNodeInfo_node_num_bits_tag             12
+#define MyNodeInfo_message_timeout_msec_tag      13
+#define MyNodeInfo_min_app_version_tag           14
 #define Position_latitude_i_tag                  7
 #define Position_longitude_i_tag                 8
 #define Position_altitude_tag                    3
 #define Position_battery_level_tag               4
-#define Position_time_tag                        6
+#define Position_time_tag                        9
 #define RadioConfig_UserPreferences_position_broadcast_secs_tag 1
 #define RadioConfig_UserPreferences_send_owner_interval_tag 2
 #define RadioConfig_UserPreferences_num_missed_to_fail_tag 3
@@ -260,6 +310,8 @@ typedef struct _ToRadio {
 #define RadioConfig_UserPreferences_min_wake_secs_tag 11
 #define RadioConfig_UserPreferences_keep_all_packets_tag 100
 #define RadioConfig_UserPreferences_promiscuous_mode_tag 101
+#define RadioConfig_UserPreferences_ignore_incoming_tag 102
+#define RouteDiscovery_route_tag                 2
 #define User_id_tag                              1
 #define User_long_name_tag                       2
 #define User_short_name_tag                      3
@@ -268,19 +320,30 @@ typedef struct _ToRadio {
 #define NodeInfo_user_tag                        2
 #define NodeInfo_position_tag                    3
 #define NodeInfo_snr_tag                         7
+#define NodeInfo_next_hop_tag                    5
 #define RadioConfig_preferences_tag              1
 #define RadioConfig_channel_settings_tag         2
 #define SubPacket_position_tag                   1
 #define SubPacket_data_tag                       3
 #define SubPacket_user_tag                       4
+#define SubPacket_route_request_tag              6
+#define SubPacket_route_reply_tag                7
+#define SubPacket_route_error_tag                13
+#define SubPacket_success_id_tag                 10
+#define SubPacket_fail_id_tag                    11
 #define SubPacket_want_response_tag              5
+#define SubPacket_dest_tag                       9
+#define SubPacket_source_tag                     12
+#define SubPacket_original_id_tag                2
 #define MeshPacket_decoded_tag                   3
 #define MeshPacket_encrypted_tag                 8
 #define MeshPacket_from_tag                      1
 #define MeshPacket_to_tag                        2
-#define MeshPacket_rx_time_tag                   4
 #define MeshPacket_id_tag                        6
+#define MeshPacket_rx_time_tag                   9
 #define MeshPacket_rx_snr_tag                    7
+#define MeshPacket_hop_limit_tag                 10
+#define MeshPacket_want_ack_tag                  11
 #define DeviceState_radio_tag                    1
 #define DeviceState_my_node_tag                  2
 #define DeviceState_owner_tag                    3
@@ -305,9 +368,9 @@ typedef struct _ToRadio {
 #define Position_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, INT32,    altitude,          3) \
 X(a, STATIC,   SINGULAR, INT32,    battery_level,     4) \
-X(a, STATIC,   SINGULAR, UINT32,   time,              6) \
 X(a, STATIC,   SINGULAR, SINT32,   latitude_i,        7) \
-X(a, STATIC,   SINGULAR, SINT32,   longitude_i,       8)
+X(a, STATIC,   SINGULAR, SINT32,   longitude_i,       8) \
+X(a, STATIC,   SINGULAR, FIXED32,  time,              9)
 #define Position_CALLBACK NULL
 #define Position_DEFAULT NULL
 
@@ -326,29 +389,41 @@ X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, macaddr,           4)
 #define User_DEFAULT NULL
 
 #define RouteDiscovery_FIELDLIST(X, a) \
-X(a, CALLBACK, REPEATED, INT32,    route,             2)
-#define RouteDiscovery_CALLBACK pb_default_field_callback
+X(a, STATIC,   REPEATED, INT32,    route,             2)
+#define RouteDiscovery_CALLBACK NULL
 #define RouteDiscovery_DEFAULT NULL
 
 #define SubPacket_FIELDLIST(X, a) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  position,          1) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  data,              3) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  user,              4) \
-X(a, STATIC,   SINGULAR, BOOL,     want_response,     5)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,position,position),   1) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,data,data),   3) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,user,user),   4) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,route_request,route_request),   6) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,route_reply,route_reply),   7) \
+X(a, STATIC,   ONEOF,    ENUM,     (payload,route_error,route_error),  13) \
+X(a, STATIC,   SINGULAR, UINT32,   original_id,       2) \
+X(a, STATIC,   SINGULAR, BOOL,     want_response,     5) \
+X(a, STATIC,   SINGULAR, UINT32,   dest,              9) \
+X(a, STATIC,   ONEOF,    UINT32,   (ack,success_id,ack.success_id),  10) \
+X(a, STATIC,   ONEOF,    UINT32,   (ack,fail_id,ack.fail_id),  11) \
+X(a, STATIC,   SINGULAR, UINT32,   source,           12)
 #define SubPacket_CALLBACK NULL
 #define SubPacket_DEFAULT NULL
-#define SubPacket_position_MSGTYPE Position
-#define SubPacket_data_MSGTYPE Data
-#define SubPacket_user_MSGTYPE User
+#define SubPacket_payload_position_MSGTYPE Position
+#define SubPacket_payload_data_MSGTYPE Data
+#define SubPacket_payload_user_MSGTYPE User
+#define SubPacket_payload_route_request_MSGTYPE RouteDiscovery
+#define SubPacket_payload_route_reply_MSGTYPE RouteDiscovery
 
 #define MeshPacket_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, INT32,    from,              1) \
-X(a, STATIC,   SINGULAR, INT32,    to,                2) \
+X(a, STATIC,   SINGULAR, UINT32,   from,              1) \
+X(a, STATIC,   SINGULAR, UINT32,   to,                2) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,decoded,decoded),   3) \
 X(a, STATIC,   ONEOF,    BYTES,    (payload,encrypted,encrypted),   8) \
-X(a, STATIC,   SINGULAR, UINT32,   rx_time,           4) \
 X(a, STATIC,   SINGULAR, UINT32,   id,                6) \
-X(a, STATIC,   SINGULAR, FLOAT,    rx_snr,            7)
+X(a, STATIC,   SINGULAR, FLOAT,    rx_snr,            7) \
+X(a, STATIC,   SINGULAR, FIXED32,  rx_time,           9) \
+X(a, STATIC,   SINGULAR, UINT32,   hop_limit,        10) \
+X(a, STATIC,   SINGULAR, BOOL,     want_ack,         11)
 #define MeshPacket_CALLBACK NULL
 #define MeshPacket_DEFAULT NULL
 #define MeshPacket_payload_decoded_MSGTYPE SubPacket
@@ -382,14 +457,16 @@ X(a, STATIC,   SINGULAR, UINT32,   sds_secs,          9) \
 X(a, STATIC,   SINGULAR, UINT32,   ls_secs,          10) \
 X(a, STATIC,   SINGULAR, UINT32,   min_wake_secs,    11) \
 X(a, STATIC,   SINGULAR, BOOL,     keep_all_packets, 100) \
-X(a, STATIC,   SINGULAR, BOOL,     promiscuous_mode, 101)
+X(a, STATIC,   SINGULAR, BOOL,     promiscuous_mode, 101) \
+X(a, STATIC,   REPEATED, UINT32,   ignore_incoming, 102)
 #define RadioConfig_UserPreferences_CALLBACK NULL
 #define RadioConfig_UserPreferences_DEFAULT NULL
 
 #define NodeInfo_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, INT32,    num,               1) \
+X(a, STATIC,   SINGULAR, UINT32,   num,               1) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  user,              2) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  position,          3) \
+X(a, STATIC,   SINGULAR, UINT32,   next_hop,          5) \
 X(a, STATIC,   SINGULAR, FLOAT,    snr,               7)
 #define NodeInfo_CALLBACK NULL
 #define NodeInfo_DEFAULT NULL
@@ -397,7 +474,7 @@ X(a, STATIC,   SINGULAR, FLOAT,    snr,               7)
 #define NodeInfo_position_MSGTYPE Position
 
 #define MyNodeInfo_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, INT32,    my_node_num,       1) \
+X(a, STATIC,   SINGULAR, UINT32,   my_node_num,       1) \
 X(a, STATIC,   SINGULAR, BOOL,     has_gps,           2) \
 X(a, STATIC,   SINGULAR, INT32,    num_channels,      3) \
 X(a, STATIC,   SINGULAR, STRING,   region,            4) \
@@ -405,7 +482,12 @@ X(a, STATIC,   SINGULAR, STRING,   hw_model,          5) \
 X(a, STATIC,   SINGULAR, STRING,   firmware_version,   6) \
 X(a, STATIC,   SINGULAR, UINT32,   error_code,        7) \
 X(a, STATIC,   SINGULAR, UINT32,   error_address,     8) \
-X(a, STATIC,   SINGULAR, UINT32,   error_count,       9)
+X(a, STATIC,   SINGULAR, UINT32,   error_count,       9) \
+X(a, STATIC,   SINGULAR, UINT32,   packet_id_bits,   10) \
+X(a, STATIC,   SINGULAR, UINT32,   current_packet_id,  11) \
+X(a, STATIC,   SINGULAR, UINT32,   node_num_bits,    12) \
+X(a, STATIC,   SINGULAR, UINT32,   message_timeout_msec,  13) \
+X(a, STATIC,   SINGULAR, UINT32,   min_app_version,  14)
 #define MyNodeInfo_CALLBACK NULL
 #define MyNodeInfo_DEFAULT NULL
 
@@ -459,6 +541,14 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_owner,variant.set_owner), 102)
 #define ToRadio_variant_set_radio_MSGTYPE RadioConfig
 #define ToRadio_variant_set_owner_MSGTYPE User
 
+#define ManufacturingData_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   fradioFreq,        1) \
+X(a, CALLBACK, SINGULAR, STRING,   hw_model,          2) \
+X(a, CALLBACK, SINGULAR, STRING,   hw_version,        3) \
+X(a, STATIC,   SINGULAR, SINT32,   selftest_result,   4)
+#define ManufacturingData_CALLBACK pb_default_field_callback
+#define ManufacturingData_DEFAULT NULL
+
 extern const pb_msgdesc_t Position_msg;
 extern const pb_msgdesc_t Data_msg;
 extern const pb_msgdesc_t User_msg;
@@ -474,6 +564,7 @@ extern const pb_msgdesc_t DeviceState_msg;
 extern const pb_msgdesc_t DebugString_msg;
 extern const pb_msgdesc_t FromRadio_msg;
 extern const pb_msgdesc_t ToRadio_msg;
+extern const pb_msgdesc_t ManufacturingData_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define Position_fields &Position_msg
@@ -491,23 +582,25 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define DebugString_fields &DebugString_msg
 #define FromRadio_fields &FromRadio_msg
 #define ToRadio_fields &ToRadio_msg
+#define ManufacturingData_fields &ManufacturingData_msg
 
 /* Maximum encoded size of messages (where known) */
-#define Position_size                            40
-#define Data_size                                256
+#define Position_size                            39
+#define Data_size                                245
 #define User_size                                72
-/* RouteDiscovery_size depends on runtime parameters */
-#define SubPacket_size                           377
-#define MeshPacket_size                          419
+#define RouteDiscovery_size                      88
+#define SubPacket_size                           274
+#define MeshPacket_size                          313
 #define ChannelSettings_size                     60
-#define RadioConfig_size                         136
-#define RadioConfig_UserPreferences_size         72
+#define RadioConfig_size                         157
+#define RadioConfig_UserPreferences_size         93
 #define NodeInfo_size                            132
-#define MyNodeInfo_size                          85
-#define DeviceState_size                         18552
+#define MyNodeInfo_size                          110
+#define DeviceState_size                         15100
 #define DebugString_size                         258
-#define FromRadio_size                           428
-#define ToRadio_size                             422
+#define FromRadio_size                           322
+#define ToRadio_size                             316
+/* ManufacturingData_size depends on runtime parameters */
 
 #ifdef __cplusplus
 } /* extern "C" */

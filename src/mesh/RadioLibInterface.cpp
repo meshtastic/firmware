@@ -1,8 +1,6 @@
 #include "RadioLibInterface.h"
 #include "MeshTypes.h"
-#include "OSTimer.h"
 #include "mesh-pb-constants.h"
-#include <NodeDB.h> // FIXME, this class shouldn't need to look into nodedb
 #include <configuration.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -12,10 +10,16 @@ static SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 
 RadioLibInterface::RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy,
                                      SPIClass &spi, PhysicalLayer *_iface)
-    : module(cs, irq, rst, busy, spi, spiSettings), iface(_iface)
+    : PeriodicTask(0), module(cs, irq, rst, busy, spi, spiSettings), iface(_iface)
 {
     assert(!instance); // We assume only one for now
     instance = this;
+}
+
+bool RadioLibInterface::init()
+{
+    setup(); // init our timer
+    return RadioInterface::init();
 }
 
 #ifndef NO_ESP32
@@ -110,8 +114,8 @@ bool RadioLibInterface::canSendImmediately()
 /// bluetooth comms code.  If the txmit queue is empty it might return an error
 ErrorCode RadioLibInterface::send(MeshPacket *p)
 {
-    DEBUG_MSG("enqueuing for send on mesh fr=0x%x,to=0x%x,id=%d (txGood=%d,rxGood=%d,rxBad=%d)\n", p->from, p->to, p->id, txGood,
-              rxGood, rxBad);
+    printPacket("enqueuing for send", p);
+    DEBUG_MSG("txGood=%d,rxGood=%d,rxBad=%d\n", txGood, rxGood, rxBad);
     ErrorCode res = txQueue.enqueue(p, 0) ? ERRNO_OK : ERRNO_UNKNOWN;
 
     if (res != ERRNO_OK) { // we weren't able to queue it, so we must drop it to prevent leaks
@@ -130,7 +134,7 @@ bool RadioLibInterface::canSleep()
 {
     bool res = txQueue.isEmpty();
     if (!res) // only print debug messages if we are vetoing sleep
-        DEBUG_MSG("radio wait to sleep, txEmpty=%d\n", txQueue.isEmpty());
+        DEBUG_MSG("radio wait to sleep, txEmpty=%d\n", res);
 
     return res;
 }
@@ -169,11 +173,13 @@ void RadioLibInterface::loop()
     case ISR_TX:
         handleTransmitInterrupt();
         startReceive();
+        // DEBUG_MSG("tx complete - starting timer\n");
         startTransmitTimer();
         break;
     case ISR_RX:
         handleReceiveInterrupt();
         startReceive();
+        // DEBUG_MSG("rx complete - starting timer\n");
         startTransmitTimer();
         break;
     case TRANSMIT_DELAY_COMPLETED:
@@ -188,6 +194,8 @@ void RadioLibInterface::loop()
                 assert(txp);
                 startSend(txp);
             }
+        } else {
+            // DEBUG_MSG("done with txqueue\n");
         }
         break;
     default:
@@ -195,45 +203,25 @@ void RadioLibInterface::loop()
     }
 }
 
-#ifndef NO_ESP32
-#define USE_HW_TIMER
-#endif
-
-void IRAM_ATTR RadioLibInterface::timerCallback(void *p1, uint32_t p2)
+void RadioLibInterface::doTask()
 {
-    RadioLibInterface *t = (RadioLibInterface *)p1;
-
-    t->timerRunning = false;
+    disable(); // Don't call this callback again
 
     // We use without overwrite, so that if there is already an interrupt pending to be handled, that gets handle properly (the
     // ISR handler will restart our timer)
-#ifndef USE_HW_TIMER
-    t->notify(TRANSMIT_DELAY_COMPLETED, eSetValueWithoutOverwrite);
-#else
-    BaseType_t xHigherPriorityTaskWoken;
-    instance->notifyFromISR(&xHigherPriorityTaskWoken, TRANSMIT_DELAY_COMPLETED, eSetValueWithoutOverwrite);
 
-    /* Force a context switch if xHigherPriorityTaskWoken is now set to pdTRUE.
-    The macro used to do this is dependent on the port and may be called
-    portEND_SWITCHING_ISR. */
-    YIELD_FROM_ISR(xHigherPriorityTaskWoken);
-#endif
+    notify(TRANSMIT_DELAY_COMPLETED, eSetValueWithoutOverwrite);
 }
 
 void RadioLibInterface::startTransmitTimer(bool withDelay)
 {
     // If we have work to do and the timer wasn't already scheduled, schedule it now
-    if (!timerRunning && !txQueue.isEmpty()) {
-        timerRunning = true;
+    if (getPeriod() == 0 && !txQueue.isEmpty()) {
         uint32_t delay =
-            !withDelay ? 0 : random(MIN_TX_WAIT_MSEC, MAX_TX_WAIT_MSEC); // See documentation for loop() wrt these values
+            !withDelay ? 1 : random(MIN_TX_WAIT_MSEC, MAX_TX_WAIT_MSEC); // See documentation for loop() wrt these values
                                                                          // DEBUG_MSG("xmit timer %d\n", delay);
-#ifdef USE_HW_TIMER
-        bool okay = scheduleHWCallback(timerCallback, this, 0, delay);
-#else
-        bool okay = scheduleOSCallback(timerCallback, this, 0, delay);
-#endif
-        assert(okay);
+        // DEBUG_MSG("delaying %u\n", delay);
+        setPeriod(delay);
     }
 }
 
@@ -249,7 +237,7 @@ void RadioLibInterface::completeSending()
 {
     if (sendingPacket) {
         txGood++;
-        DEBUG_MSG("Completed sending to=0x%x, id=%u\n", sendingPacket->to, sendingPacket->id);
+        printPacket("Completed sending", sendingPacket);
 
         // We are done sending that packet, release it
         packetPool.release(sendingPacket);
@@ -281,28 +269,31 @@ void RadioLibInterface::handleReceiveInterrupt()
             rxBad++;
         } else {
             const PacketHeader *h = (PacketHeader *)radiobuf;
-            uint8_t ourAddr = nodeDB.getNodeNum();
 
             rxGood++;
-            if (h->to != 255 && h->to != ourAddr) {
-                DEBUG_MSG("ignoring packet not sent to us\n");
-            } else {
-                MeshPacket *mp = packetPool.allocZeroed();
 
-                mp->from = h->from;
-                mp->to = h->to;
-                mp->id = h->id;
-                addReceiveMetadata(mp);
+            // Note: we deliver _all_ packets to our router (i.e. our interface is intentionally promiscuous).
+            // This allows the router and other apps on our node to sniff packets (usually routing) between other
+            // nodes.
+            MeshPacket *mp = packetPool.allocZeroed();
 
-                mp->which_payload = MeshPacket_encrypted_tag; // Mark that the payload is still encrypted at this point
-                assert(payloadLen <= sizeof(mp->encrypted.bytes));
-                memcpy(mp->encrypted.bytes, payload, payloadLen);
-                mp->encrypted.size = payloadLen;
+            mp->from = h->from;
+            mp->to = h->to;
+            mp->id = h->id;
+            assert(HOP_MAX <= PACKET_FLAGS_HOP_MASK); // If hopmax changes, carefully check this code
+            mp->hop_limit = h->flags & PACKET_FLAGS_HOP_MASK;
+            mp->want_ack = !!(h->flags & PACKET_FLAGS_WANT_ACK_MASK);
 
-                DEBUG_MSG("Lora RX interrupt from=0x%x, id=%u\n", mp->from, mp->id);
+            addReceiveMetadata(mp);
 
-                deliverToReceiver(mp);
-            }
+            mp->which_payload = MeshPacket_encrypted_tag; // Mark that the payload is still encrypted at this point
+            assert(payloadLen <= sizeof(mp->encrypted.bytes));
+            memcpy(mp->encrypted.bytes, payload, payloadLen);
+            mp->encrypted.size = payloadLen;
+
+            printPacket("Lora RX", mp);
+
+            deliverToReceiver(mp);
         }
     }
 }
@@ -310,7 +301,7 @@ void RadioLibInterface::handleReceiveInterrupt()
 /** start an immediate transmit */
 void RadioLibInterface::startSend(MeshPacket *txp)
 {
-    DEBUG_MSG("Starting low level send from=0x%x, id=%u!\n", txp->from, txp->id);
+    printPacket("Starting low level send", txp);
     setStandby(); // Cancel any already in process receives
 
     size_t numbytes = beginSending(txp);

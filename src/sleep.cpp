@@ -14,6 +14,7 @@
 #include "esp_pm.h"
 #include "rom/rtc.h"
 #include <driver/rtc_io.h>
+#include <driver/uart.h>
 
 #include "BluetoothUtil.h"
 
@@ -34,9 +35,6 @@ Observable<void *> notifySleep, notifyDeepSleep;
 
 // deep sleep support
 RTC_DATA_ATTR int bootCount = 0;
-
-#define xstr(s) str(s)
-#define str(s) #s
 
 // -----------------------------------------------------------------------------
 // Application
@@ -114,8 +112,7 @@ void initDeepSleep()
 #endif
 }
 
-/// return true if sleep is allowed
-static bool doPreflightSleep()
+bool doPreflightSleep()
 {
     if (preflightSleep.notifyObservers(NULL) != 0)
         return false; // vetoed
@@ -132,6 +129,7 @@ static void waitEnterSleep()
 
         if (millis() - now > 30 * 1000) { // If we wait too long just report an error and go to sleep
             recordCriticalError(ErrSleepEnterWait);
+            assert(0); // FIXME - for now we just restart, need to fix bug #167
             break;
         }
     }
@@ -259,6 +257,17 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     gpio_pullup_en((gpio_num_t)BUTTON_PIN);
 #endif
 
+#ifdef SERIAL0_RX_GPIO
+    // We treat the serial port as a GPIO for a fast/low power way of waking, if we see a rising edge that means
+    // someone started to send something
+
+    // Alas - doesn't work reliably, instead need to use the uart specific version (which burns a little power)
+    // FIXME: gpio 3 is RXD for serialport 0 on ESP32
+    // Send a few Z characters to wake the port
+    gpio_wakeup_enable((gpio_num_t)SERIAL0_RX_GPIO, GPIO_INTR_LOW_LEVEL);
+    // uart_set_wakeup_threshold(UART_NUM_0, 3);
+    // esp_sleep_enable_uart_wakeup(0);
+#endif
 #ifdef BUTTON_PIN
     gpio_wakeup_enable((gpio_num_t)BUTTON_PIN, GPIO_INTR_LOW_LEVEL); // when user presses, this button goes low
 #endif
@@ -276,13 +285,11 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 
     esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
     if (cause == ESP_SLEEP_WAKEUP_GPIO)
-        DEBUG_MSG("Exit light sleep gpio: btn=%d, rf95=%d\n", !digitalRead(BUTTON_PIN), digitalRead(RF95_IRQ_GPIO));
+        DEBUG_MSG("Exit light sleep gpio: btn=%d\n", !digitalRead(BUTTON_PIN));
 
     return cause;
 }
-#endif
 
-#if 0
 // not legal on the stock android ESP build
 
 /**
@@ -297,7 +304,7 @@ void enableModemSleep()
   static esp_pm_config_esp32_t config; // filled with zeros because bss
 
   config.max_freq_mhz = CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ;
-  config.min_freq_mhz = 10; // 10Mhz is minimum recommended
+  config.min_freq_mhz = 20; // 10Mhz is minimum recommended
   config.light_sleep_enable = false;
   DEBUG_MSG("Sleep request result %x\n", esp_pm_configure(&config));
 }

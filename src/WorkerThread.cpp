@@ -1,4 +1,5 @@
 #include "WorkerThread.h"
+#include "debug.h"
 #include <assert.h>
 
 void Thread::start(const char *name, size_t stackSize, uint32_t priority)
@@ -16,6 +17,15 @@ void WorkerThread::doRun()
 {
     while (!wantExit) {
         block();
+
+#ifdef DEBUG_STACK
+        static uint32_t lastPrint = 0;
+        if (millis() - lastPrint > 10 * 1000L) {
+            lastPrint = millis();
+            meshtastic::printThreadInfo("net");
+        }
+#endif
+
         loop();
     }
 }
@@ -26,14 +36,6 @@ void WorkerThread::doRun()
 void NotifiedWorkerThread::notify(uint32_t v, eNotifyAction action)
 {
     xTaskNotify(taskHandle, v, action);
-}
-
-/**
- * Notify from an ISR
- */
-void NotifiedWorkerThread::notifyFromISR(BaseType_t *highPriWoken, uint32_t v, eNotifyAction action)
-{
-    xTaskNotifyFromISR(taskHandle, v, action, highPriWoken);
 }
 
 void NotifiedWorkerThread::block()

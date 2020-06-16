@@ -23,9 +23,6 @@ static CallbackCharacteristic *meshFromNumCharacteristic;
 
 BLEService *meshService;
 
-// If defined we will also support the old API
-#define SUPPORT_OLD_BLE_API
-
 class BluetoothPhoneAPI : public PhoneAPI
 {
     /**
@@ -44,150 +41,6 @@ class BluetoothPhoneAPI : public PhoneAPI
 
 BluetoothPhoneAPI *bluetoothPhoneAPI;
 
-class ProtobufCharacteristic : public CallbackCharacteristic
-{
-    const pb_msgdesc_t *fields;
-    void *my_struct;
-
-  public:
-    ProtobufCharacteristic(const char *uuid, uint32_t btprops, const pb_msgdesc_t *_fields, void *_my_struct)
-        : CallbackCharacteristic(uuid, btprops), fields(_fields), my_struct(_my_struct)
-    {
-        setCallbacks(this);
-    }
-
-    void onRead(BLECharacteristic *c)
-    {
-        BLEKeepAliveCallbacks::onRead(c);
-        size_t numbytes = pb_encode_to_bytes(trBytes, sizeof(trBytes), fields, my_struct);
-        DEBUG_MSG("pbread from %s returns %d bytes\n", c->getUUID().toString().c_str(), numbytes);
-        c->setValue(trBytes, numbytes);
-    }
-
-    void onWrite(BLECharacteristic *c)
-    {
-        BLEKeepAliveCallbacks::onWrite(c);
-        writeToDest(c, my_struct);
-    }
-
-  protected:
-    /// like onWrite, but we provide an different destination to write to, for use by subclasses that
-    /// want to optionally ignore parts of writes.
-    /// returns true for success
-    bool writeToDest(BLECharacteristic *c, void *dest)
-    {
-        // dumpCharacteristic(pCharacteristic);
-        std::string src = c->getValue();
-        DEBUG_MSG("pbwrite to %s of %d bytes\n", c->getUUID().toString().c_str(), src.length());
-        return pb_decode_from_bytes((const uint8_t *)src.c_str(), src.length(), fields, dest);
-    }
-};
-
-#ifdef SUPPORT_OLD_BLE_API
-class NodeInfoCharacteristic : public BLECharacteristic, public BLEKeepAliveCallbacks
-{
-  public:
-    NodeInfoCharacteristic()
-        : BLECharacteristic("d31e02e0-c8ab-4d3f-9cc9-0b8466bdabe8",
-                            BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ)
-    {
-        setCallbacks(this);
-    }
-
-    void onRead(BLECharacteristic *c)
-    {
-        BLEKeepAliveCallbacks::onRead(c);
-
-        const NodeInfo *info = nodeDB.readNextInfo();
-
-        if (info) {
-            DEBUG_MSG("Sending nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s\n", info->num, info->position.time, info->user.id,
-                      info->user.long_name);
-            size_t numbytes = pb_encode_to_bytes(trBytes, sizeof(trBytes), NodeInfo_fields, info);
-            c->setValue(trBytes, numbytes);
-        } else {
-            c->setValue(trBytes, 0); // Send an empty response
-            DEBUG_MSG("Done sending nodeinfos\n");
-        }
-    }
-
-    void onWrite(BLECharacteristic *c)
-    {
-        BLEKeepAliveCallbacks::onWrite(c);
-        DEBUG_MSG("Reset nodeinfo read pointer\n");
-        nodeDB.resetReadPointer();
-    }
-};
-
-// wrap our protobuf version with something that forces the service to reload the config
-class RadioCharacteristic : public ProtobufCharacteristic
-{
-  public:
-    RadioCharacteristic()
-        : ProtobufCharacteristic("b56786c8-839a-44a1-b98e-a1724c4a0262",
-                                 BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ, RadioConfig_fields,
-                                 &radioConfig)
-    {
-    }
-
-    void onRead(BLECharacteristic *c)
-    {
-        DEBUG_MSG("Reading radio config, sdsecs %u\n", radioConfig.preferences.sds_secs);
-        ProtobufCharacteristic::onRead(c);
-    }
-
-    void onWrite(BLECharacteristic *c)
-    {
-        DEBUG_MSG("Writing radio config\n");
-        ProtobufCharacteristic::onWrite(c);
-        bluetoothPhoneAPI->handleSetRadio(radioConfig);
-    }
-};
-
-// wrap our protobuf version with something that forces the service to reload the owner
-class OwnerCharacteristic : public ProtobufCharacteristic
-{
-  public:
-    OwnerCharacteristic()
-        : ProtobufCharacteristic("6ff1d8b6-e2de-41e3-8c0b-8fa384f64eb6",
-                                 BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ, User_fields, &owner)
-    {
-    }
-
-    void onWrite(BLECharacteristic *c)
-    {
-        BLEKeepAliveCallbacks::onWrite(
-            c); // NOTE: We do not call the standard ProtobufCharacteristic superclass, because we want custom write behavior
-
-        static User o; // if the phone doesn't set ID we are careful to keep ours, we also always keep our macaddr
-        if (writeToDest(c, &o)) {
-            bluetoothPhoneAPI->handleSetOwner(o);
-        }
-    }
-};
-
-class MyNodeInfoCharacteristic : public ProtobufCharacteristic
-{
-  public:
-    MyNodeInfoCharacteristic()
-        : ProtobufCharacteristic("ea9f3f82-8dc4-4733-9452-1f6da28892a2", BLECharacteristic::PROPERTY_READ, MyNodeInfo_fields,
-                                 &myNodeInfo)
-    {
-    }
-
-    void onRead(BLECharacteristic *c)
-    {
-        // update gps connection state
-        myNodeInfo.has_gps = gps->isConnected;
-
-        ProtobufCharacteristic::onRead(c);
-
-        myNodeInfo.error_code = 0; // The phone just read us, so throw it away
-        myNodeInfo.error_address = 0;
-    }
-};
-
-#endif
 
 class ToRadioCharacteristic : public CallbackCharacteristic
 {
@@ -196,9 +49,6 @@ class ToRadioCharacteristic : public CallbackCharacteristic
 
     void onWrite(BLECharacteristic *c)
     {
-        BLEKeepAliveCallbacks::onWrite(c);
-        DEBUG_MSG("Got on write\n");
-
         bluetoothPhoneAPI->handleToRadio(c->getData(), c->getValue().length());
     }
 };
@@ -212,7 +62,6 @@ class FromRadioCharacteristic : public CallbackCharacteristic
 
     void onRead(BLECharacteristic *c)
     {
-        BLEKeepAliveCallbacks::onRead(c);
         size_t numBytes = bluetoothPhoneAPI->getFromRadio(trBytes);
 
         // Someone is going to read our value as soon as this callback returns.  So fill it with the next message in the queue
@@ -236,11 +85,7 @@ class FromNumCharacteristic : public CallbackCharacteristic
         // observe(&service.fromNumChanged);
     }
 
-    void onRead(BLECharacteristic *c)
-    {
-        BLEKeepAliveCallbacks::onRead(c);
-        DEBUG_MSG("FIXME implement fromnum read\n");
-    }
+    void onRead(BLECharacteristic *c) { DEBUG_MSG("FIXME implement fromnum read\n"); }
 };
 
 /*
@@ -263,12 +108,6 @@ BLEService *createMeshBluetoothService(BLEServer *server)
     addWithDesc(service, meshFromNumCharacteristic, "fromRadio");
     addWithDesc(service, new ToRadioCharacteristic, "toRadio");
     addWithDesc(service, new FromRadioCharacteristic, "fromNum");
-#ifdef SUPPORT_OLD_BLE_API
-    addWithDesc(service, new MyNodeInfoCharacteristic, "myNode");
-    addWithDesc(service, new RadioCharacteristic, "radio");
-    addWithDesc(service, new OwnerCharacteristic, "owner");
-    addWithDesc(service, new NodeInfoCharacteristic, "nodeinfo");
-#endif
 
     meshFromNumCharacteristic->addDescriptor(addBLEDescriptor(new BLE2902())); // Needed so clients can request notification
 
@@ -292,6 +131,7 @@ void stopMeshBluetoothService()
 {
     assert(meshService);
     meshService->stop();
+    meshService->executeDelete();
 }
 
 void destroyMeshBluetoothService()

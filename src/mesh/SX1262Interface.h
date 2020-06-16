@@ -29,7 +29,7 @@ class SX1262Interface : public RadioLibInterface
     /**
      * Glue functions called from ISR land
      */
-    virtual void INTERRUPT_ATTR disableInterrupt() { lora.clearDio1Action(); }
+    virtual void disableInterrupt();
 
     /**
      * Enable a particular ISR callback glue function
@@ -43,6 +43,12 @@ class SX1262Interface : public RadioLibInterface
      * Start waiting to receive a message
      */
     virtual void startReceive();
+
+    /** start an immediate transmit
+     *  We override to turn on transmitter power as needed.
+     */
+    virtual void startSend(MeshPacket *txp);
+
     /**
      * Add SNR data to received messages
      */

@@ -95,4 +95,10 @@ class NodeDB
     void loadFromDisk();
 };
 
+/**
+ * The node number the user is currently looking at
+ * 0 if none
+ */
+extern NodeNum displayedNodeNum;
+
 extern NodeDB nodeDB;

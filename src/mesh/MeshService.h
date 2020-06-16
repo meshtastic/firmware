@@ -67,9 +67,6 @@ class MeshService
     /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
     void reloadOwner() { sendOurOwner(); }
 
-    /// Allocate and return a meshpacket which defaults as send to broadcast from the current node.
-    MeshPacket *allocForSending();
-
     /// Called when the user wakes up our GUI, normally sends our latest location to the mesh (if we have it), otherwise at least
     /// sends our owner
     void sendNetworkPing(NodeNum dest, bool wantReplies = false);

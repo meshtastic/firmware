@@ -1,21 +1,21 @@
 #include "OSTimer.h"
 #include "configuration.h"
 
-#ifdef NO_ESP32
-
 /**
  * Schedule a callback to run.  The callback must _not_ block, though it is called from regular thread level (not ISR)
  *
- * NOTE! xTimerPend... seems to ignore the time passed in on ESP32 - I haven't checked on NRF52
+ * NOTE! xTimerPend... seems to ignore the time passed in on ESP32 and on NRF52
+ * The reason this didn't work is bcause xTimerPednFunctCall really isn't a timer function at all - it just means run the callback
+ * from the timer thread the next time you have spare cycles.
  *
  * @return true if successful, false if the timer fifo is too full.
- */
+
 bool scheduleOSCallback(PendableFunction callback, void *param1, uint32_t param2, uint32_t delayMsec)
 {
     return xTimerPendFunctionCall(callback, param1, param2, pdMS_TO_TICKS(delayMsec));
-}
+} */
 
-#else
+#ifndef NO_ESP32
 
 // Super skanky quick hack to use hardware timers of the ESP32
 static hw_timer_t *timer;

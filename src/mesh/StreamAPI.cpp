@@ -9,6 +9,7 @@ void StreamAPI::loop()
 {
     writeStream();
     readStream();
+    checkConnectionTimeout();
 }
 
 /**
@@ -31,7 +32,7 @@ void StreamAPI::readStream()
             if (c != START2)
                 rxPtr = 0;                             // failed to find framing
         } else if (ptr >= HEADER_LEN) {                // we have at least read our 4 byte framing
-            uint16_t len = (rxBuf[2] << 8) + rxBuf[3]; // big endian 16 bit length follows framing
+            uint32_t len = (rxBuf[2] << 8) + rxBuf[3]; // big endian 16 bit length follows framing
 
             if (ptr == HEADER_LEN) {
                 // we _just_ finished our 4 byte header, validate length now (note: a length of zero is a valid
