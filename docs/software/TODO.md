@@ -1,8 +1,8 @@
 # High priority
 
 - nrf52 free memory https://learn.adafruit.com/bluefruit-nrf52-feather-learning-guide/hathach-memory-map
-- modem sleep should work if we lower serial rate to 115kb?
 - encryption review findings writeup
+- NRF52 BLE
 - cubecell
 - DSR
 
@@ -43,6 +43,7 @@ During the beta timeframe the following improvements 'would be nice'
 
 Items after the first final candidate release.
 
+- dynamic frequency scaling could save a lot of power on ESP32, but it seems to corrupt uart (even with ref_tick set correctly)
 - Change back to using a fixed sized MemoryPool rather than MemoryDynamic (see bug #149)
 - scan to find channels with low background noise? (Use CAD mode of the RF95 to automatically find low noise channels)
 - If the phone doesn't read fromradio mailbox within X seconds, assume the phone is gone and we can stop queing location msgs

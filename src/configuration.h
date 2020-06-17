@@ -73,6 +73,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BUTTON_PIN PIN_BUTTON1
 
 // FIXME, use variant.h defs for all of this!!! (even on the ESP32 targets)
+#elif defined(CubeCell_BoardPlus)
+
+//
+// Standard definitions for CubeCell targets
+//
+
+#define NO_ESP32 // Don't use ESP32 libs (mainly bluetooth)
+
+// FIXME, not yet ready for NRF52
+#define RTC_DATA_ATTR
+
+#define LED_PIN -1 // FIXME totally bogus
+#define BUTTON_PIN -1
+
 #else
 
 //
@@ -173,7 +187,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HW_VENDOR "heltec"
 
 // the default ESP32 Pin of 15 is the Oled SCL, set to 36 and 37 and works fine.
-//Tested on Neo6m module. 
+// Tested on Neo6m module.
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 #define GPS_RX_PIN 36
@@ -267,7 +281,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define DEBUG_PORT console // Serial debug port
 
-#ifdef NO_ESP32
+// What platforms should use SEGGER?
+#ifdef NRF52_SERIES
 #define USE_SEGGER
 #else
 #define SERIAL0_RX_GPIO 3 // Always GPIO3 on ESP32
