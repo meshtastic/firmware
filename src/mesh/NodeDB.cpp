@@ -3,7 +3,6 @@
 #include <assert.h>
 
 #include "FS.h"
-#include "SPIFFS.h"
 
 #include "CryptoEngine.h"
 #include "GPS.h"
@@ -34,11 +33,14 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
 
 #ifndef NO_ESP32
+// ESP32 version
+#include "SPIFFS.h"
 #define FS SPIFFS
 #define FSBegin() FS.begin(true)
 #define FILE_O_WRITE "w"
 #define FILE_O_READ "r"
 #else
+// NRF52 version
 #include "InternalFileSystem.h"
 #define FS InternalFS
 #define FSBegin() FS.begin()

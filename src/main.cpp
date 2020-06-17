@@ -44,6 +44,13 @@
 #include "BluetoothUtil.h"
 #endif
 
+#include "RF95Interface.h"
+#include "SX1262Interface.h"
+
+#ifdef NRF52_SERIES
+#include "variant.h"
+#endif
+
 // We always create a screen object, but we only init it if we find the hardware
 meshtastic::Screen screen(SSD1306_ADDRESS);
 
@@ -117,12 +124,7 @@ static uint32_t ledBlinker()
 
 Periodic ledPeriodic(ledBlinker);
 
-#include "RF95Interface.h"
-#include "SX1262Interface.h"
 
-#ifdef NO_ESP32
-#include "variant.h"
-#endif
 
 void setup()
 {

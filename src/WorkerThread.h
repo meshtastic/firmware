@@ -1,7 +1,7 @@
 #include <Arduino.h>
+#include "freertosinc.h"
 
-// FIXME - ugly check to see if we have freertos
-#ifdef configUSE_PREEMPTION
+#ifdef HAS_FREE_RTOS
 
 class Thread
 {
