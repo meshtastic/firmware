@@ -1,4 +1,7 @@
 #include <Arduino.h>
+#include "freertosinc.h"
+
+#ifdef HAS_FREE_RTOS
 
 class Thread
 {
@@ -89,3 +92,5 @@ class NotifiedWorkerThread : public WorkerThread
      */
     virtual void block();
 };
+
+#endif

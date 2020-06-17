@@ -48,7 +48,7 @@ struct PendingPacket {
     PendingPacket() {}
     PendingPacket(MeshPacket *p);
 
-    void setNextTx() { nextTxMsec = millis() + random(20 * 1000, 22 * 1000); }
+    void setNextTx() { nextTxMsec = millis() + random(20 * 1000L, 22 * 1000L); }
 };
 
 class GlobalPacketIdHashFunction

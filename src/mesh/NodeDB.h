@@ -93,6 +93,9 @@ class NodeDB
 
     /// read our db from flash
     void loadFromDisk();
+
+    /// Reinit device state from scratch (not loading from disk)
+    void installDefaultDeviceState();
 };
 
 /**

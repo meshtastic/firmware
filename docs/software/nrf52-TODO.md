@@ -2,6 +2,11 @@
 
 ## Misc work items
 
+RAM investigation.
+nRF52832-QFAA 64KB ram, 512KB flash vs
+nrf52832-QFAB 32KB ram, 512kb flash
+nrf52840 256KB RAM, 1MB flash
+
 platform.json
 
     "framework-arduinoadafruitnrf52": {

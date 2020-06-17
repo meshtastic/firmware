@@ -34,7 +34,12 @@ Allocator<MeshPacket> &packetPool = staticPool;
  *
  * Currently we only allow one interface, that may change in the future
  */
-Router::Router() : fromRadioQueue(MAX_RX_FROMRADIO) {}
+Router::Router() : fromRadioQueue(MAX_RX_FROMRADIO)
+{
+    DEBUG_MSG("Size of NodeInfo %d\n", sizeof(NodeInfo));
+    DEBUG_MSG("Size of SubPacket %d\n", sizeof(SubPacket));
+    DEBUG_MSG("Size of MeshPacket %d\n", sizeof(MeshPacket));
+}
 
 /**
  * do idle processing
