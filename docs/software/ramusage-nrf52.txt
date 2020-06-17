@@ -1,12 +1,22 @@
 23K + messages
-+ heap of 30ish packets, 300ish bytes per packet: 8KB
++ heap of 70ish packets, 300ish bytes per packet: 20KB
 + 14KB soft device RAM 
+
+With max length Data inside the packet
+Size of NodeInfo 104
+Size of SubPacket 272
+Size of MeshPacket 304
+
+If Data was smaller: for 70 data packets we would save 7KB.  We would need to make SubPacket.data and MeshPacket.encrypted into "type:FT_POINTER" - variably sized mallocs
+Size of NodeInfo 104
+Size of SubPacket 96
+Size of MeshPacket 292 (could have been much smaller but I forgot to shrink MeshPacket.encrypted)
 
 therefore: 
 a) we should store all ToPhone message queued messages compressed as protobufs (since they will become that anyways)
 b) shrink packet pool size because none of that storage will be used for ToPhone packets
 c) don't allocate any storage in RAM for the tophone messages we save inside device state, instead just use nanopb callbacks to save/load those
-d) a smarter MeshPacket in memory representation would save about 4KB of RAM?
+d) a smarter MeshPacket in memory representation would save about 7KB of RAM.  call pb_release before freeing each freshly malloced MeshPacket
 
 2000790c 00003558 B devicestate  // 16KB
 2000b53c 00001000 b _cache_buffer // 4KB flash filesystem support 
