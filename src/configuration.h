@@ -81,13 +81,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define NO_ESP32 // Don't use ESP32 libs (mainly bluetooth)
 
-// We bind to the GPS using variant.h instead for this platform (Serial1)
-
 // FIXME, not yet ready for NRF52
 #define RTC_DATA_ATTR
 
-#define LED_PIN PIN_LED1 // LED1 on nrf52840-DK
-#define BUTTON_PIN PIN_BUTTON1
+#define LED_PIN -1 // FIXME totally bogus
+#define BUTTON_PIN -1
 
 #else
 
@@ -189,7 +187,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HW_VENDOR "heltec"
 
 // the default ESP32 Pin of 15 is the Oled SCL, set to 36 and 37 and works fine.
-//Tested on Neo6m module. 
+// Tested on Neo6m module.
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 #define GPS_RX_PIN 36

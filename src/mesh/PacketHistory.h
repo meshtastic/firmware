@@ -35,9 +35,8 @@ class PacketRecordOrderFunction
         // If the timer ticks have rolled over the difference between times will be _enormous_.  Handle that case specially
         uint32_t t1 = p1.rxTimeMsec, t2 = p2.rxTimeMsec;
 
-        if (abs(t1 - t2) >
-            UINT32_MAX /
-                2) { // time must have rolled over, swap them because the new little number is 'bigger' than the old big number
+        if (t1 - t2 > UINT32_MAX / 2) {
+            // time must have rolled over, swap them because the new little number is 'bigger' than the old big number
             t1 = t2;
             t2 = p1.rxTimeMsec;
         }

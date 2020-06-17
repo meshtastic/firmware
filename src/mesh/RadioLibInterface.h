@@ -3,6 +3,10 @@
 #include "PeriodicTask.h"
 #include "RadioInterface.h"
 
+#ifdef CubeCell_BoardPlus
+#define RADIOLIB_SOFTWARE_SERIAL_UNSUPPORTED
+#endif
+
 #include <RadioLib.h>
 
 // ESP32 has special rules about ISR code

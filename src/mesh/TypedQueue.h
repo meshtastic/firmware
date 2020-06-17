@@ -5,6 +5,8 @@
 
 #include "freertosinc.h"
 
+#ifdef HAS_FREE_RTOS
+
 /**
  * A wrapper for freertos queues.  Note: each element object should be small
  * and POD (Plain Old Data type) as elements are memcpied by value.
@@ -35,3 +37,45 @@ template <class T> class TypedQueue
 
     bool dequeueFromISR(T *p, BaseType_t *higherPriWoken) { return xQueueReceiveFromISR(h, p, higherPriWoken); }
 };
+
+#else
+
+#include <queue>
+
+/**
+ * A wrapper for freertos queues.  Note: each element object should be small
+ * and POD (Plain Old Data type) as elements are memcpied by value.
+ */
+template <class T> class TypedQueue
+{
+    std::queue<T> q;
+
+  public:
+    TypedQueue(int maxElements) {}
+
+    // int numFree() { return uxQueueSpacesAvailable(h); }
+
+    bool isEmpty() { return q.empty(); }
+
+    bool enqueue(T x, TickType_t maxWait = portMAX_DELAY)
+    {
+        q.push(x);
+        return true;
+    }
+
+    // bool enqueueFromISR(T x, BaseType_t *higherPriWoken) { return xQueueSendToBackFromISR(h, &x, higherPriWoken) == pdTRUE; }
+
+    bool dequeue(T *p, TickType_t maxWait = portMAX_DELAY)
+    {
+        if (isEmpty())
+            return false;
+        else {
+            *p = q.front();
+            q.pop();
+            return true;
+        }
+    }
+
+    // bool dequeueFromISR(T *p, BaseType_t *higherPriWoken) { return xQueueReceiveFromISR(h, p, higherPriWoken); }
+};
+#endif
