@@ -36,9 +36,11 @@ Allocator<MeshPacket> &packetPool = staticPool;
  */
 Router::Router() : fromRadioQueue(MAX_RX_FROMRADIO)
 {
-    DEBUG_MSG("Size of NodeInfo %d\n", sizeof(NodeInfo));
+// This is called pre main(), don't touch anything here, the following code is not safe
+
+    /* DEBUG_MSG("Size of NodeInfo %d\n", sizeof(NodeInfo));
     DEBUG_MSG("Size of SubPacket %d\n", sizeof(SubPacket));
-    DEBUG_MSG("Size of MeshPacket %d\n", sizeof(MeshPacket));
+    DEBUG_MSG("Size of MeshPacket %d\n", sizeof(MeshPacket)); */
 }
 
 /**

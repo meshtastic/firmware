@@ -3,6 +3,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
+#include "GPS.h"
 #include <assert.h>
 
 PhoneAPI::PhoneAPI()
@@ -78,6 +79,7 @@ void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
     }
 }
 
+
 /**
  * Get the next packet we want to send to the phone, or NULL if no such packet is available.
  *
@@ -108,6 +110,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         break;
 
     case STATE_SEND_MY_INFO:
+        myNodeInfo.has_gps = gps && gps->isConnected; // Update with latest GPS connect info
         fromRadioScratch.which_variant = FromRadio_my_info_tag;
         fromRadioScratch.variant.my_info = myNodeInfo;
         state = STATE_SEND_RADIO;

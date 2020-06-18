@@ -18,6 +18,8 @@ b) shrink packet pool size because none of that storage will be used for ToPhone
 c) don't allocate any storage in RAM for the tophone messages we save inside device state, instead just use nanopb callbacks to save/load those
 d) a smarter MeshPacket in memory representation would save about 7KB of RAM.  call pb_release before freeing each freshly malloced MeshPacket
 
+- nrf52 free memory https://learn.adafruit.com/bluefruit-nrf52-feather-learning-guide/hathach-memory-map
+
 2000790c 00003558 B devicestate  // 16KB
 2000b53c 00001000 b _cache_buffer // 4KB flash filesystem support 
 20003b1c 000006b0 B console
