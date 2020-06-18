@@ -2,7 +2,6 @@
 
 You probably don't care about this section - skip to the next one.
 
-- fix hasGPS bug
 - make new android release
 - check in our modified arduino binaries
 - post bug on esp32-arduino
