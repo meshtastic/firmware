@@ -6,13 +6,11 @@ You probably don't care about this section - skip to the next one.
 - make new android release
 - check in our modified arduino binaries
 - post bug on esp32-arduino
+- router mode
+- let users set arbitary params in android
 - encryption review findings writeup
-- NRF52 BLE
+- NRF52 BLE support
 - DSR
-
-- turn on modem-sleep mode - https://github.com/espressif/arduino-esp32/issues/1142#issuecomment-512428852
-
-
 
 # Medium priority
 
