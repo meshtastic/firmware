@@ -117,7 +117,7 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         altitude = ublox.getAltitude() / 1000; // in mm convert to meters
         DEBUG_MSG("new gps pos lat=%f, lon=%f, alt=%d\n", latitude * 1e-7, longitude * 1e-7, altitude);
 
-        hasValidLocation = (latitude != 0) || (longitude != 0); // bogus lat lon is reported as 0,0
+        hasValidLocation = (latitude != 0) && (longitude != 0); // bogus lat lon is reported as 0 or 0 (can be bogus just for one)
         if (hasValidLocation) {
             wantNewLocation = false;
             notifyObservers(NULL);
