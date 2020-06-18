@@ -667,7 +667,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         }
 
         if (!gpsStatus.empty()) {
-            snprintf(gpsStr, sizeof(gpsStr), "GPS %s", gpsStatus.c_str());
+            snprintf(gpsStr, sizeof(gpsStr), "%s", gpsStatus.c_str());
         } else {
             gpsStr[0] = '\0'; // Just show empty string.
         }
