@@ -86,14 +86,14 @@ void UBloxGPS::doTask()
     // If we don't have a fix (a quick check), don't try waiting for a solution)
     // Hmmm my fix type reading returns zeros for fix, which doesn't seem correct, because it is still sptting out positions
     // turn off for now
-    // fixtype = ublox.getFixType();
-    // DEBUG_MSG("fix type %d\n", fixtype);
+    fixtype = ublox.getFixType(0);
+    DEBUG_MSG("GPS fix type %d\n", fixtype);
 
     // DEBUG_MSG("sec %d\n", ublox.getSecond());
     // DEBUG_MSG("lat %d\n", ublox.getLatitude());
 
     // any fix that has time
-    if (ublox.getT()) {
+    if (ublox.getT(0)) {
         /* Convert to unix time
 The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970
 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
@@ -109,7 +109,7 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         perhapsSetRTC(t);
     }
 
-    if ((fixtype >= 3 && fixtype <= 4) && ublox.getP()) // rd fixes only
+    if ((fixtype >= 3 && fixtype <= 4) && ublox.getP(0)) // rd fixes only
     {
         // we only notify if position has changed
         latitude = ublox.getLatitude();
@@ -117,7 +117,7 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         altitude = ublox.getAltitude() / 1000; // in mm convert to meters
         DEBUG_MSG("new gps pos lat=%f, lon=%f, alt=%d\n", latitude * 1e-7, longitude * 1e-7, altitude);
 
-        hasValidLocation = (latitude != 0) || (longitude != 0); // bogus lat lon is reported as 0,0
+        hasValidLocation = (latitude != 0) && (longitude != 0); // bogus lat lon is reported as 0 or 0 (can be bogus just for one)
         if (hasValidLocation) {
             wantNewLocation = false;
             notifyObservers(NULL);
