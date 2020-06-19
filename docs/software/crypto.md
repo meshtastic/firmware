@@ -10,7 +10,7 @@ the project developers are not cryptography experts. Therefore we ask two things
 
 ## Summary of strengths/weaknesses of our current implementation
 
-Based on comments from reviewers (see below), here's some tips for usage of these radios you know the level of protection offered:
+Based on comments from reviewers (see below), here's some tips for usage of these radios.  So you can know the level of protection offered:
 
 * It is pretty likely that the AES256 security is implemented 'correctly' and an observer will not be able to decode your messages.
 * Warning: If an attacker is able to get one of the radios in their position, they could either a) extract the channel key from that device or b) use that radio to listen to new communications.
@@ -35,10 +35,6 @@ If you are reviewing our implementation, this is a brief statement of our method
 - The packet number is sent in cleartext with each packet. The node number can be derived from the "from" field of each packet. (Cleartext is acceptable because it merely provides IV for each encryption run)
 - Each 16 byte BLOCK for a packet has an incrementing COUNTER. COUNTER starts at zero for the first block of each packet.
 - The IV for each block is constructed by concatenating the NONCE as the upper 96 bits of the IV and the COUNTER as the bottom 32 bits. Since our packets are small counter portion will really never be higher than 32 (five bits).
-
-### Remaining todo
-
-- Have the app change the crypto key when the user generates a new channel
 
 ## Comments from reviewer #1
 
