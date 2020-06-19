@@ -17,6 +17,9 @@ Or if **absolutely** necessary could bitbang: https://www.cnx-software.com/2018/
 ## Task list
 
 * Port meshtastic to build (under platformio) for a poxix target.  spec: no screen, no gpios, sim network interface, posix threads, posix semaphores & queues, IO to the console only
+Use ARM linux: https://platformio.org/platforms/linux_arm
+And  linux native: https://platformio.org/platforms/native
+
 * Test cs341 driver - just test reading/writing a register and detecting interrupts, confirm can see rf95
 * Make a radiolib spi module that targets the cs341 (and builds on linux)
 * use new radiolib module to hook pinebook lora to meshtastic, confirm mesh discovery works
