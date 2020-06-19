@@ -4,7 +4,7 @@ This project is still pretty young but moving at a pretty good pace. Not all fea
 Most of these problems should be solved by the beta release (within three months):
 
 - We don't make these devices and they haven't been tested by UL or the FCC. If you use them you are experimenting and we can't promise they won't burn your house down ;-)
-- The encryption [implementation](software/crypto.md) has not been reviewed by an expert. (Are you an expert? Please help us)
+- The encryption implementation is good but see this list of [caveats](software/crypto.md#summary-of-strengthsweaknesses-of-our-current-implementation) to determine risks you might face.
 - A number of (straightforward) software work items have to be completed before battery life matches our measurements, currently battery life is about three days. Join us on chat if you want the spreadsheet of power measurements/calculations.
 - The Android API needs to be documented better
 - No one has written an iOS app yet. But some good souls [are talking about it](https://github.com/meshtastic/Meshtastic-esp32/issues/14) ;-)
