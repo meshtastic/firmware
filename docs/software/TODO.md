@@ -2,37 +2,28 @@
 
 You probably don't care about this section - skip to the next one.
 
+- bluetooth toggle enable stress test, we are not properly restarting our connect
 - make new android release
 - check in our modified arduino binaries
 - post bug on esp32-arduino
-- router mode
-- let users set arbitary params in android
-- encryption review findings writeup
+- implement first cut of router mode: preferentially handle flooding, and change sleep and GPS behaviors
+- let users set arbitrary params in android
 - NRF52 BLE support
-- DSR
 
 # Medium priority
 
-Items to complete before the first beta release.
+Items to complete before 1.0.
 
-- turn on watchdog timer (because lib code seems buggy)
-- show battery level as % full
-- rx signal measurements -3 marginal, -9 bad, 10 great, -10 means almost unusable. So scale this into % signal strength. preferably as a graph, with an X indicating loss of comms.
-
-# Pre-beta priority
-
-During the beta timeframe the following improvements 'would be nice'
+# Post 1.0 ideas
 
 - finish DSR for unicast
 - check fcc rules on duty cycle. we might not need to freq hop. https://www.sunfiretesting.com/LoRa-FCC-Certification-Guide/ . Might need to add enforcement for europe though.
-- pick channel center frequency based on channel name? "dolphin" would hash to 900Mhz, "cat" to 905MHz etc? allows us to hide the concept of channel # from hte user.
 - make a no bluetooth configured yet screen - include this screen in the loop if the user hasn't yet paired
 - if radio params change fundamentally, discard the nodedb
 - re-enable the bluetooth battery level service on the T-BEAM
-- implement first cut of router mode: preferentially handle flooding, and change sleep and GPS behaviors
 - provide generalized (but slow) internet message forwarding service if one of our nodes has internet connectivity (MQTT) [ Not a requirement but a personal interest ]
 
-# Low priority
+# Low priority ideas
 
 Items after the first final candidate release.
 
