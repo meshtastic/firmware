@@ -14,13 +14,13 @@ Based on comments from reviewers (see below), here's some tips for usage of thes
 
 * It is pretty likely that the AES256 security is implemented 'correctly' and an observer will not be able to decode your messages.
 * Warning: If an attacker is able to get one of the radios in their position, they could either a) extract the channel key from that device or b) use that radio to listen to new communications.
-* Warning: If an attacker is able to get the "Channel QR code/URL" that you share with others - that attacker could then be able to read any messages sent on the channel (either tommorw or in the past - if they kept a raw copy of those broadcast packets)
+* Warning: If an attacker is able to get the "Channel QR code/URL" that you share with others - that attacker could then be able to read any messages sent on the channel (either tomorrow or in the past - if they kept a raw copy of those broadcast packets)
 
 Possible future areas of work (if there is enough interest - post in our [forum](https://meshtastic.discourse.group) if you want this):
 
 1. Optionally requiring users to provide a PIN to regain access to the mesh.  This could be based on: intentionally locking the device, time since last use, or any member could force all members to reauthenticate,
 2. Until a device reauthenticates, any other access via BLE or USB would be blocked (this would protect against attackers who are not prepared to write custom software to extract and reverse engineer meshtastic flash memory)
-3. Turning on read-back protection in the device fuse-bits (this would extend protection in #2 to block all but **extensively** advanced attacks involving chip disassembly)
+3. Turning on read-back protection in the device fuse-bits (this would extend protection in #2 to block all but **extremely** advanced attacks involving chip disassembly)
 4. Time limiting keys used for message transmission and automatically cycling them on a schedule.  This would protect past messages from being decoded even if an attacker learns the current key.
 
 ### Notes for reviewers
