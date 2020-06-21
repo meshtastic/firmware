@@ -53,9 +53,13 @@ void NEMAGPS::loop()
                 latitude = toDegInt(loc.lat);
                 longitude = toDegInt(loc.lng);
             }
+            // Diminution of precision (an accuracy metric) is reported in 10^2 units, so we need to scale down when we use it
+            if(reader.hdop.isValid()) {
+                dop = reader.hdop.value();
+            }
 
             // expect gps pos lat=37.520825, lon=-122.309162, alt=158
-            DEBUG_MSG("new NEMA GPS pos lat=%f, lon=%f, alt=%d\n", latitude * 1e-7, longitude * 1e-7, altitude);
+            DEBUG_MSG("new NEMA GPS pos lat=%f, lon=%f, alt=%d, hdop=%f\n", latitude * 1e-7, longitude * 1e-7, altitude, dop * 1e-2);
 
             hasValidLocation = (latitude != 0) || (longitude != 0); // bogus lat lon is reported as 0,0
             if (hasValidLocation)

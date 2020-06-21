@@ -8,6 +8,9 @@
 void perhapsSetRTC(const struct timeval *tv);
 void perhapsSetRTC(struct tm &t);
 
+// Generate a string representation of DOP
+const char *getDOPString(uint32_t dop);
+
 /// Return time since 1970 in secs.  Until we have a GPS lock we will be returning time based at zero
 uint32_t getTime();
 
@@ -31,6 +34,8 @@ class GPS : public Observable<void *>
   public:
     int32_t latitude = 0, longitude = 0; // as an int mult by 1e-7 to get value as double
     int32_t altitude = 0;
+    uint32_t dop = 0; // Diminution of position; PDOP where possible (UBlox), HDOP otherwise (TinyGPS) in 10^2 units (needs scaling before use)
+
     bool isConnected = false; // Do we have a GPS we are talking to
 
     virtual ~GPS() {}
