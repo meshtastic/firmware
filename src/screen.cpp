@@ -52,7 +52,7 @@ namespace meshtastic
 // A text message frame + debug frame + all the node infos
 static FrameCallback normalFrames[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
 static uint32_t targetFramerate = IDLE_FRAMERATE;
-static char btPIN[16] = "888888";
+static char btPIN[16] = "888888"; 
 
 static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -64,6 +64,14 @@ static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     display->setFont(ArialMT_Plain_16);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->drawString(64 + x, SCREEN_HEIGHT - FONT_HEIGHT_16, "meshtastic.org");
+    display->setFont(ArialMT_Plain_10);
+    const char *region = xstr(HW_VERSION);
+    if(*region && region[3] == '-') // Skip past 1.0- in the 1.0-EU865 string
+        region += 4;
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%s", xstr(APP_VERSION)); // Note: we don't bother printing region or now, it makes the string too long
+    display->drawString(SCREEN_WIDTH - 20, 0, buf);
+    
 }
 
 static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
