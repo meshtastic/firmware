@@ -115,7 +115,8 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         latitude = ublox.getLatitude();
         longitude = ublox.getLongitude();
         altitude = ublox.getAltitude() / 1000; // in mm convert to meters
-        DEBUG_MSG("new gps pos lat=%f, lon=%f, alt=%d\n", latitude * 1e-7, longitude * 1e-7, altitude);
+        dop = ublox.getPDOP(); // PDOP (an accuracy metric) is reported in 10^2 units so we have to scale down when we use it
+        DEBUG_MSG("new gps pos lat=%f, lon=%f, alt=%d, pdop=%f\n", latitude * 1e-7, longitude * 1e-7, altitude, dop * 1e-2);
 
         // bogus lat lon is reported as 0 or 0 (can be bogus just for one)
         // Also: apparently when the GPS is initially reporting lock it can output a bogus latitude > 90 deg!
