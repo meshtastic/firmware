@@ -658,9 +658,11 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         snprintf(channelStr, sizeof(channelStr), "%s", channelName.c_str());
         if (powerStatus.haveBattery) {
             // TODO: draw a battery icon instead of letter "B".
-            int batV = powerStatus.batteryVoltageMv / 1000;
-            int batCv = (powerStatus.batteryVoltageMv % 1000) / 10;
-            snprintf(batStr, sizeof(batStr), "B %01d.%02dV%c%c", batV, batCv, powerStatus.charging ? '+' : ' ',
+            //int batV = powerStatus.batteryVoltageMv / 1000;
+            //int batCv = (powerStatus.batteryVoltageMv % 1000) / 10;
+            //snprintf(batStr, sizeof(batStr), "B %01d.%02dV%c%c", batV, batCv, powerStatus.charging ? '+' : ' ',
+            //         powerStatus.usb ? 'U' : ' ');
+            snprintf(batStr, sizeof(batStr), "B %d%%%c%c", powerStatus.batteryChargePercent, powerStatus.charging ? '+' : ' ',
                      powerStatus.usb ? 'U' : ' ');
         } else {
             snprintf(batStr, sizeof(batStr), "%s", powerStatus.usb ? "USB" : "");

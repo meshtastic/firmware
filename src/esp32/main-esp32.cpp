@@ -6,6 +6,7 @@
 #include "power.h"
 #include "sleep.h"
 #include "target_specific.h"
+#include <algorithm>
 
 bool bluetoothOn;
 
@@ -75,6 +76,16 @@ void readPowerStatus()
     powerStatus.haveBattery = axp.isBatteryConnect();
     if (powerStatus.haveBattery) {
         powerStatus.batteryVoltageMv = axp.getBattVoltage();
+        // If the AXP192 returns a valid battery percentage, use it
+        if (axp.getBattPercentage() >= 0) {
+            powerStatus.batteryChargePercent = axp.getBattPercentage();
+        } else {
+            // If the AXP192 returns a percentage less than 0, the feature is either not supported or there is an error
+            // In that case, we compute an estimate of the charge percent based on maximum and minimum voltages defined in power.h
+            int calculatedPercentage = ((powerStatus.batteryVoltageMv - BAT_MILLIVOLTS_EMPTY) * 1e2) / (BAT_MILLIVOLTS_FULL - BAT_MILLIVOLTS_EMPTY);
+            powerStatus.batteryChargePercent = (calculatedPercentage < 0) ? 0 : (calculatedPercentage > 100) ? 100 : calculatedPercentage;
+        }
+        DEBUG_MSG("Battery %dmV %d%%\n", powerStatus.batteryVoltageMv, powerStatus.batteryChargePercent);
     }
     powerStatus.usb = axp.isVBUSPlug();
     powerStatus.charging = axp.isChargeing();
@@ -205,15 +216,6 @@ uint32_t axpDebugRead()
 Periodic axpDebugOutput(axpDebugRead);
 #endif
 
-/**
- * Per @spattinson
- * MIN_BAT_MILLIVOLTS seems high. Typical 18650 are different chemistry to LiPo, even for LiPos that chart seems a bit off, other
- * charts put 3690mV at about 30% for a lipo, for 18650 i think 10% remaining iis in the region of 3.2-3.3V. Reference 1st graph
- * in [this test report](https://lygte-info.dk/review/batteries2012/Samsung%20INR18650-30Q%203000mAh%20%28Pink%29%20UK.html)
- * looking at the red line - discharge at 0.2A - he gets a capacity of 2900mah, 90% of 2900 = 2610, that point in the graph looks
- * to be a shade above 3.2V
- */
-#define MIN_BAT_MILLIVOLTS 3250 // millivolts. 10% per https://blog.ampow.com/lipo-voltage-chart/
 
 /// loop code specific to ESP32 targets
 void esp32Loop()
