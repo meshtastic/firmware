@@ -2,9 +2,11 @@
 
 You probably don't care about this section - skip to the next one.
 
-- bluetooth toggle enable stress test, we are not properly restarting our connect
-- make new android release
-- check in our modified arduino binaries
+- check in wifi code
+- test BLE software update again
+- iram space: https://esp32.com/viewtopic.php?t=8460
+- set https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/external-ram.html spi ram bss
+- figure out if iram or bluetooth classic caused ble problems
 - post bug on esp32-arduino
 - implement first cut of router mode: preferentially handle flooding, and change sleep and GPS behaviors
 - let users set arbitrary params in android
