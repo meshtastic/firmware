@@ -6,7 +6,6 @@
 #include "power.h"
 #include "sleep.h"
 #include "target_specific.h"
-#include <algorithm>
 
 bool bluetoothOn;
 
