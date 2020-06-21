@@ -19,17 +19,18 @@ reliable messaging tasks (stage one for DSR):
 - DONE once an ack comes in, remove the packet from the retry list and deliver the ack to the original sender
 - DONE after three retries, deliver a no-ack packet to the original sender (i.e. the phone app or mesh router service)
 - DONE test one hop ack/nak with the python framework
-- Do stress test with acks
+- DONE Do stress test with acks
 
 dsr tasks
 
-- oops I might have broken message reception
+- DONE oops I might have broken message reception
 - DONE Don't use broadcasts for the network pings (close open github issue)
 - DONE add ignoreSenders to radioconfig to allow testing different mesh topologies by refusing to see certain senders
-- test multihop delivery with the python framework
+- DONE test multihop delivery with the python framework
 
 optimizations / low priority:
 
+- read this [this](http://pages.cs.wisc.edu/~suman/pubs/nadv-mobihoc05.pdf) paper and others and make our naive flood routing less naive
 - read @cyclomies long email with good ideas on optimizations and reply
 - Remove NodeNum assignment algorithm (now that we use 4 byte node nums)
 - make android app warn if firmware is too old or too new to talk to
