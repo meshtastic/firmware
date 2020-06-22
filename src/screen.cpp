@@ -701,7 +701,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         // Display power status
         if (powerStatus.haveBattery) drawBattery(display, x, y + 2, imgBattery, &powerStatus); else display->drawFastImage(x, y + 2, 16, 8, powerStatus.usb ? imgUSB : imgPower);
         // Display nodes status
-        drawNodes(display, x + (SCREEN_WIDTH * 0.33), y + 2, nodesOnline, nodesTotal);
+        drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 2, nodesOnline, nodesTotal);
         // Display GPS status
         drawGPS(display, x + (SCREEN_WIDTH * 0.66), y + 2, gps);
     }
