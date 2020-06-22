@@ -213,6 +213,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #elif defined(TTGO_LORA_V1)
 // This string must exactly match the case used in release file names or the android updater won't work
 #define HW_VENDOR "ttgo-lora32-v1"
+#undef GPS_RX_PIN
+#undef GPS_TX_PIN
+#define GPS_RX_PIN 36
+#define GPS_TX_PIN 37
 
 #define I2C_SDA 4 // I2C pins for this board
 #define I2C_SCL 15
