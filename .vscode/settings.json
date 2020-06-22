@@ -59,6 +59,7 @@
         "cfsr",
         "descs",
         "ocrypto",
-        "protobufs"
+        "protobufs",
+        "wifi"
     ]
 }
