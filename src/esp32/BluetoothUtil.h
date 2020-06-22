@@ -35,5 +35,8 @@ BLECharacteristic *addBLECharacteristic(BLECharacteristic *c);
 /// Add a characteristic that we will delete when we restart
 BLEDescriptor *addBLEDescriptor(BLEDescriptor *c);
 
+/// Given a level between 0-100, update the BLE attribute
+void updateBatteryLevel(uint8_t level);
+
 /// Any bluetooth objects you allocate _must_ come from this pool if you want to be able to call deinitBLE()
 extern SimpleAllocator btPool;
