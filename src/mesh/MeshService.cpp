@@ -12,6 +12,7 @@
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "power.h"
+#include "BluetoothUtil.h" // needed for updateBatteryLevel, FIXME, eventually when we pull mesh out into a lib we shouldn't be whacking bluetooth from here
 
 /*
 receivedPacketQueue - this is a queue of messages we've received from the mesh, which we are keeping to deliver to the phone.
@@ -281,6 +282,8 @@ void MeshService::sendOurPosition(NodeNum dest, bool wantReplies)
     sendToMesh(p);
 }
 
+
+
 int MeshService::onGPSChanged(void *unused)
 {
     // DEBUG_MSG("got gps notify\n");
@@ -301,6 +304,7 @@ int MeshService::onGPSChanged(void *unused)
 
     // Include our current battery voltage in our position announcement
     pos.battery_level = powerStatus.batteryChargePercent;
+    updateBatteryLevel(pos.battery_level);
 
     // We limit our GPS broadcasts to a max rate
     static uint32_t lastGpsSend;

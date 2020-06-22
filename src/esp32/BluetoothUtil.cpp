@@ -122,7 +122,7 @@ BLEService *createBatteryService(BLEServer *server)
     addWithDesc(pBattery, batteryLevelC, "Percentage 0 - 100");
     batteryLevelC->addDescriptor(addBLEDescriptor(new BLE2902())); // Needed so clients can request notification
 
-    // I don't think we need to advertise this
+    // I don't think we need to advertise this? and some phones only see the first thing advertised anyways...
     // server->getAdvertising()->addServiceUUID(pBattery->getUUID());
     pBattery->start();
 
@@ -135,8 +135,8 @@ BLEService *createBatteryService(BLEServer *server)
  */
 void updateBatteryLevel(uint8_t level)
 {
-    // Pretend to update battery levels - fixme do elsewhere
     if (batteryLevelC) {
+        DEBUG_MSG("set BLE battery level %u\n", level);
         batteryLevelC->setValue(&level, 1);
         batteryLevelC->notify();
     }
@@ -215,7 +215,7 @@ class MySecurity : public BLESecurityCallbacks
 
 BLEServer *pServer;
 
-BLEService *pDevInfo, *pUpdate;
+BLEService *pDevInfo, *pUpdate, *pBattery;
 
 void deinitBLE()
 {
@@ -230,6 +230,9 @@ void deinitBLE()
         pUpdate->executeDelete();
     }
 
+    pBattery->stop();
+    pBattery->executeDelete();
+
     pDevInfo->stop();
     pDevInfo->executeDelete();
 
@@ -242,6 +245,7 @@ void deinitBLE()
     if (pUpdate != NULL)
         delete pUpdate;
     delete pDevInfo;
+    delete pBattery;
     delete pServer;
 
     batteryLevelC = NULL; // Don't let anyone generate bogus notifies
@@ -279,8 +283,7 @@ BLEServer *initBLE(StartBluetoothPinScreenCallback startBtPinScreen, StopBluetoo
 
     pDevInfo = createDeviceInfomationService(pServer, hwVendor, swVersion, hwVersion);
 
-    // We now let users create the battery service only if they really want (not all devices have a battery)
-    // BLEService *pBattery = createBatteryService(pServer);
+    pBattery = createBatteryService(pServer);
 
 // #define BLE_SOFTWARE_UPDATE
 #ifdef BLE_SOFTWARE_UPDATE
