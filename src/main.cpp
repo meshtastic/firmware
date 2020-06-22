@@ -361,7 +361,6 @@ void loop()
     screen.debug()->setNodeNumbersStatus(nodeDB.getNumOnlineNodes(), nodeDB.getNumNodes());
     screen.debug()->setChannelNameStatus(channelSettings.name);
     screen.debug()->setPowerStatus(powerStatus);
-    screen.debug()->setGPSStatus(gps->isConnected ? (gps->hasLock() ? getDOPString(gps->dop) : "No Sats") : "No GPS");
 
     // No GPS lock yet, let the OS put the main CPU in low power mode for 100ms (or until another interrupt comes in)
     // i.e. don't just keep spinning in loop as fast as we can.

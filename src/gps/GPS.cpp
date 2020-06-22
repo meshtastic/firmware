@@ -68,19 +68,6 @@ void perhapsSetRTC(struct tm &t)
         perhapsSetRTC(&tv);
 }
 
-// Generate a string representation of the DOP
-//   based on Wikipedia "meaning of DOP values" https://en.wikipedia.org/wiki/Dilution_of_precision_(navigation)#Meaning_of_DOP_Values
-const char *getDOPString(uint32_t dop) {
-    dop = dop / 100;
-    if(dop <= 1) return "GPS Ideal";
-    if(dop <= 2) return "GPS Exc.";
-    if(dop <= 5) return "GPS Good";
-    if(dop <= 10) return "GPS Mod.";
-    if(dop <= 20) return "GPS Fair";
-    if(dop > 0) return "GPS Poor";
-    return "invalid dop";
-}
-
 #include <time.h>
 
 uint32_t getTime()
