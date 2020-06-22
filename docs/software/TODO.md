@@ -2,12 +2,10 @@
 
 You probably don't care about this section - skip to the next one.
 
+- test BLE software update again
 - @feh123 Sony Xperia Z1 C6903 running Android 5.1.1
-- don't stop advertising BLE
 - first message sent is still doubled for some people
 - Android frontend should refetch the android messages from backend service on Resume
-- there is still an occasional BLE hang that happens on the android side? 
-- test BLE software update again
 - let users set arbitrary params in android
 - implement first cut of router mode: preferentially handle flooding, and change sleep and GPS behaviors
 - NRF52 BLE support
