@@ -43,6 +43,7 @@
 
 #ifndef NO_ESP32
 #include "BluetoothUtil.h"
+#include "WiFi.h"
 #endif
 
 #include "RF95Interface.h"
@@ -136,6 +137,29 @@ void userButtonPressed() {
     powerFSM.trigger(EVENT_PRESS);
 }
 
+#ifndef NO_ESP32
+void initWifi()
+{
+    strcpy(radioConfig.preferences.wifi_ssid, "geeksville");
+    strcpy(radioConfig.preferences.wifi_password, "xxx");
+    if (radioConfig.has_preferences) {
+        const char *wifiName = radioConfig.preferences.wifi_ssid;
+
+        if (*wifiName) {
+            const char *wifiPsw = radioConfig.preferences.wifi_password;
+            if (radioConfig.preferences.wifi_ap_mode) {
+                // DEBUG_MSG("STARTING WIFI AP: ssid=%s, ok=%d\n", wifiName, WiFi.softAP(wifiName, wifiPsw));
+            } else {
+                // WiFi.mode(WIFI_MODE_STA);
+                DEBUG_MSG("JOINING WIFI: ssid=%s\n", wifiName);
+                // WiFi.begin(wifiName, wifiPsw);
+            }
+        }
+    } else
+        DEBUG_MSG("Not using WIFI\n");
+}
+#endif
+
 void setup()
 {
 #ifdef USE_SEGGER
@@ -226,6 +250,11 @@ void setup()
 #endif
 
     service.init();
+
+#ifndef NO_ESP32
+    // Must be after we init the service, because the wifi settings are loaded by NodeDB (oops)
+    initWifi();
+#endif
 
 #ifdef SX1262_ANT_SW
     // make analog PA vs not PA switch on SX1262 eval board work properly

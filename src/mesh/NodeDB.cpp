@@ -19,7 +19,7 @@
 NodeDB nodeDB;
 
 // we have plenty of ram so statically alloc this tempbuf (for now)
-DeviceState devicestate;
+EXT_RAM_ATTR DeviceState devicestate;
 MyNodeInfo &myNodeInfo = devicestate.my_node;
 RadioConfig &radioConfig = devicestate.radio;
 ChannelSettings &channelSettings = radioConfig.channel_settings;
