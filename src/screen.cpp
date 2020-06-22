@@ -514,6 +514,9 @@ void Screen::setup()
     // Store a pointer to Screen so we can get to it from static functions.
     ui.getUiState()->userData = this;
 
+    // Set the utf8 conversion function
+    dispdev.setFontTableLookupFunction(customFontTableLookup);
+
     // Add frames.
     static FrameCallback bootFrames[] = {drawBootScreen};
     static const int bootFrameCount = sizeof(bootFrames) / sizeof(bootFrames[0]);
@@ -720,9 +723,24 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
 
     const char *fields[] = {channelStr, nullptr};
-    uint32_t yo = drawRows(display, x, y + 12, fields);
+    uint32_t yo = drawRows(display, x, y + FONT_HEIGHT, fields);
 
     display->drawLogBuffer(x, yo);
+}
+
+//adjust Brightness cycle trough 1 to 254 as long as attachDuringLongPress is true
+void Screen::adjustBrightness(){
+    if (brightness == 254)
+    {
+        brightness = 0;
+    } else {
+        brightness++;    
+    }
+    int width = brightness / 1.984375;
+    dispdev.drawRect( 0, 30, 128, 4);
+    dispdev.fillRect(0, 30, width, 4);
+    dispdev.display();
+    dispdev.setBrightness(brightness);
 }
 
 } // namespace meshtastic
