@@ -2,6 +2,7 @@
 
 You probably don't care about this section - skip to the next one.
 
+- report battery level to android app
 - @feh123 Sony Xperia Z1 C6903 running Android 5.1.1
 - don't stop advertising BLE
 - first message sent is still doubled for some people

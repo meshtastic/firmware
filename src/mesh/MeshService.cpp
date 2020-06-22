@@ -11,6 +11,7 @@
 #include "PowerFSM.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
+#include "power.h"
 
 /*
 receivedPacketQueue - this is a queue of messages we've received from the mesh, which we are keeping to deliver to the phone.
@@ -297,6 +298,9 @@ int MeshService::onGPSChanged(void *unused)
         pos.longitude_i = gps->longitude;
         pos.time = getValidTime();
     }
+
+    // Include our current battery voltage in our position announcement
+    pos.battery_level = powerStatus.batteryChargePercent;
 
     // We limit our GPS broadcasts to a max rate
     static uint32_t lastGpsSend;
