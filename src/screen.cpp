@@ -52,7 +52,7 @@ namespace meshtastic
 // A text message frame + debug frame + all the node infos
 static FrameCallback normalFrames[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
 static uint32_t targetFramerate = IDLE_FRAMERATE;
-static char btPIN[16] = "888888"; 
+static char btPIN[16] = "888888";
 
 uint8_t imgBattery[16] = { 0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0xE7, 0x3C };
 
@@ -73,7 +73,7 @@ static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     char buf[16];
     snprintf(buf, sizeof(buf), "%s", xstr(APP_VERSION)); // Note: we don't bother printing region or now, it makes the string too long
     display->drawString(SCREEN_WIDTH - 20, 0, buf);
-    
+
 }
 
 static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -346,6 +346,31 @@ static bool hasPosition(NodeInfo *n)
 static size_t nodeIndex;
 static int8_t prevFrame = -1;
 
+static void drawCompass(OLEDDisplay *display, int16_t x, int16_t y, float headingRadian)
+{
+    // coordinates for the center of the compass
+    int16_t compassX = x + SCREEN_WIDTH - COMPASS_DIAM / 2 - 1, compassY = y + SCREEN_HEIGHT / 2;
+    // display->drawXbm(compassX, compassY, compass_width, compass_height,
+    // (const uint8_t *)compass_bits);
+
+    Point tip(0.0f, 0.5f), tail(0.0f, -0.5f); // pointing up initially
+    float arrowOffsetX = 0.2f, arrowOffsetY = 0.2f;
+    Point leftArrow(tip.x - arrowOffsetX, tip.y - arrowOffsetY), rightArrow(tip.x + arrowOffsetX, tip.y - arrowOffsetY);
+
+    Point *points[] = {&tip, &tail, &leftArrow, &rightArrow};
+
+    for (int i = 0; i < 4; i++) {
+        points[i]->rotate(headingRadian);
+        points[i]->scale(COMPASS_DIAM * 0.6);
+        points[i]->translate(compassX, compassY);
+    }
+    drawLine(display, tip, tail);
+    drawLine(display, leftArrow, tip);
+    drawLine(display, rightArrow, tip);
+
+    display->drawCircle(compassX, compassY, COMPASS_DIAM / 2);
+}
+
 /// Convert an integer GPS coords to a floating point
 #define DegD(i) (i * 1e-7)
 
@@ -390,13 +415,9 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     else
         snprintf(lastStr, sizeof(lastStr), "%u hours ago", agoSecs / 60 / 60);
 
-    static float simRadian;
-    simRadian += 0.1; // For testing, have the compass spin unless both
-                      // locations are valid
-
     static char distStr[20];
     *distStr = 0; // might not have location data
-    float headingRadian = simRadian;
+    float headingRadian = 0.0;
     NodeInfo *ourNode = nodeDB.getNode(nodeDB.getNodeNum());
     if (ourNode && hasPosition(ourNode) && hasPosition(node)) {
         Position &op = ourNode->position, &p = node->position;
@@ -419,27 +440,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     const char *fields[] = {username, distStr, signalStr, lastStr, NULL};
     drawColumns(display, x, y, fields);
 
-    // coordinates for the center of the compass
-    int16_t compassX = x + SCREEN_WIDTH - COMPASS_DIAM / 2 - 1, compassY = y + SCREEN_HEIGHT / 2;
-    // display->drawXbm(compassX, compassY, compass_width, compass_height,
-    // (const uint8_t *)compass_bits);
-
-    Point tip(0.0f, 0.5f), tail(0.0f, -0.5f); // pointing up initially
-    float arrowOffsetX = 0.2f, arrowOffsetY = 0.2f;
-    Point leftArrow(tip.x - arrowOffsetX, tip.y - arrowOffsetY), rightArrow(tip.x + arrowOffsetX, tip.y - arrowOffsetY);
-
-    Point *points[] = {&tip, &tail, &leftArrow, &rightArrow};
-
-    for (int i = 0; i < 4; i++) {
-        points[i]->rotate(headingRadian);
-        points[i]->scale(COMPASS_DIAM * 0.6);
-        points[i]->translate(compassX, compassY);
-    }
-    drawLine(display, tip, tail);
-    drawLine(display, leftArrow, tip);
-    drawLine(display, rightArrow, tip);
-
-    display->drawCircle(compassX, compassY, COMPASS_DIAM / 2);
+    drawCompass(display, x, y, headingRadian);
 }
 
 #if 0
