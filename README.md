@@ -31,6 +31,8 @@ We currently support three models of radios.
     - [T-Beam V1](https://www.thingiverse.com/thing:3830711)
 
 - [TTGO LORA32](https://www.aliexpress.com/item/4000211331316.html) - No GPS
+  - 3D printable case
+    - [TTGO LORA32 v1](https://www.thingiverse.com/thing:3385109)
 
 - [Heltec LoRa 32](https://heltec.org/project/wifi-lora-32/) - No GPS
   - [3D Printable case](https://www.thingiverse.com/thing:3125854)

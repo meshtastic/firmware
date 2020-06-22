@@ -101,8 +101,9 @@ typedef struct _RadioConfig_UserPreferences {
     uint32_t sds_secs;
     uint32_t ls_secs;
     uint32_t min_wake_secs;
-    bool keep_all_packets;
-    bool promiscuous_mode;
+    char wifi_ssid[33];
+    char wifi_password[64];
+    bool wifi_ap_mode;
     pb_size_t ignore_incoming_count;
     uint32_t ignore_incoming[3];
 } RadioConfig_UserPreferences;
@@ -241,7 +242,7 @@ typedef struct _ToRadio {
 #define MeshPacket_init_default                  {0, 0, 0, {SubPacket_init_default}, 0, 0, 0, 0, 0}
 #define ChannelSettings_init_default             {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, ""}
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default, false, ChannelSettings_init_default}
-#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}}
+#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, {0, 0, 0}}
 #define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0}
 #define MyNodeInfo_init_default                  {0, 0, 0, "", "", "", 0, 0, 0, 0, 0, 0, 0, 0}
 #define DeviceState_init_default                 {false, RadioConfig_init_default, false, MyNodeInfo_init_default, false, User_init_default, 0, {NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default}, 0, {MeshPacket_init_default}, false, MeshPacket_init_default, 0}
@@ -257,7 +258,7 @@ typedef struct _ToRadio {
 #define MeshPacket_init_zero                     {0, 0, 0, {SubPacket_init_zero}, 0, 0, 0, 0, 0}
 #define ChannelSettings_init_zero                {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, ""}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero, false, ChannelSettings_init_zero}
-#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}}
+#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, {0, 0, 0}}
 #define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0}
 #define MyNodeInfo_init_zero                     {0, 0, 0, "", "", "", 0, 0, 0, 0, 0, 0, 0, 0}
 #define DeviceState_init_zero                    {false, RadioConfig_init_zero, false, MyNodeInfo_init_zero, false, User_init_zero, 0, {NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero}, 0, {MeshPacket_init_zero}, false, MeshPacket_init_zero, 0}
@@ -308,8 +309,9 @@ typedef struct _ToRadio {
 #define RadioConfig_UserPreferences_sds_secs_tag 9
 #define RadioConfig_UserPreferences_ls_secs_tag  10
 #define RadioConfig_UserPreferences_min_wake_secs_tag 11
-#define RadioConfig_UserPreferences_keep_all_packets_tag 100
-#define RadioConfig_UserPreferences_promiscuous_mode_tag 101
+#define RadioConfig_UserPreferences_wifi_ssid_tag 12
+#define RadioConfig_UserPreferences_wifi_password_tag 13
+#define RadioConfig_UserPreferences_wifi_ap_mode_tag 14
 #define RadioConfig_UserPreferences_ignore_incoming_tag 102
 #define RouteDiscovery_route_tag                 2
 #define User_id_tag                              1
@@ -456,8 +458,9 @@ X(a, STATIC,   SINGULAR, UINT32,   mesh_sds_timeout_secs,   8) \
 X(a, STATIC,   SINGULAR, UINT32,   sds_secs,          9) \
 X(a, STATIC,   SINGULAR, UINT32,   ls_secs,          10) \
 X(a, STATIC,   SINGULAR, UINT32,   min_wake_secs,    11) \
-X(a, STATIC,   SINGULAR, BOOL,     keep_all_packets, 100) \
-X(a, STATIC,   SINGULAR, BOOL,     promiscuous_mode, 101) \
+X(a, STATIC,   SINGULAR, STRING,   wifi_ssid,        12) \
+X(a, STATIC,   SINGULAR, STRING,   wifi_password,    13) \
+X(a, STATIC,   SINGULAR, BOOL,     wifi_ap_mode,     14) \
 X(a, STATIC,   REPEATED, UINT32,   ignore_incoming, 102)
 #define RadioConfig_UserPreferences_CALLBACK NULL
 #define RadioConfig_UserPreferences_DEFAULT NULL
@@ -592,11 +595,11 @@ extern const pb_msgdesc_t ManufacturingData_msg;
 #define SubPacket_size                           274
 #define MeshPacket_size                          313
 #define ChannelSettings_size                     60
-#define RadioConfig_size                         157
-#define RadioConfig_UserPreferences_size         93
+#define RadioConfig_size                         253
+#define RadioConfig_UserPreferences_size         188
 #define NodeInfo_size                            132
 #define MyNodeInfo_size                          110
-#define DeviceState_size                         5305
+#define DeviceState_size                         5401
 #define DebugString_size                         258
 #define FromRadio_size                           322
 #define ToRadio_size                             316
