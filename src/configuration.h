@@ -144,7 +144,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define I2C_SDA 21
 #define I2C_SCL 22
 
-#define BUTTON_PIN 38
+#define BUTTON_PIN 38       // The middle button GPIO on the T-Beam
+#define BUTTON_PIN_ALT 13   // Alternate GPIO for an external button if needed
 
 #ifndef USE_JTAG
 #define RESET_GPIO 14
