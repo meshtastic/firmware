@@ -2,12 +2,12 @@
 
 You probably don't care about this section - skip to the next one.
 
-- bluetooth toggle enable stress test, we are not properly restarting our connect
-- make new android release
-- check in our modified arduino binaries
-- post bug on esp32-arduino
-- implement first cut of router mode: preferentially handle flooding, and change sleep and GPS behaviors
+- test BLE software update again
+- @feh123 Sony Xperia Z1 C6903 running Android 5.1.1
+- first message sent is still doubled for some people
+- Android frontend should refetch the android messages from backend service on Resume
 - let users set arbitrary params in android
+- implement first cut of router mode: preferentially handle flooding, and change sleep and GPS behaviors
 - NRF52 BLE support
 
 # Medium priority
@@ -57,6 +57,13 @@ Items after the first final candidate release.
 - handle millis() rollover in GPS.getTime - otherwise we will break after 50 days
 - report esp32 device code bugs back to the mothership via android
 - change BLE bonding to something more secure. see comment by pSecurity->setAuthenticationMode(ESP_LE_AUTH_BOND)
+
+Changes related to wifi support on ESP32:
+
+- iram space: https://esp32.com/viewtopic.php?t=8460
+- set https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/external-ram.html spi ram bss
+- figure out if iram or bluetooth classic caused ble problems
+- post bug on esp32-arduino with BLE bug findings
 
 # Spinoff project ideas
 
