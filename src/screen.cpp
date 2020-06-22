@@ -54,6 +54,8 @@ static FrameCallback normalFrames[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
 static uint32_t targetFramerate = IDLE_FRAMERATE;
 static char btPIN[16] = "888888";
 
+uint8_t imgBattery[16] = { 0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0xE7, 0x3C };
+
 static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     // draw an xbm image.
@@ -154,6 +156,47 @@ static uint32_t drawRows(OLEDDisplay *display, int16_t x, int16_t y, const char 
     }
 
     return yo;
+}
+
+// Draw power bars or a charging indicator on an image of a battery, determined by battery charge voltage or percentage.
+static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *imgBuffer, PowerStatus *powerStatus) {
+    static const uint8_t powerBar[3] = { 0x81, 0xBD, 0xBD };
+    static const uint8_t lightning[8] = { 0xA1, 0xA1, 0xA5, 0xAD, 0xB5, 0xA5, 0x85, 0x85 };
+    // Clear the bar area on the battery image
+    for (int i = 1; i < 14; i++) {
+        imgBuffer[i] = 0x81;
+    }
+    // If charging, draw a charging indicator
+    if (powerStatus->charging) {
+        memcpy(imgBuffer + 3, lightning, 8);
+    // If not charging, Draw power bars
+    } else {
+        for (int i = 0; i < 4; i++) {
+            if(powerStatus->batteryChargePercent >= 25 * i) memcpy(imgBuffer + 1 + (i * 3), powerBar, 3);
+        }
+    }
+    display->drawFastImage(x, y, 16, 8, imgBuffer);
+}
+
+// Draw nodes status
+static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, int nodesOnline, int nodesTotal) {
+    char usersString[20];
+    sprintf(usersString, "%d/%d", nodesOnline, nodesTotal);
+    display->drawFastImage(x, y, 8, 8, imgUser);
+    display->drawString(x + 10, y - 2, usersString);
+}
+
+// Draw GPS status summary
+static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, GPS *gps) {
+    if(!gps->isConnected) { display->drawString(x, y - 2, "No GPS"); return; }
+    display->drawFastImage(x, y, 6, 8, gps->hasLock() ? imgPositionSolid : imgPositionEmpty );
+    if(!gps->hasLock()) { display->drawString(x + 8, y - 2, "No sats"); return; }
+    if(gps->dop <= 100) { display->drawString(x + 8, y - 2, "Ideal"); return; }
+    if(gps->dop <= 200) { display->drawString(x + 8, y - 2, "Exc."); return; }
+    if(gps->dop <= 500) { display->drawString(x + 8, y - 2, "Good"); return; }
+    if(gps->dop <= 1000) { display->drawString(x + 8, y - 2, "Mod."); return; }
+    if(gps->dop <= 2000) { display->drawString(x + 8, y - 2, "Fair"); return; }
+    if(gps->dop > 0) { display->drawString(x + 8, y - 2, "Poor"); return; }
 }
 
 /// Ported from my old java code, returns distance in meters along the globe
@@ -648,35 +691,21 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     // The coordinates define the left starting point of the text
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    char usersStr[20];
     char channelStr[20];
-    char batStr[20];
-    char gpsStr[20];
     {
         LockGuard guard(&lock);
-        snprintf(usersStr, sizeof(usersStr), "Users %d/%d", nodesOnline, nodesTotal);
-        snprintf(channelStr, sizeof(channelStr), "%s", channelName.c_str());
-        if (powerStatus.haveBattery) {
-            // TODO: draw a battery icon instead of letter "B".
-            //int batV = powerStatus.batteryVoltageMv / 1000;
-            //int batCv = (powerStatus.batteryVoltageMv % 1000) / 10;
-            //snprintf(batStr, sizeof(batStr), "B %01d.%02dV%c%c", batV, batCv, powerStatus.charging ? '+' : ' ',
-            //         powerStatus.usb ? 'U' : ' ');
-            snprintf(batStr, sizeof(batStr), "B %d%%%c%c", powerStatus.batteryChargePercent, powerStatus.charging ? '+' : ' ',
-                     powerStatus.usb ? 'U' : ' ');
-        } else {
-            snprintf(batStr, sizeof(batStr), "%s", powerStatus.usb ? "USB" : "");
-        }
+        snprintf(channelStr, sizeof(channelStr), "#%s", channelName.c_str());
 
-        if (!gpsStatus.empty()) {
-            snprintf(gpsStr, sizeof(gpsStr), "%s", gpsStatus.c_str());
-        } else {
-            gpsStr[0] = '\0'; // Just show empty string.
-        }
+        // Display power status
+        if (powerStatus.haveBattery) drawBattery(display, x, y + 2, imgBattery, &powerStatus); else display->drawFastImage(x, y + 2, 16, 8, powerStatus.usb ? imgUSB : imgPower);
+        // Display nodes status
+        drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 2, nodesOnline, nodesTotal);
+        // Display GPS status
+        drawGPS(display, x + (SCREEN_WIDTH * 0.66), y + 2, gps);
     }
 
-    const char *fields[] = {batStr, gpsStr, usersStr, channelStr, nullptr};
-    uint32_t yo = drawRows(display, x, y, fields);
+    const char *fields[] = {channelStr, nullptr};
+    uint32_t yo = drawRows(display, x, y + 12, fields);
 
     display->drawLogBuffer(x, yo);
 }
