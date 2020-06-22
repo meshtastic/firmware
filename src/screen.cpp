@@ -499,6 +499,9 @@ void Screen::setup()
     // Store a pointer to Screen so we can get to it from static functions.
     ui.getUiState()->userData = this;
 
+    // Set the utf8 conversion function
+    dispdev.setFontTableLookupFunction(customFontTableLookup);
+
     // Add frames.
     static FrameCallback bootFrames[] = {drawBootScreen};
     static const int bootFrameCount = sizeof(bootFrames) / sizeof(bootFrames[0]);
