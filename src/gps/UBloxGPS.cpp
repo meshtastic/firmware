@@ -99,12 +99,12 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
 */
         struct tm t;
-        t.tm_sec = ublox.getSecond();
-        t.tm_min = ublox.getMinute();
-        t.tm_hour = ublox.getHour();
-        t.tm_mday = ublox.getDay();
-        t.tm_mon = ublox.getMonth() - 1;
-        t.tm_year = ublox.getYear() - 1900;
+        t.tm_sec = ublox.getSecond(0);
+        t.tm_min = ublox.getMinute(0);
+        t.tm_hour = ublox.getHour(0);
+        t.tm_mday = ublox.getDay(0);
+        t.tm_mon = ublox.getMonth(0) - 1;
+        t.tm_year = ublox.getYear(0) - 1900;
         t.tm_isdst = false;
         perhapsSetRTC(t);
     }
@@ -112,10 +112,10 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
     if ((fixtype >= 3 && fixtype <= 4) && ublox.getP(0)) // rd fixes only
     {
         // we only notify if position has changed
-        latitude = ublox.getLatitude();
-        longitude = ublox.getLongitude();
-        altitude = ublox.getAltitude() / 1000; // in mm convert to meters
-        dop = ublox.getPDOP(); // PDOP (an accuracy metric) is reported in 10^2 units so we have to scale down when we use it
+        latitude = ublox.getLatitude(0);
+        longitude = ublox.getLongitude(0);
+        altitude = ublox.getAltitude(0) / 1000; // in mm convert to meters
+        dop = ublox.getPDOP(0); // PDOP (an accuracy metric) is reported in 10^2 units so we have to scale down when we use it
         DEBUG_MSG("new gps pos lat=%f, lon=%f, alt=%d, pdop=%f\n", latitude * 1e-7, longitude * 1e-7, altitude, dop * 1e-2);
 
         // bogus lat lon is reported as 0 or 0 (can be bogus just for one)
