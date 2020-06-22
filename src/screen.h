@@ -149,6 +149,29 @@ class Screen : public PeriodicTask
         }
     }
 
+    /// Overrides the default utf8 character conversion, to replace empty space with question marks
+    static char customFontTableLookup(const uint8_t ch) {
+        // UTF-8 to font table index converter
+        // Code form http://playground.arduino.cc/Main/Utf8ascii
+        static uint8_t LASTCHAR;
+
+        if (ch < 128) { // Standard ASCII-set 0..0x7F handling
+            LASTCHAR = 0;
+            return ch;
+        }
+
+        uint8_t last = LASTCHAR;   // get last char
+        LASTCHAR = ch;
+
+        switch (last) {    // conversion depnding on first UTF8-character
+            case 0xC2: return (uint8_t) ch;
+            case 0xC3: return (uint8_t) (ch | 0xC0);
+            case 0x82: if (ch == 0xAC) return (uint8_t) 0x80;    // special case Euro-symbol
+        }
+
+        return (uint8_t) '?'; // otherwise: return ?, if character can't be converted
+    }
+
     /// Returns a handle to the DebugInfo screen.
     //
     // Use this handle to set things like battery status, user count, GPS status, etc.
