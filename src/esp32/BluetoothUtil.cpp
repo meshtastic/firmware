@@ -285,7 +285,7 @@ BLEServer *initBLE(StartBluetoothPinScreenCallback startBtPinScreen, StopBluetoo
 
     pBattery = createBatteryService(pServer);
 
-// #define BLE_SOFTWARE_UPDATE
+#define BLE_SOFTWARE_UPDATE
 #ifdef BLE_SOFTWARE_UPDATE
     pUpdate = createUpdateService(pServer, hwVendor, swVersion,
                                   hwVersion); // We need to advertise this so our android ble scan operation can see it

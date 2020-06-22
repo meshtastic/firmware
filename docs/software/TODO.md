@@ -2,11 +2,10 @@
 
 You probably don't care about this section - skip to the next one.
 
-- report battery level to android app
 - @feh123 Sony Xperia Z1 C6903 running Android 5.1.1
 - don't stop advertising BLE
 - first message sent is still doubled for some people
-- refetch the android messages on Resume
+- Android frontend should refetch the android messages from backend service on Resume
 - there is still an occasional BLE hang that happens on the android side? 
 - test BLE software update again
 - let users set arbitrary params in android
