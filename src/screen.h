@@ -117,6 +117,10 @@ class Screen : public PeriodicTask
     /// Handles a button press.
     void onPress() { enqueueCmd(CmdItem{.cmd = Cmd::ON_PRESS}); }
 
+    // Implementation to Adjust Brightness
+    void adjustBrightness();
+    int brightness = 150;
+
     /// Starts showing the Bluetooth PIN screen.
     //
     // Switches over to a static frame showing the Bluetooth pairing screen
@@ -147,6 +151,37 @@ class Screen : public PeriodicTask
         if (!enqueueCmd(cmd)) {
             free(cmd.print_text);
         }
+    }
+
+    /// Overrides the default utf8 character conversion, to replace empty space with question marks
+    static char customFontTableLookup(const uint8_t ch) {
+        // UTF-8 to font table index converter
+        // Code form http://playground.arduino.cc/Main/Utf8ascii
+        static uint8_t LASTCHAR;
+        static bool SKIPREST;   // Only display a single unconvertable-character symbol per sequence of unconvertable characters
+
+        if (ch < 128) { // Standard ASCII-set 0..0x7F handling
+            LASTCHAR = 0;
+            SKIPREST = false;
+            return ch;
+        }
+
+        uint8_t last = LASTCHAR;   // get last char
+        LASTCHAR = ch;
+
+        switch (last) {    // conversion depnding on first UTF8-character
+            case 0xC2: { SKIPREST = false; return (uint8_t) ch; }
+            case 0xC3: { SKIPREST = false; return (uint8_t) (ch | 0xC0); }
+        }
+
+        // We want to strip out prefix chars for two-byte char formats
+        if (ch == 0xC2 || ch == 0xC3 || ch == 0x82) return (uint8_t) 0;
+
+        // If we already returned an unconvertable-character symbol for this unconvertable-character sequence, return NULs for the rest of it
+        if (SKIPREST) return (uint8_t) 0;
+        SKIPREST = true;
+
+        return (uint8_t) 191; // otherwise: return ¿ if character can't be converted (note that the font map we're using doesn't stick to standard EASCII codes)
     }
 
     /// Returns a handle to the DebugInfo screen.
