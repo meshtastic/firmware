@@ -160,8 +160,6 @@ static uint32_t drawRows(OLEDDisplay *display, int16_t x, int16_t y, const char 
 
 // Draw power bars or a charging indicator on an image of a battery, determined by battery charge voltage or percentage.
 static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *imgBuffer, PowerStatus *powerStatus) {
-    // Make sure the image buffer is large enough
-    //if(sizeof(imgBuffer) < 16) return;
     static const uint8_t powerBar[3] = { 0x81, 0xBD, 0xBD };
     static const uint8_t lightning[8] = { 0xA1, 0xA1, 0xA5, 0xAD, 0xB5, 0xA5, 0x85, 0x85 };
     // Clear the bar area on the battery image
@@ -174,7 +172,7 @@ static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *img
     // If not charging, Draw power bars
     } else {
         for (int i = 0; i < 4; i++) {
-            if(powerStatus->batteryChargePercent >= 25 * (i + 1)) memcpy(imgBuffer + 1 + (i * 3), powerBar, 3);
+            if(powerStatus->batteryChargePercent >= 25 * i) memcpy(imgBuffer + 1 + (i * 3), powerBar, 3);
         }
     }
     display->drawFastImage(x, y, 16, 8, imgBuffer);
