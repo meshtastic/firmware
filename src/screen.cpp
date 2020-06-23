@@ -418,9 +418,13 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     *distStr = 0; // might not have location data
     float headingRadian;
     NodeInfo *ourNode = nodeDB.getNode(nodeDB.getNodeNum());
-    bool hasNodeLocation = ourNode && hasPosition(ourNode) && hasPosition(node);
+    const char *fields[] = {username, distStr, signalStr, lastStr, NULL};
+    drawColumns(display, x, y, fields);
 
-    if (hasNodeLocation) {
+    // coordinates for the center of the compass/circle
+    int16_t compassX = x + SCREEN_WIDTH - COMPASS_DIAM / 2 - 1, compassY = y + SCREEN_HEIGHT / 2;
+
+    if (ourNode && hasPosition(ourNode) && hasPosition(node)) { // display direction toward node
         Position &op = ourNode->position, &p = node->position;
         float d = latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
         if (d < 2000)
@@ -433,21 +437,11 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         float bearingToOther = bearing(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
         float myHeading = estimatedHeading(DegD(p.latitude_i), DegD(p.longitude_i));
         headingRadian = bearingToOther - myHeading;
-        location = true;
-    } else {
+        drawCompass(display, compassX, compassY, headingRadian);
+    } else { // direction to known is unknown so display question mark
         // Debug info for gps lock errors
         // DEBUG_MSG("ourNode %d, ourPos %d, theirPos %d\n", !!ourNode, ourNode && hasPosition(ourNode), hasPosition(node));
-    }
 
-    const char *fields[] = {username, distStr, signalStr, lastStr, NULL};
-    drawColumns(display, x, y, fields);
-
-    // coordinates for the center of the compass/circle
-    int16_t compassX = x + SCREEN_WIDTH - COMPASS_DIAM / 2 - 1, compassY = y + SCREEN_HEIGHT / 2;
-
-    if (hasNodeLocation){
-        drawCompass(display, compassX, compassY, headingRadian);
-    } else {
         display->drawString(compassX - FONT_HEIGHT/4, compassY - FONT_HEIGHT/2, "?");
         display->drawCircle(compassX, compassY, COMPASS_DIAM / 2);
     }
