@@ -73,7 +73,6 @@ static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     char buf[16];
     snprintf(buf, sizeof(buf), "%s", xstr(APP_VERSION)); // Note: we don't bother printing region or now, it makes the string too long
     display->drawString(SCREEN_WIDTH - 20, 0, buf);
-
 }
 
 static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -438,7 +437,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         float myHeading = estimatedHeading(DegD(p.latitude_i), DegD(p.longitude_i));
         headingRadian = bearingToOther - myHeading;
         drawCompass(display, compassX, compassY, headingRadian);
-    } else { // direction to known is unknown so display question mark
+    } else { // direction to node is unknown so display question mark
         // Debug info for gps lock errors
         // DEBUG_MSG("ourNode %d, ourPos %d, theirPos %d\n", !!ourNode, ourNode && hasPosition(ourNode), hasPosition(node));
 
