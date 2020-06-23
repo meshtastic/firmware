@@ -346,10 +346,9 @@ static bool hasPosition(NodeInfo *n)
 static size_t nodeIndex;
 static int8_t prevFrame = -1;
 
-static void drawCompass(OLEDDisplay *display, int16_t x, int16_t y, float headingRadian)
+// Draw the compass and arrow pointing to location
+static void drawCompass(OLEDDisplay *display, int16_t compassX, int16_t compassY, float headingRadian)
 {
-    // coordinates for the center of the compass
-    int16_t compassX = x + SCREEN_WIDTH - COMPASS_DIAM / 2 - 1, compassY = y + SCREEN_HEIGHT / 2;
     // display->drawXbm(compassX, compassY, compass_width, compass_height,
     // (const uint8_t *)compass_bits);
 
@@ -417,9 +416,11 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 
     static char distStr[20];
     *distStr = 0; // might not have location data
-    float headingRadian = 0.0;
+    float headingRadian;
     NodeInfo *ourNode = nodeDB.getNode(nodeDB.getNodeNum());
-    if (ourNode && hasPosition(ourNode) && hasPosition(node)) {
+    bool hasNodeLocation = ourNode && hasPosition(ourNode) && hasPosition(node);
+
+    if (hasNodeLocation) {
         Position &op = ourNode->position, &p = node->position;
         float d = latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
         if (d < 2000)
@@ -432,6 +433,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         float bearingToOther = bearing(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
         float myHeading = estimatedHeading(DegD(p.latitude_i), DegD(p.longitude_i));
         headingRadian = bearingToOther - myHeading;
+        location = true;
     } else {
         // Debug info for gps lock errors
         // DEBUG_MSG("ourNode %d, ourPos %d, theirPos %d\n", !!ourNode, ourNode && hasPosition(ourNode), hasPosition(node));
@@ -440,7 +442,15 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     const char *fields[] = {username, distStr, signalStr, lastStr, NULL};
     drawColumns(display, x, y, fields);
 
-    drawCompass(display, x, y, headingRadian);
+    // coordinates for the center of the compass/circle
+    int16_t compassX = x + SCREEN_WIDTH - COMPASS_DIAM / 2 - 1, compassY = y + SCREEN_HEIGHT / 2;
+
+    if (hasNodeLocation){
+        drawCompass(display, compassX, compassY, headingRadian);
+    } else {
+        display->drawString(compassX - FONT_HEIGHT/4, compassY - FONT_HEIGHT/2, "?");
+        display->drawCircle(compassX, compassY, COMPASS_DIAM / 2);
+    }
 }
 
 #if 0
