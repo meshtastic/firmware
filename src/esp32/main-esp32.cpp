@@ -5,6 +5,7 @@
 #include "main.h"
 #include "power.h"
 #include "sleep.h"
+#include "utils.h"
 #include "target_specific.h"
 
 bool bluetoothOn;
@@ -81,8 +82,7 @@ void readPowerStatus()
         } else {
             // If the AXP192 returns a percentage less than 0, the feature is either not supported or there is an error
             // In that case, we compute an estimate of the charge percent based on maximum and minimum voltages defined in power.h
-            int calculatedPercentage = ((powerStatus.batteryVoltageMv - BAT_MILLIVOLTS_EMPTY) * 1e2) / (BAT_MILLIVOLTS_FULL - BAT_MILLIVOLTS_EMPTY);
-            powerStatus.batteryChargePercent = (calculatedPercentage < 0) ? 0 : (calculatedPercentage > 100) ? 100 : calculatedPercentage;
+            powerStatus.batteryChargePercent = clamp((int)(((powerStatus.batteryVoltageMv - BAT_MILLIVOLTS_EMPTY) * 1e2) / (BAT_MILLIVOLTS_FULL - BAT_MILLIVOLTS_EMPTY)), 0, 100);
         }
         DEBUG_MSG("Battery %dmV %d%%\n", powerStatus.batteryVoltageMv, powerStatus.batteryChargePercent);
     }

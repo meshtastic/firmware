@@ -31,6 +31,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "screen.h"
+#include "utils.h"
 
 #define FONT_HEIGHT 14 // actually 13 for "ariel 10" but want a little extra space
 #define FONT_HEIGHT_16 (ArialMT_Plain_16[1] + 1)
@@ -379,7 +380,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     const char *username = node->has_user ? node->user.long_name : "Unknown Name";
 
     static char signalStr[20];
-    snprintf(signalStr, sizeof(signalStr), "Signal: %.0f", node->snr);
+    snprintf(signalStr, sizeof(signalStr), "Signal: %d%%", clamp((int)((node->snr + 10) * 5), 0, 100));
 
     uint32_t agoSecs = sinceLastSeen(node);
     static char lastStr[20];
