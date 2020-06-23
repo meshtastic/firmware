@@ -38,6 +38,7 @@
 #include "screen.h"
 #include "sleep.h"
 #include <Wire.h>
+#include <OneButton.h>
 // #include <driver/rtc_io.h>
 
 #ifndef NO_ESP32
@@ -125,6 +126,17 @@ static uint32_t ledBlinker()
 
 Periodic ledPeriodic(ledBlinker);
 
+// Prepare for button presses
+#ifdef BUTTON_PIN
+    OneButton userButton;
+#endif
+#ifdef BUTTON_PIN_ALT
+    OneButton userButtonAlt;
+#endif
+void userButtonPressed() {
+    powerFSM.trigger(EVENT_PRESS);
+}
+
 #ifndef NO_ESP32
 void initWifi()
 {
@@ -183,8 +195,12 @@ void setup()
 
     // Buttons & LED
 #ifdef BUTTON_PIN
-    pinMode(BUTTON_PIN, INPUT_PULLUP);
-    digitalWrite(BUTTON_PIN, 1);
+    userButton = OneButton(BUTTON_PIN, true, true);
+    userButton.attachClick(userButtonPressed);
+#endif
+#ifdef BUTTON_PIN_ALT
+    userButtonAlt = OneButton(BUTTON_PIN_ALT, true, true);
+    userButtonAlt.attachClick(userButtonPressed);
 #endif
 #ifdef LED_PIN
     pinMode(LED_PIN, OUTPUT);
@@ -322,24 +338,10 @@ void loop()
 #endif
 
 #ifdef BUTTON_PIN
-    // if user presses button for more than 3 secs, discard our network prefs and reboot (FIXME, use a debounce lib instead of
-    // this boilerplate)
-    static bool wasPressed = false;
-
-    if (!digitalRead(BUTTON_PIN)) {
-        if (!wasPressed) { // just started a new press
-            DEBUG_MSG("pressing\n");
-
-            // doLightSleep();
-            // esp_pm_dump_locks(stdout); // FIXME, do this someplace better
-            wasPressed = true;
-
-            powerFSM.trigger(EVENT_PRESS);
-        }
-    } else if (wasPressed) {
-        // we just did a release
-        wasPressed = false;
-    }
+    userButton.tick();
+#endif
+#ifdef BUTTON_PIN_ALT
+    userButtonAlt.tick();
 #endif
 
     // Show boot screen for first 3 seconds, then switch to normal operation.
