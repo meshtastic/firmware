@@ -2,7 +2,7 @@
 
 You probably don't care about this section - skip to the next one.
 
-- check BLE handle stability across sleep - stress test sleep/wake
+- check BLE handle stability across sleep - stress test sleep/wake - btu_init_core calls gatt_init - which assigns handles global
 - test BLE software update again
 - @feh123 Sony Xperia Z1 C6903 running Android 5.1.1
 - first message sent is still doubled for some people
