@@ -81,14 +81,20 @@ static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, 
 {
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(ArialMT_Plain_16);
-    display->drawString(64 + x, 2 + y, "Bluetooth");
+    display->drawString(64 + x, y, "Bluetooth");
 
     display->setFont(ArialMT_Plain_10);
-    display->drawString(64 + x, SCREEN_HEIGHT - FONT_HEIGHT + y, "Enter this code");
+    display->drawString(64 + x, FONT_HEIGHT + y + 2, "Enter this code");
 
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(ArialMT_Plain_24);
-    display->drawString(64 + x, 22 + y, btPIN);
+    display->drawString(64 + x, 26 + y, btPIN);
+
+    display->setFont(ArialMT_Plain_10);
+    char buf[30];
+    const char *name = "Name: ";
+    strcpy(buf,name);
+    strcat(buf,getDeviceName());
+    display->drawString(64 + x, 48 + y, buf);
 }
 
 /// Draw the last text message we received
