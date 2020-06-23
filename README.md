@@ -24,8 +24,8 @@ We currently support three models of radios.
 
 - TTGO T-Beam
 
-  - [T-Beam V1.0 w/ NEO-M8N](https://www.aliexpress.com/item/33047631119.html) (Recommended)
-  - [T-Beam V1.0 w/ NEO-6M](https://www.aliexpress.com/item/33050391850.html)
+  - [T-Beam V1.0 w/ NEO-M8N](https://www.aliexpress.com/item/33047631119.html) (Recommended - slightly better GPS)
+  - [T-Beam V1.0 w/ NEO-6M](https://www.aliexpress.com/item/33050391850.html) (Includes built-in OLED display)
   - 3D printable cases
     - [T-Beam V0](https://www.thingiverse.com/thing:3773717)
     - [T-Beam V1](https://www.thingiverse.com/thing:3830711)
