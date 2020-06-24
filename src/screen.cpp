@@ -31,6 +31,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "screen.h"
+#include "utils.h"
 
 #define FONT_HEIGHT 14 // actually 13 for "ariel 10" but want a little extra space
 #define FONT_HEIGHT_16 (ArialMT_Plain_16[1] + 1)
@@ -79,14 +80,20 @@ static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, 
 {
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(ArialMT_Plain_16);
-    display->drawString(64 + x, 2 + y, "Bluetooth");
+    display->drawString(64 + x, y, "Bluetooth");
 
     display->setFont(ArialMT_Plain_10);
-    display->drawString(64 + x, SCREEN_HEIGHT - FONT_HEIGHT + y, "Enter this code");
+    display->drawString(64 + x, FONT_HEIGHT + y + 2, "Enter this code");
 
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(ArialMT_Plain_24);
-    display->drawString(64 + x, 22 + y, btPIN);
+    display->drawString(64 + x, 26 + y, btPIN);
+
+    display->setFont(ArialMT_Plain_10);
+    char buf[30];
+    const char *name = "Name: ";
+    strcpy(buf,name);
+    strcat(buf,getDeviceName());
+    display->drawString(64 + x, 48 + y, buf);
 }
 
 /// Draw the last text message we received
@@ -402,7 +409,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     const char *username = node->has_user ? node->user.long_name : "Unknown Name";
 
     static char signalStr[20];
-    snprintf(signalStr, sizeof(signalStr), "Signal: %.0f", node->snr);
+    snprintf(signalStr, sizeof(signalStr), "Signal: %d%%", clamp((int)((node->snr + 10) * 5), 0, 100));
 
     uint32_t agoSecs = sinceLastSeen(node);
     static char lastStr[20];
@@ -510,6 +517,9 @@ void Screen::setup()
     ui.disableAllIndicators();
     // Store a pointer to Screen so we can get to it from static functions.
     ui.getUiState()->userData = this;
+
+    // Set the utf8 conversion function
+    dispdev.setFontTableLookupFunction(customFontTableLookup);
 
     // Add frames.
     static FrameCallback bootFrames[] = {drawBootScreen};
@@ -717,7 +727,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
 
     const char *fields[] = {channelStr, nullptr};
-    uint32_t yo = drawRows(display, x, y + 12, fields);
+    uint32_t yo = drawRows(display, x, y + FONT_HEIGHT, fields);
 
     display->drawLogBuffer(x, yo);
 }
