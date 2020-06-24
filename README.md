@@ -24,13 +24,14 @@ We currently support three models of radios.
 
 - TTGO T-Beam
 
-  - [T-Beam V1.0 w/ NEO-M8N](https://www.aliexpress.com/item/33047631119.html) (Recommended - slightly better GPS)
-  - [T-Beam V1.0 w/ NEO-6M](https://www.aliexpress.com/item/33050391850.html) (Includes built-in OLED display)
+  - [T-Beam V1.0 w/ NEO-6M - special Meshtastic version](https://www.aliexpress.com/item/4001178678568.html) (Includes built-in OLED display and they have **preinstalled** the meshtastic software)
+  - [T-Beam V1.0 w/ NEO-M8N](https://www.aliexpress.com/item/33047631119.html) (slightly better GPS)
   - 3D printable cases
     - [T-Beam V0](https://www.thingiverse.com/thing:3773717)
     - [T-Beam V1](https://www.thingiverse.com/thing:3830711)
 
 - [TTGO LORA32](https://www.aliexpress.com/item/4000211331316.html) - No GPS
+
   - 3D printable case
     - [TTGO LORA32 v1](https://www.thingiverse.com/thing:3385109)
 
@@ -48,6 +49,8 @@ Getting a version that includes a screen is optional, but highly recommended.
 ## Firmware Installation
 
 Prebuilt binaries for the supported radios are available in our [releases](https://github.com/meshtastic/Meshtastic-esp32/releases). Your initial installation has to happen over USB from your Mac, Windows or Linux PC. Once our software is installed, all future software updates happen over bluetooth from your phone.
+
+Be **very careful** to install the correct load for your board. In particular the popular 'T-BEAM' radio from TTGO is not called 'TTGO-Lora' (that is a different board). So don't install the 'TTGO-Lora' build on a TBEAM, it won't work correctly.
 
 Please post comments on our [group chat](https://meshtastic.discourse.group/) if you have problems or successes.
 
