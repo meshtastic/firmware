@@ -514,6 +514,9 @@ void Screen::setup()
     // Store a pointer to Screen so we can get to it from static functions.
     ui.getUiState()->userData = this;
 
+    // Set the utf8 conversion function
+    dispdev.setFontTableLookupFunction(customFontTableLookup);
+
     // Add frames.
     static FrameCallback bootFrames[] = {drawBootScreen};
     static const int bootFrameCount = sizeof(bootFrames) / sizeof(bootFrames[0]);
@@ -720,7 +723,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
 
     const char *fields[] = {channelStr, nullptr};
-    uint32_t yo = drawRows(display, x, y + 12, fields);
+    uint32_t yo = drawRows(display, x, y + FONT_HEIGHT, fields);
 
     display->drawLogBuffer(x, yo);
 }
