@@ -103,9 +103,9 @@ void NodeDB::resetRadioConfig()
     crypto->setKey(channelSettings.psk.size, channelSettings.psk.bytes);
 
     // temp hack for quicker testing
-    // devicestate.no_save = TRUE;
+    // devicestate.no_save = true;
     if (devicestate.no_save) {
-        DEBUG_MSG("***** DEVELOPMENT MODE - DO NOT RELEASE *****");
+        DEBUG_MSG("***** DEVELOPMENT MODE - DO NOT RELEASE *****\n");
 
         // Sleep quite frequently to stress test the BLE comms, broadcast position every 6 mins
         radioConfig.preferences.screen_on_secs = 30;
@@ -289,7 +289,7 @@ void NodeDB::saveToDisk()
             DEBUG_MSG("ERROR: can't write prefs\n"); // FIXME report to app
         }
     } else {
-        DEBUG_MSG("***** DEVELOPMENT MODE - DO NOT RELEASE - not saving to flash *****");
+        DEBUG_MSG("***** DEVELOPMENT MODE - DO NOT RELEASE - not saving to flash *****\n");
     }
 #else
     DEBUG_MSG("ERROR filesystem not implemented\n");
