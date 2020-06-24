@@ -39,6 +39,7 @@ This software is 100% open source and developed by a group of hobbyist experimen
 
 Note: Updates are happening almost daily, only major updates are listed below. For more details see our forum.
 
+- 06/24/2020 - 0.7.x Now with over 1000 android users, over 600 people using the radios and translated into 13 languages. Fairly stable and we are working through bugs to get to 1.0.
 - 06/04/2020 - 0.6.7 Beta releases of both the application and the device code are released. Features are fairly solid now with a sizable number of users.
 - 04/28/2020 - 0.6.0 [Python API](https://pypi.org/project/meshtastic/) released. Makes it easy to use meshtastic devices as "zero config / just works" mesh transport adapters for other projects.
 - 04/20/2020 - 0.4.3 Pretty solid now both for the android app and the device code. Many people have donated translations and code. Probably going to call it a beta soon.
@@ -63,8 +64,9 @@ If you'd like to help with development, the source code is [on github](https://g
 
 ## Supported hardware
 
-We currently support two brands of radios. The [TTGO T-Beam](https://www.aliexpress.com/item/4000119152086.html) and the [Heltec LoRa 32](https://heltec.org/project/wifi-lora-32/). Most people should buy the T-Beam and a 18650 battery (total cost less than \$35). Make
-sure to buy the frequency range which is legal for your country. For the USA, you should buy the 915MHz version. Getting a version that include a screen is optional, but highly recommended.
+We currently support two brands of radios. The [TTGO T-Beam](https://www.aliexpress.com/item/4001178678568.html) and the [Heltec LoRa 32](https://heltec.org/project/wifi-lora-32/). Most people should buy the T-Beam and a 18650 battery (total cost less than \$35). Also, the version of the T-Beam we link to is shipped with Meshtastic **preinstalled** by TTGO, so you don't have to install it yourself.
+
+Make sure to buy the frequency range which is legal for your country. For the USA, you should buy the 915MHz version. Getting a version that include a screen is optional, but highly recommended.
 
 Instructions for installing prebuilt firmware can be found [here](https://github.com/meshtastic/Meshtastic-esp32/blob/master/README.md).
 
