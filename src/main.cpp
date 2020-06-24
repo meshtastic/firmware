@@ -136,6 +136,9 @@ Periodic ledPeriodic(ledBlinker);
 void userButtonPressed() {
     powerFSM.trigger(EVENT_PRESS);
 }
+void userButtonPressedLong(){
+    screen.adjustBrightness();
+}
 
 #ifndef NO_ESP32
 void initWifi()
@@ -197,10 +200,12 @@ void setup()
 #ifdef BUTTON_PIN
     userButton = OneButton(BUTTON_PIN, true, true);
     userButton.attachClick(userButtonPressed);
+    userButton.attachDuringLongPress(userButtonPressedLong);
 #endif
 #ifdef BUTTON_PIN_ALT
     userButtonAlt = OneButton(BUTTON_PIN_ALT, true, true);
     userButtonAlt.attachClick(userButtonPressed);
+    userButton.attachDuringLongPress(userButtonPressedLong);
 #endif
 #ifdef LED_PIN
     pinMode(LED_PIN, OUTPUT);
