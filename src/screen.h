@@ -168,13 +168,16 @@ class Screen : public PeriodicTask
         switch (last) {    // conversion depnding on first UTF8-character
             case 0xC2: { SKIPREST = false; return (uint8_t) ch; }
             case 0xC3: { SKIPREST = false; return (uint8_t) (ch | 0xC0); }
-            case 0x82: { SKIPREST = false; if (ch == 0xAC) return (uint8_t) 0x80; }   // special case Euro-symbol
         }
+
+        // We want to strip out prefix chars for two-byte char formats
+        if (ch == 0xC2 || ch == 0xC3 || ch == 0x82) return (uint8_t) 0;
+
         // If we already returned an unconvertable-character symbol for this unconvertable-character sequence, return NULs for the rest of it
         if (SKIPREST) return (uint8_t) 0;
         SKIPREST = true;
 
-        return (uint8_t) 0xA8; // otherwise: return ¿ if character can't be converted
+        return (uint8_t) 191; // otherwise: return ¿ if character can't be converted (note that the font map we're using doesn't stick to standard EASCII codes)
     }
 
     /// Returns a handle to the DebugInfo screen.

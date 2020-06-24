@@ -717,7 +717,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
 
     const char *fields[] = {channelStr, nullptr};
-    uint32_t yo = drawRows(display, x, y + 12, fields);
+    uint32_t yo = drawRows(display, x, y + FONT_HEIGHT, fields);
 
     display->drawLogBuffer(x, yo);
 }
