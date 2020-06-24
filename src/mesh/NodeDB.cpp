@@ -103,13 +103,16 @@ void NodeDB::resetRadioConfig()
     crypto->setKey(channelSettings.psk.size, channelSettings.psk.bytes);
 
     // temp hack for quicker testing
+    // devicestate.no_save = true;
+    if (devicestate.no_save) {
+        DEBUG_MSG("***** DEVELOPMENT MODE - DO NOT RELEASE *****\n");
 
-    /*
-    radioConfig.preferences.screen_on_secs = 30;
-    radioConfig.preferences.wait_bluetooth_secs = 30;
-    radioConfig.preferences.position_broadcast_secs = 6 * 60;
-    radioConfig.preferences.ls_secs = 60;
-    */
+        // Sleep quite frequently to stress test the BLE comms, broadcast position every 6 mins
+        radioConfig.preferences.screen_on_secs = 30;
+        radioConfig.preferences.wait_bluetooth_secs = 30;
+        radioConfig.preferences.position_broadcast_secs = 6 * 60;
+        radioConfig.preferences.ls_secs = 60;
+    }
 }
 
 void NodeDB::installDefaultDeviceState()
@@ -257,32 +260,36 @@ void NodeDB::loadFromDisk()
 void NodeDB::saveToDisk()
 {
 #ifdef FS
-    auto f = FS.open(preftmp, FILE_O_WRITE);
-    if (f) {
-        DEBUG_MSG("Writing preferences\n");
+    if (!devicestate.no_save) {
+        auto f = FS.open(preftmp, FILE_O_WRITE);
+        if (f) {
+            DEBUG_MSG("Writing preferences\n");
 
-        pb_ostream_t stream = {&writecb, &f, SIZE_MAX, 0};
+            pb_ostream_t stream = {&writecb, &f, SIZE_MAX, 0};
 
-        // DEBUG_MSG("Presave channel name=%s\n", channelSettings.name);
+            // DEBUG_MSG("Presave channel name=%s\n", channelSettings.name);
 
-        devicestate.version = DEVICESTATE_CUR_VER;
-        if (!pb_encode(&stream, DeviceState_fields, &devicestate)) {
-            DEBUG_MSG("Error: can't write protobuf %s\n", PB_GET_ERROR(&stream));
-            // FIXME - report failure to phone
+            devicestate.version = DEVICESTATE_CUR_VER;
+            if (!pb_encode(&stream, DeviceState_fields, &devicestate)) {
+                DEBUG_MSG("Error: can't write protobuf %s\n", PB_GET_ERROR(&stream));
+                // FIXME - report failure to phone
 
-            f.close();
+                f.close();
+            } else {
+                // Success - replace the old file
+                f.close();
+
+                // brief window of risk here ;-)
+                if (!FS.remove(preffile))
+                    DEBUG_MSG("Warning: Can't remove old pref file\n");
+                if (!FS.rename(preftmp, preffile))
+                    DEBUG_MSG("Error: can't rename new pref file\n");
+            }
         } else {
-            // Success - replace the old file
-            f.close();
-
-            // brief window of risk here ;-)
-            if (!FS.remove(preffile))
-                DEBUG_MSG("Warning: Can't remove old pref file\n");
-            if (!FS.rename(preftmp, preffile))
-                DEBUG_MSG("Error: can't rename new pref file\n");
+            DEBUG_MSG("ERROR: can't write prefs\n"); // FIXME report to app
         }
     } else {
-        DEBUG_MSG("ERROR: can't write prefs\n"); // FIXME report to app
+        DEBUG_MSG("***** DEVELOPMENT MODE - DO NOT RELEASE - not saving to flash *****\n");
     }
 #else
     DEBUG_MSG("ERROR filesystem not implemented\n");
