@@ -2,8 +2,12 @@
 
 You probably don't care about this section - skip to the next one.
 
+- do device release (after testing BLE fixes) https://github.com/meshtastic/Meshtastic-device/pull/218#event-3475395948
+- some channel names don't work - check for illegal symbols per forum report
+- auto invalidate old BLE handles
+- disable software update button after update finishes
+- mention translations in main readme
 - check BLE handle stability across sleep - stress test sleep/wake - btu_init_core calls gatt_init - which assigns handles global
-- test BLE software update again
 - @feh123 Sony Xperia Z1 C6903 running Android 5.1.1
 - first message sent is still doubled for some people
 - Android frontend should refetch the android messages from backend service on Resume
