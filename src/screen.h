@@ -117,6 +117,10 @@ class Screen : public PeriodicTask
     /// Handles a button press.
     void onPress() { enqueueCmd(CmdItem{.cmd = Cmd::ON_PRESS}); }
 
+    // Implementation to Adjust Brightness
+    void adjustBrightness();
+    int brightness = 150;
+
     /// Starts showing the Bluetooth PIN screen.
     //
     // Switches over to a static frame showing the Bluetooth pairing screen
