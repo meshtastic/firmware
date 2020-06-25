@@ -740,8 +740,8 @@ void Screen::adjustBrightness(){
     } else {
         brightness++;    
     }
-    int width = brightness / 1.984375;
-    dispdev.drawRect( 0, 30, 128, 4);
+    int width = (brightness / 254) * SCREEN_WIDTH;
+    dispdev.drawRect( 0, 30, SCREEN_WIDTH, 4);
     dispdev.fillRect(0, 30, width, 4);
     dispdev.display();
     dispdev.setBrightness(brightness);
