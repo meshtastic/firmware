@@ -2,11 +2,12 @@
 #include "MeshBluetoothService.h"
 #include "PowerFSM.h"
 #include "configuration.h"
+#include "esp_task_wdt.h"
 #include "main.h"
 #include "power.h"
 #include "sleep.h"
-#include "utils.h"
 #include "target_specific.h"
+#include "utils.h"
 
 bool bluetoothOn;
 
@@ -82,7 +83,9 @@ void readPowerStatus()
         } else {
             // If the AXP192 returns a percentage less than 0, the feature is either not supported or there is an error
             // In that case, we compute an estimate of the charge percent based on maximum and minimum voltages defined in power.h
-            powerStatus.batteryChargePercent = clamp((int)(((powerStatus.batteryVoltageMv - BAT_MILLIVOLTS_EMPTY) * 1e2) / (BAT_MILLIVOLTS_FULL - BAT_MILLIVOLTS_EMPTY)), 0, 100);
+            powerStatus.batteryChargePercent = clamp((int)(((powerStatus.batteryVoltageMv - BAT_MILLIVOLTS_EMPTY) * 1e2) /
+                                                           (BAT_MILLIVOLTS_FULL - BAT_MILLIVOLTS_EMPTY)),
+                                                     0, 100);
         }
         DEBUG_MSG("Battery %dmV %d%%\n", powerStatus.batteryVoltageMv, powerStatus.batteryChargePercent);
     }
@@ -193,6 +196,16 @@ void esp32Setup()
 #ifdef AXP192_SLAVE_ADDRESS
     axp192Init();
 #endif
+
+// Since we are turning on watchdogs rather late in the release schedule, we really don't want to catch any
+// false positives.  The wait-to-sleep timeout for shutting down radios is 30 secs, so pick 45 for now.
+#define APP_WATCHDOG_SECS 45
+
+    auto res = esp_task_wdt_init(APP_WATCHDOG_SECS, true);
+    assert(res == ESP_OK);
+
+    res = esp_task_wdt_add(NULL);
+    assert(res == ESP_OK);
 }
 
 #if 0
@@ -215,10 +228,10 @@ uint32_t axpDebugRead()
 Periodic axpDebugOutput(axpDebugRead);
 #endif
 
-
 /// loop code specific to ESP32 targets
 void esp32Loop()
 {
+    esp_task_wdt_reset(); // service our app level watchdog
     loopBLE();
 
     // for debug printing
