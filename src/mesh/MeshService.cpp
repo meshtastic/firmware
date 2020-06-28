@@ -303,7 +303,7 @@ int MeshService::onGPSChanged(void *unused)
     }
 
     // Include our current battery voltage in our position announcement
-    pos.battery_level = powerStatus.batteryChargePercent;
+    pos.battery_level = powerStatusHandler->getBatteryChargePercent();
     updateBatteryLevel(pos.battery_level);
 
     // We limit our GPS broadcasts to a max rate

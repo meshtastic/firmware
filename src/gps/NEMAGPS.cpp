@@ -65,5 +65,13 @@ void NEMAGPS::loop()
             if (hasValidLocation)
                 notifyObservers(NULL);
         }
+        meshtastic::GPSStatus status;
+        status.hasLock = hasLock();
+        status.isConnected = isConnected;
+        status.latitude = latitude;
+        status.longitude = longitude;
+        status.altitude = altitude;
+        status.dop = dop;
+        newStatus.notifyObservers(status);
     }
 }
