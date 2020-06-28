@@ -13,7 +13,10 @@
 #include "PeriodicTask.h"
 #include "TypedQueue.h"
 #include "lock.h"
-#include "power.h"
+#include "PowerStatus.h"
+#include "GPSStatus.h"
+#include "NodeStatus.h"
+#include "Observer.h"
 #include <string>
 
 namespace meshtastic
@@ -29,38 +32,11 @@ class DebugInfo
     DebugInfo(const DebugInfo &) = delete;
     DebugInfo &operator=(const DebugInfo &) = delete;
 
-    /// Sets user statistics.
-    void setNodeNumbersStatus(int online, int total)
-    {
-        LockGuard guard(&lock);
-        nodesOnline = online;
-        nodesTotal = total;
-    }
-
     /// Sets the name of the channel.
     void setChannelNameStatus(const char *name)
     {
         LockGuard guard(&lock);
         channelName = name;
-    }
-
-    /// Sets battery/charging/etc status.
-    //
-    void setPowerStatus(const PowerStatus &status)
-    {
-        LockGuard guard(&lock);
-        powerStatus = status;
-    }
-
-    /// Sets GPS status.
-    //
-    // If this function never gets called, we assume GPS does not exist on this
-    // device.
-    // TODO(girts): figure out what the format should be.
-    void setGPSStatus(const char *status)
-    {
-        LockGuard guard(&lock);
-        gpsStatus = status;
     }
 
   private:
@@ -71,14 +47,7 @@ class DebugInfo
     /// Renders the debug screen.
     void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
-    int nodesOnline = 0;
-    int nodesTotal = 0;
-
-    PowerStatus powerStatus;
-
     std::string channelName;
-
-    std::string gpsStatus;
 
     /// Protects all of internal state.
     Lock lock;
@@ -93,6 +62,10 @@ class DebugInfo
 // simultaneously).
 class Screen : public PeriodicTask
 {
+    CallbackObserver<Screen, void *> powerStatusObserver = CallbackObserver<Screen, void *>(this, &Screen::handlePowerStatusUpdate);
+    CallbackObserver<Screen, void *> gpsStatusObserver = CallbackObserver<Screen, void *>(this, &Screen::handleGPSStatusUpdate);
+    CallbackObserver<Screen, void *> nodeStatusObserver = CallbackObserver<Screen, void *>(this, &Screen::handleNodeStatusUpdate);
+
   public:
     Screen(uint8_t address, int sda = -1, int scl = -1);
 
@@ -188,6 +161,10 @@ class Screen : public PeriodicTask
     //
     // Use this handle to set things like battery status, user count, GPS status, etc.
     DebugInfo *debug() { return &debugInfo; }
+
+    int handlePowerStatusUpdate(void *arg);
+    int handleGPSStatusUpdate(void *arg);
+    int handleNodeStatusUpdate(void *arg);
 
   protected:
     /// Updates the UI.
