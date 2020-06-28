@@ -48,7 +48,6 @@ Items after the first final candidate release.
 - split out the software update utility so other projects can use it. Have the appload specify the URL for downloads.
 - read the PMU battery fault indicators and blink/led/warn user on screen
 - discard very old nodedb records (> 1wk)
-- add a watchdog timer
 - handle millis() rollover in GPS.getTime - otherwise we will break after 50 days
 - report esp32 device code bugs back to the mothership via android
 - change BLE bonding to something more secure. see comment by pSecurity->setAuthenticationMode(ESP_LE_AUTH_BOND)
