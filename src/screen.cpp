@@ -70,10 +70,11 @@ static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     display->drawString(64 + x, SCREEN_HEIGHT - FONT_HEIGHT_16, "meshtastic.org");
     display->setFont(ArialMT_Plain_10);
     const char *region = xstr(HW_VERSION);
-    if(*region && region[3] == '-') // Skip past 1.0- in the 1.0-EU865 string
+    if (*region && region[3] == '-') // Skip past 1.0- in the 1.0-EU865 string
         region += 4;
     char buf[16];
-    snprintf(buf, sizeof(buf), "%s", xstr(APP_VERSION)); // Note: we don't bother printing region or now, it makes the string too long
+    snprintf(buf, sizeof(buf), "%s",
+             xstr(APP_VERSION)); // Note: we don't bother printing region or now, it makes the string too long
     display->drawString(SCREEN_WIDTH - 20, 0, buf);
 }
 
@@ -92,8 +93,8 @@ static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, 
     display->setFont(ArialMT_Plain_10);
     char buf[30];
     const char *name = "Name: ";
-    strcpy(buf,name);
-    strcat(buf,getDeviceName());
+    strcpy(buf, name);
+    strcat(buf, getDeviceName());
     display->drawString(64 + x, 48 + y, buf);
 }
 
@@ -176,7 +177,8 @@ static void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char *
 #endif
 
 // Draw power bars or a charging indicator on an image of a battery, determined by battery charge voltage or percentage.
-static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *imgBuffer, PowerStatusHandler *powerStatusHandler) {
+static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *imgBuffer, PowerStatusHandler *powerStatusHandler) 
+{
     static const uint8_t powerBar[3] = { 0x81, 0xBD, 0xBD };
     static const uint8_t lightning[8] = { 0xA1, 0xA1, 0xA5, 0xAD, 0xB5, 0xA5, 0x85, 0x85 };
     // Clear the bar area on the battery image
@@ -186,17 +188,19 @@ static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *img
     // If charging, draw a charging indicator
     if (powerStatusHandler->isCharging()) {
         memcpy(imgBuffer + 3, lightning, 8);
-    // If not charging, Draw power bars
+        // If not charging, Draw power bars
     } else {
         for (int i = 0; i < 4; i++) {
-            if(powerStatusHandler->getBatteryChargePercent() >= 25 * i) memcpy(imgBuffer + 1 + (i * 3), powerBar, 3);
+            if(powerStatusHandler->getBatteryChargePercent() >= 25 * i) 
+                memcpy(imgBuffer + 1 + (i * 3), powerBar, 3);
         }
     }
     display->drawFastImage(x, y, 16, 8, imgBuffer);
 }
 
 // Draw nodes status
-static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, NodeStatusHandler *nodeStatusHandler) {
+static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, NodeStatusHandler *nodeStatusHandler) 
+{
     char usersString[20];
     sprintf(usersString, "%d/%d", nodeStatusHandler->getNumOnline(), nodeStatusHandler->getNumTotal());
     display->drawFastImage(x, y, 8, 8, imgUser);
@@ -204,16 +208,41 @@ static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, NodeStatusHand
 }
 
 // Draw GPS status summary
-static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, GPSStatusHandler *gpsStatusHandler) {
-    if(!gpsStatusHandler->isConnected()) { display->drawString(x, y - 2, "No GPS"); return; }
-    display->drawFastImage(x, y, 6, 8, gps->hasLock() ? imgPositionSolid : imgPositionEmpty );
-    if(!gpsStatusHandler->hasLock()) { display->drawString(x + 8, y - 2, "No sats"); return; }
-    if(gpsStatusHandler->getDOP() <= 100) { display->drawString(x + 8, y - 2, "Ideal"); return; }
-    if(gpsStatusHandler->getDOP() <= 200) { display->drawString(x + 8, y - 2, "Exc."); return; }
-    if(gpsStatusHandler->getDOP() <= 500) { display->drawString(x + 8, y - 2, "Good"); return; }
-    if(gpsStatusHandler->getDOP() <= 1000) { display->drawString(x + 8, y - 2, "Mod."); return; }
-    if(gpsStatusHandler->getDOP() <= 2000) { display->drawString(x + 8, y - 2, "Fair"); return; }
-    if(gpsStatusHandler->getDOP() > 0) { display->drawString(x + 8, y - 2, "Poor"); return; }
+static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, GPSStatusHandler *gps)
+{
+    if (!gps->isConnected()) {
+        display->drawString(x, y - 2, "No GPS");
+        return;
+    }
+    display->drawFastImage(x, y, 6, 8, gps->hasLock() ? imgPositionSolid : imgPositionEmpty);
+    if (!gps->hasLock()) {
+        display->drawString(x + 8, y - 2, "No sats");
+        return;
+    }
+    if (gps->getDOP() <= 100) {
+        display->drawString(x + 8, y - 2, "Ideal");
+        return;
+    }
+    if (gps->getDOP() <= 200) {
+        display->drawString(x + 8, y - 2, "Exc.");
+        return;
+    }
+    if (gps->getDOP() <= 500) {
+        display->drawString(x + 8, y - 2, "Good");
+        return;
+    }
+    if (gps->getDOP() <= 1000) {
+        display->drawString(x + 8, y - 2, "Mod.");
+        return;
+    }
+    if (gps->getDOP() <= 2000) {
+        display->drawString(x + 8, y - 2, "Fair");
+        return;
+    }
+    if (gps->getDOP() > 0) {
+        display->drawString(x + 8, y - 2, "Poor");
+        return;
+    }
 }
 
 /// Ported from my old java code, returns distance in meters along the globe
@@ -424,11 +453,10 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         snprintf(lastStr, sizeof(lastStr), "%u hours ago", agoSecs / 60 / 60);
 
     static char distStr[20];
-    *distStr = 0; // might not have location data
+    strcpy(distStr, "? km"); // might not have location data
     float headingRadian;
     NodeInfo *ourNode = nodeDB.getNode(nodeDB.getNodeNum());
     const char *fields[] = {username, distStr, signalStr, lastStr, NULL};
-    drawColumns(display, x, y, fields);
 
     // coordinates for the center of the compass/circle
     int16_t compassX = x + SCREEN_WIDTH - COMPASS_DIAM / 2 - 1, compassY = y + SCREEN_HEIGHT / 2;
@@ -451,9 +479,12 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         // Debug info for gps lock errors
         // DEBUG_MSG("ourNode %d, ourPos %d, theirPos %d\n", !!ourNode, ourNode && hasPosition(ourNode), hasPosition(node));
 
-        display->drawString(compassX - FONT_HEIGHT/4, compassY - FONT_HEIGHT/2, "?");
+        display->drawString(compassX - FONT_HEIGHT / 4, compassY - FONT_HEIGHT / 2, "?");
         display->drawCircle(compassX, compassY, COMPASS_DIAM / 2);
     }
+
+    // Must be after distStr is populated
+    drawColumns(display, x, y, fields);
 }
 
 #if 0
@@ -720,7 +751,10 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         snprintf(channelStr, sizeof(channelStr), "#%s", channelName.c_str());
 
         // Display power status
-        if (powerStatusHandler->hasBattery()) drawBattery(display, x, y + 2, imgBattery, powerStatusHandler); else display->drawFastImage(x, y + 2, 16, 8, powerStatusHandler->hasUSB() ? imgUSB : imgPower);
+        if (powerStatusHandler->hasBattery())
+            drawBattery(display, x, y + 2, imgBattery, powerStatusHandler);
+        else
+            display->drawFastImage(x, y + 2, 16, 8, powerStatusHandler->hasUSB() ? imgUSB : imgPower);
         // Display nodes status
         drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 2, nodeStatusHandler);
         // Display GPS status
@@ -735,16 +769,16 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     heartbeat = !heartbeat;
 }
 
-//adjust Brightness cycle trough 1 to 254 as long as attachDuringLongPress is true
-void Screen::adjustBrightness(){
-    if (brightness == 254)
-    {
+// adjust Brightness cycle trough 1 to 254 as long as attachDuringLongPress is true
+void Screen::adjustBrightness()
+{
+    if (brightness == 254) {
         brightness = 0;
     } else {
-        brightness++;    
+        brightness++;
     }
     int width = brightness / (254.00 / SCREEN_WIDTH);
-    dispdev.drawRect( 0, 30, SCREEN_WIDTH, 4);
+    dispdev.drawRect(0, 30, SCREEN_WIDTH, 4);
     dispdev.fillRect(0, 31, width, 2);
     dispdev.display();
     dispdev.setBrightness(brightness);
