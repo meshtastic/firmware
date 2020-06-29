@@ -56,8 +56,14 @@
 // We always create a screen object, but we only init it if we find the hardware
 meshtastic::Screen screen(SSD1306_ADDRESS);
 
-// Global power status singleton
-meshtastic::PowerStatus powerStatus;
+// Global power status
+meshtastic::PowerStatus *powerStatus = new meshtastic::PowerStatus();
+
+// Global GPS status
+meshtastic::GPSStatus *gpsStatus = new meshtastic::GPSStatus();
+
+// Global Node status
+meshtastic::NodeStatus *nodeStatus = new meshtastic::NodeStatus();
 
 bool ssd1306_found;
 bool axp192_found;
@@ -121,7 +127,7 @@ static uint32_t ledBlinker()
     setLed(ledOn);
 
     // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
-    return powerStatus.charging ? 1000 : (ledOn ? 2 : 1000);
+    return powerStatus->getIsCharging() ? 1000 : (ledOn ? 2 : 1000);
 }
 
 Periodic ledPeriodic(ledBlinker);
@@ -223,6 +229,10 @@ void setup()
         ssd1306_found = false; // forget we even have the hardware
 
     esp32Setup();
+    power = new Power();
+    power->setup();
+    power->setStatusHandler(powerStatus);
+    powerStatus->observe(&power->newStatus);
 #endif
 
 #ifdef NRF52_SERIES
@@ -253,9 +263,10 @@ void setup()
     gps = new NEMAGPS();
     gps->setup();
 #endif
+    gpsStatus->observe(&gps->newStatus);
+    nodeStatus->observe(&nodeDB.newStatus);
 
     service.init();
-
 #ifndef NO_ESP32
     // Must be after we init the service, because the wifi settings are loaded by NodeDB (oops)
     initWifi();
@@ -294,6 +305,7 @@ void setup()
 
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
+
 
     // setBluetoothEnable(false); we now don't start bluetooth until we enter the proper state
     setCPUFast(false); // 80MHz is fine for our slow peripherals
@@ -340,6 +352,7 @@ void loop()
 
 #ifndef NO_ESP32
     esp32Loop();
+    power->loop();
 #endif
 
 #ifdef BUTTON_PIN
@@ -365,9 +378,8 @@ void loop()
 #endif
 
     // Update the screen last, after we've figured out what to show.
-    screen.debug()->setNodeNumbersStatus(nodeDB.getNumOnlineNodes(), nodeDB.getNumNodes());
     screen.debug()->setChannelNameStatus(channelSettings.name);
-    screen.debug()->setPowerStatus(powerStatus);
+    //screen.debug()->setPowerStatus(powerStatus);
 
     // No GPS lock yet, let the OS put the main CPU in low power mode for 100ms (or until another interrupt comes in)
     // i.e. don't just keep spinning in loop as fast as we can.

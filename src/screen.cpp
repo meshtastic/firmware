@@ -39,7 +39,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define TRANSITION_FRAMERATE 30 // fps
-#define IDLE_FRAMERATE 10       // in fps
+#define IDLE_FRAMERATE 1        // in fps
 #define COMPASS_DIAM 44
 
 #define NUM_EXTRA_FRAMES 2 // text message and debug frame
@@ -52,7 +52,8 @@ static FrameCallback normalFrames[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
 static uint32_t targetFramerate = IDLE_FRAMERATE;
 static char btPIN[16] = "888888";
 
-uint8_t imgBattery[16] = {0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0xE7, 0x3C};
+uint8_t imgBattery[16] = { 0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0xE7, 0x3C };
+static bool heartbeat = false;
 
 static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -140,52 +141,54 @@ static void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char *
     }
 }
 
-/// Draw a series of fields in a row, wrapping to multiple rows if needed
-/// @return the max y we ended up printing to
-static uint32_t drawRows(OLEDDisplay *display, int16_t x, int16_t y, const char **fields)
-{
-    // The coordinates define the left starting point of the text
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
+#if 0
+    /// Draw a series of fields in a row, wrapping to multiple rows if needed
+    /// @return the max y we ended up printing to
+    static uint32_t drawRows(OLEDDisplay *display, int16_t x, int16_t y, const char **fields)
+    {
+        // The coordinates define the left starting point of the text
+        display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    const char **f = fields;
-    int xo = x, yo = y;
-    const int COLUMNS = 2; // hardwired for two columns per row....
-    int col = 0;           // track which column we are on
-    while (*f) {
-        display->drawString(xo, yo, *f);
-        xo += SCREEN_WIDTH / COLUMNS;
-        // Wrap to next row, if needed.
-        if (++col >= COLUMNS) {
-            xo = x;
-            yo += FONT_HEIGHT;
-            col = 0;
+        const char **f = fields;
+        int xo = x, yo = y;
+        const int COLUMNS = 2; // hardwired for two columns per row....
+        int col = 0;           // track which column we are on
+        while (*f) {
+            display->drawString(xo, yo, *f);
+            xo += SCREEN_WIDTH / COLUMNS;
+            // Wrap to next row, if needed.
+            if (++col >= COLUMNS) {
+                xo = x;
+                yo += FONT_HEIGHT;
+                col = 0;
+            }
+            f++;
         }
-        f++;
-    }
-    if (col != 0) {
-        // Include last incomplete line in our total.
-        yo += FONT_HEIGHT;
-    }
+        if (col != 0) {
+            // Include last incomplete line in our total.
+            yo += FONT_HEIGHT;
+        }
 
-    return yo;
-}
+        return yo;
+    }
+#endif
 
 // Draw power bars or a charging indicator on an image of a battery, determined by battery charge voltage or percentage.
-static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *imgBuffer, PowerStatus *powerStatus)
+static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *imgBuffer, const PowerStatus *powerStatus) 
 {
-    static const uint8_t powerBar[3] = {0x81, 0xBD, 0xBD};
-    static const uint8_t lightning[8] = {0xA1, 0xA1, 0xA5, 0xAD, 0xB5, 0xA5, 0x85, 0x85};
+    static const uint8_t powerBar[3] = { 0x81, 0xBD, 0xBD };
+    static const uint8_t lightning[8] = { 0xA1, 0xA1, 0xA5, 0xAD, 0xB5, 0xA5, 0x85, 0x85 };
     // Clear the bar area on the battery image
     for (int i = 1; i < 14; i++) {
         imgBuffer[i] = 0x81;
     }
     // If charging, draw a charging indicator
-    if (powerStatus->charging) {
+    if (powerStatus->getIsCharging()) {
         memcpy(imgBuffer + 3, lightning, 8);
         // If not charging, Draw power bars
     } else {
         for (int i = 0; i < 4; i++) {
-            if (powerStatus->batteryChargePercent >= 25 * i)
+            if(powerStatus->getBatteryChargePercent() >= 25 * i) 
                 memcpy(imgBuffer + 1 + (i * 3), powerBar, 3);
         }
     }
@@ -193,47 +196,47 @@ static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *img
 }
 
 // Draw nodes status
-static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, int nodesOnline, int nodesTotal)
+static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, NodeStatus *nodeStatus) 
 {
     char usersString[20];
-    sprintf(usersString, "%d/%d", nodesOnline, nodesTotal);
+    sprintf(usersString, "%d/%d", nodeStatus->getNumOnline(), nodeStatus->getNumTotal());
     display->drawFastImage(x, y, 8, 8, imgUser);
     display->drawString(x + 10, y - 2, usersString);
 }
 
 // Draw GPS status summary
-static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, GPS *gps)
+static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
-    if (!gps->isConnected) {
+    if (!gps->getIsConnected()) {
         display->drawString(x, y - 2, "No GPS");
         return;
     }
-    display->drawFastImage(x, y, 6, 8, gps->hasLock() ? imgPositionSolid : imgPositionEmpty);
-    if (!gps->hasLock()) {
+    display->drawFastImage(x, y, 6, 8, gps->getHasLock() ? imgPositionSolid : imgPositionEmpty);
+    if (!gps->getHasLock()) {
         display->drawString(x + 8, y - 2, "No sats");
         return;
     }
-    if (gps->dop <= 100) {
+    if (gps->getDOP() <= 100) {
         display->drawString(x + 8, y - 2, "Ideal");
         return;
     }
-    if (gps->dop <= 200) {
+    if (gps->getDOP() <= 200) {
         display->drawString(x + 8, y - 2, "Exc.");
         return;
     }
-    if (gps->dop <= 500) {
+    if (gps->getDOP() <= 500) {
         display->drawString(x + 8, y - 2, "Good");
         return;
     }
-    if (gps->dop <= 1000) {
+    if (gps->getDOP() <= 1000) {
         display->drawString(x + 8, y - 2, "Mod.");
         return;
     }
-    if (gps->dop <= 2000) {
+    if (gps->getDOP() <= 2000) {
         display->drawString(x + 8, y - 2, "Fair");
         return;
     }
-    if (gps->dop > 0) {
+    if (gps->getDOP() > 0) {
         display->drawString(x + 8, y - 2, "Poor");
         return;
     }
@@ -573,6 +576,11 @@ void Screen::setup()
     // twice initially.
     ui.update();
     ui.update();
+
+    // Subscribe to status updates
+    powerStatusObserver.observe(&powerStatus->onNewStatus);
+    gpsStatusObserver.observe(&gpsStatus->onNewStatus);
+    nodeStatusObserver.observe(&nodeStatus->onNewStatus);
 }
 
 void Screen::doTask()
@@ -634,14 +642,7 @@ void Screen::doTask()
     // While showing the bootscreen or Bluetooth pair screen all of our
     // standard screen switching is stopped.
     if (showingNormalScreen) {
-        // TODO(girts): decouple nodeDB from screen.
-        // standard screen loop handling ehre
-        // If the # nodes changes, we need to regen our list of screens
-        if (nodeDB.updateGUI || nodeDB.updateTextMessage) {
-            setFrames();
-            nodeDB.updateGUI = false;
-            nodeDB.updateTextMessage = false;
-        }
+        // standard screen loop handling here
     }
 
     ui.update();
@@ -666,8 +667,8 @@ void Screen::setFrames()
     DEBUG_MSG("showing standard frames\n");
     showingNormalScreen = true;
 
-    size_t numnodes = nodeDB.getNumNodes();
     // We don't show the node info our our node (if we have it yet - we should)
+    size_t numnodes = nodeStatus->getNumTotal();
     if (numnodes > 0)
         numnodes--;
 
@@ -747,20 +748,24 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         snprintf(channelStr, sizeof(channelStr), "#%s", channelName.c_str());
 
         // Display power status
-        if (powerStatus.haveBattery)
-            drawBattery(display, x, y + 2, imgBattery, &powerStatus);
+        if (powerStatus->getHasBattery())
+            drawBattery(display, x, y + 2, imgBattery, powerStatus);
         else
-            display->drawFastImage(x, y + 2, 16, 8, powerStatus.usb ? imgUSB : imgPower);
+            display->drawFastImage(x, y + 2, 16, 8, powerStatus->getHasUSB() ? imgUSB : imgPower);
         // Display nodes status
-        drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 2, nodesOnline, nodesTotal);
+        drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 2, nodeStatus);
         // Display GPS status
-        drawGPS(display, x + (SCREEN_WIDTH * 0.66), y + 2, gps);
+        drawGPS(display, x + (SCREEN_WIDTH * 0.66), y + 2, gpsStatus);
     }
 
-    const char *fields[] = {channelStr, nullptr};
-    uint32_t yo = drawRows(display, x, y + FONT_HEIGHT, fields);
+    display->drawString(x, y + FONT_HEIGHT, channelStr);
 
-    display->drawLogBuffer(x, yo);
+    display->drawLogBuffer(x, y + (FONT_HEIGHT * 2));
+
+    /* Display a heartbeat pixel that blinks every time the frame is redrawn
+    if(heartbeat) display->setPixel(0, 0);
+    heartbeat = !heartbeat;
+    */
 }
 
 // adjust Brightness cycle trough 1 to 254 as long as attachDuringLongPress is true
@@ -778,4 +783,15 @@ void Screen::adjustBrightness()
     dispdev.setBrightness(brightness);
 }
 
+int Screen::handleStatusUpdate(const Status *arg) {
+    DEBUG_MSG("Screen got status update %d\n", arg->getStatusType());
+    switch(arg->getStatusType())
+    {
+        case STATUS_TYPE_NODE:
+            setFrames();
+            break;
+    }
+    setPeriod(1); // Update the screen right away
+    return 0;
+}
 } // namespace meshtastic

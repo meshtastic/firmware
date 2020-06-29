@@ -342,8 +342,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
         int oldNumNodes = *numNodes;
         NodeInfo *info = getOrCreateNode(mp.from);
 
-        if (oldNumNodes != *numNodes)
-            updateGUI = true; // we just created a nodeinfo
+        notifyObservers();
 
         if (mp.rx_time) {              // if the packet has a valid timestamp use it to update our last_seen
             info->has_position = true; // at least the time is valid
