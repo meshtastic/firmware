@@ -41,7 +41,7 @@ class GPS : public Observable<void *>
 
     virtual ~GPS() {}
 
-    Observable<const meshtastic::GPSStatus> newStatus;
+    Observable<const meshtastic::GPSStatus *> newStatus;
 
     /**
      * Returns true if we succeeded

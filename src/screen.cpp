@@ -177,7 +177,7 @@ static void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char *
 #endif
 
 // Draw power bars or a charging indicator on an image of a battery, determined by battery charge voltage or percentage.
-static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *imgBuffer, PowerStatusHandler *powerStatusHandler) 
+static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *imgBuffer, const PowerStatus *powerStatus) 
 {
     static const uint8_t powerBar[3] = { 0x81, 0xBD, 0xBD };
     static const uint8_t lightning[8] = { 0xA1, 0xA1, 0xA5, 0xAD, 0xB5, 0xA5, 0x85, 0x85 };
@@ -186,12 +186,12 @@ static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *img
         imgBuffer[i] = 0x81;
     }
     // If charging, draw a charging indicator
-    if (powerStatusHandler->isCharging()) {
+    if (powerStatus->getIsCharging()) {
         memcpy(imgBuffer + 3, lightning, 8);
         // If not charging, Draw power bars
     } else {
         for (int i = 0; i < 4; i++) {
-            if(powerStatusHandler->getBatteryChargePercent() >= 25 * i) 
+            if(powerStatus->getBatteryChargePercent() >= 25 * i) 
                 memcpy(imgBuffer + 1 + (i * 3), powerBar, 3);
         }
     }
@@ -199,23 +199,23 @@ static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *img
 }
 
 // Draw nodes status
-static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, NodeStatusHandler *nodeStatusHandler) 
+static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, NodeStatus *nodeStatus) 
 {
     char usersString[20];
-    sprintf(usersString, "%d/%d", nodeStatusHandler->getNumOnline(), nodeStatusHandler->getNumTotal());
+    sprintf(usersString, "%d/%d", nodeStatus->getNumOnline(), nodeStatus->getNumTotal());
     display->drawFastImage(x, y, 8, 8, imgUser);
     display->drawString(x + 10, y - 2, usersString);
 }
 
 // Draw GPS status summary
-static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, GPSStatusHandler *gps)
+static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
-    if (!gps->isConnected()) {
+    if (!gps->getIsConnected()) {
         display->drawString(x, y - 2, "No GPS");
         return;
     }
-    display->drawFastImage(x, y, 6, 8, gps->hasLock() ? imgPositionSolid : imgPositionEmpty);
-    if (!gps->hasLock()) {
+    display->drawFastImage(x, y, 6, 8, gps->getHasLock() ? imgPositionSolid : imgPositionEmpty);
+    if (!gps->getHasLock()) {
         display->drawString(x + 8, y - 2, "No sats");
         return;
     }
@@ -581,9 +581,9 @@ void Screen::setup()
     ui.update();
 
     // Subscribe to status updates
-    powerStatusObserver.observe(&powerStatusHandler->onNewStatus);
-    gpsStatusObserver.observe(&gpsStatusHandler->onNewStatus);
-    nodeStatusObserver.observe(&nodeStatusHandler->onNewStatus);
+    powerStatusObserver.observe(&powerStatus->onNewStatus);
+    gpsStatusObserver.observe(&gpsStatus->onNewStatus);
+    nodeStatusObserver.observe(&nodeStatus->onNewStatus);
 }
 
 void Screen::doTask()
@@ -671,7 +671,7 @@ void Screen::setFrames()
     showingNormalScreen = true;
 
     // We don't show the node info our our node (if we have it yet - we should)
-    size_t numnodes = nodeStatusHandler->getNumTotal();
+    size_t numnodes = nodeStatus->getNumTotal();
     if (numnodes > 0)
         numnodes--;
 
@@ -751,14 +751,14 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         snprintf(channelStr, sizeof(channelStr), "#%s", channelName.c_str());
 
         // Display power status
-        if (powerStatusHandler->hasBattery())
-            drawBattery(display, x, y + 2, imgBattery, powerStatusHandler);
+        if (powerStatus->getHasBattery())
+            drawBattery(display, x, y + 2, imgBattery, powerStatus);
         else
-            display->drawFastImage(x, y + 2, 16, 8, powerStatusHandler->hasUSB() ? imgUSB : imgPower);
+            display->drawFastImage(x, y + 2, 16, 8, powerStatus->getHasUSB() ? imgUSB : imgPower);
         // Display nodes status
-        drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 2, nodeStatusHandler);
+        drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 2, nodeStatus);
         // Display GPS status
-        drawGPS(display, x + (SCREEN_WIDTH * 0.66), y + 2, gpsStatusHandler);
+        drawGPS(display, x + (SCREEN_WIDTH * 0.66), y + 2, gpsStatus);
     }
 
     display->drawString(x, y + FONT_HEIGHT, channelStr);
@@ -784,19 +784,14 @@ void Screen::adjustBrightness()
     dispdev.setBrightness(brightness);
 }
 
-int Screen::handlePowerStatusUpdate(void *arg) {
-    //DEBUG_MSG("Screen got power status update\n");
-    setPeriod(1); // Update the screen right away
-    return 0;
-}
-int Screen::handleGPSStatusUpdate(void *arg) {
-    //DEBUG_MSG("Screen got gps status update\n");
-    setPeriod(1); // Update the screen right away
-    return 0;
-}
-int Screen::handleNodeStatusUpdate(void *arg) {
-    //DEBUG_MSG("Screen got node status update\n");
-    setFrames(); // Update our frames if the node database has changed
+int Screen::handleStatusUpdate(const Status *arg) {
+    DEBUG_MSG("Screen got status update %d\n", arg->getStatusType());
+    switch(arg->getStatusType())
+    {
+        case STATUS_TYPE_NODE:
+            setFrames();
+            break;
+    }
     setPeriod(1); // Update the screen right away
     return 0;
 }

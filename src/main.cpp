@@ -57,13 +57,13 @@
 meshtastic::Screen screen(SSD1306_ADDRESS);
 
 // Global power status
-meshtastic::PowerStatusHandler *powerStatusHandler = new meshtastic::PowerStatusHandler();
+meshtastic::PowerStatus *powerStatus = new meshtastic::PowerStatus();
 
 // Global GPS status
-meshtastic::GPSStatusHandler *gpsStatusHandler = new meshtastic::GPSStatusHandler();
+meshtastic::GPSStatus *gpsStatus = new meshtastic::GPSStatus();
 
 // Global Node status
-meshtastic::NodeStatusHandler *nodeStatusHandler = new meshtastic::NodeStatusHandler();
+meshtastic::NodeStatus *nodeStatus = new meshtastic::NodeStatus();
 
 bool ssd1306_found;
 bool axp192_found;
@@ -127,7 +127,7 @@ static uint32_t ledBlinker()
     setLed(ledOn);
 
     // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
-    return powerStatusHandler->isCharging() ? 1000 : (ledOn ? 2 : 1000);
+    return powerStatus->getIsCharging() ? 1000 : (ledOn ? 2 : 1000);
 }
 
 Periodic ledPeriodic(ledBlinker);
@@ -231,8 +231,8 @@ void setup()
     esp32Setup();
     power = new Power();
     power->setup();
-    power->setStatusHandler(powerStatusHandler);
-    powerStatusHandler->observe(&power->newStatus);
+    power->setStatusHandler(powerStatus);
+    powerStatus->observe(&power->newStatus);
 #endif
 
 #ifdef NRF52_SERIES
@@ -263,8 +263,8 @@ void setup()
     gps = new NEMAGPS();
     gps->setup();
 #endif
-    gpsStatusHandler->observe(&gps->newStatus);
-    nodeStatusHandler->observe(&nodeDB.newStatus);
+    gpsStatus->observe(&gps->newStatus);
+    nodeStatus->observe(&nodeDB.newStatus);
 
     service.init();
 #ifndef NO_ESP32
