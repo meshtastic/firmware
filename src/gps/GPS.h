@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Observer.h"
+#include "GPSStatus.h"
 #include "PeriodicTask.h"
 #include "sys/time.h"
 
@@ -39,6 +40,8 @@ class GPS : public Observable<void *>
     bool isConnected = false; // Do we have a GPS we are talking to
 
     virtual ~GPS() {}
+
+    Observable<const meshtastic::GPSStatus *> newStatus;
 
     /**
      * Returns true if we succeeded
