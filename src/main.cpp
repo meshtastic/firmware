@@ -30,7 +30,7 @@
 #include "UBloxGPS.h"
 #include "configuration.h"
 #include "error.h"
-#include "Power.h"
+#include "power.h"
 // #include "rom/rtc.h"
 #include "DSRRouter.h"
 #include "debug.h"
