@@ -765,8 +765,10 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     display->drawLogBuffer(x, y + (FONT_HEIGHT * 2));
 
+    /* Display a heartbeat pixel that blinks every time the frame is redrawn
     if(heartbeat) display->setPixel(0, 0);
     heartbeat = !heartbeat;
+    */
 }
 
 // adjust Brightness cycle trough 1 to 254 as long as attachDuringLongPress is true
