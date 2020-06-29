@@ -1,4 +1,6 @@
 #pragma once
+#include "PeriodicTask.h"
+#include "PowerStatus.h"
 
 /**
  * Per @spattinson
@@ -13,23 +15,26 @@
 #define BAT_MILLIVOLTS_FULL 4100
 #define BAT_MILLIVOLTS_EMPTY 3500
 
-namespace meshtastic
+class Power : public PeriodicTask
 {
 
-/// Describes the state of the power system.
-struct PowerStatus {
-    /// Whether we have a battery connected
-    bool haveBattery;
-    /// Battery voltage in mV, valid if haveBattery is true
-    int batteryVoltageMv;
-    /// Battery charge percentage, either read directly or estimated
-    int batteryChargePercent;
-    /// Whether USB is connected
-    bool usb;
-    /// Whether we are charging the battery
-    bool charging;
+   public:
+
+    Observable<const meshtastic::PowerStatus *> newStatus;
+
+    void readPowerStatus();
+    void loop();
+    virtual bool setup();
+    virtual void doTask();
+    void setStatusHandler(meshtastic::PowerStatus *handler)
+    {
+        statusHandler = handler;
+    }
+    
+   protected:
+    meshtastic::PowerStatus *statusHandler;
+    virtual void axp192Init();
+
 };
 
-} // namespace meshtastic
-
-extern meshtastic::PowerStatus powerStatus;
+extern Power *power;
