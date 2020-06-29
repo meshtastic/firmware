@@ -20,19 +20,19 @@ class Power : public PeriodicTask
 
    public:
 
-    Observable<const meshtastic::PowerStatus> newStatus;
+    Observable<const meshtastic::PowerStatus *> newStatus;
 
     void readPowerStatus();
     void loop();
     virtual bool setup();
     virtual void doTask();
-    void setStatusHandler(meshtastic::PowerStatusHandler *handler)
+    void setStatusHandler(meshtastic::PowerStatus *handler)
     {
         statusHandler = handler;
     }
     
    protected:
-    meshtastic::PowerStatusHandler *statusHandler;
+    meshtastic::PowerStatus *statusHandler;
     virtual void axp192Init();
 
 };

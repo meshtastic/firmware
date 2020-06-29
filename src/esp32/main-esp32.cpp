@@ -2,10 +2,11 @@
 #include "MeshBluetoothService.h"
 #include "PowerFSM.h"
 #include "configuration.h"
+#include "esp_task_wdt.h"
 #include "main.h"
 #include "sleep.h"
-#include "utils.h"
 #include "target_specific.h"
+#include "utils.h"
 
 bool bluetoothOn;
 
@@ -84,6 +85,15 @@ void esp32Setup()
 
     // enableModemSleep();
 
+// Since we are turning on watchdogs rather late in the release schedule, we really don't want to catch any
+// false positives.  The wait-to-sleep timeout for shutting down radios is 30 secs, so pick 45 for now.
+#define APP_WATCHDOG_SECS 45
+
+    auto res = esp_task_wdt_init(APP_WATCHDOG_SECS, true);
+    assert(res == ESP_OK);
+
+    res = esp_task_wdt_add(NULL);
+    assert(res == ESP_OK);
 }
 
 #if 0
@@ -106,10 +116,10 @@ uint32_t axpDebugRead()
 Periodic axpDebugOutput(axpDebugRead);
 #endif
 
-
 /// loop code specific to ESP32 targets
 void esp32Loop()
 {
+    esp_task_wdt_reset(); // service our app level watchdog
     loopBLE();
 
     // for debug printing

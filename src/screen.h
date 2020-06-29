@@ -62,9 +62,9 @@ class DebugInfo
 // simultaneously).
 class Screen : public PeriodicTask
 {
-    CallbackObserver<Screen, void *> powerStatusObserver = CallbackObserver<Screen, void *>(this, &Screen::handlePowerStatusUpdate);
-    CallbackObserver<Screen, void *> gpsStatusObserver = CallbackObserver<Screen, void *>(this, &Screen::handleGPSStatusUpdate);
-    CallbackObserver<Screen, void *> nodeStatusObserver = CallbackObserver<Screen, void *>(this, &Screen::handleNodeStatusUpdate);
+    CallbackObserver<Screen, const Status *> powerStatusObserver = CallbackObserver<Screen, const Status *>(this, &Screen::handleStatusUpdate);
+    CallbackObserver<Screen, const Status *> gpsStatusObserver = CallbackObserver<Screen, const Status *>(this, &Screen::handleStatusUpdate);
+    CallbackObserver<Screen, const Status *> nodeStatusObserver = CallbackObserver<Screen, const Status *>(this, &Screen::handleStatusUpdate);
 
   public:
     Screen(uint8_t address, int sda = -1, int scl = -1);
@@ -162,9 +162,7 @@ class Screen : public PeriodicTask
     // Use this handle to set things like battery status, user count, GPS status, etc.
     DebugInfo *debug() { return &debugInfo; }
 
-    int handlePowerStatusUpdate(void *arg);
-    int handleGPSStatusUpdate(void *arg);
-    int handleNodeStatusUpdate(void *arg);
+    int handleStatusUpdate(const meshtastic::Status *arg);
 
   protected:
     /// Updates the UI.

@@ -1,62 +1,73 @@
 #pragma once
 #include <Arduino.h>
-#include "lock.h"
+#include "Status.h"
 #include "configuration.h"
 
 namespace meshtastic {
 
-/// Describes the state of the GPS system.
-struct NodeStatus 
-{
-
-    bool isDirty = false;
-    size_t numOnline; // Number of nodes online
-    size_t numTotal;  // Number of nodes total
-
-};
-
-class NodeStatusHandler 
-{
-
-   private:
-    NodeStatus status;
-    CallbackObserver<NodeStatusHandler, const NodeStatus> nodeObserver = CallbackObserver<NodeStatusHandler, const NodeStatus>(this, &NodeStatusHandler::updateStatus);
-    bool initialized = false;
-    /// Protects all of internal state.
-    Lock lock;
-
-   public:
-    Observable<void *> onNewStatus;
-
-    void observe(Observable<const NodeStatus> *source)
+    /// Describes the state of the NodeDB system.
+    class NodeStatus : public Status
     {
-        nodeObserver.observe(source);
-    }
 
-    bool isInitialized() const { return initialized; }
-    size_t getNumOnline() const { return status.numOnline; }
-    size_t getNumTotal() const { return status.numTotal; }
+       private:
+        CallbackObserver<NodeStatus, const NodeStatus *> statusObserver = CallbackObserver<NodeStatus, const NodeStatus *>(this, &NodeStatus::updateStatus);
 
-    int updateStatus(const NodeStatus newStatus) 
-    {
-        // Only update the status if values have actually changed
-        status.isDirty = (
-            newStatus.numOnline != status.numOnline ||
-            newStatus.numTotal != status.numTotal
-        );
-        LockGuard guard(&lock);
-        initialized = true; 
-        status.numOnline = newStatus.numOnline;
-        status.numTotal = newStatus.numTotal;
-        if(status.isDirty) {
-            DEBUG_MSG("Node status update: %d online, %d total\n", status.numOnline, status.numTotal);            
-            onNewStatus.notifyObservers(NULL);
+        uint8_t numOnline = 0;
+        uint8_t numTotal = 0;
+
+       public:
+
+        NodeStatus() {
+            statusType = STATUS_TYPE_NODE;
         }
-        return 0;
-    }
+        NodeStatus( uint8_t numOnline, uint8_t numTotal ) : Status()
+        {
+            this->numOnline = numOnline;
+            this->numTotal = numTotal;
+        }
+        NodeStatus(const NodeStatus &);
+        NodeStatus &operator=(const NodeStatus &);
 
-};
+        void observe(Observable<const NodeStatus *> *source)
+        {
+            statusObserver.observe(source);
+        }
+
+        uint8_t getNumOnline() const
+        { 
+            return numOnline; 
+        }
+
+        uint8_t getNumTotal() const
+        { 
+            return numTotal; 
+        }
+
+        bool matches(const NodeStatus *newStatus) const
+        {
+            return (
+                newStatus->getNumOnline() != numOnline ||
+                newStatus->getNumTotal() != numTotal
+            );
+        }
+        int updateStatus(const NodeStatus *newStatus) {
+            // Only update the status if values have actually changed
+            bool isDirty;
+            {
+                isDirty = matches(newStatus);
+                initialized = true; 
+                numOnline = newStatus->getNumOnline();
+                numTotal = newStatus->getNumTotal();
+            }
+            if(isDirty) {
+                DEBUG_MSG("Node status update: %d online, %d total\n", numOnline, numTotal);            
+                onNewStatus.notifyObservers(this);
+            }
+            return 0;
+        }
+
+    };
 
 }
 
-extern meshtastic::NodeStatus nodeStatus;
+extern meshtastic::NodeStatus *nodeStatus;

@@ -30,25 +30,27 @@ bool Power::setup()
 // TODO(girts): move this and other axp stuff to power.h/power.cpp.
 void Power::readPowerStatus()
 {
-    meshtastic::PowerStatus status;
-    status.hasBattery = axp.isBatteryConnect();
-    if (status.hasBattery) {
-        status.batteryVoltageMv = axp.getBattVoltage();
+    bool hasBattery = axp.isBatteryConnect();
+    int batteryVoltageMv = 0;
+    uint8_t batteryChargePercent = 0;
+    if (hasBattery) {
+        batteryVoltageMv = axp.getBattVoltage();
         // If the AXP192 returns a valid battery percentage, use it
         if (axp.getBattPercentage() >= 0) {
-            status.batteryChargePercent = axp.getBattPercentage();
+            batteryChargePercent = axp.getBattPercentage();
         } else {
             // If the AXP192 returns a percentage less than 0, the feature is either not supported or there is an error
             // In that case, we compute an estimate of the charge percent based on maximum and minimum voltages defined in power.h
-            status.batteryChargePercent = clamp((int)(((status.batteryVoltageMv - BAT_MILLIVOLTS_EMPTY) * 1e2) / (BAT_MILLIVOLTS_FULL - BAT_MILLIVOLTS_EMPTY)), 0, 100);
+            batteryChargePercent = clamp((int)(((batteryVoltageMv - BAT_MILLIVOLTS_EMPTY) * 1e2) / (BAT_MILLIVOLTS_FULL - BAT_MILLIVOLTS_EMPTY)), 0, 100);
         }
     }
-    status.hasUSB = axp.isVBUSPlug();
-    status.isCharging = axp.isChargeing();
-    newStatus.notifyObservers(status);
+
+    // Notify any status instances that are observing us
+    const meshtastic::PowerStatus powerStatus = meshtastic::PowerStatus(hasBattery, axp.isVBUSPlug(), axp.isChargeing(), batteryVoltageMv, batteryChargePercent);
+    newStatus.notifyObservers(&powerStatus);
 
     // If we have a battery at all and it is less than 10% full, force deep sleep
-    if (status.hasBattery && !status.hasUSB &&
+    if (powerStatus.getHasBattery() && !powerStatus.getHasUSB() &&
         axp.getBattVoltage() < MIN_BAT_MILLIVOLTS)
         powerFSM.trigger(EVENT_LOW_BATTERY);
 }

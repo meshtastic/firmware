@@ -34,7 +34,7 @@ class NodeDB
     bool updateGUI = false;            // we think the gui should definitely be redrawn, screen will clear this once handled
     NodeInfo *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
     bool updateTextMessage = false;    // if true, the GUI should show a new text message
-    Observable<const meshtastic::NodeStatus> newStatus;
+    Observable<const meshtastic::NodeStatus *> newStatus;
 
     /// don't do mesh based algoritm for node id assignment (initially)
     /// instead just store in flash - possibly even in the initial alpha release do this hack
@@ -97,10 +97,8 @@ class NodeDB
     /// Notify observers of changes to the DB
     void notifyObservers() {
         // Notify observers of the current node state
-        meshtastic::NodeStatus status;
-        status.numOnline = getNumOnlineNodes();
-        status.numTotal = getNumNodes();
-        newStatus.notifyObservers(status);
+        const meshtastic::NodeStatus status = meshtastic::NodeStatus(getNumOnlineNodes(), getNumNodes());
+        newStatus.notifyObservers(&status);
     }
 
     /// read our db from flash
