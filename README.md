@@ -40,7 +40,7 @@ We currently support three models of radios.
 
 **Make sure to get the frequency for your country**
 
-- US/JP/AU/NZ - 915MHz
+- US/JP/AU/NZ/CA - 915MHz
 - CN - 470MHz
 - EU - 868MHz, 433MHz
 
