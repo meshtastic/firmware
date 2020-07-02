@@ -37,8 +37,8 @@
 #include "main.h"
 #include "screen.h"
 #include "sleep.h"
-#include <Wire.h>
 #include <OneButton.h>
+#include <Wire.h>
 // #include <driver/rtc_io.h>
 
 #ifndef NO_ESP32
@@ -134,15 +134,17 @@ Periodic ledPeriodic(ledBlinker);
 
 // Prepare for button presses
 #ifdef BUTTON_PIN
-    OneButton userButton;
+OneButton userButton;
 #endif
 #ifdef BUTTON_PIN_ALT
-    OneButton userButtonAlt;
+OneButton userButtonAlt;
 #endif
-void userButtonPressed() {
+void userButtonPressed()
+{
     powerFSM.trigger(EVENT_PRESS);
 }
-void userButtonPressedLong(){
+void userButtonPressedLong()
+{
     screen.adjustBrightness();
 }
 
@@ -229,6 +231,10 @@ void setup()
         ssd1306_found = false; // forget we even have the hardware
 
     esp32Setup();
+#endif
+
+#ifdef TBEAM_V10
+    // Currently only the tbeam has a PMU
     power = new Power();
     power->setup();
     power->setStatusHandler(powerStatus);
@@ -306,7 +312,6 @@ void setup()
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
 
-
     // setBluetoothEnable(false); we now don't start bluetooth until we enter the proper state
     setCPUFast(false); // 80MHz is fine for our slow peripherals
 }
@@ -352,6 +357,8 @@ void loop()
 
 #ifndef NO_ESP32
     esp32Loop();
+#endif
+#ifdef TBEAM_V10
     power->loop();
 #endif
 
@@ -379,7 +386,7 @@ void loop()
 
     // Update the screen last, after we've figured out what to show.
     screen.debug()->setChannelNameStatus(channelSettings.name);
-    //screen.debug()->setPowerStatus(powerStatus);
+    // screen.debug()->setPowerStatus(powerStatus);
 
     // No GPS lock yet, let the OS put the main CPU in low power mode for 100ms (or until another interrupt comes in)
     // i.e. don't just keep spinning in loop as fast as we can.
