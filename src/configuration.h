@@ -180,8 +180,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // This board has different GPS pins than all other boards
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
-#define GPS_RX_PIN 15
-#define GPS_TX_PIN 12
+#define GPS_RX_PIN 12
+#define GPS_TX_PIN 15
 
 #elif defined(ARDUINO_HELTEC_WIFI_LORA_32_V2)
 // This string must exactly match the case used in release file names or the android updater won't work
