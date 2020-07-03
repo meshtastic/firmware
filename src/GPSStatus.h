@@ -17,13 +17,15 @@ namespace meshtastic {
         int32_t latitude = 0, longitude = 0; // as an int mult by 1e-7 to get value as double
         int32_t altitude = 0;
         uint32_t dop = 0; // Diminution of position; PDOP where possible (UBlox), HDOP otherwise (TinyGPS) in 10^2 units (needs scaling before use)
+        uint32_t heading = 0;
+        uint32_t numSatellites = 0;
 
        public:
 
         GPSStatus() {
             statusType = STATUS_TYPE_GPS;
         }
-        GPSStatus( bool hasLock, bool isConnected, int32_t latitude, int32_t longitude, int32_t altitude, uint32_t dop ) : Status()
+        GPSStatus( bool hasLock, bool isConnected, int32_t latitude, int32_t longitude, int32_t altitude, uint32_t dop, uint32_t heading, uint32_t numSatellites ) : Status()
         {
             this->hasLock = hasLock;
             this->isConnected = isConnected;
@@ -31,6 +33,8 @@ namespace meshtastic {
             this->longitude = longitude;
             this->altitude = altitude;
             this->dop = dop;
+            this->heading = heading;
+            this->numSatellites = numSatellites;
         }
         GPSStatus(const GPSStatus &);
         GPSStatus &operator=(const GPSStatus &);
@@ -70,6 +74,16 @@ namespace meshtastic {
             return dop; 
         }
 
+        uint32_t getHeading() const
+        {
+            return heading;
+        }
+
+        uint32_t getNumSatellites() const
+        {
+            return numSatellites;
+        }
+
         bool matches(const GPSStatus *newStatus) const
         {
             return (
@@ -78,7 +92,9 @@ namespace meshtastic {
                 newStatus->latitude != latitude ||
                 newStatus->longitude != longitude ||
                 newStatus->altitude != altitude ||
-                newStatus->dop != dop
+                newStatus->dop != dop ||
+                newStatus->heading != heading ||
+                newStatus->numSatellites != numSatellites
             );
         }
         int updateStatus(const GPSStatus *newStatus) {
@@ -93,9 +109,11 @@ namespace meshtastic {
                 longitude = newStatus->longitude;
                 altitude = newStatus->altitude;
                 dop = newStatus->dop;
+                heading = newStatus->heading;
+                numSatellites = newStatus->numSatellites;
             }
             if(isDirty) {
-                DEBUG_MSG("New GPS pos lat=%f, lon=%f, alt=%d, pdop=%f\n", latitude * 1e-7, longitude * 1e-7, altitude, dop * 1e-2);            
+                DEBUG_MSG("New GPS pos lat=%f, lon=%f, alt=%d, pdop=%f, heading=%f, sats=%d\n", latitude * 1e-7, longitude * 1e-7, altitude, dop * 1e-2, heading * 1e-5, numSatellites);
                 onNewStatus.notifyObservers(this);
             }
             return 0;
