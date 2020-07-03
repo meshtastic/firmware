@@ -35,11 +35,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define FONT_HEIGHT 14 // actually 13 for "ariel 10" but want a little extra space
 #define FONT_HEIGHT_16 (ArialMT_Plain_16[1] + 1)
-#ifdef USE_SH1106
-#define SCREEN_WIDTH 132
-#else
+// This means the *visible* area (sh1106 can address 132, but shows 128 for example)
 #define SCREEN_WIDTH 128
-#endif
 #define SCREEN_HEIGHT 64
 #define TRANSITION_FRAMERATE 30 // fps
 #define IDLE_FRAMERATE 1        // in fps
@@ -482,6 +479,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 
     // coordinates for the center of the compass/circle
     int16_t compassX = x + SCREEN_WIDTH - COMPASS_DIAM / 2 - 5, compassY = y + SCREEN_HEIGHT / 2;
+    bool hasNodeHeading = false;
 
     if(ourNode && hasPosition(ourNode))
     {
@@ -489,7 +487,10 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         float myHeading = estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
         drawCompassHeading(display, compassX, compassY, myHeading);
 
-        if(hasPosition(node)) { // display direction toward node
+        if(hasPosition(node)) 
+        { 
+            // display direction toward node
+            hasNodeHeading = true;
             Position &p = node->position;
             float d = latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
             if (d < 2000)
@@ -502,12 +503,13 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             float bearingToOther = bearing(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
             headingRadian = bearingToOther - myHeading;
             drawNodeHeading(display, compassX, compassY, headingRadian);
-        } else { // direction to node is unknown so display question mark
-            // Debug info for gps lock errors
-            // DEBUG_MSG("ourNode %d, ourPos %d, theirPos %d\n", !!ourNode, ourNode && hasPosition(ourNode), hasPosition(node));
-            display->drawString(compassX - FONT_HEIGHT / 4, compassY - FONT_HEIGHT / 2, "?");
-        }
+        } 
     }
+    if(!hasNodeHeading)
+        // direction to node is unknown so display question mark
+        // Debug info for gps lock errors
+        // DEBUG_MSG("ourNode %d, ourPos %d, theirPos %d\n", !!ourNode, ourNode && hasPosition(ourNode), hasPosition(node));
+        display->drawString(compassX - FONT_HEIGHT / 4, compassY - FONT_HEIGHT / 2, "?");
     display->drawCircle(compassX, compassY, COMPASS_DIAM / 2);
 
 
@@ -822,7 +824,11 @@ int Screen::handleStatusUpdate(const Status *arg)
     switch(arg->getStatusType())
     {
         case STATUS_TYPE_NODE:
-            setFrames();
+            if (nodeDB.updateTextMessage || nodeStatus->getLastNumTotal() != nodeStatus->getNumTotal())
+                setFrames();
+            prevFrame = -1;
+            nodeDB.updateGUI = false;
+            nodeDB.updateTextMessage = false;
             break;
     }
     setPeriod(1); // Update the screen right away

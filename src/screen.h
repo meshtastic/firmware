@@ -92,7 +92,7 @@ class Screen : public PeriodicTask
 
     // Implementation to Adjust Brightness
     void adjustBrightness();
-    int brightness = 150;
+    uint8_t brightness = 150;
 
     /// Starts showing the Bluetooth PIN screen.
     //
