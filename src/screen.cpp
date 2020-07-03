@@ -60,6 +60,12 @@ uint8_t imgSatellite[8] = { 0x70, 0x71, 0x22, 0xFA, 0xFA, 0x22, 0x71, 0x70 };
 
 uint32_t dopThresholds[5] = { 2000, 1000, 500, 200, 100 };
 
+// if defined a pixel will blink to show redraws
+// #define SHOW_REDRAWS
+#ifdef SHOW_REDRAWS
+static bool heartbeat = false;
+#endif
+
 static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     // draw an xbm image.
@@ -179,10 +185,10 @@ static void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char *
 #endif
 
 // Draw power bars or a charging indicator on an image of a battery, determined by battery charge voltage or percentage.
-static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *imgBuffer, const PowerStatus *powerStatus) 
+static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *imgBuffer, const PowerStatus *powerStatus)
 {
-    static const uint8_t powerBar[3] = { 0x81, 0xBD, 0xBD };
-    static const uint8_t lightning[8] = { 0xA1, 0xA1, 0xA5, 0xAD, 0xB5, 0xA5, 0x85, 0x85 };
+    static const uint8_t powerBar[3] = {0x81, 0xBD, 0xBD};
+    static const uint8_t lightning[8] = {0xA1, 0xA1, 0xA5, 0xAD, 0xB5, 0xA5, 0x85, 0x85};
     // Clear the bar area on the battery image
     for (int i = 1; i < 14; i++) {
         imgBuffer[i] = 0x81;
@@ -193,7 +199,7 @@ static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *img
         // If not charging, Draw power bars
     } else {
         for (int i = 0; i < 4; i++) {
-            if(powerStatus->getBatteryChargePercent() >= 25 * i) 
+            if (powerStatus->getBatteryChargePercent() >= 25 * i)
                 memcpy(imgBuffer + 1 + (i * 3), powerBar, 3);
         }
     }
@@ -201,7 +207,7 @@ static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *img
 }
 
 // Draw nodes status
-static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, NodeStatus *nodeStatus) 
+static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, NodeStatus *nodeStatus)
 {
     char usersString[20];
     sprintf(usersString, "%d/%d", nodeStatus->getNumOnline(), nodeStatus->getNumTotal());
@@ -787,10 +793,12 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     display->drawLogBuffer(x, y + (FONT_HEIGHT * 2));
 
-    /* Display a heartbeat pixel that blinks every time the frame is redrawn
-    if(heartbeat) display->setPixel(0, 0);
+    /* Display a heartbeat pixel that blinks every time the frame is redrawn */
+#ifdef SHOW_REDRAWS
+    if (heartbeat)
+        display->setPixel(0, 0);
     heartbeat = !heartbeat;
-    */
+#endif
 }
 
 // adjust Brightness cycle trough 1 to 254 as long as attachDuringLongPress is true
@@ -808,7 +816,8 @@ void Screen::adjustBrightness()
     dispdev.setBrightness(brightness);
 }
 
-int Screen::handleStatusUpdate(const Status *arg) {
+int Screen::handleStatusUpdate(const Status *arg) 
+{
     //DEBUG_MSG("Screen got status update %d\n", arg->getStatusType());
     switch(arg->getStatusType())
     {

@@ -2,7 +2,7 @@
 
 You probably don't care about this section - skip to the next one.
 
-- implement first cut of router mode: preferentially handle flooding, and change sleep and GPS behaviors
+- implement first cut of router mode: preferentially handle flooding, and change sleep and GPS behaviors (plan for geofence mode and battery save mode)
 - NRF52 BLE support
 
 # Medium priority
