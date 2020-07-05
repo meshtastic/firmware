@@ -1,0 +1,21 @@
+#pragma once
+
+#include "Lock.h"
+
+namespace concurrency {
+
+// RAII lock guard.
+class LockGuard
+{
+  public:
+    LockGuard(Lock *lock);
+    ~LockGuard();
+
+    LockGuard(const LockGuard &) = delete;
+    LockGuard &operator=(const LockGuard &) = delete;
+
+  private:
+    Lock *lock;
+};
+
+} // namespace concurrency

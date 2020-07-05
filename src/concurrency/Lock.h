@@ -2,8 +2,7 @@
 
 #include "freertosinc.h"
 
-namespace meshtastic
-{
+namespace concurrency {
 
 // Simple wrapper around FreeRTOS API for implementing a mutex lock.
 class Lock
@@ -25,23 +24,8 @@ class Lock
     void unlock();
 
   private:
-#ifdef configUSE_PREEMPTION
     SemaphoreHandle_t handle;
-#endif
+
 };
 
-// RAII lock guard.
-class LockGuard
-{
-  public:
-    LockGuard(Lock *lock);
-    ~LockGuard();
-
-    LockGuard(const LockGuard &) = delete;
-    LockGuard &operator=(const LockGuard &) = delete;
-
-  private:
-    Lock *lock;
-};
-
-} // namespace meshtastic
+} // namespace concurrency
