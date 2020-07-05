@@ -54,12 +54,18 @@ void NEMAGPS::loop()
                 longitude = toDegInt(loc.lng);
             }
             // Diminution of precision (an accuracy metric) is reported in 10^2 units, so we need to scale down when we use it
-            if(reader.hdop.isValid()) {
+            if (reader.hdop.isValid()) {
                 dop = reader.hdop.value();
+            }
+            if (reader.course.isValid()) {
+                heading = reader.course.value() * 1e3;  //Scale the heading (in degrees * 10^-2) to match the expected degrees * 10^-5
+            }
+            if (reader.satellites.isValid()) {
+                numSatellites = reader.satellites.value();
             }
 
             // expect gps pos lat=37.520825, lon=-122.309162, alt=158
-            DEBUG_MSG("new NEMA GPS pos lat=%f, lon=%f, alt=%d, hdop=%f\n", latitude * 1e-7, longitude * 1e-7, altitude, dop * 1e-2);
+            DEBUG_MSG("new NEMA GPS pos lat=%f, lon=%f, alt=%d, hdop=%f, heading=%f\n", latitude * 1e-7, longitude * 1e-7, altitude, dop * 1e-2, heading * 1e-5);
 
             hasValidLocation = (latitude != 0) || (longitude != 0); // bogus lat lon is reported as 0,0
             if (hasValidLocation)
@@ -67,7 +73,7 @@ void NEMAGPS::loop()
         }
 
         // Notify any status instances that are observing us
-        const meshtastic::GPSStatus status = meshtastic::GPSStatus(hasLock(), isConnected, latitude, longitude, altitude, dop);
+        const meshtastic::GPSStatus status = meshtastic::GPSStatus(hasLock(), isConnected, latitude, longitude, altitude, dop, heading, numSatellites);
         newStatus.notifyObservers(&status);
     }
 }
