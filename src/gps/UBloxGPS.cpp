@@ -116,6 +116,8 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         longitude = ublox.getLongitude(0);
         altitude = ublox.getAltitude(0) / 1000; // in mm convert to meters
         dop = ublox.getPDOP(0); // PDOP (an accuracy metric) is reported in 10^2 units so we have to scale down when we use it
+        heading = ublox.getHeading(0);
+        numSatellites = ublox.getSIV(0);
 
         // bogus lat lon is reported as 0 or 0 (can be bogus just for one)
         // Also: apparently when the GPS is initially reporting lock it can output a bogus latitude > 90 deg!
@@ -129,7 +131,7 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         wantNewLocation = true;
 
     // Notify any status instances that are observing us
-    const meshtastic::GPSStatus status = meshtastic::GPSStatus(hasLock(), isConnected, latitude, longitude, altitude, dop);
+    const meshtastic::GPSStatus status = meshtastic::GPSStatus(hasLock(), isConnected, latitude, longitude, altitude, dop, heading, numSatellites);
     newStatus.notifyObservers(&status);
 
     // Once we have sent a location once we only poll the GPS rarely, otherwise check back every 1s until we have something over
