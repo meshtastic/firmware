@@ -10,9 +10,9 @@
 #include <SSD1306Wire.h>
 #endif
 
-#include "PeriodicTask.h"
+#include "concurrency/PeriodicTask.h"
 #include "TypedQueue.h"
-#include "lock.h"
+#include "concurrency/Lock.h"
 #include "power.h"
 #include <string>
 
@@ -32,7 +32,7 @@ class DebugInfo
     /// Sets user statistics.
     void setNodeNumbersStatus(int online, int total)
     {
-        LockGuard guard(&lock);
+        concurrency::LockGuard guard(&lock);
         nodesOnline = online;
         nodesTotal = total;
     }
@@ -40,7 +40,7 @@ class DebugInfo
     /// Sets the name of the channel.
     void setChannelNameStatus(const char *name)
     {
-        LockGuard guard(&lock);
+        concurrency::LockGuard guard(&lock);
         channelName = name;
     }
 
@@ -48,7 +48,7 @@ class DebugInfo
     //
     void setPowerStatus(const PowerStatus &status)
     {
-        LockGuard guard(&lock);
+        concurrency::LockGuard guard(&lock);
         powerStatus = status;
     }
 
@@ -59,7 +59,7 @@ class DebugInfo
     // TODO(girts): figure out what the format should be.
     void setGPSStatus(const char *status)
     {
-        LockGuard guard(&lock);
+        concurrency::LockGuard guard(&lock);
         gpsStatus = status;
     }
 
@@ -81,7 +81,7 @@ class DebugInfo
     std::string gpsStatus;
 
     /// Protects all of internal state.
-    Lock lock;
+    concurrency::Lock lock;
 };
 
 /// Deals with showing things on the screen of the device.
@@ -91,7 +91,7 @@ class DebugInfo
 //
 // This class is thread-safe (as long as drawFrame is not called multiple times
 // simultaneously).
-class Screen : public PeriodicTask
+class Screen : public concurrency::PeriodicTask
 {
   public:
     Screen(uint8_t address, int sda = -1, int scl = -1);

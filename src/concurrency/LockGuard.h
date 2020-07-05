@@ -4,7 +4,9 @@
 
 namespace concurrency {
 
-// RAII lock guard.
+/**
+ * @brief RAII lock guard
+ */
 class LockGuard
 {
   public:

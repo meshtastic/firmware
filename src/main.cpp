@@ -25,7 +25,7 @@
 #include "MeshService.h"
 #include "NEMAGPS.h"
 #include "NodeDB.h"
-#include "Periodic.h"
+#include "concurrency/Periodic.h"
 #include "PowerFSM.h"
 #include "UBloxGPS.h"
 #include "configuration.h"
@@ -124,7 +124,7 @@ static uint32_t ledBlinker()
     return powerStatus.charging ? 1000 : (ledOn ? 2 : 1000);
 }
 
-Periodic ledPeriodic(ledBlinker);
+concurrency::Periodic ledPeriodic(ledBlinker);
 
 // Prepare for button presses
 #ifdef BUTTON_PIN
@@ -316,7 +316,7 @@ uint32_t axpDebugRead()
   return 30 * 1000;
 }
 
-Periodic axpDebugOutput(axpDebugRead);
+concurrency::Periodic axpDebugOutput(axpDebugRead);
 axpDebugOutput.setup();
 #endif
 

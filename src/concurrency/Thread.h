@@ -4,6 +4,9 @@
 
 namespace concurrency {
 
+/**
+ * @brief Base threading
+ */
 class Thread
 {
   protected:

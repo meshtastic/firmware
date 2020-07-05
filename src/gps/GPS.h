@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Observer.h"
-#include "PeriodicTask.h"
 #include "sys/time.h"
 
 /// If we haven't yet set our RTC this boot, set it from a GPS derived time

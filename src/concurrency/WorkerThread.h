@@ -5,11 +5,10 @@
 namespace concurrency {
 
 /**
- * This wraps threading (FreeRTOS for now) with a blocking API intended for efficiently converting onlyschool arduino loop() code.
+ * @brief This wraps threading (FreeRTOS for now) with a blocking API intended for efficiently converting 
+ *        old-school arduino loop() code. Use as a mixin base class for the classes you want to convert.
  *
- * Use as a mixin base class for the classes you want to convert.
- *
- * https://www.freertos.org/RTOS_Task_Notification_As_Mailbox.html
+ * @link https://www.freertos.org/RTOS_Task_Notification_As_Mailbox.html
  */
 class WorkerThread : public Thread
 {
