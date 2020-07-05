@@ -36,6 +36,8 @@ class GPS : public Observable<void *>
     int32_t latitude = 0, longitude = 0; // as an int mult by 1e-7 to get value as double
     int32_t altitude = 0;
     uint32_t dop = 0; // Diminution of position; PDOP where possible (UBlox), HDOP otherwise (TinyGPS) in 10^2 units (needs scaling before use)
+    uint32_t heading = 0; // Heading of motion, in degrees * 10^-5
+    uint32_t numSatellites = 0;
 
     bool isConnected = false; // Do we have a GPS we are talking to
 
