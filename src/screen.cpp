@@ -529,7 +529,7 @@ void Screen::handleSetOn(bool on)
 
 void Screen::setup()
 {
-    PeriodicTask::setup();
+    concurrency::PeriodicTask::setup();
 
     // We don't set useDisplay until setup() is called, because some boards have a declaration of this object but the device
     // is never found when probing i2c and therefore we don't call setup and never want to do (invalid) accesses to this device.
@@ -746,7 +746,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     char channelStr[20];
     {
-        LockGuard guard(&lock);
+        concurrency::LockGuard guard(&lock);
         snprintf(channelStr, sizeof(channelStr), "#%s", channelName.c_str());
 
         // Display power status

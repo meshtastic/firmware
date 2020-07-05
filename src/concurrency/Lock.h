@@ -4,7 +4,9 @@
 
 namespace concurrency {
 
-// Simple wrapper around FreeRTOS API for implementing a mutex lock.
+/**
+ * @brief Simple wrapper around FreeRTOS API for implementing a mutex lock
+ */
 class Lock
 {
   public:

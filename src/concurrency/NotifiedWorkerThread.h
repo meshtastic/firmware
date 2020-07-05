@@ -5,7 +5,7 @@
 namespace concurrency {
 
 /**
- * A worker thread that waits on a freertos notification
+ * @brief A worker thread that waits on a freertos notification
  */
 class NotifiedWorkerThread : public WorkerThread
 {
