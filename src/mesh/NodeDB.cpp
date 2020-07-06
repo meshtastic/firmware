@@ -339,10 +339,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
         const SubPacket &p = mp.decoded;
         DEBUG_MSG("Update DB node 0x%x, rx_time=%u\n", mp.from, mp.rx_time);
 
-        int oldNumNodes = *numNodes;
         NodeInfo *info = getOrCreateNode(mp.from);
-
-        notifyObservers();
 
         if (mp.rx_time) {              // if the packet has a valid timestamp use it to update our last_seen
             info->has_position = true; // at least the time is valid
@@ -359,6 +356,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
             info->position.time = oldtime;
             info->has_position = true;
             updateGUIforNode = info;
+            notifyObservers(true);  //Force an update whether or not our node counts have changed
             break;
         }
 
@@ -373,6 +371,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
                     devicestate.has_rx_text_message = true;
                     updateTextMessage = true;
                     powerFSM.trigger(EVENT_RECEIVED_TEXT_MSG);
+                    notifyObservers(true);  //Force an update whether or not our node counts have changed
                 }
             }
             break;
@@ -391,12 +390,17 @@ void NodeDB::updateFrom(const MeshPacket &mp)
             if (changed) {
                 updateGUIforNode = info;
                 powerFSM.trigger(EVENT_NODEDB_UPDATED);
+                notifyObservers(true);  //Force an update whether or not our node counts have changed
 
                 // Not really needed - we will save anyways when we go to sleep
                 // We just changed something important about the user, store our DB
                 // saveToDisk();
             }
             break;
+        }
+
+        default: {
+            notifyObservers();  //If the node counts have changed, notify observers
         }
         }
     }

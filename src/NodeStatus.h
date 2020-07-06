@@ -15,13 +15,17 @@ namespace meshtastic {
         uint8_t numOnline = 0;
         uint8_t numTotal = 0;
 
+        uint8_t lastNumTotal = 0;
+
        public:
+        bool forceUpdate = false;
 
         NodeStatus() {
             statusType = STATUS_TYPE_NODE;
         }
-        NodeStatus( uint8_t numOnline, uint8_t numTotal ) : Status()
+        NodeStatus( uint8_t numOnline, uint8_t numTotal, bool forceUpdate = false ) : Status()
         {
+            this->forceUpdate = forceUpdate;
             this->numOnline = numOnline;
             this->numTotal = numTotal;
         }
@@ -43,6 +47,11 @@ namespace meshtastic {
             return numTotal; 
         }
 
+        uint8_t getLastNumTotal() const
+        {
+            return lastNumTotal;
+        }
+
         bool matches(const NodeStatus *newStatus) const
         {
             return (
@@ -52,6 +61,7 @@ namespace meshtastic {
         }
         int updateStatus(const NodeStatus *newStatus) {
             // Only update the status if values have actually changed
+            lastNumTotal = numTotal;
             bool isDirty;
             {
                 isDirty = matches(newStatus);
@@ -59,7 +69,7 @@ namespace meshtastic {
                 numOnline = newStatus->getNumOnline();
                 numTotal = newStatus->getNumTotal();
             }
-            if(isDirty) {
+            if(isDirty || newStatus->forceUpdate) {
                 DEBUG_MSG("Node status update: %d online, %d total\n", numOnline, numTotal);            
                 onNewStatus.notifyObservers(this);
             }
