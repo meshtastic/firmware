@@ -444,10 +444,13 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             nodeIndex = (nodeIndex + 1) % nodeDB.getNumNodes();
             n = nodeDB.getNodeByIndex(nodeIndex);
         }
-
-        // We just changed to a new node screen, ask that node for updated state
         displayedNodeNum = n->num;
-        service.sendNetworkPing(displayedNodeNum, true);
+
+        // We just changed to a new node screen, ask that node for updated state if it's older than 2 minutes
+        if(sinceLastSeen(n) > 120)
+        {
+            service.sendNetworkPing(displayedNodeNum, true);
+        }
     }
 
     NodeInfo *node = nodeDB.getNodeByIndex(nodeIndex);
