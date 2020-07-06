@@ -10,13 +10,10 @@
 #include <SSD1306Wire.h>
 #endif
 
-#include "PeriodicTask.h"
+#include "concurrency/PeriodicTask.h"
 #include "TypedQueue.h"
-#include "lock.h"
-#include "PowerStatus.h"
-#include "GPSStatus.h"
-#include "NodeStatus.h"
-#include "Observer.h"
+#include "concurrency/LockGuard.h"
+#include "power.h"
 #include <string>
 
 namespace meshtastic
@@ -35,7 +32,7 @@ class DebugInfo
     /// Sets the name of the channel.
     void setChannelNameStatus(const char *name)
     {
-        LockGuard guard(&lock);
+        concurrency::LockGuard guard(&lock);
         channelName = name;
     }
 
@@ -50,7 +47,7 @@ class DebugInfo
     std::string channelName;
 
     /// Protects all of internal state.
-    Lock lock;
+    concurrency::Lock lock;
 };
 
 /// Deals with showing things on the screen of the device.
@@ -60,7 +57,7 @@ class DebugInfo
 //
 // This class is thread-safe (as long as drawFrame is not called multiple times
 // simultaneously).
-class Screen : public PeriodicTask
+class Screen : public concurrency::PeriodicTask
 {
     CallbackObserver<Screen, const Status *> powerStatusObserver = CallbackObserver<Screen, const Status *>(this, &Screen::handleStatusUpdate);
     CallbackObserver<Screen, const Status *> gpsStatusObserver = CallbackObserver<Screen, const Status *>(this, &Screen::handleStatusUpdate);
@@ -160,7 +157,7 @@ class Screen : public PeriodicTask
     /// Returns a handle to the DebugInfo screen.
     //
     // Use this handle to set things like battery status, user count, GPS status, etc.
-    DebugInfo *debug() { return &debugInfo; }
+    DebugInfo* debug_info() { return &debugInfo; }
 
     int handleStatusUpdate(const meshtastic::Status *arg);
 

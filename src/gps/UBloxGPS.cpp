@@ -2,7 +2,7 @@
 #include "sleep.h"
 #include <assert.h>
 
-UBloxGPS::UBloxGPS() : PeriodicTask()
+UBloxGPS::UBloxGPS() : concurrency::PeriodicTask()
 {
     notifySleepObserver.observe(&notifySleep);
 }
@@ -55,7 +55,7 @@ bool UBloxGPS::setup()
         ok = ublox.saveConfiguration(3000);
         assert(ok);
 
-        PeriodicTask::setup(); // We don't start our periodic task unless we actually found the device
+        concurrency::PeriodicTask::setup(); // We don't start our periodic task unless we actually found the device
 
         return true;
     } else {

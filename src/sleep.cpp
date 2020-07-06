@@ -5,7 +5,7 @@
 #include "NodeDB.h"
 #include "configuration.h"
 #include "error.h"
-
+#include "timing.h"
 #include "main.h"
 #include "target_specific.h"
 
@@ -123,11 +123,11 @@ bool doPreflightSleep()
 /// Tell devices we are going to sleep and wait for them to handle things
 static void waitEnterSleep()
 {
-    uint32_t now = millis();
+    uint32_t now = timing::millis();
     while (!doPreflightSleep()) {
         delay(100); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
 
-        if (millis() - now > 30 * 1000) { // If we wait too long just report an error and go to sleep
+        if (timing::millis() - now > 30 * 1000) { // If we wait too long just report an error and go to sleep
             recordCriticalError(ErrSleepEnterWait);
             assert(0); // FIXME - for now we just restart, need to fix bug #167
             break;

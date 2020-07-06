@@ -4,7 +4,6 @@
 #include "utils.h"
 #include "sleep.h"
 
-
 #ifdef TBEAM_V10
 
 // FIXME. nasty hack cleanup how we load axp192
@@ -19,7 +18,7 @@ bool Power::setup()
 {
 
     axp192Init();
-    PeriodicTask::setup(); // We don't start our periodic task unless we actually found the device
+    concurrency::PeriodicTask::setup(); // We don't start our periodic task unless we actually found the device
     setPeriod(1);
 
     return axp192_found;

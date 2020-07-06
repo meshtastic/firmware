@@ -2,7 +2,7 @@
 
 #include "GPS.h"
 #include "Observer.h"
-#include "PeriodicTask.h"
+#include "../concurrency/PeriodicTask.h"
 #include "TinyGPS++.h"
 
 /**

@@ -1,5 +1,6 @@
 #include "NEMAGPS.h"
 #include "configuration.h"
+#include "timing.h"
 
 static int32_t toDegInt(RawDegrees d)
 {
@@ -19,7 +20,7 @@ void NEMAGPS::loop()
         reader.encode(c);
     }
 
-    uint32_t now = millis();
+    uint32_t now = timing::millis();
     if ((now - lastUpdateMsec) > 20 * 1000) { // Ugly hack for now - limit update checks to once every 20 secs (but still consume
                                               // serial chars at whatever rate)
         lastUpdateMsec = now;

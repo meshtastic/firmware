@@ -25,7 +25,7 @@
 #include "MeshService.h"
 #include "NEMAGPS.h"
 #include "NodeDB.h"
-#include "Periodic.h"
+#include "concurrency/Periodic.h"
 #include "PowerFSM.h"
 #include "UBloxGPS.h"
 #include "configuration.h"
@@ -37,6 +37,7 @@
 #include "main.h"
 #include "screen.h"
 #include "sleep.h"
+#include "timing.h"
 #include <OneButton.h>
 #include <Wire.h>
 // #include <driver/rtc_io.h>
@@ -130,7 +131,7 @@ static uint32_t ledBlinker()
     return powerStatus->getIsCharging() ? 1000 : (ledOn ? 2 : 1000);
 }
 
-Periodic ledPeriodic(ledBlinker);
+concurrency::Periodic ledPeriodic(ledBlinker);
 
 // Prepare for button presses
 #ifdef BUTTON_PIN
@@ -333,7 +334,7 @@ uint32_t axpDebugRead()
   return 30 * 1000;
 }
 
-Periodic axpDebugOutput(axpDebugRead);
+concurrency::Periodic axpDebugOutput(axpDebugRead);
 axpDebugOutput.setup();
 #endif
 
@@ -346,7 +347,7 @@ void loop()
     powerFSM.run_machine();
     service.loop();
 
-    periodicScheduler.loop();
+    concurrency::periodicScheduler.loop();
     // axpDebugOutput.loop();
 
 #ifdef DEBUG_PORT
@@ -371,21 +372,21 @@ void loop()
 
     // Show boot screen for first 3 seconds, then switch to normal operation.
     static bool showingBootScreen = true;
-    if (showingBootScreen && (millis() > 3000)) {
+    if (showingBootScreen && (timing::millis() > 3000)) {
         screen.stopBootScreen();
         showingBootScreen = false;
     }
 
 #ifdef DEBUG_STACK
     static uint32_t lastPrint = 0;
-    if (millis() - lastPrint > 10 * 1000L) {
-        lastPrint = millis();
+    if (timing::millis() - lastPrint > 10 * 1000L) {
+        lastPrint = timing::millis();
         meshtastic::printThreadInfo("main");
     }
 #endif
 
     // Update the screen last, after we've figured out what to show.
-    screen.debug()->setChannelNameStatus(channelSettings.name);
+    screen.debug_info()->setChannelNameStatus(channelSettings.name);
     // screen.debug()->setPowerStatus(powerStatus);
 
     // No GPS lock yet, let the OS put the main CPU in low power mode for 100ms (or until another interrupt comes in)

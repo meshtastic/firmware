@@ -1,9 +1,9 @@
 
 #include "GPS.h"
 #include "configuration.h"
-#include "time.h"
+#include "timing.h"
 #include <assert.h>
-#include <sys/time.h>
+#include <time.h>
 
 #ifdef GPS_RX_PIN
 HardwareSerial _serial_gps_real(GPS_SERIAL_NUM);
@@ -27,7 +27,7 @@ void readFromRTC()
     struct timeval tv; /* btw settimeofday() is helpfull here too*/
 
     if (!gettimeofday(&tv, NULL)) {
-        uint32_t now = millis();
+        uint32_t now = timing::millis();
 
         DEBUG_MSG("Read RTC time as %ld (cur millis %u) valid=%d\n", tv.tv_sec, now, timeSetFromGPS);
         timeStartMsec = now;
@@ -68,11 +68,9 @@ void perhapsSetRTC(struct tm &t)
         perhapsSetRTC(&tv);
 }
 
-#include <time.h>
-
 uint32_t getTime()
 {
-    return ((millis() - timeStartMsec) / 1000) + zeroOffsetSecs;
+    return ((timing::millis() - timeStartMsec) / 1000) + zeroOffsetSecs;
 }
 
 uint32_t getValidTime()
