@@ -3,21 +3,22 @@
 #include "CallbackCharacteristic.h"
 #include "RadioLibInterface.h"
 #include "configuration.h"
-#include "lock.h"
+#include "../concurrency/LockGuard.h"
+#include "../timing.h"
 #include <Arduino.h>
 #include <BLE2902.h>
 #include <CRC32.h>
 #include <Update.h>
 #include <esp_gatt_defs.h>
 
-using namespace meshtastic;
+//using namespace meshtastic;
 
 CRC32 crc;
 uint32_t rebootAtMsec = 0; // If not zero we will reboot at this time (used to reboot shortly after the update completes)
 
 uint32_t updateExpectedSize, updateActualSize;
 
-Lock *updateLock;
+concurrency::Lock *updateLock;
 
 class TotalSizeCharacteristic : public CallbackCharacteristic
 {
@@ -30,7 +31,7 @@ class TotalSizeCharacteristic : public CallbackCharacteristic
 
     void onWrite(BLECharacteristic *c)
     {
-        LockGuard g(updateLock);
+        concurrency::LockGuard g(updateLock);
         // Check if there is enough to OTA Update
         uint32_t len = getValue32(c, 0);
         updateExpectedSize = len;
@@ -65,7 +66,7 @@ class DataCharacteristic : public CallbackCharacteristic
 
     void onWrite(BLECharacteristic *c)
     {
-        LockGuard g(updateLock);
+        concurrency::LockGuard g(updateLock);
         std::string value = c->getValue();
         uint32_t len = value.length();
         assert(len <= MAX_BLOCKSIZE);
@@ -89,7 +90,7 @@ class CRC32Characteristic : public CallbackCharacteristic
 
     void onWrite(BLECharacteristic *c)
     {
-        LockGuard g(updateLock);
+        concurrency::LockGuard g(updateLock);
         uint32_t expectedCRC = getValue32(c, 0);
         uint32_t actualCRC = crc.finalize();
         DEBUG_MSG("expected CRC %u\n", expectedCRC);
@@ -106,7 +107,7 @@ class CRC32Characteristic : public CallbackCharacteristic
         } else {
             if (Update.end()) {
                 DEBUG_MSG("OTA done, rebooting in 5 seconds!\n");
-                rebootAtMsec = millis() + 5000;
+                rebootAtMsec = timing::millis() + 5000;
             } else {
                 DEBUG_MSG("Error Occurred. Error #: %d\n", Update.getError());
             }
@@ -124,7 +125,7 @@ class CRC32Characteristic : public CallbackCharacteristic
 
 void bluetoothRebootCheck()
 {
-    if (rebootAtMsec && millis() > rebootAtMsec) {
+    if (rebootAtMsec && timing::millis() > rebootAtMsec) {
         DEBUG_MSG("Rebooting for update\n");
         ESP.restart();
     }
@@ -137,7 +138,7 @@ See bluetooth-api.md
 BLEService *createUpdateService(BLEServer *server, std::string hwVendor, std::string swVersion, std::string hwVersion)
 {
     if (!updateLock)
-        updateLock = new Lock();
+        updateLock = new concurrency::Lock();
 
     // Create the BLE Service
     BLEService *service = server->createService(BLEUUID("cb0b9a0b-a84c-4c0d-bdbb-442e3144ee30"), 25, 0);
