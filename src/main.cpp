@@ -38,8 +38,8 @@
 #include "screen.h"
 #include "sleep.h"
 #include "timing.h"
-#include <Wire.h>
 #include <OneButton.h>
+#include <Wire.h>
 // #include <driver/rtc_io.h>
 
 #ifndef NO_ESP32
@@ -57,8 +57,14 @@
 // We always create a screen object, but we only init it if we find the hardware
 meshtastic::Screen screen(SSD1306_ADDRESS);
 
-// Global power status singleton
-meshtastic::PowerStatus powerStatus;
+// Global power status
+meshtastic::PowerStatus *powerStatus = new meshtastic::PowerStatus();
+
+// Global GPS status
+meshtastic::GPSStatus *gpsStatus = new meshtastic::GPSStatus();
+
+// Global Node status
+meshtastic::NodeStatus *nodeStatus = new meshtastic::NodeStatus();
 
 bool ssd1306_found;
 bool axp192_found;
@@ -122,22 +128,24 @@ static uint32_t ledBlinker()
     setLed(ledOn);
 
     // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
-    return powerStatus.charging ? 1000 : (ledOn ? 2 : 1000);
+    return powerStatus->getIsCharging() ? 1000 : (ledOn ? 2 : 1000);
 }
 
 concurrency::Periodic ledPeriodic(ledBlinker);
 
 // Prepare for button presses
 #ifdef BUTTON_PIN
-    OneButton userButton;
+OneButton userButton;
 #endif
 #ifdef BUTTON_PIN_ALT
-    OneButton userButtonAlt;
+OneButton userButtonAlt;
 #endif
-void userButtonPressed() {
+void userButtonPressed()
+{
     powerFSM.trigger(EVENT_PRESS);
 }
-void userButtonPressedLong(){
+void userButtonPressedLong()
+{
     screen.adjustBrightness();
 }
 
@@ -226,6 +234,14 @@ void setup()
     esp32Setup();
 #endif
 
+#ifdef TBEAM_V10
+    // Currently only the tbeam has a PMU
+    power = new Power();
+    power->setup();
+    power->setStatusHandler(powerStatus);
+    powerStatus->observe(&power->newStatus);
+#endif
+
 #ifdef NRF52_SERIES
     nrf52Setup();
 #endif
@@ -254,9 +270,10 @@ void setup()
     gps = new NEMAGPS();
     gps->setup();
 #endif
+    gpsStatus->observe(&gps->newStatus);
+    nodeStatus->observe(&nodeDB.newStatus);
 
     service.init();
-
 #ifndef NO_ESP32
     // Must be after we init the service, because the wifi settings are loaded by NodeDB (oops)
     initWifi();
@@ -342,6 +359,9 @@ void loop()
 #ifndef NO_ESP32
     esp32Loop();
 #endif
+#ifdef TBEAM_V10
+    power->loop();
+#endif
 
 #ifdef BUTTON_PIN
     userButton.tick();
@@ -366,9 +386,8 @@ void loop()
 #endif
 
     // Update the screen last, after we've figured out what to show.
-    screen.debug_info()->setNodeNumbersStatus(nodeDB.getNumOnlineNodes(), nodeDB.getNumNodes());
     screen.debug_info()->setChannelNameStatus(channelSettings.name);
-    screen.debug_info()->setPowerStatus(powerStatus);
+    // screen.debug()->setPowerStatus(powerStatus);
 
     // No GPS lock yet, let the OS put the main CPU in low power mode for 100ms (or until another interrupt comes in)
     // i.e. don't just keep spinning in loop as fast as we can.

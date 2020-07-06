@@ -29,38 +29,11 @@ class DebugInfo
     DebugInfo(const DebugInfo &) = delete;
     DebugInfo &operator=(const DebugInfo &) = delete;
 
-    /// Sets user statistics.
-    void setNodeNumbersStatus(int online, int total)
-    {
-        concurrency::LockGuard guard(&lock);
-        nodesOnline = online;
-        nodesTotal = total;
-    }
-
     /// Sets the name of the channel.
     void setChannelNameStatus(const char *name)
     {
         concurrency::LockGuard guard(&lock);
         channelName = name;
-    }
-
-    /// Sets battery/charging/etc status.
-    //
-    void setPowerStatus(const PowerStatus &status)
-    {
-        concurrency::LockGuard guard(&lock);
-        powerStatus = status;
-    }
-
-    /// Sets GPS status.
-    //
-    // If this function never gets called, we assume GPS does not exist on this
-    // device.
-    // TODO(girts): figure out what the format should be.
-    void setGPSStatus(const char *status)
-    {
-        concurrency::LockGuard guard(&lock);
-        gpsStatus = status;
     }
 
   private:
@@ -71,14 +44,7 @@ class DebugInfo
     /// Renders the debug screen.
     void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
-    int nodesOnline = 0;
-    int nodesTotal = 0;
-
-    PowerStatus powerStatus;
-
     std::string channelName;
-
-    std::string gpsStatus;
 
     /// Protects all of internal state.
     concurrency::Lock lock;
@@ -93,6 +59,10 @@ class DebugInfo
 // simultaneously).
 class Screen : public concurrency::PeriodicTask
 {
+    CallbackObserver<Screen, const Status *> powerStatusObserver = CallbackObserver<Screen, const Status *>(this, &Screen::handleStatusUpdate);
+    CallbackObserver<Screen, const Status *> gpsStatusObserver = CallbackObserver<Screen, const Status *>(this, &Screen::handleStatusUpdate);
+    CallbackObserver<Screen, const Status *> nodeStatusObserver = CallbackObserver<Screen, const Status *>(this, &Screen::handleStatusUpdate);
+
   public:
     Screen(uint8_t address, int sda = -1, int scl = -1);
 
@@ -119,7 +89,7 @@ class Screen : public concurrency::PeriodicTask
 
     // Implementation to Adjust Brightness
     void adjustBrightness();
-    int brightness = 150;
+    uint8_t brightness = 150;
 
     /// Starts showing the Bluetooth PIN screen.
     //
@@ -188,6 +158,8 @@ class Screen : public concurrency::PeriodicTask
     //
     // Use this handle to set things like battery status, user count, GPS status, etc.
     DebugInfo* debug_info() { return &debugInfo; }
+
+    int handleStatusUpdate(const meshtastic::Status *arg);
 
   protected:
     /// Updates the UI.

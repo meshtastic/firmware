@@ -1,4 +1,5 @@
 #include "Thread.h"
+#include "timing.h"
 
 namespace concurrency {
 
