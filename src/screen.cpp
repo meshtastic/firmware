@@ -479,6 +479,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 
     // coordinates for the center of the compass/circle
     int16_t compassX = x + SCREEN_WIDTH - COMPASS_DIAM / 2 - 5, compassY = y + SCREEN_HEIGHT / 2;
+    bool hasNodeHeading = false;
 
     if(ourNode && hasPosition(ourNode))
     {
@@ -486,7 +487,10 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         float myHeading = estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
         drawCompassHeading(display, compassX, compassY, myHeading);
 
-        if(hasPosition(node)) { // display direction toward node
+        if(hasPosition(node)) 
+        { 
+            // display direction toward node
+            hasNodeHeading = true;
             Position &p = node->position;
             float d = latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
             if (d < 2000)
@@ -499,12 +503,13 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             float bearingToOther = bearing(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
             headingRadian = bearingToOther - myHeading;
             drawNodeHeading(display, compassX, compassY, headingRadian);
-        } else { // direction to node is unknown so display question mark
-            // Debug info for gps lock errors
-            // DEBUG_MSG("ourNode %d, ourPos %d, theirPos %d\n", !!ourNode, ourNode && hasPosition(ourNode), hasPosition(node));
-            display->drawString(compassX - FONT_HEIGHT / 4, compassY - FONT_HEIGHT / 2, "?");
-        }
+        } 
     }
+    if(!hasNodeHeading)
+        // direction to node is unknown so display question mark
+        // Debug info for gps lock errors
+        // DEBUG_MSG("ourNode %d, ourPos %d, theirPos %d\n", !!ourNode, ourNode && hasPosition(ourNode), hasPosition(node));
+        display->drawString(compassX - FONT_HEIGHT / 4, compassY - FONT_HEIGHT / 2, "?");
     display->drawCircle(compassX, compassY, COMPASS_DIAM / 2);
 
 
@@ -819,7 +824,11 @@ int Screen::handleStatusUpdate(const Status *arg)
     switch(arg->getStatusType())
     {
         case STATUS_TYPE_NODE:
-            setFrames();
+            if (nodeDB.updateTextMessage || nodeStatus->getLastNumTotal() != nodeStatus->getNumTotal())
+                setFrames();
+            prevFrame = -1;
+            nodeDB.updateGUI = false;
+            nodeDB.updateTextMessage = false;
             break;
     }
     setPeriod(1); // Update the screen right away

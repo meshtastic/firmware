@@ -95,9 +95,9 @@ class NodeDB
     NodeInfo *getOrCreateNode(NodeNum n);
 
     /// Notify observers of changes to the DB
-    void notifyObservers() {
+    void notifyObservers(bool forceUpdate = false) {
         // Notify observers of the current node state
-        const meshtastic::NodeStatus status = meshtastic::NodeStatus(getNumOnlineNodes(), getNumNodes());
+        const meshtastic::NodeStatus status = meshtastic::NodeStatus(getNumOnlineNodes(), getNumNodes(), forceUpdate);
         newStatus.notifyObservers(&status);
     }
 
