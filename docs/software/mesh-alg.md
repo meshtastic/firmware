@@ -32,8 +32,8 @@ optimizations / low priority:
 
 - read this [this](http://pages.cs.wisc.edu/~suman/pubs/nadv-mobihoc05.pdf) paper and others and make our naive flood routing less naive
 - read @cyclomies long email with good ideas on optimizations and reply
-- Remove NodeNum assignment algorithm (now that we use 4 byte node nums)
-- make android app warn if firmware is too old or too new to talk to
+- DONE Remove NodeNum assignment algorithm (now that we use 4 byte node nums)
+- DONE make android app warn if firmware is too old or too new to talk to
 - change nodenums and packetids in protobuf to be fixed32
 - low priority: think more careful about reliable retransmit intervals
 - make ReliableRouter.pending threadsafe
