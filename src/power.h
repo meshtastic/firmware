@@ -1,5 +1,5 @@
 #pragma once
-#include "PeriodicTask.h"
+#include "concurrency/PeriodicTask.h"
 #include "PowerStatus.h"
 
 /**
@@ -15,7 +15,7 @@
 #define BAT_MILLIVOLTS_FULL 4100
 #define BAT_MILLIVOLTS_EMPTY 3500
 
-class Power : public PeriodicTask
+class Power : public concurrency::PeriodicTask
 {
 
    public:

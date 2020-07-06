@@ -1,12 +1,12 @@
 #pragma once
 
 #include "PeriodicTask.h"
-#include <Arduino.h>
+
+namespace concurrency {
 
 /**
- * Periodically invoke a callback.
- *
- * This just provides C style callback conventions rather than a virtual function - FIXME, remove?
+ * @brief Periodically invoke a callback. This just provides C-style callback conventions 
+ *        rather than a virtual function - FIXME, remove?
  */
 class Periodic : public PeriodicTask
 {
@@ -17,5 +17,10 @@ class Periodic : public PeriodicTask
     Periodic(uint32_t (*_callback)()) : callback(_callback) {}
 
   protected:
-    void doTask();
+    void doTask() {
+        uint32_t p = callback();
+        setPeriod(p);
+    }
 };
+
+} // namespace concurrency
