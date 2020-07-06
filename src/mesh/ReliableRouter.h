@@ -1,7 +1,8 @@
 #pragma once
 
 #include "FloodingRouter.h"
-#include "PeriodicTask.h"
+#include "../concurrency/PeriodicTask.h"
+#include "../timing.h"
 #include <unordered_map>
 
 /**
@@ -48,7 +49,7 @@ struct PendingPacket {
     PendingPacket() {}
     PendingPacket(MeshPacket *p);
 
-    void setNextTx() { nextTxMsec = millis() + random(20 * 1000L, 22 * 1000L); }
+    void setNextTx() { nextTxMsec = timing::millis() + random(20 * 1000L, 22 * 1000L); }
 };
 
 class GlobalPacketIdHashFunction

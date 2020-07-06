@@ -1,6 +1,6 @@
 #pragma once
 
-#include "PeriodicTask.h"
+#include "../concurrency/PeriodicTask.h"
 #include "RadioInterface.h"
 
 #ifdef CubeCell_BoardPlus
@@ -16,7 +16,7 @@
 #define INTERRUPT_ATTR
 #endif
 
-class RadioLibInterface : public RadioInterface, private PeriodicTask
+class RadioLibInterface : public RadioInterface, private concurrency::PeriodicTask
 {
     /// Used as our notification from the ISR
     enum PendingISR { ISR_NONE = 0, ISR_RX, ISR_TX, TRANSMIT_DELAY_COMPLETED };

@@ -12,7 +12,7 @@
 
 #include "concurrency/PeriodicTask.h"
 #include "TypedQueue.h"
-#include "concurrency/Lock.h"
+#include "concurrency/LockGuard.h"
 #include "power.h"
 #include <string>
 
@@ -187,7 +187,7 @@ class Screen : public concurrency::PeriodicTask
     /// Returns a handle to the DebugInfo screen.
     //
     // Use this handle to set things like battery status, user count, GPS status, etc.
-    DebugInfo *debug() { return &debugInfo; }
+    DebugInfo* debug_info() { return &debugInfo; }
 
   protected:
     /// Updates the UI.

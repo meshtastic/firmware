@@ -1,16 +1,16 @@
 #pragma once
 
 #include "PeriodicScheduler.h"
-#include "../time.h"
+#include "timing.h"
 
 namespace concurrency {
 
 /**
- * A base class for tasks that want their doTask() method invoked periodically
+ * @brief A base class for tasks that want their doTask() method invoked periodically
  *
- * FIXME: currently just syntatic sugar for polling in loop (you must call .loop), but eventually
- * generalize with the freertos scheduler so we can save lots of power by having everything either in
- * something like this or triggered off of an irq.
+ * @todo currently just syntatic sugar for polling in loop (you must call .loop), but eventually
+ *        generalize with the freertos scheduler so we can save lots of power by having everything either in
+ *        something like this or triggered off of an irq.
  */
 class PeriodicTask
 {
@@ -27,7 +27,8 @@ class PeriodicTask
      */
     PeriodicTask(uint32_t initialPeriod = 1);
 
-    /** MUST be be called once at startup (but after threading is running - i.e. not from a constructor)
+    /** 
+     * MUST be be called once at startup (but after threading is running - i.e. not from a constructor)
      */
     void setup();
 
@@ -37,7 +38,7 @@ class PeriodicTask
      */
     void setPeriod(uint32_t p)
     {
-        lastMsec = time::millis(); // reset starting from now
+        lastMsec = timing::millis(); // reset starting from now
         period = p;
     }
 

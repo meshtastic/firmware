@@ -61,5 +61,6 @@
         "ocrypto",
         "protobufs",
         "wifi"
-    ]
+    ],
+    "C_Cpp.dimInactiveRegions": true
 }
