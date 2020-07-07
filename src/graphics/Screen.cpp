@@ -26,25 +26,16 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "configuration.h"
-#include "fonts.h"
-#include "images.h"
+#include "graphics/images.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
-#include "screen.h"
+#include "Screen.h"
 #include "utils.h"
+#include "configs.h"
 
-#define FONT_HEIGHT 14 // actually 13 for "ariel 10" but want a little extra space
-#define FONT_HEIGHT_16 (ArialMT_Plain_16[1] + 1)
-// This means the *visible* area (sh1106 can address 132, but shows 128 for example)
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
-#define TRANSITION_FRAMERATE 30 // fps
-#define IDLE_FRAMERATE 1        // in fps
-#define COMPASS_DIAM 44
+using namespace meshtastic; /** @todo remove */
 
-#define NUM_EXTRA_FRAMES 2 // text message and debug frame
-
-namespace meshtastic
+namespace graphics
 {
 
 // A text message frame + debug frame + all the node infos
@@ -57,8 +48,6 @@ uint8_t imgSatellite[8] = { 0x70, 0x71, 0x22, 0xFA, 0xFA, 0x22, 0x71, 0x70 };
 
 uint32_t dopThresholds[5] = { 2000, 1000, 500, 200, 100 };
 
-// if defined a pixel will blink to show redraws
-// #define SHOW_REDRAWS
 #ifdef SHOW_REDRAWS
 static bool heartbeat = false;
 #endif
@@ -629,7 +618,7 @@ void Screen::doTask()
 
     // Process incoming commands.
     for (;;) {
-        CmdItem cmd;
+        ScreenCmd cmd;
         if (!cmdQueue.dequeue(&cmd, 0)) {
             break;
         }
@@ -821,7 +810,7 @@ void Screen::adjustBrightness()
     dispdev.setBrightness(brightness);
 }
 
-int Screen::handleStatusUpdate(const Status *arg) 
+int Screen::handleStatusUpdate(const meshtastic::Status *arg) 
 {
     //DEBUG_MSG("Screen got status update %d\n", arg->getStatusType());
     switch(arg->getStatusType())
@@ -837,4 +826,4 @@ int Screen::handleStatusUpdate(const Status *arg)
     setPeriod(1); // Update the screen right away
     return 0;
 }
-} // namespace meshtastic
+} // namespace graphics

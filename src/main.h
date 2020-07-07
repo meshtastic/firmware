@@ -1,6 +1,6 @@
 #pragma once
 
-#include "screen.h"
+#include "graphics/Screen.h"
 #include "PowerStatus.h"
 #include "GPSStatus.h"
 #include "NodeStatus.h"
@@ -11,7 +11,7 @@ extern bool isCharging;
 extern bool isUSBPowered;
 
 // Global Screen singleton.
-extern meshtastic::Screen screen;
+extern graphics::Screen screen;
 //extern Observable<meshtastic::PowerStatus> newPowerStatus; //TODO: move this to main-esp32.cpp somehow or a helper class
 
 //extern meshtastic::PowerStatus *powerStatus;

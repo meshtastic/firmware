@@ -1,3 +1,5 @@
+#pragma once
+
 #define SATELLITE_IMAGE_WIDTH 16
 #define SATELLITE_IMAGE_HEIGHT 15
 const uint8_t SATELLITE_IMAGE[] PROGMEM = {0x00, 0x08, 0x00, 0x1C, 0x00, 0x0E, 0x20, 0x07, 0x70, 0x02,
@@ -10,12 +12,12 @@ const uint8_t imgUser[] PROGMEM =           { 0x3C, 0x42, 0x99, 0xA5, 0xA5, 0x99
 const uint8_t imgPositionEmpty[] PROGMEM =  { 0x20, 0x30, 0x28, 0x24, 0x42, 0xFF };
 const uint8_t imgPositionSolid[] PROGMEM =  { 0x20, 0x30, 0x38, 0x3C, 0x7E, 0xFF };
 
-#include "icon.xbm"
+#include "img/icon.xbm"
 
 // We now programmatically draw our compass
 #if 0
 const
-#include "compass.xbm"
+#include "img/compass.xbm"
 #endif
 
 #if 0
