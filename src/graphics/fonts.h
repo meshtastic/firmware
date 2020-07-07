@@ -1,3 +1,5 @@
+#pragma once
+
 const uint8_t Custom_ArialMT_Plain_10[] PROGMEM = {
     0x0A, // Width: 10
     0x0A, // Height: 10

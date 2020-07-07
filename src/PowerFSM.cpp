@@ -5,7 +5,7 @@
 #include "NodeDB.h"
 #include "configuration.h"
 #include "main.h"
-#include "screen.h"
+#include "graphics/Screen.h"
 #include "sleep.h"
 #include "target_specific.h"
 #include "timing.h"

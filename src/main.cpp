@@ -35,7 +35,7 @@
 #include "DSRRouter.h"
 #include "debug.h"
 #include "main.h"
-#include "screen.h"
+#include "graphics/Screen.h"
 #include "sleep.h"
 #include "timing.h"
 #include <OneButton.h>
@@ -55,7 +55,7 @@
 #endif
 
 // We always create a screen object, but we only init it if we find the hardware
-meshtastic::Screen screen(SSD1306_ADDRESS);
+graphics::Screen screen(SSD1306_ADDRESS);
 
 // Global power status
 meshtastic::PowerStatus *powerStatus = new meshtastic::PowerStatus();
