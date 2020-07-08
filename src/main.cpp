@@ -25,17 +25,17 @@
 #include "MeshService.h"
 #include "NEMAGPS.h"
 #include "NodeDB.h"
-#include "concurrency/Periodic.h"
 #include "PowerFSM.h"
 #include "UBloxGPS.h"
+#include "concurrency/Periodic.h"
 #include "configuration.h"
 #include "error.h"
 #include "power.h"
 // #include "rom/rtc.h"
 #include "DSRRouter.h"
 #include "debug.h"
-#include "main.h"
 #include "graphics/Screen.h"
+#include "main.h"
 #include "sleep.h"
 #include "timing.h"
 #include <OneButton.h>
@@ -152,8 +152,8 @@ void userButtonPressedLong()
 #ifndef NO_ESP32
 void initWifi()
 {
-    strcpy(radioConfig.preferences.wifi_ssid, "geeksville");
-    strcpy(radioConfig.preferences.wifi_password, "xxx");
+    // strcpy(radioConfig.preferences.wifi_ssid, "xxx");
+    // strcpy(radioConfig.preferences.wifi_password, "xxx");
     if (radioConfig.has_preferences) {
         const char *wifiName = radioConfig.preferences.wifi_ssid;
 
@@ -164,7 +164,11 @@ void initWifi()
             } else {
                 WiFi.mode(WIFI_MODE_STA);
                 DEBUG_MSG("JOINING WIFI: ssid=%s\n", wifiName);
-                WiFi.begin(wifiName, wifiPsw);
+                if (WiFi.begin(wifiName, wifiPsw) == WL_CONNECTED) {
+                    DEBUG_MSG("MY IP ADDRESS: %s\n", WiFi.localIP().toString().c_str());
+                } else {
+                    DEBUG_MSG("FAILED JOINING WIFI\n");
+                }
             }
         }
     } else
