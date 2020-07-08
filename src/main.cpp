@@ -160,11 +160,11 @@ void initWifi()
         if (*wifiName) {
             const char *wifiPsw = radioConfig.preferences.wifi_password;
             if (radioConfig.preferences.wifi_ap_mode) {
-                // DEBUG_MSG("STARTING WIFI AP: ssid=%s, ok=%d\n", wifiName, WiFi.softAP(wifiName, wifiPsw));
+                DEBUG_MSG("STARTING WIFI AP: ssid=%s, ok=%d\n", wifiName, WiFi.softAP(wifiName, wifiPsw));
             } else {
-                // WiFi.mode(WIFI_MODE_STA);
+                WiFi.mode(WIFI_MODE_STA);
                 DEBUG_MSG("JOINING WIFI: ssid=%s\n", wifiName);
-                // WiFi.begin(wifiName, wifiPsw);
+                WiFi.begin(wifiName, wifiPsw);
             }
         }
     } else
