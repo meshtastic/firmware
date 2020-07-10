@@ -267,7 +267,7 @@ void setup()
     if (!gps->setup()) {
         DEBUG_MSG("ERROR: No UBLOX GPS found\n");
 
-        if(GPS::_serial_gps) {
+        if (GPS::_serial_gps) {
             // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
             // assume NEMA at 9600 baud.
             DEBUG_MSG("Hoping that NEMA might work\n");
@@ -308,7 +308,7 @@ void setup()
 
     // MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
     RadioInterface *rIf =
-#if defined(RF95_IRQ_GPIO)
+#if defined(RF95_IRQ)
         // new CustomRF95(); old Radiohead based driver
         new RF95Interface(RF95_NSS, RF95_IRQ, RF95_RESET, SPI);
 #elif defined(SX1262_CS)

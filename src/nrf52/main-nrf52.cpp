@@ -52,8 +52,9 @@ void setBluetoothEnable(bool on)
     if (on != bleOn) {
         if (on) {
             if (!nrf52Bluetooth) {
-                nrf52Bluetooth = new NRF52Bluetooth();
-                nrf52Bluetooth->setup();
+                DEBUG_MSG("DISABLING NRF52 BLUETOOTH WHILE DEBUGGING\n");
+                //nrf52Bluetooth = new NRF52Bluetooth();
+                //nrf52Bluetooth->setup();
             }
         } else {
             DEBUG_MSG("FIXME: implement BLE disable\n");

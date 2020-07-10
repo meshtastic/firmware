@@ -2,6 +2,9 @@
 
 ## RAK815
 
+TODO:
+This board has a TCXO, which is uncommon. For better RF performance it should be enabled P0.05 (RF95_TCXO) high. And then tell the RF95 to use it.
+
 ### Bootloader
 
 Install our (temporarily hacked up) adafruit bootloader
@@ -36,6 +39,7 @@ Run.
 tips on installing https://github.com/platformio/platform-nordicnrf52/issues/8#issuecomment-374017768
 
 to see console output over jlink:
+
 ```
 12:17
 in one tab run "bin/nrf52832-gdbserver.sh" - leave this running the whole time while developing/debugging
