@@ -9,6 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@master
+      - name: Checkout submodules
+        uses: textbook/git-checkout-submodule-action@master
       - name: Setup Python
         uses: actions/setup-python@master
         with:
@@ -18,4 +20,4 @@ jobs:
           python -m pip install --upgrade pip
           pip install -U platformio
       - name: Build
-        run: platformio run -e tbeam -e nrf52dk
+        run: platformio run -e tbeam -e nrf52840dk
