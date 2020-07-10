@@ -10,14 +10,6 @@ nrf52840 256KB RAM, 1MB flash
 
 Manual hacks needed to build (for now):
 
-platform.json
-
-    "framework-arduinoadafruitnrf52": {
-      "type": "framework",
-      "optional": true,
-      "version": "https://github.com/meshtastic/Adafruit_nRF52_Arduino.git"
-    },
-
 kevinh@kevin-server:~/.platformio/packages/framework-arduinoadafruitnrf52/variants$ ln -s ~/development/meshtastic/meshtastic-esp32/variants/* .
 
 ## Initial work items
