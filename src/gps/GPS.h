@@ -1,8 +1,8 @@
 #pragma once
 
-#include "Observer.h"
-#include "GPSStatus.h"
 #include "../concurrency/PeriodicTask.h"
+#include "GPSStatus.h"
+#include "Observer.h"
 #include "sys/time.h"
 
 /// If we haven't yet set our RTC this boot, set it from a GPS derived time
@@ -30,12 +30,17 @@ class GPS : public Observable<void *>
   protected:
     bool hasValidLocation = false; // default to false, until we complete our first read
 
+  public:
+    /** If !NULL we will use this serial port to construct our GPS */
     static HardwareSerial *_serial_gps;
 
-  public:
+    /** If !0 we will attempt to connect to the GPS over I2C */
+    static uint8_t i2cAddress;
+
     int32_t latitude = 0, longitude = 0; // as an int mult by 1e-7 to get value as double
     int32_t altitude = 0;
-    uint32_t dop = 0; // Diminution of position; PDOP where possible (UBlox), HDOP otherwise (TinyGPS) in 10^2 units (needs scaling before use)
+    uint32_t dop = 0;     // Diminution of position; PDOP where possible (UBlox), HDOP otherwise (TinyGPS) in 10^2 units (needs
+                          // scaling before use)
     uint32_t heading = 0; // Heading of motion, in degrees * 10^-5
     uint32_t numSatellites = 0;
 

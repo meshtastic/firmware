@@ -7,23 +7,35 @@ UBloxGPS::UBloxGPS() : concurrency::PeriodicTask()
     notifySleepObserver.observe(&notifySleep);
 }
 
+bool UBloxGPS::tryConnect()
+{
+    isConnected = false;
+
+    if (_serial_gps)
+        isConnected = ublox.begin(*_serial_gps);
+
+    if (!isConnected && i2cAddress)
+        isConnected = ublox.begin(Wire, i2cAddress);
+
+    return isConnected;
+}
+
 bool UBloxGPS::setup()
 {
+    if (_serial_gps) {
 #ifdef GPS_RX_PIN
-    _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+        _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
 #else
-    _serial_gps->begin(GPS_BAUDRATE);
+        _serial_gps->begin(GPS_BAUDRATE);
 #endif
-    // _serial_gps.setRxBufferSize(1024); // the default is 256
+        // _serial_gps.setRxBufferSize(1024); // the default is 256
+    }
+
     // ublox.enableDebugging(Serial);
 
-    // note: the lib's implementation has the wrong docs for what the return val is
-    // it is not a bool, it returns zero for success
-    isConnected = ublox.begin(*_serial_gps);
-
     // try a second time, the ublox lib serial parsing is buggy?
-    if (!isConnected)
-        isConnected = ublox.begin(*_serial_gps);
+    if (!tryConnect())
+        tryConnect();
 
     if (isConnected) {
         DEBUG_MSG("Connected to UBLOX GPS successfully\n");
@@ -35,7 +47,7 @@ bool UBloxGPS::setup()
             // GPS_TX connected)
             ublox.factoryReset();
             delay(3000);
-            isConnected = ublox.begin(*_serial_gps);
+            tryConnect();
             DEBUG_MSG("Factory reset success=%d\n", isConnected);
             ok = ublox.saveConfiguration(3000);
             assert(ok);
@@ -131,7 +143,8 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         wantNewLocation = true;
 
     // Notify any status instances that are observing us
-    const meshtastic::GPSStatus status = meshtastic::GPSStatus(hasLock(), isConnected, latitude, longitude, altitude, dop, heading, numSatellites);
+    const meshtastic::GPSStatus status =
+        meshtastic::GPSStatus(hasLock(), isConnected, latitude, longitude, altitude, dop, heading, numSatellites);
     newStatus.notifyObservers(&status);
 
     // Once we have sent a location once we only poll the GPS rarely, otherwise check back every 1s until we have something over

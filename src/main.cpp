@@ -269,8 +269,12 @@ void setup()
         // assume NEMA at 9600 baud.
         DEBUG_MSG("ERROR: No UBLOX GPS found, hoping that NEMA might work\n");
         delete gps;
-        gps = new NEMAGPS();
-        gps->setup();
+
+        if(GPS::_serial_gps) {
+            // dumb NEMA access only work for serial GPSes)
+            gps = new NEMAGPS();
+            gps->setup();
+        }
     }
 #else
     gps = new NEMAGPS();
