@@ -10,20 +10,20 @@ UBloxGPS::UBloxGPS() : concurrency::PeriodicTask()
 bool UBloxGPS::setup()
 {
 #ifdef GPS_RX_PIN
-    _serial_gps.begin(GPS_BAUDRATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+    _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
 #else
-    _serial_gps.begin(GPS_BAUDRATE);
+    _serial_gps->begin(GPS_BAUDRATE);
 #endif
     // _serial_gps.setRxBufferSize(1024); // the default is 256
     // ublox.enableDebugging(Serial);
 
     // note: the lib's implementation has the wrong docs for what the return val is
     // it is not a bool, it returns zero for success
-    isConnected = ublox.begin(_serial_gps);
+    isConnected = ublox.begin(*_serial_gps);
 
     // try a second time, the ublox lib serial parsing is buggy?
     if (!isConnected)
-        isConnected = ublox.begin(_serial_gps);
+        isConnected = ublox.begin(*_serial_gps);
 
     if (isConnected) {
         DEBUG_MSG("Connected to UBLOX GPS successfully\n");
@@ -35,7 +35,7 @@ bool UBloxGPS::setup()
             // GPS_TX connected)
             ublox.factoryReset();
             delay(3000);
-            isConnected = ublox.begin(_serial_gps);
+            isConnected = ublox.begin(*_serial_gps);
             DEBUG_MSG("Factory reset success=%d\n", isConnected);
             ok = ublox.saveConfiguration(3000);
             assert(ok);

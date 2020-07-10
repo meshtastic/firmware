@@ -7,10 +7,12 @@
 
 #ifdef GPS_RX_PIN
 HardwareSerial _serial_gps_real(GPS_SERIAL_NUM);
-HardwareSerial &GPS::_serial_gps = _serial_gps_real;
+HardwareSerial *GPS::_serial_gps = &_serial_gps_real;
+#elif defined(NRF52840_XXAA)
+// Assume NRF52840
+HardwareSerial *GPS::_serial_gps = &Serial1;
 #else
-// Assume NRF52
-HardwareSerial &GPS::_serial_gps = Serial1;
+HardwareSerial *GPS::_serial_gps = NULL;
 #endif
 
 bool timeSetFromGPS; // We try to set our time from GPS each time we wake from sleep

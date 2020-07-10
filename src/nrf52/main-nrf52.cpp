@@ -3,7 +3,10 @@
 #include <assert.h>
 #include <ble_gap.h>
 #include <memory.h>
-#include <nrf52840.h>
+
+#ifdef NRF52840_XXAA
+// #include <nrf52840.h>
+#endif
 
 // #define USE_SOFTDEVICE
 
