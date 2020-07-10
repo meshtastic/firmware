@@ -152,6 +152,7 @@ void userButtonPressedLong()
 #ifndef NO_ESP32
 void initWifi()
 {
+#if 0
     // strcpy(radioConfig.preferences.wifi_ssid, "xxx");
     // strcpy(radioConfig.preferences.wifi_password, "xxx");
     if (radioConfig.has_preferences) {
@@ -173,6 +174,7 @@ void initWifi()
         }
     } else
         DEBUG_MSG("Not using WIFI\n");
+#endif
 }
 #endif
 
