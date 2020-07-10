@@ -5,7 +5,10 @@
 RAM investigation.
 nRF52832-QFAA 64KB ram, 512KB flash vs
 nrf52832-QFAB 32KB ram, 512kb flash
+nrf52833 128KB RAM
 nrf52840 256KB RAM, 1MB flash
+
+Manual hacks needed to build (for now):
 
 platform.json
 
@@ -14,6 +17,8 @@ platform.json
       "optional": true,
       "version": "https://github.com/meshtastic/Adafruit_nRF52_Arduino.git"
     },
+
+kevinh@kevin-server:~/.platformio/packages/framework-arduinoadafruitnrf52/variants$ ln -s ~/development/meshtastic/meshtastic-esp32/variants/* .
 
 ## Initial work items
 

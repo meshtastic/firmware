@@ -62,6 +62,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Standard definitions for NRF52 targets
 //
 
+// Nop definition for these attributes - not used on NRF52
+#define EXT_RAM_ATTR
+#define IRAM_ATTR
+
 #define NO_ESP32 // Don't use ESP32 libs (mainly bluetooth)
 
 // We bind to the GPS using variant.h instead for this platform (Serial1)
