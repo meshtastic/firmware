@@ -296,7 +296,7 @@ void setup()
     SPI.begin();
 #else
     // ESP32
-    SPI.begin(SCK_GPIO, MISO_GPIO, MOSI_GPIO, NSS_GPIO);
+    SPI.begin(RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
     SPI.setFrequency(4000000);
 #endif
 

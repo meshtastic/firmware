@@ -113,10 +113,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // LoRa SPI
 // -----------------------------------------------------------------------------
 
-#define SCK_GPIO 5
-#define MISO_GPIO 19
-#define MOSI_GPIO 27
-#define NSS_GPIO 18
+#define RF95_SCK 5
+#define RF95_MISO 19
+#define RF95_MOSI 27
+#define RF95_NSS 18
 
 #endif
 

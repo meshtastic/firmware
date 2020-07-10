@@ -31,6 +31,10 @@ Applying system reset.
 Run.
 ```
 
+### Appload
+
+tips on installing https://github.com/platformio/platform-nordicnrf52/issues/8#issuecomment-374017768
+
 ## Misc work items
 
 RAM investigation.
