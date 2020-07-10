@@ -305,7 +305,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // What platforms should use SEGGER?
 #ifdef NRF52_SERIES
+
+// nrf52 gets its settings via variant files
+#ifndef PIN_SERIAL_RX
+// No serial ports on this board - use segger in memory console
 #define USE_SEGGER
+#endif 
+
 #else
 #define SERIAL0_RX_GPIO 3 // Always GPIO3 on ESP32
 #endif
