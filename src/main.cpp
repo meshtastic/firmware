@@ -310,7 +310,7 @@ void setup()
     RadioInterface *rIf =
 #if defined(RF95_IRQ_GPIO)
         // new CustomRF95(); old Radiohead based driver
-        new RF95Interface(NSS_GPIO, RF95_IRQ_GPIO, RESET_GPIO, SPI);
+        new RF95Interface(RF95_NSS, RF95_IRQ, RF95_RESET, SPI);
 #elif defined(SX1262_CS)
         new SX1262Interface(SX1262_CS, SX1262_DIO1, SX1262_RESET, SX1262_BUSY, SPI);
 #else
