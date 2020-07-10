@@ -35,6 +35,36 @@ Run.
 
 tips on installing https://github.com/platformio/platform-nordicnrf52/issues/8#issuecomment-374017768
 
+to see console output over jlink:
+```
+12:17
+in one tab run "bin/nrf52832-gdbserver.sh" - leave this running the whole time while developing/debugging
+12:17
+~/development/meshtastic/meshtastic-esp32$ bin/nrf52-console.sh
+###RTT Client: ************************************************************
+###RTT Client: *               SEGGER Microcontroller GmbH                *
+###RTT Client: *   Solutions for real time microcontroller applications   *
+###RTT Client: ************************************************************
+###RTT Client: *                                                          *
+###RTT Client: *       (c) 2012 - 2016  SEGGER Microcontroller GmbH       *
+###RTT Client: *                                                          *
+###RTT Client: *     www.segger.com     Support: support@segger.com       *
+###RTT Client: *                                                          *
+###RTT Client: ************************************************************
+###RTT Client: *                                                          *
+###RTT Client: * SEGGER J-Link RTT Client   Compiled Apr  7 2020 15:01:22 *
+###RTT Client: *                                                          *
+###RTT Client: ************************************************************
+###RTT Client: -----------------------------------------------
+###RTT Client: Connecting to J-Link RTT Server via localhost:19021 ..............
+###RTT Client: Connected.
+SEGGER J-Link V6.70c - Real time terminal output
+SEGGER J-Link ARM V9.6, SN=69663845
+Process: JLinkGDBServerCLExein another tab run:
+12:18
+On NRF52 I've been using the jlink fake serial console.  But since the rak815 has the serial port hooked up we can switch back to that once the basics are working.
+```
+
 ## Misc work items
 
 RAM investigation.
