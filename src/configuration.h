@@ -156,9 +156,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BUTTON_PIN_ALT 13 // Alternate GPIO for an external button if needed
 
 #ifndef USE_JTAG
-#define RESET_GPIO 14
+#define RF95_RESET 14
 #endif
-#define RF95_IRQ_GPIO 26
+#define RF95_IRQ 26
 #define DIO1_GPIO 33 // Note: not really used on this board
 #define DIO2_GPIO 32 // Note: not really used on this board
 
