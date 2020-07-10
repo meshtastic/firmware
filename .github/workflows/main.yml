@@ -18,4 +18,4 @@ jobs:
           python -m pip install --upgrade pip
           pip install -U platformio
       - name: Build
-        run: platformio run
+        run: platformio run -e tbeam -e nrf52dk
