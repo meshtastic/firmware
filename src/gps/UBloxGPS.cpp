@@ -53,8 +53,15 @@ bool UBloxGPS::setup()
             assert(ok);
             return false;
         } else {
-            ok = ublox.setUART1Output(COM_TYPE_UBX, 500); // Use native API
-            assert(ok);
+            if (_serial_gps) {
+                ok = ublox.setUART1Output(COM_TYPE_UBX, 500); // Use native API
+                assert(ok);
+            }
+            if (i2cAddress) {
+                ublox.setI2COutput(COM_TYPE_UBX, 500);
+                assert(ok);
+            }
+
             ok = ublox.setNavigationFrequency(1, 500); // Produce 4x/sec to keep the amount of time we stall in getPVT low
             assert(ok);
             // ok = ublox.setAutoPVT(false); // Not implemented on NEO-6M

@@ -16,7 +16,11 @@ HardwareSerial *GPS::_serial_gps = &Serial1;
 HardwareSerial *GPS::_serial_gps = NULL;
 #endif
 
+#ifdef GPS_I2C_ADDRESS 
+uint8_t GPS::i2cAddress = GPS_I2C_ADDRESS;
+#else
 uint8_t GPS::i2cAddress = 0;
+#endif
 
 bool timeSetFromGPS; // We try to set our time from GPS each time we wake from sleep
 
