@@ -30,7 +30,7 @@ class GPS : public Observable<void *>
   protected:
     bool hasValidLocation = false; // default to false, until we complete our first read
 
-    static HardwareSerial &_serial_gps;
+    static HardwareSerial *_serial_gps;
 
   public:
     int32_t latitude = 0, longitude = 0; // as an int mult by 1e-7 to get value as double

@@ -55,7 +55,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 /// Convert a preprocessor name into a quoted string and if that string is empty use "unset"
 #define optstr(s) (xstr(s)[0] ? xstr(s) : "unset")
 
-#ifdef NRF52840_XXAA // All of the NRF52 targets are configured using variant.h, so this section shouldn't need to be
+#ifdef NRF52_SERIES // All of the NRF52 targets are configured using variant.h, so this section shouldn't need to be
                      // board specific
 
 //
@@ -74,7 +74,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define RTC_DATA_ATTR
 
 #define LED_PIN PIN_LED1 // LED1 on nrf52840-DK
+
+// If the variant filed defines as standard button
+#ifdef PIN_BUTTON1
 #define BUTTON_PIN PIN_BUTTON1
+#endif 
 
 // FIXME, use variant.h defs for all of this!!! (even on the ESP32 targets)
 #elif defined(CubeCell_BoardPlus)
@@ -282,6 +286,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #elif defined(ARDUINO_NRF52840_PPR)
 
 #define HW_VENDOR "ppr"
+
+#elif NRF52_SERIES
+
+#define HW_VENDOR "nrf52unknown" // FIXME - unknown nrf52 board
 
 #endif
 

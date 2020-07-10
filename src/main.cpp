@@ -172,7 +172,7 @@ void initWifi()
                 }
             }
         }
-    } else
+    } else 
         DEBUG_MSG("Not using WIFI\n");
 #endif
 }
