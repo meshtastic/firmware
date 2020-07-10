@@ -49,8 +49,9 @@ extern "C"
 #define LED_BUILTIN          PIN_LED1
 #define LED_CONN             PIN_LED2
 
-//#define LED_RED              PIN_LED1
-//#define LED_BLUE             PIN_LED2
+// The BLE stack is hardwired to look for these constants
+#define LED_RED              PIN_LED1
+#define LED_BLUE             PIN_LED2
 
 #define LED_STATE_ON         0         // State when LED is litted
 
