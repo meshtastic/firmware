@@ -265,12 +265,14 @@ void setup()
     // Init GPS - first try ublox
     gps = new UBloxGPS();
     if (!gps->setup()) {
-        // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
-        // assume NEMA at 9600 baud.
-        DEBUG_MSG("ERROR: No UBLOX GPS found, hoping that NEMA might work\n");
-        delete gps;
+        DEBUG_MSG("ERROR: No UBLOX GPS found\n");
 
         if(GPS::_serial_gps) {
+            // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
+            // assume NEMA at 9600 baud.
+            DEBUG_MSG("Hoping that NEMA might work\n");
+            delete gps;
+
             // dumb NEMA access only work for serial GPSes)
             gps = new NEMAGPS();
             gps->setup();
