@@ -20,4 +20,4 @@ jobs:
           python -m pip install --upgrade pip
           pip install -U platformio
       - name: Build
-        run: platformio run -e tbeam -e nrf52840dk
+        run: platformio run -e tbeam -e heltec -e nrf52840dk -e feather_nrf52832
