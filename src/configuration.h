@@ -56,7 +56,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define optstr(s) (xstr(s)[0] ? xstr(s) : "unset")
 
 #ifdef NRF52_SERIES // All of the NRF52 targets are configured using variant.h, so this section shouldn't need to be
-                     // board specific
+                    // board specific
 
 //
 // Standard definitions for NRF52 targets
@@ -78,7 +78,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // If the variant filed defines as standard button
 #ifdef PIN_BUTTON1
 #define BUTTON_PIN PIN_BUTTON1
-#endif 
+#endif
 
 // FIXME, use variant.h defs for all of this!!! (even on the ESP32 targets)
 #elif defined(CubeCell_BoardPlus)
@@ -113,10 +113,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // LoRa SPI
 // -----------------------------------------------------------------------------
 
+// NRF52 boards will define this in variant.h
+#ifndef RF95_SCK
 #define RF95_SCK 5
 #define RF95_MISO 19
 #define RF95_MOSI 27
 #define RF95_NSS 18
+#endif
 
 #endif
 
@@ -159,8 +162,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define RF95_RESET 14
 #endif
 #define RF95_IRQ 26
-#define DIO1_GPIO 33 // Note: not really used on this board
-#define DIO2_GPIO 32 // Note: not really used on this board
+#define RF95_DIO1 33 // Note: not really used on this board
+#define RF95_DIO2 32 // Note: not really used on this board
 
 // Leave undefined to disable our PMU IRQ handler
 #define PMU_IRQ 35
@@ -179,11 +182,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BUTTON_PIN 39
 
 #ifndef USE_JTAG
-#define RESET_GPIO 23
+#define RF95_RESET 23
 #endif
-#define RF95_IRQ_GPIO 26
-#define DIO1_GPIO 33 // Note: not really used on this board
-#define DIO2_GPIO 32 // Note: not really used on this board
+#define RF95_IRQ 26
+#define RF95_DIO1 33 // Note: not really used on this board
+#define RF95_DIO2 32 // Note: not really used on this board
 
 // This board has different GPS pins than all other boards
 #undef GPS_RX_PIN
@@ -214,11 +217,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BUTTON_PIN 0   // If defined, this will be used for user button presses
 
 #ifndef USE_JTAG
-#define RESET_GPIO 14 // If defined, this pin will be used to reset the LORA radio
+#define RF95_RESET 14 // If defined, this pin will be used to reset the LORA radio
 #endif
-#define RF95_IRQ_GPIO 26
-#define DIO1_GPIO 35 // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
-#define DIO2_GPIO 34 // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
+#define RF95_IRQ 26
+#define RF95_DIO1 35 // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
+#define RF95_DIO2 34 // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
 #elif defined(TTGO_LORA_V1)
 // This string must exactly match the case used in release file names or the android updater won't work
 #define HW_VENDOR "ttgo-lora32-v1"
@@ -236,10 +239,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LED_PIN 2     // If defined we will blink this LED
 #define BUTTON_PIN 0  // If defined, this will be used for user button presses
 
-#define RESET_GPIO 14    // If defined, this pin will be used to reset the LORA radio
-#define RF95_IRQ_GPIO 26 // IRQ line for the LORA radio
-#define DIO1_GPIO 35     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
-#define DIO2_GPIO 34     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
+#define RF95_RESET 14 // If defined, this pin will be used to reset the LORA radio
+#define RF95_IRQ 26   // IRQ line for the LORA radio
+#define RF95_DIO1 35  // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
+#define RF95_DIO2 34  // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
 #elif defined(TTGO_LORA_V2)
 // This string must exactly match the case used in release file names or the android updater won't work
 #define HW_VENDOR "ttgo-lora32-v2"
@@ -260,10 +263,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
     0 // If defined, this will be used for user button presses, if your board doesn't have a physical switch, you can wire one
 // between this pin and ground
 
-#define RESET_GPIO 14    // If defined, this pin will be used to reset the LORA radio
-#define RF95_IRQ_GPIO 26 // IRQ line for the LORA radio
-#define DIO1_GPIO 35     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
-#define DIO2_GPIO 34     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
+#define RF95_RESET 14 // If defined, this pin will be used to reset the LORA radio
+#define RF95_IRQ 26   // IRQ line for the LORA radio
+#define RF95_DIO1 35  // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
+#define RF95_DIO2 34  // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
 #endif
 
 #ifdef ARDUINO_NRF52840_PCA10056
@@ -274,14 +277,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // This board uses 0 to be mean LED on
 #undef LED_INVERTED
 #define LED_INVERTED 1
-
-// Uncomment to confirm if we can build the RF95 driver for NRF52
-#if 0
-#define RESET_GPIO 14    // If defined, this pin will be used to reset the LORA radio
-#define RF95_IRQ_GPIO 26 // IRQ line for the LORA radio
-#define DIO1_GPIO 35     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
-#define DIO2_GPIO 34     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
-#endif
 
 #elif defined(ARDUINO_NRF52840_PPR)
 
@@ -301,7 +296,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define SERIAL_BAUD CONSOLE_MAX_BAUD
 #else
 #define SERIAL_BAUD 921600 // Serial debug baud rate
-#endif 
+#endif
 
 #include "SerialConsole.h"
 
@@ -314,7 +309,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef PIN_SERIAL_RX
 // No serial ports on this board - use segger in memory console
 #define USE_SEGGER
-#endif 
+#endif
 
 #else
 #define SERIAL0_RX_GPIO 3 // Always GPIO3 on ESP32

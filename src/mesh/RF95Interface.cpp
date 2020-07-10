@@ -24,8 +24,14 @@ bool RF95Interface::init()
         power = MAX_POWER;
 
     iface = lora = new RadioLibRF95(&module);
+
+#ifdef RF95_TCXO
+    pinMode(RF95_TCXO, OUTPUT);
+    digitalWrite(RF95_TCXO, 1);
+#endif
+
     int res = lora->begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength);
-    DEBUG_MSG("LORA init result %d\n", res);
+    DEBUG_MSG("RF95 init result %d\n", res);
 
     if (res == ERR_NONE)
         res = lora->setCRC(SX126X_LORA_CRC_ON);
