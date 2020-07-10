@@ -1,13 +1,13 @@
 # NRF52 TODO
 
-
 ## RAK815
 
-### Bootloader 
-Installing the adafruit bootloader is optional - I think the stock bootloader will work okay for most.
+### Bootloader
+
+Install our (temporarily hacked up) adafruit bootloader
 
 ```
-kevinh@kevin-server:~/development/meshtastic/Adafruit_nRF52_Bootloader$ make BOARD=rak815 flash
+kevinh@kevin-server:~/development/meshtastic/Adafruit_nRF52_Bootloader$ make BOARD=rak815 sd flash
 LD rak815_bootloader-0.3.2-111-g9478eb7-dirty.out
    text	   data	    bss	    dec	    hex	filename
   20888	   1124	  15006	  37018	   909a	_build/build-rak815/rak815_bootloader-0.3.2-111-g9478eb7-dirty.out
@@ -45,7 +45,7 @@ nrf52840 256KB RAM, 1MB flash
 
 Manual hacks needed to build (for now):
 
-kevinh@kevin-server:~/.platformio/packages/framework-arduinoadafruitnrf52/variants$ ln -s ~/development/meshtastic/meshtastic-esp32/variants/* .
+kevinh@kevin-server:~/.platformio/packages/framework-arduinoadafruitnrf52/variants\$ ln -s ~/development/meshtastic/meshtastic-esp32/variants/\* .
 
 ## Initial work items
 
