@@ -19,5 +19,8 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -U platformio
+      - name: Install extra python tools
+        run: |          
+          pip3 install --user adafruit-nrfutil
       - name: Build
         run: platformio run -e tbeam -e heltec -e nrf52840dk -e feather_nrf52832
