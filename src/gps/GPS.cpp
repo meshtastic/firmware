@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <time.h>
 
+// If we have a serial GPS port it will not be null
 #ifdef GPS_RX_PIN
 HardwareSerial _serial_gps_real(GPS_SERIAL_NUM);
 HardwareSerial *GPS::_serial_gps = &_serial_gps_real;
@@ -14,6 +15,8 @@ HardwareSerial *GPS::_serial_gps = &Serial1;
 #else
 HardwareSerial *GPS::_serial_gps = NULL;
 #endif
+
+uint8_t GPS::i2cAddress = 0;
 
 bool timeSetFromGPS; // We try to set our time from GPS each time we wake from sleep
 
