@@ -1,6 +1,7 @@
 #include "NRF52Bluetooth.h"
 #include "configuration.h"
 #include "main.h"
+#include "BluetoothCommon.h"
 #include <bluefruit.h>
 
 /* HRM Service Definitions
@@ -190,6 +191,11 @@ void NRF52Bluetooth::setup()
 
         DEBUG_MSG("Advertising\n");
     }
+}
+
+/// Given a level between 0-100, update the BLE attribute
+void updateBatteryLevel(uint8_t level) {
+  // FIXME - implement
 }
 
 /*

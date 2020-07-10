@@ -33,7 +33,7 @@
 #include "power.h"
 // #include "rom/rtc.h"
 #include "DSRRouter.h"
-#include "debug.h"
+// #include "debug.h"
 #include "graphics/Screen.h"
 #include "main.h"
 #include "sleep.h"
