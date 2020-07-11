@@ -17,8 +17,7 @@ HardwareSerial *GPS::_serial_gps = NULL;
 #endif
 
 #ifdef GPS_I2C_ADDRESS
-uint8_t GPS::i2cAddress = 0;
-// FIXME - no good - GPS_I2C_ADDRESS;
+uint8_t GPS::i2cAddress = GPS_I2C_ADDRESS;
 #else
 uint8_t GPS::i2cAddress = 0;
 #endif
@@ -73,7 +72,7 @@ void perhapsSetRTC(struct tm &t)
 
     // DEBUG_MSG("Got time from GPS month=%d, year=%d, unixtime=%ld\n", t.tm_mon, t.tm_year, tv.tv_sec);
     if (t.tm_year < 0 || t.tm_year >= 300)
-        DEBUG_MSG("Ignoring invalid GPS time\n");
+        DEBUG_MSG("Ignoring invalid GPS month=%d, year=%d, unixtime=%ld\n", t.tm_mon, t.tm_year, tv.tv_sec);
     else
         perhapsSetRTC(&tv);
 }
