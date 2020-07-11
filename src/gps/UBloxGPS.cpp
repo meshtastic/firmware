@@ -14,8 +14,13 @@ bool UBloxGPS::tryConnect()
     if (_serial_gps)
         isConnected = ublox.begin(*_serial_gps);
 
-    if (!isConnected && i2cAddress)
+    if (!isConnected && i2cAddress) {
+        extern bool neo6M; // Super skanky - if we are talking to the device i2c we assume it is a neo7 on a RAK815, which
+                           // supports the newer API
+        neo6M = true;
+
         isConnected = ublox.begin(Wire, i2cAddress);
+    }
 
     return isConnected;
 }
@@ -31,7 +36,13 @@ bool UBloxGPS::setup()
         // _serial_gps.setRxBufferSize(1024); // the default is 256
     }
 
-    // ublox.enableDebugging(Serial);
+#ifdef GPS_POWER_EN
+    pinMode(GPS_POWER_EN, OUTPUT);
+    digitalWrite(GPS_POWER_EN, 1);
+    delay(200); // Give time for the GPS to startup after we gave power
+#endif
+
+    ublox.enableDebugging(Serial);
 
     // try a second time, the ublox lib serial parsing is buggy?
     if (!tryConnect())
@@ -58,7 +69,7 @@ bool UBloxGPS::setup()
                 assert(ok);
             }
             if (i2cAddress) {
-                ublox.setI2COutput(COM_TYPE_UBX, 500);
+                ok = ublox.setI2COutput(COM_TYPE_UBX, 500);
                 assert(ok);
             }
 
@@ -99,20 +110,22 @@ void UBloxGPS::doTask()
 
     // Consume all characters that have arrived
 
-    // getPVT automatically calls checkUblox
+    // if using i2c or serial look too see if any chars are ready
     ublox.checkUblox(); // See if new data is available. Process bytes as they come in.
 
     // If we don't have a fix (a quick check), don't try waiting for a solution)
     // Hmmm my fix type reading returns zeros for fix, which doesn't seem correct, because it is still sptting out positions
     // turn off for now
-    fixtype = ublox.getFixType(0);
+    uint16_t maxWait = i2cAddress ? 300 : 0; // If using i2c we must poll with wait
+    fixtype = ublox.getFixType(maxWait);
     DEBUG_MSG("GPS fix type %d\n", fixtype);
 
     // DEBUG_MSG("sec %d\n", ublox.getSecond());
     // DEBUG_MSG("lat %d\n", ublox.getLatitude());
 
     // any fix that has time
-    if (ublox.getT(0)) {
+
+    if (ublox.getT(maxWait)) {
         /* Convert to unix time
 The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970
 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
@@ -128,7 +141,7 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         perhapsSetRTC(t);
     }
 
-    if ((fixtype >= 3 && fixtype <= 4) && ublox.getP(0)) // rd fixes only
+    if ((fixtype >= 3 && fixtype <= 4) && ublox.getP(maxWait)) // rd fixes only
     {
         // we only notify if position has changed
         latitude = ublox.getLatitude(0);
