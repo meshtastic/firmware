@@ -1,5 +1,36 @@
 # NRF52 TODO
 
+
+## RAK815
+
+### Bootloader 
+Installing the adafruit bootloader is optional - I think the stock bootloader will work okay for most.
+
+```
+kevinh@kevin-server:~/development/meshtastic/Adafruit_nRF52_Bootloader$ make BOARD=rak815 flash
+LD rak815_bootloader-0.3.2-111-g9478eb7-dirty.out
+   text	   data	    bss	    dec	    hex	filename
+  20888	   1124	  15006	  37018	   909a	_build/build-rak815/rak815_bootloader-0.3.2-111-g9478eb7-dirty.out
+Create rak815_bootloader-0.3.2-111-g9478eb7-dirty.hex
+Create rak815_bootloader-0.3.2-111-g9478eb7-dirty-nosd.hex
+Flashing: rak815_bootloader-0.3.2-111-g9478eb7-dirty-nosd.hex
+nrfjprog --program _build/build-rak815/rak815_bootloader-0.3.2-111-g9478eb7-dirty-nosd.hex --sectoranduicrerase -f nrf52 --reset
+Parsing hex file.
+Erasing page at address 0x0.
+Erasing page at address 0x74000.
+Erasing page at address 0x75000.
+Erasing page at address 0x76000.
+Erasing page at address 0x77000.
+Erasing page at address 0x78000.
+Erasing page at address 0x79000.
+Erasing UICR flash area.
+Applying system reset.
+Checking that the area to write is not protected.
+Programming device.
+Applying system reset.
+Run.
+```
+
 ## Misc work items
 
 RAM investigation.
