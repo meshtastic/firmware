@@ -2,12 +2,6 @@
 
 You probably don't care about this section - skip to the next one.
 
-- fix NRF52 build
-- show channel hash / speed at end of name
-- make default network faster
-- implement first cut of router mode: preferentially handle flooding, and change sleep and GPS behaviors (plan for geofence mode and battery save mode)
-- NRF52 BLE support
-
 # Medium priority
 
 Items to complete before 1.0.
