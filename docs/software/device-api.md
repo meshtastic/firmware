@@ -1,12 +1,26 @@
-# Bluetooth API
+# Device API
 
-The Bluetooth API is design to have only a few characteristics and most polymorphism comes from the flexible set of Google Protocol Buffers which are sent over the wire. We use protocol buffers extensively both for the bluetooth API and for packets inside the mesh or when providing packets to other applications on the phone.
+The Device API is design to have only a simple stream of ToRadio and FromRadio packets and all polymorphism comes from the flexible set of Google Protocol Buffers which are sent over the wire. We use protocol buffers extensively both for the bluetooth API and for packets inside the mesh or when providing packets to other applications on the phone.
 
-## A note on MTU sizes
+## Streaming version
 
-This device will work with any MTU size, but it is highly recommended that you call your phone's "setMTU function to increase MTU to 512 bytes" as soon as you connect to a service. This will dramatically improve performance when reading/writing packets.
+This protocol is **almost** identical when it is deployed over BLE, Serial/USB or TCP (our three currently supported transports for connecting to phone/PC). Most of this document is in terms of the original BLE version, but this section describes the small changes when this API is exposed over a Streaming (non datagram) transport. The streaming version has the following changes:
 
-## MeshBluetoothService
+- We assume the stream is reliable (though the protocol will resynchronize if bytes are lost or corrupted). i.e. we do not include CRCs or error correction codes.
+- Packets always have a four byte header (described below) prefixed before each packet. This header provides framing characters and length.
+- The stream going towards the radio is only a series of ToRadio packets (with the extra 4 byte headers)
+- The stream going towards the PC is a stream of FromRadio packets (with the 4 byte headers), or if the receiver state machine does not see valid header bytes it can (optionally) print those bytes as the debug console from the radio. This allows the device to emit regular serial debugging messages (which can be understood by a terminal program) but also switch to a more structured set of protobufs once it sees that the PC client has sent a protobuf towards it.
+
+The 4 byte header is constructed to both provide framing and to not look line 'normal' 7 bit ASCII.
+
+- Byte 0: START1 (0x94)
+- Byte 1: START2 (0xc3)
+- Byte 2: MSB of protobuf length
+- Byte 3: LSB of protobuf length
+
+The receiver will validate length and if >512 it will assume the packet is corrupted and return to looking for START1. While looking for START1 any other characters are printed as "debug output". For small example implementation of this reader see the meshtastic-python implementation.
+
+## MeshBluetoothService (the BLE API)
 
 This is the main bluetooth service for the device and provides the API your app should use to get information about the mesh, send packets or provision the radio.
 
@@ -71,16 +85,20 @@ Not all messages are kept in the fromradio queue (filtered based on SubPacket):
 - No WantNodeNum / DenyNodeNum messages are kept
   A variable keepAllPackets, if set to true will suppress this behavior and instead keep everything for forwarding to the phone (for debugging)
 
-## Protobuf API
+### A note on MTU sizes
+
+This device will work with any MTU size, but it is highly recommended that you call your phone's "setMTU function to increase MTU to 512 bytes" as soon as you connect to a service. This will dramatically improve performance when reading/writing packets.
+
+### Protobuf API
 
 On connect, you should send a want_config_id protobuf to the device. This will cause the device to send its node DB and radio config via the fromradio endpoint. After sending the full DB, the radio will send a want_config_id to indicate it is done sending the configuration.
 
-## Other bluetooth services
+### Other bluetooth services
 
-This document focuses on the core mesh service, but it is worth noting that the following other Bluetooth services are also
+This document focuses on the core device protocol, but it is worth noting that the following other Bluetooth services are also
 provided by the device.
 
-### BluetoothSoftwareUpdate
+#### BluetoothSoftwareUpdate
 
 The software update service. For a sample function that performs a software update using this API see [startUpdate](https://github.com/meshtastic/Meshtastic-Android/blob/master/app/src/main/java/com/geeksville/mesh/service/SoftwareUpdateService.kt).
 
@@ -98,10 +116,10 @@ Characteristics
 | GATT_UUID_MANU_NAME/0x2a29           | read        |                                                                                                                   |
 | GATT_UUID_HW_VERSION_STR/0x2a27      | read        |                                                                                                                   |
 
-### DeviceInformationService
+#### DeviceInformationService
 
 Implements the standard BLE contract for this service (has software version, hardware model, serial number, etc...)
 
-### BatteryLevelService
+#### BatteryLevelService
 
 Implements the standard BLE contract service, provides battery level in a way that most client devices should automatically understand (i.e. it should show in the bluetooth devices screen automatically)
