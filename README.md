@@ -22,10 +22,10 @@ This software is 100% open source and developed by a group of hobbyist experimen
 
 We currently support three models of radios.
 
-- TTGO T-Beam
-  - [T-Beam V0.7 w/ NEO-6M](https://www.aliexpress.com/item/4000574335430.html)
-  - [T-Beam V1.0 w/ NEO-6M - special Meshtastic version](https://www.aliexpress.com/item/4001178678568.html) (Includes built-in OLED display and they have **preinstalled** the meshtastic software)
+- TTGO T-Beam (usually the recommended choice)
+  - [T-Beam V1.1 w/ NEO-6M - special Meshtastic version](https://www.aliexpress.com/item/4001178678568.html) (Includes built-in OLED display and they have **preinstalled** the meshtastic software)
   - [T-Beam V1.0 w/ NEO-M8N](https://www.aliexpress.com/item/33047631119.html) (slightly better GPS)
+  - [T-Beam V0.7 w/ NEO-6M](https://www.aliexpress.com/item/4000574335430.html) (will work but **you must use the tbeam0.7 firmware ** - but the T-Beam V1.0 or later are better!)
   - 3D printable cases
     - [T-Beam V0](https://www.thingiverse.com/thing:3773717)
     - [T-Beam V1](https://www.thingiverse.com/thing:3830711)
