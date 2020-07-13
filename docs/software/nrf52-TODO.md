@@ -3,9 +3,9 @@
 ## RAK815
 
 TODO:
-* LORA: P0.23 is for PABOOST? see page 2 in RAK813 sechematic  P0.22 is for HF_RF_CPS?  Look up datasheet for PE4259  Until this is fixed I bet the range is quite poor.  DIO2 is not controlling PABOOST on this board!
-* i2c gps comms not quite right
-* measure power draw
+
+- i2c gps comms not quite right
+- measure power draw
 
 ### Bootloader
 
