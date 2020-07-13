@@ -119,8 +119,7 @@ void SX1262Interface::addReceiveMetadata(MeshPacket *mp)
     mp->rx_snr = lora.getSNR();
 }
 
-/** start an immediate transmit
- *  We override to turn on transmitter power as needed.
+/** We override to turn on transmitter power as needed.
  */
 void SX1262Interface::configHardwareForSend()
 {
