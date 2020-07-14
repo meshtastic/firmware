@@ -37,7 +37,7 @@ This software is 100% open source and developed by a group of hobbyist experimen
 
 ### Beginner's Guide
 
-For an detailed walkthrough aimed at beginners, we recommend: https://meshtastic.letstalkthis.com/
+For an detailed walk-through aimed at beginners, we recommend [meshtastic.letstalkthis.com](https://meshtastic.letstalkthis.com/)
 
 # Updates
 
