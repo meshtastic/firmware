@@ -35,6 +35,9 @@ This project is currently in beta testing but it is fairly stable and feature co
 
 This software is 100% open source and developed by a group of hobbyist experimenters. No warranty is provided, if you'd like to improve it - we'd love your help. Please post in the [forum](https://meshtastic.discourse.group/).
 
+### Beginner's Guide
+For an inclusive walkthrough aimed at beginners, we reccomend: https://meshtastic.letstalkthis.com/
+
 # Updates
 
 Note: Updates are happening almost daily, only major updates are listed below. For more details see our forum.
