@@ -255,9 +255,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define DIO1_GPIO 35     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
 #define DIO2_GPIO 34     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
 
-#elif defined(TTGO_LORA_V2_1_16)
+#elif defined(LORA_V2_1_16)
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "ttgo-lora32-v2-1-16"
+#define HW_VENDOR "lora32-v2-1-1.6"
 
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
