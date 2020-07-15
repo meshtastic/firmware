@@ -44,12 +44,10 @@ static void printMemErrorMsg(uint32_t cfsr)
 
 extern "C" void HardFault_Impl(uint32_t stack[])
 {
-    FAULT_MSG("In Hard Fault Handler\n");
-    FAULT_MSG("SCB->HFSR = 0x%08lx\n", SCB->HFSR);
+    FAULT_MSG("Hard Fault occurred! SCB->HFSR = 0x%08lx\n", SCB->HFSR);
 
     if ((SCB->HFSR & SCB_HFSR_FORCED_Msk) != 0) {
-        FAULT_MSG("Forced Hard Fault\n");
-        FAULT_MSG("SCB->CFSR = 0x%08lx\n", SCB->CFSR);
+        FAULT_MSG("Forced Hard Fault: SCB->CFSR = 0x%08lx\n", SCB->CFSR);
 
         if ((SCB->CFSR & SCB_CFSR_USGFAULTSR_Msk) != 0) {
             printUsageErrorMsg(SCB->CFSR);
@@ -69,10 +67,12 @@ extern "C" void HardFault_Impl(uint32_t stack[])
         FAULT_MSG("lr  = 0x%08lx\n", stack[lr]);
         FAULT_MSG("pc  = 0x%08lx\n", stack[pc]);
         FAULT_MSG("psr = 0x%08lx\n", stack[psr]);
-        asm volatile("bkpt #01");
-        while (1)
-            ;
     }
+
+    FAULT_MSG("Done with fault report - Waiting to reboot\n");
+    asm volatile("bkpt #01"); // Enter the debugger if one is connected
+    while (1)
+        ;
 }
 
 extern "C" void HardFault_Handler(void)
