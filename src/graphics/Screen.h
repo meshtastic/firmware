@@ -13,7 +13,7 @@
 #include "concurrency/PeriodicTask.h"
 #include "TypedQueue.h"
 #include "concurrency/LockGuard.h"
-#include "power.h"
+#include "../powermanager/Power.h"
 #include "commands.h"
 #include <string>
 

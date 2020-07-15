@@ -3,12 +3,18 @@
 #include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "configuration.h"
-#include "main.h"
-#include "graphics/Screen.h"
-#include "sleep.h"
-#include "target_specific.h"
-#include "timing.h"
+#include "../configuration.h"
+#include "../main.h"
+#include "../graphics/Screen.h"
+#include "../RedirectablePrint.h"
+#include "../target_specific.h"
+#include "../timing.h"
+#include "../sleep.h"
+#include "../error.h"
+#include "../events.h"
+#include <Arduino.h>
+
+namespace powermanager {
 
 static void sdsEnter()
 {
@@ -24,8 +30,6 @@ static void sdsEnter()
 
     doDeepSleep(radioConfig.preferences.sds_secs * 1000LL);
 }
-
-#include "error.h"
 
 static uint32_t secsSlept;
 
@@ -106,8 +110,8 @@ static void lsExit()
 
 static void nbEnter()
 {
-    screen.setOn(false);
     setBluetoothEnable(false);
+    screen.setOn(false);
 
     // FIXME - check if we already have packets for phone and immediately trigger EVENT_PACKETS_FOR_PHONE
 }
@@ -126,8 +130,8 @@ static void serialEnter()
 
 static void onEnter()
 {
-    screen.setOn(true);
     setBluetoothEnable(true);
+    screen.setOn(true);
 
     static uint32_t lastPingMs;
 
@@ -226,3 +230,5 @@ void PowerFSM_setup()
 
     powerFSM.run_machine(); // run one interation of the state machine, so we run our on enter tasks for the initial DARK state
 }
+
+} // namespace powermanager

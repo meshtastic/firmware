@@ -8,12 +8,14 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "../concurrency/Periodic.h"
-#include "PowerFSM.h"
+#include "../powermanager/PowerFSM.h"
+#include "../powermanager/PowerStatus.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
-#include "power.h"
 #include "BluetoothUtil.h" // needed for updateBatteryLevel, FIXME, eventually when we pull mesh out into a lib we shouldn't be whacking bluetooth from here
 #include "timing.h"
+#include "events.h"
+#include "Router.h"
 
 /*
 receivedPacketQueue - this is a queue of messages we've received from the mesh, which we are keeping to deliver to the phone.
@@ -46,8 +48,6 @@ FIXME in the initial proof of concept we just skip the entire want/deny flow and
 */
 
 MeshService service;
-
-#include "Router.h"
 
 static uint32_t sendOwnerCb()
 {
@@ -148,7 +148,7 @@ void MeshService::handleIncomingPosition(const MeshPacket *mp)
 
 int MeshService::handleFromRadio(const MeshPacket *mp)
 {
-    powerFSM.trigger(EVENT_RECEIVED_PACKET); // Possibly keep the node from sleeping
+    powermanager::powerFSM.trigger(EVENT_RECEIVED_PACKET); // Possibly keep the node from sleeping
 
     // If it is a position packet, perhaps set our clock (if we don't have a GPS of our own, otherwise wait for that to work)
     if (!gps->isConnected)

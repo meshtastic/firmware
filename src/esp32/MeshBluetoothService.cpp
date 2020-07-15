@@ -10,7 +10,6 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PhoneAPI.h"
-#include "PowerFSM.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "mesh.pb.h"

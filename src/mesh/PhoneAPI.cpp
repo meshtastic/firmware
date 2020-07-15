@@ -1,10 +1,11 @@
 #include "PhoneAPI.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "PowerFSM.h"
+#include "../powermanager/PowerFSM.h"
 #include "RadioInterface.h"
 #include "GPS.h"
 #include "timing.h"
+#include "events.h"
 #include <assert.h>
 
 PhoneAPI::PhoneAPI()
@@ -34,7 +35,7 @@ void PhoneAPI::checkConnectionTimeout()
  */
 void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 {
-    powerFSM.trigger(EVENT_CONTACT_FROM_PHONE); // As long as the phone keeps talking to us, don't let the radio go to sleep
+    powermanager::powerFSM.trigger(EVENT_CONTACT_FROM_PHONE); // As long as the phone keeps talking to us, don't let the radio go to sleep
     lastContactMsec = timing::millis();
     if (!isConnected) {
         isConnected = true;

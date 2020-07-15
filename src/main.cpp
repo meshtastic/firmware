@@ -26,11 +26,11 @@
 #include "NEMAGPS.h"
 #include "NodeDB.h"
 #include "concurrency/Periodic.h"
-#include "PowerFSM.h"
 #include "UBloxGPS.h"
 #include "configuration.h"
 #include "error.h"
-#include "power.h"
+#include "powermanager/Power.h"
+#include "powermanager/PowerFSM.h"
 // #include "rom/rtc.h"
 #include "DSRRouter.h"
 #include "debug.h"
@@ -38,6 +38,7 @@
 #include "graphics/Screen.h"
 #include "sleep.h"
 #include "timing.h"
+#include "events.h"
 #include <OneButton.h>
 #include <Wire.h>
 // #include <driver/rtc_io.h>
@@ -58,7 +59,10 @@
 graphics::Screen screen(SSD1306_ADDRESS);
 
 // Global power status
-meshtastic::PowerStatus *powerStatus = new meshtastic::PowerStatus();
+powermanager::PowerStatus *powerStatus = new powermanager::PowerStatus();
+
+// Global power class
+powermanager::Power *power;
 
 // Global GPS status
 meshtastic::GPSStatus *gpsStatus = new meshtastic::GPSStatus();
@@ -142,7 +146,7 @@ OneButton userButtonAlt;
 #endif
 void userButtonPressed()
 {
-    powerFSM.trigger(EVENT_PRESS);
+    powermanager::powerFSM.trigger(EVENT_PRESS);
 }
 void userButtonPressedLong()
 {
@@ -236,7 +240,7 @@ void setup()
 
 #ifdef TBEAM_V10
     // Currently only the tbeam has a PMU
-    power = new Power();
+    power = new powermanager::Power();
     power->setup();
     power->setStatusHandler(powerStatus);
     powerStatus->observe(&power->newStatus);
@@ -311,7 +315,7 @@ void setup()
         router.addInterface(rIf);
 
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
-    PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
+    powermanager::PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
 
     // setBluetoothEnable(false); we now don't start bluetooth until we enter the proper state
     setCPUFast(false); // 80MHz is fine for our slow peripherals
@@ -344,7 +348,7 @@ void loop()
 
     gps->loop(); // FIXME, remove from main, instead block on read
     router.loop();
-    powerFSM.run_machine();
+    powermanager::powerFSM.run_machine();
     service.loop();
 
     concurrency::periodicScheduler.loop();

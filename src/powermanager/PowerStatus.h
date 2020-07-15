@@ -1,12 +1,12 @@
 #pragma once
 #include <Arduino.h>
-#include "Status.h"
+#include "../Status.h"
 #include "configuration.h"
 
-namespace meshtastic {
+namespace powermanager {
 
-    /// Describes the state of the GPS system.
-    class PowerStatus : public Status
+    /// Describes the state of the power system.
+    class PowerStatus : public meshtastic::Status
     {
 
        private:
@@ -98,6 +98,6 @@ namespace meshtastic {
 
     };
 
-}
+} // namespace powermanager
 
-extern meshtastic::PowerStatus *powerStatus;
+extern powermanager::PowerStatus *powerStatus;

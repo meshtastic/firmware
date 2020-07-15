@@ -1,6 +1,4 @@
 #pragma once
-#include "concurrency/PeriodicTask.h"
-#include "PowerStatus.h"
 
 /**
  * Per @spattinson
@@ -10,31 +8,8 @@
  * looking at the red line - discharge at 0.2A - he gets a capacity of 2900mah, 90% of 2900 = 2610, that point in the graph looks
  * to be a shade above 3.2V
  */
-#define MIN_BAT_MILLIVOLTS 3250 // millivolts. 10% per https://blog.ampow.com/lipo-voltage-chart/
-
+#define MIN_BAT_MILLIVOLTS 3250 // millivolts. 10% per https://blog.ampow.com/lipo-voltage-chart/s
 #define BAT_MILLIVOLTS_FULL 4100
 #define BAT_MILLIVOLTS_EMPTY 3500
 
-class Power : public concurrency::PeriodicTask
-{
-
-   public:
-
-    Observable<const meshtastic::PowerStatus *> newStatus;
-
-    void readPowerStatus();
-    void loop();
-    virtual bool setup();
-    virtual void doTask();
-    void setStatusHandler(meshtastic::PowerStatus *handler)
-    {
-        statusHandler = handler;
-    }
-    
-   protected:
-    meshtastic::PowerStatus *statusHandler;
-    virtual void axp192Init();
-
-};
-
-extern Power *power;
+#define APX192

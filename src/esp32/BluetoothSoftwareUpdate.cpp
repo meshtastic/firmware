@@ -5,6 +5,7 @@
 #include "configuration.h"
 #include "../concurrency/LockGuard.h"
 #include "../timing.h"
+#include "../events.h"
 #include <Arduino.h>
 #include <BLE2902.h>
 #include <CRC32.h>
@@ -77,7 +78,7 @@ class DataCharacteristic : public CallbackCharacteristic
         crc.update(data, len);
         Update.write(data, len);
         updateActualSize += len;
-        powerFSM.trigger(EVENT_RECEIVED_TEXT_MSG); // Not exactly correct, but we want to force the device to not sleep now
+        powermanager::powerFSM.trigger(EVENT_RECEIVED_TEXT_MSG); // Not exactly correct, but we want to force the device to not sleep now
     }
 };
 

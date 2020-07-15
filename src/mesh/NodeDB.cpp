@@ -8,10 +8,11 @@
 #include "GPS.h"
 #include "NodeDB.h"
 #include "PacketHistory.h"
-#include "PowerFSM.h"
+#include "../powermanager/PowerFSM.h"
 #include "Router.h"
 #include "configuration.h"
 #include "error.h"
+#include "events.h"
 #include "mesh-pb-constants.h"
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -370,7 +371,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
                     devicestate.rx_text_message = mp;
                     devicestate.has_rx_text_message = true;
                     updateTextMessage = true;
-                    powerFSM.trigger(EVENT_RECEIVED_TEXT_MSG);
+                    powermanager::powerFSM.trigger(EVENT_RECEIVED_TEXT_MSG);
                     notifyObservers(true);  //Force an update whether or not our node counts have changed
                 }
             }
@@ -389,7 +390,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
 
             if (changed) {
                 updateGUIforNode = info;
-                powerFSM.trigger(EVENT_NODEDB_UPDATED);
+                powermanager::powerFSM.trigger(EVENT_NODEDB_UPDATED);
                 notifyObservers(true);  //Force an update whether or not our node counts have changed
 
                 // Not really needed - we will save anyways when we go to sleep

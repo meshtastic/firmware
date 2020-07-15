@@ -23,7 +23,6 @@ esp_sleep_source_t wakeCause; // the reason we booted this time
 
 #ifdef TBEAM_V10
 #include "axp20x.h"
-extern AXP20X_Class axp;
 #endif
 
 /// Called to ask any observers if they want to veto sleep. Return 1 to veto or 0 to allow sleep to happen
@@ -63,7 +62,8 @@ void setLed(bool ledOn)
 #ifdef TBEAM_V10
     if (axp192_found) {
         // blink the axp led
-        axp.setChgLEDMode(ledOn ? AXP20X_LED_LOW_LEVEL : AXP20X_LED_OFF);
+        /** @todo fix */
+        //axp.setChgLEDMode(ledOn ? AXP20X_LED_LOW_LEVEL : AXP20X_LED_OFF);
     }
 #endif
 }
@@ -73,8 +73,9 @@ void setGPSPower(bool on)
     DEBUG_MSG("Setting GPS power=%d\n", on);
 
 #ifdef TBEAM_V10
-    if (axp192_found)
-        axp.setPowerOutPut(AXP192_LDO3, on ? AXP202_ON : AXP202_OFF); // GPS main power
+        /** @todo fix */
+    //if (axp192_found)
+        //axp.setPowerOutPut(AXP192_LDO3, on ? AXP202_ON : AXP202_OFF); // GPS main power
 #endif
 }
 

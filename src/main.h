@@ -1,7 +1,7 @@
 #pragma once
 
 #include "graphics/Screen.h"
-#include "PowerStatus.h"
+#include "powermanager/PowerStatus.h"
 #include "GPSStatus.h"
 #include "NodeStatus.h"
 

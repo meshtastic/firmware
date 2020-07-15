@@ -1,12 +1,13 @@
 #include "BluetoothUtil.h"
 #include "MeshBluetoothService.h"
-#include "PowerFSM.h"
-#include "configuration.h"
+#include "../powermanager/PowerFSM.h"
+#include "../configuration.h"
+#include "../events.h"
 #include "esp_task_wdt.h"
-#include "main.h"
-#include "sleep.h"
-#include "target_specific.h"
-#include "utils.h"
+#include "../main.h"
+#include "../sleep.h"
+#include "../target_specific.h"
+#include "../utils.h"
 
 bool bluetoothOn;
 
@@ -21,7 +22,7 @@ void reinitBluetooth()
     // Note: these callbacks might be coming in from a different thread.
     BLEServer *serve = initBLE(
         [](uint32_t pin) {
-            powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
+            powermanager::powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
             screen.startBluetoothPinScreen(pin);
         },
         []() { screen.stopBluetoothPinScreen(); }, getDeviceName(), HW_VENDOR, optstr(APP_VERSION),

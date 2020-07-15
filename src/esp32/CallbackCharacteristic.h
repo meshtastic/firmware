@@ -1,6 +1,6 @@
 #pragma once
 #include "BLECharacteristic.h"
-#include "PowerFSM.h" // FIXME - someday I want to make this OTA thing a separate lb at at that point it can't touch this
+#include "../powermanager/PowerFSM.h" // FIXME - someday I want to make this OTA thing a separate lb at at that point it can't touch this
 
 /**
  * A characterstic with a set of overridable callbacks

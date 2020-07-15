@@ -26,12 +26,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "configuration.h"
-#include "graphics/images.h"
+#include "images.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
+#include "../powermanager/PowerStatus.h"
 #include "Screen.h"
 #include "utils.h"
 #include "configs.h"
+#include "events.h"
 
 using namespace meshtastic; /** @todo remove */
 
@@ -171,7 +173,8 @@ static void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char *
 #endif
 
 // Draw power bars or a charging indicator on an image of a battery, determined by battery charge voltage or percentage.
-static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *imgBuffer, const PowerStatus *powerStatus)
+// CHANGE: let's use the global powerStatus pointer instead of passing it as an argument
+static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *imgBuffer)
 {
     static const uint8_t powerBar[3] = {0x81, 0xBD, 0xBD};
     static const uint8_t lightning[8] = {0xA1, 0xA1, 0xA5, 0xAD, 0xB5, 0xA5, 0x85, 0x85};
@@ -774,7 +777,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
         // Display power status
         if (powerStatus->getHasBattery())
-            drawBattery(display, x, y + 2, imgBattery, powerStatus);
+            drawBattery(display, x, y + 2, imgBattery);
         else
             display->drawFastImage(x, y + 2, 16, 8, powerStatus->getHasUSB() ? imgUSB : imgPower);
         // Display nodes status
