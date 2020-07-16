@@ -4,6 +4,17 @@
 #include "main.h"
 #include <bluefruit.h>
 
+// NRF52 wants these constants as byte arrays
+// Generated here https://yupana-engineering.com/online-uuid-to-c-array-converter - but in REVERSE BYTE ORDER
+const uint8_t MESH_SERVICE_UUID_16[16u] = {0xfd, 0xea, 0x73, 0xe2, 0xca, 0x5d, 0xa8, 0x9f,
+                                           0x1f, 0x46, 0xa8, 0x15, 0x18, 0xb2, 0xa1, 0x6b};
+const uint8_t TORADIO_UUID_16[16u] = {0xe7, 0x01, 0x44, 0x12, 0x66, 0x78, 0xdd, 0xa1,
+                                      0xad, 0x4d, 0x9e, 0x12, 0xd2, 0x76, 0x5c, 0xf7};
+const uint8_t FROMRADIO_UUID_16[16u] = {0xd5, 0x54, 0xe4, 0xc5, 0x25, 0xc5, 0x31, 0xa5,
+                                        0x55, 0x4a, 0x02, 0xee, 0xc2, 0xbc, 0xa2, 0x8b};
+const uint8_t FROMNUM_UUID_16[16u] = {0x53, 0x44, 0xe3, 0x47, 0x75, 0xaa, 0x70, 0xa6,
+                                      0x66, 0x4f, 0x00, 0xa8, 0x8c, 0xa1, 0x9d, 0xed};
+
 static BLEService meshBleService = BLEService(BLEUuid(MESH_SERVICE_UUID_16));
 static BLECharacteristic fromNum = BLECharacteristic(BLEUuid(FROMNUM_UUID_16));
 static BLECharacteristic fromRadio = BLECharacteristic(BLEUuid(FROMRADIO_UUID_16));
@@ -17,6 +28,7 @@ static BLEDfu bledfu; // DFU software update helper service
 // proccess at once
 // static uint8_t trBytes[_max(_max(_max(_max(ToRadio_size, RadioConfig_size), User_size), MyNodeInfo_size), FromRadio_size)];
 static uint8_t fromRadioBytes[FromRadio_size];
+static uint8_t toRadioBytes[ToRadio_size];
 
 class BluetoothPhoneAPI : public PhoneAPI
 {
@@ -77,10 +89,10 @@ void startAdv(void)
 {
     // Advertising packet
     Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
-    Bluefruit.Advertising.addTxPower();
 
-    // Include HRM Service UUID
-    Bluefruit.Advertising.addService(meshBleService);
+    // IncludeService UUID
+    Bluefruit.ScanResponse.addService(meshBleService);
+    Bluefruit.ScanResponse.addTxPower();
 
     // Include Name
     Bluefruit.Advertising.addName();
@@ -97,7 +109,7 @@ void startAdv(void)
     Bluefruit.Advertising.restartOnDisconnect(true);
     Bluefruit.Advertising.setInterval(32, 244); // in unit of 0.625 ms
     Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode
-    Bluefruit.Advertising.start(0);             // 0 = Don't stop advertising after n seconds
+    Bluefruit.Advertising.start(0); // 0 = Don't stop advertising after n seconds.  FIXME, we should stop advertising after X
 }
 
 /**
@@ -163,13 +175,15 @@ void setupMeshService(void)
 
     toRadio.setProperties(CHR_PROPS_WRITE);
     toRadio.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS); // FIXME secure this!
+    toRadio.setFixedLen(0);
     toRadio.setMaxLen(512);
+    toRadio.setBuffer(toRadioBytes, sizeof(toRadioBytes));
     toRadio.setWriteCallback(toRadioWriteCb);
     toRadio.begin();
 }
 
 // FIXME, turn off soft device access for debugging
-static bool isSoftDeviceAllowed = false;
+static bool isSoftDeviceAllowed = true;
 
 void NRF52Bluetooth::setup()
 {
@@ -178,7 +192,7 @@ void NRF52Bluetooth::setup()
     Bluefruit.begin();
 
     // Set the advertised device name (keep it short!)
-    Bluefruit.setName(getDeviceName()); // FIXME
+    Bluefruit.setName(getDeviceName());
 
     // Set the connect/disconnect callback handlers
     Bluefruit.Periph.setConnectCallback(connect_callback);
@@ -186,8 +200,9 @@ void NRF52Bluetooth::setup()
 
     // Configure and Start the Device Information Service
     DEBUG_MSG("Configuring the Device Information Service\n");
-    bledis.setManufacturer("meshtastic.org");
-    bledis.setModel("NRF52-meshtastic"); // FIXME
+    bledis.setManufacturer(HW_VENDOR);
+    bledis.setModel(optstr(HW_VERSION));
+    bledis.setFirmwareRev(optstr(APP_VERSION));
     bledis.begin();
 
     // Start the BLE Battery Service and set it to 100%
