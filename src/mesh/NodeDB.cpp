@@ -88,10 +88,11 @@ void NodeDB::resetRadioConfig()
         radioConfig.has_channel_settings = true;
         radioConfig.has_preferences = true;
 
+        channelSettings.modem_config = ChannelSettings_ModemConfig_Bw125Cr45Sf128; // Short and Fast
         // radioConfig.modem_config = RadioConfig_ModemConfig_Bw125Cr45Sf128;  // medium range and fast
         // channelSettings.modem_config = ChannelSettings_ModemConfig_Bw500Cr45Sf128;  // short range and fast, but wide bandwidth
         // so incompatible radios can talk together
-        channelSettings.modem_config = ChannelSettings_ModemConfig_Bw125Cr48Sf4096; // slow and long range
+        // channelSettings.modem_config = ChannelSettings_ModemConfig_Bw125Cr48Sf4096; // slow and long range
 
         channelSettings.tx_power = 23;
         memcpy(&channelSettings.psk.bytes, &defaultpsk, sizeof(channelSettings.psk));
