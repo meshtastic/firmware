@@ -141,19 +141,20 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         perhapsSetRTC(t);
     }
 
+    latitude = ublox.getLatitude(0);
+    longitude = ublox.getLongitude(0);
+    altitude = ublox.getAltitude(0) / 1000; // in mm convert to meters
+    dop = ublox.getPDOP(0); // PDOP (an accuracy metric) is reported in 10^2 units so we have to scale down when we use it
+    heading = ublox.getHeading(0);
+    numSatellites = ublox.getSIV(0);
+
+    // bogus lat lon is reported as 0 or 0 (can be bogus just for one)
+    // Also: apparently when the GPS is initially reporting lock it can output a bogus latitude > 90 deg!
+    hasValidLocation = (latitude != 0) && (longitude != 0) && (latitude <= 900000000 && latitude >= -900000000) && (numSatellites > 0);
+
+    // we only notify if position has changed due to a new fix
     if ((fixtype >= 3 && fixtype <= 4) && ublox.getP(maxWait)) // rd fixes only
     {
-        // we only notify if position has changed
-        latitude = ublox.getLatitude(0);
-        longitude = ublox.getLongitude(0);
-        altitude = ublox.getAltitude(0) / 1000; // in mm convert to meters
-        dop = ublox.getPDOP(0); // PDOP (an accuracy metric) is reported in 10^2 units so we have to scale down when we use it
-        heading = ublox.getHeading(0);
-        numSatellites = ublox.getSIV(0);
-
-        // bogus lat lon is reported as 0 or 0 (can be bogus just for one)
-        // Also: apparently when the GPS is initially reporting lock it can output a bogus latitude > 90 deg!
-        hasValidLocation = (latitude != 0) && (longitude != 0) && (latitude <= 900000000 && latitude >= -900000000);
         if (hasValidLocation) {
             wantNewLocation = false;
             notifyObservers(NULL);
