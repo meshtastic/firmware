@@ -305,9 +305,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // What platforms should use SEGGER?
 #ifdef NRF52_SERIES
 
+// Always include the SEGGER code on NRF52 - because useful for debugging
+#include "SEGGER_RTT.h"
+
+// Debug printing to segger console
+#define SEGGER_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
+
 // nrf52 gets its settings via variant files
 #ifndef PIN_SERIAL_RX
-// No serial ports on this board - use segger in memory console
+// No serial ports on this board - ONLY use segger in memory console
 #define USE_SEGGER
 #endif
 
@@ -316,7 +322,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 
 #ifdef USE_SEGGER
-#include "SEGGER_RTT.h"
 #define DEBUG_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
 #else
 #ifdef DEBUG_PORT
