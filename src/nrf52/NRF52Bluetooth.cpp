@@ -130,10 +130,12 @@ void fromRadioAuthorizeCb(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_e
     size_t numBytes = bluetoothPhoneAPI->getFromRadio(fromRadioBytes);
 
     DEBUG_MSG("fromRadioAuthorizeCb numBytes=%u\n", numBytes);
+    if (numBytes >= 2)
+        DEBUG_MSG("fromRadio bytes %x %x\n", fromRadioBytes[0], fromRadioBytes[1]);
 
     // Someone is going to read our value as soon as this callback returns.  So fill it with the next message in the queue
     // or make empty if the queue is empty
-    chr->write(fromRadioBytes, numBytes);
+    fromRadio.write(fromRadioBytes, numBytes);
     authorizeRead(conn_hdl);
 }
 
@@ -182,10 +184,13 @@ void setupMeshService(void)
 
     fromRadio.setProperties(CHR_PROPS_READ);
     fromRadio.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS); // FIXME secure this!
-    fromRadio.setMaxLen(512);
-    fromRadio.setReadAuthorizeCallback(fromRadioAuthorizeCb);
-    fromRadio.setBuffer(fromRadioBytes,
-                        sizeof(fromRadioBytes)); // we preallocate our fromradio buffer so we won't waste space for two copies
+    fromRadio.setMaxLen(sizeof(fromRadioBytes));
+    fromRadio.setReadAuthorizeCallback(
+        fromRadioAuthorizeCb,
+        false); // We don't call this callback via the adafruit queue, because we can safely run in the BLE context
+    // FIXME - add this back in
+    // fromRadio.setBuffer(fromRadioBytes, sizeof(fromRadioBytes)); // we preallocate our fromradio buffer so we won't waste space
+    // for two copies
     fromRadio.begin();
 
     toRadio.setProperties(CHR_PROPS_WRITE);
@@ -193,7 +198,9 @@ void setupMeshService(void)
     toRadio.setFixedLen(0);
     toRadio.setMaxLen(512);
     toRadio.setBuffer(toRadioBytes, sizeof(toRadioBytes));
-    toRadio.setWriteCallback(toRadioWriteCb);
+    toRadio.setWriteCallback(
+        toRadioWriteCb,
+        false); // We don't call this callback via the adafruit queue, because we can safely run in the BLE context
     toRadio.begin();
 }
 
