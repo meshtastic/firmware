@@ -114,6 +114,14 @@ void startAdv(void)
     Bluefruit.Advertising.start(0); // 0 = Don't stop advertising after n seconds.  FIXME, we should stop advertising after X
 }
 
+// Just ack that the caller is allowed to read
+static void authorizeRead(uint16_t conn_hdl)
+{
+    ble_gatts_rw_authorize_reply_params_t reply = {.type = BLE_GATTS_AUTHORIZE_TYPE_READ};
+    reply.params.write.gatt_status = BLE_GATT_STATUS_SUCCESS;
+    sd_ble_gatts_rw_authorize_reply(conn_hdl, &reply);
+}
+
 /**
  * client is starting read, pull the bytes from our API class
  */
@@ -126,6 +134,7 @@ void fromRadioAuthorizeCb(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_e
     // Someone is going to read our value as soon as this callback returns.  So fill it with the next message in the queue
     // or make empty if the queue is empty
     chr->write(fromRadioBytes, numBytes);
+    authorizeRead(conn_hdl);
 }
 
 void toRadioWriteCb(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *data, uint16_t len)
@@ -140,7 +149,9 @@ void toRadioWriteCb(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *data, ui
  */
 void fromNumAuthorizeCb(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_evt_read_t *request)
 {
-    DEBUG_MSG("fromNumAuthorizeCb FIXME - implement\n");
+    DEBUG_MSG("fromNumAuthorizeCb\n");
+
+    authorizeRead(conn_hdl);
 }
 
 void setupMeshService(void)
@@ -161,7 +172,9 @@ void setupMeshService(void)
         0); // Variable len (either 0 or 4)  FIXME consider changing protocol so it is fixed 4 byte len, where 0 means empty
     fromNum.setMaxLen(4);
     fromNum.setCccdWriteCallback(cccd_callback); // Optionally capture CCCD updates
-    fromNum.setReadAuthorizeCallback(fromNumAuthorizeCb);
+    // We don't yet need to hook the fromNum auth callback
+    // fromNum.setReadAuthorizeCallback(fromNumAuthorizeCb);
+    fromNum.write32(0); // Provide default fromNum of 0
     fromNum.begin();
     // uint8_t hrmdata[2] = {0b00000110, 0x40}; // Set the characteristic to use 8-bit values, with the sensor connected and
     // detected
@@ -176,7 +189,7 @@ void setupMeshService(void)
     fromRadio.begin();
 
     toRadio.setProperties(CHR_PROPS_WRITE);
-    toRadio.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS); // FIXME secure this!
+    toRadio.setPermission(SECMODE_OPEN, SECMODE_OPEN); // FIXME secure this!
     toRadio.setFixedLen(0);
     toRadio.setMaxLen(512);
     toRadio.setBuffer(toRadioBytes, sizeof(toRadioBytes));
