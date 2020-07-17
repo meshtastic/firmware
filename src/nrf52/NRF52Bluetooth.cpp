@@ -127,15 +127,20 @@ static void authorizeRead(uint16_t conn_hdl)
  */
 void fromRadioAuthorizeCb(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_evt_read_t *request)
 {
-    size_t numBytes = bluetoothPhoneAPI->getFromRadio(fromRadioBytes);
+    if (request->offset == 0) {
+        // If the read is long, we will get multiple authorize invocations - we only populate data on the first
 
-    DEBUG_MSG("fromRadioAuthorizeCb numBytes=%u\n", numBytes);
-    if (numBytes >= 2)
-        DEBUG_MSG("fromRadio bytes %x %x\n", fromRadioBytes[0], fromRadioBytes[1]);
+        size_t numBytes = bluetoothPhoneAPI->getFromRadio(fromRadioBytes);
 
-    // Someone is going to read our value as soon as this callback returns.  So fill it with the next message in the queue
-    // or make empty if the queue is empty
-    fromRadio.write(fromRadioBytes, numBytes);
+        // DEBUG_MSG("fromRadioAuthorizeCb numBytes=%u\n", numBytes);
+        // if (numBytes >= 2) DEBUG_MSG("fromRadio bytes %x %x\n", fromRadioBytes[0], fromRadioBytes[1]);
+
+        // Someone is going to read our value as soon as this callback returns.  So fill it with the next message in the queue
+        // or make empty if the queue is empty
+        fromRadio.write(fromRadioBytes, numBytes);
+    } else {
+        // DEBUG_MSG("Ignoring successor read\n");
+    }
     authorizeRead(conn_hdl);
 }
 
@@ -188,8 +193,7 @@ void setupMeshService(void)
     fromRadio.setReadAuthorizeCallback(
         fromRadioAuthorizeCb,
         false); // We don't call this callback via the adafruit queue, because we can safely run in the BLE context
-    // FIXME - add this back in
-    // fromRadio.setBuffer(fromRadioBytes, sizeof(fromRadioBytes)); // we preallocate our fromradio buffer so we won't waste space
+    fromRadio.setBuffer(fromRadioBytes, sizeof(fromRadioBytes)); // we preallocate our fromradio buffer so we won't waste space
     // for two copies
     fromRadio.begin();
 
