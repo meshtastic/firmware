@@ -42,7 +42,7 @@ bool UBloxGPS::setup()
     delay(200); // Give time for the GPS to startup after we gave power
 #endif
 
-    ublox.enableDebugging(Serial);
+    // ublox.enableDebugging(Serial);
 
     // try a second time, the ublox lib serial parsing is buggy?
     if (!tryConnect())
