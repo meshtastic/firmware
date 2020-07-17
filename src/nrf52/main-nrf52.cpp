@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <ble_gap.h>
 #include <memory.h>
+#include <stdio.h>
 
 #ifdef NRF52840_XXAA
 // #include <nrf52840.h>
@@ -63,6 +64,18 @@ void setBluetoothEnable(bool on)
     }
 }
 
+/**
+ * Override printf to use the SEGGER output library
+ */
+int printf(const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    auto res = SEGGER_RTT_vprintf(0, fmt, &args);
+    va_end(args);
+    return res;
+}
+
 void nrf52Setup()
 {
 
@@ -84,4 +97,5 @@ void nrf52Setup()
     // ble_controller_rand_vector_get_blocking(&r, sizeof(r));
     // randomSeed(r);
     DEBUG_MSG("FIXME, call randomSeed\n");
+    // ::printf("TESTING PRINTF\n");
 }
