@@ -33,9 +33,9 @@
 #include "powermanager/PowerFSM.h"
 // #include "rom/rtc.h"
 #include "DSRRouter.h"
-#include "debug.h"
-#include "main.h"
+// #include "debug.h"
 #include "graphics/Screen.h"
+#include "main.h"
 #include "sleep.h"
 #include "timing.h"
 #include "events.h"
@@ -156,23 +156,29 @@ void userButtonPressedLong()
 #ifndef NO_ESP32
 void initWifi()
 {
-    strcpy(radioConfig.preferences.wifi_ssid, "geeksville");
-    strcpy(radioConfig.preferences.wifi_password, "xxx");
+#if 0
+    // strcpy(radioConfig.preferences.wifi_ssid, "xxx");
+    // strcpy(radioConfig.preferences.wifi_password, "xxx");
     if (radioConfig.has_preferences) {
         const char *wifiName = radioConfig.preferences.wifi_ssid;
 
         if (*wifiName) {
             const char *wifiPsw = radioConfig.preferences.wifi_password;
             if (radioConfig.preferences.wifi_ap_mode) {
-                // DEBUG_MSG("STARTING WIFI AP: ssid=%s, ok=%d\n", wifiName, WiFi.softAP(wifiName, wifiPsw));
+                DEBUG_MSG("STARTING WIFI AP: ssid=%s, ok=%d\n", wifiName, WiFi.softAP(wifiName, wifiPsw));
             } else {
-                // WiFi.mode(WIFI_MODE_STA);
+                WiFi.mode(WIFI_MODE_STA);
                 DEBUG_MSG("JOINING WIFI: ssid=%s\n", wifiName);
-                // WiFi.begin(wifiName, wifiPsw);
+                if (WiFi.begin(wifiName, wifiPsw) == WL_CONNECTED) {
+                    DEBUG_MSG("MY IP ADDRESS: %s\n", WiFi.localIP().toString().c_str());
+                } else {
+                    DEBUG_MSG("FAILED JOINING WIFI\n");
+                }
             }
         }
-    } else
+    } else 
         DEBUG_MSG("Not using WIFI\n");
+#endif
 }
 #endif
 
@@ -263,12 +269,18 @@ void setup()
     // Init GPS - first try ublox
     gps = new UBloxGPS();
     if (!gps->setup()) {
-        // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
-        // assume NEMA at 9600 baud.
-        DEBUG_MSG("ERROR: No UBLOX GPS found, hoping that NEMA might work\n");
-        delete gps;
-        gps = new NEMAGPS();
-        gps->setup();
+        DEBUG_MSG("ERROR: No UBLOX GPS found\n");
+
+        if (GPS::_serial_gps) {
+            // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
+            // assume NEMA at 9600 baud.
+            DEBUG_MSG("Hoping that NEMA might work\n");
+            delete gps;
+
+            // dumb NEMA access only work for serial GPSes)
+            gps = new NEMAGPS();
+            gps->setup();
+        }
     }
 #else
     gps = new NEMAGPS();
@@ -294,15 +306,15 @@ void setup()
     SPI.begin();
 #else
     // ESP32
-    SPI.begin(SCK_GPIO, MISO_GPIO, MOSI_GPIO, NSS_GPIO);
+    SPI.begin(RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
     SPI.setFrequency(4000000);
 #endif
 
     // MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
     RadioInterface *rIf =
-#if defined(RF95_IRQ_GPIO)
+#if defined(RF95_IRQ)
         // new CustomRF95(); old Radiohead based driver
-        new RF95Interface(NSS_GPIO, RF95_IRQ_GPIO, RESET_GPIO, SPI);
+        new RF95Interface(RF95_NSS, RF95_IRQ, RF95_RESET, SPI);
 #elif defined(SX1262_CS)
         new SX1262Interface(SX1262_CS, SX1262_DIO1, SX1262_RESET, SX1262_BUSY, SPI);
 #else

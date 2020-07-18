@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <esp_gatt_defs.h>
 
+#include "BluetoothCommon.h"
 #include "CallbackCharacteristic.h"
 #include "GPS.h"
 #include "MeshService.h"
@@ -38,26 +39,20 @@ class BluetoothPhoneAPI : public PhoneAPI
     }
 };
 
-BluetoothPhoneAPI *bluetoothPhoneAPI;
-
+static BluetoothPhoneAPI *bluetoothPhoneAPI;
 
 class ToRadioCharacteristic : public CallbackCharacteristic
 {
   public:
-    ToRadioCharacteristic() : CallbackCharacteristic("f75c76d2-129e-4dad-a1dd-7866124401e7", BLECharacteristic::PROPERTY_WRITE) {}
+    ToRadioCharacteristic() : CallbackCharacteristic(TORADIO_UUID, BLECharacteristic::PROPERTY_WRITE) {}
 
-    void onWrite(BLECharacteristic *c)
-    {
-        bluetoothPhoneAPI->handleToRadio(c->getData(), c->getValue().length());
-    }
+    void onWrite(BLECharacteristic *c) { bluetoothPhoneAPI->handleToRadio(c->getData(), c->getValue().length()); }
 };
 
 class FromRadioCharacteristic : public CallbackCharacteristic
 {
   public:
-    FromRadioCharacteristic() : CallbackCharacteristic("8ba2bcc2-ee02-4a55-a531-c525c5e454d5", BLECharacteristic::PROPERTY_READ)
-    {
-    }
+    FromRadioCharacteristic() : CallbackCharacteristic(FROMRADIO_UUID, BLECharacteristic::PROPERTY_READ) {}
 
     void onRead(BLECharacteristic *c)
     {
@@ -77,9 +72,8 @@ class FromNumCharacteristic : public CallbackCharacteristic
 {
   public:
     FromNumCharacteristic()
-        : CallbackCharacteristic("ed9da18c-a800-4f66-a670-aa7547e34453", BLECharacteristic::PROPERTY_WRITE |
-                                                                             BLECharacteristic::PROPERTY_READ |
-                                                                             BLECharacteristic::PROPERTY_NOTIFY)
+        : CallbackCharacteristic(FROMNUM_UUID, BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ |
+                                                   BLECharacteristic::PROPERTY_NOTIFY)
     {
         // observe(&service.fromNumChanged);
     }
@@ -99,7 +93,7 @@ BLEService *createMeshBluetoothService(BLEServer *server)
     }
 
     // Create the BLE Service, we need more than the default of 15 handles
-    BLEService *service = server->createService(BLEUUID("6ba1b218-15a8-461f-9fa8-5dcae273eafd"), 30, 0);
+    BLEService *service = server->createService(BLEUUID(MESH_SERVICE_UUID), 30, 0);
 
     assert(!meshFromNumCharacteristic);
     meshFromNumCharacteristic = new FromNumCharacteristic;

@@ -161,6 +161,11 @@ class SimRadio : public RadioInterface
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
     virtual bool init() { return true; }
+
+    /// Apply any radio provisioning changes
+    /// Make sure the Driver is properly configured before calling init().
+    /// \return true if initialisation succeeded.
+    virtual bool reconfigure() { return true; }
 };
 
 /// Debug printing for packets

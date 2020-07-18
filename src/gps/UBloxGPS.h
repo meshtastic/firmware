@@ -38,4 +38,7 @@ class UBloxGPS : public GPS, public concurrency::PeriodicTask
     /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
     /// always returns 0 to indicate okay to sleep
     int prepareSleep(void *unused);
+
+    /// Attempt to connect to our GPS, returns false if no gps is present
+    bool tryConnect();
 };
