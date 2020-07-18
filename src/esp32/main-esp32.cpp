@@ -7,6 +7,8 @@
 #include "sleep.h"
 #include "target_specific.h"
 #include "utils.h"
+#include <nvs.h>
+#include <nvs_flash.h>
 
 bool bluetoothOn;
 
@@ -83,13 +85,19 @@ void esp32Setup()
     DEBUG_MSG("Total PSRAM: %d\n", ESP.getPsramSize());
     DEBUG_MSG("Free PSRAM: %d\n", ESP.getFreePsram());
 
+    nvs_stats_t nvs_stats;
+    auto res = nvs_get_stats(NULL, &nvs_stats);
+    assert(res == ESP_OK);
+    DEBUG_MSG("NVS: UsedEntries %d, FreeEntries %d, AllEntries %d\n", nvs_stats.used_entries, nvs_stats.free_entries,
+              nvs_stats.total_entries);
+
     // enableModemSleep();
 
 // Since we are turning on watchdogs rather late in the release schedule, we really don't want to catch any
 // false positives.  The wait-to-sleep timeout for shutting down radios is 30 secs, so pick 45 for now.
 #define APP_WATCHDOG_SECS 45
 
-    auto res = esp_task_wdt_init(APP_WATCHDOG_SECS, true);
+    res = esp_task_wdt_init(APP_WATCHDOG_SECS, true);
     assert(res == ESP_OK);
 
     res = esp_task_wdt_add(NULL);
