@@ -45,6 +45,10 @@ typedef struct _ChannelSettings {
     ChannelSettings_ModemConfig modem_config;
     ChannelSettings_psk_t psk;
     char name[12];
+    uint32_t bandwidth;
+    uint32_t spread_factor;
+    uint32_t coding_rate;
+    uint32_t channel_num;
 } ChannelSettings;
 
 typedef PB_BYTES_ARRAY_T(240) Data_payload_t;
@@ -241,7 +245,7 @@ typedef struct _ToRadio {
 #define RouteDiscovery_init_default              {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define SubPacket_init_default                   {0, {Position_init_default}, 0, 0, 0, 0, {0}, 0}
 #define MeshPacket_init_default                  {0, 0, 0, {SubPacket_init_default}, 0, 0, 0, 0, 0}
-#define ChannelSettings_init_default             {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, ""}
+#define ChannelSettings_init_default             {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, "", 0, 0, 0, 0}
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default, false, ChannelSettings_init_default}
 #define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, {0, 0, 0}}
 #define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0}
@@ -257,7 +261,7 @@ typedef struct _ToRadio {
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define SubPacket_init_zero                      {0, {Position_init_zero}, 0, 0, 0, 0, {0}, 0}
 #define MeshPacket_init_zero                     {0, 0, 0, {SubPacket_init_zero}, 0, 0, 0, 0, 0}
-#define ChannelSettings_init_zero                {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, ""}
+#define ChannelSettings_init_zero                {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, "", 0, 0, 0, 0}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero, false, ChannelSettings_init_zero}
 #define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, {0, 0, 0}}
 #define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0}
@@ -271,6 +275,10 @@ typedef struct _ToRadio {
 /* Field tags (for use in manual encoding/decoding) */
 #define ChannelSettings_tx_power_tag             1
 #define ChannelSettings_modem_config_tag         3
+#define ChannelSettings_bandwidth_tag            6
+#define ChannelSettings_spread_factor_tag        7
+#define ChannelSettings_coding_rate_tag          8
+#define ChannelSettings_channel_num_tag          9
 #define ChannelSettings_psk_tag                  4
 #define ChannelSettings_name_tag                 5
 #define Data_typ_tag                             1
@@ -436,7 +444,11 @@ X(a, STATIC,   SINGULAR, BOOL,     want_ack,         11)
 X(a, STATIC,   SINGULAR, INT32,    tx_power,          1) \
 X(a, STATIC,   SINGULAR, UENUM,    modem_config,      3) \
 X(a, STATIC,   SINGULAR, BYTES,    psk,               4) \
-X(a, STATIC,   SINGULAR, STRING,   name,              5)
+X(a, STATIC,   SINGULAR, STRING,   name,              5) \
+X(a, STATIC,   SINGULAR, UINT32,   bandwidth,         6) \
+X(a, STATIC,   SINGULAR, UINT32,   spread_factor,     7) \
+X(a, STATIC,   SINGULAR, UINT32,   coding_rate,       8) \
+X(a, STATIC,   SINGULAR, UINT32,   channel_num,       9)
 #define ChannelSettings_CALLBACK NULL
 #define ChannelSettings_DEFAULT NULL
 
@@ -597,12 +609,12 @@ extern const pb_msgdesc_t ManufacturingData_msg;
 #define RouteDiscovery_size                      88
 #define SubPacket_size                           274
 #define MeshPacket_size                          313
-#define ChannelSettings_size                     60
-#define RadioConfig_size                         253
+#define ChannelSettings_size                     84
+#define RadioConfig_size                         277
 #define RadioConfig_UserPreferences_size         188
 #define NodeInfo_size                            132
 #define MyNodeInfo_size                          110
-#define DeviceState_size                         5403
+#define DeviceState_size                         5427
 #define DebugString_size                         258
 #define FromRadio_size                           322
 #define ToRadio_size                             316
