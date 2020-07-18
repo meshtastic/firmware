@@ -1,4 +1,4 @@
-#include "power.h"
+#include "Power.h"
 #include "PowerFSM.h"
 #include "main.h"
 #include "utils.h"
