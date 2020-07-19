@@ -2,6 +2,8 @@
 
 You probably don't care about this section - skip to the next one.
 
+* Nimble getting started https://espressif-esp-idf.readthedocs-hosted.com/zh_CN/release-v3.3/api-reference/bluetooth/nimble/index.html#overview?  could it work with arduino esp-idf 4.2
+
 # Medium priority
 
 Items to complete before 1.0.
