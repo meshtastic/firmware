@@ -1,5 +1,7 @@
 # NRF52 TODO
 
+* Possibly switch from softdevice to Apachy Newt: https://github.com/espressif/esp-nimble
+https://github.com/apache/mynewt-core - use nimble BLE on both ESP32 and NRF52
 
 ## RAK815
 
