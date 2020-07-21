@@ -1,11 +1,7 @@
-#include "MeshBluetoothService.h"
-#include "BluetoothUtil.h"
-#include <Arduino.h>
-#include <BLE2902.h>
-#include <assert.h>
-#include <esp_gatt_defs.h>
 
-#include "CallbackCharacteristic.h"
+#include <Arduino.h>
+#include <assert.h>
+
 #include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -14,6 +10,14 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "mesh.pb.h"
+
+#ifdef CONFIG_BLUEDROID_ENABLED
+
+#include <BLE2902.h>
+#include <esp_gatt_defs.h>
+#include "CallbackCharacteristic.h"
+#include "BluetoothUtil.h"
+#include "MeshBluetoothService.h"
 
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in
 // proccess at once
@@ -141,3 +145,10 @@ void destroyMeshBluetoothService()
 
     meshFromNumCharacteristic = NULL;
 }
+
+#else
+
+void destroyMeshBluetoothService() {}
+void stopMeshBluetoothService() {}
+
+#endif

@@ -1,6 +1,5 @@
 #include "BluetoothSoftwareUpdate.h"
 #include "BluetoothUtil.h"
-#include "CallbackCharacteristic.h"
 #include "RadioLibInterface.h"
 #include "configuration.h"
 #include "../concurrency/LockGuard.h"
@@ -11,7 +10,9 @@
 #include <Update.h>
 #include <esp_gatt_defs.h>
 
-//using namespace meshtastic;
+#ifdef CONFIG_BLUEDROID_ENABLED
+
+#include "CallbackCharacteristic.h"
 
 CRC32 crc;
 uint32_t rebootAtMsec = 0; // If not zero we will reboot at this time (used to reboot shortly after the update completes)
@@ -177,3 +178,5 @@ void destroyUpdateService()
 
     resultC = NULL;
 }
+
+#endif

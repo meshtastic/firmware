@@ -4,12 +4,11 @@
 #include <BLEServer.h>
 #include <BLEService.h>
 
+#ifdef CONFIG_BLUEDROID_ENABLED
+
 BLEService *createMeshBluetoothService(BLEServer *server);
+
+#endif
+
 void destroyMeshBluetoothService();
-
-/**
- * Tell any bluetooth clients that the number of rx packets has changed
- */
-void bluetoothNotifyFromNum(uint32_t newValue);
-
 void stopMeshBluetoothService();

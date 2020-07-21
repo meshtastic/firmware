@@ -17,9 +17,7 @@ void reinitBluetooth()
 {
     DEBUG_MSG("Starting bluetooth\n");
 
-    // FIXME - we are leaking like crazy
-    // AllocatorScope scope(btPool);
-
+#ifdef CONFIG_BLUEDROID_ENABLED
     // Note: these callbacks might be coming in from a different thread.
     BLEServer *serve = initBLE(
         [](uint32_t pin) {
@@ -32,6 +30,7 @@ void reinitBluetooth()
 
     // Start advertising - this must be done _after_ creating all services
     serve->getAdvertising()->start();
+#endif
 }
 
 // Enable/disable bluetooth.
