@@ -12,27 +12,6 @@
 
 bool bluetoothOn;
 
-// This routine is called multiple times, once each time we come back from sleep
-void reinitBluetooth()
-{
-    DEBUG_MSG("Starting bluetooth\n");
-
-#ifdef CONFIG_BLUEDROID_ENABLED
-    // Note: these callbacks might be coming in from a different thread.
-    BLEServer *serve = initBLE(
-        [](uint32_t pin) {
-            powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
-            screen.startBluetoothPinScreen(pin);
-        },
-        []() { screen.stopBluetoothPinScreen(); }, getDeviceName(), HW_VENDOR, optstr(APP_VERSION),
-        optstr(HW_VERSION)); // FIXME, use a real name based on the macaddr
-    createMeshBluetoothService(serve);
-
-    // Start advertising - this must be done _after_ creating all services
-    serve->getAdvertising()->start();
-#endif
-}
-
 // Enable/disable bluetooth.
 void setBluetoothEnable(bool on)
 {

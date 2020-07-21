@@ -324,11 +324,85 @@ void loopBLE()
     bluetoothRebootCheck();
 }
 
+// This routine is called multiple times, once each time we come back from sleep
+void reinitBluetooth()
+{
+    DEBUG_MSG("Starting bluetooth\n");
+
+    // Note: these callbacks might be coming in from a different thread.
+    BLEServer *serve = initBLE(
+        [](uint32_t pin) {
+            powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
+            screen.startBluetoothPinScreen(pin);
+        },
+        []() { screen.stopBluetoothPinScreen(); }, getDeviceName(), HW_VENDOR, optstr(APP_VERSION),
+        optstr(HW_VERSION)); // FIXME, use a real name based on the macaddr
+    createMeshBluetoothService(serve);
+
+    // Start advertising - this must be done _after_ creating all services
+    serve->getAdvertising()->start();
+}
+
 #else
 
+#include "esp_nimble_hci.h"
+#include "nimble/nimble_port.h"
+#include "nimble/nimble_port_freertos.h"
+
+// Force arduino to keep ble data around
+bool btInUse()
+{
+    return false;
+}
+
 /// Given a level between 0-100, update the BLE attribute
-void updateBatteryLevel(uint8_t level) {}
-void deinitBLE() {}
-void loopBLE() {}
+void updateBatteryLevel(uint8_t level)
+{
+    // FIXME
+}
+
+void deinitBLE()
+{
+    // FIXME - do we need to dealloc things? - what needs to stay alive across light sleep?
+    auto ret = nimble_port_stop();
+    assert(ret == ESP_OK);
+
+    nimble_port_deinit();          // teardown nimble datastructures
+    nimble_port_freertos_deinit(); // delete the task
+
+    ret = esp_nimble_hci_and_controller_deinit();
+    assert(ret == ESP_OK);
+}
+
+void loopBLE()
+{
+    // FIXME
+}
+
+static void ble_host_task(void *param)
+{
+    nimble_port_run(); // This function will return only when nimble_port_stop() is executed.
+    // nimble_port_freertos_deinit();
+}
+
+// This routine is called multiple times, once each time we come back from sleep
+void reinitBluetooth()
+{
+    DEBUG_MSG("Starting bluetooth\n");
+
+    // FIXME - if waking from light sleep, only esp_nimble_hci_init
+    // FIXME - why didn't this version work?
+    // auto res = esp_nimble_hci_and_controller_init();
+    auto res = esp_nimble_hci_init();
+    DEBUG_MSG("BLE result %d\n", res);
+    assert(res == ESP_OK);
+
+    nimble_port_init();
+
+    // FIXME Initialize the required NimBLE host configuration parameters and callbacks
+    // Perform application specific tasks / initialization
+
+    nimble_port_freertos_init(ble_host_task);
+}
 
 #endif

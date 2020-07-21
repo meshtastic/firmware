@@ -2,11 +2,11 @@
 
 #include <functional>
 
+#include "SimpleAllocator.h"
 #include <Arduino.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
-#include "SimpleAllocator.h"
 
 #ifdef CONFIG_BLUEDROID_ENABLED
 
@@ -22,9 +22,8 @@ uint32_t getValue32(BLECharacteristic *c, uint32_t defaultValue);
 using StartBluetoothPinScreenCallback = std::function<void(uint32_t pass_key)>;
 using StopBluetoothPinScreenCallback = std::function<void(void)>;
 
-BLEServer *initBLE(
-    StartBluetoothPinScreenCallback startBtPinScreen, StopBluetoothPinScreenCallback stopBtPinScreen,
-    std::string devName, std::string hwVendor, std::string swVersion, std::string hwVersion = "");
+BLEServer *initBLE(StartBluetoothPinScreenCallback startBtPinScreen, StopBluetoothPinScreenCallback stopBtPinScreen,
+                   std::string devName, std::string hwVendor, std::string swVersion, std::string hwVersion = "");
 
 /// Add a characteristic that we will delete when we restart
 BLECharacteristic *addBLECharacteristic(BLECharacteristic *c);
@@ -41,3 +40,4 @@ extern SimpleAllocator btPool;
 void updateBatteryLevel(uint8_t level);
 void deinitBLE();
 void loopBLE();
+void reinitBluetooth();
