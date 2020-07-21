@@ -9,6 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@master
+      - name: Checkout submodules
+        uses: textbook/git-checkout-submodule-action@master
       - name: Setup Python
         uses: actions/setup-python@master
         with:
@@ -17,5 +19,8 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -U platformio
+      - name: Install extra python tools
+        run: |
+          pip install -U adafruit-nrfutil
       - name: Build
-        run: platformio run
+        run: platformio run -e tbeam -e heltec -e nrf52840dk -e rak815

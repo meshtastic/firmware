@@ -33,7 +33,7 @@ bool SX1262Interface::init()
     if (power > 22) // This chip has lower power limits than some
         power = 22;
     int res = lora.begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength, tcxoVoltage, useRegulatorLDO);
-    DEBUG_MSG("LORA init result %d\n", res);
+    DEBUG_MSG("SX1262 init result %d\n", res);
 
 #ifdef SX1262_TXEN
     // lora.begin sets Dio2 as RF switch control, which is not true if we are manually controlling RX and TX
@@ -119,8 +119,7 @@ void SX1262Interface::addReceiveMetadata(MeshPacket *mp)
     mp->rx_snr = lora.getSNR();
 }
 
-/** start an immediate transmit
- *  We override to turn on transmitter power as needed.
+/** We override to turn on transmitter power as needed.
  */
 void SX1262Interface::configHardwareForSend()
 {
