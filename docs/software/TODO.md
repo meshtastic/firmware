@@ -2,13 +2,26 @@
 
 You probably don't care about this section - skip to the next one.
 
-- Nimble getting started https://espressif-esp-idf.readthedocs-hosted.com/zh_CN/release-v3.3/api-reference/bluetooth/nimble/index.html#overview?  could it work with arduino esp-idf 4.2
-- update protocol description per cyclomies
-- update faq with antennas https://meshtastic.discourse.group/t/range-test-ideas-requested/738/2
-- update faq on recommended android version and phones
-- add help link inside the app, reference a page on the wiki
-- turn on amazon reviews support
-- add a tablet layout (with map next to messages) in the android app
+Nimble tasks:
+
+- Nimble getting started https://espressif-esp-idf.readthedocs-hosted.com/zh_CN/release-v3.3/api-reference/bluetooth/nimble/index.html#overview? could it work with arduino esp-idf 4.2
+- implement nimble device api
+- setup advertising https://mynewt.apache.org/latest/tutorials/ble/bleprph/bleprph-sections/bleprph-gap-event.html
+- add security
+- test with app
+- restart advertising after client disconnects
+- make sleep work
+- check BLE handle stability
+- apply nimble RPA patches
+- start RPA long test
+- implement nimble software update api
+
+* update protocol description per cyclomies email thread
+* update faq with antennas https://meshtastic.discourse.group/t/range-test-ideas-requested/738/2
+* update faq on recommended android version and phones
+* add help link inside the app, reference a page on the wiki
+* turn on amazon reviews support
+* add a tablet layout (with map next to messages) in the android app
 
 # Medium priority
 
