@@ -5,7 +5,11 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 
+#ifdef CONFIG_BLUEDROID_ENABLED
+
 BLEService *createUpdateService(BLEServer *server, std::string hwVendor, std::string swVersion, std::string hwVersion);
 
 void destroyUpdateService();
 void bluetoothRebootCheck();
+
+#endif

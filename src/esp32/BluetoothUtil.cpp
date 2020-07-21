@@ -6,6 +6,8 @@
 #include <Update.h>
 #include <esp_gatt_defs.h>
 
+#ifdef CONFIG_BLUEDROID_ENABLED
+
 SimpleAllocator btPool;
 
 bool _BLEClientConnected = false;
@@ -321,3 +323,12 @@ void loopBLE()
 {
     bluetoothRebootCheck();
 }
+
+#else
+
+/// Given a level between 0-100, update the BLE attribute
+void updateBatteryLevel(uint8_t level) {}
+void deinitBLE() {}
+void loopBLE() {}
+
+#endif
