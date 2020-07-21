@@ -1,7 +1,6 @@
 #pragma once
 
 #include "freertosinc.h"
-#include "esp_task_wdt.h"
 
 namespace concurrency {
 
@@ -36,17 +35,9 @@ class Thread
      *
      * this only applies after startWatchdog() has been called.  If you need to sleep for a long time call stopWatchdog()
      */
-    void serviceWatchdog() { esp_task_wdt_reset(); }
-    void startWatchdog()
-    {
-        auto r = esp_task_wdt_add(taskHandle);
-        assert(r == ESP_OK);
-    }
-    void stopWatchdog()
-    {
-        auto r = esp_task_wdt_delete(taskHandle);
-        assert(r == ESP_OK);
-    }
+    void serviceWatchdog();
+    void startWatchdog();
+    void stopWatchdog();
 
   private:
     static void callRun(void *_this);
