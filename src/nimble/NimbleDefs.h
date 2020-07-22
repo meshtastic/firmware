@@ -18,6 +18,8 @@ int fromnum_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt
 
 extern const struct ble_gatt_svc_def gatt_svr_svcs[];
 
+extern const ble_uuid128_t mesh_service_uuid;
+
 #ifdef __cplusplus
 };
 #endif

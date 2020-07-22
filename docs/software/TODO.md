@@ -4,13 +4,9 @@ You probably don't care about this section - skip to the next one.
 
 Nimble tasks:
 
-- Nimble getting started https://espressif-esp-idf.readthedocs-hosted.com/zh_CN/release-v3.3/api-reference/bluetooth/nimble/index.html#overview? could it work with arduino esp-idf 4.2
-- implement nimble device api
-- setup advertising https://mynewt.apache.org/latest/tutorials/ble/bleprph/bleprph-sections/bleprph-gap-event.html
-- add security (at least bonding)
+- make notify work
 - test with app
-- remove unsecured read/write access
-- restart advertising after client disconnects
+- restart advertising after client disconnects (confirm this works if client goes out of range)
 - make sleep work
 - check BLE handle stability
 - apply nimble RPA patches
