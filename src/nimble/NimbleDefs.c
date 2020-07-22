@@ -32,17 +32,17 @@ const struct ble_gatt_svc_def gatt_svr_svcs[] = {
                                             // FIXME - remove non ENC access
                                             .uuid = &toradio_uuid.u,
                                             .access_cb = toradio_callback,
-                                            .flags = BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_ENC,
+                                            .flags = BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_AUTHEN,
                                         },
                                         {
                                             .uuid = &fromradio_uuid.u,
                                             .access_cb = fromradio_callback,
-                                            .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_READ_ENC,
+                                            .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_READ_AUTHEN,
                                         },
                                         {
                                             .uuid = &fromnum_uuid.u,
                                             .access_cb = fromnum_callback,
-                                            .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_READ_ENC | BLE_GATT_CHR_F_NOTIFY,
+                                            .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_READ_AUTHEN | BLE_GATT_CHR_F_NOTIFY,
                                         },
                                         {
                                             0, /* No more characteristics in this service. */
