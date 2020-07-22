@@ -332,15 +332,21 @@ BLEServer *serve = initBLE(, , getDeviceName(), HW_VENDOR, optstr(APP_VERSION),
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
 
+static bool pinShowing;
+
 static void startCb(uint32_t pin)
 {
+    pinShowing = true;
     powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
     screen.startBluetoothPinScreen(pin);
 };
 
 static void stopCb()
 {
-    screen.stopBluetoothPinScreen();
+    if (pinShowing) {
+        pinShowing = false;
+        screen.stopBluetoothPinScreen();
+    }
 };
 
 static uint8_t own_addr_type;
@@ -348,6 +354,12 @@ static uint8_t own_addr_type;
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in
 // proccess at once
 static uint8_t trBytes[max(FromRadio_size, ToRadio_size)];
+
+static uint16_t fromNumValHandle;
+static uint32_t fromNum;
+
+/// We only allow one BLE connection at a time
+static int16_t curConnectionHandle = -1;
 
 class BluetoothPhoneAPI : public PhoneAPI
 {
@@ -358,8 +370,14 @@ class BluetoothPhoneAPI : public PhoneAPI
     {
         PhoneAPI::onNowHasData(fromRadioNum);
 
-        DEBUG_MSG("BLE notify fromNum\n");
-        // fromNum.notify32(fromRadioNum);
+        fromNum = fromRadioNum;
+        if (curConnectionHandle >= 0 && fromNumValHandle) {
+            DEBUG_MSG("BLE notify fromNum\n");
+            auto res = ble_gattc_notify(curConnectionHandle, fromNumValHandle);
+            assert(res == 0);
+        } else {
+            DEBUG_MSG("No BLE notify\n");
+        }
     }
 };
 
@@ -396,8 +414,6 @@ int fromradio_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_ga
 
 int fromnum_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
-    static uint32_t fromNum = 0;
-
     DEBUG_MSG("BLE fromNum called\n");
     auto rc = os_mbuf_append(ctxt->om, &fromNum,
                              sizeof(fromNum)); // FIXME - once we report real numbers we will need to consider endianness
@@ -491,6 +507,7 @@ static int bleprph_gap_event(struct ble_gap_event *event, void *arg)
             rc = ble_gap_conn_find(event->connect.conn_handle, &desc);
             assert(rc == 0);
             print_conn_desc(&desc);
+            curConnectionHandle = event->connect.conn_handle;
         }
         DEBUG_MSG("\n");
 
@@ -504,6 +521,8 @@ static int bleprph_gap_event(struct ble_gap_event *event, void *arg)
         DEBUG_MSG("disconnect; reason=%d ", event->disconnect.reason);
         print_conn_desc(&event->disconnect.conn);
         DEBUG_MSG("\n");
+
+        curConnectionHandle = -1;
 
         /* Connection terminated; resume advertising. */
         advertise();
@@ -710,6 +729,11 @@ void gatt_svr_register_cb(struct ble_gatt_register_ctxt *ctxt, void *arg)
         DEBUG_MSG("registering characteristic %s with "
                   "def_handle=%d val_handle=%d\n",
                   ble_uuid_to_str(ctxt->chr.chr_def->uuid, buf), ctxt->chr.def_handle, ctxt->chr.val_handle);
+
+        if (ctxt->chr.chr_def->uuid == &fromnum_uuid.u) {
+            fromNumValHandle = ctxt->chr.val_handle;
+            DEBUG_MSG("FromNum handle %d\n", fromNumValHandle);
+        }
         break;
 
     case BLE_GATT_REGISTER_OP_DSC:

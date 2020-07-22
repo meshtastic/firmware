@@ -4,8 +4,7 @@ You probably don't care about this section - skip to the next one.
 
 Nimble tasks:
 
-- make notify work
-- test with app
+- ble bonding is not being kept?
 - restart advertising after client disconnects (confirm this works if client goes out of range)
 - make sleep work
 - check BLE handle stability
