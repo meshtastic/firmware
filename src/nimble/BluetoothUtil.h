@@ -18,10 +18,6 @@ void dumpCharacteristic(BLECharacteristic *c);
 /** converting endianness pull out a 32 bit value */
 uint32_t getValue32(BLECharacteristic *c, uint32_t defaultValue);
 
-// TODO(girts): create a class for the bluetooth utils helpers?
-using StartBluetoothPinScreenCallback = std::function<void(uint32_t pass_key)>;
-using StopBluetoothPinScreenCallback = std::function<void(void)>;
-
 BLEServer *initBLE(StartBluetoothPinScreenCallback startBtPinScreen, StopBluetoothPinScreenCallback stopBtPinScreen,
                    std::string devName, std::string hwVendor, std::string swVersion, std::string hwVersion = "");
 
@@ -35,6 +31,10 @@ BLEDescriptor *addBLEDescriptor(BLEDescriptor *c);
 extern SimpleAllocator btPool;
 
 #endif
+
+// TODO(girts): create a class for the bluetooth utils helpers?
+using StartBluetoothPinScreenCallback = std::function<void(uint32_t pass_key)>;
+using StopBluetoothPinScreenCallback = std::function<void(void)>;
 
 /// Given a level between 0-100, update the BLE attribute
 void updateBatteryLevel(uint8_t level);
