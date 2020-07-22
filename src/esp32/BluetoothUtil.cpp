@@ -378,9 +378,9 @@ int fromnum_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt
     }
 
 // Force arduino to keep ble data around
-bool btInUse()
+extern "C" bool btInUse()
 {
-    return false;
+    return true;
 }
 
 /// Given a level between 0-100, update the BLE attribute
@@ -605,12 +605,13 @@ static void advertise(void)
     }
 }
 
-static void bleprph_on_reset(int reason)
+static void on_reset(int reason)
 {
+    // 19 == BLE_HS_ETIMEOUT_HCI
     DEBUG_MSG("Resetting state; reason=%d\n", reason);
 }
 
-static void bleprph_on_sync(void)
+static void on_sync(void)
 {
     int rc;
 
@@ -676,19 +677,20 @@ void gatt_svr_register_cb(struct ble_gatt_register_ctxt *ctxt, void *arg)
 void reinitBluetooth()
 {
     DEBUG_MSG("Starting bluetooth\n");
+    esp_log_level_set("BTDM_INIT", ESP_LOG_VERBOSE);
 
     // FIXME - if waking from light sleep, only esp_nimble_hci_init
     // FIXME - why didn't this version work?
-    // auto res = esp_nimble_hci_and_controller_init();
-    auto res = esp_nimble_hci_init();
+    auto res = esp_nimble_hci_and_controller_init();
+    // auto res = esp_nimble_hci_init();
     // DEBUG_MSG("BLE result %d\n", res);
     assert(res == ESP_OK);
 
     nimble_port_init();
 
     /* Initialize the NimBLE host configuration. */
-    ble_hs_cfg.reset_cb = bleprph_on_reset;
-    ble_hs_cfg.sync_cb = bleprph_on_sync;
+    ble_hs_cfg.reset_cb = on_reset;
+    ble_hs_cfg.sync_cb = on_sync;
     ble_hs_cfg.gatts_register_cb = gatt_svr_register_cb;
     ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
 
