@@ -1,4 +1,5 @@
 #include "UBloxGPS.h"
+#include "error.h"
 #include "sleep.h"
 #include <assert.h>
 
@@ -83,7 +84,8 @@ bool UBloxGPS::setup()
             assert(ok);
         }
         ok = ublox.saveConfiguration(3000);
-        assert(ok);
+        if (!ok)
+            recordCriticalError(UBloxInitFailed); // Don't halt the boot if saving the config fails, but do report the bug
 
         concurrency::PeriodicTask::setup(); // We don't start our periodic task unless we actually found the device
 
@@ -150,7 +152,8 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
 
     // bogus lat lon is reported as 0 or 0 (can be bogus just for one)
     // Also: apparently when the GPS is initially reporting lock it can output a bogus latitude > 90 deg!
-    hasValidLocation = (latitude != 0) && (longitude != 0) && (latitude <= 900000000 && latitude >= -900000000) && (numSatellites > 0);
+    hasValidLocation =
+        (latitude != 0) && (longitude != 0) && (latitude <= 900000000 && latitude >= -900000000) && (numSatellites > 0);
 
     // we only notify if position has changed due to a new fix
     if ((fixtype >= 3 && fixtype <= 4) && ublox.getP(maxWait)) // rd fixes only
