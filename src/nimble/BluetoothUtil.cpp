@@ -345,37 +345,75 @@ void reinitBluetooth()
 
 #else
 
+#include "PhoneAPI.h"
 #include "host/util/util.h"
+#include "main.h"
 #include "nimble/NimbleDefs.h"
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
 
 static uint8_t own_addr_type;
 
+// This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in
+// proccess at once
+static uint8_t trBytes[max(FromRadio_size, ToRadio_size)];
+
+class BluetoothPhoneAPI : public PhoneAPI
+{
+    /**
+     * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
+     */
+    virtual void onNowHasData(uint32_t fromRadioNum)
+    {
+        PhoneAPI::onNowHasData(fromRadioNum);
+
+        DEBUG_MSG("BLE notify fromNum\n");
+        // fromNum.notify32(fromRadioNum);
+    }
+};
+
+static BluetoothPhoneAPI *bluetoothPhoneAPI;
+
 int toradio_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
-    return BLE_ATT_ERR_UNLIKELY; // unimplemented
+    auto om = ctxt->om;
+    uint16_t len = 0;
+
+    auto rc = ble_hs_mbuf_to_flat(om, trBytes, sizeof(trBytes), &len);
+    if (rc != 0) {
+        return BLE_ATT_ERR_UNLIKELY;
+    }
+
+    DEBUG_MSG("toRadioWriteCb data %p, len %u\n", trBytes, len);
+
+    bluetoothPhoneAPI->handleToRadio(trBytes, len);
+    return 0;
 }
 
 int fromradio_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
-    return BLE_ATT_ERR_UNLIKELY; // unimplemented
+    DEBUG_MSG("BLE fromRadio called\n");
+    size_t numBytes = bluetoothPhoneAPI->getFromRadio(trBytes);
+
+    // Someone is going to read our value as soon as this callback returns.  So fill it with the next message in the queue
+    // or make empty if the queue is empty
+    auto rc = os_mbuf_append(ctxt->om, trBytes, numBytes);
+    assert(rc == 0);
+
+    return 0; // success
 }
 
 int fromnum_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
-    return BLE_ATT_ERR_UNLIKELY; // unimplemented
-}
+    static uint32_t fromNum = 0;
 
-// A C++ version of BLE_UUID128_INIT
-#define BLE_UUID128_INIT_CPP(uuid128...)                                                                                         \
-    {                                                                                                                            \
-    u : {                                                                                                                        \
-    type:                                                                                                                        \
-        BLE_UUID_TYPE_128                                                                                                        \
-    }                                                                                                                            \
-        , value: { uuid128 }                                                                                                     \
-    }
+    DEBUG_MSG("BLE fromNum called\n");
+    auto rc = os_mbuf_append(ctxt->om, &fromNum,
+                             sizeof(fromNum)); // FIXME - once we report real numbers we will need to consider endianness
+    assert(rc == 0);
+
+    return 0; // success
+}
 
 // Force arduino to keep ble data around
 extern "C" bool btInUse()
@@ -679,6 +717,11 @@ void reinitBluetooth()
     DEBUG_MSG("Starting bluetooth\n");
     esp_log_level_set("BTDM_INIT", ESP_LOG_VERBOSE);
 
+    if (!bluetoothPhoneAPI) {
+        bluetoothPhoneAPI = new BluetoothPhoneAPI();
+        bluetoothPhoneAPI->init();
+    }
+
     // FIXME - if waking from light sleep, only esp_nimble_hci_init
     // FIXME - why didn't this version work?
     auto res = esp_nimble_hci_and_controller_init();
@@ -723,7 +766,7 @@ void reinitBluetooth()
     assert(res == 0);
 
     /* Set the default device name. */
-    res = ble_svc_gap_device_name_set("nimble-bleprph");
+    res = ble_svc_gap_device_name_set(getDeviceName());
     assert(res == 0);
 
     /* XXX Need to have template for store */

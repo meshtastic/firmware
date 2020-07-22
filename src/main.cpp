@@ -43,8 +43,8 @@
 // #include <driver/rtc_io.h>
 
 #ifndef NO_ESP32
-#include "BluetoothUtil.h"
 #include "WiFi.h"
+#include "nimble/BluetoothUtil.h"
 #endif
 
 #include "RF95Interface.h"

@@ -15,6 +15,7 @@ Nimble tasks:
 - check BLE handle stability
 - apply nimble RPA patches
 - start RPA long test
+- use a random pairing key rather than 123456
 - implement nimble software update api
 
 * update protocol description per cyclomies email thread
