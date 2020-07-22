@@ -318,39 +318,30 @@ BLEServer *initBLE(StartBluetoothPinScreenCallback startBtPinScreen, StopBluetoo
     return pServer;
 }
 
-// Called from loop
-void loopBLE()
-{
-    bluetoothRebootCheck();
-}
-
-// This routine is called multiple times, once each time we come back from sleep
-void reinitBluetooth()
-{
-    DEBUG_MSG("Starting bluetooth\n");
-
-    // Note: these callbacks might be coming in from a different thread.
-    BLEServer *serve = initBLE(
-        [](uint32_t pin) {
-            powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
-            screen.startBluetoothPinScreen(pin);
-        },
-        []() { screen.stopBluetoothPinScreen(); }, getDeviceName(), HW_VENDOR, optstr(APP_VERSION),
-        optstr(HW_VERSION)); // FIXME, use a real name based on the macaddr
-    createMeshBluetoothService(serve);
-
-    // Start advertising - this must be done _after_ creating all services
-    serve->getAdvertising()->start();
-}
+// Note: these callbacks might be coming in from a different thread.
+BLEServer *serve = initBLE(, , getDeviceName(), HW_VENDOR, optstr(APP_VERSION),
+                           optstr(HW_VERSION)); // FIXME, use a real name based on the macaddr
 
 #else
 
 #include "PhoneAPI.h"
+#include "PowerFSM.h"
 #include "host/util/util.h"
 #include "main.h"
 #include "nimble/NimbleDefs.h"
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
+
+static void startCb(uint32_t pin)
+{
+    powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
+    screen.startBluetoothPinScreen(pin);
+};
+
+static void stopCb()
+{
+    screen.stopBluetoothPinScreen();
+};
 
 static uint8_t own_addr_type;
 
@@ -511,7 +502,7 @@ static int bleprph_gap_event(struct ble_gap_event *event, void *arg)
 
     case BLE_GAP_EVENT_DISCONNECT:
         DEBUG_MSG("disconnect; reason=%d ", event->disconnect.reason);
-        // bleprph_print_conn_desc(&event->disconnect.conn);
+        print_conn_desc(&event->disconnect.conn);
         DEBUG_MSG("\n");
 
         /* Connection terminated; resume advertising. */
@@ -523,7 +514,7 @@ static int bleprph_gap_event(struct ble_gap_event *event, void *arg)
         DEBUG_MSG("connection updated; status=%d ", event->conn_update.status);
         rc = ble_gap_conn_find(event->conn_update.conn_handle, &desc);
         assert(rc == 0);
-        // bleprph_print_conn_desc(&desc);
+        print_conn_desc(&desc);
         DEBUG_MSG("\n");
         return 0;
 
@@ -537,8 +528,11 @@ static int bleprph_gap_event(struct ble_gap_event *event, void *arg)
         DEBUG_MSG("encryption change event; status=%d ", event->enc_change.status);
         rc = ble_gap_conn_find(event->enc_change.conn_handle, &desc);
         assert(rc == 0);
-        // bleprph_print_conn_desc(&desc);
+        print_conn_desc(&desc);
         DEBUG_MSG("\n");
+
+        // Remove our custom PIN request screen.
+        stopCb();
         return 0;
 
     case BLE_GAP_EVENT_SUBSCRIBE:
@@ -576,12 +570,16 @@ static int bleprph_gap_event(struct ble_gap_event *event, void *arg)
 
         if (event->passkey.params.action == BLE_SM_IOACT_DISP) {
             pkey.action = event->passkey.params.action;
-            pkey.passkey = 123456; // This is the passkey to be entered on peer
-            DEBUG_MSG("Enter passkey %d on the peer side", pkey.passkey);
+            pkey.passkey = random(
+                100000, 999999); // This is the passkey to be entered on peer - we pick a number >100,000 to ensure 6 digits
+            DEBUG_MSG("*** Enter passkey %d on the peer side ***\n", pkey.passkey);
+
+            startCb(pkey.passkey);
+
             rc = ble_sm_inject_io(event->passkey.conn_handle, &pkey);
             DEBUG_MSG("ble_sm_inject_io result: %d\n", rc);
         } else {
-            DEBUG_MSG("FIXME - unexpected auth type\n");
+            DEBUG_MSG("FIXME - unexpected auth type %d\n", event->passkey.params.action);
         }
         return 0;
     }
