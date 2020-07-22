@@ -441,8 +441,15 @@ void loopBLE()
 
 extern "C" void ble_store_config_init(void);
 
-/// Print a macaddr
-static void print_addr(const uint8_t *v) {}
+/// Print a macaddr - bytes are stored in reverse order
+static void print_addr(const uint8_t v[])
+{
+    const int macaddrlen = 6;
+
+    for (int i = 0; i < macaddrlen; i++) {
+        DEBUG_MSG("%02x%c", v[macaddrlen - i], (i == macaddrlen - 1) ? '\n' : ':');
+    }
+}
 
 /**
  * Logs information about a connection to the console.
@@ -588,11 +595,6 @@ static int bleprph_gap_event(struct ble_gap_event *event, void *arg)
  */
 static void advertise(void)
 {
-    struct ble_gap_adv_params adv_params;
-    struct ble_hs_adv_fields fields;
-    const char *name;
-    int rc;
-
     /**
      *  Set the advertisement data included in our advertisements:
      *     o Flags (indicates advertisement type and other general info).
@@ -601,44 +603,55 @@ static void advertise(void)
      *     o 16-bit service UUIDs (alert notifications).
      */
 
-    memset(&fields, 0, sizeof fields);
+    struct ble_hs_adv_fields adv_fields;
+    memset(&adv_fields, 0, sizeof adv_fields);
 
     /* Advertise two flags:
      *     o Discoverability in forthcoming advertisement (general)
      *     o BLE-only (BR/EDR unsupported).
      */
-    fields.flags = BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP;
+    adv_fields.flags = BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP;
 
     /* Indicate that the TX power level field should be included; have the
      * stack fill this value automatically.  This is done by assigning the
      * special value BLE_HS_ADV_TX_PWR_LVL_AUTO.
      */
-    fields.tx_pwr_lvl_is_present = 1;
-    fields.tx_pwr_lvl = BLE_HS_ADV_TX_PWR_LVL_AUTO;
+    adv_fields.tx_pwr_lvl_is_present = 1;
+    adv_fields.tx_pwr_lvl = BLE_HS_ADV_TX_PWR_LVL_AUTO;
 
-    name = ble_svc_gap_device_name();
-    fields.name = (uint8_t *)name;
-    fields.name_len = strlen(name);
-    fields.name_is_complete = 1;
+    const char *name = ble_svc_gap_device_name();
+    adv_fields.name = (uint8_t *)name;
+    adv_fields.name_len = strlen(name);
+    adv_fields.name_is_complete = 1;
 
-    // fields.uuids16 = (ble_uuid16_t[]){BLE_UUID16_INIT(GATT_SVR_SVC_ALERT_UUID)};
-    // fields.num_uuids16 = 1;
-    // fields.uuids16_is_complete = 1;
-
-    rc = ble_gap_adv_set_fields(&fields);
+    auto rc = ble_gap_adv_set_fields(&adv_fields);
     if (rc != 0) {
-        MODLOG_DFLT(ERROR, "error setting advertisement data; rc=%d\n", rc);
+        DEBUG_MSG("error setting advertisement data; rc=%d\n", rc);
+        return;
+    }
+
+    // add scan response fields
+    struct ble_hs_adv_fields scan_fields;
+    memset(&scan_fields, 0, sizeof scan_fields);
+    scan_fields.uuids128 = const_cast<ble_uuid128_t *>(&mesh_service_uuid);
+    scan_fields.num_uuids128 = 1;
+    scan_fields.uuids128_is_complete = 1;
+
+    rc = ble_gap_adv_rsp_set_fields(&scan_fields);
+    if (rc != 0) {
+        DEBUG_MSG("error setting scan response data; rc=%d\n", rc);
         return;
     }
 
     /* Begin advertising. */
+    struct ble_gap_adv_params adv_params;
     memset(&adv_params, 0, sizeof adv_params);
     adv_params.conn_mode = BLE_GAP_CONN_MODE_UND;
     adv_params.disc_mode = BLE_GAP_DISC_MODE_GEN;
     // FIXME - use RPA for first parameter
     rc = ble_gap_adv_start(own_addr_type, NULL, BLE_HS_FOREVER, &adv_params, bleprph_gap_event, NULL);
     if (rc != 0) {
-        MODLOG_DFLT(ERROR, "error enabling advertisement; rc=%d\n", rc);
+        DEBUG_MSG("error enabling advertisement; rc=%d\n", rc);
         return;
     }
 }

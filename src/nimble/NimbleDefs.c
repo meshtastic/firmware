@@ -10,7 +10,7 @@
         , value: { uuid128 }                                                                                                     \
     }
 
-static const ble_uuid128_t mesh_service_uuid =
+const ble_uuid128_t mesh_service_uuid =
     BLE_UUID128_INIT(0xfd, 0xea, 0x73, 0xe2, 0xca, 0x5d, 0xa8, 0x9f, 0x1f, 0x46, 0xa8, 0x15, 0x18, 0xb2, 0xa1, 0x6b);
 
 static const ble_uuid128_t toradio_uuid =
