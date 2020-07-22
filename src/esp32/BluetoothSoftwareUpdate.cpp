@@ -1,16 +1,18 @@
+#include <Arduino.h>
+
+#ifdef CONFIG_BLUEDROID_ENABLED
+
+#include "../concurrency/LockGuard.h"
+#include "../timing.h"
 #include "BluetoothSoftwareUpdate.h"
 #include "BluetoothUtil.h"
 #include "RadioLibInterface.h"
 #include "configuration.h"
-#include "../concurrency/LockGuard.h"
-#include "../timing.h"
-#include <Arduino.h>
+
 #include <BLE2902.h>
 #include <CRC32.h>
 #include <Update.h>
 #include <esp_gatt_defs.h>
-
-#ifdef CONFIG_BLUEDROID_ENABLED
 
 #include "CallbackCharacteristic.h"
 

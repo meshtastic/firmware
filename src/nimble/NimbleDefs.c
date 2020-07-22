@@ -27,15 +27,26 @@ const struct ble_gatt_svc_def gatt_svr_svcs[] = {
         /*** Service: Security test. */
         .type = BLE_GATT_SVC_TYPE_PRIMARY,
         .uuid = &mesh_service_uuid.u,
-        .characteristics = (struct ble_gatt_chr_def[]){{
-                                                           /*** Characteristic: Random number generator. */
-                                                           .uuid = &toradio_uuid.u,
-                                                           .access_cb = toradio_callback,
-                                                           .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_READ_ENC,
-                                                       },
-                                                       {
-                                                           0, /* No more characteristics in this service. */
-                                                       }},
+        .characteristics =
+            (struct ble_gatt_chr_def[]){{
+                                            // FIXME - remove non ENC access
+                                            .uuid = &toradio_uuid.u,
+                                            .access_cb = toradio_callback,
+                                            .flags = BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_ENC,
+                                        },
+                                        {
+                                            .uuid = &fromradio_uuid.u,
+                                            .access_cb = fromradio_callback,
+                                            .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_READ_ENC,
+                                        },
+                                        {
+                                            .uuid = &fromnum_uuid.u,
+                                            .access_cb = fromnum_callback,
+                                            .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_READ_ENC | BLE_GATT_CHR_F_NOTIFY,
+                                        },
+                                        {
+                                            0, /* No more characteristics in this service. */
+                                        }},
     },
 
     {
