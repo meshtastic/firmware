@@ -4,13 +4,10 @@ You probably don't care about this section - skip to the next one.
 
 Nimble tasks:
 
-- ble bonding is not being kept?
 - restart advertising after client disconnects (confirm this works if client goes out of range)
 - make sleep work
 - check BLE handle stability
-- apply nimble RPA patches
-- start RPA long test
-- use a random pairing key rather than 123456
+- started RPA long test, jul 22 6pm
 - implement nimble software update api
 
 * update protocol description per cyclomies email thread

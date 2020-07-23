@@ -448,13 +448,13 @@ void loopBLE()
 
 extern "C" void ble_store_config_init(void);
 
-/// Print a macaddr - bytes are stored in reverse order
-static void print_addr(const uint8_t v[])
+/// Print a macaddr - bytes are sometimes stored in reverse order
+static void print_addr(const uint8_t v[], bool isReversed = true)
 {
     const int macaddrlen = 6;
-
+    
     for (int i = 0; i < macaddrlen; i++) {
-        DEBUG_MSG("%02x%c", v[macaddrlen - i], (i == macaddrlen - 1) ? '\n' : ':');
+        DEBUG_MSG("%02x%c", v[isReversed ? macaddrlen - i : i], (i == macaddrlen - 1) ? '\n' : ':');
     }
 }
 
@@ -568,6 +568,13 @@ static int bleprph_gap_event(struct ble_gap_event *event, void *arg)
         return 0;
 
     case BLE_GAP_EVENT_REPEAT_PAIRING:
+        DEBUG_MSG("repeat pairing event; conn_handle=%d "
+                  "cur_key_sz=%d cur_auth=%d cur_sc=%d "
+                  "new_key_sz=%d new_auth=%d new_sc=%d "
+                  "new_bonding=%d\n",
+                  event->repeat_pairing.conn_handle, event->repeat_pairing.cur_key_size, event->repeat_pairing.cur_authenticated,
+                  event->repeat_pairing.cur_sc, event->repeat_pairing.new_key_size, event->repeat_pairing.new_authenticated,
+                  event->repeat_pairing.new_sc, event->repeat_pairing.new_bonding);
         /* We already have a bond with the peer, but it is attempting to
          * establish a new secure link.  This app sacrifices security for
          * convenience: just throw away the old bond and accept the new link.
@@ -695,9 +702,10 @@ static void on_sync(void)
 
     /* Printing ADDR */
     uint8_t addr_val[6] = {0};
-    rc = ble_hs_id_copy_addr(own_addr_type, addr_val, NULL);
-
-    DEBUG_MSG("Device Address: ");
+    int isPrivate = 0;
+    rc = ble_hs_id_copy_addr(own_addr_type, addr_val, &isPrivate);
+    assert(rc == 0);
+    DEBUG_MSG("Addr type %d, Private=%d, Device Address: ", own_addr_type, isPrivate);
     print_addr(addr_val);
     DEBUG_MSG("\n");
     /* Begin advertising. */
@@ -776,8 +784,9 @@ void reinitBluetooth()
     ble_hs_cfg.sm_bonding = 1;
     ble_hs_cfg.sm_mitm = 1;
     ble_hs_cfg.sm_sc = 1;
-    ble_hs_cfg.sm_our_key_dist = 1;
-    ble_hs_cfg.sm_their_key_dist = 1;
+    // per https://github.com/espressif/esp-idf/issues/5530#issuecomment-652933685
+    ble_hs_cfg.sm_our_key_dist = BLE_SM_PAIR_KEY_DIST_ID | BLE_SM_PAIR_KEY_DIST_ENC;
+    ble_hs_cfg.sm_their_key_dist = BLE_SM_PAIR_KEY_DIST_ID | BLE_SM_PAIR_KEY_DIST_ENC;
 
     // add standard GAP services
     ble_svc_gap_init();
