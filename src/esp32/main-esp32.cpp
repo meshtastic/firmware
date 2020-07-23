@@ -1,4 +1,3 @@
-#include "MeshBluetoothService.h"
 #include "PowerFSM.h"
 #include "configuration.h"
 #include "esp_task_wdt.h"
@@ -10,30 +9,6 @@
 #include <nvs.h>
 #include <nvs_flash.h>
 
-bool bluetoothOn;
-
-// Enable/disable bluetooth.
-void setBluetoothEnable(bool on)
-{
-    if (on != bluetoothOn) {
-        DEBUG_MSG("Setting bluetooth enable=%d\n", on);
-
-        bluetoothOn = on;
-        if (on) {
-            Serial.printf("Pre BT: %u heap size\n", ESP.getFreeHeap());
-            // ESP_ERROR_CHECK( heap_trace_start(HEAP_TRACE_LEAKS) );
-            reinitBluetooth();
-        } else {
-            // We have to totally teardown our bluetooth objects to prevent leaks
-            stopMeshBluetoothService(); // Must do before shutting down bluetooth
-            deinitBLE();
-            destroyMeshBluetoothService(); // must do after deinit, because it frees our service
-            Serial.printf("Shutdown BT: %u heap size\n", ESP.getFreeHeap());
-            // ESP_ERROR_CHECK( heap_trace_stop() );
-            // heap_trace_dump();
-        }
-    }
-}
 
 void getMacAddr(uint8_t *dmac)
 {

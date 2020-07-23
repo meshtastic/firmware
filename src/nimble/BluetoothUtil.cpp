@@ -1,6 +1,7 @@
 #include "BluetoothUtil.h"
 #include "BluetoothSoftwareUpdate.h"
 #include "configuration.h"
+#include "esp_bt.h"
 #include <Arduino.h>
 #include <BLE2902.h>
 #include <Update.h>
@@ -179,7 +180,10 @@ void deinitBLE()
 
     ret = ble_gatts_reset(); // Teardown the service tables, so the next restart assigns the same handle numbers
     assert(ret == ESP_OK);
-
+#if 0
+    auto ret = esp_bt_controller_disable();
+    assert(ret == ESP_OK);
+#endif
     DEBUG_MSG("Done shutting down bluetooth\n");
 }
 
@@ -495,11 +499,9 @@ void gatt_svr_register_cb(struct ble_gatt_register_ctxt *ctxt, void *arg)
 // This routine is called multiple times, once each time we come back from sleep
 void reinitBluetooth()
 {
-    DEBUG_MSG("Starting bluetooth\n");
-    esp_log_level_set("BTDM_INIT", ESP_LOG_VERBOSE);
-
     auto isFirstTime = !bluetoothPhoneAPI;
 
+    DEBUG_MSG("Starting bluetooth\n");
     if (isFirstTime) {
         bluetoothPhoneAPI = new BluetoothPhoneAPI();
         bluetoothPhoneAPI->init();
@@ -530,8 +532,8 @@ void reinitBluetooth()
     ble_svc_gap_init();
     ble_svc_gatt_init();
 
-    res = ble_gatts_count_cfg(
-        gatt_svr_svcs); // assigns handles?  see docstring for note about clearing the handle list before calling SLEEP SUPPORT
+    res = ble_gatts_count_cfg(gatt_svr_svcs); // assigns handles?  see docstring for note about clearing the handle list
+                                              // before calling SLEEP SUPPORT
     assert(res == 0);
 
     res = ble_gatts_add_svcs(gatt_svr_svcs);
@@ -545,4 +547,27 @@ void reinitBluetooth()
     ble_store_config_init();
 
     nimble_port_freertos_init(ble_host_task);
+}
+
+bool bluetoothOn;
+
+// Enable/disable bluetooth.
+void setBluetoothEnable(bool on)
+{
+    if (on != bluetoothOn) {
+        DEBUG_MSG("Setting bluetooth enable=%d\n", on);
+
+        bluetoothOn = on;
+        if (on) {
+            Serial.printf("Pre BT: %u heap size\n", ESP.getFreeHeap());
+            // ESP_ERROR_CHECK( heap_trace_start(HEAP_TRACE_LEAKS) );
+            reinitBluetooth();
+        } else {
+            // We have to totally teardown our bluetooth objects to prevent leaks
+            deinitBLE();
+            Serial.printf("Shutdown BT: %u heap size\n", ESP.getFreeHeap());
+            // ESP_ERROR_CHECK( heap_trace_stop() );
+            // heap_trace_dump();
+        }
+    }
 }
