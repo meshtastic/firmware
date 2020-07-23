@@ -103,7 +103,7 @@ void NodeDB::resetRadioConfig()
     crypto->setKey(channelSettings.psk.size, channelSettings.psk.bytes);
 
     // temp hack for quicker testing
-    // devicestate.no_save = true;
+    devicestate.no_save = true;
     if (devicestate.no_save) {
         DEBUG_MSG("***** DEVELOPMENT MODE - DO NOT RELEASE *****\n");
 
@@ -356,7 +356,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
             info->position.time = oldtime;
             info->has_position = true;
             updateGUIforNode = info;
-            notifyObservers(true);  //Force an update whether or not our node counts have changed
+            notifyObservers(true); // Force an update whether or not our node counts have changed
             break;
         }
 
@@ -371,7 +371,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
                     devicestate.has_rx_text_message = true;
                     updateTextMessage = true;
                     powerFSM.trigger(EVENT_RECEIVED_TEXT_MSG);
-                    notifyObservers(true);  //Force an update whether or not our node counts have changed
+                    notifyObservers(true); // Force an update whether or not our node counts have changed
                 }
             }
             break;
@@ -390,7 +390,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
             if (changed) {
                 updateGUIforNode = info;
                 powerFSM.trigger(EVENT_NODEDB_UPDATED);
-                notifyObservers(true);  //Force an update whether or not our node counts have changed
+                notifyObservers(true); // Force an update whether or not our node counts have changed
 
                 // Not really needed - we will save anyways when we go to sleep
                 // We just changed something important about the user, store our DB
@@ -400,7 +400,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
         }
 
         default: {
-            notifyObservers();  //If the node counts have changed, notify observers
+            notifyObservers(); // If the node counts have changed, notify observers
         }
         }
     }

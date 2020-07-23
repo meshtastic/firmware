@@ -9,6 +9,8 @@ Nimble tasks:
 - check BLE handle stability
 - started RPA long test, jul 22 6pm
 - implement nimble software update api
+- implement nimble battery level service
+- implement device info service remaining fields (hw version etc)
 
 * update protocol description per cyclomies email thread
 * update faq with antennas https://meshtastic.discourse.group/t/range-test-ideas-requested/738/2
@@ -34,6 +36,8 @@ Items to complete before 1.0.
 
 Items after the first final candidate release.
 
+- Turn on RPA addresses for the device side in Nimble
+- Try to teardown less of the Nimble protocol stack across sleep
 - dynamic frequency scaling could save a lot of power on ESP32, but it seems to corrupt uart (even with ref_tick set correctly)
 - Change back to using a fixed sized MemoryPool rather than MemoryDynamic (see bug #149)
 - scan to find channels with low background noise? (Use CAD mode of the RF95 to automatically find low noise channels)
