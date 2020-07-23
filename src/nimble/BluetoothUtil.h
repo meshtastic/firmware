@@ -1,36 +1,10 @@
 #pragma once
 
+#include <Arduino.h>
 #include <functional>
 
-#include "SimpleAllocator.h"
-#include <Arduino.h>
-#include <BLEDevice.h>
-#include <BLEServer.h>
-#include <BLEUtils.h>
-
-#ifdef CONFIG_BLUEDROID_ENABLED
-
-// Help routine to add a description to any BLECharacteristic and add it to the service
-void addWithDesc(BLEService *service, BLECharacteristic *c, const char *description);
-
-void dumpCharacteristic(BLECharacteristic *c);
-
-/** converting endianness pull out a 32 bit value */
-uint32_t getValue32(BLECharacteristic *c, uint32_t defaultValue);
-
-BLEServer *initBLE(StartBluetoothPinScreenCallback startBtPinScreen, StopBluetoothPinScreenCallback stopBtPinScreen,
-                   std::string devName, std::string hwVendor, std::string swVersion, std::string hwVersion = "");
-
-/// Add a characteristic that we will delete when we restart
-BLECharacteristic *addBLECharacteristic(BLECharacteristic *c);
-
-/// Add a characteristic that we will delete when we restart
-BLEDescriptor *addBLEDescriptor(BLEDescriptor *c);
-
-/// Any bluetooth objects you allocate _must_ come from this pool if you want to be able to call deinitBLE()
-extern SimpleAllocator btPool;
-
-#endif
+/// We only allow one BLE connection at a time
+extern int16_t curConnectionHandle;
 
 // TODO(girts): create a class for the bluetooth utils helpers?
 using StartBluetoothPinScreenCallback = std::function<void(uint32_t pass_key)>;
@@ -41,3 +15,16 @@ void updateBatteryLevel(uint8_t level);
 void deinitBLE();
 void loopBLE();
 void reinitBluetooth();
+
+/**
+ * A helper function that implements simple read and write handling for a uint32_t
+ *
+ * If a read, the provided value will be returned over bluetooth.  If a write, the value from the received packet
+ * will be written into the variable.
+ */
+int chr_readwrite32le(uint32_t *v, struct ble_gatt_access_ctxt *ctxt, void *arg);
+
+/**
+ * A helper for readwrite access to an array of bytes (with no endian conversion)
+ */
+int chr_readwrite8(uint8_t *v, size_t vlen, struct ble_gatt_access_ctxt *ctxt, void *arg);
