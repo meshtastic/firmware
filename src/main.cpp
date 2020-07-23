@@ -43,7 +43,6 @@
 // #include <driver/rtc_io.h>
 
 #ifndef NO_ESP32
-#include "WiFi.h"
 #include "nimble/BluetoothUtil.h"
 #endif
 
@@ -148,35 +147,6 @@ void userButtonPressedLong()
 {
     screen.adjustBrightness();
 }
-
-#ifndef NO_ESP32
-void initWifi()
-{
-#if 0
-    // strcpy(radioConfig.preferences.wifi_ssid, "xxx");
-    // strcpy(radioConfig.preferences.wifi_password, "xxx");
-    if (radioConfig.has_preferences) {
-        const char *wifiName = radioConfig.preferences.wifi_ssid;
-
-        if (*wifiName) {
-            const char *wifiPsw = radioConfig.preferences.wifi_password;
-            if (radioConfig.preferences.wifi_ap_mode) {
-                DEBUG_MSG("STARTING WIFI AP: ssid=%s, ok=%d\n", wifiName, WiFi.softAP(wifiName, wifiPsw));
-            } else {
-                WiFi.mode(WIFI_MODE_STA);
-                DEBUG_MSG("JOINING WIFI: ssid=%s\n", wifiName);
-                if (WiFi.begin(wifiName, wifiPsw) == WL_CONNECTED) {
-                    DEBUG_MSG("MY IP ADDRESS: %s\n", WiFi.localIP().toString().c_str());
-                } else {
-                    DEBUG_MSG("FAILED JOINING WIFI\n");
-                }
-            }
-        }
-    } else 
-        DEBUG_MSG("Not using WIFI\n");
-#endif
-}
-#endif
 
 void setup()
 {
@@ -286,10 +256,6 @@ void setup()
     nodeStatus->observe(&nodeDB.newStatus);
 
     service.init();
-#ifndef NO_ESP32
-    // Must be after we init the service, because the wifi settings are loaded by NodeDB (oops)
-    initWifi();
-#endif
 
 #ifdef SX1262_ANT_SW
     // make analog PA vs not PA switch on SX1262 eval board work properly

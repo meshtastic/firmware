@@ -1,65 +1,18 @@
 #include "BluetoothUtil.h"
 #include "BluetoothSoftwareUpdate.h"
-#include "configuration.h"
-#include "esp_bt.h"
-#include <Arduino.h>
-#include <BLE2902.h>
-#include <Update.h>
-#include <esp_gatt_defs.h>
-
-#if 0
-
-static BLECharacteristic *batteryLevelC;
-
-/**
- * Create a battery level service
- */
-BLEService *createBatteryService(BLEServer *server)
-{
-    // Create the BLE Service
-    BLEService *pBattery = server->createService(BLEUUID((uint16_t)0x180F));
-
-    batteryLevelC = new BLECharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_BATTERY_LEVEL),
-                                          BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
-
-    addWithDesc(pBattery, batteryLevelC, "Percentage 0 - 100");
-    batteryLevelC->addDescriptor(addBLEDescriptor(new BLE2902())); // Needed so clients can request notification
-
-    // I don't think we need to advertise this? and some phones only see the first thing advertised anyways...
-    // server->getAdvertising()->addServiceUUID(pBattery->getUUID());
-    pBattery->start();
-
-    return pBattery;
-}
-
-/**
- * Update the battery level we are currently telling clients.
- * level should be a pct between 0 and 100
- */
-void updateBatteryLevel(uint8_t level)
-{
-    if (batteryLevelC) {
-        DEBUG_MSG("set BLE battery level %u\n", level);
-        batteryLevelC->setValue(&level, 1);
-        batteryLevelC->notify();
-    }
-}
-
-
-
-// Note: these callbacks might be coming in from a different thread.
-BLEServer *serve = initBLE(, , getDeviceName(), HW_VENDOR, optstr(APP_VERSION),
-                           optstr(HW_VERSION)); // FIXME, use a real name based on the macaddr
-
-#endif
-
+#include "NimbleBluetoothAPI.h"
+#include "NodeDB.h" // FIXME - we shouldn't really douch this here - we are using it only because we currently do wifi setup when ble gets turned on
 #include "PhoneAPI.h"
 #include "PowerFSM.h"
+#include "WiFi.h"
+#include "configuration.h"
+#include "esp_bt.h"
 #include "host/util/util.h"
 #include "main.h"
 #include "nimble/NimbleDefs.h"
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
+#include <Arduino.h>
 
 static bool pinShowing;
 
@@ -79,77 +32,6 @@ static void stopCb()
 };
 
 static uint8_t own_addr_type;
-
-// This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in
-// proccess at once
-static uint8_t trBytes[max(FromRadio_size, ToRadio_size)];
-
-static uint16_t fromNumValHandle;
-static uint32_t fromNum;
-
-/// We only allow one BLE connection at a time
-static int16_t curConnectionHandle = -1;
-
-class BluetoothPhoneAPI : public PhoneAPI
-{
-    /**
-     * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
-     */
-    virtual void onNowHasData(uint32_t fromRadioNum)
-    {
-        PhoneAPI::onNowHasData(fromRadioNum);
-
-        fromNum = fromRadioNum;
-        if (curConnectionHandle >= 0 && fromNumValHandle) {
-            DEBUG_MSG("BLE notify fromNum\n");
-            auto res = ble_gattc_notify(curConnectionHandle, fromNumValHandle);
-            assert(res == 0);
-        } else {
-            DEBUG_MSG("No BLE notify\n");
-        }
-    }
-};
-
-static BluetoothPhoneAPI *bluetoothPhoneAPI;
-
-int toradio_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
-{
-    auto om = ctxt->om;
-    uint16_t len = 0;
-
-    auto rc = ble_hs_mbuf_to_flat(om, trBytes, sizeof(trBytes), &len);
-    if (rc != 0) {
-        return BLE_ATT_ERR_UNLIKELY;
-    }
-
-    /// DEBUG_MSG("toRadioWriteCb data %p, len %u\n", trBytes, len);
-
-    bluetoothPhoneAPI->handleToRadio(trBytes, len);
-    return 0;
-}
-
-int fromradio_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
-{
-    /// DEBUG_MSG("BLE fromRadio called\n");
-    size_t numBytes = bluetoothPhoneAPI->getFromRadio(trBytes);
-
-    // Someone is going to read our value as soon as this callback returns.  So fill it with the next message in the queue
-    // or make empty if the queue is empty
-    auto rc = os_mbuf_append(ctxt->om, trBytes, numBytes);
-    assert(rc == 0);
-
-    return 0; // success
-}
-
-int fromnum_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
-{
-    // DEBUG_MSG("BLE fromNum called\n");
-    auto rc = os_mbuf_append(ctxt->om, &fromNum,
-                             sizeof(fromNum)); // FIXME - once we report real numbers we will need to consider endianness
-    assert(rc == 0);
-
-    return 0; // success
-}
 
 // Force arduino to keep ble data around
 extern "C" bool btInUse()
@@ -460,7 +342,7 @@ static void ble_host_task(void *param)
     DEBUG_MSG("BLE task running\n");
     nimble_port_run(); // This function will return only when nimble_port_stop() is executed.
 
-    DEBUG_MSG("BLE run complete\n");
+    // DEBUG_MSG("BLE run complete\n");
 
     nimble_port_freertos_deinit(); // delete the task
 }
@@ -551,6 +433,32 @@ void reinitBluetooth()
     nimble_port_freertos_init(ble_host_task);
 }
 
+void initWifi()
+{
+    // Note: Wifi is not yet supported ;-)
+    strcpy(radioConfig.preferences.wifi_ssid, "");
+    strcpy(radioConfig.preferences.wifi_password, "");
+    if (radioConfig.has_preferences) {
+        const char *wifiName = radioConfig.preferences.wifi_ssid;
+
+        if (*wifiName) {
+            const char *wifiPsw = radioConfig.preferences.wifi_password;
+            if (radioConfig.preferences.wifi_ap_mode) {
+                DEBUG_MSG("STARTING WIFI AP: ssid=%s, ok=%d\n", wifiName, WiFi.softAP(wifiName, wifiPsw));
+            } else {
+                WiFi.mode(WIFI_MODE_STA);
+                DEBUG_MSG("JOINING WIFI: ssid=%s\n", wifiName);
+                if (WiFi.begin(wifiName, wifiPsw) == WL_CONNECTED) {
+                    DEBUG_MSG("MY IP ADDRESS: %s\n", WiFi.localIP().toString().c_str());
+                } else {
+                    DEBUG_MSG("Started Joining WIFI\n");
+                }
+            }
+        }
+    } else
+        DEBUG_MSG("Not using WIFI\n");
+}
+
 bool bluetoothOn;
 
 // Enable/disable bluetooth.
@@ -564,12 +472,60 @@ void setBluetoothEnable(bool on)
             Serial.printf("Pre BT: %u heap size\n", ESP.getFreeHeap());
             // ESP_ERROR_CHECK( heap_trace_start(HEAP_TRACE_LEAKS) );
             reinitBluetooth();
+            initWifi();
         } else {
             // We have to totally teardown our bluetooth objects to prevent leaks
             deinitBLE();
+            WiFi.mode(WIFI_MODE_NULL); // shutdown wifi
             Serial.printf("Shutdown BT: %u heap size\n", ESP.getFreeHeap());
             // ESP_ERROR_CHECK( heap_trace_stop() );
             // heap_trace_dump();
         }
     }
 }
+
+#if 0
+
+static BLECharacteristic *batteryLevelC;
+
+/**
+ * Create a battery level service
+ */
+BLEService *createBatteryService(BLEServer *server)
+{
+    // Create the BLE Service
+    BLEService *pBattery = server->createService(BLEUUID((uint16_t)0x180F));
+
+    batteryLevelC = new BLECharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_BATTERY_LEVEL),
+                                          BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+
+    addWithDesc(pBattery, batteryLevelC, "Percentage 0 - 100");
+    batteryLevelC->addDescriptor(addBLEDescriptor(new BLE2902())); // Needed so clients can request notification
+
+    // I don't think we need to advertise this? and some phones only see the first thing advertised anyways...
+    // server->getAdvertising()->addServiceUUID(pBattery->getUUID());
+    pBattery->start();
+
+    return pBattery;
+}
+
+/**
+ * Update the battery level we are currently telling clients.
+ * level should be a pct between 0 and 100
+ */
+void updateBatteryLevel(uint8_t level)
+{
+    if (batteryLevelC) {
+        DEBUG_MSG("set BLE battery level %u\n", level);
+        batteryLevelC->setValue(&level, 1);
+        batteryLevelC->notify();
+    }
+}
+
+
+
+// Note: these callbacks might be coming in from a different thread.
+BLEServer *serve = initBLE(, , getDeviceName(), HW_VENDOR, optstr(APP_VERSION),
+                           optstr(HW_VERSION)); // FIXME, use a real name based on the macaddr
+
+#endif
