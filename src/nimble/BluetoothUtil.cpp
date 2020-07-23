@@ -365,6 +365,10 @@ void gatt_svr_register_cb(struct ble_gatt_register_ctxt *ctxt, void *arg)
             fromNumValHandle = ctxt->chr.val_handle;
             DEBUG_MSG("FromNum handle %d\n", fromNumValHandle);
         }
+        if (ctxt->chr.chr_def->uuid == &update_result_uuid.u) {
+            updateResultHandle = ctxt->chr.val_handle;
+            DEBUG_MSG("update result handle %d\n", updateResultHandle);
+        }
         break;
 
     case BLE_GATT_REGISTER_OP_DSC:
@@ -375,6 +379,68 @@ void gatt_svr_register_cb(struct ble_gatt_register_ctxt *ctxt, void *arg)
         assert(0);
         break;
     }
+}
+
+/**
+ * A helper function that implements simple read and write handling for a uint32_t
+ *
+ * If a read, the provided value will be returned over bluetooth.  If a write, the value from the received packet
+ * will be written into the variable.
+ */
+int chr_readwrite32le(uint32_t *v, struct ble_gatt_access_ctxt *ctxt, void *arg)
+{
+    uint8_t le[4];
+
+    if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
+        DEBUG_MSG("BLE reading a uint32\n");
+        put_le32(le, *v);
+        auto rc = os_mbuf_append(ctxt->om, le, sizeof(le));
+        assert(rc == 0);
+    } else if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR) {
+        uint16_t len = 0;
+
+        auto rc = ble_hs_mbuf_to_flat(ctxt->om, le, sizeof(le), &len);
+        assert(rc == 0);
+        if (len < sizeof(le)) {
+            DEBUG_MSG("Error: wrongsized write32\n");
+            *v = 0;
+        } else {
+            *v = get_le32(le);
+            DEBUG_MSG("BLE writing a uint32\n");
+        }
+    } else {
+        DEBUG_MSG("Unexpected readwrite32 op\n");
+        return BLE_ATT_ERR_UNLIKELY;
+    }
+
+    return 0; // success
+}
+
+/**
+ * A helper for readwrite access to an array of bytes (with no endian conversion)
+ */
+int chr_readwrite8(uint8_t *v, size_t vlen, struct ble_gatt_access_ctxt *ctxt, void *arg)
+{
+    if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
+        DEBUG_MSG("BLE reading bytes\n");
+        auto rc = os_mbuf_append(ctxt->om, v, vlen);
+        assert(rc == 0);
+    } else if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR) {
+        uint16_t len = 0;
+
+        auto rc = ble_hs_mbuf_to_flat(ctxt->om, v, vlen, &len);
+        assert(rc == 0);
+        if (len < vlen)
+            DEBUG_MSG("Error: wrongsized write\n");
+        else {
+            DEBUG_MSG("BLE writing bytes\n");
+        }
+    } else {
+        DEBUG_MSG("Unexpected readwrite8 op\n");
+        return BLE_ATT_ERR_UNLIKELY;
+    }
+
+    return 0; // success
 }
 
 // This routine is called multiple times, once each time we come back from sleep

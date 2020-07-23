@@ -1,10 +1,17 @@
 #pragma once
 
+// Keep nimble #defs from messing up the build
+#ifndef max
+#define max max
+#define min min
+#endif
+
 #include "esp_nimble_hci.h"
 #include "host/ble_hs.h"
 #include "host/ble_uuid.h"
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
+#include <Arduino.h>
 
 #ifdef __cplusplus
 extern "C" {

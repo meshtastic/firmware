@@ -4,9 +4,6 @@
 
 extern uint16_t fromNumValHandle;
 
-/// We only allow one BLE connection at a time
-extern int16_t curConnectionHandle;
-
 class BluetoothPhoneAPI : public PhoneAPI
 {
     /**

@@ -1,11 +1,13 @@
 #include "NimbleBluetoothAPI.h"
 #include "PhoneAPI.h"
 #include "configuration.h"
+#include "nimble/BluetoothUtil.h"
 #include "nimble/NimbleDefs.h"
+#include <Arduino.h>
 
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in
 // proccess at once
-static uint8_t trBytes[max(FromRadio_size, ToRadio_size)];
+static uint8_t trBytes[FromRadio_size < ToRadio_size ? ToRadio_size : FromRadio_size];
 static uint32_t fromNum;
 
 uint16_t fromNumValHandle;
@@ -60,10 +62,5 @@ int fromradio_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_ga
 
 int fromnum_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
-    // DEBUG_MSG("BLE fromNum called\n");
-    auto rc = os_mbuf_append(ctxt->om, &fromNum,
-                             sizeof(fromNum)); // FIXME - once we report real numbers we will need to consider endianness
-    assert(rc == 0);
-
-    return 0; // success
+    return chr_readwrite32le(&fromNum, ctxt, arg);
 }
