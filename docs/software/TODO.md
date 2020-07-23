@@ -5,8 +5,6 @@ You probably don't care about this section - skip to the next one.
 Nimble tasks:
 
 - restart advertising after client disconnects (confirm this works if client goes out of range)
-- make sleep work
-- check BLE handle stability
 - started RPA long test, jul 22 6pm
 - implement nimble software update api
 - implement nimble battery level service
