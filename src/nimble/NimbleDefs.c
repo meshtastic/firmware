@@ -1,15 +1,7 @@
 #include "NimbleDefs.h"
 
-// A C++ version of BLE_UUID128_INIT
-#define BLE_UUID128_INIT_CPP(uuid128...)                                                                                         \
-    {                                                                                                                            \
-    u : {                                                                                                                        \
-    type:                                                                                                                        \
-        BLE_UUID_TYPE_128                                                                                                        \
-    }                                                                                                                            \
-        , value: { uuid128 }                                                                                                     \
-    }
-
+// NRF52 wants these constants as byte arrays
+// Generated here https://yupana-engineering.com/online-uuid-to-c-array-converter - but in REVERSE BYTE ORDER
 const ble_uuid128_t mesh_service_uuid =
     BLE_UUID128_INIT(0xfd, 0xea, 0x73, 0xe2, 0xca, 0x5d, 0xa8, 0x9f, 0x1f, 0x46, 0xa8, 0x15, 0x18, 0xb2, 0xa1, 0x6b);
 
@@ -29,7 +21,6 @@ const struct ble_gatt_svc_def gatt_svr_svcs[] = {
         .uuid = &mesh_service_uuid.u,
         .characteristics =
             (struct ble_gatt_chr_def[]){{
-                                            // FIXME - remove non ENC access
                                             .uuid = &toradio_uuid.u,
                                             .access_cb = toradio_callback,
                                             .flags = BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_AUTHEN,
