@@ -122,7 +122,7 @@ int toradio_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt
         return BLE_ATT_ERR_UNLIKELY;
     }
 
-    DEBUG_MSG("toRadioWriteCb data %p, len %u\n", trBytes, len);
+    /// DEBUG_MSG("toRadioWriteCb data %p, len %u\n", trBytes, len);
 
     bluetoothPhoneAPI->handleToRadio(trBytes, len);
     return 0;
@@ -130,7 +130,7 @@ int toradio_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt
 
 int fromradio_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
-    DEBUG_MSG("BLE fromRadio called\n");
+    /// DEBUG_MSG("BLE fromRadio called\n");
     size_t numBytes = bluetoothPhoneAPI->getFromRadio(trBytes);
 
     // Someone is going to read our value as soon as this callback returns.  So fill it with the next message in the queue
@@ -143,7 +143,7 @@ int fromradio_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_ga
 
 int fromnum_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
-    DEBUG_MSG("BLE fromNum called\n");
+    // DEBUG_MSG("BLE fromNum called\n");
     auto rc = os_mbuf_append(ctxt->om, &fromNum,
                              sizeof(fromNum)); // FIXME - once we report real numbers we will need to consider endianness
     assert(rc == 0);
@@ -165,25 +165,22 @@ void updateBatteryLevel(uint8_t level)
 
 void deinitBLE()
 {
-    DEBUG_MSG("Shutting down bluetooth\n");
-    ble_gatts_show_local();
+    // DEBUG_MSG("Shutting down bluetooth\n");
+    // ble_gatts_show_local();
 
     // FIXME - do we need to dealloc things? - what needs to stay alive across light sleep?
     auto ret = nimble_port_stop();
     assert(ret == ESP_OK);
 
-    nimble_port_deinit();          // teardown nimble datastructures
-    nimble_port_freertos_deinit(); // delete the task
+    nimble_port_deinit(); // teardown nimble datastructures
+
+    // DEBUG_MSG("BLE port_deinit done\n");
 
     ret = esp_nimble_hci_and_controller_deinit();
     assert(ret == ESP_OK);
 
-    ret = ble_gatts_reset(); // Teardown the service tables, so the next restart assigns the same handle numbers
-    assert(ret == ESP_OK);
-#if 0
-    auto ret = esp_bt_controller_disable();
-    assert(ret == ESP_OK);
-#endif
+    // DEBUG_MSG("BLE task exiting\n");
+
     DEBUG_MSG("Done shutting down bluetooth\n");
 }
 
@@ -463,7 +460,9 @@ static void ble_host_task(void *param)
     DEBUG_MSG("BLE task running\n");
     nimble_port_run(); // This function will return only when nimble_port_stop() is executed.
 
-    DEBUG_MSG("BLE task exiting\n");
+    DEBUG_MSG("BLE run complete\n");
+
+    nimble_port_freertos_deinit(); // delete the task
 }
 
 void gatt_svr_register_cb(struct ble_gatt_register_ctxt *ctxt, void *arg)
@@ -513,6 +512,9 @@ void reinitBluetooth()
     assert(res == ESP_OK);
 
     nimble_port_init();
+
+    res = ble_gatts_reset(); // Teardown the service tables, so the next restart assigns the same handle numbers
+    assert(res == ESP_OK);
 
     /* Initialize the NimBLE host configuration. */
     ble_hs_cfg.reset_cb = on_reset;
