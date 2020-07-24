@@ -136,8 +136,15 @@ void bluetoothRebootCheck()
 See bluetooth-api.md
 
  */
-void createUpdateService()
+void reinitUpdateService()
 {
     if (!updateLock)
         updateLock = new concurrency::Lock();
+
+    auto res = ble_gatts_count_cfg(gatt_update_svcs); // assigns handles?  see docstring for note about clearing the handle list
+                                                      // before calling SLEEP SUPPORT
+    assert(res == 0);
+
+    res = ble_gatts_add_svcs(gatt_update_svcs);
+    assert(res == 0);
 }

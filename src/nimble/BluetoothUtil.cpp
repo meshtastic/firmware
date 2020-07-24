@@ -489,6 +489,8 @@ void reinitBluetooth()
     res = ble_gatts_add_svcs(gatt_svr_svcs);
     assert(res == 0);
 
+    reinitUpdateService();
+
     /* Set the default device name. */
     res = ble_svc_gap_device_name_set(getDeviceName());
     assert(res == 0);
