@@ -3,6 +3,10 @@
 #define RF95_CHIP_VERSION 0x12
 #define RF95_ALT_VERSION 0x11 // Supposedly some versions of the chip have id 0x11
 
+// From datasheet but radiolib doesn't know anything about this
+#define SX127X_REG_TCXO 0x4B
+
+
 RadioLibRF95::RadioLibRF95(Module *mod) : SX1278(mod) {}
 
 int16_t RadioLibRF95::begin(float freq, float bw, uint8_t sf, uint8_t cr, uint8_t syncWord, int8_t power, uint8_t currentLimit,
@@ -17,6 +21,11 @@ int16_t RadioLibRF95::begin(float freq, float bw, uint8_t sf, uint8_t cr, uint8_
     // configure settings not accessible by API
     state = config();
     RADIOLIB_ASSERT(state);
+
+#ifdef RF95_TCXO
+    state = _mod->SPIsetRegValue(SX127X_REG_TCXO, 0x10 | _mod->SPIgetRegValue(SX127X_REG_TCXO));
+    RADIOLIB_ASSERT(state);
+#endif
 
     // configure publicly accessible settings
     state = setFrequency(freq);

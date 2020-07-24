@@ -24,8 +24,8 @@
     (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
      2) // max number of packets which can be in flight (either queued from reception or queued for sending)
 
-static MemoryPool<MeshPacket> staticPool(MAX_PACKETS);
-// static MemoryDynamic<MeshPacket> staticPool;
+// static MemoryPool<MeshPacket> staticPool(MAX_PACKETS);
+static MemoryDynamic<MeshPacket> staticPool;
 
 Allocator<MeshPacket> &packetPool = staticPool;
 
@@ -36,7 +36,7 @@ Allocator<MeshPacket> &packetPool = staticPool;
  */
 Router::Router() : fromRadioQueue(MAX_RX_FROMRADIO)
 {
-// This is called pre main(), don't touch anything here, the following code is not safe
+    // This is called pre main(), don't touch anything here, the following code is not safe
 
     /* DEBUG_MSG("Size of NodeInfo %d\n", sizeof(NodeInfo));
     DEBUG_MSG("Size of SubPacket %d\n", sizeof(SubPacket));

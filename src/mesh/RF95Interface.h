@@ -52,4 +52,13 @@ class RF95Interface : public RadioLibInterface
     virtual void addReceiveMetadata(MeshPacket *mp);
 
     virtual void setStandby();
+
+    /**
+     *  We override to turn on transmitter power as needed.
+     */
+    virtual void configHardwareForSend();
+
+  private:
+    /** Some boards require GPIO control of tx vs rx paths */
+    void setTransmitEnable(bool txon);
 };

@@ -5,14 +5,14 @@
 
 #include "GPS.h"
 //#include "MeshBluetoothService.h"
+#include "../concurrency/Periodic.h"
+#include "BluetoothCommon.h" // needed for updateBatteryLevel, FIXME, eventually when we pull mesh out into a lib we shouldn't be whacking bluetooth from here
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "../concurrency/Periodic.h"
 #include "PowerFSM.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "power.h"
-#include "BluetoothUtil.h" // needed for updateBatteryLevel, FIXME, eventually when we pull mesh out into a lib we shouldn't be whacking bluetooth from here
 #include "timing.h"
 
 /*
@@ -282,8 +282,6 @@ void MeshService::sendOurPosition(NodeNum dest, bool wantReplies)
     p->decoded.position.time = getValidTime(); // This nodedb timestamp might be stale, so update it if our clock is valid.
     sendToMesh(p);
 }
-
-
 
 int MeshService::onGPSChanged(void *unused)
 {
