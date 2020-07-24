@@ -13,9 +13,8 @@ static int32_t toDegInt(RawDegrees d)
 
 void NEMAGPS::loop()
 {
-
-    while (_serial_gps.available() > 0) {
-        int c = _serial_gps.read();
+    while (_serial_gps->available() > 0) {
+        int c = _serial_gps->read();
         // Serial.write(c);
         reader.encode(c);
     }
