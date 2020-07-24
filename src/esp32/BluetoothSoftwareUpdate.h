@@ -2,7 +2,7 @@
 
 #include "nimble/NimbleDefs.h"
 
-void createUpdateService();
+void reinitUpdateService();
 
 void bluetoothRebootCheck();
 
