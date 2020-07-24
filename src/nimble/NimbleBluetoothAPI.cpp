@@ -49,8 +49,10 @@ int toradio_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt
 
 int fromradio_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
-    /// DEBUG_MSG("BLE fromRadio called\n");
     size_t numBytes = bluetoothPhoneAPI->getFromRadio(trBytes);
+
+    DEBUG_MSG("BLE fromRadio called omlen=%d, ourlen=%d\n", OS_MBUF_PKTLEN(ctxt->om),
+              numBytes); // the normal case has omlen 1 here
 
     // Someone is going to read our value as soon as this callback returns.  So fill it with the next message in the queue
     // or make empty if the queue is empty
@@ -62,5 +64,5 @@ int fromradio_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_ga
 
 int fromnum_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
-    return chr_readwrite32le(&fromNum, ctxt, arg);
+    return chr_readwrite32le(&fromNum, ctxt);
 }

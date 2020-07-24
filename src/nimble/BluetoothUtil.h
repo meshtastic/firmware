@@ -22,9 +22,9 @@ void reinitBluetooth();
  * If a read, the provided value will be returned over bluetooth.  If a write, the value from the received packet
  * will be written into the variable.
  */
-int chr_readwrite32le(uint32_t *v, struct ble_gatt_access_ctxt *ctxt, void *arg);
+int chr_readwrite32le(uint32_t *v, struct ble_gatt_access_ctxt *ctxt);
 
 /**
  * A helper for readwrite access to an array of bytes (with no endian conversion)
  */
-int chr_readwrite8(uint8_t *v, size_t vlen, struct ble_gatt_access_ctxt *ctxt, void *arg);
+int chr_readwrite8(uint8_t *v, size_t vlen, struct ble_gatt_access_ctxt *ctxt);
