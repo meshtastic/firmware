@@ -28,7 +28,7 @@ class NodeDB
     NodeInfo *nodes;
     pb_size_t *numNodes;
 
-    int readPointer = 0;
+    uint32_t readPointer = 0;
 
   public:
     bool updateGUI = false;            // we think the gui should definitely be redrawn, screen will clear this once handled

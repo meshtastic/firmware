@@ -12,5 +12,9 @@
 #define FROMRADIO_UUID "8ba2bcc2-ee02-4a55-a531-c525c5e454d5"
 #define FROMNUM_UUID "ed9da18c-a800-4f66-a670-aa7547e34453"
 
+// NRF52 wants these constants as byte arrays
+// Generated here https://yupana-engineering.com/online-uuid-to-c-array-converter - but in REVERSE BYTE ORDER
+extern const uint8_t MESH_SERVICE_UUID_16[], TORADIO_UUID_16[16u], FROMRADIO_UUID_16[], FROMNUM_UUID_16[];
+
 /// Given a level between 0-100, update the BLE attribute
 void updateBatteryLevel(uint8_t level);
