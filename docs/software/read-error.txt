@@ -1,0 +1,148 @@
+nimble stress test error (private notes for @geeksville)
+
+findings:
+only happens when stress testing multiple sleepwake cycles?
+failed packets all have initial mbuflen of zero (should be 1)
+restarting the connection on phone sometimes (but not always) fixes it (is the larger config nonce pushing packet size up too large?)
+- packets >= 79 bytes (FromRadio) cause INVALID_OFFSET (7) gatt errors to be sent to the app
+- some packets are missing
+
+theory:
+some sort of leak in mbuf storage during unfortunately timed sleep shutdowns
+
+
+device side
+
+
+connection updated; status=0 handle=0 our_ota_addr_type=0 our_ota_addr=00:24:62:ab:dd:df
+ our_id_addr_type=0 our_id_addr=00:24:62:ab:dd:df
+ peer_ota_addr_type=0 peer_ota_addr=00:7c:d9:5c:ba:2e
+ peer_id_addr_type=0 peer_id_addr=00:7c:d9:5c:ba:2e
+ conn_itvl=36 conn_latency=0 supervision_timeout=500 encrypted=1 authenticated=1 bonded=1
+
+BLE fromRadio called
+getFromRadio, !available
+toRadioWriteCb data 0x3ffc3d72, len 4
+Trigger powerFSM 9
+Transition powerFSM transition=Contact from phone, from=DARK to=DARK
+Client wants config, nonce=6864
+Reset nodeinfo read pointer
+toRadioWriteCb data 0x3ffc3d72, len 4
+Trigger powerFSM 9
+Transition powerFSM transition=Contact from phone, from=DARK to=DARK
+Client wants config, nonce=6863
+Reset nodeinfo read pointer
+BLE fromRadio called
+getFromRadio, state=2
+encoding toPhone packet to phone variant=3, 50 bytes
+BLE fromRadio called
+getFromRadio, state=3
+encoding toPhone packet to phone variant=6, 83 bytes
+BLE fromRadio called
+getFromRadio, state=4
+Sending nodeinfo: num=0xabdddf38, lastseen=1595606850, id=!2462abdddf38, name=Bob b
+encoding toPhone packet to phone variant=4, 67 bytes
+BLE fromRadio called
+getFromRadio, state=4
+Sending nodeinfo: num=0x28b200b4, lastseen=1595606804, id=!246f28b200b4, name=Unknown 00b4
+encoding toPhone packet to phone variant=4, 80 bytes
+BLE fromRadio called
+getFromRadio, state=4
+Sending nodeinfo: num=0xabf84098, lastseen=1593680756, id=!2462abf84098, name=bx n
+encoding toPhone packet to phone variant=4, 72 bytes
+BLE fromRadio called
+getFromRadio, state=4
+Sending nodeinfo: num=0x83f0d8e5, lastseen=1594686931, id=!e8e383f0d8e5, name=Unknown d8e5
+encoding toPhone packet to phone variant=4, 64 bytes
+BLE fromRadio called
+getFromRadio, state=4
+Sending nodeinfo: num=0xd1dc7764, lastseen=1595602082, id=!f008d1dc7764, name=dg
+encoding toPhone packet to phone variant=4, 52 bytes
+BLE fromRadio called
+getFromRadio, state=4
+Sending nodeinfo: num=0xd1dc7828, lastseen=1595598298, id=!f008d1dc7828, name=ryan 
+encoding toPhone packet to phone variant=4, 54 bytes
+BLE fromRadio called
+getFromRadio, state=4
+Done sending nodeinfos
+getFromRadio, state=5
+
+
+
+phone side
+
+2020-07-24 09:11:00.642 6478-6545/com.geeksville.mesh W/com.geeksville.mesh.service.BluetoothInterface: Attempting reconnect
+2020-07-24 09:11:00.642 6478-6545/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: Enqueuing work: connect
+2020-07-24 09:11:00.642 6478-6545/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth$BluetoothContinuation: Starting work: connect
+2020-07-24 09:11:00.643 6478-6545/com.geeksville.mesh D/BluetoothGatt: connect() - device: 24:62:AB:DD:DF:3A, auto: false
+2020-07-24 09:11:00.643 6478-6545/com.geeksville.mesh D/BluetoothGatt: registerApp()
+2020-07-24 09:11:00.643 6478-6545/com.geeksville.mesh D/BluetoothGatt: registerApp() - UUID=026baf7f-d2de-43f1-961f-4e00e04c6fbb
+2020-07-24 09:11:00.645 6478-27868/com.geeksville.mesh D/BluetoothGatt: onClientRegistered() - status=0 clientIf=4
+2020-07-24 09:11:01.022 6478-27868/com.geeksville.mesh D/BluetoothGatt: onClientConnectionState() - status=0 clientIf=4 device=24:62:AB:DD:DF:3A
+2020-07-24 09:11:01.022 6478-27868/com.geeksville.mesh I/com.geeksville.mesh.service.SafeBluetooth: new bluetooth connection state 2, status 0
+2020-07-24 09:11:01.023 6478-27868/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: work connect is completed, resuming status=0, res=kotlin.Unit
+2020-07-24 09:11:01.023 6478-6545/com.geeksville.mesh I/com.geeksville.mesh.service.BluetoothInterface: Connected to radio!
+2020-07-24 09:11:01.023 6478-6545/com.geeksville.mesh D/BluetoothGatt: refresh() - device: 24:62:AB:DD:DF:3A
+2020-07-24 09:11:01.526 6478-6545/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: Enqueuing work: discover
+2020-07-24 09:11:01.526 6478-6545/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth$BluetoothContinuation: Starting work: discover
+2020-07-24 09:11:01.526 6478-6545/com.geeksville.mesh D/BluetoothGatt: discoverServices() - device: 24:62:AB:DD:DF:3A
+2020-07-24 09:11:01.829 6478-27868/com.geeksville.mesh D/BluetoothGatt: onConnectionUpdated() - Device=24:62:AB:DD:DF:3A interval=6 latency=0 timeout=500 status=0
+2020-07-24 09:11:02.008 6478-27868/com.geeksville.mesh D/BluetoothGatt: onSearchComplete() = Device=24:62:AB:DD:DF:3A Status=0
+2020-07-24 09:11:02.009 6478-27868/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: work discover is completed, resuming status=0, res=kotlin.Unit
+2020-07-24 09:11:02.009 6478-6545/com.geeksville.mesh D/com.geeksville.mesh.service.BluetoothInterface: Discovered services!
+2020-07-24 09:11:02.095 6478-27868/com.geeksville.mesh D/BluetoothGatt: onConnectionUpdated() - Device=24:62:AB:DD:DF:3A interval=36 latency=0 timeout=500 status=0
+2020-07-24 09:11:03.010 6478-6545/com.geeksville.mesh D/com.geeksville.mesh.service.RadioInterfaceService: Broadcasting connection=true
+2020-07-24 09:11:03.012 6478-6545/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: Enqueuing work: readC 8ba2bcc2-ee02-4a55-a531-c525c5e454d5
+2020-07-24 09:11:03.012 6478-6545/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth$BluetoothContinuation: Starting work: readC 8ba2bcc2-ee02-4a55-a531-c525c5e454d5
+2020-07-24 09:11:03.012 6478-6478/com.geeksville.mesh D/com.geeksville.mesh.service.MeshService: Received broadcast com.geeksville.mesh.CONNECT_CHANGED
+2020-07-24 09:11:03.012 6478-6478/com.geeksville.mesh D/com.geeksville.mesh.service.MeshService: onConnectionChanged=CONNECTED
+2020-07-24 09:11:03.012 6478-6478/com.geeksville.mesh D/com.geeksville.mesh.service.MeshService: Starting config nonce=6878
+2020-07-24 09:11:03.013 6478-6545/com.geeksville.mesh D/com.geeksville.mesh.service.BluetoothInterface: queuing 4 bytes to f75c76d2-129e-4dad-a1dd-7866124401e7 *** sending start config
+2020-07-24 09:11:03.013 6478-6545/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: Enqueuing work: writeC f75c76d2-129e-4dad-a1dd-7866124401e7
+2020-07-24 09:11:03.015 6478-6478/com.geeksville.mesh D/com.geeksville.mesh.service.MeshService: Received broadcast com.geeksville.mesh.CONNECT_CHANGED
+2020-07-24 09:11:03.015 6478-6478/com.geeksville.mesh D/com.geeksville.mesh.service.MeshService: onConnectionChanged=CONNECTED
+2020-07-24 09:11:03.015 6478-6478/com.geeksville.mesh D/com.geeksville.mesh.service.MeshService: Starting config nonce=6877
+2020-07-24 09:11:03.016 6478-6545/com.geeksville.mesh D/com.geeksville.mesh.service.MeshService: device sleep timeout cancelled
+2020-07-24 09:11:03.016 6478-6545/com.geeksville.mesh D/com.geeksville.mesh.service.BluetoothInterface: queuing 4 bytes to f75c76d2-129e-4dad-a1dd-7866124401e7
+2020-07-24 09:11:03.016 6478-6545/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: Enqueuing work: writeC f75c76d2-129e-4dad-a1dd-7866124401e7
+2020-07-24 09:11:03.130 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth$BluetoothContinuation: Starting work: writeC f75c76d2-129e-4dad-a1dd-7866124401e7
+2020-07-24 09:11:03.132 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: work readC 8ba2bcc2-ee02-4a55-a531-c525c5e454d5 is completed, resuming status=0, res=android.bluetooth.BluetoothGattCharacteristic@556a315
+2020-07-24 09:11:03.132 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.BluetoothInterface: Done reading from radio, fromradio is empty
+2020-07-24 09:11:03.132 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: starting setNotify(ed9da18c-a800-4f66-a670-aa7547e34453, true) *** start notify
+2020-07-24 09:11:03.132 6478-19966/com.geeksville.mesh D/BluetoothGatt: setCharacteristicNotification() - uuid: ed9da18c-a800-4f66-a670-aa7547e34453 enable: true
+2020-07-24 09:11:03.133 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: Enqueuing work: writeD  
+2020-07-24 09:11:03.220 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth$BluetoothContinuation: Starting work: writeC f75c76d2-129e-4dad-a1dd-7866124401e7
+2020-07-24 09:11:03.221 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: work writeC f75c76d2-129e-4dad-a1dd-7866124401e7 is completed, resuming status=0, res=android.bluetooth.BluetoothGattCharacteristic@2d2062a
+2020-07-24 09:11:03.221 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.BluetoothInterface: write of 4 bytes completed
+2020-07-24 09:11:03.221 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: Enqueuing work: readC 8ba2bcc2-ee02-4a55-a531-c525c5e454d5
+2020-07-24 09:11:03.310 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth$BluetoothContinuation: Starting work: writeD
+2020-07-24 09:11:03.311 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: work writeC f75c76d2-129e-4dad-a1dd-7866124401e7 is completed, resuming status=0, res=android.bluetooth.BluetoothGattCharacteristic@2d2062a
+2020-07-24 09:11:03.311 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.BluetoothInterface: write of 4 bytes completed
+2020-07-24 09:11:03.400 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth$BluetoothContinuation: Starting work: readC 8ba2bcc2-ee02-4a55-a531-c525c5e454d5
+2020-07-24 09:11:03.402 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: work writeD is completed, resuming status=0, res=android.bluetooth.BluetoothGattDescriptor@fc99c1b
+2020-07-24 09:11:03.402 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: Notify enable=true completed
+2020-07-24 09:11:03.769 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: work readC 8ba2bcc2-ee02-4a55-a531-c525c5e454d5 is completed, resuming status=0, res=android.bluetooth.BluetoothGattCharacteristic@556a315
+2020-07-24 09:11:03.769 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.BluetoothInterface: Received 80 bytes from radio **** received an 80 byte fromradio.  Why did we miss three previous reads?
+2020-07-24 09:11:03.774 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: Enqueuing work: readC 8ba2bcc2-ee02-4a55-a531-c525c5e454d5
+2020-07-24 09:11:03.774 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth$BluetoothContinuation: Starting work: readC 8ba2bcc2-ee02-4a55-a531-c525c5e454d5
+2020-07-24 09:11:03.774 6478-6478/com.geeksville.mesh D/com.geeksville.mesh.service.MeshService: Received broadcast com.geeksville.mesh.RECEIVE_FROMRADIO
+2020-07-24 09:11:03.776 6478-6478/com.geeksville.mesh E/com.geeksville.mesh.service.MeshService: Invalid Protobuf from radio, len=80 (exception Protocol message had invalid UTF-8.)
+2020-07-24 09:11:03.776 6478-6478/com.geeksville.mesh D/com.geeksville.mesh.service.MeshService: Received broadcast com.geeksville.mesh.RECEIVE_FROMRADIO
+2020-07-24 09:11:03.776 6478-6478/com.geeksville.mesh E/com.geeksville.mesh.service.MeshService: Invalid Protobuf from radio, len=80 (exception Protocol message had invalid UTF-8.)
+2020-07-24 09:11:04.031 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: work readC 8ba2bcc2-ee02-4a55-a531-c525c5e454d5 is completed, resuming status=0, res=android.bluetooth.BluetoothGattCharacteristic@556a315
+2020-07-24 09:11:04.031 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.BluetoothInterface: Received 52 bytes from radio *** received 52 bytes - where did the previous two read results go?
+2020-07-24 09:11:04.033 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: Enqueuing work: readC 8ba2bcc2-ee02-4a55-a531-c525c5e454d5
+2020-07-24 09:11:04.033 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth$BluetoothContinuation: Starting work: readC 8ba2bcc2-ee02-4a55-a531-c525c5e454d5
+2020-07-24 09:11:04.034 6478-6478/com.geeksville.mesh D/com.geeksville.mesh.service.MeshService: Received broadcast com.geeksville.mesh.RECEIVE_FROMRADIO
+2020-07-24 09:11:04.035 6478-6478/com.geeksville.mesh E/com.geeksville.mesh.service.MeshService: Invalid Protobuf from radio, len=52 (exception While parsing a protocol message, the input ended unexpectedly in the middle of a field.  This could mean either that the input has been truncated or that an embedded message misreported its own length.)
+2020-07-24 09:11:04.036 6478-6478/com.geeksville.mesh D/com.geeksville.mesh.service.MeshService: Received broadcast com.geeksville.mesh.RECEIVE_FROMRADIO
+2020-07-24 09:11:04.036 6478-6478/com.geeksville.mesh E/com.geeksville.mesh.service.MeshService: Invalid Protobuf from radio, len=52 (exception While parsing a protocol message, the input ended unexpectedly in the middle of a field.  This could mean either that the input has been truncated or that an embedded message misreported its own length.)
+2020-07-24 09:11:04.210 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: work readC 8ba2bcc2-ee02-4a55-a531-c525c5e454d5 is completed, resuming status=7, res=android.bluetooth.BluetoothGattCharacteristic@556a315 *** read failed
+2020-07-24 09:11:04.211 6478-19966/com.geeksville.mesh W/com.geeksville.mesh.service.BluetoothInterface: Scheduling reconnect because error during doReadFromRadio - disconnecting, Bluetooth status=7 while doing readC 8ba2bcc2-ee02-4a55-a531-c525c5e454d5
+2020-07-24 09:11:04.211 6478-6545/com.geeksville.mesh W/com.geeksville.mesh.service.BluetoothInterface: Forcing disconnect and hopefully device will comeback (disabling forced refresh)
+2020-07-24 09:11:04.211 6478-6545/com.geeksville.mesh I/com.geeksville.mesh.service.SafeBluetooth: Closing our GATT connection
+2020-07-24 09:11:04.211 6478-6545/com.geeksville.mesh D/BluetoothGatt: cancelOpen() - device: 24:62:AB:DD:DF:3A
+2020-07-24 09:11:04.214 6478-19966/com.geeksville.mesh D/BluetoothGatt: onClientConnectionState() - status=0 clientIf=4 device=24:62:AB:DD:DF:3A
+2020-07-24 09:11:04.215 6478-19966/com.geeksville.mesh I/com.geeksville.mesh.service.SafeBluetooth: new bluetooth connection state 0, status 0
+2020-07-24 09:11:04.215 6478-19966/com.geeksville.mesh I/com.geeksville.mesh.service.SafeBluetooth: Got disconnect because we are shutting down, closing gatt
+2020-07-24 09:11:04.215 6478-19966/com.geeksville.mesh D/BluetoothGatt: close()
