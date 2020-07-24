@@ -461,6 +461,8 @@ void reinitBluetooth()
 
     nimble_port_init();
 
+    ble_att_set_preferred_mtu(512);
+
     res = ble_gatts_reset(); // Teardown the service tables, so the next restart assigns the same handle numbers
     assert(res == ESP_OK);
 
