@@ -2,6 +2,15 @@
 
 You probably don't care about this section - skip to the next one.
 
+- brf52 ble
+- update protocol description per cyclomies
+- esp32 pairing
+- update faq with antennas https://meshtastic.discourse.group/t/range-test-ideas-requested/738/2
+- update faq on recommended android version and phones
+- add help link inside the app, reference a page on the wiki
+- turn on amazon reviews support
+- add a tablet layout (with map next to messages) in the android app
+
 # Medium priority
 
 Items to complete before 1.0.
