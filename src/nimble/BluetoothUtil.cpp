@@ -387,7 +387,7 @@ void gatt_svr_register_cb(struct ble_gatt_register_ctxt *ctxt, void *arg)
  * If a read, the provided value will be returned over bluetooth.  If a write, the value from the received packet
  * will be written into the variable.
  */
-int chr_readwrite32le(uint32_t *v, struct ble_gatt_access_ctxt *ctxt, void *arg)
+int chr_readwrite32le(uint32_t *v, struct ble_gatt_access_ctxt *ctxt)
 {
     uint8_t le[4];
 
@@ -419,7 +419,7 @@ int chr_readwrite32le(uint32_t *v, struct ble_gatt_access_ctxt *ctxt, void *arg)
 /**
  * A helper for readwrite access to an array of bytes (with no endian conversion)
  */
-int chr_readwrite8(uint8_t *v, size_t vlen, struct ble_gatt_access_ctxt *ctxt, void *arg)
+int chr_readwrite8(uint8_t *v, size_t vlen, struct ble_gatt_access_ctxt *ctxt)
 {
     if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
         DEBUG_MSG("BLE reading bytes\n");

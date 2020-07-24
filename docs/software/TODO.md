@@ -4,11 +4,107 @@ You probably don't care about this section - skip to the next one.
 
 Nimble tasks:
 
+- packets >= 79 bytes (FromRadio) cause INVALID_OFFSET (7) gatt errors to be sent to the app
+  FIXME - add instrumentation
+  is MTU setting heppening ever? or only on the first attempt?
+  client is reading nodeinfos. do we do a second 79 byte read, and that one returns 7 because the length is weong? when the second read should have been 72 bytes?
+  hmm rebooting did not fix
+
+  disconnecting the app and reconnecting it (on the settings screen) did fix it. So is the android app confused?
+  is the retry on exception thing not tearing enough down?
+
+  could old reads from a previous session be coming back and messing up new reads? do we need to cancel all pending Jobs?
+  use reliable writes? < I don't think that is the problem? >
+
+BLE fromRadio called
+getFromRadio, !available
+toRadioWriteCb data 0x3ffc3d72, len 4
+Trigger powerFSM 9
+Client wants config, nonce=3494
+Reset nodeinfo read pointer
+toRadioWriteCb data 0x3ffc3d72, len 4
+Trigger powerFSM 9
+Client wants config, nonce=3493
+Reset nodeinfo read pointer
+BLE fromRadio called
+getFromRadio, state=2
+encoding toPhone packet to phone variant=3, 50 bytes
+BLE fromRadio called
+getFromRadio, state=3
+encoding toPhone packet to phone variant=6, 83 bytes
+BLE fromRadio called
+getFromRadio, state=4
+Sending nodeinfo: num=0xabdddf38, lastseen=1594754867, id=!2462abdddf38, name=Bob b
+encoding toPhone packet to phone variant=4, 67 bytes
+BLE fromRadio called
+getFromRadio, state=4
+Sending nodeinfo: num=0x28b200b4, lastseen=1595545403, id=!246f28b200b4, name=Unknown 00b4
+encoding toPhone packet to phone variant=4, 79 bytes \*\*\*\*
+BLE fromRadio called
+getFromRadio, state=4
+Sending nodeinfo: num=0xabf84098, lastseen=1593680756, id=!2462abf84098, name=bx n
+encoding toPhone packet to phone variant=4, 72 bytes
+BLE fromRadio called
+getFromRadio, state=4
+Sending nodeinfo: num=0x83f0d8e5, lastseen=1594686931, id=!e8e383f0d8e5, name=Unknown d8e5
+encoding toPhone packet to phone variant=4, 64 bytes
+BLE fromRadio called
+getFromRadio, state=4
+Done sending nodeinfos
+getFromRadio, state=5
+
+2020-07-23 16:52:47.843 6478-16336/com.geeksville.mesh D/com.geeksville.mesh.service.RadioInterfaceService: Broadcasting connection=true
+2020-07-23 16:52:47.845 6478-16336/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: Enqueuing work: readC 8ba2bcc2-ee02-4a55-a531-c525c5e454d5
+2020-07-23 16:52:47.845 6478-16336/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth$BluetoothContinuation: Starting work: readC 8ba2bcc2-ee02-4a55-a531-c525c5e454d5
+2020-07-23 16:52:47.846 6478-6478/com.geeksville.mesh D/com.geeksville.mesh.service.MeshService: Received broadcast com.geeksville.mesh.CONNECT_CHANGED
+2020-07-23 16:52:47.847 6478-6478/com.geeksville.mesh D/com.geeksville.mesh.service.MeshService: onConnectionChanged=CONNECTED
+2020-07-23 16:52:47.847 6478-6478/com.geeksville.mesh D/com.geeksville.mesh.service.MeshService: Starting config nonce=4091
+2020-07-23 16:52:47.849 6478-16336/com.geeksville.mesh D/com.geeksville.mesh.service.BluetoothInterface: queuing 4 bytes to f75c76d2-129e-4dad-a1dd-7866124401e7
+2020-07-23 16:52:47.849 6478-16336/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: Enqueuing work: writeC f75c76d2-129e-4dad-a1dd-7866124401e7
+2020-07-23 16:52:47.852 6478-6478/com.geeksville.mesh D/com.geeksville.mesh.service.MeshService: Received broadcast com.geeksville.mesh.CONNECT_CHANGED
+2020-07-23 16:52:47.852 6478-6478/com.geeksville.mesh D/com.geeksville.mesh.service.MeshService: onConnectionChanged=CONNECTED
+2020-07-23 16:52:47.852 6478-6478/com.geeksville.mesh D/com.geeksville.mesh.service.MeshService: Starting config nonce=4090
+2020-07-23 16:52:47.852 6478-16336/com.geeksville.mesh D/com.geeksville.mesh.service.MeshService: device sleep timeout cancelled
+2020-07-23 16:52:47.853 6478-16336/com.geeksville.mesh D/com.geeksville.mesh.service.BluetoothInterface: queuing 4 bytes to f75c76d2-129e-4dad-a1dd-7866124401e7
+2020-07-23 16:52:47.853 6478-16336/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: Enqueuing work: writeC f75c76d2-129e-4dad-a1dd-7866124401e7
+2020-07-23 16:52:48.294 6478-27868/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth$BluetoothContinuation: Starting work: writeC f75c76d2-129e-4dad-a1dd-7866124401e7
+2020-07-23 16:52:48.296 6478-27868/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: work readC 8ba2bcc2-ee02-4a55-a531-c525c5e454d5 is completed, resuming status=0, res=android.bluetooth.BluetoothGattCharacteristic@1717693
+2020-07-23 16:52:48.296 6478-27868/com.geeksville.mesh D/com.geeksville.mesh.service.BluetoothInterface: Received 79 bytes from radio
+2020-07-23 16:52:48.299 6478-27868/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: Enqueuing work: readC 8ba2bcc2-ee02-4a55-a531-c525c5e454d5
+2020-07-23 16:52:48.300 6478-6478/com.geeksville.mesh D/com.geeksville.mesh.service.MeshService: Received broadcast com.geeksville.mesh.RECEIVE_FROMRADIO
+2020-07-23 16:52:48.301 6478-6478/com.geeksville.mesh E/com.geeksville.mesh.service.MeshService: Invalid Protobuf from radio, len=79 (exception Protocol message had invalid UTF-8.)
+2020-07-23 16:52:48.301 6478-6478/com.geeksville.mesh D/com.geeksville.mesh.service.MeshService: Received broadcast com.geeksville.mesh.RECEIVE_FROMRADIO
+2020-07-23 16:52:48.302 6478-6478/com.geeksville.mesh E/com.geeksville.mesh.service.MeshService: Invalid Protobuf from radio, len=79 (exception Protocol message had invalid UTF-8.)
+2020-07-23 16:52:48.384 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth\$BluetoothContinuation: Starting work: writeC f75c76d2-129e-4dad-a1dd-7866124401e7
+2020-07-23 16:52:48.387 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: work writeC f75c76d2-129e-4dad-a1dd-7866124401e7 is completed, resuming status=0, res=android.bluetooth.BluetoothGattCharacteristic@82276d0
+2020-07-23 16:52:48.387 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.BluetoothInterface: write of 4 bytes completed
+2020-07-23 16:52:48.387 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: Enqueuing work: readC 8ba2bcc2-ee02-4a55-a531-c525c5e454d5
+...
+07-23 16:52:48.302 6478-6478/com.geeksville.mesh E/com.geeksville.mesh.service.MeshService: Invalid Protobuf from radio, len=79 (exception Protocol message had invalid UTF-8.)
+2020-07-23 16:52:48.384 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth$BluetoothContinuation: Starting work: writeC f75c76d2-129e-4dad-a1dd-7866124401e7
+2020-07-23 16:52:48.387 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: work writeC f75c76d2-129e-4dad-a1dd-7866124401e7 is completed, resuming status=0, res=android.bluetooth.BluetoothGattCharacteristic@82276d0
+2020-07-23 16:52:48.387 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.BluetoothInterface: write of 4 bytes completed
+2020-07-23 16:52:48.387 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: Enqueuing work: readC 8ba2bcc2-ee02-4a55-a531-c525c5e454d5
+2020-07-23 16:52:48.474 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth$BluetoothContinuation: Starting work: readC 8ba2bcc2-ee02-4a55-a531-c525c5e454d5
+2020-07-23 16:52:48.476 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: work writeC f75c76d2-129e-4dad-a1dd-7866124401e7 is completed, resuming status=0, res=android.bluetooth.BluetoothGattCharacteristic@82276d0
+2020-07-23 16:52:48.476 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.BluetoothInterface: write of 4 bytes completed
+2020-07-23 16:52:48.833 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth$BluetoothContinuation: Starting work: readC 8ba2bcc2-ee02-4a55-a531-c525c5e454d5
+2020-07-23 16:52:48.835 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: work readC 8ba2bcc2-ee02-4a55-a531-c525c5e454d5 is completed, resuming status=0, res=android.bluetooth.BluetoothGattCharacteristic@1717693
+2020-07-23 16:52:48.835 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.BluetoothInterface: Received 79 bytes from radio
+2020-07-23 16:52:48.837 6478-19966/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: Enqueuing work: readC 8ba2bcc2-ee02-4a55-a531-c525c5e454d5
+2020-07-23 16:52:48.839 6478-6478/com.geeksville.mesh D/com.geeksville.mesh.service.MeshService: Received broadcast com.geeksville.mesh.RECEIVE_FROMRADIO
+2020-07-23 16:52:48.840 6478-6478/com.geeksville.mesh E/com.geeksville.mesh.service.MeshService: Invalid Protobuf from radio, len=79 (exception Protocol message had invalid UTF-8.)
+2020-07-23 16:52:48.840 6478-6478/com.geeksville.mesh D/com.geeksville.mesh.service.MeshService: Received broadcast com.geeksville.mesh.RECEIVE_FROMRADIO
+2020-07-23 16:52:48.842 6478-6478/com.geeksville.mesh E/com.geeksville.mesh.service.MeshService: Invalid Protobuf from radio, len=79 (exception Protocol message had invalid UTF-8.)
+2020-07-23 16:52:49.104 6478-27868/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth$BluetoothContinuation: Starting work: readC 8ba2bcc2-ee02-4a55-a531-c525c5e454d5
+2020-07-23 16:52:49.106 6478-27868/com.geeksville.mesh D/com.geeksville.mesh.service.SafeBluetooth: work readC 8ba2bcc2-ee02-4a55-a531-c525c5e454d5 is completed, resuming status=7, res=android.bluetooth.BluetoothGattCharacteristic@1717693
+2020-07-23 16:52:49.107 6478-27868/com.geeksville.mesh W/com.geeksville.mesh.service.BluetoothInterface: Scheduling reconnect because error during doReadFromRadio - disconnecting, Bluetooth status=7 while doing readC 8ba2bcc2-ee02-4a55-a531-c525c5e454d5
+2020-07-23 16:52:49.108 6478-6546/com.geeksville.mesh W/com.geeksville.mesh.service.BluetoothInterface: Forcing disconnect and hopefully device will comeback (disabling forced refresh)
+2020-07-23 16:52:49.108 6478-6546/com.geeksville.mesh I/com.geeksville.mesh.service.SafeBluetooth: Closing our GATT connection
+
 - restart advertising after client disconnects (confirm this works if client goes out of range)
 - started RPA long test, jul 22 6pm
 - implement nimble software update api
-- implement nimble battery level service
-- implement device info service remaining fields (hw version etc)
 
 * update protocol description per cyclomies email thread
 * update faq with antennas https://meshtastic.discourse.group/t/range-test-ideas-requested/738/2
@@ -34,6 +130,8 @@ Items to complete before 1.0.
 
 Items after the first final candidate release.
 
+- implement nimble battery level service
+- Nimble implement device info service remaining fields (hw version etc)
 - Turn on RPA addresses for the device side in Nimble
 - Try to teardown less of the Nimble protocol stack across sleep
 - dynamic frequency scaling could save a lot of power on ESP32, but it seems to corrupt uart (even with ref_tick set correctly)

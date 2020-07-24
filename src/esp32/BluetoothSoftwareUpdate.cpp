@@ -26,7 +26,7 @@ int update_size_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_
     concurrency::LockGuard g(updateLock);
 
     // Check if there is enough to OTA Update
-    chr_readwrite32le(&updateExpectedSize, ctxt, arg);
+    chr_readwrite32le(&updateExpectedSize, ctxt);
 
     if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR && updateExpectedSize != 0) {
         updateActualSize = 0;
@@ -83,7 +83,7 @@ int update_crc32_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble
 {
     concurrency::LockGuard g(updateLock);
     uint32_t expectedCRC = 0;
-    chr_readwrite32le(&expectedCRC, ctxt, arg);
+    chr_readwrite32le(&expectedCRC, ctxt);
 
     uint32_t actualCRC = crc.finalize();
     DEBUG_MSG("expected CRC %u\n", expectedCRC);
@@ -121,7 +121,7 @@ int update_crc32_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble
 
 int update_result_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
-    return chr_readwrite8(&update_result, sizeof(update_result), ctxt, arg);
+    return chr_readwrite8(&update_result, sizeof(update_result), ctxt);
 }
 
 void bluetoothRebootCheck()

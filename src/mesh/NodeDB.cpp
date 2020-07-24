@@ -103,7 +103,7 @@ void NodeDB::resetRadioConfig()
     crypto->setKey(channelSettings.psk.size, channelSettings.psk.bytes);
 
     // temp hack for quicker testing
-    devicestate.no_save = true;
+    // devicestate.no_save = true;
     if (devicestate.no_save) {
         DEBUG_MSG("***** DEVELOPMENT MODE - DO NOT RELEASE *****\n");
 
