@@ -4,10 +4,11 @@ You probably don't care about this section - skip to the next one.
 
 Nimble tasks:
 
-- readerror.txt
-- restart advertising after client disconnects (confirm this works if client goes out of range)
+- readerror.txt stress test bug
 - started RPA long test, jul 22 6pm
 - implement nimble software update api
+- update to latest bins, test OTA again (measure times) and then checkin bins
+- do alpha release
 
 * update protocol description per cyclomies email thread
 * update faq with antennas https://meshtastic.discourse.group/t/range-test-ideas-requested/738/2
