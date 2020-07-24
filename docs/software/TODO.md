@@ -2,14 +2,20 @@
 
 You probably don't care about this section - skip to the next one.
 
-- brf52 ble
-- update protocol description per cyclomies
-- esp32 pairing
-- update faq with antennas https://meshtastic.discourse.group/t/range-test-ideas-requested/738/2
-- update faq on recommended android version and phones
-- add help link inside the app, reference a page on the wiki
-- turn on amazon reviews support
-- add a tablet layout (with map next to messages) in the android app
+Nimble tasks:
+
+- readerror.txt stress test bug
+- started RPA long test, jul 22 6pm
+- implement nimble software update api
+- update to latest bins, test OTA again (measure times) and then checkin bins
+- do alpha release
+
+* update protocol description per cyclomies email thread
+* update faq with antennas https://meshtastic.discourse.group/t/range-test-ideas-requested/738/2
+* update faq on recommended android version and phones
+* add help link inside the app, reference a page on the wiki
+* turn on amazon reviews support
+* add a tablet layout (with map next to messages) in the android app
 
 # Medium priority
 
@@ -28,6 +34,10 @@ Items to complete before 1.0.
 
 Items after the first final candidate release.
 
+- implement nimble battery level service
+- Nimble implement device info service remaining fields (hw version etc)
+- Turn on RPA addresses for the device side in Nimble
+- Try to teardown less of the Nimble protocol stack across sleep
 - dynamic frequency scaling could save a lot of power on ESP32, but it seems to corrupt uart (even with ref_tick set correctly)
 - Change back to using a fixed sized MemoryPool rather than MemoryDynamic (see bug #149)
 - scan to find channels with low background noise? (Use CAD mode of the RF95 to automatically find low noise channels)
