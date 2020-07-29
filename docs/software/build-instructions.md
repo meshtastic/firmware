@@ -5,7 +5,13 @@ in these instructions I describe use of their command line tool.
 
 1. Purchase a suitable radio (see above)
 2. Install [PlatformIO](https://platformio.org/platformio-ide)
-3. Download this git repo and cd into it
+3. Download this git repo and cd into it:
+
+```
+git clone https://github.com/meshtastic/Meshtastic-device.git
+cd Meshtastic-device
+```
+
 4. Run `git submodule update --init --recursive` to pull in dependencies this project needs.
 5. If you are outside the USA, run "export COUNTRY=EU865" (or whatever) to set the correct frequency range for your country. Options are provided for `EU433`, `EU865`, `CN`, `JP` and `US` (default). Pull-requests eagerly accepted for other countries.
 6. Plug the radio into your USB port
