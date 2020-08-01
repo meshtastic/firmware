@@ -43,10 +43,14 @@ static FrameCallback normalFrames[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
 static uint32_t targetFramerate = IDLE_FRAMERATE;
 static char btPIN[16] = "888888";
 
+// This image definition is here instead of images.h because it's modified dynamically by the drawBattery function
 uint8_t imgBattery[16] =  { 0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0xE7, 0x3C };
-uint8_t imgSatellite[8] = { 0x70, 0x71, 0x22, 0xFA, 0xFA, 0x22, 0x71, 0x70 };
 
+// Threshold values for the GPS lock accuracy bar display
 uint32_t dopThresholds[5] = { 2000, 1000, 500, 200, 100 };
+
+// Stores the last 4 of our hardware ID, to make finding the device for pairing easier
+static char ourId[5];
 
 #ifdef SHOW_REDRAWS
 static bool heartbeat = false;
@@ -116,7 +120,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     assert(mp.decoded.which_payload == SubPacket_data_tag);
     snprintf(tempBuf, sizeof(tempBuf), "         %s", mp.decoded.data.payload.bytes);
 
-    display->drawStringMaxWidth(4 + x, 10 + y, 128, tempBuf);
+    display->drawStringMaxWidth(4 + x, 10 + y, SCREEN_WIDTH - (6 + x), tempBuf);
 }
 
 /// Draw a series of fields in a column, wrapping to multiple colums if needed
@@ -408,7 +412,7 @@ static void drawCompassHeading(OLEDDisplay *display, int16_t compassX, int16_t c
 
     for (int i = 0; i < 4; i++) {
         rosePoints[i]->rotate(myHeading);
-        rosePoints[i]->scale(COMPASS_DIAM);
+        rosePoints[i]->scale(-1 * COMPASS_DIAM);
         rosePoints[i]->translate(compassX, compassY);
     }
     drawLine(display, N1, N3);
@@ -593,6 +597,11 @@ void Screen::setup()
 #ifdef FLIP_SCREEN_VERTICALLY
     dispdev.flipScreenVertically();
 #endif
+
+    // Get our hardware ID
+    uint8_t dmac[6];
+    getMacAddr(dmac);
+    sprintf(ourId, "%02x%02x", dmac[4], dmac[5]);
 
     // Turn on the display.
     handleSetOn(true);
@@ -783,8 +792,13 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         drawGPS(display, x + (SCREEN_WIDTH * 0.63), y + 2, gpsStatus);
     }
 
+    // Draw the channel name
     display->drawString(x, y + FONT_HEIGHT, channelStr);
+    // Draw our hardware ID to assist with bluetooth pairing
+    display->drawFastImage(x + SCREEN_WIDTH - (10) - display->getStringWidth(ourId), y + 2 + FONT_HEIGHT, 8, 8, imgInfo);
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(ourId), y + FONT_HEIGHT, ourId);
 
+    // Draw any log messages
     display->drawLogBuffer(x, y + (FONT_HEIGHT * 2));
 
     /* Display a heartbeat pixel that blinks every time the frame is redrawn */
