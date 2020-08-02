@@ -7,6 +7,8 @@
 
 TODO:
 
+- shrink soft device RAM usage
+- get nrf52832 working again (currently OOM)
 - i2c gps comms not quite right
 - ble: AdafruitBluefruit::begin - adafruit_ble_task was assigned an invalid stack pointer. out of memory?
 - measure power draw
