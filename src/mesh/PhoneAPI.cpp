@@ -1,9 +1,9 @@
 #include "PhoneAPI.h"
+#include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
-#include "GPS.h"
 #include "timing.h"
 #include <assert.h>
 
@@ -80,7 +80,6 @@ void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
     }
 }
 
-
 /**
  * Get the next packet we want to send to the phone, or NULL if no such packet is available.
  *
@@ -96,7 +95,7 @@ void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 size_t PhoneAPI::getFromRadio(uint8_t *buf)
 {
     if (!available()) {
-        DEBUG_MSG("getFromRadio, !available\n");
+        // DEBUG_MSG("getFromRadio, !available\n");
         return false;
     } else {
         DEBUG_MSG("getFromRadio, state=%d\n", state);
