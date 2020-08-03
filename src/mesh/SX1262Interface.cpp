@@ -14,10 +14,12 @@ bool SX1262Interface::init()
 {
     RadioLibInterface::init();
 
-#ifdef SX1262_RXEN // set not rx or tx mode
+#ifdef SX1262_RXEN                  // set not rx or tx mode
+    digitalWrite(SX1262_RXEN, LOW); // Set low before becoming an output
     pinMode(SX1262_RXEN, OUTPUT);
 #endif
 #ifdef SX1262_TXEN
+    digitalWrite(SX1262_TXEN, LOW);
     pinMode(SX1262_TXEN, OUTPUT);
 #endif
 
