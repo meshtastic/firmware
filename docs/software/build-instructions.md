@@ -1,9 +1,19 @@
 # Build instructions
 
-This project uses the simple PlatformIO build system. You can use the IDE, but for brevity
-in these instructions I describe use of their command line tool.
+This project uses the simple PlatformIO build system. PlatformIO is an extension to Microsoft VSCode.
 
-1. Purchase a suitable radio (see above)
+## GUI
+1. Purchase a suitable [radio](https://github.com/meshtastic/Meshtastic-device/wiki/Hardware-Information).
+2. Install [PlatformIO](https://platformio.org/platformio-ide).
+3. Click the PlatformIO icon on the side bar. ![platformio icon](https://user-images.githubusercontent.com/47490997/89482668-77c7ea00-d7ee-11ea-8785-5faf8ff99800.png)
+4. Under `Quick Access, Miscellaneous, Clone Git Project` enter the URL of the Meshtastic repo found [here](https://github.com/meshtastic/Meshtastic-device). ![image](https://user-images.githubusercontent.com/47490997/89483047-4c91ca80-d7ef-11ea-91f4-1d53d4e8acd9.png) 
+5. Select a file location to save the repo.
+6. Once loaded, open the `platformio.ini` file. 
+7. At the line `default_envs` you can change it to the board type you are building for ie. `ttgo-lora32-v2, ttgo-lora32-v1, tbeam, heltec` (boards are listed further down in the file).
+8. Click the PlatformIO icon on the side bar. Under `Project Tasks` you can now build or upload.
+
+## Command Line
+1. Purchase a suitable [radio](https://github.com/meshtastic/Meshtastic-device/wiki/Hardware-Information).
 2. Install [PlatformIO](https://platformio.org/platformio-ide)
 3. Download this git repo and cd into it
 4. Run `git submodule update --init --recursive` to pull in dependencies this project needs.
