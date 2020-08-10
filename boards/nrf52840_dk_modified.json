@@ -8,7 +8,7 @@
     "extra_flags": "-DARDUINO_NRF52840_PCA10056 -DNRF52840_XXAA",
     "f_cpu": "64000000L",
     "hwids": [["0x239A", "0x4404"]],
-    "usb_product": "SimPPR",
+    "usb_product": "nrf52840dk",
     "mcu": "nrf52840",
     "variant": "pca10056-rc-clock",
     "variants_dir": "variants",

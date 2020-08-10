@@ -8,7 +8,7 @@ COUNTRIES="US EU433 EU865 CN JP"
 #COUNTRIES=US
 #COUNTRIES=CN
 
-BOARDS="ttgo-lora32-v2 ttgo-lora32-v1 tbeam heltec"
+BOARDS="tlora-v2 tlora-v1 tlora-v2-1-1.6 tbeam heltec tbeam0.7"
 #BOARDS=tbeam
 
 OUTDIR=release/latest

@@ -10,7 +10,7 @@ static SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 
 RadioLibInterface::RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy,
                                      SPIClass &spi, PhysicalLayer *_iface)
-    : PeriodicTask(0), module(cs, irq, rst, busy, spi, spiSettings), iface(_iface)
+    : concurrency::PeriodicTask(0), module(cs, irq, rst, busy, spi, spiSettings), iface(_iface)
 {
     assert(!instance); // We assume only one for now
     instance = this;
@@ -303,6 +303,8 @@ void RadioLibInterface::startSend(MeshPacket *txp)
 {
     printPacket("Starting low level send", txp);
     setStandby(); // Cancel any already in process receives
+
+    configHardwareForSend(); // must be after setStandby
 
     size_t numbytes = beginSending(txp);
 

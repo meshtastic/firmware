@@ -15,9 +15,14 @@ This project uses the simple PlatformIO build system. PlatformIO is an extension
 ## Command Line
 1. Purchase a suitable [radio](https://github.com/meshtastic/Meshtastic-device/wiki/Hardware-Information).
 2. Install [PlatformIO](https://platformio.org/platformio-ide)
-3. Download this git repo and cd into it. `git clone https://github.com/meshtastic/Meshtastic-device.git` and `cd Meshtastic-device`
+3. Download this git repo and cd into it:
+
+```
+git clone https://github.com/meshtastic/Meshtastic-device.git
+cd Meshtastic-device
+```
 4. Run `git submodule update --init --recursive` to pull in dependencies this project needs.
-5. If you are outside the USA, edit [platformio.ini](/platformio.ini) to set the correct frequency range for your country. The line you need to change starts with `hw_version` and instructions are provided above that line. Options are provided for `EU433`, `EU835`, `CN`, `JP` and `US` (default). Pull-requests eagerly accepted for other countries.
+5. If you are outside the USA, run "export COUNTRY=EU865" (or whatever) to set the correct frequency range for your country. Options are provided for `EU433`, `EU865`, `CN`, `JP` and `US` (default). Pull-requests eagerly accepted for other countries.
 6. Plug the radio into your USB port
 7. Type `pio run --environment XXX -t upload` (This command will fetch dependencies, build the project and install it on the board via USB). For XXX, use the board type you have (either `tlora-v2, tlora-v1, tlora-v2-1-1.6, tbeam, heltec, tbeam0.7`).
 8. Platform IO also installs a very nice VisualStudio Code based IDE, see their [tutorial](https://docs.platformio.org/en/latest/tutorials/espressif32/arduino_debugging_unit_testing.html) if you'd like to use it.

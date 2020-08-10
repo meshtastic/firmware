@@ -12,6 +12,18 @@ RF95Interface::RF95Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOL
     // FIXME - we assume devices never get destroyed
 }
 
+/** Some boards require GPIO control of tx vs rx paths */
+void RF95Interface::setTransmitEnable(bool txon)
+{
+#ifdef RF95_TXEN
+    digitalWrite(RF95_TXEN, txon ? 1 : 0);
+#endif
+
+#ifdef RF95_RXEN
+    digitalWrite(RF95_RXEN, txon ? 0 : 1);
+#endif
+}
+
 /// Initialise the Driver transport hardware and software.
 /// Make sure the Driver is properly configured before calling init().
 /// \return true if initialisation succeeded.
@@ -24,8 +36,30 @@ bool RF95Interface::init()
         power = MAX_POWER;
 
     iface = lora = new RadioLibRF95(&module);
+
+#ifdef RF95_TCXO
+    pinMode(RF95_TCXO, OUTPUT);
+    digitalWrite(RF95_TCXO, 1);
+#endif
+
+    /*
+    #define RF95_TXEN (22) // If defined, this pin should be set high prior to transmit (controls an external analog switch)
+    #define RF95_RXEN (23) // If defined, this pin should be set high prior to receive (controls an external analog switch)
+    */
+
+#ifdef RF95_TXEN
+    pinMode(RF95_TXEN, OUTPUT);
+    digitalWrite(RF95_TXEN, 0);
+#endif
+
+#ifdef RF95_RXEN
+    pinMode(RF95_RXEN, OUTPUT);
+    digitalWrite(RF95_RXEN, 1);
+#endif
+    setTransmitEnable(false);
+
     int res = lora->begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength);
-    DEBUG_MSG("LORA init result %d\n", res);
+    DEBUG_MSG("RF95 init result %d\n", res);
 
     if (res == ERR_NONE)
         res = lora->setCRC(SX126X_LORA_CRC_ON);
@@ -98,8 +132,18 @@ void RF95Interface::setStandby()
     completeSending(); // If we were sending, not anymore
 }
 
+/** We override to turn on transmitter power as needed.
+ */
+void RF95Interface::configHardwareForSend()
+{
+    setTransmitEnable(true);
+
+    RadioLibInterface::configHardwareForSend();
+}
+
 void RF95Interface::startReceive()
 {
+    setTransmitEnable(false);
     setStandby();
     int err = lora->startReceive();
     assert(err == ERR_NONE);

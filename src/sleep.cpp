@@ -5,9 +5,9 @@
 #include "NodeDB.h"
 #include "configuration.h"
 #include "error.h"
-
 #include "main.h"
 #include "target_specific.h"
+#include "timing.h"
 
 #ifndef NO_ESP32
 #include "esp32/pm.h"
@@ -16,7 +16,7 @@
 #include <driver/rtc_io.h>
 #include <driver/uart.h>
 
-#include "BluetoothUtil.h"
+#include "nimble/BluetoothUtil.h"
 
 esp_sleep_source_t wakeCause; // the reason we booted this time
 #endif
@@ -123,11 +123,11 @@ bool doPreflightSleep()
 /// Tell devices we are going to sleep and wait for them to handle things
 static void waitEnterSleep()
 {
-    uint32_t now = millis();
+    uint32_t now = timing::millis();
     while (!doPreflightSleep()) {
         delay(100); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
 
-        if (millis() - now > 30 * 1000) { // If we wait too long just report an error and go to sleep
+        if (timing::millis() - now > 30 * 1000) { // If we wait too long just report an error and go to sleep
             recordCriticalError(ErrSleepEnterWait);
             assert(0); // FIXME - for now we just restart, need to fix bug #167
             break;
@@ -294,18 +294,18 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 
 /**
  * enable modem sleep mode as needed and available.  Should lower our CPU current draw to an average of about 20mA.
- * 
+ *
  * per https://docs.espressif.com/projects/esp-idf/en/latest/api-reference/system/power_management.html
- * 
+ *
  * supposedly according to https://github.com/espressif/arduino-esp32/issues/475 this is already done in arduino
  */
 void enableModemSleep()
 {
-  static esp_pm_config_esp32_t config; // filled with zeros because bss
+    static esp_pm_config_esp32_t config; // filled with zeros because bss
 
-  config.max_freq_mhz = CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ;
-  config.min_freq_mhz = 20; // 10Mhz is minimum recommended
-  config.light_sleep_enable = false;
-  DEBUG_MSG("Sleep request result %x\n", esp_pm_configure(&config));
+    config.max_freq_mhz = CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ;
+    config.min_freq_mhz = 20; // 10Mhz is minimum recommended
+    config.light_sleep_enable = false;
+    DEBUG_MSG("Sleep request result %x\n", esp_pm_configure(&config));
 }
 #endif
