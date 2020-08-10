@@ -1,12 +1,14 @@
 # NRF52 TODO
 
-* Possibly switch from softdevice to Apachy Newt: https://github.com/espressif/esp-nimble
-https://github.com/apache/mynewt-core - use nimble BLE on both ESP32 and NRF52
+- Possibly switch from softdevice to Apachy Newt: https://github.com/espressif/esp-nimble
+  https://github.com/apache/mynewt-core - use nimble BLE on both ESP32 and NRF52
 
 ## RAK815
 
 TODO:
 
+- shrink soft device RAM usage
+- get nrf52832 working again (currently OOM)
 - i2c gps comms not quite right
 - ble: AdafruitBluefruit::begin - adafruit_ble_task was assigned an invalid stack pointer. out of memory?
 - measure power draw

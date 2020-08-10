@@ -66,6 +66,8 @@ The link above will return older more stable releases. We would prefer if you jo
 
 If you'd like to help with development, the source code is [on github](https://github.com/meshtastic/Meshtastic-Android).
 
+The app is also distributed for Amazon Fire devices via the Amazon appstore: [![Amazon appstore link](https://raw.githubusercontent.com/meshtastic/Meshtastic-device/master/images/amazon-fire-button.png)](https://www.amazon.com/Geeksville-Industries-Meshtastic/dp/B08CY9394Q)
+
 ## Supported hardware
 
 We currently support two brands of radios. The [TTGO T-Beam](https://www.aliexpress.com/item/4001178678568.html) and the [Heltec LoRa 32](https://heltec.org/project/wifi-lora-32/). Most people should buy the T-Beam and a 18650 battery (total cost less than \$35). Also, the version of the T-Beam we link to is shipped with Meshtastic **preinstalled** by TTGO, so you don't have to install it yourself.
