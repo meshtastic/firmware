@@ -25,30 +25,45 @@
 #include "MeshService.h"
 #include "NEMAGPS.h"
 #include "NodeDB.h"
-#include "Periodic.h"
 #include "PowerFSM.h"
 #include "UBloxGPS.h"
+#include "concurrency/Periodic.h"
 #include "configuration.h"
 #include "error.h"
 #include "power.h"
 // #include "rom/rtc.h"
 #include "DSRRouter.h"
-#include "debug.h"
+// #include "debug.h"
+#include "graphics/Screen.h"
 #include "main.h"
-#include "screen.h"
 #include "sleep.h"
+#include "timing.h"
+#include <OneButton.h>
 #include <Wire.h>
 // #include <driver/rtc_io.h>
 
 #ifndef NO_ESP32
-#include "BluetoothUtil.h"
+#include "nimble/BluetoothUtil.h"
+#endif
+
+#include "RF95Interface.h"
+#include "SX1262Interface.h"
+
+#ifdef NRF52_SERIES
+#include "variant.h"
 #endif
 
 // We always create a screen object, but we only init it if we find the hardware
-meshtastic::Screen screen(SSD1306_ADDRESS);
+graphics::Screen screen(SSD1306_ADDRESS);
 
-// Global power status singleton
-meshtastic::PowerStatus powerStatus;
+// Global power status
+meshtastic::PowerStatus *powerStatus = new meshtastic::PowerStatus();
+
+// Global GPS status
+meshtastic::GPSStatus *gpsStatus = new meshtastic::GPSStatus();
+
+// Global Node status
+meshtastic::NodeStatus *nodeStatus = new meshtastic::NodeStatus();
 
 bool ssd1306_found;
 bool axp192_found;
@@ -112,17 +127,26 @@ static uint32_t ledBlinker()
     setLed(ledOn);
 
     // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
-    return powerStatus.charging ? 1000 : (ledOn ? 2 : 1000);
+    return powerStatus->getIsCharging() ? 1000 : (ledOn ? 2 : 1000);
 }
 
-Periodic ledPeriodic(ledBlinker);
+concurrency::Periodic ledPeriodic(ledBlinker);
 
-#include "RF95Interface.h"
-#include "SX1262Interface.h"
-
-#ifdef NO_ESP32
-#include "variant.h"
+// Prepare for button presses
+#ifdef BUTTON_PIN
+OneButton userButton;
 #endif
+#ifdef BUTTON_PIN_ALT
+OneButton userButtonAlt;
+#endif
+void userButtonPressed()
+{
+    powerFSM.trigger(EVENT_PRESS);
+}
+void userButtonPressedLong()
+{
+    screen.adjustBrightness();
+}
 
 void setup()
 {
@@ -159,8 +183,14 @@ void setup()
 
     // Buttons & LED
 #ifdef BUTTON_PIN
-    pinMode(BUTTON_PIN, INPUT_PULLUP);
-    digitalWrite(BUTTON_PIN, 1);
+    userButton = OneButton(BUTTON_PIN, true, true);
+    userButton.attachClick(userButtonPressed);
+    userButton.attachDuringLongPress(userButtonPressedLong);
+#endif
+#ifdef BUTTON_PIN_ALT
+    userButtonAlt = OneButton(BUTTON_PIN_ALT, true, true);
+    userButtonAlt.attachClick(userButtonPressed);
+    userButton.attachDuringLongPress(userButtonPressedLong);
 #endif
 #ifdef LED_PIN
     pinMode(LED_PIN, OUTPUT);
@@ -180,6 +210,14 @@ void setup()
     esp32Setup();
 #endif
 
+#ifdef TBEAM_V10
+    // Currently only the tbeam has a PMU
+    power = new Power();
+    power->setup();
+    power->setStatusHandler(powerStatus);
+    powerStatus->observe(&power->newStatus);
+#endif
+
 #ifdef NRF52_SERIES
     nrf52Setup();
 #endif
@@ -197,17 +235,25 @@ void setup()
     // Init GPS - first try ublox
     gps = new UBloxGPS();
     if (!gps->setup()) {
-        // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
-        // assume NEMA at 9600 baud.
-        DEBUG_MSG("ERROR: No UBLOX GPS found, hoping that NEMA might work\n");
-        delete gps;
-        gps = new NEMAGPS();
-        gps->setup();
+        DEBUG_MSG("ERROR: No UBLOX GPS found\n");
+
+        if (GPS::_serial_gps) {
+            // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
+            // assume NEMA at 9600 baud.
+            DEBUG_MSG("Hoping that NEMA might work\n");
+            delete gps;
+
+            // dumb NEMA access only work for serial GPSes)
+            gps = new NEMAGPS();
+            gps->setup();
+        }
     }
 #else
     gps = new NEMAGPS();
     gps->setup();
 #endif
+    gpsStatus->observe(&gps->newStatus);
+    nodeStatus->observe(&nodeDB.newStatus);
 
     service.init();
 
@@ -222,15 +268,15 @@ void setup()
     SPI.begin();
 #else
     // ESP32
-    SPI.begin(SCK_GPIO, MISO_GPIO, MOSI_GPIO, NSS_GPIO);
+    SPI.begin(RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
     SPI.setFrequency(4000000);
 #endif
 
     // MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
     RadioInterface *rIf =
-#if defined(RF95_IRQ_GPIO)
+#if defined(RF95_IRQ)
         // new CustomRF95(); old Radiohead based driver
-        new RF95Interface(NSS_GPIO, RF95_IRQ_GPIO, RESET_GPIO, SPI);
+        new RF95Interface(RF95_NSS, RF95_IRQ, RF95_RESET, SPI);
 #elif defined(SX1262_CS)
         new SX1262Interface(SX1262_CS, SX1262_DIO1, SX1262_RESET, SX1262_BUSY, SPI);
 #else
@@ -266,7 +312,7 @@ uint32_t axpDebugRead()
   return 30 * 1000;
 }
 
-Periodic axpDebugOutput(axpDebugRead);
+concurrency::Periodic axpDebugOutput(axpDebugRead);
 axpDebugOutput.setup();
 #endif
 
@@ -279,7 +325,7 @@ void loop()
     powerFSM.run_machine();
     service.loop();
 
-    periodicScheduler.loop();
+    concurrency::periodicScheduler.loop();
     // axpDebugOutput.loop();
 
 #ifdef DEBUG_PORT
@@ -291,49 +337,35 @@ void loop()
 #ifndef NO_ESP32
     esp32Loop();
 #endif
+#ifdef TBEAM_V10
+    power->loop();
+#endif
 
 #ifdef BUTTON_PIN
-    // if user presses button for more than 3 secs, discard our network prefs and reboot (FIXME, use a debounce lib instead of
-    // this boilerplate)
-    static bool wasPressed = false;
-
-    if (!digitalRead(BUTTON_PIN)) {
-        if (!wasPressed) { // just started a new press
-            DEBUG_MSG("pressing\n");
-
-            // doLightSleep();
-            // esp_pm_dump_locks(stdout); // FIXME, do this someplace better
-            wasPressed = true;
-
-            powerFSM.trigger(EVENT_PRESS);
-        }
-    } else if (wasPressed) {
-        // we just did a release
-        wasPressed = false;
-    }
+    userButton.tick();
+#endif
+#ifdef BUTTON_PIN_ALT
+    userButtonAlt.tick();
 #endif
 
     // Show boot screen for first 3 seconds, then switch to normal operation.
     static bool showingBootScreen = true;
-    if (showingBootScreen && (millis() > 3000)) {
+    if (showingBootScreen && (timing::millis() > 3000)) {
         screen.stopBootScreen();
         showingBootScreen = false;
     }
 
 #ifdef DEBUG_STACK
     static uint32_t lastPrint = 0;
-    if (millis() - lastPrint > 10 * 1000L) {
-        lastPrint = millis();
+    if (timing::millis() - lastPrint > 10 * 1000L) {
+        lastPrint = timing::millis();
         meshtastic::printThreadInfo("main");
     }
 #endif
 
     // Update the screen last, after we've figured out what to show.
-    screen.debug()->setNodeNumbersStatus(nodeDB.getNumOnlineNodes(), nodeDB.getNumNodes());
-    screen.debug()->setChannelNameStatus(channelSettings.name);
-    screen.debug()->setPowerStatus(powerStatus);
-    // TODO(#4): use something based on hdop to show GPS "signal" strength.
-    screen.debug()->setGPSStatus(gps->hasLock() ? "good" : "bad");
+    screen.debug_info()->setChannelNameStatus(channelSettings.name);
+    // screen.debug()->setPowerStatus(powerStatus);
 
     // No GPS lock yet, let the OS put the main CPU in low power mode for 100ms (or until another interrupt comes in)
     // i.e. don't just keep spinning in loop as fast as we can.

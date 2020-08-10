@@ -6,6 +6,7 @@
 #include "assert.h"
 #include "configuration.h"
 #include "sleep.h"
+#include "timing.h"
 #include <assert.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -155,7 +156,7 @@ size_t RadioInterface::beginSending(MeshPacket *p)
     // DEBUG_MSG("sending queued packet on mesh (txGood=%d,rxGood=%d,rxBad=%d)\n", rf95.txGood(), rf95.rxGood(), rf95.rxBad());
     assert(p->which_payload == MeshPacket_encrypted_tag); // It should have already been encoded by now
 
-    lastTxStart = millis();
+    lastTxStart = timing::millis();
 
     PacketHeader *h = (PacketHeader *)radiobuf;
 

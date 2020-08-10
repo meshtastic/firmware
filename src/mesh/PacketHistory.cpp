@@ -1,6 +1,7 @@
 #include "PacketHistory.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
+#include "../timing.h"
 
 PacketHistory::PacketHistory()
 {
@@ -18,7 +19,7 @@ bool PacketHistory::wasSeenRecently(const MeshPacket *p, bool withUpdate)
         return false; // Not a floodable message ID, so we don't care
     }
 
-    uint32_t now = millis();
+    uint32_t now = timing::millis();
     for (size_t i = 0; i < recentPackets.size();) {
         PacketRecord &r = recentPackets[i];
 

@@ -1,16 +1,25 @@
 
 #include "GPS.h"
 #include "configuration.h"
-#include "time.h"
+#include "timing.h"
 #include <assert.h>
-#include <sys/time.h>
+#include <time.h>
 
+// If we have a serial GPS port it will not be null
 #ifdef GPS_RX_PIN
 HardwareSerial _serial_gps_real(GPS_SERIAL_NUM);
-HardwareSerial &GPS::_serial_gps = _serial_gps_real;
+HardwareSerial *GPS::_serial_gps = &_serial_gps_real;
+#elif defined(NRF52840_XXAA)
+// Assume NRF52840
+HardwareSerial *GPS::_serial_gps = &Serial1;
 #else
-// Assume NRF52
-HardwareSerial &GPS::_serial_gps = Serial1;
+HardwareSerial *GPS::_serial_gps = NULL;
+#endif
+
+#ifdef GPS_I2C_ADDRESS
+uint8_t GPS::i2cAddress = GPS_I2C_ADDRESS;
+#else
+uint8_t GPS::i2cAddress = 0;
 #endif
 
 bool timeSetFromGPS; // We try to set our time from GPS each time we wake from sleep
@@ -27,7 +36,7 @@ void readFromRTC()
     struct timeval tv; /* btw settimeofday() is helpfull here too*/
 
     if (!gettimeofday(&tv, NULL)) {
-        uint32_t now = millis();
+        uint32_t now = timing::millis();
 
         DEBUG_MSG("Read RTC time as %ld (cur millis %u) valid=%d\n", tv.tv_sec, now, timeSetFromGPS);
         timeStartMsec = now;
@@ -63,16 +72,14 @@ void perhapsSetRTC(struct tm &t)
 
     // DEBUG_MSG("Got time from GPS month=%d, year=%d, unixtime=%ld\n", t.tm_mon, t.tm_year, tv.tv_sec);
     if (t.tm_year < 0 || t.tm_year >= 300)
-        DEBUG_MSG("Ignoring invalid GPS time\n");
+        DEBUG_MSG("Ignoring invalid GPS month=%d, year=%d, unixtime=%ld\n", t.tm_mon, t.tm_year, tv.tv_sec);
     else
         perhapsSetRTC(&tv);
 }
 
-#include <time.h>
-
 uint32_t getTime()
 {
-    return ((millis() - timeStartMsec) / 1000) + zeroOffsetSecs;
+    return ((timing::millis() - timeStartMsec) / 1000) + zeroOffsetSecs;
 }
 
 uint32_t getValidTime()
