@@ -129,8 +129,8 @@ void RadioInterface::applyModemConfig()
     if (power == 0)
         power = POWER_DEFAULT;
 
-    // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM
-    int channel_num = hash(channelSettings.name) % NUM_CHANNELS;
+    // If user has manually specified a channel num, then use that, otherwise generate one by hashing the name
+    int channel_num = (channelSettings.channel_num ? channelSettings.channel_num - 1 : hash(channelSettings.name)) % NUM_CHANNELS;
     freq = CH0 + CH_SPACING * channel_num;
 
     DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, power=%d\n", channelSettings.name, channelSettings.modem_config, channel_num,
