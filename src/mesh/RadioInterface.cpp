@@ -115,6 +115,8 @@ unsigned long hash(char *str)
     return hash;
 }
 
+
+
 #define POWER_DEFAULT 17
 
 /**

@@ -66,6 +66,33 @@ static uint8_t ourMacAddr[6];
  */
 NodeNum displayedNodeNum;
 
+/**
+ * Generate a short suffix used to disambiguate channels that might have the same "name" entered by the human but different PSKs.
+ * The ideas is that the PSK changing should be visible to the user so that they see they probably messed up and that's why they
+their nodes
+ * aren't talking to each other.
+ *
+ * This string is of the form "#name-XY".
+ *
+ * Where X is a letter from A to Z (base26), and formed by xoring all the bytes of the PSK together.
+ * Y is not yet used but should eventually indicate 'speed/range' of the link
+ *
+ * This function will also need to be implemented in GUI apps that talk to the radio.
+ *
+ * https://github.com/meshtastic/Meshtastic-device/issues/269
+ */
+const char *getChannelName()
+{
+    static char buf[32];
+
+    uint8_t code = 0;
+    for (int i = 0; i < sizeof(channelSettings.psk.size); i++)
+        code ^= channelSettings.psk.bytes[i];
+
+    snprintf(buf, sizeof(buf), "#%s-%c", channelSettings.name, 'A' + (code % 26));
+    return buf;
+}
+
 NodeDB::NodeDB() : nodes(devicestate.node_db), numNodes(&devicestate.node_db_count) {}
 
 void NodeDB::resetRadioConfig()
