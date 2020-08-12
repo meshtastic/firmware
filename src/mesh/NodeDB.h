@@ -1,12 +1,12 @@
 #pragma once
 
+#include "Observer.h"
 #include <Arduino.h>
 #include <assert.h>
-#include "Observer.h"
 
 #include "MeshTypes.h"
-#include "mesh-pb-constants.h"
 #include "NodeStatus.h"
+#include "mesh-pb-constants.h"
 
 extern DeviceState devicestate;
 extern MyNodeInfo &myNodeInfo;
@@ -95,7 +95,8 @@ class NodeDB
     NodeInfo *getOrCreateNode(NodeNum n);
 
     /// Notify observers of changes to the DB
-    void notifyObservers(bool forceUpdate = false) {
+    void notifyObservers(bool forceUpdate = false)
+    {
         // Notify observers of the current node state
         const meshtastic::NodeStatus status = meshtastic::NodeStatus(getNumOnlineNodes(), getNumNodes(), forceUpdate);
         newStatus.notifyObservers(&status);
@@ -115,3 +116,20 @@ class NodeDB
 extern NodeNum displayedNodeNum;
 
 extern NodeDB nodeDB;
+
+/**
+ * Generate a short suffix used to disambiguate channels that might have the same "name" entered by the human but different PSKs.
+ * The ideas is that the PSK changing should be visible to the user so that they see they probably messed up and that's why they
+their nodes
+ * aren't talking to each other.
+ *
+ * This string is of the form "#name-XY".
+ *
+ * Where X is a letter from A to Z (base26), and formed by xoring all the bytes of the PSK together.
+ * Y is not yet used but should eventually indicate 'speed/range' of the link
+ *
+ * This function will also need to be implemented in GUI apps that talk to the radio.
+ *
+ * https://github.com/meshtastic/Meshtastic-device/issues/269
+ */
+const char *getChannelName();

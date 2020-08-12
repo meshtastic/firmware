@@ -30,6 +30,8 @@ We currently support three models of radios.
   - 3D printable cases
     - [T-Beam V0](https://www.thingiverse.com/thing:3773717)
     - [T-Beam V1](https://www.thingiverse.com/thing:3830711)
+  - Laser-cut cases
+    - [T-Beam V1](https://www.thingiverse.com/thing:4552771)
 
 - [TTGO LORA32](https://www.aliexpress.com/item/4000211331316.html) - No GPS
   - version 2.1
