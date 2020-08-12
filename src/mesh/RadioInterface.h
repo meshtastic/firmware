@@ -1,10 +1,10 @@
 #pragma once
 
+#include "../concurrency/NotifiedWorkerThread.h"
 #include "MemoryPool.h"
 #include "MeshTypes.h"
 #include "Observer.h"
 #include "PointerQueue.h"
-#include "../concurrency/NotifiedWorkerThread.h"
 #include "mesh.pb.h"
 
 #define MAX_TX_QUEUE 16 // max number of packets which can be waiting for transmission
@@ -30,13 +30,6 @@ typedef struct {
      **/
     uint8_t flags;
 } PacketHeader;
-
-typedef enum {
-    Bw125Cr45Sf128 = 0, ///< Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on. Default medium range
-    Bw500Cr45Sf128,     ///< Bw = 500 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on. Fast+short range
-    Bw31_25Cr48Sf512,   ///< Bw = 31.25 kHz, Cr = 4/8, Sf = 512chips/symbol, CRC on. Slow+long range
-    Bw125Cr48Sf4096,    ///< Bw = 125 kHz, Cr = 4/8, Sf = 4096chips/symbol, CRC on. Slow+long range
-} ModemConfigChoice;
 
 /**
  * Basic operations all radio chipsets must implement.
@@ -72,9 +65,7 @@ class RadioInterface : protected concurrency::NotifiedWorkerThread
     void deliverToReceiver(MeshPacket *p);
 
   public:
-    float freq = 915.0; // FIXME, init all these params from user setings
-    int8_t power = 17;
-    ModemConfigChoice modemConfig;
+    float freq = 915.0;
 
     /** pool is the pool we will alloc our rx packets from
      * rxDest is where we will send any rx packets, it becomes receivers responsibility to return packet to the pool
@@ -116,6 +107,8 @@ class RadioInterface : protected concurrency::NotifiedWorkerThread
     virtual bool reconfigure() = 0;
 
   protected:
+    int8_t power = 17; // Set by applyModemConfig()
+
     /***
      * given a packet set sendingPacket and decode the protobufs into radiobuf.  Returns # of bytes to send (including the
      * PacketHeader & payload).
