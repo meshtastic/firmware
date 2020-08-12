@@ -29,7 +29,7 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define here.
 */
 
-#define DEVICESTATE_CUR_VER 10
+#define DEVICESTATE_CUR_VER 11
 #define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
 
 #ifndef NO_ESP32
@@ -93,7 +93,7 @@ void NodeDB::resetRadioConfig()
         // so incompatible radios can talk together
         channelSettings.modem_config = ChannelSettings_ModemConfig_Bw125Cr48Sf4096; // slow and long range
 
-        channelSettings.tx_power = 23;
+        channelSettings.tx_power = 0; // default
         memcpy(&channelSettings.psk.bytes, &defaultpsk, sizeof(channelSettings.psk));
         channelSettings.psk.size = sizeof(defaultpsk);
         strcpy(channelSettings.name, "Default");
