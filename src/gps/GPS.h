@@ -25,7 +25,7 @@ void readFromRTC();
  *
  * When new data is available it will notify observers.
  */
-class GPS : public Observable<void *>
+class GPS
 {
   protected:
     bool hasValidLocation = false; // default to false, until we complete our first read
@@ -48,6 +48,7 @@ class GPS : public Observable<void *>
 
     virtual ~GPS() {}
 
+    /** We will notify this observable anytime GPS state has changed meaningfully */
     Observable<const meshtastic::GPSStatus *> newStatus;
 
     /**
