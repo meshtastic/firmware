@@ -160,7 +160,6 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
     {
         if (hasValidLocation) {
             wantNewLocation = false;
-            notifyObservers(NULL);
             // ublox.powerOff();
         }
     } else // we didn't get a location update, go back to sleep and hope the characters show up

@@ -1,27 +1,92 @@
 #include "power.h"
 #include "PowerFSM.h"
 #include "main.h"
-#include "utils.h"
 #include "sleep.h"
-
-#ifdef TBEAM_V10
+#include "utils.h"
 
 // FIXME. nasty hack cleanup how we load axp192
 #undef AXP192_SLAVE_ADDRESS
 #include "axp20x.h"
+
+#ifdef TBEAM_V10
 AXP20X_Class axp;
+#endif
+
 bool pmu_irq = false;
 
 Power *power;
 
-bool Power::setup() 
+/**
+ * If this board has a battery level sensor, set this to a valid implementation
+ */
+static HasBatteryLevel *batteryLevel; // Default to NULL for no battery level sensor
+
+/**
+ * A simple battery level sensor that assumes the battery voltage is attached via a voltage-divider to an analog input
+ */
+class AnalogBatteryLevel : public HasBatteryLevel
 {
+    /**
+     * Battery state of charge, from 0 to 100 or -1 for unknown
+     *
+     * FIXME - use a lipo lookup table, the current % full is super wrong
+     */
+    virtual int getBattPercentage()
+    {
+        float v = getBattVoltage();
 
-    axp192Init();
-    concurrency::PeriodicTask::setup(); // We don't start our periodic task unless we actually found the device
-    setPeriod(1);
+        if (v < 2.1)
+            return -1;
 
-    return axp192_found;
+        return 100 * (getBattVoltage() - 3.27) / (4.2 - 3.27);
+    }
+
+    /**
+     * The raw voltage of the battery or NAN if unknown
+     */
+    virtual float getBattVoltage()
+    {
+        return
+#ifdef BATTERY_PIN
+            analogRead(BATTERY_PIN) * 2.0 * (3.3 / 1024.0);
+#else
+            NAN;
+#endif
+    }
+
+    /**
+     * return true if there is a battery installed in this unit
+     */
+    virtual bool isBatteryConnect() { return true; }
+} analogLevel;
+
+bool Power::analogInit()
+{
+#ifdef BATTERY_PIN
+    DEBUG_MSG("Using analog input for battery level\n");
+    adcAttachPin(BATTERY_PIN);
+    // adcStart(BATTERY_PIN);
+    analogReadResolution(10); // Default of 12 is not very linear. Recommended to use 10 or 11 depending on needed resolution.
+    batteryLevel = &analogLevel;
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool Power::setup()
+{
+    bool found = axp192Init();
+
+    if (!found) {
+        found = analogInit();
+    }
+    if (found) {
+        concurrency::PeriodicTask::setup(); // We don't start our periodic task unless we actually found the device
+        setPeriod(1);
+    }
+
+    return found;
 }
 
 /// Reads power status to powerStatus singleton.
@@ -29,42 +94,45 @@ bool Power::setup()
 // TODO(girts): move this and other axp stuff to power.h/power.cpp.
 void Power::readPowerStatus()
 {
-    bool hasBattery = axp.isBatteryConnect();
-    int batteryVoltageMv = 0;
-    uint8_t batteryChargePercent = 0;
-    if (hasBattery) {
-        batteryVoltageMv = axp.getBattVoltage();
-        // If the AXP192 returns a valid battery percentage, use it
-        if (axp.getBattPercentage() >= 0) {
-            batteryChargePercent = axp.getBattPercentage();
-        } else {
-            // If the AXP192 returns a percentage less than 0, the feature is either not supported or there is an error
-            // In that case, we compute an estimate of the charge percent based on maximum and minimum voltages defined in power.h
-            batteryChargePercent = clamp((int)(((batteryVoltageMv - BAT_MILLIVOLTS_EMPTY) * 1e2) / (BAT_MILLIVOLTS_FULL - BAT_MILLIVOLTS_EMPTY)), 0, 100);
+    if (batteryLevel) {
+        bool hasBattery = batteryLevel->isBatteryConnect();
+        int batteryVoltageMv = 0;
+        uint8_t batteryChargePercent = 0;
+        if (hasBattery) {
+            batteryVoltageMv = batteryLevel->getBattVoltage();
+            // If the AXP192 returns a valid battery percentage, use it
+            if (batteryLevel->getBattPercentage() >= 0) {
+                batteryChargePercent = batteryLevel->getBattPercentage();
+            } else {
+                // If the AXP192 returns a percentage less than 0, the feature is either not supported or there is an error
+                // In that case, we compute an estimate of the charge percent based on maximum and minimum voltages defined in
+                // power.h
+                batteryChargePercent =
+                    clamp((int)(((batteryVoltageMv - BAT_MILLIVOLTS_EMPTY) * 1e2) / (BAT_MILLIVOLTS_FULL - BAT_MILLIVOLTS_EMPTY)),
+                          0, 100);
+            }
         }
+
+        // Notify any status instances that are observing us
+        const meshtastic::PowerStatus powerStatus = meshtastic::PowerStatus(
+            hasBattery, batteryLevel->isVBUSPlug(), batteryLevel->isChargeing(), batteryVoltageMv, batteryChargePercent);
+        newStatus.notifyObservers(&powerStatus);
+
+        // If we have a battery at all and it is less than 10% full, force deep sleep
+        if (powerStatus.getHasBattery() && !powerStatus.getHasUSB() && batteryLevel->getBattVoltage() < MIN_BAT_MILLIVOLTS)
+            powerFSM.trigger(EVENT_LOW_BATTERY);
     }
-
-    // Notify any status instances that are observing us
-    const meshtastic::PowerStatus powerStatus = meshtastic::PowerStatus(hasBattery, axp.isVBUSPlug(), axp.isChargeing(), batteryVoltageMv, batteryChargePercent);
-    newStatus.notifyObservers(&powerStatus);
-
-    // If we have a battery at all and it is less than 10% full, force deep sleep
-    if (powerStatus.getHasBattery() && !powerStatus.getHasUSB() &&
-        axp.getBattVoltage() < MIN_BAT_MILLIVOLTS)
-        powerFSM.trigger(EVENT_LOW_BATTERY);
 }
 
-void Power::doTask() 
+void Power::doTask()
 {
     readPowerStatus();
-    
+
     // Only read once every 20 seconds once the power status for the app has been initialized
-    if(statusHandler && statusHandler->isInitialized())
+    if (statusHandler && statusHandler->isInitialized())
         setPeriod(1000 * 20);
 }
-#endif // TBEAM_V10
 
-#ifdef AXP192_SLAVE_ADDRESS
 /**
  * Init the power manager chip
  *
@@ -74,10 +142,13 @@ void Power::doTask()
  30mA -> charges GPS backup battery // charges the tiny J13 battery by the GPS to power the GPS ram (for a couple of days), can
  not be turned off LDO2 200mA -> LORA LDO3 200mA -> GPS
  */
-void Power::axp192Init()
+bool Power::axp192Init()
 {
+#ifdef TBEAM_V10
     if (axp192_found) {
         if (!axp.begin(Wire, AXP192_SLAVE_ADDRESS)) {
+            batteryLevel = &axp;
+
             DEBUG_MSG("AXP192 Begin PASS\n");
 
             // axp.setChgLEDMode(LED_BLINK_4HZ);
@@ -135,12 +206,16 @@ void Power::axp192Init()
     } else {
         DEBUG_MSG("AXP192 not found\n");
     }
-}
+
+    return axp192_found;
+#else
+    return false;
 #endif
+}
 
-void Power::loop() 
+
+void Power::loop()
 {
-
 #ifdef PMU_IRQ
     if (pmu_irq) {
         pmu_irq = false;
@@ -174,6 +249,5 @@ void Power::loop()
         axp.clearIRQ();
     }
 
-#endif // T_BEAM_V10
-
+#endif
 }

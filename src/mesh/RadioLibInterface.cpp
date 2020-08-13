@@ -1,5 +1,6 @@
 #include "RadioLibInterface.h"
 #include "MeshTypes.h"
+#include "NodeDB.h"
 #include "mesh-pb-constants.h"
 #include <configuration.h>
 #include <pb_decode.h>
@@ -64,29 +65,41 @@ void RadioLibInterface::applyModemConfig()
 {
     RadioInterface::applyModemConfig();
 
-    switch (modemConfig) {
-    case Bw125Cr45Sf128: ///< Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on. Default medium range
-        bw = 125;
-        cr = 5;
-        sf = 7;
-        break;
-    case Bw500Cr45Sf128: ///< Bw = 500 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on. Fast+short range
-        bw = 500;
-        cr = 5;
-        sf = 7;
-        break;
-    case Bw31_25Cr48Sf512: ///< Bw = 31.25 kHz, Cr = 4/8, Sf = 512chips/symbol, CRC on. Slow+long range
-        bw = 31.25;
-        cr = 8;
-        sf = 9;
-        break;
-    case Bw125Cr48Sf4096:
-        bw = 125;
-        cr = 8;
-        sf = 12;
-        break;
-    default:
-        assert(0); // Unknown enum
+    if (channelSettings.spread_factor == 0) {
+        switch (channelSettings.modem_config) {
+        case ChannelSettings_ModemConfig_Bw125Cr45Sf128: ///< Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on. Default medium
+                                                         ///< range
+            bw = 125;
+            cr = 5;
+            sf = 7;
+            break;
+        case ChannelSettings_ModemConfig_Bw500Cr45Sf128: ///< Bw = 500 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on. Fast+short
+                                                         ///< range
+            bw = 500;
+            cr = 5;
+            sf = 7;
+            break;
+        case ChannelSettings_ModemConfig_Bw31_25Cr48Sf512: ///< Bw = 31.25 kHz, Cr = 4/8, Sf = 512chips/symbol, CRC on. Slow+long
+                                                           ///< range
+            bw = 31.25;
+            cr = 8;
+            sf = 9;
+            break;
+        case ChannelSettings_ModemConfig_Bw125Cr48Sf4096:
+            bw = 125;
+            cr = 8;
+            sf = 12;
+            break;
+        default:
+            assert(0); // Unknown enum
+        }
+    } else {
+        sf = channelSettings.spread_factor;
+        cr = channelSettings.coding_rate;
+        bw = channelSettings.bandwidth;
+
+        if (bw == 31) // This parameter is not an integer
+            bw = 31.25;
     }
 }
 
