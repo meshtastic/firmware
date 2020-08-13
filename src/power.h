@@ -1,6 +1,6 @@
 #pragma once
-#include "concurrency/PeriodicTask.h"
 #include "PowerStatus.h"
+#include "concurrency/PeriodicTask.h"
 
 /**
  * Per @spattinson
@@ -18,23 +18,23 @@
 class Power : public concurrency::PeriodicTask
 {
 
-   public:
-
+  public:
     Observable<const meshtastic::PowerStatus *> newStatus;
 
     void readPowerStatus();
     void loop();
     virtual bool setup();
     virtual void doTask();
-    void setStatusHandler(meshtastic::PowerStatus *handler)
-    {
-        statusHandler = handler;
-    }
-    
-   protected:
-    meshtastic::PowerStatus *statusHandler;
-    virtual void axp192Init();
+    void setStatusHandler(meshtastic::PowerStatus *handler) { statusHandler = handler; }
 
+  protected:
+    meshtastic::PowerStatus *statusHandler;
+
+    /// Setup a axp192, return true if found
+    bool axp192Init();
+
+    /// Setup a simple ADC input based battery sensor
+    bool analogInit();
 };
 
 extern Power *power;

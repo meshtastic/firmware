@@ -68,7 +68,8 @@ void MeshService::init()
     sendOwnerPeriod.setup();
     nodeDB.init();
 
-    gpsObserver.observe(gps);
+    assert(gps);
+    gpsObserver.observe(&gps->newStatus);
     packetReceivedObserver.observe(&router.notifyPacketReceived);
 }
 
@@ -283,9 +284,8 @@ void MeshService::sendOurPosition(NodeNum dest, bool wantReplies)
     sendToMesh(p);
 }
 
-int MeshService::onGPSChanged(void *unused)
+int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
 {
-    // DEBUG_MSG("got gps notify\n");
 
     // Update our local node info with our position (even if we don't decide to update anyone else)
     MeshPacket *p = router.allocForSending();
@@ -304,6 +304,8 @@ int MeshService::onGPSChanged(void *unused)
     // Include our current battery voltage in our position announcement
     pos.battery_level = powerStatus->getBatteryChargePercent();
     updateBatteryLevel(pos.battery_level);
+
+    // DEBUG_MSG("got gps notify time=%u, lat=%d, bat=%d\n", pos.latitude_i, pos.time, pos.battery_level);
 
     // We limit our GPS broadcasts to a max rate
     static uint32_t lastGpsSend;

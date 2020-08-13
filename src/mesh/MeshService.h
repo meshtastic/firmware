@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <string>
 
+#include "GPSStatus.h"
 #include "MemoryPool.h"
 #include "MeshRadio.h"
 #include "MeshTypes.h"
@@ -17,7 +18,8 @@
  */
 class MeshService
 {
-    CallbackObserver<MeshService, void *> gpsObserver = CallbackObserver<MeshService, void *>(this, &MeshService::onGPSChanged);
+    CallbackObserver<MeshService, const meshtastic::GPSStatus *> gpsObserver =
+        CallbackObserver<MeshService, const meshtastic::GPSStatus *>(this, &MeshService::onGPSChanged);
     CallbackObserver<MeshService, const MeshPacket *> packetReceivedObserver =
         CallbackObserver<MeshService, const MeshPacket *>(this, &MeshService::handleFromRadio);
 
@@ -85,7 +87,7 @@ class MeshService
 
     /// Called when our gps position has changed - updates nodedb and sends Location message out into the mesh
     /// returns 0 to allow futher processing
-    int onGPSChanged(void *arg);
+    int onGPSChanged(const meshtastic::GPSStatus *arg);
 
     /// Handle a packet that just arrived from the radio.  This method does _not_ free the provided packet.  If it needs
     /// to keep the packet around it makes a copy
