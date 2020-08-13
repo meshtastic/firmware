@@ -25,13 +25,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "Screen.h"
+#include "configs.h"
 #include "configuration.h"
 #include "graphics/images.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
-#include "Screen.h"
 #include "utils.h"
-#include "configs.h"
 
 using namespace meshtastic; /** @todo remove */
 
@@ -44,10 +44,10 @@ static uint32_t targetFramerate = IDLE_FRAMERATE;
 static char btPIN[16] = "888888";
 
 // This image definition is here instead of images.h because it's modified dynamically by the drawBattery function
-uint8_t imgBattery[16] =  { 0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0xE7, 0x3C };
+uint8_t imgBattery[16] = {0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0xE7, 0x3C};
 
 // Threshold values for the GPS lock accuracy bar display
-uint32_t dopThresholds[5] = { 2000, 1000, 500, 200, 100 };
+uint32_t dopThresholds[5] = {2000, 1000, 500, 200, 100};
 
 // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
 static char ourId[5];
@@ -208,37 +208,32 @@ static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, NodeStatus *no
 // Draw GPS status summary
 static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
-    if (!gps->getIsConnected()) 
-    {
+    if (!gps->getIsConnected()) {
         display->drawString(x, y - 2, "No GPS");
         return;
     }
     display->drawFastImage(x, y, 6, 8, gps->getHasLock() ? imgPositionSolid : imgPositionEmpty);
-    if (!gps->getHasLock()) 
-    {
+    if (!gps->getHasLock()) {
         display->drawString(x + 8, y - 2, "No sats");
         return;
-    } 
-    else 
-    {
+    } else {
         char satsString[3];
-        uint8_t bar[2] = { 0 };
+        uint8_t bar[2] = {0};
 
-        //Draw DOP signal bars
-        for(int i = 0; i < 5; i++)
-        {
+        // Draw DOP signal bars
+        for (int i = 0; i < 5; i++) {
             if (gps->getDOP() <= dopThresholds[i])
                 bar[0] = ~((1 << (5 - i)) - 1);
             else
                 bar[0] = 0b10000000;
-            //bar[1] = bar[0];
+            // bar[1] = bar[0];
             display->drawFastImage(x + 9 + (i * 2), y, 2, 8, bar);
         }
 
-        //Draw satellite image
+        // Draw satellite image
         display->drawFastImage(x + 24, y, 8, 8, imgSatellite);
 
-        //Draw the number of satellites
+        // Draw the number of satellites
         sprintf(satsString, "%d", gps->getNumSatellites());
         display->drawString(x + 34, y - 2, satsString);
     }
@@ -390,7 +385,6 @@ static void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t comp
     float arrowOffsetX = 0.2f, arrowOffsetY = 0.2f;
     Point leftArrow(tip.x - arrowOffsetX, tip.y - arrowOffsetY), rightArrow(tip.x + arrowOffsetX, tip.y - arrowOffsetY);
 
-
     Point *arrowPoints[] = {&tip, &tail, &leftArrow, &rightArrow};
 
     for (int i = 0; i < 4; i++) {
@@ -406,8 +400,8 @@ static void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t comp
 // Draw the compass heading
 static void drawCompassHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading)
 {
-    Point N1(-0.04f, -0.65f), N2( 0.04f, -0.65f);
-    Point N3(-0.04f, -0.55f), N4( 0.04f, -0.55f);
+    Point N1(-0.04f, -0.65f), N2(0.04f, -0.65f);
+    Point N3(-0.04f, -0.55f), N4(0.04f, -0.55f);
     Point *rosePoints[] = {&N1, &N2, &N3, &N4};
 
     for (int i = 0; i < 4; i++) {
@@ -440,8 +434,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         displayedNodeNum = n->num;
 
         // We just changed to a new node screen, ask that node for updated state if it's older than 2 minutes
-        if(sinceLastSeen(n) > 120)
-        {
+        if (sinceLastSeen(n) > 120) {
             service.sendNetworkPing(displayedNodeNum, true);
         }
     }
@@ -477,14 +470,12 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     int16_t compassX = x + SCREEN_WIDTH - COMPASS_DIAM / 2 - 5, compassY = y + SCREEN_HEIGHT / 2;
     bool hasNodeHeading = false;
 
-    if(ourNode && hasPosition(ourNode))
-    {
+    if (ourNode && hasPosition(ourNode)) {
         Position &op = ourNode->position;
         float myHeading = estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
         drawCompassHeading(display, compassX, compassY, myHeading);
 
-        if(hasPosition(node)) 
-        { 
+        if (hasPosition(node)) {
             // display direction toward node
             hasNodeHeading = true;
             Position &p = node->position;
@@ -499,15 +490,14 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             float bearingToOther = bearing(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
             headingRadian = bearingToOther - myHeading;
             drawNodeHeading(display, compassX, compassY, headingRadian);
-        } 
+        }
     }
-    if(!hasNodeHeading)
+    if (!hasNodeHeading)
         // direction to node is unknown so display question mark
         // Debug info for gps lock errors
         // DEBUG_MSG("ourNode %d, ourPos %d, theirPos %d\n", !!ourNode, ourNode && hasPosition(ourNode), hasPosition(node));
         display->drawString(compassX - FONT_HEIGHT / 4, compassY - FONT_HEIGHT / 2, "?");
     display->drawCircle(compassX, compassY, COMPASS_DIAM / 2);
-
 
     // Must be after distStr is populated
     drawColumns(display, x, y, fields);
@@ -779,7 +769,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     char channelStr[20];
     {
         concurrency::LockGuard guard(&lock);
-        snprintf(channelStr, sizeof(channelStr), "#%s", channelName.c_str());
+        snprintf(channelStr, sizeof(channelStr), "%s", channelName.c_str());
 
         // Display power status
         if (powerStatus->getHasBattery())
@@ -824,18 +814,17 @@ void Screen::adjustBrightness()
     dispdev.setBrightness(brightness);
 }
 
-int Screen::handleStatusUpdate(const meshtastic::Status *arg) 
+int Screen::handleStatusUpdate(const meshtastic::Status *arg)
 {
-    //DEBUG_MSG("Screen got status update %d\n", arg->getStatusType());
-    switch(arg->getStatusType())
-    {
-        case STATUS_TYPE_NODE:
-            if (nodeDB.updateTextMessage || nodeStatus->getLastNumTotal() != nodeStatus->getNumTotal())
-                setFrames();
-            prevFrame = -1;
-            nodeDB.updateGUI = false;
-            nodeDB.updateTextMessage = false;
-            break;
+    // DEBUG_MSG("Screen got status update %d\n", arg->getStatusType());
+    switch (arg->getStatusType()) {
+    case STATUS_TYPE_NODE:
+        if (nodeDB.updateTextMessage || nodeStatus->getLastNumTotal() != nodeStatus->getNumTotal())
+            setFrames();
+        prevFrame = -1;
+        nodeDB.updateGUI = false;
+        nodeDB.updateTextMessage = false;
+        break;
     }
     setPeriod(1); // Update the screen right away
     return 0;

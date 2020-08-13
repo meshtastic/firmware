@@ -210,13 +210,11 @@ void setup()
     esp32Setup();
 #endif
 
-#ifdef TBEAM_V10
     // Currently only the tbeam has a PMU
     power = new Power();
     power->setup();
     power->setStatusHandler(powerStatus);
     powerStatus->observe(&power->newStatus);
-#endif
 
 #ifdef NRF52_SERIES
     nrf52Setup();
@@ -364,7 +362,7 @@ void loop()
 #endif
 
     // Update the screen last, after we've figured out what to show.
-    screen.debug_info()->setChannelNameStatus(channelSettings.name);
+    screen.debug_info()->setChannelNameStatus(getChannelName());
     // screen.debug()->setPowerStatus(powerStatus);
 
     // No GPS lock yet, let the OS put the main CPU in low power mode for 100ms (or until another interrupt comes in)

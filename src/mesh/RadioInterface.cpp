@@ -115,22 +115,28 @@ unsigned long hash(char *str)
     return hash;
 }
 
+
+
+#define POWER_DEFAULT 17
+
 /**
  * Pull our channel settings etc... from protobufs to the dumb interface settings
  */
 void RadioInterface::applyModemConfig()
 {
     // Set up default configuration
-    // No Sync Words in LORA mode.
-    modemConfig = (ModemConfigChoice)channelSettings.modem_config;
+    // No Sync Words in LORA mode
 
-    // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM
-    int channel_num = hash(channelSettings.name) % NUM_CHANNELS;
-    freq = CH0 + CH_SPACING * channel_num;
     power = channelSettings.tx_power;
+    if (power == 0)
+        power = POWER_DEFAULT;
+
+    // If user has manually specified a channel num, then use that, otherwise generate one by hashing the name
+    int channel_num = (channelSettings.channel_num ? channelSettings.channel_num - 1 : hash(channelSettings.name)) % NUM_CHANNELS;
+    freq = CH0 + CH_SPACING * channel_num;
 
     DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, power=%d\n", channelSettings.name, channelSettings.modem_config, channel_num,
-              channelSettings.tx_power);
+              power);
 }
 
 ErrorCode SimRadio::send(MeshPacket *p)
