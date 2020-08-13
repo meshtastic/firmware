@@ -210,13 +210,11 @@ void setup()
     esp32Setup();
 #endif
 
-#ifdef TBEAM_V10
     // Currently only the tbeam has a PMU
     power = new Power();
     power->setup();
     power->setStatusHandler(powerStatus);
     powerStatus->observe(&power->newStatus);
-#endif
 
 #ifdef NRF52_SERIES
     nrf52Setup();
