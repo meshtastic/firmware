@@ -33,22 +33,22 @@ class AnalogBatteryLevel : public HasBatteryLevel
      */
     virtual int getBattPercentage()
     {
-        float v = getBattVoltage();
+        float v = getBattVoltage() / 1000;
 
         if (v < 2.1)
             return -1;
 
-        return 100 * (getBattVoltage() - 3.27) / (4.2 - 3.27);
+        return 100 * (v - 3.27) / (4.2 - 3.27);
     }
 
     /**
-     * The raw voltage of the battery or NAN if unknown
+     * The raw voltage of the batteryin millivolts or NAN if unknown
      */
     virtual float getBattVoltage()
     {
         return
 #ifdef BATTERY_PIN
-            analogRead(BATTERY_PIN) * 2.0 * (3.3 / 1024.0);
+            1000.0 * analogRead(BATTERY_PIN) * 2.0 * (3.3 / 1024.0);
 #else
             NAN;
 #endif
@@ -212,7 +212,6 @@ bool Power::axp192Init()
     return false;
 #endif
 }
-
 
 void Power::loop()
 {
