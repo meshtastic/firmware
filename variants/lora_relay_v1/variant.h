@@ -38,7 +38,7 @@ extern "C" {
 // Number of pins defined in PinDescription array
 #define PINS_COUNT (43)
 #define NUM_DIGITAL_PINS (43)
-#define NUM_ANALOG_INPUTS (8) // A6 is used for battery, A7 is analog reference
+#define NUM_ANALOG_INPUTS (7) // A6 is used for battery, A7 is analog reference
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs
@@ -62,14 +62,13 @@ extern "C" {
 /*
  * Analog pins
  */
-#define PIN_A0 (14)
-#define PIN_A1 (15)
-#define PIN_A2 (16)
-#define PIN_A3 (17)
-#define PIN_A4 (18)
-#define PIN_A5 (19)
-#define PIN_A6 (20)
-#define PIN_A7 (21)
+#define PIN_A0 (15)
+#define PIN_A1 (16)
+#define PIN_A2 (17)
+#define PIN_A3 (18)
+#define PIN_A4 (19)
+#define PIN_A5 (20)
+#define PIN_A6 (21)
 
 static const uint8_t A0 = PIN_A0;
 static const uint8_t A1 = PIN_A1;
@@ -78,12 +77,12 @@ static const uint8_t A3 = PIN_A3;
 static const uint8_t A4 = PIN_A4;
 static const uint8_t A5 = PIN_A5;
 static const uint8_t A6 = PIN_A6;
-static const uint8_t A7 = PIN_A7;
+// static const uint8_t A7 = PIN_A7;
 #define ADC_RESOLUTION 14
 
 // Other pins
-#define PIN_AREF PIN_A7
-#define PIN_VBAT PIN_A6
+#define PIN_AREF PIN_A6
+#define PIN_VBAT PIN_A5
 #define PIN_NFC1 (33)
 #define PIN_NFC2 (2)
 
@@ -117,17 +116,19 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_WIRE_SDA (22)
 #define PIN_WIRE_SCL (23)
 
-// QSPI Pins
-//#define PIN_QSPI_SCK         27
-//#define PIN_QSPI_CS          28
-//#define PIN_QSPI_IO0         29
-//#define PIN_QSPI_IO1         30
-//#define PIN_QSPI_IO2         31
-//#define PIN_QSPI_IO3         32
+// I2C device addresses
+#define I2C_ADDR_BQ27441 0x55 // Battery gauge
 
-// On-board QSPI Flash
-//#define EXTERNAL_FLASH_DEVICES   GD25Q16C
-//#define EXTERNAL_FLASH_USE_QSPI
+// CUSTOM GPIOs the SX1262
+#define SX1262_CS (32)
+#define SX1262_DIO1 (29)
+#define SX1262_DIO2 (30)
+#define SX1262_BUSY (33) // Supposed to be P0.18 but because of reworks, now on P0.31 (18)
+#define SX1262_RESET (34)
+// #define SX1262_ANT_SW (32 + 10)
+#define SX1262_RXEN (14)
+#define SX1262_TXEN (31)
+#define SX1262_E22 // Indicates this SX1262 is inside of an ebyte E22 module and special config should be done for that
 
 #ifdef __cplusplus
 }

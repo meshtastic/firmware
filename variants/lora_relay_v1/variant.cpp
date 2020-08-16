@@ -39,16 +39,16 @@ const uint32_t g_ADigitalPinMap[] = {
     6,  // D11 is P0.06 D_RES (IPS display reset)
     8,  // D12 is P0.08 D_CS (IPS display chip select)
     41, // D13 is P1.09 BLT (IPS display backlight)
+    4,  // D14 is P0.04 SX1262 RXEN
 
     // D14 .. D21 (aka A0 .. A7)
-    4,  // D14 is P0.04 (A0)
-    5,  // D15 is P0.05 (A1)
-    30, // D16 is P0.30 (A2)
-    28, // D17 is P0.28 (A3)
-    2,  // D18 is P0.02 (A4)
-    3,  // D19 is P0.03 (A5)
-    29, // D20 is P0.29 (A6, Battery)
-    31, // D21 is P0.31 (A7, ARef)
+    5,  // D15 is P0.05 (A0)
+    30, // D16 is P0.30 (A1)
+    28, // D17 is P0.28 (A2)
+    2,  // D18 is P0.02 (A3)
+    3,  // D19 is P0.03 (A4)
+    29, // D20 is P0.29 (A5, Battery)
+    31, // D21 is P0.31 (A6, ARef)
 
     // D22 .. D23 (aka I2C pins)
     12, // D22 is P0.12 (SDA)
@@ -77,19 +77,19 @@ const uint32_t g_ADigitalPinMap[] = {
     // 32, // P1.00 is SWO   (attached to debug header)
 
     // D29-D43
-    27,      // P0.27 E22-SX1262 DIO1
-    28,      // P0.28 E22-SX1262 DIO2
-    30,      // P0.30 E22-SX1262 TXEN
+    27,      // D29 P0.27 E22-SX1262 DIO1
+    28,      // D30 P0.28 E22-SX1262 DIO2
+    30,      // D31 P0.30 E22-SX1262 TXEN
+    35,      // D32 P1.03 E22-SX1262 NSS
+    32 + 8,  // D33 P1.08 E22-SX1262 BUSY
+    32 + 12, // D34 P1.12 E22-SX1262 RESET
     32 + 1,  // P1.01 BTN_UP
     32 + 2,  // P1.02 SWITCH
-    35,      // P1.03 E22-SX1262 NSS
     36,      // P1.04 is not connected per schematic
     37,      // P1.05 is not connected per schematic
     38,      // P1.06 is not connected per schematic
     39,      // P1.07 is not connected per schematic
-    32 + 8,  // P1.08 E22-SX1262 BUSY
     43,      // P1.11 is not connected per schematic
-    32 + 12, // P1.12 E22-SX1262 RESET
     45,      // P1.13 is not connected per schematic
     46,      // P1.14 is not connected per schematic
 };
