@@ -38,7 +38,7 @@ extern "C" {
 // Number of pins defined in PinDescription array
 #define PINS_COUNT (43)
 #define NUM_DIGITAL_PINS (43)
-#define NUM_ANALOG_INPUTS (7) // A6 is used for battery, A7 is analog reference
+#define NUM_ANALOG_INPUTS (6) // A6 is used for battery, A7 is analog reference
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs
@@ -62,13 +62,12 @@ extern "C" {
 /*
  * Analog pins
  */
-#define PIN_A0 (15)
-#define PIN_A1 (16)
-#define PIN_A2 (17)
-#define PIN_A3 (18)
-#define PIN_A4 (19)
-#define PIN_A5 (20)
-#define PIN_A6 (21)
+#define PIN_A0 (16)
+#define PIN_A1 (17)
+#define PIN_A2 (18)
+#define PIN_A3 (19)
+#define PIN_A4 (20)
+#define PIN_A5 (21)
 
 static const uint8_t A0 = PIN_A0;
 static const uint8_t A1 = PIN_A1;
@@ -76,17 +75,26 @@ static const uint8_t A2 = PIN_A2;
 static const uint8_t A3 = PIN_A3;
 static const uint8_t A4 = PIN_A4;
 static const uint8_t A5 = PIN_A5;
-static const uint8_t A6 = PIN_A6;
-// static const uint8_t A7 = PIN_A7;
 #define ADC_RESOLUTION 14
 
 // Other pins
-#define PIN_AREF PIN_A6
-#define PIN_VBAT PIN_A5
+#define PIN_AREF PIN_A5
+#define PIN_VBAT PIN_A4
 #define PIN_NFC1 (33)
 #define PIN_NFC2 (2)
-
+#define PIN_DISPLAY_RESET (11) // Output
+#define PIN_PIEZO (37)
+#define PIN_POWER_HOLD                                                                                                           \
+    (15) // FIXME, see warning hre  https://github.com/BigCorvus/SX1262-LoRa-BLE-Relay/blob/master/LORA_RELAY_NRF52840.ino
 static const uint8_t AREF = PIN_AREF;
+
+/*
+@geeksville
+TODO FIXME
+flash bootloader as if feather
+power hold ST7735
+look at example sketch
+*/
 
 /*
  * Serial interfaces
