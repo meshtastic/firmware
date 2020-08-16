@@ -40,15 +40,15 @@ const uint32_t g_ADigitalPinMap[] = {
     8,  // D12 is P0.08 D_CS (IPS display chip select)
     41, // D13 is P1.09 BLT (IPS display backlight)
     4,  // D14 is P0.04 SX1262 RXEN
+    5,  // D15 is P0.05 PHOLD
 
     // D14 .. D21 (aka A0 .. A7)
-    5,  // D15 is P0.05 (A0)
-    30, // D16 is P0.30 (A1)
-    28, // D17 is P0.28 (A2)
-    2,  // D18 is P0.02 (A3)
-    3,  // D19 is P0.03 (A4)
-    29, // D20 is P0.29 (A5, Battery)
-    31, // D21 is P0.31 (A6, ARef)
+    30, // D16 is P0.30 (A0)
+    28, // D17 is P0.28 (A1)
+    2,  // D18 is P0.02 (A2)
+    3,  // D19 is P0.03 (A3)
+    29, // D20 is P0.29 (A4, Battery)
+    31, // D21 is P0.31 (A5, ARef)
 
     // D22 .. D23 (aka I2C pins)
     12, // D22 is P0.12 (SDA)
@@ -85,13 +85,13 @@ const uint32_t g_ADigitalPinMap[] = {
     32 + 12, // D34 P1.12 E22-SX1262 RESET
     32 + 1,  // P1.01 BTN_UP
     32 + 2,  // P1.02 SWITCH
+    32 + 14, // D37 P1.14 is not connected per schematic
     36,      // P1.04 is not connected per schematic
     37,      // P1.05 is not connected per schematic
     38,      // P1.06 is not connected per schematic
     39,      // P1.07 is not connected per schematic
     43,      // P1.11 is not connected per schematic
     45,      // P1.13 is not connected per schematic
-    46,      // P1.14 is not connected per schematic
 };
 
 void initVariant()
