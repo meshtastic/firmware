@@ -339,8 +339,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Debug printing to segger console
 #define SEGGER_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
 
-// nrf52 gets its settings via variant files
-#ifndef PIN_SERIAL_RX
+// If we are not on a NRF52840 (which has built in USB-ACM serial support) and we don't have serial pins hooked up, then we MUST
+// use SEGGER for debug output
+#if !defined(PIN_SERIAL_RX) && !defined(NRF52840_XXAA)
 // No serial ports on this board - ONLY use segger in memory console
 #define USE_SEGGER
 #endif
