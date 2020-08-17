@@ -34,7 +34,7 @@ const uint32_t g_ADigitalPinMap[] = {
     7,  // D6  is P0.07
     34, // D7  is P1.02 (Button)
     16, // D8  is P0.16 (NeoPixel)
-    26, // D9  is P0.26
+    26, // D9  is P0.26 D_RS (IPS data/command control)
     27, // D10 is P0.27
     6,  // D11 is P0.06 D_RES (IPS display reset)
     8,  // D12 is P0.08 D_CS (IPS display chip select)
