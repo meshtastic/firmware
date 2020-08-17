@@ -17,3 +17,5 @@ Thumbs.db
 .cproject
 .idea/*
 .vagrant
+
+flash.uf2
