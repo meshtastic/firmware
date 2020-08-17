@@ -82,7 +82,6 @@ static const uint8_t A5 = PIN_A5;
 #define PIN_VBAT PIN_A4
 #define PIN_NFC1 (33)
 #define PIN_NFC2 (2)
-#define PIN_DISPLAY_RESET (11) // Output
 #define PIN_PIEZO (37)
 static const uint8_t AREF = PIN_AREF;
 
@@ -129,6 +128,11 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define SX1262_POWER_EN                                                                                                          \
     (15) // FIXME, see warning hre  https://github.com/BigCorvus/SX1262-LoRa-BLE-Relay/blob/master/LORA_RELAY_NRF52840.ino
 #define SX1262_E22 // Indicates this SX1262 is inside of an ebyte E22 module and special config should be done for that
+
+#define ST7735_RESET (11) // Output
+#define ST7735_CS    (12)
+#define ST7735_BACKLIGHT_EN (13)
+#define ST7735_RS (9)
 
 #ifdef __cplusplus
 }
