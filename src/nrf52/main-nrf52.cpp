@@ -1,5 +1,6 @@
 #include "NRF52Bluetooth.h"
 #include "configuration.h"
+#include "graphics/TFT.h"
 #include <assert.h>
 #include <ble_gap.h>
 #include <memory.h>
@@ -98,4 +99,9 @@ void nrf52Setup()
     // randomSeed(r);
     DEBUG_MSG("FIXME, call randomSeed\n");
     // ::printf("TESTING PRINTF\n");
+
+// Setup TFT display - FIXME do somewhere else
+#ifdef ST7735_CS
+    TFTinit();
+#endif
 }
