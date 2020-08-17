@@ -89,14 +89,6 @@ static const uint8_t A5 = PIN_A5;
 static const uint8_t AREF = PIN_AREF;
 
 /*
-@geeksville
-TODO FIXME
-flash bootloader as if feather
-power hold ST7735
-look at example sketch
-*/
-
-/*
  * Serial interfaces
  */
 #define PIN_SERIAL1_RX (1)
