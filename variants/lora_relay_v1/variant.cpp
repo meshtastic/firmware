@@ -40,7 +40,7 @@ const uint32_t g_ADigitalPinMap[] = {
     8,  // D12 is P0.08 D_CS (IPS display chip select)
     41, // D13 is P1.09 BLT (IPS display backlight)
     4,  // D14 is P0.04 SX1262 RXEN
-    5,  // D15 is P0.05 PHOLD
+    5,  // D15 is P0.05 BOOST_EN (5V buck converter enable for the the radio power)
 
     // D14 .. D21 (aka A0 .. A7)
     30, // D16 is P0.30 (A0)

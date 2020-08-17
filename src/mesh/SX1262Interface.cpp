@@ -12,6 +12,11 @@ SX1262Interface::SX1262Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RA
 /// \return true if initialisation succeeded.
 bool SX1262Interface::init()
 {
+#ifdef SX1262_POWER_EN
+    digitalWrite(SX1262_POWER_EN, HIGH);
+    pinMode(SX1262_POWER_EN, OUTPUT);
+#endif
+
     RadioLibInterface::init();
 
 #ifdef SX1262_RXEN                  // set not rx or tx mode
