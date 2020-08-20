@@ -13,7 +13,6 @@ RadioLibInterface::RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq
                                      SPIClass &spi, PhysicalLayer *_iface)
     : concurrency::PeriodicTask(0), module(cs, irq, rst, busy, spi, spiSettings), iface(_iface)
 {
-    assert(!instance); // We assume only one for now
     instance = this;
 }
 
