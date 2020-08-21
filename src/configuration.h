@@ -158,12 +158,26 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BUTTON_PIN 38     // The middle button GPIO on the T-Beam
 #define BUTTON_PIN_ALT 13 // Alternate GPIO for an external button if needed
 
-#ifndef USE_JTAG
-#define RF95_RESET 14
+// TTGO uses a common pinout for their SX1262 vs RF95 modules - both can be enabled and we will probe at runtime for RF95 and if
+// not found then probe for SX1262
+#define USE_RF95
+#define USE_SX1262
+
+#define LORA_DIO0 26 // a No connect on the SX1262 module
+#define LORA_RESET 23
+#define LORA_DIO1 33 // SX1262 IRQ
+#define LORA_DIO2 32 // SX1262 BUSY
+#define LORA_DIO3    // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TXCO is enabled
+
+#ifdef USE_SX1262
+#define SX1262_CS RF95_NSS // FIXME - we really should define LORA_CS instead
+#define SX1262_DIO1 LORA_DIO1
+#define SX1262_BUSY LORA_DIO2
+#define SX1262_RESET LORA_RESET
+#define SX1262_E22 // Not really an E22 but TTGO seems to be trying to clone that
+// Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
+// code)
 #endif
-#define RF95_IRQ 26
-#define RF95_DIO1 33 // Note: not really used on this board
-#define RF95_DIO2 32 // Note: not really used on this board
 
 // Leave undefined to disable our PMU IRQ handler
 #define PMU_IRQ 35
@@ -181,12 +195,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BUTTON_PIN 39
 #define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 
-#ifndef USE_JTAG
-#define RF95_RESET 23
-#endif
-#define RF95_IRQ 26
-#define RF95_DIO1 33 // Note: not really used on this board
-#define RF95_DIO2 32 // Note: not really used on this board
+#define USE_RF95
+
+#define USE_RF95
+#define LORA_DIO0 26 // a No connect on the SX1262 module
+#define LORA_RESET 23
+#define LORA_DIO1 33 // Not really used
+#define LORA_DIO2 32 // Not really used
 
 // This board has different GPS pins than all other boards
 #undef GPS_RX_PIN
@@ -216,12 +231,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LED_PIN 25     // If defined we will blink this LED
 #define BUTTON_PIN 0   // If defined, this will be used for user button presses
 
+#define USE_RF95
+#define LORA_DIO0 26 // a No connect on the SX1262 module
 #ifndef USE_JTAG
-#define RF95_RESET 14 // If defined, this pin will be used to reset the LORA radio
+#define LORA_RESET 14
 #endif
-#define RF95_IRQ 26
-#define RF95_DIO1 35 // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
-#define RF95_DIO2 34 // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
+#define LORA_DIO1 35 // Not really used
+#define LORA_DIO2 34 // Not really used
+
 #elif defined(TLORA_V1)
 // This string must exactly match the case used in release file names or the android updater won't work
 #define HW_VENDOR "tlora-v1"
@@ -239,10 +256,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LED_PIN 2     // If defined we will blink this LED
 #define BUTTON_PIN 0  // If defined, this will be used for user button presses
 
-#define RF95_RESET 14 // If defined, this pin will be used to reset the LORA radio
-#define RF95_IRQ 26   // IRQ line for the LORA radio
-#define RF95_DIO1 35  // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
-#define RF95_DIO2 34  // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
+#define USE_RF95
+#define LORA_DIO0 26 // a No connect on the SX1262 module
+#define LORA_RESET 14
+#define LORA_DIO1 35 // Not really used
+#define LORA_DIO2 34 // Not really used
 
 #elif defined(TLORA_V2)
 // This string must exactly match the case used in release file names or the android updater won't work
@@ -264,10 +282,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
     0 // If defined, this will be used for user button presses, if your board doesn't have a physical switch, you can wire one
       // between this pin and ground
 
-#define RESET_GPIO 14    // If defined, this pin will be used to reset the LORA radio
-#define RF95_IRQ_GPIO 26 // IRQ line for the LORA radio
-#define DIO1_GPIO 35     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
-#define DIO2_GPIO 34     // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
+#define USE_RF95
+#define LORA_DIO0 26 // a No connect on the SX1262 module
+#define LORA_RESET 14
+#define LORA_DIO1 35 // Not really used
+#define LORA_DIO2 34 // Not really used
 
 #elif defined(TLORA_V2_1_16)
 // This string must exactly match the case used in release file names or the android updater won't work
@@ -291,10 +310,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
     12 // If defined, this will be used for user button presses, if your board doesn't have a physical switch, you can wire one
        // between this pin and ground
 
-#define RF95_RESET 14 // If defined, this pin will be used to reset the LORA radio
-#define RF95_IRQ 26   // IRQ line for the LORA radio
-#define RF95_DIO1 35  // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
-#define RF95_DIO2 34  // DIO1 & DIO2 are not currently used, but they must be assigned to a pin number
+#define USE_RF95
+#define LORA_DIO0 26 // a No connect on the SX1262 module
+#define LORA_RESET 14
+#define LORA_DIO1 35 // Not really used
+#define LORA_DIO2 34 // Not really used
+
 #endif
 
 #ifdef ARDUINO_NRF52840_PCA10056
@@ -314,6 +335,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define HW_VENDOR "nrf52unknown" // FIXME - unknown nrf52 board
 
+#endif
+
+#ifdef USE_RF95
+#define RF95_RESET LORA_RESET
+#define RF95_IRQ LORA_DIO0  // on SX1262 version this is a no connect DIO0
+#define RF95_DIO1 LORA_DIO1 // Note: not really used for RF95
+#define RF95_DIO2 LORA_DIO2 // Note: not really used for RF95
 #endif
 
 // -----------------------------------------------------------------------------

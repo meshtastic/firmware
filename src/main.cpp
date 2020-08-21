@@ -231,15 +231,18 @@ void setup()
 // If we know we have a L80 GPS, don't try UBLOX
 #ifndef L80_RESET
     // Init GPS - first try ublox
-    gps = new UBloxGPS();
+    auto ublox = new UBloxGPS();
+    gps = ublox;
     if (!gps->setup()) {
         DEBUG_MSG("ERROR: No UBLOX GPS found\n");
+
+        delete ublox;
+        gps = ublox = NULL;
 
         if (GPS::_serial_gps) {
             // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
             // assume NEMA at 9600 baud.
             DEBUG_MSG("Hoping that NEMA might work\n");
-            delete gps;
 
             // dumb NEMA access only work for serial GPSes)
             gps = new NEMAGPS();
@@ -254,6 +257,16 @@ void setup()
     nodeStatus->observe(&nodeDB.newStatus);
 
     service.init();
+
+    // We have now loaded our saved preferences from flash
+
+    // ONCE we will factory reset the GPS for bug #327
+    if (ublox && !devicestate.did_gps_reset) {
+        if (ublox->factoryReset()) { // If we don't succeed try again next time
+            devicestate.did_gps_reset = true;
+            nodeDB.saveToDisk();
+        }
+    }
 
 #ifdef SX1262_ANT_SW
     // make analog PA vs not PA switch on SX1262 eval board work properly
@@ -271,17 +284,42 @@ void setup()
 #endif
 
     // MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
-    RadioInterface *rIf =
+    RadioInterface *rIf = NULL;
+
 #if defined(RF95_IRQ)
-        // new CustomRF95(); old Radiohead based driver
-        new RF95Interface(RF95_NSS, RF95_IRQ, RF95_RESET, SPI);
-#elif defined(SX1262_CS)
-        new SX1262Interface(SX1262_CS, SX1262_DIO1, SX1262_RESET, SX1262_BUSY, SPI);
-#else
-        new SimRadio();
+    if (!rIf) {
+        rIf = new RF95Interface(RF95_NSS, RF95_IRQ, RF95_RESET, SPI);
+        if (!rIf->init()) {
+            DEBUG_MSG("Warning: Failed to find RF95 radio\n");
+            delete rIf;
+            rIf = NULL;
+        }
+    }
 #endif
 
-    if (!rIf || !rIf->init())
+#if defined(SX1262_CS)
+    if (!rIf) {
+        rIf = new SX1262Interface(SX1262_CS, SX1262_DIO1, SX1262_RESET, SX1262_BUSY, SPI);
+        if (!rIf->init()) {
+            DEBUG_MSG("Warning: Failed to find SX1262 radio\n");
+            delete rIf;
+            rIf = NULL;
+        }
+    }
+#endif
+
+#ifdef USE_SIM_RADIO
+    if (!rIf) {
+        rIf = new SimRadio;
+        if (!rIf->init()) {
+            DEBUG_MSG("Warning: Failed to find simulated radio\n");
+            delete rIf;
+            rIf = NULL;
+        }
+    }
+#endif
+
+    if (!rIf)
         recordCriticalError(ErrNoRadio);
     else
         router.addInterface(rIf);
