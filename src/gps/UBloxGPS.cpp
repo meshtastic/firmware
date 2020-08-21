@@ -52,39 +52,7 @@ bool UBloxGPS::setup()
     if (isConnected) {
         DEBUG_MSG("Connected to UBLOX GPS successfully\n");
 
-        bool factoryReset = false;
-        bool ok;
-        if (factoryReset) {
-            // It is useful to force back into factory defaults (9600baud, NEMA to test the behavior of boards that don't have
-            // GPS_TX connected)
-            ublox.factoryReset();
-            delay(3000);
-            tryConnect();
-            DEBUG_MSG("Factory reset success=%d\n", isConnected);
-            ok = ublox.saveConfiguration(3000);
-            assert(ok);
-            return false;
-        } else {
-            if (_serial_gps) {
-                ok = ublox.setUART1Output(COM_TYPE_UBX, 500); // Use native API
-                assert(ok);
-            }
-            if (i2cAddress) {
-                ok = ublox.setI2COutput(COM_TYPE_UBX, 500);
-                assert(ok);
-            }
-
-            ok = ublox.setNavigationFrequency(1, 500); // Produce 4x/sec to keep the amount of time we stall in getPVT low
-            assert(ok);
-            // ok = ublox.setAutoPVT(false); // Not implemented on NEO-6M
-            // assert(ok);
-            // ok = ublox.setDynamicModel(DYN_MODEL_BIKE); // probably PEDESTRIAN but just in case assume bike speeds
-            // assert(ok);
-            ok = ublox.powerSaveMode(true, 2000); // use power save mode, the default timeout (1100ms seems a bit too tight)
-            assert(ok);
-        }
-        ok = ublox.saveConfiguration(3000);
-        if (!ok)
+        if (!setUBXMode())
             recordCriticalError(UBloxInitFailed); // Don't halt the boot if saving the config fails, but do report the bug
 
         concurrency::PeriodicTask::setup(); // We don't start our periodic task unless we actually found the device
@@ -93,6 +61,54 @@ bool UBloxGPS::setup()
     } else {
         return false;
     }
+}
+
+bool UBloxGPS::setUBXMode()
+{
+    if (_serial_gps) {
+        if (!ublox.setUART1Output(COM_TYPE_UBX, 1000)) // Use native API
+            return false;
+    }
+    if (i2cAddress) {
+        if (!ublox.setI2COutput(COM_TYPE_UBX, 1000))
+            return false;
+    }
+
+    if (!ublox.setNavigationFrequency(1, 1000)) // Produce 4x/sec to keep the amount of time we stall in getPVT low
+        return false;
+
+    // ok = ublox.setAutoPVT(false); // Not implemented on NEO-6M
+    // assert(ok);
+    // ok = ublox.setDynamicModel(DYN_MODEL_BIKE); // probably PEDESTRIAN but just in case assume bike speeds
+    // assert(ok);
+    if (!ublox.powerSaveMode(true, 2000)) // use power save mode, the default timeout (1100ms seems a bit too tight)
+        return false;
+
+    if (!ublox.saveConfiguration(3000))
+        return false;
+
+    return true;
+}
+
+/**
+ * Reset our GPS back to factory settings
+ *
+ * @return true for success
+ */
+bool UBloxGPS::factoryReset()
+{
+    bool ok = false;
+
+    // It is useful to force back into factory defaults (9600baud, NEMA to test the behavior of boards that don't have
+    // GPS_TX connected)
+    ublox.factoryReset();
+    delay(3000);
+    tryConnect(); // sets isConnected
+    DEBUG_MSG("GPS Factory reset success=%d\n", isConnected);
+    if (isConnected)
+        ok = setUBXMode();
+
+    return ok;
 }
 
 /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
