@@ -271,17 +271,42 @@ void setup()
 #endif
 
     // MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
-    RadioInterface *rIf =
+    RadioInterface *rIf = NULL;
+
 #if defined(RF95_IRQ)
-        // new CustomRF95(); old Radiohead based driver
-        new RF95Interface(RF95_NSS, RF95_IRQ, RF95_RESET, SPI);
-#elif defined(SX1262_CS)
-        new SX1262Interface(SX1262_CS, SX1262_DIO1, SX1262_RESET, SX1262_BUSY, SPI);
-#else
-        new SimRadio();
+    if (!rIf) {
+        rIf = new RF95Interface(RF95_NSS, RF95_IRQ, RF95_RESET, SPI);
+        if (!rIf->init()) {
+            DEBUG_MSG("Warning: Failed to find RF95 radio\n");
+            delete rIf;
+            rIf = NULL;
+        }
+    }
 #endif
 
-    if (!rIf || !rIf->init())
+#if defined(SX1262_CS)
+    if (!rIf) {
+        rIf = new SX1262Interface(SX1262_CS, SX1262_DIO1, SX1262_RESET, SX1262_BUSY, SPI);
+        if (!rIf->init()) {
+            DEBUG_MSG("Warning: Failed to find SX1262 radio\n");
+            delete rIf;
+            rIf = NULL;
+        }
+    }
+#endif
+
+#ifdef USE_SIM_RADIO
+    if (!rIf) {
+        rIf = new SimRadio;
+        if (!rIf->init()) {
+            DEBUG_MSG("Warning: Failed to find simulated radio\n");
+            delete rIf;
+            rIf = NULL;
+        }
+    }
+#endif
+
+    if (!rIf)
         recordCriticalError(ErrNoRadio);
     else
         router.addInterface(rIf);
