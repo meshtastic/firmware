@@ -20,7 +20,7 @@ namespace meshtastic
         CallbackObserver<Status, const Status *> statusObserver = CallbackObserver<Status, const Status *>(this, &Status::updateStatus);
         bool initialized = false;
         // Workaround for no typeid support
-        int statusType;
+        int statusType = 0;
 
        public:
         // Allows us to generate observable events
