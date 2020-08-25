@@ -68,6 +68,9 @@ void printPacket(const char *prefix, const MeshPacket *p)
     if (p->rx_time != 0) {
         DEBUG_MSG(" rxtime=%u", p->rx_time);
     }
+    if (p->rx_snr != 0.0) {
+        DEBUG_MSG(" rxSNR=%g", p->rx_snr);
+    }
     DEBUG_MSG(")\n");
 }
 
@@ -114,8 +117,6 @@ unsigned long hash(char *str)
 
     return hash;
 }
-
-
 
 #define POWER_DEFAULT 17
 
