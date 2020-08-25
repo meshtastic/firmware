@@ -16,6 +16,8 @@ bool pmu_irq = false;
 
 Power *power;
 
+using namespace meshtastic;
+
 /**
  * If this board has a battery level sensor, set this to a valid implementation
  */
@@ -97,7 +99,7 @@ void Power::readPowerStatus()
     if (batteryLevel) {
         bool hasBattery = batteryLevel->isBatteryConnect();
         int batteryVoltageMv = 0;
-        uint8_t batteryChargePercent = 0;
+        int8_t batteryChargePercent = 0;
         if (hasBattery) {
             batteryVoltageMv = batteryLevel->getBattVoltage();
             // If the AXP192 returns a valid battery percentage, use it
@@ -114,13 +116,18 @@ void Power::readPowerStatus()
         }
 
         // Notify any status instances that are observing us
-        const meshtastic::PowerStatus powerStatus = meshtastic::PowerStatus(
-            hasBattery, batteryLevel->isVBUSPlug(), batteryLevel->isChargeing(), batteryVoltageMv, batteryChargePercent);
+        const PowerStatus powerStatus =
+            PowerStatus(hasBattery ? OptTrue : OptFalse, batteryLevel->isVBUSPlug() ? OptTrue : OptFalse,
+                        batteryLevel->isChargeing() ? OptTrue : OptFalse, batteryVoltageMv, batteryChargePercent);
         newStatus.notifyObservers(&powerStatus);
 
         // If we have a battery at all and it is less than 10% full, force deep sleep
         if (powerStatus.getHasBattery() && !powerStatus.getHasUSB() && batteryLevel->getBattVoltage() < MIN_BAT_MILLIVOLTS)
             powerFSM.trigger(EVENT_LOW_BATTERY);
+    } else {
+        // No power sensing on this board - tell everyone else we have no idea what is happening
+        const PowerStatus powerStatus = PowerStatus(OptUnknown, OptUnknown, OptUnknown, -1, -1);
+        newStatus.notifyObservers(&powerStatus);
     }
 }
 
