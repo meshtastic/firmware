@@ -819,14 +819,16 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
     // DEBUG_MSG("Screen got status update %d\n", arg->getStatusType());
     switch (arg->getStatusType()) {
     case STATUS_TYPE_NODE:
-        if (nodeDB.updateTextMessage || nodeStatus->getLastNumTotal() != nodeStatus->getNumTotal())
-            setFrames();
-        prevFrame = -1;
+        if (nodeDB.updateTextMessage || nodeStatus->getLastNumTotal() != nodeStatus->getNumTotal()) {
+            setFrames();    // Regen the list of screens
+            prevFrame = -1; // Force a GUI update
+            setPeriod(1);   // Update the screen right away
+        }
         nodeDB.updateGUI = false;
         nodeDB.updateTextMessage = false;
         break;
     }
-    setPeriod(1); // Update the screen right away
+
     return 0;
 }
 } // namespace graphics
