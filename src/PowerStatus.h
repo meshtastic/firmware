@@ -22,9 +22,9 @@ class PowerStatus : public Status
     /// Whether we have a battery connected
     OptionalBool hasBattery = OptUnknown;
     /// Battery voltage in mV, valid if haveBattery is true
-    int batteryVoltageMv;
+    int batteryVoltageMv = 0;
     /// Battery charge percentage, either read directly or estimated
-    int8_t batteryChargePercent;
+    int8_t batteryChargePercent = 0;
     /// Whether USB is connected
     OptionalBool hasUSB = OptUnknown;
     /// Whether we are charging the battery
@@ -33,7 +33,7 @@ class PowerStatus : public Status
   public:
     PowerStatus() { statusType = STATUS_TYPE_POWER; }
     PowerStatus(OptionalBool hasBattery, OptionalBool hasUSB, OptionalBool isCharging, int batteryVoltageMv = -1,
-                int8_t batteryChargePercent = -1)
+                int8_t batteryChargePercent = 0)
         : Status()
     {
         this->hasBattery = hasBattery;
@@ -58,7 +58,10 @@ class PowerStatus : public Status
 
     int getBatteryVoltageMv() const { return batteryVoltageMv; }
 
-    uint8_t getBatteryChargePercent() const { return batteryChargePercent; }
+    /**
+     * Note: 0% battery means 'unknown/this board doesn't have a battery installed'
+     */
+    uint8_t getBatteryChargePercent() const { return getHasBattery() ? batteryChargePercent : 0; }
 
     bool matches(const PowerStatus *newStatus) const
     {
