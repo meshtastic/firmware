@@ -774,7 +774,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         // Display power status
         if (powerStatus->getHasBattery())
             drawBattery(display, x, y + 2, imgBattery, powerStatus);
-        else
+        else if (powerStatus->knowsUSB())
             display->drawFastImage(x, y + 2, 16, 8, powerStatus->getHasUSB() ? imgUSB : imgPower);
         // Display nodes status
         drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 2, nodeStatus);
