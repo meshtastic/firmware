@@ -197,7 +197,7 @@ void doDeepSleep(uint64_t msecToWake)
     static const uint8_t rtcGpios[] = {/* 0, */ 2,
     /* 4, */
 #ifndef USE_JTAG
-                                       12,           13,
+                                       13,
     /* 14, */ /* 15, */
 #endif
                                        /* 25, */ 26, /* 27, */
