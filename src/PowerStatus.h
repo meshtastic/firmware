@@ -1,103 +1,94 @@
 #pragma once
-#include <Arduino.h>
 #include "Status.h"
 #include "configuration.h"
+#include <Arduino.h>
 
-namespace meshtastic {
+namespace meshtastic
+{
 
-    /// Describes the state of the GPS system.
-    class PowerStatus : public Status
+/**
+ * A boolean where we have a third state of Unknown
+ */
+enum OptionalBool { OptFalse = 0, OptTrue = 1, OptUnknown = 2 };
+
+/// Describes the state of the GPS system.
+class PowerStatus : public Status
+{
+
+  private:
+    CallbackObserver<PowerStatus, const PowerStatus *> statusObserver =
+        CallbackObserver<PowerStatus, const PowerStatus *>(this, &PowerStatus::updateStatus);
+
+    /// Whether we have a battery connected
+    OptionalBool hasBattery = OptUnknown;
+    /// Battery voltage in mV, valid if haveBattery is true
+    int batteryVoltageMv = 0;
+    /// Battery charge percentage, either read directly or estimated
+    int8_t batteryChargePercent = 0;
+    /// Whether USB is connected
+    OptionalBool hasUSB = OptUnknown;
+    /// Whether we are charging the battery
+    OptionalBool isCharging = OptUnknown;
+
+  public:
+    PowerStatus() { statusType = STATUS_TYPE_POWER; }
+    PowerStatus(OptionalBool hasBattery, OptionalBool hasUSB, OptionalBool isCharging, int batteryVoltageMv = -1,
+                int8_t batteryChargePercent = 0)
+        : Status()
     {
+        this->hasBattery = hasBattery;
+        this->hasUSB = hasUSB;
+        this->isCharging = isCharging;
+        this->batteryVoltageMv = batteryVoltageMv;
+        this->batteryChargePercent = batteryChargePercent;
+    }
+    PowerStatus(const PowerStatus &);
+    PowerStatus &operator=(const PowerStatus &);
 
-       private:
-        CallbackObserver<PowerStatus, const PowerStatus *> statusObserver = CallbackObserver<PowerStatus, const PowerStatus *>(this, &PowerStatus::updateStatus);
+    void observe(Observable<const PowerStatus *> *source) { statusObserver.observe(source); }
 
-        /// Whether we have a battery connected
-        bool hasBattery;
-        /// Battery voltage in mV, valid if haveBattery is true
-        int batteryVoltageMv;
-        /// Battery charge percentage, either read directly or estimated
-        uint8_t batteryChargePercent;
-        /// Whether USB is connected
-        bool hasUSB;
-        /// Whether we are charging the battery
-        bool isCharging;
+    bool getHasBattery() const { return hasBattery == OptTrue; }
 
-       public:
+    bool getHasUSB() const { return hasUSB == OptTrue; }
 
-        PowerStatus() {
-            statusType = STATUS_TYPE_POWER;
-        }
-        PowerStatus( bool hasBattery, bool hasUSB, bool isCharging, int batteryVoltageMv, uint8_t batteryChargePercent ) : Status()
+    /// Can we even know if this board has USB power or not
+    bool knowsUSB() const { return hasUSB != OptUnknown; }
+
+    bool getIsCharging() const { return isCharging == OptTrue; }
+
+    int getBatteryVoltageMv() const { return batteryVoltageMv; }
+
+    /**
+     * Note: 0% battery means 'unknown/this board doesn't have a battery installed'
+     */
+    uint8_t getBatteryChargePercent() const { return getHasBattery() ? batteryChargePercent : 0; }
+
+    bool matches(const PowerStatus *newStatus) const
+    {
+        return (newStatus->getHasBattery() != hasBattery || newStatus->getHasUSB() != hasUSB ||
+                newStatus->getBatteryVoltageMv() != batteryVoltageMv);
+    }
+    int updateStatus(const PowerStatus *newStatus)
+    {
+        // Only update the status if values have actually changed
+        bool isDirty;
         {
-            this->hasBattery = hasBattery;
-            this->hasUSB = hasUSB;
-            this->isCharging = isCharging;
-            this->batteryVoltageMv = batteryVoltageMv;
-            this->batteryChargePercent = batteryChargePercent;
+            isDirty = matches(newStatus);
+            initialized = true;
+            hasBattery = newStatus->hasBattery;
+            batteryVoltageMv = newStatus->getBatteryVoltageMv();
+            batteryChargePercent = newStatus->getBatteryChargePercent();
+            hasUSB = newStatus->hasUSB;
+            isCharging = newStatus->isCharging;
         }
-        PowerStatus(const PowerStatus &);
-        PowerStatus &operator=(const PowerStatus &);
-
-        void observe(Observable<const PowerStatus *> *source)
-        {
-            statusObserver.observe(source);
+        if (isDirty) {
+            DEBUG_MSG("Battery %dmV %d%%\n", batteryVoltageMv, batteryChargePercent);
+            onNewStatus.notifyObservers(this);
         }
+        return 0;
+    }
+};
 
-        bool getHasBattery() const
-        { 
-            return hasBattery; 
-        }
-
-        bool getHasUSB() const
-        {
-            return hasUSB;
-        }
-
-        bool getIsCharging() const
-        { 
-            return isCharging; 
-        }
-
-        int getBatteryVoltageMv() const
-        { 
-            return batteryVoltageMv; 
-        }
-
-        uint8_t getBatteryChargePercent() const
-        { 
-            return batteryChargePercent;
-        }
-
-        bool matches(const PowerStatus *newStatus) const
-        {
-            return (
-                newStatus->getHasBattery() != hasBattery ||
-                newStatus->getHasUSB() != hasUSB ||
-                newStatus->getBatteryVoltageMv() != batteryVoltageMv
-            );
-        }
-        int updateStatus(const PowerStatus *newStatus) {
-            // Only update the status if values have actually changed
-            bool isDirty;
-            {
-                isDirty = matches(newStatus);
-                initialized = true; 
-                hasBattery = newStatus->getHasBattery();
-                batteryVoltageMv = newStatus->getBatteryVoltageMv();
-                batteryChargePercent = newStatus->getBatteryChargePercent();
-                hasUSB = newStatus->getHasUSB();
-                isCharging = newStatus->getIsCharging();
-            }
-            if(isDirty) {
-                DEBUG_MSG("Battery %dmV %d%%\n", batteryVoltageMv, batteryChargePercent);
-                onNewStatus.notifyObservers(this);
-            }
-            return 0;
-        }
-
-    };
-
-}
+} // namespace meshtastic
 
 extern meshtastic::PowerStatus *powerStatus;
