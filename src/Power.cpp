@@ -38,7 +38,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
         float v = getBattVoltage() / 1000;
 
         if (v < 2.1)
-            return -1;
+            return -1; // If voltage is super low assume no battery installed
 
         return 100 * (v - 3.27) / (4.2 - 3.27);
     }
@@ -59,7 +59,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /**
      * return true if there is a battery installed in this unit
      */
-    virtual bool isBatteryConnect() { return true; }
+    virtual bool isBatteryConnect() { return getBattVoltage() != -1; }
 } analogLevel;
 
 bool Power::analogInit()
