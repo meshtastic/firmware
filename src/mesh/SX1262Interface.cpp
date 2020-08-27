@@ -74,6 +74,10 @@ bool SX1262Interface::reconfigure()
     err = lora.setCodingRate(cr);
     assert(err == ERR_NONE);
 
+    // Hmm - seems to lower SNR when the signal levels are high.  Leaving off for now...
+    //err = lora.setRxGain(true);
+    //assert(err == ERR_NONE);
+
     err = lora.setSyncWord(syncWord);
     assert(err == ERR_NONE);
 
@@ -123,6 +127,7 @@ void SX1262Interface::setStandby()
  */
 void SX1262Interface::addReceiveMetadata(MeshPacket *mp)
 {
+    // DEBUG_MSG("PacketStatus %x\n", lora.getPacketStatus());
     mp->rx_snr = lora.getSNR();
 }
 
