@@ -117,7 +117,9 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define I2C_ADDR_BQ27441 0x55 // Battery gauge
 
 // CUSTOM GPIOs the SX1262
-#define SX1262_CS (32)
+// #define SX1262_CS (32)
+#define USE_SIM_RADIO
+#define USE_SEGGER
 #define SX1262_DIO1 (29)
 #define SX1262_DIO2 (30)
 #define SX1262_BUSY (33) // Supposed to be P0.18 but because of reworks, now on P0.31 (18)
@@ -130,7 +132,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define SX1262_E22 // Indicates this SX1262 is inside of an ebyte E22 module and special config should be done for that
 
 #define ST7735_RESET (11) // Output
-#define ST7735_CS    (12)
+#define ST7735_CS (12)
 #define ST7735_BACKLIGHT_EN (13)
 #define ST7735_RS (9)
 
