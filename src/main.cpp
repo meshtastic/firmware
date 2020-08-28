@@ -221,8 +221,12 @@ void setup()
 #endif
 
     // Initialize the screen first so we can show the logo while we start up everything else.
+#ifdef ST7735_CS
+    screen.setup();
+#else
     if (ssd1306_found)
         screen.setup();
+#endif
 
     screen.print("Started...\n");
 
