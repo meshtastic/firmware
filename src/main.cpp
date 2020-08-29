@@ -34,6 +34,7 @@
 // #include "rom/rtc.h"
 #include "DSRRouter.h"
 // #include "debug.h"
+#include "SPILock.h"
 #include "graphics/Screen.h"
 #include "main.h"
 #include "sleep.h"
@@ -220,6 +221,16 @@ void setup()
     nrf52Setup();
 #endif
 
+    // Init our SPI controller (must be before screen and lora)
+    initSPI();
+#ifdef NRF52_SERIES
+    SPI.begin();
+#else
+    // ESP32
+    SPI.begin(RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
+    SPI.setFrequency(4000000);
+#endif
+
     // Initialize the screen first so we can show the logo while we start up everything else.
 #ifdef ST7735_CS
     screen.setup();
@@ -276,15 +287,6 @@ void setup()
     // make analog PA vs not PA switch on SX1262 eval board work properly
     pinMode(SX1262_ANT_SW, OUTPUT);
     digitalWrite(SX1262_ANT_SW, 1);
-#endif
-
-    // Init our SPI controller
-#ifdef NRF52_SERIES
-    SPI.begin();
-#else
-    // ESP32
-    SPI.begin(RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
-    SPI.setFrequency(4000000);
 #endif
 
     // MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
