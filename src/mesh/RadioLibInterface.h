@@ -16,6 +16,49 @@
 #define INTERRUPT_ATTR
 #endif
 
+/**
+ * A wrapper for the RadioLib Module class, that adds mutex for SPI bus access
+ */
+class LockingModule : public Module
+{
+  public:
+    /*!
+      \brief Extended SPI-based module constructor.
+
+      \param cs Arduino pin to be used as chip select.
+
+      \param irq Arduino pin to be used as interrupt/GPIO.
+
+      \param rst Arduino pin to be used as hardware reset for the module.
+
+      \param gpio Arduino pin to be used as additional interrupt/GPIO.
+
+      \param spi SPI interface to be used, can also use software SPI implementations.
+
+      \param spiSettings SPI interface settings.
+    */
+    LockingModule(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE gpio, SPIClass &spi,
+                  SPISettings spiSettings)
+        : Module(cs, irq, rst, gpio, spi, spiSettings)
+    {
+    }
+
+    /*!
+    \brief SPI single transfer method.
+
+    \param cmd SPI access command (read/write/burst/...).
+
+    \param reg Address of SPI register to transfer to/from.
+
+    \param dataOut Data that will be transfered from master to slave.
+
+    \param dataIn Data that was transfered from slave to master.
+
+    \param numBytes Number of bytes to transfer.
+    */
+    virtual void SPItransfer(uint8_t cmd, uint8_t reg, uint8_t *dataOut, uint8_t *dataIn, uint8_t numBytes);
+};
+
 class RadioLibInterface : public RadioInterface, private concurrency::PeriodicTask
 {
     /// Used as our notification from the ISR
@@ -49,7 +92,7 @@ class RadioLibInterface : public RadioInterface, private concurrency::PeriodicTa
     float currentLimit = 100;     // FIXME
     uint16_t preambleLength = 32; // 8 is default, but FIXME use longer to increase the amount of sleep time when receiving
 
-    Module module; // The HW interface to the radio
+    LockingModule module; // The HW interface to the radio
 
     /**
      * provides lowest common denominator RadioLib API

@@ -1,6 +1,7 @@
 #include "RadioLibInterface.h"
 #include "MeshTypes.h"
 #include "NodeDB.h"
+#include "SPILock.h"
 #include "mesh-pb-constants.h"
 #include <configuration.h>
 #include <pb_decode.h>
@@ -8,6 +9,13 @@
 
 // FIXME, we default to 4MHz SPI, SPI mode 0, check if the datasheet says it can really do that
 static SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
+
+void LockingModule::SPItransfer(uint8_t cmd, uint8_t reg, uint8_t *dataOut, uint8_t *dataIn, uint8_t numBytes)
+{
+    concurrency::LockGuard g(spiLock);
+
+    Module::SPItransfer(cmd, reg, dataOut, dataIn, numBytes);
+}
 
 RadioLibInterface::RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy,
                                      SPIClass &spi, PhysicalLayer *_iface)
@@ -126,6 +134,8 @@ bool RadioLibInterface::canSendImmediately()
 /// bluetooth comms code.  If the txmit queue is empty it might return an error
 ErrorCode RadioLibInterface::send(MeshPacket *p)
 {
+    // Sometimes when testing it is useful to be able to never turn on the xmitter
+#ifndef LORA_DISABLE_SENDING
     printPacket("enqueuing for send", p);
     DEBUG_MSG("txGood=%d,rxGood=%d,rxBad=%d\n", txGood, rxGood, rxBad);
     ErrorCode res = txQueue.enqueue(p, 0) ? ERRNO_OK : ERRNO_UNKNOWN;
@@ -140,6 +150,10 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
     startTransmitTimer(true);
 
     return res;
+#else
+    packetPool.release(p);
+    return ERRNO_UNKNOWN;
+#endif
 }
 
 bool RadioLibInterface::canSleep()
