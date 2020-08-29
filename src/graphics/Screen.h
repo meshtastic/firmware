@@ -10,11 +10,12 @@
 #include <SSD1306Wire.h>
 #endif
 
-#include "concurrency/PeriodicTask.h"
+#include "TFT.h"
 #include "TypedQueue.h"
-#include "concurrency/LockGuard.h"
-#include "power.h"
 #include "commands.h"
+#include "concurrency/LockGuard.h"
+#include "concurrency/PeriodicTask.h"
+#include "power.h"
 #include <string>
 
 namespace graphics
@@ -53,16 +54,19 @@ class DebugInfo
 
 /**
  * @brief This class deals with showing things on the screen of the device.
- * 
- * @details Other than setup(), this class is thread-safe as long as drawFrame is not called 
- *          multiple times simultaneously. All state-changing calls are queued and executed 
+ *
+ * @details Other than setup(), this class is thread-safe as long as drawFrame is not called
+ *          multiple times simultaneously. All state-changing calls are queued and executed
  *          when the main loop calls us.
  */
 class Screen : public concurrency::PeriodicTask
 {
-    CallbackObserver<Screen, const meshtastic::Status *> powerStatusObserver = CallbackObserver<Screen, const meshtastic::Status *>(this, &Screen::handleStatusUpdate);
-    CallbackObserver<Screen, const meshtastic::Status *> gpsStatusObserver = CallbackObserver<Screen, const meshtastic::Status *>(this, &Screen::handleStatusUpdate);
-    CallbackObserver<Screen, const meshtastic::Status *> nodeStatusObserver = CallbackObserver<Screen, const meshtastic::Status *>(this, &Screen::handleStatusUpdate);
+    CallbackObserver<Screen, const meshtastic::Status *> powerStatusObserver =
+        CallbackObserver<Screen, const meshtastic::Status *>(this, &Screen::handleStatusUpdate);
+    CallbackObserver<Screen, const meshtastic::Status *> gpsStatusObserver =
+        CallbackObserver<Screen, const meshtastic::Status *>(this, &Screen::handleStatusUpdate);
+    CallbackObserver<Screen, const meshtastic::Status *> nodeStatusObserver =
+        CallbackObserver<Screen, const meshtastic::Status *>(this, &Screen::handleStatusUpdate);
 
   public:
     Screen(uint8_t address, int sda = -1, int scl = -1);
@@ -125,11 +129,12 @@ class Screen : public concurrency::PeriodicTask
     }
 
     /// Overrides the default utf8 character conversion, to replace empty space with question marks
-    static char customFontTableLookup(const uint8_t ch) {
+    static char customFontTableLookup(const uint8_t ch)
+    {
         // UTF-8 to font table index converter
         // Code form http://playground.arduino.cc/Main/Utf8ascii
         static uint8_t LASTCHAR;
-        static bool SKIPREST;   // Only display a single unconvertable-character symbol per sequence of unconvertable characters
+        static bool SKIPREST; // Only display a single unconvertable-character symbol per sequence of unconvertable characters
 
         if (ch < 128) { // Standard ASCII-set 0..0x7F handling
             LASTCHAR = 0;
@@ -137,28 +142,38 @@ class Screen : public concurrency::PeriodicTask
             return ch;
         }
 
-        uint8_t last = LASTCHAR;   // get last char
+        uint8_t last = LASTCHAR; // get last char
         LASTCHAR = ch;
 
-        switch (last) {    // conversion depnding on first UTF8-character
-            case 0xC2: { SKIPREST = false; return (uint8_t) ch; }
-            case 0xC3: { SKIPREST = false; return (uint8_t) (ch | 0xC0); }
+        switch (last) { // conversion depnding on first UTF8-character
+        case 0xC2: {
+            SKIPREST = false;
+            return (uint8_t)ch;
+        }
+        case 0xC3: {
+            SKIPREST = false;
+            return (uint8_t)(ch | 0xC0);
+        }
         }
 
         // We want to strip out prefix chars for two-byte char formats
-        if (ch == 0xC2 || ch == 0xC3 || ch == 0x82) return (uint8_t) 0;
+        if (ch == 0xC2 || ch == 0xC3 || ch == 0x82)
+            return (uint8_t)0;
 
-        // If we already returned an unconvertable-character symbol for this unconvertable-character sequence, return NULs for the rest of it
-        if (SKIPREST) return (uint8_t) 0;
+        // If we already returned an unconvertable-character symbol for this unconvertable-character sequence, return NULs for the
+        // rest of it
+        if (SKIPREST)
+            return (uint8_t)0;
         SKIPREST = true;
 
-        return (uint8_t) 191; // otherwise: return ¿ if character can't be converted (note that the font map we're using doesn't stick to standard EASCII codes)
+        return (uint8_t)191; // otherwise: return ¿ if character can't be converted (note that the font map we're using doesn't
+                             // stick to standard EASCII codes)
     }
 
     /// Returns a handle to the DebugInfo screen.
     //
     // Use this handle to set things like battery status, user count, GPS status, etc.
-    DebugInfo* debug_info() { return &debugInfo; }
+    DebugInfo *debug_info() { return &debugInfo; }
 
     int handleStatusUpdate(const meshtastic::Status *arg);
 
@@ -215,8 +230,10 @@ class Screen : public concurrency::PeriodicTask
     DebugInfo debugInfo;
 
     /// Display device
-    /** @todo display abstraction */
-#ifdef USE_SH1106
+    /** FIXME cleanup display abstraction */
+#ifdef ST7735_CS
+    TFTDisplay dispdev;
+#elif defined(USE_SH1106)
     SH1106Wire dispdev;
 #else
     SSD1306Wire dispdev;
