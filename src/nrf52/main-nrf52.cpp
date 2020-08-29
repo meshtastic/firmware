@@ -99,9 +99,4 @@ void nrf52Setup()
     // randomSeed(r);
     DEBUG_MSG("FIXME, call randomSeed\n");
     // ::printf("TESTING PRINTF\n");
-
-// Setup TFT display - FIXME do somewhere else
-#ifdef ST7735_CS
-    TFTinit();
-#endif
 }
