@@ -117,8 +117,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define I2C_ADDR_BQ27441 0x55 // Battery gauge
 
 // CUSTOM GPIOs the SX1262
-// #define SX1262_CS (32)
-#define USE_SIM_RADIO
+#define SX1262_CS (32)
+
 #define USE_SEGGER
 #define SX1262_DIO1 (29)
 #define SX1262_DIO2 (30)
@@ -135,6 +135,10 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define ST7735_CS (12)
 #define ST7735_BACKLIGHT_EN (13)
 #define ST7735_RS (9)
+
+#define LORA_DISABLE_SENDING // The 1.1 version of this board browns out if the SX1262 transmits while the screen is on.  So you
+                             // can
+// have either a working SX1262 or a working screen
 
 #ifdef __cplusplus
 }
