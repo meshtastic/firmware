@@ -119,7 +119,9 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // CUSTOM GPIOs the SX1262
 #define SX1262_CS (32)
 
-#define USE_SEGGER
+// If you would prefer to get console debug output over the JTAG ICE connection rather than the CDC-ACM USB serial device, just
+// define this. #define USE_SEGGER
+
 #define SX1262_DIO1 (29)
 #define SX1262_DIO2 (30)
 #define SX1262_BUSY (33) // Supposed to be P0.18 but because of reworks, now on P0.31 (18)
@@ -136,9 +138,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define ST7735_BACKLIGHT_EN (13)
 #define ST7735_RS (9)
 
-#define LORA_DISABLE_SENDING // The 1.1 version of this board browns out if the SX1262 transmits while the screen is on.  So you
-                             // can
-// have either a working SX1262 or a working screen
+// #define LORA_DISABLE_SENDING // The board can brownout during lora TX if you don't have a battery connected.  Disable sending
+// to allow USB power only based debugging
 
 #ifdef __cplusplus
 }
