@@ -86,7 +86,7 @@ const char *getChannelName()
     static char buf[32];
 
     uint8_t code = 0;
-    for (int i = 0; i < sizeof(channelSettings.psk.size); i++)
+    for (int i = 0; i < channelSettings.psk.size; i++)
         code ^= channelSettings.psk.bytes[i];
 
     snprintf(buf, sizeof(buf), "#%s-%c", channelSettings.name, 'A' + (code % 26));
@@ -121,7 +121,7 @@ void NodeDB::resetRadioConfig()
         channelSettings.modem_config = ChannelSettings_ModemConfig_Bw125Cr48Sf4096; // slow and long range
 
         channelSettings.tx_power = 0; // default
-        memcpy(&channelSettings.psk.bytes, &defaultpsk, sizeof(channelSettings.psk));
+        memcpy(&channelSettings.psk.bytes, defaultpsk, sizeof(channelSettings.psk));
         channelSettings.psk.size = sizeof(defaultpsk);
         strcpy(channelSettings.name, "Default");
     }

@@ -26,10 +26,15 @@
 #define CH_SPACING_CN 2.0f // MHz FIXME, this is just a guess for 470-510
 #define NUM_CHANNELS_CN 20
 
-// JP channel settings
-#define CH0_JP 920.0f      // MHz
-#define CH_SPACING_JP 0.5f // MHz FIXME, this is just a guess for 920-925
+// JP channel settings (AS1 bandplan)
+#define CH0_JP 920.0f // MHz
+#define CH_SPACING_JP 0.5f
 #define NUM_CHANNELS_JP 10
+
+// TW channel settings (AS2 bandplan 923-925MHz)
+#define CH0_TW 923.0f // MHz
+#define CH_SPACING_TW 0.2
+#define NUM_CHANNELS_TW 10
 
 // FIXME add defs for other regions and use them here
 #ifdef HW_VERSION_US
@@ -49,13 +54,18 @@
 #define CH_SPACING CH_SPACING_CN
 #define NUM_CHANNELS NUM_CHANNELS_CN
 #elif defined(HW_VERSION_JP)
+// Also called AS1 bandplan
 #define CH0 CH0_JP
 #define CH_SPACING CH_SPACING_JP
 #define NUM_CHANNELS NUM_CHANNELS_JP
+#elif defined(HW_VERSION_TW)
+// Also called AS2 bandplan
+#define CH0 CH0_TW
+#define CH_SPACING CH_SPACING_TW
+#define NUM_CHANNELS NUM_CHANNELS_TW
 #else
 // HW version not set - assume US
 #define CH0 CH0_US
 #define CH_SPACING CH_SPACING_US
 #define NUM_CHANNELS NUM_CHANNELS_US
 #endif
-
