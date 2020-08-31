@@ -330,7 +330,7 @@ static void on_sync(void)
     int isPrivate = 0;
     rc = ble_hs_id_copy_addr(own_addr_type, addr_val, &isPrivate);
     assert(rc == 0);
-    DEBUG_MSG("Addr type %d, Private=%d, Device Address: ", own_addr_type, isPrivate);
+    DEBUG_MSG("BLE advertisting type=%d, Private=%d, Device Address: ", own_addr_type, isPrivate);
     print_addr(addr_val);
     DEBUG_MSG("\n");
     /* Begin advertising. */
@@ -357,17 +357,17 @@ void gatt_svr_register_cb(struct ble_gatt_register_ctxt *ctxt, void *arg)
         break;
 
     case BLE_GATT_REGISTER_OP_CHR:
-        DEBUG_MSG("registering characteristic %s with "
+        /* DEBUG_MSG("registering characteristic %s with "
                   "def_handle=%d val_handle=%d\n",
-                  ble_uuid_to_str(ctxt->chr.chr_def->uuid, buf), ctxt->chr.def_handle, ctxt->chr.val_handle);
+                  ble_uuid_to_str(ctxt->chr.chr_def->uuid, buf), ctxt->chr.def_handle, ctxt->chr.val_handle); */
 
         if (ctxt->chr.chr_def->uuid == &fromnum_uuid.u) {
             fromNumValHandle = ctxt->chr.val_handle;
-            DEBUG_MSG("FromNum handle %d\n", fromNumValHandle);
+            // DEBUG_MSG("FromNum handle %d\n", fromNumValHandle);
         }
         if (ctxt->chr.chr_def->uuid == &update_result_uuid.u) {
             updateResultHandle = ctxt->chr.val_handle;
-            DEBUG_MSG("update result handle %d\n", updateResultHandle);
+            // DEBUG_MSG("update result handle %d\n", updateResultHandle);
         }
         break;
 
