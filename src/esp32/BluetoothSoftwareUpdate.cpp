@@ -31,6 +31,8 @@ int update_size_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_
     if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR && updateExpectedSize != 0) {
         updateActualSize = 0;
         crc.reset();
+        if (Update.isRunning())
+            Update.abort();
         bool canBegin = Update.begin(updateExpectedSize);
         DEBUG_MSG("Setting update size %u, result %d\n", updateExpectedSize, canBegin);
         if (!canBegin) {
