@@ -47,7 +47,8 @@
         "memory_resource": "cpp",
         "optional": "cpp",
         "string_view": "cpp",
-        "cassert": "cpp"
+        "cassert": "cpp",
+        "iterator": "cpp"
     },
     "cSpell.words": [
         "Blox",
@@ -59,6 +60,8 @@
         "cfsr",
         "descs",
         "ocrypto",
-        "protobufs"
-    ]
+        "protobufs",
+        "wifi"
+    ],
+    "C_Cpp.dimInactiveRegions": true
 }

@@ -1,5 +1,7 @@
 #include "RadioLibInterface.h"
 #include "MeshTypes.h"
+#include "NodeDB.h"
+#include "SPILock.h"
 #include "mesh-pb-constants.h"
 #include <configuration.h>
 #include <pb_decode.h>
@@ -8,11 +10,17 @@
 // FIXME, we default to 4MHz SPI, SPI mode 0, check if the datasheet says it can really do that
 static SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 
+void LockingModule::SPItransfer(uint8_t cmd, uint8_t reg, uint8_t *dataOut, uint8_t *dataIn, uint8_t numBytes)
+{
+    concurrency::LockGuard g(spiLock);
+
+    Module::SPItransfer(cmd, reg, dataOut, dataIn, numBytes);
+}
+
 RadioLibInterface::RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy,
                                      SPIClass &spi, PhysicalLayer *_iface)
-    : PeriodicTask(0), module(cs, irq, rst, busy, spi, spiSettings), iface(_iface)
+    : concurrency::PeriodicTask(0), module(cs, irq, rst, busy, spi, spiSettings), iface(_iface)
 {
-    assert(!instance); // We assume only one for now
     instance = this;
 }
 
@@ -64,29 +72,41 @@ void RadioLibInterface::applyModemConfig()
 {
     RadioInterface::applyModemConfig();
 
-    switch (modemConfig) {
-    case Bw125Cr45Sf128: ///< Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on. Default medium range
-        bw = 125;
-        cr = 5;
-        sf = 7;
-        break;
-    case Bw500Cr45Sf128: ///< Bw = 500 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on. Fast+short range
-        bw = 500;
-        cr = 5;
-        sf = 7;
-        break;
-    case Bw31_25Cr48Sf512: ///< Bw = 31.25 kHz, Cr = 4/8, Sf = 512chips/symbol, CRC on. Slow+long range
-        bw = 31.25;
-        cr = 8;
-        sf = 9;
-        break;
-    case Bw125Cr48Sf4096:
-        bw = 125;
-        cr = 8;
-        sf = 12;
-        break;
-    default:
-        assert(0); // Unknown enum
+    if (channelSettings.spread_factor == 0) {
+        switch (channelSettings.modem_config) {
+        case ChannelSettings_ModemConfig_Bw125Cr45Sf128: ///< Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on. Default medium
+                                                         ///< range
+            bw = 125;
+            cr = 5;
+            sf = 7;
+            break;
+        case ChannelSettings_ModemConfig_Bw500Cr45Sf128: ///< Bw = 500 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on. Fast+short
+                                                         ///< range
+            bw = 500;
+            cr = 5;
+            sf = 7;
+            break;
+        case ChannelSettings_ModemConfig_Bw31_25Cr48Sf512: ///< Bw = 31.25 kHz, Cr = 4/8, Sf = 512chips/symbol, CRC on. Slow+long
+                                                           ///< range
+            bw = 31.25;
+            cr = 8;
+            sf = 9;
+            break;
+        case ChannelSettings_ModemConfig_Bw125Cr48Sf4096:
+            bw = 125;
+            cr = 8;
+            sf = 12;
+            break;
+        default:
+            assert(0); // Unknown enum
+        }
+    } else {
+        sf = channelSettings.spread_factor;
+        cr = channelSettings.coding_rate;
+        bw = channelSettings.bandwidth;
+
+        if (bw == 31) // This parameter is not an integer
+            bw = 31.25;
     }
 }
 
@@ -114,6 +134,8 @@ bool RadioLibInterface::canSendImmediately()
 /// bluetooth comms code.  If the txmit queue is empty it might return an error
 ErrorCode RadioLibInterface::send(MeshPacket *p)
 {
+    // Sometimes when testing it is useful to be able to never turn on the xmitter
+#ifndef LORA_DISABLE_SENDING
     printPacket("enqueuing for send", p);
     DEBUG_MSG("txGood=%d,rxGood=%d,rxBad=%d\n", txGood, rxGood, rxBad);
     ErrorCode res = txQueue.enqueue(p, 0) ? ERRNO_OK : ERRNO_UNKNOWN;
@@ -128,6 +150,10 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
     startTransmitTimer(true);
 
     return res;
+#else
+    packetPool.release(p);
+    return ERRNO_UNKNOWN;
+#endif
 }
 
 bool RadioLibInterface::canSleep()
@@ -303,6 +329,8 @@ void RadioLibInterface::startSend(MeshPacket *txp)
 {
     printPacket("Starting low level send", txp);
     setStandby(); // Cancel any already in process receives
+
+    configHardwareForSend(); // must be after setStandby
 
     size_t numbytes = beginSending(txp);
 

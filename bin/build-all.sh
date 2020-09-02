@@ -8,7 +8,11 @@ COUNTRIES="US EU433 EU865 CN JP"
 #COUNTRIES=US
 #COUNTRIES=CN
 
-BOARDS="ttgo-lora32-v2 ttgo-lora32-v1 tbeam heltec"
+BOARDS_ESP32="tlora-v2 tlora-v1 tlora-v2-1-1.6 tbeam heltec tbeam0.7"
+
+# FIXME note nrf52840dk build is for some reason only generating a BIN file but not a HEX file nrf52840dk-geeksville is fine
+BOARDS_NRF52="lora-relay-v1"
+BOARDS="$BOARDS_ESP32 $BOARDS_NRF52"
 #BOARDS=tbeam
 
 OUTDIR=release/latest
@@ -23,20 +27,17 @@ rm -f $OUTDIR/bins/*
 
 # build the named environment and copy the bins to the release directory
 function do_build {
-    ENV_NAME=$1
-    echo "Building for $ENV_NAME with $PLATFORMIO_BUILD_FLAGS"
-    SRCBIN=.pio/build/$ENV_NAME/firmware.bin
-    SRCELF=.pio/build/$ENV_NAME/firmware.elf
-    rm -f $SRCBIN 
+    echo "Building for $BOARD with $PLATFORMIO_BUILD_FLAGS"
+    rm -f .pio/build/$BOARD/firmware.*
 
     # The shell vars the build tool expects to find
     export HW_VERSION="1.0-$COUNTRY"
     export APP_VERSION=$VERSION
     export COUNTRY
 
-    pio run --jobs 4 --environment $ENV_NAME # -v
-    cp $SRCBIN $OUTDIR/bins/firmware-$ENV_NAME-$COUNTRY-$VERSION.bin
-    cp $SRCELF $OUTDIR/elfs/firmware-$ENV_NAME-$COUNTRY-$VERSION.elf
+    pio run --jobs 4 --environment $BOARD # -v
+    SRCELF=.pio/build/$BOARD/firmware.elf
+    cp $SRCELF $OUTDIR/elfs/firmware-$BOARD-$COUNTRY-$VERSION.elf
 }
 
 # Make sure our submodules are current
@@ -48,6 +49,18 @@ platformio lib update
 for COUNTRY in $COUNTRIES; do 
     for BOARD in $BOARDS; do
         do_build $BOARD
+    done
+
+    echo "Copying ESP32 bin files"
+    for BOARD in $BOARDS_ESP32; do
+        SRCBIN=.pio/build/$BOARD/firmware.bin
+        cp $SRCBIN $OUTDIR/bins/firmware-$BOARD-$COUNTRY-$VERSION.bin
+    done
+
+    echo "Generating NRF52 uf2 files"
+    for BOARD in $BOARDS_NRF52; do
+        SRCHEX=.pio/build/$BOARD/firmware.hex
+        bin/uf2conv.py $SRCHEX -c -o $OUTDIR/bins/firmware-$BOARD-$COUNTRY-$VERSION.uf2 -f 0xADA52840
     done
 done
 

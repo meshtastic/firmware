@@ -44,10 +44,10 @@ class SX1262Interface : public RadioLibInterface
      */
     virtual void startReceive();
 
-    /** start an immediate transmit
+    /**
      *  We override to turn on transmitter power as needed.
      */
-    virtual void startSend(MeshPacket *txp);
+    virtual void configHardwareForSend();
 
     /**
      * Add SNR data to received messages
@@ -57,5 +57,4 @@ class SX1262Interface : public RadioLibInterface
     virtual void setStandby();
 
   private:
-
 };
