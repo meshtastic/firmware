@@ -8,3 +8,14 @@ main/credentials.h
 !.vscode/tasks.json
 !.vscode/extensions.json
 *.code-workspace
+
+.DS_Store
+Thumbs.db
+.autotools
+.built
+.context
+.cproject
+.idea/*
+.vagrant
+
+flash.uf2

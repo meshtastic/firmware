@@ -6,6 +6,7 @@
 #include "assert.h"
 #include "configuration.h"
 #include "sleep.h"
+#include "timing.h"
 #include <assert.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -67,6 +68,9 @@ void printPacket(const char *prefix, const MeshPacket *p)
     if (p->rx_time != 0) {
         DEBUG_MSG(" rxtime=%u", p->rx_time);
     }
+    if (p->rx_snr != 0.0) {
+        DEBUG_MSG(" rxSNR=%g", p->rx_snr);
+    }
     DEBUG_MSG(")\n");
 }
 
@@ -114,22 +118,26 @@ unsigned long hash(char *str)
     return hash;
 }
 
+#define POWER_DEFAULT 17
+
 /**
  * Pull our channel settings etc... from protobufs to the dumb interface settings
  */
 void RadioInterface::applyModemConfig()
 {
     // Set up default configuration
-    // No Sync Words in LORA mode.
-    modemConfig = (ModemConfigChoice)channelSettings.modem_config;
+    // No Sync Words in LORA mode
 
-    // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM
-    int channel_num = hash(channelSettings.name) % NUM_CHANNELS;
-    freq = CH0 + CH_SPACING * channel_num;
     power = channelSettings.tx_power;
+    if (power == 0)
+        power = POWER_DEFAULT;
+
+    // If user has manually specified a channel num, then use that, otherwise generate one by hashing the name
+    int channel_num = (channelSettings.channel_num ? channelSettings.channel_num - 1 : hash(channelSettings.name)) % NUM_CHANNELS;
+    freq = CH0 + CH_SPACING * channel_num;
 
     DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, power=%d\n", channelSettings.name, channelSettings.modem_config, channel_num,
-              channelSettings.tx_power);
+              power);
 }
 
 ErrorCode SimRadio::send(MeshPacket *p)
@@ -155,7 +163,7 @@ size_t RadioInterface::beginSending(MeshPacket *p)
     // DEBUG_MSG("sending queued packet on mesh (txGood=%d,rxGood=%d,rxBad=%d)\n", rf95.txGood(), rf95.rxGood(), rf95.rxBad());
     assert(p->which_payload == MeshPacket_encrypted_tag); // It should have already been encoded by now
 
-    lastTxStart = millis();
+    lastTxStart = timing::millis();
 
     PacketHeader *h = (PacketHeader *)radiobuf;
 
