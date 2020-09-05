@@ -6,7 +6,7 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 
-#ifdef NO_ESP32
+#if 0 // FIXME NRF52 only
 #include "Adafruit_LittleFS.h"
 using namespace Adafruit_LittleFS_Namespace; // To get File type
 #endif 

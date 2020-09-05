@@ -341,6 +341,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define HW_VENDOR "nrf52unknown" // FIXME - unknown nrf52 board
 
+#elif PORTDUINO
+
+#define HW_VENDOR "portduino" 
+
 #endif
 
 #ifdef USE_RF95

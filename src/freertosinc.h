@@ -42,8 +42,6 @@ typedef uint32_t BaseType_t;
 // Don't do anything on non free rtos platforms when done with the ISR
 #define portYIELD_FROM_ISR(x)
 
-enum eNotifyAction {
-    eNoAction
-};
+enum eNotifyAction { eNoAction, eSetValueWithoutOverwrite, eSetValueWithOverwrite };
 
 #endif

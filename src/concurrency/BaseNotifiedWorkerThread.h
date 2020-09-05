@@ -15,6 +15,13 @@ class BaseNotifiedWorkerThread : public WorkerThread
      */
     virtual void notify(uint32_t v = 0, eNotifyAction action = eNoAction) = 0;
 
+    /**
+     * Notify from an ISR
+     *
+     * This must be inline or IRAM_ATTR on ESP32
+     */
+    virtual void notifyFromISR(BaseType_t *highPriWoken, uint32_t v = 0, eNotifyAction action = eNoAction) { notify(v, action); }
+    
   protected:
     /**
      * The notification that was most recently used to wake the thread.  Read from loop()
