@@ -2,7 +2,6 @@
 
 #ifdef HAS_FREE_RTOS
 
-#include "timing.h"
 #include <assert.h>
 
 #ifdef ARDUINO_ARCH_ESP32

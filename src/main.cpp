@@ -38,7 +38,6 @@
 #include "graphics/Screen.h"
 #include "main.h"
 #include "sleep.h"
-#include "timing.h"
 #include <OneButton.h>
 #include <Wire.h>
 // #include <driver/rtc_io.h>
@@ -392,15 +391,15 @@ void loop()
 
     // Show boot screen for first 3 seconds, then switch to normal operation.
     static bool showingBootScreen = true;
-    if (showingBootScreen && (timing::millis() > 3000)) {
+    if (showingBootScreen && (millis() > 3000)) {
         screen.stopBootScreen();
         showingBootScreen = false;
     }
 
 #ifdef DEBUG_STACK
     static uint32_t lastPrint = 0;
-    if (timing::millis() - lastPrint > 10 * 1000L) {
-        lastPrint = timing::millis();
+    if (millis() - lastPrint > 10 * 1000L) {
+        lastPrint = millis();
         meshtastic::printThreadInfo("main");
     }
 #endif

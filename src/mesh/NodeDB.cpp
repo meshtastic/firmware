@@ -36,7 +36,7 @@ DeviceState versions used to be defined in the .proto file but really only this 
 // Portduino version
 #include "PortduinoFS.h"
 #define FS PortduinoFS
-#define FSBegin() FS.begin(true)
+#define FSBegin() true
 #define FILE_O_WRITE "w"
 #define FILE_O_READ "r"
 #elif !defined(NO_ESP32)
