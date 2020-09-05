@@ -59,7 +59,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define NO_ESP32 // Don't use ESP32 libs (mainly bluetooth)
 
-#elif NRF52_SERIES // All of the NRF52 targets are configured using variant.h, so this section shouldn't need to be
+#elif defined(NRF52_SERIES) // All of the NRF52 targets are configured using variant.h, so this section shouldn't need to be
                    // board specific
 
 //
@@ -103,17 +103,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define GPS_TX_PIN 12
 #endif
 
-//
-// Standard definitions for !ESP32 targets
-//
-
-#ifdef NO_ESP32
-// Nop definition for these attributes - not used on NRF52
-#define EXT_RAM_ATTR
-#define IRAM_ATTR
-#define RTC_DATA_ATTR
-#endif
-
 // -----------------------------------------------------------------------------
 // LoRa SPI
 // -----------------------------------------------------------------------------
@@ -126,6 +115,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define RF95_NSS 18
 #endif
 
+#endif
+
+//
+// Standard definitions for !ESP32 targets
+//
+
+#ifdef NO_ESP32
+// Nop definition for these attributes - not used on NRF52
+#define EXT_RAM_ATTR
+#define IRAM_ATTR
+#define RTC_DATA_ATTR
 #endif
 
 // -----------------------------------------------------------------------------

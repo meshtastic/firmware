@@ -48,7 +48,8 @@
         "optional": "cpp",
         "string_view": "cpp",
         "cassert": "cpp",
-        "iterator": "cpp"
+        "iterator": "cpp",
+        "shared_mutex": "cpp"
     },
     "cSpell.words": [
         "Blox",
