@@ -223,7 +223,7 @@ void setup()
 
     // Init our SPI controller (must be before screen and lora)
     initSPI();
-#ifdef NRF52_SERIES
+#ifdef NO_ESP32
     SPI.begin();
 #else
     // ESP32
