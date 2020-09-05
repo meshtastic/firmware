@@ -247,7 +247,7 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
         displayLine = "No GPS Module";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else if (!gps->getHasLock()) {
-        displayLine = "No Satellite Lock";
+        displayLine = "No GPS Lock";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
         char coordinateLine[20];
@@ -848,14 +848,16 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
             powerStatus->getBatteryChargePercent(),
             powerStatus->getIsCharging() ? '+' : ' ',
             powerStatus->getHasUSB() ? 'U' : ' ');
+
+        // Line 1
+        display->drawString(x, y, batStr);
     } 
     else 
     {
-        snprintf(batStr, sizeof(batStr), "%s", powerStatus->getHasUSB() ? "USB" : "");
+        // Line 1
+        display->drawString(x, y, String("USB"));
     } 
 
-    // Line 1
-    display->drawString(x, y, batStr);
 
     //TODO: Display status of the BT radio
     //display->drawString(x + SCREEN_WIDTH - display->getStringWidth("BT-Off"), y, "BT-Off");
