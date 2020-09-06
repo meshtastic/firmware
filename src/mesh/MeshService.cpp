@@ -67,8 +67,8 @@ void MeshService::init()
     sendOwnerPeriod.setup();
     nodeDB.init();
 
-    assert(gps);
-    gpsObserver.observe(&gps->newStatus);
+    if (gps)
+        gpsObserver.observe(&gps->newStatus);
     packetReceivedObserver.observe(&router.notifyPacketReceived);
 }
 

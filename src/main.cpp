@@ -268,7 +268,10 @@ void setup()
     gps = new NEMAGPS();
     gps->setup();
 #endif
-    gpsStatus->observe(&gps->newStatus);
+    if (gps)
+        gpsStatus->observe(&gps->newStatus);
+    else
+        DEBUG_MSG("Warning: No GPS found - running without GPS\n");
     nodeStatus->observe(&nodeDB.newStatus);
 
     service.init();
@@ -362,7 +365,8 @@ void loop()
 {
     uint32_t msecstosleep = 1000 * 30; // How long can we sleep before we again need to service the main loop?
 
-    gps->loop(); // FIXME, remove from main, instead block on read
+    if (gps)
+        gps->loop(); // FIXME, remove from main, instead block on read
     router.loop();
     powerFSM.run_machine();
     service.loop();
