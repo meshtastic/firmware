@@ -860,7 +860,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 
 
     //TODO: Display status of the BT radio
-    //display->drawString(x + SCREEN_WIDTH - display->getStringWidth("BT-Off"), y, "BT-Off");
+    // display->drawString(x + SCREEN_WIDTH - display->getStringWidth("BT On"), y, "BT On");
 
     // Line 2
     uint32_t currentMillis = millis();
@@ -880,7 +880,8 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth("Mode " + String(channelSettings.modem_config)), y + FONT_HEIGHT * 1, "Mode " + String(channelSettings.modem_config));
 
     // Line 3
-    //display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth("Slow V-Long Range"))) / 2, y + FONT_HEIGHT * 2, "Slow V-Long Range");
+    // TODO: Use this line for WiFi information.
+    // display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth("WiFi: 192.168.0.100"))) / 2, y + FONT_HEIGHT * 2, "WiFi: 192.168.0.100");
 
     // Line 4
     drawGPScoordinates(display, x, y + FONT_HEIGHT * 3, gpsStatus);
