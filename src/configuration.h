@@ -60,7 +60,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define NO_ESP32 // Don't use ESP32 libs (mainly bluetooth)
 
 #elif defined(NRF52_SERIES) // All of the NRF52 targets are configured using variant.h, so this section shouldn't need to be
-                   // board specific
+// board specific
 
 //
 // Standard definitions for NRF52 targets
@@ -343,7 +343,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #elif PORTDUINO
 
-#define HW_VENDOR "portduino" 
+#define HW_VENDOR "portduino"
+
+#define USE_SIM_RADIO
 
 #endif
 
