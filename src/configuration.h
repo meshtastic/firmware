@@ -201,8 +201,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 
 #define USE_RF95
-
-#define USE_RF95
 #define LORA_DIO0 26 // a No connect on the SX1262 module
 #define LORA_RESET 23
 #define LORA_DIO1 33 // Not really used
@@ -346,6 +344,18 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HW_VENDOR "portduino"
 
 #define USE_SIM_RADIO
+
+#define USE_RF95
+#define LORA_DIO0 26 // a No connect on the SX1262 module
+#define LORA_RESET 23
+#define LORA_DIO1 33 // Not really used
+#define LORA_DIO2 32 // Not really used
+
+// Fake SPI device selections
+#define RF95_SCK 5
+#define RF95_MISO 19
+#define RF95_MOSI 27
+#define RF95_NSS 18
 
 #endif
 
