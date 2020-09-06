@@ -38,6 +38,7 @@
 #include "graphics/Screen.h"
 #include "main.h"
 #include "sleep.h"
+#include "target_specific.h"
 #include <OneButton.h>
 #include <Wire.h>
 // #include <driver/rtc_io.h>
