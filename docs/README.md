@@ -76,11 +76,14 @@ Make sure to buy the frequency range which is legal for your country. For the US
 
 Instructions for installing prebuilt firmware can be found [here](https://github.com/meshtastic/Meshtastic-esp32/blob/master/README.md).
 
-For a nice printable cases:
-
-1. TTGO T-Beam V0 see this [design](https://www.thingiverse.com/thing:3773717) by [bsiege](https://www.thingiverse.com/bsiege).
-2. TTGO T_Beam V1 see this [design](https://www.thingiverse.com/thing:3830711) by [rwanrooy](https://www.thingiverse.com/rwanrooy) or this [remix](https://www.thingiverse.com/thing:3949330) by [8ung](https://www.thingiverse.com/8ung)
-3. Heltec Lora32 see this [design](https://www.thingiverse.com/thing:3125854) by [ornotermes](https://www.thingiverse.com/ornotermes).
+For a nice looking cases:
+  - 3D printable cases
+    1. TTGO T-Beam V0 see this [design](https://www.thingiverse.com/thing:3773717) by [bsiege](https://www.thingiverse.com/bsiege).
+    2. TTGO T_Beam V1 (SMA) see this [design](https://www.thingiverse.com/thing:3830711) by [rwanrooy](https://www.thingiverse.com/rwanrooy) or this [remix](https://www.thingiverse.com/thing:3949330) by [8ung](https://www.thingiverse.com/8ung)
+    3. TTGO T_Beam V1 (IPEX) see this [design](https://www.thingiverse.com/thing:4587297) by [drewsed](https://www.thingiverse.com/drewsed)
+    4. Heltec Lora32 see this [design](https://www.thingiverse.com/thing:3125854) by [ornotermes](https://www.thingiverse.com/ornotermes).
+  - Laser-cut cases
+    1. TTGO T_Beam V1 (SMA) see this [design](https://www.thingiverse.com/thing:4552771) by [jefish](https://www.thingiverse.com/jefish) 
 
 # IMPORTANT DISCLAIMERS AND FAQ
 
