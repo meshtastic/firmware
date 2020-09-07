@@ -1,4 +1,7 @@
 #include "PosixNotifiedWorkerThread.h"
+
+#ifdef __unix__
+
 #include <Utility.h>
 
 using namespace concurrency;
@@ -12,3 +15,5 @@ void PosixNotifiedWorkerThread::notify(uint32_t v, eNotifyAction action) NOT_IMP
  * A method that should block execution - either waiting ona queue/mutex or a "task notification"
  */
 void PosixNotifiedWorkerThread::block() NOT_IMPLEMENTED("block");
+
+#endif
