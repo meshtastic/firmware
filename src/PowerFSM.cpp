@@ -8,7 +8,6 @@
 #include "graphics/Screen.h"
 #include "sleep.h"
 #include "target_specific.h"
-#include "timing.h"
 
 static void sdsEnter()
 {
@@ -16,7 +15,7 @@ static void sdsEnter()
 
   // Don't deepsleep if we have USB power or if the user as pressed a button recently
   // !isUSBPowered <- doesn't work yet because the axp192 isn't letting the battery fully charge when we are awake - FIXME
-  if (timing::millis() - lastPressMs > radioConfig.preferences.mesh_sds_timeout_secs)
+  if (millis() - lastPressMs > radioConfig.preferences.mesh_sds_timeout_secs)
   {
     doDeepSleep(radioConfig.preferences.sds_secs);
   }
@@ -131,7 +130,7 @@ static void onEnter()
 
     static uint32_t lastPingMs;
 
-    uint32_t now = timing::millis();
+    uint32_t now = millis();
 
     if (now - lastPingMs > 30 * 1000) { // if more than a minute since our last press, ask other nodes to update their state
         if (displayedNodeNum)
