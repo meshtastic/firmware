@@ -239,6 +239,23 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
     }
 }
 
+// Draw GPS status coordinates
+static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
+{
+    String displayLine = "";
+    if (!gps->getIsConnected()) {
+        displayLine = "No GPS Module";
+        display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
+    } else if (!gps->getHasLock()) {
+        displayLine = "No GPS Lock";
+        display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
+    } else {
+        char coordinateLine[20];
+        sprintf(coordinateLine, "%f %f", gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
+        display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
+    }
+}
+
 /// Ported from my old java code, returns distance in meters along the globe
 /// surface (by magic?)
 static float latLongToMeter(double lat_a, double lng_a, double lat_b, double lng_b)
@@ -685,6 +702,13 @@ void Screen::drawDebugInfoTrampoline(OLEDDisplay *display, OLEDDisplayUiState *s
     screen->debugInfo.drawFrame(display, state, x, y);
 }
 
+void Screen::drawDebugInfoSettingsTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    Screen *screen = reinterpret_cast<Screen *>(state->userData);
+    screen->debugInfo.drawFrameSettings(display, state, x, y);
+}
+
+
 // restore our regular frame list
 void Screen::setFrames()
 {
@@ -711,6 +735,9 @@ void Screen::setFrames()
     // Since frames are basic function pointers, we have to use a helper to
     // call a method on debugInfo object.
     normalFrames[numframes++] = &Screen::drawDebugInfoTrampoline;
+
+    // call a method on debugInfoScreen object (for more details)
+    normalFrames[numframes++] = &Screen::drawDebugInfoSettingsTrampoline;
 
     ui.setFrames(normalFrames, numframes);
     ui.enableAllIndicators();
@@ -799,6 +826,74 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 #endif
 }
 
+// Jm
+void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    displayedNodeNum = 0; // Not currently showing a node pane
+
+    display->setFont(ArialMT_Plain_10);
+
+    // The coordinates define the left starting point of the text
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    char batStr[20];
+    if (powerStatus->getHasBattery()) 
+    {
+        int batV = powerStatus->getBatteryVoltageMv() / 1000;
+        int batCv = (powerStatus->getBatteryVoltageMv() % 1000) / 10;
+
+        snprintf(batStr, sizeof(batStr), "B %01d.%02dV %3d%% %c%c",
+            batV,
+            batCv,
+            powerStatus->getBatteryChargePercent(),
+            powerStatus->getIsCharging() ? '+' : ' ',
+            powerStatus->getHasUSB() ? 'U' : ' ');
+
+        // Line 1
+        display->drawString(x, y, batStr);
+    } 
+    else 
+    {
+        // Line 1
+        display->drawString(x, y, String("USB"));
+    } 
+
+
+    //TODO: Display status of the BT radio
+    // display->drawString(x + SCREEN_WIDTH - display->getStringWidth("BT On"), y, "BT On");
+
+    // Line 2
+    uint32_t currentMillis = millis();
+    uint32_t seconds = currentMillis / 1000;
+    uint32_t minutes = seconds / 60;
+    uint32_t hours = minutes / 60;
+    uint32_t days = hours / 24;
+    currentMillis %= 1000;
+    seconds %= 60;
+    minutes %= 60;
+    hours %= 24;
+
+    display->drawString(x, y + FONT_HEIGHT * 1, String(days) + "d " 
+        + (hours < 10 ? "0" : "") + String(hours) + ":" 
+        + (minutes < 10 ? "0" : "") + String(minutes) + ":" 
+        + (seconds < 10 ? "0" : "") + String(seconds));
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth("Mode " + String(channelSettings.modem_config)), y + FONT_HEIGHT * 1, "Mode " + String(channelSettings.modem_config));
+
+    // Line 3
+    // TODO: Use this line for WiFi information.
+    // display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth("WiFi: 192.168.0.100"))) / 2, y + FONT_HEIGHT * 2, "WiFi: 192.168.0.100");
+
+    // Line 4
+    drawGPScoordinates(display, x, y + FONT_HEIGHT * 3, gpsStatus);
+
+
+    /* Display a heartbeat pixel that blinks every time the frame is redrawn */
+#ifdef SHOW_REDRAWS
+    if (heartbeat)
+        display->setPixel(0, 0);
+    heartbeat = !heartbeat;
+#endif
+}
 // adjust Brightness cycle trough 1 to 254 as long as attachDuringLongPress is true
 void Screen::adjustBrightness()
 {
