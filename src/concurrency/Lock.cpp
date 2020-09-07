@@ -1,8 +1,10 @@
 #include "Lock.h"
 #include <cassert>
 
-namespace concurrency {
+namespace concurrency
+{
 
+#ifdef HAS_FREE_RTOS
 Lock::Lock()
 {
     handle = xSemaphoreCreateBinary();
@@ -19,5 +21,12 @@ void Lock::unlock()
 {
     assert(xSemaphoreGive(handle));
 }
+#else
+Lock::Lock() {}
+
+void Lock::lock() {}
+
+void Lock::unlock() {}
+#endif
 
 } // namespace concurrency
