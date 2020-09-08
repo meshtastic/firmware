@@ -165,7 +165,7 @@ void UBloxGPS::doTask()
 
         latitude = ublox.getLatitude(0);
         longitude = ublox.getLongitude(0);
-        altitude = ublox.getAltitude(0) / 1000; // in mm convert to meters
+        altitude = ublox.getAltitudeMSL(0) / 1000; // in mm convert to meters
         dop = ublox.getPDOP(0); // PDOP (an accuracy metric) is reported in 10^2 units so we have to scale down when we use it
         heading = ublox.getHeading(0);
         numSatellites = ublox.getSIV(0);
