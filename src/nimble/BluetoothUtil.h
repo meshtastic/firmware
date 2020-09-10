@@ -28,3 +28,20 @@ int chr_readwrite32le(uint32_t *v, struct ble_gatt_access_ctxt *ctxt);
  * A helper for readwrite access to an array of bytes (with no endian conversion)
  */
 int chr_readwrite8(uint8_t *v, size_t vlen, struct ble_gatt_access_ctxt *ctxt);
+
+enum StateBT 
+{
+	CONNECT,
+	DISCONNECT,
+	CONN_UPDATE,
+	ADV_COMPLETE,
+	ENC_CHANGE,
+	SUBSCRIBE,
+	MTU,
+	REPEAT_PAIRING,
+	PASSKEY_ACTION,
+	ON,
+	OFF
+};
+
+extern StateBT stateBT;
