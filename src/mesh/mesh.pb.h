@@ -364,7 +364,7 @@ typedef struct _ToRadio {
 #define DeviceState_version_tag                  8
 #define DeviceState_rx_text_message_tag          7
 #define DeviceState_no_save_tag                  9
-#define DeviceState_did_gps_reset_tag            10
+#define DeviceState_did_gps_reset_tag            11
 #define FromRadio_packet_tag                     2
 #define FromRadio_my_info_tag                    3
 #define FromRadio_node_info_tag                  4
@@ -519,7 +519,7 @@ X(a, STATIC,   REPEATED, MESSAGE,  receive_queue,     5) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  rx_text_message,   7) \
 X(a, STATIC,   SINGULAR, UINT32,   version,           8) \
 X(a, STATIC,   SINGULAR, BOOL,     no_save,           9) \
-X(a, STATIC,   SINGULAR, BOOL,     did_gps_reset,    10)
+X(a, STATIC,   SINGULAR, BOOL,     did_gps_reset,    11)
 #define DeviceState_CALLBACK NULL
 #define DeviceState_DEFAULT NULL
 #define DeviceState_radio_MSGTYPE RadioConfig
