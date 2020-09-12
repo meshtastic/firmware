@@ -250,7 +250,7 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
         displayLine = "No GPS Lock";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
-        char coordinateLine[20];
+        char coordinateLine[22];
         sprintf(coordinateLine, "%f %f", gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
     }
