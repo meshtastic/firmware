@@ -841,6 +841,9 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 // Jm
 void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    const char *wifiName = radioConfig.preferences.wifi_ssid;
+    const char *wifiPsw = radioConfig.preferences.wifi_password;
+
     displayedNodeNum = 0; // Not currently showing a node pane
 
     display->setFont(ArialMT_Plain_10);
@@ -856,6 +859,9 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
     display->drawString(x, y + FONT_HEIGHT * 1, WiFi.localIP().toString().c_str());
 
+    display->drawString(x, y + FONT_HEIGHT * 2, wifiName);
+    display->drawString(x, y + FONT_HEIGHT * 3, wifiPsw);
+ 
     /* Display a heartbeat pixel that blinks every time the frame is redrawn */
 #ifdef SHOW_REDRAWS
     if (heartbeat)
