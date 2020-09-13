@@ -1,10 +1,9 @@
 #include "BluetoothUtil.h"
 #include "BluetoothSoftwareUpdate.h"
 #include "NimbleBluetoothAPI.h"
-#include "NodeDB.h" // FIXME - we shouldn't really douch this here - we are using it only because we currently do wifi setup when ble gets turned on
 #include "PhoneAPI.h"
 #include "PowerFSM.h"
-#include "WiFi.h"
+#include <WiFi.h>
 #include "configuration.h"
 #include "esp_bt.h"
 #include "host/util/util.h"
@@ -503,32 +502,6 @@ void reinitBluetooth()
     nimble_port_freertos_init(ble_host_task);
 }
 
-void initWifi()
-{
-    // Note: Wifi is not yet supported ;-)
-    strcpy(radioConfig.preferences.wifi_ssid, "");
-    strcpy(radioConfig.preferences.wifi_password, "");
-    if (radioConfig.has_preferences) {
-        const char *wifiName = radioConfig.preferences.wifi_ssid;
-
-        if (*wifiName) {
-            const char *wifiPsw = radioConfig.preferences.wifi_password;
-            if (radioConfig.preferences.wifi_ap_mode) {
-                DEBUG_MSG("STARTING WIFI AP: ssid=%s, ok=%d\n", wifiName, WiFi.softAP(wifiName, wifiPsw));
-            } else {
-                WiFi.mode(WIFI_MODE_STA);
-                DEBUG_MSG("JOINING WIFI: ssid=%s\n", wifiName);
-                if (WiFi.begin(wifiName, wifiPsw) == WL_CONNECTED) {
-                    DEBUG_MSG("MY IP ADDRESS: %s\n", WiFi.localIP().toString().c_str());
-                } else {
-                    DEBUG_MSG("Started Joining WIFI\n");
-                }
-            }
-        }
-    } else
-        DEBUG_MSG("Not using WIFI\n");
-}
-
 bool bluetoothOn;
 
 // Enable/disable bluetooth.
@@ -542,11 +515,11 @@ void setBluetoothEnable(bool on)
             Serial.printf("Pre BT: %u heap size\n", ESP.getFreeHeap());
             // ESP_ERROR_CHECK( heap_trace_start(HEAP_TRACE_LEAKS) );
             reinitBluetooth();
-            initWifi();
+            //initWifi();
         } else {
             // We have to totally teardown our bluetooth objects to prevent leaks
             deinitBLE();
-            WiFi.mode(WIFI_MODE_NULL); // shutdown wifi
+            //WiFi.mode(WIFI_MODE_NULL); // shutdown wifi
             Serial.printf("Shutdown BT: %u heap size\n", ESP.getFreeHeap());
             // ESP_ERROR_CHECK( heap_trace_stop() );
             // heap_trace_dump();
