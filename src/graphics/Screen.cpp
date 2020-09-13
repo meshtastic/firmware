@@ -32,6 +32,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "utils.h"
+#include <WiFi.h>
 
 using namespace meshtastic; /** @todo remove */
 
@@ -708,6 +709,12 @@ void Screen::drawDebugInfoSettingsTrampoline(OLEDDisplay *display, OLEDDisplayUi
     screen->debugInfo.drawFrameSettings(display, state, x, y);
 }
 
+void Screen::drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    Screen *screen = reinterpret_cast<Screen *>(state->userData);
+    screen->debugInfo.drawFrameWiFi(display, state, x, y);
+}
+
 
 // restore our regular frame list
 void Screen::setFrames()
@@ -738,6 +745,11 @@ void Screen::setFrames()
 
     // call a method on debugInfoScreen object (for more details)
     normalFrames[numframes++] = &Screen::drawDebugInfoSettingsTrampoline;
+
+#if WiFi_MODE
+    // call a method on debugInfoScreen object (for more details)
+    normalFrames[numframes++] = &Screen::drawDebugInfoWiFiTrampoline;
+#endif
 
     ui.setFrames(normalFrames, numframes);
     ui.enableAllIndicators();
@@ -827,6 +839,32 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 }
 
 // Jm
+void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    displayedNodeNum = 0; // Not currently showing a node pane
+
+    display->setFont(ArialMT_Plain_10);
+
+    // The coordinates define the left starting point of the text
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    if ( WiFi.status() !=  WL_CONNECTED ) {
+        display->drawString(x, y, String("WiFi - Not Connected"));
+    } else {
+        display->drawString(x, y, String("WiFi - Connected"));
+    }
+
+    display->drawString(x, y + FONT_HEIGHT * 1, WiFi.localIP().toString().c_str());
+
+    /* Display a heartbeat pixel that blinks every time the frame is redrawn */
+#ifdef SHOW_REDRAWS
+    if (heartbeat)
+        display->setPixel(0, 0);
+    heartbeat = !heartbeat;
+#endif
+}
+
+
 void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     displayedNodeNum = 0; // Not currently showing a node pane

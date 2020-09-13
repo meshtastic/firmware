@@ -10,6 +10,8 @@ extern bool ssd1306_found;
 extern bool isCharging;
 extern bool isUSBPowered;
 
+
+
 // Global Screen singleton.
 extern graphics::Screen screen;
 //extern Observable<meshtastic::PowerStatus> newPowerStatus; //TODO: move this to main-esp32.cpp somehow or a helper class
