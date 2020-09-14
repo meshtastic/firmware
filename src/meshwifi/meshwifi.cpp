@@ -32,6 +32,7 @@ void initWifi()
         DEBUG_MSG("Not using WIFI\n");
 }
 
+
 void WiFiEvent(WiFiEvent_t event)
 {
     DEBUG_MSG("************ [WiFi-event] event: %d ************\n", event);
@@ -124,9 +125,17 @@ void WiFiEvent(WiFiEvent_t event)
 }
 
 void reconnectWiFi() {
-  if ( WiFi.status() !=  WL_CONNECTED ) {
-    DEBUG_MSG("... Reconnecting to WiFi access point");
-    WiFi.begin(  );
-  }
+    const char *wifiName = radioConfig.preferences.wifi_ssid;
+    const char *wifiPsw = radioConfig.preferences.wifi_password;
 
+    if (radioConfig.has_preferences) {
+
+        if (*wifiName) {
+
+            DEBUG_MSG("... Reconnecting to WiFi access point");
+
+            WiFi.mode(WIFI_MODE_STA);
+            WiFi.begin(wifiName, wifiPsw);
+        }
+    }
 }

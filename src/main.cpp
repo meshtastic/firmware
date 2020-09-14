@@ -427,15 +427,6 @@ void loop()
     // TODO: This should go into a thread handled by FreeRTOS.
     handleWebResponse();
 #endif
-/*
-    const char *wifiName = radioConfig.preferences.wifi_ssid;
-    const char *wifiPsw = radioConfig.preferences.wifi_password;
-    Serial.print("-------------------");
-    Serial.print(wifiName);
-    Serial.print(" ");
-    Serial.println(wifiPsw);
-    Serial.println("+++++++++++++++++++");
-    Serial.println("");
-*/
+
     delay(msecstosleep);
 }
