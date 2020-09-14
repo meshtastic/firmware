@@ -46,8 +46,9 @@ bool UBloxGPS::setup()
     // ublox.enableDebugging(Serial);
 
     // try a second time, the ublox lib serial parsing is buggy?
-    if (!tryConnect())
-        tryConnect();
+    // see https://github.com/meshtastic/Meshtastic-device/issues/376
+    for (int i = 0; (i < 3) && !tryConnect(); i++)
+        delay(500);
 
     if (isConnected) {
         DEBUG_MSG("Connected to UBLOX GPS successfully\n");
@@ -81,8 +82,11 @@ bool UBloxGPS::setUBXMode()
     // assert(ok);
     // ok = ublox.setDynamicModel(DYN_MODEL_BIKE); // probably PEDESTRIAN but just in case assume bike speeds
     // assert(ok);
-    if (!ublox.powerSaveMode(true, 2000)) // use power save mode, the default timeout (1100ms seems a bit too tight)
-        return false;
+
+    // per https://github.com/meshtastic/Meshtastic-device/issues/376 powerSaveMode might not work with the marginal
+    // TTGO antennas
+    // if (!ublox.powerSaveMode(true, 2000)) // use power save mode, the default timeout (1100ms seems a bit too tight)
+    //     return false;
 
     if (!ublox.saveConfiguration(3000))
         return false;
@@ -106,8 +110,8 @@ bool UBloxGPS::factoryReset()
     tryConnect(); // sets isConnected
 
     // try a second time, the ublox lib serial parsing is buggy?
-    if (!tryConnect())
-        tryConnect();
+    for (int i = 0; (i < 3) && !tryConnect(); i++)
+        delay(500);
 
     DEBUG_MSG("GPS Factory reset success=%d\n", isConnected);
     if (isConnected)
@@ -165,7 +169,7 @@ void UBloxGPS::doTask()
 
         latitude = ublox.getLatitude(0);
         longitude = ublox.getLongitude(0);
-        altitude = ublox.getAltitude(0) / 1000; // in mm convert to meters
+        altitude = ublox.getAltitudeMSL(0) / 1000; // in mm convert to meters
         dop = ublox.getPDOP(0); // PDOP (an accuracy metric) is reported in 10^2 units so we have to scale down when we use it
         heading = ublox.getHeading(0);
         numSatellites = ublox.getSIV(0);
