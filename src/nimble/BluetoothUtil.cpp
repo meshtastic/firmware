@@ -12,6 +12,7 @@
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
 #include <Arduino.h>
+#include "meshwifi/meshwifi.h"
 
 static bool pinShowing;
 
@@ -503,6 +504,7 @@ void reinitBluetooth()
 }
 
 bool bluetoothOn;
+bool firstTime = 1;
 
 // Enable/disable bluetooth.
 void setBluetoothEnable(bool on)
@@ -515,7 +517,12 @@ void setBluetoothEnable(bool on)
             Serial.printf("Pre BT: %u heap size\n", ESP.getFreeHeap());
             // ESP_ERROR_CHECK( heap_trace_start(HEAP_TRACE_LEAKS) );
             reinitBluetooth();
-            //initWifi();
+
+            if (firstTime) {
+                firstTime = 0;
+            } else {
+                reconnectWiFi();
+            }
         } else {
             // We have to totally teardown our bluetooth objects to prevent leaks
             deinitBLE();
