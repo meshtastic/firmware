@@ -518,6 +518,8 @@ void setBluetoothEnable(bool on)
             // ESP_ERROR_CHECK( heap_trace_start(HEAP_TRACE_LEAKS) );
             reinitBluetooth();
 
+            // Don't try to reconnect wifi before bluetooth is configured.
+            //   WiFi is initialized from main.cpp in setup() .
             if (firstTime) {
                 firstTime = 0;
             } else {
@@ -526,7 +528,8 @@ void setBluetoothEnable(bool on)
         } else {
             // We have to totally teardown our bluetooth objects to prevent leaks
             deinitBLE();
-            //WiFi.mode(WIFI_MODE_NULL); // shutdown wifi
+            WiFi.mode(WIFI_MODE_NULL); // shutdown wifi
+
             Serial.printf("Shutdown BT: %u heap size\n", ESP.getFreeHeap());
             // ESP_ERROR_CHECK( heap_trace_stop() );
             // heap_trace_dump();

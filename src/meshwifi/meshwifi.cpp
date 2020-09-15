@@ -5,6 +5,12 @@
 #include "NodeDB.h"
 #include "meshwifi/meshhttp.h"
 
+void deinitWifi()
+{
+    WiFi.mode(WIFI_MODE_NULL);
+    DEBUG_MSG("WiFi Turned Off\n");
+}
+
 void initWifi()
 {
     strcpy(radioConfig.preferences.wifi_ssid, WiFi_SSID_NAME);
@@ -68,6 +74,7 @@ void WiFiEvent(WiFiEvent_t event)
 
             // Start web server
             initWebServer();
+            
             break;
         case SYSTEM_EVENT_STA_LOST_IP:
             DEBUG_MSG("Lost IP address and IP address is reset to 0");

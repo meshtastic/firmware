@@ -8,5 +8,7 @@ void reconnectWiFi();
 
 void initWifi();
 
+void deinitWifi();
+
 void WiFiEvent(WiFiEvent_t event);
 
