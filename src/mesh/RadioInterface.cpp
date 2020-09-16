@@ -107,7 +107,7 @@ bool RadioInterface::init()
  * djb2 by Dan Bernstein.
  * http://www.cse.yorku.ca/~oz/hash.html
  */
-unsigned long hash(char *str)
+unsigned long hash(const char *str)
 {
     unsigned long hash = 5381;
     int c;
