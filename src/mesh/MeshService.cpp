@@ -299,8 +299,8 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
     p->decoded.which_payload = SubPacket_position_tag;
 
     Position &pos = p->decoded.position;
-    // !zero or !zero lat/long means valid
-    if (gps->latitude != 0 || gps->longitude != 0) {
+
+    if (gps->hasLock()) {
         if (gps->altitude != 0)
             pos.altitude = gps->altitude;
         pos.latitude_i = gps->latitude;
