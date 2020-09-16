@@ -44,7 +44,7 @@ For an detailed walk-through aimed at beginners, we recommend [meshtastic.letsta
 Note: Updates are happening almost daily, only major updates are listed below. For more details see our forum.
 
 - 09/14/2020 - 1.0.0 Now with over 1700 android users, over 2000 nodes and translated into 15 languages. This project will always be a "beta" experiment, but now quite usable. We are currently selecting 1.1 features in our discussion forum.
-- 06/24/2020 - 0.7.x Now with over 1000 android users, over 600 people using the radios and translated into 13 languages. Fairly stable and we are working through bugs to get to 1.0.
+- 06/24/2020 - 0.7.x Now with over 1000 android users, over 600 people using the radios and translated into 22 languages. Fairly stable and we are working through bugs to get to 1.0.
 - 06/04/2020 - 0.6.7 Beta releases of both the application and the device code are released. Features are fairly solid now with a sizable number of users.
 - 04/28/2020 - 0.6.0 [Python API](https://pypi.org/project/meshtastic/) released. Makes it easy to use meshtastic devices as "zero config / just works" mesh transport adapters for other projects.
 - 04/20/2020 - 0.4.3 Pretty solid now both for the android app and the device code. Many people have donated translations and code. Probably going to call it a beta soon.
