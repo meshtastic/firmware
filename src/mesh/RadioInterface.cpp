@@ -118,8 +118,6 @@ unsigned long hash(char *str)
     return hash;
 }
 
-#define POWER_DEFAULT 17
-
 /**
  * Pull our channel settings etc... from protobufs to the dumb interface settings
  */
@@ -129,8 +127,6 @@ void RadioInterface::applyModemConfig()
     // No Sync Words in LORA mode
 
     power = channelSettings.tx_power;
-    if (power == 0)
-        power = POWER_DEFAULT;
 
     // If user has manually specified a channel num, then use that, otherwise generate one by hashing the name
     int channel_num = (channelSettings.channel_num ? channelSettings.channel_num - 1 : hash(channelSettings.name)) % NUM_CHANNELS;
