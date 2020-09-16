@@ -13,8 +13,8 @@ void deinitWifi()
 
 void initWifi()
 {
-    strcpy(radioConfig.preferences.wifi_ssid, WiFi_SSID_NAME);
-    strcpy(radioConfig.preferences.wifi_password, WiFi_SSID_PASSWORD);
+    //strcpy(radioConfig.preferences.wifi_ssid, WiFi_SSID_NAME);
+    //strcpy(radioConfig.preferences.wifi_password, WiFi_SSID_PASSWORD);
     if (radioConfig.has_preferences) {
         const char *wifiName = radioConfig.preferences.wifi_ssid;
 
