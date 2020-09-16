@@ -136,6 +136,25 @@ void RadioInterface::applyModemConfig()
               power);
 }
 
+/**
+ * Some regulatory regions limit xmit power.
+ * This function should be called by subclasses after setting their desired power.  It might lower it
+ */
+void RadioInterface::limitPower()
+{
+    uint8_t maxPower = 255; // No limit
+
+#ifdef HW_VERSION_JP
+    maxPower = 13; // See https://github.com/meshtastic/Meshtastic-device/issues/346
+#endif
+    if (power > maxPower) {
+        DEBUG_MSG("Lowering transmit power because of regulatory limits\n");
+        power = maxPower;
+    }
+
+    DEBUG_MSG("Set radio: final power level=%d\n", power);
+}
+
 ErrorCode SimRadio::send(MeshPacket *p)
 {
     DEBUG_MSG("SimRadio.send\n");
