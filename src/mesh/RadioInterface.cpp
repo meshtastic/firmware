@@ -107,7 +107,7 @@ bool RadioInterface::init()
  * djb2 by Dan Bernstein.
  * http://www.cse.yorku.ca/~oz/hash.html
  */
-unsigned long hash(char *str)
+unsigned long hash(const char *str)
 {
     unsigned long hash = 5381;
     int c;
@@ -134,6 +134,25 @@ void RadioInterface::applyModemConfig()
 
     DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, power=%d\n", channelSettings.name, channelSettings.modem_config, channel_num,
               power);
+}
+
+/**
+ * Some regulatory regions limit xmit power.
+ * This function should be called by subclasses after setting their desired power.  It might lower it
+ */
+void RadioInterface::limitPower()
+{
+    uint8_t maxPower = 255; // No limit
+
+#ifdef HW_VERSION_JP
+    maxPower = 13; // See https://github.com/meshtastic/Meshtastic-device/issues/346
+#endif
+    if (power > maxPower) {
+        DEBUG_MSG("Lowering transmit power because of regulatory limits\n");
+        power = maxPower;
+    }
+
+    DEBUG_MSG("Set radio: final power level=%d\n", power);
 }
 
 ErrorCode SimRadio::send(MeshPacket *p)

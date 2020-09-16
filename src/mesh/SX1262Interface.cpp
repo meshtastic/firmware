@@ -43,6 +43,9 @@ bool SX1262Interface::init()
 
     if (power > 22) // This chip has lower power limits than some
         power = 22;
+
+    limitPower();
+
     int res = lora.begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength, tcxoVoltage, useRegulatorLDO);
     DEBUG_MSG("SX1262 init result %d\n", res);
 
