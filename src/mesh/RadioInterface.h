@@ -120,6 +120,12 @@ class RadioInterface : protected concurrency::NotifiedWorkerThread
     virtual void loop() {} // Idle processing
 
     /**
+     * Some regulatory regions limit xmit power.
+     * This function should be called by subclasses after setting their desired power.  It might lower it
+     */
+    void limitPower();
+
+    /**
      * Convert our modemConfig enum into wf, sf, etc...
      *
      * These paramaters will be pull from the channelSettings global
