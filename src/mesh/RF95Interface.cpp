@@ -3,7 +3,7 @@
 #include "RadioLibRF95.h"
 #include <configuration.h>
 
-#define MAX_POWER 17
+#define MAX_POWER 20
 // if we use 20 we are limited to 1% duty cycle or hw might overheat.  For continuous operation set a limit of 17
 
 #define POWER_DEFAULT 17 // How much power to use if the user hasn't set a power level
