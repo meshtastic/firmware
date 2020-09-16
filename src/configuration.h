@@ -409,6 +409,4 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // WiFi_Mode
 //  0 = Disabled
 //  1 = Enabled
-#define WiFi_MODE 0
-#define WiFi_SSID_NAME "meshtastic"
-#define WiFi_SSID_PASSWORD "meshtastic!"
+#define WiFi_MODE 1
