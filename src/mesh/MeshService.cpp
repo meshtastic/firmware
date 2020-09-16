@@ -206,6 +206,13 @@ void MeshService::reloadConfig()
     nodeDB.saveToDisk();
 }
 
+/// The owner User record just got updated, update our node DB and broadcast the info into the mesh
+void MeshService::reloadOwner()
+{
+    sendOurOwner();
+    nodeDB.saveToDisk();
+}
+
 /**
  *  Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)
  * Called by PhoneAPI.handleToRadio.  Note: p is a scratch buffer, this function is allowed to write to it but it can not keep a
