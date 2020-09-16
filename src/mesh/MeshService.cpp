@@ -206,6 +206,13 @@ void MeshService::reloadConfig()
     nodeDB.saveToDisk();
 }
 
+/// The owner User record just got updated, update our node DB and broadcast the info into the mesh
+void MeshService::reloadOwner()
+{
+    sendOurOwner();
+    nodeDB.saveToDisk();
+}
+
 /**
  *  Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)
  * Called by PhoneAPI.handleToRadio.  Note: p is a scratch buffer, this function is allowed to write to it but it can not keep a
@@ -292,8 +299,8 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
     p->decoded.which_payload = SubPacket_position_tag;
 
     Position &pos = p->decoded.position;
-    // !zero or !zero lat/long means valid
-    if (gps->latitude != 0 || gps->longitude != 0) {
+
+    if (gps->hasLock()) {
         if (gps->altitude != 0)
             pos.altitude = gps->altitude;
         pos.latitude_i = gps->latitude;

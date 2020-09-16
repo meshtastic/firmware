@@ -41,6 +41,8 @@ bool RF95Interface::init()
     if (power > MAX_POWER) // This chip has lower power limits than some
         power = MAX_POWER;
 
+    limitPower();
+    
     iface = lora = new RadioLibRF95(&module);
 
 #ifdef RF95_TCXO

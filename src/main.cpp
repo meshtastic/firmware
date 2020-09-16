@@ -23,7 +23,7 @@
 
 #include "MeshRadio.h"
 #include "MeshService.h"
-#include "NEMAGPS.h"
+#include "NMEAGPS.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "UBloxGPS.h"
@@ -256,16 +256,16 @@ void setup()
 
         if (GPS::_serial_gps) {
             // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
-            // assume NEMA at 9600 baud.
-            DEBUG_MSG("Hoping that NEMA might work\n");
+            // assume NMEA at 9600 baud.
+            DEBUG_MSG("Hoping that NMEA might work\n");
 
-            // dumb NEMA access only work for serial GPSes)
-            gps = new NEMAGPS();
+            // dumb NMEA access only work for serial GPSes)
+            gps = new NMEAGPS();
             gps->setup();
         }
     }
 #else
-    gps = new NEMAGPS();
+    gps = new NMEAGPS();
     gps->setup();
 #endif
     gpsStatus->observe(&gps->newStatus);
@@ -407,7 +407,7 @@ void loop()
 
     // Update the screen last, after we've figured out what to show.
     screen.debug_info()->setChannelNameStatus(getChannelName());
-    
+
     // No GPS lock yet, let the OS put the main CPU in low power mode for 100ms (or until another interrupt comes in)
     // i.e. don't just keep spinning in loop as fast as we can.
     // DEBUG_MSG("msecs %d\n", msecstosleep);
