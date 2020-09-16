@@ -283,8 +283,10 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     assert(esp_light_sleep_start() == ESP_OK);
 
     esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+#ifdef BUTTON_PIN
     if (cause == ESP_SLEEP_WAKEUP_GPIO)
         DEBUG_MSG("Exit light sleep gpio: btn=%d\n", !digitalRead(BUTTON_PIN));
+#endif
 
     return cause;
 }
