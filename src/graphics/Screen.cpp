@@ -33,6 +33,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "mesh-pb-constants.h"
 #include "utils.h"
 #include <WiFi.h>
+#include "meshwifi/meshwifi.h"
 
 using namespace meshtastic; /** @todo remove */
 
@@ -746,10 +747,10 @@ void Screen::setFrames()
     // call a method on debugInfoScreen object (for more details)
     normalFrames[numframes++] = &Screen::drawDebugInfoSettingsTrampoline;
 
-#if WiFi_MODE
-    // call a method on debugInfoScreen object (for more details)
-    normalFrames[numframes++] = &Screen::drawDebugInfoWiFiTrampoline;
-#endif
+    if (isWifiAvailable()) {
+        // call a method on debugInfoScreen object (for more details)
+        normalFrames[numframes++] = &Screen::drawDebugInfoWiFiTrampoline;
+    }
 
     ui.setFrames(normalFrames, numframes);
     ui.enableAllIndicators();

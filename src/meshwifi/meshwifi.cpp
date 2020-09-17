@@ -5,14 +5,34 @@
 #include "NodeDB.h"
 #include "meshwifi/meshhttp.h"
 
+bool isWifiAvailable() 
+{
+    const char *wifiName = radioConfig.preferences.wifi_ssid;
+    const char *wifiPsw = radioConfig.preferences.wifi_password;
+
+    if (*wifiName && *wifiPsw) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+// Disable WiFi
 void deinitWifi()
 {
     WiFi.mode(WIFI_MODE_NULL);
     DEBUG_MSG("WiFi Turned Off\n");
 }
 
+
+// Startup WiFi
 void initWifi()
 {
+
+    if (isWifiAvailable() == 0) {
+        return;
+    }
+
     //strcpy(radioConfig.preferences.wifi_ssid, WiFi_SSID_NAME);
     //strcpy(radioConfig.preferences.wifi_password, WiFi_SSID_PASSWORD);
     if (radioConfig.has_preferences) {
