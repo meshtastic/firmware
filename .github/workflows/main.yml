@@ -23,4 +23,4 @@ jobs:
         run: |
           pip install -U adafruit-nrfutil
       - name: Build
-        run: platformio run -e tbeam -e heltec -e lora-relay-v1
+        run: platformio run -e tbeam -e heltec -e lora-relay-v1 -e linux
