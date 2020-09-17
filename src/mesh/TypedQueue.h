@@ -53,7 +53,7 @@ template <class T> class TypedQueue
   public:
     TypedQueue(int maxElements) {}
 
-    // int numFree() { return uxQueueSpacesAvailable(h); }
+    int numFree() { return 1; } // Always claim 1 free, because we can grow to any size
 
     bool isEmpty() { return q.empty(); }
 
