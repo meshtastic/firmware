@@ -15,7 +15,6 @@
 #include "mesh-pb-constants.h"
 #include <pb_decode.h>
 #include <pb_encode.h>
-#include "meshwifi/meshwifi.h"
 
 NodeDB nodeDB;
 
@@ -400,12 +399,6 @@ void NodeDB::updateFrom(const MeshPacket &mp)
                     updateTextMessage = true;
                     powerFSM.trigger(EVENT_RECEIVED_TEXT_MSG);
                     notifyObservers(true); // Force an update whether or not our node counts have changed
-
-// This is going into the wifidev feature branch
-// Only update the WebUI if WiFi is enabled
-//#if WiFi_MODE != 0
-//  notifyWebUI();
-//#endif
                 }
             }
             break;
