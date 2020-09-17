@@ -97,7 +97,7 @@ void WiFiEvent(WiFiEvent_t event)
             DEBUG_MSG("Disconnected from WiFi access point\n");
 
             // Reconnect WiFi
-            reconnectWiFi();
+            initWifi();
             break;
         case SYSTEM_EVENT_STA_AUTHMODE_CHANGE:
             DEBUG_MSG("Authentication mode of access point has changed\n");
