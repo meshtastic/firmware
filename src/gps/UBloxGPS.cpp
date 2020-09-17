@@ -103,7 +103,7 @@ bool UBloxGPS::factoryReset()
 {
     bool ok = false;
 
-    // It is useful to force back into factory defaults (9600baud, NEMA to test the behavior of boards that don't have
+    // It is useful to force back into factory defaults (9600baud, NMEA to test the behavior of boards that don't have
     // GPS_TX connected)
     ublox.factoryReset();
     delay(5000);

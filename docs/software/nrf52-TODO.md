@@ -196,7 +196,7 @@ Nice ideas worth considering someday...
 - DONE neg 7 error code from receive
 - DONE remove unused sx1262 lib from github
 - at boot we are starting our message IDs at 1, rather we should start them at a random number. also, seed random based on timer. this could be the cause of our first message not seen bug.
-- add a NEMA based GPS driver to test GPS
+- add a NMEA based GPS driver to test GPS
 - DONE use "variants" to get all gpio bindings
 - DONE plug in correct variants for the real board
 - turn on DFU assistance in the appload using the nordic DFU helper lib call
