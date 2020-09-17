@@ -2,7 +2,8 @@
 
 #include "../freertosinc.h"
 
-namespace concurrency {
+namespace concurrency
+{
 
 /**
  * @brief Simple wrapper around FreeRTOS API for implementing a mutex lock
@@ -26,8 +27,9 @@ class Lock
     void unlock();
 
   private:
+#ifdef HAS_FREE_RTOS
     SemaphoreHandle_t handle;
-
+#endif
 };
 
 } // namespace concurrency

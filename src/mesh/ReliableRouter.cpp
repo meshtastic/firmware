@@ -2,7 +2,6 @@
 #include "MeshTypes.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
-#include "timing.h"
 
 // ReliableRouter::ReliableRouter() {}
 
@@ -163,7 +162,7 @@ PendingPacket *ReliableRouter::startRetransmission(MeshPacket *p)
  */
 void ReliableRouter::doRetransmissions()
 {
-    uint32_t now = timing::millis();
+    uint32_t now = millis();
 
     // FIXME, we should use a better datastructure rather than walking through this map.
     // for(auto el: pending) {

@@ -4,7 +4,6 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
-#include "timing.h"
 #include <assert.h>
 
 PhoneAPI::PhoneAPI()
@@ -21,7 +20,7 @@ void PhoneAPI::init()
 void PhoneAPI::checkConnectionTimeout()
 {
     if (isConnected) {
-        bool newConnected = (timing::millis() - lastContactMsec < radioConfig.preferences.phone_timeout_secs * 1000L);
+        bool newConnected = (millis() - lastContactMsec < radioConfig.preferences.phone_timeout_secs * 1000L);
         if (!newConnected) {
             isConnected = false;
             onConnectionChanged(isConnected);
@@ -35,7 +34,7 @@ void PhoneAPI::checkConnectionTimeout()
 void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 {
     powerFSM.trigger(EVENT_CONTACT_FROM_PHONE); // As long as the phone keeps talking to us, don't let the radio go to sleep
-    lastContactMsec = timing::millis();
+    lastContactMsec = millis();
     if (!isConnected) {
         isConnected = true;
         onConnectionChanged(isConnected);
