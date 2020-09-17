@@ -327,10 +327,8 @@ void setup()
     }
 #endif
 
-#if WiFi_MODE
     // Initialize Wifi
     initWifi();
-#endif
 
     if (!rIf)
         recordCriticalError(ErrNoRadio);
@@ -423,10 +421,8 @@ void loop()
     // feel slow
     msecstosleep = 10;
 
-#if WiFi_MODE
     // TODO: This should go into a thread handled by FreeRTOS.
     handleWebResponse();
-#endif
 
     delay(msecstosleep);
 }

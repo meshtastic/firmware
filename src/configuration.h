@@ -397,16 +397,3 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define GPS_POWER_CTRL_CH 3
 #define LORA_POWER_CTRL_CH 2
-
-// -----------------------------------------------------------------------------
-// WiFi Configuration
-// -----------------------------------------------------------------------------
-//
-// Set WiFi credentials using the API (Does this work?)
-//    meshtastic --setpref WiFi_SSID_NAME yournetwork
-//    meshtastic --setpref WiFi_SSID_PASSWORD yourpassword
-//
-// WiFi_Mode
-//  0 = Disabled
-//  1 = Enabled
-#define WiFi_MODE 1

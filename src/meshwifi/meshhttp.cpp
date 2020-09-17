@@ -3,8 +3,8 @@
 #include "configuration.h"
 #include "main.h"
 #include "NodeDB.h"
-#include "meshwifi.h"
-#include "meshhttp.h"
+#include "meshwifi/meshwifi.h"
+#include "meshwifi/meshhttp.h"
 
 
 WebServer webserver(80);
@@ -14,6 +14,10 @@ String sender = "";
 
 
 void handleWebResponse() {
+    if (isWifiAvailable() == 0) {
+        return;
+    }
+
     webserver.handleClient();
 }
 

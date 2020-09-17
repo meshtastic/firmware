@@ -12,3 +12,4 @@ void deinitWifi();
 
 void WiFiEvent(WiFiEvent_t event);
 
+bool isWifiAvailable();
