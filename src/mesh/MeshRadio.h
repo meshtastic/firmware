@@ -36,6 +36,11 @@
 #define CH_SPACING_TW 0.2
 #define NUM_CHANNELS_TW 10
 
+// AU/NZ channel settings 915-928MHz
+#define CH0_ANZ 916.0f      // MHz - avoid overcrowding on 915.0
+#define CH_SPACING_ANZ 0.5f
+#define NUM_CHANNELS_ANZ 20
+
 // FIXME add defs for other regions and use them here
 #ifdef HW_VERSION_US
 #define CH0 CH0_US
@@ -63,6 +68,11 @@
 #define CH0 CH0_TW
 #define CH_SPACING CH_SPACING_TW
 #define NUM_CHANNELS NUM_CHANNELS_TW
+#elif defined(HW_VERSION_ANZ)
+// Australia and NZ
+#define CH0 CH0_ANZ
+#define CH_SPACING CH_SPACING_ANZ
+#define NUM_CHANNELS NUM_CHANNELS_ANZ
 #else
 // HW version not set - assume US
 #define CH0 CH0_US
