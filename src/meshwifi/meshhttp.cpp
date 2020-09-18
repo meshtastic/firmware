@@ -25,6 +25,7 @@ void initWebServer() {
     webserver.onNotFound(handleNotFound);
     //webserver.on("/", handleJSONChatHistory);
     //webserver.on("/json/chat/history", handleJSONChatHistory);
+    webserver.on("/hotspot-detect.html", handleHotspot);
     webserver.on("/", []() {
     webserver.send(200, "text/plain", "Everything is awesome!");
     });
@@ -69,13 +70,24 @@ void handleNotFound() {
     for (uint8_t i = 0; i < webserver.args(); i++) {
         message += " " + webserver.argName(i) + ": " + webserver.arg(i) + "\n";
     }
-
+    Serial.println(message);
     webserver.send(404, "text/plain", message);
     /*
     */
 }
 
+/*
+    This supports the Apple Captive Network Assistant (CNA) Portal
+*/
+void handleHotspot() {
+    DEBUG_MSG("Hotspot Request\n");
 
+    String out = "";
+    //out += "Success\n";
+    out += "<meta http-equiv=\"refresh\" content=\"0;url=http://meshtastic.org/\" />\n";
+    webserver.send ( 200, "text/html", out );
+    return;
+}
 
 void notifyWebUI() {
     DEBUG_MSG("************ Got a message! ************\n");

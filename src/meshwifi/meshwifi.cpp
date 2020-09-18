@@ -1,9 +1,12 @@
 #include "meshwifi.h"
 #include <WiFi.h>
+#include <DNSServer.h>
 #include "configuration.h"
 #include "main.h"
 #include "NodeDB.h"
 #include "meshwifi/meshhttp.h"
+
+DNSServer dnsServer;
 
 bool isWifiAvailable() 
 {
@@ -45,20 +48,38 @@ void initWifi()
         return;
     }
 
-    //strcpy(radioConfig.preferences.wifi_ssid, WiFi_SSID_NAME);
-    //strcpy(radioConfig.preferences.wifi_password, WiFi_SSID_PASSWORD);
     if (radioConfig.has_preferences) {
         const char *wifiName = radioConfig.preferences.wifi_ssid;
+        const char *wifiPsw = radioConfig.preferences.wifi_password;
 
-        if (*wifiName) {
-            const char *wifiPsw = radioConfig.preferences.wifi_password;
+        if (1) {
+            radioConfig.preferences.wifi_ap_mode = 1;
+            strcpy(radioConfig.preferences.wifi_ssid, "MeshTest2");
+            strcpy(radioConfig.preferences.wifi_password, "12345678");
+        } else {
+            radioConfig.preferences.wifi_ap_mode = 0;
+            strcpy(radioConfig.preferences.wifi_ssid, "meshtastic");
+            strcpy(radioConfig.preferences.wifi_password, "meshtastic!");
+        }
+
+
+        if (*wifiName && *wifiPsw) {
             if (radioConfig.preferences.wifi_ap_mode) {
+            
+                IPAddress apIP(192, 168, 42, 1);
+                WiFi.onEvent(WiFiEvent);
+
+                WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
                 DEBUG_MSG("STARTING WIFI AP: ssid=%s, ok=%d\n", wifiName, WiFi.softAP(wifiName, wifiPsw));
+                DEBUG_MSG("MY IP ADDRESS: %s\n", WiFi.softAPIP().toString().c_str());
+
+                dnsServer.start(53, "*", apIP);
+
+
             } else {
                 WiFi.mode(WIFI_MODE_STA);
                 WiFi.onEvent(WiFiEvent);
                 //esp_wifi_set_ps(WIFI_PS_NONE); // Disable power saving
-
 
                 DEBUG_MSG("JOINING WIFI: ssid=%s\n", wifiName);
                 if (WiFi.begin(wifiName, wifiPsw) == WL_CONNECTED) {
@@ -127,6 +148,11 @@ void WiFiEvent(WiFiEvent_t event)
             break;
         case SYSTEM_EVENT_AP_START:
             DEBUG_MSG("WiFi access point started\n");
+            Serial.println(WiFi.softAPIP());
+
+            // Start web server
+            initWebServer();
+            
             break;
         case SYSTEM_EVENT_AP_STOP:
             DEBUG_MSG("WiFi access point stopped\n");
@@ -162,5 +188,11 @@ void WiFiEvent(WiFiEvent_t event)
             DEBUG_MSG("Obtained IP address\n");
             break;
         default: break;
+    }
+}
+
+void handleDNSResponse() {
+    if (radioConfig.preferences.wifi_ap_mode) {
+        dnsServer.processNextRequest();
     }
 }
