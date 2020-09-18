@@ -17,7 +17,6 @@
 #include "concurrency/PeriodicTask.h"
 #include "power.h"
 #include <string>
-#include <WiFi.h>
 
 namespace graphics
 {
