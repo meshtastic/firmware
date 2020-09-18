@@ -1,7 +1,6 @@
 #include <Arduino.h>
 
 #include "../concurrency/LockGuard.h"
-#include "../timing.h"
 #include "BluetoothSoftwareUpdate.h"
 #include "PowerFSM.h"
 #include "RadioLibInterface.h"
@@ -102,7 +101,7 @@ int update_crc32_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble
     } else {
         if (Update.end()) {
             DEBUG_MSG("OTA done, rebooting in 5 seconds!\n");
-            rebootAtMsec = timing::millis() + 5000;
+            rebootAtMsec = millis() + 5000;
         } else {
             DEBUG_MSG("Error Occurred. Error #: %d\n", Update.getError());
         }
@@ -128,7 +127,7 @@ int update_result_callback(uint16_t conn_handle, uint16_t attr_handle, struct bl
 
 void bluetoothRebootCheck()
 {
-    if (rebootAtMsec && timing::millis() > rebootAtMsec) {
+    if (rebootAtMsec && millis() > rebootAtMsec) {
         DEBUG_MSG("Rebooting for update\n");
         ESP.restart();
     }

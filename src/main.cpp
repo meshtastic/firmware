@@ -38,7 +38,7 @@
 #include "graphics/Screen.h"
 #include "main.h"
 #include "sleep.h"
-#include "timing.h"
+#include "target_specific.h"
 #include <OneButton.h>
 #include <Wire.h>
 // #include <driver/rtc_io.h>
@@ -223,7 +223,7 @@ void setup()
 
     // Init our SPI controller (must be before screen and lora)
     initSPI();
-#ifdef NRF52_SERIES
+#ifdef NO_ESP32
     SPI.begin();
 #else
     // ESP32
@@ -268,7 +268,10 @@ void setup()
     gps = new NMEAGPS();
     gps->setup();
 #endif
-    gpsStatus->observe(&gps->newStatus);
+    if (gps)
+        gpsStatus->observe(&gps->newStatus);
+    else
+        DEBUG_MSG("Warning: No GPS found - running without GPS\n");
     nodeStatus->observe(&nodeDB.newStatus);
 
     service.init();
@@ -362,7 +365,8 @@ void loop()
 {
     uint32_t msecstosleep = 1000 * 30; // How long can we sleep before we again need to service the main loop?
 
-    gps->loop(); // FIXME, remove from main, instead block on read
+    if (gps)
+        gps->loop(); // FIXME, remove from main, instead block on read
     router.loop();
     powerFSM.run_machine();
     service.loop();
@@ -392,15 +396,15 @@ void loop()
 
     // Show boot screen for first 3 seconds, then switch to normal operation.
     static bool showingBootScreen = true;
-    if (showingBootScreen && (timing::millis() > 3000)) {
+    if (showingBootScreen && (millis() > 3000)) {
         screen.stopBootScreen();
         showingBootScreen = false;
     }
 
 #ifdef DEBUG_STACK
     static uint32_t lastPrint = 0;
-    if (timing::millis() - lastPrint > 10 * 1000L) {
-        lastPrint = timing::millis();
+    if (millis() - lastPrint > 10 * 1000L) {
+        lastPrint = millis();
         meshtastic::printThreadInfo("main");
     }
 #endif
