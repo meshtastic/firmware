@@ -32,7 +32,14 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define DEVICESTATE_CUR_VER 11
 #define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
 
-#ifndef NO_ESP32
+#ifdef PORTDUINO
+// Portduino version
+#include "PortduinoFS.h"
+#define FS PortduinoFS
+#define FSBegin() true
+#define FILE_O_WRITE "w"
+#define FILE_O_READ "r"
+#elif !defined(NO_ESP32)
 // ESP32 version
 #include "SPIFFS.h"
 #define FS SPIFFS
