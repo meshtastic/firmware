@@ -13,7 +13,6 @@
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "power.h"
-#include "timing.h"
 
 /*
 receivedPacketQueue - this is a queue of messages we've received from the mesh, which we are keeping to deliver to the phone.
@@ -68,8 +67,8 @@ void MeshService::init()
     sendOwnerPeriod.setup();
     nodeDB.init();
 
-    assert(gps);
-    gpsObserver.observe(&gps->newStatus);
+    if (gps)
+        gpsObserver.observe(&gps->newStatus);
     packetReceivedObserver.observe(&router.notifyPacketReceived);
 }
 
@@ -316,7 +315,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
 
     // We limit our GPS broadcasts to a max rate
     static uint32_t lastGpsSend;
-    uint32_t now = timing::millis();
+    uint32_t now = millis();
     if (lastGpsSend == 0 || now - lastGpsSend > radioConfig.preferences.position_broadcast_secs * 1000) {
         lastGpsSend = now;
         DEBUG_MSG("Sending position to mesh\n");

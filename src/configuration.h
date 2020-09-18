@@ -55,23 +55,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 /// Convert a preprocessor name into a quoted string and if that string is empty use "unset"
 #define optstr(s) (xstr(s)[0] ? xstr(s) : "unset")
 
-#ifdef NRF52_SERIES // All of the NRF52 targets are configured using variant.h, so this section shouldn't need to be
-                    // board specific
+#ifdef PORTDUINO
+
+#define NO_ESP32 // Don't use ESP32 libs (mainly bluetooth)
+
+#elif defined(NRF52_SERIES) // All of the NRF52 targets are configured using variant.h, so this section shouldn't need to be
+// board specific
 
 //
 // Standard definitions for NRF52 targets
 //
 
-// Nop definition for these attributes - not used on NRF52
-#define EXT_RAM_ATTR
-#define IRAM_ATTR
-
 #define NO_ESP32 // Don't use ESP32 libs (mainly bluetooth)
 
 // We bind to the GPS using variant.h instead for this platform (Serial1)
-
-// FIXME, not yet ready for NRF52
-#define RTC_DATA_ATTR
 
 #define LED_PIN PIN_LED1 // LED1 on nrf52840-DK
 
@@ -88,9 +85,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #define NO_ESP32 // Don't use ESP32 libs (mainly bluetooth)
-
-// FIXME, not yet ready for NRF52
-#define RTC_DATA_ATTR
 
 #define LED_PIN -1 // FIXME totally bogus
 #define BUTTON_PIN -1
@@ -121,6 +115,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define RF95_NSS 18
 #endif
 
+#endif
+
+//
+// Standard definitions for !ESP32 targets
+//
+
+#ifdef NO_ESP32
+// Nop definition for these attributes - not used on NRF52
+#define EXT_RAM_ATTR
+#define IRAM_ATTR
+#define RTC_DATA_ATTR
 #endif
 
 // -----------------------------------------------------------------------------
@@ -194,8 +199,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define BUTTON_PIN 39
 #define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-
-#define USE_RF95
 
 #define USE_RF95
 #define LORA_DIO0 26 // a No connect on the SX1262 module
@@ -337,6 +340,24 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #elif NRF52_SERIES
 
 #define HW_VENDOR "nrf52unknown" // FIXME - unknown nrf52 board
+
+#elif PORTDUINO
+
+#define HW_VENDOR "portduino"
+
+#define USE_SIM_RADIO
+
+#define USE_RF95
+#define LORA_DIO0 26 // a No connect on the SX1262 module
+#define LORA_RESET 23
+#define LORA_DIO1 33 // Not really used
+#define LORA_DIO2 32 // Not really used
+
+// Fake SPI device selections
+#define RF95_SCK 5
+#define RF95_MISO 19
+#define RF95_MOSI 27
+#define RF95_NSS 18
 
 #endif
 
