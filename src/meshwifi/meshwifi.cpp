@@ -3,14 +3,14 @@
 #include "configuration.h"
 #include "main.h"
 #include "meshwifi/meshhttp.h"
-#include <WiFi.h>
 #include <DNSServer.h>
+#include <WiFi.h>
 
 static void WiFiEvent(WiFiEvent_t event);
 
 DNSServer dnsServer;
 
-bool isWifiAvailable() 
+bool isWifiAvailable()
 {
     const char *wifiName = radioConfig.preferences.wifi_ssid;
     const char *wifiPsw = radioConfig.preferences.wifi_password;
@@ -66,7 +66,7 @@ void initWifi()
 
         if (*wifiName && *wifiPsw) {
             if (radioConfig.preferences.wifi_ap_mode) {
-            
+
                 IPAddress apIP(192, 168, 42, 1);
                 WiFi.onEvent(WiFiEvent);
 
@@ -75,7 +75,6 @@ void initWifi()
                 DEBUG_MSG("MY IP ADDRESS: %s\n", WiFi.softAPIP().toString().c_str());
 
                 dnsServer.start(53, "*", apIP);
-
 
             } else {
                 WiFi.mode(WIFI_MODE_STA);
@@ -189,11 +188,11 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     default:
         break;
-
     }
 }
 
-void handleDNSResponse() {
+void handleDNSResponse()
+{
     if (radioConfig.preferences.wifi_ap_mode) {
         dnsServer.processNextRequest();
     }
