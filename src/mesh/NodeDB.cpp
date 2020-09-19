@@ -102,14 +102,23 @@ const char *getChannelName()
 
 NodeDB::NodeDB() : nodes(devicestate.node_db), numNodes(&devicestate.node_db_count) {}
 
-void NodeDB::resetRadioConfig()
+bool NodeDB::resetRadioConfig()
 {
+    bool didFactoryReset = false;
+
     /// 16 bytes of random PSK for our _public_ default channel that all devices power up on (AES128)
     static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
                                          0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0xbf};
 
-    if (radioConfig.preferences.sds_secs == 0) {
-        DEBUG_MSG("RadioConfig reset!\n");
+    if (radioConfig.preferences.factory_reset) {
+        DEBUG_MSG("Performing factory reset!\n");
+        installDefaultDeviceState();
+        didFactoryReset = true;
+    } else if (radioConfig.preferences.sds_secs == 0) {
+        DEBUG_MSG("Fixing bogus RadioConfig!\n");
+
+        radioConfig.preferences.factory_reset = false; // never save this to disk
+
         radioConfig.preferences.send_owner_interval = 4; // per sw-design.md
         radioConfig.preferences.position_broadcast_secs = 15 * 60;
         radioConfig.preferences.wait_bluetooth_secs = 120;
@@ -123,8 +132,8 @@ void NodeDB::resetRadioConfig()
         radioConfig.has_preferences = true;
 
         // radioConfig.modem_config = RadioConfig_ModemConfig_Bw125Cr45Sf128;  // medium range and fast
-        // channelSettings.modem_config = ChannelSettings_ModemConfig_Bw500Cr45Sf128;  // short range and fast, but wide bandwidth
-        // so incompatible radios can talk together
+        // channelSettings.modem_config = ChannelSettings_ModemConfig_Bw500Cr45Sf128;  // short range and fast, but wide
+        // bandwidth so incompatible radios can talk together
         channelSettings.modem_config = ChannelSettings_ModemConfig_Bw125Cr48Sf4096; // slow and long range
 
         channelSettings.tx_power = 0; // default
@@ -147,11 +156,15 @@ void NodeDB::resetRadioConfig()
         radioConfig.preferences.position_broadcast_secs = 6 * 60;
         radioConfig.preferences.ls_secs = 60;
     }
+
+    return didFactoryReset;
 }
 
 void NodeDB::installDefaultDeviceState()
 {
     memset(&devicestate, 0, sizeof(devicestate));
+
+    *numNodes = 0; // Forget node DB
 
     // init our devicestate with valid flags so protobuf writing/reading will work
     devicestate.has_my_node = true;
