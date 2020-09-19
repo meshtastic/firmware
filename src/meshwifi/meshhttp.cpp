@@ -8,6 +8,17 @@
 
 WebServer webserver(80);
 
+struct message {
+    char sender[10];
+    char message[250];
+    int32_t gpsLat;
+    int32_t gpsLong;
+    uint32_t time;
+    bool fromMe;
+};
+
+struct message arrayMessages[50];
+
 String something = "";
 String sender = "";
 
