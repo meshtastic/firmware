@@ -526,8 +526,10 @@ void setBluetoothEnable(bool on)
                 initWifi();
             }
         } else {
+            // shutdown wifi
+            deinitWifi();
+
             // We have to totally teardown our bluetooth objects to prevent leaks
-            deinitWifi(); // shutdown wifi
             deinitBLE();
 
             Serial.printf("Shutdown BT: %u heap size\n", ESP.getFreeHeap());

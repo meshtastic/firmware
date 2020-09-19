@@ -852,16 +852,22 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
     // The coordinates define the left starting point of the text
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    if ( WiFi.status() !=  WL_CONNECTED ) {
+    if (radioConfig.preferences.wifi_ap_mode) {
+        display->drawString(x, y, String("WiFi - Software AP"));
+    } else if ( WiFi.status() !=  WL_CONNECTED ) {
         display->drawString(x, y, String("WiFi - Not Connected"));
     } else {
         display->drawString(x, y, String("WiFi - Connected"));
     }
 
-    display->drawString(x, y + FONT_HEIGHT * 1, WiFi.localIP().toString().c_str());
+    if (radioConfig.preferences.wifi_ap_mode) {
+        display->drawString(x, y + FONT_HEIGHT * 1, "IP " + String(WiFi.softAPIP().toString().c_str()));
+    } else {
+        display->drawString(x, y + FONT_HEIGHT * 1, "IP " + String(WiFi.localIP().toString().c_str()));
+    }
 
-    display->drawString(x, y + FONT_HEIGHT * 2, wifiName);
-    display->drawString(x, y + FONT_HEIGHT * 3, wifiPsw);
+    display->drawString(x, y + FONT_HEIGHT * 2, "SSID " + String(wifiName));
+    display->drawString(x, y + FONT_HEIGHT * 3, "PWD  " + String(wifiPsw));
  
     /* Display a heartbeat pixel that blinks every time the frame is redrawn */
 #ifdef SHOW_REDRAWS
