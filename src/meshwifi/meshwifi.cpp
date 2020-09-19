@@ -16,6 +16,11 @@ bool isWifiAvailable()
     const char *wifiPsw = radioConfig.preferences.wifi_password;
 
     if (*wifiName && *wifiPsw) {
+
+
+        // 
+
+
         return 1;
     } else {
         return 0;
@@ -26,7 +31,7 @@ bool isWifiAvailable()
 void deinitWifi()
 {
     /*
-        Note from Jm (Sept 16, 2020):
+        Note from Jm (jm@casler.org - Sept 16, 2020):
 
         A bug in the ESP32 SDK was introduced in Oct 2019 that keeps the WiFi radio from
         turning back on after it's shut off. See:
@@ -52,16 +57,16 @@ void initWifi()
         const char *wifiName = radioConfig.preferences.wifi_ssid;
         const char *wifiPsw = radioConfig.preferences.wifi_password;
 
-        /*
-        if (1) {
+        if (0) {
             radioConfig.preferences.wifi_ap_mode = 1;
             strcpy(radioConfig.preferences.wifi_ssid, "MeshTest2");
             strcpy(radioConfig.preferences.wifi_password, "12345678");
         } else {
             radioConfig.preferences.wifi_ap_mode = 0;
-            strcpy(radioConfig.preferences.wifi_ssid, "meshtastic");
+            strcpy(radioConfig.preferences.wifi_ssid, "meshtastic1");
             strcpy(radioConfig.preferences.wifi_password, "meshtastic!");
         }
+        /*
         */
 
         if (*wifiName && *wifiPsw) {
