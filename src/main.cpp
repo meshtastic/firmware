@@ -423,7 +423,6 @@ void loop()
 
     // TODO: This should go into a thread handled by FreeRTOS.
     handleWebResponse();
-    handleDNSResponse();
 
     delay(msecstosleep);
 }
