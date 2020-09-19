@@ -27,7 +27,7 @@ PB_BIND(MeshPacket, MeshPacket, 2)
 PB_BIND(ChannelSettings, ChannelSettings, AUTO)
 
 
-PB_BIND(RadioConfig, RadioConfig, AUTO)
+PB_BIND(RadioConfig, RadioConfig, 2)
 
 
 PB_BIND(RadioConfig_UserPreferences, RadioConfig_UserPreferences, 2)
