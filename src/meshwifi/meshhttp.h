@@ -14,3 +14,5 @@ void handleJSONChatHistory();
 void notifyWebUI();
 
 void handleHotspot();
+
+void handleRoot();

@@ -30,7 +30,7 @@ void initWebServer()
     // webserver.on("/", handleJSONChatHistory);
     // webserver.on("/json/chat/history", handleJSONChatHistory);
     webserver.on("/hotspot-detect.html", handleHotspot);
-    webserver.on("/", []() { webserver.send(200, "text/plain", "Everything is awesome!"); });
+    webserver.on("/", handleRoot);
     webserver.begin();
 }
 
@@ -82,9 +82,69 @@ void handleHotspot()
 {
     DEBUG_MSG("Hotspot Request\n");
 
+    /*
+        If we don't do a redirect, be sure to return a "Success" message
+        otherwise iOS will have trouble detecting that the connection to the SoftAP worked.
+    */
+
     String out = "";
     // out += "Success\n";
     out += "<meta http-equiv=\"refresh\" content=\"0;url=http://meshtastic.org/\" />\n";
+    webserver.send(200, "text/html", out);
+    return;
+}
+
+void handleRoot()
+{
+    DEBUG_MSG("Hotspot Request\n");
+
+    /*
+        If we don't do a redirect, be sure to return a "Success" message
+        otherwise iOS will have trouble detecting that the connection to the SoftAP worked.
+    */
+
+    String out = "";
+    // out += "Success\n";
+    out += "<!doctype html>\n"
+           "<html>\n"
+           "<head>\n"
+           "<meta charset=\"utf-8\">\n"
+           "<title>Meshtastic - WebUI</title>\n"
+           "</head>\n"
+           "\n"
+           "<body>\n"
+           "<center>\n"
+           "  <form>\n"
+           "    <table width=\"900\" height=\"100%\" border=\"0\">\n"
+           "      <tbody>\n"
+           "        <tr>\n"
+           "          <td align=\"center\">Meshtastic - WebUI (Pre-Alpha)</td>\n"
+           "        </tr>\n"
+           "        <tr>\n"
+           "          <td><table width=\"100%\" height=\"100%\" border=\"1\">\n"
+           "              <tbody>\n"
+           "                <tr>\n"
+           "                  <td width=\"50\" height=\"100%\">Channels:<br>\n"
+           "                    <br>\n"
+           "                    #general<br>\n"
+           "                    #stuff<br>\n"
+           "                    #things<br>\n"
+           "                    <br></td>\n"
+           "                  <td height=\"100%\" valign=\"top\"><div>Everything is awesome!</div></td>\n"
+           "                </tr>\n"
+           "              </tbody>\n"
+           "            </table></td>\n"
+           "        </tr>\n"
+           "        <tr>\n"
+           "          <td align=\"center\"><input type=\"text\" size=\"50\">\n"
+           "            <input type=\"submit\"></td>\n"
+           "        </tr>\n"
+           "      </tbody>\n"
+           "    </table>\n"
+           "  </form>\n"
+           "</center>\n"
+           "</body>\n"
+           "</html>\n";
     webserver.send(200, "text/html", out);
     return;
 }
