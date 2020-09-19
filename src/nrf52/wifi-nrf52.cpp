@@ -11,3 +11,6 @@ bool isWifiAvailable()
 }
 
 void handleWebResponse() {}
+
+/// Perform idle loop processing required by the wifi layer
+void loopWifi() {}

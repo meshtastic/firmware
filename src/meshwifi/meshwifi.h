@@ -5,12 +5,16 @@
 #include <functional>
 
 #ifdef HAS_WIFI
-#include <WiFi.h>
 #include <DNSServer.h>
+#include <WiFi.h>
 #endif
 
 void initWifi();
 void deinitWifi();
+
+/// Perform idle loop processing required by the wifi layer
+void loopWifi();
+
 bool isWifiAvailable();
 
 void handleDNSResponse();
