@@ -5,8 +5,8 @@
 #include <functional>
 
 #ifdef HAS_WIFI
-#include <WiFi.h>
 #include <DNSServer.h>
+#include <WiFi.h>
 #endif
 
 void initWifi();
@@ -14,3 +14,5 @@ void deinitWifi();
 bool isWifiAvailable();
 
 void handleDNSResponse();
+
+void reconnectWiFi();

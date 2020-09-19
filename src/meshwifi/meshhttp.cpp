@@ -8,6 +8,24 @@
 
 WebServer webserver(80);
 
+const uint16_t maxMessages = 50;
+
+struct message_t {
+    char sender[10];
+    char message[250];
+    int32_t gpsLat;
+    int32_t gpsLong;
+    uint32_t time;
+    bool fromMe;
+};
+
+struct messages_t
+{
+  message_t history[maxMessages]; // 900 positions to save up to 1200 seconds (15 minutes). uInt for each temerature sensor, Input and Setpoint.
+};
+
+messages_t messages_history;
+
 String something = "";
 String sender = "";
 
@@ -27,15 +45,19 @@ void handleWebResponse()
 void initWebServer()
 {
     webserver.onNotFound(handleNotFound);
-    // webserver.on("/", handleJSONChatHistory);
-    // webserver.on("/json/chat/history", handleJSONChatHistory);
+    webserver.on("/json/chat/send/channel", handleJSONChatHistory);
+    webserver.on("/json/chat/send/user", handleJSONChatHistory);
+    webserver.on("/json/chat/history/channel", handleJSONChatHistory);
+    webserver.on("/json/chat/history/user", handleJSONChatHistory);
+    webserver.on("/json/stats", handleJSONChatHistory);
     webserver.on("/hotspot-detect.html", handleHotspot);
-    webserver.on("/", []() { webserver.send(200, "text/plain", "Everything is awesome!"); });
+    webserver.on("/", handleRoot);
     webserver.begin();
 }
 
 void handleJSONChatHistory()
 {
+    int i;
 
     String out = "";
     out += "{\n";
@@ -47,6 +69,14 @@ void handleJSONChatHistory()
     out += "\"" + something + "\"";
     out += "]\n";
 
+    for (i = 0; i < maxMessages; i++) {
+        out += "[";
+        out += "\"" + String(messages_history.history[i].sender) + "\"";
+        out += ",";
+        out += "\"" + String(messages_history.history[i].message) + "\"";
+        out += "]\n";
+    }
+
     out += "\n";
     out += "  }\n";
     out += "}\n";
@@ -57,7 +87,8 @@ void handleJSONChatHistory()
 
 void handleNotFound()
 {
-    String message = "File Not Found\n\n";
+    String message = "";
+    message += "File Not Found\n\n";
     message += "URI: ";
     message += webserver.uri();
     message += "\nMethod: ";
@@ -71,8 +102,6 @@ void handleNotFound()
     }
     Serial.println(message);
     webserver.send(404, "text/plain", message);
-    /*
-     */
 }
 
 /*
@@ -82,9 +111,69 @@ void handleHotspot()
 {
     DEBUG_MSG("Hotspot Request\n");
 
+    /*
+        If we don't do a redirect, be sure to return a "Success" message
+        otherwise iOS will have trouble detecting that the connection to the SoftAP worked.
+    */
+
     String out = "";
     // out += "Success\n";
     out += "<meta http-equiv=\"refresh\" content=\"0;url=http://meshtastic.org/\" />\n";
+    webserver.send(200, "text/html", out);
+    return;
+}
+
+void handleRoot()
+{
+    DEBUG_MSG("Hotspot Request\n");
+
+    /*
+        If we don't do a redirect, be sure to return a "Success" message
+        otherwise iOS will have trouble detecting that the connection to the SoftAP worked.
+    */
+
+    String out = "";
+    // out += "Success\n";
+    out += "<!doctype html>\n"
+           "<html>\n"
+           "<head>\n"
+           "<meta charset=\"utf-8\">\n"
+           "<title>Meshtastic - WebUI</title>\n"
+           "</head>\n"
+           "\n"
+           "<body>\n"
+           "<center>\n"
+           "  <form>\n"
+           "    <table width=\"900\" height=\"100%\" border=\"0\">\n"
+           "      <tbody>\n"
+           "        <tr>\n"
+           "          <td align=\"center\">Meshtastic - WebUI (Pre-Alpha)</td>\n"
+           "        </tr>\n"
+           "        <tr>\n"
+           "          <td><table width=\"100%\" height=\"100%\" border=\"1\">\n"
+           "              <tbody>\n"
+           "                <tr>\n"
+           "                  <td width=\"50\" height=\"100%\">Channels:<br>\n"
+           "                    <br>\n"
+           "                    #general<br>\n"
+           "                    #stuff<br>\n"
+           "                    #things<br>\n"
+           "                    <br></td>\n"
+           "                  <td height=\"100%\" valign=\"top\"><div>Everything is awesome!</div></td>\n"
+           "                </tr>\n"
+           "              </tbody>\n"
+           "            </table></td>\n"
+           "        </tr>\n"
+           "        <tr>\n"
+           "          <td align=\"center\"><input type=\"text\" size=\"50\">\n"
+           "            <input type=\"submit\"></td>\n"
+           "        </tr>\n"
+           "      </tbody>\n"
+           "    </table>\n"
+           "  </form>\n"
+           "</center>\n"
+           "</body>\n"
+           "</html>\n";
     webserver.send(200, "text/html", out);
     return;
 }
