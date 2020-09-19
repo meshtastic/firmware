@@ -31,8 +31,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "graphics/images.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
-#include "utils.h"
 #include "meshwifi/meshwifi.h"
+#include "utils.h"
 
 using namespace meshtastic; /** @todo remove */
 
@@ -715,7 +715,6 @@ void Screen::drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiStat
     screen->debugInfo.drawFrameWiFi(display, state, x, y);
 }
 
-
 // restore our regular frame list
 void Screen::setFrames()
 {
@@ -854,11 +853,16 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
     if (radioConfig.preferences.wifi_ap_mode) {
         display->drawString(x, y, String("WiFi - Software AP"));
-    } else if ( WiFi.status() !=  WL_CONNECTED ) {
+    } else if (WiFi.status() != WL_CONNECTED) {
         display->drawString(x, y, String("WiFi - Not Connected"));
     } else {
         display->drawString(x, y, String("WiFi - Connected"));
+
+        display->drawString(x + SCREEN_WIDTH - display->getStringWidth("RSSI " + String(WiFi.RSSI())), y,
+                            "RSSI " + String(WiFi.RSSI()));
+
     }
+
 
     if (radioConfig.preferences.wifi_ap_mode) {
         display->drawString(x, y + FONT_HEIGHT * 1, "IP " + String(WiFi.softAPIP().toString().c_str()));
@@ -868,7 +872,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
     display->drawString(x, y + FONT_HEIGHT * 2, "SSID " + String(wifiName));
     display->drawString(x, y + FONT_HEIGHT * 3, "PWD  " + String(wifiPsw));
- 
+
     /* Display a heartbeat pixel that blinks every time the frame is redrawn */
 #ifdef SHOW_REDRAWS
     if (heartbeat)
@@ -877,7 +881,6 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
 #endif
 #endif
 }
-
 
 void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -889,29 +892,21 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
     char batStr[20];
-    if (powerStatus->getHasBattery()) 
-    {
+    if (powerStatus->getHasBattery()) {
         int batV = powerStatus->getBatteryVoltageMv() / 1000;
         int batCv = (powerStatus->getBatteryVoltageMv() % 1000) / 10;
 
-        snprintf(batStr, sizeof(batStr), "B %01d.%02dV %3d%% %c%c",
-            batV,
-            batCv,
-            powerStatus->getBatteryChargePercent(),
-            powerStatus->getIsCharging() ? '+' : ' ',
-            powerStatus->getHasUSB() ? 'U' : ' ');
+        snprintf(batStr, sizeof(batStr), "B %01d.%02dV %3d%% %c%c", batV, batCv, powerStatus->getBatteryChargePercent(),
+                 powerStatus->getIsCharging() ? '+' : ' ', powerStatus->getHasUSB() ? 'U' : ' ');
 
         // Line 1
         display->drawString(x, y, batStr);
-    } 
-    else 
-    {
+    } else {
         // Line 1
         display->drawString(x, y, String("USB"));
-    } 
+    }
 
-
-    //TODO: Display status of the BT radio
+    // TODO: Display status of the BT radio
     // display->drawString(x + SCREEN_WIDTH - display->getStringWidth("BT On"), y, "BT On");
 
     // Line 2
@@ -925,19 +920,14 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     minutes %= 60;
     hours %= 24;
 
-    display->drawString(x, y + FONT_HEIGHT * 1, String(days) + "d " 
-        + (hours < 10 ? "0" : "") + String(hours) + ":" 
-        + (minutes < 10 ? "0" : "") + String(minutes) + ":" 
-        + (seconds < 10 ? "0" : "") + String(seconds));
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth("Mode " + String(channelSettings.modem_config)), y + FONT_HEIGHT * 1, "Mode " + String(channelSettings.modem_config));
-
-    // Line 3
-    // TODO: Use this line for WiFi information.
-    // display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth("WiFi: 192.168.0.100"))) / 2, y + FONT_HEIGHT * 2, "WiFi: 192.168.0.100");
+    display->drawString(x, y + FONT_HEIGHT * 1,
+                        String(days) + "d " + (hours < 10 ? "0" : "") + String(hours) + ":" + (minutes < 10 ? "0" : "") +
+                            String(minutes) + ":" + (seconds < 10 ? "0" : "") + String(seconds));
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth("Mode " + String(channelSettings.modem_config)),
+                        y + FONT_HEIGHT * 1, "Mode " + String(channelSettings.modem_config));
 
     // Line 4
     drawGPScoordinates(display, x, y + FONT_HEIGHT * 3, gpsStatus);
-
 
     /* Display a heartbeat pixel that blinks every time the frame is redrawn */
 #ifdef SHOW_REDRAWS
