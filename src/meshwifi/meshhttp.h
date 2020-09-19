@@ -2,7 +2,6 @@
 
 #include <Arduino.h>
 #include <functional>
-#include <WiFi.h>
 
 void initWebServer();
 
