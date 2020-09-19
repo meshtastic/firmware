@@ -52,6 +52,7 @@ void initWifi()
         const char *wifiName = radioConfig.preferences.wifi_ssid;
         const char *wifiPsw = radioConfig.preferences.wifi_password;
 
+        /*
         if (1) {
             radioConfig.preferences.wifi_ap_mode = 1;
             strcpy(radioConfig.preferences.wifi_ssid, "MeshTest2");
@@ -61,7 +62,7 @@ void initWifi()
             strcpy(radioConfig.preferences.wifi_ssid, "meshtastic");
             strcpy(radioConfig.preferences.wifi_password, "meshtastic!");
         }
-
+        */
 
         if (*wifiName && *wifiPsw) {
             if (radioConfig.preferences.wifi_ap_mode) {

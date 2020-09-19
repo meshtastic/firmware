@@ -13,6 +13,4 @@ void initWifi();
 void deinitWifi();
 bool isWifiAvailable();
 
-void WiFiEvent(WiFiEvent_t event);
-
 void handleDNSResponse();
