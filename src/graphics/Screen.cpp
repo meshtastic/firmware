@@ -32,7 +32,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "utils.h"
-#include <WiFi.h>
 #include "meshwifi/meshwifi.h"
 
 using namespace meshtastic; /** @todo remove */
@@ -842,6 +841,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 // Jm
 void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+#ifdef HAS_WIFI
     const char *wifiName = radioConfig.preferences.wifi_ssid;
     const char *wifiPsw = radioConfig.preferences.wifi_password;
 
@@ -874,6 +874,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
     if (heartbeat)
         display->setPixel(0, 0);
     heartbeat = !heartbeat;
+#endif
 #endif
 }
 
