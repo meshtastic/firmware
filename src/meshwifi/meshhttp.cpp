@@ -8,7 +8,9 @@
 
 WebServer webserver(80);
 
-struct message {
+const uint16_t maxMessages = 50;
+
+struct message_t {
     char sender[10];
     char message[250];
     int32_t gpsLat;
@@ -17,7 +19,12 @@ struct message {
     bool fromMe;
 };
 
-struct message arrayMessages[50];
+struct messages_t
+{
+  message_t history[maxMessages]; // 900 positions to save up to 1200 seconds (15 minutes). uInt for each temerature sensor, Input and Setpoint.
+};
+
+messages_t messages_history;
 
 String something = "";
 String sender = "";
@@ -50,6 +57,7 @@ void initWebServer()
 
 void handleJSONChatHistory()
 {
+    int i;
 
     String out = "";
     out += "{\n";
@@ -60,6 +68,14 @@ void handleJSONChatHistory()
     out += ",";
     out += "\"" + something + "\"";
     out += "]\n";
+
+    for (i = 0; i < maxMessages; i++) {
+        out += "[";
+        out += "\"" + String(messages_history.history[i].sender) + "\"";
+        out += ",";
+        out += "\"" + String(messages_history.history[i].message) + "\"";
+        out += "]\n";
+    }
 
     out += "\n";
     out += "  }\n";

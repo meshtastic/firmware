@@ -17,9 +17,7 @@ bool isWifiAvailable()
 
     if (*wifiName && *wifiPsw) {
 
-
-        // 
-
+        // Once every 10 seconds, try to reconnect.
 
         return 1;
     } else {
@@ -43,7 +41,7 @@ void deinitWifi()
 
     WiFi.mode(WIFI_MODE_NULL);
     DEBUG_MSG("WiFi Turned Off\n");
-    WiFi.printDiag(Serial);
+    // WiFi.printDiag(Serial);
 }
 
 // Startup WiFi
@@ -57,17 +55,17 @@ void initWifi()
         const char *wifiName = radioConfig.preferences.wifi_ssid;
         const char *wifiPsw = radioConfig.preferences.wifi_password;
 
+        /*
         if (0) {
             radioConfig.preferences.wifi_ap_mode = 1;
             strcpy(radioConfig.preferences.wifi_ssid, "MeshTest2");
             strcpy(radioConfig.preferences.wifi_password, "12345678");
         } else {
             radioConfig.preferences.wifi_ap_mode = 0;
-            strcpy(radioConfig.preferences.wifi_ssid, "meshtastic1");
+            strcpy(radioConfig.preferences.wifi_ssid, "meshtastic");
             strcpy(radioConfig.preferences.wifi_password, "meshtastic!");
         }
-        /*
-        */
+         */
 
         if (*wifiName && *wifiPsw) {
             if (radioConfig.preferences.wifi_ap_mode) {
@@ -120,9 +118,9 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
         DEBUG_MSG("Disconnected from WiFi access point\n");
+        // Event 5
 
-        // Reconnect WiFi
-        initWifi();
+        reconnectWiFi();
         break;
     case SYSTEM_EVENT_STA_AUTHMODE_CHANGE:
         DEBUG_MSG("Authentication mode of access point has changed\n");
@@ -200,5 +198,22 @@ void handleDNSResponse()
 {
     if (radioConfig.preferences.wifi_ap_mode) {
         dnsServer.processNextRequest();
+    }
+}
+
+void reconnectWiFi()
+{
+    const char *wifiName = radioConfig.preferences.wifi_ssid;
+    const char *wifiPsw = radioConfig.preferences.wifi_password;
+
+    if (radioConfig.has_preferences) {
+
+        if (*wifiName && *wifiPsw) {
+
+            DEBUG_MSG("... Reconnecting to WiFi access point");
+
+            WiFi.mode(WIFI_MODE_STA);
+            WiFi.begin(wifiName, wifiPsw);
+        }
     }
 }
