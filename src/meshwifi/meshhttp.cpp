@@ -27,8 +27,11 @@ void handleWebResponse()
 void initWebServer()
 {
     webserver.onNotFound(handleNotFound);
-    // webserver.on("/", handleJSONChatHistory);
-    // webserver.on("/json/chat/history", handleJSONChatHistory);
+    webserver.on("/json/chat/send/channel", handleJSONChatHistory);
+    webserver.on("/json/chat/send/user", handleJSONChatHistory);
+    webserver.on("/json/chat/history/channel", handleJSONChatHistory);
+    webserver.on("/json/chat/history/user", handleJSONChatHistory);
+    webserver.on("/json/stats", handleJSONChatHistory);
     webserver.on("/hotspot-detect.html", handleHotspot);
     webserver.on("/", handleRoot);
     webserver.begin();
@@ -57,7 +60,8 @@ void handleJSONChatHistory()
 
 void handleNotFound()
 {
-    String message = "File Not Found\n\n";
+    String message = "";
+    message += "File Not Found\n\n";
     message += "URI: ";
     message += webserver.uri();
     message += "\nMethod: ";
@@ -71,8 +75,6 @@ void handleNotFound()
     }
     Serial.println(message);
     webserver.send(404, "text/plain", message);
-    /*
-     */
 }
 
 /*
