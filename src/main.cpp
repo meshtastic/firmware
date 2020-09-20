@@ -37,12 +37,12 @@
 #include "SPILock.h"
 #include "graphics/Screen.h"
 #include "main.h"
+#include "meshwifi/meshhttp.h"
+#include "meshwifi/meshwifi.h"
 #include "sleep.h"
 #include "timing.h"
 #include <OneButton.h>
 #include <Wire.h>
-#include "meshwifi/meshwifi.h"
-#include "meshwifi/meshhttp.h"
 // #include <driver/rtc_io.h>
 
 #ifndef NO_ESP32
@@ -394,6 +394,8 @@ void loop()
 #ifdef BUTTON_PIN_ALT
     userButtonAlt.tick();
 #endif
+
+    loopWifi();
 
     // Show boot screen for first 3 seconds, then switch to normal operation.
     static bool showingBootScreen = true;
