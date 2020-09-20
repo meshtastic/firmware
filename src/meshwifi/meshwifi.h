@@ -20,3 +20,5 @@ bool isWifiAvailable();
 void handleDNSResponse();
 
 void reconnectWiFi();
+
+uint8_t getWifiDisconnectReason();
