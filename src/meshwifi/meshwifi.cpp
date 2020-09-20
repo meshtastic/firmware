@@ -8,9 +8,12 @@
 #include <WiFi.h>
 
 static void WiFiEvent(WiFiEvent_t event);
+// static void WiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info);
 
 DNSServer dnsServer;
 static WiFiServerPort *apiPort;
+
+uint8_t wifiDisconnectReason = 0;
 
 bool isWifiAvailable()
 {
@@ -86,6 +89,14 @@ void initWifi()
                 WiFi.onEvent(WiFiEvent);
                 // esp_wifi_set_ps(WIFI_PS_NONE); // Disable power saving
 
+                WiFiEventId_t eventID = WiFi.onEvent(
+                    [](WiFiEvent_t event, WiFiEventInfo_t info) {
+                        Serial.print("\n-------------- WiFi lost connection. Reason: ");
+                        Serial.println(info.disconnected.reason);
+                        // wifiDisconnectReason = info.disconnected.reason;
+                    },
+                    WiFiEvent_t::SYSTEM_EVENT_STA_DISCONNECTED);
+
                 DEBUG_MSG("JOINING WIFI: ssid=%s\n", wifiName);
                 if (WiFi.begin(wifiName, wifiPsw) == WL_CONNECTED) {
                     DEBUG_MSG("MY IP ADDRESS: %s\n", WiFi.localIP().toString().c_str());
@@ -114,7 +125,6 @@ static void initApiServer()
         apiPort->init();
     }
 }
-
 static void WiFiEvent(WiFiEvent_t event)
 {
     DEBUG_MSG("************ [WiFi-event] event: %d ************\n", event);
@@ -237,4 +247,9 @@ void reconnectWiFi()
             WiFi.begin(wifiName, wifiPsw);
         }
     }
+}
+
+uint8_t getWifiDisconnectReason() 
+{
+    return wifiDisconnectReason;
 }
