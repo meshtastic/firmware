@@ -101,6 +101,10 @@ MQTT topic strings are very long and potentially expensive over the slow LORA ne
 - Refactor the position features into a position "mini-app". Use only the new public on-device API to implement this app.
 - Refactor the on device texting features into a messaging "mini-app". (Similar to the position mini-app)
 
+### Riot.im bridge
+
+There is apparently already a riot.im bridge for MQTT. That will possibly need to be customized a bit. But by doing this, we should be able to let random riot.im users send/receive messages to/from any meshtastic device. (FIXME add link and ponder security)
+
 ### New 'no-code-IOT' mini-app
 
 Add a new 'remote GPIO/serial port/SPI/I2C access' mini-app. This new standard app would use the MQTT messaging layer to let users (devs that don't need to write device code) do basic (potentially dangerous) operations remotely.
