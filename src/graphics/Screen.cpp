@@ -860,14 +860,35 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
         display->drawString(x + SCREEN_WIDTH - display->getStringWidth("RSSI " + String(WiFi.RSSI())), y,
                             "RSSI " + String(WiFi.RSSI()));
-
     }
 
+    /*
+    - WL_CONNECTED: assigned when connected to a WiFi network;
+    WL_NO_SHIELD: assigned when no WiFi shield is present;
+    WL_IDLE_STATUS: it is a temporary status assigned when WiFi.begin() is called and remains active until the number of attempts expires (resulting in WL_CONNECT_FAILED) or a connection is established (resulting in WL_CONNECTED);
+    - WL_NO_SSID_AVAIL: assigned when no SSID are available;
+    WL_SCAN_COMPLETED: assigned when the scan networks is completed;
+    - WL_CONNECT_FAILED: assigned when the connection fails for all the attempts;
+    - WL_CONNECTION_LOST: assigned when the connection is lost;
+    - WL_DISCONNECTED: assigned when disconnected from a network;
+    */
 
-    if (radioConfig.preferences.wifi_ap_mode) {
-        display->drawString(x, y + FONT_HEIGHT * 1, "IP " + String(WiFi.softAPIP().toString().c_str()));
+    if (WiFi.status() == WL_CONNECTED) {
+        if (radioConfig.preferences.wifi_ap_mode) {
+            display->drawString(x, y + FONT_HEIGHT * 1, "IP " + String(WiFi.softAPIP().toString().c_str()));
+        } else {
+            display->drawString(x, y + FONT_HEIGHT * 1, "IP " + String(WiFi.localIP().toString().c_str()));
+        }
+    } else if (WiFi.status() == WL_NO_SSID_AVAIL) {
+        display->drawString(x, y + FONT_HEIGHT * 1, "SSID Not Found");
+    } else if (WiFi.status() == WL_CONNECTION_LOST) {
+        display->drawString(x, y + FONT_HEIGHT * 1, "Connection Lost");
+    } else if (WiFi.status() == WL_CONNECT_FAILED) {
+        display->drawString(x, y + FONT_HEIGHT * 1, "Connection Failed");
+    } else if (WiFi.status() == WL_DISCONNECTED) {
+        display->drawString(x, y + FONT_HEIGHT * 1, "Disconnected");
     } else {
-        display->drawString(x, y + FONT_HEIGHT * 1, "IP " + String(WiFi.localIP().toString().c_str()));
+        display->drawString(x, y + FONT_HEIGHT * 1, "Unknown Status");
     }
 
     display->drawString(x, y + FONT_HEIGHT * 2, "SSID " + String(wifiName));
