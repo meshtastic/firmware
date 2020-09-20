@@ -1,5 +1,6 @@
 #include "meshwifi.h"
 #include "NodeDB.h"
+#include "WiFiServerAPI.h"
 #include "configuration.h"
 #include "main.h"
 #include "meshwifi/meshhttp.h"
@@ -9,6 +10,7 @@
 static void WiFiEvent(WiFiEvent_t event);
 
 DNSServer dnsServer;
+static WiFiServerPort *apiPort;
 
 bool isWifiAvailable()
 {
@@ -96,6 +98,23 @@ void initWifi()
         DEBUG_MSG("Not using WIFI\n");
 }
 
+/// Perform idle loop processing required by the wifi layer
+void loopWifi()
+{
+    // FIXME, once we have coroutines - just use a coroutine instead of this nasty loopWifi()
+    if (apiPort)
+        apiPort->loop();
+}
+
+static void initApiServer()
+{
+    // Start API server on port 4403
+    if (!apiPort) {
+        apiPort = new WiFiServerPort();
+        apiPort->init();
+    }
+}
+
 static void WiFiEvent(WiFiEvent_t event)
 {
     DEBUG_MSG("************ [WiFi-event] event: %d ************\n", event);
@@ -131,6 +150,7 @@ static void WiFiEvent(WiFiEvent_t event)
 
         // Start web server
         initWebServer();
+        initApiServer();
 
         break;
     case SYSTEM_EVENT_STA_LOST_IP:
@@ -154,6 +174,7 @@ static void WiFiEvent(WiFiEvent_t event)
 
         // Start web server
         initWebServer();
+        initApiServer();
 
         break;
     case SYSTEM_EVENT_AP_STOP:
