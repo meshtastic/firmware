@@ -1,6 +1,7 @@
 #include "CryptoEngine.h"
 #include "target_specific.h"
 #include <Utility.h>
+#include "PhoneAPI.h"
 
 // FIXME - move getMacAddr/setBluetoothEnable into a HALPlatform class
 
@@ -26,7 +27,10 @@ void setBluetoothEnable(bool on)
     notImplemented("setBluetoothEnable");
 }
 
+StateBT stateBT = UNKNOW;
+
 // FIXME - implement real crypto for linux
 CryptoEngine *crypto = new CryptoEngine();
 
 void updateBatteryLevel(uint8_t level) NOT_IMPLEMENTED("updateBatteryLevel");
+
