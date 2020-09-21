@@ -34,7 +34,7 @@ This is a mini-doc/RFC sketching out a development plan to satisfy a number of 1
 
 - [MQTT](https://opensource.com/article/18/6/mqtt) internet accessible API.  Issue #[369](https://github.com/meshtastic/Meshtastic-device/issues/169)
 - An open API to easily run custom mini-apps on the devices
-- A text messaging bridge when a node in the mesh can gateway to the internet. Issue #[353](https://github.com/meshtastic/Meshtastic-device/issues/353)
+- A text messaging bridge when a node in the mesh can gateway to the internet. Issue #[353](https://github.com/meshtastic/Meshtastic-device/issues/353) and this nicely documented [android issue](https://github.com/meshtastic/Meshtastic-Android/issues/2).
 - An easy way to let desktop app developers remotely control GPIOs. Issue #[182](https://github.com/meshtastic/Meshtastic-device/issues/182)
 - Remote attribute access (to change settings of distant nodes). Issue #182
 
@@ -164,7 +164,7 @@ Is used to filter whole classes of destination IDs (DESTID). Can be...
 
 @Geeksville will run a riot.im bridge that talks to the public MQTT broker and sends/receives into the riot.im network.
 
-There is apparently already a riot.im [bridge](https://matrix.org/bridges/) for MQTT. That will possibly need to be customized a bit. But by doing this, we should be able to let random riot.im users send/receive messages to/from any meshtastic device. (FIXME add link and ponder security)
+There is apparently [already](https://github.com/derEisele/tuple) a riot.im [bridge](https://matrix.org/bridges/) for MQTT. That will possibly need to be customized a bit. But by doing this, we should be able to let random riot.im users send/receive messages to/from any meshtastic device. (FIXME ponder security).  See this [issue](https://github.com/meshtastic/Meshtastic-Android/issues/2#issuecomment-645660990) with discussion with the dev.
 
 ### 1.6.4. Named attribute API
 
