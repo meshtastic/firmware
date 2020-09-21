@@ -1,5 +1,4 @@
 #include "WorkerThread.h"
-#include "timing.h"
 
 namespace concurrency {
 
@@ -17,8 +16,8 @@ void WorkerThread::doRun()
 
 #ifdef DEBUG_STACK
         static uint32_t lastPrint = 0;
-        if (timing::millis() - lastPrint > 10 * 1000L) {
-            lastPrint = timing::millis();
+        if (millis() - lastPrint > 10 * 1000L) {
+            lastPrint = millis();
             meshtastic::printThreadInfo("net");
         }
 #endif

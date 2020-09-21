@@ -1,5 +1,7 @@
-#include "Thread.h"
-#include "timing.h"
+#include "FreeRtosThread.h"
+
+#ifdef HAS_FREE_RTOS
+
 #include <assert.h>
 
 #ifdef ARDUINO_ARCH_ESP32
@@ -9,25 +11,20 @@
 namespace concurrency
 {
 
-void Thread::start(const char *name, size_t stackSize, uint32_t priority)
+void FreeRtosThread::start(const char *name, size_t stackSize, uint32_t priority)
 {
     auto r = xTaskCreate(callRun, name, stackSize, this, priority, &taskHandle);
     assert(r == pdPASS);
 }
 
-void Thread::callRun(void *_this)
-{
-    ((Thread *)_this)->doRun();
-}
-
-void Thread::serviceWatchdog()
+void FreeRtosThread::serviceWatchdog()
 {
 #ifdef ARDUINO_ARCH_ESP32
     esp_task_wdt_reset();
 #endif
 }
 
-void Thread::startWatchdog()
+void FreeRtosThread::startWatchdog()
 {
 #ifdef ARDUINO_ARCH_ESP32
     auto r = esp_task_wdt_add(taskHandle);
@@ -35,7 +32,7 @@ void Thread::startWatchdog()
 #endif
 }
 
-void Thread::stopWatchdog()
+void FreeRtosThread::stopWatchdog()
 {
 #ifdef ARDUINO_ARCH_ESP32
     auto r = esp_task_wdt_delete(taskHandle);
@@ -44,3 +41,5 @@ void Thread::stopWatchdog()
 }
 
 } // namespace concurrency
+
+#endif

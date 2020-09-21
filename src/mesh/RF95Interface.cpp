@@ -3,8 +3,10 @@
 #include "RadioLibRF95.h"
 #include <configuration.h>
 
-#define MAX_POWER 17
+#define MAX_POWER 20
 // if we use 20 we are limited to 1% duty cycle or hw might overheat.  For continuous operation set a limit of 17
+
+#define POWER_DEFAULT 17 // How much power to use if the user hasn't set a power level
 
 RF95Interface::RF95Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, SPIClass &spi)
     : RadioLibInterface(cs, irq, rst, 0, spi)
@@ -32,9 +34,15 @@ bool RF95Interface::init()
     RadioLibInterface::init();
 
     applyModemConfig();
+
+    if (power == 0)
+        power = POWER_DEFAULT;
+
     if (power > MAX_POWER) // This chip has lower power limits than some
         power = MAX_POWER;
 
+    limitPower();
+    
     iface = lora = new RadioLibRF95(&module);
 
 #ifdef RF95_TCXO
