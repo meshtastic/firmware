@@ -13,9 +13,11 @@
 #define EVENT_BLUETOOTH_PAIR 7
 #define EVENT_NODEDB_UPDATED 8     // NodeDB has a big enough change that we think you should turn on the screen
 #define EVENT_CONTACT_FROM_PHONE 9 // the phone just talked to us over bluetooth
-#define EVENT_LOW_BATTERY 10 // Battery is critically low, go to sleep
+#define EVENT_LOW_BATTERY 10       // Battery is critically low, go to sleep
 #define EVENT_SERIAL_CONNECTED 11
 #define EVENT_SERIAL_DISCONNECTED 12
+#define EVENT_POWER_CONNECTED 13
+#define EVENT_POWER_DISCONNECTED 14
 
 extern Fsm powerFSM;
 

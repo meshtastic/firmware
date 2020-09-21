@@ -213,9 +213,9 @@ void setup()
 
     // Currently only the tbeam has a PMU
     power = new Power();
-    power->setup();
     power->setStatusHandler(powerStatus);
     powerStatus->observe(&power->newStatus);
+    power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
 
 #ifdef NRF52_SERIES
     nrf52Setup();
