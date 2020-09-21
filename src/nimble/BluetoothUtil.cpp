@@ -15,6 +15,7 @@
 #include <Arduino.h>
 
 static bool pinShowing;
+StateBT stateBT = UNKNOW;
 
 static void startCb(uint32_t pin)
 {
@@ -120,7 +121,6 @@ static void advertise();
  *                                  particular GAP event being signalled.
  */
 
-StateBT stateBT;
 
 static int gap_event(struct ble_gap_event *event, void *arg)
 {

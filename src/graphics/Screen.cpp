@@ -32,7 +32,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "utils.h"
-#include "nimble/BluetoothUtil.h"
 
 using namespace meshtastic; /** @todo remove */
 
@@ -896,48 +895,12 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
         }
     } else if (stateBT == OFF)
     {
-         display->drawString(x + SCREEN_WIDTH - display->getStringWidth("  "), y, "  ");
-    } else
+	    display->drawString(x + SCREEN_WIDTH - display->getStringWidth("BT OFF"), y, "BT OFF");
+    } else if (stateBT == UNKNOW)
     {
-         display->drawString(x + SCREEN_WIDTH - display->getStringWidth("BT"), y, "BT");
-    }
-
-    switch (stateBT) {
-    case CONNECT:
-        display->drawString(x, y + FONT_HEIGHT * 2,"BT: CONNECT");
-	break;
-    case DISCONNECT:
-        display->drawString(x, y + FONT_HEIGHT * 2,"BT: DISCONNECT");
-	break;
-    case CONN_UPDATE:
-	display->drawString(x, y + FONT_HEIGHT * 2,"BT: CONN_UPDATE");
-	break;
-    case ADV_COMPLETE:
-	display->drawString(x, y + FONT_HEIGHT * 2,"BT: ADV_COMPLETE");
-	break;
-    case ENC_CHANGE:
-	display->drawString(x, y + FONT_HEIGHT * 2,"BT: ENC_CHANGE");
-	break;
-    case SUBSCRIBE:
-	display->drawString(x, y + FONT_HEIGHT * 2,"BT: SUBSCRIBE");
-	break;
-    case MTU:
-	display->drawString(x, y + FONT_HEIGHT * 2,"BT: MTU");
-	break;
-    case REPEAT_PAIRING:
-	display->drawString(x, y + FONT_HEIGHT * 2,"BT: REPEAT_PAIRING");
-	break;
-    case PASSKEY_ACTION:
-	display->drawString(x, y + FONT_HEIGHT * 2,"BT: PASSKEY_ACTION");
-	break;
-    case ON:
-	display->drawString(x, y + FONT_HEIGHT * 2,"BT: ON");
-	break;
-    case OFF:
-	display->drawString(x, y + FONT_HEIGHT * 2,"BT: OFF");
-	break;
-    default:
-	display->drawString(x, y + FONT_HEIGHT * 2,"BT: ");
+	    display->drawString(x + SCREEN_WIDTH - display->getStringWidth("BT UNKNOW"), y, "BT UNKNOW");
+    } else {
+            display->drawString(x + SCREEN_WIDTH - display->getStringWidth("BT"), y, "BT");
     }
 
   //  }

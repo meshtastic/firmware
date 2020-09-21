@@ -21,6 +21,8 @@ static BLEDfu bledfu; // DFU software update helper service
 static uint8_t fromRadioBytes[FromRadio_size];
 static uint8_t toRadioBytes[ToRadio_size];
 
+StateBT stateBT = UNKNOW;
+
 class BluetoothPhoneAPI : public PhoneAPI
 {
     /**
@@ -35,7 +37,7 @@ class BluetoothPhoneAPI : public PhoneAPI
     }
 };
 
-static BluetoothPhoneAPI *bluetoothPhoneAPI;
+static PhoneAPI *bluetoothPhoneAPI;
 
 void connect_callback(uint16_t conn_handle)
 {

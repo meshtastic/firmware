@@ -110,3 +110,22 @@ class PhoneAPI
     /// If the mesh service tells us fromNum has changed, tell the phone
     virtual int onNotify(uint32_t newValue);
 };
+
+// FIXME, move this someplace better
+enum StateBT
+{
+	CONNECT,
+	DISCONNECT,
+	CONN_UPDATE,
+	ADV_COMPLETE,
+	ENC_CHANGE,
+	SUBSCRIBE,
+	MTU,
+	REPEAT_PAIRING,
+	PASSKEY_ACTION,
+	ON,
+	OFF,
+	UNKNOW
+};
+
+extern StateBT stateBT;
