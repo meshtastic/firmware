@@ -1,8 +1,43 @@
-# MQTT / remote attributes / on-device app API
+
+# 1. Table of Contents
+- [1. Table of Contents](#1-table-of-contents)
+  - [1.1. Abstract](#11-abstract)
+  - [1.2. Short term goals](#12-short-term-goals)
+  - [1.3. Long term goals](#13-long-term-goals)
+  - [1.4. Security](#14-security)
+  - [1.5. Efficient MQTT](#15-efficient-mqtt)
+    - [1.5.1. Topics](#151-topics)
+      - [1.5.1.1. MESHID](#1511-meshid)
+      - [1.5.1.2. NODEID](#1512-nodeid)
+      - [1.5.1.3. DESTCLASS](#1513-destclass)
+      - [1.5.1.4. DESTID](#1514-destid)
+      - [1.5.1.5. USERID](#1515-userid)
+    - [1.5.2. Gateway nodes](#152-gateway-nodes)
+      - [1.5.2.1. Default ToInternet filters](#1521-default-tointernet-filters)
+      - [1.5.2.2. Default FromInternet subscriptions](#1522-default-frominternet-subscriptions)
+    - [1.5.3. Optional web services](#153-optional-web-services)
+      - [1.5.3.1. Public MQTT broker service](#1531-public-mqtt-broker-service)
+      - [1.5.3.2. Riot.im messaging bridge](#1532-riotim-messaging-bridge)
+    - [1.5.4. Named attribute API](#154-named-attribute-api)
+    - [1.5.5. Name to ID mapping](#155-name-to-id-mapping)
+  - [1.6. Development plan](#16-development-plan)
+    - [1.6.1. Cleanup/refactoring of existing codebase](#161-cleanuprefactoring-of-existing-codebase)
+    - [1.6.2. New 'no-code-IOT' mini-app](#162-new-no-code-iot-mini-app)
+      - [1.6.2.1. Supported operations in the initial release](#1621-supported-operations-in-the-initial-release)
+      - [1.6.2.2. Supported operations eventually](#1622-supported-operations-eventually)
+    - [1.6.3. Later release features (1.2)](#163-later-release-features-12)
+
+## 1.1. Abstract
 
 This is a mini-doc/RFC sketching out a development plan to satisfy a number of 1.1 goals.
 
-## Short term goals
+- [MQTT](https://opensource.com/article/18/6/mqtt) internet accessible API.  Issue #[369](https://github.com/meshtastic/Meshtastic-device/issues/169)
+- An open API to easily run custom mini-apps on the devices
+- A text messaging bridge when a node in the mesh can gateway to the internet. Issue #[353](https://github.com/meshtastic/Meshtastic-device/issues/353)
+- An easy way to let desktop app developers remotely control GPIOs. Issue #[182](https://github.com/meshtastic/Meshtastic-device/issues/182)
+- Remote attribute access (to change settings of distant nodes). Issue #182
+
+## 1.2. Short term goals
 
 - We want a clean API for novice developers to write mini "apps" that run **on the device** with the existing messaging/location "apps".
 - We want the ability to have a gateway web service, so that if any node in the mesh can connect to the internet (via its connected phone app or directly) then that node will provide bidirectional messaging between nodes and the internet.
@@ -12,23 +47,25 @@ This is a mini-doc/RFC sketching out a development plan to satisfy a number of 1
 - This work should be independent of our current (semi-custom) LoRa transport, so that in the future we can swap out that transport if we wish (to QMesh or Reticulum?)
 - Our networks are (usually) very slow and low bandwidth, so the messaging must be very airtime efficient.
 
-## Long term goals
+## 1.3. Long term goals
 
 - Store and forward messaging should be supported, so apps can send messages that might be delivered to their destination in **hours** or **days** if a node/mesh was partitioned.
 
-## Security
+## 1.4. Security
 
 Mini-apps API can bind to particular channels. They will only see messages sent on that channel.
 
-During the 1.1 timeframe only one channel is supported per node, but eventually we will do things like "remote admin operations / channel settings etc..." are on the "Control" channel and only especially trusted users should have the keys to access that channel. This means that during 1.1 you should assume that **any** user you grant access to your mesh (if technically knowledgeable enough) could change network settings. So you should still think of your meshes as private tools for friends. FIXME - how would this work with remote mqtt?
+During the 1.1 timeframe only one channel is supported per node, but eventually we will do things like "remote admin operations / channel settings etc..." are on the "Control" channel and only especially trusted users should have the keys to access that channel.
 
-## Efficient MQTT
+See "Named Attribute API" section for special access control to prevent remote access to device settings.
 
-A gateway-device will contact the MQTT broker. For each operation it will use the meshtastic node ID as the MQTT "client ID".
+## 1.5. Efficient MQTT
 
-### Topics
+A gateway-device will contact the MQTT broker. For each operation it will use the meshtastic "MESHID/NODEID" tuple as the MQTT "client ID". MESHIDs will be (TBD somehow) tracked and authenticated out-of-band.
 
-A sample [topic](https://www.hivemq.com/blog/mqtt-essentials-part-5-mqtt-topics-best-practices/) heirarchy for a complete functioning mesh:
+### 1.5.1. Topics
+
+A sample [topic](https://www.hivemq.com/blog/mqtt-essentials-part-5-mqtt-topics-best-practices/) hierarchy for a complete functioning mesh:
 
 | Topic                                   | Description                                         |
 | --------------------------------------- | --------------------------------------------------- |
@@ -44,19 +81,56 @@ A sample [topic](https://www.hivemq.com/blog/mqtt-essentials-part-5-mqtt-topics-
 | MESHID/NODEID/attr/ATTRNAME/set         | Set an attribute value                              |
 | MESHID/NODEID/app/APPNUM/#              | An topic from an unregistered/unknown app           |
 
+#### 1.5.1.1. MESHID
+
+A unique ID for this mesh. There will be some sort of key exchange process so that the mesh ID can not be impersonated by other meshes.
+
+#### 1.5.1.2. NODEID
+
+The unique ID for a node. A hex string that starts with a ! symbol.
+
+#### 1.5.1.3. DESTCLASS
+
+The type of DESTID this message should be delivered to. A short one letter sequence:
+
+| Symbol | Description                                                   |
+| ------ | ------------------------------------------------------------- |
+| R      | riot.im                                                       |
+| L      | local mesh node ID or ^all                                    |
+| A      | an application specific message, ID will be an APP ID         |
+| S      | SMS gateway, DESTID is a phone number to reach via Twilio.com |
+| E      | Emergency message, see bug #fixme for more context            |
+
+#### 1.5.1.4. DESTID
+
+Can be...
+
+- an internet username: kevinh@geeksville.com
+- ^ALL for anyone
+- An app ID (to allow apps out in the web to receive arbitrary binary data from nodes or simply other apps using meshtastic as a transport). They would connect to the MQTT broker and subscribe to their topic
+
+#### 1.5.1.5. USERID
+
+A user ID string. This string is either a user ID if known or a nodeid to simply deliver the message to whoever the local user is of a particular device (i.e. person who might see the screen). FIXME, see what riot.im uses and perhaps use that convention? Or use the signal +phone number convention? Or the email addr?
+
+### 1.5.2. Gateway nodes
+
+Any meshtastic node that has a direct connection to the internet (either via a helper app or installed wifi/4G/satellite hardware) can function as a "Gateway node". 
+
 Gateway nodes (via code running in the phone) will contain two tables to whitelist particular traffic to either be delivered toward the internet, or down toward the mesh. Users that are developing custom apps will be able to customize these filters/subscriptions.
 
-#### Default ToInternet filters
+#### 1.5.2.1. Default ToInternet filters
 
 These filters are used to whitelist particular traffic - only traffic that matches a filter will be forwarded to the internet MQTT broker.
 
-| Pattern          | Description                                                                |
-| ---------------- | -------------------------------------------------------------------------- |
-| +/+/id/#         | Only if set for 'no privacy'                                               |
-| +/+/pos/upd      | Only if set for 'no privacy' - useful for showing all nodes on a world map |
-| +/+/msg/text/W/+ | For internet messaging feature                                             |
+| Pattern          | Description                                                                                                                |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| +/+/id/#         | Only if set for 'no privacy'                                                                                               |
+| +/+/pos/upd      | Only if set for 'no privacy' - useful for showing all nodes on a world map                                                 |
+| +/+/msg/text/W/+ | For internet messaging feature                                                                                             |
+| +/+/app/APPNUM/# | Only if "send app APPNUM" has been set in gateway settings - for app developers who want their traffic routed to the world |
 
-#### Default FromInternet subscriptions
+#### 1.5.2.2. Default FromInternet subscriptions
 
 The gateway node will always subscribe to certain topics on the broker so that it can forward those topics into the mesh.
 
@@ -65,58 +139,68 @@ The gateway node will always subscribe to certain topics on the broker so that i
 | MESHID/+/msg/text/W/+ | To receive text messages from the internet (where the sender knows our mesh ID) |
 | +/+/msg/text/W/USERID | For each named user on the local mesh, to receive messages bound for that user  |
 
-The provided example MQTT broker from Geeksville will also have filters:
+### 1.5.3. Optional web services
 
-#### MESHID
+#### 1.5.3.1. Public MQTT broker service
 
-#### NODEID
+@Geeksville will provide a standard [MQTT broker](https://mosquitto.org/) on the web to facilitate use of this service, but clients can use any MQTT broker they choose. Geeksville will initially not charge for the use of this broker, but if it becomes a burden he might ask for donations or require a payment for the use of the server.  
 
-#### USERID
+The provided public MQTT broker from geeksville.com will also have filters to ensure:
 
-#### DESTCLASS
+- only authenticated MESHIDs can publish under that ID
+- messages sent/to from the riot.im text message bridge can only be seen by that bridge or the intended destination/source mesh
 
 Is used to filter whole classes of destination IDs (DESTID). Can be...
 
 - L - Local, for this mesh only.
 - W - World, for this mesh and the broader internet
 
-#### DESTID
+#### 1.5.3.2. Riot.im messaging bridge
 
-Can be...
+@Geeksville will run a riot.im bridge that talks to the public MQTT broker and sends/receives into the riot.im network.
 
-- an internet username: kevinh@geeksville.com
-- ^ALL for anyone
-- An app ID (to allow apps out in the web to receive arbitrary binary data from nodes or simply other apps using meshtastic as a transport). They would connect to the MQTT broker and subscribe to their topic
+There is apparently already a riot.im [bridge](https://matrix.org/bridges/) for MQTT. That will possibly need to be customized a bit. But by doing this, we should be able to let random riot.im users send/receive messages to/from any meshtastic device. (FIXME add link and ponder security)
 
-### Named attribute API
+### 1.5.4. Named attribute API
 
-### Name to ID mapping
+The current channel and node settings are set/read using a special protobuf exchange between a local client and the meshtastic device.  In version 1.1 that mechanism will be changed so that settings are set/read using MQTT (even when done locally).  This will enable remote node adminstration (even conceivably through the internet).
 
-MQTT topic strings are very long and potentially expensive over the slow LORA network. Also, we don't want to burden each (dumb) node in the mesh with having to regex match against them. For that reason, well known topics map to (small) "topic IDs". For portions of the topic that correspond to a wildcard, those strings are provided as "topic arguments". This means that only the phone app needs to consider full ... FIXME.
+To provide some basic security a new named attribute name "seckey" can be set.  If set, any attribute operations must include that get with their operation request. Note: This mechanism still assumes that users you grant permission to access your local mesh are not 'adversaries'.  A technically competent user could discover the remote attribute key needed for attribute reading/writing.  In the 1.2ish timeframe we will add the concept of multiple channels and in that case, remote attribute operations will be on their own secured channel that regular 'users' can not see.
 
-## Work items
+### 1.5.5. Name to ID mapping
 
-### Cleanup/refactoring of existing codebase
+MQTT topic strings are very long and potentially expensive over the slow LORA network. Also, we don't want to burden each (dumb) node in the mesh with having to regex match against them. For that reason, well known topics map to (small) "topic IDs". For portions of the topic that correspond to a wildcard, those strings are provided as "topic arguments". This means that only the phone app needs to consider full topic strings.  Device nodes will only understand integer topic IDs and their arguments.
 
+FIXME, add more details to this section and figure out how unassigned apps/topics work in this framework.
+
+## 1.6. Development plan
+
+Given the previous problem/goals statement, here's the initial thoughts on the work items required.  As this idea becomes a bit more fully baked we should add details
+on how this will be implemented and guesses at approximate work items.
+
+### 1.6.1. Cleanup/refactoring of existing codebase
+
+- Change nodeIDs to be base64 instead of eight hex digits.
+- Add the concept of topic IDs and topic arguments to the protobufs and the device code.
 - Refactor the position features into a position "mini-app". Use only the new public on-device API to implement this app.
 - Refactor the on device texting features into a messaging "mini-app". (Similar to the position mini-app)
+- Add first cut of the "gateway node" code (i.e. MQTT broker client) to the python API (very little code needed for this component)
+- Confirm that texting works to/from the internet
+- Confirm that positions are optionally sent to the internet
+- Add the first cut of the "gateway node" code to the android app (very little code needed for this component)
 
-### Riot.im bridge
+### 1.6.2. New 'no-code-IOT' mini-app
 
-There is apparently already a riot.im bridge for MQTT. That will possibly need to be customized a bit. But by doing this, we should be able to let random riot.im users send/receive messages to/from any meshtastic device. (FIXME add link and ponder security)
+Add a new 'remote GPIO/serial port/SPI/I2C access' mini-app. This new standard app would use the MQTT messaging layer to let users (developers that don't need to write device code) do basic (potentially dangerous) operations remotely.
 
-### New 'no-code-IOT' mini-app
-
-Add a new 'remote GPIO/serial port/SPI/I2C access' mini-app. This new standard app would use the MQTT messaging layer to let users (devs that don't need to write device code) do basic (potentially dangerous) operations remotely.
-
-#### Supported operations in the initial release
+#### 1.6.2.1. Supported operations in the initial release
 
 Initially supported features for no-code-IOT.
 
 - Set any GPIO
 - Read any GPIO
 
-#### Supported operations eventually
+#### 1.6.2.2. Supported operations eventually
 
 General ideas for no-code IOT.
 
@@ -125,10 +209,8 @@ General ideas for no-code IOT.
 - Send N bytes out serial port Z
 - Subscribe for notification for when regex X matches the bytes that were received on serial port Z
 
-### Later release features (1.2)
+### 1.6.3. Later release features (1.2)
 
 - Allow radios to be on multiple channels at once. Each channel will have its own encryption keys.
 
-```
 
-```
