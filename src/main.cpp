@@ -37,6 +37,8 @@
 #include "SPILock.h"
 #include "graphics/Screen.h"
 #include "main.h"
+#include "meshwifi/meshhttp.h"
+#include "meshwifi/meshwifi.h"
 #include "sleep.h"
 #include "target_specific.h"
 #include <OneButton.h>
@@ -328,6 +330,9 @@ void setup()
     }
 #endif
 
+    // Initialize Wifi
+    initWifi();
+
     if (!rIf)
         recordCriticalError(ErrNoRadio);
     else
@@ -394,6 +399,8 @@ void loop()
     userButtonAlt.tick();
 #endif
 
+    loopWifi();
+
     // Show boot screen for first 3 seconds, then switch to normal operation.
     static bool showingBootScreen = true;
     if (showingBootScreen && (millis() > 3000)) {
@@ -419,6 +426,9 @@ void loop()
     // FIXME - until button press handling is done by interrupt (see polling above) we can't sleep very long at all or buttons
     // feel slow
     msecstosleep = 10;
+
+    // TODO: This should go into a thread handled by FreeRTOS.
+    handleWebResponse();
 
     delay(msecstosleep);
 }
