@@ -15,4 +15,7 @@ void notifyWebUI();
 
 void handleHotspot();
 
+// WebServer webserver(80);
+
+void handleStyleCSS();
 void handleRoot();
