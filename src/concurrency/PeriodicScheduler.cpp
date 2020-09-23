@@ -1,7 +1,6 @@
 #include "PeriodicScheduler.h"
 #include "PeriodicTask.h"
 #include "LockGuard.h"
-#include "../timing.h"
 
 namespace concurrency {
 
@@ -10,7 +9,7 @@ void PeriodicScheduler::loop()
 {
     LockGuard lg(&lock);
 
-    uint32_t now = timing::millis();
+    uint32_t now = millis();
     for (auto t : tasks) {
         if (t->period && (now - t->lastMsec) >= t->period) {
 
