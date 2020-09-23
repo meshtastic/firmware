@@ -44,7 +44,7 @@ WiFiServerPort::WiFiServerPort() : WiFiServer(MESHTASTIC_PORTNUM) {}
 
 void WiFiServerPort::init()
 {
-    DEBUG_MSG("Listening on TCP port %d\n", MESHTASTIC_PORTNUM);
+    DEBUG_MSG("API server sistening on TCP port %d\n", MESHTASTIC_PORTNUM);
     begin();
 }
 
