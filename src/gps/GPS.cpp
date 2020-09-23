@@ -1,7 +1,6 @@
 
 #include "GPS.h"
 #include "configuration.h"
-#include "timing.h"
 #include <assert.h>
 #include <time.h>
 
@@ -36,7 +35,7 @@ void readFromRTC()
     struct timeval tv; /* btw settimeofday() is helpfull here too*/
 
     if (!gettimeofday(&tv, NULL)) {
-        uint32_t now = timing::millis();
+        uint32_t now = millis();
 
         DEBUG_MSG("Read RTC time as %ld (cur millis %u) valid=%d\n", tv.tv_sec, now, timeSetFromGPS);
         timeStartMsec = now;
@@ -79,7 +78,7 @@ void perhapsSetRTC(struct tm &t)
 
 uint32_t getTime()
 {
-    return ((timing::millis() - timeStartMsec) / 1000) + zeroOffsetSecs;
+    return ((millis() - timeStartMsec) / 1000) + zeroOffsetSecs;
 }
 
 uint32_t getValidTime()
