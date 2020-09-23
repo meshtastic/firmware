@@ -91,7 +91,7 @@ void initWifi()
 
                 WiFiEventId_t eventID = WiFi.onEvent(
                     [](WiFiEvent_t event, WiFiEventInfo_t info) {
-                        Serial.print("\n-------------- WiFi lost connection. Reason: ");
+                        Serial.print("\nWiFi lost connection. Reason: ");
                         Serial.println(info.disconnected.reason);
                         // wifiDisconnectReason = info.disconnected.reason;
                     },

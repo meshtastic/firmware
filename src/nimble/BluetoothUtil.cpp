@@ -526,6 +526,14 @@ void setBluetoothEnable(bool on)
                 initWifi();
             }
         } else {
+
+            /*
+            // If WiFi is in use, disable shutting down the radio.
+            if (isWifiAvailable()) {
+                return;
+            }
+            */
+           
             // shutdown wifi
             deinitWifi();
 
