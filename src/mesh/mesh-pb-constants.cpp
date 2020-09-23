@@ -6,10 +6,10 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 
-#ifdef NO_ESP32
+#ifdef ARDUINO_ARCH_NRF52
 #include "Adafruit_LittleFS.h"
 using namespace Adafruit_LittleFS_Namespace; // To get File type
-#endif 
+#endif
 
 /// helper function for encoding a record as a protobuf, any failures to encode are fatal and we will panic
 /// returns the encoded packet size
@@ -49,7 +49,7 @@ bool readcb(pb_istream_t *stream, uint8_t *buf, size_t count)
         return count == 0;
     }
 
-    status = (file->read(buf, count) == (int) count);
+    status = (file->read(buf, count) == (int)count);
 
     if (file->available() == 0)
         stream->bytes_left = 0;

@@ -1,7 +1,7 @@
 #pragma once
 
+#include <Arduino.h>
 #include "PeriodicScheduler.h"
-#include "timing.h"
 
 namespace concurrency {
 
@@ -38,7 +38,7 @@ class PeriodicTask
      */
     void setPeriod(uint32_t p)
     {
-        lastMsec = timing::millis(); // reset starting from now
+        lastMsec = millis(); // reset starting from now
         period = p;
     }
 
