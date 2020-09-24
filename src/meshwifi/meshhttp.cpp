@@ -162,7 +162,7 @@ void handleRoot()
         "\n"
         "</head>\n"
         "<body>\n"
-        "<!-- Add SVG for Symbols -->\n"
+        "<center><h1>This area is under development. Please don't file bugs.</h1></center><!-- Add SVG for Symbols -->\n"
         "<svg aria-hidden=\"true\" style=\"position: absolute; width: 0; height: 0; overflow: hidden;\" version=\"1.1\" "
         "xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n"
         "<defs>\n"
