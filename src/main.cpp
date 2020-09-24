@@ -211,15 +211,15 @@ void setup()
     esp32Setup();
 #endif
 
+#ifdef NRF52_SERIES
+    nrf52Setup();
+#endif
+
     // Currently only the tbeam has a PMU
     power = new Power();
     power->setup();
     power->setStatusHandler(powerStatus);
     powerStatus->observe(&power->newStatus);
-
-#ifdef NRF52_SERIES
-    nrf52Setup();
-#endif
 
     // Init our SPI controller (must be before screen and lora)
     initSPI();

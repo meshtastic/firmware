@@ -49,14 +49,19 @@ void getMacAddr(uint8_t *dmac)
 NRF52Bluetooth *nrf52Bluetooth;
 
 static bool bleOn = false;
+static const bool enableBle = false; // Set to false for easier debugging
+
 void setBluetoothEnable(bool on)
 {
     if (on != bleOn) {
         if (on) {
             if (!nrf52Bluetooth) {
-                // DEBUG_MSG("DISABLING NRF52 BLUETOOTH WHILE DEBUGGING\n");
-                nrf52Bluetooth = new NRF52Bluetooth();
-                nrf52Bluetooth->setup();
+                if (!enableBle)
+                    DEBUG_MSG("DISABLING NRF52 BLUETOOTH WHILE DEBUGGING\n");
+                else {
+                    nrf52Bluetooth = new NRF52Bluetooth();
+                    nrf52Bluetooth->setup();
+                }
             }
         } else {
             DEBUG_MSG("FIXME: implement BLE disable\n");
@@ -87,6 +92,11 @@ void nrf52Setup()
     // Per https://devzone.nordicsemi.com/nordic/nordic-blog/b/blog/posts/monitor-mode-debugging-with-j-link-and-gdbeclipse
     // This is the recommended setting for Monitor Mode Debugging
     NVIC_SetPriority(DebugMonitor_IRQn, 6UL);
+
+#ifdef PIN_PWR_ON
+    digitalWrite(PIN_PWR_ON, HIGH); // If we need to assert a pin to power external peripherals
+    pinMode(PIN_PWR_ON, OUTPUT);
+#endif
 
     // Not yet on board
     // pmu.init();

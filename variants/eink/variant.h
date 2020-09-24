@@ -28,6 +28,7 @@
 /*
 @geeksville eink TODO:
 fix battery pin usage
+drive TCXO DIO3 enable high whenever we want the clock
 */
 
 /*----------------------------------------------------------------------------
@@ -69,24 +70,11 @@ extern "C" {
  * Analog pins
  */
 #define PIN_A0 (4) // Battery ADC
-/* #define PIN_A1 (4) bat adc
-#define PIN_A2 (28)xx
-#define PIN_A3 (29) xx
-#define PIN_A4 (30) xx
-#define PIN_A5 (31) xx
-#define PIN_A6 (0xff)
-#define PIN_A7 (0xff) */
 
 // #define BATTERY_PIN PIN_A0
 
 static const uint8_t A0 = PIN_A0;
-/* static const uint8_t A1 = PIN_A1;
-static const uint8_t A2 = PIN_A2;
-static const uint8_t A3 = PIN_A3;
-static const uint8_t A4 = PIN_A4;
-static const uint8_t A5 = PIN_A5;
-static const uint8_t A6 = PIN_A6;
-static const uint8_t A7 = PIN_A7; */
+
 #define ADC_RESOLUTION 14
 
 // Other pins
@@ -106,9 +94,9 @@ static const uint8_t AREF = PIN_AREF;
 This serial port is _also_ connected to the incoming D+/D- pins from the USB header.  FIXME, figure out how that is supposed to
 work.
 */
-#define PIN_SERIAL1_RX (32 + 9)
-#define PIN_SERIAL1_TX (32 + 8)
-// #define PIN_SERIAL1_EN (0 + 17)
+#define PIN_SERIAL2_RX (32 + 9)
+#define PIN_SERIAL2_TX (32 + 8)
+// #define PIN_SERIAL2_EN (0 + 17)
 
 // Connected to Jlink CDC
 // #define PIN_SERIAL2_RX (8)
@@ -119,7 +107,7 @@ work.
  */
 #define WIRE_INTERFACES_COUNT 1
 
-#define PIN_WIRE_SDA (26)
+#define PIN_WIRE_SDA (26) // Not connected on board?
 #define PIN_WIRE_SCL (27)
 
 /* touch sensor */
@@ -135,12 +123,13 @@ work.
 
 #define SX1262_CS (0 + 24) // FIXME - we really should define LORA_CS instead
 #define SX1262_DIO1 (0 + 20)
-#define SX1262_DIO3 (0 + 22) // FIXME this isn't used yet in the code?
+#define SX1262_DIO3 (0 + 22) // This is TCXO enable
 #define SX1262_BUSY (0 + 25)
 #define SX1262_RESET (32 + 0)
 #define SX1262_E22 // Not really an E22 but TTGO seems to be trying to clone that
 // Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
 // code)
+// #define SX1262_POWER_EN SX1262_DIO3 // This forces the SX1262 code to turn on the TCXO enable
 
 #define LORA_DISABLE_SENDING // Define this to disable transmission for testing (power testing etc...)
 
@@ -162,8 +151,11 @@ work.
 
 #define PIN_GPS_WAKE (32 + 4)
 #define PIN_GPS_PPS (0 + 12)
-#define PIN_GPS_RX (0 + 6) // This is for bits going TOWARDS the GPS
-#define PIN_GPS_TX (0 + 8) // This is for bits going TOWARDS the CPU
+#define PIN_GPS_TX (0 + 6) // This is for bits going TOWARDS the GPS
+#define PIN_GPS_RX (0 + 8) // This is for bits going TOWARDS the CPU
+
+#define PIN_SERIAL1_RX PIN_GPS_RX
+#define PIN_SERIAL1_TX PIN_GPS_TX
 
 /*
  * SPI Interfaces
@@ -178,6 +170,9 @@ static const uint8_t SS = SX1262_CS;
 static const uint8_t MOSI = PIN_SPI_MOSI;
 static const uint8_t MISO = PIN_SPI_MISO;
 static const uint8_t SCK = PIN_SPI_SCK;
+
+// To debug via the segger JLINK console rather than the CDC-ACM serial device
+#define USE_SEGGER
 
 #ifdef __cplusplus
 }
