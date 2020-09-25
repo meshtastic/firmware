@@ -37,6 +37,7 @@ https://github.com/Xinyuan-LilyGO/LilyGO_T5_V24
 200 x 200
 
 feedback to ttgo:
+name: TTGO LoraCard (nice googablity, unique name, sounds slick, implies lora and small)
 i'm going to add some sort of pass/fail factory test
 remove the cp2014 part
 add solar power
