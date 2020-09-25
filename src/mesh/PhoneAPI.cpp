@@ -243,7 +243,10 @@ void PhoneAPI::handleSetRadio(const RadioConfig &r)
 {
     radioConfig = r;
 
-    service.reloadConfig();
+    bool didReset = service.reloadConfig();
+    if (didReset) {
+        state = STATE_SEND_MY_INFO; // Squirt a completely new set of configs to the client
+    }
 }
 
 /**
