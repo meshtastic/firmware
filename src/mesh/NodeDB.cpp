@@ -6,6 +6,7 @@
 
 #include "CryptoEngine.h"
 #include "GPS.h"
+#include "MeshRadio.h"
 #include "NodeDB.h"
 #include "PacketHistory.h"
 #include "PowerFSM.h"
@@ -13,9 +14,9 @@
 #include "configuration.h"
 #include "error.h"
 #include "mesh-pb-constants.h"
+#include "meshwifi/meshwifi.h"
 #include <pb_decode.h>
 #include <pb_encode.h>
-#include "meshwifi/meshwifi.h"
 
 NodeDB nodeDB;
 
@@ -118,8 +119,6 @@ bool NodeDB::resetRadioConfig()
     } else if (radioConfig.preferences.sds_secs == 0) {
         DEBUG_MSG("Fixing bogus RadioConfig!\n");
 
-        radioConfig.preferences.factory_reset = false; // never save this to disk
-
         radioConfig.preferences.send_owner_interval = 4; // per sw-design.md
         radioConfig.preferences.position_broadcast_secs = 15 * 60;
         radioConfig.preferences.wait_bluetooth_secs = 120;
@@ -163,6 +162,10 @@ bool NodeDB::resetRadioConfig()
 
 void NodeDB::installDefaultDeviceState()
 {
+    // We try to preserve the region setting because it will really bum users out if we discard it
+    String oldRegion = myNodeInfo.region;
+    RegionCode oldRegionCode = radioConfig.preferences.region;
+
     memset(&devicestate, 0, sizeof(devicestate));
 
     *numNodes = 0; // Forget node DB
@@ -195,6 +198,12 @@ void NodeDB::installDefaultDeviceState()
     // owner.short_name now
     sprintf(owner.long_name, "Unknown %02x%02x", ourMacAddr[4], ourMacAddr[5]);
     sprintf(owner.short_name, "?%02X", (unsigned)(myNodeInfo.my_node_num & 0xff));
+
+    // Restore region if possible
+    if (oldRegionCode != RegionCode_Unset)
+        radioConfig.preferences.region = oldRegionCode;
+    if (oldRegion.length())
+        strcpy(myNodeInfo.region, oldRegion.c_str());
 }
 
 void NodeDB::init()
@@ -227,13 +236,29 @@ void NodeDB::init()
 
     // We set these _after_ loading from disk - because they come from the build and are more trusted than
     // what is stored in flash
-    strncpy(myNodeInfo.region, optstr(HW_VERSION), sizeof(myNodeInfo.region));
+    if (xstr(HW_VERSION)[0])
+        strncpy(myNodeInfo.region, optstr(HW_VERSION), sizeof(myNodeInfo.region));
+    else
+        DEBUG_MSG("This build does not specify a HW_VERSION\n"); // Eventually new builds will no longer include this build flag
+
+    // Check for the old style of region code strings, if found, convert to the new enum.
+    // Those strings will look like "1.0-EU433"
+    if (radioConfig.preferences.region == RegionCode_Unset && strncmp(myNodeInfo.region, "1.0-", 4) == 0) {
+        const char *regionStr = myNodeInfo.region + 4; // EU433 or whatever
+        for (const RegionInfo *r = regions; r->code != RegionCode_Unset; r++)
+            if (strcmp(r->name, regionStr) == 0) {
+                radioConfig.preferences.region = r->code;
+                break;
+            }
+    }
+
     strncpy(myNodeInfo.firmware_version, optstr(APP_VERSION), sizeof(myNodeInfo.firmware_version));
     strncpy(myNodeInfo.hw_model, HW_VENDOR, sizeof(myNodeInfo.hw_model));
 
     resetRadioConfig(); // If bogus settings got saved, then fix them
 
-    DEBUG_MSG("NODENUM=0x%x, dbsize=%d\n", myNodeInfo.my_node_num, *numNodes);
+    DEBUG_MSG("legacy_region=%s, region=%d, NODENUM=0x%x, dbsize=%d\n", myNodeInfo.region, radioConfig.preferences.region,
+              myNodeInfo.my_node_num, *numNodes);
 }
 
 // We reserve a few nodenums for future use
@@ -421,11 +446,11 @@ void NodeDB::updateFrom(const MeshPacket &mp)
                     powerFSM.trigger(EVENT_RECEIVED_TEXT_MSG);
                     notifyObservers(true); // Force an update whether or not our node counts have changed
 
-// This is going into the wifidev feature branch
-// Only update the WebUI if WiFi is enabled
-//#if WiFi_MODE != 0
-//  notifyWebUI();
-//#endif
+                    // This is going into the wifidev feature branch
+                    // Only update the WebUI if WiFi is enabled
+                    //#if WiFi_MODE != 0
+                    //  notifyWebUI();
+                    //#endif
                 }
             }
             break;
