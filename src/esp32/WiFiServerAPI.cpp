@@ -52,6 +52,14 @@ void WiFiServerPort::loop()
 {
     auto client = available();
     if (client) {
-        new WiFiServerAPI(client);
+        // Close any previous connection (see FIXME in header file)
+        if (openAPI)
+            delete openAPI;
+
+        openAPI = new WiFiServerAPI(client);
     }
+
+    if (openAPI)
+        // Allow idle processing so the API can read from its incoming stream
+        openAPI->loop();
 }
