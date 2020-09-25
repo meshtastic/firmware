@@ -10,6 +10,17 @@ static int32_t toDegInt(RawDegrees d)
     return r;
 }
 
+bool NMEAGPS::setup()
+{
+#ifdef PIN_GPS_WAKE
+    // FIXME, support using this pin to control GPS sleep
+    // digitalWrite(PIN_GPS_WAKE, LOW);
+    // pinMode(PIN_GPS_WAKE, OUTPUT);
+#endif
+
+    return true;
+}
+
 void NMEAGPS::loop()
 {
     while (_serial_gps->available() > 0) {
