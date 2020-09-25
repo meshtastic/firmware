@@ -31,8 +31,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "graphics/images.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
-#include "target_specific.h"
 #include "meshwifi/meshwifi.h"
+#include "target_specific.h"
 #include "utils.h"
 
 using namespace meshtastic; /** @todo remove */
@@ -809,17 +809,17 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     {
         concurrency::LockGuard guard(&lock);
         snprintf(channelStr, sizeof(channelStr), "%s", channelName.c_str());
-
-        // Display power status
-        if (powerStatus->getHasBattery())
-            drawBattery(display, x, y + 2, imgBattery, powerStatus);
-        else if (powerStatus->knowsUSB())
-            display->drawFastImage(x, y + 2, 16, 8, powerStatus->getHasUSB() ? imgUSB : imgPower);
-        // Display nodes status
-        drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 2, nodeStatus);
-        // Display GPS status
-        drawGPS(display, x + (SCREEN_WIDTH * 0.63), y + 2, gpsStatus);
     }
+
+    // Display power status
+    if (powerStatus->getHasBattery())
+        drawBattery(display, x, y + 2, imgBattery, powerStatus);
+    else if (powerStatus->knowsUSB())
+        display->drawFastImage(x, y + 2, 16, 8, powerStatus->getHasUSB() ? imgUSB : imgPower);
+    // Display nodes status
+    drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 2, nodeStatus);
+    // Display GPS status
+    drawGPS(display, x + (SCREEN_WIDTH * 0.63), y + 2, gpsStatus);
 
     // Draw the channel name
     display->drawString(x, y + FONT_HEIGHT, channelStr);

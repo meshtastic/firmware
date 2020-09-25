@@ -29,6 +29,13 @@ class WiFiServerAPI : public StreamAPI
  */
 class WiFiServerPort : public WiFiServer
 {
+    /** The currently open port
+     *
+     * FIXME: We currently only allow one open TCP connection at a time, because we depend on the loop() call in this class to
+     * delegate to the worker.  Once coroutines are implemented we can relax this restriction.
+     */
+    WiFiServerAPI *openAPI = NULL;
+
   public:
     WiFiServerPort();
 
