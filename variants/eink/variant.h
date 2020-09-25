@@ -29,6 +29,18 @@
 @geeksville eink TODO:
 fix battery pin usage
 drive TCXO DIO3 enable high whenever we want the clock
+use PIN_GPS_WAKE to sleep the GPS
+use tp_ser_io as a button, it goes high when pressed
+
+eink probably is // #include <GxGDEP015OC1/GxGDEP015OC1.h>    // 1.54" b/w               //G702-A
+https://github.com/Xinyuan-LilyGO/LilyGO_T5_V24
+200 x 200
+
+feedback to ttgo:
+i'm going to add some sort of pass/fail factory test
+remove the cp2014 part
+add solar power
+move touch sensor pad to the same side of the PCB as the screen (or just change it to a button)
 */
 
 /*----------------------------------------------------------------------------
@@ -110,7 +122,7 @@ work.
 #define PIN_WIRE_SDA (26) // Not connected on board?
 #define PIN_WIRE_SCL (27)
 
-/* touch sensor */
+/* touch sensor, active high */
 
 #define TP_SER_IO (32 + 1)
 
@@ -123,13 +135,15 @@ work.
 
 #define SX1262_CS (0 + 24) // FIXME - we really should define LORA_CS instead
 #define SX1262_DIO1 (0 + 20)
-#define SX1262_DIO3 (0 + 22) // This is TCXO enable
+// Note DIO2 is attached internally to the module to an analog switch for TX/RX switching
+#define SX1262_DIO3                                                                                                              \
+    (0 + 22) // This is used as an *output* from the sx1262 and connected internally to power the tcxo, do not drive from the main
+             // CPU?
 #define SX1262_BUSY (0 + 25)
 #define SX1262_RESET (32 + 0)
 #define SX1262_E22 // Not really an E22 but TTGO seems to be trying to clone that
 // Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
 // code)
-// #define SX1262_POWER_EN SX1262_DIO3 // This forces the SX1262 code to turn on the TCXO enable
 
 #define LORA_DISABLE_SENDING // Define this to disable transmission for testing (power testing etc...)
 
