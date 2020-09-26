@@ -33,7 +33,7 @@ void WiFiServerAPI::loop()
     if (client.connected()) {
         StreamAPI::loop();
     } else {
-        DEBUG_MSG("Client dropped connection, closing UDP server\n");
+        DEBUG_MSG("Client dropped connection, closing TCP server\n");
         delete this;
     }
 }

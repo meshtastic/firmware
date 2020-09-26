@@ -32,6 +32,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "meshwifi/meshwifi.h"
+#include "nimble/BluetoothUtil.h"
 #include "target_specific.h"
 #include "utils.h"
 
@@ -942,7 +943,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         } else if (getWifiDisconnectReason() == 200) {
             display->drawString(x, y + FONT_HEIGHT * 1, "BEACON_TIMEOUT");
         } else if (getWifiDisconnectReason() == 201) {
-            display->drawString(x, y + FONT_HEIGHT * 1, "NO_AP_FOUND");
+            display->drawString(x, y + FONT_HEIGHT * 1, "AP Not Found");
         } else if (getWifiDisconnectReason() == 202) {
             display->drawString(x, y + FONT_HEIGHT * 1, "AUTH_FAIL");
         } else if (getWifiDisconnectReason() == 203) {
@@ -950,7 +951,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         } else if (getWifiDisconnectReason() == 204) {
             display->drawString(x, y + FONT_HEIGHT * 1, "HANDSHAKE_TIMEOUT");
         } else if (getWifiDisconnectReason() == 205) {
-            display->drawString(x, y + FONT_HEIGHT * 1, "CONNECTION_FAIL");
+            display->drawString(x, y + FONT_HEIGHT * 1, "Connection Failed");
         } else {
             display->drawString(x, y + FONT_HEIGHT * 1, "Unknown Status");
         }
@@ -992,8 +993,10 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
         display->drawString(x, y, String("USB"));
     }
 
-    // TODO: Display status of the BT radio
-    // display->drawString(x + SCREEN_WIDTH - display->getStringWidth("BT On"), y, "BT On");
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth("Mode " + String(channelSettings.modem_config)),
+                        y, "Mode " + String(channelSettings.modem_config));
+
+
 
     // Line 2
     uint32_t currentMillis = millis();
@@ -1009,8 +1012,6 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     display->drawString(x, y + FONT_HEIGHT * 1,
                         String(days) + "d " + (hours < 10 ? "0" : "") + String(hours) + ":" + (minutes < 10 ? "0" : "") +
                             String(minutes) + ":" + (seconds < 10 ? "0" : "") + String(seconds));
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth("Mode " + String(channelSettings.modem_config)),
-                        y + FONT_HEIGHT * 1, "Mode " + String(channelSettings.modem_config));
 
     // Line 4
     drawGPScoordinates(display, x, y + FONT_HEIGHT * 3, gpsStatus);
