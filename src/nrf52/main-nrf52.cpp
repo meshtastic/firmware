@@ -1,6 +1,6 @@
 #include "NRF52Bluetooth.h"
 #include "configuration.h"
-#include "graphics/TFT.h"
+#include "graphics/TFTDisplay.h"
 #include <assert.h>
 #include <ble_gap.h>
 #include <memory.h>

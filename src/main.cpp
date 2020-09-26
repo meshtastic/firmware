@@ -232,7 +232,7 @@ void setup()
 #endif
 
     // Initialize the screen first so we can show the logo while we start up everything else.
-#ifdef ST7735_CS
+#if defined(ST7735_CS) || defined(HAS_EINK)
     screen.setup();
 #else
     if (ssd1306_found)

@@ -27,18 +27,22 @@
 /*
 @geeksville eink TODO:
 
-enable reset as a button
-fix battery pin usage
-drive TCXO DIO3 enable high whenever we want the clock
-use PIN_GPS_WAKE to sleep the GPS
-use tp_ser_io as a button, it goes high when pressed
-
+button not working
+get pps blinking on second board
+clean up eink drawing to not have the nasty timeout hack
+put eink to sleep when we think the screen is off
+enable flash on spi0, share chip selects on spi1.
+https://infocenter.nordicsemi.com/index.jsp?topic=%2Fcom.nordic.infocenter.nrf52832.ps.v1.1%2Fspi.html enable reset as a button in
+bootloader fix battery pin usage drive TCXO DIO3 enable high whenever we want the clock use PIN_GPS_WAKE to sleep the GPS use
+tp_ser_io as a button, it goes high when pressed unify eink display classes
 
 eink probably is // #include <GxGDEP015OC1/GxGDEP015OC1.h>    // 1.54" b/w               //G702-A
 https://github.com/Xinyuan-LilyGO/LilyGO_T5_V24
 200 x 200
 
 feedback to ttgo:
+are D10 and D8 backwards on the GPS schematic? gps comms no work?
+leds don't work?
 use pcf8563 part for waking CPU? or remove it
 the mx25 flash chip is great!
 name: TTGO LoraCard (nice googablity, unique name, sounds slick, implies lora and small)
@@ -65,16 +69,16 @@ extern "C" {
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs
-#define PIN_LED1 (0 + 13)
-#define PIN_LED2 (0 + 14)
-#define PIN_LED3 (0 + 15)
+#define PIN_LED1 (0 + 13) // green
+#define PIN_LED2 (0 + 14) // red
+#define PIN_LED3 (0 + 15) // blue
 
 #define LED_RED PIN_LED2
 #define LED_GREEN PIN_LED1
 #define LED_BLUE PIN_LED3
 
 #define LED_BUILTIN LED_GREEN
-#define LED_CONN LED_CONN
+#define LED_CONN PIN_BLUE
 
 #define LED_STATE_ON 0 // State when LED is lit
 
@@ -171,12 +175,19 @@ FIXME define/FIX flash access
  */
 
 #define PIN_EINK_EN (32 + 11)
-#define PIN_EINK_CS (0 + 31)
+#define PIN_EINK_CS (0 + 30)
 #define PIN_EINK_BUSY (0 + 3)
 #define PIN_EINK_DC (0 + 28)
 #define PIN_EINK_RES (0 + 2)
 #define PIN_EINK_SCLK (0 + 31)
 #define PIN_EINK_MOSI (0 + 29) // also called SDI
+
+#define HAS_EINK
+
+#define PIN_SPI1_MISO                                                                                                            \
+    (32 + 7) // FIXME not really needed, but for now the SPI code requires something to be defined, pick an used GPIO
+#define PIN_SPI1_MOSI PIN_EINK_MOSI
+#define PIN_SPI1_SCK PIN_EINK_SCLK
 
 /*
  * Air530 GPS pins
@@ -184,8 +195,8 @@ FIXME define/FIX flash access
 
 #define PIN_GPS_WAKE (32 + 2)
 #define PIN_GPS_PPS (32 + 4)
-#define PIN_GPS_TX (32 + 9) // This is for bits going TOWARDS the GPS
-#define PIN_GPS_RX (32 + 8) // This is for bits going TOWARDS the CPU
+#define PIN_GPS_TX (32 + 8) // This is for bits going TOWARDS the GPS
+#define PIN_GPS_RX (32 + 9) // This is for bits going TOWARDS the CPU
 
 #define PIN_SERIAL1_RX PIN_GPS_RX
 #define PIN_SERIAL1_TX PIN_GPS_TX
@@ -193,17 +204,17 @@ FIXME define/FIX flash access
 /*
  * SPI Interfaces
  */
-#define SPI_INTERFACES_COUNT 1
+#define SPI_INTERFACES_COUNT 2
 
 // For LORA
 #define PIN_SPI_MISO (0 + 23)
 #define PIN_SPI_MOSI (0 + 22)
 #define PIN_SPI_SCK (0 + 19)
 
-static const uint8_t SS = SX1262_CS;
-static const uint8_t MOSI = PIN_SPI_MOSI;
-static const uint8_t MISO = PIN_SPI_MISO;
-static const uint8_t SCK = PIN_SPI_SCK;
+// static const uint8_t SS = SX1262_CS;
+// static const uint8_t MOSI = PIN_SPI_MOSI;
+// static const uint8_t MISO = PIN_SPI_MISO;
+// static const uint8_t SCK = PIN_SPI_SCK;
 
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
 #define USE_SEGGER
