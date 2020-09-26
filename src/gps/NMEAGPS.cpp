@@ -14,8 +14,14 @@ bool NMEAGPS::setup()
 {
 #ifdef PIN_GPS_WAKE
     // FIXME, support using this pin to control GPS sleep
-    // digitalWrite(PIN_GPS_WAKE, LOW);
+    // digitalWrite(PIN_GPS_WAKE, HIGH);
     // pinMode(PIN_GPS_WAKE, OUTPUT);
+#endif
+
+#ifdef PIN_GPS_PPS
+    // pulse per second
+    // FIXME - move into shared GPS code
+    pinMode(PIN_GPS_PPS, INPUT);
 #endif
 
     return true;

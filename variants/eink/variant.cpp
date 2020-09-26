@@ -38,4 +38,7 @@ void initVariant()
 
     pinMode(PIN_LED2, OUTPUT);
     ledOff(PIN_LED2);
+
+    pinMode(PIN_LED3, OUTPUT);
+    ledOff(PIN_LED3);
 }
