@@ -49,7 +49,7 @@ void getMacAddr(uint8_t *dmac)
 NRF52Bluetooth *nrf52Bluetooth;
 
 static bool bleOn = false;
-static const bool enableBle = false; // Set to false for easier debugging
+static const bool enableBle = true; // Set to false for easier debugging
 
 void setBluetoothEnable(bool on)
 {

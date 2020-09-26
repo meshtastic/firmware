@@ -27,8 +27,7 @@
 /*
 @geeksville eink TODO:
 
-fix regout0!
-get pps blinking on second board
+fix display width and height
 clean up eink drawing to not have the nasty timeout hack
 put eink to sleep when we think the screen is off
 enable flash on spi0, share chip selects on spi1.
@@ -36,14 +35,16 @@ https://infocenter.nordicsemi.com/index.jsp?topic=%2Fcom.nordic.infocenter.nrf52
 bootloader fix battery pin usage drive TCXO DIO3 enable high whenever we want the clock use PIN_GPS_WAKE to sleep the GPS use
 tp_ser_io as a button, it goes high when pressed unify eink display classes
 make screen.adjustBrightness() a nop on eink screens
-
-eink probably is // #include <GxGDEP015OC1/GxGDEP015OC1.h>    // 1.54" b/w               //G702-A
-https://github.com/Xinyuan-LilyGO/LilyGO_T5_V24
-200 x 200
+enable gps sleep mode
+use new flash chip
 
 feedback to ttgo:
-are D10 and D8 backwards on the GPS schematic? gps comms no work?
-leds don't work?
+offer to provide an image
+usb works!
+radio works!
+eink works!
+leds work?
+gps works!
 use pcf8563 part for waking CPU? or remove it
 the mx25 flash chip is great!
 name: TTGO LoraCard (nice googablity, unique name, sounds slick, implies lora and small)
@@ -74,9 +75,9 @@ extern "C" {
 #define PIN_LED2 (0 + 15) // blue (but red on my prototype)
 #define PIN_LED3 (0 + 14) // red (not functional on my prototype)
 
-#define LED_RED PIN_LED2
+#define LED_RED PIN_LED3
 #define LED_GREEN PIN_LED1
-#define LED_BLUE PIN_LED3
+#define LED_BLUE PIN_LED2
 
 #define LED_BUILTIN LED_GREEN
 #define LED_CONN PIN_BLUE

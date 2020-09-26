@@ -12,12 +12,6 @@ static int32_t toDegInt(RawDegrees d)
 
 bool NMEAGPS::setup()
 {
-#ifdef PIN_GPS_WAKE
-    // FIXME, support using this pin to control GPS sleep
-    // digitalWrite(PIN_GPS_WAKE, HIGH);
-    // pinMode(PIN_GPS_WAKE, OUTPUT);
-#endif
-
 #ifdef PIN_GPS_PPS
     // pulse per second
     // FIXME - move into shared GPS code
@@ -31,8 +25,12 @@ void NMEAGPS::loop()
 {
     while (_serial_gps->available() > 0) {
         int c = _serial_gps->read();
-        // Serial.write(c);
-        reader.encode(c);
+        // DEBUG_MSG("%c", c);
+        bool isValid = reader.encode(c);
+
+        // if we have received valid NMEA claim we are connected
+        if (isValid)
+            isConnected = true;
     }
 
     uint32_t now = millis();
@@ -56,8 +54,6 @@ void NMEAGPS::loop()
             t.tm_year = d.year() - 1900;
             t.tm_isdst = false;
             perhapsSetRTC(t);
-
-            isConnected = true; // we seem to have a real GPS (but not necessarily a lock)
         }
 
         uint8_t fixtype = reader.fixQuality();
