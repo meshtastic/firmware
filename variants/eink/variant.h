@@ -23,20 +23,24 @@
 #define VARIANT_MCK (64000000ul)
 
 #define USE_LFXO // Board uses 32khz crystal for LF
-// define USE_LFRC    // Board uses RC for LF
 
 /*
 @geeksville eink TODO:
+
+enable reset as a button
 fix battery pin usage
 drive TCXO DIO3 enable high whenever we want the clock
 use PIN_GPS_WAKE to sleep the GPS
 use tp_ser_io as a button, it goes high when pressed
+
 
 eink probably is // #include <GxGDEP015OC1/GxGDEP015OC1.h>    // 1.54" b/w               //G702-A
 https://github.com/Xinyuan-LilyGO/LilyGO_T5_V24
 200 x 200
 
 feedback to ttgo:
+use pcf8563 part for waking CPU? or remove it
+the mx25 flash chip is great!
 name: TTGO LoraCard (nice googablity, unique name, sounds slick, implies lora and small)
 i'm going to add some sort of pass/fail factory test
 remove the cp2014 part
@@ -77,7 +81,7 @@ extern "C" {
 /*
  * Buttons
  */
-#define PIN_BUTTON1 (32 + 3)
+#define PIN_BUTTON1 (32 + 10)
 
 /*
  * Analog pins
@@ -90,14 +94,8 @@ static const uint8_t A0 = PIN_A0;
 
 #define ADC_RESOLUTION 14
 
-// Other pins
-/*
-#define PIN_AREF (2)
 #define PIN_NFC1 (9)
 #define PIN_NFC2 (10)
-
-static const uint8_t AREF = PIN_AREF;
-*/
 
 /*
  * Serial interfaces
@@ -107,8 +105,8 @@ static const uint8_t AREF = PIN_AREF;
 This serial port is _also_ connected to the incoming D+/D- pins from the USB header.  FIXME, figure out how that is supposed to
 work.
 */
-#define PIN_SERIAL2_RX (32 + 9)
-#define PIN_SERIAL2_TX (32 + 8)
+#define PIN_SERIAL2_RX (0 + 6)
+#define PIN_SERIAL2_TX (0 + 8)
 // #define PIN_SERIAL2_EN (0 + 17)
 
 // Connected to Jlink CDC
@@ -125,10 +123,30 @@ work.
 
 /* touch sensor, active high */
 
-#define TP_SER_IO (32 + 1)
+#define TP_SER_IO (0 + 11)
 
 // Board power is enabled either by VBUS from USB or the CPU asserting PWR_ON
-#define PIN_PWR_ON (32 + 2)
+#define PIN_PWR_ON (0 + 12)
+
+#define PIN_RTC_INT (0 + 16) // Interrupt from the PCF8563 RTC
+
+/*
+
+FIXME define/FIX flash access
+
+// QSPI Pins
+#define PIN_QSPI_SCK 19
+#define PIN_QSPI_CS 17
+#define PIN_QSPI_IO0 20
+#define PIN_QSPI_IO1 21
+#define PIN_QSPI_IO2 22
+#define PIN_QSPI_IO3 23
+
+// On-board QSPI Flash
+#define EXTERNAL_FLASH_DEVICES MX25R6435F
+#define EXTERNAL_FLASH_USE_QSPI
+
+*/
 
 /*
  * Lora radio
@@ -138,36 +156,36 @@ work.
 #define SX1262_DIO1 (0 + 20)
 // Note DIO2 is attached internally to the module to an analog switch for TX/RX switching
 #define SX1262_DIO3                                                                                                              \
-    (0 + 22) // This is used as an *output* from the sx1262 and connected internally to power the tcxo, do not drive from the main
+    (0 + 21) // This is used as an *output* from the sx1262 and connected internally to power the tcxo, do not drive from the main
              // CPU?
-#define SX1262_BUSY (0 + 25)
-#define SX1262_RESET (32 + 0)
+#define SX1262_BUSY (0 + 17)
+#define SX1262_RESET (0 + 25)
 #define SX1262_E22 // Not really an E22 but TTGO seems to be trying to clone that
 // Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
 // code)
 
-#define LORA_DISABLE_SENDING // Define this to disable transmission for testing (power testing etc...)
+// #define LORA_DISABLE_SENDING // Define this to disable transmission for testing (power testing etc...)
 
 /*
  * eink display pins
  */
 
-#define PIN_EINK_EN (0 + 11)
-#define PIN_EINK_CS (0 + 30)
+#define PIN_EINK_EN (32 + 11)
+#define PIN_EINK_CS (0 + 31)
 #define PIN_EINK_BUSY (0 + 3)
 #define PIN_EINK_DC (0 + 28)
 #define PIN_EINK_RES (0 + 2)
-#define PIN_EINK_SCK (0 + 31)
-#define PIN_EINK_MOSI (0 + 29)
+#define PIN_EINK_SCLK (0 + 31)
+#define PIN_EINK_MOSI (0 + 29) // also called SDI
 
 /*
  * Air530 GPS pins
  */
 
-#define PIN_GPS_WAKE (32 + 4)
-#define PIN_GPS_PPS (0 + 12)
-#define PIN_GPS_TX (0 + 6) // This is for bits going TOWARDS the GPS
-#define PIN_GPS_RX (0 + 8) // This is for bits going TOWARDS the CPU
+#define PIN_GPS_WAKE (32 + 2)
+#define PIN_GPS_PPS (32 + 4)
+#define PIN_GPS_TX (32 + 9) // This is for bits going TOWARDS the GPS
+#define PIN_GPS_RX (32 + 8) // This is for bits going TOWARDS the CPU
 
 #define PIN_SERIAL1_RX PIN_GPS_RX
 #define PIN_SERIAL1_TX PIN_GPS_TX
@@ -177,8 +195,9 @@ work.
  */
 #define SPI_INTERFACES_COUNT 1
 
-#define PIN_SPI_MISO (0 + 21)
-#define PIN_SPI_MOSI (0 + 23)
+// For LORA
+#define PIN_SPI_MISO (0 + 23)
+#define PIN_SPI_MOSI (0 + 22)
 #define PIN_SPI_SCK (0 + 19)
 
 static const uint8_t SS = SX1262_CS;
