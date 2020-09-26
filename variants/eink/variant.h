@@ -27,7 +27,7 @@
 /*
 @geeksville eink TODO:
 
-button not working
+fix regout0!
 get pps blinking on second board
 clean up eink drawing to not have the nasty timeout hack
 put eink to sleep when we think the screen is off
@@ -35,6 +35,7 @@ enable flash on spi0, share chip selects on spi1.
 https://infocenter.nordicsemi.com/index.jsp?topic=%2Fcom.nordic.infocenter.nrf52832.ps.v1.1%2Fspi.html enable reset as a button in
 bootloader fix battery pin usage drive TCXO DIO3 enable high whenever we want the clock use PIN_GPS_WAKE to sleep the GPS use
 tp_ser_io as a button, it goes high when pressed unify eink display classes
+make screen.adjustBrightness() a nop on eink screens
 
 eink probably is // #include <GxGDEP015OC1/GxGDEP015OC1.h>    // 1.54" b/w               //G702-A
 https://github.com/Xinyuan-LilyGO/LilyGO_T5_V24
@@ -69,9 +70,9 @@ extern "C" {
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs
-#define PIN_LED1 (0 + 13) // green
-#define PIN_LED2 (0 + 14) // red
-#define PIN_LED3 (0 + 15) // blue
+#define PIN_LED1 (0 + 13) // green (but red on my prototype)
+#define PIN_LED2 (0 + 15) // blue (but red on my prototype)
+#define PIN_LED3 (0 + 14) // red (not functional on my prototype)
 
 #define LED_RED PIN_LED2
 #define LED_GREEN PIN_LED1
@@ -81,6 +82,7 @@ extern "C" {
 #define LED_CONN PIN_BLUE
 
 #define LED_STATE_ON 0 // State when LED is lit
+#define LED_INVERTED 1
 
 /*
  * Buttons
@@ -195,11 +197,11 @@ FIXME define/FIX flash access
 
 #define PIN_GPS_WAKE (32 + 2)
 #define PIN_GPS_PPS (32 + 4)
-#define PIN_GPS_TX (32 + 8) // This is for bits going TOWARDS the GPS
-#define PIN_GPS_RX (32 + 9) // This is for bits going TOWARDS the CPU
+#define PIN_GPS_TX (32 + 9) // This is for bits going TOWARDS the CPU
+#define PIN_GPS_RX (32 + 8) // This is for bits going TOWARDS the GPS
 
-#define PIN_SERIAL1_RX PIN_GPS_RX
-#define PIN_SERIAL1_TX PIN_GPS_TX
+#define PIN_SERIAL1_RX PIN_GPS_TX
+#define PIN_SERIAL1_TX PIN_GPS_RX
 
 /*
  * SPI Interfaces

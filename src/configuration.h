@@ -143,7 +143,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define FLIP_SCREEN_VERTICALLY
 
 // DEBUG LED
+#ifndef LED_INVERTED
 #define LED_INVERTED 0 // define as 1 if LED is active low (on)
+#endif
 
 // -----------------------------------------------------------------------------
 // GPS
