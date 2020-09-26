@@ -33,7 +33,7 @@ void WiFiServerAPI::loop()
     if (client.connected()) {
         StreamAPI::loop();
     } else {
-        DEBUG_MSG("Client dropped connection, closing UDP server\n");
+        DEBUG_MSG("Client dropped connection, closing TCP server\n");
         delete this;
     }
 }
@@ -44,7 +44,7 @@ WiFiServerPort::WiFiServerPort() : WiFiServer(MESHTASTIC_PORTNUM) {}
 
 void WiFiServerPort::init()
 {
-    DEBUG_MSG("Listening on TCP port %d\n", MESHTASTIC_PORTNUM);
+    DEBUG_MSG("API server sistening on TCP port %d\n", MESHTASTIC_PORTNUM);
     begin();
 }
 
@@ -52,6 +52,14 @@ void WiFiServerPort::loop()
 {
     auto client = available();
     if (client) {
-        new WiFiServerAPI(client);
+        // Close any previous connection (see FIXME in header file)
+        if (openAPI)
+            delete openAPI;
+
+        openAPI = new WiFiServerAPI(client);
     }
+
+    if (openAPI)
+        // Allow idle processing so the API can read from its incoming stream
+        openAPI->loop();
 }

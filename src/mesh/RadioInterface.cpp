@@ -10,6 +10,24 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 
+#define RDEF(name, freq, spacing, num_ch, power_limit)                                                                           \
+    {                                                                                                                            \
+        RegionCode_##name, num_ch, power_limit, freq, spacing, #name                                                             \
+    }
+
+const RegionInfo regions[] = {
+    RDEF(US, 903.08f, 2.16f, 13, 0), RDEF(EU433, 433.175f, 0.2f, 8, 0), RDEF(EU865, 865.2f, 0.3f, 10, 0),
+    RDEF(CN, 470.0f, 2.0f, 20, 0),
+    RDEF(JP, 920.0f, 0.5f, 10, 13),    // See https://github.com/meshtastic/Meshtastic-device/issues/346 power level 13
+    RDEF(ANZ, 916.0f, 0.5f, 20, 0),    // AU/NZ channel settings 915-928MHz
+    RDEF(KR, 921.9f, 0.2f, 8, 0),      // KR channel settings (KR920-923) Start from TTN download channel
+                                       // freq. (921.9f is for download, others are for uplink)
+    RDEF(TW, 923.0f, 0.2f, 10, 0),     // TW channel settings (AS2 bandplan 923-925MHz)
+    RDEF(Unset, 903.08f, 2.16f, 13, 0) // Assume US freqs if unset, Must be last
+};
+
+static const RegionInfo *myRegion;
+
 /**
  * ## LoRaWAN for North America
 
@@ -77,7 +95,15 @@ RadioInterface::RadioInterface()
 {
     assert(sizeof(PacketHeader) == 4 || sizeof(PacketHeader) == 16); // make sure the compiler did what we expected
 
-    myNodeInfo.num_channels = NUM_CHANNELS;
+    if (!myRegion) {
+        const RegionInfo *r = regions;
+        for (; r->code != RegionCode_Unset && r->code != radioConfig.preferences.region; r++)
+            ;
+        myRegion = r;
+        DEBUG_MSG("Wanted region %d, using %s\n", radioConfig.preferences.region, r->name);
+
+        myNodeInfo.num_channels = myRegion->numChannels; // Tell our android app how many channels we have
+    }
 
     // Can't print strings this early - serial not setup yet
     // DEBUG_MSG("Set meshradio defaults name=%s\n", channelSettings.name);
@@ -127,9 +153,12 @@ void RadioInterface::applyModemConfig()
 
     power = channelSettings.tx_power;
 
+    assert(myRegion); // Should have been found in init
+
     // If user has manually specified a channel num, then use that, otherwise generate one by hashing the name
-    int channel_num = (channelSettings.channel_num ? channelSettings.channel_num - 1 : hash(channelSettings.name)) % NUM_CHANNELS;
-    freq = CH0 + CH_SPACING * channel_num;
+    int channel_num =
+        (channelSettings.channel_num ? channelSettings.channel_num - 1 : hash(channelSettings.name)) % myRegion->numChannels;
+    freq = myRegion->freq + myRegion->spacing * channel_num;
 
     DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, power=%d\n", channelSettings.name, channelSettings.modem_config, channel_num,
               power);
@@ -143,9 +172,9 @@ void RadioInterface::limitPower()
 {
     uint8_t maxPower = 255; // No limit
 
-#ifdef HW_VERSION_JP
-    maxPower = 13; // See https://github.com/meshtastic/Meshtastic-device/issues/346
-#endif
+    if (myRegion->powerLimit)
+        maxPower = myRegion->powerLimit;
+
     if (power > maxPower) {
         DEBUG_MSG("Lowering transmit power because of regulatory limits\n");
         power = maxPower;
