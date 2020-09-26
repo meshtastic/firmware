@@ -81,7 +81,7 @@ void NMEAGPS::loop()
             }
 
             // expect gps pos lat=37.520825, lon=-122.309162, alt=158
-            DEBUG_MSG("new NMEA GPS pos lat=%f, lon=%f, alt=%d, hdop=%f, heading=%f\n", latitude * 1e-7, longitude * 1e-7,
+            DEBUG_MSG("new NMEA GPS pos lat=%f, lon=%f, alt=%d, hdop=%g, heading=%f\n", latitude * 1e-7, longitude * 1e-7,
                       altitude, dop * 1e-2, heading * 1e-5);
         }
 

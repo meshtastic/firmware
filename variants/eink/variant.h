@@ -29,6 +29,7 @@
 
 fix bootloader to use two buttons - remove bootloader hacks
 fix battery voltage sensing
+fix floating point SEGGER printf on nrf52 - see "new NMEA GPS pos"
 get second button working in app load
 if battery falls too low deassert PWR_ON (to force board to shutdown)
 fix display width and height
@@ -201,7 +202,7 @@ FIXME define/FIX flash access
 #define PIN_SPI_SCK (0 + 19)
 
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
-#define USE_SEGGER
+// #define USE_SEGGER
 
 #ifdef __cplusplus
 }
