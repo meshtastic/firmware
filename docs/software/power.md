@@ -32,11 +32,15 @@ From lower to higher power consumption.
   onEntry: setBluetoothOn(true)
   onExit:
 
-- full on (ON) - Everything is on
+- serial API usage (SERIAL) - Screen is on, device doesn't sleep, bluetooth off
+  onEntry: setBluetooth off, screen on
+  onExit:
+
+- full on (ON) - Everything is on, can eventually timeout and lower to a lower power state
   onEntry: setBluetoothOn(true), screen.setOn(true)
   onExit: screen.setOn(false)
 
-- serial API usage (SERIAL) - Screen is on, device doesn't sleep, bluetooth off
+- has power (POWER) - Screen is on, device doesn't sleep, bluetooth on, will stay in this state as long as we have power
   onEntry: setBluetooth off, screen on
   onExit:
 
@@ -56,9 +60,11 @@ From lower to higher power consumption.
 - While in NB/DARK/ON: If we receive EVENT_NODEDB_UPDATED we transition to ON (so the new screen can be shown)
 - While in DARK: While the phone talks to us over BLE (EVENT_CONTACT_FROM_PHONE) reset any sleep timers and stay in DARK (needed for bluetooth sw update and nice user experience if the user is reading/replying to texts)
 - while in LS/NB/DARK: if SERIAL_CONNECTED, go to serial
+- while in any state: if we have AC power, go to POWER
 
 ### events that decrease cpu activity
 
+- While in POWER: if lose AC go to ON
 - While in SERIAL: if SERIAL_DISCONNECTED, go to NB
 - While in ON: If PRESS event occurs, reset screen_on_secs timer and tell the screen to handle the pess
 - While in ON: If it has been more than screen_on_secs since a press, lower to DARK

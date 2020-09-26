@@ -46,8 +46,13 @@ class NodeDB
     /// write to flash
     void saveToDisk();
 
-    // Reinit radio config if needed, because sometimes a buggy android app might send us bogus settings
-    void resetRadioConfig();
+    /** Reinit radio config if needed, because either:
+     * a) sometimes a buggy android app might send us bogus settings or 
+     * b) the client set factory_reset
+     * 
+     * @return true if the config was completely reset, in that case, we should send it back to the client
+     */
+    bool resetRadioConfig();
 
     /// given a subpacket sniffed from the network, update our DB state
     /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw

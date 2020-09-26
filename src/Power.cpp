@@ -119,6 +119,7 @@ void Power::readPowerStatus()
         const PowerStatus powerStatus =
             PowerStatus(hasBattery ? OptTrue : OptFalse, batteryLevel->isVBUSPlug() ? OptTrue : OptFalse,
                         batteryLevel->isChargeing() ? OptTrue : OptFalse, batteryVoltageMv, batteryChargePercent);
+        DEBUG_MSG("Read power stat %d\n", powerStatus.getHasUSB());
         newStatus.notifyObservers(&powerStatus);
 
         // If we have a battery at all and it is less than 10% full, force deep sleep
@@ -237,9 +238,11 @@ void Power::loop()
         }
         if (axp.isVbusRemoveIRQ()) {
             DEBUG_MSG("USB unplugged\n");
+            powerFSM.trigger(EVENT_POWER_DISCONNECTED);
         }
         if (axp.isVbusPlugInIRQ()) {
             DEBUG_MSG("USB plugged In\n");
+            powerFSM.trigger(EVENT_POWER_CONNECTED);
         }
         if (axp.isBattPlugInIRQ()) {
             DEBUG_MSG("Battery inserted\n");
