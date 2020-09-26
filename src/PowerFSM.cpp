@@ -4,8 +4,8 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "configuration.h"
-#include "main.h"
 #include "graphics/Screen.h"
+#include "main.h"
 #include "sleep.h"
 #include "target_specific.h"
 
@@ -123,6 +123,12 @@ static void serialEnter()
     screen.setOn(true);
 }
 
+static void powerEnter()
+{
+    screen.setOn(true);
+    setBluetoothEnable(true);
+}
+
 static void onEnter()
 {
     screen.setOn(true);
@@ -155,16 +161,20 @@ State stateDARK(darkEnter, NULL, NULL, "DARK");
 State stateSERIAL(serialEnter, NULL, NULL, "SERIAL");
 State stateBOOT(bootEnter, NULL, NULL, "BOOT");
 State stateON(onEnter, NULL, NULL, "ON");
+State statePOWER(powerEnter, NULL, NULL, "POWER");
 Fsm powerFSM(&stateBOOT);
 
 void PowerFSM_setup()
 {
-    powerFSM.add_timed_transition(&stateBOOT, &stateON, 3 * 1000, NULL, "boot timeout");
+    // If we already have AC power go to POWER state after init, otherwise go to ON
+    bool hasPower = powerStatus && powerStatus->getHasUSB();
+    DEBUG_MSG("PowerFSM init, USB power=%d\n", hasPower);
+    powerFSM.add_timed_transition(&stateBOOT, hasPower ? &statePOWER : &stateON, 3 * 1000, NULL, "boot timeout");
 
     powerFSM.add_transition(&stateLS, &stateDARK, EVENT_WAKE_TIMER, wakeForPing, "Wake timer");
 
-    // Note we don't really use this transition, because when we wake from light sleep we _always_ transition to NB and then it
-    // handles things powerFSM.add_transition(&stateLS, &stateNB, EVENT_RECEIVED_PACKET, NULL, "Received packet");
+    // Note we don't really use this transition, because when we wake from light sleep we _always_ transition to NB and then
+    // it handles things powerFSM.add_transition(&stateLS, &stateNB, EVENT_RECEIVED_PACKET, NULL, "Received packet");
 
     powerFSM.add_transition(&stateNB, &stateNB, EVENT_RECEIVED_PACKET, NULL, "Received packet, resetting win wake");
 
@@ -172,7 +182,10 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateLS, &stateON, EVENT_PRESS, NULL, "Press");
     powerFSM.add_transition(&stateNB, &stateON, EVENT_PRESS, NULL, "Press");
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_PRESS, NULL, "Press");
+    powerFSM.add_transition(&statePOWER, &statePOWER, EVENT_PRESS, screenPress, "Press");
     powerFSM.add_transition(&stateON, &stateON, EVENT_PRESS, screenPress, "Press"); // reenter On to restart our timers
+    powerFSM.add_transition(&stateSERIAL, &stateSERIAL, EVENT_PRESS, screenPress,
+                            "Press"); // Allow button to work while in serial API
 
     // Handle critically low power battery by forcing deep sleep
     powerFSM.add_transition(&stateBOOT, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
@@ -198,6 +211,14 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateNB, &stateSERIAL, EVENT_SERIAL_CONNECTED, NULL, "serial API");
     powerFSM.add_transition(&stateDARK, &stateSERIAL, EVENT_SERIAL_CONNECTED, NULL, "serial API");
     powerFSM.add_transition(&stateON, &stateSERIAL, EVENT_SERIAL_CONNECTED, NULL, "serial API");
+
+    powerFSM.add_transition(&stateLS, &statePOWER, EVENT_POWER_CONNECTED, NULL, "power connect");
+    powerFSM.add_transition(&stateNB, &statePOWER, EVENT_POWER_CONNECTED, NULL, "power connect");
+    powerFSM.add_transition(&stateDARK, &statePOWER, EVENT_POWER_CONNECTED, NULL, "power connect");
+    powerFSM.add_transition(&stateON, &statePOWER, EVENT_POWER_CONNECTED, NULL, "power connect");
+
+    powerFSM.add_transition(&statePOWER, &stateON, EVENT_POWER_DISCONNECTED, NULL, "power disconnected");
+    powerFSM.add_transition(&stateSERIAL, &stateON, EVENT_POWER_DISCONNECTED, NULL, "power disconnected");
 
     powerFSM.add_transition(&stateSERIAL, &stateNB, EVENT_SERIAL_DISCONNECTED, NULL, "serial disconnect");
 

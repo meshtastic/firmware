@@ -63,8 +63,10 @@ class MeshService
      */
     void handleToRadio(MeshPacket &p);
 
-    /// The radioConfig object just changed, call this to force the hw to change to the new settings
-    void reloadConfig();
+    /** The radioConfig object just changed, call this to force the hw to change to the new settings
+     * @return true if client devices should be sent a new set of radio configs
+     */
+    bool reloadConfig();
 
     /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
     void reloadOwner();
