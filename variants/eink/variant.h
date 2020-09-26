@@ -27,6 +27,9 @@
 /*
 @geeksville eink TODO:
 
+fix battery voltage sensing
+get second button working in app load
+fix bootloader to use two buttons
 fix display width and height
 clean up eink drawing to not have the nasty timeout hack
 put eink to sleep when we think the screen is off
@@ -37,21 +40,8 @@ tp_ser_io as a button, it goes high when pressed unify eink display classes
 make screen.adjustBrightness() a nop on eink screens
 enable gps sleep mode
 use new flash chip
+add factory/power on self test
 
-feedback to ttgo:
-offer to provide an image
-usb works!
-radio works!
-eink works!
-leds work?
-gps works!
-use pcf8563 part for waking CPU? or remove it
-the mx25 flash chip is great!
-name: TTGO LoraCard (nice googablity, unique name, sounds slick, implies lora and small)
-i'm going to add some sort of pass/fail factory test
-remove the cp2014 part
-add solar power
-move touch sensor pad to the same side of the PCB as the screen (or just change it to a button)
 */
 
 /*----------------------------------------------------------------------------
