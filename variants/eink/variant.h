@@ -16,8 +16,8 @@
  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-#ifndef _VARIANT_LORA_RELAY_V1_
-#define _VARIANT_LORA_RELAY_V1_
+#ifndef _VARIANT_TTGO_EINK_V1_
+#define _VARIANT_TTGO_EINK_V1_
 
 /** Master clock frequency */
 #define VARIANT_MCK (64000000ul)
@@ -27,9 +27,10 @@
 /*
 @geeksville eink TODO:
 
+fix bootloader to use two buttons - remove bootloader hacks
 fix battery voltage sensing
 get second button working in app load
-fix bootloader to use two buttons
+if battery falls too low deassert PWR_ON (to force board to shutdown)
 fix display width and height
 clean up eink drawing to not have the nasty timeout hack
 put eink to sleep when we think the screen is off
@@ -41,7 +42,6 @@ make screen.adjustBrightness() a nop on eink screens
 enable gps sleep mode
 use new flash chip
 add factory/power on self test
-
 */
 
 /*----------------------------------------------------------------------------
@@ -106,13 +106,9 @@ work.
 #define PIN_SERIAL2_TX (0 + 8)
 // #define PIN_SERIAL2_EN (0 + 17)
 
-// Connected to Jlink CDC
-// #define PIN_SERIAL2_RX (8)
-// #define PIN_SERIAL2_TX (6)
-
-/*
- * Wire Interfaces
- */
+/**
+    Wire Interfaces
+    */
 #define WIRE_INTERFACES_COUNT 1
 
 #define PIN_WIRE_SDA (26) // Not connected on board?
@@ -203,11 +199,6 @@ FIXME define/FIX flash access
 #define PIN_SPI_MISO (0 + 23)
 #define PIN_SPI_MOSI (0 + 22)
 #define PIN_SPI_SCK (0 + 19)
-
-// static const uint8_t SS = SX1262_CS;
-// static const uint8_t MOSI = PIN_SPI_MOSI;
-// static const uint8_t MISO = PIN_SPI_MISO;
-// static const uint8_t SCK = PIN_SPI_SCK;
 
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
 #define USE_SEGGER
