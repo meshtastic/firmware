@@ -8,9 +8,10 @@
 #include <WiFi.h>
 
 static void WiFiEvent(WiFiEvent_t event);
-// static void WiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info);
 
+// DNS Server for the Captive Portal
 DNSServer dnsServer;
+
 static WiFiServerPort *apiPort;
 
 uint8_t wifiDisconnectReason = 0;
@@ -60,18 +61,6 @@ void initWifi()
         const char *wifiName = radioConfig.preferences.wifi_ssid;
         const char *wifiPsw = radioConfig.preferences.wifi_password;
 
-        /*
-        if (0) {
-            radioConfig.preferences.wifi_ap_mode = 1;
-            strcpy(radioConfig.preferences.wifi_ssid, "MeshTest2");
-            strcpy(radioConfig.preferences.wifi_password, "12345678");
-        } else {
-            radioConfig.preferences.wifi_ap_mode = 0;
-            strcpy(radioConfig.preferences.wifi_ssid, "meshtastic");
-            strcpy(radioConfig.preferences.wifi_password, "meshtastic!");
-        }
-         */
-
         if (*wifiName && *wifiPsw) {
             if (radioConfig.preferences.wifi_ap_mode) {
 
@@ -89,11 +78,20 @@ void initWifi()
                 WiFi.onEvent(WiFiEvent);
                 // esp_wifi_set_ps(WIFI_PS_NONE); // Disable power saving
 
-                WiFiEventId_t eventID = WiFi.onEvent(
+                //WiFiEventId_t eventID = WiFi.onEvent(
+                WiFi.onEvent( 
                     [](WiFiEvent_t event, WiFiEventInfo_t info) {
                         Serial.print("\nWiFi lost connection. Reason: ");
                         Serial.println(info.disconnected.reason);
-                        // wifiDisconnectReason = info.disconnected.reason;
+
+                        /*
+                           If we are disconnected from the AP for some reason,
+                           save the error code.
+
+                           For a reference to the codes:
+                             https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/wifi.html#wi-fi-reason-code
+                        */
+                        wifiDisconnectReason = info.disconnected.reason;
                     },
                     WiFiEvent_t::SYSTEM_EVENT_STA_DISCONNECTED);
 
@@ -125,6 +123,8 @@ static void initApiServer()
         apiPort->init();
     }
 }
+
+// Called by the Espressif SDK to
 static void WiFiEvent(WiFiEvent_t event)
 {
     DEBUG_MSG("************ [WiFi-event] event: %d ************\n", event);
@@ -249,7 +249,7 @@ void reconnectWiFi()
     }
 }
 
-uint8_t getWifiDisconnectReason() 
+uint8_t getWifiDisconnectReason()
 {
     return wifiDisconnectReason;
 }
