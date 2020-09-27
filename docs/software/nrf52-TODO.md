@@ -1,12 +1,99 @@
 # NRF52 TODO
 
+- Possibly switch from softdevice to Apachy Newt: https://github.com/espressif/esp-nimble
+  https://github.com/apache/mynewt-core - use nimble BLE on both ESP32 and NRF52
+
+## RAK815
+
+TODO:
+
+- shrink soft device RAM usage
+- get nrf52832 working again (currently OOM)
+- i2c gps comms not quite right
+- ble: AdafruitBluefruit::begin - adafruit_ble_task was assigned an invalid stack pointer. out of memory?
+- measure power draw
+
+### Bootloader
+
+Install our (temporarily hacked up) adafruit bootloader
+
+```
+kevinh@kevin-server:~/development/meshtastic/Adafruit_nRF52_Bootloader$ make BOARD=rak815 sd flash
+LD rak815_bootloader-0.3.2-111-g9478eb7-dirty.out
+   text	   data	    bss	    dec	    hex	filename
+  20888	   1124	  15006	  37018	   909a	_build/build-rak815/rak815_bootloader-0.3.2-111-g9478eb7-dirty.out
+Create rak815_bootloader-0.3.2-111-g9478eb7-dirty.hex
+Create rak815_bootloader-0.3.2-111-g9478eb7-dirty-nosd.hex
+Flashing: rak815_bootloader-0.3.2-111-g9478eb7-dirty-nosd.hex
+nrfjprog --program _build/build-rak815/rak815_bootloader-0.3.2-111-g9478eb7-dirty-nosd.hex --sectoranduicrerase -f nrf52 --reset
+Parsing hex file.
+Erasing page at address 0x0.
+Erasing page at address 0x74000.
+Erasing page at address 0x75000.
+Erasing page at address 0x76000.
+Erasing page at address 0x77000.
+Erasing page at address 0x78000.
+Erasing page at address 0x79000.
+Erasing UICR flash area.
+Applying system reset.
+Checking that the area to write is not protected.
+Programming device.
+Applying system reset.
+Run.
+```
+
+### Appload
+
+tips on installing https://github.com/platformio/platform-nordicnrf52/issues/8#issuecomment-374017768
+
+to see console output over jlink:
+
+```
+12:17
+in one tab run "bin/nrf52832-gdbserver.sh" - leave this running the whole time while developing/debugging
+12:17
+~/development/meshtastic/meshtastic-esp32$ bin/nrf52-console.sh
+###RTT Client: ************************************************************
+###RTT Client: *               SEGGER Microcontroller GmbH                *
+###RTT Client: *   Solutions for real time microcontroller applications   *
+###RTT Client: ************************************************************
+###RTT Client: *                                                          *
+###RTT Client: *       (c) 2012 - 2016  SEGGER Microcontroller GmbH       *
+###RTT Client: *                                                          *
+###RTT Client: *     www.segger.com     Support: support@segger.com       *
+###RTT Client: *                                                          *
+###RTT Client: ************************************************************
+###RTT Client: *                                                          *
+###RTT Client: * SEGGER J-Link RTT Client   Compiled Apr  7 2020 15:01:22 *
+###RTT Client: *                                                          *
+###RTT Client: ************************************************************
+###RTT Client: -----------------------------------------------
+###RTT Client: Connecting to J-Link RTT Server via localhost:19021 ..............
+###RTT Client: Connected.
+SEGGER J-Link V6.70c - Real time terminal output
+SEGGER J-Link ARM V9.6, SN=69663845
+Process: JLinkGDBServerCLExein another tab run:
+12:18
+On NRF52 I've been using the jlink fake serial console.  But since the rak815 has the serial port hooked up we can switch back to that once the basics are working.
+```
+
 ## Misc work items
+
+RAM investigation.
+nRF52832-QFAA 64KB ram, 512KB flash vs
+nrf52832-QFAB 32KB ram, 512kb flash
+nrf52833 128KB RAM
+nrf52840 256KB RAM, 1MB flash
+
+Manual hacks needed to build (for now):
+
+kevinh@kevin-server:~/.platformio/packages/framework-arduinoadafruitnrf52/variants\$ ln -s ~/development/meshtastic/meshtastic-esp32/variants/\* .
 
 ## Initial work items
 
 Minimum items needed to make sure hardware is good.
 
-- set power UICR per https://devzone.nordicsemi.com/f/nordic-q-a/28562/nrf52840-regulator-configuration
+- DONE set power UICR per https://devzone.nordicsemi.com/f/nordic-q-a/28562/nrf52840-regulator-configuration
 - switch charge controller into / out of performance mode (see 8.3.1 in datasheet)
 - write UC1701 wrapper
 - Test hardfault handler for null ptrs (if one isn't already installed)
@@ -109,7 +196,7 @@ Nice ideas worth considering someday...
 - DONE neg 7 error code from receive
 - DONE remove unused sx1262 lib from github
 - at boot we are starting our message IDs at 1, rather we should start them at a random number. also, seed random based on timer. this could be the cause of our first message not seen bug.
-- add a NEMA based GPS driver to test GPS
+- add a NMEA based GPS driver to test GPS
 - DONE use "variants" to get all gpio bindings
 - DONE plug in correct variants for the real board
 - turn on DFU assistance in the appload using the nordic DFU helper lib call

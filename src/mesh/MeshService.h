@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <string>
 
+#include "GPSStatus.h"
 #include "MemoryPool.h"
 #include "MeshRadio.h"
 #include "MeshTypes.h"
@@ -17,7 +18,8 @@
  */
 class MeshService
 {
-    CallbackObserver<MeshService, void *> gpsObserver = CallbackObserver<MeshService, void *>(this, &MeshService::onGPSChanged);
+    CallbackObserver<MeshService, const meshtastic::GPSStatus *> gpsObserver =
+        CallbackObserver<MeshService, const meshtastic::GPSStatus *>(this, &MeshService::onGPSChanged);
     CallbackObserver<MeshService, const MeshPacket *> packetReceivedObserver =
         CallbackObserver<MeshService, const MeshPacket *>(this, &MeshService::handleFromRadio);
 
@@ -61,11 +63,13 @@ class MeshService
      */
     void handleToRadio(MeshPacket &p);
 
-    /// The radioConfig object just changed, call this to force the hw to change to the new settings
-    void reloadConfig();
+    /** The radioConfig object just changed, call this to force the hw to change to the new settings
+     * @return true if client devices should be sent a new set of radio configs
+     */
+    bool reloadConfig();
 
     /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
-    void reloadOwner() { sendOurOwner(); }
+    void reloadOwner();
 
     /// Called when the user wakes up our GUI, normally sends our latest location to the mesh (if we have it), otherwise at least
     /// sends our owner
@@ -85,7 +89,7 @@ class MeshService
 
     /// Called when our gps position has changed - updates nodedb and sends Location message out into the mesh
     /// returns 0 to allow futher processing
-    int onGPSChanged(void *arg);
+    int onGPSChanged(const meshtastic::GPSStatus *arg);
 
     /// Handle a packet that just arrived from the radio.  This method does _not_ free the provided packet.  If it needs
     /// to keep the packet around it makes a copy

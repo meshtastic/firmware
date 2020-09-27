@@ -1,7 +1,11 @@
 #pragma once
 
-#include "PeriodicTask.h"
+#include "../concurrency/PeriodicTask.h"
 #include "RadioInterface.h"
+
+#ifdef CubeCell_BoardPlus
+#define RADIOLIB_SOFTWARE_SERIAL_UNSUPPORTED
+#endif
 
 #include <RadioLib.h>
 
@@ -12,7 +16,50 @@
 #define INTERRUPT_ATTR
 #endif
 
-class RadioLibInterface : public RadioInterface, private PeriodicTask
+/**
+ * A wrapper for the RadioLib Module class, that adds mutex for SPI bus access
+ */
+class LockingModule : public Module
+{
+  public:
+    /*!
+      \brief Extended SPI-based module constructor.
+
+      \param cs Arduino pin to be used as chip select.
+
+      \param irq Arduino pin to be used as interrupt/GPIO.
+
+      \param rst Arduino pin to be used as hardware reset for the module.
+
+      \param gpio Arduino pin to be used as additional interrupt/GPIO.
+
+      \param spi SPI interface to be used, can also use software SPI implementations.
+
+      \param spiSettings SPI interface settings.
+    */
+    LockingModule(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE gpio, SPIClass &spi,
+                  SPISettings spiSettings)
+        : Module(cs, irq, rst, gpio, spi, spiSettings)
+    {
+    }
+
+    /*!
+    \brief SPI single transfer method.
+
+    \param cmd SPI access command (read/write/burst/...).
+
+    \param reg Address of SPI register to transfer to/from.
+
+    \param dataOut Data that will be transfered from master to slave.
+
+    \param dataIn Data that was transfered from slave to master.
+
+    \param numBytes Number of bytes to transfer.
+    */
+    virtual void SPItransfer(uint8_t cmd, uint8_t reg, uint8_t *dataOut, uint8_t *dataIn, uint8_t numBytes);
+};
+
+class RadioLibInterface : public RadioInterface, private concurrency::PeriodicTask
 {
     /// Used as our notification from the ISR
     enum PendingISR { ISR_NONE = 0, ISR_RX, ISR_TX, TRANSMIT_DELAY_COMPLETED };
@@ -45,7 +92,7 @@ class RadioLibInterface : public RadioInterface, private PeriodicTask
     float currentLimit = 100;     // FIXME
     uint16_t preambleLength = 32; // 8 is default, but FIXME use longer to increase the amount of sleep time when receiving
 
-    Module module; // The HW interface to the radio
+    LockingModule module; // The HW interface to the radio
 
     /**
      * provides lowest common denominator RadioLib API
@@ -91,9 +138,6 @@ class RadioLibInterface : public RadioInterface, private PeriodicTask
     virtual void startReceive() = 0;
 
   private:
-    /** start an immediate transmit */
-    void startSend(MeshPacket *txp);
-
     /** if we have something waiting to send, start a short random timer so we can come check for collision before actually doing
      * the transmit
      *
@@ -108,12 +152,20 @@ class RadioLibInterface : public RadioInterface, private PeriodicTask
 
     virtual void doTask();
 
+    /** start an immediate transmit
+     *  This method is virtual so subclasses can hook as needed, subclasses should not call directly
+     */
+    virtual void startSend(MeshPacket *txp);
+
   protected:
     /// Initialise the Driver transport hardware and software.
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
     virtual bool init();
-    
+
+    /** Do any hardware setup needed on entry into send configuration for the radio.  Subclasses can customize */
+    virtual void configHardwareForSend() {}
+
     /**
      * Convert our modemConfig enum into wf, sf, etc...
      *

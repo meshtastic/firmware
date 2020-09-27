@@ -107,6 +107,7 @@ template <class T> class MemoryPool : public Allocator<T>
                    maxElements); // sanity check to make sure a programmer didn't free something that didn't come from this pool
     }
 
+#ifdef HAS_FREE_RTOS
     /// Return a buffer from an ISR, if higherPriWoken is set to true you have some work to do ;-)
     void releaseFromISR(T *p, BaseType_t *higherPriWoken)
     {
@@ -115,6 +116,7 @@ template <class T> class MemoryPool : public Allocator<T>
                (size_t)(p - buf) <
                    maxElements); // sanity check to make sure a programmer didn't free something that didn't come from this pool
     }
+#endif
 
   protected:
     /// Return a queable object which has been prefilled with zeros - allow timeout to wait for available buffers (you

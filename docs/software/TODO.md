@@ -1,37 +1,44 @@
-# High priority
+# Geeksville's current work queue
 
-- why is the net so chatty now?
-- do a release
-- device wakes, turns BLE on and phone doesn't notice (while phone was sitting in auto-connect)
-- E22 bringup
-- encryption review findings writeup
-- turn on modem-sleep mode - https://github.com/espressif/arduino-esp32/issues/1142#issuecomment-512428852
+You probably don't care about this section - skip to the next one.
+
+Nimble tasks:
+
+- readerror.txt stress test bug
+- started RPA long test, jul 22 6pm
+- implement nimble software update api
+- update to latest bins, test OTA again (measure times) and then checkin bins
+- do alpha release
+
+* update protocol description per cyclomies email thread
+* update faq with antennas https://meshtastic.discourse.group/t/range-test-ideas-requested/738/2
+* update faq on recommended android version and phones
+* add help link inside the app, reference a page on the wiki
+* turn on amazon reviews support
+* add a tablet layout (with map next to messages) in the android app
 
 # Medium priority
 
-Items to complete before the first beta release.
+Items to complete before 1.0.
 
-- turn on watchdog timer (because lib code seems buggy)
-- show battery level as % full
-- rx signal measurements -3 marginal, -9 bad, 10 great, -10 means almost unusable. So scale this into % signal strength. preferably as a graph, with an X indicating loss of comms.
-
-# Pre-beta priority
-
-During the beta timeframe the following improvements 'would be nice'
+# Post 1.0 ideas
 
 - finish DSR for unicast
 - check fcc rules on duty cycle. we might not need to freq hop. https://www.sunfiretesting.com/LoRa-FCC-Certification-Guide/ . Might need to add enforcement for europe though.
-- pick channel center frequency based on channel name? "dolphin" would hash to 900Mhz, "cat" to 905MHz etc? allows us to hide the concept of channel # from hte user.
 - make a no bluetooth configured yet screen - include this screen in the loop if the user hasn't yet paired
 - if radio params change fundamentally, discard the nodedb
 - re-enable the bluetooth battery level service on the T-BEAM
-- implement first cut of router mode: preferentially handle flooding, and change sleep and GPS behaviors
 - provide generalized (but slow) internet message forwarding service if one of our nodes has internet connectivity (MQTT) [ Not a requirement but a personal interest ]
 
-# Low priority
+# Low priority ideas
 
 Items after the first final candidate release.
 
+- implement nimble battery level service
+- Nimble implement device info service remaining fields (hw version etc)
+- Turn on RPA addresses for the device side in Nimble
+- Try to teardown less of the Nimble protocol stack across sleep
+- dynamic frequency scaling could save a lot of power on ESP32, but it seems to corrupt uart (even with ref_tick set correctly)
 - Change back to using a fixed sized MemoryPool rather than MemoryDynamic (see bug #149)
 - scan to find channels with low background noise? (Use CAD mode of the RF95 to automatically find low noise channels)
 - If the phone doesn't read fromradio mailbox within X seconds, assume the phone is gone and we can stop queing location msgs
@@ -57,9 +64,16 @@ Items after the first final candidate release.
 - split out the software update utility so other projects can use it. Have the appload specify the URL for downloads.
 - read the PMU battery fault indicators and blink/led/warn user on screen
 - discard very old nodedb records (> 1wk)
-- add a watchdog timer
 - handle millis() rollover in GPS.getTime - otherwise we will break after 50 days
 - report esp32 device code bugs back to the mothership via android
+- change BLE bonding to something more secure. see comment by pSecurity->setAuthenticationMode(ESP_LE_AUTH_BOND)
+
+Changes related to wifi support on ESP32:
+
+- iram space: https://esp32.com/viewtopic.php?t=8460
+- set https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/external-ram.html spi ram bss
+- figure out if iram or bluetooth classic caused ble problems
+- post bug on esp32-arduino with BLE bug findings
 
 # Spinoff project ideas
 

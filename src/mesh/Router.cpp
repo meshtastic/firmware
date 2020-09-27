@@ -24,8 +24,8 @@
     (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
      2) // max number of packets which can be in flight (either queued from reception or queued for sending)
 
-static MemoryPool<MeshPacket> staticPool(MAX_PACKETS);
-// static MemoryDynamic<MeshPacket> staticPool;
+// static MemoryPool<MeshPacket> staticPool(MAX_PACKETS);
+static MemoryDynamic<MeshPacket> staticPool;
 
 Allocator<MeshPacket> &packetPool = staticPool;
 
@@ -34,7 +34,14 @@ Allocator<MeshPacket> &packetPool = staticPool;
  *
  * Currently we only allow one interface, that may change in the future
  */
-Router::Router() : fromRadioQueue(MAX_RX_FROMRADIO) {}
+Router::Router() : fromRadioQueue(MAX_RX_FROMRADIO)
+{
+    // This is called pre main(), don't touch anything here, the following code is not safe
+
+    /* DEBUG_MSG("Size of NodeInfo %d\n", sizeof(NodeInfo));
+    DEBUG_MSG("Size of SubPacket %d\n", sizeof(SubPacket));
+    DEBUG_MSG("Size of MeshPacket %d\n", sizeof(MeshPacket)); */
+}
 
 /**
  * do idle processing
@@ -150,8 +157,8 @@ ErrorCode Router::send(MeshPacket *p)
  */
 void Router::sniffReceived(const MeshPacket *p)
 {
-    DEBUG_MSG("FIXME-update-db Sniffing packet fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
-    // FIXME, update nodedb
+    DEBUG_MSG("FIXME-update-db Sniffing packet\n");
+    // FIXME, update nodedb here for any packet that passes through us
 }
 
 bool Router::perhapsDecode(MeshPacket *p)
@@ -202,7 +209,7 @@ void Router::handleReceived(MeshPacket *p)
         sniffReceived(p);
 
         if (p->to == NODENUM_BROADCAST || p->to == getNodeNum()) {
-            DEBUG_MSG("Notifying observers of received packet fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+            printPacket("Delivering rx packet", p);
             notifyPacketReceived.notifyObservers(p);
         }
     }

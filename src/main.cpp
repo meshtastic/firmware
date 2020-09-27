@@ -23,32 +23,50 @@
 
 #include "MeshRadio.h"
 #include "MeshService.h"
-#include "NEMAGPS.h"
+#include "NMEAGPS.h"
 #include "NodeDB.h"
-#include "Periodic.h"
 #include "PowerFSM.h"
 #include "UBloxGPS.h"
+#include "concurrency/Periodic.h"
 #include "configuration.h"
 #include "error.h"
 #include "power.h"
 // #include "rom/rtc.h"
 #include "DSRRouter.h"
-#include "debug.h"
+// #include "debug.h"
+#include "SPILock.h"
+#include "graphics/Screen.h"
 #include "main.h"
-#include "screen.h"
+#include "meshwifi/meshhttp.h"
+#include "meshwifi/meshwifi.h"
 #include "sleep.h"
+#include "target_specific.h"
+#include <OneButton.h>
 #include <Wire.h>
 // #include <driver/rtc_io.h>
 
 #ifndef NO_ESP32
-#include "BluetoothUtil.h"
+#include "nimble/BluetoothUtil.h"
+#endif
+
+#include "RF95Interface.h"
+#include "SX1262Interface.h"
+
+#ifdef NRF52_SERIES
+#include "variant.h"
 #endif
 
 // We always create a screen object, but we only init it if we find the hardware
-meshtastic::Screen screen(SSD1306_ADDRESS);
+graphics::Screen screen(SSD1306_ADDRESS);
 
-// Global power status singleton
-meshtastic::PowerStatus powerStatus;
+// Global power status
+meshtastic::PowerStatus *powerStatus = new meshtastic::PowerStatus();
+
+// Global GPS status
+meshtastic::GPSStatus *gpsStatus = new meshtastic::GPSStatus();
+
+// Global Node status
+meshtastic::NodeStatus *nodeStatus = new meshtastic::NodeStatus();
 
 bool ssd1306_found;
 bool axp192_found;
@@ -112,17 +130,26 @@ static uint32_t ledBlinker()
     setLed(ledOn);
 
     // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
-    return powerStatus.charging ? 1000 : (ledOn ? 2 : 1000);
+    return powerStatus->getIsCharging() ? 1000 : (ledOn ? 2 : 1000);
 }
 
-Periodic ledPeriodic(ledBlinker);
+concurrency::Periodic ledPeriodic(ledBlinker);
 
-#include "RF95Interface.h"
-#include "SX1262Interface.h"
-
-#ifdef NO_ESP32
-#include "variant.h"
+// Prepare for button presses
+#ifdef BUTTON_PIN
+OneButton userButton;
 #endif
+#ifdef BUTTON_PIN_ALT
+OneButton userButtonAlt;
+#endif
+void userButtonPressed()
+{
+    powerFSM.trigger(EVENT_PRESS);
+}
+void userButtonPressedLong()
+{
+    screen.adjustBrightness();
+}
 
 void setup()
 {
@@ -152,12 +179,21 @@ void setup()
 #else
     Wire.begin();
 #endif
+    // i2c still busted on new board
+#ifndef ARDUINO_NRF52840_PPR
     scanI2Cdevice();
+#endif
 
     // Buttons & LED
 #ifdef BUTTON_PIN
-    pinMode(BUTTON_PIN, INPUT_PULLUP);
-    digitalWrite(BUTTON_PIN, 1);
+    userButton = OneButton(BUTTON_PIN, true, true);
+    userButton.attachClick(userButtonPressed);
+    userButton.attachDuringLongPress(userButtonPressedLong);
+#endif
+#ifdef BUTTON_PIN_ALT
+    userButtonAlt = OneButton(BUTTON_PIN_ALT, true, true);
+    userButtonAlt.attachClick(userButtonPressed);
+    userButton.attachDuringLongPress(userButtonPressedLong);
 #endif
 #ifdef LED_PIN
     pinMode(LED_PIN, OUTPUT);
@@ -181,9 +217,29 @@ void setup()
     nrf52Setup();
 #endif
 
+    // Currently only the tbeam has a PMU
+    power = new Power();
+    power->setStatusHandler(powerStatus);
+    powerStatus->observe(&power->newStatus);
+    power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
+
+    // Init our SPI controller (must be before screen and lora)
+    initSPI();
+#ifdef NO_ESP32
+    SPI.begin();
+#else
+    // ESP32
+    SPI.begin(RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
+    SPI.setFrequency(4000000);
+#endif
+
     // Initialize the screen first so we can show the logo while we start up everything else.
+#if defined(ST7735_CS) || defined(HAS_EINK)
+    screen.setup();
+#else
     if (ssd1306_found)
         screen.setup();
+#endif
 
     screen.print("Started...\n");
 
@@ -192,21 +248,45 @@ void setup()
 // If we know we have a L80 GPS, don't try UBLOX
 #ifndef L80_RESET
     // Init GPS - first try ublox
-    gps = new UBloxGPS();
+    auto ublox = new UBloxGPS();
+    gps = ublox;
     if (!gps->setup()) {
-        // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
-        // assume NEMA at 9600 baud.
-        DEBUG_MSG("ERROR: No UBLOX GPS found, hoping that NEMA might work\n");
-        delete gps;
-        gps = new NEMAGPS();
-        gps->setup();
+        DEBUG_MSG("ERROR: No UBLOX GPS found\n");
+
+        delete ublox;
+        gps = ublox = NULL;
+
+        if (GPS::_serial_gps) {
+            // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
+            // assume NMEA at 9600 baud.
+            DEBUG_MSG("Hoping that NMEA might work\n");
+
+            // dumb NMEA access only work for serial GPSes)
+            gps = new NMEAGPS();
+            gps->setup();
+        }
     }
 #else
-    gps = new NEMAGPS();
+    gps = new NMEAGPS();
     gps->setup();
 #endif
+    if (gps)
+        gpsStatus->observe(&gps->newStatus);
+    else
+        DEBUG_MSG("Warning: No GPS found - running without GPS\n");
+    nodeStatus->observe(&nodeDB.newStatus);
 
     service.init();
+
+    // We have now loaded our saved preferences from flash
+
+    // ONCE we will factory reset the GPS for bug #327
+    if (ublox && !devicestate.did_gps_reset) {
+        if (ublox->factoryReset()) { // If we don't succeed try again next time
+            devicestate.did_gps_reset = true;
+            nodeDB.saveToDisk();
+        }
+    }
 
 #ifdef SX1262_ANT_SW
     // make analog PA vs not PA switch on SX1262 eval board work properly
@@ -214,27 +294,46 @@ void setup()
     digitalWrite(SX1262_ANT_SW, 1);
 #endif
 
-    // Init our SPI controller
-#ifdef NRF52_SERIES
-    SPI.begin();
-#else
-    // ESP32
-    SPI.begin(SCK_GPIO, MISO_GPIO, MOSI_GPIO, NSS_GPIO);
-    SPI.setFrequency(4000000);
-#endif
-
     // MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
-    RadioInterface *rIf =
-#if defined(RF95_IRQ_GPIO)
-        // new CustomRF95(); old Radiohead based driver
-        new RF95Interface(NSS_GPIO, RF95_IRQ_GPIO, RESET_GPIO, SPI);
-#elif defined(SX1262_CS)
-        new SX1262Interface(SX1262_CS, SX1262_DIO1, SX1262_RESET, SX1262_BUSY, SPI);
-#else
-        new SimRadio();
+    RadioInterface *rIf = NULL;
+
+#if defined(RF95_IRQ)
+    if (!rIf) {
+        rIf = new RF95Interface(RF95_NSS, RF95_IRQ, RF95_RESET, SPI);
+        if (!rIf->init()) {
+            DEBUG_MSG("Warning: Failed to find RF95 radio\n");
+            delete rIf;
+            rIf = NULL;
+        }
+    }
 #endif
 
-    if (!rIf->init())
+#if defined(SX1262_CS)
+    if (!rIf) {
+        rIf = new SX1262Interface(SX1262_CS, SX1262_DIO1, SX1262_RESET, SX1262_BUSY, SPI);
+        if (!rIf->init()) {
+            DEBUG_MSG("Warning: Failed to find SX1262 radio\n");
+            delete rIf;
+            rIf = NULL;
+        }
+    }
+#endif
+
+#ifdef USE_SIM_RADIO
+    if (!rIf) {
+        rIf = new SimRadio;
+        if (!rIf->init()) {
+            DEBUG_MSG("Warning: Failed to find simulated radio\n");
+            delete rIf;
+            rIf = NULL;
+        }
+    }
+#endif
+
+    // Initialize Wifi
+    initWifi();
+
+    if (!rIf)
         recordCriticalError(ErrNoRadio);
     else
         router.addInterface(rIf);
@@ -263,7 +362,7 @@ uint32_t axpDebugRead()
   return 30 * 1000;
 }
 
-Periodic axpDebugOutput(axpDebugRead);
+concurrency::Periodic axpDebugOutput(axpDebugRead);
 axpDebugOutput.setup();
 #endif
 
@@ -271,12 +370,13 @@ void loop()
 {
     uint32_t msecstosleep = 1000 * 30; // How long can we sleep before we again need to service the main loop?
 
-    gps->loop(); // FIXME, remove from main, instead block on read
+    if (gps)
+        gps->loop(); // FIXME, remove from main, instead block on read
     router.loop();
     powerFSM.run_machine();
     service.loop();
 
-    periodicScheduler.loop();
+    concurrency::periodicScheduler.loop();
     // axpDebugOutput.loop();
 
 #ifdef DEBUG_PORT
@@ -288,27 +388,18 @@ void loop()
 #ifndef NO_ESP32
     esp32Loop();
 #endif
+#ifdef TBEAM_V10
+    power->loop();
+#endif
 
 #ifdef BUTTON_PIN
-    // if user presses button for more than 3 secs, discard our network prefs and reboot (FIXME, use a debounce lib instead of
-    // this boilerplate)
-    static bool wasPressed = false;
-
-    if (!digitalRead(BUTTON_PIN)) {
-        if (!wasPressed) { // just started a new press
-            DEBUG_MSG("pressing\n");
-
-            // doLightSleep();
-            // esp_pm_dump_locks(stdout); // FIXME, do this someplace better
-            wasPressed = true;
-
-            powerFSM.trigger(EVENT_PRESS);
-        }
-    } else if (wasPressed) {
-        // we just did a release
-        wasPressed = false;
-    }
+    userButton.tick();
 #endif
+#ifdef BUTTON_PIN_ALT
+    userButtonAlt.tick();
+#endif
+
+    loopWifi();
 
     // Show boot screen for first 3 seconds, then switch to normal operation.
     static bool showingBootScreen = true;
@@ -326,11 +417,7 @@ void loop()
 #endif
 
     // Update the screen last, after we've figured out what to show.
-    screen.debug()->setNodeNumbersStatus(nodeDB.getNumOnlineNodes(), nodeDB.getNumNodes());
-    screen.debug()->setChannelNameStatus(channelSettings.name);
-    screen.debug()->setPowerStatus(powerStatus);
-    // TODO(#4): use something based on hdop to show GPS "signal" strength.
-    screen.debug()->setGPSStatus(gps->hasLock() ? "good" : "bad");
+    screen.debug_info()->setChannelNameStatus(getChannelName());
 
     // No GPS lock yet, let the OS put the main CPU in low power mode for 100ms (or until another interrupt comes in)
     // i.e. don't just keep spinning in loop as fast as we can.
@@ -339,6 +426,9 @@ void loop()
     // FIXME - until button press handling is done by interrupt (see polling above) we can't sleep very long at all or buttons
     // feel slow
     msecstosleep = 10;
+
+    // TODO: This should go into a thread handled by FreeRTOS.
+    handleWebResponse();
 
     delay(msecstosleep);
 }
