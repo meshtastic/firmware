@@ -27,6 +27,9 @@
 /*
 @geeksville eink TODO:
 
+confirm that watchdog reset (i.e. all pins now become inputs) won't cause the board to power down when we are not connected to USB
+(I bet it will). If this happens recommended fix is to add an external pullup on PWR_ON GPIO.
+
 fix bootloader to use two buttons - remove bootloader hacks
 fix battery voltage sensing
 fix floating point SEGGER printf on nrf52 - see "new NMEA GPS pos"
@@ -86,7 +89,7 @@ extern "C" {
  */
 #define PIN_A0 (4) // Battery ADC
 
-// #define BATTERY_PIN PIN_A0
+#define BATTERY_PIN PIN_A0
 
 static const uint8_t A0 = PIN_A0;
 
@@ -202,7 +205,7 @@ FIXME define/FIX flash access
 #define PIN_SPI_SCK (0 + 19)
 
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
-// #define USE_SEGGER
+#define USE_SEGGER
 
 #ifdef __cplusplus
 }
