@@ -4,6 +4,7 @@
 #include "configuration.h"
 #include "main.h"
 #include "meshwifi/meshhttp.h"
+#include "target_specific.h"
 #include <DNSServer.h>
 #include <WiFi.h>
 
@@ -16,10 +17,16 @@ static WiFiServerPort *apiPort;
 
 uint8_t wifiDisconnectReason = 0;
 
+// Stores the last 4 of our hardware ID, to make finding the device for pairing easier
+static char ourHost[16];
+
 bool isWifiAvailable()
 {
     const char *wifiName = radioConfig.preferences.wifi_ssid;
     const char *wifiPsw = radioConfig.preferences.wifi_password;
+
+    //strcpy(radioConfig.preferences.wifi_ssid, "");
+    //strcpy(radioConfig.preferences.wifi_password, "");
 
     if (*wifiName && *wifiPsw) {
 
@@ -57,9 +64,6 @@ void initWifi()
         return;
     }
 
-    //strcpy(radioConfig.preferences.wifi_ssid, "");
-    //strcpy(radioConfig.preferences.wifi_password, "");
-
     if (radioConfig.has_preferences) {
         const char *wifiName = radioConfig.preferences.wifi_ssid;
         const char *wifiPsw = radioConfig.preferences.wifi_password;
@@ -77,12 +81,19 @@ void initWifi()
                 dnsServer.start(53, "*", apIP);
 
             } else {
+                uint8_t dmac[6];
+                getMacAddr(dmac);
+                sprintf(ourHost, "Meshtastic-%02x%02x", dmac[4], dmac[5]);
+
+                Serial.println(ourHost);
+
                 WiFi.mode(WIFI_MODE_STA);
+                WiFi.setHostname(ourHost);
                 WiFi.onEvent(WiFiEvent);
                 // esp_wifi_set_ps(WIFI_PS_NONE); // Disable power saving
 
-                //WiFiEventId_t eventID = WiFi.onEvent(
-                WiFi.onEvent( 
+                // WiFiEventId_t eventID = WiFi.onEvent(
+                WiFi.onEvent(
                     [](WiFiEvent_t event, WiFiEventInfo_t info) {
                         Serial.print("\nWiFi lost connection. Reason: ");
                         Serial.println(info.disconnected.reason);
