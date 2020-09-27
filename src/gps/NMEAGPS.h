@@ -17,5 +17,7 @@ class NMEAGPS : public GPS
     uint32_t lastUpdateMsec = 0;
 
   public:
+    virtual bool setup();
+
     virtual void loop();
 };
