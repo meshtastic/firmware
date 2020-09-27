@@ -11,16 +11,7 @@
 
 static void sdsEnter()
 {
-    /*
-
-  // Don't deepsleep if we have USB power or if the user as pressed a button recently
-  // !isUSBPowered <- doesn't work yet because the axp192 isn't letting the battery fully charge when we are awake - FIXME
-  if (millis() - lastPressMs > radioConfig.preferences.mesh_sds_timeout_secs)
-  {
-    doDeepSleep(radioConfig.preferences.sds_secs);
-  }
-*/
-
+    // FIXME - make sure GPS and LORA radio are off first - because we want close to zero current draw
     doDeepSleep(radioConfig.preferences.sds_secs * 1000LL);
 }
 
