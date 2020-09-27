@@ -213,15 +213,15 @@ void setup()
     esp32Setup();
 #endif
 
+#ifdef NRF52_SERIES
+    nrf52Setup();
+#endif
+
     // Currently only the tbeam has a PMU
     power = new Power();
     power->setStatusHandler(powerStatus);
     powerStatus->observe(&power->newStatus);
     power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
-
-#ifdef NRF52_SERIES
-    nrf52Setup();
-#endif
 
     // Init our SPI controller (must be before screen and lora)
     initSPI();
@@ -234,7 +234,7 @@ void setup()
 #endif
 
     // Initialize the screen first so we can show the logo while we start up everything else.
-#ifdef ST7735_CS
+#if defined(ST7735_CS) || defined(HAS_EINK)
     screen.setup();
 #else
     if (ssd1306_found)
