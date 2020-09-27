@@ -905,8 +905,8 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         display->drawString(x, y + FONT_HEIGHT * 1, "Connection Lost");
     } else if (WiFi.status() == WL_CONNECT_FAILED) {
         display->drawString(x, y + FONT_HEIGHT * 1, "Connection Failed");
-    } else if (WiFi.status() == WL_DISCONNECTED) {
-        display->drawString(x, y + FONT_HEIGHT * 1, "Disconnected");
+    //} else if (WiFi.status() == WL_DISCONNECTED) {
+    //    display->drawString(x, y + FONT_HEIGHT * 1, "Disconnected");
     } else if (WiFi.status() == WL_IDLE_STATUS) {
         display->drawString(x, y + FONT_HEIGHT * 1, "Idle ... Reconnecting");
     } else {
