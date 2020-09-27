@@ -57,6 +57,9 @@ void initWifi()
         return;
     }
 
+    //strcpy(radioConfig.preferences.wifi_ssid, "");
+    //strcpy(radioConfig.preferences.wifi_password, "");
+
     if (radioConfig.has_preferences) {
         const char *wifiName = radioConfig.preferences.wifi_ssid;
         const char *wifiPsw = radioConfig.preferences.wifi_password;
