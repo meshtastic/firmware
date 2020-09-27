@@ -22,30 +22,43 @@ This software is 100% open source and developed by a group of hobbyist experimen
 
 We currently support three models of radios.
 
-- TTGO T-Beam
-
-  - [T-Beam V1.0 w/ NEO-M8N](https://www.aliexpress.com/item/33047631119.html) (Recommended)
-  - [T-Beam V1.0 w/ NEO-6M](https://www.aliexpress.com/item/33050391850.html)
+- TTGO T-Beam (usually the recommended choice)
+  - [T-Beam V1.1 w/ NEO-6M - special Meshtastic version](https://www.aliexpress.com/item/4001178678568.html) (Includes built-in OLED display and they have **preinstalled** the meshtastic software)
+  - [T-Beam V1.1 w/ NEO-M8N](https://www.aliexpress.com/item/33047631119.html) (slightly better GPS)
+  - [T-Beam V1.1 w/ NEO-M8N /w SX1262](https://de.aliexpress.com/item/4001287221970.html) (slightly better GPS + LoRa)
+    - board labels "TTGO T22_V1.1 20191212"
+  - [T-Beam V0.7 w/ NEO-6M](https://www.aliexpress.com/item/4000574335430.html) (will work but **you must use the tbeam0.7 firmware ** - but the T-Beam V1.0 or later are better!)
+     - board labels "TTGO T22_V07 20180711"
   - 3D printable cases
     - [T-Beam V0](https://www.thingiverse.com/thing:3773717)
-    - [T-Beam V1](https://www.thingiverse.com/thing:3830711)
+    - [T-Beam V1 (SMA-antenna)](https://www.thingiverse.com/thing:3830711)
+    - [T-Beam V1 (IPEX-antenna)](https://www.thingiverse.com/thing:4587297)
+  - Laser-cut cases
+    - [T-Beam V1](https://www.thingiverse.com/thing:4552771)
 
 - [TTGO LORA32](https://www.aliexpress.com/item/4000211331316.html) - No GPS
+  - version 2.1
+    - board labels "TTGO T3_V1.6 20180606"
+  - 3D printable case
+    - [TTGO LORA32 v1](https://www.thingiverse.com/thing:3385109)
 
 - [Heltec LoRa 32](https://heltec.org/project/wifi-lora-32/) - No GPS
   - [3D Printable case](https://www.thingiverse.com/thing:3125854)
 
 **Make sure to get the frequency for your country**
 
-- US/JP/AU/NZ - 915MHz
+- US/JP/AU/NZ/CA - 915MHz
 - CN - 470MHz
 - EU - 868MHz, 433MHz
+- full list of LoRa frequencies per region is available [here](https://www.thethingsnetwork.org/docs/lorawan/frequencies-by-country.html)
 
 Getting a version that includes a screen is optional, but highly recommended.
 
 ## Firmware Installation
 
 Prebuilt binaries for the supported radios are available in our [releases](https://github.com/meshtastic/Meshtastic-esp32/releases). Your initial installation has to happen over USB from your Mac, Windows or Linux PC. Once our software is installed, all future software updates happen over bluetooth from your phone.
+
+Be **very careful** to install the correct load for your board. In particular the popular 'T-BEAM' radio from TTGO is not called 'TTGO-Lora' (that is a different board). So don't install the 'TTGO-Lora' build on a TBEAM, it won't work correctly.
 
 Please post comments on our [group chat](https://meshtastic.discourse.group/) if you have problems or successes.
 
@@ -168,7 +181,7 @@ Hard resetting via RTS pin...
 
 # Meshtastic Android app
 
-The companion (optional) Meshtastic Android app is [here](https://github.com/meshtastic/Meshtastic-Android). You can also download it on Google Play.
+The companion (optional) Meshtastic Android app is [here](https://play.google.com/store/apps/details?id=com.geeksville.mesh&referrer=utm_source%3Dgithub-dev-readme). You can also download it on Google Play.
 
 # Python API
 

@@ -1,47 +1,42 @@
+#include <Arduino.h>
+
+#include "../concurrency/LockGuard.h"
 #include "BluetoothSoftwareUpdate.h"
-#include "BluetoothUtil.h"
-#include "CallbackCharacteristic.h"
+#include "PowerFSM.h"
 #include "RadioLibInterface.h"
 #include "configuration.h"
-#include "lock.h"
-#include <Arduino.h>
-#include <BLE2902.h>
+#include "nimble/BluetoothUtil.h"
+
 #include <CRC32.h>
 #include <Update.h>
-#include <esp_gatt_defs.h>
 
-using namespace meshtastic;
+int16_t updateResultHandle = -1;
 
-CRC32 crc;
-uint32_t rebootAtMsec = 0; // If not zero we will reboot at this time (used to reboot shortly after the update completes)
+static CRC32 crc;
+static uint32_t rebootAtMsec = 0; // If not zero we will reboot at this time (used to reboot shortly after the update completes)
 
-uint32_t updateExpectedSize, updateActualSize;
+static uint32_t updateExpectedSize, updateActualSize;
 
-Lock *updateLock;
+static concurrency::Lock *updateLock;
 
-class TotalSizeCharacteristic : public CallbackCharacteristic
+/// Handle writes & reads to total size
+int update_size_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
-  public:
-    TotalSizeCharacteristic()
-        : CallbackCharacteristic("e74dd9c0-a301-4a6f-95a1-f0e1dbea8e1e",
-                                 BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ)
-    {
-    }
+    concurrency::LockGuard g(updateLock);
 
-    void onWrite(BLECharacteristic *c)
-    {
-        LockGuard g(updateLock);
-        // Check if there is enough to OTA Update
-        uint32_t len = getValue32(c, 0);
-        updateExpectedSize = len;
+    // Check if there is enough to OTA Update
+    chr_readwrite32le(&updateExpectedSize, ctxt);
+
+    if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR && updateExpectedSize != 0) {
         updateActualSize = 0;
         crc.reset();
-        bool canBegin = Update.begin(len);
-        DEBUG_MSG("Setting update size %u, result %d\n", len, canBegin);
+        if (Update.isRunning())
+            Update.abort();
+        bool canBegin = Update.begin(updateExpectedSize);
+        DEBUG_MSG("Setting update size %u, result %d\n", updateExpectedSize, canBegin);
         if (!canBegin) {
-            // Indicate failure by forcing the size to 0
-            uint32_t zero = 0;
-            c->setValue(zero);
+            // Indicate failure by forcing the size to 0 (client will read it back)
+            updateExpectedSize = 0;
         } else {
             // This totally breaks abstraction to up up into the app layer for this, but quick hack to make sure we only
             // talk to one service during the sw update.
@@ -54,122 +49,103 @@ class TotalSizeCharacteristic : public CallbackCharacteristic
                                                       // writing flash - shut the radio off during updates
         }
     }
-};
+
+    return 0;
+}
 
 #define MAX_BLOCKSIZE 512
 
-class DataCharacteristic : public CallbackCharacteristic
+/// Handle writes to data
+int update_data_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
-  public:
-    DataCharacteristic() : CallbackCharacteristic("e272ebac-d463-4b98-bc84-5cc1a39ee517", BLECharacteristic::PROPERTY_WRITE) {}
+    concurrency::LockGuard g(updateLock);
 
-    void onWrite(BLECharacteristic *c)
-    {
-        LockGuard g(updateLock);
-        std::string value = c->getValue();
-        uint32_t len = value.length();
-        assert(len <= MAX_BLOCKSIZE);
-        static uint8_t
-            data[MAX_BLOCKSIZE]; // we temporarily copy here because I'm worried that a fast sender might be able overwrite srcbuf
-        memcpy(data, c->getData(), len);
-        // DEBUG_MSG("Writing %u\n", len);
-        crc.update(data, len);
-        Update.write(data, len);
-        updateActualSize += len;
-    }
-};
+    static uint8_t
+        data[MAX_BLOCKSIZE]; // we temporarily copy here because I'm worried that a fast sender might be able overwrite srcbuf
 
-static BLECharacteristic *resultC;
+    uint16_t len = 0;
 
-class CRC32Characteristic : public CallbackCharacteristic
+    auto rc = ble_hs_mbuf_to_flat(ctxt->om, data, sizeof(data), &len);
+    assert(rc == 0);
+
+    // DEBUG_MSG("Writing %u\n", len);
+    crc.update(data, len);
+    Update.write(data, len);
+    updateActualSize += len;
+    powerFSM.trigger(EVENT_RECEIVED_TEXT_MSG); // Not exactly correct, but we want to force the device to not sleep now
+
+    return 0;
+}
+
+static uint8_t update_result;
+
+/// Handle writes to crc32
+int update_crc32_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
-  public:
-    CRC32Characteristic() : CallbackCharacteristic("4826129c-c22a-43a3-b066-ce8f0d5bacc6", BLECharacteristic::PROPERTY_WRITE) {}
+    concurrency::LockGuard g(updateLock);
+    uint32_t expectedCRC = 0;
+    chr_readwrite32le(&expectedCRC, ctxt);
 
-    void onWrite(BLECharacteristic *c)
+    uint32_t actualCRC = crc.finalize();
+    DEBUG_MSG("expected CRC %u\n", expectedCRC);
+
+    uint8_t result = 0xff;
+
+    if (updateActualSize != updateExpectedSize) {
+        DEBUG_MSG("Expected %u bytes, but received %u bytes!\n", updateExpectedSize, updateActualSize);
+        result = 0xe1;                   // FIXME, use real error codes
+    } else if (actualCRC != expectedCRC) // Check the CRC before asking the update to happen.
     {
-        LockGuard g(updateLock);
-        uint32_t expectedCRC = getValue32(c, 0);
-        uint32_t actualCRC = crc.finalize();
-        DEBUG_MSG("expected CRC %u\n", expectedCRC);
-
-        uint8_t result = 0xff;
-
-        if (updateActualSize != updateExpectedSize) {
-            DEBUG_MSG("Expected %u bytes, but received %u bytes!\n", updateExpectedSize, updateActualSize);
-            result = 0xe1;                   // FIXME, use real error codes
-        } else if (actualCRC != expectedCRC) // Check the CRC before asking the update to happen.
-        {
-            DEBUG_MSG("Invalid CRC! expected=%u, actual=%u\n", expectedCRC, actualCRC);
-            result = 0xe0; // FIXME, use real error codes
+        DEBUG_MSG("Invalid CRC! expected=%u, actual=%u\n", expectedCRC, actualCRC);
+        result = 0xe0; // FIXME, use real error codes
+    } else {
+        if (Update.end()) {
+            DEBUG_MSG("OTA done, rebooting in 5 seconds!\n");
+            rebootAtMsec = millis() + 5000;
         } else {
-            if (Update.end()) {
-                DEBUG_MSG("OTA done, rebooting in 5 seconds!\n");
-                rebootAtMsec = millis() + 5000;
-            } else {
-                DEBUG_MSG("Error Occurred. Error #: %d\n", Update.getError());
-            }
-            result = Update.getError();
+            DEBUG_MSG("Error Occurred. Error #: %d\n", Update.getError());
         }
-
-        if (RadioLibInterface::instance)
-            RadioLibInterface::instance->startReceive(); // Resume radio
-
-        assert(resultC);
-        resultC->setValue(&result, 1);
-        resultC->notify();
+        result = Update.getError();
     }
-};
+
+    if (RadioLibInterface::instance)
+        RadioLibInterface::instance->startReceive(); // Resume radio
+
+    assert(updateResultHandle >= 0);
+    update_result = result;
+    DEBUG_MSG("BLE notify update result\n");
+    auto res = ble_gattc_notify(curConnectionHandle, updateResultHandle);
+    assert(res == 0);
+
+    return 0;
+}
+
+int update_result_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
+{
+    return chr_readwrite8(&update_result, sizeof(update_result), ctxt);
+}
 
 void bluetoothRebootCheck()
 {
-    if (rebootAtMsec && millis() > rebootAtMsec)
+    if (rebootAtMsec && millis() > rebootAtMsec) {
+        DEBUG_MSG("Rebooting for update\n");
         ESP.restart();
+    }
 }
 
 /*
 See bluetooth-api.md
 
  */
-BLEService *createUpdateService(BLEServer *server, std::string hwVendor, std::string swVersion, std::string hwVersion)
+void reinitUpdateService()
 {
     if (!updateLock)
-        updateLock = new Lock();
+        updateLock = new concurrency::Lock();
 
-    // Create the BLE Service
-    BLEService *service = server->createService(BLEUUID("cb0b9a0b-a84c-4c0d-bdbb-442e3144ee30"), 25, 0);
+    auto res = ble_gatts_count_cfg(gatt_update_svcs); // assigns handles?  see docstring for note about clearing the handle list
+                                                      // before calling SLEEP SUPPORT
+    assert(res == 0);
 
-    assert(!resultC);
-    resultC = new BLECharacteristic("5e134862-7411-4424-ac4a-210937432c77",
-                                    BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
-
-    addWithDesc(service, new TotalSizeCharacteristic, "total image size");
-    addWithDesc(service, new DataCharacteristic, "data");
-    addWithDesc(service, new CRC32Characteristic, "crc32");
-    addWithDesc(service, resultC, "result code");
-
-    resultC->addDescriptor(addBLEDescriptor(new BLE2902())); // Needed so clients can request notification
-
-    BLECharacteristic *swC =
-        new BLECharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_SW_VERSION_STR), BLECharacteristic::PROPERTY_READ);
-    swC->setValue(swVersion);
-    service->addCharacteristic(addBLECharacteristic(swC));
-
-    BLECharacteristic *mfC = new BLECharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_MANU_NAME), BLECharacteristic::PROPERTY_READ);
-    mfC->setValue(hwVendor);
-    service->addCharacteristic(addBLECharacteristic(mfC));
-
-    BLECharacteristic *hwvC =
-        new BLECharacteristic(BLEUUID((uint16_t)ESP_GATT_UUID_HW_VERSION_STR), BLECharacteristic::PROPERTY_READ);
-    hwvC->setValue(hwVersion);
-    service->addCharacteristic(addBLECharacteristic(hwvC));
-
-    return service;
-}
-
-void destroyUpdateService()
-{
-    assert(resultC);
-
-    resultC = NULL;
+    res = ble_gatts_add_svcs(gatt_update_svcs);
+    assert(res == 0);
 }

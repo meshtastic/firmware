@@ -1,0 +1,202 @@
+23K + messages
++ heap of 70ish packets, 300ish bytes per packet: 20KB
++ 14KB soft device RAM 
+
+With max length Data inside the packet
+Size of NodeInfo 104
+Size of SubPacket 272
+Size of MeshPacket 304
+
+If Data was smaller: for 70 data packets we would save 7KB.  We would need to make SubPacket.data and MeshPacket.encrypted into "type:FT_POINTER" - variably sized mallocs
+Size of NodeInfo 104
+Size of SubPacket 96
+Size of MeshPacket 292 (could have been much smaller but I forgot to shrink MeshPacket.encrypted)
+
+therefore: 
+a) we should store all ToPhone message queued messages compressed as protobufs (since they will become that anyways)
+b) shrink packet pool size because none of that storage will be used for ToPhone packets
+c) don't allocate any storage in RAM for the tophone messages we save inside device state, instead just use nanopb callbacks to save/load those
+d) a smarter MeshPacket in memory representation would save about 7KB of RAM.  call pb_release before freeing each freshly malloced MeshPacket
+
+- nrf52 free memory https://learn.adafruit.com/bluefruit-nrf52-feather-learning-guide/hathach-memory-map
+
+2000790c 00003558 B devicestate  // 16KB
+2000b53c 00001000 b _cache_buffer // 4KB flash filesystem support 
+20003b1c 000006b0 B console
+2000d5f4 00000400 b vApplicationGetTimerTaskMemory::uxTimerTaskStack
+2000da04 00000400 b _acUpBuffer
+2000c558 0000036c B Bluefruit
+2000c8d8 00000358 b _cdcd_itf
+2000e54c 00000258 B _midid_itf
+2000d0dc 00000200 b ucStaticTimerQueueStorage.9390
+2000e044 00000200 b _mscd_buf
+2000e284 000001cc b _vendord_itf
+2000d410 00000190 b vApplicationGetIdleTaskMemory::uxIdleTaskStack
+2000374c 0000016c D __global_locale
+2000de48 0000012c B USBDevice
+2000afa4 00000100 b Router::send(_MeshPacket*)::bytes
+2000aea4 00000100 b Router::perhapsDecode(_MeshPacket*)::bytes
+200039b0 000000f4 B powerFSM
+20004258 000000f0 B screen
+2000cd7c 000000c4 b _dcd
+2000cc68 000000c0 b _usbd_qdef_buf
+2000b3c4 000000bc B Wire
+2000cef4 000000a8 B Serial2
+2000ce4c 000000a8 B Serial1
+2000e498 000000a8 B _SEGGER_RTT
+2000b498 000000a4 B InternalFS
+2000dfb8 0000008c b _hidd_itf
+2000b260 00000088 b meshtastic::normalFrames
+2000cfdc 00000064 b pxReadyTasksLists
+2000b340 00000060 b meshtastic::drawTextMessageFrame(OLEDDisplay*, OLEDDisplayUiState*, short, short)::tempBuf
+200036ec 00000060 d impure_data
+2000b104 00000060 B bledfu
+2000b0a4 00000060 B blebas
+20003684 00000058 D _usbd_qdef
+200038c0 00000058 d tzinfo
+2000d5a0 00000054 b vApplicationGetTimerTaskMemory::xTimerTaskTCB
+2000d3bc 00000054 b vApplicationGetIdleTaskMemory::xIdleTaskTCB
+2000d308 00000050 b xStaticTimerQueue.9389
+2000b1f4 00000050 B hrmc
+2000b1a4 00000050 B bslc
+20004360 0000004c B service
+2000d374 00000048 b m_cb
+2000df74 00000042 b _desc_str
+2000cd3c 00000040 b _usbd_ctrl_buf
+20004214 00000040 B realRouter
+2000e244 00000040 b _mscd_itf
+2000b164 00000040 B bledis
+20003634 00000038 d _InternalFSConfig
+2000cc30 00000031 b _usbd_dev
+2000398c 00000020 B periodicScheduler
+2000cfa4 00000020 b callbacksInt
+2000de10 0000001f b fw_str.13525
+20003974 00000018 b object.9934
+2000ae68 00000018 B nodeDB
+2000366c 00000018 d _cache
+2000b314 00000014 b meshtastic::drawNodeInfo(OLEDDisplay*, OLEDDisplayUiState*, short, short)::signalStr
+2000b300 00000014 b meshtastic::drawNodeInfo(OLEDDisplay*, OLEDDisplayUiState*, short, short)::lastStr
+2000b2ec 00000014 b meshtastic::drawNodeInfo(OLEDDisplay*, OLEDDisplayUiState*, short, short)::distStr
+200041e0 00000014 b getDeviceName()::name
+2000d0b8 00000014 b xTasksWaitingTermination
+2000d0a4 00000014 b xSuspendedTaskList
+2000d08c 00000014 b xPendingReadyList
+2000d06c 00000014 b xDelayedTaskList2
+2000d058 00000014 b xDelayedTaskList1
+2000d2f0 00000014 b xActiveTimerList2
+2000d2dc 00000014 b xActiveTimerList1
+2000b480 00000014 B SPI
+2000c8c4 00000014 B Serial
+2000cd28 00000014 b _ctrl_xfer
+2000de30 00000011 b serial_str.13534
+2000c544 00000010 b BLEAdvertising::_start(unsigned short, unsigned short)::gap_adv
+20003614 00000010 d meshtastic::btPIN
+2000434c 00000010 b sendOwnerPeriod
+2000ae8c 00000010 b staticPool
+2000e484 00000010 B xQueueRegistry
+20003b04 00000010 B stateSERIAL
+20003af4 00000010 B stateSDS
+20003ae4 00000010 B stateON
+20003ad4 00000010 B stateNB
+20003ac4 00000010 B stateLS
+20003ab4 00000010 B stateDARK
+20003aa4 00000010 B stateBOOT
+200041f8 00000010 B ledPeriodic
+2000b244 00000010 B hrms
+2000d9f4 00000010 b _acDownBuffer
+2000b3b8 0000000c B preflightSleep
+20004208 0000000c B powerStatus
+2000e540 0000000c B nrf_nvic_state
+2000b3ac 0000000c B notifySleep
+2000b3a0 0000000c B notifyDeepSleep
+2000e463 0000000b b __tzname_std
+2000e458 0000000b b __tzname_dst
+2000b338 00000008 b meshtastic::estimatedHeading(double, double)::oldLon
+2000b330 00000008 b meshtastic::estimatedHeading(double, double)::oldLat
+200041d0 00000008 b zeroOffsetSecs
+2000ae80 00000008 b spiSettings
+200038b8 00000008 D _tzname
+20003b14 00000008 B noopPrint
+2000cfc4 00000008 b channelMap
+2000cf9c 00000008 b callbackDeferred
+200043ac 00000006 b ourMacAddr
+2000435c 00000004 b MeshService::onGPSChanged(void*)::lastGpsSend
+2000b32c 00000004 b meshtastic::estimatedHeading(double, double)::b
+2000b328 00000004 b meshtastic::drawNodeInfo(OLEDDisplay*, OLEDDisplayUiState*, short, short)::simRadian
+2000362c 00000004 d meshtastic::Screen::setup()::bootFrames
+20003628 00000004 d meshtastic::Screen::handleStartBluetoothPinScreen(unsigned long)::btFrames
+200039ac 00000004 b onEnter()::lastPingMs
+2000ae9c 00000004 b generatePacketId()::i
+2000ae88 00000004 B RadioLibInterface::instance
+2000b2e8 00000004 b meshtastic::nodeIndex
+20003610 00000004 d meshtastic::targetFramerate
+2000c554 00000004 B BLEService::lastService
+200041cc 00000004 b timeStartMsec
+200036dc 00000004 d sbrk_heap_top
+2000d364 00000004 b _loopHandle
+2000c540 00000004 b guard variable for BLEAdvertising::_start(unsigned short, unsigned short)::gap_adv
+2000d0d0 00000004 b xYieldPending
+2000d35c 00000004 b xTimerTaskHandle
+2000d358 00000004 b xTimerQueue
+2000d0cc 00000004 b xTickCount
+2000d0a0 00000004 b xSchedulerRunning
+2000d088 00000004 b xNumOfOverflows
+2000d084 00000004 b xNextTaskUnblockTime
+2000d304 00000004 b xLastTime.9343
+2000d080 00000004 b xIdleTaskHandle
+2000d054 00000004 b uxTopReadyPriority
+2000d050 00000004 b uxTaskNumber
+2000d04c 00000004 b uxSchedulerSuspended
+2000d048 00000004 b uxPendedTicks
+2000d044 00000004 b uxDeletedTasksWaitingCleanUp
+2000d040 00000004 b uxCurrentNumberOfTasks
+2000d360 00000004 b uxCriticalNesting
+2000cc64 00000004 b _usbd_q
+2000e478 00000004 B _timezone
+200036e0 00000004 D SystemCoreClock
+2000c53c 00000004 b _sem
+2000d0d8 00000004 b pxOverflowTimerList
+2000cfd8 00000004 b pxOverflowDelayedTaskList
+2000cfd4 00000004 b pxDelayedTaskList
+2000d0d4 00000004 b pxCurrentTimerList
+2000cfd0 00000004 B pxCurrentTCB
+2000e470 00000004 b prev_tzenv
+2000360c 00000004 D preftmp
+20003608 00000004 D preffile
+2000b25c 00000004 B nrf52Bluetooth
+2000d370 00000004 b m_usbevt_handler
+2000d36c 00000004 b m_sleepevt_handler
+2000d368 00000004 b m_pofwarn_handler
+2000e454 00000004 B __malloc_sbrk_start
+2000e450 00000004 B __malloc_free_list
+2000e480 00000004 B MAIN_MonCnt
+2000e47c 00000004 b initial_env
+200036e8 00000004 D _impure_ptr
+200041d8 00000004 B gps
+2000e7a4 00000004 B errno
+20003918 00000004 D environ
+2000cfcc 00000004 b enabled
+2000ae64 00000004 B displayedNodeNum
+2000e474 00000004 B _daylight
+2000b254 00000004 B crypto
+2000ce44 00000004 B count_duration
+2000de0c 00000004 b _cb_task
+2000de08 00000004 b _cb_queue
+2000de04 00000004 b _cb_qdepth
+2000de44 00000004 B bootloaderVersion
+200041f5 00000001 b ledBlinker()::ledOn
+20003604 00000001 d loop::showingBootScreen
+200041f4 00000001 b loop::wasPressed
+2000b494 00000001 b DefaultFontTableLookup(unsigned char)::LASTCHAR
+2000aea0 00000001 b generatePacketId()::didInit
+20003624 00000001 d meshtastic::prevFrame
+2000b258 00000001 b bleOn
+200041dc 00000001 B timeSetFromGPS
+20004348 00000001 B ssd1306_found
+2000ce49 00000001 B pin_sound
+2000e494 00000001 B nrfx_power_irq_enabled
+2000ce48 00000001 B no_stop
+20003630 00000001 D neo6M
+2000ce40 00000001 b _initialized
+200036e4 00000001 D __fdlib_version
+20003970 00000001 b completed.9929

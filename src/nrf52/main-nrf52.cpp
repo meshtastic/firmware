@@ -1,9 +1,14 @@
 #include "NRF52Bluetooth.h"
 #include "configuration.h"
+#include "graphics/TFTDisplay.h"
 #include <assert.h>
 #include <ble_gap.h>
 #include <memory.h>
-#include <nrf52840.h>
+#include <stdio.h>
+
+#ifdef NRF52840_XXAA
+// #include <nrf52840.h>
+#endif
 
 // #define USE_SOFTDEVICE
 
@@ -44,13 +49,19 @@ void getMacAddr(uint8_t *dmac)
 NRF52Bluetooth *nrf52Bluetooth;
 
 static bool bleOn = false;
+static const bool enableBle = true; // Set to false for easier debugging
+
 void setBluetoothEnable(bool on)
 {
     if (on != bleOn) {
         if (on) {
             if (!nrf52Bluetooth) {
-                nrf52Bluetooth = new NRF52Bluetooth();
-                nrf52Bluetooth->setup();
+                if (!enableBle)
+                    DEBUG_MSG("DISABLING NRF52 BLUETOOTH WHILE DEBUGGING\n");
+                else {
+                    nrf52Bluetooth = new NRF52Bluetooth();
+                    nrf52Bluetooth->setup();
+                }
             }
         } else {
             DEBUG_MSG("FIXME: implement BLE disable\n");
@@ -59,11 +70,17 @@ void setBluetoothEnable(bool on)
     }
 }
 
-#ifdef ARDUINO_NRF52840_PPR
-#include "PmuBQ25703A.h"
-
-PmuBQ25703A pmu;
-#endif
+/**
+ * Override printf to use the SEGGER output library
+ */
+int printf(const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    auto res = SEGGER_RTT_vprintf(0, fmt, &args);
+    va_end(args);
+    return res;
+}
 
 void nrf52Setup()
 {
@@ -76,6 +93,11 @@ void nrf52Setup()
     // This is the recommended setting for Monitor Mode Debugging
     NVIC_SetPriority(DebugMonitor_IRQn, 6UL);
 
+#ifdef PIN_PWR_ON
+    digitalWrite(PIN_PWR_ON, HIGH); // If we need to assert a pin to power external peripherals
+    pinMode(PIN_PWR_ON, OUTPUT);
+#endif
+
     // Not yet on board
     // pmu.init();
 
@@ -86,4 +108,5 @@ void nrf52Setup()
     // ble_controller_rand_vector_get_blocking(&r, sizeof(r));
     // randomSeed(r);
     DEBUG_MSG("FIXME, call randomSeed\n");
+    // ::printf("TESTING PRINTF\n");
 }

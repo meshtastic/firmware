@@ -10,6 +10,24 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 
+#define RDEF(name, freq, spacing, num_ch, power_limit)                                                                           \
+    {                                                                                                                            \
+        RegionCode_##name, num_ch, power_limit, freq, spacing, #name                                                             \
+    }
+
+const RegionInfo regions[] = {
+    RDEF(US, 903.08f, 2.16f, 13, 0), RDEF(EU433, 433.175f, 0.2f, 8, 0), RDEF(EU865, 865.2f, 0.3f, 10, 0),
+    RDEF(CN, 470.0f, 2.0f, 20, 0),
+    RDEF(JP, 920.0f, 0.5f, 10, 13),    // See https://github.com/meshtastic/Meshtastic-device/issues/346 power level 13
+    RDEF(ANZ, 916.0f, 0.5f, 20, 0),    // AU/NZ channel settings 915-928MHz
+    RDEF(KR, 921.9f, 0.2f, 8, 0),      // KR channel settings (KR920-923) Start from TTN download channel
+                                       // freq. (921.9f is for download, others are for uplink)
+    RDEF(TW, 923.0f, 0.2f, 10, 0),     // TW channel settings (AS2 bandplan 923-925MHz)
+    RDEF(Unset, 903.08f, 2.16f, 13, 0) // Assume US freqs if unset, Must be last
+};
+
+static const RegionInfo *myRegion;
+
 /**
  * ## LoRaWAN for North America
 
@@ -24,11 +42,68 @@ separated by 2.16 MHz with respect to the adjacent channels. Channel zero starts
 // 1kb was too small
 #define RADIO_STACK_SIZE 4096
 
+void printPacket(const char *prefix, const MeshPacket *p)
+{
+    DEBUG_MSG("%s (id=0x%08x Fr0x%02x To0x%02x, WantAck%d, HopLim%d", prefix, p->id, p->from & 0xff, p->to & 0xff, p->want_ack,
+              p->hop_limit);
+    if (p->which_payload == MeshPacket_decoded_tag) {
+        auto &s = p->decoded;
+        switch (s.which_payload) {
+        case SubPacket_data_tag:
+            DEBUG_MSG(" Payload:Data");
+            break;
+        case SubPacket_position_tag:
+            DEBUG_MSG(" Payload:Position");
+            break;
+        case SubPacket_user_tag:
+            DEBUG_MSG(" Payload:User");
+            break;
+        case 0:
+            DEBUG_MSG(" Payload:None");
+            break;
+        default:
+            DEBUG_MSG(" Payload:%d", s.which_payload);
+            break;
+        }
+        if (s.want_response)
+            DEBUG_MSG(" WANTRESP");
+
+        if (s.source != 0)
+            DEBUG_MSG(" source=%08x", s.source);
+
+        if (s.dest != 0)
+            DEBUG_MSG(" dest=%08x", s.dest);
+
+        if (s.which_ack == SubPacket_success_id_tag)
+            DEBUG_MSG(" successId=%08x", s.ack.success_id);
+        else if (s.which_ack == SubPacket_fail_id_tag)
+            DEBUG_MSG(" failId=%08x", s.ack.fail_id);
+    } else {
+        DEBUG_MSG(" encrypted");
+    }
+
+    if (p->rx_time != 0) {
+        DEBUG_MSG(" rxtime=%u", p->rx_time);
+    }
+    if (p->rx_snr != 0.0) {
+        DEBUG_MSG(" rxSNR=%g", p->rx_snr);
+    }
+    DEBUG_MSG(")\n");
+}
+
 RadioInterface::RadioInterface()
 {
     assert(sizeof(PacketHeader) == 4 || sizeof(PacketHeader) == 16); // make sure the compiler did what we expected
 
-    myNodeInfo.num_channels = NUM_CHANNELS;
+    if (!myRegion) {
+        const RegionInfo *r = regions;
+        for (; r->code != RegionCode_Unset && r->code != radioConfig.preferences.region; r++)
+            ;
+        myRegion = r;
+        DEBUG_MSG("Wanted region %d, using %s\n", radioConfig.preferences.region, r->name);
+
+        myNodeInfo.num_channels = myRegion->numChannels; // Tell our android app how many channels we have
+    }
 
     // Can't print strings this early - serial not setup yet
     // DEBUG_MSG("Set meshradio defaults name=%s\n", channelSettings.name);
@@ -57,7 +132,7 @@ bool RadioInterface::init()
  * djb2 by Dan Bernstein.
  * http://www.cse.yorku.ca/~oz/hash.html
  */
-unsigned long hash(char *str)
+unsigned long hash(const char *str)
 {
     unsigned long hash = 5381;
     int c;
@@ -74,16 +149,38 @@ unsigned long hash(char *str)
 void RadioInterface::applyModemConfig()
 {
     // Set up default configuration
-    // No Sync Words in LORA mode.
-    modemConfig = (ModemConfigChoice)channelSettings.modem_config;
+    // No Sync Words in LORA mode
 
-    // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM
-    int channel_num = hash(channelSettings.name) % NUM_CHANNELS;
-    freq = CH0 + CH_SPACING * channel_num;
     power = channelSettings.tx_power;
 
+    assert(myRegion); // Should have been found in init
+
+    // If user has manually specified a channel num, then use that, otherwise generate one by hashing the name
+    int channel_num =
+        (channelSettings.channel_num ? channelSettings.channel_num - 1 : hash(channelSettings.name)) % myRegion->numChannels;
+    freq = myRegion->freq + myRegion->spacing * channel_num;
+
     DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, power=%d\n", channelSettings.name, channelSettings.modem_config, channel_num,
-              channelSettings.tx_power);
+              power);
+}
+
+/**
+ * Some regulatory regions limit xmit power.
+ * This function should be called by subclasses after setting their desired power.  It might lower it
+ */
+void RadioInterface::limitPower()
+{
+    uint8_t maxPower = 255; // No limit
+
+    if (myRegion->powerLimit)
+        maxPower = myRegion->powerLimit;
+
+    if (power > maxPower) {
+        DEBUG_MSG("Lowering transmit power because of regulatory limits\n");
+        power = maxPower;
+    }
+
+    DEBUG_MSG("Set radio: final power level=%d\n", power);
 }
 
 ErrorCode SimRadio::send(MeshPacket *p)

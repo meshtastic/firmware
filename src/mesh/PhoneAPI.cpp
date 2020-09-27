@@ -1,7 +1,9 @@
 #include "PhoneAPI.h"
+#include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "RadioInterface.h"
 #include <assert.h>
 
 PhoneAPI::PhoneAPI()
@@ -43,8 +45,7 @@ void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
         switch (toRadioScratch.which_variant) {
         case ToRadio_packet_tag: {
             MeshPacket &p = toRadioScratch.variant.packet;
-            DEBUG_MSG("PACKET FROM PHONE: id=%d, to=%x, want_ack=%d, which1=%d, which2=%d, typ=%d, buflen=%d\n", p.id, p.to, p.want_ack, p.which_payload,
-            p.decoded.which_payload, p.decoded.data.typ, bufLength);
+            printPacket("PACKET FROM PHONE", &p);
             service.handleToRadio(p);
             break;
         }
@@ -93,7 +94,7 @@ void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 size_t PhoneAPI::getFromRadio(uint8_t *buf)
 {
     if (!available()) {
-        DEBUG_MSG("getFromRadio, !available\n");
+        // DEBUG_MSG("getFromRadio, !available\n");
         return false;
     } else {
         DEBUG_MSG("getFromRadio, state=%d\n", state);
@@ -108,6 +109,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         break;
 
     case STATE_SEND_MY_INFO:
+        myNodeInfo.has_gps = gps && gps->isConnected; // Update with latest GPS connect info
         fromRadioScratch.which_variant = FromRadio_my_info_tag;
         fromRadioScratch.variant.my_info = myNodeInfo;
         state = STATE_SEND_RADIO;
@@ -241,7 +243,10 @@ void PhoneAPI::handleSetRadio(const RadioConfig &r)
 {
     radioConfig = r;
 
-    service.reloadConfig();
+    bool didReset = service.reloadConfig();
+    if (didReset) {
+        state = STATE_SEND_MY_INFO; // Squirt a completely new set of configs to the client
+    }
 }
 
 /**

@@ -5,7 +5,6 @@
 #include "NodeDB.h"
 #include "configuration.h"
 #include "error.h"
-
 #include "main.h"
 #include "target_specific.h"
 
@@ -16,7 +15,7 @@
 #include <driver/rtc_io.h>
 #include <driver/uart.h>
 
-#include "BluetoothUtil.h"
+#include "nimble/BluetoothUtil.h"
 
 esp_sleep_source_t wakeCause; // the reason we booted this time
 #endif
@@ -129,7 +128,7 @@ static void waitEnterSleep()
 
         if (millis() - now > 30 * 1000) { // If we wait too long just report an error and go to sleep
             recordCriticalError(ErrSleepEnterWait);
-            ESP.restart(); // FIXME - for now we just restart, need to fix bug #167
+            assert(0); // FIXME - for now we just restart, need to fix bug #167
             break;
         }
     }
@@ -197,7 +196,7 @@ void doDeepSleep(uint64_t msecToWake)
     static const uint8_t rtcGpios[] = {/* 0, */ 2,
     /* 4, */
 #ifndef USE_JTAG
-                                       12,           13,
+                                       13,
     /* 14, */ /* 15, */
 #endif
                                        /* 25, */ 26, /* 27, */
@@ -284,30 +283,30 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     assert(esp_light_sleep_start() == ESP_OK);
 
     esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+#ifdef BUTTON_PIN
     if (cause == ESP_SLEEP_WAKEUP_GPIO)
         DEBUG_MSG("Exit light sleep gpio: btn=%d\n", !digitalRead(BUTTON_PIN));
+#endif
 
     return cause;
 }
-#endif
 
-#if 0
 // not legal on the stock android ESP build
 
 /**
  * enable modem sleep mode as needed and available.  Should lower our CPU current draw to an average of about 20mA.
- * 
+ *
  * per https://docs.espressif.com/projects/esp-idf/en/latest/api-reference/system/power_management.html
- * 
+ *
  * supposedly according to https://github.com/espressif/arduino-esp32/issues/475 this is already done in arduino
  */
 void enableModemSleep()
 {
-  static esp_pm_config_esp32_t config; // filled with zeros because bss
+    static esp_pm_config_esp32_t config; // filled with zeros because bss
 
-  config.max_freq_mhz = CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ;
-  config.min_freq_mhz = 10; // 10Mhz is minimum recommended
-  config.light_sleep_enable = false;
-  DEBUG_MSG("Sleep request result %x\n", esp_pm_configure(&config));
+    config.max_freq_mhz = CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ;
+    config.min_freq_mhz = 20; // 10Mhz is minimum recommended
+    config.light_sleep_enable = false;
+    DEBUG_MSG("Sleep request result %x\n", esp_pm_configure(&config));
 }
 #endif

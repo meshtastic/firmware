@@ -3,10 +3,10 @@
 #include <assert.h>
 
 #include "FS.h"
-#include "SPIFFS.h"
 
 #include "CryptoEngine.h"
 #include "GPS.h"
+#include "MeshRadio.h"
 #include "NodeDB.h"
 #include "PacketHistory.h"
 #include "PowerFSM.h"
@@ -14,13 +14,14 @@
 #include "configuration.h"
 #include "error.h"
 #include "mesh-pb-constants.h"
+#include "meshwifi/meshwifi.h"
 #include <pb_decode.h>
 #include <pb_encode.h>
 
 NodeDB nodeDB;
 
 // we have plenty of ram so statically alloc this tempbuf (for now)
-DeviceState devicestate;
+EXT_RAM_ATTR DeviceState devicestate;
 MyNodeInfo &myNodeInfo = devicestate.my_node;
 RadioConfig &radioConfig = devicestate.radio;
 ChannelSettings &channelSettings = radioConfig.channel_settings;
@@ -30,15 +31,25 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define here.
 */
 
-#define DEVICESTATE_CUR_VER 9
+#define DEVICESTATE_CUR_VER 11
 #define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
 
-#ifndef NO_ESP32
+#ifdef PORTDUINO
+// Portduino version
+#include "PortduinoFS.h"
+#define FS PortduinoFS
+#define FSBegin() true
+#define FILE_O_WRITE "w"
+#define FILE_O_READ "r"
+#elif !defined(NO_ESP32)
+// ESP32 version
+#include "SPIFFS.h"
 #define FS SPIFFS
 #define FSBegin() FS.begin(true)
 #define FILE_O_WRITE "w"
 #define FILE_O_READ "r"
 #else
+// NRF52 version
 #include "InternalFileSystem.h"
 #define FS InternalFS
 #define FSBegin() FS.begin()
@@ -64,16 +75,50 @@ static uint8_t ourMacAddr[6];
  */
 NodeNum displayedNodeNum;
 
+/**
+ * Generate a short suffix used to disambiguate channels that might have the same "name" entered by the human but different PSKs.
+ * The ideas is that the PSK changing should be visible to the user so that they see they probably messed up and that's why they
+their nodes
+ * aren't talking to each other.
+ *
+ * This string is of the form "#name-XY".
+ *
+ * Where X is a letter from A to Z (base26), and formed by xoring all the bytes of the PSK together.
+ * Y is not yet used but should eventually indicate 'speed/range' of the link
+ *
+ * This function will also need to be implemented in GUI apps that talk to the radio.
+ *
+ * https://github.com/meshtastic/Meshtastic-device/issues/269
+ */
+const char *getChannelName()
+{
+    static char buf[32];
+
+    uint8_t code = 0;
+    for (int i = 0; i < channelSettings.psk.size; i++)
+        code ^= channelSettings.psk.bytes[i];
+
+    snprintf(buf, sizeof(buf), "#%s-%c", channelSettings.name, 'A' + (code % 26));
+    return buf;
+}
+
 NodeDB::NodeDB() : nodes(devicestate.node_db), numNodes(&devicestate.node_db_count) {}
 
-void NodeDB::resetRadioConfig()
+bool NodeDB::resetRadioConfig()
 {
+    bool didFactoryReset = false;
+
     /// 16 bytes of random PSK for our _public_ default channel that all devices power up on (AES128)
     static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
                                          0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0xbf};
 
-    if (radioConfig.preferences.sds_secs == 0) {
-        DEBUG_MSG("RadioConfig reset!\n");
+    if (radioConfig.preferences.factory_reset) {
+        DEBUG_MSG("Performing factory reset!\n");
+        installDefaultDeviceState();
+        didFactoryReset = true;
+    } else if (radioConfig.preferences.sds_secs == 0) {
+        DEBUG_MSG("Fixing bogus RadioConfig!\n");
+
         radioConfig.preferences.send_owner_interval = 4; // per sw-design.md
         radioConfig.preferences.position_broadcast_secs = 15 * 60;
         radioConfig.preferences.wait_bluetooth_secs = 120;
@@ -87,12 +132,12 @@ void NodeDB::resetRadioConfig()
         radioConfig.has_preferences = true;
 
         // radioConfig.modem_config = RadioConfig_ModemConfig_Bw125Cr45Sf128;  // medium range and fast
-        // channelSettings.modem_config = ChannelSettings_ModemConfig_Bw500Cr45Sf128;  // short range and fast, but wide bandwidth
-        // so incompatible radios can talk together
+        // channelSettings.modem_config = ChannelSettings_ModemConfig_Bw500Cr45Sf128;  // short range and fast, but wide
+        // bandwidth so incompatible radios can talk together
         channelSettings.modem_config = ChannelSettings_ModemConfig_Bw125Cr48Sf4096; // slow and long range
 
-        channelSettings.tx_power = 23;
-        memcpy(&channelSettings.psk.bytes, &defaultpsk, sizeof(channelSettings.psk));
+        channelSettings.tx_power = 0; // default
+        memcpy(&channelSettings.psk.bytes, defaultpsk, sizeof(channelSettings.psk));
         channelSettings.psk.size = sizeof(defaultpsk);
         strcpy(channelSettings.name, "Default");
     }
@@ -101,17 +146,30 @@ void NodeDB::resetRadioConfig()
     crypto->setKey(channelSettings.psk.size, channelSettings.psk.bytes);
 
     // temp hack for quicker testing
+    // devicestate.no_save = true;
+    if (devicestate.no_save) {
+        DEBUG_MSG("***** DEVELOPMENT MODE - DO NOT RELEASE *****\n");
 
-    /*
-    radioConfig.preferences.screen_on_secs = 30;
-    radioConfig.preferences.wait_bluetooth_secs = 30;
-    radioConfig.preferences.position_broadcast_secs = 6 * 60;
-    radioConfig.preferences.ls_secs = 60;
-    */
+        // Sleep quite frequently to stress test the BLE comms, broadcast position every 6 mins
+        radioConfig.preferences.screen_on_secs = 30;
+        radioConfig.preferences.wait_bluetooth_secs = 30;
+        radioConfig.preferences.position_broadcast_secs = 6 * 60;
+        radioConfig.preferences.ls_secs = 60;
+    }
+
+    return didFactoryReset;
 }
 
-void NodeDB::init()
+void NodeDB::installDefaultDeviceState()
 {
+    // We try to preserve the region setting because it will really bum users out if we discard it
+    String oldRegion = myNodeInfo.region;
+    RegionCode oldRegionCode = radioConfig.preferences.region;
+
+    memset(&devicestate, 0, sizeof(devicestate));
+
+    *numNodes = 0; // Forget node DB
+
     // init our devicestate with valid flags so protobuf writing/reading will work
     devicestate.has_my_node = true;
     devicestate.has_radio = true;
@@ -119,7 +177,7 @@ void NodeDB::init()
     devicestate.radio.has_channel_settings = true;
     devicestate.radio.has_preferences = true;
     devicestate.node_db_count = 0;
-    devicestate.receive_queue_count = 0;
+    devicestate.receive_queue_count = 0; // Not yet implemented FIXME
 
     resetRadioConfig();
 
@@ -139,12 +197,23 @@ void NodeDB::init()
     pickNewNodeNum(); // Note: we will repick later, just in case the settings are corrupted, but we need a valid
     // owner.short_name now
     sprintf(owner.long_name, "Unknown %02x%02x", ourMacAddr[4], ourMacAddr[5]);
-    sprintf(owner.short_name, "?%02X", myNodeInfo.my_node_num & 0xff);
+    sprintf(owner.short_name, "?%02X", (unsigned)(myNodeInfo.my_node_num & 0xff));
+
+    // Restore region if possible
+    if (oldRegionCode != RegionCode_Unset)
+        radioConfig.preferences.region = oldRegionCode;
+    if (oldRegion.length())
+        strcpy(myNodeInfo.region, oldRegion.c_str());
+}
+
+void NodeDB::init()
+{
+    installDefaultDeviceState();
 
     if (!FSBegin()) // FIXME - do this in main?
     {
         DEBUG_MSG("ERROR filesystem mount Failed\n");
-        // FIXME - report failure to phone
+        assert(0); // FIXME - report failure to phone
     }
 
     // saveToDisk();
@@ -167,13 +236,29 @@ void NodeDB::init()
 
     // We set these _after_ loading from disk - because they come from the build and are more trusted than
     // what is stored in flash
-    strncpy(myNodeInfo.region, optstr(HW_VERSION), sizeof(myNodeInfo.region));
+    if (xstr(HW_VERSION)[0])
+        strncpy(myNodeInfo.region, optstr(HW_VERSION), sizeof(myNodeInfo.region));
+    else
+        DEBUG_MSG("This build does not specify a HW_VERSION\n"); // Eventually new builds will no longer include this build flag
+
+    // Check for the old style of region code strings, if found, convert to the new enum.
+    // Those strings will look like "1.0-EU433"
+    if (radioConfig.preferences.region == RegionCode_Unset && strncmp(myNodeInfo.region, "1.0-", 4) == 0) {
+        const char *regionStr = myNodeInfo.region + 4; // EU433 or whatever
+        for (const RegionInfo *r = regions; r->code != RegionCode_Unset; r++)
+            if (strcmp(r->name, regionStr) == 0) {
+                radioConfig.preferences.region = r->code;
+                break;
+            }
+    }
+
     strncpy(myNodeInfo.firmware_version, optstr(APP_VERSION), sizeof(myNodeInfo.firmware_version));
     strncpy(myNodeInfo.hw_model, HW_VENDOR, sizeof(myNodeInfo.hw_model));
 
     resetRadioConfig(); // If bogus settings got saved, then fix them
 
-    DEBUG_MSG("NODENUM=0x%x, dbsize=%d\n", myNodeInfo.my_node_num, *numNodes);
+    DEBUG_MSG("legacy_region=%s, region=%d, NODENUM=0x%x, dbsize=%d\n", myNodeInfo.region, radioConfig.preferences.region,
+              myNodeInfo.my_node_num, *numNodes);
 }
 
 // We reserve a few nodenums for future use
@@ -210,7 +295,7 @@ const char *preftmp = "/db.proto.tmp";
 void NodeDB::loadFromDisk()
 {
 #ifdef FS
-    static DeviceState scratch;
+    // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
 
     auto f = FS.open(preffile);
     if (f) {
@@ -219,16 +304,17 @@ void NodeDB::loadFromDisk()
 
         // DEBUG_MSG("Preload channel name=%s\n", channelSettings.name);
 
-        memset(&scratch, 0, sizeof(scratch));
-        if (!pb_decode(&stream, DeviceState_fields, &scratch)) {
+        memset(&devicestate, 0, sizeof(devicestate));
+        if (!pb_decode(&stream, DeviceState_fields, &devicestate)) {
             DEBUG_MSG("Error: can't decode protobuf %s\n", PB_GET_ERROR(&stream));
+            installDefaultDeviceState(); // Our in RAM copy might now be corrupt
             // FIXME - report failure to phone
         } else {
-            if (scratch.version < DEVICESTATE_MIN_VER)
+            if (devicestate.version < DEVICESTATE_MIN_VER) {
                 DEBUG_MSG("Warn: devicestate is old, discarding\n");
-            else {
-                DEBUG_MSG("Loaded saved preferences version %d\n", scratch.version);
-                devicestate = scratch;
+                installDefaultDeviceState();
+            } else {
+                DEBUG_MSG("Loaded saved preferences version %d\n", devicestate.version);
             }
 
             // DEBUG_MSG("Postload channel name=%s\n", channelSettings.name);
@@ -238,6 +324,7 @@ void NodeDB::loadFromDisk()
     } else {
         DEBUG_MSG("No saved preferences found\n");
     }
+
 #else
     DEBUG_MSG("ERROR: Filesystem not implemented\n");
 #endif
@@ -246,32 +333,36 @@ void NodeDB::loadFromDisk()
 void NodeDB::saveToDisk()
 {
 #ifdef FS
-    auto f = FS.open(preftmp, FILE_O_WRITE);
-    if (f) {
-        DEBUG_MSG("Writing preferences\n");
+    if (!devicestate.no_save) {
+        auto f = FS.open(preftmp, FILE_O_WRITE);
+        if (f) {
+            DEBUG_MSG("Writing preferences\n");
 
-        pb_ostream_t stream = {&writecb, &f, SIZE_MAX, 0};
+            pb_ostream_t stream = {&writecb, &f, SIZE_MAX, 0};
 
-        // DEBUG_MSG("Presave channel name=%s\n", channelSettings.name);
+            // DEBUG_MSG("Presave channel name=%s\n", channelSettings.name);
 
-        devicestate.version = DEVICESTATE_CUR_VER;
-        if (!pb_encode(&stream, DeviceState_fields, &devicestate)) {
-            DEBUG_MSG("Error: can't write protobuf %s\n", PB_GET_ERROR(&stream));
-            // FIXME - report failure to phone
+            devicestate.version = DEVICESTATE_CUR_VER;
+            if (!pb_encode(&stream, DeviceState_fields, &devicestate)) {
+                DEBUG_MSG("Error: can't write protobuf %s\n", PB_GET_ERROR(&stream));
+                // FIXME - report failure to phone
 
-            f.close();
+                f.close();
+            } else {
+                // Success - replace the old file
+                f.close();
+
+                // brief window of risk here ;-)
+                if (!FS.remove(preffile))
+                    DEBUG_MSG("Warning: Can't remove old pref file\n");
+                if (!FS.rename(preftmp, preffile))
+                    DEBUG_MSG("Error: can't rename new pref file\n");
+            }
         } else {
-            // Success - replace the old file
-            f.close();
-
-            // brief window of risk here ;-)
-            if (!FS.remove(preffile))
-                DEBUG_MSG("Warning: Can't remove old pref file\n");
-            if (!FS.rename(preftmp, preffile))
-                DEBUG_MSG("Error: can't rename new pref file\n");
+            DEBUG_MSG("ERROR: can't write prefs\n"); // FIXME report to app
         }
     } else {
-        DEBUG_MSG("ERROR: can't write prefs\n"); // FIXME report to app
+        DEBUG_MSG("***** DEVELOPMENT MODE - DO NOT RELEASE - not saving to flash *****\n");
     }
 #else
     DEBUG_MSG("ERROR filesystem not implemented\n");
@@ -321,11 +412,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
         const SubPacket &p = mp.decoded;
         DEBUG_MSG("Update DB node 0x%x, rx_time=%u\n", mp.from, mp.rx_time);
 
-        int oldNumNodes = *numNodes;
         NodeInfo *info = getOrCreateNode(mp.from);
-
-        if (oldNumNodes != *numNodes)
-            updateGUI = true; // we just created a nodeinfo
 
         if (mp.rx_time) {              // if the packet has a valid timestamp use it to update our last_seen
             info->has_position = true; // at least the time is valid
@@ -342,6 +429,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
             info->position.time = oldtime;
             info->has_position = true;
             updateGUIforNode = info;
+            notifyObservers(true); // Force an update whether or not our node counts have changed
             break;
         }
 
@@ -356,6 +444,13 @@ void NodeDB::updateFrom(const MeshPacket &mp)
                     devicestate.has_rx_text_message = true;
                     updateTextMessage = true;
                     powerFSM.trigger(EVENT_RECEIVED_TEXT_MSG);
+                    notifyObservers(true); // Force an update whether or not our node counts have changed
+
+                    // This is going into the wifidev feature branch
+                    // Only update the WebUI if WiFi is enabled
+                    //#if WiFi_MODE != 0
+                    //  notifyWebUI();
+                    //#endif
                 }
             }
             break;
@@ -374,12 +469,17 @@ void NodeDB::updateFrom(const MeshPacket &mp)
             if (changed) {
                 updateGUIforNode = info;
                 powerFSM.trigger(EVENT_NODEDB_UPDATED);
+                notifyObservers(true); // Force an update whether or not our node counts have changed
 
                 // Not really needed - we will save anyways when we go to sleep
                 // We just changed something important about the user, store our DB
                 // saveToDisk();
             }
             break;
+        }
+
+        default: {
+            notifyObservers(); // If the node counts have changed, notify observers
         }
         }
     }

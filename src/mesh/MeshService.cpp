@@ -5,12 +5,14 @@
 
 #include "GPS.h"
 //#include "MeshBluetoothService.h"
+#include "../concurrency/Periodic.h"
+#include "BluetoothCommon.h" // needed for updateBatteryLevel, FIXME, eventually when we pull mesh out into a lib we shouldn't be whacking bluetooth from here
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "Periodic.h"
 #include "PowerFSM.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
+#include "power.h"
 
 /*
 receivedPacketQueue - this is a queue of messages we've received from the mesh, which we are keeping to deliver to the phone.
@@ -53,7 +55,7 @@ static uint32_t sendOwnerCb()
     return radioConfig.preferences.send_owner_interval * radioConfig.preferences.position_broadcast_secs * 1000;
 }
 
-static Periodic sendOwnerPeriod(sendOwnerCb);
+static concurrency::Periodic sendOwnerPeriod(sendOwnerCb);
 
 MeshService::MeshService() : toPhoneQueue(MAX_RX_TOPHONE)
 {
@@ -65,7 +67,8 @@ void MeshService::init()
     sendOwnerPeriod.setup();
     nodeDB.init();
 
-    gpsObserver.observe(gps);
+    if (gps)
+        gpsObserver.observe(&gps->newStatus);
     packetReceivedObserver.observe(&router.notifyPacketReceived);
 }
 
@@ -160,7 +163,7 @@ int MeshService::handleFromRadio(const MeshPacket *mp)
 
     // If we veto a received User packet, we don't put it into the DB or forward it to the phone (to prevent confusing it)
     if (mp) {
-        DEBUG_MSG("Forwarding to phone, from=0x%x, rx_time=%u\n", mp->from, mp->rx_time);
+        printPacket("Forwarding to phone", mp);
         nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
 
         fromNum++;
@@ -194,11 +197,20 @@ void MeshService::loop()
 }
 
 /// The radioConfig object just changed, call this to force the hw to change to the new settings
-void MeshService::reloadConfig()
+bool MeshService::reloadConfig()
 {
     // If we can successfully set this radio to these settings, save them to disk
-    nodeDB.resetRadioConfig(); // Don't let the phone send us fatally bad settings
+    bool didReset = nodeDB.resetRadioConfig(); // Don't let the phone send us fatally bad settings
     configChanged.notifyObservers(NULL);
+    nodeDB.saveToDisk();
+
+    return didReset;
+}
+
+/// The owner User record just got updated, update our node DB and broadcast the info into the mesh
+void MeshService::reloadOwner()
+{
+    sendOurOwner();
     nodeDB.saveToDisk();
 }
 
@@ -280,23 +292,28 @@ void MeshService::sendOurPosition(NodeNum dest, bool wantReplies)
     sendToMesh(p);
 }
 
-int MeshService::onGPSChanged(void *unused)
+int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
 {
-    // DEBUG_MSG("got gps notify\n");
 
     // Update our local node info with our position (even if we don't decide to update anyone else)
     MeshPacket *p = router.allocForSending();
     p->decoded.which_payload = SubPacket_position_tag;
 
     Position &pos = p->decoded.position;
-    // !zero or !zero lat/long means valid
-    if (gps->latitude != 0 || gps->longitude != 0) {
+
+    if (gps->hasLock()) {
         if (gps->altitude != 0)
             pos.altitude = gps->altitude;
         pos.latitude_i = gps->latitude;
         pos.longitude_i = gps->longitude;
         pos.time = getValidTime();
     }
+
+    // Include our current battery voltage in our position announcement
+    pos.battery_level = powerStatus->getBatteryChargePercent();
+    updateBatteryLevel(pos.battery_level);
+
+    // DEBUG_MSG("got gps notify time=%u, lat=%d, bat=%d\n", pos.latitude_i, pos.time, pos.battery_level);
 
     // We limit our GPS broadcasts to a max rate
     static uint32_t lastGpsSend;

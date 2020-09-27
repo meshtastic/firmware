@@ -47,18 +47,24 @@
         "memory_resource": "cpp",
         "optional": "cpp",
         "string_view": "cpp",
-        "cassert": "cpp"
+        "cassert": "cpp",
+        "iterator": "cpp",
+        "shared_mutex": "cpp"
     },
     "cSpell.words": [
         "Blox",
+        "EINK",
         "HFSR",
         "Meshtastic",
         "NEMAGPS",
+        "RDEF",
         "Ublox",
         "bkpt",
         "cfsr",
         "descs",
         "ocrypto",
-        "protobufs"
-    ]
+        "protobufs",
+        "wifi"
+    ],
+    "C_Cpp.dimInactiveRegions": true
 }
