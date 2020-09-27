@@ -66,7 +66,10 @@ bool Power::analogInit()
 {
 #ifdef BATTERY_PIN
     DEBUG_MSG("Using analog input for battery level\n");
+#ifndef NO_ESP32
+    // ESP32 needs special analog stuff
     adcAttachPin(BATTERY_PIN);
+#endif
     // adcStart(BATTERY_PIN);
     analogReadResolution(10); // Default of 12 is not very linear. Recommended to use 10 or 11 depending on needed resolution.
     batteryLevel = &analogLevel;
