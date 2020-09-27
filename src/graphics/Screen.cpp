@@ -937,7 +937,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         } else if (getWifiDisconnectReason() == 14) {
             display->drawString(x, y + FONT_HEIGHT * 1, "MIC_FAILURE");
         } else if (getWifiDisconnectReason() == 15) {
-            display->drawString(x, y + FONT_HEIGHT * 1, "4WAY_HANDSHAKE_TIMEOUT");
+            display->drawString(x, y + FONT_HEIGHT * 1, "AP Handshake Timeout");
         } else if (getWifiDisconnectReason() == 16) {
             display->drawString(x, y + FONT_HEIGHT * 1, "GROUP_KEY_UPDATE_TIMEOUT");
         } else if (getWifiDisconnectReason() == 17) {
