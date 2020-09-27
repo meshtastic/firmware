@@ -241,6 +241,23 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
     }
 }
 
+//asdf
+static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
+{
+    String displayLine = "";
+    if (!gps->getIsConnected()) {
+        //displayLine = "No GPS Module";
+        //display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
+    } else if (!gps->getHasLock()) {
+        //displayLine = "No GPS Lock";
+        //display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
+    } else {
+        
+        displayLine = "Altitude: " + String(gps->getAltitude()) + "m";
+        display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
+    }
+}
+
 // Draw GPS status coordinates
 static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
@@ -1011,6 +1028,8 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     display->drawString(x, y + FONT_HEIGHT * 1,
                         String(days) + "d " + (hours < 10 ? "0" : "") + String(hours) + ":" + (minutes < 10 ? "0" : "") +
                             String(minutes) + ":" + (seconds < 10 ? "0" : "") + String(seconds));
+
+    drawGPSAltitude(display, x, y + FONT_HEIGHT * 2, gpsStatus);
 
     // Line 4
     drawGPScoordinates(display, x, y + FONT_HEIGHT * 3, gpsStatus);
