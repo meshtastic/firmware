@@ -51,11 +51,14 @@ feedback to give:
 
 * remove ipx connector for nfc, instead use two caps and loop traces on the back of the board as an antenna?
 
+* the i2c RTC seems to talk fine on the i2c bus
+
 * I've made the serial flash chip work, but if you do a new spin of the board I recommend:
 connect pin 3 and pin 7 of U4 to spare GPIOs on the processor (instead of their current connections), 
-This would allow using 4 bit wide interface mode to the serial flash.
-doubling the transfer speed! see example here:
+This would allow using 4 bit wide interface mode to the serial flash - doubling the transfer speed! see example here:
 https://infocenter.nordicsemi.com/topic/ug_nrf52840_dk/UG/nrf52840_DK/hw_external_memory.html?cp=4_0_4_7_4
+Once again - I'm glad you added that external flash chip. 
+
 */
 
 /*----------------------------------------------------------------------------

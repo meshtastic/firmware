@@ -1,5 +1,7 @@
 # You probably don't want to use this script, it programs a custom bootloader build onto a nrf52 board
 
+set -e 
+
 BOOTDIR=/home/kevinh/development/meshtastic/Adafruit_nRF52_Bootloader
 
 nrfjprog --eraseall -f nrf52
@@ -9,7 +11,7 @@ nrfjprog --eraseall -f nrf52
 
 echo Programming bootloader and soft device
 # the following ling incorrectly enables reset pin, because the running code rewrites it
-nrfjprog --program $BOOTDIR/_build/build-ttgo_eink/ttgo_eink_bootloader-0.3.2-122-gf6bfaac-dirty_s140_6.1.1.hex -f nrf52
+nrfjprog --program $BOOTDIR/_build/build-ttgo_eink/ttgo_eink_bootloader-0.3.2-123-g4f9022d-dirty_s140_6.1.1.hex -f nrf52
 
 # this generates an intel hex file that can be programmed into a NRF52 to tell the adafruit bootloader that the current app image is valid
 # Bootloader settings are at BOOTLOADER_SETTINGS (rw) : ORIGIN = 0xFF000, LENGTH = 0x1000
