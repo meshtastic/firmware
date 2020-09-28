@@ -30,7 +30,7 @@
 soonish:
 hook cdc acm device to debug output
 fix bootloader to use two buttons - remove bootloader hacks
-get second button working in app load
+DONE get second button working in app load
 fix display width and height
 clean up eink drawing to not have the nasty timeout hack
 measure current draws
@@ -48,8 +48,14 @@ add factory/power on self test
 use tp_ser_io as a button, it goes high when pressed unify eink display classes
 
 feedback to give:
-remove ipx connector for nfc, instead use two caps and loop traces on the back of the board as an antenna?
 
+* remove ipx connector for nfc, instead use two caps and loop traces on the back of the board as an antenna?
+
+* I've made the serial flash chip work, but if you do a new spin of the board I recommend:
+connect pin 3 and pin 7 of U4 to spare GPIOs on the processor (instead of their current connections), 
+This would allow using 4 bit wide interface mode to the serial flash.
+doubling the transfer speed! see example here:
+https://infocenter.nordicsemi.com/topic/ug_nrf52840_dk/UG/nrf52840_DK/hw_external_memory.html?cp=4_0_4_7_4
 */
 
 /*----------------------------------------------------------------------------
@@ -108,11 +114,10 @@ static const uint8_t A0 = PIN_A0;
  */
 
 /*
-This serial port is _also_ connected to the incoming D+/D- pins from the USB header.  FIXME, figure out how that is supposed to
-work.
+No longer populated on PCB
 */
-#define PIN_SERIAL2_RX (0 + 6)
-#define PIN_SERIAL2_TX (0 + 8)
+//#define PIN_SERIAL2_RX (0 + 6)
+//#define PIN_SERIAL2_TX (0 + 8)
 // #define PIN_SERIAL2_EN (0 + 17)
 
 /**
@@ -130,22 +135,20 @@ work.
 #define PIN_RTC_INT (0 + 16) // Interrupt from the PCF8563 RTC
 
 /*
-
-FIXME define/FIX flash access
+External serial flash WP25R1635FZUIL0
+*/
 
 // QSPI Pins
-#define PIN_QSPI_SCK 19
-#define PIN_QSPI_CS 17
-#define PIN_QSPI_IO0 20
-#define PIN_QSPI_IO1 21
-#define PIN_QSPI_IO2 22
-#define PIN_QSPI_IO3 23
+#define PIN_QSPI_SCK (32 + 14)
+#define PIN_QSPI_CS (32 + 15)
+#define PIN_QSPI_IO0 (32 + 12) // MOSI if using two bit interface
+#define PIN_QSPI_IO1 (32 + 13) // MISO if using two bit interface
+//#define PIN_QSPI_IO2 22 // WP if using two bit interface (i.e. not used)
+//#define PIN_QSPI_IO3 23 // HOLD if using two bit interface (i.e. not used)
 
 // On-board QSPI Flash
-#define EXTERNAL_FLASH_DEVICES MX25R6435F
+#define EXTERNAL_FLASH_DEVICES MX25R1635F
 #define EXTERNAL_FLASH_USE_QSPI
-
-*/
 
 /*
  * Lora radio
