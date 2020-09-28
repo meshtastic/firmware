@@ -28,36 +28,42 @@
 @geeksville eink TODO:
 
 soonish:
-hook cdc acm device to debug output
-fix bootloader to use two buttons - remove bootloader hacks
+DONE hook cdc acm device to debug output
+DONE fix bootloader to use two buttons - remove bootloader hacks
 DONE get second button working in app load
+DONE use tp_ser_io as a button, it goes high when pressed unify eink display classes
 fix display width and height
 clean up eink drawing to not have the nasty timeout hack
 measure current draws
-put eink to sleep when we think the screen is off
+DONE put eink to sleep when we think the screen is off
 enable gps sleep mode
-https://infocenter.nordicsemi.com/index.jsp?topic=%2Fcom.nordic.infocenter.nrf52832.ps.v1.1%2Fspi.html enable reset as a button
+turn off txco on lora?
 make screen.adjustBrightness() a nop on eink screens
 
 later:
-confirm that watchdog reset (i.e. all pins now become inputs) won't cause the board to power down when we are not connected to USB
-(I bet it will). If this happens recommended fix is to add an external pullup on PWR_ON GPIO.
-enable flash on spi0, share chip selects on spi1.
+enable flash on qspi.
 fix floating point SEGGER printf on nrf52 - see "new NMEA GPS pos"
 add factory/power on self test
-use tp_ser_io as a button, it goes high when pressed unify eink display classes
 
 feedback to give:
 
+* bootloader is finished
+
+* the capacitive touch sensor works, though I'm not sure what use you are intending for it
+
 * remove ipx connector for nfc, instead use two caps and loop traces on the back of the board as an antenna?
 
-* the i2c RTC seems to talk fine on the i2c bus
+* the i2c RTC seems to talk fine on the i2c bus.  However, I'm not sure of the utility of that part.  Instead I'd be in favor of the following:
+
+* move BAT1 to power the GPS VBACKUP instead per page 6 of the Air530 datasheet.  And remove the i2c RTC entirely.
+
+* remove the cp2014 chip.
 
 * I've made the serial flash chip work, but if you do a new spin of the board I recommend:
-connect pin 3 and pin 7 of U4 to spare GPIOs on the processor (instead of their current connections), 
+connect pin 3 and pin 7 of U4 to spare GPIOs on the processor (instead of their current connections),
 This would allow using 4 bit wide interface mode to the serial flash - doubling the transfer speed! see example here:
 https://infocenter.nordicsemi.com/topic/ug_nrf52840_dk/UG/nrf52840_DK/hw_external_memory.html?cp=4_0_4_7_4
-Once again - I'm glad you added that external flash chip. 
+Once again - I'm glad you added that external flash chip.
 
 */
 
@@ -210,7 +216,7 @@ External serial flash WP25R1635FZUIL0
  */
 #define SPI_INTERFACES_COUNT 2
 
-// For LORA
+// For LORA, spi 0
 #define PIN_SPI_MISO (0 + 23)
 #define PIN_SPI_MOSI (0 + 22)
 #define PIN_SPI_SCK (0 + 19)
