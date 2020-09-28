@@ -27,25 +27,29 @@
 /*
 @geeksville eink TODO:
 
-confirm that watchdog reset (i.e. all pins now become inputs) won't cause the board to power down when we are not connected to USB
-(I bet it will). If this happens recommended fix is to add an external pullup on PWR_ON GPIO.
-
+soonish:
+hook cdc acm device to debug output
 fix bootloader to use two buttons - remove bootloader hacks
-fix battery voltage sensing
-fix floating point SEGGER printf on nrf52 - see "new NMEA GPS pos"
 get second button working in app load
-if battery falls too low deassert PWR_ON (to force board to shutdown)
 fix display width and height
 clean up eink drawing to not have the nasty timeout hack
+measure current draws
 put eink to sleep when we think the screen is off
-enable flash on spi0, share chip selects on spi1.
-https://infocenter.nordicsemi.com/index.jsp?topic=%2Fcom.nordic.infocenter.nrf52832.ps.v1.1%2Fspi.html enable reset as a button in
-bootloader fix battery pin usage drive TCXO DIO3 enable high whenever we want the clock use PIN_GPS_WAKE to sleep the GPS use
-tp_ser_io as a button, it goes high when pressed unify eink display classes
-make screen.adjustBrightness() a nop on eink screens
 enable gps sleep mode
-use new flash chip
+https://infocenter.nordicsemi.com/index.jsp?topic=%2Fcom.nordic.infocenter.nrf52832.ps.v1.1%2Fspi.html enable reset as a button
+make screen.adjustBrightness() a nop on eink screens
+
+later:
+confirm that watchdog reset (i.e. all pins now become inputs) won't cause the board to power down when we are not connected to USB
+(I bet it will). If this happens recommended fix is to add an external pullup on PWR_ON GPIO.
+enable flash on spi0, share chip selects on spi1.
+fix floating point SEGGER printf on nrf52 - see "new NMEA GPS pos"
 add factory/power on self test
+use tp_ser_io as a button, it goes high when pressed unify eink display classes
+
+feedback to give:
+remove ipx connector for nfc, instead use two caps and loop traces on the back of the board as an antenna?
+
 */
 
 /*----------------------------------------------------------------------------
@@ -122,9 +126,6 @@ work.
 
 #define TP_SER_IO (0 + 11)
 
-// Board power is enabled either by VBUS from USB or the CPU asserting PWR_ON
-#define PIN_PWR_ON (0 + 12)
-
 #define PIN_RTC_INT (0 + 16) // Interrupt from the PCF8563 RTC
 
 /*
@@ -175,6 +176,9 @@ FIXME define/FIX flash access
 #define PIN_EINK_SCLK (0 + 31)
 #define PIN_EINK_MOSI (0 + 29) // also called SDI
 
+// Controls power for the eink display - Board power is enabled either by VBUS from USB or the CPU asserting PWR_ON
+#define PIN_EINK_PWR_ON (0 + 12)
+
 #define HAS_EINK
 
 #define PIN_SPI1_MISO                                                                                                            \
@@ -186,10 +190,10 @@ FIXME define/FIX flash access
  * Air530 GPS pins
  */
 
-#define PIN_GPS_WAKE (32 + 2)
-#define PIN_GPS_PPS (32 + 4)
-#define PIN_GPS_TX (32 + 9) // This is for bits going TOWARDS the CPU
-#define PIN_GPS_RX (32 + 8) // This is for bits going TOWARDS the GPS
+#define PIN_GPS_WAKE (32 + 2) // An output to wake GPS, low means allow sleep, high means force wake
+#define PIN_GPS_PPS (32 + 4)  // Pulse per second input from the GPS
+#define PIN_GPS_TX (32 + 9)   // This is for bits going TOWARDS the CPU
+#define PIN_GPS_RX (32 + 8)   // This is for bits going TOWARDS the GPS
 
 #define PIN_SERIAL1_RX PIN_GPS_TX
 #define PIN_SERIAL1_TX PIN_GPS_RX

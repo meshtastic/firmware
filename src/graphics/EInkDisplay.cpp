@@ -95,6 +95,11 @@ bool EInkDisplay::connect()
 {
     DEBUG_MSG("Doing EInk init\n");
 
+#ifdef EINK_PIN_PWR_ON
+    digitalWrite(EINK_PIN_PWR_ON, HIGH); // If we need to assert a pin to power external peripherals
+    pinMode(EINK_PIN_PWR_ON, OUTPUT);
+#endif
+
 #ifdef PIN_EINK_EN
     digitalWrite(PIN_EINK_EN, HIGH);
     pinMode(PIN_EINK_EN, OUTPUT);
