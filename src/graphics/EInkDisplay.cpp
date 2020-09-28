@@ -56,7 +56,8 @@ uint32_t lastDrawMsec;
 // Write the buffer to the display memory
 void EInkDisplay::display(void)
 {
-    concurrency::LockGuard g(spiLock);
+    // No need to grab this lock because we are on our own SPI bus
+    // concurrency::LockGuard g(spiLock);
 
     uint32_t now = millis();
     uint32_t sinceLast = now - lastDrawMsec;
@@ -76,10 +77,14 @@ void EInkDisplay::display(void)
             }
         }
 
-        updateDisplay(); // Send image to display and refresh
+        ePaper.Reset(); // wake the screen from sleep
 
-        // Put screen to sleep to save power (if wanted)
-        // ePaper.Sleep();
+        DEBUG_MSG("Updating eink... ");
+        updateDisplay(); // Send image to display and refresh
+        DEBUG_MSG("done\n");
+
+        // Put screen to sleep to save power 
+        ePaper.Sleep();
     }
 }
 
@@ -95,9 +100,9 @@ bool EInkDisplay::connect()
 {
     DEBUG_MSG("Doing EInk init\n");
 
-#ifdef EINK_PIN_PWR_ON
-    digitalWrite(EINK_PIN_PWR_ON, HIGH); // If we need to assert a pin to power external peripherals
-    pinMode(EINK_PIN_PWR_ON, OUTPUT);
+#ifdef PIN_EINK_PWR_ON
+    digitalWrite(PIN_EINK_PWR_ON, HIGH); // If we need to assert a pin to power external peripherals
+    pinMode(PIN_EINK_PWR_ON, OUTPUT);
 #endif
 
 #ifdef PIN_EINK_EN
