@@ -162,6 +162,11 @@ void RadioInterface::applyModemConfig()
 
     DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, power=%d\n", channelSettings.name, channelSettings.modem_config, channel_num,
               power);
+    DEBUG_MSG("Radio myRegion->freq: %f\n", myRegion->freq);
+    DEBUG_MSG("Radio myRegion->spacing: %f\n", myRegion->spacing);
+    DEBUG_MSG("Radio myRegion->numChannels: %d\n", myRegion->numChannels);
+    DEBUG_MSG("Radio channel_num: %d\n", channel_num);
+    DEBUG_MSG("Radio frequency: %f\n", freq);
 }
 
 /**
