@@ -472,7 +472,14 @@ void reinitBluetooth()
     ble_hs_cfg.gatts_register_cb = gatt_svr_register_cb;
     ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
 
-    ble_hs_cfg.sm_io_cap = BLE_SM_IO_CAP_DISP_ONLY;
+    if (ssd1306_found == true) {
+        DEBUG_MSG("Screen Found! : using display for passcode\n");
+        ble_hs_cfg.sm_io_cap = BLE_SM_IO_CAP_DISP_ONLY;
+    }
+    else { 
+        DEBUG_MSG("No Screen Found! : disabling passcode for pairing\n");
+        ble_hs_cfg.sm_io_cap = BLE_SM_IO_CAP_NO_IO; 
+    }
     ble_hs_cfg.sm_bonding = 1;
     ble_hs_cfg.sm_mitm = 1;
     ble_hs_cfg.sm_sc = 1;
