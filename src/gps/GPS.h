@@ -30,6 +30,8 @@ class GPS
   protected:
     bool hasValidLocation = false; // default to false, until we complete our first read
 
+    bool wantNewLocation = false; // true if we want a location right now
+
   public:
     /** If !NULL we will use this serial port to construct our GPS */
     static HardwareSerial *_serial_gps;
@@ -63,9 +65,23 @@ class GPS
     bool hasLock() const { return hasValidLocation; }
 
     /**
+     * Switch the GPS into a mode where we are actively looking for a lock, or alternatively switch GPS into a low power mode
+     * 
+     * calls sleep/wake
+     */
+    void setWantLocation(bool on);
+
+    /**
      * Restart our lock attempt - try to get and broadcast a GPS reading ASAP
      * called after the CPU wakes from light-sleep state */
     virtual void startLock() {}
+
+protected:
+  /// If possible force the GPS into sleep/low power mode
+  virtual void sleep() {}
+
+  /// wake the GPS into normal operation mode
+  virtual void wake() {}
 };
 
 extern GPS *gps;
