@@ -62,7 +62,7 @@ void EInkDisplay::display(void)
     uint32_t now = millis();
     uint32_t sinceLast = now - lastDrawMsec;
 
-    if (framePtr && (sinceLast > 30 * 1000 || lastDrawMsec == 0)) {
+    if (framePtr && (sinceLast > 60 * 1000 || lastDrawMsec == 0)) {
         lastDrawMsec = now;
 
         // FIXME - only draw bits have changed (use backbuf similar to the other displays)
