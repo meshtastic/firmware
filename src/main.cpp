@@ -23,7 +23,7 @@
 
 #include "MeshRadio.h"
 #include "MeshService.h"
-#include "NMEAGPS.h"
+#include "Air530GPS.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "UBloxGPS.h"
@@ -259,10 +259,14 @@ void setup()
         if (GPS::_serial_gps) {
             // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
             // assume NMEA at 9600 baud.
+            // dumb NMEA access only work for serial GPSes)
             DEBUG_MSG("Hoping that NMEA might work\n");
 
-            // dumb NMEA access only work for serial GPSes)
+#ifdef HAS_AIR530_GPS
+            gps = new Air530GPS();
+#else
             gps = new NMEAGPS();
+#endif
             gps->setup();
         }
     }
