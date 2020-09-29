@@ -53,7 +53,8 @@ feedback to give:
 
 * remove ipx connector for nfc, instead use two caps and loop traces on the back of the board as an antenna?
 
-* the i2c RTC seems to talk fine on the i2c bus.  However, I'm not sure of the utility of that part.  Instead I'd be in favor of the following:
+* the i2c RTC seems to talk fine on the i2c bus.  However, I'm not sure of the utility of that part.  Instead I'd be in favor of
+the following:
 
 * move BAT1 to power the GPS VBACKUP instead per page 6 of the Air530 datasheet.  And remove the i2c RTC entirely.
 
@@ -64,6 +65,20 @@ connect pin 3 and pin 7 of U4 to spare GPIOs on the processor (instead of their 
 This would allow using 4 bit wide interface mode to the serial flash - doubling the transfer speed! see example here:
 https://infocenter.nordicsemi.com/topic/ug_nrf52840_dk/UG/nrf52840_DK/hw_external_memory.html?cp=4_0_4_7_4
 Once again - I'm glad you added that external flash chip.
+
+* Power measurements
+When powered by 4V battery
+
+CPU on, lora radio RX mode, bluetooth enabled, GPS trying to lock.  total draw 43mA
+CPU on, lora radio RX mode, bluetooth enabled, GPS super low power sleep mode.  Total draw 20mA
+CPU on, lora radio TX mode, bluetooth enabled, GPS super low power sleep mode.  Total draw 132mA
+
+Note: power consumption while connected via BLE to a phone almost identical.
+
+Note: eink display for all tests was in sleep mode most of the time.  Current draw during the brief periods while the eink was being drawn was not
+measured (but it was low).
+
+Note: Turning off EINK PWR_ON produces no noticeable power savings over just putting the eink display into sleep mode.
 
 */
 
