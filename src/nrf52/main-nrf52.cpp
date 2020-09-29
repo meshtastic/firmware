@@ -93,11 +93,6 @@ void nrf52Setup()
     // This is the recommended setting for Monitor Mode Debugging
     NVIC_SetPriority(DebugMonitor_IRQn, 6UL);
 
-#ifdef PIN_PWR_ON
-    digitalWrite(PIN_PWR_ON, HIGH); // If we need to assert a pin to power external peripherals
-    pinMode(PIN_PWR_ON, OUTPUT);
-#endif
-
     // Not yet on board
     // pmu.init();
 

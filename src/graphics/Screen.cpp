@@ -241,18 +241,17 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
     }
 }
 
-//asdf
 static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
     String displayLine = "";
     if (!gps->getIsConnected()) {
-        //displayLine = "No GPS Module";
-        //display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
+        // displayLine = "No GPS Module";
+        // display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else if (!gps->getHasLock()) {
-        //displayLine = "No GPS Lock";
-        //display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
+        // displayLine = "No GPS Lock";
+        // display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
-        
+
         displayLine = "Altitude: " + String(gps->getAltitude()) + "m";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     }
@@ -905,8 +904,8 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         display->drawString(x, y + FONT_HEIGHT * 1, "Connection Lost");
     } else if (WiFi.status() == WL_CONNECT_FAILED) {
         display->drawString(x, y + FONT_HEIGHT * 1, "Connection Failed");
-    //} else if (WiFi.status() == WL_DISCONNECTED) {
-    //    display->drawString(x, y + FONT_HEIGHT * 1, "Disconnected");
+        //} else if (WiFi.status() == WL_DISCONNECTED) {
+        //    display->drawString(x, y + FONT_HEIGHT * 1, "Disconnected");
     } else if (WiFi.status() == WL_IDLE_STATUS) {
         display->drawString(x, y + FONT_HEIGHT * 1, "Idle ... Reconnecting");
     } else {
@@ -1009,10 +1008,8 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
         display->drawString(x, y, String("USB"));
     }
 
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth("Mode " + String(channelSettings.modem_config)),
-                        y, "Mode " + String(channelSettings.modem_config));
-
-
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth("Mode " + String(channelSettings.modem_config)), y,
+                        "Mode " + String(channelSettings.modem_config));
 
     // Line 2
     uint32_t currentMillis = millis();
@@ -1029,6 +1026,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
                         String(days) + "d " + (hours < 10 ? "0" : "") + String(hours) + ":" + (minutes < 10 ? "0" : "") +
                             String(minutes) + ":" + (seconds < 10 ? "0" : "") + String(seconds));
 
+    // Line 3
     drawGPSAltitude(display, x, y + FONT_HEIGHT * 2, gpsStatus);
 
     // Line 4

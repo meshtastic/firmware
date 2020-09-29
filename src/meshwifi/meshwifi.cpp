@@ -25,8 +25,8 @@ bool isWifiAvailable()
     const char *wifiName = radioConfig.preferences.wifi_ssid;
     const char *wifiPsw = radioConfig.preferences.wifi_password;
 
-    //strcpy(radioConfig.preferences.wifi_ssid, "");
-    //strcpy(radioConfig.preferences.wifi_password, "");
+    // strcpy(radioConfig.preferences.wifi_ssid, "");
+    // strcpy(radioConfig.preferences.wifi_password, "");
 
     if (*wifiName && *wifiPsw) {
 
