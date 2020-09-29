@@ -14,7 +14,7 @@ echo "01 00 00 00 00 00 00 00" | xxd -r -p - >/tmp/bootconf.bin
 srec_cat /tmp/bootconf.bin -binary -offset 0xff000 -output /tmp/bootconf.hex -intel   
 
 echo Generating merged hex file 
-mergehex -m $BOOTDIR/_build/build-ttgo_eink/ttgo_eink_bootloader-0.3.2-123-g4f9022d-dirty_s140_6.1.1.hex .pio/build/eink/firmware.hex /tmp/bootconf.hex -o ttgo_eink_full.hex
+mergehex -m $BOOTDIR/_build/build-ttgo_eink/ttgo_eink_bootloader-0.3.2-124-g69bd8eb-dirty_s140_6.1.1.hex .pio/build/eink/firmware.hex /tmp/bootconf.hex -o ttgo_eink_full.hex
 
 echo Telling bootloader app region is valid and telling CPU to run
 nrfjprog --program ttgo_eink_full.hex -f nrf52 --reset
