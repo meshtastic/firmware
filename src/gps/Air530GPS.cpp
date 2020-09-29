@@ -75,13 +75,13 @@ void Air530GPS::sleep() {
 /// wake the GPS into normal operation mode
 void Air530GPS::wake()
 {
-#if 0
+#if 1
 #ifdef PIN_GPS_WAKE
     digitalWrite(PIN_GPS_WAKE, 1);
     pinMode(PIN_GPS_WAKE, OUTPUT);
 #endif
 #else
-    // For power testing
+    // For power testing - keep GPS sleeping forever
     sleep();
 #endif
 }
