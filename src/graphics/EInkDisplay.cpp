@@ -1,0 +1,125 @@
+#include "configuration.h"
+
+#ifdef HAS_EINK
+#include "EInkDisplay.h"
+#include "SPILock.h"
+#include "epd1in54.h" // Screen specific library
+#include "graphics/configs.h"
+#include <SPI.h>
+#include <TFT_eSPI.h> // Graphics library and Sprite class
+
+Epd ePaper; // Create an instance ePaper
+
+TFT_eSPI glc = TFT_eSPI();             // Invoke the graphics library class
+TFT_eSprite frame = TFT_eSprite(&glc); // Invoke the Sprite class for the image frame buffer
+uint8_t *framePtr;                     // Pointer for the black frame buffer
+
+#define COLORED 0
+#define UNCOLORED 1
+
+#define INK COLORED     // Black ink
+#define PAPER UNCOLORED // 'paper' background colour
+
+//------------------------------------------------------------------------------------
+// Update display - different displays have different function names in the default
+// Waveshare libraries  :-(
+//------------------------------------------------------------------------------------
+#if defined(EPD1IN54B_H) || defined(EPD1IN54C_H) || defined(EPD2IN13B_H) || defined(EPD2IN7B_H) || defined(EPD2IN9B_H) ||        \
+    defined(EPD4IN2_H)
+void updateDisplay(uint8_t *blackFrame = blackFramePtr, uint8_t *redFrame = redFramePtr)
+{
+    ePaper.DisplayFrame(blackFrame, redFrame); // Update 3 colour display
+#else
+void updateDisplay(uint8_t *blackFrame = framePtr)
+{
+#if defined(EPD2IN7_H) || defined(EPD4IN2_H)
+    ePaper.DisplayFrame(blackFrame); // Update 2 color display
+
+#elif defined(EPD1IN54_H) || defined(EPD2IN13_H) || defined(EPD2IN9_H)
+    ePaper.SetFrameMemory(blackFrame); // Update 2 colour display
+    ePaper.DisplayFrame();
+#else
+#error "Selected ePaper library is not supported"
+#endif
+#endif
+}
+
+EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl)
+{
+    setGeometry(GEOMETRY_128_64); // FIXME - currently we lie and claim 128x64 because I'm not yet sure other resolutions will
+                                  // work ie GEOMETRY_RAWMODE
+}
+
+// FIXME quick hack to limit drawing to a very slow rate
+uint32_t lastDrawMsec;
+
+// Write the buffer to the display memory
+void EInkDisplay::display(void)
+{
+    concurrency::LockGuard g(spiLock);
+
+    uint32_t now = millis();
+    uint32_t sinceLast = now - lastDrawMsec;
+
+    if (framePtr && (sinceLast > 30 * 1000 || lastDrawMsec == 0)) {
+        lastDrawMsec = now;
+
+        // FIXME - only draw bits have changed (use backbuf similar to the other displays)
+        // tft.drawBitmap(0, 0, buffer, 128, 64, TFT_YELLOW, TFT_BLACK);
+        for (uint8_t y = 0; y < SCREEN_HEIGHT; y++) {
+            for (uint8_t x = 0; x < SCREEN_WIDTH; x++) {
+
+                // get src pixel in the page based ordering the OLED lib uses FIXME, super inefficent
+                auto b = buffer[x + (y / 8) * SCREEN_WIDTH];
+                auto isset = b & (1 << (y & 7));
+                frame.drawPixel(x, y, isset ? INK : PAPER);
+            }
+        }
+
+        updateDisplay(); // Send image to display and refresh
+
+        // Put screen to sleep to save power (if wanted)
+        // ePaper.Sleep();
+    }
+}
+
+// Send a command to the display (low level function)
+void EInkDisplay::sendCommand(uint8_t com)
+{
+    (void)com;
+    // Drop all commands to device (we just update the buffer)
+}
+
+// Connect to the display
+bool EInkDisplay::connect()
+{
+    DEBUG_MSG("Doing EInk init\n");
+
+#ifdef PIN_EINK_EN
+    digitalWrite(PIN_EINK_EN, HIGH);
+    pinMode(PIN_EINK_EN, OUTPUT);
+#endif
+
+    // Initialise the ePaper library
+    // FIXME - figure out how to use lut_partial_update
+    if (ePaper.Init(lut_full_update) != 0) {
+        DEBUG_MSG("ePaper init failed\n");
+        return false;
+    } else {
+        frame.setColorDepth(1); // Must set the bits per pixel to 1 for ePaper displays
+                                // Set bit depth BEFORE creating Sprite, default is 16!
+
+        // Create a frame buffer in RAM of defined size and save the pointer to it
+        // RAM needed is about (EPD_WIDTH * EPD_HEIGHT)/8 , ~5000 bytes for 200 x 200 pixels
+        // Note: always create the Sprite before setting the Sprite rotation
+        framePtr = (uint8_t *)frame.createSprite(EPD_WIDTH, EPD_HEIGHT);
+
+        frame.fillSprite(PAPER); // Fill frame with white
+        /* frame.drawLine(0, 0, frame.width() - 1, frame.height() - 1, INK);
+        frame.drawLine(0, frame.height() - 1, frame.width() - 1, 0, INK);
+        updateDisplay(); */
+        return true;
+    }
+}
+
+#endif

@@ -241,6 +241,23 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
     }
 }
 
+//asdf
+static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
+{
+    String displayLine = "";
+    if (!gps->getIsConnected()) {
+        //displayLine = "No GPS Module";
+        //display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
+    } else if (!gps->getHasLock()) {
+        //displayLine = "No GPS Lock";
+        //display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
+    } else {
+        
+        displayLine = "Altitude: " + String(gps->getAltitude()) + "m";
+        display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
+    }
+}
+
 // Draw GPS status coordinates
 static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
@@ -888,8 +905,8 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         display->drawString(x, y + FONT_HEIGHT * 1, "Connection Lost");
     } else if (WiFi.status() == WL_CONNECT_FAILED) {
         display->drawString(x, y + FONT_HEIGHT * 1, "Connection Failed");
-    } else if (WiFi.status() == WL_DISCONNECTED) {
-        display->drawString(x, y + FONT_HEIGHT * 1, "Disconnected");
+    //} else if (WiFi.status() == WL_DISCONNECTED) {
+    //    display->drawString(x, y + FONT_HEIGHT * 1, "Disconnected");
     } else if (WiFi.status() == WL_IDLE_STATUS) {
         display->drawString(x, y + FONT_HEIGHT * 1, "Idle ... Reconnecting");
     } else {
@@ -920,7 +937,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         } else if (getWifiDisconnectReason() == 14) {
             display->drawString(x, y + FONT_HEIGHT * 1, "MIC_FAILURE");
         } else if (getWifiDisconnectReason() == 15) {
-            display->drawString(x, y + FONT_HEIGHT * 1, "4WAY_HANDSHAKE_TIMEOUT");
+            display->drawString(x, y + FONT_HEIGHT * 1, "AP Handshake Timeout");
         } else if (getWifiDisconnectReason() == 16) {
             display->drawString(x, y + FONT_HEIGHT * 1, "GROUP_KEY_UPDATE_TIMEOUT");
         } else if (getWifiDisconnectReason() == 17) {
@@ -942,7 +959,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         } else if (getWifiDisconnectReason() == 200) {
             display->drawString(x, y + FONT_HEIGHT * 1, "BEACON_TIMEOUT");
         } else if (getWifiDisconnectReason() == 201) {
-            display->drawString(x, y + FONT_HEIGHT * 1, "NO_AP_FOUND");
+            display->drawString(x, y + FONT_HEIGHT * 1, "AP Not Found");
         } else if (getWifiDisconnectReason() == 202) {
             display->drawString(x, y + FONT_HEIGHT * 1, "AUTH_FAIL");
         } else if (getWifiDisconnectReason() == 203) {
@@ -950,7 +967,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         } else if (getWifiDisconnectReason() == 204) {
             display->drawString(x, y + FONT_HEIGHT * 1, "HANDSHAKE_TIMEOUT");
         } else if (getWifiDisconnectReason() == 205) {
-            display->drawString(x, y + FONT_HEIGHT * 1, "CONNECTION_FAIL");
+            display->drawString(x, y + FONT_HEIGHT * 1, "Connection Failed");
         } else {
             display->drawString(x, y + FONT_HEIGHT * 1, "Unknown Status");
         }
@@ -992,8 +1009,10 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
         display->drawString(x, y, String("USB"));
     }
 
-    // TODO: Display status of the BT radio
-    // display->drawString(x + SCREEN_WIDTH - display->getStringWidth("BT On"), y, "BT On");
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth("Mode " + String(channelSettings.modem_config)),
+                        y, "Mode " + String(channelSettings.modem_config));
+
+
 
     // Line 2
     uint32_t currentMillis = millis();
@@ -1009,8 +1028,8 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     display->drawString(x, y + FONT_HEIGHT * 1,
                         String(days) + "d " + (hours < 10 ? "0" : "") + String(hours) + ":" + (minutes < 10 ? "0" : "") +
                             String(minutes) + ":" + (seconds < 10 ? "0" : "") + String(seconds));
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth("Mode " + String(channelSettings.modem_config)),
-                        y + FONT_HEIGHT * 1, "Mode " + String(channelSettings.modem_config));
+
+    drawGPSAltitude(display, x, y + FONT_HEIGHT * 2, gpsStatus);
 
     // Line 4
     drawGPScoordinates(display, x, y + FONT_HEIGHT * 3, gpsStatus);
