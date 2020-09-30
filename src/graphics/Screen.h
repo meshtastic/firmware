@@ -10,7 +10,8 @@
 #include <SSD1306Wire.h>
 #endif
 
-#include "TFT.h"
+#include "EInkDisplay.h"
+#include "TFTDisplay.h"
 #include "TypedQueue.h"
 #include "commands.h"
 #include "concurrency/LockGuard.h"
@@ -47,7 +48,6 @@ class DebugInfo
     void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     void drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-
 
     std::string channelName;
 
@@ -240,6 +240,8 @@ class Screen : public concurrency::PeriodicTask
     /** FIXME cleanup display abstraction */
 #ifdef ST7735_CS
     TFTDisplay dispdev;
+#elif defined(HAS_EINK)
+    EInkDisplay dispdev;
 #elif defined(USE_SH1106)
     SH1106Wire dispdev;
 #else
