@@ -91,7 +91,7 @@ static void lsIdle()
 static void lsExit()
 {
     // setGPSPower(true); // restore GPS power
-    gps->startLock();
+    gps->forceWake(true);
 }
 
 static void nbEnter()

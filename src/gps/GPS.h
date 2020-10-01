@@ -27,11 +27,18 @@ void readFromRTC();
  */
 class GPS
 {
-  protected:
+  private:
+    uint32_t lastUpdateMsec = 0;
+
     bool hasValidLocation = false; // default to false, until we complete our first read
 
-    bool wantNewLocation = false; // true if we want a location right now
+    bool isAwake = false; // true if we want a location right now
 
+    bool wakeAllowed = true; // false if gps must be forced to sleep regardless of what time it is
+
+    CallbackObserver<GPS, void *> notifySleepObserver = CallbackObserver<GPS, void *>(this, &GPS::prepareSleep);
+
+  protected:
   public:
     /** If !NULL we will use this serial port to construct our GPS */
     static HardwareSerial *_serial_gps;
@@ -48,7 +55,7 @@ class GPS
 
     bool isConnected = false; // Do we have a GPS we are talking to
 
-    virtual ~GPS() {}
+    virtual ~GPS() {} // FIXME, we really should unregister our sleep observer
 
     /** We will notify this observable anytime GPS state has changed meaningfully */
     Observable<const meshtastic::GPSStatus *> newStatus;
@@ -56,32 +63,61 @@ class GPS
     /**
      * Returns true if we succeeded
      */
-    virtual bool setup() { return true; }
+    virtual bool setup();
 
-    /// A loop callback for subclasses that need it.  FIXME, instead just block on serial reads
-    virtual void loop() {}
+    virtual void loop();
 
     /// Returns ture if we have acquired GPS lock.
     bool hasLock() const { return hasValidLocation; }
 
     /**
-     * Switch the GPS into a mode where we are actively looking for a lock, or alternatively switch GPS into a low power mode
-     * 
-     * calls sleep/wake
+     * Restart our lock attempt - try to get and broadcast a GPS reading ASAP
+     * called after the CPU wakes from light-sleep state
+     *
+     * Or set to false, to disallow any sort of waking
+     * */
+    void forceWake(bool on);
+
+  protected:
+    /// If possible force the GPS into sleep/low power mode
+    virtual void sleep() {}
+
+    /// wake the GPS into normal operation mode
+    virtual void wake() {}
+
+    /** Subclasses should look for serial rx characters here and feed it to their GPS parser
+     *
+     * Return true if we received a valid message from the GPS
      */
-    void setWantLocation(bool on);
+    virtual bool whileIdle() = 0;
 
     /**
-     * Restart our lock attempt - try to get and broadcast a GPS reading ASAP
-     * called after the CPU wakes from light-sleep state */
-    virtual void startLock() {}
+     * Perform any processing that should be done only while the GPS is awake and looking for a fix.
+     * Override this method to check for new locations
+     *
+     * @return true if we've acquired a time
+     */
+    virtual bool lookForTime() = 0;
 
-protected:
-  /// If possible force the GPS into sleep/low power mode
-  virtual void sleep() {}
+    /**
+     * Perform any processing that should be done only while the GPS is awake and looking for a fix.
+     * Override this method to check for new locations
+     *
+     * @return true if we've acquired a new location
+     */
+    virtual bool lookForLocation() = 0;
 
-  /// wake the GPS into normal operation mode
-  virtual void wake() {}
+  private:
+    /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
+    /// always returns 0 to indicate okay to sleep
+    int prepareSleep(void *unused);
+
+    /**
+     * Switch the GPS into a mode where we are actively looking for a lock, or alternatively switch GPS into a low power mode
+     *
+     * calls sleep/wake
+     */
+    void setAwake(bool on);
 };
 
 extern GPS *gps;
