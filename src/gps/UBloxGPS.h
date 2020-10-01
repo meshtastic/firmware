@@ -14,8 +14,6 @@ class UBloxGPS : public GPS, public concurrency::PeriodicTask
 {
     SFE_UBLOX_GPS ublox;
 
-    bool wantNewLocation = true;
-
     CallbackObserver<UBloxGPS, void *> notifySleepObserver = CallbackObserver<UBloxGPS, void *>(this, &UBloxGPS::prepareSleep);
 
   public:
