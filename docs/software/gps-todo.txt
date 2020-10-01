@@ -1,0 +1,36 @@
+gps todo - bug 376
+
+handle the various GPS modes 
+
+handle wake and sleep times 
+
+handle maxint parameters
+
+handle loss of lock at end of wake (gotLocThisTime)
+
+if not sharing location, don't even power up the GPS
+
+if we go to sleep without getting a location set hasValidLocation to false
+
+properly handle time only modes
+
+force gps sleep when in LightSleep and force wake only once <- confirm
+
+fix has_gps based on new logic
+
+add set router mode in python tool - it will also set GPS to stationary
+(which will shrink DARK and NB period to zero and
+ make light_sleep very long)
+
+gps states
+
+Active - for gps_attempt_time seconds
+Sleeping - for (gps_update_rate or sleep forever) seconds
+ForcedSleep - PowerFSM says we don't want to use GPS right now
+(no need for sleep forever state)
+
+gps triggers
+GPS_TRIG_FORCE_SLEEP - from powerfsm
+GPS_TRIG_FORCE_WAKE - from powerfsm
+GPS_SETTINGS - if GPS settings changed, reset params and possibly become active
+
