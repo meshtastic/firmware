@@ -1,11 +1,9 @@
 #include "UBloxGPS.h"
 #include "error.h"
-#include "sleep.h"
 #include <assert.h>
 
-UBloxGPS::UBloxGPS() : concurrency::PeriodicTask()
+UBloxGPS::UBloxGPS() 
 {
-    notifySleepObserver.observe(&notifySleep);
 }
 
 bool UBloxGPS::tryConnect()
@@ -53,13 +51,15 @@ bool UBloxGPS::setup()
     if (isConnected) {
         DEBUG_MSG("Connected to UBLOX GPS successfully\n");
 
+        GPS::setup();
+
         if (!setUBXMode())
             recordCriticalError(UBloxInitFailed); // Don't halt the boot if saving the config fails, but do report the bug
 
-        concurrency::PeriodicTask::setup(); // We don't start our periodic task unless we actually found the device
-
         return true;
     } else {
+        // Note: we do not call superclass setup in this case, because we dont want sleep observer registered
+
         return false;
     }
 }
@@ -120,53 +120,53 @@ bool UBloxGPS::factoryReset()
     return ok;
 }
 
-/// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
-int UBloxGPS::prepareSleep(void *unused)
+/**
+ * Perform any processing that should be done only while the GPS is awake and looking for a fix.
+ * Override this method to check for new locations
+ *
+ * @return true if we've acquired a new location
+ */
+bool UBloxGPS::lookForTime()
 {
-    if (isConnected)
-        ublox.powerOff();
-
-    return 0;
+    if (ublox.getT(maxWait())) {
+        /* Convert to unix time
+        The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January
+        1, 1970 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
+        */
+        struct tm t;
+        t.tm_sec = ublox.getSecond(0);
+        t.tm_min = ublox.getMinute(0);
+        t.tm_hour = ublox.getHour(0);
+        t.tm_mday = ublox.getDay(0);
+        t.tm_mon = ublox.getMonth(0) - 1;
+        t.tm_year = ublox.getYear(0) - 1900;
+        t.tm_isdst = false;
+        perhapsSetRTC(t);
+        return true;
+    }
+    else
+    {
+        return false;
+    }
 }
 
-void UBloxGPS::doTask()
+/**
+ * Perform any processing that should be done only while the GPS is awake and looking for a fix.
+ * Override this method to check for new locations
+ *
+ * @return true if we've acquired a new location
+ */
+bool UBloxGPS::lookForLocation()
 {
-    if (isConnected) {
-        // Consume all characters that have arrived
+    bool foundLocation = false;
 
-        uint8_t fixtype = 3; // If we are only using the RX pin, assume we have a 3d fix
+    // If we don't have a fix (a quick check), don't try waiting for a solution)
+    uint8_t fixtype = ublox.getFixType(maxWait());
+    DEBUG_MSG("GPS fix type %d\n", fixtype);
 
-        // if using i2c or serial look too see if any chars are ready
-        ublox.checkUblox(); // See if new data is available. Process bytes as they come in.
-
-        // If we don't have a fix (a quick check), don't try waiting for a solution)
-        // Hmmm my fix type reading returns zeros for fix, which doesn't seem correct, because it is still sptting out positions
-        // turn off for now
-        uint16_t maxWait = i2cAddress ? 300 : 0; // If using i2c we must poll with wait
-        fixtype = ublox.getFixType(maxWait);
-        DEBUG_MSG("GPS fix type %d\n", fixtype);
-
-        // DEBUG_MSG("sec %d\n", ublox.getSecond());
-        // DEBUG_MSG("lat %d\n", ublox.getLatitude());
-
-        // any fix that has time
-
-        if (ublox.getT(maxWait)) {
-            /* Convert to unix time
-            The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January
-            1, 1970 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
-            */
-            struct tm t;
-            t.tm_sec = ublox.getSecond(0);
-            t.tm_min = ublox.getMinute(0);
-            t.tm_hour = ublox.getHour(0);
-            t.tm_mday = ublox.getDay(0);
-            t.tm_mon = ublox.getMonth(0) - 1;
-            t.tm_year = ublox.getYear(0) - 1900;
-            t.tm_isdst = false;
-            perhapsSetRTC(t);
-        }
-
+    // we only notify if position has changed due to a new fix
+    if ((fixtype >= 3 && fixtype <= 4) && ublox.getP(maxWait())) // rd fixes only
+    {
         latitude = ublox.getLatitude(0);
         longitude = ublox.getLongitude(0);
         altitude = ublox.getAltitudeMSL(0) / 1000; // in mm convert to meters
@@ -176,33 +176,24 @@ void UBloxGPS::doTask()
 
         // bogus lat lon is reported as 0 or 0 (can be bogus just for one)
         // Also: apparently when the GPS is initially reporting lock it can output a bogus latitude > 90 deg!
-        hasValidLocation =
+        foundLocation =
             (latitude != 0) && (longitude != 0) && (latitude <= 900000000 && latitude >= -900000000) && (numSatellites > 0);
+    } 
 
-        // we only notify if position has changed due to a new fix
-        if ((fixtype >= 3 && fixtype <= 4) && ublox.getP(maxWait)) // rd fixes only
-        {
-            if (hasValidLocation) {
-                setWantLocation(false);
-                // ublox.powerOff();
-            }
-        } else // we didn't get a location update, go back to sleep and hope the characters show up
-            setWantLocation(true);
-
-        // Notify any status instances that are observing us
-        const meshtastic::GPSStatus status =
-            meshtastic::GPSStatus(hasLock(), isConnected, latitude, longitude, altitude, dop, heading, numSatellites);
-        newStatus.notifyObservers(&status);
-    }
-
-    // Once we have sent a location once we only poll the GPS rarely, otherwise check back every 10s until we have something
-    // over the serial
-    setPeriod(hasValidLocation && !wantNewLocation ? 30 * 1000 : 10 * 1000);
+    return foundLocation;
 }
 
-void UBloxGPS::startLock()
+bool UBloxGPS::whileIdle()
 {
-    DEBUG_MSG("Looking for GPS lock\n");
-    wantNewLocation = true;
-    setPeriod(1);
+    // if using i2c or serial look too see if any chars are ready
+    return ublox.checkUblox(); // See if new data is available. Process bytes as they come in. 
 }
+
+
+/// If possible force the GPS into sleep/low power mode
+/// Note: ublox doesn't need a wake method, because as soon as we send chars to the GPS it will wake up
+void UBloxGPS::sleep() {
+    if (isConnected)
+        ublox.powerOff();
+}
+
