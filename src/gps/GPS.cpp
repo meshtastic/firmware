@@ -85,3 +85,20 @@ uint32_t getValidTime()
 {
     return timeSetFromGPS ? getTime() : 0;
 }
+
+/**
+ * Switch the GPS into a mode where we are actively looking for a lock, or alternatively switch GPS into a low power mode
+ *
+ * calls sleep/wake
+ */
+void GPS::setWantLocation(bool on)
+{
+    if (wantNewLocation != on) {
+        wantNewLocation = on;
+        DEBUG_MSG("WANT GPS=%d\n", on);
+        if (on)
+            wake();
+        else
+            sleep();
+        }
+}
