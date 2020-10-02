@@ -183,11 +183,11 @@ void UBloxGPS::doTask()
         if ((fixtype >= 3 && fixtype <= 4) && ublox.getP(maxWait)) // rd fixes only
         {
             if (hasValidLocation) {
-                wantNewLocation = false;
+                setWantLocation(false);
                 // ublox.powerOff();
             }
         } else // we didn't get a location update, go back to sleep and hope the characters show up
-            wantNewLocation = true;
+            setWantLocation(true);
 
         // Notify any status instances that are observing us
         const meshtastic::GPSStatus status =
