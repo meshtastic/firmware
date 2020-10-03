@@ -27,25 +27,59 @@
 /*
 @geeksville eink TODO:
 
-confirm that watchdog reset (i.e. all pins now become inputs) won't cause the board to power down when we are not connected to USB
-(I bet it will). If this happens recommended fix is to add an external pullup on PWR_ON GPIO.
-
-fix bootloader to use two buttons - remove bootloader hacks
-fix battery voltage sensing
-fix floating point SEGGER printf on nrf52 - see "new NMEA GPS pos"
-get second button working in app load
-if battery falls too low deassert PWR_ON (to force board to shutdown)
+soonish:
+DONE hook cdc acm device to debug output
+DONE fix bootloader to use two buttons - remove bootloader hacks
+DONE get second button working in app load
+DONE use tp_ser_io as a button, it goes high when pressed unify eink display classes
 fix display width and height
 clean up eink drawing to not have the nasty timeout hack
-put eink to sleep when we think the screen is off
-enable flash on spi0, share chip selects on spi1.
-https://infocenter.nordicsemi.com/index.jsp?topic=%2Fcom.nordic.infocenter.nrf52832.ps.v1.1%2Fspi.html enable reset as a button in
-bootloader fix battery pin usage drive TCXO DIO3 enable high whenever we want the clock use PIN_GPS_WAKE to sleep the GPS use
-tp_ser_io as a button, it goes high when pressed unify eink display classes
-make screen.adjustBrightness() a nop on eink screens
+measure current draws
+DONE put eink to sleep when we think the screen is off
 enable gps sleep mode
-use new flash chip
+turn off txco on lora?
+make screen.adjustBrightness() a nop on eink screens
+
+later:
+enable flash on qspi.
+fix floating point SEGGER printf on nrf52 - see "new NMEA GPS pos"
 add factory/power on self test
+
+feedback to give:
+
+* bootloader is finished
+
+* the capacitive touch sensor works, though I'm not sure what use you are intending for it
+
+* remove ipx connector for nfc, instead use two caps and loop traces on the back of the board as an antenna?
+
+* the i2c RTC seems to talk fine on the i2c bus.  However, I'm not sure of the utility of that part.  Instead I'd be in favor of
+the following:
+
+* move BAT1 to power the GPS VBACKUP instead per page 6 of the Air530 datasheet.  And remove the i2c RTC entirely.
+
+* remove the cp2014 chip.
+
+* I've made the serial flash chip work, but if you do a new spin of the board I recommend:
+connect pin 3 and pin 7 of U4 to spare GPIOs on the processor (instead of their current connections),
+This would allow using 4 bit wide interface mode to the serial flash - doubling the transfer speed! see example here:
+https://infocenter.nordicsemi.com/topic/ug_nrf52840_dk/UG/nrf52840_DK/hw_external_memory.html?cp=4_0_4_7_4
+Once again - I'm glad you added that external flash chip.
+
+* Power measurements
+When powered by 4V battery
+
+CPU on, lora radio RX mode, bluetooth enabled, GPS trying to lock.  total draw 43mA
+CPU on, lora radio RX mode, bluetooth enabled, GPS super low power sleep mode.  Total draw 20mA
+CPU on, lora radio TX mode, bluetooth enabled, GPS super low power sleep mode.  Total draw 132mA
+
+Note: power consumption while connected via BLE to a phone almost identical.
+
+Note: eink display for all tests was in sleep mode most of the time.  Current draw during the brief periods while the eink was being drawn was not
+measured (but it was low).
+
+Note: Turning off EINK PWR_ON produces no noticeable power savings over just putting the eink display into sleep mode.
+
 */
 
 /*----------------------------------------------------------------------------
@@ -83,6 +117,7 @@ extern "C" {
  * Buttons
  */
 #define PIN_BUTTON1 (32 + 10)
+#define PIN_BUTTON2 (0 + 18) // 0.18 is labeled on the board as RESET but we configure it in the bootloader as a regular GPIO
 
 /*
  * Analog pins
@@ -103,11 +138,10 @@ static const uint8_t A0 = PIN_A0;
  */
 
 /*
-This serial port is _also_ connected to the incoming D+/D- pins from the USB header.  FIXME, figure out how that is supposed to
-work.
+No longer populated on PCB
 */
-#define PIN_SERIAL2_RX (0 + 6)
-#define PIN_SERIAL2_TX (0 + 8)
+//#define PIN_SERIAL2_RX (0 + 6)
+//#define PIN_SERIAL2_TX (0 + 8)
 // #define PIN_SERIAL2_EN (0 + 17)
 
 /**
@@ -122,28 +156,23 @@ work.
 
 #define TP_SER_IO (0 + 11)
 
-// Board power is enabled either by VBUS from USB or the CPU asserting PWR_ON
-#define PIN_PWR_ON (0 + 12)
-
 #define PIN_RTC_INT (0 + 16) // Interrupt from the PCF8563 RTC
 
 /*
-
-FIXME define/FIX flash access
+External serial flash WP25R1635FZUIL0
+*/
 
 // QSPI Pins
-#define PIN_QSPI_SCK 19
-#define PIN_QSPI_CS 17
-#define PIN_QSPI_IO0 20
-#define PIN_QSPI_IO1 21
-#define PIN_QSPI_IO2 22
-#define PIN_QSPI_IO3 23
+#define PIN_QSPI_SCK (32 + 14)
+#define PIN_QSPI_CS (32 + 15)
+#define PIN_QSPI_IO0 (32 + 12) // MOSI if using two bit interface
+#define PIN_QSPI_IO1 (32 + 13) // MISO if using two bit interface
+//#define PIN_QSPI_IO2 22 // WP if using two bit interface (i.e. not used)
+//#define PIN_QSPI_IO3 23 // HOLD if using two bit interface (i.e. not used)
 
 // On-board QSPI Flash
-#define EXTERNAL_FLASH_DEVICES MX25R6435F
+#define EXTERNAL_FLASH_DEVICES MX25R1635F
 #define EXTERNAL_FLASH_USE_QSPI
-
-*/
 
 /*
  * Lora radio
@@ -175,6 +204,9 @@ FIXME define/FIX flash access
 #define PIN_EINK_SCLK (0 + 31)
 #define PIN_EINK_MOSI (0 + 29) // also called SDI
 
+// Controls power for the eink display - Board power is enabled either by VBUS from USB or the CPU asserting PWR_ON
+#define PIN_EINK_PWR_ON (0 + 12)
+
 #define HAS_EINK
 
 #define PIN_SPI1_MISO                                                                                                            \
@@ -186,10 +218,12 @@ FIXME define/FIX flash access
  * Air530 GPS pins
  */
 
-#define PIN_GPS_WAKE (32 + 2)
-#define PIN_GPS_PPS (32 + 4)
-#define PIN_GPS_TX (32 + 9) // This is for bits going TOWARDS the CPU
-#define PIN_GPS_RX (32 + 8) // This is for bits going TOWARDS the GPS
+#define PIN_GPS_WAKE (32 + 2) // An output to wake GPS, low means allow sleep, high means force wake
+#define PIN_GPS_PPS (32 + 4)  // Pulse per second input from the GPS
+#define PIN_GPS_TX (32 + 9)   // This is for bits going TOWARDS the CPU
+#define PIN_GPS_RX (32 + 8)   // This is for bits going TOWARDS the GPS
+
+#define HAS_AIR530_GPS
 
 #define PIN_SERIAL1_RX PIN_GPS_TX
 #define PIN_SERIAL1_TX PIN_GPS_RX
@@ -199,7 +233,7 @@ FIXME define/FIX flash access
  */
 #define SPI_INTERFACES_COUNT 2
 
-// For LORA
+// For LORA, spi 0
 #define PIN_SPI_MISO (0 + 23)
 #define PIN_SPI_MOSI (0 + 22)
 #define PIN_SPI_SCK (0 + 19)
