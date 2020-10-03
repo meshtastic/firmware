@@ -150,6 +150,10 @@ void userButtonPressedLong()
 {
     screen.adjustBrightness();
 }
+void userButtonDoublePressed()
+{
+    disablePin();
+}
 
 void setup()
 {
@@ -189,11 +193,13 @@ void setup()
     userButton = OneButton(BUTTON_PIN, true, true);
     userButton.attachClick(userButtonPressed);
     userButton.attachDuringLongPress(userButtonPressedLong);
+    userButton.attachDoubleClick(userButtonDoublePressed);
 #endif
 #ifdef BUTTON_PIN_ALT
     userButtonAlt = OneButton(BUTTON_PIN_ALT, true, true);
     userButtonAlt.attachClick(userButtonPressed);
     userButton.attachDuringLongPress(userButtonPressedLong);
+    userButton.attachDoubleClick(userButtonDoublePressed);
 #endif
 #ifdef LED_PIN
     pinMode(LED_PIN, OUTPUT);
