@@ -152,7 +152,9 @@ void userButtonPressedLong()
 }
 void userButtonDoublePressed()
 {
+#ifndef NO_ESP32
     disablePin();
+#endif
 }
 
 void setup()
