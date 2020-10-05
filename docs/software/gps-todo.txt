@@ -3,17 +3,9 @@ gps todo - bug 376
 for taiwan region:
 bin/run.sh --set region 8
 
-after sleep we declare success without real new data
-
-handle the various GPS modes 
-
 fix poll interval for sending commands to ublox
 
-handle maxint parameters
-
-if not sharing location, don't even power up the GPS
-
-if we go to sleep without getting a location set hasValidLocation to false
+change defaults to 2 min 
 
 properly handle time only modes
 

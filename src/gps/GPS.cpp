@@ -130,15 +130,32 @@ void GPS::setAwake(bool on)
     }
 }
 
+GpsOperation GPS::getGpsOp() const
+{
+    auto op = radioConfig.preferences.gps_operation;
+
+    if (op == GpsOperation_GpsOpUnset)
+        op = (radioConfig.preferences.location_share == LocationSharing_LocDisabled) ? GpsOperation_GpsOpTimeOnly
+                                                                                     : GpsOperation_GpsOpMobile;
+
+    return op;
+}
+
 /** Get how long we should stay looking for each aquisition in msecs
  */
 uint32_t GPS::getWakeTime() const
 {
     uint32_t t = radioConfig.preferences.gps_attempt_time;
 
-    // fixme check modes
+    auto op = getGpsOp();
+    if ((timeSetFromGPS && op == GpsOperation_GpsOpTimeOnly) || (op == GpsOperation_GpsOpDisabled))
+        t = UINT32_MAX; // Sleep forever now
+
+    if (t == UINT32_MAX)
+        return t; // already maxint
+
     if (t == 0)
-        t = 30;
+        t = 2 * 60; // default to 2 mins
 
     t *= 1000; // msecs
 
@@ -151,9 +168,12 @@ uint32_t GPS::getSleepTime() const
 {
     uint32_t t = radioConfig.preferences.gps_update_interval;
 
+    if (t == UINT32_MAX)
+        return t; // already maxint
+
     // fixme check modes
     if (t == 0)
-        t = 30;
+        t = 30; // 2 mins
 
     t *= 1000;
 
@@ -180,7 +200,8 @@ void GPS::loop()
     // If we are overdue for an update, turn on the GPS and at least publish the current status
     uint32_t now = millis();
 
-    if ((now - lastSleepStartMsec) > getSleepTime() && !isAwake) {
+    auto sleepTime = getSleepTime();
+    if (!isAwake && sleepTime != UINT32_MAX && (now - lastSleepStartMsec) > sleepTime) {
         // We now want to be awake - so wake up the GPS
         setAwake(true);
     }
@@ -195,10 +216,12 @@ void GPS::loop()
         bool gotLoc = lookForLocation();
 
         // We've been awake too long - force sleep
-        bool tooLong = (now - lastWakeStartMsec) > getWakeTime();
+        auto wakeTime = getWakeTime();
+        bool tooLong = wakeTime != UINT32_MAX && (now - lastWakeStartMsec) > wakeTime;
 
         // Once we get a location we no longer desperately want an update
-        if (gotLoc || tooLong) {
+        // or if we got a time and we are in GpsOpTimeOnly mode
+        if (gotLoc || tooLong || (gotTime && getGpsOp() == GpsOperation_GpsOpTimeOnly)) {
             if (gotLoc)
                 hasValidLocation = true;
 
@@ -216,8 +239,8 @@ void GPS::loop()
 void GPS::forceWake(bool on)
 {
     if (on) {
-        DEBUG_MSG("Looking for GPS lock\n");
-        lastSleepStartMsec = 0; // Force an update ASAP
+        DEBUG_MSG("llowing GPS lock\n");
+        // lastSleepStartMsec = 0; // Force an update ASAP
         wakeAllowed = true;
     } else {
         wakeAllowed = false;

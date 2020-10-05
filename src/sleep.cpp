@@ -176,7 +176,8 @@ void doDeepSleep(uint64_t msecToWake)
 
         // axp.setPowerOutPut(AXP192_LDO2, AXP202_OFF); // LORA radio
 
-        setGPSPower(false);
+        // now done by UBloxGPS.cpp 
+        // setGPSPower(false);
     }
 #endif
 
