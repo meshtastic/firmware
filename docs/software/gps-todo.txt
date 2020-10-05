@@ -3,13 +3,7 @@ gps todo - bug 376
 for taiwan region:
 bin/run.sh --set region 8
 
-fix poll interval for sending commands to ublox
-
 change defaults to 2 min 
-
-properly handle time only modes
-
-force gps sleep when in LightSleep and force wake only once <- confirm
 
 fix has_gps based on new logic
 
