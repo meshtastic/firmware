@@ -34,7 +34,8 @@ bool UBloxGPS::setupGPS()
         // _serial_gps.setRxBufferSize(1024); // the default is 256
     }
 
-    ublox.enableDebugging(Serial);
+    // uncomment to see debug info
+    // ublox.enableDebugging(Serial);
 
     // try a second time, the ublox lib serial parsing is buggy?
     // see https://github.com/meshtastic/Meshtastic-device/issues/376
@@ -112,9 +113,19 @@ bool UBloxGPS::factoryReset()
 /** Idle processing while GPS is looking for lock */
 void UBloxGPS::whileActive()
 {
-    // If we don't have a fix (a quick check), don't try waiting for a solution)
-    fixType = ublox.getFixType(maxWait());
-    DEBUG_MSG("GPS fix type %d\n", fixType);
+    ublox.getT(maxWait()); // ask for new time data - hopefully ready when we come back
+
+    // Ask for a new position fix - hopefully it will have results ready by next time
+    // the order here is important, because we only check for has latitude when reading
+    ublox.getSIV(maxWait());
+    ublox.getPDOP(maxWait());
+    ublox.getP(maxWait());
+
+    // Update fixtype
+    if (ublox.moduleQueried.fixType) {
+        fixType = ublox.getFixType(0);
+        DEBUG_MSG("GPS fix type %d\n", fixType);
+    }
 }
 
 /**
@@ -141,8 +152,6 @@ bool UBloxGPS::lookForTime()
             t.tm_isdst = false;
             perhapsSetRTC(t);
             return true;
-        } else {
-            ublox.getT(maxWait()); // ask for new time data - hopefully ready when we come back
         }
     }
 
@@ -177,11 +186,6 @@ bool UBloxGPS::lookForLocation()
             // Also: apparently when the GPS is initially reporting lock it can output a bogus latitude > 90 deg!
             foundLocation =
                 (latitude != 0) && (longitude != 0) && (latitude <= 900000000 && latitude >= -900000000) && (numSatellites > 0);
-        } else {
-            // Ask for a new position fix - hopefully it will have results ready by next time
-            ublox.getSIV(maxWait());
-            ublox.getPDOP(maxWait());
-            ublox.getP(maxWait());
         }
     }
 
@@ -205,6 +209,7 @@ void UBloxGPS::sleep()
 
 void UBloxGPS::wake()
 {
+    fixType = 0; // assume we hace no fix yet
     setGPSPower(true);
     // Give time for the GPS to boot
     delay(200);

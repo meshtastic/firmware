@@ -429,7 +429,7 @@ void loop()
 
     // FIXME - until button press handling is done by interrupt (see polling above) we can't sleep very long at all or buttons
     // feel slow
-    msecstosleep = 200; // FIXME, stop early if something happens
+    msecstosleep = 10; // FIXME, stop early if something happens and sleep much longer
 
     // TODO: This should go into a thread handled by FreeRTOS.
     handleWebResponse();

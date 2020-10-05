@@ -209,7 +209,10 @@ void GPS::loop()
     // While we are awake
     if (isAwake) {
         // DEBUG_MSG("looking for location\n");
-        whileActive();
+        if ((now - lastWhileActiveMsec) > 1000) {
+            lastWhileActiveMsec = now;
+            whileActive();
+        }
 
         // If we've already set time from the GPS, no need to ask the GPS
         bool gotTime = timeSetFromGPS || lookForTime();
