@@ -2,9 +2,7 @@
 #include "error.h"
 #include <assert.h>
 
-UBloxGPS::UBloxGPS() 
-{
-}
+UBloxGPS::UBloxGPS() {}
 
 bool UBloxGPS::tryConnect()
 {
@@ -41,7 +39,7 @@ bool UBloxGPS::setup()
     delay(200); // Give time for the GPS to startup after we gave power
 #endif
 
-    // ublox.enableDebugging(Serial);
+    ublox.enableDebugging(Serial);
 
     // try a second time, the ublox lib serial parsing is buggy?
     // see https://github.com/meshtastic/Meshtastic-device/issues/376
@@ -120,6 +118,14 @@ bool UBloxGPS::factoryReset()
     return ok;
 }
 
+/** Idle processing while GPS is looking for lock */
+void UBloxGPS::whileActive()
+{
+    // If we don't have a fix (a quick check), don't try waiting for a solution)
+    fixType = ublox.getFixType(maxWait());
+    DEBUG_MSG("GPS fix type %d\n", fixType);
+}
+
 /**
  * Perform any processing that should be done only while the GPS is awake and looking for a fix.
  * Override this method to check for new locations
@@ -128,7 +134,7 @@ bool UBloxGPS::factoryReset()
  */
 bool UBloxGPS::lookForTime()
 {
-    if (ublox.getT(maxWait())) {
+    if (fixType >= 2 && ublox.getT(maxWait())) {
         /* Convert to unix time
         The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January
         1, 1970 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
@@ -143,9 +149,7 @@ bool UBloxGPS::lookForTime()
         t.tm_isdst = false;
         perhapsSetRTC(t);
         return true;
-    }
-    else
-    {
+    } else {
         return false;
     }
 }
@@ -160,12 +164,8 @@ bool UBloxGPS::lookForLocation()
 {
     bool foundLocation = false;
 
-    // If we don't have a fix (a quick check), don't try waiting for a solution)
-    uint8_t fixtype = ublox.getFixType(maxWait());
-    DEBUG_MSG("GPS fix type %d\n", fixtype);
-
     // we only notify if position has changed due to a new fix
-    if ((fixtype >= 3 && fixtype <= 4) && ublox.getP(maxWait())) // rd fixes only
+    if ((fixType >= 3 && fixType <= 4) && ublox.getP(maxWait())) // rd fixes only
     {
         latitude = ublox.getLatitude(0);
         longitude = ublox.getLongitude(0);
@@ -178,7 +178,7 @@ bool UBloxGPS::lookForLocation()
         // Also: apparently when the GPS is initially reporting lock it can output a bogus latitude > 90 deg!
         foundLocation =
             (latitude != 0) && (longitude != 0) && (latitude <= 900000000 && latitude >= -900000000) && (numSatellites > 0);
-    } 
+    }
 
     return foundLocation;
 }
@@ -186,14 +186,17 @@ bool UBloxGPS::lookForLocation()
 bool UBloxGPS::whileIdle()
 {
     // if using i2c or serial look too see if any chars are ready
-    return ublox.checkUblox(); // See if new data is available. Process bytes as they come in. 
+    return ublox.checkUblox(); // See if new data is available. Process bytes as they come in.
 }
-
 
 /// If possible force the GPS into sleep/low power mode
 /// Note: ublox doesn't need a wake method, because as soon as we send chars to the GPS it will wake up
-void UBloxGPS::sleep() {
-    if (isConnected)
-        ublox.powerOff();
-}
+void UBloxGPS::sleep()
+{
+    if (isConnected) {
+        DEBUG_MSG("FIXME, enter low power mode\n");
 
+        // won't work on 6M
+        // ublox.powerOff();
+    }
+}

@@ -12,6 +12,7 @@
 class UBloxGPS : public GPS
 {
     SFE_UBLOX_GPS ublox;
+    uint8_t fixType = 0;
 
   public:
     UBloxGPS();
@@ -35,6 +36,9 @@ class UBloxGPS : public GPS
      */
     virtual bool whileIdle();
 
+    /** Idle processing while GPS is looking for lock */
+    virtual void whileActive();
+
     /**
      * Perform any processing that should be done only while the GPS is awake and looking for a fix.
      * Override this method to check for new locations
@@ -55,7 +59,6 @@ class UBloxGPS : public GPS
     virtual void sleep();
 
   private:
-
     /// Attempt to connect to our GPS, returns false if no gps is present
     bool tryConnect();
 

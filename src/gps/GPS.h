@@ -6,8 +6,8 @@
 #include "sys/time.h"
 
 /// If we haven't yet set our RTC this boot, set it from a GPS derived time
-void perhapsSetRTC(const struct timeval *tv);
-void perhapsSetRTC(struct tm &t);
+bool perhapsSetRTC(const struct timeval *tv);
+bool perhapsSetRTC(struct tm &t);
 
 // Generate a string representation of DOP
 const char *getDOPString(uint32_t dop);
@@ -28,7 +28,7 @@ void readFromRTC();
 class GPS
 {
   private:
-    uint32_t lastUpdateMsec = 0;
+    uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0;
 
     bool hasValidLocation = false; // default to false, until we complete our first read
 
@@ -91,6 +91,9 @@ class GPS
      */
     virtual bool whileIdle() = 0;
 
+    /** Idle processing while GPS is looking for lock */
+    virtual void whileActive() {}
+
     /**
      * Perform any processing that should be done only while the GPS is awake and looking for a fix.
      * Override this method to check for new locations
@@ -118,6 +121,20 @@ class GPS
      * calls sleep/wake
      */
     void setAwake(bool on);
+
+    /** Get how long we should stay looking for each aquisition
+     */
+    uint32_t getWakeTime() const;
+
+    /** Get how long we should sleep between aqusition attempts
+     */
+    uint32_t getSleepTime() const;
+
+    /**
+     * Tell users we have new GPS readings
+     */
+    void publishUpdate();
+
 };
 
 extern GPS *gps;
