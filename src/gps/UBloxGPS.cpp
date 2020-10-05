@@ -167,7 +167,10 @@ bool UBloxGPS::lookForLocation()
             longitude = ublox.getLongitude(0);
             altitude = ublox.getAltitudeMSL(0) / 1000; // in mm convert to meters
             dop = ublox.getPDOP(0); // PDOP (an accuracy metric) is reported in 10^2 units so we have to scale down when we use it
-            heading = ublox.getHeading(0);
+
+            // Note: heading is only currently implmented in the ublox for the 8m chipset - therefore
+            // don't read it here - it will generate an ignored getPVT command on the 6ms
+            // heading = ublox.getHeading(0);
             numSatellites = ublox.getSIV(0);
 
             // bogus lat lon is reported as 0 or 0 (can be bogus just for one)
@@ -176,6 +179,8 @@ bool UBloxGPS::lookForLocation()
                 (latitude != 0) && (longitude != 0) && (latitude <= 900000000 && latitude >= -900000000) && (numSatellites > 0);
         } else {
             // Ask for a new position fix - hopefully it will have results ready by next time
+            ublox.getSIV(maxWait());
+            ublox.getPDOP(maxWait());
             ublox.getP(maxWait());
         }
     }

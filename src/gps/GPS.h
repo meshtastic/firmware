@@ -133,6 +133,8 @@ class GPS
      */
     uint32_t getSleepTime() const;
 
+    GpsOperation getGpsOp() const;
+    
     /**
      * Tell users we have new GPS readings
      */
