@@ -3,13 +3,13 @@ gps todo - bug 376
 for taiwan region:
 bin/run.sh --set region 8
 
+after sleep we declare success without real new data
+
 handle the various GPS modes 
 
 fix poll interval for sending commands to ublox
 
 handle maxint parameters
-
-handle loss of lock at end of wake (gotLocThisTime)
 
 if not sharing location, don't even power up the GPS
 

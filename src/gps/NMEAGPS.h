@@ -15,7 +15,7 @@ class NMEAGPS : public GPS
     TinyGPSPlus reader;
 
   public:
-    virtual bool setup();
+    virtual bool setupGPS();
 
   protected:
     /** Subclasses should look for serial rx characters here and feed it to their GPS parser

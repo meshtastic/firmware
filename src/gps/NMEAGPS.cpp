@@ -10,14 +10,13 @@ static int32_t toDegInt(RawDegrees d)
     return r;
 }
 
-bool NMEAGPS::setup()
+bool NMEAGPS::setupGPS()
 {
 #ifdef PIN_GPS_PPS
     // pulse per second
     // FIXME - move into shared GPS code
     pinMode(PIN_GPS_PPS, INPUT);
 #endif
-    GPS::setup();
 
     return true;
 }
