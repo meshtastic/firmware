@@ -147,10 +147,6 @@ uint32_t GPS::getWakeTime() const
 {
     uint32_t t = radioConfig.preferences.gps_attempt_time;
 
-    auto op = getGpsOp();
-    if ((timeSetFromGPS && op == GpsOperation_GpsOpTimeOnly) || (op == GpsOperation_GpsOpDisabled))
-        t = UINT32_MAX; // Sleep forever now
-
     if (t == UINT32_MAX)
         return t; // already maxint
 
@@ -168,12 +164,15 @@ uint32_t GPS::getSleepTime() const
 {
     uint32_t t = radioConfig.preferences.gps_update_interval;
 
+    auto op = getGpsOp();
+    if ((timeSetFromGPS && op == GpsOperation_GpsOpTimeOnly) || (op == GpsOperation_GpsOpDisabled))
+        t = UINT32_MAX; // Sleep forever now
+
     if (t == UINT32_MAX)
         return t; // already maxint
 
-    // fixme check modes
     if (t == 0)
-        t = 30; // 2 mins
+        t = 2 * 60; // 2 mins
 
     t *= 1000;
 
@@ -242,7 +241,7 @@ void GPS::loop()
 void GPS::forceWake(bool on)
 {
     if (on) {
-        DEBUG_MSG("llowing GPS lock\n");
+        DEBUG_MSG("Allowing GPS lock\n");
         // lastSleepStartMsec = 0; // Force an update ASAP
         wakeAllowed = true;
     } else {
