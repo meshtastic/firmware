@@ -28,7 +28,7 @@ void readFromRTC();
 class GPS
 {
   private:
-    uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0;
+    uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0, lastWhileActiveMsec = 0;
 
     bool hasValidLocation = false; // default to false, until we complete our first read
 
@@ -94,7 +94,7 @@ class GPS
      */
     virtual bool whileIdle() = 0;
 
-    /** Idle processing while GPS is looking for lock */
+    /** Idle processing while GPS is looking for lock, called once per secondish */
     virtual void whileActive() {}
 
     /**
@@ -134,7 +134,7 @@ class GPS
     uint32_t getSleepTime() const;
 
     GpsOperation getGpsOp() const;
-    
+
     /**
      * Tell users we have new GPS readings
      */
