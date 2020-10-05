@@ -25,7 +25,7 @@ We currently support three models of radios.
 - TTGO T-Beam (usually the recommended choice)
   - [T-Beam V1.1 w/ NEO-6M - special Meshtastic version](https://www.aliexpress.com/item/4001178678568.html) (Includes built-in OLED display and they have **preinstalled** the meshtastic software)
   - [T-Beam V1.1 w/ NEO-M8N](https://www.aliexpress.com/item/33047631119.html) (slightly better GPS)
-  - [T-Beam V1.1 w/ NEO-M8N /w SX1262](https://de.aliexpress.com/item/4001287221970.html) (slightly better GPS + LoRa)
+  - [T-Beam V1.1 w/ NEO-M8N /w SX1262](https://www.aliexpress.com/item/4001287221970.html) (slightly better GPS + LoRa)
     - board labels "TTGO T22_V1.1 20191212"
   - [T-Beam V0.7 w/ NEO-6M](https://www.aliexpress.com/item/4000574335430.html) (will work but **you must use the tbeam0.7 firmware ** - but the T-Beam V1.0 or later are better!)
      - board labels "TTGO T22_V07 20180711"
@@ -103,10 +103,10 @@ Hard resetting via RTS pin...
 ```
 
 5. cd into the directory where the release zip file was expanded.
-6. Install the correct firmware for your board with `device-install.sh firmware-_board_-_country_.bin`.
-   - Example: `./device-install.sh firmware-HELTEC-US-0.0.3.bin`.
-7. To update run `device-update.sh firmware-_board_-_country_.bin`
-   - Example: `./device-update.sh firmware-HELTEC-US-0.0.3.bin`.
+6. Install the correct firmware for your board with `device-install.sh -f firmware-_board_-_country_.bin`.
+   - Example: `./device-install.sh -f firmware-HELTEC-US-0.0.3.bin`.
+7. To update run `device-update.sh -f firmware-_board_-_country_.bin`
+   - Example: `./device-update.sh -f firmware-HELTEC-US-0.0.3.bin`.
 
 Note: If you have previously installed meshtastic, you don't need to run this full script instead just run `esptool.py --baud 921600 write_flash 0x10000 firmware-_board_-_country_-_version_.bin`. This will be faster, also all of your current preferences will be preserved.
 
