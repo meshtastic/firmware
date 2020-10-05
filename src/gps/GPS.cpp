@@ -1,5 +1,6 @@
 
 #include "GPS.h"
+#include "NodeDB.h"
 #include "configuration.h"
 #include "sleep.h"
 #include <assert.h>
@@ -45,7 +46,7 @@ void readFromRTC()
 }
 
 /// If we haven't yet set our RTC this boot, set it from a GPS derived time
-void perhapsSetRTC(const struct timeval *tv)
+bool perhapsSetRTC(const struct timeval *tv)
 {
     if (!timeSetFromGPS) {
         timeSetFromGPS = true;
@@ -56,10 +57,13 @@ void perhapsSetRTC(const struct timeval *tv)
         DEBUG_MSG("ERROR TIME SETTING NOT IMPLEMENTED!\n");
 #endif
         readFromRTC();
+        return true;
+    } else {
+        return false;
     }
 }
 
-void perhapsSetRTC(struct tm &t)
+bool perhapsSetRTC(struct tm &t)
 {
     /* Convert to unix time
     The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970
@@ -71,10 +75,12 @@ void perhapsSetRTC(struct tm &t)
     tv.tv_usec = 0; // time.centisecond() * (10 / 1000);
 
     // DEBUG_MSG("Got time from GPS month=%d, year=%d, unixtime=%ld\n", t.tm_mon, t.tm_year, tv.tv_sec);
-    if (t.tm_year < 0 || t.tm_year >= 300)
-        DEBUG_MSG("Ignoring invalid GPS month=%d, year=%d, unixtime=%ld\n", t.tm_mon, t.tm_year, tv.tv_sec);
-    else
-        perhapsSetRTC(&tv);
+    if (t.tm_year < 0 || t.tm_year >= 300) {
+        // DEBUG_MSG("Ignoring invalid GPS month=%d, year=%d, unixtime=%ld\n", t.tm_mon, t.tm_year, tv.tv_sec);
+        return false;
+    } else {
+        return perhapsSetRTC(&tv);
+    }
 }
 
 uint32_t getTime()
@@ -101,20 +107,63 @@ bool GPS::setup()
  */
 void GPS::setAwake(bool on)
 {
-    if(!wakeAllowed && on) {
+    if (!wakeAllowed && on) {
         DEBUG_MSG("Inhibiting because !wakeAllowed\n");
         on = false;
     }
 
     if (isAwake != on) {
         DEBUG_MSG("WANT GPS=%d\n", on);
-        if (on)
+        if (on) {
+            lastWakeStartMsec = millis();
             wake();
-        else
+        } else {
+            lastSleepStartMsec = millis();
             sleep();
+        }
 
         isAwake = on;
     }
+}
+
+/** Get how long we should stay looking for each aquisition in msecs
+ */
+uint32_t GPS::getWakeTime() const
+{
+    uint32_t t = radioConfig.preferences.gps_attempt_time;
+
+    // fixme check modes
+    if (t == 0)
+        t = 30;
+
+    t *= 1000; // msecs
+
+    return t;
+}
+
+/** Get how long we should sleep between aqusition attempts in msecs
+ */
+uint32_t GPS::getSleepTime() const
+{
+    uint32_t t = radioConfig.preferences.gps_update_interval;
+
+    // fixme check modes
+    if (t == 0)
+        t = 30;
+
+    t *= 1000;
+
+    return t;
+}
+
+void GPS::publishUpdate()
+{
+    DEBUG_MSG("publishing GPS lock=%d\n", hasLock());
+
+    // Notify any status instances that are observing us
+    const meshtastic::GPSStatus status =
+        meshtastic::GPSStatus(hasLock(), isConnected, latitude, longitude, altitude, dop, heading, numSatellites);
+    newStatus.notifyObservers(&status);
 }
 
 void GPS::loop()
@@ -128,39 +177,36 @@ void GPS::loop()
     uint32_t now = millis();
     bool mustPublishUpdate = false;
 
-    if ((now - lastUpdateMsec) > 30 * 1000 && !isAwake) {
+    if ((now - lastSleepStartMsec) > getSleepTime() && !isAwake) {
         // We now want to be awake - so wake up the GPS
         setAwake(true);
-
-        mustPublishUpdate =
-            true; // Even if we don't have an update this time, we at least want to occasionally publish the current state
     }
 
     // While we are awake
     if (isAwake) {
-        DEBUG_MSG("looking for location\n");
-        bool gotTime = lookForTime();
+        // DEBUG_MSG("looking for location\n");
+        whileActive();
+
+        // If we've already set time from the GPS, no need to ask the GPS
+        bool gotTime = timeSetFromGPS || lookForTime();
         bool gotLoc = lookForLocation();
 
-        if (gotLoc)
-            hasValidLocation = true;
-
-        mustPublishUpdate |= gotLoc;
+        // We've been awake too long - force sleep
+        bool tooLong = (now - lastWakeStartMsec) > getWakeTime();
 
         // Once we get a location we no longer desperately want an update
-        if (gotLoc) {
-            lastUpdateMsec = now;
+        if (gotLoc || tooLong) {
+            if (gotLoc)
+                hasValidLocation = true;
+
+            if (tooLong) {
+                // we didn't get a location during this ack window, therefore declare loss of lock
+                hasValidLocation = false;
+            }
+
             setAwake(false);
+            publishUpdate(); // publish our update for this just finished acquisition window
         }
-    }
-
-    if (mustPublishUpdate) {
-        DEBUG_MSG("publishing GPS lock=%d\n", hasLock());
-
-        // Notify any status instances that are observing us
-        const meshtastic::GPSStatus status =
-            meshtastic::GPSStatus(hasLock(), isConnected, latitude, longitude, altitude, dop, heading, numSatellites);
-        newStatus.notifyObservers(&status);
     }
 }
 
@@ -168,7 +214,7 @@ void GPS::forceWake(bool on)
 {
     if (on) {
         DEBUG_MSG("Looking for GPS lock\n");
-        lastUpdateMsec = 0; // Force an update ASAP
+        lastSleepStartMsec = 0; // Force an update ASAP
         wakeAllowed = true;
     } else {
         wakeAllowed = false;

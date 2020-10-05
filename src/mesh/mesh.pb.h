@@ -39,7 +39,6 @@ typedef enum _RegionCode {
 
 typedef enum _GpsOperation {
     GpsOperation_GpsOpUnset = 0,
-    GpsOperation_GpsOpStationary = 1,
     GpsOperation_GpsOpMobile = 2,
     GpsOperation_GpsOpTimeOnly = 3,
     GpsOperation_GpsOpDisabled = 4
@@ -137,7 +136,7 @@ typedef struct _RadioConfig_UserPreferences {
     RegionCode region;
     LocationSharing location_share;
     GpsOperation gps_operation;
-    uint32_t gps_update_rate;
+    uint32_t gps_update_interval;
     uint32_t gps_attempt_time;
     bool factory_reset;
     pb_size_t ignore_incoming_count;
@@ -369,7 +368,7 @@ typedef struct _ToRadio {
 #define RadioConfig_UserPreferences_region_tag   15
 #define RadioConfig_UserPreferences_location_share_tag 32
 #define RadioConfig_UserPreferences_gps_operation_tag 33
-#define RadioConfig_UserPreferences_gps_update_rate_tag 34
+#define RadioConfig_UserPreferences_gps_update_interval_tag 34
 #define RadioConfig_UserPreferences_gps_attempt_time_tag 36
 #define RadioConfig_UserPreferences_factory_reset_tag 100
 #define RadioConfig_UserPreferences_ignore_incoming_tag 103
@@ -530,7 +529,7 @@ X(a, STATIC,   SINGULAR, BOOL,     wifi_ap_mode,     14) \
 X(a, STATIC,   SINGULAR, UENUM,    region,           15) \
 X(a, STATIC,   SINGULAR, UENUM,    location_share,   32) \
 X(a, STATIC,   SINGULAR, UENUM,    gps_operation,    33) \
-X(a, STATIC,   SINGULAR, UINT32,   gps_update_rate,  34) \
+X(a, STATIC,   SINGULAR, UINT32,   gps_update_interval,  34) \
 X(a, STATIC,   SINGULAR, UINT32,   gps_attempt_time,  36) \
 X(a, STATIC,   SINGULAR, BOOL,     factory_reset,   100) \
 X(a, STATIC,   REPEATED, UINT32,   ignore_incoming, 103)

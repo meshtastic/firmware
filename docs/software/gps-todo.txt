@@ -1,8 +1,11 @@
 gps todo - bug 376
 
+for taiwan region:
+bin/run.sh --set region 8
+
 handle the various GPS modes 
 
-handle wake and sleep times 
+fix poll interval for sending commands to ublox
 
 handle maxint parameters
 
@@ -18,9 +21,14 @@ force gps sleep when in LightSleep and force wake only once <- confirm
 
 fix has_gps based on new logic
 
+have loop methods return allowable sleep time (from their perspective)
+increase main cpu sleep time
+
 add set router mode in python tool - it will also set GPS to stationary
 (which will shrink DARK and NB period to zero and
  make light_sleep very long)
+
+warn people about crummy gps antennas - add to faq
 
 gps states
 
