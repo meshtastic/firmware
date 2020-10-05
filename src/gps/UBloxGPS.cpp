@@ -1,5 +1,6 @@
 #include "UBloxGPS.h"
 #include "error.h"
+#include "sleep.h"
 #include <assert.h>
 
 UBloxGPS::UBloxGPS() {}
@@ -22,7 +23,7 @@ bool UBloxGPS::tryConnect()
     return isConnected;
 }
 
-bool UBloxGPS::setup()
+bool UBloxGPS::setupGPS()
 {
     if (_serial_gps) {
 #ifdef GPS_RX_PIN
@@ -32,12 +33,6 @@ bool UBloxGPS::setup()
 #endif
         // _serial_gps.setRxBufferSize(1024); // the default is 256
     }
-
-#ifdef GPS_POWER_EN
-    pinMode(GPS_POWER_EN, OUTPUT);
-    digitalWrite(GPS_POWER_EN, 1);
-    delay(200); // Give time for the GPS to startup after we gave power
-#endif
 
     ublox.enableDebugging(Serial);
 
@@ -49,15 +44,11 @@ bool UBloxGPS::setup()
     if (isConnected) {
         DEBUG_MSG("Connected to UBLOX GPS successfully\n");
 
-        GPS::setup();
-
         if (!setUBXMode())
             recordCriticalError(UBloxInitFailed); // Don't halt the boot if saving the config fails, but do report the bug
 
         return true;
     } else {
-        // Note: we do not call superclass setup in this case, because we dont want sleep observer registered
-
         return false;
     }
 }
@@ -134,24 +125,28 @@ void UBloxGPS::whileActive()
  */
 bool UBloxGPS::lookForTime()
 {
-    if (fixType >= 2 && ublox.getT(maxWait())) {
-        /* Convert to unix time
-        The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January
-        1, 1970 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
-        */
-        struct tm t;
-        t.tm_sec = ublox.getSecond(0);
-        t.tm_min = ublox.getMinute(0);
-        t.tm_hour = ublox.getHour(0);
-        t.tm_mday = ublox.getDay(0);
-        t.tm_mon = ublox.getMonth(0) - 1;
-        t.tm_year = ublox.getYear(0) - 1900;
-        t.tm_isdst = false;
-        perhapsSetRTC(t);
-        return true;
-    } else {
-        return false;
+    if (fixType >= 2) {
+        if (ublox.moduleQueried.gpsSecond) {
+            /* Convert to unix time
+            The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January
+            1, 1970 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
+            */
+            struct tm t;
+            t.tm_sec = ublox.getSecond(0);
+            t.tm_min = ublox.getMinute(0);
+            t.tm_hour = ublox.getHour(0);
+            t.tm_mday = ublox.getDay(0);
+            t.tm_mon = ublox.getMonth(0) - 1;
+            t.tm_year = ublox.getYear(0) - 1900;
+            t.tm_isdst = false;
+            perhapsSetRTC(t);
+            return true;
+        } else {
+            ublox.getT(maxWait()); // ask for new time data - hopefully ready when we come back
+        }
     }
+
+    return false;
 }
 
 /**
@@ -165,19 +160,24 @@ bool UBloxGPS::lookForLocation()
     bool foundLocation = false;
 
     // we only notify if position has changed due to a new fix
-    if ((fixType >= 3 && fixType <= 4) && ublox.getP(maxWait())) // rd fixes only
-    {
-        latitude = ublox.getLatitude(0);
-        longitude = ublox.getLongitude(0);
-        altitude = ublox.getAltitudeMSL(0) / 1000; // in mm convert to meters
-        dop = ublox.getPDOP(0); // PDOP (an accuracy metric) is reported in 10^2 units so we have to scale down when we use it
-        heading = ublox.getHeading(0);
-        numSatellites = ublox.getSIV(0);
+    if ((fixType >= 3 && fixType <= 4)) {
+        if (ublox.moduleQueried.latitude) // rd fixes only
+        {
+            latitude = ublox.getLatitude(0);
+            longitude = ublox.getLongitude(0);
+            altitude = ublox.getAltitudeMSL(0) / 1000; // in mm convert to meters
+            dop = ublox.getPDOP(0); // PDOP (an accuracy metric) is reported in 10^2 units so we have to scale down when we use it
+            heading = ublox.getHeading(0);
+            numSatellites = ublox.getSIV(0);
 
-        // bogus lat lon is reported as 0 or 0 (can be bogus just for one)
-        // Also: apparently when the GPS is initially reporting lock it can output a bogus latitude > 90 deg!
-        foundLocation =
-            (latitude != 0) && (longitude != 0) && (latitude <= 900000000 && latitude >= -900000000) && (numSatellites > 0);
+            // bogus lat lon is reported as 0 or 0 (can be bogus just for one)
+            // Also: apparently when the GPS is initially reporting lock it can output a bogus latitude > 90 deg!
+            foundLocation =
+                (latitude != 0) && (longitude != 0) && (latitude <= 900000000 && latitude >= -900000000) && (numSatellites > 0);
+        } else {
+            // Ask for a new position fix - hopefully it will have results ready by next time
+            ublox.getP(maxWait());
+        }
     }
 
     return foundLocation;
@@ -193,10 +193,14 @@ bool UBloxGPS::whileIdle()
 /// Note: ublox doesn't need a wake method, because as soon as we send chars to the GPS it will wake up
 void UBloxGPS::sleep()
 {
-    if (isConnected) {
-        DEBUG_MSG("FIXME, enter low power mode\n");
+    // won't work on 6M
+    // ublox.powerOff();
+    setGPSPower(false);
+}
 
-        // won't work on 6M
-        // ublox.powerOff();
-    }
+void UBloxGPS::wake()
+{
+    setGPSPower(true);
+    // Give time for the GPS to boot
+    delay(200);
 }

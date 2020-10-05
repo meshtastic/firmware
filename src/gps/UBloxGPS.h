@@ -18,11 +18,6 @@ class UBloxGPS : public GPS
     UBloxGPS();
 
     /**
-     * Returns true if we succeeded
-     */
-    virtual bool setup();
-
-    /**
      * Reset our GPS back to factory settings
      *
      * @return true for success
@@ -30,6 +25,11 @@ class UBloxGPS : public GPS
     bool factoryReset();
 
   protected:
+    /**
+     * Returns true if we succeeded
+     */
+    virtual bool setupGPS();
+
     /** Subclasses should look for serial rx characters here and feed it to their GPS parser
      *
      * Return true if we received a valid message from the GPS
@@ -57,6 +57,7 @@ class UBloxGPS : public GPS
 
     /// If possible force the GPS into sleep/low power mode
     virtual void sleep();
+    virtual void wake();
 
   private:
     /// Attempt to connect to our GPS, returns false if no gps is present

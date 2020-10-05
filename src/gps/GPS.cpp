@@ -95,9 +95,13 @@ uint32_t getValidTime()
 
 bool GPS::setup()
 {
-    notifySleepObserver.observe(&notifySleep);
+    setAwake(true); // Wake GPS power before doing any init
+    bool ok = setupGPS();
 
-    return true;
+    if (ok)
+        notifySleepObserver.observe(&notifySleep);
+
+    return ok;
 }
 
 /**
@@ -175,7 +179,6 @@ void GPS::loop()
 
     // If we are overdue for an update, turn on the GPS and at least publish the current status
     uint32_t now = millis();
-    bool mustPublishUpdate = false;
 
     if ((now - lastSleepStartMsec) > getSleepTime() && !isAwake) {
         // We now want to be awake - so wake up the GPS

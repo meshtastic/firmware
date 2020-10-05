@@ -79,6 +79,9 @@ class GPS
     void forceWake(bool on);
 
   protected:
+    /// Do gps chipset specific init, return true for success
+    virtual bool setupGPS() = 0;
+
     /// If possible force the GPS into sleep/low power mode
     virtual void sleep() {}
 
@@ -134,7 +137,6 @@ class GPS
      * Tell users we have new GPS readings
      */
     void publishUpdate();
-
 };
 
 extern GPS *gps;
