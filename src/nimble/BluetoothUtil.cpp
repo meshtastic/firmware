@@ -224,7 +224,7 @@ static int gap_event(struct ble_gap_event *event, void *arg)
         if (event->passkey.params.action == BLE_SM_IOACT_DISP) {
             pkey.action = event->passkey.params.action;
             DEBUG_MSG("dp: %d now:%d\n",doublepressed, now);
-            if ((doublepressed > 0 && (doublepressed + (30*1000)) > now) || ssd1306_found != true)
+            if (doublepressed > 0 && (doublepressed + (30*1000)) > now) 
             {
                 DEBUG_MSG("User has overridden passkey or no display available\n");
                 pkey.passkey = defaultBLEPin;  
