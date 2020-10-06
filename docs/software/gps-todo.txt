@@ -6,9 +6,9 @@ bin/run.sh --set region 8
 time only mode
 ./bin/run.sh --set gps_operation 3
 
-fix wake behavior when message arrives on lora
+record power measurements and update spreadsheet
 
-do new power measurements
+fix uart wake from sleep 
 
 fix has_gps based on new logic
 

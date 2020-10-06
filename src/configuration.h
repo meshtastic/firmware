@@ -190,8 +190,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // code)
 #endif
 
-// Leave undefined to disable our PMU IRQ handler
-#define PMU_IRQ 35
+// Leave undefined to disable our PMU IRQ handler.  DO NOT ENABLE THIS because the pmuirq can cause sperious interrupts
+// and waking from light sleep
+// #define PMU_IRQ 35
 #define AXP192_SLAVE_ADDRESS 0x34
 
 #elif defined(TBEAM_V07)
