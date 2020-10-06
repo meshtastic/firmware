@@ -6,6 +6,8 @@ bin/run.sh --set region 8
 time only mode
 ./bin/run.sh --set gps_operation 3
 
+fix wake behavior when message arrives on lora
+
 do new power measurements
 
 fix has_gps based on new logic
@@ -18,6 +20,7 @@ increase main cpu sleep time
 add set router mode in python tool - it will also set GPS to stationary
 make sure location still gets set once per boot and stays marked as valid on the gui 
 send position updates super rarely
+turn off checking for usb power and forcing always on
 (which will shrink DARK and NB period to zero and
  make light_sleep very long)
 
