@@ -8,8 +8,6 @@ time only mode
 
 record power measurements and update spreadsheet
 
-fix uart wake from sleep 
-
 fix has_gps based on new logic
 
 don't send locations if the user has forbidden that (lie to phone so phone won't either)
