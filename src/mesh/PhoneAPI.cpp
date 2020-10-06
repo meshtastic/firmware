@@ -20,7 +20,7 @@ void PhoneAPI::init()
 void PhoneAPI::checkConnectionTimeout()
 {
     if (isConnected) {
-        bool newConnected = (millis() - lastContactMsec < radioConfig.preferences.phone_timeout_secs * 1000L);
+        bool newConnected = (millis() - lastContactMsec < getPref_phone_timeout_secs() * 1000L);
         if (!newConnected) {
             isConnected = false;
             onConnectionChanged(isConnected);
