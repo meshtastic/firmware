@@ -176,7 +176,7 @@ void doDeepSleep(uint64_t msecToWake)
 
         // axp.setPowerOutPut(AXP192_LDO2, AXP202_OFF); // LORA radio
 
-        // now done by UBloxGPS.cpp 
+        // now done by UBloxGPS.cpp
         // setGPSPower(false);
     }
 #endif
@@ -275,7 +275,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     gpio_wakeup_enable((gpio_num_t)RF95_IRQ_GPIO, GPIO_INTR_HIGH_LEVEL); // RF95 interrupt, active high
 #endif
 #ifdef PMU_IRQ
-    // FIXME, disable wake due to PMU because it seems to fire all the time?
+    // wake due to PMU can happen repeatedly if there is no battery installed or the battery fills
     if (axp192_found)
         gpio_wakeup_enable((gpio_num_t)PMU_IRQ, GPIO_INTR_LOW_LEVEL); // pmu irq
 #endif
