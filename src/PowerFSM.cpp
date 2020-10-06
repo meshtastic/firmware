@@ -12,7 +12,7 @@
 static void sdsEnter()
 {
     // FIXME - make sure GPS and LORA radio are off first - because we want close to zero current draw
-    doDeepSleep(radioConfig.preferences.sds_secs * 1000LL);
+    doDeepSleep(getPref_sds_secs() * 1000LL);
 }
 
 #include "error.h"
@@ -21,7 +21,7 @@ static uint32_t secsSlept;
 
 static void lsEnter()
 {
-    DEBUG_MSG("lsEnter begin, ls_secs=%u\n", radioConfig.preferences.ls_secs);
+    DEBUG_MSG("lsEnter begin, ls_secs=%u\n", getPref_ls_secs());
     screen.setOn(false);
     secsSlept = 0; // How long have we been sleeping this time
 
@@ -30,13 +30,13 @@ static void lsEnter()
 
 static void lsIdle()
 {
-    // DEBUG_MSG("lsIdle begin ls_secs=%u\n", radioConfig.preferences.ls_secs);
+    // DEBUG_MSG("lsIdle begin ls_secs=%u\n", getPref_ls_secs());
 
 #ifndef NO_ESP32
     esp_sleep_source_t wakeCause = ESP_SLEEP_WAKEUP_UNDEFINED;
 
     // Do we have more sleeping to do?
-    if (secsSlept < radioConfig.preferences.ls_secs) {
+    if (secsSlept < getPref_ls_secs()) {
         // Briefly come out of sleep long enough to blink the led once every few seconds
         uint32_t sleepTime = 30;
 
@@ -158,7 +158,7 @@ Fsm powerFSM(&stateBOOT);
 void PowerFSM_setup()
 {
     // If we already have AC power go to POWER state after init, otherwise go to ON
-    bool hasPower = powerStatus && powerStatus->getHasUSB();
+    bool hasPower = false && powerStatus && powerStatus->getHasUSB();
     DEBUG_MSG("PowerFSM init, USB power=%d\n", hasPower);
     powerFSM.add_timed_transition(&stateBOOT, hasPower ? &statePOWER : &stateON, 3 * 1000, NULL, "boot timeout");
 
@@ -217,22 +217,20 @@ void PowerFSM_setup()
 
     powerFSM.add_transition(&stateNB, &stateDARK, EVENT_PACKET_FOR_PHONE, NULL, "Packet for phone");
 
-    powerFSM.add_timed_transition(&stateON, &stateDARK, radioConfig.preferences.screen_on_secs * 1000, NULL, "Screen-on timeout");
+    powerFSM.add_timed_transition(&stateON, &stateDARK, getPref_screen_on_secs() * 1000, NULL, "Screen-on timeout");
 
-    powerFSM.add_timed_transition(&stateDARK, &stateNB, radioConfig.preferences.phone_timeout_secs * 1000, NULL, "Phone timeout");
+    powerFSM.add_timed_transition(&stateDARK, &stateNB, getPref_phone_timeout_secs() * 1000, NULL, "Phone timeout");
 
 #ifndef NRF52_SERIES
     // We never enter light-sleep state on NRF52 (because the CPU uses so little power normally)
-    powerFSM.add_timed_transition(&stateNB, &stateLS, radioConfig.preferences.min_wake_secs * 1000, NULL, "Min wake timeout");
+    powerFSM.add_timed_transition(&stateNB, &stateLS, getPref_min_wake_secs() * 1000, NULL, "Min wake timeout");
 
-    powerFSM.add_timed_transition(&stateDARK, &stateLS, radioConfig.preferences.wait_bluetooth_secs * 1000, NULL,
-                                  "Bluetooth timeout");
+    powerFSM.add_timed_transition(&stateDARK, &stateLS, getPref_wait_bluetooth_secs() * 1000, NULL, "Bluetooth timeout");
 #endif
 
-    powerFSM.add_timed_transition(&stateLS, &stateSDS, radioConfig.preferences.mesh_sds_timeout_secs * 1000, NULL,
-                                  "mesh timeout");
+    powerFSM.add_timed_transition(&stateLS, &stateSDS, getPref_mesh_sds_timeout_secs() * 1000, NULL, "mesh timeout");
     // removing for now, because some users don't even have phones
-    // powerFSM.add_timed_transition(&stateLS, &stateSDS, radioConfig.preferences.phone_sds_timeout_sec * 1000, NULL, "phone
+    // powerFSM.add_timed_transition(&stateLS, &stateSDS, getPref_phone_sds_timeout_sec() * 1000, NULL, "phone
     // timeout");
 
     powerFSM.run_machine(); // run one interation of the state machine, so we run our on enter tasks for the initial DARK state

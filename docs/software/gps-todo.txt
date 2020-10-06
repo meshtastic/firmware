@@ -3,18 +3,26 @@ gps todo - bug 376
 for taiwan region:
 bin/run.sh --set region 8
 
-change defaults to 2 min 
+time only mode
+./bin/run.sh --set gps_operation 3
+
+do new power measurements
 
 fix has_gps based on new logic
+
+don't send locations if the user has forbidden that (lie to phone so phone won't either)
 
 have loop methods return allowable sleep time (from their perspective)
 increase main cpu sleep time
 
 add set router mode in python tool - it will also set GPS to stationary
+make sure location still gets set once per boot and stays marked as valid on the gui 
+send position updates super rarely
 (which will shrink DARK and NB period to zero and
  make light_sleep very long)
 
 warn people about crummy gps antennas - add to faq
+
 
 gps states
 
