@@ -12,43 +12,9 @@ ublox parsing failure
 
 record power measurements and update spreadsheet
 
-wait to sleep loop problem
-radio wait to sleep, txEmpty=0
-radio wait to sleep, txEmpty=0
-radio wait to sleep, txEmpty=0
-radio wait to sleep, txEmpty=0
-radio wait to sleep, txEmpty=0
-radio wait to sleep, txEmpty=0
-Can not send yet, busyRx
-radio wait to sleep, txEmpty=0
-radio wait to sleep, txEmpty=0
-radio wait to sleep, txEmpty=0
-radio wait to sleep, txEmpty=0
-radio wait to sleep, txEmpty=0
-radio wait to sleep, txEmpty=0
-radio wait to sleep, txEmpty=0
-radio wait to sleep, txEmpty=0
-
-vs normal run
-radio wait to sleep, txEmpty=0
-radio wait to sleep, txEmpty=0
-radio wait to sleep, txEmpty=0
-radio wait to sleep, txEmpty=0
-radio wait to sleep, txEmpty=0
-radio wait to sleep, txEmpty=0
-radio wait to sleep, txEmpty=0
-radio wait to sleep, txEmpty=0
-radio wait to sleep, txEmpty=0
-radio wait to sleep, txEmpty=0
-radio wait to sleep, txEmpty=0
-radio wait to sleep, txEmpty=0
-radio wait to sleep, txEmpty=0
-radio wait to sleep, txEmpty=0
-radio wait to sleep, txEmpty=0
-Starting low level send (id=0x53fe1dd0 Fr0xe5 To0xff, WantAck0, HopLim3 encrypted)
-Completed sending (id=0x53fe1dd0 Fr0xe5 To0xff, WantAck0, HopLim3 encrypted)
-
 fix has_gps based on new logic
+
+make sure we are turning off lora radio in deep sleep
 
 don't send locations if the user has forbidden that (lie to phone so phone won't either)
 
