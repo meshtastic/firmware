@@ -52,7 +52,7 @@ static uint32_t sendOwnerCb()
 {
     service.sendOurOwner();
 
-    return radioConfig.preferences.send_owner_interval * radioConfig.preferences.position_broadcast_secs * 1000;
+    return getPref_send_owner_interval() * getPref_position_broadcast_secs() * 1000;
 }
 
 static concurrency::Periodic sendOwnerPeriod(sendOwnerCb);
@@ -318,7 +318,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
     // We limit our GPS broadcasts to a max rate
     static uint32_t lastGpsSend;
     uint32_t now = millis();
-    if (lastGpsSend == 0 || now - lastGpsSend > radioConfig.preferences.position_broadcast_secs * 1000) {
+    if (lastGpsSend == 0 || now - lastGpsSend > getPref_position_broadcast_secs() * 1000) {
         lastGpsSend = now;
         DEBUG_MSG("Sending position to mesh\n");
 
