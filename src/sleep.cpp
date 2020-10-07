@@ -170,17 +170,18 @@ void doDeepSleep(uint64_t msecToWake)
 
 #ifdef TBEAM_V10
     if (axp192_found) {
+        // Obsolete comment: from back when we we used to receive lora packets while CPU was in deep sleep.
+        // We no longer do that, because our light-sleep current draws are low enough and it provides fast start/low cost
+        // wake.  We currently use deep sleep only for 'we want our device to actually be off - because our battery is
+        // critically low'.  So in deep sleep we DO shut down power to LORA (and when we boot later we completely reinit it)
+        //
         // No need to turn this off if the power draw in sleep mode really is just 0.2uA and turning it off would
         // leave floating input for the IRQ line
-
         // If we want to leave the radio receving in would be 11.5mA current draw, but most of the time it is just waiting
         // in its sequencer (true?) so the average power draw should be much lower even if we were listinging for packets
         // all the time.
 
-        // axp.setPowerOutPut(AXP192_LDO2, AXP202_OFF); // LORA radio
-
-        // now done by UBloxGPS.cpp
-        // setGPSPower(false);
+        axp.setPowerOutPut(AXP192_LDO2, AXP202_OFF); // LORA radio
     }
 #endif
 
