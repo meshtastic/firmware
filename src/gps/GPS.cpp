@@ -1,10 +1,10 @@
 
 #include "GPS.h"
 #include "NodeDB.h"
+#include "RTC.h"
 #include "configuration.h"
 #include "sleep.h"
 #include <assert.h>
-#include "RTC.h"
 
 // If we have a serial GPS port it will not be null
 #ifdef GPS_RX_PIN
@@ -23,9 +23,7 @@ uint8_t GPS::i2cAddress = GPS_I2C_ADDRESS;
 uint8_t GPS::i2cAddress = 0;
 #endif
 
-
 GPS *gps;
-
 
 bool GPS::setup()
 {
@@ -99,7 +97,8 @@ uint32_t GPS::getSleepTime() const
     uint32_t t = radioConfig.preferences.gps_update_interval;
 
     auto op = getGpsOp();
-    if ((timeSetFromGPS && op == GpsOperation_GpsOpTimeOnly) || (op == GpsOperation_GpsOpDisabled))
+    bool gotTime = (getRTCQuality() >= RTCQualityGPS);
+    if ((gotTime && op == GpsOperation_GpsOpTimeOnly) || (op == GpsOperation_GpsOpDisabled))
         t = UINT32_MAX; // Sleep forever now
 
     if (t == UINT32_MAX)
@@ -148,7 +147,7 @@ void GPS::loop()
         }
 
         // If we've already set time from the GPS, no need to ask the GPS
-        bool gotTime = timeSetFromGPS || lookForTime();
+        bool gotTime = (getRTCQuality() >= RTCQualityGPS) || lookForTime();
         bool gotLoc = lookForLocation();
 
         // We've been awake too long - force sleep
@@ -158,7 +157,7 @@ void GPS::loop()
         // Once we get a location we no longer desperately want an update
         // or if we got a time and we are in GpsOpTimeOnly mode
         // DEBUG_MSG("gotLoc %d, tooLong %d, gotTime %d\n", gotLoc, tooLong, gotTime);
-        if ((gotLoc && timeSetFromGPS) || tooLong || (gotTime && getGpsOp() == GpsOperation_GpsOpTimeOnly)) {
+        if ((gotLoc && gotTime) || tooLong || (gotTime && getGpsOp() == GpsOperation_GpsOpTimeOnly)) {
             if (gotLoc)
                 hasValidLocation = true;
 

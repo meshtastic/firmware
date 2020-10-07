@@ -152,7 +152,7 @@ bool UBloxGPS::lookForTime()
         t.tm_mon = ublox.getMonth(0) - 1;
         t.tm_year = ublox.getYear(0) - 1900;
         t.tm_isdst = false;
-        perhapsSetRTC(t);
+        perhapsSetRTC(RTCQualityGPS, t);
         return true;
     }
 

@@ -4,16 +4,27 @@
 #include "sys/time.h"
 #include <Arduino.h>
 
-extern bool timeSetFromGPS; // We try to set our time from GPS each time we wake from sleep
+enum RTCQuality {
+    /// We haven't had our RTC set yet
+    RTCQualityNone = 0,
+
+    /// Some other node gave us a time we can use
+    RTCQualityFromNet = 1,
+
+    /// Our time is based on our own GPS
+    RTCQualityGPS = 2
+};
+
+RTCQuality getRTCQuality();
 
 /// If we haven't yet set our RTC this boot, set it from a GPS derived time
-bool perhapsSetRTC(const struct timeval *tv);
-bool perhapsSetRTC(struct tm &t);
+bool perhapsSetRTC(RTCQuality q, const struct timeval *tv);
+bool perhapsSetRTC(RTCQuality q, struct tm &t);
 
-/// Return time since 1970 in secs.  Until we have a GPS lock we will be returning time based at zero
+/// Return time since 1970 in secs.  While quality is RTCQualityNone we will be returning time based at zero
 uint32_t getTime();
 
-/// Return time since 1970 in secs.  If we don't have a GPS lock return zero
+/// Return time since 1970 in secs.  If quality is RTCQualityNone return zero
 uint32_t getValidTime();
 
 void readFromRTC();
