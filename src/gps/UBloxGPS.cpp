@@ -31,7 +31,9 @@ bool UBloxGPS::setupGPS()
 #else
         _serial_gps->begin(GPS_BAUDRATE);
 #endif
+#ifndef NO_ESP32
         _serial_gps->setRxBufferSize(1024); // the default is 256
+#endif
     }
 
     // uncomment to see debug info
