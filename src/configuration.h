@@ -148,11 +148,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // devices. Comment this out to not rotate screen 180 degrees.
 #define FLIP_SCREEN_VERTICALLY
 
-// DEBUG LED
-#ifndef LED_INVERTED
-#define LED_INVERTED 0 // define as 1 if LED is active low (on)
-#endif
-
 // -----------------------------------------------------------------------------
 // GPS
 // -----------------------------------------------------------------------------
@@ -170,6 +165,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define BUTTON_PIN 38     // The middle button GPIO on the T-Beam
 #define BUTTON_PIN_ALT 13 // Alternate GPIO for an external button if needed
+
+#define LED_INVERTED 1
+#define LED_PIN 4 // Newer tbeams (1.1) have an extra led on GPIO4
 
 // TTGO uses a common pinout for their SX1262 vs RF95 modules - both can be enabled and we will probe at runtime for RF95 and if
 // not found then probe for SX1262
@@ -192,8 +190,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // code)
 #endif
 
-// Leave undefined to disable our PMU IRQ handler
-#define PMU_IRQ 35
+// Leave undefined to disable our PMU IRQ handler.  DO NOT ENABLE THIS because the pmuirq can cause sperious interrupts
+// and waking from light sleep
+// #define PMU_IRQ 35
 #define AXP192_SLAVE_ADDRESS 0x34
 
 #elif defined(TBEAM_V07)
@@ -367,6 +366,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define RF95_MOSI 27
 #define RF95_NSS 18
 
+#endif
+
+// DEBUG LED
+#ifndef LED_INVERTED
+#define LED_INVERTED 0 // define as 1 if LED is active low (on)
 #endif
 
 #ifdef USE_RF95

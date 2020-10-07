@@ -163,6 +163,9 @@ void doDeepSleep(uint64_t msecToWake)
     digitalWrite(VEXT_ENABLE, 1); // turn off the display power
 #endif
 
+    // Kill GPS power completely (even if previously we just had it in sleep mode)
+    setGPSPower(false);
+
     setLed(false);
 
 #ifdef TBEAM_V10
@@ -176,7 +179,8 @@ void doDeepSleep(uint64_t msecToWake)
 
         // axp.setPowerOutPut(AXP192_LDO2, AXP202_OFF); // LORA radio
 
-        setGPSPower(false);
+        // now done by UBloxGPS.cpp
+        // setGPSPower(false);
     }
 #endif
 
@@ -260,12 +264,20 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // We treat the serial port as a GPIO for a fast/low power way of waking, if we see a rising edge that means
     // someone started to send something
 
-    // Alas - doesn't work reliably, instead need to use the uart specific version (which burns a little power)
-    // FIXME: gpio 3 is RXD for serialport 0 on ESP32
+    // gpio 3 is RXD for serialport 0 on ESP32
     // Send a few Z characters to wake the port
-    gpio_wakeup_enable((gpio_num_t)SERIAL0_RX_GPIO, GPIO_INTR_LOW_LEVEL);
-    // uart_set_wakeup_threshold(UART_NUM_0, 3);
-    // esp_sleep_enable_uart_wakeup(0);
+
+    // this doesn't work on TBEAMs when the USB is depowered (causes bogus interrupts)
+    // So we disable this "wake on serial" feature - because now when a TBEAM (only) has power connected it
+    // never tries to go to sleep if the user is using the API
+    // gpio_wakeup_enable((gpio_num_t)SERIAL0_RX_GPIO, GPIO_INTR_LOW_LEVEL);
+
+    // doesn't help - I think the USB-UART chip losing power is pulling the signal llow
+    // gpio_pullup_en((gpio_num_t)SERIAL0_RX_GPIO);
+
+    // alas - can only work if using the refclock, which is limited to about 9600 bps
+    // assert(uart_set_wakeup_threshold(UART_NUM_0, 3) == ESP_OK);
+    // assert(esp_sleep_enable_uart_wakeup(0) == ESP_OK);
 #endif
 #ifdef BUTTON_PIN
     gpio_wakeup_enable((gpio_num_t)BUTTON_PIN, GPIO_INTR_LOW_LEVEL); // when user presses, this button goes low
@@ -274,7 +286,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     gpio_wakeup_enable((gpio_num_t)RF95_IRQ_GPIO, GPIO_INTR_HIGH_LEVEL); // RF95 interrupt, active high
 #endif
 #ifdef PMU_IRQ
-    // FIXME, disable wake due to PMU because it seems to fire all the time?
+    // wake due to PMU can happen repeatedly if there is no battery installed or the battery fills
     if (axp192_found)
         gpio_wakeup_enable((gpio_num_t)PMU_IRQ, GPIO_INTR_LOW_LEVEL); // pmu irq
 #endif

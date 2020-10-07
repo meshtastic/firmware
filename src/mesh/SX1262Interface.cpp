@@ -179,9 +179,17 @@ void SX1262Interface::startReceive()
 /** Could we send right now (i.e. either not actively receving or transmitting)? */
 bool SX1262Interface::isActivelyReceiving()
 {
-    // return false; // FIXME
-    // FIXME this is not correct? - often always true - need to add an extra conditional
-    return lora.getPacketLength() > 0;
+    // The IRQ status will be cleared when we start our read operation.  Check if we've started a preamble, but haven't yet
+    // received and handled the interrupt for reading the packet/handling errors.
+
+    uint16_t irq = lora.getIrqStatus();
+    bool hasPreamble = (irq & SX126X_IRQ_PREAMBLE_DETECTED);
+
+    // this is not correct - often always true - need to add an extra conditional
+    // size_t bytesPending = lora.getPacketLength();
+
+    // if (hasPreamble || bytesPending) DEBUG_MSG("rx hasPre %d, bytes %d\n", hasPreamble, bytesPending);
+    return hasPreamble;
 }
 
 bool SX1262Interface::sleep()
