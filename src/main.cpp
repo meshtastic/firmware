@@ -34,6 +34,7 @@
 // #include "rom/rtc.h"
 #include "DSRRouter.h"
 // #include "debug.h"
+#include "RTC.h"
 #include "SPILock.h"
 #include "graphics/Screen.h"
 #include "main.h"
@@ -150,6 +151,8 @@ void userButtonPressedLong()
 {
     screen.adjustBrightness();
 }
+
+RadioInterface *rIf = NULL;
 
 void setup()
 {
@@ -298,8 +301,7 @@ void setup()
     digitalWrite(SX1262_ANT_SW, 1);
 #endif
 
-    // MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
-    RadioInterface *rIf = NULL;
+    // radio init MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
 
 #if defined(RF95_IRQ)
     if (!rIf) {
@@ -404,6 +406,9 @@ void loop()
 #endif
 
     loopWifi();
+
+    // For debugging
+    // if (rIf) ((RadioLibInterface *)rIf)->isActivelyReceiving();
 
     // Show boot screen for first 3 seconds, then switch to normal operation.
     static bool showingBootScreen = true;
