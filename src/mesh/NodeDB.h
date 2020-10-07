@@ -47,9 +47,9 @@ class NodeDB
     void saveToDisk();
 
     /** Reinit radio config if needed, because either:
-     * a) sometimes a buggy android app might send us bogus settings or 
+     * a) sometimes a buggy android app might send us bogus settings or
      * b) the client set factory_reset
-     * 
+     *
      * @return true if the config was completely reset, in that case, we should send it back to the client
      */
     bool resetRadioConfig();
@@ -138,3 +138,17 @@ their nodes
  * https://github.com/meshtastic/Meshtastic-device/issues/269
  */
 const char *getChannelName();
+
+#define PREF_GET(name, defaultVal)                                                                                               \
+    inline uint32_t getPref_##name() { return radioConfig.preferences.name ? radioConfig.preferences.name : (defaultVal); }
+
+PREF_GET(send_owner_interval, 4)
+PREF_GET(position_broadcast_secs, 15 * 60)
+PREF_GET(wait_bluetooth_secs, 120)
+PREF_GET(screen_on_secs, 60)
+PREF_GET(mesh_sds_timeout_secs, 2 * 60 * 60)
+PREF_GET(phone_sds_timeout_sec, 2 * 60 * 60)
+PREF_GET(sds_secs, 365 * 24 * 60 * 60)
+PREF_GET(ls_secs, 60 * 60)
+PREF_GET(phone_timeout_secs, 15 * 60)
+PREF_GET(min_wake_secs, 10)
