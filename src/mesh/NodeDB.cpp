@@ -10,6 +10,7 @@
 #include "NodeDB.h"
 #include "PacketHistory.h"
 #include "PowerFSM.h"
+#include "RTC.h"
 #include "Router.h"
 #include "configuration.h"
 #include "error.h"

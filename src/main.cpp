@@ -34,6 +34,7 @@
 // #include "rom/rtc.h"
 #include "DSRRouter.h"
 // #include "debug.h"
+#include "RTC.h"
 #include "SPILock.h"
 #include "graphics/Screen.h"
 #include "main.h"

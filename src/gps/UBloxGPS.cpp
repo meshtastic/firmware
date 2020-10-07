@@ -1,4 +1,5 @@
 #include "UBloxGPS.h"
+#include "RTC.h"
 #include "error.h"
 #include "sleep.h"
 #include <assert.h>
