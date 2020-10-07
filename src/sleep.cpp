@@ -163,6 +163,9 @@ void doDeepSleep(uint64_t msecToWake)
     digitalWrite(VEXT_ENABLE, 1); // turn off the display power
 #endif
 
+    // Kill GPS power completely (even if previously we just had it in sleep mode)
+    setGPSPower(false);
+
     setLed(false);
 
 #ifdef TBEAM_V10
