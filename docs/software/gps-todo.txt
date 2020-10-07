@@ -1,4 +1,4 @@
-gps todo - bug 376
+You probably don't care about this ugly file of personal notes ;-)
 
 for taiwan region:
 bin/run.sh --set region 8
@@ -6,40 +6,14 @@ bin/run.sh --set region 8
 time only mode
 ./bin/run.sh --set gps_operation 3
 
-increase acquisition time until ublox power management can be improved see 9.3.1
-
 ublox parsing failure
 
 record power measurements and update spreadsheet
 
-fix has_gps based on new logic
-
 make sure we are turning off lora radio in deep sleep
-
-don't send locations if the user has forbidden that (lie to phone so phone won't either)
 
 have loop methods return allowable sleep time (from their perspective)
 increase main cpu sleep time
 
-add set router mode in python tool - it will also set GPS to stationary
-make sure location still gets set once per boot and stays marked as valid on the gui 
-send position updates super rarely
-turn off checking for usb power and forcing always on
-(which will shrink DARK and NB period to zero and
- make light_sleep very long)
-
 warn people about crummy gps antennas - add to faq
-
-
-gps states
-
-Active - for gps_attempt_time seconds
-Sleeping - for (gps_update_rate or sleep forever) seconds
-ForcedSleep - PowerFSM says we don't want to use GPS right now
-(no need for sleep forever state)
-
-gps triggers
-GPS_TRIG_FORCE_SLEEP - from powerfsm
-GPS_TRIG_FORCE_WAKE - from powerfsm
-GPS_SETTINGS - if GPS settings changed, reset params and possibly become active
 
