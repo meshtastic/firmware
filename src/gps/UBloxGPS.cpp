@@ -32,7 +32,7 @@ bool UBloxGPS::setupGPS()
         _serial_gps->begin(GPS_BAUDRATE);
 #endif
 #ifndef NO_ESP32
-        _serial_gps->setRxBufferSize(1024); // the default is 256
+        _serial_gps->setRxBufferSize(2048); // the default is 256
 #endif
     }
 
@@ -126,7 +126,7 @@ void UBloxGPS::whileActive()
     // Update fixtype
     if (ublox.moduleQueried.fixType) {
         fixType = ublox.getFixType(0);
-        DEBUG_MSG("GPS fix type %d\n", fixType);
+        DEBUG_MSG("GPS fix type %d, numSats %d\n", fixType, numSatellites);
     }
 }
 
@@ -168,6 +168,12 @@ bool UBloxGPS::lookForLocation()
 {
     bool foundLocation = false;
 
+    if (ublox.moduleQueried.SIV)
+        numSatellites = ublox.getSIV(0);
+
+    if (ublox.moduleQueried.pDOP)
+        dop = ublox.getPDOP(0); // PDOP (an accuracy metric) is reported in 10^2 units so we have to scale down when we use it
+
     // we only notify if position has changed due to a new fix
     if ((fixType >= 3 && fixType <= 4)) {
         if (ublox.moduleQueried.latitude) // rd fixes only
@@ -175,12 +181,10 @@ bool UBloxGPS::lookForLocation()
             latitude = ublox.getLatitude(0);
             longitude = ublox.getLongitude(0);
             altitude = ublox.getAltitudeMSL(0) / 1000; // in mm convert to meters
-            dop = ublox.getPDOP(0); // PDOP (an accuracy metric) is reported in 10^2 units so we have to scale down when we use it
 
             // Note: heading is only currently implmented in the ublox for the 8m chipset - therefore
             // don't read it here - it will generate an ignored getPVT command on the 6ms
             // heading = ublox.getHeading(0);
-            numSatellites = ublox.getSIV(0);
 
             // bogus lat lon is reported as 0 or 0 (can be bogus just for one)
             // Also: apparently when the GPS is initially reporting lock it can output a bogus latitude > 90 deg!
