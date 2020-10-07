@@ -10,6 +10,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "RTC.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "power.h"
