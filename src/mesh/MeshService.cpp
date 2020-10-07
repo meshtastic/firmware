@@ -140,7 +140,7 @@ void MeshService::handleIncomingPosition(const MeshPacket *mp)
             tv.tv_sec = secs;
             tv.tv_usec = 0;
 
-            perhapsSetRTC(&tv);
+            perhapsSetRTC(RTCQualityFromNet, &tv);
         }
     } else {
         DEBUG_MSG("Ignoring incoming packet - not a position\n");
@@ -151,12 +151,8 @@ int MeshService::handleFromRadio(const MeshPacket *mp)
 {
     powerFSM.trigger(EVENT_RECEIVED_PACKET); // Possibly keep the node from sleeping
 
-    // If it is a position packet, perhaps set our clock (if we don't have a GPS of our own, otherwise wait for that to work)
-    if (!gps->isConnected)
-        handleIncomingPosition(mp);
-    else {
-        DEBUG_MSG("Ignoring incoming time, because we have a GPS\n");
-    }
+    // If it is a position packet, perhaps set our clock 
+    handleIncomingPosition(mp);
 
     if (mp->which_payload == MeshPacket_decoded_tag && mp->decoded.which_payload == SubPacket_user_tag) {
         mp = handleFromRadioUser(mp);

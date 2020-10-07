@@ -1,9 +1,14 @@
-#include "configuration.h"
 #include "RTC.h"
+#include "configuration.h"
 #include <sys/time.h>
 #include <time.h>
 
-bool timeSetFromGPS; // We try to set our time from GPS each time we wake from sleep
+static RTCQuality currentQuality = RTCQualityNone;
+
+RTCQuality getRTCQuality()
+{
+    return currentQuality;
+}
 
 // stuff that really should be in in the instance instead...
 static uint32_t
@@ -17,17 +22,17 @@ void readFromRTC()
     if (!gettimeofday(&tv, NULL)) {
         uint32_t now = millis();
 
-        DEBUG_MSG("Read RTC time as %ld (cur millis %u) valid=%d\n", tv.tv_sec, now, timeSetFromGPS);
+        DEBUG_MSG("Read RTC time as %ld (cur millis %u) quality=%d\n", tv.tv_sec, now, currentQuality);
         timeStartMsec = now;
         zeroOffsetSecs = tv.tv_sec;
     }
 }
 
 /// If we haven't yet set our RTC this boot, set it from a GPS derived time
-bool perhapsSetRTC(const struct timeval *tv)
+bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
 {
-    if (!timeSetFromGPS) {
-        timeSetFromGPS = true;
+    if (q > currentQuality) {
+        currentQuality = q;
         DEBUG_MSG("Setting RTC %ld secs\n", tv->tv_sec);
 #ifndef NO_ESP32
         settimeofday(tv, NULL);
@@ -41,7 +46,7 @@ bool perhapsSetRTC(const struct timeval *tv)
     }
 }
 
-bool perhapsSetRTC(struct tm &t)
+bool perhapsSetRTC(RTCQuality q, struct tm &t)
 {
     /* Convert to unix time
     The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970
@@ -57,7 +62,7 @@ bool perhapsSetRTC(struct tm &t)
         // DEBUG_MSG("Ignoring invalid GPS month=%d, year=%d, unixtime=%ld\n", t.tm_mon, t.tm_year, tv.tv_sec);
         return false;
     } else {
-        return perhapsSetRTC(&tv);
+        return perhapsSetRTC(q, &tv);
     }
 }
 
@@ -68,5 +73,5 @@ uint32_t getTime()
 
 uint32_t getValidTime()
 {
-    return timeSetFromGPS ? getTime() : 0;
+    return (currentQuality >= RTCQualityFromNet) ? getTime() : 0;
 }
