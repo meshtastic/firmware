@@ -1,6 +1,6 @@
 #include "Router.h"
 #include "CryptoEngine.h"
-#include "GPS.h"
+#include "RTC.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include <NodeDB.h>
