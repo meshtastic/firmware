@@ -151,7 +151,7 @@ uint32_t GPS::getWakeTime() const
         return t; // already maxint
 
     if (t == 0)
-        t = 5 * 60; // Allow up to 5 mins for each attempt (probably will be much less if we can find sats)
+        t = 15 * 60; // Allow up to 5 mins for each attempt (probably will be much less if we can find sats)
 
     t *= 1000; // msecs
 
@@ -208,7 +208,7 @@ void GPS::loop()
     // While we are awake
     if (isAwake) {
         // DEBUG_MSG("looking for location\n");
-        if ((now - lastWhileActiveMsec) > 1000) {
+        if ((now - lastWhileActiveMsec) > 5000) {
             lastWhileActiveMsec = now;
             whileActive();
         }
@@ -224,7 +224,7 @@ void GPS::loop()
         // Once we get a location we no longer desperately want an update
         // or if we got a time and we are in GpsOpTimeOnly mode
         // DEBUG_MSG("gotLoc %d, tooLong %d, gotTime %d\n", gotLoc, tooLong, gotTime);
-        if (gotLoc || tooLong || (gotTime && getGpsOp() == GpsOperation_GpsOpTimeOnly)) {
+        if ((gotLoc && timeSetFromGPS) || tooLong || (gotTime && getGpsOp() == GpsOperation_GpsOpTimeOnly)) {
             if (gotLoc)
                 hasValidLocation = true;
 
@@ -247,7 +247,10 @@ void GPS::forceWake(bool on)
         wakeAllowed = true;
     } else {
         wakeAllowed = false;
-        setAwake(false);
+
+        // Note: if the gps was already awake, we DO NOT shut it down, because we want to allow it to complete its lock
+        // attempt even if we are in light sleep.  Once the attempt succeeds (or times out) we'll then shut it down.
+        // setAwake(false);
     }
 }
 
