@@ -10,8 +10,6 @@ ublox parsing failure
 
 record power measurements and update spreadsheet
 
-make sure we are turning off lora radio in deep sleep
-
 have loop methods return allowable sleep time (from their perspective)
 increase main cpu sleep time
 
