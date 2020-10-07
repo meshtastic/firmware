@@ -151,7 +151,7 @@ uint32_t GPS::getWakeTime() const
         return t; // already maxint
 
     if (t == 0)
-        t = 2 * 60; // default to 2 mins
+        t = 5 * 60; // Allow up to 5 mins for each attempt (probably will be much less if we can find sats)
 
     t *= 1000; // msecs
 
@@ -223,6 +223,7 @@ void GPS::loop()
 
         // Once we get a location we no longer desperately want an update
         // or if we got a time and we are in GpsOpTimeOnly mode
+        // DEBUG_MSG("gotLoc %d, tooLong %d, gotTime %d\n", gotLoc, tooLong, gotTime);
         if (gotLoc || tooLong || (gotTime && getGpsOp() == GpsOperation_GpsOpTimeOnly)) {
             if (gotLoc)
                 hasValidLocation = true;
