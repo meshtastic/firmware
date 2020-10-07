@@ -31,7 +31,7 @@ bool UBloxGPS::setupGPS()
 #else
         _serial_gps->begin(GPS_BAUDRATE);
 #endif
-        // _serial_gps.setRxBufferSize(1024); // the default is 256
+        _serial_gps->setRxBufferSize(1024); // the default is 256
     }
 
     // uncomment to see debug info
@@ -202,15 +202,18 @@ bool UBloxGPS::whileIdle()
 /// Note: ublox doesn't need a wake method, because as soon as we send chars to the GPS it will wake up
 void UBloxGPS::sleep()
 {
-    // won't work on 6M
-    // ublox.powerOff();
-    setGPSPower(false);
+    // Tell GPS to power down until we send it characters on serial port (we leave vcc connected)
+    ublox.powerOff();
+    // setGPSPower(false);
 }
 
 void UBloxGPS::wake()
 {
     fixType = 0; // assume we hace no fix yet
+
     setGPSPower(true);
+
+    // Note: no delay needed because now we leave gps power on always and instead use ublox.powerOff()
     // Give time for the GPS to boot
-    delay(200);
+    // delay(200);
 }
