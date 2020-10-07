@@ -6,6 +6,9 @@ bin/run.sh --set region 8
 time only mode
 ./bin/run.sh --set gps_operation 3
 
+allow longer locking attempts
+allow locking while cpu sleeps
+test with crummy antenna
 ublox parsing failure
 
 record power measurements and update spreadsheet

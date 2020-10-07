@@ -138,23 +138,21 @@ void UBloxGPS::whileActive()
  */
 bool UBloxGPS::lookForTime()
 {
-    if (fixType >= 2) {
-        if (ublox.moduleQueried.gpsSecond) {
-            /* Convert to unix time
-            The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January
-            1, 1970 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
-            */
-            struct tm t;
-            t.tm_sec = ublox.getSecond(0);
-            t.tm_min = ublox.getMinute(0);
-            t.tm_hour = ublox.getHour(0);
-            t.tm_mday = ublox.getDay(0);
-            t.tm_mon = ublox.getMonth(0) - 1;
-            t.tm_year = ublox.getYear(0) - 1900;
-            t.tm_isdst = false;
-            perhapsSetRTC(t);
-            return true;
-        }
+    if (ublox.moduleQueried.gpsSecond) {
+        /* Convert to unix time
+        The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January
+        1, 1970 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
+        */
+        struct tm t;
+        t.tm_sec = ublox.getSecond(0);
+        t.tm_min = ublox.getMinute(0);
+        t.tm_hour = ublox.getHour(0);
+        t.tm_mday = ublox.getDay(0);
+        t.tm_mon = ublox.getMonth(0) - 1;
+        t.tm_year = ublox.getYear(0) - 1900;
+        t.tm_isdst = false;
+        perhapsSetRTC(t);
+        return true;
     }
 
     return false;
