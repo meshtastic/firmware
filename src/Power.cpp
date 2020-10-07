@@ -172,7 +172,7 @@ bool Power::axp192Init()
             DEBUG_MSG("----------------------------------------\n");
 
             axp.setPowerOutPut(AXP192_LDO2, AXP202_ON); // LORA radio
-            axp.setPowerOutPut(AXP192_LDO3, AXP202_ON); // GPS main power
+            // axp.setPowerOutPut(AXP192_LDO3, AXP202_ON); // GPS main power - now turned on in setGpsPower
             axp.setPowerOutPut(AXP192_DCDC2, AXP202_ON);
             axp.setPowerOutPut(AXP192_EXTEN, AXP202_ON);
             axp.setPowerOutPut(AXP192_DCDC1, AXP202_ON);
@@ -204,8 +204,11 @@ bool Power::axp192Init()
                 PMU_IRQ, [] { pmu_irq = true; }, FALLING);
 
             axp.adc1Enable(AXP202_BATT_CUR_ADC1, 1);
-            axp.enableIRQ(AXP202_BATT_REMOVED_IRQ | AXP202_BATT_CONNECT_IRQ | AXP202_CHARGING_FINISHED_IRQ | AXP202_CHARGING_IRQ |
-                              AXP202_VBUS_REMOVED_IRQ | AXP202_VBUS_CONNECT_IRQ | AXP202_PEK_SHORTPRESS_IRQ,
+            // we do not look for AXP202_CHARGING_FINISHED_IRQ & AXP202_CHARGING_IRQ because it occurs repeatedly while there is
+            // no battery also it could cause inadvertent waking from light sleep just because the battery filled
+            // we don't look for AXP202_BATT_REMOVED_IRQ because it occurs repeatedly while no battery installed
+            // we don't look at AXP202_VBUS_REMOVED_IRQ because we don't have anything hooked to vbus
+            axp.enableIRQ(AXP202_BATT_CONNECT_IRQ | AXP202_VBUS_CONNECT_IRQ | AXP202_PEK_SHORTPRESS_IRQ,
                           1);
 
             axp.clearIRQ();
