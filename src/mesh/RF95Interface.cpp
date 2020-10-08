@@ -42,7 +42,7 @@ bool RF95Interface::init()
         power = MAX_POWER;
 
     limitPower();
-    
+
     iface = lora = new RadioLibRF95(&module);
 
 #ifdef RF95_TCXO
@@ -158,7 +158,7 @@ void RF95Interface::startReceive()
 
     isReceiving = true;
 
-    // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
+    // Must be done AFTER, starting receive, because startReceive clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
 }
 
@@ -171,7 +171,7 @@ bool RF95Interface::isActivelyReceiving()
 bool RF95Interface::sleep()
 {
     // put chipset into sleep mode
-    disableInterrupt();
+    setStandby(); // First cancel any active receving/sending
     lora->sleep();
 
     return true;
