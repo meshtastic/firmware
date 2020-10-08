@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Thread.h"
+#include "OSThread.h"
 
 namespace concurrency {
 
@@ -10,7 +10,7 @@ namespace concurrency {
  *
  * @link https://www.freertos.org/RTOS_Task_Notification_As_Mailbox.html
  */
-class WorkerThread : public Thread
+class WorkerThread : public OSThread
 {
   protected:
     /**

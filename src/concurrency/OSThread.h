@@ -7,11 +7,11 @@ namespace concurrency
 {
 
 #ifdef HAS_FREE_RTOS
-typedef FreeRtosThread Thread;
+typedef FreeRtosThread OSThread;
 #endif
 
 #ifdef __unix__
-typedef PosixThread Thread;
+typedef PosixThread OSThread;
 #endif
 
 } // namespace concurrency
