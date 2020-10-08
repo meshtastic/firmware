@@ -4,6 +4,8 @@
 #include <functional>
 
 void initWebServer();
+void createSSLCert();
+
 
 void handleNotFound();
 
