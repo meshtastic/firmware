@@ -6,29 +6,46 @@
 #include <WebServer.h>
 #include <WiFi.h>
 
-WebServer webserver(80);
+// Persistant Data Storage
+#include <Preferences.h>
+Preferences prefs;
 
-// Maximum number of messages for chat history. Don't make this too big -- it'll use a
-//   lot of memory!
-const uint16_t maxMessages = 50;
+/*
+  Including the esp32_https_server library will trigger a compile time error. I've
+  tracked it down to a reoccurrance of this bug:
+    https://gcc.gnu.org/bugzilla/show_bug.cgi?id=57824
+  The work around is described here:
+    https://forums.xilinx.com/t5/Embedded-Development-Tools/Error-with-Standard-Libaries-in-Zynq/td-p/450032
 
-struct message_t {
-    char sender[10];
-    char message[250];
-    int32_t gpsLat;
-    int32_t gpsLong;
-    uint32_t time;
-    bool fromMe;
-};
+  Long story short is we need "#undef str" before including the esp32_https_server.
+    - Jm Casler (jm@casler.org) Oct 2020
+*/
+#undef str
 
-struct messages_t {
-    message_t history[maxMessages];
-};
+// Includes for the https server
+//   https://github.com/fhessel/esp32_https_server
+#include <HTTPRequest.hpp>
+#include <HTTPResponse.hpp>
+#include <HTTPSServer.hpp>
+#include <HTTPServer.hpp>
+#include <SSLCert.hpp>
 
-messages_t messages_history;
+// The HTTPS Server comes in a separate namespace. For easier use, include it here.
+using namespace httpsserver;
 
-String something = "";
-String sender = "";
+SSLCert *cert;
+HTTPSServer *secureServer;
+HTTPServer *insecureServer;
+
+// Declare some handler functions for the various URLs on the server
+void handleStyleCSS(HTTPRequest *req, HTTPResponse *res);
+void handleJSONChatHistoryDummy(HTTPRequest *req, HTTPResponse *res);
+void handleHotspot(HTTPRequest *req, HTTPResponse *res);
+void handleRoot(HTTPRequest *req, HTTPResponse *res);
+void handle404(HTTPRequest *req, HTTPResponse *res);
+
+bool isWebServerReady = 0;
+bool isCertReady = 0;
 
 void handleWebResponse()
 {
@@ -36,82 +53,196 @@ void handleWebResponse()
         return;
     }
 
-    // We're going to handle the DNS responder here so it
-    // will be ignored by the NRF boards.
-    handleDNSResponse();
+    if (isWebServerReady) {
+        // We're going to handle the DNS responder here so it
+        // will be ignored by the NRF boards.
+        handleDNSResponse();
 
-    webserver.handleClient();
+        secureServer->loop();
+        insecureServer->loop();
+    }
+}
+
+void taskCreateCert(void *parameter)
+{
+
+    prefs.begin("MeshtasticHTTPS", false);
+
+    // Delete the saved certs
+    if (0) {
+        DEBUG_MSG("Deleting any saved SSL keys ...\n");
+        // prefs.clear();
+        prefs.remove("PK");
+        prefs.remove("cert");
+    }
+
+    size_t pkLen = prefs.getBytesLength("PK");
+    size_t certLen = prefs.getBytesLength("cert");
+
+    DEBUG_MSG("Checking if we have a previously saved SSL Certificate.\n");
+
+    if (pkLen && certLen) {
+        DEBUG_MSG("Existing SSL Certificate found!\n");
+    } else {
+        DEBUG_MSG("Creating the certificate. This may take a while. Please wait...\n");
+
+        cert = new SSLCert();
+        //disableCore1WDT();
+        int createCertResult = createSelfSignedCert(*cert, KEYSIZE_2048, "CN=meshtastic.local,O=Meshtastic,C=US",
+                                                    "20190101000000", "20300101000000");
+        //enableCore1WDT();
+
+        if (createCertResult != 0) {
+            DEBUG_MSG("Creating the certificate failed\n");
+
+            // Serial.printf("Creating the certificate failed. Error Code = 0x%02X, check SSLCert.hpp for details",
+            //              createCertResult);
+            // while (true)
+            //    delay(500);
+        } else {
+            DEBUG_MSG("Creating the certificate was successful\n");
+
+            DEBUG_MSG("Created Private Key: %d Bytes\n", cert->getPKLength());
+            // for (int i = 0; i < cert->getPKLength(); i++)
+            //  Serial.print(cert->getPKData()[i], HEX);
+            // Serial.println();
+
+            DEBUG_MSG("Created Certificate: %d Bytes\n", cert->getCertLength());
+            // for (int i = 0; i < cert->getCertLength(); i++)
+            //  Serial.print(cert->getCertData()[i], HEX);
+            // Serial.println();
+
+            prefs.putBytes("PK", (uint8_t *)cert->getPKData(), cert->getPKLength());
+            prefs.putBytes("cert", (uint8_t *)cert->getCertData(), cert->getCertLength());
+        }
+    }
+
+    isCertReady = 1;
+    vTaskDelete(NULL);
+}
+
+void createSSLCert()
+{
+
+    if (isWifiAvailable() == 0) {
+        return;
+    }
+
+    // Create a new process just to handle creating the cert.
+    //   This is a workaround for Bug: https://github.com/fhessel/esp32_https_server/issues/48
+    //  jm@casler.org (Oct 2020)
+    xTaskCreate(taskCreateCert, /* Task function. */
+                "createCert",   /* String with name of task. */
+                16384,          /* Stack size in bytes. */
+                NULL,           /* Parameter passed as input of the task */
+                16,             /* Priority of the task. */
+                NULL);          /* Task handle. */
+
+    DEBUG_MSG("Waiting for SSL Cert to be generated.\n");
+    if (isCertReady) {
+        DEBUG_MSG(".\n");
+        delayMicroseconds(1000);
+    }
+    DEBUG_MSG("SSL Cert Ready!\n");
 }
 
 void initWebServer()
 {
-    webserver.onNotFound(handleNotFound);
-    webserver.on("/json/chat/send/channel", handleJSONChatHistory);
-    webserver.on("/json/chat/send/user", handleJSONChatHistory);
-    webserver.on("/json/chat/history/channel", handleJSONChatHistory);
-    webserver.on("/json/chat/history/dummy", handleJSONChatHistoryDummy);
-    webserver.on("/json/chat/history/user", handleJSONChatHistory);
-    webserver.on("/json/stats", handleJSONChatHistory);
-    webserver.on("/hotspot-detect.html", handleHotspot);
-    webserver.on("/css/style.css", handleStyleCSS);
-    webserver.on("/scripts/script.js", handleScriptsScriptJS);
-    webserver.on("/", handleRoot);
-    webserver.begin();
-}
+    DEBUG_MSG("Initializing Web Server ...\n");
 
-void handleJSONChatHistory()
-{
-    int i;
+    prefs.begin("MeshtasticHTTPS", false);
 
-    String out = "";
-    out += "{\n";
-    out += "  \"data\" : {\n";
-    out += "    \"chat\" : ";
-    out += "[";
-    out += "\"" + sender + "\"";
-    out += ",";
-    out += "\"" + something + "\"";
-    out += "]\n";
+    size_t pkLen = prefs.getBytesLength("PK");
+    size_t certLen = prefs.getBytesLength("cert");
 
-    for (i = 0; i < maxMessages; i++) {
-        out += "[";
-        out += "\"" + String(messages_history.history[i].sender) + "\"";
-        out += ",";
-        out += "\"" + String(messages_history.history[i].message) + "\"";
-        out += "]\n";
+    DEBUG_MSG("Checking if we have a previously saved SSL Certificate.\n");
+
+    if (pkLen && certLen) {
+
+        uint8_t *pkBuffer = new uint8_t[pkLen];
+        prefs.getBytes("PK", pkBuffer, pkLen);
+
+        uint8_t *certBuffer = new uint8_t[certLen];
+        prefs.getBytes("cert", certBuffer, certLen);
+
+        cert = new SSLCert(certBuffer, certLen, pkBuffer, pkLen);
+
+        DEBUG_MSG("Retrieved Private Key: %d Bytes\n", cert->getPKLength());
+        // DEBUG_MSG("Retrieved Private Key: " + String(cert->getPKLength()) + " Bytes");
+        // for (int i = 0; i < cert->getPKLength(); i++)
+        //  Serial.print(cert->getPKData()[i], HEX);
+        // Serial.println();
+
+        DEBUG_MSG("Retrieved Certificate: %d Bytes\n", cert->getCertLength());
+        // for (int i = 0; i < cert->getCertLength(); i++)
+        //  Serial.print(cert->getCertData()[i], HEX);
+        // Serial.println();
+    } else {
+        DEBUG_MSG("Web Server started without SSL keys! How did this happen?\n");
     }
 
-    out += "\n";
-    out += "  }\n";
-    out += "}\n";
+    // We can now use the new certificate to setup our server as usual.
+    secureServer = new HTTPSServer(cert);
+    insecureServer = new HTTPServer();
 
-    webserver.send(200, "application/json", out);
-    return;
+    // For every resource available on the server, we need to create a ResourceNode
+    // The ResourceNode links URL and HTTP method to a handler function
+
+    ResourceNode *nodeCSS = new ResourceNode("/css/style.css", "GET", &handleStyleCSS);
+    ResourceNode *nodeJS = new ResourceNode("/scripts/script.js", "GET", &handleJSONChatHistoryDummy);
+    ResourceNode *nodeHotspot = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
+    ResourceNode *nodeRoot = new ResourceNode("/", "GET", &handleRoot);
+    ResourceNode *node404 = new ResourceNode("", "GET", &handle404);
+
+    // Secure nodes
+    secureServer->registerNode(nodeCSS);
+    secureServer->registerNode(nodeJS);
+    secureServer->registerNode(nodeHotspot);
+    secureServer->registerNode(nodeRoot);
+    secureServer->setDefaultNode(node404);
+
+    // Insecure nodes
+    insecureServer->registerNode(nodeCSS);
+    insecureServer->registerNode(nodeJS);
+    insecureServer->registerNode(nodeHotspot);
+    insecureServer->registerNode(nodeRoot);
+    insecureServer->setDefaultNode(node404);
+
+    DEBUG_MSG("Starting Web Server...\n");
+    secureServer->start();
+    insecureServer->start();
+    if (secureServer->isRunning() && insecureServer->isRunning()) {
+        DEBUG_MSG("Web Server Ready\n");
+        isWebServerReady = 1;
+    }
 }
 
-void handleNotFound()
+void handle404(HTTPRequest *req, HTTPResponse *res)
 {
-    String message = "";
-    message += "File Not Found\n\n";
-    message += "URI: ";
-    message += webserver.uri();
-    message += "\nMethod: ";
-    message += (webserver.method() == HTTP_GET) ? "GET" : "POST";
-    message += "\nArguments: ";
-    message += webserver.args();
-    message += "\n";
 
-    for (uint8_t i = 0; i < webserver.args(); i++) {
-        message += " " + webserver.argName(i) + ": " + webserver.arg(i) + "\n";
-    }
-    Serial.println(message);
-    webserver.send(404, "text/plain", message);
+    // Discard request body, if we received any
+    // We do this, as this is the default node and may also server POST/PUT requests
+    req->discardRequestBody();
+
+    // Set the response status
+    res->setStatusCode(404);
+    res->setStatusText("Not Found");
+
+    // Set content type of the response
+    res->setHeader("Content-Type", "text/html");
+
+    // Write a tiny HTTP page
+    res->println("<!DOCTYPE html>");
+    res->println("<html>");
+    res->println("<head><title>Not Found</title></head>");
+    res->println("<body><h1>404 Not Found</h1><p>The requested resource was not found on this server.</p></body>");
+    res->println("</html>");
 }
 
 /*
     This supports the Apple Captive Network Assistant (CNA) Portal
 */
-void handleHotspot()
+void handleHotspot(HTTPRequest *req, HTTPResponse *res)
 {
     DEBUG_MSG("Hotspot Request\n");
 
@@ -120,25 +251,14 @@ void handleHotspot()
         otherwise iOS will have trouble detecting that the connection to the SoftAP worked.
     */
 
-    String out = "";
-    // out += "Success\n";
-    out += "<meta http-equiv=\"refresh\" content=\"0;url=http://meshtastic.org/\" />\n";
-    webserver.send(200, "text/html", out);
-    return;
-}
+    // Status code is 200 OK by default.
+    // We want to deliver a simple HTML page, so we send a corresponding content type:
+    res->setHeader("Content-Type", "text/html");
 
-void notifyWebUI()
-{
-    DEBUG_MSG("************ Got a message! ************\n");
-    MeshPacket &mp = devicestate.rx_text_message;
-    NodeInfo *node = nodeDB.getNode(mp.from);
-    sender = (node && node->has_user) ? node->user.long_name : "???";
-
-    static char tempBuf[256]; // mesh.options says this is MeshPacket.encrypted max_size
-    assert(mp.decoded.which_payload == SubPacket_data_tag);
-    snprintf(tempBuf, sizeof(tempBuf), "%s", mp.decoded.data.payload.bytes);
-
-    something = tempBuf;
+    // The response implements the Print interface, so you can use it just like
+    // you would write to Serial etc.
+    res->println("<!DOCTYPE html>");
+    res->println("<meta http-equiv=\"refresh\" content=\"0;url=http://meshtastic.org/\" />\n");
 }
 
 /*
@@ -146,7 +266,7 @@ void notifyWebUI()
 
     https://tomeko.net/online_tools/cpp_text_escape.php?lang=en
 */
-void handleRoot()
+void handleRoot(HTTPRequest *req, HTTPResponse *res)
 {
 
     String out = "";
@@ -223,11 +343,17 @@ void handleRoot()
         "</body>\n"
         "</html>\n"
         "";
-    webserver.send(200, "text/html", out);
-    return;
+
+    // Status code is 200 OK by default.
+    // We want to deliver a simple HTML page, so we send a corresponding content type:
+    res->setHeader("Content-Type", "text/html");
+
+    // The response implements the Print interface, so you can use it just like
+    // you would write to Serial etc.
+    res->print(out);
 }
 
-void handleStyleCSS()
+void handleStyleCSS(HTTPRequest *req, HTTPResponse *res)
 {
 
     String out = "";
@@ -510,11 +636,16 @@ void handleStyleCSS()
         "  height: 0;\n"
         "}";
 
-    webserver.send(200, "text/css", out);
-    return;
+    // Status code is 200 OK by default.
+    // We want to deliver a simple HTML page, so we send a corresponding content type:
+    res->setHeader("Content-Type", "text/css");
+
+    // The response implements the Print interface, so you can use it just like
+    // you would write to Serial etc.
+    res->print(out);
 }
 
-void handleScriptsScriptJS()
+void handleScriptsScriptJS(HTTPRequest *req, HTTPResponse *res)
 {
     String out = "";
     out += "String.prototype.toHHMMSS = function () {\n"
@@ -664,11 +795,16 @@ void handleScriptsScriptJS()
            "//\tsetTimeout(scrollHistory(),500);\n"
            "// }";
 
-    webserver.send(200, "text/javascript", out);
-    return;
+    // Status code is 200 OK by default.
+    // We want to deliver a simple HTML page, so we send a corresponding content type:
+    res->setHeader("Content-Type", "text/html");
+
+    // The response implements the Print interface, so you can use it just like
+    // you would write to Serial etc.
+    res->print(out);
 }
 
-void handleJSONChatHistoryDummy()
+void handleJSONChatHistoryDummy(HTTPRequest *req, HTTPResponse *res)
 {
     String out = "";
     out += "{\n"
@@ -788,6 +924,11 @@ void handleJSONChatHistoryDummy()
            "\t}\n"
            "}";
 
-    webserver.send(200, "application/json", out);
-    return;
+    // Status code is 200 OK by default.
+    // We want to deliver a simple HTML page, so we send a corresponding content type:
+    res->setHeader("Content-Type", "application/json");
+
+    // The response implements the Print interface, so you can use it just like
+    // you would write to Serial etc.
+    res->print(out);
 }

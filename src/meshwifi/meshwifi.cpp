@@ -29,9 +29,6 @@ bool isWifiAvailable()
     // strcpy(radioConfig.preferences.wifi_password, "");
 
     if (*wifiName && *wifiPsw) {
-
-        // Once every 10 seconds, try to reconnect.
-
         return 1;
     } else {
         return 0;
@@ -63,6 +60,9 @@ void initWifi()
     if (isWifiAvailable() == 0) {
         return;
     }
+
+    createSSLCert();
+
 
     if (radioConfig.has_preferences) {
         const char *wifiName = radioConfig.preferences.wifi_ssid;
