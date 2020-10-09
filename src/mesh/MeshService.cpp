@@ -151,7 +151,7 @@ int MeshService::handleFromRadio(const MeshPacket *mp)
 {
     powerFSM.trigger(EVENT_RECEIVED_PACKET); // Possibly keep the node from sleeping
 
-    // If it is a position packet, perhaps set our clock 
+    // If it is a position packet, perhaps set our clock - this must be before nodeDB.updateFrom
     handleIncomingPosition(mp);
 
     if (mp->which_payload == MeshPacket_decoded_tag && mp->decoded.which_payload == SubPacket_user_tag) {
@@ -226,7 +226,7 @@ void MeshService::handleToRadio(MeshPacket &p)
     if (p.id == 0)
         p.id = generatePacketId(); // If the phone didn't supply one, then pick one
 
-    p.rx_time = getValidTime(); // Record the time the packet arrived from the phone
+    p.rx_time = getValidTime(RTCQualityFromNet); // Record the time the packet arrived from the phone
                                 // (so we update our nodedb for the local node)
 
     // Send the packet into the mesh
@@ -285,7 +285,7 @@ void MeshService::sendOurPosition(NodeNum dest, bool wantReplies)
     p->decoded.which_payload = SubPacket_position_tag;
     p->decoded.position = node->position;
     p->decoded.want_response = wantReplies;
-    p->decoded.position.time = getValidTime(); // This nodedb timestamp might be stale, so update it if our clock is valid.
+    p->decoded.position.time = getValidTime(RTCQualityGPS); // This nodedb timestamp might be stale, so update it if our clock is valid.
     sendToMesh(p);
 }
 
@@ -303,8 +303,9 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
             pos.altitude = gps->altitude;
         pos.latitude_i = gps->latitude;
         pos.longitude_i = gps->longitude;
-        pos.time = getValidTime();
     }
+
+    pos.time = getValidTime(RTCQualityGPS);
 
     // Include our current battery voltage in our position announcement
     pos.battery_level = powerStatus->getBatteryChargePercent();
