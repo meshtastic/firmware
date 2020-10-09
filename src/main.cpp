@@ -1,25 +1,3 @@
-/*
-
-  Main module
-
-  # Modified by Kyle T. Gabriel to fix issue with incorrect GPS data for TTNMapper
-
-  Copyright (C) 2018 by Xose Pérez <xose dot perez at gmail dot com>
-
-  This program is free software: you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation, either version 3 of the License, or
-  (at your option) any later version.
-
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License
-  along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
-*/
 
 #include "Air530GPS.h"
 #include "MeshRadio.h"
@@ -27,7 +5,6 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "UBloxGPS.h"
-#include "concurrency/Periodic.h"
 #include "configuration.h"
 #include "error.h"
 #include "power.h"
@@ -36,6 +13,7 @@
 // #include "debug.h"
 #include "RTC.h"
 #include "SPILock.h"
+#include "concurrency/Periodic.h"
 #include "graphics/Screen.h"
 #include "main.h"
 #include "meshwifi/meshhttp.h"
@@ -134,7 +112,7 @@ static uint32_t ledBlinker()
     return powerStatus->getIsCharging() ? 1000 : (ledOn ? 2 : 1000);
 }
 
-concurrency::Periodic ledPeriodic(ledBlinker);
+concurrency::Periodic ledPeriodic("Blink", ledBlinker);
 
 // Prepare for button presses
 #ifdef BUTTON_PIN
@@ -202,8 +180,6 @@ void setup()
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, 1 ^ LED_INVERTED); // turn on for now
 #endif
-
-    ledPeriodic.setup();
 
     // Hello
     DEBUG_MSG("Meshtastic swver=%s, hwver=%s\n", optstr(APP_VERSION), optstr(HW_VERSION));
@@ -378,11 +354,8 @@ void loop()
 
     if (gps)
         gps->loop(); // FIXME, remove from main, instead block on read
-    router.loop();
     powerFSM.run_machine();
-    service.loop();
 
-    concurrency::periodicScheduler.loop();
     // axpDebugOutput.loop();
 
 #ifdef DEBUG_PORT
@@ -393,9 +366,6 @@ void loop()
 
 #ifndef NO_ESP32
     esp32Loop();
-#endif
-#ifdef TBEAM_V10
-    power->loop();
 #endif
 
 #ifdef BUTTON_PIN

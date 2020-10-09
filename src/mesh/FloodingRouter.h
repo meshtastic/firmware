@@ -1,7 +1,6 @@
 #pragma once
 
 #include "PacketHistory.h"
-#include "../concurrency/PeriodicTask.h"
 #include "Router.h"
 
 /**

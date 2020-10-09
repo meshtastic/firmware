@@ -117,8 +117,6 @@ class RadioInterface : protected concurrency::NotifiedWorkerThread
      */
     size_t beginSending(MeshPacket *p);
 
-    virtual void loop() {} // Idle processing
-
     /**
      * Some regulatory regions limit xmit power.
      * This function should be called by subclasses after setting their desired power.  It might lower it

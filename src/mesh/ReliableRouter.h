@@ -1,7 +1,6 @@
 #pragma once
 
 #include "FloodingRouter.h"
-#include "../concurrency/PeriodicTask.h"
 #include <unordered_map>
 
 /**
@@ -80,10 +79,10 @@ class ReliableRouter : public FloodingRouter
     virtual ErrorCode send(MeshPacket *p);
 
     /** Do our retransmission handling */
-    virtual void loop()
+    virtual uint32_t runOnce()
     {
         doRetransmissions();
-        FloodingRouter::loop();
+        return FloodingRouter::runOnce();
     }
 
   protected:

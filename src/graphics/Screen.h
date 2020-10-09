@@ -15,7 +15,7 @@
 #include "TypedQueue.h"
 #include "commands.h"
 #include "concurrency/LockGuard.h"
-#include "concurrency/PeriodicTask.h"
+#include "concurrency/OSThread.h"
 #include "power.h"
 #include <string>
 
@@ -62,7 +62,7 @@ class DebugInfo
  *          multiple times simultaneously. All state-changing calls are queued and executed
  *          when the main loop calls us.
  */
-class Screen : public concurrency::PeriodicTask
+class Screen : public concurrency::OSThread
 {
     CallbackObserver<Screen, const meshtastic::Status *> powerStatusObserver =
         CallbackObserver<Screen, const meshtastic::Status *>(this, &Screen::handleStatusUpdate);
@@ -184,7 +184,7 @@ class Screen : public concurrency::PeriodicTask
     /// Updates the UI.
     //
     // Called periodically from the main loop.
-    void doTask() final;
+    uint32_t runOnce() final;
 
   private:
     struct ScreenCmd {
@@ -202,7 +202,7 @@ class Screen : public concurrency::PeriodicTask
             return true; // claim success if our display is not in use
         else {
             bool success = cmdQueue.enqueue(cmd, 0);
-            setPeriod(1); // handle ASAP
+            setInterval(0); // handle ASAP
             return success;
         }
     }

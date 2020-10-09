@@ -5,12 +5,13 @@
 #include "Observer.h"
 #include "PointerQueue.h"
 #include "RadioInterface.h"
+#include "concurrency/OSThread.h"
 #include "mesh.pb.h"
 
 /**
  * A mesh aware router that supports multiple interfaces.
  */
-class Router
+class Router : protected concurrency::OSThread
 {
   private:
     RadioInterface *iface;
@@ -44,7 +45,7 @@ class Router
      * do idle processing
      * Mostly looking in our incoming rxPacket queue and calling handleReceived.
      */
-    virtual void loop();
+    virtual uint32_t runOnce();
 
     /**
      * Works like send, but if we are sending to the local node, we directly put the message in the receive queue
