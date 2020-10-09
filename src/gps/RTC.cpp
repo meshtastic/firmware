@@ -71,7 +71,7 @@ uint32_t getTime()
     return ((millis() - timeStartMsec) / 1000) + zeroOffsetSecs;
 }
 
-uint32_t getValidTime()
+uint32_t getValidTime(RTCQuality minQuality)
 {
-    return (currentQuality >= RTCQualityFromNet) ? getTime() : 0;
+    return (currentQuality >= minQuality) ? getTime() : 0;
 }
