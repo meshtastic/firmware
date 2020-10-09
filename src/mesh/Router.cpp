@@ -89,7 +89,7 @@ MeshPacket *Router::allocForSending()
     p->to = NODENUM_BROADCAST;
     p->hop_limit = HOP_RELIABLE;
     p->id = generatePacketId();
-    p->rx_time = getValidTime(); // Just in case we process the packet locally - make sure it has a valid timestamp
+    p->rx_time = getValidTime(RTCQualityFromNet); // Just in case we process the packet locally - make sure it has a valid timestamp
 
     return p;
 }
@@ -198,9 +198,8 @@ NodeNum Router::getNodeNum()
  */
 void Router::handleReceived(MeshPacket *p)
 {
-    // FIXME, this class shouldn't EVER need to know about the GPS, move getValidTime() into a non gps dependent function
     // Also, we should set the time from the ISR and it should have msec level resolution
-    p->rx_time = getValidTime(); // store the arrival timestamp for the phone
+    p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
 
     // Take those raw bytes and convert them back into a well structured protobuf we can understand
     if (perhapsDecode(p)) {
