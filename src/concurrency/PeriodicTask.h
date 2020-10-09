@@ -14,8 +14,6 @@ namespace concurrency {
  */
 class PeriodicTask
 {
-    friend class PeriodicScheduler;
-
     uint32_t lastMsec = 0;
     uint32_t period = 1; // call soon after creation
 
@@ -47,7 +45,7 @@ class PeriodicTask
     /**
      * Syntatic sugar for suspending tasks
      */
-    void disable() { setPeriod(0); }
+    void disable();
 
   protected:
     virtual void doTask() = 0;
