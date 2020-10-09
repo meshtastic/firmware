@@ -19,7 +19,7 @@ void LockingModule::SPItransfer(uint8_t cmd, uint8_t reg, uint8_t *dataOut, uint
 
 RadioLibInterface::RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy,
                                      SPIClass &spi, PhysicalLayer *_iface)
-    : concurrency::PeriodicTask(0), module(cs, irq, rst, busy, spi, spiSettings), iface(_iface)
+    : module(cs, irq, rst, busy, spi, spiSettings), iface(_iface)
 {
     instance = this;
 }
@@ -41,7 +41,6 @@ void INTERRUPT_ATTR RadioLibInterface::isrLevel0Common(PendingISR cause)
 {
     instance->disableInterrupt();
 
-    instance->pending = cause;
     BaseType_t xHigherPriorityTaskWoken;
     instance->notifyFromISR(&xHigherPriorityTaskWoken, cause, eSetValueWithOverwrite);
 
@@ -191,10 +190,8 @@ transmitters that we are potentially stomping on.  Requires further thought.
 
 FIXME, the MIN_TX_WAIT_MSEC and MAX_TX_WAIT_MSEC values should be tuned via logic analyzer later.
 */
-void RadioLibInterface::loop()
+void RadioLibInterface::onNotify(uint32_t notification)
 {
-    pending = ISR_NONE;
-
     switch (notification) {
     case ISR_TX:
         handleTransmitInterrupt();
@@ -229,25 +226,15 @@ void RadioLibInterface::loop()
     }
 }
 
-void RadioLibInterface::doTask()
-{
-    disable(); // Don't call this callback again
-
-    // We use without overwrite, so that if there is already an interrupt pending to be handled, that gets handle properly (the
-    // ISR handler will restart our timer)
-
-    notify(TRANSMIT_DELAY_COMPLETED, eSetValueWithoutOverwrite);
-}
-
 void RadioLibInterface::startTransmitTimer(bool withDelay)
 {
     // If we have work to do and the timer wasn't already scheduled, schedule it now
-    if (getPeriod() == 0 && !txQueue.isEmpty()) {
+    if (!txQueue.isEmpty()) {
         uint32_t delay =
             !withDelay ? 1 : random(MIN_TX_WAIT_MSEC, MAX_TX_WAIT_MSEC); // See documentation for loop() wrt these values
                                                                          // DEBUG_MSG("xmit timer %d\n", delay);
-        // DEBUG_MSG("delaying %u\n", delay);
-        setPeriod(delay);
+        DEBUG_MSG("delaying %u\n", delay);
+        notifyLater(delay, TRANSMIT_DELAY_COMPLETED, false); // This will implicitly enable
     }
 }
 

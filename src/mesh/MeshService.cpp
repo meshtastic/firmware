@@ -56,7 +56,7 @@ static uint32_t sendOwnerCb()
     return getPref_send_owner_interval() * getPref_position_broadcast_secs() * 1000;
 }
 
-static concurrency::Periodic sendOwnerPeriod(sendOwnerCb);
+static concurrency::Periodic sendOwnerPeriod("SendOwner", sendOwnerCb);
 
 MeshService::MeshService() : toPhoneQueue(MAX_RX_TOPHONE)
 {
@@ -65,7 +65,6 @@ MeshService::MeshService() : toPhoneQueue(MAX_RX_TOPHONE)
 
 void MeshService::init()
 {
-    sendOwnerPeriod.setup();
     nodeDB.init();
 
     if (gps)
@@ -227,7 +226,7 @@ void MeshService::handleToRadio(MeshPacket &p)
         p.id = generatePacketId(); // If the phone didn't supply one, then pick one
 
     p.rx_time = getValidTime(RTCQualityFromNet); // Record the time the packet arrived from the phone
-                                // (so we update our nodedb for the local node)
+                                                 // (so we update our nodedb for the local node)
 
     // Send the packet into the mesh
 
@@ -285,7 +284,8 @@ void MeshService::sendOurPosition(NodeNum dest, bool wantReplies)
     p->decoded.which_payload = SubPacket_position_tag;
     p->decoded.position = node->position;
     p->decoded.want_response = wantReplies;
-    p->decoded.position.time = getValidTime(RTCQualityGPS); // This nodedb timestamp might be stale, so update it if our clock is valid.
+    p->decoded.position.time =
+        getValidTime(RTCQualityGPS); // This nodedb timestamp might be stale, so update it if our clock is valid.
     sendToMesh(p);
 }
 
