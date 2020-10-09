@@ -25,6 +25,6 @@ bool perhapsSetRTC(RTCQuality q, struct tm &t);
 uint32_t getTime();
 
 /// Return time since 1970 in secs.  If quality is RTCQualityNone return zero
-uint32_t getValidTime();
+uint32_t getValidTime(RTCQuality minQuality);
 
 void readFromRTC();
