@@ -125,7 +125,13 @@ static void powerEnter()
     screen.setOn(true);
     setBluetoothEnable(true);
     setCPUFast(true); // Set CPU to 240mhz when we're plugged in to wall power.
-    DEBUG_MSG("PowerFSM - powerEnter(true)\n");
+}
+
+static void powerExit()
+{
+    screen.setOn(true);
+    setBluetoothEnable(true);
+    setCPUFast(false); // Set CPU to 80mhz when we're plugged in to wall power.
 }
 
 static void onEnter()
@@ -159,6 +165,8 @@ State stateSERIAL(serialEnter, NULL, NULL, "SERIAL");
 State stateBOOT(bootEnter, NULL, NULL, "BOOT");
 State stateON(onEnter, NULL, NULL, "ON");
 State statePOWER(powerEnter, NULL, NULL, "POWER");
+State stateUNPLUG(powerExit, NULL, NULL, "UNPLUG");
+
 Fsm powerFSM(&stateBOOT);
 
 void PowerFSM_setup()
@@ -224,6 +232,7 @@ void PowerFSM_setup()
         powerFSM.add_transition(&stateNB, &statePOWER, EVENT_POWER_CONNECTED, NULL, "power connect");
         powerFSM.add_transition(&stateDARK, &statePOWER, EVENT_POWER_CONNECTED, NULL, "power connect");
         powerFSM.add_transition(&stateON, &statePOWER, EVENT_POWER_CONNECTED, NULL, "power connect");
+        powerFSM.add_transition(&statePOWER, &stateUNPLUG, EVENT_POWER_DISCONNECTED, NULL, "power disconnected");
     }
 
     powerFSM.add_transition(&statePOWER, &stateON, EVENT_POWER_DISCONNECTED, NULL, "power disconnected");
