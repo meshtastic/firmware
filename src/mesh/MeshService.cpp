@@ -246,10 +246,10 @@ void MeshService::sendToMesh(MeshPacket *p)
     nodeDB.updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
 
     // Strip out any time information before sending packets to other  nodes - to keep the wire size small (and because other
-    // nodes shouldn't trust it anyways) Note: for now, we allow a device with a local GPS to include the time, so that gpsless
+    // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS to include the time, so that gpsless
     // devices can get time.
     if (p->which_payload == MeshPacket_decoded_tag && p->decoded.which_payload == SubPacket_position_tag) {
-        if (!gps->isConnected) {
+        if (getRTCQuality() < RTCQualityGPS) {
             DEBUG_MSG("Stripping time %u from position send\n", p->decoded.position.time);
             p->decoded.position.time = 0;
         } else
