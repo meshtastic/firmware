@@ -41,20 +41,22 @@ Router::Router() : concurrency::OSThread("Router"), fromRadioQueue(MAX_RX_FROMRA
     /* DEBUG_MSG("Size of NodeInfo %d\n", sizeof(NodeInfo));
     DEBUG_MSG("Size of SubPacket %d\n", sizeof(SubPacket));
     DEBUG_MSG("Size of MeshPacket %d\n", sizeof(MeshPacket)); */
+
+    fromRadioQueue.setReader(this);
 }
 
 /**
  * do idle processing
  * Mostly looking in our incoming rxPacket queue and calling handleReceived.
  */
-uint32_t Router::runOnce()
+int32_t Router::runOnce()
 {
     MeshPacket *mp;
     while ((mp = fromRadioQueue.dequeuePtr(0)) != NULL) {
         perhapsHandleReceived(mp);
     }
 
-    return 0;
+    return INT32_MAX; // Wait a long time - until we get woken for the message queue
 }
 
 /// Generate a unique packet id

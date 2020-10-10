@@ -49,14 +49,14 @@ MeshService service;
 
 #include "Router.h"
 
-static uint32_t sendOwnerCb()
+static int32_t sendOwnerCb()
 {
     service.sendOurOwner();
 
     return getPref_send_owner_interval() * getPref_position_broadcast_secs() * 1000;
 }
 
-static concurrency::Periodic sendOwnerPeriod("SendOwner", sendOwnerCb);
+static concurrency::Periodic *sendOwnerPeriod;
 
 MeshService::MeshService() : toPhoneQueue(MAX_RX_TOPHONE)
 {
@@ -65,16 +65,18 @@ MeshService::MeshService() : toPhoneQueue(MAX_RX_TOPHONE)
 
 void MeshService::init()
 {
+    sendOwnerPeriod = new concurrency::Periodic("SendOwner", sendOwnerCb);
+
     nodeDB.init();
 
     if (gps)
         gpsObserver.observe(&gps->newStatus);
-    packetReceivedObserver.observe(&router.notifyPacketReceived);
+    packetReceivedObserver.observe(&router->notifyPacketReceived);
 }
 
 void MeshService::sendOurOwner(NodeNum dest, bool wantReplies)
 {
-    MeshPacket *p = router.allocForSending();
+    MeshPacket *p = router->allocForSending();
     p->to = dest;
     p->decoded.want_response = wantReplies;
     p->decoded.which_payload = SubPacket_user_tag;
@@ -121,7 +123,7 @@ const MeshPacket *MeshService::handleFromRadioUser(const MeshPacket *mp)
         sendOurOwner(mp->from);
 
         String lcd = String("Joined: ") + mp->decoded.user.long_name + "\n";
-        screen.print(lcd.c_str());
+        screen->print(lcd.c_str());
     }
 
     return mp;
@@ -257,7 +259,7 @@ void MeshService::sendToMesh(MeshPacket *p)
     }
 
     // Note: We might return !OK if our fifo was full, at that point the only option we have is to drop it
-    router.sendLocal(p);
+    router->sendLocal(p);
 }
 
 void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
@@ -279,7 +281,7 @@ void MeshService::sendOurPosition(NodeNum dest, bool wantReplies)
     assert(node->has_position);
 
     // Update our local node info with our position (even if we don't decide to update anyone else)
-    MeshPacket *p = router.allocForSending();
+    MeshPacket *p = router->allocForSending();
     p->to = dest;
     p->decoded.which_payload = SubPacket_position_tag;
     p->decoded.position = node->position;
@@ -293,7 +295,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
 {
 
     // Update our local node info with our position (even if we don't decide to update anyone else)
-    MeshPacket *p = router.allocForSending();
+    MeshPacket *p = router->allocForSending();
     p->decoded.which_payload = SubPacket_position_tag;
 
     Position &pos = p->decoded.position;

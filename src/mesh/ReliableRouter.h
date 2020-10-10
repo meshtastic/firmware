@@ -79,10 +79,13 @@ class ReliableRouter : public FloodingRouter
     virtual ErrorCode send(MeshPacket *p);
 
     /** Do our retransmission handling */
-    virtual uint32_t runOnce()
+    virtual int32_t runOnce()
     {
-        doRetransmissions();
-        return FloodingRouter::runOnce();
+        auto d = FloodingRouter::runOnce();
+
+        int32_t r = doRetransmissions();
+
+        return min(d, r);
     }
 
   protected:
@@ -123,6 +126,8 @@ class ReliableRouter : public FloodingRouter
 
     /**
      * Do any retransmissions that are scheduled (FIXME - for the time being called from loop)
+     *
+     * @return the number of msecs until our next retransmission or MAXINT if none scheduled
      */
-    void doRetransmissions();
+    int32_t doRetransmissions();
 };

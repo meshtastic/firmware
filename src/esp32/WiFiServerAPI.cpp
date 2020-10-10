@@ -40,7 +40,7 @@ void WiFiServerAPI::loop()
 
 #define MESHTASTIC_PORTNUM 4403
 
-WiFiServerPort::WiFiServerPort() : WiFiServer(MESHTASTIC_PORTNUM) {}
+WiFiServerPort::WiFiServerPort() : WiFiServer(MESHTASTIC_PORTNUM), concurrency::OSThread("ApiServer") {}
 
 void WiFiServerPort::init()
 {
@@ -48,7 +48,7 @@ void WiFiServerPort::init()
     begin();
 }
 
-void WiFiServerPort::loop()
+int32_t WiFiServerPort::runOnce()
 {
     auto client = available();
     if (client) {
@@ -59,7 +59,10 @@ void WiFiServerPort::loop()
         openAPI = new WiFiServerAPI(client);
     }
 
-    if (openAPI)
+    if (openAPI) {
         // Allow idle processing so the API can read from its incoming stream
         openAPI->loop();
+        return 0; // run fast while our API server is running
+    } else
+        return 100; // only check occasionally for incoming connections
 }

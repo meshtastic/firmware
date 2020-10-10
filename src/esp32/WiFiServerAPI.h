@@ -1,6 +1,7 @@
 #pragma once
 
 #include "StreamAPI.h"
+#include "concurrency/OSThread.h"
 #include <WiFi.h>
 
 /**
@@ -27,7 +28,7 @@ class WiFiServerAPI : public StreamAPI
 /**
  * Listens for incoming connections and does accepts and creates instances of WiFiServerAPI as needed
  */
-class WiFiServerPort : public WiFiServer
+class WiFiServerPort : public WiFiServer, private concurrency::OSThread
 {
     /** The currently open port
      *
@@ -41,5 +42,5 @@ class WiFiServerPort : public WiFiServer
 
     void init();
 
-    void loop();
+    int32_t runOnce();
 };

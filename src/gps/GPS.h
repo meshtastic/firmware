@@ -2,6 +2,7 @@
 
 #include "GPSStatus.h"
 #include "Observer.h"
+#include "concurrency/OSThread.h"
 
 // Generate a string representation of DOP
 const char *getDOPString(uint32_t dop);
@@ -11,7 +12,7 @@ const char *getDOPString(uint32_t dop);
  *
  * When new data is available it will notify observers.
  */
-class GPS
+class GPS : private concurrency::OSThread
 {
   private:
     uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0, lastWhileActiveMsec = 0;
@@ -43,6 +44,8 @@ class GPS
                           // scaling before use)
     uint32_t heading = 0; // Heading of motion, in degrees * 10^-5
 
+    GPS() : concurrency::OSThread("GPS") {}
+
     virtual ~GPS() {} // FIXME, we really should unregister our sleep observer
 
     /** We will notify this observable anytime GPS state has changed meaningfully */
@@ -52,8 +55,6 @@ class GPS
      * Returns true if we succeeded
      */
     virtual bool setup();
-
-    virtual void loop();
 
     /// Returns ture if we have acquired GPS lock.
     bool hasLock() const { return hasValidLocation; }
@@ -135,6 +136,8 @@ class GPS
      * Tell users we have new GPS readings
      */
     void publishUpdate();
+
+    virtual int32_t runOnce();
 };
 
 extern GPS *gps;

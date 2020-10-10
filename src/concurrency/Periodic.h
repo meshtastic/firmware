@@ -11,14 +11,14 @@ namespace concurrency
  */
 class Periodic : public OSThread
 {
-    uint32_t (*callback)();
+    int32_t (*callback)();
 
   public:
     // callback returns the period for the next callback invocation (or 0 if we should no longer be called)
-    Periodic(const char *name, uint32_t (*_callback)()) : OSThread(name), callback(_callback) {}
+    Periodic(const char *name, int32_t (*_callback)()) : OSThread(name), callback(_callback) {}
 
   protected:
-    uint32_t runOnce() { return callback(); }
+    int32_t runOnce() { return callback(); }
 };
 
 } // namespace concurrency

@@ -184,7 +184,7 @@ class Screen : public concurrency::OSThread
     /// Updates the UI.
     //
     // Called periodically from the main loop.
-    uint32_t runOnce() final;
+    int32_t runOnce() final;
 
   private:
     struct ScreenCmd {

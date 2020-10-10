@@ -143,7 +143,7 @@ void GPS::publishUpdate()
     }
 }
 
-void GPS::loop()
+int32_t GPS::runOnce()
 {
     if (whileIdle()) {
         // if we have received valid NMEA claim we are connected
@@ -201,6 +201,10 @@ void GPS::loop()
 
     // If state has changed do a publish
     publishUpdate();
+
+    // 9600bps is approx 1 byte per msec, so considering our buffer size we never need to wake more often than 200ms
+    // if not awake we can run super infrquently (once every 5 secs?) to see if we need to wake.
+    return isAwake ? 100 : 5000;
 }
 
 void GPS::forceWake(bool on)
