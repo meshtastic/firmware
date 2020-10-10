@@ -22,9 +22,14 @@ class GPS
 
     bool wakeAllowed = true; // false if gps must be forced to sleep regardless of what time it is
 
+    bool shouldPublish = false; // If we've changed GPS state, this will force a publish the next loop()
+
+    bool hasGPS = false; // Do we have a GPS we are talking to
+
+    uint8_t numSatellites = 0;
+
     CallbackObserver<GPS, void *> notifySleepObserver = CallbackObserver<GPS, void *>(this, &GPS::prepareSleep);
 
-  protected:
   public:
     /** If !NULL we will use this serial port to construct our GPS */
     static HardwareSerial *_serial_gps;
@@ -37,9 +42,6 @@ class GPS
     uint32_t dop = 0;     // Diminution of position; PDOP where possible (UBlox), HDOP otherwise (TinyGPS) in 10^2 units (needs
                           // scaling before use)
     uint32_t heading = 0; // Heading of motion, in degrees * 10^-5
-    uint32_t numSatellites = 0;
-
-    bool isConnected = false; // Do we have a GPS we are talking to
 
     virtual ~GPS() {} // FIXME, we really should unregister our sleep observer
 
@@ -55,6 +57,9 @@ class GPS
 
     /// Returns ture if we have acquired GPS lock.
     bool hasLock() const { return hasValidLocation; }
+
+    /// Return true if we are connected to a GPS
+    bool isConnected() const { return hasGPS; }
 
     /**
      * Restart our lock attempt - try to get and broadcast a GPS reading ASAP
@@ -98,6 +103,11 @@ class GPS
      * @return true if we've acquired a new location
      */
     virtual bool lookForLocation() = 0;
+
+    /// Record that we have a GPS
+    void setConnected();
+
+    void setNumSatellites(uint8_t n);
 
   private:
     /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
