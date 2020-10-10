@@ -45,7 +45,7 @@ class Router : protected concurrency::OSThread
      * do idle processing
      * Mostly looking in our incoming rxPacket queue and calling handleReceived.
      */
-    virtual uint32_t runOnce();
+    virtual int32_t runOnce();
 
     /**
      * Works like send, but if we are sending to the local node, we directly put the message in the receive queue
@@ -114,7 +114,7 @@ class Router : protected concurrency::OSThread
     void handleReceived(MeshPacket *p);
 };
 
-extern Router &router;
+extern Router *router;
 
 /// Generate a unique packet id
 // FIXME, move this someplace better

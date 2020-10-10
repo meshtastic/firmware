@@ -134,7 +134,7 @@ void Power::readPowerStatus()
     }
 }
 
-uint32_t Power::runOnce()
+int32_t Power::runOnce()
 {
     readPowerStatus();
 
@@ -173,7 +173,7 @@ uint32_t Power::runOnce()
 #endif
 
     // Only read once every 20 seconds once the power status for the app has been initialized
-    return (statusHandler && statusHandler->isInitialized()) ? (1000 * 20) : 0;
+    return (statusHandler && statusHandler->isInitialized()) ? (1000 * 20) : RUN_SAME;
 }
 
 /**

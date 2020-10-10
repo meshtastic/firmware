@@ -24,12 +24,6 @@ RadioLibInterface::RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq
     instance = this;
 }
 
-bool RadioLibInterface::init()
-{
-    setup(); // init our timer
-    return RadioInterface::init();
-}
-
 #ifndef NO_ESP32
 // ESP32 doesn't use that flag
 #define YIELD_FROM_ISR(x) portYIELD_FROM_ISR()
@@ -42,7 +36,7 @@ void INTERRUPT_ATTR RadioLibInterface::isrLevel0Common(PendingISR cause)
     instance->disableInterrupt();
 
     BaseType_t xHigherPriorityTaskWoken;
-    instance->notifyFromISR(&xHigherPriorityTaskWoken, cause, eSetValueWithOverwrite);
+    instance->notifyFromISR(&xHigherPriorityTaskWoken, cause, true);
 
     /* Force a context switch if xHigherPriorityTaskWoken is now set to pdTRUE.
     The macro used to do this is dependent on the port and may be called
@@ -206,6 +200,8 @@ void RadioLibInterface::onNotify(uint32_t notification)
         startTransmitTimer();
         break;
     case TRANSMIT_DELAY_COMPLETED:
+        // DEBUG_MSG("delay done\n");
+
         // If we are not currently in receive mode, then restart the timer and try again later (this can happen if the main thread
         // has placed the unit into standby)  FIXME, how will this work if the chipset is in sleep mode?
         if (!txQueue.isEmpty()) {
@@ -232,8 +228,7 @@ void RadioLibInterface::startTransmitTimer(bool withDelay)
     if (!txQueue.isEmpty()) {
         uint32_t delay =
             !withDelay ? 1 : random(MIN_TX_WAIT_MSEC, MAX_TX_WAIT_MSEC); // See documentation for loop() wrt these values
-                                                                         // DEBUG_MSG("xmit timer %d\n", delay);
-        DEBUG_MSG("delaying %u\n", delay);
+        // DEBUG_MSG("xmit timer %d\n", delay);
         notifyLater(delay, TRANSMIT_DELAY_COMPLETED, false); // This will implicitly enable
     }
 }

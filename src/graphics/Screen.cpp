@@ -561,7 +561,9 @@ void _screen_header()
 }
 #endif
 
-Screen::Screen(uint8_t address, int sda, int scl) : OSThread("Screen"), cmdQueue(32), dispdev(address, sda, scl), ui(&dispdev) {}
+Screen::Screen(uint8_t address, int sda, int scl) : OSThread("Screen"), cmdQueue(32), dispdev(address, sda, scl), ui(&dispdev) {
+    cmdQueue.setReader(this);
+}
 
 void Screen::handleSetOn(bool on)
 {
@@ -643,13 +645,23 @@ void Screen::setup()
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
 }
 
-uint32_t Screen::runOnce()
+int32_t Screen::runOnce()
 {
     // If we don't have a screen, don't ever spend any CPU for us.
     if (!useDisplay) {
         enabled = false;
-        return 0;
+        return RUN_SAME;
     }
+
+    // Show boot screen for first 3 seconds, then switch to normal operation.
+    static bool showingBootScreen = true;
+    if (showingBootScreen && (millis() > 3000)) {
+        stopBootScreen();
+        showingBootScreen = false;
+    }
+
+    // Update the screen last, after we've figured out what to show.
+    debug_info()->setChannelNameStatus(getChannelName());
 
     // Process incoming commands.
     for (;;) {

@@ -25,7 +25,7 @@ class Power : private concurrency::OSThread
 
     void readPowerStatus();
     virtual bool setup();
-    virtual uint32_t runOnce();
+    virtual int32_t runOnce();
     void setStatusHandler(meshtastic::PowerStatus *handler) { statusHandler = handler; }
 
   protected:

@@ -161,10 +161,6 @@ class RadioLibInterface : public RadioInterface
     virtual void startSend(MeshPacket *txp);
 
   protected:
-    /// Initialise the Driver transport hardware and software.
-    /// Make sure the Driver is properly configured before calling init().
-    /// \return true if initialisation succeeded.
-    virtual bool init();
 
     /** Do any hardware setup needed on entry into send configuration for the radio.  Subclasses can customize */
     virtual void configHardwareForSend() {}
