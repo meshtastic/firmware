@@ -25,6 +25,10 @@ extern ThreadController mainController, timerController;
  * stopping sleep instantly as soon as an event occurs.
  * use global functions delayTillWakeEvent(time), doWakeEvent(isInISR) - use freertos mutex or somesuch
  *
+ * make everything use osthread
+ *
+ * Debug what is keeping us from sleeping
+ *
  * have router thread block on its message queue in runOnce
  *
  * remove lock/lockguard
@@ -38,6 +42,8 @@ class OSThread : public Thread
 
     virtual ~OSThread();
 
+    static void setup();
+
   protected:
     /**
      * The method that will be called each time our thread gets a chance to run
@@ -45,6 +51,9 @@ class OSThread : public Thread
      * Returns desired period for next invocation (or 0 for no change)
      */
     virtual uint32_t runOnce() = 0;
+
+    // Do not override this
+    virtual void run();
 };
 
 } // namespace concurrency

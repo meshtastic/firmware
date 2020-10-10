@@ -10,6 +10,11 @@ namespace concurrency
  */
 class NotifiedWorkerThread : public OSThread
 {
+    /**
+     * The notification that was most recently used to wake the thread.  Read from runOnce()
+     */
+    uint32_t notification = 0;
+
   public:
     NotifiedWorkerThread(const char *name) : OSThread(name) {}
 
@@ -23,7 +28,7 @@ class NotifiedWorkerThread : public OSThread
      *
      * This must be inline or IRAM_ATTR on ESP32
      */
-    void notifyFromISR(BaseType_t *highPriWoken, uint32_t v, bool overwrite) { notify(v, overwrite); }
+    void notifyFromISR(BaseType_t *highPriWoken, uint32_t v, bool overwrite);
 
     /**
      * Schedule a notification to fire in delay msecs
@@ -34,12 +39,6 @@ class NotifiedWorkerThread : public OSThread
     virtual void onNotify(uint32_t notification) = 0;
 
     virtual uint32_t runOnce();
-
-  private:
-    /**
-     * The notification that was most recently used to wake the thread.  Read from runOnce()
-     */
-    uint32_t notification = 0;
 };
 
 } // namespace concurrency

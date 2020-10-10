@@ -13,6 +13,7 @@
 // #include "debug.h"
 #include "RTC.h"
 #include "SPILock.h"
+#include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
 #include "graphics/Screen.h"
 #include "main.h"
@@ -154,6 +155,8 @@ void setup()
     pinMode(RESET_OLED, OUTPUT);
     digitalWrite(RESET_OLED, 1);
 #endif
+
+    concurrency::OSThread::setup();
 
 #ifdef I2C_SDA
     Wire.begin(I2C_SDA, I2C_SCL);
@@ -374,6 +377,8 @@ void loop()
 #ifdef BUTTON_PIN_ALT
     userButtonAlt.tick();
 #endif
+
+    concurrency::mainController.run();
 
     loopWifi();
 
