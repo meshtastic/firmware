@@ -1,5 +1,6 @@
 #include "NMEAGPS.h"
 #include "configuration.h"
+#include "RTC.h"
 
 static int32_t toDegInt(RawDegrees d)
 {
@@ -44,7 +45,7 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         t.tm_mon = d.month() - 1;
         t.tm_year = d.year() - 1900;
         t.tm_isdst = false;
-        perhapsSetRTC(t);
+        perhapsSetRTC(RTCQualityGPS, t);
 
         return true;
     } else

@@ -10,6 +10,7 @@
 #include "NodeDB.h"
 #include "PacketHistory.h"
 #include "PowerFSM.h"
+#include "RTC.h"
 #include "Router.h"
 #include "configuration.h"
 #include "error.h"
@@ -414,10 +415,10 @@ void NodeDB::updateFrom(const MeshPacket &mp)
 
         switch (p.which_payload) {
         case SubPacket_position_tag: {
-            // we carefully preserve the old time, because we always trust our local timestamps more
-            uint32_t oldtime = info->position.time;
+            // we always trust our local timestamps more
             info->position = p.position;
-            info->position.time = oldtime;
+            if (mp.rx_time)
+                info->position.time = mp.rx_time;
             info->has_position = true;
             updateGUIforNode = info;
             notifyObservers(true); // Force an update whether or not our node counts have changed
