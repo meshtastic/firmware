@@ -160,9 +160,10 @@ PendingPacket *ReliableRouter::startRetransmission(MeshPacket *p)
 /**
  * Do any retransmissions that are scheduled (FIXME - for the time being called from loop)
  */
-void ReliableRouter::doRetransmissions()
+int32_t ReliableRouter::doRetransmissions()
 {
     uint32_t now = millis();
+    int32_t d = INT32_MAX;
 
     // FIXME, we should use a better datastructure rather than walking through this map.
     // for(auto el: pending) {
@@ -192,5 +193,13 @@ void ReliableRouter::doRetransmissions()
                 p.setNextTx();
             }
         }
+        else {
+            // Not yet time
+            int32_t t = p.nextTxMsec - now;
+
+            d = min(t, d);
+        }
     }
+
+    return d;
 }
