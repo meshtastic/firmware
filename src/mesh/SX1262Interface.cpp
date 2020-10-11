@@ -82,8 +82,8 @@ bool SX1262Interface::reconfigure()
     assert(err == ERR_NONE);
 
     // Hmm - seems to lower SNR when the signal levels are high.  Leaving off for now...
-    // err = lora.setRxGain(true);
-    // assert(err == ERR_NONE);
+    err = lora.setRxGain(true);
+    assert(err == ERR_NONE);
 
     err = lora.setSyncWord(syncWord);
     assert(err == ERR_NONE);
