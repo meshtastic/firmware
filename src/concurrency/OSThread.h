@@ -17,21 +17,12 @@ extern InterruptableDelay mainDelay;
 
 /**
  * @brief Base threading
+ * 
+ * This is a pseudo threading layer that is super easy to port, well suited to our slow network and very ram & power efficient.
  *
  * TODO FIXME @geeksville
  *
- * make bluetooth wake cpu immediately (because it puts a message in a queue?)
- * 
- * don't sleep at all if in POWER mode
- * 
- * wake for serial character received
- *
- * add concept of 'low priority' threads that are not used to block sleep?
- * 
- * make everything use osthread
- *
- * if we wake once because of a ble packet we might need to run loop multiple times before we can truely sleep
- *
+ * move more things into OSThreads
  * remove lock/lockguard
  * 
  * move typedQueue into concurrency

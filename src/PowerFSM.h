@@ -20,5 +20,6 @@
 #define EVENT_POWER_DISCONNECTED 14
 
 extern Fsm powerFSM;
+extern State statePOWER;
 
 void PowerFSM_setup();
