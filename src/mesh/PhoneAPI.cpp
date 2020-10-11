@@ -113,7 +113,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         // app not to send locations on our behalf.
         myNodeInfo.has_gps = (radioConfig.preferences.location_share == LocationSharing_LocDisabled)
                                  ? true
-                                 : (gps && gps->isConnected); // Update with latest GPS connect info
+                                 : (gps && gps->isConnected()); // Update with latest GPS connect info
         fromRadioScratch.which_variant = FromRadio_my_info_tag;
         fromRadioScratch.variant.my_info = myNodeInfo;
         state = STATE_SEND_RADIO;
