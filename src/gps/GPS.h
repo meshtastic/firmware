@@ -1,24 +1,10 @@
 #pragma once
 
-#include "../concurrency/PeriodicTask.h"
 #include "GPSStatus.h"
 #include "Observer.h"
-#include "sys/time.h"
-
-/// If we haven't yet set our RTC this boot, set it from a GPS derived time
-bool perhapsSetRTC(const struct timeval *tv);
-bool perhapsSetRTC(struct tm &t);
 
 // Generate a string representation of DOP
 const char *getDOPString(uint32_t dop);
-
-/// Return time since 1970 in secs.  Until we have a GPS lock we will be returning time based at zero
-uint32_t getTime();
-
-/// Return time since 1970 in secs.  If we don't have a GPS lock return zero
-uint32_t getValidTime();
-
-void readFromRTC();
 
 /**
  * A gps class that only reads from the GPS periodically (and FIXME - eventually keeps the gps powered down except when reading)

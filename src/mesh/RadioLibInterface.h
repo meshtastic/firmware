@@ -137,6 +137,11 @@ class RadioLibInterface : public RadioInterface, private concurrency::PeriodicTa
      */
     virtual void startReceive() = 0;
 
+    /** are we actively receiving a packet (only called during receiving state)
+     *  This method is only public to facilitate debugging.  Do not call.
+     */
+    virtual bool isActivelyReceiving() = 0;
+
   private:
     /** if we have something waiting to send, start a short random timer so we can come check for collision before actually doing
      * the transmit
@@ -175,9 +180,6 @@ class RadioLibInterface : public RadioInterface, private concurrency::PeriodicTa
 
     /** Could we send right now (i.e. either not actively receiving or transmitting)? */
     virtual bool canSendImmediately();
-
-    /** are we actively receiving a packet (only called during receiving state) */
-    virtual bool isActivelyReceiving() = 0;
 
     /**
      * Raw ISR handler that just calls our polymorphic method
