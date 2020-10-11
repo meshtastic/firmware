@@ -361,6 +361,7 @@ void setup()
 
     // Initialize Wifi
     initWifi();
+    
 
     if (!rIf)
         recordCriticalError(ErrNoRadio);

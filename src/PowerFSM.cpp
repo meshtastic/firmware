@@ -124,6 +124,7 @@ static void powerEnter()
 {
     screen->setOn(true);
     setBluetoothEnable(true);
+    setCPUFast(true); // Set CPU to 240mhz when we're plugged in to wall power.
 }
 
 static void onEnter()
@@ -140,6 +141,7 @@ static void onEnter()
             service.sendNetworkPing(displayedNodeNum, true); // Refresh the currently displayed node
         lastPingMs = now;
     }
+
 }
 
 static void screenPress()
@@ -157,6 +159,7 @@ State stateSERIAL(serialEnter, NULL, NULL, "SERIAL");
 State stateBOOT(bootEnter, NULL, NULL, "BOOT");
 State stateON(onEnter, NULL, NULL, "ON");
 State statePOWER(powerEnter, NULL, NULL, "POWER");
+
 Fsm powerFSM(&stateBOOT);
 
 void PowerFSM_setup()
