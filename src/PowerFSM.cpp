@@ -22,7 +22,7 @@ static uint32_t secsSlept;
 static void lsEnter()
 {
     DEBUG_MSG("lsEnter begin, ls_secs=%u\n", getPref_ls_secs());
-    screen.setOn(false);
+    screen->setOn(false);
     secsSlept = 0; // How long have we been sleeping this time
 
     DEBUG_MSG("lsEnter end\n");
@@ -102,7 +102,7 @@ static void lsExit()
 
 static void nbEnter()
 {
-    screen.setOn(false);
+    screen->setOn(false);
     setBluetoothEnable(false);
 
     // FIXME - check if we already have packets for phone and immediately trigger EVENT_PACKETS_FOR_PHONE
@@ -111,24 +111,24 @@ static void nbEnter()
 static void darkEnter()
 {
     setBluetoothEnable(true);
-    screen.setOn(false);
+    screen->setOn(false);
 }
 
 static void serialEnter()
 {
     setBluetoothEnable(false);
-    screen.setOn(true);
+    screen->setOn(true);
 }
 
 static void powerEnter()
 {
-    screen.setOn(true);
+    screen->setOn(true);
     setBluetoothEnable(true);
 }
 
 static void onEnter()
 {
-    screen.setOn(true);
+    screen->setOn(true);
     setBluetoothEnable(true);
 
     static uint32_t lastPingMs;
@@ -144,7 +144,7 @@ static void onEnter()
 
 static void screenPress()
 {
-    screen.onPress();
+    screen->onPress();
 }
 
 static void bootEnter() {}

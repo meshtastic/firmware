@@ -34,25 +34,29 @@ Allocator<MeshPacket> &packetPool = staticPool;
  *
  * Currently we only allow one interface, that may change in the future
  */
-Router::Router() : fromRadioQueue(MAX_RX_FROMRADIO)
+Router::Router() : concurrency::OSThread("Router"), fromRadioQueue(MAX_RX_FROMRADIO)
 {
     // This is called pre main(), don't touch anything here, the following code is not safe
 
     /* DEBUG_MSG("Size of NodeInfo %d\n", sizeof(NodeInfo));
     DEBUG_MSG("Size of SubPacket %d\n", sizeof(SubPacket));
     DEBUG_MSG("Size of MeshPacket %d\n", sizeof(MeshPacket)); */
+
+    fromRadioQueue.setReader(this);
 }
 
 /**
  * do idle processing
  * Mostly looking in our incoming rxPacket queue and calling handleReceived.
  */
-void Router::loop()
+int32_t Router::runOnce()
 {
     MeshPacket *mp;
     while ((mp = fromRadioQueue.dequeuePtr(0)) != NULL) {
         perhapsHandleReceived(mp);
     }
+
+    return INT32_MAX; // Wait a long time - until we get woken for the message queue
 }
 
 /// Generate a unique packet id

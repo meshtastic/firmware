@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../concurrency/PeriodicTask.h"
+#include "../concurrency/OSThread.h"
 #include "RadioInterface.h"
 
 #ifdef CubeCell_BoardPlus
@@ -59,12 +59,10 @@ class LockingModule : public Module
     virtual void SPItransfer(uint8_t cmd, uint8_t reg, uint8_t *dataOut, uint8_t *dataIn, uint8_t numBytes);
 };
 
-class RadioLibInterface : public RadioInterface, private concurrency::PeriodicTask
+class RadioLibInterface : public RadioInterface, protected concurrency::NotifiedWorkerThread
 {
     /// Used as our notification from the ISR
     enum PendingISR { ISR_NONE = 0, ISR_RX, ISR_TX, TRANSMIT_DELAY_COMPLETED };
-
-    volatile PendingISR pending = ISR_NONE;
 
     /**
      * Raw ISR handler that just calls our polymorphic method
@@ -155,7 +153,7 @@ class RadioLibInterface : public RadioInterface, private concurrency::PeriodicTa
 
     static void timerCallback(void *p1, uint32_t p2);
 
-    virtual void doTask();
+    virtual void onNotify(uint32_t notification);
 
     /** start an immediate transmit
      *  This method is virtual so subclasses can hook as needed, subclasses should not call directly
@@ -163,10 +161,6 @@ class RadioLibInterface : public RadioInterface, private concurrency::PeriodicTa
     virtual void startSend(MeshPacket *txp);
 
   protected:
-    /// Initialise the Driver transport hardware and software.
-    /// Make sure the Driver is properly configured before calling init().
-    /// \return true if initialisation succeeded.
-    virtual bool init();
 
     /** Do any hardware setup needed on entry into send configuration for the radio.  Subclasses can customize */
     virtual void configHardwareForSend() {}
@@ -194,8 +188,6 @@ class RadioLibInterface : public RadioInterface, private concurrency::PeriodicTa
      * Add SNR data to received messages
      */
     virtual void addReceiveMetadata(MeshPacket *mp) = 0;
-
-    virtual void loop(); // Idle processing
 
     virtual void setStandby() = 0;
 };

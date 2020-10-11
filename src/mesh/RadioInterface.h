@@ -36,7 +36,7 @@ typedef struct {
  *
  * This defines the SOLE API for talking to radios (because soon we will have alternate radio implementations)
  */
-class RadioInterface : protected concurrency::NotifiedWorkerThread
+class RadioInterface 
 {
     friend class MeshRadio; // for debugging we let that class touch pool
     PointerQueue<MeshPacket> *rxDest = NULL;
@@ -71,6 +71,8 @@ class RadioInterface : protected concurrency::NotifiedWorkerThread
      * rxDest is where we will send any rx packets, it becomes receivers responsibility to return packet to the pool
      */
     RadioInterface();
+
+    virtual ~RadioInterface() {}
 
     /**
      * Set where to deliver received packets.  This method should only be used by the Router class
@@ -116,8 +118,6 @@ class RadioInterface : protected concurrency::NotifiedWorkerThread
      * Used as the first step of
      */
     size_t beginSending(MeshPacket *p);
-
-    virtual void loop() {} // Idle processing
 
     /**
      * Some regulatory regions limit xmit power.
