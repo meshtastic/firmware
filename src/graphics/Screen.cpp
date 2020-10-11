@@ -1026,9 +1026,11 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
                         String(days) + "d " + (hours < 10 ? "0" : "") + String(hours) + ":" + (minutes < 10 ? "0" : "") +
                             String(minutes) + ":" + (seconds < 10 ? "0" : "") + String(seconds));
 
+#ifndef NO_ESP32
     // Show CPU Frequency.
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth("CPU " + String(getCpuFrequencyMhz()) + "MHz"), y + FONT_HEIGHT * 1,
                         "CPU " + String(getCpuFrequencyMhz()) + "MHz");
+#endif
 
     // Line 3
     drawGPSAltitude(display, x, y + FONT_HEIGHT * 2, gpsStatus);
