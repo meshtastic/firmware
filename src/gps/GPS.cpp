@@ -36,6 +36,23 @@ bool GPS::setup()
     return ok;
 }
 
+/// Record that we have a GPS
+void GPS::setConnected()
+{
+    if (!hasGPS) {
+        hasGPS = true;
+        shouldPublish = true;
+    }
+}
+
+void GPS::setNumSatellites(uint8_t n)
+{
+    if (n != numSatellites) {
+        numSatellites = n;
+        shouldPublish = true;
+    }
+}
+
 /**
  * Switch the GPS into a mode where we are actively looking for a lock, or alternatively switch GPS into a low power mode
  *
@@ -114,19 +131,23 @@ uint32_t GPS::getSleepTime() const
 
 void GPS::publishUpdate()
 {
-    DEBUG_MSG("publishing GPS lock=%d\n", hasLock());
+    if (shouldPublish) {
+        shouldPublish = false;
 
-    // Notify any status instances that are observing us
-    const meshtastic::GPSStatus status =
-        meshtastic::GPSStatus(hasLock(), isConnected, latitude, longitude, altitude, dop, heading, numSatellites);
-    newStatus.notifyObservers(&status);
+        DEBUG_MSG("publishing GPS lock=%d\n", hasLock());
+
+        // Notify any status instances that are observing us
+        const meshtastic::GPSStatus status =
+            meshtastic::GPSStatus(hasLock(), isConnected(), latitude, longitude, altitude, dop, heading, numSatellites);
+        newStatus.notifyObservers(&status);
+    }
 }
 
-void GPS::loop()
+int32_t GPS::runOnce()
 {
     if (whileIdle()) {
         // if we have received valid NMEA claim we are connected
-        isConnected = true;
+        setConnected();
     }
 
     // If we are overdue for an update, turn on the GPS and at least publish the current status
@@ -147,8 +168,17 @@ void GPS::loop()
         }
 
         // If we've already set time from the GPS, no need to ask the GPS
-        bool gotTime = (getRTCQuality() >= RTCQualityGPS) || lookForTime();
+        bool gotTime = (getRTCQuality() >= RTCQualityGPS);
+        if (!gotTime && lookForTime()) { // Note: we count on this && short-circuiting and not resetting the RTC time
+            gotTime = true;
+            shouldPublish = true;
+        }
+
         bool gotLoc = lookForLocation();
+        if (gotLoc && !hasValidLocation) { // declare that we have location ASAP
+            hasValidLocation = true;
+            shouldPublish = true;
+        }
 
         // We've been awake too long - force sleep
         auto wakeTime = getWakeTime();
@@ -158,8 +188,6 @@ void GPS::loop()
         // or if we got a time and we are in GpsOpTimeOnly mode
         // DEBUG_MSG("gotLoc %d, tooLong %d, gotTime %d\n", gotLoc, tooLong, gotTime);
         if ((gotLoc && gotTime) || tooLong || (gotTime && getGpsOp() == GpsOperation_GpsOpTimeOnly)) {
-            if (gotLoc)
-                hasValidLocation = true;
 
             if (tooLong) {
                 // we didn't get a location during this ack window, therefore declare loss of lock
@@ -167,9 +195,16 @@ void GPS::loop()
             }
 
             setAwake(false);
-            publishUpdate(); // publish our update for this just finished acquisition window
+            shouldPublish = true; // publish our update for this just finished acquisition window
         }
     }
+
+    // If state has changed do a publish
+    publishUpdate();
+
+    // 9600bps is approx 1 byte per msec, so considering our buffer size we never need to wake more often than 200ms
+    // if not awake we can run super infrquently (once every 5 secs?) to see if we need to wake.
+    return isAwake ? 100 : 5000;
 }
 
 void GPS::forceWake(bool on)

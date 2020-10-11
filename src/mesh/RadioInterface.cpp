@@ -91,7 +91,7 @@ void printPacket(const char *prefix, const MeshPacket *p)
     DEBUG_MSG(")\n");
 }
 
-RadioInterface::RadioInterface()
+RadioInterface::RadioInterface() 
 {
     assert(sizeof(PacketHeader) == 4 || sizeof(PacketHeader) == 16); // make sure the compiler did what we expected
 
@@ -120,10 +120,7 @@ bool RadioInterface::init()
     // we now expect interfaces to operate in promiscous mode
     // radioIf.setThisAddress(nodeDB.getNodeNum()); // Note: we must do this here, because the nodenum isn't inited at constructor
     // time.
-
-    // we want this thread to run at very high priority, because it is effectively running as a user space ISR
-    start("radio", RADIO_STACK_SIZE, configMAX_PRIORITIES - 1); // Start our worker thread
-
+    
     return true;
 }
 

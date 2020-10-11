@@ -151,7 +151,7 @@ void doDeepSleep(uint64_t msecToWake)
     notifySleep.notifyObservers(NULL); // also tell the regular sleep handlers
     notifyDeepSleep.notifyObservers(NULL);
 
-    screen.setOn(false); // datasheet says this will draw only 10ua
+    screen->setOn(false); // datasheet says this will draw only 10ua
 
     nodeDB.saveToDisk();
 

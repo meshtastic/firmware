@@ -561,7 +561,9 @@ void _screen_header()
 }
 #endif
 
-Screen::Screen(uint8_t address, int sda, int scl) : cmdQueue(32), dispdev(address, sda, scl), ui(&dispdev) {}
+Screen::Screen(uint8_t address, int sda, int scl) : OSThread("Screen"), cmdQueue(32), dispdev(address, sda, scl), ui(&dispdev) {
+    cmdQueue.setReader(this);
+}
 
 void Screen::handleSetOn(bool on)
 {
@@ -573,9 +575,12 @@ void Screen::handleSetOn(bool on)
             DEBUG_MSG("Turning on screen\n");
             dispdev.displayOn();
             dispdev.displayOn();
+            enabled = true;
+            setInterval(0); // Draw ASAP
         } else {
             DEBUG_MSG("Turning off screen\n");
             dispdev.displayOff();
+            enabled = false;
         }
         screenOn = on;
     }
@@ -583,8 +588,6 @@ void Screen::handleSetOn(bool on)
 
 void Screen::setup()
 {
-    concurrency::PeriodicTask::setup();
-
     // We don't set useDisplay until setup() is called, because some boards have a declaration of this object but the device
     // is never found when probing i2c and therefore we don't call setup and never want to do (invalid) accesses to this device.
     useDisplay = true;
@@ -642,13 +645,23 @@ void Screen::setup()
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
 }
 
-void Screen::doTask()
+int32_t Screen::runOnce()
 {
     // If we don't have a screen, don't ever spend any CPU for us.
     if (!useDisplay) {
-        setPeriod(0);
-        return;
+        enabled = false;
+        return RUN_SAME;
     }
+
+    // Show boot screen for first 3 seconds, then switch to normal operation.
+    static bool showingBootScreen = true;
+    if (showingBootScreen && (millis() > 3000)) {
+        stopBootScreen();
+        showingBootScreen = false;
+    }
+
+    // Update the screen last, after we've figured out what to show.
+    debug_info()->setChannelNameStatus(getChannelName());
 
     // Process incoming commands.
     for (;;) {
@@ -684,8 +697,8 @@ void Screen::doTask()
 
     if (!screenOn) { // If we didn't just wake and the screen is still off, then
                      // stop updating until it is on again
-        setPeriod(0);
-        return;
+        enabled = false;
+        return 0;
     }
 
     // Switch to a low framerate (to save CPU) when we are not in transition
@@ -711,7 +724,7 @@ void Screen::doTask()
     // soon, otherwise just 1 fps (to save CPU) We also ask to be called twice
     // as fast as we really need so that any rounding errors still result with
     // the correct framerate
-    setPeriod(1000 / targetFramerate);
+    return (1000 / targetFramerate);
 }
 
 void Screen::drawDebugInfoTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -801,7 +814,7 @@ void Screen::handleOnPress()
     // If screen was off, just wake it, otherwise advance to next frame
     // If we are in a transition, the press must have bounced, drop it.
     if (ui.getUiState()->frameState == FIXED) {
-        setPeriod(1); // redraw ASAP
+        setInterval(0); // redraw ASAP
         ui.nextFrame();
 
         DEBUG_MSG("Setting fast framerate\n");
@@ -1068,7 +1081,7 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
         if (nodeDB.updateTextMessage || nodeStatus->getLastNumTotal() != nodeStatus->getNumTotal()) {
             setFrames();    // Regen the list of screens
             prevFrame = -1; // Force a GUI update
-            setPeriod(1);   // Update the screen right away
+            setInterval(0); // Update the screen right away
         }
         nodeDB.updateGUI = false;
         nodeDB.updateTextMessage = false;

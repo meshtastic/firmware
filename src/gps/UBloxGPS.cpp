@@ -8,20 +8,23 @@ UBloxGPS::UBloxGPS() {}
 
 bool UBloxGPS::tryConnect()
 {
-    isConnected = false;
+    bool c = false;
 
     if (_serial_gps)
-        isConnected = ublox.begin(*_serial_gps);
+        c = ublox.begin(*_serial_gps);
 
-    if (!isConnected && i2cAddress) {
+    if (!c && i2cAddress) {
         extern bool neo6M; // Super skanky - if we are talking to the device i2c we assume it is a neo7 on a RAK815, which
                            // supports the newer API
         neo6M = true;
 
-        isConnected = ublox.begin(Wire, i2cAddress);
+        c = ublox.begin(Wire, i2cAddress);
     }
 
-    return isConnected;
+    if (c)
+        setConnected();
+
+    return c;
 }
 
 bool UBloxGPS::setupGPS()
@@ -45,7 +48,7 @@ bool UBloxGPS::setupGPS()
     for (int i = 0; (i < 3) && !tryConnect(); i++)
         delay(500);
 
-    if (isConnected) {
+    if (isConnected()) {
         DEBUG_MSG("Connected to UBLOX GPS successfully\n");
 
         if (!setUBXMode())
@@ -106,8 +109,8 @@ bool UBloxGPS::factoryReset()
     for (int i = 0; (i < 3) && !tryConnect(); i++)
         delay(500);
 
-    DEBUG_MSG("GPS Factory reset success=%d\n", isConnected);
-    if (isConnected)
+    DEBUG_MSG("GPS Factory reset success=%d\n", isConnected());
+    if (isConnected())
         ok = setUBXMode();
 
     return ok;
@@ -127,7 +130,7 @@ void UBloxGPS::whileActive()
     // Update fixtype
     if (ublox.moduleQueried.fixType) {
         fixType = ublox.getFixType(0);
-        DEBUG_MSG("GPS fix type %d, numSats %d\n", fixType, numSatellites);
+        // DEBUG_MSG("GPS fix type %d, numSats %d\n", fixType, numSatellites);
     }
 }
 
@@ -170,7 +173,7 @@ bool UBloxGPS::lookForLocation()
     bool foundLocation = false;
 
     if (ublox.moduleQueried.SIV)
-        numSatellites = ublox.getSIV(0);
+        setNumSatellites(ublox.getSIV(0));
 
     if (ublox.moduleQueried.pDOP)
         dop = ublox.getPDOP(0); // PDOP (an accuracy metric) is reported in 10^2 units so we have to scale down when we use it
@@ -189,8 +192,7 @@ bool UBloxGPS::lookForLocation()
 
             // bogus lat lon is reported as 0 or 0 (can be bogus just for one)
             // Also: apparently when the GPS is initially reporting lock it can output a bogus latitude > 90 deg!
-            foundLocation =
-                (latitude != 0) && (longitude != 0) && (latitude <= 900000000 && latitude >= -900000000) && (numSatellites > 0);
+            foundLocation = (latitude != 0) && (longitude != 0) && (latitude <= 900000000 && latitude >= -900000000);
         }
     }
 

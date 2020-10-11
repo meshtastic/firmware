@@ -84,7 +84,7 @@ bool NMEAGPS::lookForLocation()
             heading = reader.course.value() * 1e3; // Scale the heading (in degrees * 10^-2) to match the expected degrees * 10^-5
         }
         if (reader.satellites.isValid()) {
-            numSatellites = reader.satellites.value();
+            setNumSatellites(reader.satellites.value());
         }
 
         // expect gps pos lat=37.520825, lon=-122.309162, alt=158

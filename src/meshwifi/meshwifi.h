@@ -12,9 +12,6 @@
 void initWifi();
 void deinitWifi();
 
-/// Perform idle loop processing required by the wifi layer
-void loopWifi();
-
 bool isWifiAvailable();
 
 void handleDNSResponse();
