@@ -53,7 +53,6 @@ meshtastic::NodeStatus *nodeStatus = new meshtastic::NodeStatus();
 bool ssd1306_found;
 bool axp192_found;
 
-
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
 
 // -----------------------------------------------------------------------------
@@ -115,7 +114,28 @@ static int32_t ledBlinker()
     return powerStatus->getIsCharging() ? 1000 : (ledOn ? 1 : 1000);
 }
 
+/// Wrapper to convert our powerFSM stuff into a 'thread'
+class PowerFSMThread : public OSThread
+{
+  public:
+    // callback returns the period for the next callback invocation (or 0 if we should no longer be called)
+    PowerFSMThread() : OSThread("PowerFSM") {}
+
+  protected:
+    int32_t runOnce()
+    {
+        powerFSM.run_machine();
+
+        /// If we are in power state we force the CPU to wake every 10ms to check for serial characters (we don't yet wake
+        /// cpu for serial rx - FIXME)
+        canSleep = (powerFSM.getState() != &statePOWER);
+        
+        return 10;
+    }
+};
+
 static Periodic *ledPeriodic;
+static OSThread *powerFSMthread;
 
 // Prepare for button presses
 #ifdef BUTTON_PIN
@@ -349,6 +369,7 @@ void setup()
 
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
+    powerFSMthread = new PowerFSMThread();
 
     // setBluetoothEnable(false); we now don't start bluetooth until we enter the proper state
     setCPUFast(false); // 80MHz is fine for our slow peripherals
@@ -377,8 +398,6 @@ axpDebugOutput.setup();
 
 void loop()
 {
-    powerFSM.run_machine();
-
     // axpDebugOutput.loop();
 
 #ifdef DEBUG_PORT
@@ -416,9 +435,11 @@ void loop()
 
     long delayMsec = mainController.runOrDelay();
 
-    if(mainController.nextThread && delayMsec) 
-        DEBUG_MSG("Next %s in %ld\n", mainController.nextThread->ThreadName.c_str(), mainController.nextThread->tillRun(millis()));
-
+    /* if (mainController.nextThread && delayMsec)
+        DEBUG_MSG("Next %s in %ld\n", mainController.nextThread->ThreadName.c_str(),
+                  mainController.nextThread->tillRun(millis()));
+    */
+   
     // We want to sleep as long as possible here - because it saves power
     mainDelay.delay(delayMsec);
 }
