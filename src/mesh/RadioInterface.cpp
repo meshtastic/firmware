@@ -91,7 +91,7 @@ void printPacket(const char *prefix, const MeshPacket *p)
     DEBUG_MSG(")\n");
 }
 
-RadioInterface::RadioInterface() : NotifiedWorkerThread("RadioIf")
+RadioInterface::RadioInterface() 
 {
     assert(sizeof(PacketHeader) == 4 || sizeof(PacketHeader) == 16); // make sure the compiler did what we expected
 

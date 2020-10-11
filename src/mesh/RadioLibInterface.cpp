@@ -19,7 +19,7 @@ void LockingModule::SPItransfer(uint8_t cmd, uint8_t reg, uint8_t *dataOut, uint
 
 RadioLibInterface::RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy,
                                      SPIClass &spi, PhysicalLayer *_iface)
-    : module(cs, irq, rst, busy, spi, spiSettings), iface(_iface)
+    : NotifiedWorkerThread("RadioIf"), module(cs, irq, rst, busy, spi, spiSettings), iface(_iface)
 {
     instance = this;
 }
