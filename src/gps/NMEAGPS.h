@@ -1,6 +1,5 @@
 #pragma once
 
-#include "../concurrency/PeriodicTask.h"
 #include "GPS.h"
 #include "Observer.h"
 #include "TinyGPS++.h"

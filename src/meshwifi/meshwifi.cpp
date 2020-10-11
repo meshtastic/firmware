@@ -121,13 +121,7 @@ void initWifi()
         DEBUG_MSG("Not using WIFI\n");
 }
 
-/// Perform idle loop processing required by the wifi layer
-void loopWifi()
-{
-    // FIXME, once we have coroutines - just use a coroutine instead of this nasty loopWifi()
-    if (apiPort)
-        apiPort->loop();
-}
+
 
 static void initApiServer()
 {

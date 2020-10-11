@@ -62,6 +62,8 @@ class AnalogBatteryLevel : public HasBatteryLevel
     virtual bool isBatteryConnect() { return getBattVoltage() != -1; }
 } analogLevel;
 
+Power::Power() : OSThread("Power") {}
+
 bool Power::analogInit()
 {
 #ifdef BATTERY_PIN
@@ -86,10 +88,7 @@ bool Power::setup()
     if (!found) {
         found = analogInit();
     }
-    if (found) {
-        concurrency::PeriodicTask::setup(); // We don't start our periodic task unless we actually found the device
-        setPeriod(1);
-    }
+    enabled = found;
 
     return found;
 }
@@ -135,13 +134,46 @@ void Power::readPowerStatus()
     }
 }
 
-void Power::doTask()
+int32_t Power::runOnce()
 {
     readPowerStatus();
 
+#ifdef PMU_IRQ
+    if (pmu_irq) {
+        pmu_irq = false;
+        axp.readIRQ();
+
+        DEBUG_MSG("pmu irq!\n");
+
+        if (axp.isChargingIRQ()) {
+            DEBUG_MSG("Battery start charging\n");
+        }
+        if (axp.isChargingDoneIRQ()) {
+            DEBUG_MSG("Battery fully charged\n");
+        }
+        if (axp.isVbusRemoveIRQ()) {
+            DEBUG_MSG("USB unplugged\n");
+            powerFSM.trigger(EVENT_POWER_DISCONNECTED);
+        }
+        if (axp.isVbusPlugInIRQ()) {
+            DEBUG_MSG("USB plugged In\n");
+            powerFSM.trigger(EVENT_POWER_CONNECTED);
+        }
+        if (axp.isBattPlugInIRQ()) {
+            DEBUG_MSG("Battery inserted\n");
+        }
+        if (axp.isBattRemoveIRQ()) {
+            DEBUG_MSG("Battery removed\n");
+        }
+        if (axp.isPEKShortPressIRQ()) {
+            DEBUG_MSG("PEK short button press\n");
+        }
+        axp.clearIRQ();
+    }
+#endif
+
     // Only read once every 20 seconds once the power status for the app has been initialized
-    if (statusHandler && statusHandler->isInitialized())
-        setPeriod(1000 * 20);
+    return (statusHandler && statusHandler->isInitialized()) ? (1000 * 20) : RUN_SAME;
 }
 
 /**
@@ -208,8 +240,7 @@ bool Power::axp192Init()
             // no battery also it could cause inadvertent waking from light sleep just because the battery filled
             // we don't look for AXP202_BATT_REMOVED_IRQ because it occurs repeatedly while no battery installed
             // we don't look at AXP202_VBUS_REMOVED_IRQ because we don't have anything hooked to vbus
-            axp.enableIRQ(AXP202_BATT_CONNECT_IRQ | AXP202_VBUS_CONNECT_IRQ | AXP202_PEK_SHORTPRESS_IRQ,
-                          1);
+            axp.enableIRQ(AXP202_BATT_CONNECT_IRQ | AXP202_VBUS_CONNECT_IRQ | AXP202_PEK_SHORTPRESS_IRQ, 1);
 
             axp.clearIRQ();
 #endif
@@ -224,45 +255,5 @@ bool Power::axp192Init()
     return axp192_found;
 #else
     return false;
-#endif
-}
-
-void Power::loop()
-{
-#ifdef PMU_IRQ
-    if (pmu_irq) {
-        pmu_irq = false;
-        axp.readIRQ();
-
-        DEBUG_MSG("pmu irq!\n");
-
-        if (axp.isChargingIRQ()) {
-            DEBUG_MSG("Battery start charging\n");
-        }
-        if (axp.isChargingDoneIRQ()) {
-            DEBUG_MSG("Battery fully charged\n");
-        }
-        if (axp.isVbusRemoveIRQ()) {
-            DEBUG_MSG("USB unplugged\n");
-            powerFSM.trigger(EVENT_POWER_DISCONNECTED);
-        }
-        if (axp.isVbusPlugInIRQ()) {
-            DEBUG_MSG("USB plugged In\n");
-            powerFSM.trigger(EVENT_POWER_CONNECTED);
-        }
-        if (axp.isBattPlugInIRQ()) {
-            DEBUG_MSG("Battery inserted\n");
-        }
-        if (axp.isBattRemoveIRQ()) {
-            DEBUG_MSG("Battery removed\n");
-        }
-        if (axp.isPEKShortPressIRQ()) {
-            DEBUG_MSG("PEK short button press\n");
-        }
-
-        readPowerStatus();
-        axp.clearIRQ();
-    }
-
 #endif
 }
