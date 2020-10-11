@@ -73,6 +73,7 @@ template <class T> class TypedQueue
 template <class T> class TypedQueue
 {
     std::queue<T> q;
+    concurrency::OSThread *reader = NULL;
 
   public:
     TypedQueue(int maxElements) {}
@@ -83,6 +84,11 @@ template <class T> class TypedQueue
 
     bool enqueue(T x, TickType_t maxWait = portMAX_DELAY)
     {
+        if (reader) {
+            reader->setInterval(0);
+            concurrency::mainDelay.interrupt();
+        }
+
         q.push(x);
         return true;
     }
@@ -101,5 +107,7 @@ template <class T> class TypedQueue
     }
 
     // bool dequeueFromISR(T *p, BaseType_t *higherPriWoken) { return xQueueReceiveFromISR(h, p, higherPriWoken); }
+
+    void setReader(concurrency::OSThread *t) { reader = t; }
 };
 #endif

@@ -2,6 +2,15 @@
 
 #include "../freertosinc.h"
 
+
+#ifdef HAS_FREE_RTOS
+#include "concurrency/BinarySemaphoreFreeRTOS.h"
+#define BinarySemaphore BinarySemaphoreFreeRTOS
+#else
+#include "concurrency/BinarySemaphorePosix.h"
+#define BinarySemaphore BinarySemaphorePosix
+#endif
+
 namespace concurrency
 {
 
@@ -14,7 +23,7 @@ namespace concurrency
  */
 class InterruptableDelay
 {
-    SemaphoreHandle_t semaphore;
+    BinarySemaphore semaphore;
 
   public:
     InterruptableDelay();

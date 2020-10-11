@@ -59,7 +59,7 @@ class LockingModule : public Module
     virtual void SPItransfer(uint8_t cmd, uint8_t reg, uint8_t *dataOut, uint8_t *dataIn, uint8_t numBytes);
 };
 
-class RadioLibInterface : public RadioInterface
+class RadioLibInterface : public RadioInterface, protected concurrency::NotifiedWorkerThread
 {
     /// Used as our notification from the ISR
     enum PendingISR { ISR_NONE = 0, ISR_RX, ISR_TX, TRANSMIT_DELAY_COMPLETED };

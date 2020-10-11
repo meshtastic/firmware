@@ -6,12 +6,10 @@ namespace concurrency
 
 InterruptableDelay::InterruptableDelay()
 {
-    semaphore = xSemaphoreCreateBinary();
 }
 
 InterruptableDelay::~InterruptableDelay()
 {
-    vSemaphoreDelete(semaphore);
 }
 
 /**
@@ -23,7 +21,7 @@ bool InterruptableDelay::delay(uint32_t msec)
         // DEBUG_MSG("delay %u ", msec);
 
         // sem take will return false if we timed out (i.e. were not interrupted)
-        bool r = xSemaphoreTake(semaphore, pdMS_TO_TICKS(msec));
+        bool r = semaphore.take(msec);
 
         // DEBUG_MSG("interrupt=%d\n", r);
         return !r;
@@ -34,12 +32,12 @@ bool InterruptableDelay::delay(uint32_t msec)
 
 void InterruptableDelay::interrupt()
 {
-    xSemaphoreGive(semaphore);
+    semaphore.give();
 }
 
 IRAM_ATTR void InterruptableDelay::interruptFromISR(BaseType_t *pxHigherPriorityTaskWoken)
 {
-    xSemaphoreGiveFromISR(semaphore, pxHigherPriorityTaskWoken);
+    semaphore.giveFromISR(pxHigherPriorityTaskWoken);
 }
 
 } // namespace concurrency
