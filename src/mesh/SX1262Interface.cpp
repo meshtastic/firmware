@@ -179,16 +179,18 @@ void SX1262Interface::startReceive()
 /** Could we send right now (i.e. either not actively receving or transmitting)? */
 bool SX1262Interface::isActivelyReceiving()
 {
-    // The IRQ status will be cleared when we start our read operation.  Check if we've started a preamble, but haven't yet
+    // The IRQ status will be cleared when we start our read operation.  Check if we've started a header, but haven't yet
     // received and handled the interrupt for reading the packet/handling errors.
+    // FIXME: it would be better to check for preamble, but we currently have our ISR not set to fire for packets that
+    // never even get a valid header, so we don't want preamble to get set and stay set due to noise on the network.
 
     uint16_t irq = lora.getIrqStatus();
-    bool hasPreamble = (irq & SX126X_IRQ_PREAMBLE_DETECTED);
+    bool hasPreamble = (irq & SX126X_IRQ_HEADER_VALID);
 
     // this is not correct - often always true - need to add an extra conditional
     // size_t bytesPending = lora.getPacketLength();
 
-    // if (hasPreamble || bytesPending) DEBUG_MSG("rx hasPre %d, bytes %d\n", hasPreamble, bytesPending);
+    // if (hasPreamble) DEBUG_MSG("rx hasPreamble\n");
     return hasPreamble;
 }
 
