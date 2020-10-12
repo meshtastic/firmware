@@ -138,39 +138,38 @@ int32_t Power::runOnce()
 {
     readPowerStatus();
 
-#ifdef PMU_IRQ
-    if (pmu_irq) {
-        pmu_irq = false;
-        axp.readIRQ();
+    // WE no longer use the IRQ line to wake the CPU (due to false wakes from sleep), but we do poll
+    // the IRQ status by reading the registers over I2C
+    axp.readIRQ();
 
-        DEBUG_MSG("pmu irq!\n");
-
-        if (axp.isChargingIRQ()) {
-            DEBUG_MSG("Battery start charging\n");
-        }
-        if (axp.isChargingDoneIRQ()) {
-            DEBUG_MSG("Battery fully charged\n");
-        }
-        if (axp.isVbusRemoveIRQ()) {
-            DEBUG_MSG("USB unplugged\n");
-            powerFSM.trigger(EVENT_POWER_DISCONNECTED);
-        }
-        if (axp.isVbusPlugInIRQ()) {
-            DEBUG_MSG("USB plugged In\n");
-            powerFSM.trigger(EVENT_POWER_CONNECTED);
-        }
-        if (axp.isBattPlugInIRQ()) {
-            DEBUG_MSG("Battery inserted\n");
-        }
-        if (axp.isBattRemoveIRQ()) {
-            DEBUG_MSG("Battery removed\n");
-        }
-        if (axp.isPEKShortPressIRQ()) {
-            DEBUG_MSG("PEK short button press\n");
-        }
-        axp.clearIRQ();
+    if (axp.isVbusRemoveIRQ()) {
+        DEBUG_MSG("USB unplugged\n");
+        powerFSM.trigger(EVENT_POWER_DISCONNECTED);
     }
-#endif
+    if (axp.isVbusPlugInIRQ()) {
+        DEBUG_MSG("USB plugged In\n");
+        powerFSM.trigger(EVENT_POWER_CONNECTED);
+    }
+    /*
+    Other things we could check if we cared...
+
+    if (axp.isChargingIRQ()) {
+        DEBUG_MSG("Battery start charging\n");
+    }
+    if (axp.isChargingDoneIRQ()) {
+        DEBUG_MSG("Battery fully charged\n");
+    }
+    if (axp.isBattPlugInIRQ()) {
+        DEBUG_MSG("Battery inserted\n");
+    }
+    if (axp.isBattRemoveIRQ()) {
+        DEBUG_MSG("Battery removed\n");
+    }
+    if (axp.isPEKShortPressIRQ()) {
+        DEBUG_MSG("PEK short button press\n");
+    }
+    */
+    axp.clearIRQ();
 
     // Only read once every 20 seconds once the power status for the app has been initialized
     return (statusHandler && statusHandler->isInitialized()) ? (1000 * 20) : RUN_SAME;
