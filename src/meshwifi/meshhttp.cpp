@@ -49,6 +49,7 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res);
 void handleStyleCSS(HTTPRequest *req, HTTPResponse *res);
 void handleJSONChatHistoryDummy(HTTPRequest *req, HTTPResponse *res);
 void handleHotspot(HTTPRequest *req, HTTPResponse *res);
+void handleFavicon(HTTPRequest *req, HTTPResponse *res);
 void handleRoot(HTTPRequest *req, HTTPResponse *res);
 void handle404(HTTPRequest *req, HTTPResponse *res);
 
@@ -76,11 +77,10 @@ void handleWebResponse()
 
     // Slow down the CPU if we have not received a request within the last
     //   2 minutes.
-    if (millis () - timeSpeedUp >= (2 * 60 * 1000)) {
+    if (millis() - timeSpeedUp >= (2 * 60 * 1000)) {
         setCPUFast(false); // Set CPU to 80mhz
         timeSpeedUp = millis();
     }
-
 }
 
 void taskCreateCert(void *parameter)
@@ -213,6 +213,7 @@ void initWebServer()
     ResourceNode *nodeCSS = new ResourceNode("/css/style.css", "GET", &handleStyleCSS);
     ResourceNode *nodeJS = new ResourceNode("/scripts/script.js", "GET", &handleJSONChatHistoryDummy);
     ResourceNode *nodeHotspot = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
+    ResourceNode *nodeFavicon = new ResourceNode("/favicon.ico", "GET", &handleFavicon);
     ResourceNode *nodeRoot = new ResourceNode("/", "GET", &handleRoot);
     ResourceNode *node404 = new ResourceNode("", "GET", &handle404);
 
@@ -222,6 +223,7 @@ void initWebServer()
     secureServer->registerNode(nodeCSS);
     secureServer->registerNode(nodeJS);
     secureServer->registerNode(nodeHotspot);
+    secureServer->registerNode(nodeFavicon);
     secureServer->registerNode(nodeRoot);
     secureServer->setDefaultNode(node404);
 
@@ -233,6 +235,7 @@ void initWebServer()
     insecureServer->registerNode(nodeCSS);
     insecureServer->registerNode(nodeJS);
     insecureServer->registerNode(nodeHotspot);
+    insecureServer->registerNode(nodeFavicon);
     insecureServer->registerNode(nodeRoot);
     insecureServer->setDefaultNode(node404);
 
@@ -252,9 +255,7 @@ void middlewareLogging(HTTPRequest *req, HTTPResponse *res, std::function<void()
 
     setCPUFast(true); // Set CPU to 240mhz when we're plugged in to wall power.
     timeSpeedUp = millis();
-
 }
-
 
 void handle404(HTTPRequest *req, HTTPResponse *res)
 {
@@ -1004,4 +1005,12 @@ void handleJSONChatHistoryDummy(HTTPRequest *req, HTTPResponse *res)
     // The response implements the Print interface, so you can use it just like
     // you would write to Serial etc.
     res->print(out);
+}
+
+void handleFavicon(HTTPRequest *req, HTTPResponse *res)
+{
+    // Set Content-Type
+    res->setHeader("Content-Type", "image/vnd.microsoft.icon");
+    // Write data from header file
+    res->write(FAVICON_DATA, FAVICON_LENGTH);
 }
