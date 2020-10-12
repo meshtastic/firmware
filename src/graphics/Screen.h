@@ -202,7 +202,7 @@ class Screen : public concurrency::OSThread
             return true; // claim success if our display is not in use
         else {
             bool success = cmdQueue.enqueue(cmd, 0);
-            setInterval(0); // handle ASAP
+            enabled = true; // handle ASAP (we are the registered reader for cmdQueue, but might have been disabled)
             return success;
         }
     }
