@@ -128,30 +128,12 @@ class PowerFSMThread : public OSThread
 
         /// If we are in power state we force the CPU to wake every 10ms to check for serial characters (we don't yet wake
         /// cpu for serial rx - FIXME)
-        canSleep = (powerFSM.getState() != &statePOWER);
-        
+        auto state = powerFSM.getState();
+        canSleep = (state != &statePOWER) && (state != &stateSERIAL);
+
         return 10;
     }
 };
-
-static Periodic *ledPeriodic;
-static OSThread *powerFSMthread;
-
-// Prepare for button presses
-#ifdef BUTTON_PIN
-OneButton userButton;
-#endif
-#ifdef BUTTON_PIN_ALT
-OneButton userButtonAlt;
-#endif
-void userButtonPressed()
-{
-    powerFSM.trigger(EVENT_PRESS);
-}
-void userButtonPressedLong()
-{
-    screen->adjustBrightness();
-}
 
 /**
  * Watch a GPIO and if we get an IRQ, wake the main thread.
@@ -167,6 +149,65 @@ void wakeOnIrq(int irq, int mode)
         },
         FALLING);
 }
+
+class ButtonThread : public OSThread
+{
+// Prepare for button presses
+#ifdef BUTTON_PIN
+    OneButton userButton;
+#endif
+#ifdef BUTTON_PIN_ALT
+    OneButton userButtonAlt;
+#endif
+
+  public:
+    // callback returns the period for the next callback invocation (or 0 if we should no longer be called)
+    ButtonThread() : OSThread("Button")
+    {
+#ifdef BUTTON_PIN
+        userButton = OneButton(BUTTON_PIN, true, true);
+        userButton.attachClick(userButtonPressed);
+        userButton.attachDuringLongPress(userButtonPressedLong);
+        wakeOnIrq(BUTTON_PIN, FALLING);
+#endif
+#ifdef BUTTON_PIN_ALT
+        userButtonAlt = OneButton(BUTTON_PIN_ALT, true, true);
+        userButtonAlt.attachClick(userButtonPressed);
+        userButton.attachDuringLongPress(userButtonPressedLong);
+        wakeOnIrq(BUTTON_PIN_ALT, FALLING);
+#endif
+    }
+
+  protected:
+    /// If the button is pressed we suppress CPU sleep until release
+    int32_t runOnce()
+    {
+        canSleep = true; // Assume we should not keep the board awake
+
+#ifdef BUTTON_PIN
+        userButton.tick();
+        canSleep &= userButton.isIdle();
+#endif
+#ifdef BUTTON_PIN_ALT
+        userButtonAlt.tick();
+        canSleep &= userButton.isIdle();
+#endif
+        // if(!canSleep) DEBUG_MSG("Supressing sleep!\n");
+
+        return 5;
+    }
+
+  private:
+    static void userButtonPressed()
+    {
+        // DEBUG_MSG("press!\n");
+        powerFSM.trigger(EVENT_PRESS);
+    }
+    static void userButtonPressedLong() { screen->adjustBrightness(); }
+};
+
+static Periodic *ledPeriodic;
+static OSThread *powerFSMthread, *buttonThread;
 
 RadioInterface *rIf = NULL;
 
@@ -210,18 +251,7 @@ void setup()
 #endif
 
     // Buttons & LED
-#ifdef BUTTON_PIN
-    userButton = OneButton(BUTTON_PIN, true, true);
-    userButton.attachClick(userButtonPressed);
-    userButton.attachDuringLongPress(userButtonPressedLong);
-    wakeOnIrq(BUTTON_PIN, FALLING);
-#endif
-#ifdef BUTTON_PIN_ALT
-    userButtonAlt = OneButton(BUTTON_PIN_ALT, true, true);
-    userButtonAlt.attachClick(userButtonPressed);
-    userButton.attachDuringLongPress(userButtonPressedLong);
-    wakeOnIrq(BUTTON_PIN_ALT, FALLING);
-#endif
+    buttonThread = new ButtonThread();
 #ifdef LED_PIN
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, 1 ^ LED_INVERTED); // turn on for now
@@ -411,13 +441,6 @@ void loop()
     esp32Loop();
 #endif
 
-#ifdef BUTTON_PIN
-    userButton.tick();
-#endif
-#ifdef BUTTON_PIN_ALT
-    userButtonAlt.tick();
-#endif
-
     // For debugging
     // if (rIf) ((RadioLibInterface *)rIf)->isActivelyReceiving();
 
@@ -438,9 +461,9 @@ void loop()
 
     /* if (mainController.nextThread && delayMsec)
         DEBUG_MSG("Next %s in %ld\n", mainController.nextThread->ThreadName.c_str(),
-                  mainController.nextThread->tillRun(millis()));
-    */
-   
+                  mainController.nextThread->tillRun(millis())); */
+
     // We want to sleep as long as possible here - because it saves power
     mainDelay.delay(delayMsec);
+    // if (didWake) DEBUG_MSG("wake!\n");
 }

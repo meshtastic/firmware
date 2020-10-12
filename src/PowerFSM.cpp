@@ -118,12 +118,21 @@ static void serialEnter()
 {
     setBluetoothEnable(false);
     screen->setOn(true);
+    screen->print("Using API...\n");
 }
 
 static void powerEnter()
 {
     screen->setOn(true);
     setBluetoothEnable(true);
+    screen->print("Powered...\n");
+}
+
+static void powerExit()
+{
+    screen->setOn(true);
+    setBluetoothEnable(true);
+    screen->print("Unpowered...\n");
 }
 
 static void onEnter()
@@ -157,8 +166,7 @@ State stateDARK(darkEnter, NULL, NULL, "DARK");
 State stateSERIAL(serialEnter, NULL, NULL, "SERIAL");
 State stateBOOT(bootEnter, NULL, NULL, "BOOT");
 State stateON(onEnter, NULL, NULL, "ON");
-State statePOWER(powerEnter, NULL, NULL, "POWER");
-
+State statePOWER(powerEnter, NULL, powerExit, "POWER");
 Fsm powerFSM(&stateBOOT);
 
 void PowerFSM_setup()
