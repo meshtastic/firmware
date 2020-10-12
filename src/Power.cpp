@@ -138,6 +138,7 @@ int32_t Power::runOnce()
 {
     readPowerStatus();
 
+#ifdef TBEAM_V10
     // WE no longer use the IRQ line to wake the CPU (due to false wakes from sleep), but we do poll
     // the IRQ status by reading the registers over I2C
     axp.readIRQ();
@@ -170,6 +171,7 @@ int32_t Power::runOnce()
     }
     */
     axp.clearIRQ();
+#endif
 
     // Only read once every 20 seconds once the power status for the app has been initialized
     return (statusHandler && statusHandler->isInitialized()) ? (1000 * 20) : RUN_SAME;
