@@ -4,30 +4,22 @@
 namespace concurrency
 {
 
-InterruptableDelay::InterruptableDelay()
-{
-}
+InterruptableDelay::InterruptableDelay() {}
 
-InterruptableDelay::~InterruptableDelay()
-{
-}
+InterruptableDelay::~InterruptableDelay() {}
 
 /**
  * Returns false if we were interrupted
  */
 bool InterruptableDelay::delay(uint32_t msec)
 {
-    if (msec) {
-        // DEBUG_MSG("delay %u ", msec);
+    // DEBUG_MSG("delay %u ", msec);
 
-        // sem take will return false if we timed out (i.e. were not interrupted)
-        bool r = semaphore.take(msec);
+    // sem take will return false if we timed out (i.e. were not interrupted)
+    bool r = semaphore.take(msec);
 
-        // DEBUG_MSG("interrupt=%d\n", r);
-        return !r;
-    } else {
-        return true;
-    }
+    // DEBUG_MSG("interrupt=%d\n", r);
+    return !r;
 }
 
 void InterruptableDelay::interrupt()
