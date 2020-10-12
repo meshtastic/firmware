@@ -124,7 +124,6 @@ static void powerEnter()
 {
     screen->setOn(true);
     setBluetoothEnable(true);
-    setCPUFast(true); // Set CPU to 240mhz when we're plugged in to wall power.
 }
 
 static void onEnter()
