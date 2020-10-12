@@ -255,6 +255,7 @@ void middlewareLogging(HTTPRequest *req, HTTPResponse *res, std::function<void()
 
 }
 
+
 void handle404(HTTPRequest *req, HTTPResponse *res)
 {
 
