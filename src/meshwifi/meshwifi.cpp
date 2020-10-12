@@ -17,7 +17,7 @@ static WiFiServerPort *apiPort;
 
 uint8_t wifiDisconnectReason = 0;
 
-// Stores the last 4 of our hardware ID, to make finding the device for pairing easier
+// Stores our hostname
 static char ourHost[16];
 
 bool isWifiAvailable()
