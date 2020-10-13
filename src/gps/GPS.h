@@ -75,10 +75,10 @@ class GPS : private concurrency::OSThread
     virtual bool setupGPS() = 0;
 
     /// If possible force the GPS into sleep/low power mode
-    virtual void sleep() {}
+    virtual void sleep();
 
     /// wake the GPS into normal operation mode
-    virtual void wake() {}
+    virtual void wake();
 
     /** Subclasses should look for serial rx characters here and feed it to their GPS parser
      *

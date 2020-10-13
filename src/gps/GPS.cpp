@@ -36,6 +36,22 @@ bool GPS::setup()
     return ok;
 }
 
+void GPS::wake()
+{
+#ifdef PIN_GPS_WAKE
+    digitalWrite(PIN_GPS_WAKE, 1);
+    pinMode(PIN_GPS_WAKE, OUTPUT);
+#endif
+}
+
+
+void GPS::sleep() {
+#ifdef PIN_GPS_WAKE
+    digitalWrite(PIN_GPS_WAKE, 0);
+    pinMode(PIN_GPS_WAKE, OUTPUT);
+#endif
+}
+
 /// Record that we have a GPS
 void GPS::setConnected()
 {
