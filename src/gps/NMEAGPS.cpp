@@ -102,7 +102,7 @@ bool NMEAGPS::whileIdle()
     // First consume any chars that have piled up at the receiver
     while (_serial_gps->available() > 0) {
         int c = _serial_gps->read();
-        // DEBUG_MSG("%c", c);
+        DEBUG_MSG("%c", c);
         isValid |= reader.encode(c);
     }
 
