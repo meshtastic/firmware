@@ -301,39 +301,39 @@ void setup()
 
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 
-// If we know we have a L80 GPS, don't try UBLOX
-#ifndef L80_RESET
+// If we don't have bidirectional comms, we can't even try talking to UBLOX
+    UBloxGPS *ublox = NULL;
+#ifdef GPS_TX_PIN
     // Init GPS - first try ublox
-    auto ublox = new UBloxGPS();
+    ublox = new UBloxGPS();
     gps = ublox;
     if (!gps->setup()) {
         DEBUG_MSG("ERROR: No UBLOX GPS found\n");
 
         delete ublox;
         gps = ublox = NULL;
+    }
+#endif
 
-        if (GPS::_serial_gps) {
-            // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
-            // assume NMEA at 9600 baud.
-            // dumb NMEA access only work for serial GPSes)
-            DEBUG_MSG("Hoping that NMEA might work\n");
+    if (!gps && GPS::_serial_gps) {
+        // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
+        // assume NMEA at 9600 baud.
+        // dumb NMEA access only work for serial GPSes)
+        DEBUG_MSG("Hoping that NMEA might work\n");
 
 #ifdef HAS_AIR530_GPS
-            gps = new Air530GPS();
+        gps = new Air530GPS();
 #else
-            gps = new NMEAGPS();
+        gps = new NMEAGPS();
 #endif
-            gps->setup();
-        }
+        gps->setup();
     }
-#else
-    gps = new NMEAGPS();
-    gps->setup();
-#endif
+
     if (gps)
         gpsStatus->observe(&gps->newStatus);
     else
         DEBUG_MSG("Warning: No GPS found - running without GPS\n");
+        
     nodeStatus->observe(&nodeDB.newStatus);
 
     service.init();

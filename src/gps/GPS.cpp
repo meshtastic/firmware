@@ -36,10 +36,15 @@ bool GPS::setup()
     return ok;
 }
 
+// Allow defining the polarity of the WAKE output.  default is active high
+#ifndef GPS_WAKE_ACTIVE
+#define GPS_WAKE_ACTIVE 1
+#endif
+
 void GPS::wake()
 {
 #ifdef PIN_GPS_WAKE
-    digitalWrite(PIN_GPS_WAKE, 1);
+    digitalWrite(PIN_GPS_WAKE, GPS_WAKE_ACTIVE);
     pinMode(PIN_GPS_WAKE, OUTPUT);
 #endif
 }
@@ -47,7 +52,7 @@ void GPS::wake()
 
 void GPS::sleep() {
 #ifdef PIN_GPS_WAKE
-    digitalWrite(PIN_GPS_WAKE, 0);
+    digitalWrite(PIN_GPS_WAKE, GPS_WAKE_ACTIVE ? 0 : 1);
     pinMode(PIN_GPS_WAKE, OUTPUT);
 #endif
 }
