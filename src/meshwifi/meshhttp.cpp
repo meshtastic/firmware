@@ -78,7 +78,7 @@ void handleWebResponse()
     // Slow down the CPU if we have not received a request within the last
     //   2 minutes.
     if (millis() - timeSpeedUp >= (2 * 60 * 1000)) {
-        setCPUFast(false); // Set CPU to 80mhz
+        setCpuFrequencyMhz(80);
         timeSpeedUp = millis();
     }
 }
@@ -105,7 +105,7 @@ void taskCreateCert(void *parameter)
         DEBUG_MSG("Existing SSL Certificate found!\n");
     } else {
         DEBUG_MSG("Creating the certificate. This may take a while. Please wait...\n");
-
+screen->print("Powered...\n");
         cert = new SSLCert();
         // disableCore1WDT();
         int createCertResult = createSelfSignedCert(*cert, KEYSIZE_2048, "CN=meshtastic.local,O=Meshtastic,C=US",
@@ -208,7 +208,7 @@ void initWebServer()
     // For every resource available on the server, we need to create a ResourceNode
     // The ResourceNode links URL and HTTP method to a handler function
 
-    ResourceNode *nodeAPIv1ToRadio = new ResourceNode("/api/v1/toradio", "GET", &handleAPIv1ToRadio);
+    ResourceNode *nodeAPIv1ToRadio = new ResourceNode("/api/v1/toradio", "PUT", &handleAPIv1ToRadio);
     ResourceNode *nodeAPIv1FromRadio = new ResourceNode("/api/v1/fromradio", "GET", &handleAPIv1FromRadio);
     ResourceNode *nodeCSS = new ResourceNode("/css/style.css", "GET", &handleStyleCSS);
     ResourceNode *nodeJS = new ResourceNode("/scripts/script.js", "GET", &handleJSONChatHistoryDummy);
@@ -253,7 +253,8 @@ void middlewareLogging(HTTPRequest *req, HTTPResponse *res, std::function<void()
     // We want to print the response status, so we need to call next() first.
     next();
 
-    setCPUFast(true); // Set CPU to 240mhz when we're plugged in to wall power.
+    //setCPUFast(true); // Set CPU to 240mhz when we're plugged in to wall power.
+    setCpuFrequencyMhz(240);
     timeSpeedUp = millis();
 }
 
@@ -303,16 +304,21 @@ void handleHotspot(HTTPRequest *req, HTTPResponse *res)
 
 void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
 {
+
     DEBUG_MSG("+++++++++++++++ webAPI handleAPIv1FromRadio\n");
 
     /*
-        http://10.10.30.198/api/v1/fromradio
+        For documentation, see:
+            https://github.com/meshtastic/Meshtastic-device/wiki/HTTP-REST-API-discussion
+            https://github.com/meshtastic/Meshtastic-device/blob/master/docs/software/device-api.md
 
+        Example:
+            http://10.10.30.198/api/v1/fromradio
     */
 
     // Status code is 200 OK by default.
-    // We want to deliver a simple HTML page, so we send a corresponding content type:
     res->setHeader("Content-Type", "application/x-protobuf");
+    //res->setHeader("Content-Type", "application/json");
 
     uint8_t txBuf[MAX_STREAM_BUF_SIZE];
 
@@ -324,15 +330,36 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
 
 void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
 {
-    DEBUG_MSG("webAPI handleAPIv1ToRadio\n");
+    DEBUG_MSG("+++++++++++++++ webAPI handleAPIv1ToRadio\n");
+
+    /*
+        For documentation, see:
+            https://github.com/meshtastic/Meshtastic-device/wiki/HTTP-REST-API-discussion
+            https://github.com/meshtastic/Meshtastic-device/blob/master/docs/software/device-api.md
+
+        Example:
+            http://10.10.30.198/api/v1/toradio
+    */
 
     // Status code is 200 OK by default.
-    // We want to deliver a simple HTML page, so we send a corresponding content type:
     res->setHeader("Content-Type", "application/x-protobuf");
+    //res->setHeader("Content-Type", "application/json");
 
-    // The response implements the Print interface, so you can use it just like
-    // you would write to Serial etc.
-    res->print("<!DOCTYPE html>");
+    // webAPI.handleToRadio(p);
+
+    // We use text/plain for the response
+    //res->setHeader("Content-Type", "text/plain");
+
+    // Stream the incoming request body to the response body
+    // Theoretically, this should work for every request size.
+    byte buffer[MAX_TO_FROM_RADIO_SIZE];
+    size_t s = req->readBytes(buffer, MAX_TO_FROM_RADIO_SIZE);
+
+    DEBUG_MSG("Received %d bytes from PUT request\n", s);
+    webAPI.handleToRadio(buffer, s);
+
+    res->write(buffer, s);
+    DEBUG_MSG("--------------- webAPI handleAPIv1ToRadio\n");
 }
 
 /*
