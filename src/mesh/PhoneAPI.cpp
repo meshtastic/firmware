@@ -121,7 +121,14 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
     case STATE_SEND_RADIO:
         fromRadioScratch.which_variant = FromRadio_radio_tag;
+
         fromRadioScratch.variant.radio = radioConfig;
+
+        // NOTE: The phone app needs to know the ls_secs value so it can properly expect sleep behavior.
+        // So even if we internally use 0 to represent 'use default' we still need to send the value we are
+        // using to the app (so that even old phone apps work with new device loads).
+        fromRadioScratch.variant.radio.preferences.ls_secs = getPref_ls_secs();
+
         state = STATE_SEND_NODEINFO;
         break;
 
