@@ -144,11 +144,18 @@ const char *getChannelName();
 
 PREF_GET(send_owner_interval, 4)
 PREF_GET(position_broadcast_secs, 15 * 60)
-PREF_GET(wait_bluetooth_secs, 120)
+
+// Each time we wake into the DARK state allow 1 minute to send and receive BLE packets to the phone
+PREF_GET(wait_bluetooth_secs, 60)
+
 PREF_GET(screen_on_secs, 60)
 PREF_GET(mesh_sds_timeout_secs, 2 * 60 * 60)
 PREF_GET(phone_sds_timeout_sec, 2 * 60 * 60)
 PREF_GET(sds_secs, 365 * 24 * 60 * 60)
-PREF_GET(ls_secs, 60 * 60)
+
+// We default to sleeping (with bluetooth off for 5 minutes at a time).  This seems to be a good tradeoff between
+// latency for the user sending messages and power savings because of not having to run (expensive) ESP32 bluetooth
+PREF_GET(ls_secs, 5 * 60)
+
 PREF_GET(phone_timeout_secs, 15 * 60)
 PREF_GET(min_wake_secs, 10)
