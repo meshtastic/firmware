@@ -1,6 +1,11 @@
 #include "SX1262Interface.h"
 #include <configuration.h>
 
+// Particular boards might define a different max power based on what their hardware can do
+#ifndef SX1262_MAX_POWER
+#define SX1262_MAX_POWER 22
+#endif
+
 SX1262Interface::SX1262Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy,
                                  SPIClass &spi)
     : RadioLibInterface(cs, irq, rst, busy, spi, &lora), lora(&module)
@@ -39,10 +44,10 @@ bool SX1262Interface::init()
     applyModemConfig();
 
     if (power == 0)
-        power = 22;
+        power = SX1262_MAX_POWER;
 
-    if (power > 22) // This chip has lower power limits than some
-        power = 22;
+    if (power > SX1262_MAX_POWER) // This chip has lower power limits than some
+        power = SX1262_MAX_POWER;
 
     limitPower();
 

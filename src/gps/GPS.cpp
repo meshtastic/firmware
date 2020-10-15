@@ -10,7 +10,7 @@
 #ifdef GPS_RX_PIN
 HardwareSerial _serial_gps_real(GPS_SERIAL_NUM);
 HardwareSerial *GPS::_serial_gps = &_serial_gps_real;
-#elif defined(NRF52840_XXAA)
+#elif defined(NRF52840_XXAA) || defined(NRF52833_XXAA)
 // Assume NRF52840
 HardwareSerial *GPS::_serial_gps = &Serial1;
 #else
@@ -47,6 +47,12 @@ void GPS::wake()
     digitalWrite(PIN_GPS_WAKE, GPS_WAKE_ACTIVE);
     pinMode(PIN_GPS_WAKE, OUTPUT);
 #endif
+
+#ifdef PIN_GPS_RESET
+    digitalWrite(PIN_GPS_RESET, 0);
+    pinMode(PIN_GPS_RESET, OUTPUT);
+#endif
+
 }
 
 
