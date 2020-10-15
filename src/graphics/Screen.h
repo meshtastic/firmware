@@ -180,6 +180,9 @@ class Screen : public concurrency::OSThread
 
     int handleStatusUpdate(const meshtastic::Status *arg);
 
+    /// Used to force (super slow) eink displays to draw critical frames
+    void forceDisplay();
+
   protected:
     /// Updates the UI.
     //

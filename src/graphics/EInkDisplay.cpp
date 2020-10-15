@@ -54,8 +54,10 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl)
 // FIXME quick hack to limit drawing to a very slow rate
 uint32_t lastDrawMsec;
 
-// Write the buffer to the display memory
-void EInkDisplay::display(void)
+/**
+ * Force a display update if we haven't drawn within the specified msecLimit
+ */
+bool EInkDisplay::forceDisplay(uint32_t msecLimit)
 {
     // No need to grab this lock because we are on our own SPI bus
     // concurrency::LockGuard g(spiLock);
@@ -63,7 +65,7 @@ void EInkDisplay::display(void)
     uint32_t now = millis();
     uint32_t sinceLast = now - lastDrawMsec;
 
-    if (framePtr && (sinceLast > 60 * 1000 || lastDrawMsec == 0)) {
+    if (framePtr && (sinceLast > msecLimit || lastDrawMsec == 0)) {
         lastDrawMsec = now;
 
         // FIXME - only draw bits have changed (use backbuf similar to the other displays)
@@ -84,9 +86,24 @@ void EInkDisplay::display(void)
         updateDisplay(); // Send image to display and refresh
         DEBUG_MSG("done\n");
 
-        // Put screen to sleep to save power 
+        // Put screen to sleep to save power
         ePaper.Sleep();
+        return true;
+    } else {
+        // DEBUG_MSG("Skipping eink display\n");
+        return false;
     }
+}
+
+// Write the buffer to the display memory
+void EInkDisplay::display(void)
+{
+    // We don't allow regular 'dumb' display() calls to draw on eink until we've shown
+    // at least one forceDisplay() keyframe.  This prevents flashing when we should the critical
+    // bootscreen (that we want to look nice)
+    if (lastDrawMsec)
+        if (forceDisplay(slowUpdateMsec)) // Show the first screen a few seconds after boot, then slower
+            slowUpdateMsec = 5 * 60 * 1000;
 }
 
 // Send a command to the display (low level function)
