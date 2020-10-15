@@ -72,7 +72,10 @@ static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     // draw an xbm image.
     // Please note that everything that should be transitioned
     // needs to be drawn relative to x and y
-    display->drawXbm(x + 32, y, icon_width, icon_height, (const uint8_t *)icon_bits);
+
+    // draw centered left to right and centered above the one line of app text
+    display->drawXbm(x + (SCREEN_WIDTH - icon_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_16 - icon_height) / 2, icon_width,
+                     icon_height, (const uint8_t *)icon_bits);
 
     display->setFont(ArialMT_Plain_16);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
@@ -85,6 +88,7 @@ static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     snprintf(buf, sizeof(buf), "%s",
              xstr(APP_VERSION)); // Note: we don't bother printing region or now, it makes the string too long
     display->drawString(SCREEN_WIDTH - 20, 0, buf);
+    screen->forceDisplay();
 }
 
 static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -570,7 +574,8 @@ void _screen_header()
 }
 #endif
 
-Screen::Screen(uint8_t address, int sda, int scl) : OSThread("Screen"), cmdQueue(32), dispdev(address, sda, scl), ui(&dispdev) {
+Screen::Screen(uint8_t address, int sda, int scl) : OSThread("Screen"), cmdQueue(32), dispdev(address, sda, scl), ui(&dispdev)
+{
     cmdQueue.setReader(this);
 }
 
@@ -608,7 +613,7 @@ void Screen::setup()
 
     displayWidth = dispdev.width();
     displayHeight = dispdev.height();
-    
+
     ui.setTimePerTransition(300); // msecs
     ui.setIndicatorPosition(BOTTOM);
     // Defines where the first frame is located in the bar.
@@ -656,6 +661,14 @@ void Screen::setup()
     powerStatusObserver.observe(&powerStatus->onNewStatus);
     gpsStatusObserver.observe(&gpsStatus->onNewStatus);
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
+}
+
+void Screen::forceDisplay()
+{
+    // Nasty hack to force epaper updates for 'key' frames.  FIXME, cleanup.
+#ifdef HAS_EINK
+    dispdev.forceDisplay();
+#endif
 }
 
 int32_t Screen::runOnce()
@@ -722,6 +735,7 @@ int32_t Screen::runOnce()
         DEBUG_MSG("Setting idle framerate\n");
         targetFramerate = IDLE_FRAMERATE;
         ui.setTargetFPS(targetFramerate);
+        forceDisplay();
     }
 
     // While showing the bootscreen or Bluetooth pair screen all of our
