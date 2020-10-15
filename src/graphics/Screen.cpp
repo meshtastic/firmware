@@ -58,6 +58,15 @@ static char ourId[5];
 static bool heartbeat = false;
 #endif
 
+// We used to use constants for this - now we pull from the device at startup
+//#define SCREEN_WIDTH 128
+//#define SCREEN_HEIGHT 64
+
+static uint16_t displayWidth, displayHeight;
+
+#define SCREEN_WIDTH displayWidth
+#define SCREEN_HEIGHT displayHeight
+
 static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     // draw an xbm image.
@@ -236,7 +245,7 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
         display->drawFastImage(x + 24, y, 8, 8, imgSatellite);
 
         // Draw the number of satellites
-        sprintf(satsString, "%d", gps->getNumSatellites());
+        sprintf(satsString, "%lu", gps->getNumSatellites());
         display->drawString(x + 34, y - 2, satsString);
     }
 }
@@ -489,11 +498,11 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     uint32_t agoSecs = sinceLastSeen(node);
     static char lastStr[20];
     if (agoSecs < 120) // last 2 mins?
-        snprintf(lastStr, sizeof(lastStr), "%u seconds ago", agoSecs);
+        snprintf(lastStr, sizeof(lastStr), "%lu seconds ago", agoSecs);
     else if (agoSecs < 120 * 60) // last 2 hrs
-        snprintf(lastStr, sizeof(lastStr), "%u minutes ago", agoSecs / 60);
+        snprintf(lastStr, sizeof(lastStr), "%lu minutes ago", agoSecs / 60);
     else
-        snprintf(lastStr, sizeof(lastStr), "%u hours ago", agoSecs / 60 / 60);
+        snprintf(lastStr, sizeof(lastStr), "%lu hours ago", agoSecs / 60 / 60);
 
     static char distStr[20];
     strcpy(distStr, "? km"); // might not have location data
@@ -596,6 +605,10 @@ void Screen::setup()
 
     // Initialising the UI will init the display too.
     ui.init();
+
+    displayWidth = dispdev.width();
+    displayHeight = dispdev.height();
+    
     ui.setTimePerTransition(300); // msecs
     ui.setIndicatorPosition(BOTTOM);
     // Defines where the first frame is located in the bar.
@@ -794,7 +807,7 @@ void Screen::handleStartBluetoothPinScreen(uint32_t pin)
 
     static FrameCallback btFrames[] = {drawFrameBluetooth};
 
-    snprintf(btPIN, sizeof(btPIN), "%06u", pin);
+    snprintf(btPIN, sizeof(btPIN), "%06lu", pin);
 
     ui.disableAllIndicators();
     ui.setFrames(btFrames, 1);
