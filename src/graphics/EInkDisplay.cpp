@@ -46,8 +46,9 @@ void updateDisplay(uint8_t *blackFrame = framePtr)
 
 EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl)
 {
-    setGeometry(GEOMETRY_128_64); // FIXME - currently we lie and claim 128x64 because I'm not yet sure other resolutions will
-                                  // work ie GEOMETRY_RAWMODE
+    setGeometry(GEOMETRY_RAWMODE, EPD_WIDTH, EPD_HEIGHT);
+    // setGeometry(GEOMETRY_RAWMODE, 128, 64); // old resolution
+    // setGeometry(GEOMETRY_128_64); // We originally used this because I wasn't sure if rawmode worked - it does
 }
 
 // FIXME quick hack to limit drawing to a very slow rate
@@ -67,11 +68,11 @@ void EInkDisplay::display(void)
 
         // FIXME - only draw bits have changed (use backbuf similar to the other displays)
         // tft.drawBitmap(0, 0, buffer, 128, 64, TFT_YELLOW, TFT_BLACK);
-        for (uint8_t y = 0; y < SCREEN_HEIGHT; y++) {
-            for (uint8_t x = 0; x < SCREEN_WIDTH; x++) {
+        for (uint8_t y = 0; y < displayHeight; y++) {
+            for (uint8_t x = 0; x < displayWidth; x++) {
 
                 // get src pixel in the page based ordering the OLED lib uses FIXME, super inefficent
-                auto b = buffer[x + (y / 8) * SCREEN_WIDTH];
+                auto b = buffer[x + (y / 8) * displayWidth];
                 auto isset = b & (1 << (y & 7));
                 frame.drawPixel(x, y, isset ? INK : PAPER);
             }
