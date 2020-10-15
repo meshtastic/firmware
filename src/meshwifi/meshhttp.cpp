@@ -31,8 +31,6 @@ Preferences prefs;
 #include <HTTPServer.hpp>
 #include <SSLCert.hpp>
 
-#define HEADER_LEN 4
-
 // The HTTPS Server comes in a separate namespace. For easier use, include it here.
 using namespace httpsserver;
 
@@ -53,7 +51,8 @@ void handleFavicon(HTTPRequest *req, HTTPResponse *res);
 void handleRoot(HTTPRequest *req, HTTPResponse *res);
 void handle404(HTTPRequest *req, HTTPResponse *res);
 
-void middlewareLogging(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
+void middlewareSpeedUp240(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
+void middlewareSpeedUp160(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
 
 bool isWebServerReady = 0;
 bool isCertReady = 0;
@@ -227,7 +226,7 @@ void initWebServer()
     secureServer->registerNode(nodeRoot);
     secureServer->setDefaultNode(node404);
 
-    secureServer->addMiddleware(&middlewareLogging);
+    secureServer->addMiddleware(&middlewareSpeedUp240);
 
     // Insecure nodes
     insecureServer->registerNode(nodeAPIv1ToRadio);
@@ -239,6 +238,9 @@ void initWebServer()
     insecureServer->registerNode(nodeRoot);
     insecureServer->setDefaultNode(node404);
 
+    insecureServer->addMiddleware(&middlewareSpeedUp160);
+
+
     DEBUG_MSG("Starting Web Server...\n");
     secureServer->start();
     insecureServer->start();
@@ -248,13 +250,21 @@ void initWebServer()
     }
 }
 
-void middlewareLogging(HTTPRequest *req, HTTPResponse *res, std::function<void()> next)
+void middlewareSpeedUp240(HTTPRequest *req, HTTPResponse *res, std::function<void()> next)
 {
     // We want to print the response status, so we need to call next() first.
     next();
 
-    //setCPUFast(true); // Set CPU to 240mhz when we're plugged in to wall power.
     setCpuFrequencyMhz(240);
+    timeSpeedUp = millis();
+}
+
+void middlewareSpeedUp160(HTTPRequest *req, HTTPResponse *res, std::function<void()> next)
+{
+    // We want to print the response status, so we need to call next() first.
+    next();
+
+    setCpuFrequencyMhz(160);
     timeSpeedUp = millis();
 }
 
@@ -322,9 +332,13 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
 
     uint8_t txBuf[MAX_STREAM_BUF_SIZE];
 
-    uint32_t len = webAPI.getFromRadio(txBuf + HEADER_LEN);
+    
+    uint32_t len = 1;
+    while (len) {
+        len = webAPI.getFromRadio(txBuf);
+        res->write(txBuf, len);
+    }
 
-    res->write(txBuf, len);
     DEBUG_MSG("--------------- webAPI handleAPIv1FromRadio, len %d\n", len);
 }
 
