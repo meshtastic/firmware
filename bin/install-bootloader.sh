@@ -2,7 +2,19 @@
 
 set -e 
 
+# dependencies
+# apt install srecord
+
 BOOTDIR=/home/kevinh/development/meshtastic/Adafruit_nRF52_Bootloader
+BOARD=othernet_ppr1
+BOOTVER=0.3.2
+BOOTNUM=125
+BOOTSHA=g4582f73
+SDVER=6.1.1
+PROJ=ppr1
+
+# FIXME for nRF52840 use 0xff000
+BOOTSET=0x7f000
 
 nrfjprog --eraseall -f nrf52
 
@@ -11,12 +23,12 @@ nrfjprog --eraseall -f nrf52
 # first 4 bytes should be 0x01 to indicate valid app image
 # second 4 bytes should be 0x00 to indicate no CRC required for image
 echo "01 00 00 00 00 00 00 00" | xxd -r -p - >/tmp/bootconf.bin
-srec_cat /tmp/bootconf.bin -binary -offset 0xff000 -output /tmp/bootconf.hex -intel   
+srec_cat /tmp/bootconf.bin -binary -offset $BOOTSET -output /tmp/bootconf.hex -intel   
 
 echo Generating merged hex file 
-mergehex -m $BOOTDIR/_build/build-ttgo_eink/ttgo_eink_bootloader-0.3.2-124-g69bd8eb-dirty_s140_6.1.1.hex .pio/build/eink/firmware.hex /tmp/bootconf.hex -o ttgo_eink_full.hex
+mergehex -o ${BOARD}_full.hex -m $BOOTDIR/_build/build-$BOARD/${BOARD}_bootloader-$BOOTVER-$BOOTNUM-$BOOTSHA-dirty_s140_$SDVER.hex .pio/build/$PROJ/firmware.hex /tmp/bootconf.hex
 
 echo Telling bootloader app region is valid and telling CPU to run
-nrfjprog --program ttgo_eink_full.hex -f nrf52 --reset
+nrfjprog --program ${BOARD}_full.hex -f nrf52 --reset
 
 # nrfjprog --readuicr /tmp/uicr.hex; objdump -s /tmp/uicr.hex | less
