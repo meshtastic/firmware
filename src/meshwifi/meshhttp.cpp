@@ -332,6 +332,8 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
 
     // Status code is 200 OK by default.
     res->setHeader("Content-Type", "application/x-protobuf");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "PUT, GET");
 
     uint8_t txBuf[MAX_STREAM_BUF_SIZE];
 
@@ -359,6 +361,8 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
 
     // Status code is 200 OK by default.
     res->setHeader("Content-Type", "application/x-protobuf");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "PUT, GET");
 
     byte buffer[MAX_TO_FROM_RADIO_SIZE];
     size_t s = req->readBytes(buffer, MAX_TO_FROM_RADIO_SIZE);
