@@ -63,13 +63,11 @@ class AnalogBatteryLevel : public HasBatteryLevel
      */
     virtual float getBattVoltage()
     {
-        uint32_t raw = analogRead(BATTERY_PIN);
-
         // Tested ttgo eink nrf52 board and the reported value is perfect
         // DEBUG_MSG("raw val %u", raw);
         return
 #ifdef BATTERY_PIN
-            1000.0 * 2.0 * (AREF_VOLTAGE / 1024.0) * raw;
+            1000.0 * 2.0 * (AREF_VOLTAGE / 1024.0) * analogRead(BATTERY_PIN);
 #else
             NAN;
 #endif
