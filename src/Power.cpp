@@ -18,6 +18,21 @@ Power *power;
 
 using namespace meshtastic;
 
+#if defined(NRF52_SERIES)
+/*
+ * Internal Reference is +/-0.6V, with an adjustable gain of 1/6, 1/5, 1/4,
+ * 1/3, 1/2 or 1, meaning 3.6, 3.0, 2.4, 1.8, 1.2 or 0.6V for the ADC levels.
+ *
+ * External Reference is VDD/4, with an adjustable gain of 1, 2 or 4, meaning
+ * VDD/4, VDD/2 or VDD for the ADC levels.
+ *
+ * Default settings are internal reference with 1/6 gain (GND..3.6V ADC range)
+ */
+#define AREF_VOLTAGE 3.6
+#else
+#define AREF_VOLTAGE 3.3
+#endif
+
 /**
  * If this board has a battery level sensor, set this to a valid implementation
  */
@@ -48,9 +63,13 @@ class AnalogBatteryLevel : public HasBatteryLevel
      */
     virtual float getBattVoltage()
     {
+        uint32_t raw = analogRead(BATTERY_PIN);
+
+        // Tested ttgo eink nrf52 board and the reported value is perfect
+        // DEBUG_MSG("raw val %u", raw);
         return
 #ifdef BATTERY_PIN
-            1000.0 * analogRead(BATTERY_PIN) * 2.0 * (3.3 / 1024.0);
+            1000.0 * 2.0 * (AREF_VOLTAGE / 1024.0) * raw;
 #else
             NAN;
 #endif
@@ -68,10 +87,18 @@ bool Power::analogInit()
 {
 #ifdef BATTERY_PIN
     DEBUG_MSG("Using analog input for battery level\n");
+
+    // disable any internal pullups
+    pinMode(BATTERY_PIN, INPUT);
+
 #ifndef NO_ESP32
     // ESP32 needs special analog stuff
     adcAttachPin(BATTERY_PIN);
 #endif
+#ifdef NRF52_SERIES
+    analogReference(AR_INTERNAL); // 3.6V
+#endif
+
     // adcStart(BATTERY_PIN);
     analogReadResolution(10); // Default of 12 is not very linear. Recommended to use 10 or 11 depending on needed resolution.
     batteryLevel = &analogLevel;
