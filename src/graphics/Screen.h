@@ -180,6 +180,9 @@ class Screen : public concurrency::OSThread
 
     int handleStatusUpdate(const meshtastic::Status *arg);
 
+    /// Used to force (super slow) eink displays to draw critical frames
+    void forceDisplay();
+
   protected:
     /// Updates the UI.
     //
@@ -215,6 +218,9 @@ class Screen : public concurrency::OSThread
 
     /// Rebuilds our list of frames (screens) to default ones.
     void setFrames();
+
+    /// Try to start drawing ASAP
+    void setFastFramerate();
 
     /// Called when debug screen is to be drawn, calls through to debugInfo.drawFrame.
     static void drawDebugInfoTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
