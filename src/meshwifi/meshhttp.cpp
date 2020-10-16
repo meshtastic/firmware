@@ -53,6 +53,7 @@ void handle404(HTTPRequest *req, HTTPResponse *res);
 
 void middlewareSpeedUp240(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
 void middlewareSpeedUp160(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
+void middlewareSession(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
 
 bool isWebServerReady = 0;
 bool isCertReady = 0;
@@ -104,7 +105,6 @@ void taskCreateCert(void *parameter)
         DEBUG_MSG("Existing SSL Certificate found!\n");
     } else {
         DEBUG_MSG("Creating the certificate. This may take a while. Please wait...\n");
-screen->print("Powered...\n");
         cert = new SSLCert();
         // disableCore1WDT();
         int createCertResult = createSelfSignedCert(*cert, KEYSIZE_2048, "CN=meshtastic.local,O=Meshtastic,C=US",
@@ -240,7 +240,6 @@ void initWebServer()
 
     insecureServer->addMiddleware(&middlewareSpeedUp160);
 
-
     DEBUG_MSG("Starting Web Server...\n");
     secureServer->start();
     insecureServer->start();
@@ -264,7 +263,12 @@ void middlewareSpeedUp160(HTTPRequest *req, HTTPResponse *res, std::function<voi
     // We want to print the response status, so we need to call next() first.
     next();
 
-    setCpuFrequencyMhz(160);
+    // If the frequency is 240mhz, we have recently gotten a HTTPS request.
+    //   In that case, leave the frequency where it is and just update the
+    //   countdown timer (timeSpeedUp).
+    if (getCpuFrequencyMhz() != 240) {
+        setCpuFrequencyMhz(160);
+    }
     timeSpeedUp = millis();
 }
 
@@ -328,11 +332,9 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
 
     // Status code is 200 OK by default.
     res->setHeader("Content-Type", "application/x-protobuf");
-    //res->setHeader("Content-Type", "application/json");
 
     uint8_t txBuf[MAX_STREAM_BUF_SIZE];
 
-    
     uint32_t len = 1;
     while (len) {
         len = webAPI.getFromRadio(txBuf);
@@ -357,15 +359,7 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
 
     // Status code is 200 OK by default.
     res->setHeader("Content-Type", "application/x-protobuf");
-    //res->setHeader("Content-Type", "application/json");
 
-    // webAPI.handleToRadio(p);
-
-    // We use text/plain for the response
-    //res->setHeader("Content-Type", "text/plain");
-
-    // Stream the incoming request body to the response body
-    // Theoretically, this should work for every request size.
     byte buffer[MAX_TO_FROM_RADIO_SIZE];
     size_t s = req->readBytes(buffer, MAX_TO_FROM_RADIO_SIZE);
 
