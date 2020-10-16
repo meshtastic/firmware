@@ -102,8 +102,7 @@ void EInkDisplay::display(void)
     // at least one forceDisplay() keyframe.  This prevents flashing when we should the critical
     // bootscreen (that we want to look nice)
     if (lastDrawMsec)
-        if (forceDisplay(slowUpdateMsec)) // Show the first screen a few seconds after boot, then slower
-            slowUpdateMsec = 5 * 60 * 1000;
+        forceDisplay(slowUpdateMsec); // Show the first screen a few seconds after boot, then slower
 }
 
 // Send a command to the display (low level function)

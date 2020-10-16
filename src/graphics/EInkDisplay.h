@@ -14,9 +14,9 @@
  */
 class EInkDisplay : public OLEDDisplay
 {
-    /// How often should we update the display, at first we do an update 5 secs after boot,
+    /// How often should we update the display
     /// thereafter we do once per 5 minutes
-    uint32_t slowUpdateMsec = 5 * 1000;
+    uint32_t slowUpdateMsec = 5 * 60 * 1000;
     
   public:
     /* constructor
@@ -32,7 +32,7 @@ class EInkDisplay : public OLEDDisplay
      * 
      * @return true if we did draw the screen
      */
-    bool forceDisplay(uint32_t msecLimit = 2000);
+    bool forceDisplay(uint32_t msecLimit = 1000);
 
   protected:
     // the header size of the buffer used, e.g. for the SPI command header
