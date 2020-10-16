@@ -681,7 +681,8 @@ int32_t Screen::runOnce()
 
     // Show boot screen for first 3 seconds, then switch to normal operation.
     static bool showingBootScreen = true;
-    if (showingBootScreen && (millis() > 3000)) {
+    if (showingBootScreen && (millis() > 5000)) {
+        DEBUG_MSG("Done with boot screen...\n");
         stopBootScreen();
         showingBootScreen = false;
     }
@@ -727,6 +728,10 @@ int32_t Screen::runOnce()
         return 0;
     }
 
+    // this must be before the frameState == FIXED check, because we always
+    // want to draw at least one FIXED frame before doing forceDisplay
+    ui.update();
+
     // Switch to a low framerate (to save CPU) when we are not in transition
     // but we should only call setTargetFPS when framestate changes, because
     // otherwise that breaks animations.
@@ -743,8 +748,6 @@ int32_t Screen::runOnce()
     if (showingNormalScreen) {
         // standard screen loop handling here
     }
-
-    ui.update();
 
     // DEBUG_MSG("want fps %d, fixed=%d\n", targetFramerate,
     // ui.getUiState()->frameState); If we are scrolling we need to be called
@@ -812,6 +815,8 @@ void Screen::setFrames()
 
     prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list
                     // just changed)
+
+    setFastFramerate(); // Draw ASAP
 }
 
 void Screen::handleStartBluetoothPinScreen(uint32_t pin)
@@ -825,12 +830,13 @@ void Screen::handleStartBluetoothPinScreen(uint32_t pin)
 
     ui.disableAllIndicators();
     ui.setFrames(btFrames, 1);
+    setFastFramerate();
 }
 
 void Screen::handlePrint(const char *text)
 {
     DEBUG_MSG("Screen: %s", text);
-    if (!useDisplay)
+    if (!useDisplay || !showingNormalScreen)
         return;
 
     dispdev.print(text);
@@ -841,15 +847,20 @@ void Screen::handleOnPress()
     // If screen was off, just wake it, otherwise advance to next frame
     // If we are in a transition, the press must have bounced, drop it.
     if (ui.getUiState()->frameState == FIXED) {
-        setInterval(0); // redraw ASAP
         ui.nextFrame();
 
-        DEBUG_MSG("Setting fast framerate\n");
-
-        // We are about to start a transition so speed up fps
-        targetFramerate = TRANSITION_FRAMERATE;
-        ui.setTargetFPS(targetFramerate);
+        setFastFramerate();
     }
+}
+
+void Screen::setFastFramerate()
+{
+    DEBUG_MSG("Setting fast framerate\n");
+
+    // We are about to start a transition so speed up fps
+    targetFramerate = TRANSITION_FRAMERATE;
+    ui.setTargetFPS(targetFramerate);
+    setInterval(0); // redraw ASAP
 }
 
 void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -1100,9 +1111,7 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
     switch (arg->getStatusType()) {
     case STATUS_TYPE_NODE:
         if (nodeDB.updateTextMessage || nodeStatus->getLastNumTotal() != nodeStatus->getNumTotal()) {
-            setFrames();    // Regen the list of screens
-            prevFrame = -1; // Force a GUI update
-            setInterval(0); // Update the screen right away
+            setFrames(); // Regen the list of screens
         }
         nodeDB.updateGUI = false;
         nodeDB.updateTextMessage = false;
