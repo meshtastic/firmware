@@ -31,8 +31,6 @@ Preferences prefs;
 #include <HTTPServer.hpp>
 #include <SSLCert.hpp>
 
-#define HEADER_LEN 4
-
 // The HTTPS Server comes in a separate namespace. For easier use, include it here.
 using namespace httpsserver;
 
@@ -49,10 +47,13 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res);
 void handleStyleCSS(HTTPRequest *req, HTTPResponse *res);
 void handleJSONChatHistoryDummy(HTTPRequest *req, HTTPResponse *res);
 void handleHotspot(HTTPRequest *req, HTTPResponse *res);
+void handleFavicon(HTTPRequest *req, HTTPResponse *res);
 void handleRoot(HTTPRequest *req, HTTPResponse *res);
 void handle404(HTTPRequest *req, HTTPResponse *res);
 
-void middlewareLogging(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
+void middlewareSpeedUp240(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
+void middlewareSpeedUp160(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
+void middlewareSession(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
 
 bool isWebServerReady = 0;
 bool isCertReady = 0;
@@ -76,11 +77,10 @@ void handleWebResponse()
 
     // Slow down the CPU if we have not received a request within the last
     //   2 minutes.
-    if (millis () - timeSpeedUp >= (2 * 60 * 1000)) {
-        setCPUFast(false); // Set CPU to 80mhz
+    if (millis() - timeSpeedUp >= (2 * 60 * 1000)) {
+        setCpuFrequencyMhz(80);
         timeSpeedUp = millis();
     }
-
 }
 
 void taskCreateCert(void *parameter)
@@ -105,7 +105,6 @@ void taskCreateCert(void *parameter)
         DEBUG_MSG("Existing SSL Certificate found!\n");
     } else {
         DEBUG_MSG("Creating the certificate. This may take a while. Please wait...\n");
-
         cert = new SSLCert();
         // disableCore1WDT();
         int createCertResult = createSelfSignedCert(*cert, KEYSIZE_2048, "CN=meshtastic.local,O=Meshtastic,C=US",
@@ -208,11 +207,12 @@ void initWebServer()
     // For every resource available on the server, we need to create a ResourceNode
     // The ResourceNode links URL and HTTP method to a handler function
 
-    ResourceNode *nodeAPIv1ToRadio = new ResourceNode("/api/v1/toradio", "GET", &handleAPIv1ToRadio);
+    ResourceNode *nodeAPIv1ToRadio = new ResourceNode("/api/v1/toradio", "PUT", &handleAPIv1ToRadio);
     ResourceNode *nodeAPIv1FromRadio = new ResourceNode("/api/v1/fromradio", "GET", &handleAPIv1FromRadio);
     ResourceNode *nodeCSS = new ResourceNode("/css/style.css", "GET", &handleStyleCSS);
     ResourceNode *nodeJS = new ResourceNode("/scripts/script.js", "GET", &handleJSONChatHistoryDummy);
     ResourceNode *nodeHotspot = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
+    ResourceNode *nodeFavicon = new ResourceNode("/favicon.ico", "GET", &handleFavicon);
     ResourceNode *nodeRoot = new ResourceNode("/", "GET", &handleRoot);
     ResourceNode *node404 = new ResourceNode("", "GET", &handle404);
 
@@ -222,10 +222,11 @@ void initWebServer()
     secureServer->registerNode(nodeCSS);
     secureServer->registerNode(nodeJS);
     secureServer->registerNode(nodeHotspot);
+    secureServer->registerNode(nodeFavicon);
     secureServer->registerNode(nodeRoot);
     secureServer->setDefaultNode(node404);
 
-    secureServer->addMiddleware(&middlewareLogging);
+    secureServer->addMiddleware(&middlewareSpeedUp240);
 
     // Insecure nodes
     insecureServer->registerNode(nodeAPIv1ToRadio);
@@ -233,8 +234,11 @@ void initWebServer()
     insecureServer->registerNode(nodeCSS);
     insecureServer->registerNode(nodeJS);
     insecureServer->registerNode(nodeHotspot);
+    insecureServer->registerNode(nodeFavicon);
     insecureServer->registerNode(nodeRoot);
     insecureServer->setDefaultNode(node404);
+
+    insecureServer->addMiddleware(&middlewareSpeedUp160);
 
     DEBUG_MSG("Starting Web Server...\n");
     secureServer->start();
@@ -245,14 +249,27 @@ void initWebServer()
     }
 }
 
-void middlewareLogging(HTTPRequest *req, HTTPResponse *res, std::function<void()> next)
+void middlewareSpeedUp240(HTTPRequest *req, HTTPResponse *res, std::function<void()> next)
 {
     // We want to print the response status, so we need to call next() first.
     next();
 
-    setCPUFast(true); // Set CPU to 240mhz when we're plugged in to wall power.
+    setCpuFrequencyMhz(240);
     timeSpeedUp = millis();
+}
 
+void middlewareSpeedUp160(HTTPRequest *req, HTTPResponse *res, std::function<void()> next)
+{
+    // We want to print the response status, so we need to call next() first.
+    next();
+
+    // If the frequency is 240mhz, we have recently gotten a HTTPS request.
+    //   In that case, leave the frequency where it is and just update the
+    //   countdown timer (timeSpeedUp).
+    if (getCpuFrequencyMhz() != 240) {
+        setCpuFrequencyMhz(160);
+    }
+    timeSpeedUp = millis();
 }
 
 void handle404(HTTPRequest *req, HTTPResponse *res)
@@ -301,36 +318,56 @@ void handleHotspot(HTTPRequest *req, HTTPResponse *res)
 
 void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
 {
+
     DEBUG_MSG("+++++++++++++++ webAPI handleAPIv1FromRadio\n");
 
     /*
-        http://10.10.30.198/api/v1/fromradio
+        For documentation, see:
+            https://github.com/meshtastic/Meshtastic-device/wiki/HTTP-REST-API-discussion
+            https://github.com/meshtastic/Meshtastic-device/blob/master/docs/software/device-api.md
 
+        Example:
+            http://10.10.30.198/api/v1/fromradio
     */
 
     // Status code is 200 OK by default.
-    // We want to deliver a simple HTML page, so we send a corresponding content type:
     res->setHeader("Content-Type", "application/x-protobuf");
 
     uint8_t txBuf[MAX_STREAM_BUF_SIZE];
 
-    uint32_t len = webAPI.getFromRadio(txBuf + HEADER_LEN);
+    uint32_t len = 1;
+    while (len) {
+        len = webAPI.getFromRadio(txBuf);
+        res->write(txBuf, len);
+    }
 
-    res->write(txBuf, len);
     DEBUG_MSG("--------------- webAPI handleAPIv1FromRadio, len %d\n", len);
 }
 
 void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
 {
-    DEBUG_MSG("webAPI handleAPIv1ToRadio\n");
+    DEBUG_MSG("+++++++++++++++ webAPI handleAPIv1ToRadio\n");
+
+    /*
+        For documentation, see:
+            https://github.com/meshtastic/Meshtastic-device/wiki/HTTP-REST-API-discussion
+            https://github.com/meshtastic/Meshtastic-device/blob/master/docs/software/device-api.md
+
+        Example:
+            http://10.10.30.198/api/v1/toradio
+    */
 
     // Status code is 200 OK by default.
-    // We want to deliver a simple HTML page, so we send a corresponding content type:
     res->setHeader("Content-Type", "application/x-protobuf");
 
-    // The response implements the Print interface, so you can use it just like
-    // you would write to Serial etc.
-    res->print("<!DOCTYPE html>");
+    byte buffer[MAX_TO_FROM_RADIO_SIZE];
+    size_t s = req->readBytes(buffer, MAX_TO_FROM_RADIO_SIZE);
+
+    DEBUG_MSG("Received %d bytes from PUT request\n", s);
+    webAPI.handleToRadio(buffer, s);
+
+    res->write(buffer, s);
+    DEBUG_MSG("--------------- webAPI handleAPIv1ToRadio\n");
 }
 
 /*
@@ -1003,4 +1040,12 @@ void handleJSONChatHistoryDummy(HTTPRequest *req, HTTPResponse *res)
     // The response implements the Print interface, so you can use it just like
     // you would write to Serial etc.
     res->print(out);
+}
+
+void handleFavicon(HTTPRequest *req, HTTPResponse *res)
+{
+    // Set Content-Type
+    res->setHeader("Content-Type", "image/vnd.microsoft.icon");
+    // Write data from header file
+    res->write(FAVICON_DATA, FAVICON_LENGTH);
 }
