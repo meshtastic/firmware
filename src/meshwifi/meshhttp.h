@@ -135,7 +135,7 @@ const byte FAVICON_DATA[] = {
 // Length of the binary data
 const int FAVICON_LENGTH = 2238;
 
-class httpAPI : public PhoneAPI
+class HttpAPI : public PhoneAPI
 {
 
   public:
