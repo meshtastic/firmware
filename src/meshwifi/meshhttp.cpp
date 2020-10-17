@@ -2,6 +2,7 @@
 #include "NodeDB.h"
 #include "configuration.h"
 #include "main.h"
+#include "meshhttpStatic.h"
 #include "meshwifi/meshwifi.h"
 #include "sleep.h"
 #include <WebServer.h>
@@ -49,6 +50,9 @@ void handleJSONChatHistoryDummy(HTTPRequest *req, HTTPResponse *res);
 void handleHotspot(HTTPRequest *req, HTTPResponse *res);
 void handleFavicon(HTTPRequest *req, HTTPResponse *res);
 void handleRoot(HTTPRequest *req, HTTPResponse *res);
+void handleBasicHTML(HTTPRequest *req, HTTPResponse *res);
+void handleBasicJS(HTTPRequest *req, HTTPResponse *res);
+void handleStatic(HTTPRequest *req, HTTPResponse *res);
 void handle404(HTTPRequest *req, HTTPResponse *res);
 
 void middlewareSpeedUp240(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
@@ -215,6 +219,9 @@ void initWebServer()
     ResourceNode *nodeHotspot = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
     ResourceNode *nodeFavicon = new ResourceNode("/favicon.ico", "GET", &handleFavicon);
     ResourceNode *nodeRoot = new ResourceNode("/", "GET", &handleRoot);
+    ResourceNode *nodeBasicHTML = new ResourceNode("/basic.html", "GET", &handleBasicHTML);
+    ResourceNode *nodeBasicJS = new ResourceNode("/basic.js", "GET", &handleBasicJS);
+    ResourceNode *nodeStatic = new ResourceNode("/static/*", "GET", &handleStatic);
     ResourceNode *node404 = new ResourceNode("", "GET", &handle404);
 
     // Secure nodes
@@ -226,6 +233,9 @@ void initWebServer()
     secureServer->registerNode(nodeHotspot);
     secureServer->registerNode(nodeFavicon);
     secureServer->registerNode(nodeRoot);
+    secureServer->registerNode(nodeBasicHTML);
+    secureServer->registerNode(nodeBasicJS);
+    secureServer->registerNode(nodeStatic);
     secureServer->setDefaultNode(node404);
 
     secureServer->addMiddleware(&middlewareSpeedUp240);
@@ -239,6 +249,9 @@ void initWebServer()
     insecureServer->registerNode(nodeHotspot);
     insecureServer->registerNode(nodeFavicon);
     insecureServer->registerNode(nodeRoot);
+    insecureServer->registerNode(nodeBasicHTML);
+    insecureServer->registerNode(nodeBasicJS);
+    insecureServer->registerNode(nodeStatic);
     insecureServer->setDefaultNode(node404);
 
     insecureServer->addMiddleware(&middlewareSpeedUp160);
@@ -275,6 +288,34 @@ void middlewareSpeedUp160(HTTPRequest *req, HTTPResponse *res, std::function<voi
     timeSpeedUp = millis();
 }
 
+void handleStatic(HTTPRequest *req, HTTPResponse *res)
+{
+    // Get access to the parameters
+    ResourceParameters *params = req->getParams();
+
+    // Set a default content type
+    res->setHeader("Content-Type", "text/plain");
+
+    std::string parameter1;
+    // Print the first parameter value
+    if (params->getPathParameter(0, parameter1)) {
+        if (parameter1 == "meshtastic.js") {
+            res->setHeader("Content-Encoding", "gzip");
+            res->setHeader("Content-Type", "application/json");
+            res->write(STATIC_MESHTASTIC_JS_DATA, STATIC_MESHTASTIC_JS_LENGTH);
+
+            return;
+        } else {
+            res->print("Parameter 1: ");
+            res->printStd(parameter1);
+
+            return;
+        }
+
+    } else {
+        res->println("ERROR: This should not have happened...");
+    }
+}
 void handle404(HTTPRequest *req, HTTPResponse *res)
 {
 
@@ -392,7 +433,6 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
         res->print("");
         return;
     }
-
 
     byte buffer[MAX_TO_FROM_RADIO_SIZE];
     size_t s = req->readBytes(buffer, MAX_TO_FROM_RADIO_SIZE);
@@ -1082,4 +1122,93 @@ void handleFavicon(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Content-Type", "image/vnd.microsoft.icon");
     // Write data from header file
     res->write(FAVICON_DATA, FAVICON_LENGTH);
+}
+
+/*
+    To convert text to c strings:
+
+    https://tomeko.net/online_tools/cpp_text_escape.php?lang=en
+*/
+void handleBasicJS(HTTPRequest *req, HTTPResponse *res)
+{
+    String out = "";
+    out += "var meshtasticClient;\n"
+           "var connectionOne;\n"
+           "\n"
+           "\n"
+           "// Important: the connect action must be called from a user interaction (e.g. button press), otherwise the browsers "
+           "won't allow the connect\n"
+           "function connect() {\n"
+           "\n"
+           "    // Create new connection\n"
+           "    var httpconn = new meshtasticjs.IHTTPConnection();\n"
+           "    let sslActive = false;\n"
+           "    let deviceIp = '10.10.30.198'; // Your devices IP here\n"
+           "   \n"
+           "\n"
+           "    // Add event listeners that get called when a new packet is received / state of device changes\n"
+           "    httpconn.addEventListener('fromRadio', function(packet) { console.log(packet)});\n"
+           "\n"
+           "    // Connect to the device async, then send a text message\n"
+           "    httpconn.connect(deviceIp, sslActive)\n"
+           "    .then(result => { \n"
+           "\n"
+           "        alert('device has been configured')\n"
+           "        // This gets called when the connection has been established\n"
+           "        // -> send a message over the mesh network. If no recipient node is provided, it gets sent as a broadcast\n"
+           "        return httpconn.sendText('meshtastic is awesome');\n"
+           "\n"
+           "    })\n"
+           "    .then(result => { \n"
+           "\n"
+           "        // This gets called when the message has been sucessfully sent\n"
+           "        console.log('Message sent!');})\n"
+           "\n"
+           "    .catch(error => { console.log(error); });\n"
+           "\n"
+           "}";
+
+    // Status code is 200 OK by default.
+    // We want to deliver a simple HTML page, so we send a corresponding content type:
+    res->setHeader("Content-Type", "text/javascript");
+
+    // The response implements the Print interface, so you can use it just like
+    // you would write to Serial etc.
+    res->print(out);
+}
+
+/*
+    To convert text to c strings:
+
+    https://tomeko.net/online_tools/cpp_text_escape.php?lang=en
+*/
+void handleBasicHTML(HTTPRequest *req, HTTPResponse *res)
+{
+    String out = "";
+    out += "<!doctype html>\n"
+           "<html class=\"no-js\" lang=\"\">\n"
+           "\n"
+           "<head>\n"
+           "  <meta charset=\"utf-8\">\n"
+           "  <title></title>\n"
+           "\n"
+           "  <script src=\"/static/meshtastic.js\"></script>\n"
+           "  <script src=\"basic.js\"></script>\n"
+           "</head>\n"
+           "\n"
+           "<body>\n"
+           "\n"
+           "  <button id=\"connect_button\" onclick=\"connect()\">Connect to Meshtastic device</button>\n"
+           " \n"
+           "</body>\n"
+           "\n"
+           "</html>";
+
+    // Status code is 200 OK by default.
+    // We want to deliver a simple HTML page, so we send a corresponding content type:
+    res->setHeader("Content-Type", "text/html");
+
+    // The response implements the Print interface, so you can use it just like
+    // you would write to Serial etc.
+    res->print(out);
 }
