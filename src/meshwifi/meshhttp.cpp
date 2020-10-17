@@ -207,6 +207,7 @@ void initWebServer()
     // For every resource available on the server, we need to create a ResourceNode
     // The ResourceNode links URL and HTTP method to a handler function
 
+    ResourceNode *nodeAPIv1ToRadioOptions = new ResourceNode("/api/v1/toradio", "OPTIONS", &handleAPIv1ToRadio);
     ResourceNode *nodeAPIv1ToRadio = new ResourceNode("/api/v1/toradio", "PUT", &handleAPIv1ToRadio);
     ResourceNode *nodeAPIv1FromRadio = new ResourceNode("/api/v1/fromradio", "GET", &handleAPIv1FromRadio);
     ResourceNode *nodeCSS = new ResourceNode("/css/style.css", "GET", &handleStyleCSS);
@@ -217,6 +218,7 @@ void initWebServer()
     ResourceNode *node404 = new ResourceNode("", "GET", &handle404);
 
     // Secure nodes
+    secureServer->registerNode(nodeAPIv1ToRadioOptions);
     secureServer->registerNode(nodeAPIv1ToRadio);
     secureServer->registerNode(nodeAPIv1FromRadio);
     secureServer->registerNode(nodeCSS);
@@ -229,6 +231,7 @@ void initWebServer()
     secureServer->addMiddleware(&middlewareSpeedUp240);
 
     // Insecure nodes
+    insecureServer->registerNode(nodeAPIv1ToRadioOptions);
     insecureServer->registerNode(nodeAPIv1ToRadio);
     insecureServer->registerNode(nodeAPIv1FromRadio);
     insecureServer->registerNode(nodeCSS);
@@ -330,13 +333,31 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
             http://10.10.30.198/api/v1/fromradio
     */
 
+    // Get access to the parameters
+    ResourceParameters *params = req->getParams();
+
+    // std::string paramAll = "all";
+    std::string valueAll;
+
     // Status code is 200 OK by default.
     res->setHeader("Content-Type", "application/x-protobuf");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "PUT, GET");
 
     uint8_t txBuf[MAX_STREAM_BUF_SIZE];
-
     uint32_t len = 1;
-    while (len) {
+
+    if (params->getQueryParameter("all", valueAll)) {
+        if (valueAll == "true") {
+            while (len) {
+                len = webAPI.getFromRadio(txBuf);
+                res->write(txBuf, len);
+            }
+        } else {
+            len = webAPI.getFromRadio(txBuf);
+            res->write(txBuf, len);
+        }
+    } else {
         len = webAPI.getFromRadio(txBuf);
         res->write(txBuf, len);
     }
@@ -358,7 +379,24 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
     */
 
     // Status code is 200 OK by default.
-    res->setHeader("Content-Type", "application/x-protobuf");
+
+    if (req->getMethod() != "OPTIONS") {
+        res->setHeader("Content-Type", "application/x-protobuf");
+    } else {
+        res->setHeader("Content-Type", "application/x-protobuf");
+        
+    }
+
+    res->setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "PUT, OPTIONS");
+
+    if (req->getMethod() == "OPTIONS") {
+        res->setStatusCode(204);
+        res->print("");
+        return;
+    }
+
 
     byte buffer[MAX_TO_FROM_RADIO_SIZE];
     size_t s = req->readBytes(buffer, MAX_TO_FROM_RADIO_SIZE);
