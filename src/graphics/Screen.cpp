@@ -1100,8 +1100,9 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 
 #ifndef NO_ESP32
     // Show CPU Frequency.
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth("CPU " + String(getCpuFrequencyMhz()) + "MHz"), y + FONT_HEIGHT * 1,
-                        "CPU " + String(getCpuFrequencyMhz()) + "MHz");
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth("CPU " + String(getCpuFrequencyMhz()) + "MHz"), 
+        y + FONT_HEIGHT_SMALL * 1,
+        "CPU " + String(getCpuFrequencyMhz()) + "MHz");
 #endif
 
     // Line 3
