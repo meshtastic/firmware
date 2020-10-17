@@ -343,6 +343,7 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Content-Type", "application/x-protobuf");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "PUT, GET");
+    res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/Meshtastic-protobufs/master/mesh.proto");
 
     uint8_t txBuf[MAX_STREAM_BUF_SIZE];
     uint32_t len = 1;
@@ -380,19 +381,14 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
 
     // Status code is 200 OK by default.
 
-    if (req->getMethod() != "OPTIONS") {
-        res->setHeader("Content-Type", "application/x-protobuf");
-    } else {
-        res->setHeader("Content-Type", "application/x-protobuf");
-        
-    }
-
+    res->setHeader("Content-Type", "application/x-protobuf");
     res->setHeader("Access-Control-Allow-Headers", "Content-Type");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "PUT, OPTIONS");
+    res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/Meshtastic-protobufs/master/mesh.proto");
 
     if (req->getMethod() == "OPTIONS") {
-        res->setStatusCode(204);
+        res->setStatusCode(204); // Success with no content
         res->print("");
         return;
     }
