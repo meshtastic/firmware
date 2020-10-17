@@ -27,6 +27,12 @@ GPS *gps;
 
 bool GPS::setup()
 {
+    // Master power for the GPS
+#ifdef PIN_GPS_EN
+    digitalWrite(PIN_GPS_EN, PIN_GPS_EN);
+    pinMode(PIN_GPS_EN, OUTPUT);
+#endif
+
     setAwake(true); // Wake GPS power before doing any init
     bool ok = setupGPS();
 
