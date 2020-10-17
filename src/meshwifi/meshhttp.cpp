@@ -379,7 +379,11 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
     */
 
     // Status code is 200 OK by default.
-    res->setHeader("Content-Type", "application/x-protobuf");
+
+    if (req->getMethod() != "OPTIONS") {
+        res->setHeader("Content-Type", "application/x-protobuf");
+    }
+    
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "PUT, OPTIONS");
 
