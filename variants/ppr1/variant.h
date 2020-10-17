@@ -109,9 +109,14 @@ static const uint8_t AREF = PIN_AREF;
 
 #define PIN_GPS_RESET 29 // active high?
 #define PIN_GPS_PPS 28
-#define PIN_GPS_WAKE 7 // GPS_EN active high?
+// #define PIN_GPS_WAKE 20 // CELL_CTRL in schematic? based on their example code
+#define PIN_GPS_EN 7 // GPS_EN active high?
 
 #define PIN_VUSB_EN 21
+
+// LCD
+
+// #define PIN_LCD_RESET 23 // active high?
 
 /*
  * SPI Interfaces

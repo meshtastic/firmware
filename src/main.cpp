@@ -245,10 +245,14 @@ void setup()
 #else
     Wire.begin();
 #endif
-    // i2c still busted on new board
-#ifndef ARDUINO_NRF52840_PPR
-    scanI2Cdevice();
+
+#ifdef PIN_LCD_RESET
+    // FIXME - move this someplace better
+    pinMode(PIN_LCD_RESET, OUTPUT);
+    digitalWrite(PIN_LCD_RESET, 0);
 #endif
+
+    scanI2Cdevice();
 
     // Buttons & LED
     buttonThread = new ButtonThread();
