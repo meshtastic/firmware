@@ -39,7 +39,7 @@ HTTPSServer *secureServer;
 HTTPServer *insecureServer;
 
 // Our API to handle messages to and from the radio.
-httpAPI webAPI;
+HttpAPI webAPI;
 
 // Declare some handler functions for the various URLs on the server
 void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res);
