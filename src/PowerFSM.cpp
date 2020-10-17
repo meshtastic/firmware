@@ -149,6 +149,7 @@ static void onEnter()
             service.sendNetworkPing(displayedNodeNum, true); // Refresh the currently displayed node
         lastPingMs = now;
     }
+
 }
 
 static void screenPress()
