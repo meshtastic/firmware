@@ -46,15 +46,18 @@ void updateDisplay(uint8_t *blackFrame = framePtr)
 
 EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl)
 {
-    setGeometry(GEOMETRY_128_64); // FIXME - currently we lie and claim 128x64 because I'm not yet sure other resolutions will
-                                  // work ie GEOMETRY_RAWMODE
+    setGeometry(GEOMETRY_RAWMODE, EPD_WIDTH, EPD_HEIGHT);
+    // setGeometry(GEOMETRY_RAWMODE, 128, 64); // old resolution
+    // setGeometry(GEOMETRY_128_64); // We originally used this because I wasn't sure if rawmode worked - it does
 }
 
 // FIXME quick hack to limit drawing to a very slow rate
 uint32_t lastDrawMsec;
 
-// Write the buffer to the display memory
-void EInkDisplay::display(void)
+/**
+ * Force a display update if we haven't drawn within the specified msecLimit
+ */
+bool EInkDisplay::forceDisplay(uint32_t msecLimit)
 {
     // No need to grab this lock because we are on our own SPI bus
     // concurrency::LockGuard g(spiLock);
@@ -62,16 +65,16 @@ void EInkDisplay::display(void)
     uint32_t now = millis();
     uint32_t sinceLast = now - lastDrawMsec;
 
-    if (framePtr && (sinceLast > 60 * 1000 || lastDrawMsec == 0)) {
+    if (framePtr && (sinceLast > msecLimit || lastDrawMsec == 0)) {
         lastDrawMsec = now;
 
         // FIXME - only draw bits have changed (use backbuf similar to the other displays)
         // tft.drawBitmap(0, 0, buffer, 128, 64, TFT_YELLOW, TFT_BLACK);
-        for (uint8_t y = 0; y < SCREEN_HEIGHT; y++) {
-            for (uint8_t x = 0; x < SCREEN_WIDTH; x++) {
+        for (uint8_t y = 0; y < displayHeight; y++) {
+            for (uint8_t x = 0; x < displayWidth; x++) {
 
                 // get src pixel in the page based ordering the OLED lib uses FIXME, super inefficent
-                auto b = buffer[x + (y / 8) * SCREEN_WIDTH];
+                auto b = buffer[x + (y / 8) * displayWidth];
                 auto isset = b & (1 << (y & 7));
                 frame.drawPixel(x, y, isset ? INK : PAPER);
             }
@@ -83,9 +86,23 @@ void EInkDisplay::display(void)
         updateDisplay(); // Send image to display and refresh
         DEBUG_MSG("done\n");
 
-        // Put screen to sleep to save power 
+        // Put screen to sleep to save power
         ePaper.Sleep();
+        return true;
+    } else {
+        // DEBUG_MSG("Skipping eink display\n");
+        return false;
     }
+}
+
+// Write the buffer to the display memory
+void EInkDisplay::display(void)
+{
+    // We don't allow regular 'dumb' display() calls to draw on eink until we've shown
+    // at least one forceDisplay() keyframe.  This prevents flashing when we should the critical
+    // bootscreen (that we want to look nice)
+    if (lastDrawMsec)
+        forceDisplay(slowUpdateMsec); // Show the first screen a few seconds after boot, then slower
 }
 
 // Send a command to the display (low level function)
