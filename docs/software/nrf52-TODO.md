@@ -7,6 +7,10 @@
 
 TODO:
 
+- enter SDS state at correct time (to protect battery or loss of phone contact)
+- show screen on eink when we enter SDS state (with app info and say sleeping)
+- require button press to pair
+
 - shrink soft device RAM usage
 - get nrf52832 working again (currently OOM)
 - i2c gps comms not quite right
