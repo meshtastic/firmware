@@ -330,15 +330,31 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
             http://10.10.30.198/api/v1/fromradio
     */
 
+    // Get access to the parameters
+    ResourceParameters *params = req->getParams();
+
+    // std::string paramAll = "all";
+    std::string valueAll;
+
     // Status code is 200 OK by default.
     res->setHeader("Content-Type", "application/x-protobuf");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "PUT, GET");
 
     uint8_t txBuf[MAX_STREAM_BUF_SIZE];
-
     uint32_t len = 1;
-    while (len) {
+
+    if (params->getQueryParameter("all", valueAll)) {
+        if (valueAll == "true") {
+            while (len) {
+                len = webAPI.getFromRadio(txBuf);
+                res->write(txBuf, len);
+            }
+        } else {
+            len = webAPI.getFromRadio(txBuf);
+            res->write(txBuf, len);
+        }
+    } else {
         len = webAPI.getFromRadio(txBuf);
         res->write(txBuf, len);
     }
