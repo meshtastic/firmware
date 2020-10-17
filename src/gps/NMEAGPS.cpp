@@ -1,6 +1,6 @@
 #include "NMEAGPS.h"
-#include "configuration.h"
 #include "RTC.h"
+#include "configuration.h"
 
 static int32_t toDegInt(RawDegrees d)
 {
@@ -32,7 +32,7 @@ bool NMEAGPS::lookForTime()
 {
     auto ti = reader.time;
     auto d = reader.date;
-    if (ti.isUpdated() && ti.isValid() && d.isValid()) {
+    if (ti.isValid() && d.isValid()) { // Note: we don't check for updated, because we'll only be called if needed
         /* Convert to unix time
 The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970
 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
@@ -65,27 +65,27 @@ bool NMEAGPS::lookForLocation()
     // uint8_t fixtype = reader.fixQuality();
     // hasValidLocation = ((fixtype >= 1) && (fixtype <= 5));
 
+    if (reader.satellites.isUpdated()) {
+        setNumSatellites(reader.satellites.value());
+    }
+
+    // Diminution of precision (an accuracy metric) is reported in 10^2 units, so we need to scale down when we use it
+    if (reader.hdop.isUpdated()) {
+        dop = reader.hdop.value();
+    }
+    if (reader.course.isUpdated()) {
+        heading = reader.course.value() * 1e3; // Scale the heading (in degrees * 10^-2) to match the expected degrees * 10^-5
+    }
+
+    if (reader.altitude.isUpdated())
+        altitude = reader.altitude.meters();
+
     if (reader.location.isUpdated()) {
-        if (reader.altitude.isValid())
-            altitude = reader.altitude.meters();
 
-        if (reader.location.isValid()) {
-            auto loc = reader.location.value();
-            latitude = toDegInt(loc.lat);
-            longitude = toDegInt(loc.lng);
-            foundLocation = true;
-        }
-
-        // Diminution of precision (an accuracy metric) is reported in 10^2 units, so we need to scale down when we use it
-        if (reader.hdop.isValid()) {
-            dop = reader.hdop.value();
-        }
-        if (reader.course.isValid()) {
-            heading = reader.course.value() * 1e3; // Scale the heading (in degrees * 10^-2) to match the expected degrees * 10^-5
-        }
-        if (reader.satellites.isValid()) {
-            setNumSatellites(reader.satellites.value());
-        }
+        auto loc = reader.location.value();
+        latitude = toDegInt(loc.lat);
+        longitude = toDegInt(loc.lng);
+        foundLocation = true;
 
         // expect gps pos lat=37.520825, lon=-122.309162, alt=158
         DEBUG_MSG("new NMEA GPS pos lat=%f, lon=%f, alt=%d, hdop=%g, heading=%f\n", latitude * 1e-7, longitude * 1e-7, altitude,
@@ -102,7 +102,7 @@ bool NMEAGPS::whileIdle()
     // First consume any chars that have piled up at the receiver
     while (_serial_gps->available() > 0) {
         int c = _serial_gps->read();
-        // DEBUG_MSG("%c", c);
+        //DEBUG_MSG("%c", c);
         isValid |= reader.encode(c);
     }
 

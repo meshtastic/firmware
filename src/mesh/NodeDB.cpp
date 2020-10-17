@@ -147,6 +147,7 @@ bool NodeDB::resetRadioConfig()
         radioConfig.preferences.wait_bluetooth_secs = 30;
         radioConfig.preferences.position_broadcast_secs = 6 * 60;
         radioConfig.preferences.ls_secs = 60;
+        radioConfig.preferences.region = RegionCode_TW;
     }
 
     return didFactoryReset;
