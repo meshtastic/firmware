@@ -382,8 +382,12 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
 
     if (req->getMethod() != "OPTIONS") {
         res->setHeader("Content-Type", "application/x-protobuf");
+    } else {
+        res->setHeader("Content-Type", "application/x-protobuf");
+        
     }
-    
+
+    res->setHeader("Access-Control-Allow-Headers", "Content-Type");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "PUT, OPTIONS");
 
