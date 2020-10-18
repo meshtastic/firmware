@@ -1,0 +1,277 @@
+/* latin-ext */
+@font-face {
+  font-family: 'Lato';
+  font-style: normal;
+  font-weight: 400;
+  src: local('Lato Regular'), local('Lato-Regular'), url(./Google.woff2) format('woff2');
+  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+
+*, *:before, *:after {
+  box-sizing: border-box;
+}
+
+body {
+  background: #C5DDEB;
+  font: 14px/20px "Lato", Arial, sans-serif;
+  padding: 40px 0;
+  color: white;
+}
+
+
+  
+.grid {
+  display: grid;
+  grid-template-columns:
+	1fr 4fr;
+  grid-template-areas:
+	"header header"
+	"sidebar content";
+  margin: 0 auto;
+  width: 750px;
+  background: #444753;
+  border-radius: 5px;
+}
+
+.top {grid-area: header;}
+.side {grid-area: sidebar;}
+.main {grid-area: content;}
+
+.top {
+  border-bottom: 2px solid white;
+}
+.top-text {
+  font-weight: bold;
+  font-size: 24px;
+  text-align: center;
+  padding: 20px;
+}
+
+.side {
+  width: 260px;
+  float: left;
+}
+.side .side-header {
+  padding: 20px;
+  border-bottom: 2px solid white;
+}
+
+.side .side-header .side-text {
+  padding-left: 10px;
+  margin-top: 6px;
+  font-size: 16px;
+  text-align: left;
+  font-weight: bold;
+  
+}
+
+.channel-list ul {
+  padding: 20px;
+  height: 570px;
+  list-style-type: none;
+}
+.channel-list ul li {
+  padding-bottom: 20px;
+}
+
+.channel-list .channel-name {
+  font-size: 20px;
+  margin-top: 8px;
+  padding-left: 8px;
+}
+
+.channel-list .message-count {
+  padding-left: 16px;
+  color: #92959E;
+}
+
+.icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  stroke-width: 0;
+  stroke: currentColor;
+  fill: currentColor;
+}
+
+.icon-map-marker {
+  width: 0.5714285714285714em;
+}
+
+.icon-circle {
+  width: 0.8571428571428571em;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+/* width: 490px; */
+  float: left;
+  background: #F2F5F8;
+/*  border-top-right-radius: 5px;
+  border-bottom-right-radius: 5px; */
+  color: #434651;
+}
+.content .content-header {
+  flex-grow: 0;
+  padding: 20px;
+  border-bottom: 2px solid white;
+}
+
+.content .content-header .content-from {
+  padding-left: 10px;
+  margin-top: 6px;
+  font-size: 20px;
+  text-align: center;
+  font-size: 16px;
+}
+.content .content-header .content-from .content-from-highlight {
+  font-weight: bold;
+}
+.content .content-header .content-num-messages {
+  color: #92959E;
+}
+
+.content .content-history {
+  flex-grow: 1;
+  padding: 20px 20px 20px;
+  border-bottom: 2px solid white;
+  overflow-y: scroll;
+  height: 375px;
+}
+.content .content-history ul {
+  list-style-type: none;
+  padding-inline-start: 10px;
+}
+.content .content-history .message-data {
+  margin-bottom: 10px;
+}
+.content .content-history .message-data-time {
+  color: #a8aab1;
+  padding-left: 6px;
+}
+.content .content-history .message {
+  color: white;
+  padding: 8px 10px;
+  line-height: 20px;
+  font-size: 14px;
+  border-radius: 7px;
+  margin-bottom: 30px;
+  width: 90%;
+  position: relative;
+}
+.content .content-history .message:after {
+  bottom: 100%;
+  left: 7%;
+  border: solid transparent;
+  content: " ";
+  height: 0;
+  width: 0;
+  position: absolute;
+  pointer-events: none;
+  border-bottom-color: #86BB71;
+  border-width: 10px;
+  margin-left: -10px;
+}
+.content .content-history .my-message {
+  background: #86BB71;
+}
+.content .content-history .other-message {
+  background: #94C2ED;
+}
+.content .content-history .other-message:after {
+  border-bottom-color: #94C2ED;
+  left: 93%;
+}
+.content .content-message {
+  flex-grow: 0;
+  padding: 10px;
+}
+.content .content-message textarea {
+  width: 100%;
+  border: none;
+  padding: 10px 10px;
+  font: 14px/22px "Lato", Arial, sans-serif;
+  margin-bottom: 10px;
+  border-radius: 5px;
+  resize: none;
+}
+
+.content .content-message button {
+  float: right;
+  color: #94C2ED;
+  font-size: 16px;
+  text-transform: uppercase;
+  border: none;
+  cursor: pointer;
+  font-weight: bold;
+  background: #F2F5F8;
+}
+.content .content-message button:hover {
+  color: #75b1e8;
+}
+/* Tooltip container */
+.tooltip {
+  color: #86BB71;
+  position: relative;
+  display: inline-block;
+  border-bottom: 1px dotted black; /* If you want dots under the hoverable text */
+}
+/* Tooltip text */
+.tooltip .tooltiptext {
+  visibility: hidden;
+  width: 120px;
+  background-color: #444753;
+  color: #fff;
+  text-align: center;
+  padding: 5px 0;
+  border-radius: 6px;
+   /* Position the tooltip text - see examples below! */
+  position: absolute;
+  z-index: 1;
+}
+
+/* Show the tooltip text when you mouse over the tooltip container */
+.tooltip:hover .tooltiptext {
+  visibility: visible;
+}
+
+.online, .offline, .me {
+  margin-right: 3px;
+  font-size: 10px;
+}
+
+.online {
+  color: #86BB71;
+}
+
+.offline {
+  color: #E38968;
+}
+
+.me {
+  color: #94C2ED;
+}
+
+.align-left {
+  text-align: left;
+}
+
+.align-right {
+  text-align: right;
+}
+
+.float-right {
+  float: right;
+}
+
+.clearfix:after {
+  visibility: hidden;
+  display: block;
+  font-size: 0;
+  content: " ";
+  clear: both;
+  height: 0;
+}
