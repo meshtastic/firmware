@@ -146,7 +146,8 @@ void Power::readPowerStatus()
         const PowerStatus powerStatus =
             PowerStatus(hasBattery ? OptTrue : OptFalse, batteryLevel->isVBUSPlug() ? OptTrue : OptFalse,
                         batteryLevel->isChargeing() ? OptTrue : OptFalse, batteryVoltageMv, batteryChargePercent);
-        DEBUG_MSG("Read power stat %d\n", powerStatus.getHasUSB());
+        DEBUG_MSG("Battery: hasUSB=%d, isCharging=%d, batMv=%d, batPct=%d\n", powerStatus.getHasUSB(),
+                  powerStatus.getIsCharging(), powerStatus.getBatteryVoltageMv(), powerStatus.getBatteryChargePercent());
         newStatus.notifyObservers(&powerStatus);
 
         // If we have a battery at all and it is less than 10% full, force deep sleep
