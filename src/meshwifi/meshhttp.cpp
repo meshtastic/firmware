@@ -51,6 +51,7 @@ void handleFavicon(HTTPRequest *req, HTTPResponse *res);
 void handleRoot(HTTPRequest *req, HTTPResponse *res);
 void handleBasicHTML(HTTPRequest *req, HTTPResponse *res);
 void handleBasicJS(HTTPRequest *req, HTTPResponse *res);
+void handleScriptsScriptJS(HTTPRequest *req, HTTPResponse *res);
 void handleStatic(HTTPRequest *req, HTTPResponse *res);
 void handle404(HTTPRequest *req, HTTPResponse *res);
 
@@ -216,6 +217,7 @@ void initWebServer()
     ResourceNode *nodeHotspot = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
     ResourceNode *nodeFavicon = new ResourceNode("/favicon.ico", "GET", &handleFavicon);
     ResourceNode *nodeRoot = new ResourceNode("/", "GET", &handleRoot);
+    ResourceNode *nodeScriptScriptsJS = new ResourceNode("/scripts/script.js", "GET", &handleScriptsScriptJS);
     ResourceNode *nodeBasicHTML = new ResourceNode("/basic.html", "GET", &handleBasicHTML);
     ResourceNode *nodeBasicJS = new ResourceNode("/basic.js", "GET", &handleBasicJS);
     ResourceNode *nodeStatic = new ResourceNode("/static/*", "GET", &handleStatic);
@@ -228,6 +230,7 @@ void initWebServer()
     secureServer->registerNode(nodeHotspot);
     secureServer->registerNode(nodeFavicon);
     secureServer->registerNode(nodeRoot);
+    secureServer->registerNode(nodeScriptScriptsJS);
     secureServer->registerNode(nodeBasicHTML);
     secureServer->registerNode(nodeBasicJS);
     secureServer->registerNode(nodeStatic);
@@ -242,6 +245,7 @@ void initWebServer()
     insecureServer->registerNode(nodeHotspot);
     insecureServer->registerNode(nodeFavicon);
     insecureServer->registerNode(nodeRoot);
+    insecureServer->registerNode(nodeScriptScriptsJS);
     insecureServer->registerNode(nodeBasicHTML);
     insecureServer->registerNode(nodeBasicJS);
     insecureServer->registerNode(nodeStatic);
