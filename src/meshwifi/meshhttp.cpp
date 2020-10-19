@@ -255,12 +255,14 @@ void initWebServer()
 
     insecureServer->addMiddleware(&middlewareSpeedUp160);
 
-    DEBUG_MSG("Starting Web Server...\n");
+    DEBUG_MSG("Starting Web Servers...\n");
     secureServer->start();
     insecureServer->start();
     if (secureServer->isRunning() && insecureServer->isRunning()) {
-        DEBUG_MSG("Web Server Ready\n");
+        DEBUG_MSG("HTTP and HTTPS Web Servers Ready! :-) \n");
         isWebServerReady = 1;
+    } else {
+        DEBUG_MSG("HTTP and HTTPS Web Servers Failed! ;-( \n");
     }
 }
 
