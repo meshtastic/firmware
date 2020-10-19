@@ -2,7 +2,7 @@
 #include "NodeDB.h"
 #include "configuration.h"
 #include "main.h"
-#include "meshhttpStatic.h"
+#include "meshHttpStatic.h"
 #include "meshwifi/meshwifi.h"
 #include "sleep.h"
 #include <WebServer.h>
@@ -79,9 +79,11 @@ void handleWebResponse()
         insecureServer->loop();
     }
 
-    // Slow down the CPU if we have not received a request within the last
-    //   2 minutes.
-    if (millis() - timeSpeedUp >= (2 * 60 * 1000)) {
+    /* 
+        Slow down the CPU if we have not received a request within the last few
+        seconds.
+    */
+    if (millis() - timeSpeedUp >= (25 * 1000)) {
         setCpuFrequencyMhz(80);
         timeSpeedUp = millis();
     }
