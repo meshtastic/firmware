@@ -7,6 +7,8 @@
      - Convert to hex:
          http://tomeko.net/online_tools/file_to_hex.php?lang=en
      - Paste into the array
+     - Note the filesize of your .gz file and write the file
+       size into the length int.
 
 */
 
