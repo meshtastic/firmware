@@ -2,7 +2,7 @@
 #include "NodeDB.h"
 #include "configuration.h"
 #include "main.h"
-#include "meshHttpStatic.h"
+#include "meshhttpStatic.h"
 #include "meshwifi/meshwifi.h"
 #include "sleep.h"
 #include <WebServer.h>
