@@ -110,8 +110,6 @@ static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     screen->forceDisplay();
 }
 
-
-
 static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->setTextAlignment(TEXT_ALIGN_CENTER);
@@ -1044,8 +1042,12 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         }
     }
 
-    display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
-    display->drawString(x, y + FONT_HEIGHT_SMALL * 3, "PWD: " + String(wifiPsw));
+    if ((millis() / 1000) % 2) {
+        display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
+    } else {
+        display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "PWD: " + String(wifiPsw));
+    }
+    display->drawString(x, y + FONT_HEIGHT_SMALL * 3, "http://meshtastic.local");
 
     /* Display a heartbeat pixel that blinks every time the frame is redrawn */
 #ifdef SHOW_REDRAWS
@@ -1100,9 +1102,8 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 
 #ifndef NO_ESP32
     // Show CPU Frequency.
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth("CPU " + String(getCpuFrequencyMhz()) + "MHz"), 
-        y + FONT_HEIGHT_SMALL * 1,
-        "CPU " + String(getCpuFrequencyMhz()) + "MHz");
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth("CPU " + String(getCpuFrequencyMhz()) + "MHz"),
+                        y + FONT_HEIGHT_SMALL * 1, "CPU " + String(getCpuFrequencyMhz()) + "MHz");
 #endif
 
     // Line 3
