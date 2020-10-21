@@ -66,9 +66,9 @@ function do_build() {
 }
 
 function do_boards() {
-	BOARDS=$1
-	isNrf=$2
-	for board in $BOARDS; do
+	declare boards=$1
+	declare isNrf=$2
+	for board in $boards; do
 		for country in $COUNTRIES; do 
 		    do_build $board $country "$isNrf"   
 		done
@@ -84,8 +84,8 @@ git submodule update
 # Important to pull latest version of libs into all device flavors, otherwise some devices might be stale
 platformio lib update 
 
-do_boards $BOARDS_ESP32 "false"
-do_boards $BOARDS_NRF52 "true"
+do_boards "$BOARDS_ESP32" "false"
+do_boards "$BOARDS_NRF52" "true"
 
 # keep the bins in archive also
 cp $OUTDIR/bins/firmware* $OUTDIR/elfs/firmware* $OUTDIR/bins/universal/firmware* $OUTDIR/elfs/universal/firmware* $ARCHIVEDIR
