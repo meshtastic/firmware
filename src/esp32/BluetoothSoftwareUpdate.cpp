@@ -72,7 +72,7 @@ int update_data_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_
     crc.update(data, len);
     Update.write(data, len);
     updateActualSize += len;
-    powerFSM.trigger(EVENT_RECEIVED_TEXT_MSG); // Not exactly correct, but we want to force the device to not sleep now
+    powerFSM.trigger(EVENT_CONTACT_FROM_PHONE); 
 
     return 0;
 }
