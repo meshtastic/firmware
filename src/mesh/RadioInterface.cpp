@@ -26,7 +26,20 @@ const RegionInfo regions[] = {
     RDEF(Unset, 903.08f, 2.16f, 13, 0) // Assume US freqs if unset, Must be last
 };
 
-static const RegionInfo *myRegion;
+const RegionInfo *myRegion;
+
+void initRegion()
+{
+    if (!myRegion) {
+        const RegionInfo *r = regions;
+        for (; r->code != RegionCode_Unset && r->code != radioConfig.preferences.region; r++)
+            ;
+        myRegion = r;
+        DEBUG_MSG("Wanted region %d, using %s\n", radioConfig.preferences.region, r->name);
+
+        myNodeInfo.num_channels = myRegion->numChannels; // Tell our android app how many channels we have
+    }
+}
 
 /**
  * ## LoRaWAN for North America
@@ -91,19 +104,9 @@ void printPacket(const char *prefix, const MeshPacket *p)
     DEBUG_MSG(")\n");
 }
 
-RadioInterface::RadioInterface() 
+RadioInterface::RadioInterface()
 {
     assert(sizeof(PacketHeader) == 4 || sizeof(PacketHeader) == 16); // make sure the compiler did what we expected
-
-    if (!myRegion) {
-        const RegionInfo *r = regions;
-        for (; r->code != RegionCode_Unset && r->code != radioConfig.preferences.region; r++)
-            ;
-        myRegion = r;
-        DEBUG_MSG("Wanted region %d, using %s\n", radioConfig.preferences.region, r->name);
-
-        myNodeInfo.num_channels = myRegion->numChannels; // Tell our android app how many channels we have
-    }
 
     // Can't print strings this early - serial not setup yet
     // DEBUG_MSG("Set meshradio defaults name=%s\n", channelSettings.name);
@@ -120,7 +123,7 @@ bool RadioInterface::init()
     // we now expect interfaces to operate in promiscous mode
     // radioIf.setThisAddress(nodeDB.getNodeNum()); // Note: we must do this here, because the nodenum isn't inited at constructor
     // time.
-    
+
     return true;
 }
 
