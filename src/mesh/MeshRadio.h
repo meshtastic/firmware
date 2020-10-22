@@ -17,3 +17,6 @@ struct RegionInfo {
 };
 
 extern const RegionInfo regions[];
+extern const RegionInfo *myRegion;
+
+extern void initRegion();
