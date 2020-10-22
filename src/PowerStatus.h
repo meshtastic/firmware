@@ -82,7 +82,7 @@ class PowerStatus : public Status
             isCharging = newStatus->isCharging;
         }
         if (isDirty) {
-            DEBUG_MSG("Battery %dmV %d%%\n", batteryVoltageMv, batteryChargePercent);
+            // DEBUG_MSG("Battery %dmV %d%%\n", batteryVoltageMv, batteryChargePercent);
             onNewStatus.notifyObservers(this);
         }
         return 0;
