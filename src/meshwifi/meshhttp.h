@@ -22,7 +22,6 @@ void handleRoot();
 void handleScriptsScriptJS();
 void handleJSONChatHistoryDummy();
 
-
 class HttpAPI : public PhoneAPI
 {
 
