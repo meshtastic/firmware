@@ -1044,7 +1044,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         }
     }
 
-    if ((millis() / 1000) % 2) {
+    if ((millis() / 10000) % 2) {
         display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
     } else {
         display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "PWD: " + String(wifiPsw));
