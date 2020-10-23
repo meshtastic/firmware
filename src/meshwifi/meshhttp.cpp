@@ -350,7 +350,8 @@ void handleStaticBrowse(HTTPRequest *req, HTTPResponse *res)
                     modifiedFile.remove((modifiedFile.length() - 3), 3);
                     res->print("<a href=\"" + modifiedFile + "\">" + String(file.name()).substring(1) + "</a>");
                 } else {
-                    res->print("<a href=\"" + String(file.name()).substring(1) + "\">" + String(file.name()).substring(1) + "</a>");
+                    res->print("<a href=\"" + String(file.name()).substring(1) + "\">" + String(file.name()).substring(1) +
+                               "</a>");
                 }
                 res->println("</td>");
                 res->println("<td>");
@@ -699,9 +700,35 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
 void handleRoot(HTTPRequest *req, HTTPResponse *res)
 {
     res->setHeader("Content-Type", "text/html");
-    res->setHeader("Content-Encoding", "gzip");
 
-    File file = SPIFFS.open("/static/index.html.gz");
+    std::string filename = "/static/index.html";
+    std::string filenameGzip = "/static/index.html.gz";
+
+    if (!SPIFFS.exists(filename.c_str()) && !SPIFFS.exists(filenameGzip.c_str())) {
+        // Send "404 Not Found" as response, as the file doesn't seem to exist
+        res->setStatusCode(404);
+        res->setStatusText("Not found");
+        res->println("404 Not Found");
+        res->printf("<p>File not found: %s</p>\n", filename.c_str());
+        return;
+    }
+
+    // Try to open the file from SPIFFS
+    File file;
+
+    if (SPIFFS.exists(filename.c_str())) {
+        file = SPIFFS.open(filename.c_str());
+        if (!file.available()) {
+            DEBUG_MSG("File not available - %s\n", filename.c_str());
+        }
+
+    } else if (SPIFFS.exists(filenameGzip.c_str())) {
+        file = SPIFFS.open(filenameGzip.c_str());
+        res->setHeader("Content-Encoding", "gzip");
+        if (!file.available()) {
+            DEBUG_MSG("File not available\n");
+        }
+    }
 
     // Read the file from SPIFFS and write it to the HTTP response body
     size_t length = 0;
