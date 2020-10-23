@@ -50,7 +50,9 @@ meshtastic::GPSStatus *gpsStatus = new meshtastic::GPSStatus();
 // Global Node status
 meshtastic::NodeStatus *nodeStatus = new meshtastic::NodeStatus();
 
-bool ssd1306_found;
+/// The I2C address of our display (if found)
+uint8_t screen_found;
+
 bool axp192_found;
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
@@ -72,8 +74,12 @@ void scanI2Cdevice(void)
             nDevices++;
 
             if (addr == SSD1306_ADDRESS) {
-                ssd1306_found = true;
+                screen_found = addr;
                 DEBUG_MSG("ssd1306 display found\n");
+            }
+            if (addr == ST7567_ADDRESS) {
+                screen_found = addr;
+                DEBUG_MSG("st7567 display found\n");
             }
 #ifdef AXP192_SLAVE_ADDRESS
             if (addr == AXP192_SLAVE_ADDRESS) {
@@ -247,7 +253,7 @@ void setup()
 #endif
 
 #ifdef PIN_LCD_RESET
-    // FIXME - move this someplace better
+    // FIXME - move this someplace better, LCD is at address 0x3F
     pinMode(PIN_LCD_RESET, OUTPUT);
     digitalWrite(PIN_LCD_RESET, 0);
     delay(20);
@@ -270,7 +276,7 @@ void setup()
 #ifndef NO_ESP32
     // Don't init display if we don't have one or we are waking headless due to a timer event
     if (wakeCause == ESP_SLEEP_WAKEUP_TIMER)
-        ssd1306_found = false; // forget we even have the hardware
+        screen_found = 0; // forget we even have the hardware
 
     esp32Setup();
 #endif
@@ -296,11 +302,11 @@ void setup()
 #endif
 
     // Initialize the screen first so we can show the logo while we start up everything else.
-    screen = new graphics::Screen(SSD1306_ADDRESS);
+    screen = new graphics::Screen(screen_found);
 
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 
-// If we don't have bidirectional comms, we can't even try talking to UBLOX
+    // If we don't have bidirectional comms, we can't even try talking to UBLOX
     UBloxGPS *ublox = NULL;
 #ifdef GPS_TX_PIN
     // Init GPS - first try ublox
@@ -332,7 +338,7 @@ void setup()
         gpsStatus->observe(&gps->newStatus);
     else
         DEBUG_MSG("Warning: No GPS found - running without GPS\n");
-        
+
     nodeStatus->observe(&nodeDB.newStatus);
 
     service.init();
@@ -342,11 +348,11 @@ void setup()
 #if defined(ST7735_CS) || defined(HAS_EINK)
     screen->setup();
 #else
-    if (ssd1306_found)
+    if (screen_found)
         screen->setup();
 #endif
 
-    screen->print("Started...\n");    
+    screen->print("Started...\n");
 
     // We have now loaded our saved preferences from flash
 
@@ -401,7 +407,6 @@ void setup()
 
     // Initialize Wifi
     initWifi();
-    
 
     if (!rIf)
         recordCriticalError(ErrNoRadio);
