@@ -5,7 +5,13 @@
 
 ## RAK815
 
-TODO:
+### PPR1 TODO
+
+* Test GPS
+* make ST7567Wire driver less ugly
+* leave LCD screen on most of the time (because it needs little power)
+
+### general nrf52 TODO:
 
 - enter SDS state at correct time (to protect battery or loss of phone contact)
 - show screen on eink when we enter SDS state (with app info and say sleeping)
