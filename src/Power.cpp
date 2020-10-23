@@ -52,10 +52,13 @@ class AnalogBatteryLevel : public HasBatteryLevel
     {
         float v = getBattVoltage() / 1000;
 
-        if (v < 2.1)
+        if (v < noBatVolt)
             return -1; // If voltage is super low assume no battery installed
 
-        return 100 * (v - 3.27) / (4.2 - 3.27);
+        if (v > chargingVolt)
+            return 0; // While charging we can't report % full on the battery
+
+        return 100 * (v - emptyVolt) / (fullVolt - emptyVolt);
     }
 
     /**
@@ -76,7 +79,20 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /**
      * return true if there is a battery installed in this unit
      */
-    virtual bool isBatteryConnect() { return getBattVoltage() != -1; }
+    virtual bool isBatteryConnect() { return getBattPercentage() != -1; }
+
+    /// If we see a battery voltage higher than physics allows - assume charger is pumping
+    /// in power
+    virtual bool isVBUSPlug() { return getBattVoltage() > chargingVolt; }
+
+    /// Assume charging if we have a battery and external power is connected.
+    /// we can't be smart enough to say 'full'?
+    virtual bool isChargeing() { return isBatteryConnect() && isVBUSPlug(); }
+
+  private:
+    /// If we see a battery voltage higher than physics allows - assume charger is pumping
+    /// in power
+    const float fullVolt = 4.2, emptyVolt = 3.27, chargingVolt = 4.3, noBatVolt = 2.1;
 } analogLevel;
 
 Power::Power() : OSThread("Power") {}
@@ -146,7 +162,8 @@ void Power::readPowerStatus()
         const PowerStatus powerStatus =
             PowerStatus(hasBattery ? OptTrue : OptFalse, batteryLevel->isVBUSPlug() ? OptTrue : OptFalse,
                         batteryLevel->isChargeing() ? OptTrue : OptFalse, batteryVoltageMv, batteryChargePercent);
-        DEBUG_MSG("Read power stat %d\n", powerStatus.getHasUSB());
+        DEBUG_MSG("Battery: usbPower=%d, isCharging=%d, batMv=%d, batPct=%d\n", powerStatus.getHasUSB(),
+                  powerStatus.getIsCharging(), powerStatus.getBatteryVoltageMv(), powerStatus.getBatteryChargePercent());
         newStatus.notifyObservers(&powerStatus);
 
         // If we have a battery at all and it is less than 10% full, force deep sleep

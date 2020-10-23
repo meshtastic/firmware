@@ -92,25 +92,25 @@ static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     // needs to be drawn relative to x and y
 
     // draw centered left to right and centered above the one line of app text
-    display->drawXbm(x + (SCREEN_WIDTH - icon_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - icon_height) / 2, icon_width,
-                     icon_height, (const uint8_t *)icon_bits);
+    display->drawXbm(x + (SCREEN_WIDTH - icon_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - icon_height) / 2 + 2,
+                     icon_width, icon_height, (const uint8_t *)icon_bits);
 
     display->setFont(FONT_MEDIUM);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     const char *title = "meshtastic.org";
     display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
     display->setFont(FONT_SMALL);
-    const char *region = xstr(HW_VERSION);
-    if (*region && region[3] == '-') // Skip past 1.0- in the 1.0-EU865 string
-        region += 4;
+
+    const char *region = myRegion ? myRegion->name : NULL;
+    if (region)
+        display->drawString(x + 0, y + 0, region);
+
     char buf[16];
     snprintf(buf, sizeof(buf), "%s",
              xstr(APP_VERSION)); // Note: we don't bother printing region or now, it makes the string too long
-    display->drawString(SCREEN_WIDTH - 20, 0, buf);
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(buf), y + 0, buf);
     screen->forceDisplay();
 }
-
-
 
 static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -1044,8 +1044,12 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         }
     }
 
-    display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
-    display->drawString(x, y + FONT_HEIGHT_SMALL * 3, "PWD: " + String(wifiPsw));
+    if ((millis() / 1000) % 2) {
+        display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
+    } else {
+        display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "PWD: " + String(wifiPsw));
+    }
+    display->drawString(x, y + FONT_HEIGHT_SMALL * 3, "http://meshtastic.local");
 
     /* Display a heartbeat pixel that blinks every time the frame is redrawn */
 #ifdef SHOW_REDRAWS
@@ -1100,9 +1104,8 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 
 #ifndef NO_ESP32
     // Show CPU Frequency.
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth("CPU " + String(getCpuFrequencyMhz()) + "MHz"), 
-        y + FONT_HEIGHT_SMALL * 1,
-        "CPU " + String(getCpuFrequencyMhz()) + "MHz");
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth("CPU " + String(getCpuFrequencyMhz()) + "MHz"),
+                        y + FONT_HEIGHT_SMALL * 1, "CPU " + String(getCpuFrequencyMhz()) + "MHz");
 #endif
 
     // Line 3
@@ -1138,7 +1141,7 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
     // DEBUG_MSG("Screen got status update %d\n", arg->getStatusType());
     switch (arg->getStatusType()) {
     case STATUS_TYPE_NODE:
-        if (nodeDB.updateTextMessage || nodeStatus->getLastNumTotal() != nodeStatus->getNumTotal()) {
+        if (showingNormalScreen && (nodeDB.updateTextMessage || nodeStatus->getLastNumTotal() != nodeStatus->getNumTotal())) {
             setFrames(); // Regen the list of screens
         }
         nodeDB.updateGUI = false;
