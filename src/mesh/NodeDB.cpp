@@ -245,6 +245,9 @@ void NodeDB::init()
             }
     }
 
+    // Update the global myRegion
+    initRegion();
+
     strncpy(myNodeInfo.firmware_version, optstr(APP_VERSION), sizeof(myNodeInfo.firmware_version));
     strncpy(myNodeInfo.hw_model, HW_VENDOR, sizeof(myNodeInfo.hw_model));
 

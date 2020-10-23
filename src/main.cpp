@@ -294,14 +294,6 @@ void setup()
 
     // Initialize the screen first so we can show the logo while we start up everything else.
     screen = new graphics::Screen(SSD1306_ADDRESS);
-#if defined(ST7735_CS) || defined(HAS_EINK)
-    screen->setup();
-#else
-    if (ssd1306_found)
-        screen->setup();
-#endif
-
-    screen->print("Started...\n");
 
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 
@@ -341,6 +333,17 @@ void setup()
     nodeStatus->observe(&nodeDB.newStatus);
 
     service.init();
+
+    // Don't call screen setup until after nodedb is setup (because we need
+    // the current region name)
+#if defined(ST7735_CS) || defined(HAS_EINK)
+    screen->setup();
+#else
+    if (ssd1306_found)
+        screen->setup();
+#endif
+
+    screen->print("Started...\n");    
 
     // We have now loaded our saved preferences from flash
 
