@@ -250,6 +250,9 @@ void setup()
     // FIXME - move this someplace better
     pinMode(PIN_LCD_RESET, OUTPUT);
     digitalWrite(PIN_LCD_RESET, 0);
+    delay(20);
+    digitalWrite(PIN_LCD_RESET, 1);
+    delay(20);
 #endif
 
     scanI2Cdevice();

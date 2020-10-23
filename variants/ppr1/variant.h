@@ -116,7 +116,7 @@ static const uint8_t AREF = PIN_AREF;
 
 // LCD
 
-// #define PIN_LCD_RESET 23 // active high?
+#define PIN_LCD_RESET 23 // active low, pulse low for 20ms at boot
 
 /*
  * SPI Interfaces
