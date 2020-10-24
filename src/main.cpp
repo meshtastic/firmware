@@ -256,9 +256,9 @@ void setup()
     // FIXME - move this someplace better, LCD is at address 0x3F
     pinMode(PIN_LCD_RESET, OUTPUT);
     digitalWrite(PIN_LCD_RESET, 0);
-    delay(20);
+    delay(1);
     digitalWrite(PIN_LCD_RESET, 1);
-    delay(20);
+    delay(1);
 #endif
 
     scanI2Cdevice();
