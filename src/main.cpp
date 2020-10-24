@@ -179,7 +179,7 @@ class ButtonThread : public OSThread
 #ifdef BUTTON_PIN_ALT
         userButtonAlt = OneButton(BUTTON_PIN_ALT, true, true);
         userButtonAlt.attachClick(userButtonPressed);
-        userButton.attachDuringLongPress(userButtonPressedLong);
+        userButtonAlt.attachDuringLongPress(userButtonPressedLong);
         wakeOnIrq(BUTTON_PIN_ALT, FALLING);
 #endif
     }
@@ -196,9 +196,10 @@ class ButtonThread : public OSThread
 #endif
 #ifdef BUTTON_PIN_ALT
         userButtonAlt.tick();
-        canSleep &= userButton.isIdle();
+        canSleep &= userButtonAlt.isIdle();
 #endif
-        // if(!canSleep) DEBUG_MSG("Supressing sleep!\n");
+        // if (!canSleep) DEBUG_MSG("Supressing sleep!\n");
+        //else DEBUG_MSG("sleep ok\n");
 
         return 5;
     }
@@ -209,7 +210,11 @@ class ButtonThread : public OSThread
         // DEBUG_MSG("press!\n");
         powerFSM.trigger(EVENT_PRESS);
     }
-    static void userButtonPressedLong() { screen->adjustBrightness(); }
+    static void userButtonPressedLong()
+    {
+        DEBUG_MSG("Long press!\n");
+        screen->adjustBrightness();
+    }
 };
 
 static Periodic *ledPeriodic;
