@@ -33,6 +33,13 @@ bool GPS::setup()
     pinMode(PIN_GPS_EN, OUTPUT);
 #endif
 
+#ifdef PIN_GPS_RESET
+    digitalWrite(PIN_GPS_RESET, 1); // assert for 10ms
+    pinMode(PIN_GPS_RESET, OUTPUT);
+    delay(10);
+    digitalWrite(PIN_GPS_RESET, 0);
+#endif
+
     setAwake(true); // Wake GPS power before doing any init
     bool ok = setupGPS();
 
@@ -53,12 +60,6 @@ void GPS::wake()
     digitalWrite(PIN_GPS_WAKE, GPS_WAKE_ACTIVE);
     pinMode(PIN_GPS_WAKE, OUTPUT);
 #endif
-
-#ifdef PIN_GPS_RESET
-    digitalWrite(PIN_GPS_RESET, 0);
-    pinMode(PIN_GPS_RESET, OUTPUT);
-#endif
-
 }
 
 

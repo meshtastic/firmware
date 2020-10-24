@@ -107,10 +107,10 @@ static const uint8_t AREF = PIN_AREF;
 // #define GPS_TX_PIN PIN_SERIAL1_TX
 // #define GPS_RX_PIN PIN_SERIAL1_RX
 
-#define PIN_GPS_RESET 29 // active high?
+#define PIN_GPS_RESET 29 // active high
 #define PIN_GPS_PPS 28
 // #define PIN_GPS_WAKE 20 // CELL_CTRL in schematic? based on their example code
-#define PIN_GPS_EN 7 // GPS_EN active high?
+#define PIN_GPS_EN 7 // GPS_EN active high
 
 #define PIN_VUSB_EN 21
 
@@ -118,6 +118,9 @@ static const uint8_t AREF = PIN_AREF;
 
 #define PIN_LCD_RESET 23 // active low, pulse low for 20ms at boot
 #define USE_ST7567
+
+/// Charge controller I2C address
+#define BQ25703A_ADDR 0x6b
 
 // Define if screen should be mirrored left to right
 #define SCREEN_MIRROR
