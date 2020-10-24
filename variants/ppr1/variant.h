@@ -122,6 +122,10 @@ static const uint8_t AREF = PIN_AREF;
 // Define if screen should be mirrored left to right
 #define SCREEN_MIRROR
 
+// LCD screens are slow, so slowdown the wipe so it looks better
+#define SCREEN_TRANSITION_MSECS 1000
+#define SCREEN_TRANSITION_FRAMERATE 10 // fps
+
 /*
  * SPI Interfaces
  */
