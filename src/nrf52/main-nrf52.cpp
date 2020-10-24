@@ -82,6 +82,8 @@ int printf(const char *fmt, ...)
     return res;
 }
 
+#include "BQ25713.h"
+
 void nrf52Setup()
 {
 
@@ -93,8 +95,11 @@ void nrf52Setup()
     // This is the recommended setting for Monitor Mode Debugging
     NVIC_SetPriority(DebugMonitor_IRQn, 6UL);
 
-    // Not yet on board
-    // pmu.init();
+#ifdef BQ25703A_ADDR
+    auto *bq = new BQ25713();
+    if(!bq->setup())
+        DEBUG_MSG("ERROR! Charge controller init failed\n");
+#endif
 
     // Init random seed
     // FIXME - use this to get random numbers

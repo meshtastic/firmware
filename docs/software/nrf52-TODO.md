@@ -7,9 +7,12 @@
 
 ### PPR1 TODO
 
-* fix usb
+* fix usb - check latest tinyusb
+* Test GPS - try pulsing reset
+* properly test charge controller config and read battery/charge status
 * fix bluetooth
-* Test GPS
+* fix LCD max contrast (currently too high, needs to be about 40?)
+* save brightness settings in flash
 * make ST7567Wire driver less ugly, move OLED stuff into a common class treee
 * add LCD power save mode for lcd per page 31 of datasheet
 * add LCD power off sequence per datasheet to lcd driver
