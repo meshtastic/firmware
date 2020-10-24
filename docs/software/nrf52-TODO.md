@@ -11,8 +11,8 @@
 * fix bluetooth
 * Test GPS
 * make ST7567Wire driver less ugly, move OLED stuff into a common class treee
-* add power save mode for lcd per page 31 of datasheet
-* add power off sequence per datasheet to lcd driver
+* add LCD power save mode for lcd per page 31 of datasheet
+* add LCD power off sequence per datasheet to lcd driver
 * leave LCD screen on most of the time (because it needs little power)
 
 ### general nrf52 TODO:
