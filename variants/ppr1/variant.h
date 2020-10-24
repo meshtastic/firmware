@@ -119,6 +119,9 @@ static const uint8_t AREF = PIN_AREF;
 #define PIN_LCD_RESET 23 // active low, pulse low for 20ms at boot
 #define USE_ST7567
 
+// Define if screen should be mirrored left to right
+#define SCREEN_MIRROR
+
 /*
  * SPI Interfaces
  */

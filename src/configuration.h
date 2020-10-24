@@ -147,7 +147,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // Flip the screen upside down by default as it makes more sense on T-BEAM
 // devices. Comment this out to not rotate screen 180 degrees.
-#define FLIP_SCREEN_VERTICALLY
+#define SCREEN_FLIP_VERTICALLY
+
+// Define if screen should be mirrored left to right
+// #define SCREEN_MIRROR
 
 // -----------------------------------------------------------------------------
 // GPS

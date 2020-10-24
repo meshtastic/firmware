@@ -7,12 +7,18 @@
 
 ### PPR1 TODO
 
+* fix usb
+* fix bluetooth
 * Test GPS
-* make ST7567Wire driver less ugly
+* make ST7567Wire driver less ugly, move OLED stuff into a common class treee
+* add power save mode for lcd per page 31 of datasheet
+* add power off sequence per datasheet to lcd driver
 * leave LCD screen on most of the time (because it needs little power)
 
 ### general nrf52 TODO:
 
+- turn off transitions on eink screens
+- change update interval on eink from 1/sec frames to one frame every 5 mins
 - enter SDS state at correct time (to protect battery or loss of phone contact)
 - show screen on eink when we enter SDS state (with app info and say sleeping)
 - require button press to pair

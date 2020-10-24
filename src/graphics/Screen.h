@@ -21,6 +21,11 @@
 #include "power.h"
 #include <string>
 
+// 0 to 255, though particular variants might define different defaults
+#ifndef BRIGHTNESS_DEFAULT
+#define BRIGHTNESS_DEFAULT 150
+#endif
+
 namespace graphics
 {
 
@@ -99,7 +104,7 @@ class Screen : public concurrency::OSThread
 
     // Implementation to Adjust Brightness
     void adjustBrightness();
-    uint8_t brightness = 150;
+    uint8_t brightness = BRIGHTNESS_DEFAULT;
 
     /// Starts showing the Bluetooth PIN screen.
     //

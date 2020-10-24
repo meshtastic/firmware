@@ -627,7 +627,8 @@ void Screen::setup()
     // is never found when probing i2c and therefore we don't call setup and never want to do (invalid) accesses to this device.
     useDisplay = true;
 
-    dispdev.resetOrientation();
+    // I think this is not needed - redundant with ui.init
+    // dispdev.resetOrientation();
 
     // Initialising the UI will init the display too.
     ui.init();
@@ -635,7 +636,12 @@ void Screen::setup()
     displayWidth = dispdev.width();
     displayHeight = dispdev.height();
 
-    ui.setTimePerTransition(300); // msecs
+    uint16_t transitionTime = 300; // msecs
+#ifdef HAS_EINK
+    transitionTime = 0;
+#endif
+    ui.setTimePerTransition(transitionTime);  
+
     ui.setIndicatorPosition(BOTTOM);
     // Defines where the first frame is located in the bar.
     ui.setIndicatorDirection(LEFT_RIGHT);
@@ -661,7 +667,9 @@ void Screen::setup()
     // Set up a log buffer with 3 lines, 32 chars each.
     dispdev.setLogBuffer(3, 32);
 
-#ifdef FLIP_SCREEN_VERTICALLY
+#ifdef SCREEN_MIRROR
+    dispdev.mirrorScreen();
+#elif defined(SCREEN_FLIP_VERTICALLY)
     dispdev.flipScreenVertically();
 #endif
 
