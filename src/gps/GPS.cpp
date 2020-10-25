@@ -25,6 +25,22 @@ uint8_t GPS::i2cAddress = 0;
 
 GPS *gps;
 
+bool GPS::setupGPS()
+{
+    if (_serial_gps) {
+#ifdef GPS_RX_PIN
+        _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+#else
+        _serial_gps->begin(GPS_BAUDRATE);
+#endif
+#ifndef NO_ESP32
+        _serial_gps->setRxBufferSize(2048); // the default is 256
+#endif
+    }
+
+    return true;
+}
+
 bool GPS::setup()
 {
     // Master power for the GPS
