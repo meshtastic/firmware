@@ -69,8 +69,9 @@ uint32_t timeSpeedUp = 0;
 
 // We need to specify some content-type mapping, so the resources get delivered with the
 // right content type and are displayed correctly in the browser
-char contentTypes[][2][32] = {{".txt", "text/plain"}, {".html", "text/html"}, {".js", "text/javascript"},
-                              {".png", "image/png"},  {".jpg", "image/jpg"},  {"", ""}};
+char contentTypes[][2][32] = {{".txt", "text/plain"}, {".html", "text/html"},        {".js", "text/javascript"},
+                              {".png", "image/png"},  {".jpg", "image/jpg"},         {".gz", "application/gzip"},
+                              {".gif", "image/gif"},  {".json", "application/json"}, {"", ""}};
 
 void handleWebResponse()
 {
