@@ -209,6 +209,9 @@ External serial flash WP25R1635FZUIL0
 
 #define HAS_EINK
 
+// No screen wipes on eink
+#define SCREEN_TRANSITION_MSECS 0
+
 #define PIN_SPI1_MISO                                                                                                            \
     (32 + 7) // FIXME not really needed, but for now the SPI code requires something to be defined, pick an used GPIO
 #define PIN_SPI1_MOSI PIN_EINK_MOSI
