@@ -58,10 +58,6 @@ static char ourId[5];
 static bool heartbeat = false;
 #endif
 
-// We used to use constants for this - now we pull from the device at startup
-//#define SCREEN_WIDTH 128
-//#define SCREEN_HEIGHT 64
-
 static uint16_t displayWidth, displayHeight;
 
 #define SCREEN_WIDTH displayWidth
@@ -84,6 +80,10 @@ static uint16_t displayWidth, displayHeight;
 #define FONT_HEIGHT_MEDIUM fontHeight(FONT_MEDIUM)
 
 #define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
+
+#ifndef SCREEN_TRANSITION_MSECS
+#define SCREEN_TRANSITION_MSECS 300
+#endif
 
 static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -627,7 +627,8 @@ void Screen::setup()
     // is never found when probing i2c and therefore we don't call setup and never want to do (invalid) accesses to this device.
     useDisplay = true;
 
-    dispdev.resetOrientation();
+    // I think this is not needed - redundant with ui.init
+    // dispdev.resetOrientation();
 
     // Initialising the UI will init the display too.
     ui.init();
@@ -635,7 +636,8 @@ void Screen::setup()
     displayWidth = dispdev.width();
     displayHeight = dispdev.height();
 
-    ui.setTimePerTransition(300); // msecs
+    ui.setTimePerTransition(SCREEN_TRANSITION_MSECS);  
+
     ui.setIndicatorPosition(BOTTOM);
     // Defines where the first frame is located in the bar.
     ui.setIndicatorDirection(LEFT_RIGHT);
@@ -661,7 +663,9 @@ void Screen::setup()
     // Set up a log buffer with 3 lines, 32 chars each.
     dispdev.setLogBuffer(3, 32);
 
-#ifdef FLIP_SCREEN_VERTICALLY
+#ifdef SCREEN_MIRROR
+    dispdev.mirrorScreen();
+#elif defined(SCREEN_FLIP_VERTICALLY)
     dispdev.flipScreenVertically();
 #endif
 
@@ -874,12 +878,16 @@ void Screen::handleOnPress()
     }
 }
 
+#ifndef SCREEN_TRANSITION_FRAMERATE
+#define SCREEN_TRANSITION_FRAMERATE 30 // fps
+#endif
+
 void Screen::setFastFramerate()
 {
     DEBUG_MSG("Setting fast framerate\n");
 
     // We are about to start a transition so speed up fps
-    targetFramerate = TRANSITION_FRAMERATE;
+    targetFramerate = SCREEN_TRANSITION_FRAMERATE;
     ui.setTargetFPS(targetFramerate);
     setInterval(0); // redraw ASAP
 }
