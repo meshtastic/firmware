@@ -8,12 +8,13 @@ set -e
 BOOTDIR=/home/kevinh/development/meshtastic/Adafruit_nRF52_Bootloader
 BOARD=othernet_ppr1
 BOOTVER=0.3.2
-BOOTNUM=125
-BOOTSHA=g4582f73
-SDVER=6.1.1
+BOOTNUM=128
+BOOTSHA=gc01b9ea
+SDCODE=s113
+SDVER=7.2.0
 PROJ=ppr1
 
-# FIXME for nRF52840 use 0xff000
+# FIXME for nRF52840 use 0xff000, for nRF52833 use 0x7f000
 BOOTSET=0x7f000
 
 nrfjprog --eraseall -f nrf52
@@ -25,8 +26,8 @@ nrfjprog --eraseall -f nrf52
 echo "01 00 00 00 00 00 00 00" | xxd -r -p - >/tmp/bootconf.bin
 srec_cat /tmp/bootconf.bin -binary -offset $BOOTSET -output /tmp/bootconf.hex -intel   
 
-echo Generating merged hex file 
-mergehex -o ${BOARD}_full.hex -m $BOOTDIR/_build/build-$BOARD/${BOARD}_bootloader-$BOOTVER-$BOOTNUM-$BOOTSHA-dirty_s140_$SDVER.hex .pio/build/$PROJ/firmware.hex /tmp/bootconf.hex
+echo Generating merged hex file from .pio/build/$PROJ/firmware.hex
+mergehex -o ${BOARD}_full.hex -m $BOOTDIR/_build/build-$BOARD/${BOARD}_bootloader-$BOOTVER-$BOOTNUM-$BOOTSHA-dirty_${SDCODE}_$SDVER.hex .pio/build/$PROJ/firmware.hex /tmp/bootconf.hex
 
 echo Telling bootloader app region is valid and telling CPU to run
 nrfjprog --program ${BOARD}_full.hex -f nrf52 --reset
