@@ -7,10 +7,6 @@
 
 ### PPR1 TODO
 
-* fix usb - I think the problem is VBUS in HW
-
-* Test GPS - try pulsing reset - no joy.  R19 is the resistor on the TX path from GPS to CPU
-R17 is the resistor for V_BK GPS power (measured 3V - ok!), R20 is the resistor for the RX path from CPU to GPS. R18 for RESET (it is low and GPS reset is high - ok!)
 * V_BK for the GPS should probably be supplied from something always on
 
 * use S113 soft device 7.2.0
