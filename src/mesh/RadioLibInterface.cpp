@@ -243,13 +243,17 @@ void RadioLibInterface::handleTransmitInterrupt()
 
 void RadioLibInterface::completeSending()
 {
-    if (sendingPacket) {
+    // We are careful to clear sending packet before calling printPacket because
+    // that can take a long time
+    auto p = sendingPacket;
+    sendingPacket = NULL;
+
+    if (p) {
         txGood++;
-        printPacket("Completed sending", sendingPacket);
+        printPacket("Completed sending", p);
 
         // We are done sending that packet, release it
-        packetPool.release(sendingPacket);
-        sendingPacket = NULL;
+        packetPool.release(p);
         // DEBUG_MSG("Done with send\n");
     }
 }
