@@ -174,12 +174,14 @@ class ButtonThread : public OSThread
         userButton = OneButton(BUTTON_PIN, true, true);
         userButton.attachClick(userButtonPressed);
         userButton.attachDuringLongPress(userButtonPressedLong);
+        userButton.attachDoubleClick(userButtonDoublePressed);
         wakeOnIrq(BUTTON_PIN, FALLING);
 #endif
 #ifdef BUTTON_PIN_ALT
         userButtonAlt = OneButton(BUTTON_PIN_ALT, true, true);
         userButtonAlt.attachClick(userButtonPressed);
         userButtonAlt.attachDuringLongPress(userButtonPressedLong);
+        userButtonAlt.attachDoubleClick(userButtonDoublePressed);
         wakeOnIrq(BUTTON_PIN_ALT, FALLING);
 #endif
     }
@@ -215,6 +217,13 @@ class ButtonThread : public OSThread
         DEBUG_MSG("Long press!\n");
         screen->adjustBrightness();
     }
+    
+    static void userButtonDoublePressed()
+{
+#ifndef NO_ESP32
+    disablePin();
+#endif
+}
 };
 
 static Periodic *ledPeriodic;
@@ -270,6 +279,7 @@ void setup()
 
     // Buttons & LED
     buttonThread = new ButtonThread();
+
 #ifdef LED_PIN
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, 1 ^ LED_INVERTED); // turn on for now
