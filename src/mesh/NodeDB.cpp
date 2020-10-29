@@ -10,6 +10,7 @@
 #include "NodeDB.h"
 #include "PacketHistory.h"
 #include "PowerFSM.h"
+#include "RTC.h"
 #include "Router.h"
 #include "configuration.h"
 #include "error.h"
@@ -116,18 +117,9 @@ bool NodeDB::resetRadioConfig()
         DEBUG_MSG("Performing factory reset!\n");
         installDefaultDeviceState();
         didFactoryReset = true;
-    } else if (radioConfig.preferences.sds_secs == 0) {
-        DEBUG_MSG("Fixing bogus RadioConfig!\n");
+    } else if (!channelSettings.psk.size) {
+        DEBUG_MSG("Setting default preferences!\n");
 
-        radioConfig.preferences.send_owner_interval = 4; // per sw-design.md
-        radioConfig.preferences.position_broadcast_secs = 15 * 60;
-        radioConfig.preferences.wait_bluetooth_secs = 120;
-        radioConfig.preferences.screen_on_secs = 5 * 60;
-        radioConfig.preferences.mesh_sds_timeout_secs = 2 * 60 * 60;
-        radioConfig.preferences.phone_sds_timeout_sec = 2 * 60 * 60;
-        radioConfig.preferences.sds_secs = 365 * 24 * 60 * 60; // one year
-        radioConfig.preferences.ls_secs = 60 * 60;
-        radioConfig.preferences.phone_timeout_secs = 15 * 60;
         radioConfig.has_channel_settings = true;
         radioConfig.has_preferences = true;
 
@@ -155,6 +147,7 @@ bool NodeDB::resetRadioConfig()
         radioConfig.preferences.wait_bluetooth_secs = 30;
         radioConfig.preferences.position_broadcast_secs = 6 * 60;
         radioConfig.preferences.ls_secs = 60;
+        radioConfig.preferences.region = RegionCode_TW;
     }
 
     return didFactoryReset;
@@ -251,6 +244,9 @@ void NodeDB::init()
                 break;
             }
     }
+
+    // Update the global myRegion
+    initRegion();
 
     strncpy(myNodeInfo.firmware_version, optstr(APP_VERSION), sizeof(myNodeInfo.firmware_version));
     strncpy(myNodeInfo.hw_model, HW_VENDOR, sizeof(myNodeInfo.hw_model));
@@ -423,10 +419,10 @@ void NodeDB::updateFrom(const MeshPacket &mp)
 
         switch (p.which_payload) {
         case SubPacket_position_tag: {
-            // we carefully preserve the old time, because we always trust our local timestamps more
-            uint32_t oldtime = info->position.time;
+            // we always trust our local timestamps more
             info->position = p.position;
-            info->position.time = oldtime;
+            if (mp.rx_time)
+                info->position.time = mp.rx_time;
             info->has_position = true;
             updateGUIforNode = info;
             notifyObservers(true); // Force an update whether or not our node counts have changed

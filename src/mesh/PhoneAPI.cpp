@@ -20,7 +20,7 @@ void PhoneAPI::init()
 void PhoneAPI::checkConnectionTimeout()
 {
     if (isConnected) {
-        bool newConnected = (millis() - lastContactMsec < radioConfig.preferences.phone_timeout_secs * 1000L);
+        bool newConnected = (millis() - lastContactMsec < getPref_phone_timeout_secs() * 1000L);
         if (!newConnected) {
             isConnected = false;
             onConnectionChanged(isConnected);
@@ -109,7 +109,11 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         break;
 
     case STATE_SEND_MY_INFO:
-        myNodeInfo.has_gps = gps && gps->isConnected; // Update with latest GPS connect info
+        // If the user has specified they don't want our node to share its location, make sure to tell the phone
+        // app not to send locations on our behalf.
+        myNodeInfo.has_gps = (radioConfig.preferences.location_share == LocationSharing_LocDisabled)
+                                 ? true
+                                 : (gps && gps->isConnected()); // Update with latest GPS connect info
         fromRadioScratch.which_variant = FromRadio_my_info_tag;
         fromRadioScratch.variant.my_info = myNodeInfo;
         state = STATE_SEND_RADIO;
@@ -117,7 +121,14 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
     case STATE_SEND_RADIO:
         fromRadioScratch.which_variant = FromRadio_radio_tag;
+
         fromRadioScratch.variant.radio = radioConfig;
+
+        // NOTE: The phone app needs to know the ls_secs value so it can properly expect sleep behavior.
+        // So even if we internally use 0 to represent 'use default' we still need to send the value we are
+        // using to the app (so that even old phone apps work with new device loads).
+        fromRadioScratch.variant.radio.preferences.ls_secs = getPref_ls_secs();
+
         state = STATE_SEND_NODEINFO;
         break;
 

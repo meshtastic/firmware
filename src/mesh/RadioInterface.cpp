@@ -26,7 +26,20 @@ const RegionInfo regions[] = {
     RDEF(Unset, 903.08f, 2.16f, 13, 0) // Assume US freqs if unset, Must be last
 };
 
-static const RegionInfo *myRegion;
+const RegionInfo *myRegion;
+
+void initRegion()
+{
+    if (!myRegion) {
+        const RegionInfo *r = regions;
+        for (; r->code != RegionCode_Unset && r->code != radioConfig.preferences.region; r++)
+            ;
+        myRegion = r;
+        DEBUG_MSG("Wanted region %d, using %s\n", radioConfig.preferences.region, r->name);
+
+        myNodeInfo.num_channels = myRegion->numChannels; // Tell our android app how many channels we have
+    }
+}
 
 /**
  * ## LoRaWAN for North America
@@ -95,16 +108,6 @@ RadioInterface::RadioInterface()
 {
     assert(sizeof(PacketHeader) == 4 || sizeof(PacketHeader) == 16); // make sure the compiler did what we expected
 
-    if (!myRegion) {
-        const RegionInfo *r = regions;
-        for (; r->code != RegionCode_Unset && r->code != radioConfig.preferences.region; r++)
-            ;
-        myRegion = r;
-        DEBUG_MSG("Wanted region %d, using %s\n", radioConfig.preferences.region, r->name);
-
-        myNodeInfo.num_channels = myRegion->numChannels; // Tell our android app how many channels we have
-    }
-
     // Can't print strings this early - serial not setup yet
     // DEBUG_MSG("Set meshradio defaults name=%s\n", channelSettings.name);
 }
@@ -120,9 +123,6 @@ bool RadioInterface::init()
     // we now expect interfaces to operate in promiscous mode
     // radioIf.setThisAddress(nodeDB.getNodeNum()); // Note: we must do this here, because the nodenum isn't inited at constructor
     // time.
-
-    // we want this thread to run at very high priority, because it is effectively running as a user space ISR
-    start("radio", RADIO_STACK_SIZE, configMAX_PRIORITIES - 1); // Start our worker thread
 
     return true;
 }

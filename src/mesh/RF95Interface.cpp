@@ -5,6 +5,8 @@
 
 #define MAX_POWER 20
 // if we use 20 we are limited to 1% duty cycle or hw might overheat.  For continuous operation set a limit of 17
+// In theory up to 27 dBm is possible, but the modules installed in most radios can cope with a max of 20.  So BIG WARNING
+// if you set power to something higher than 17 or 20 you might fry your board.
 
 #define POWER_DEFAULT 17 // How much power to use if the user hasn't set a power level
 
@@ -42,7 +44,7 @@ bool RF95Interface::init()
         power = MAX_POWER;
 
     limitPower();
-    
+
     iface = lora = new RadioLibRF95(&module);
 
 #ifdef RF95_TCXO
@@ -158,7 +160,7 @@ void RF95Interface::startReceive()
 
     isReceiving = true;
 
-    // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
+    // Must be done AFTER, starting receive, because startReceive clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
 }
 
@@ -171,7 +173,7 @@ bool RF95Interface::isActivelyReceiving()
 bool RF95Interface::sleep()
 {
     // put chipset into sleep mode
-    disableInterrupt();
+    setStandby(); // First cancel any active receving/sending
     lora->sleep();
 
     return true;

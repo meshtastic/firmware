@@ -38,7 +38,7 @@ From lower to higher power consumption.
 
 - full on (ON) - Everything is on, can eventually timeout and lower to a lower power state
   onEntry: setBluetoothOn(true), screen.setOn(true)
-  onExit: screen.setOn(false)
+  onExit: screen->setOn(false)
 
 - has power (POWER) - Screen is on, device doesn't sleep, bluetooth on, will stay in this state as long as we have power
   onEntry: setBluetooth off, screen on

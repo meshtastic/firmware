@@ -42,7 +42,6 @@ Expected sequence for initial download:
 - Read a RadioConfig from "radio" - used to get the channel and radio settings
 - Read a User from "user" - to get the username for this node
 - Read a MyNodeInfo from "mynode" to get information about this local device
-- Write an empty record to "nodeinfo" to restart the nodeinfo reading state machine
 - Read a series of NodeInfo packets to build the phone's copy of the current NodeDB for the mesh
 - Read a endConfig packet that indicates that the entire state you need has been sent.
 - Read a series of MeshPackets until it returns empty to get any messages that arrived for this node while the phone was away

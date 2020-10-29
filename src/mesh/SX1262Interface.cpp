@@ -1,6 +1,11 @@
 #include "SX1262Interface.h"
 #include <configuration.h>
 
+// Particular boards might define a different max power based on what their hardware can do
+#ifndef SX1262_MAX_POWER
+#define SX1262_MAX_POWER 22
+#endif
+
 SX1262Interface::SX1262Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy,
                                  SPIClass &spi)
     : RadioLibInterface(cs, irq, rst, busy, spi, &lora), lora(&module)
@@ -39,10 +44,10 @@ bool SX1262Interface::init()
     applyModemConfig();
 
     if (power == 0)
-        power = 22;
+        power = SX1262_MAX_POWER;
 
-    if (power > 22) // This chip has lower power limits than some
-        power = 22;
+    if (power > SX1262_MAX_POWER) // This chip has lower power limits than some
+        power = SX1262_MAX_POWER;
 
     limitPower();
 
@@ -82,8 +87,8 @@ bool SX1262Interface::reconfigure()
     assert(err == ERR_NONE);
 
     // Hmm - seems to lower SNR when the signal levels are high.  Leaving off for now...
-    // err = lora.setRxGain(true);
-    // assert(err == ERR_NONE);
+    err = lora.setRxGain(true);
+    assert(err == ERR_NONE);
 
     err = lora.setSyncWord(syncWord);
     assert(err == ERR_NONE);
@@ -179,9 +184,19 @@ void SX1262Interface::startReceive()
 /** Could we send right now (i.e. either not actively receving or transmitting)? */
 bool SX1262Interface::isActivelyReceiving()
 {
-    // return false; // FIXME
-    // FIXME this is not correct? - often always true - need to add an extra conditional
-    return lora.getPacketLength() > 0;
+    // The IRQ status will be cleared when we start our read operation.  Check if we've started a header, but haven't yet
+    // received and handled the interrupt for reading the packet/handling errors.
+    // FIXME: it would be better to check for preamble, but we currently have our ISR not set to fire for packets that
+    // never even get a valid header, so we don't want preamble to get set and stay set due to noise on the network.
+
+    uint16_t irq = lora.getIrqStatus();
+    bool hasPreamble = (irq & SX126X_IRQ_HEADER_VALID);
+
+    // this is not correct - often always true - need to add an extra conditional
+    // size_t bytesPending = lora.getPacketLength();
+
+    // if (hasPreamble) DEBUG_MSG("rx hasPreamble\n");
+    return hasPreamble;
 }
 
 bool SX1262Interface::sleep()

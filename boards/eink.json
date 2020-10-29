@@ -5,7 +5,7 @@
     },
     "core": "nRF5",
     "cpu": "cortex-m4",
-    "extra_flags": "-DARDUINO_NRF52840_LORA_RELAY_V1 -DNRF52840_XXAA",
+    "extra_flags": "-DARDUINO_NRF52840_TTGO_EINK -DNRF52840_XXAA",
     "f_cpu": "64000000L",
     "hwids": [
       [

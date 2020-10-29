@@ -2,33 +2,67 @@
 #include "NodeDB.h"
 #include "configuration.h"
 #include "main.h"
+#include "meshhttpStatic.h"
 #include "meshwifi/meshwifi.h"
+#include "sleep.h"
 #include <WebServer.h>
 #include <WiFi.h>
 
-WebServer webserver(80);
+// Persistant Data Storage
+#include <Preferences.h>
+Preferences prefs;
 
-// Maximum number of messages for chat history. Don't make this too big -- it'll use a
-//   lot of memory!
-const uint16_t maxMessages = 50;
+/*
+  Including the esp32_https_server library will trigger a compile time error. I've
+  tracked it down to a reoccurrance of this bug:
+    https://gcc.gnu.org/bugzilla/show_bug.cgi?id=57824
+  The work around is described here:
+    https://forums.xilinx.com/t5/Embedded-Development-Tools/Error-with-Standard-Libaries-in-Zynq/td-p/450032
 
-struct message_t {
-    char sender[10];
-    char message[250];
-    int32_t gpsLat;
-    int32_t gpsLong;
-    uint32_t time;
-    bool fromMe;
-};
+  Long story short is we need "#undef str" before including the esp32_https_server.
+    - Jm Casler (jm@casler.org) Oct 2020
+*/
+#undef str
 
-struct messages_t {
-    message_t history[maxMessages];
-};
+// Includes for the https server
+//   https://github.com/fhessel/esp32_https_server
+#include <HTTPRequest.hpp>
+#include <HTTPResponse.hpp>
+#include <HTTPSServer.hpp>
+#include <HTTPServer.hpp>
+#include <SSLCert.hpp>
 
-messages_t messages_history;
+// The HTTPS Server comes in a separate namespace. For easier use, include it here.
+using namespace httpsserver;
 
-String something = "";
-String sender = "";
+SSLCert *cert;
+HTTPSServer *secureServer;
+HTTPServer *insecureServer;
+
+// Our API to handle messages to and from the radio.
+HttpAPI webAPI;
+
+// Declare some handler functions for the various URLs on the server
+void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res);
+void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res);
+void handleStyleCSS(HTTPRequest *req, HTTPResponse *res);
+void handleHotspot(HTTPRequest *req, HTTPResponse *res);
+void handleFavicon(HTTPRequest *req, HTTPResponse *res);
+void handleRoot(HTTPRequest *req, HTTPResponse *res);
+void handleBasicHTML(HTTPRequest *req, HTTPResponse *res);
+void handleBasicJS(HTTPRequest *req, HTTPResponse *res);
+void handleScriptsScriptJS(HTTPRequest *req, HTTPResponse *res);
+void handleStatic(HTTPRequest *req, HTTPResponse *res);
+void handle404(HTTPRequest *req, HTTPResponse *res);
+
+void middlewareSpeedUp240(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
+void middlewareSpeedUp160(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
+void middlewareSession(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
+
+bool isWebServerReady = 0;
+bool isCertReady = 0;
+
+uint32_t timeSpeedUp = 0;
 
 void handleWebResponse()
 {
@@ -36,82 +70,285 @@ void handleWebResponse()
         return;
     }
 
-    // We're going to handle the DNS responder here so it
-    // will be ignored by the NRF boards.
-    handleDNSResponse();
+    if (isWebServerReady) {
+        // We're going to handle the DNS responder here so it
+        // will be ignored by the NRF boards.
+        handleDNSResponse();
 
-    webserver.handleClient();
+        secureServer->loop();
+        insecureServer->loop();
+    }
+
+    /* 
+        Slow down the CPU if we have not received a request within the last few
+        seconds.
+    */
+    if (millis() - timeSpeedUp >= (25 * 1000)) {
+        setCpuFrequencyMhz(80);
+        timeSpeedUp = millis();
+    }
+}
+
+void taskCreateCert(void *parameter)
+{
+
+    prefs.begin("MeshtasticHTTPS", false);
+
+    // Delete the saved certs
+    if (0) {
+        DEBUG_MSG("Deleting any saved SSL keys ...\n");
+        // prefs.clear();
+        prefs.remove("PK");
+        prefs.remove("cert");
+    }
+
+    size_t pkLen = prefs.getBytesLength("PK");
+    size_t certLen = prefs.getBytesLength("cert");
+
+    DEBUG_MSG("Checking if we have a previously saved SSL Certificate.\n");
+
+    if (pkLen && certLen) {
+        DEBUG_MSG("Existing SSL Certificate found!\n");
+    } else {
+        DEBUG_MSG("Creating the certificate. This may take a while. Please wait...\n");
+        cert = new SSLCert();
+        // disableCore1WDT();
+        int createCertResult = createSelfSignedCert(*cert, KEYSIZE_2048, "CN=meshtastic.local,O=Meshtastic,C=US",
+                                                    "20190101000000", "20300101000000");
+        // enableCore1WDT();
+
+        if (createCertResult != 0) {
+            DEBUG_MSG("Creating the certificate failed\n");
+
+            // Serial.printf("Creating the certificate failed. Error Code = 0x%02X, check SSLCert.hpp for details",
+            //              createCertResult);
+            // while (true)
+            //    delay(500);
+        } else {
+            DEBUG_MSG("Creating the certificate was successful\n");
+
+            DEBUG_MSG("Created Private Key: %d Bytes\n", cert->getPKLength());
+            // for (int i = 0; i < cert->getPKLength(); i++)
+            //  Serial.print(cert->getPKData()[i], HEX);
+            // Serial.println();
+
+            DEBUG_MSG("Created Certificate: %d Bytes\n", cert->getCertLength());
+            // for (int i = 0; i < cert->getCertLength(); i++)
+            //  Serial.print(cert->getCertData()[i], HEX);
+            // Serial.println();
+
+            prefs.putBytes("PK", (uint8_t *)cert->getPKData(), cert->getPKLength());
+            prefs.putBytes("cert", (uint8_t *)cert->getCertData(), cert->getCertLength());
+        }
+    }
+
+    isCertReady = 1;
+    vTaskDelete(NULL);
+}
+
+void createSSLCert()
+{
+
+    if (isWifiAvailable() == 0) {
+        return;
+    }
+
+    // Create a new process just to handle creating the cert.
+    //   This is a workaround for Bug: https://github.com/fhessel/esp32_https_server/issues/48
+    //  jm@casler.org (Oct 2020)
+    xTaskCreate(taskCreateCert, /* Task function. */
+                "createCert",   /* String with name of task. */
+                16384,          /* Stack size in bytes. */
+                NULL,           /* Parameter passed as input of the task */
+                16,             /* Priority of the task. */
+                NULL);          /* Task handle. */
+
+    DEBUG_MSG("Waiting for SSL Cert to be generated.\n");
+    if (isCertReady) {
+        DEBUG_MSG(".\n");
+        delayMicroseconds(1000);
+    }
+    DEBUG_MSG("SSL Cert Ready!\n");
 }
 
 void initWebServer()
 {
-    webserver.onNotFound(handleNotFound);
-    webserver.on("/json/chat/send/channel", handleJSONChatHistory);
-    webserver.on("/json/chat/send/user", handleJSONChatHistory);
-    webserver.on("/json/chat/history/channel", handleJSONChatHistory);
-    webserver.on("/json/chat/history/dummy", handleJSONChatHistoryDummy);
-    webserver.on("/json/chat/history/user", handleJSONChatHistory);
-    webserver.on("/json/stats", handleJSONChatHistory);
-    webserver.on("/hotspot-detect.html", handleHotspot);
-    webserver.on("/css/style.css", handleStyleCSS);
-    webserver.on("/scripts/script.js", handleScriptsScriptJS);
-    webserver.on("/", handleRoot);
-    webserver.begin();
-}
+    DEBUG_MSG("Initializing Web Server ...\n");
 
-void handleJSONChatHistory()
-{
-    int i;
+    prefs.begin("MeshtasticHTTPS", false);
 
-    String out = "";
-    out += "{\n";
-    out += "  \"data\" : {\n";
-    out += "    \"chat\" : ";
-    out += "[";
-    out += "\"" + sender + "\"";
-    out += ",";
-    out += "\"" + something + "\"";
-    out += "]\n";
+    size_t pkLen = prefs.getBytesLength("PK");
+    size_t certLen = prefs.getBytesLength("cert");
 
-    for (i = 0; i < maxMessages; i++) {
-        out += "[";
-        out += "\"" + String(messages_history.history[i].sender) + "\"";
-        out += ",";
-        out += "\"" + String(messages_history.history[i].message) + "\"";
-        out += "]\n";
+    DEBUG_MSG("Checking if we have a previously saved SSL Certificate.\n");
+
+    if (pkLen && certLen) {
+
+        uint8_t *pkBuffer = new uint8_t[pkLen];
+        prefs.getBytes("PK", pkBuffer, pkLen);
+
+        uint8_t *certBuffer = new uint8_t[certLen];
+        prefs.getBytes("cert", certBuffer, certLen);
+
+        cert = new SSLCert(certBuffer, certLen, pkBuffer, pkLen);
+
+        DEBUG_MSG("Retrieved Private Key: %d Bytes\n", cert->getPKLength());
+        // DEBUG_MSG("Retrieved Private Key: " + String(cert->getPKLength()) + " Bytes");
+        // for (int i = 0; i < cert->getPKLength(); i++)
+        //  Serial.print(cert->getPKData()[i], HEX);
+        // Serial.println();
+
+        DEBUG_MSG("Retrieved Certificate: %d Bytes\n", cert->getCertLength());
+        // for (int i = 0; i < cert->getCertLength(); i++)
+        //  Serial.print(cert->getCertData()[i], HEX);
+        // Serial.println();
+    } else {
+        DEBUG_MSG("Web Server started without SSL keys! How did this happen?\n");
     }
 
-    out += "\n";
-    out += "  }\n";
-    out += "}\n";
+    // We can now use the new certificate to setup our server as usual.
+    secureServer = new HTTPSServer(cert);
+    insecureServer = new HTTPServer();
 
-    webserver.send(200, "application/json", out);
-    return;
+    // For every resource available on the server, we need to create a ResourceNode
+    // The ResourceNode links URL and HTTP method to a handler function
+
+    ResourceNode *nodeAPIv1ToRadioOptions = new ResourceNode("/api/v1/toradio", "OPTIONS", &handleAPIv1ToRadio);
+    ResourceNode *nodeAPIv1ToRadio = new ResourceNode("/api/v1/toradio", "PUT", &handleAPIv1ToRadio);
+    ResourceNode *nodeAPIv1FromRadio = new ResourceNode("/api/v1/fromradio", "GET", &handleAPIv1FromRadio);
+    ResourceNode *nodeHotspot = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
+    ResourceNode *nodeFavicon = new ResourceNode("/favicon.ico", "GET", &handleFavicon);
+    ResourceNode *nodeRoot = new ResourceNode("/", "GET", &handleRoot);
+    ResourceNode *nodeScriptScriptsJS = new ResourceNode("/scripts/script.js", "GET", &handleScriptsScriptJS);
+    ResourceNode *nodeBasicHTML = new ResourceNode("/basic.html", "GET", &handleBasicHTML);
+    ResourceNode *nodeBasicJS = new ResourceNode("/basic.js", "GET", &handleBasicJS);
+    ResourceNode *nodeStatic = new ResourceNode("/static/*", "GET", &handleStatic);
+    ResourceNode *node404 = new ResourceNode("", "GET", &handle404);
+
+    // Secure nodes
+    secureServer->registerNode(nodeAPIv1ToRadioOptions);
+    secureServer->registerNode(nodeAPIv1ToRadio);
+    secureServer->registerNode(nodeAPIv1FromRadio);
+    secureServer->registerNode(nodeHotspot);
+    secureServer->registerNode(nodeFavicon);
+    secureServer->registerNode(nodeRoot);
+    secureServer->registerNode(nodeScriptScriptsJS);
+    secureServer->registerNode(nodeBasicHTML);
+    secureServer->registerNode(nodeBasicJS);
+    secureServer->registerNode(nodeStatic);
+    secureServer->setDefaultNode(node404);
+
+    secureServer->addMiddleware(&middlewareSpeedUp240);
+
+    // Insecure nodes
+    insecureServer->registerNode(nodeAPIv1ToRadioOptions);
+    insecureServer->registerNode(nodeAPIv1ToRadio);
+    insecureServer->registerNode(nodeAPIv1FromRadio);
+    insecureServer->registerNode(nodeHotspot);
+    insecureServer->registerNode(nodeFavicon);
+    insecureServer->registerNode(nodeRoot);
+    insecureServer->registerNode(nodeScriptScriptsJS);
+    insecureServer->registerNode(nodeBasicHTML);
+    insecureServer->registerNode(nodeBasicJS);
+    insecureServer->registerNode(nodeStatic);
+    insecureServer->setDefaultNode(node404);
+
+    insecureServer->addMiddleware(&middlewareSpeedUp160);
+
+    DEBUG_MSG("Starting Web Servers...\n");
+    secureServer->start();
+    insecureServer->start();
+    if (secureServer->isRunning() && insecureServer->isRunning()) {
+        DEBUG_MSG("HTTP and HTTPS Web Servers Ready! :-) \n");
+        isWebServerReady = 1;
+    } else {
+        DEBUG_MSG("HTTP and HTTPS Web Servers Failed! ;-( \n");
+    }
 }
 
-void handleNotFound()
+void middlewareSpeedUp240(HTTPRequest *req, HTTPResponse *res, std::function<void()> next)
 {
-    String message = "";
-    message += "File Not Found\n\n";
-    message += "URI: ";
-    message += webserver.uri();
-    message += "\nMethod: ";
-    message += (webserver.method() == HTTP_GET) ? "GET" : "POST";
-    message += "\nArguments: ";
-    message += webserver.args();
-    message += "\n";
+    // We want to print the response status, so we need to call next() first.
+    next();
 
-    for (uint8_t i = 0; i < webserver.args(); i++) {
-        message += " " + webserver.argName(i) + ": " + webserver.arg(i) + "\n";
+    setCpuFrequencyMhz(240);
+    timeSpeedUp = millis();
+}
+
+void middlewareSpeedUp160(HTTPRequest *req, HTTPResponse *res, std::function<void()> next)
+{
+    // We want to print the response status, so we need to call next() first.
+    next();
+
+    // If the frequency is 240mhz, we have recently gotten a HTTPS request.
+    //   In that case, leave the frequency where it is and just update the
+    //   countdown timer (timeSpeedUp).
+    if (getCpuFrequencyMhz() != 240) {
+        setCpuFrequencyMhz(160);
     }
-    Serial.println(message);
-    webserver.send(404, "text/plain", message);
+    timeSpeedUp = millis();
+}
+
+void handleStatic(HTTPRequest *req, HTTPResponse *res)
+{
+    // Get access to the parameters
+    ResourceParameters *params = req->getParams();
+
+    // Set a default content type
+    res->setHeader("Content-Type", "text/plain");
+
+    std::string parameter1;
+    // Print the first parameter value
+    if (params->getPathParameter(0, parameter1)) {
+        if (parameter1 == "meshtastic.js") {
+            res->setHeader("Content-Encoding", "gzip");
+            res->setHeader("Content-Type", "application/json");
+            res->write(STATIC_MESHTASTIC_JS_DATA, STATIC_MESHTASTIC_JS_LENGTH);
+            return;
+
+        } else if (parameter1 == "style.css") {
+            res->setHeader("Content-Encoding", "gzip");
+            res->setHeader("Content-Type", "text/css");
+            res->write(STATIC_STYLE_CSS_DATA, STATIC_STYLE_CSS_LENGTH);
+            return;
+
+        } else {
+            res->print("Parameter 1: ");
+            res->printStd(parameter1);
+
+            return;
+        }
+
+    } else {
+        res->println("ERROR: This should not have happened...");
+    }
+}
+void handle404(HTTPRequest *req, HTTPResponse *res)
+{
+
+    // Discard request body, if we received any
+    // We do this, as this is the default node and may also server POST/PUT requests
+    req->discardRequestBody();
+
+    // Set the response status
+    res->setStatusCode(404);
+    res->setStatusText("Not Found");
+
+    // Set content type of the response
+    res->setHeader("Content-Type", "text/html");
+
+    // Write a tiny HTTP page
+    res->println("<!DOCTYPE html>");
+    res->println("<html>");
+    res->println("<head><title>Not Found</title></head>");
+    res->println("<body><h1>404 Not Found</h1><p>The requested resource was not found on this server.</p></body>");
+    res->println("</html>");
 }
 
 /*
     This supports the Apple Captive Network Assistant (CNA) Portal
 */
-void handleHotspot()
+void handleHotspot(HTTPRequest *req, HTTPResponse *res)
 {
     DEBUG_MSG("Hotspot Request\n");
 
@@ -120,25 +357,98 @@ void handleHotspot()
         otherwise iOS will have trouble detecting that the connection to the SoftAP worked.
     */
 
-    String out = "";
-    // out += "Success\n";
-    out += "<meta http-equiv=\"refresh\" content=\"0;url=http://meshtastic.org/\" />\n";
-    webserver.send(200, "text/html", out);
-    return;
+    // Status code is 200 OK by default.
+    // We want to deliver a simple HTML page, so we send a corresponding content type:
+    res->setHeader("Content-Type", "text/html");
+
+    // The response implements the Print interface, so you can use it just like
+    // you would write to Serial etc.
+    res->println("<!DOCTYPE html>");
+    res->println("<meta http-equiv=\"refresh\" content=\"0;url=http://meshtastic.org/\" />\n");
 }
 
-void notifyWebUI()
+void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
 {
-    DEBUG_MSG("************ Got a message! ************\n");
-    MeshPacket &mp = devicestate.rx_text_message;
-    NodeInfo *node = nodeDB.getNode(mp.from);
-    sender = (node && node->has_user) ? node->user.long_name : "???";
 
-    static char tempBuf[256]; // mesh.options says this is MeshPacket.encrypted max_size
-    assert(mp.decoded.which_payload == SubPacket_data_tag);
-    snprintf(tempBuf, sizeof(tempBuf), "%s", mp.decoded.data.payload.bytes);
+    DEBUG_MSG("+++++++++++++++ webAPI handleAPIv1FromRadio\n");
 
-    something = tempBuf;
+    /*
+        For documentation, see:
+            https://github.com/meshtastic/Meshtastic-device/wiki/HTTP-REST-API-discussion
+            https://github.com/meshtastic/Meshtastic-device/blob/master/docs/software/device-api.md
+
+        Example:
+            http://10.10.30.198/api/v1/fromradio
+    */
+
+    // Get access to the parameters
+    ResourceParameters *params = req->getParams();
+
+    // std::string paramAll = "all";
+    std::string valueAll;
+
+    // Status code is 200 OK by default.
+    res->setHeader("Content-Type", "application/x-protobuf");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "PUT, GET");
+    res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/Meshtastic-protobufs/master/mesh.proto");
+
+    uint8_t txBuf[MAX_STREAM_BUF_SIZE];
+    uint32_t len = 1;
+
+    if (params->getQueryParameter("all", valueAll)) {
+        if (valueAll == "true") {
+            while (len) {
+                len = webAPI.getFromRadio(txBuf);
+                res->write(txBuf, len);
+            }
+        } else {
+            len = webAPI.getFromRadio(txBuf);
+            res->write(txBuf, len);
+        }
+    } else {
+        len = webAPI.getFromRadio(txBuf);
+        res->write(txBuf, len);
+    }
+
+    DEBUG_MSG("--------------- webAPI handleAPIv1FromRadio, len %d\n", len);
+}
+
+void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
+{
+    DEBUG_MSG("+++++++++++++++ webAPI handleAPIv1ToRadio\n");
+
+    /*
+        For documentation, see:
+            https://github.com/meshtastic/Meshtastic-device/wiki/HTTP-REST-API-discussion
+            https://github.com/meshtastic/Meshtastic-device/blob/master/docs/software/device-api.md
+
+        Example:
+            http://10.10.30.198/api/v1/toradio
+    */
+
+    // Status code is 200 OK by default.
+
+    res->setHeader("Content-Type", "application/x-protobuf");
+    res->setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "PUT, OPTIONS");
+    res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/Meshtastic-protobufs/master/mesh.proto");
+
+    if (req->getMethod() == "OPTIONS") {
+        res->setStatusCode(204); // Success with no content
+        res->print("");
+        return;
+    }
+
+    byte buffer[MAX_TO_FROM_RADIO_SIZE];
+    size_t s = req->readBytes(buffer, MAX_TO_FROM_RADIO_SIZE);
+
+    DEBUG_MSG("Received %d bytes from PUT request\n", s);
+    webAPI.handleToRadio(buffer, s);
+
+    res->write(buffer, s);
+    DEBUG_MSG("--------------- webAPI handleAPIv1ToRadio\n");
 }
 
 /*
@@ -146,7 +456,7 @@ void notifyWebUI()
 
     https://tomeko.net/online_tools/cpp_text_escape.php?lang=en
 */
-void handleRoot()
+void handleRoot(HTTPRequest *req, HTTPResponse *res)
 {
 
     String out = "";
@@ -158,7 +468,7 @@ void handleRoot()
         "<head>\n"
         "  <meta charset=\"UTF-8\">\n"
         "  <title>Meshtastic - Chat</title>\n"
-        "  <link rel=\"stylesheet\" href=\"css/style.css\">\n"
+        "  <link rel=\"stylesheet\" href=\"static/style.css\">\n"
         "\n"
         "</head>\n"
         "<body>\n"
@@ -223,298 +533,17 @@ void handleRoot()
         "</body>\n"
         "</html>\n"
         "";
-    webserver.send(200, "text/html", out);
-    return;
+
+    // Status code is 200 OK by default.
+    // We want to deliver a simple HTML page, so we send a corresponding content type:
+    res->setHeader("Content-Type", "text/html");
+
+    // The response implements the Print interface, so you can use it just like
+    // you would write to Serial etc.
+    res->print(out);
 }
 
-void handleStyleCSS()
-{
-
-    String out = "";
-    out +=
-        "/* latin-ext */\n"
-        "@font-face {\n"
-        "  font-family: 'Lato';\n"
-        "  font-style: normal;\n"
-        "  font-weight: 400;\n"
-        "  src: local('Lato Regular'), local('Lato-Regular'), url(./Google.woff2) format('woff2');\n"
-        "  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;\n"
-        "}\n"
-        "\n"
-        "\n"
-        "*, *:before, *:after {\n"
-        "  box-sizing: border-box;\n"
-        "}\n"
-        "\n"
-        "body {\n"
-        "  background: #C5DDEB;\n"
-        "  font: 14px/20px \"Lato\", Arial, sans-serif;\n"
-        "  padding: 40px 0;\n"
-        "  color: white;\n"
-        "}\n"
-        "\n"
-        "\n"
-        "  \n"
-        ".grid {\n"
-        "  display: grid;\n"
-        "  grid-template-columns:\n"
-        "\t1fr 4fr;\n"
-        "  grid-template-areas:\n"
-        "\t\"header header\"\n"
-        "\t\"sidebar content\";\n"
-        "  margin: 0 auto;\n"
-        "  width: 750px;\n"
-        "  background: #444753;\n"
-        "  border-radius: 5px;\n"
-        "}\n"
-        "\n"
-        ".top {grid-area: header;}\n"
-        ".side {grid-area: sidebar;}\n"
-        ".main {grid-area: content;}\n"
-        "\n"
-        ".top {\n"
-        "  border-bottom: 2px solid white;\n"
-        "}\n"
-        ".top-text {\n"
-        "  font-weight: bold;\n"
-        "  font-size: 24px;\n"
-        "  text-align: center;\n"
-        "  padding: 20px;\n"
-        "}\n"
-        "\n"
-        ".side {\n"
-        "  width: 260px;\n"
-        "  float: left;\n"
-        "}\n"
-        ".side .side-header {\n"
-        "  padding: 20px;\n"
-        "  border-bottom: 2px solid white;\n"
-        "}\n"
-        "\n"
-        ".side .side-header .side-text {\n"
-        "  padding-left: 10px;\n"
-        "  margin-top: 6px;\n"
-        "  font-size: 16px;\n"
-        "  text-align: left;\n"
-        "  font-weight: bold;\n"
-        "  \n"
-        "}\n"
-        "\n"
-        ".channel-list ul {\n"
-        "  padding: 20px;\n"
-        "  height: 570px;\n"
-        "  list-style-type: none;\n"
-        "}\n"
-        ".channel-list ul li {\n"
-        "  padding-bottom: 20px;\n"
-        "}\n"
-        "\n"
-        ".channel-list .channel-name {\n"
-        "  font-size: 20px;\n"
-        "  margin-top: 8px;\n"
-        "  padding-left: 8px;\n"
-        "}\n"
-        "\n"
-        ".channel-list .message-count {\n"
-        "  padding-left: 16px;\n"
-        "  color: #92959E;\n"
-        "}\n"
-        "\n"
-        ".icon {\n"
-        "  display: inline-block;\n"
-        "  width: 1em;\n"
-        "  height: 1em;\n"
-        "  stroke-width: 0;\n"
-        "  stroke: currentColor;\n"
-        "  fill: currentColor;\n"
-        "}\n"
-        "\n"
-        ".icon-map-marker {\n"
-        "  width: 0.5714285714285714em;\n"
-        "}\n"
-        "\n"
-        ".icon-circle {\n"
-        "  width: 0.8571428571428571em;\n"
-        "}\n"
-        "\n"
-        ".content {\n"
-        "  display: flex;\n"
-        "  flex-direction: column;\n"
-        "  flex-wrap: nowrap;\n"
-        "/* width: 490px; */\n"
-        "  float: left;\n"
-        "  background: #F2F5F8;\n"
-        "/*  border-top-right-radius: 5px;\n"
-        "  border-bottom-right-radius: 5px; */\n"
-        "  color: #434651;\n"
-        "}\n"
-        ".content .content-header {\n"
-        "  flex-grow: 0;\n"
-        "  padding: 20px;\n"
-        "  border-bottom: 2px solid white;\n"
-        "}\n"
-        "\n"
-        ".content .content-header .content-from {\n"
-        "  padding-left: 10px;\n"
-        "  margin-top: 6px;\n"
-        "  font-size: 20px;\n"
-        "  text-align: center;\n"
-        "  font-size: 16px;\n"
-        "}\n"
-        ".content .content-header .content-from .content-from-highlight {\n"
-        "  font-weight: bold;\n"
-        "}\n"
-        ".content .content-header .content-num-messages {\n"
-        "  color: #92959E;\n"
-        "}\n"
-        "\n"
-        ".content .content-history {\n"
-        "  flex-grow: 1;\n"
-        "  padding: 20px 20px 20px;\n"
-        "  border-bottom: 2px solid white;\n"
-        "  overflow-y: scroll;\n"
-        "  height: 375px;\n"
-        "}\n"
-        ".content .content-history ul {\n"
-        "  list-style-type: none;\n"
-        "  padding-inline-start: 10px;\n"
-        "}\n"
-        ".content .content-history .message-data {\n"
-        "  margin-bottom: 10px;\n"
-        "}\n"
-        ".content .content-history .message-data-time {\n"
-        "  color: #a8aab1;\n"
-        "  padding-left: 6px;\n"
-        "}\n"
-        ".content .content-history .message {\n"
-        "  color: white;\n"
-        "  padding: 8px 10px;\n"
-        "  line-height: 20px;\n"
-        "  font-size: 14px;\n"
-        "  border-radius: 7px;\n"
-        "  margin-bottom: 30px;\n"
-        "  width: 90%;\n"
-        "  position: relative;\n"
-        "}\n"
-        ".content .content-history .message:after {\n"
-        "  bottom: 100%;\n"
-        "  left: 7%;\n"
-        "  border: solid transparent;\n"
-        "  content: \" \";\n"
-        "  height: 0;\n"
-        "  width: 0;\n"
-        "  position: absolute;\n"
-        "  pointer-events: none;\n"
-        "  border-bottom-color: #86BB71;\n"
-        "  border-width: 10px;\n"
-        "  margin-left: -10px;\n"
-        "}\n"
-        ".content .content-history .my-message {\n"
-        "  background: #86BB71;\n"
-        "}\n"
-        ".content .content-history .other-message {\n"
-        "  background: #94C2ED;\n"
-        "}\n"
-        ".content .content-history .other-message:after {\n"
-        "  border-bottom-color: #94C2ED;\n"
-        "  left: 93%;\n"
-        "}\n"
-        ".content .content-message {\n"
-        "  flex-grow: 0;\n"
-        "  padding: 10px;\n"
-        "}\n"
-        ".content .content-message textarea {\n"
-        "  width: 100%;\n"
-        "  border: none;\n"
-        "  padding: 10px 10px;\n"
-        "  font: 14px/22px \"Lato\", Arial, sans-serif;\n"
-        "  margin-bottom: 10px;\n"
-        "  border-radius: 5px;\n"
-        "  resize: none;\n"
-        "}\n"
-        "\n"
-        ".content .content-message button {\n"
-        "  float: right;\n"
-        "  color: #94C2ED;\n"
-        "  font-size: 16px;\n"
-        "  text-transform: uppercase;\n"
-        "  border: none;\n"
-        "  cursor: pointer;\n"
-        "  font-weight: bold;\n"
-        "  background: #F2F5F8;\n"
-        "}\n"
-        ".content .content-message button:hover {\n"
-        "  color: #75b1e8;\n"
-        "}\n"
-        "/* Tooltip container */\n"
-        ".tooltip {\n"
-        "  color: #86BB71;\n"
-        "  position: relative;\n"
-        "  display: inline-block;\n"
-        "  border-bottom: 1px dotted black; /* If you want dots under the hoverable text */\n"
-        "}\n"
-        "/* Tooltip text */\n"
-        ".tooltip .tooltiptext {\n"
-        "  visibility: hidden;\n"
-        "  width: 120px;\n"
-        "  background-color: #444753;\n"
-        "  color: #fff;\n"
-        "  text-align: center;\n"
-        "  padding: 5px 0;\n"
-        "  border-radius: 6px;\n"
-        "   /* Position the tooltip text - see examples below! */\n"
-        "  position: absolute;\n"
-        "  z-index: 1;\n"
-        "}\n"
-        "\n"
-        "/* Show the tooltip text when you mouse over the tooltip container */\n"
-        ".tooltip:hover .tooltiptext {\n"
-        "  visibility: visible;\n"
-        "}\n"
-        "\n"
-        ".online, .offline, .me {\n"
-        "  margin-right: 3px;\n"
-        "  font-size: 10px;\n"
-        "}\n"
-        "\n"
-        ".online {\n"
-        "  color: #86BB71;\n"
-        "}\n"
-        "\n"
-        ".offline {\n"
-        "  color: #E38968;\n"
-        "}\n"
-        "\n"
-        ".me {\n"
-        "  color: #94C2ED;\n"
-        "}\n"
-        "\n"
-        ".align-left {\n"
-        "  text-align: left;\n"
-        "}\n"
-        "\n"
-        ".align-right {\n"
-        "  text-align: right;\n"
-        "}\n"
-        "\n"
-        ".float-right {\n"
-        "  float: right;\n"
-        "}\n"
-        "\n"
-        ".clearfix:after {\n"
-        "  visibility: hidden;\n"
-        "  display: block;\n"
-        "  font-size: 0;\n"
-        "  content: \" \";\n"
-        "  clear: both;\n"
-        "  height: 0;\n"
-        "}";
-
-    webserver.send(200, "text/css", out);
-    return;
-}
-
-void handleScriptsScriptJS()
+void handleScriptsScriptJS(HTTPRequest *req, HTTPResponse *res)
 {
     String out = "";
     out += "String.prototype.toHHMMSS = function () {\n"
@@ -664,130 +693,115 @@ void handleScriptsScriptJS()
            "//\tsetTimeout(scrollHistory(),500);\n"
            "// }";
 
-    webserver.send(200, "text/javascript", out);
-    return;
+    // Status code is 200 OK by default.
+    // We want to deliver a simple HTML page, so we send a corresponding content type:
+    res->setHeader("Content-Type", "text/html");
+
+    // The response implements the Print interface, so you can use it just like
+    // you would write to Serial etc.
+    res->print(out);
 }
 
-void handleJSONChatHistoryDummy()
+void handleFavicon(HTTPRequest *req, HTTPResponse *res)
+{
+    // Set Content-Type
+    res->setHeader("Content-Type", "image/vnd.microsoft.icon");
+    // Write data from header file
+    res->write(FAVICON_DATA, FAVICON_LENGTH);
+}
+
+/*
+    To convert text to c strings:
+
+    https://tomeko.net/online_tools/cpp_text_escape.php?lang=en
+*/
+void handleBasicJS(HTTPRequest *req, HTTPResponse *res)
 {
     String out = "";
-    out += "{\n"
-           "\t\"data\": {\n"
-           "\t\t\"system\": {\n"
-           "\t\t\t\"timeSinceStart\": 3213544,\n"
-           "\t\t\t\"timeGPS\": 1600830985,\n"
-           "\t\t\t\"channel\": \"ourSecretPlace\"\n"
-           "\t\t},\n"
-           "\t\t\"users\": [{\n"
-           "\t\t\t\t\"NameShort\": \"J\",\n"
-           "\t\t\t\t\"NameLong\": \"John\",\n"
-           "\t\t\t\t\"lastSeen\": 3207544,\n"
-           "\t\t\t\t\"lat\" : -2.882243,\n"
-           "\t\t\t\t\"lon\" : -111.038580\n"
-           "\t\t\t},\n"
-           "\t\t\t{\n"
-           "\t\t\t\t\"NameShort\": \"D\",\n"
-           "\t\t\t\t\"NameLong\": \"David\",\n"
-           "\t\t\t\t\"lastSeen\": 3212544,\n"
-           "\t\t\t\t\"lat\" : -12.24452,\n"
-           "\t\t\t\t\"lon\" : -61.87351\n"
-           "\t\t\t},\n"
-           "\t\t\t{\n"
-           "\t\t\t\t\"NameShort\": \"P\",\n"
-           "\t\t\t\t\"NameLong\": \"Peter\",\n"
-           "\t\t\t\t\"lastSeen\": 3213444,\n"
-           "\t\t\t\t\"lat\" : 0,\n"
-           "\t\t\t\t\"lon\" : 0\n"
-           "\t\t\t},\n"
-           "\t\t\t{\n"
-           "\t\t\t\t\"NameShort\": \"M\",\n"
-           "\t\t\t\t\"NameLong\": \"Mary\",\n"
-           "\t\t\t\t\"lastSeen\": 3211544,\n"
-           "\t\t\t\t\"lat\" : 16.45478,\n"
-           "\t\t\t\t\"lon\" : 11.40166\n"
-           "\t\t\t}\n"
-           "\t\t],\n"
-           "\t\t\"chat\": [{\n"
-           "\t\t\t\t\"local\": 0,\n"
-           "\t\t\t\t\"NameShort\": \"J\",\n"
-           "\t\t\t\t\"NameLong\": \"John\",\n"
-           "\t\t\t\t\"chatLine\": \"Hello\",\n"
-           "\t\t\t\t\"timestamp\" : 3203544\n"
-           "\t\t\t},\n"
-           "\t\t\t{\n"
-           "\t\t\t\t\"local\": 0,\n"
-           "\t\t\t\t\"NameShort\": \"D\",\n"
-           "\t\t\t\t\"NameLong\": \"David\",\n"
-           "\t\t\t\t\"chatLine\": \"Hello There\",\n"
-           "\t\t\t\t\"timestamp\" : 3204544\n"
-           "\t\t\t},\n"
-           "\t\t\t{\n"
-           "\t\t\t\t\"local\": 0,\n"
-           "\t\t\t\t\"NameShort\": \"J\",\n"
-           "\t\t\t\t\"NameLong\": \"John\",\n"
-           "\t\t\t\t\"chatLine\": \"Where you been?\",\n"
-           "\t\t\t\t\"timestamp\" : 3205544\n"
-           "\t\t\t},\n"
-           "\t\t\t{\n"
-           "\t\t\t\t\"local\": 0,\n"
-           "\t\t\t\t\"NameShort\": \"D\",\n"
-           "\t\t\t\t\"NameLong\": \"David\",\n"
-           "\t\t\t\t\"chatLine\": \"I was on Channel 2\",\n"
-           "\t\t\t\t\"timestamp\" : 3206544\n"
-           "\t\t\t},\n"
-           "\t\t\t{\n"
-           "\t\t\t\t\"local\": 0,\n"
-           "\t\t\t\t\"NameShort\": \"J\",\n"
-           "\t\t\t\t\"NameLong\": \"John\",\n"
-           "\t\t\t\t\"chatLine\": \"With Mary again?\",\n"
-           "\t\t\t\t\"timestamp\" : 3207544\n"
-           "\t\t\t},\n"
-           "\t\t\t{\n"
-           "\t\t\t\t\"local\": 0,\n"
-           "\t\t\t\t\"NameShort\": \"D\",\n"
-           "\t\t\t\t\"NameLong\": \"David\",\n"
-           "\t\t\t\t\"chatLine\": \"She's better looking than you\",\n"
-           "\t\t\t\t\"timestamp\" : 3208544\n"
-           "\t\t\t},\n"
-           "\t\t\t{\n"
-           "\t\t\t\t\"local\": 0,\n"
-           "\t\t\t\t\"NameShort\": \"M\",\n"
-           "\t\t\t\t\"NameLong\": \"Mary\",\n"
-           "\t\t\t\t\"chatLine\": \"Well, Hi\",\n"
-           "\t\t\t\t\"timestamp\" : 3209544\n"
-           "\t\t\t},\n"
-           "\t\t\t{\n"
-           "\t\t\t\t\"local\": 0,\n"
-           "\t\t\t\t\"NameShort\": \"D\",\n"
-           "\t\t\t\t\"NameLong\": \"David\",\n"
-           "\t\t\t\t\"chatLine\": \"You're Here\",\n"
-           "\t\t\t\t\"timestamp\" : 3210544\n"
-           "\t\t\t},\n"
-           "\t\t\t{\n"
-           "\t\t\t\t\"local\": 0,\n"
-           "\t\t\t\t\"NameShort\": \"M\",\n"
-           "\t\t\t\t\"NameLong\": \"Mary\",\n"
-           "\t\t\t\t\"chatLine\": \"Wanted to say Howdy.\",\n"
-           "\t\t\t\t\"timestamp\" : 3211544\n"
-           "\t\t\t},\n"
-           "\t\t\t{\n"
-           "\t\t\t\t\"local\": 0,\n"
-           "\t\t\t\t\"NameShort\": \"D\",\n"
-           "\t\t\t\t\"NameLong\": \"David\",\n"
-           "\t\t\t\t\"chatLine\": \"Better come down and visit sometime\",\n"
-           "\t\t\t\t\"timestamp\" : 3212544\n"
-           "\t\t\t},\n"
-           "\t\t\t{\n"
-           "\t\t\t\t\"local\": 1,\n"
-           "\t\t\t\t\"NameShort\": \"P\",\n"
-           "\t\t\t\t\"NameLong\": \"Peter\",\n"
-           "\t\t\t\t\"chatLine\": \"Where is everybody?\",\n"
-           "\t\t\t\t\"timestamp\" : 3213444\n"
-           "\t\t\t}\n"
-           "\t\t]\n"
-           "\t}\n"
+    out += "var meshtasticClient;\n"
+           "var connectionOne;\n"
+           "\n"
+           "\n"
+           "// Important: the connect action must be called from a user interaction (e.g. button press), otherwise the browsers "
+           "won't allow the connect\n"
+           "function connect() {\n"
+           "\n"
+           "    // Create new connection\n"
+           "    var httpconn = new meshtasticjs.IHTTPConnection();\n"
+           "\n"
+           "    // Set connection params\n"
+           "    let sslActive;\n"
+           "    if (window.location.protocol === 'https:') {\n"
+           "        sslActive = true;\n"
+           "    } else {\n"
+           "        sslActive = false;\n"
+           "    }\n"
+           "    let deviceIp = window.location.hostname; // Your devices IP here\n"
+           "   \n"
+           "\n"
+           "    // Add event listeners that get called when a new packet is received / state of device changes\n"
+           "    httpconn.addEventListener('fromRadio', function(packet) { console.log(packet)});\n"
+           "\n"
+           "    // Connect to the device async, then send a text message\n"
+           "    httpconn.connect(deviceIp, sslActive)\n"
+           "    .then(result => { \n"
+           "\n"
+           "        alert('device has been configured')\n"
+           "        // This gets called when the connection has been established\n"
+           "        // -> send a message over the mesh network. If no recipient node is provided, it gets sent as a broadcast\n"
+           "        return httpconn.sendText('meshtastic is awesome');\n"
+           "\n"
+           "    })\n"
+           "    .then(result => { \n"
+           "\n"
+           "        // This gets called when the message has been sucessfully sent\n"
+           "        console.log('Message sent!');})\n"
+           "\n"
+           "    .catch(error => { console.log(error); });\n"
+           "\n"
            "}";
 
-    webserver.send(200, "application/json", out);
-    return;
+    // Status code is 200 OK by default.
+    // We want to deliver a simple HTML page, so we send a corresponding content type:
+    res->setHeader("Content-Type", "text/javascript");
+
+    // The response implements the Print interface, so you can use it just like
+    // you would write to Serial etc.
+    res->print(out);
+}
+
+/*
+    To convert text to c strings:
+
+    https://tomeko.net/online_tools/cpp_text_escape.php?lang=en
+*/
+void handleBasicHTML(HTTPRequest *req, HTTPResponse *res)
+{
+    String out = "";
+    out += "<!doctype html>\n"
+           "<html class=\"no-js\" lang=\"\">\n"
+           "\n"
+           "<head>\n"
+           "  <meta charset=\"utf-8\">\n"
+           "  <title></title>\n"
+           "\n"
+           "  <script src=\"/static/meshtastic.js\"></script>\n"
+           "  <script src=\"basic.js\"></script>\n"
+           "</head>\n"
+           "\n"
+           "<body>\n"
+           "\n"
+           "  <button id=\"connect_button\" onclick=\"connect()\">Connect to Meshtastic device</button>\n"
+           " \n"
+           "</body>\n"
+           "\n"
+           "</html>";
+
+    // Status code is 200 OK by default.
+    // We want to deliver a simple HTML page, so we send a corresponding content type:
+    res->setHeader("Content-Type", "text/html");
+
+    // The response implements the Print interface, so you can use it just like
+    // you would write to Serial etc.
+    res->print(out);
 }

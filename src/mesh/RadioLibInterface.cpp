@@ -19,15 +19,9 @@ void LockingModule::SPItransfer(uint8_t cmd, uint8_t reg, uint8_t *dataOut, uint
 
 RadioLibInterface::RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy,
                                      SPIClass &spi, PhysicalLayer *_iface)
-    : concurrency::PeriodicTask(0), module(cs, irq, rst, busy, spi, spiSettings), iface(_iface)
+    : NotifiedWorkerThread("RadioIf"), module(cs, irq, rst, busy, spi, spiSettings), iface(_iface)
 {
     instance = this;
-}
-
-bool RadioLibInterface::init()
-{
-    setup(); // init our timer
-    return RadioInterface::init();
 }
 
 #ifndef NO_ESP32
@@ -41,9 +35,8 @@ void INTERRUPT_ATTR RadioLibInterface::isrLevel0Common(PendingISR cause)
 {
     instance->disableInterrupt();
 
-    instance->pending = cause;
     BaseType_t xHigherPriorityTaskWoken;
-    instance->notifyFromISR(&xHigherPriorityTaskWoken, cause, eSetValueWithOverwrite);
+    instance->notifyFromISR(&xHigherPriorityTaskWoken, cause, true);
 
     /* Force a context switch if xHigherPriorityTaskWoken is now set to pdTRUE.
     The macro used to do this is dependent on the port and may be called
@@ -191,10 +184,8 @@ transmitters that we are potentially stomping on.  Requires further thought.
 
 FIXME, the MIN_TX_WAIT_MSEC and MAX_TX_WAIT_MSEC values should be tuned via logic analyzer later.
 */
-void RadioLibInterface::loop()
+void RadioLibInterface::onNotify(uint32_t notification)
 {
-    pending = ISR_NONE;
-
     switch (notification) {
     case ISR_TX:
         handleTransmitInterrupt();
@@ -209,6 +200,8 @@ void RadioLibInterface::loop()
         startTransmitTimer();
         break;
     case TRANSMIT_DELAY_COMPLETED:
+        // DEBUG_MSG("delay done\n");
+
         // If we are not currently in receive mode, then restart the timer and try again later (this can happen if the main thread
         // has placed the unit into standby)  FIXME, how will this work if the chipset is in sleep mode?
         if (!txQueue.isEmpty()) {
@@ -229,25 +222,14 @@ void RadioLibInterface::loop()
     }
 }
 
-void RadioLibInterface::doTask()
-{
-    disable(); // Don't call this callback again
-
-    // We use without overwrite, so that if there is already an interrupt pending to be handled, that gets handle properly (the
-    // ISR handler will restart our timer)
-
-    notify(TRANSMIT_DELAY_COMPLETED, eSetValueWithoutOverwrite);
-}
-
 void RadioLibInterface::startTransmitTimer(bool withDelay)
 {
     // If we have work to do and the timer wasn't already scheduled, schedule it now
-    if (getPeriod() == 0 && !txQueue.isEmpty()) {
+    if (!txQueue.isEmpty()) {
         uint32_t delay =
             !withDelay ? 1 : random(MIN_TX_WAIT_MSEC, MAX_TX_WAIT_MSEC); // See documentation for loop() wrt these values
-                                                                         // DEBUG_MSG("xmit timer %d\n", delay);
-        // DEBUG_MSG("delaying %u\n", delay);
-        setPeriod(delay);
+        // DEBUG_MSG("xmit timer %d\n", delay);
+        notifyLater(delay, TRANSMIT_DELAY_COMPLETED, false); // This will implicitly enable
     }
 }
 

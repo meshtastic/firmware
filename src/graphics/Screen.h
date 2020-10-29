@@ -6,6 +6,8 @@
 
 #ifdef USE_SH1106
 #include <SH1106Wire.h>
+#elif defined(USE_ST7567)
+#include <ST7567Wire.h>
 #else
 #include <SSD1306Wire.h>
 #endif
@@ -15,9 +17,14 @@
 #include "TypedQueue.h"
 #include "commands.h"
 #include "concurrency/LockGuard.h"
-#include "concurrency/PeriodicTask.h"
+#include "concurrency/OSThread.h"
 #include "power.h"
 #include <string>
+
+// 0 to 255, though particular variants might define different defaults
+#ifndef BRIGHTNESS_DEFAULT
+#define BRIGHTNESS_DEFAULT 150
+#endif
 
 namespace graphics
 {
@@ -62,7 +69,7 @@ class DebugInfo
  *          multiple times simultaneously. All state-changing calls are queued and executed
  *          when the main loop calls us.
  */
-class Screen : public concurrency::PeriodicTask
+class Screen : public concurrency::OSThread
 {
     CallbackObserver<Screen, const meshtastic::Status *> powerStatusObserver =
         CallbackObserver<Screen, const meshtastic::Status *>(this, &Screen::handleStatusUpdate);
@@ -97,7 +104,7 @@ class Screen : public concurrency::PeriodicTask
 
     // Implementation to Adjust Brightness
     void adjustBrightness();
-    uint8_t brightness = 150;
+    uint8_t brightness = BRIGHTNESS_DEFAULT;
 
     /// Starts showing the Bluetooth PIN screen.
     //
@@ -180,11 +187,14 @@ class Screen : public concurrency::PeriodicTask
 
     int handleStatusUpdate(const meshtastic::Status *arg);
 
+    /// Used to force (super slow) eink displays to draw critical frames
+    void forceDisplay();
+
   protected:
     /// Updates the UI.
     //
     // Called periodically from the main loop.
-    void doTask() final;
+    int32_t runOnce() final;
 
   private:
     struct ScreenCmd {
@@ -202,7 +212,7 @@ class Screen : public concurrency::PeriodicTask
             return true; // claim success if our display is not in use
         else {
             bool success = cmdQueue.enqueue(cmd, 0);
-            setPeriod(1); // handle ASAP
+            enabled = true; // handle ASAP (we are the registered reader for cmdQueue, but might have been disabled)
             return success;
         }
     }
@@ -215,6 +225,9 @@ class Screen : public concurrency::PeriodicTask
 
     /// Rebuilds our list of frames (screens) to default ones.
     void setFrames();
+
+    /// Try to start drawing ASAP
+    void setFastFramerate();
 
     /// Called when debug screen is to be drawn, calls through to debugInfo.drawFrame.
     static void drawDebugInfoTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
@@ -244,6 +257,8 @@ class Screen : public concurrency::PeriodicTask
     EInkDisplay dispdev;
 #elif defined(USE_SH1106)
     SH1106Wire dispdev;
+#elif defined(USE_ST7567)
+    ST7567Wire dispdev;
 #else
     SSD1306Wire dispdev;
 #endif
