@@ -1,6 +1,6 @@
 #include "Router.h"
 #include "CryptoEngine.h"
-#include "GPS.h"
+#include "RTC.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include <NodeDB.h>
@@ -34,25 +34,29 @@ Allocator<MeshPacket> &packetPool = staticPool;
  *
  * Currently we only allow one interface, that may change in the future
  */
-Router::Router() : fromRadioQueue(MAX_RX_FROMRADIO)
+Router::Router() : concurrency::OSThread("Router"), fromRadioQueue(MAX_RX_FROMRADIO)
 {
     // This is called pre main(), don't touch anything here, the following code is not safe
 
     /* DEBUG_MSG("Size of NodeInfo %d\n", sizeof(NodeInfo));
     DEBUG_MSG("Size of SubPacket %d\n", sizeof(SubPacket));
     DEBUG_MSG("Size of MeshPacket %d\n", sizeof(MeshPacket)); */
+
+    fromRadioQueue.setReader(this);
 }
 
 /**
  * do idle processing
  * Mostly looking in our incoming rxPacket queue and calling handleReceived.
  */
-void Router::loop()
+int32_t Router::runOnce()
 {
     MeshPacket *mp;
     while ((mp = fromRadioQueue.dequeuePtr(0)) != NULL) {
         perhapsHandleReceived(mp);
     }
+
+    return INT32_MAX; // Wait a long time - until we get woken for the message queue
 }
 
 /// Generate a unique packet id
@@ -89,7 +93,7 @@ MeshPacket *Router::allocForSending()
     p->to = NODENUM_BROADCAST;
     p->hop_limit = HOP_RELIABLE;
     p->id = generatePacketId();
-    p->rx_time = getValidTime(); // Just in case we process the packet locally - make sure it has a valid timestamp
+    p->rx_time = getValidTime(RTCQualityFromNet); // Just in case we process the packet locally - make sure it has a valid timestamp
 
     return p;
 }
@@ -198,9 +202,8 @@ NodeNum Router::getNodeNum()
  */
 void Router::handleReceived(MeshPacket *p)
 {
-    // FIXME, this class shouldn't EVER need to know about the GPS, move getValidTime() into a non gps dependent function
     // Also, we should set the time from the ISR and it should have msec level resolution
-    p->rx_time = getValidTime(); // store the arrival timestamp for the phone
+    p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
 
     // Take those raw bytes and convert them back into a well structured protobuf we can understand
     if (perhapsDecode(p)) {

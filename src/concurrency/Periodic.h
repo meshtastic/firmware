@@ -1,26 +1,24 @@
 #pragma once
 
-#include "PeriodicTask.h"
+#include "concurrency/OSThread.h"
 
-namespace concurrency {
+namespace concurrency
+{
 
 /**
- * @brief Periodically invoke a callback. This just provides C-style callback conventions 
+ * @brief Periodically invoke a callback. This just provides C-style callback conventions
  *        rather than a virtual function - FIXME, remove?
  */
-class Periodic : public PeriodicTask
+class Periodic : public OSThread
 {
-    uint32_t (*callback)();
+    int32_t (*callback)();
 
   public:
     // callback returns the period for the next callback invocation (or 0 if we should no longer be called)
-    Periodic(uint32_t (*_callback)()) : callback(_callback) {}
+    Periodic(const char *name, int32_t (*_callback)()) : OSThread(name), callback(_callback) {}
 
   protected:
-    void doTask() {
-        uint32_t p = callback();
-        setPeriod(p);
-    }
+    int32_t runOnce() { return callback(); }
 };
 
 } // namespace concurrency

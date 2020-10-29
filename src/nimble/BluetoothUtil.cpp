@@ -3,16 +3,16 @@
 #include "NimbleBluetoothAPI.h"
 #include "PhoneAPI.h"
 #include "PowerFSM.h"
-#include <WiFi.h>
 #include "configuration.h"
 #include "esp_bt.h"
 #include "host/util/util.h"
 #include "main.h"
+#include "meshwifi/meshwifi.h"
 #include "nimble/NimbleDefs.h"
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
 #include <Arduino.h>
-#include "meshwifi/meshwifi.h"
+#include <WiFi.h>
 
 static bool pinShowing;
 static uint32_t doublepressed;
@@ -21,14 +21,14 @@ static void startCb(uint32_t pin)
 {
     pinShowing = true;
     powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
-    screen.startBluetoothPinScreen(pin);
+    screen->startBluetoothPinScreen(pin);
 };
 
 static void stopCb()
 {
     if (pinShowing) {
         pinShowing = false;
-        screen.stopBluetoothPinScreen();
+        screen->stopBluetoothPinScreen();
     }
 };
 
@@ -551,7 +551,7 @@ void setBluetoothEnable(bool on)
                 return;
             }
             */
-           
+
             // shutdown wifi
             deinitWifi();
 

@@ -10,6 +10,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "RTC.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "power.h"
@@ -48,14 +49,14 @@ MeshService service;
 
 #include "Router.h"
 
-static uint32_t sendOwnerCb()
+static int32_t sendOwnerCb()
 {
     service.sendOurOwner();
 
-    return radioConfig.preferences.send_owner_interval * radioConfig.preferences.position_broadcast_secs * 1000;
+    return getPref_send_owner_interval() * getPref_position_broadcast_secs() * 1000;
 }
 
-static concurrency::Periodic sendOwnerPeriod(sendOwnerCb);
+static concurrency::Periodic *sendOwnerPeriod;
 
 MeshService::MeshService() : toPhoneQueue(MAX_RX_TOPHONE)
 {
@@ -64,17 +65,18 @@ MeshService::MeshService() : toPhoneQueue(MAX_RX_TOPHONE)
 
 void MeshService::init()
 {
-    sendOwnerPeriod.setup();
+    sendOwnerPeriod = new concurrency::Periodic("SendOwner", sendOwnerCb);
+
     nodeDB.init();
 
     if (gps)
         gpsObserver.observe(&gps->newStatus);
-    packetReceivedObserver.observe(&router.notifyPacketReceived);
+    packetReceivedObserver.observe(&router->notifyPacketReceived);
 }
 
 void MeshService::sendOurOwner(NodeNum dest, bool wantReplies)
 {
-    MeshPacket *p = router.allocForSending();
+    MeshPacket *p = router->allocForSending();
     p->to = dest;
     p->decoded.want_response = wantReplies;
     p->decoded.which_payload = SubPacket_user_tag;
@@ -121,7 +123,7 @@ const MeshPacket *MeshService::handleFromRadioUser(const MeshPacket *mp)
         sendOurOwner(mp->from);
 
         String lcd = String("Joined: ") + mp->decoded.user.long_name + "\n";
-        screen.print(lcd.c_str());
+        screen->print(lcd.c_str());
     }
 
     return mp;
@@ -139,7 +141,7 @@ void MeshService::handleIncomingPosition(const MeshPacket *mp)
             tv.tv_sec = secs;
             tv.tv_usec = 0;
 
-            perhapsSetRTC(&tv);
+            perhapsSetRTC(RTCQualityFromNet, &tv);
         }
     } else {
         DEBUG_MSG("Ignoring incoming packet - not a position\n");
@@ -150,12 +152,8 @@ int MeshService::handleFromRadio(const MeshPacket *mp)
 {
     powerFSM.trigger(EVENT_RECEIVED_PACKET); // Possibly keep the node from sleeping
 
-    // If it is a position packet, perhaps set our clock (if we don't have a GPS of our own, otherwise wait for that to work)
-    if (!gps->isConnected)
-        handleIncomingPosition(mp);
-    else {
-        DEBUG_MSG("Ignoring incoming time, because we have a GPS\n");
-    }
+    // If it is a position packet, perhaps set our clock - this must be before nodeDB.updateFrom
+    handleIncomingPosition(mp);
 
     if (mp->which_payload == MeshPacket_decoded_tag && mp->decoded.which_payload == SubPacket_user_tag) {
         mp = handleFromRadioUser(mp);
@@ -229,8 +227,8 @@ void MeshService::handleToRadio(MeshPacket &p)
     if (p.id == 0)
         p.id = generatePacketId(); // If the phone didn't supply one, then pick one
 
-    p.rx_time = getValidTime(); // Record the time the packet arrived from the phone
-                                // (so we update our nodedb for the local node)
+    p.rx_time = getValidTime(RTCQualityFromNet); // Record the time the packet arrived from the phone
+                                                 // (so we update our nodedb for the local node)
 
     // Send the packet into the mesh
 
@@ -250,10 +248,10 @@ void MeshService::sendToMesh(MeshPacket *p)
     nodeDB.updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
 
     // Strip out any time information before sending packets to other  nodes - to keep the wire size small (and because other
-    // nodes shouldn't trust it anyways) Note: for now, we allow a device with a local GPS to include the time, so that gpsless
+    // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS to include the time, so that gpsless
     // devices can get time.
     if (p->which_payload == MeshPacket_decoded_tag && p->decoded.which_payload == SubPacket_position_tag) {
-        if (!gps->isConnected) {
+        if (getRTCQuality() < RTCQualityGPS) {
             DEBUG_MSG("Stripping time %u from position send\n", p->decoded.position.time);
             p->decoded.position.time = 0;
         } else
@@ -261,7 +259,7 @@ void MeshService::sendToMesh(MeshPacket *p)
     }
 
     // Note: We might return !OK if our fifo was full, at that point the only option we have is to drop it
-    router.sendLocal(p);
+    router->sendLocal(p);
 }
 
 void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
@@ -283,12 +281,13 @@ void MeshService::sendOurPosition(NodeNum dest, bool wantReplies)
     assert(node->has_position);
 
     // Update our local node info with our position (even if we don't decide to update anyone else)
-    MeshPacket *p = router.allocForSending();
+    MeshPacket *p = router->allocForSending();
     p->to = dest;
     p->decoded.which_payload = SubPacket_position_tag;
     p->decoded.position = node->position;
     p->decoded.want_response = wantReplies;
-    p->decoded.position.time = getValidTime(); // This nodedb timestamp might be stale, so update it if our clock is valid.
+    p->decoded.position.time =
+        getValidTime(RTCQualityGPS); // This nodedb timestamp might be stale, so update it if our clock is valid.
     sendToMesh(p);
 }
 
@@ -296,7 +295,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
 {
 
     // Update our local node info with our position (even if we don't decide to update anyone else)
-    MeshPacket *p = router.allocForSending();
+    MeshPacket *p = router->allocForSending();
     p->decoded.which_payload = SubPacket_position_tag;
 
     Position &pos = p->decoded.position;
@@ -306,8 +305,9 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
             pos.altitude = gps->altitude;
         pos.latitude_i = gps->latitude;
         pos.longitude_i = gps->longitude;
-        pos.time = getValidTime();
     }
+
+    pos.time = getValidTime(RTCQualityGPS);
 
     // Include our current battery voltage in our position announcement
     pos.battery_level = powerStatus->getBatteryChargePercent();
@@ -318,7 +318,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
     // We limit our GPS broadcasts to a max rate
     static uint32_t lastGpsSend;
     uint32_t now = millis();
-    if (lastGpsSend == 0 || now - lastGpsSend > radioConfig.preferences.position_broadcast_secs * 1000) {
+    if (lastGpsSend == 0 || now - lastGpsSend > getPref_position_broadcast_secs() * 1000) {
         lastGpsSend = now;
         DEBUG_MSG("Sending position to mesh\n");
 

@@ -151,7 +151,7 @@ void doDeepSleep(uint64_t msecToWake)
     notifySleep.notifyObservers(NULL); // also tell the regular sleep handlers
     notifyDeepSleep.notifyObservers(NULL);
 
-    screen.setOn(false); // datasheet says this will draw only 10ua
+    screen->setOn(false); // datasheet says this will draw only 10ua
 
     nodeDB.saveToDisk();
 
@@ -163,20 +163,25 @@ void doDeepSleep(uint64_t msecToWake)
     digitalWrite(VEXT_ENABLE, 1); // turn off the display power
 #endif
 
+    // Kill GPS power completely (even if previously we just had it in sleep mode)
+    setGPSPower(false);
+
     setLed(false);
 
 #ifdef TBEAM_V10
     if (axp192_found) {
+        // Obsolete comment: from back when we we used to receive lora packets while CPU was in deep sleep.
+        // We no longer do that, because our light-sleep current draws are low enough and it provides fast start/low cost
+        // wake.  We currently use deep sleep only for 'we want our device to actually be off - because our battery is
+        // critically low'.  So in deep sleep we DO shut down power to LORA (and when we boot later we completely reinit it)
+        //
         // No need to turn this off if the power draw in sleep mode really is just 0.2uA and turning it off would
         // leave floating input for the IRQ line
-
         // If we want to leave the radio receving in would be 11.5mA current draw, but most of the time it is just waiting
         // in its sequencer (true?) so the average power draw should be much lower even if we were listinging for packets
         // all the time.
 
-        // axp.setPowerOutPut(AXP192_LDO2, AXP202_OFF); // LORA radio
-
-        setGPSPower(false);
+        axp.setPowerOutPut(AXP192_LDO2, AXP202_OFF); // LORA radio
     }
 #endif
 
@@ -260,12 +265,20 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // We treat the serial port as a GPIO for a fast/low power way of waking, if we see a rising edge that means
     // someone started to send something
 
-    // Alas - doesn't work reliably, instead need to use the uart specific version (which burns a little power)
-    // FIXME: gpio 3 is RXD for serialport 0 on ESP32
+    // gpio 3 is RXD for serialport 0 on ESP32
     // Send a few Z characters to wake the port
-    gpio_wakeup_enable((gpio_num_t)SERIAL0_RX_GPIO, GPIO_INTR_LOW_LEVEL);
-    // uart_set_wakeup_threshold(UART_NUM_0, 3);
-    // esp_sleep_enable_uart_wakeup(0);
+
+    // this doesn't work on TBEAMs when the USB is depowered (causes bogus interrupts)
+    // So we disable this "wake on serial" feature - because now when a TBEAM (only) has power connected it
+    // never tries to go to sleep if the user is using the API
+    // gpio_wakeup_enable((gpio_num_t)SERIAL0_RX_GPIO, GPIO_INTR_LOW_LEVEL);
+
+    // doesn't help - I think the USB-UART chip losing power is pulling the signal llow
+    // gpio_pullup_en((gpio_num_t)SERIAL0_RX_GPIO);
+
+    // alas - can only work if using the refclock, which is limited to about 9600 bps
+    // assert(uart_set_wakeup_threshold(UART_NUM_0, 3) == ESP_OK);
+    // assert(esp_sleep_enable_uart_wakeup(0) == ESP_OK);
 #endif
 #ifdef BUTTON_PIN
     gpio_wakeup_enable((gpio_num_t)BUTTON_PIN, GPIO_INTR_LOW_LEVEL); // when user presses, this button goes low
@@ -274,7 +287,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     gpio_wakeup_enable((gpio_num_t)RF95_IRQ_GPIO, GPIO_INTR_HIGH_LEVEL); // RF95 interrupt, active high
 #endif
 #ifdef PMU_IRQ
-    // FIXME, disable wake due to PMU because it seems to fire all the time?
+    // wake due to PMU can happen repeatedly if there is no battery installed or the battery fills
     if (axp192_found)
         gpio_wakeup_enable((gpio_num_t)PMU_IRQ, GPIO_INTR_LOW_LEVEL); // pmu irq
 #endif
