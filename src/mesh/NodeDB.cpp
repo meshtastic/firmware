@@ -150,6 +150,9 @@ bool NodeDB::resetRadioConfig()
         radioConfig.preferences.region = RegionCode_TW;
     }
 
+    // Update the global myRegion
+    initRegion();
+    
     return didFactoryReset;
 }
 
@@ -244,9 +247,6 @@ void NodeDB::init()
                 break;
             }
     }
-
-    // Update the global myRegion
-    initRegion();
 
     strncpy(myNodeInfo.firmware_version, optstr(APP_VERSION), sizeof(myNodeInfo.firmware_version));
     strncpy(myNodeInfo.hw_model, HW_VENDOR, sizeof(myNodeInfo.hw_model));
