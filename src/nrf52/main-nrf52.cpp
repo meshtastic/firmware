@@ -49,7 +49,7 @@ void getMacAddr(uint8_t *dmac)
 NRF52Bluetooth *nrf52Bluetooth;
 
 static bool bleOn = false;
-static const bool enableBle = true; // Set to false for easier debugging
+static const bool enableBle = false; // Set to false for easier debugging
 
 void setBluetoothEnable(bool on)
 {
@@ -64,7 +64,8 @@ void setBluetoothEnable(bool on)
                 }
             }
         } else {
-            DEBUG_MSG("FIXME: implement BLE disable\n");
+            if(nrf52Bluetooth)
+                nrf52Bluetooth->shutdown();
         }
         bleOn = on;
     }
@@ -109,4 +110,22 @@ void nrf52Setup()
     // randomSeed(r);
     DEBUG_MSG("FIXME, call randomSeed\n");
     // ::printf("TESTING PRINTF\n");
+}
+
+void cpuDeepSleep(uint64_t msecToWake)
+{
+  DEBUG_MSG("FIXME: implement NRF52 deep sleep enter actions\n");
+  // FIXME, configure RTC to wake us
+  // FIXME, power down SPI, I2C, RAMs
+
+  // FIXME, use system off mode with ram retention for key state?
+  // FIXME, use non-init RAM per https://devzone.nordicsemi.com/f/nordic-q-a/48919/ram-retention-settings-with-softdevice-enabled
+
+  while(1) {
+    delay(5000);
+    DEBUG_MSG(".");
+  }
+
+  // FIXME, after wake power up SPI, I2C, RAMs, reinit LORA
+  DEBUG_MSG("FIXME: implement NRF52 deep sleep wake actions\n");
 }

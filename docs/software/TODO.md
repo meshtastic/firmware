@@ -2,15 +2,11 @@
 
 You probably don't care about this section - skip to the next one.
 
-Threading tasks:
+For high speed/lots of devices/short range tasks:
 
-- Use https://github.com/ivanseidel/ArduinoThread? rather than full coroutines 
-- clean up main loop()
-- check that we are mostly asleep, show which thread is causing us to wake
-- 
-- use tickless idle on nrf52, and sleep X msec or until an interrupt occurs or the cooperative scheduling changes. https://devzone.nordicsemi.com/f/nordic-q-a/12363/nrf52-freertos-power-consumption-tickless-idle
-- BAD IDEA: use vTaskDelay and https://www.freertos.org/xTaskAbortDelay.html if scheduling changes. (define INCLUDE_xTaskAbortDelay on ESP32 and NRF52 - seems impossible to find?)
-- GOOD IDEA: use xSemaphoreTake to take a semaphore using a timeout.  Expect semaphore to not be set, but set it to indicate scheduling has changed.
+- When guessing numhops for sending: if I've heard from many local (0 hop neighbors) decrease hopcount by 2 rather than 1. 
+This should nicely help 'router' nodes do the right thing when long range, or if there are many local nodes for short range.
+- fix timeouts/delays to be based on packet length at current radio settings
 
 Nimble tasks:
 
