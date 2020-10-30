@@ -59,8 +59,10 @@ bool GPS::setup()
     setAwake(true); // Wake GPS power before doing any init
     bool ok = setupGPS();
 
-    if (ok)
+    if (ok) {
         notifySleepObserver.observe(&notifySleep);
+        notifyDeepSleepObserver.observe(&notifyDeepSleep);
+    }
 
     return ok;
 }
@@ -275,7 +277,19 @@ void GPS::forceWake(bool on)
 /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
 int GPS::prepareSleep(void *unused)
 {
+    DEBUG_MSG("GPS prepare sleep!\n");
     forceWake(false);
+
+    return 0;
+}
+
+/// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
+int GPS::prepareDeepSleep(void *unused)
+{
+    DEBUG_MSG("GPS deep sleep!\n");
+
+    // For deep sleep we also want abandon any lock attempts (because we want minimum power)
+    setAwake(false);
 
     return 0;
 }

@@ -125,6 +125,12 @@ bool RadioInterface::init()
     return true;
 }
 
+int RadioInterface::notifyDeepSleepCb(void *unused)
+{
+    sleep();
+    return 0;
+}
+
 /** hash a string into an integer
  *
  * djb2 by Dan Bernstein.
