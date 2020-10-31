@@ -65,9 +65,8 @@ void Air530GPS::sendCommand(const char *cmd) {
 }
 
 void Air530GPS::sleep() {
+    NMEAGPS::sleep();
 #ifdef PIN_GPS_WAKE
-    digitalWrite(PIN_GPS_WAKE, 0);
-    pinMode(PIN_GPS_WAKE, OUTPUT);
     sendCommand("$PGKC105,4");
 #endif
 }
@@ -76,10 +75,7 @@ void Air530GPS::sleep() {
 void Air530GPS::wake()
 {
 #if 1
-#ifdef PIN_GPS_WAKE
-    digitalWrite(PIN_GPS_WAKE, 1);
-    pinMode(PIN_GPS_WAKE, OUTPUT);
-#endif
+    NMEAGPS::wake();
 #else
     // For power testing - keep GPS sleeping forever
     sleep();
