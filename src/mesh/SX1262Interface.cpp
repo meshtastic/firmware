@@ -201,16 +201,17 @@ bool SX1262Interface::isActivelyReceiving()
 
 bool SX1262Interface::sleep()
 {
-    DEBUG_MSG("sx1262 entering sleep mode\n");
+    // Not keeping config is busted - next time nrf52 board boots lora sending fails  tcxo related? - see datasheet
+    DEBUG_MSG("sx1262 entering sleep mode (FIXME, don't keep config)\n");
     setStandby(); // Stop any pending operations
 
     // turn off TCXO if it was powered
     // FIXME - this isn't correct
     // lora.setTCXO(0);
 
-    // put chipset into sleep mode
-    disableInterrupt();
-    lora.sleep(false); // Note: we do not keep the config, full reinit will be needed
+    // put chipset into sleep mode (we've already disabled interrupts by now)
+    bool keepConfig = true;
+    lora.sleep(keepConfig); // Note: we do not keep the config, full reinit will be needed
 
 #ifdef SX1262_POWER_EN
     digitalWrite(SX1262_POWER_EN, LOW);
