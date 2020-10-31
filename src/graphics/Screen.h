@@ -6,6 +6,8 @@
 
 #ifdef USE_SH1106
 #include <SH1106Wire.h>
+#elif defined(USE_ST7567)
+#include <ST7567Wire.h>
 #else
 #include <SSD1306Wire.h>
 #endif
@@ -18,6 +20,11 @@
 #include "concurrency/OSThread.h"
 #include "power.h"
 #include <string>
+
+// 0 to 255, though particular variants might define different defaults
+#ifndef BRIGHTNESS_DEFAULT
+#define BRIGHTNESS_DEFAULT 150
+#endif
 
 namespace graphics
 {
@@ -97,7 +104,7 @@ class Screen : public concurrency::OSThread
 
     // Implementation to Adjust Brightness
     void adjustBrightness();
-    uint8_t brightness = 150;
+    uint8_t brightness = BRIGHTNESS_DEFAULT;
 
     /// Starts showing the Bluetooth PIN screen.
     //
@@ -250,6 +257,8 @@ class Screen : public concurrency::OSThread
     EInkDisplay dispdev;
 #elif defined(USE_SH1106)
     SH1106Wire dispdev;
+#elif defined(USE_ST7567)
+    ST7567Wire dispdev;
 #else
     SSD1306Wire dispdev;
 #endif

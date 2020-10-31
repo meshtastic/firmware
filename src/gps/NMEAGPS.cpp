@@ -13,6 +13,8 @@ static int32_t toDegInt(RawDegrees d)
 
 bool NMEAGPS::setupGPS()
 {
+    GPS::setupGPS();
+    
 #ifdef PIN_GPS_PPS
     // pulse per second
     // FIXME - move into shared GPS code
@@ -102,7 +104,7 @@ bool NMEAGPS::whileIdle()
     // First consume any chars that have piled up at the receiver
     while (_serial_gps->available() > 0) {
         int c = _serial_gps->read();
-        //DEBUG_MSG("%c", c);
+        // DEBUG_MSG("%c", c);
         isValid |= reader.encode(c);
     }
 
