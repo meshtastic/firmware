@@ -72,13 +72,13 @@ class GPS : private concurrency::OSThread
 
   protected:
     /// Do gps chipset specific init, return true for success
-    virtual bool setupGPS() = 0;
+    virtual bool setupGPS();
 
     /// If possible force the GPS into sleep/low power mode
-    virtual void sleep() {}
+    virtual void sleep();
 
     /// wake the GPS into normal operation mode
-    virtual void wake() {}
+    virtual void wake();
 
     /** Subclasses should look for serial rx characters here and feed it to their GPS parser
      *

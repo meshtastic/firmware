@@ -15,6 +15,7 @@
 #include <WiFi.h>
 
 static bool pinShowing;
+static uint32_t doublepressed;
 
 static void startCb(uint32_t pin)
 {
@@ -123,6 +124,7 @@ static int gap_event(struct ble_gap_event *event, void *arg)
 {
     struct ble_gap_conn_desc desc;
     int rc;
+    uint32_t now = millis();
 
     switch (event->type) {
     case BLE_GAP_EVENT_CONNECT:
@@ -221,8 +223,17 @@ static int gap_event(struct ble_gap_event *event, void *arg)
 
         if (event->passkey.params.action == BLE_SM_IOACT_DISP) {
             pkey.action = event->passkey.params.action;
-            pkey.passkey = random(
-                100000, 999999); // This is the passkey to be entered on peer - we pick a number >100,000 to ensure 6 digits
+            DEBUG_MSG("dp: %d now:%d\n",doublepressed, now);
+            if (doublepressed > 0 && (doublepressed + (30*1000)) > now) 
+            {
+                DEBUG_MSG("User has overridden passkey or no display available\n");
+                pkey.passkey = defaultBLEPin;  
+            }
+            else {
+                DEBUG_MSG("Using random passkey\n");
+                pkey.passkey = random(
+                    100000, 999999); // This is the passkey to be entered on peer - we pick a number >100,000 to ensure 6 digits    
+            }
             DEBUG_MSG("*** Enter passkey %d on the peer side ***\n", pkey.passkey);
 
             startCb(pkey.passkey);
@@ -441,6 +452,13 @@ int chr_readwrite8(uint8_t *v, size_t vlen, struct ble_gatt_access_ctxt *ctxt)
     }
 
     return 0; // success
+}
+
+void disablePin()
+{
+    DEBUG_MSG("User Override, disabling bluetooth pin requirement\n");
+    // keep track of when it was pressed, so we know it was within X seconds
+    doublepressed = millis();  
 }
 
 // This routine is called multiple times, once each time we come back from sleep
