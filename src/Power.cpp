@@ -18,6 +18,21 @@ Power *power;
 
 using namespace meshtastic;
 
+#if defined(NRF52_SERIES)
+/*
+ * Internal Reference is +/-0.6V, with an adjustable gain of 1/6, 1/5, 1/4,
+ * 1/3, 1/2 or 1, meaning 3.6, 3.0, 2.4, 1.8, 1.2 or 0.6V for the ADC levels.
+ *
+ * External Reference is VDD/4, with an adjustable gain of 1, 2 or 4, meaning
+ * VDD/4, VDD/2 or VDD for the ADC levels.
+ *
+ * Default settings are internal reference with 1/6 gain (GND..3.6V ADC range)
+ */
+#define AREF_VOLTAGE 3.6
+#else
+#define AREF_VOLTAGE 3.3
+#endif
+
 /**
  * If this board has a battery level sensor, set this to a valid implementation
  */
@@ -37,10 +52,13 @@ class AnalogBatteryLevel : public HasBatteryLevel
     {
         float v = getBattVoltage() / 1000;
 
-        if (v < 2.1)
+        if (v < noBatVolt)
             return -1; // If voltage is super low assume no battery installed
 
-        return 100 * (v - 3.27) / (4.2 - 3.27);
+        if (v > chargingVolt)
+            return 0; // While charging we can't report % full on the battery
+
+        return 100 * (v - emptyVolt) / (fullVolt - emptyVolt);
     }
 
     /**
@@ -48,9 +66,11 @@ class AnalogBatteryLevel : public HasBatteryLevel
      */
     virtual float getBattVoltage()
     {
+        // Tested ttgo eink nrf52 board and the reported value is perfect
+        // DEBUG_MSG("raw val %u", raw);
         return
 #ifdef BATTERY_PIN
-            1000.0 * analogRead(BATTERY_PIN) * 2.0 * (3.3 / 1024.0);
+            1000.0 * 2.0 * (AREF_VOLTAGE / 1024.0) * analogRead(BATTERY_PIN);
 #else
             NAN;
 #endif
@@ -59,7 +79,20 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /**
      * return true if there is a battery installed in this unit
      */
-    virtual bool isBatteryConnect() { return getBattVoltage() != -1; }
+    virtual bool isBatteryConnect() { return getBattPercentage() != -1; }
+
+    /// If we see a battery voltage higher than physics allows - assume charger is pumping
+    /// in power
+    virtual bool isVBUSPlug() { return getBattVoltage() > chargingVolt; }
+
+    /// Assume charging if we have a battery and external power is connected.
+    /// we can't be smart enough to say 'full'?
+    virtual bool isChargeing() { return isBatteryConnect() && isVBUSPlug(); }
+
+  private:
+    /// If we see a battery voltage higher than physics allows - assume charger is pumping
+    /// in power
+    const float fullVolt = 4.2, emptyVolt = 3.27, chargingVolt = 4.3, noBatVolt = 2.1;
 } analogLevel;
 
 Power::Power() : OSThread("Power") {}
@@ -68,10 +101,18 @@ bool Power::analogInit()
 {
 #ifdef BATTERY_PIN
     DEBUG_MSG("Using analog input for battery level\n");
+
+    // disable any internal pullups
+    pinMode(BATTERY_PIN, INPUT);
+
 #ifndef NO_ESP32
     // ESP32 needs special analog stuff
     adcAttachPin(BATTERY_PIN);
 #endif
+#ifdef NRF52_SERIES
+    analogReference(AR_INTERNAL); // 3.6V
+#endif
+
     // adcStart(BATTERY_PIN);
     analogReadResolution(10); // Default of 12 is not very linear. Recommended to use 10 or 11 depending on needed resolution.
     batteryLevel = &analogLevel;
@@ -121,7 +162,8 @@ void Power::readPowerStatus()
         const PowerStatus powerStatus =
             PowerStatus(hasBattery ? OptTrue : OptFalse, batteryLevel->isVBUSPlug() ? OptTrue : OptFalse,
                         batteryLevel->isChargeing() ? OptTrue : OptFalse, batteryVoltageMv, batteryChargePercent);
-        DEBUG_MSG("Read power stat %d\n", powerStatus.getHasUSB());
+        DEBUG_MSG("Battery: usbPower=%d, isCharging=%d, batMv=%d, batPct=%d\n", powerStatus.getHasUSB(),
+                  powerStatus.getIsCharging(), powerStatus.getBatteryVoltageMv(), powerStatus.getBatteryChargePercent());
         newStatus.notifyObservers(&powerStatus);
 
         // If we have a battery at all and it is less than 10% full, force deep sleep

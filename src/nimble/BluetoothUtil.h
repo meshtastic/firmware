@@ -15,6 +15,7 @@ void updateBatteryLevel(uint8_t level);
 void deinitBLE();
 void loopBLE();
 void reinitBluetooth();
+void disablePin();
 
 /**
  * A helper function that implements simple read and write handling for a uint32_t
