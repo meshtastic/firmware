@@ -202,6 +202,13 @@ void setupMeshService(void)
 // FIXME, turn off soft device access for debugging
 static bool isSoftDeviceAllowed = true;
 
+void NRF52Bluetooth::shutdown()
+{
+    // Shutdown bluetooth for minimum power draw
+    DEBUG_MSG("Disable NRF52 bluetooth\n");
+    Bluefruit.Advertising.stop();
+}
+
 void NRF52Bluetooth::setup()
 {
     // Initialise the Bluefruit module

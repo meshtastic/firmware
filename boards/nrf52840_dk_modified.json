@@ -1,7 +1,7 @@
 {
   "build": {
     "arduino": {
-      "ldscript": "nrf52840_s140_v6.ld"
+      "ldscript": "nrf52840_s113_v7.ld"
     },
     "core": "nRF5",
     "cpu": "cortex-m4",
@@ -16,9 +16,9 @@
       "name": "adafruit"
     },
     "softdevice": {
-      "sd_flags": "-DS140",
-      "sd_name": "s140",
-      "sd_version": "6.1.1",
+      "sd_flags": "-DS113",
+      "sd_name": "s113",
+      "sd_version": "7.2.0",
       "sd_fwid": "0x00B6"
     },
     "bootloader": {

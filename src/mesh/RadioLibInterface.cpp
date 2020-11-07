@@ -236,20 +236,25 @@ void RadioLibInterface::startTransmitTimer(bool withDelay)
 void RadioLibInterface::handleTransmitInterrupt()
 {
     // DEBUG_MSG("handling lora TX interrupt\n");
-    assert(sendingPacket); // Were we sending? - FIXME, this was null coming out of light sleep due to RF95 ISR!
-
-    completeSending();
+    // This can be null if we forced the device to enter standby mode.  In that case
+    // ignore the transmit interrupt
+    if(sendingPacket)
+        completeSending();
 }
 
 void RadioLibInterface::completeSending()
 {
-    if (sendingPacket) {
+    // We are careful to clear sending packet before calling printPacket because
+    // that can take a long time
+    auto p = sendingPacket;
+    sendingPacket = NULL;
+
+    if (p) {
         txGood++;
-        printPacket("Completed sending", sendingPacket);
+        printPacket("Completed sending", p);
 
         // We are done sending that packet, release it
-        packetPool.release(sendingPacket);
-        sendingPacket = NULL;
+        packetPool.release(p);
         // DEBUG_MSG("Done with send\n");
     }
 }
