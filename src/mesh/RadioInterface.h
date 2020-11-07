@@ -48,7 +48,7 @@ class RadioInterface
         CallbackObserver<RadioInterface, void *>(this, &RadioInterface::preflightSleepCb);
 
     CallbackObserver<RadioInterface, void *> notifyDeepSleepObserver =
-        CallbackObserver<RadioInterface, void *>(this, &RadioInterface::notifyDeepSleepDb);
+        CallbackObserver<RadioInterface, void *>(this, &RadioInterface::notifyDeepSleepCb);
 
   protected:
     MeshPacket *sendingPacket = NULL; // The packet we are currently sending
@@ -136,11 +136,7 @@ class RadioInterface
     /// Return 0 if sleep is okay
     int preflightSleepCb(void *unused = NULL) { return canSleep() ? 0 : 1; }
 
-    int notifyDeepSleepDb(void *unused = NULL)
-    {
-        sleep();
-        return 0;
-    }
+    int notifyDeepSleepCb(void *unused = NULL);
 
     int reloadConfig(void *unused)
     {
