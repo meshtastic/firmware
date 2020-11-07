@@ -25,9 +25,15 @@ uint8_t GPS::i2cAddress = 0;
 
 GPS *gps;
 
+/// Multiple GPS instances might use the same serial port (in sequence), but we can 
+/// only init that port once.
+static bool didSerialInit;
+
 bool GPS::setupGPS()
 {
-    if (_serial_gps) {
+    if (_serial_gps && !didSerialInit) {
+        didSerialInit = true;
+        
 #ifdef GPS_RX_PIN
         _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
 #else
