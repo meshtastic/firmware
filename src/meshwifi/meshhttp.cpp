@@ -54,6 +54,7 @@ void handleHotspot(HTTPRequest *req, HTTPResponse *res);
 void handleFavicon(HTTPRequest *req, HTTPResponse *res);
 void handleRoot(HTTPRequest *req, HTTPResponse *res);
 void handleStaticBrowse(HTTPRequest *req, HTTPResponse *res);
+void handleStaticPost(HTTPRequest *req, HTTPResponse *res);
 void handleStatic(HTTPRequest *req, HTTPResponse *res);
 void handle404(HTTPRequest *req, HTTPResponse *res);
 void handleFormUpload(HTTPRequest *req, HTTPResponse *res);
@@ -229,6 +230,7 @@ void initWebServer()
     ResourceNode *nodeFavicon = new ResourceNode("/favicon.ico", "GET", &handleFavicon);
     ResourceNode *nodeRoot = new ResourceNode("/", "GET", &handleRoot);
     ResourceNode *nodeStaticBrowse = new ResourceNode("/static", "GET", &handleStaticBrowse);
+    ResourceNode *nodeStaticPOST = new ResourceNode("/static", "POST", &handleStaticPost);
     ResourceNode *nodeStatic = new ResourceNode("/static/*", "GET", &handleStatic);
     ResourceNode *node404 = new ResourceNode("", "GET", &handle404);
     ResourceNode *nodeFormUpload = new ResourceNode("/upload", "POST", &handleFormUpload);
@@ -241,6 +243,7 @@ void initWebServer()
     secureServer->registerNode(nodeFavicon);
     secureServer->registerNode(nodeRoot);
     secureServer->registerNode(nodeStaticBrowse);
+    secureServer->registerNode(nodeStaticPOST);
     secureServer->registerNode(nodeStatic);
     secureServer->setDefaultNode(node404);
     secureServer->setDefaultNode(nodeFormUpload);
@@ -255,6 +258,7 @@ void initWebServer()
     insecureServer->registerNode(nodeFavicon);
     insecureServer->registerNode(nodeRoot);
     insecureServer->registerNode(nodeStaticBrowse);
+    insecureServer->registerNode(nodeStaticPOST);
     insecureServer->registerNode(nodeStatic);
     insecureServer->setDefaultNode(node404);
     insecureServer->setDefaultNode(nodeFormUpload);
@@ -294,11 +298,82 @@ void middlewareSpeedUp160(HTTPRequest *req, HTTPResponse *res, std::function<voi
     }
     timeSpeedUp = millis();
 }
+
+void handleStaticPost(HTTPRequest *req, HTTPResponse *res)
+{
+    // Assume POST request. Contains submitted data.
+    res->println("<html><head><title>File Edited</title><meta http-equiv=\"refresh\" content=\"3;url=/static\" "
+                 "/><head><body><h1>File Edited</h1>");
+
+    // The form is submitted with the x-www-form-urlencoded content type, so we need the
+    // HTTPURLEncodedBodyParser to read the fields.
+    // Note that the content of the file's content comes from a <textarea>, so we
+    // can use the URL encoding here, since no file upload from an <input type="file"
+    // is involved.
+    HTTPURLEncodedBodyParser parser(req);
+
+    // The bodyparser will consume the request body. That means you can iterate over the
+    // fields only ones. For that reason, we need to create variables for all fields that
+    // we expect. So when parsing is done, you can process the field values from your
+    // temporary variables.
+    std::string filename;
+    bool savedFile = false;
+
+    // Iterate over the fields from the request body by calling nextField(). This function
+    // will update the field name and value of the body parsers. If the last field has been
+    // reached, it will return false and the while loop stops.
+    while (parser.nextField()) {
+        // Get the field name, so that we can decide what the value is for
+        std::string name = parser.getFieldName();
+
+        if (name == "filename") {
+            // Read the filename from the field's value, add the /public prefix and store it in
+            // the filename variable.
+            char buf[512];
+            size_t readLength = parser.read((byte *)buf, 512);
+            // filename = std::string("/public/") + std::string(buf, readLength);
+            filename = std::string(buf, readLength);
+
+        } else if (name == "content") {
+            // Browsers must return the fields in the order that they are placed in
+            // the HTML form, so if the broweser behaves correctly, this condition will
+            // never be true. We include it for safety reasons.
+            if (filename == "") {
+                res->println("<p>Error: form contained content before filename.</p>");
+                break;
+            }
+
+            // With parser.read() and parser.endOfField(), we can stream the field content
+            // into a buffer. That allows handling arbitrarily-sized field contents. Here,
+            // we use it and write the file contents directly to the SPIFFS:
+            size_t fieldLength = 0;
+            File file = SPIFFS.open(filename.c_str(), "w");
+            savedFile = true;
+            while (!parser.endOfField()) {
+                byte buf[512];
+                size_t readLength = parser.read(buf, 512);
+                file.write(buf, readLength);
+                fieldLength += readLength;
+            }
+            file.close();
+            res->printf("<p>Saved %d bytes to %s</p>", int(fieldLength), filename.c_str());
+
+        } else {
+            res->printf("<p>Unexpected field %s</p>", name.c_str());
+        }
+    }
+    if (!savedFile) {
+        res->println("<p>No file to save...</p>");
+    }
+    res->println("</body></html>");
+}
+
 void handleStaticBrowse(HTTPRequest *req, HTTPResponse *res)
 {
     // Get access to the parameters
     ResourceParameters *params = req->getParams();
     std::string paramValDelete;
+    std::string paramValEdit;
 
     // Set a default content type
     res->setHeader("Content-Type", "text/html");
@@ -323,6 +398,47 @@ void handleStaticBrowse(HTTPRequest *req, HTTPResponse *res)
         }
     }
 
+    if (params->getQueryParameter("edit", paramValEdit)) {
+        std::string pathEdit = "/" + paramValEdit;
+        res->println("<html><head><title>Edit "
+                     "file</title></head><body><h1>Edit file - ");
+
+        res->println(pathEdit.c_str());
+
+        res->println("</h1>");
+        res->println("<form method=post action=/static enctype=application/x-www-form-urlencoded>");
+        res->printf("<input name=\"filename\" type=\"hidden\" value=\"%s\">", pathEdit.c_str());
+        res->print("<textarea id=id name=content rows=20 cols=80>");
+
+        // Try to open the file from SPIFFS
+        File file = SPIFFS.open(pathEdit.c_str());
+
+        if (file.available()) {
+            // Read the file from SPIFFS and write it to the HTTP response body
+            size_t length = 0;
+            do {
+                char buffer[256];
+                length = file.read((uint8_t *)buffer, 256);
+                std::string bufferString(buffer, length);
+
+                // Escape gt and lt
+                replaceAll(bufferString, "<", "&lt;");
+                replaceAll(bufferString, ">", "&gt;");
+
+                res->write((uint8_t *)bufferString.c_str(), bufferString.size());
+            } while (length > 0);
+        } else {
+            res->println("Error: File not found");
+        }
+
+        res->println("</textarea><br>");
+        res->println("<input type=submit value=Submit>");
+        res->println("</form>");
+        res->println("</body></html>");
+
+        return;
+    }
+
     res->println("<h2>Upload new file</h2>");
     res->println("<p><b>*** This interface is experimental ***</b></p>");
     res->println("<p>This form allows you to upload files. Keep your filenames very short and files small. Big filenames and big "
@@ -339,6 +455,15 @@ void handleStaticBrowse(HTTPRequest *req, HTTPResponse *res)
         res->println("<script type=\"text/javascript\">function confirm_delete() {return confirm('Are you sure?');}</script>");
 
         res->println("<table>");
+        res->println("<tr>");
+        res->println("<td>File");
+        res->println("</td>");
+        res->println("<td>Size");
+        res->println("</td>");
+        res->println("<td colspan=2>Actions");
+        res->println("</td>");
+        res->println("</tr>");
+
         File file = root.openNextFile();
         while (file) {
             String filePath = String(file.name());
@@ -360,8 +485,14 @@ void handleStaticBrowse(HTTPRequest *req, HTTPResponse *res)
                 res->println("</td>");
                 res->println("<td>");
                 res->print("<a href=\"/static?delete=" + String(file.name()).substring(1) +
-                           "\" onclick=\"return confirm_delete()\">X</a>");
+                           "\" onclick=\"return confirm_delete()\">Delete</a> ");
                 res->println("</td>");
+                res->println("<td>");
+                if (!String(file.name()).substring(1).endsWith(".gz")) {
+                    res->print("<a href=\"/static?edit=" + String(file.name()).substring(1) + "\">Edit</a>");
+                }
+                res->println("</td>");
+                res->println("</tr>");
             }
 
             file = root.openNextFile();
@@ -369,7 +500,7 @@ void handleStaticBrowse(HTTPRequest *req, HTTPResponse *res)
         res->println("</table>");
 
         res->print("<br>");
-        res->print("Total : " + String(SPIFFS.totalBytes()) + " Bytes<br>");
+        // res->print("Total : " + String(SPIFFS.totalBytes()) + " Bytes<br>");
         res->print("Used : " + String(SPIFFS.usedBytes()) + " Bytes<br>");
         res->print("Free : " + String(SPIFFS.totalBytes() - SPIFFS.usedBytes()) + " Bytes<br>");
     }
@@ -702,6 +833,16 @@ void handleRoot(HTTPRequest *req, HTTPResponse *res)
 {
     res->setHeader("Content-Type", "text/html");
 
+    randomSeed(millis());
+
+    res->setHeader("Set-Cookie",
+                   "mt_session=" + httpsserver::intToString(random(1, 9999999)) + "; Expires=Wed, 20 Apr 2049 4:20:00 PST");
+
+    std::string cookie = req->getHeader("Cookie");
+    //String cookieString = cookie.c_str();
+    //uint8_t nameIndex = cookieString.indexOf("mt_session");
+    //DEBUG_MSG(cookie.c_str());
+
     std::string filename = "/static/index.html";
     std::string filenameGzip = "/static/index.html.gz";
 
@@ -731,6 +872,7 @@ void handleRoot(HTTPRequest *req, HTTPResponse *res)
         }
     }
 
+
     // Read the file from SPIFFS and write it to the HTTP response body
     size_t length = 0;
     do {
@@ -748,3 +890,16 @@ void handleFavicon(HTTPRequest *req, HTTPResponse *res)
     // Write data from header file
     res->write(FAVICON_DATA, FAVICON_LENGTH);
 }
+
+
+void replaceAll(std::string &str, const std::string &from, const std::string &to)
+{
+    if (from.empty())
+        return;
+    size_t start_pos = 0;
+    while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
+        str.replace(start_pos, from.length(), to);
+        start_pos += to.length(); // In case 'to' contains 'from', like replacing 'x' with 'yx'
+    }
+}
+
