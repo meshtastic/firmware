@@ -6,6 +6,7 @@
 #include "meshwifi/meshhttp.h"
 #include "target_specific.h"
 #include <DNSServer.h>
+#include <ESPmDNS.h>
 #include <WiFi.h>
 
 static void WiFiEvent(WiFiEvent_t event);
@@ -18,7 +19,7 @@ static WiFiServerPort *apiPort;
 uint8_t wifiDisconnectReason = 0;
 
 // Stores our hostname
-static char ourHost[16];
+char ourHost[16];
 
 bool isWifiAvailable()
 {
@@ -62,7 +63,6 @@ void initWifi()
     }
 
     createSSLCert();
-
 
     if (radioConfig.has_preferences) {
         const char *wifiName = radioConfig.preferences.wifi_ssid;
@@ -117,11 +117,22 @@ void initWifi()
                 }
             }
         }
+
+        if (!MDNS.begin( "Meshtastic" )) {
+            DEBUG_MSG("Error setting up MDNS responder!\n");
+
+            while (1) {
+                delay(1000);
+            }
+        }
+        DEBUG_MSG("mDNS responder started\n");
+        DEBUG_MSG("mDNS Host: Meshtastic.local\n");
+        MDNS.addService("http", "tcp", 80);
+        MDNS.addService("https", "tcp", 443);
+
     } else
         DEBUG_MSG("Not using WIFI\n");
 }
-
-
 
 static void initApiServer()
 {

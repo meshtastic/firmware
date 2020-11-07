@@ -150,6 +150,9 @@ bool NodeDB::resetRadioConfig()
         radioConfig.preferences.region = RegionCode_TW;
     }
 
+    // Update the global myRegion
+    initRegion();
+    
     return didFactoryReset;
 }
 
