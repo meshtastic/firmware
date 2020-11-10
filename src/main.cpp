@@ -233,6 +233,13 @@ RadioInterface *rIf = NULL;
 
 void setup()
 {
+
+// Jm's TXRX Deduplexer
+//  if 0 - receive
+//     1 - transmit
+pinMode(RADIO_TXRX, OUTPUT);
+digitalWrite(RADIO_TXRX, 0);
+
 #ifdef USE_SEGGER
     SEGGER_RTT_ConfigUpBuffer(0, NULL, NULL, 0, SEGGER_RTT_MODE_NO_BLOCK_TRIM);
 #endif
