@@ -36,7 +36,7 @@ typedef struct {
  *
  * This defines the SOLE API for talking to radios (because soon we will have alternate radio implementations)
  */
-class RadioInterface 
+class RadioInterface : public PacketTimes
 {
     friend class MeshRadio; // for debugging we let that class touch pool
     PointerQueue<MeshPacket> *rxDest = NULL;
@@ -107,6 +107,21 @@ class RadioInterface
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
     virtual bool reconfigure() = 0;
+
+    /** The delay to use for retransmitting dropped packets */
+    uint32_t getRetransmissionMsec(const MeshPacket *p);
+
+    /** The delay to use when we want to send something but the ether is busy */
+    uint32_t getTxDelayMsec();
+
+    /**
+     * Calculate airtime per
+     * https://www.rs-online.com/designspark/rel-assets/ds-assets/uploads/knowledge-items/application-notes-for-the-internet-of-things/LoRa%20Design%20Guide.pdf
+     * section 4
+     *
+     * @return num msecs for the packet
+     */
+    uint32_t getPacketTime(MeshPacket *p);
 
   protected:
     int8_t power = 17; // Set by applyModemConfig()
