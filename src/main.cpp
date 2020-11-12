@@ -233,8 +233,8 @@ RadioInterface *rIf = NULL;
 
 void setup()
 {
-#ifdef USE_SEGGER
-    SEGGER_RTT_ConfigUpBuffer(0, NULL, NULL, 0, SEGGER_RTT_MODE_NO_BLOCK_TRIM);
+#ifdef SEGGER_STDOUT_CH
+    SEGGER_RTT_ConfigUpBuffer(SEGGER_STDOUT_CH, NULL, NULL, 1024, SEGGER_RTT_MODE_NO_BLOCK_TRIM);
 #endif
 
 // Debug
