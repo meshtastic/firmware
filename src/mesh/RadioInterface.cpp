@@ -53,6 +53,59 @@ separated by 2.16 MHz with respect to the adjacent channels. Channel zero starts
 // 1kb was too small
 #define RADIO_STACK_SIZE 4096
 
+/** At the low end we want to pick a delay large enough that anyone who just completed sending (some other node)
+ * has had enough time to switch their radio back into receive mode.
+ */
+#define MIN_TX_WAIT_MSEC 100
+
+/**
+ * At the high end, this value is used to spread node attempts across time so when they are replying to a packet
+ * they don't both check that the airwaves are clear at the same moment.  As long as they are off by some amount
+ * one of the two will be first to start transmitting and the other will see that.  I bet 500ms is more than enough
+ * to guarantee this.
+ */
+#define MAX_TX_WAIT_MSEC 2000 // stress test would still fail occasionally with 1000
+
+/**
+ * Calculate airtime per https://www.rs-online.com/designspark/rel-assets/ds-assets/uploads/knowledge-items/application-notes-for-the-internet-of-things/LoRa%20Design%20Guide.pdf
+ * section 4
+ * 
+ * @return num msecs for the packet
+ */
+uint32_t RadioInterface::getPacketTime(MeshPacket *p)
+{
+    assert(p->which_payload == MeshPacket_encrypted_tag); // It should have already been encoded by now
+
+    uint8_t sf = 12;        // FIXME
+    uint8_t nPreamble = 32; // FIXME
+    uint32_t bandwidthHz = 125 * 1000; // FIXME
+    bool headDisable = false; // we currently always use the header
+    bool lowDataOptEn = false; // FIXME
+    uint8_t cr = 1; // from 1 to 4
+    uint32_t pl = p->encrypted.size + sizeof(PacketHeader);
+    float tSym = (1 << sf) / bandwidthHz;
+    float tPreamble = (nPreamble + 4.25f) * tSym;
+    float numPayloadSym =
+        8 + max(ceilf(((8 * pl - 4 * sf + 28 + 16 - 20 * headDisable) / (4 * (sf - 2 * lowDataOptEn))) * (cr + 4)), 0.0f);
+    float tPayload = numPayloadSym * tSym;
+    float tPacket = tPreamble + tPayload;
+
+    uint32_t msecs = tPacket / 1000;
+    return msecs;
+}
+
+/** The delay to use for retransmitting dropped packets */
+uint32_t RadioInterface::getRetransmissionMsec(const MeshPacket *p)
+{
+    return random(20 * 1000L, 22 * 1000L);
+}
+
+/** The delay to use when we want to send something but the ether is busy */
+uint32_t RadioInterface::getTxDelayMsec()
+{
+    return random(MIN_TX_WAIT_MSEC, MAX_TX_WAIT_MSEC);
+}
+
 void printPacket(const char *prefix, const MeshPacket *p)
 {
     DEBUG_MSG("%s (id=0x%08x Fr0x%02x To0x%02x, WantAck%d, HopLim%d", prefix, p->id, p->from & 0xff, p->to & 0xff, p->want_ack,

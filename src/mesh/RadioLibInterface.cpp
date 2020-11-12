@@ -158,18 +158,6 @@ bool RadioLibInterface::canSleep()
     return res;
 }
 
-/** At the low end we want to pick a delay large enough that anyone who just completed sending (some other node)
- * has had enough time to switch their radio back into receive mode.
- */
-#define MIN_TX_WAIT_MSEC 100
-
-/**
- * At the high end, this value is used to spread node attempts across time so when they are replying to a packet
- * they don't both check that the airwaves are clear at the same moment.  As long as they are off by some amount
- * one of the two will be first to start transmitting and the other will see that.  I bet 500ms is more than enough
- * to guarantee this.
- */
-#define MAX_TX_WAIT_MSEC 2000 // stress test would still fail occasionally with 1000
 
 /** radio helper thread callback.
 
@@ -226,8 +214,7 @@ void RadioLibInterface::startTransmitTimer(bool withDelay)
 {
     // If we have work to do and the timer wasn't already scheduled, schedule it now
     if (!txQueue.isEmpty()) {
-        uint32_t delay =
-            !withDelay ? 1 : random(MIN_TX_WAIT_MSEC, MAX_TX_WAIT_MSEC); // See documentation for loop() wrt these values
+        uint32_t delay = !withDelay ? 1 : getTxDelayMsec(); 
         // DEBUG_MSG("xmit timer %d\n", delay);
         notifyLater(delay, TRANSMIT_DELAY_COMPLETED, false); // This will implicitly enable
     }
