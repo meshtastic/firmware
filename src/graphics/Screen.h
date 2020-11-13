@@ -99,6 +99,12 @@ class Screen : public concurrency::OSThread
             enqueueCmd(ScreenCmd{.cmd = on ? Cmd::SET_ON : Cmd::SET_OFF});
     }
 
+    /**
+     * Prepare the display for the unit going to the lowest power mode possible.  Most screens will just 
+     * poweroff, but eink screens will show a "I'm sleeping" graphic, possibly with a QR code
+     */
+    void doDeepSleep();
+
     /// Handles a button press.
     void onPress() { enqueueCmd(ScreenCmd{.cmd = Cmd::ON_PRESS}); }
 
