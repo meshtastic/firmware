@@ -142,7 +142,7 @@ static void waitEnterSleep()
 
 void doDeepSleep(uint64_t msecToWake)
 {
-    DEBUG_MSG("Entering deep sleep for %llu seconds\n", msecToWake / 1000);
+    DEBUG_MSG("Entering deep sleep for %lu seconds\n", msecToWake / 1000);
 
     // not using wifi yet, but once we are this is needed to shutoff the radio hw
     // esp_wifi_stop();
