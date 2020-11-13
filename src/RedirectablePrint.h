@@ -19,7 +19,7 @@ class RedirectablePrint : public Print
      */
     void setDestination(Print *dest);
 
-    virtual size_t write(uint8_t c) { return dest->write(c); }
+    virtual size_t write(uint8_t c);
 };
 
 class NoopPrint : public Print
