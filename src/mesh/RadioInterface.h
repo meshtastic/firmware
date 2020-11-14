@@ -50,7 +50,16 @@ class RadioInterface
     CallbackObserver<RadioInterface, void *> notifyDeepSleepObserver =
         CallbackObserver<RadioInterface, void *>(this, &RadioInterface::notifyDeepSleepCb);
 
+    /// Number of msecs we expect our shortest actual packet to be over the wire (used in retry timeout calcs)
+    uint32_t shortPacketMsec;
+
   protected:
+    float bw = 125;
+    uint8_t sf = 9;
+    uint8_t cr = 7;
+
+    uint16_t preambleLength = 32; // 8 is default, but FIXME use longer to increase the amount of sleep time when receiving
+
     MeshPacket *sendingPacket = NULL; // The packet we are currently sending
     uint32_t lastTxStart = 0L;
 
@@ -107,6 +116,22 @@ class RadioInterface
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
     virtual bool reconfigure() = 0;
+
+    /** The delay to use for retransmitting dropped packets */
+    uint32_t getRetransmissionMsec(const MeshPacket *p);
+
+    /** The delay to use when we want to send something but the ether is busy */
+    uint32_t getTxDelayMsec();
+
+    /**
+     * Calculate airtime per
+     * https://www.rs-online.com/designspark/rel-assets/ds-assets/uploads/knowledge-items/application-notes-for-the-internet-of-things/LoRa%20Design%20Guide.pdf
+     * section 4
+     *
+     * @return num msecs for the packet
+     */
+    uint32_t getPacketTime(MeshPacket *p);
+    uint32_t getPacketTime(uint32_t totalPacketLen);
 
   protected:
     int8_t power = 17; // Set by applyModemConfig()
