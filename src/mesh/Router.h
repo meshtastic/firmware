@@ -14,11 +14,12 @@
 class Router : protected concurrency::OSThread
 {
   private:
-    RadioInterface *iface;
-
     /// Packets which have just arrived from the radio, ready to be processed by this service and possibly
     /// forwarded to the phone.
     PointerQueue<MeshPacket> fromRadioQueue;
+
+  protected:
+    RadioInterface *iface = NULL;
 
   public:
     /// Local services that want to see _every_ packet this node receives can observe this.
