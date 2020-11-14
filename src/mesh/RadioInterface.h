@@ -36,7 +36,7 @@ typedef struct {
  *
  * This defines the SOLE API for talking to radios (because soon we will have alternate radio implementations)
  */
-class RadioInterface : public PacketTimes
+class RadioInterface 
 {
     friend class MeshRadio; // for debugging we let that class touch pool
     PointerQueue<MeshPacket> *rxDest = NULL;
@@ -50,7 +50,16 @@ class RadioInterface : public PacketTimes
     CallbackObserver<RadioInterface, void *> notifyDeepSleepObserver =
         CallbackObserver<RadioInterface, void *>(this, &RadioInterface::notifyDeepSleepCb);
 
+    /// Number of msecs we expect our shortest actual packet to be over the wire (used in retry timeout calcs)
+    uint32_t shortPacketMsec;
+
   protected:
+    float bw = 125;
+    uint8_t sf = 9;
+    uint8_t cr = 7;
+
+    uint16_t preambleLength = 32; // 8 is default, but FIXME use longer to increase the amount of sleep time when receiving
+
     MeshPacket *sendingPacket = NULL; // The packet we are currently sending
     uint32_t lastTxStart = 0L;
 
@@ -122,6 +131,7 @@ class RadioInterface : public PacketTimes
      * @return num msecs for the packet
      */
     uint32_t getPacketTime(MeshPacket *p);
+    uint32_t getPacketTime(uint32_t totalPacketLen);
 
   protected:
     int8_t power = 17; // Set by applyModemConfig()
