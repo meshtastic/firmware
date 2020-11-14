@@ -46,8 +46,6 @@ struct PendingPacket {
 
     PendingPacket() {}
     PendingPacket(MeshPacket *p);
-
-    void setNextTx() { nextTxMsec = millis() + random(20 * 1000L, 22 * 1000L); }
 };
 
 class GlobalPacketIdHashFunction
@@ -130,4 +128,8 @@ class ReliableRouter : public FloodingRouter
      * @return the number of msecs until our next retransmission or MAXINT if none scheduled
      */
     int32_t doRetransmissions();
+
+    void setNextTx(PendingPacket *pending) {  
+      assert(iface);
+      pending->nextTxMsec = millis() + iface->getRetransmissionMsec(pending->packet); }
 };

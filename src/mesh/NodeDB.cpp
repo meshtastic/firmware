@@ -143,11 +143,15 @@ bool NodeDB::resetRadioConfig()
         DEBUG_MSG("***** DEVELOPMENT MODE - DO NOT RELEASE *****\n");
 
         // Sleep quite frequently to stress test the BLE comms, broadcast position every 6 mins
-        radioConfig.preferences.screen_on_secs = 30;
-        radioConfig.preferences.wait_bluetooth_secs = 30;
+        radioConfig.preferences.screen_on_secs = 10;
+        radioConfig.preferences.wait_bluetooth_secs = 10;
         radioConfig.preferences.position_broadcast_secs = 6 * 60;
         radioConfig.preferences.ls_secs = 60;
         radioConfig.preferences.region = RegionCode_TW;
+
+        // Enter super deep sleep soon and stay there not very long
+        //radioConfig.preferences.mesh_sds_timeout_secs = 10;
+        //radioConfig.preferences.sds_secs = 60;
     }
 
     // Update the global myRegion
