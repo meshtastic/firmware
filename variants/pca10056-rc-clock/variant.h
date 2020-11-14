@@ -147,7 +147,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define SX1262_ANT_SW (32 + 10) // P1.10
 
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
-#define USE_SEGGER
+// #define USE_SEGGER
 
 #ifdef __cplusplus
 }

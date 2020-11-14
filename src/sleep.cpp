@@ -142,18 +142,21 @@ static void waitEnterSleep()
 
 void doDeepSleep(uint64_t msecToWake)
 {
-    DEBUG_MSG("Entering deep sleep for %llu seconds\n", msecToWake / 1000);
+    DEBUG_MSG("Entering deep sleep for %lu seconds\n", msecToWake / 1000);
 
-#ifndef NO_ESP32
     // not using wifi yet, but once we are this is needed to shutoff the radio hw
     // esp_wifi_stop();
     waitEnterSleep();
-    notifySleep.notifyObservers(NULL); // also tell the regular sleep handlers
     notifyDeepSleep.notifyObservers(NULL);
 
-    screen->setOn(false); // datasheet says this will draw only 10ua
+    screen->doDeepSleep(); // datasheet says this will draw only 10ua
 
     nodeDB.saveToDisk();
+
+    // Kill GPS power completely (even if previously we just had it in sleep mode)
+    setGPSPower(false);
+
+    setLed(false);
 
 #ifdef RESET_OLED
     digitalWrite(RESET_OLED, 1); // put the display in reset before killing its power
@@ -162,11 +165,6 @@ void doDeepSleep(uint64_t msecToWake)
 #ifdef VEXT_ENABLE
     digitalWrite(VEXT_ENABLE, 1); // turn off the display power
 #endif
-
-    // Kill GPS power completely (even if previously we just had it in sleep mode)
-    setGPSPower(false);
-
-    setLed(false);
 
 #ifdef TBEAM_V10
     if (axp192_found) {
@@ -185,57 +183,7 @@ void doDeepSleep(uint64_t msecToWake)
     }
 #endif
 
-    /*
-    Some ESP32 IOs have internal pullups or pulldowns, which are enabled by default.
-    If an external circuit drives this pin in deep sleep mode, current consumption may
-    increase due to current flowing through these pullups and pulldowns.
-
-    To isolate a pin, preventing extra current draw, call rtc_gpio_isolate() function.
-    For example, on ESP32-WROVER module, GPIO12 is pulled up externally.
-    GPIO12 also has an internal pulldown in the ESP32 chip. This means that in deep sleep,
-    some current will flow through these external and internal resistors, increasing deep
-    sleep current above the minimal possible value.
-
-    Note: we don't isolate pins that are used for the LORA, LED, i2c, spi or the wake button
-    */
-    static const uint8_t rtcGpios[] = {/* 0, */ 2,
-    /* 4, */
-#ifndef USE_JTAG
-                                       13,
-    /* 14, */ /* 15, */
-#endif
-                                       /* 25, */ 26, /* 27, */
-                                       32,           33, 34, 35,
-                                       36,           37
-                                       /* 38, 39 */};
-
-    for (int i = 0; i < sizeof(rtcGpios); i++)
-        rtc_gpio_isolate((gpio_num_t)rtcGpios[i]);
-
-    // FIXME, disable internal rtc pullups/pulldowns on the non isolated pins. for inputs that we aren't using
-    // to detect wake and in normal operation the external part drives them hard.
-
-    // We want RTC peripherals to stay on
-    esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
-
-#ifdef BUTTON_PIN
-    // Only GPIOs which are have RTC functionality can be used in this bit map: 0,2,4,12-15,25-27,32-39.
-    uint64_t gpioMask = (1ULL << BUTTON_PIN);
-
-#ifdef BUTTON_NEED_PULLUP
-    gpio_pullup_en((gpio_num_t)BUTTON_PIN);
-#endif
-
-    // Not needed because both of the current boards have external pullups
-    // FIXME change polarity in hw so we can wake on ANY_HIGH instead - that would allow us to use all three buttons (instead of
-    // just the first) gpio_pullup_en((gpio_num_t)BUTTON_PIN);
-
-    esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ALL_LOW);
-#endif
-
-    esp_sleep_enable_timer_wakeup(msecToWake * 1000ULL); // call expects usecs
-    esp_deep_sleep_start();                              // TBD mA sleep current (battery)
-#endif
+    cpuDeepSleep(msecToWake);
 }
 
 #ifndef NO_ESP32

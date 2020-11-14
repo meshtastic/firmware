@@ -1,6 +1,7 @@
 #include "CryptoEngine.h"
 #include "target_specific.h"
 #include <Utility.h>
+#include "sleep.h"
 
 // FIXME - move getMacAddr/setBluetoothEnable into a HALPlatform class
 
@@ -24,6 +25,10 @@ void getMacAddr(uint8_t *dmac)
 void setBluetoothEnable(bool on)
 {
     notImplemented("setBluetoothEnable");
+}
+
+void cpuDeepSleep(uint64_t msecs) {
+    notImplemented("cpuDeepSleep");
 }
 
 // FIXME - implement real crypto for linux
