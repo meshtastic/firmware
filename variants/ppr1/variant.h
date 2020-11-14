@@ -168,7 +168,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define LORA_DISABLE_SENDING // Define this to disable transmission for testing (power testing etc...)
 
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
-#define USE_SEGGER
+// #define USE_SEGGER
 
 #ifdef __cplusplus
 }

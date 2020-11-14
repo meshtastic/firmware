@@ -1,6 +1,8 @@
 #include "NRF52Bluetooth.h"
 #include "configuration.h"
 #include "graphics/TFTDisplay.h"
+#include <SPI.h>
+#include <Wire.h>
 #include <assert.h>
 #include <ble_gap.h>
 #include <memory.h>
@@ -49,7 +51,7 @@ void getMacAddr(uint8_t *dmac)
 NRF52Bluetooth *nrf52Bluetooth;
 
 static bool bleOn = false;
-static const bool enableBle = true; // Set to false for easier debugging
+static const bool enableBle = false; // Set to false for easier debugging
 
 void setBluetoothEnable(bool on)
 {
@@ -64,7 +66,8 @@ void setBluetoothEnable(bool on)
                 }
             }
         } else {
-            DEBUG_MSG("FIXME: implement BLE disable\n");
+            if (nrf52Bluetooth)
+                nrf52Bluetooth->shutdown();
         }
         bleOn = on;
     }
@@ -97,7 +100,7 @@ void nrf52Setup()
 
 #ifdef BQ25703A_ADDR
     auto *bq = new BQ25713();
-    if(!bq->setup())
+    if (!bq->setup())
         DEBUG_MSG("ERROR! Charge controller init failed\n");
 #endif
 
@@ -109,4 +112,30 @@ void nrf52Setup()
     // randomSeed(r);
     DEBUG_MSG("FIXME, call randomSeed\n");
     // ::printf("TESTING PRINTF\n");
+}
+
+void cpuDeepSleep(uint64_t msecToWake)
+{
+    // FIXME, configure RTC or button press to wake us
+    // FIXME, power down SPI, I2C, RAMs
+    Wire.end();
+    SPI.end();
+    Serial.end();
+    Serial1.end();
+
+    // FIXME, use system off mode with ram retention for key state?
+    // FIXME, use non-init RAM per
+    // https://devzone.nordicsemi.com/f/nordic-q-a/48919/ram-retention-settings-with-softdevice-enabled
+
+    auto ok = sd_power_system_off();
+    if(ok != NRF_SUCCESS) {
+        DEBUG_MSG("FIXME: Ignoring soft device (EasyDMA pending?) and forcing system-off!\n");
+        NRF_POWER->SYSTEMOFF = 1;
+    }
+
+    // The following code should not be run, because we are off
+    while (1) {
+        delay(5000);
+        DEBUG_MSG(".");
+    }
 }
