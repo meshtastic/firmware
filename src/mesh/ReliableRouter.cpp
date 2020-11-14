@@ -111,7 +111,6 @@ PendingPacket::PendingPacket(MeshPacket *p)
 {
     packet = p;
     numRetransmissions = NUM_RETRANSMISSIONS - 1; // We subtract one, because we assume the user just did the first send
-    setNextTx();
 }
 
 PendingPacket *ReliableRouter::findPendingPacket(GlobalPacketId key)
@@ -151,6 +150,7 @@ PendingPacket *ReliableRouter::startRetransmission(MeshPacket *p)
     auto id = GlobalPacketId(p);
     auto rec = PendingPacket(p);
 
+    setNextTx(&rec);
     stopRetransmission(p->from, p->id);
     pending[id] = rec;
 
@@ -190,10 +190,9 @@ int32_t ReliableRouter::doRetransmissions()
 
                 // Queue again
                 --p.numRetransmissions;
-                p.setNextTx();
+                setNextTx(&p);
             }
-        }
-        else {
+        } else {
             // Not yet time
             int32_t t = p.nextTxMsec - now;
 
