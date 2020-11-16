@@ -87,8 +87,12 @@ platformio lib update
 do_boards "$BOARDS_ESP32" "false"
 do_boards "$BOARDS_NRF52" "true"
 
+echo "Building SPIFFS for ESP32 targets"
+pio run --environment tbeam -t buildfs
+cp .pio/build/tbeam/spiffs.bin $OUTDIR/bins/universal/spiffs-$VERSION.bin
+
 # keep the bins in archive also
-cp $OUTDIR/bins/firmware* $OUTDIR/elfs/firmware* $OUTDIR/bins/universal/firmware* $OUTDIR/elfs/universal/firmware* $ARCHIVEDIR
+cp $OUTDIR/bins/firmware* $OUTDIR/bins/universal/spiffs* $OUTDIR/elfs/firmware* $OUTDIR/bins/universal/firmware* $OUTDIR/elfs/universal/firmware* $ARCHIVEDIR
 
 echo Updating android bins $OUTDIR/forandroid
 rm -rf $OUTDIR/forandroid
