@@ -172,6 +172,10 @@ class ButtonThread : public OSThread
     {
 #ifdef BUTTON_PIN
         userButton = OneButton(BUTTON_PIN, true, true);
+#ifdef INPUT_PULLUP_SENSE
+    // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
+        pinMode(BUTTON_PIN, INPUT_PULLUP_SENSE);
+#endif
         userButton.attachClick(userButtonPressed);
         userButton.attachDuringLongPress(userButtonPressedLong);
         userButton.attachDoubleClick(userButtonDoublePressed);
@@ -179,6 +183,10 @@ class ButtonThread : public OSThread
 #endif
 #ifdef BUTTON_PIN_ALT
         userButtonAlt = OneButton(BUTTON_PIN_ALT, true, true);
+#ifdef INPUT_PULLUP_SENSE
+    // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
+        pinMode(BUTTON_PIN_ALT, INPUT_PULLUP_SENSE);
+#endif        
         userButtonAlt.attachClick(userButtonPressed);
         userButtonAlt.attachDuringLongPress(userButtonPressedLong);
         userButtonAlt.attachDoubleClick(userButtonDoublePressed);
@@ -233,6 +241,9 @@ RadioInterface *rIf = NULL;
 
 void setup()
 {
+#ifdef SEGGER_STDOUT_CH
+    SEGGER_RTT_ConfigUpBuffer(SEGGER_STDOUT_CH, NULL, NULL, 1024, SEGGER_RTT_MODE_NO_BLOCK_TRIM);
+#endif
 
 // Jm's TXRX Deduplexer
 //  if 0 - receive

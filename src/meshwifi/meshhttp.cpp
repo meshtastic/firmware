@@ -72,7 +72,8 @@ uint32_t timeSpeedUp = 0;
 // right content type and are displayed correctly in the browser
 char contentTypes[][2][32] = {{".txt", "text/plain"}, {".html", "text/html"},        {".js", "text/javascript"},
                               {".png", "image/png"},  {".jpg", "image/jpg"},         {".gz", "application/gzip"},
-                              {".gif", "image/gif"},  {".json", "application/json"}, {"", ""}};
+                              {".gif", "image/gif"},  {".json", "application/json"}, {".css", "text/css"},
+                              {"", ""}};
 
 void handleWebResponse()
 {
@@ -511,8 +512,6 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
     // Get access to the parameters
     ResourceParameters *params = req->getParams();
 
-    // Set a default content type
-    res->setHeader("Content-Type", "application/octet-stream");
 
     std::string parameter1;
     // Print the first parameter value
@@ -549,15 +548,22 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
 
         res->setHeader("Content-Length", httpsserver::intToString(file.size()));
 
+        bool has_set_content_type = false;
         // Content-Type is guessed using the definition of the contentTypes-table defined above
         int cTypeIdx = 0;
         do {
             if (filename.rfind(contentTypes[cTypeIdx][0]) != std::string::npos) {
                 res->setHeader("Content-Type", contentTypes[cTypeIdx][1]);
+                has_set_content_type = true;
                 break;
             }
             cTypeIdx += 1;
         } while (strlen(contentTypes[cTypeIdx][0]) > 0);
+
+        if(!has_set_content_type) {
+            // Set a default content type
+            res->setHeader("Content-Type", "application/octet-stream");
+        }
 
         // Read the file from SPIFFS and write it to the HTTP response body
         size_t length = 0;

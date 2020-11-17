@@ -14,6 +14,13 @@ Notes here on using that driver: https://www.linuxquestions.org/questions/linux-
 
 Or if **absolutely** necessary could bitbang: https://www.cnx-software.com/2018/02/16/wch-ch341-usb-to-serial-chip-gets-linux-driver-to-control-gpios-over-usb/
 
+## Portduino tasks
+
+* How to access spi devices via ioctl (spidev): https://www.raspberrypi.org/documentation/hardware/raspberrypi/spi/README.md#:~:text=Troubleshooting-,Overview,bus)%2C%20UARTs%2C%20etc.
+* access gpio via libgpiod?
+* Use dkms to distribute driver? 
+* echo 100 > /sys/module/spi_ch341_usb/parameters/poll_period
+
 ## Task list
 
 * Port meshtastic to build (under platformio) for a poxix target.  spec: no screen, no gpios, sim network interface, posix threads, posix semaphores & queues, IO to the console only

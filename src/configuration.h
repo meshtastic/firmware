@@ -408,8 +408,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Always include the SEGGER code on NRF52 - because useful for debugging
 #include "SEGGER_RTT.h"
 
+// The channel we send stdout data to
+#define SEGGER_STDOUT_CH 0
+
 // Debug printing to segger console
-#define SEGGER_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
+#define SEGGER_MSG(...) SEGGER_RTT_printf(SEGGER_STDOUT_CH, __VA_ARGS__)
 
 // If we are not on a NRF52840 (which has built in USB-ACM serial support) and we don't have serial pins hooked up, then we MUST
 // use SEGGER for debug output
