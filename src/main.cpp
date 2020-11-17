@@ -245,6 +245,16 @@ void setup()
     SEGGER_RTT_ConfigUpBuffer(SEGGER_STDOUT_CH, NULL, NULL, 1024, SEGGER_RTT_MODE_NO_BLOCK_TRIM);
 #endif
 
+// Jm's TXRX Deduplexer
+//  if 0 - receive
+//     1 - transmit
+pinMode(RADIO_TXRX, OUTPUT);
+digitalWrite(RADIO_TXRX, 0);
+
+#ifdef USE_SEGGER
+    SEGGER_RTT_ConfigUpBuffer(0, NULL, NULL, 0, SEGGER_RTT_MODE_NO_BLOCK_TRIM);
+#endif
+
 // Debug
 #ifdef DEBUG_PORT
     DEBUG_PORT.init(); // Set serial baud rate and init our mesh console
