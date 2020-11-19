@@ -16,6 +16,7 @@
 #include "error.h"
 #include "mesh-pb-constants.h"
 #include "meshwifi/meshwifi.h"
+#include "FSCommon.h"
 #include <pb_decode.h>
 #include <pb_encode.h>
 
@@ -35,27 +36,7 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define DEVICESTATE_CUR_VER 11
 #define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
 
-#ifdef PORTDUINO
-// Portduino version
-#include "PortduinoFS.h"
-#define FS PortduinoFS
-#define FSBegin() true
-#define FILE_O_WRITE "w"
-#define FILE_O_READ "r"
-#elif !defined(NO_ESP32)
-// ESP32 version
-#include "SPIFFS.h"
-#define FS SPIFFS
-#define FSBegin() FS.begin(true)
-#define FILE_O_WRITE "w"
-#define FILE_O_READ "r"
-#else
-// NRF52 version
-#include "InternalFileSystem.h"
-#define FS InternalFS
-#define FSBegin() FS.begin()
-using namespace Adafruit_LittleFS_Namespace;
-#endif
+
 
 // FIXME - move this somewhere else
 extern void getMacAddr(uint8_t *dmac);
@@ -209,12 +190,6 @@ void NodeDB::installDefaultDeviceState()
 void NodeDB::init()
 {
     installDefaultDeviceState();
-
-    if (!FSBegin()) // FIXME - do this in main?
-    {
-        DEBUG_MSG("ERROR filesystem mount Failed\n");
-        assert(0); // FIXME - report failure to phone
-    }
 
     // saveToDisk();
     loadFromDisk();

@@ -11,6 +11,7 @@
 // #include "rom/rtc.h"
 #include "DSRRouter.h"
 // #include "debug.h"
+#include "FSCommon.h"
 #include "RTC.h"
 #include "SPILock.h"
 #include "concurrency/OSThread.h"
@@ -173,7 +174,7 @@ class ButtonThread : public OSThread
 #ifdef BUTTON_PIN
         userButton = OneButton(BUTTON_PIN, true, true);
 #ifdef INPUT_PULLUP_SENSE
-    // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
+        // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
         pinMode(BUTTON_PIN, INPUT_PULLUP_SENSE);
 #endif
         userButton.attachClick(userButtonPressed);
@@ -184,9 +185,9 @@ class ButtonThread : public OSThread
 #ifdef BUTTON_PIN_ALT
         userButtonAlt = OneButton(BUTTON_PIN_ALT, true, true);
 #ifdef INPUT_PULLUP_SENSE
-    // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
+        // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
         pinMode(BUTTON_PIN_ALT, INPUT_PULLUP_SENSE);
-#endif        
+#endif
         userButtonAlt.attachClick(userButtonPressed);
         userButtonAlt.attachDuringLongPress(userButtonPressedLong);
         userButtonAlt.attachDoubleClick(userButtonDoublePressed);
@@ -209,7 +210,7 @@ class ButtonThread : public OSThread
         canSleep &= userButtonAlt.isIdle();
 #endif
         // if (!canSleep) DEBUG_MSG("Supressing sleep!\n");
-        //else DEBUG_MSG("sleep ok\n");
+        // else DEBUG_MSG("sleep ok\n");
 
         return 5;
     }
@@ -225,13 +226,13 @@ class ButtonThread : public OSThread
         DEBUG_MSG("Long press!\n");
         screen->adjustBrightness();
     }
-    
+
     static void userButtonDoublePressed()
-{
+    {
 #ifndef NO_ESP32
-    disablePin();
+        disablePin();
 #endif
-}
+    }
 };
 
 static Periodic *ledPeriodic;
@@ -265,6 +266,8 @@ void setup()
     OSThread::setup();
 
     ledPeriodic = new Periodic("Blink", ledBlinker);
+
+    fsInit();
 
     router = new DSRRouter();
 

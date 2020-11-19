@@ -9,7 +9,7 @@ COUNTRIES="US EU433 EU865 CN JP ANZ KR"
 #COUNTRIES=CN
 
 BOARDS_ESP32="tlora-v2 tlora-v1 tlora-v2-1-1.6 tbeam heltec tbeam0.7"
-# BOARDS_ESP32=tbeam
+#BOARDS_ESP32=tbeam
 
 # FIXME note nrf52840dk build is for some reason only generating a BIN file but not a HEX file nrf52840dk-geeksville is fine
 BOARDS_NRF52="lora-relay-v1"
@@ -113,6 +113,6 @@ XML
 
 echo Generating $ARCHIVEDIR/firmware-$VERSION.zip
 rm -f $ARCHIVEDIR/firmware-$VERSION.zip
-zip --junk-paths $ARCHIVEDIR/firmware-$VERSION.zip $OUTDIR/bins/firmware-*-$VERSION.* images/system-info.bin bin/device-install.sh bin/device-update.sh
+zip --junk-paths $ARCHIVEDIR/firmware-$VERSION.zip $ARCHIVEDIR/spiffs-$VERSION.bin $OUTDIR/bins/firmware-*-$VERSION.* images/system-info.bin bin/device-install.sh bin/device-update.sh
 
 echo BUILT ALL
