@@ -162,10 +162,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // This string must exactly match the case used in release file names or the android updater won't work
 #define HW_VENDOR "tbeam"
 
-// Jm's TXRX Deduplexer
-#define RADIO_TXRX 2
-
-
 // #define BUTTON_NEED_PULLUP // if set we need to turn on the internal CPU pullup during sleep
 
 #define I2C_SDA 21
