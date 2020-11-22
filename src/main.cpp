@@ -245,6 +245,10 @@ void setup()
     SEGGER_RTT_ConfigUpBuffer(SEGGER_STDOUT_CH, NULL, NULL, 1024, SEGGER_RTT_MODE_NO_BLOCK_TRIM);
 #endif
 
+#ifdef USE_SEGGER
+    SEGGER_RTT_ConfigUpBuffer(0, NULL, NULL, 0, SEGGER_RTT_MODE_NO_BLOCK_TRIM);
+#endif
+
 // Debug
 #ifdef DEBUG_PORT
     DEBUG_PORT.init(); // Set serial baud rate and init our mesh console
