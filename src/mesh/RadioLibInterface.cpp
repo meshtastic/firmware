@@ -197,6 +197,8 @@ void RadioLibInterface::completeSending()
         txGood++;
         printPacket("Completed sending", p);
 
+        digitalWrite(RADIO_TXRX, 0);
+
         // We are done sending that packet, release it
         packetPool.release(p);
         // DEBUG_MSG("Done with send\n");
@@ -258,6 +260,8 @@ void RadioLibInterface::handleReceiveInterrupt()
 /** start an immediate transmit */
 void RadioLibInterface::startSend(MeshPacket *txp)
 {
+    digitalWrite(RADIO_TXRX, 1);
+
     printPacket("Starting low level send", txp);
     setStandby(); // Cancel any already in process receives
 
