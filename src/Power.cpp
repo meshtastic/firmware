@@ -136,7 +136,7 @@ bool Power::setup()
 
 void Power::shutdown()
 {
-#ifdef AXP192_SLAVE_ADDRESS
+#ifdef TBEAM_V10
     DEBUG_MSG("Shutting down\n");
     axp.shutdown();
 #endif
