@@ -134,6 +134,11 @@ bool Power::setup()
     return found;
 }
 
+void Power::shutdown() {
+    DEBUG_MSG("Shutting down\n");
+    axp.shutdown();
+}
+
 /// Reads power status to powerStatus singleton.
 //
 // TODO(girts): move this and other axp stuff to power.h/power.cpp.
