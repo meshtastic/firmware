@@ -233,7 +233,7 @@ class ButtonThread : public OSThread
 
         // If user button is held down for 10 seconds, shutdown the device.
         if (millis() - longPressTime > 10 * 1000) {
-#ifdef AXP192_SLAVE_ADDRESS
+#ifdef TBEAM_V10
             if (axp192_found == true) {
                 power->shutdown();
             }
