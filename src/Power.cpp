@@ -134,9 +134,12 @@ bool Power::setup()
     return found;
 }
 
-void Power::shutdown() {
+void Power::shutdown()
+{
+#ifdef AXP192_SLAVE_ADDRESS
     DEBUG_MSG("Shutting down\n");
     axp.shutdown();
+#endif
 }
 
 /// Reads power status to powerStatus singleton.
