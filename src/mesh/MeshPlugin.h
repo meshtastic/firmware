@@ -16,7 +16,7 @@ class MeshPlugin
 {
     const char *name;
 
-    static std::vector<MeshPlugin *> plugins;
+    static std::vector<MeshPlugin *> *plugins;
 
   public:
     /** Constructor
@@ -30,7 +30,7 @@ class MeshPlugin
      * Initialize your plugin.  This setup function is called once after all hardware and mesh protocol layers have
      * been initialized
      */
-    virtual void setup() {}
+    virtual void setup();
 
     /**
      * @return true if you want to receive the specified portnum
