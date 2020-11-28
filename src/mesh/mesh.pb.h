@@ -22,7 +22,8 @@ typedef enum _RouteError {
 } RouteError;
 
 typedef enum _Constants {
-    Constants_Unused = 0
+    Constants_Unused = 0,
+    Constants_DATA_PAYLOAD_LEN = 240
 } Constants;
 
 typedef enum _RegionCode {
@@ -260,8 +261,8 @@ typedef struct _ToRadio {
 #define _RouteError_ARRAYSIZE ((RouteError)(RouteError_TIMEOUT+1))
 
 #define _Constants_MIN Constants_Unused
-#define _Constants_MAX Constants_Unused
-#define _Constants_ARRAYSIZE ((Constants)(Constants_Unused+1))
+#define _Constants_MAX Constants_DATA_PAYLOAD_LEN
+#define _Constants_ARRAYSIZE ((Constants)(Constants_DATA_PAYLOAD_LEN+1))
 
 #define _RegionCode_MIN RegionCode_Unset
 #define _RegionCode_MAX RegionCode_TW
