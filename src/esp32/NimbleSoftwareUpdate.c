@@ -23,6 +23,10 @@ const ble_uuid128_t update_crc32_uuid =
 const ble_uuid128_t update_result_uuid =
     BLE_UUID128_INIT(0x77, 0x2c, 0x43, 0x37, 0x09, 0x21, 0x4a, 0xac, 0x24, 0x44, 0x11, 0x74, 0x62, 0x48, 0x13, 0x5e);
 
+// "5e134862-7411-4424-ac4a-210937432c67" write
+const ble_uuid128_t update_region_uuid =
+    BLE_UUID128_INIT(0x67, 0x2c, 0x43, 0x37, 0x09, 0x21, 0x4a, 0xac, 0x24, 0x44, 0x11, 0x74, 0x62, 0x48, 0x13, 0x5e);
+
 const struct ble_gatt_svc_def gatt_update_svcs[] = {
     {
         /*** Service: Security test. */
@@ -47,8 +51,13 @@ const struct ble_gatt_svc_def gatt_update_svcs[] = {
                                         },
                                         {
                                             .uuid = &update_result_uuid.u,
-                                            .access_cb = update_size_callback,
+                                            .access_cb = update_result_callback,
                                             .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_READ_AUTHEN | BLE_GATT_CHR_F_NOTIFY,
+                                        },
+                                        {
+                                            .uuid = &update_region_uuid.u,
+                                            .access_cb = update_region_callback,
+                                            .flags = BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_AUTHEN,
                                         },
                                         {
                                             0, /* No more characteristics in this service. */
