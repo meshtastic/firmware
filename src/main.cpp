@@ -168,6 +168,8 @@ class ButtonThread : public OSThread
 #endif
 
   public:
+    static uint32_t longPressTime;
+
     // callback returns the period for the next callback invocation (or 0 if we should no longer be called)
     ButtonThread() : OSThread("Button")
     {
@@ -180,6 +182,8 @@ class ButtonThread : public OSThread
         userButton.attachClick(userButtonPressed);
         userButton.attachDuringLongPress(userButtonPressedLong);
         userButton.attachDoubleClick(userButtonDoublePressed);
+        userButton.attachLongPressStart(userButtonPressedLongStart);
+        userButton.attachLongPressStop(userButtonPressedLongStop);
         wakeOnIrq(BUTTON_PIN, FALLING);
 #endif
 #ifdef BUTTON_PIN_ALT
@@ -191,6 +195,8 @@ class ButtonThread : public OSThread
         userButtonAlt.attachClick(userButtonPressed);
         userButtonAlt.attachDuringLongPress(userButtonPressedLong);
         userButtonAlt.attachDoubleClick(userButtonDoublePressed);
+        userButtonAlt.attachLongPressStart(userButtonPressedLongStart);
+        userButtonAlt.attachLongPressStop(userButtonPressedLongStop);
         wakeOnIrq(BUTTON_PIN_ALT, FALLING);
 #endif
     }
@@ -223,8 +229,19 @@ class ButtonThread : public OSThread
     }
     static void userButtonPressedLong()
     {
-        DEBUG_MSG("Long press!\n");
+        // DEBUG_MSG("Long press!\n");
         screen->adjustBrightness();
+
+        // If user button is held down for 10 seconds, shutdown the device.
+        if (millis() - longPressTime > 10 * 1000) {
+#ifdef TBEAM_V10
+            if (axp192_found == true) {
+                power->shutdown();
+            }
+#endif
+        } else {
+            //DEBUG_MSG("Long press %u\n", (millis() - longPressTime));
+        }
     }
 
     static void userButtonDoublePressed()
@@ -237,6 +254,7 @@ class ButtonThread : public OSThread
 
 static Periodic *ledPeriodic;
 static OSThread *powerFSMthread, *buttonThread;
+uint32_t ButtonThread::longPressTime = 0;
 
 RadioInterface *rIf = NULL;
 
@@ -244,6 +262,10 @@ void setup()
 {
 #ifdef SEGGER_STDOUT_CH
     SEGGER_RTT_ConfigUpBuffer(SEGGER_STDOUT_CH, NULL, NULL, 1024, SEGGER_RTT_MODE_NO_BLOCK_TRIM);
+#endif
+
+#ifdef USE_SEGGER
+    SEGGER_RTT_ConfigUpBuffer(0, NULL, NULL, 0, SEGGER_RTT_MODE_NO_BLOCK_TRIM);
 #endif
 
 // Debug
