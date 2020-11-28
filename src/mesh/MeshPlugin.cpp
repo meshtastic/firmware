@@ -22,7 +22,7 @@ MeshPlugin::~MeshPlugin()
 
 void MeshPlugin::callPlugins(const MeshPacket &mp)
 {
-    DEBUG_MSG("In call plugins\n");
+    // DEBUG_MSG("In call plugins\n");
     for (auto i = plugins->begin(); i != plugins->end(); ++i) {
         auto &pi = **i;
         if (pi.wantPortnum(mp.decoded.data.portnum)) {
