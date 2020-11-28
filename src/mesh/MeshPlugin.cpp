@@ -1,10 +1,18 @@
 #include "MeshPlugin.h"
 #include <assert.h>
 
-std::vector<MeshPlugin *> MeshPlugin::plugins;
+std::vector<MeshPlugin *> *MeshPlugin::plugins;
 
-MeshPlugin::MeshPlugin(const char *_name) : name(_name) {
-    plugins.push_back(this);
+MeshPlugin::MeshPlugin(const char *_name) : name(_name)
+{
+    // Can't trust static initalizer order, so we check each time
+    if(!plugins)
+        plugins = new std::vector<MeshPlugin *>();
+
+    plugins->push_back(this);
+}
+
+void MeshPlugin::setup() {
 }
 
 MeshPlugin::~MeshPlugin()
@@ -14,9 +22,17 @@ MeshPlugin::~MeshPlugin()
 
 void MeshPlugin::callPlugins(const MeshPacket &mp)
 {
-    for (auto i = plugins.begin(); i != plugins.end(); ++i) {
-        if ((*i)->wantPortnum(mp.decoded.data.portnum))
-            if ((*i)->handleReceived(mp))
+    DEBUG_MSG("In call plugins\n");
+    for (auto i = plugins->begin(); i != plugins->end(); ++i) {
+        auto &pi = **i;
+        if (pi.wantPortnum(mp.decoded.data.portnum)) {
+            bool handled = pi.handleReceived(mp);
+            DEBUG_MSG("Plugin %s handled=%d\n", pi.name, handled);
+            if (handled)
                 break;
+        }
+        else {
+            DEBUG_MSG("Plugin %s not interested\n", pi.name);
+        }
     }
 }
