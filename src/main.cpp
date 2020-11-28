@@ -11,6 +11,7 @@
 // #include "rom/rtc.h"
 #include "DSRRouter.h"
 // #include "debug.h"
+#include "FSCommon.h"
 #include "RTC.h"
 #include "SPILock.h"
 #include "concurrency/OSThread.h"
@@ -299,6 +300,8 @@ void setup()
     OSThread::setup();
 
     ledPeriodic = new Periodic("Blink", ledBlinker);
+
+    fsInit();
 
     router = new DSRRouter();
 

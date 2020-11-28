@@ -392,6 +392,7 @@ void gatt_svr_register_cb(struct ble_gatt_register_ctxt *ctxt, void *arg)
     }
 }
 
+
 /**
  * A helper function that implements simple read and write handling for a uint32_t
  *
@@ -415,6 +416,7 @@ int chr_readwrite32le(uint32_t *v, struct ble_gatt_access_ctxt *ctxt)
         if (len < sizeof(le)) {
             DEBUG_MSG("Error: wrongsized write32\n");
             *v = 0;
+            return BLE_ATT_ERR_UNLIKELY;
         } else {
             *v = get_le32(le);
             DEBUG_MSG("BLE writing a uint32\n");
@@ -441,8 +443,10 @@ int chr_readwrite8(uint8_t *v, size_t vlen, struct ble_gatt_access_ctxt *ctxt)
 
         auto rc = ble_hs_mbuf_to_flat(ctxt->om, v, vlen, &len);
         assert(rc == 0);
-        if (len < vlen)
+        if (len < vlen) {
             DEBUG_MSG("Error: wrongsized write\n");
+            return BLE_ATT_ERR_UNLIKELY;
+        }
         else {
             DEBUG_MSG("BLE writing bytes\n");
         }
