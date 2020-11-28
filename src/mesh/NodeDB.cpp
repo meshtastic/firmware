@@ -273,8 +273,7 @@ void NodeDB::pickNewNodeNum()
 
     // If we don't have a nodenum at app - pick an initial nodenum based on the macaddr
     if (r == 0)
-        r = sizeof(NodeNum) == 1 ? ourMacAddr[5]
-                                 : ((ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5]);
+        r = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
 
     if (r == NODENUM_BROADCAST || r < NUM_RESERVED)
         r = NUM_RESERVED; // don't pick a reserved node number

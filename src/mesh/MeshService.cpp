@@ -93,7 +93,8 @@ const MeshPacket *MeshService::handleFromRadioUser(const MeshPacket *mp)
     bool wasBroadcast = mp->to == NODENUM_BROADCAST;
 
     // Disable this collision testing if we use 32 bit nodenums
-    bool isCollision = (sizeof(NodeNum) == 1) && (mp->from == myNodeInfo.my_node_num);
+    // (We do this always now, because we don't use 8 bit nodenums since 0.6 ish)
+    bool isCollision = false; // (sizeof(NodeNum) == 1) && (mp->from == myNodeInfo.my_node_num);
 
     if (isCollision) {
         // we win if we have a lower macaddr
