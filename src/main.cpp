@@ -250,6 +250,18 @@ class ButtonThread : public OSThread
         disablePin();
 #endif
     }
+
+    static void userButtonPressedLongStart()
+    {
+        DEBUG_MSG("Long press start!\n");
+        longPressTime = millis();
+    }
+
+    static void userButtonPressedLongStop()
+    {
+        DEBUG_MSG("Long press stop!\n");
+        longPressTime = 0;
+    }
 };
 
 static Periodic *ledPeriodic;
