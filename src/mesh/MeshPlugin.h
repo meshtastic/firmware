@@ -26,6 +26,11 @@ class MeshPlugin
 
     virtual ~MeshPlugin();
 
+    /** For use only by MeshService
+     */
+    static void callPlugins(const MeshPacket &mp);
+
+  protected:
     /**
      * Initialize your plugin.  This setup function is called once after all hardware and mesh protocol layers have
      * been initialized
@@ -42,8 +47,4 @@ class MeshPlugin
     @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
     virtual bool handleReceived(const MeshPacket &mp) { return false; }
-
-    /** For use only by MeshService 
-     */
-    static void callPlugins(const MeshPacket &mp);
 };

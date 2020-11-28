@@ -7,12 +7,12 @@
 class TextMessagePlugin : public MeshPlugin, public Observable<const MeshPacket *>
 {
   public:
-
     /** Constructor
      * name is for debugging output
      */
     TextMessagePlugin() : MeshPlugin("text") {}
 
+  protected:
     /**
      * @return true if you want to receive the specified portnum
      */

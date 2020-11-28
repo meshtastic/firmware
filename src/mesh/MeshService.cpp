@@ -297,7 +297,6 @@ void MeshService::sendOurPosition(NodeNum dest, bool wantReplies)
 
 int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
 {
-
     // Update our local node info with our position (even if we don't decide to update anyone else)
     MeshPacket *p = router->allocForSending();
     p->decoded.which_payload = SubPacket_position_tag;
