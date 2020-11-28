@@ -33,7 +33,6 @@ class NodeDB
   public:
     bool updateGUI = false;            // we think the gui should definitely be redrawn, screen will clear this once handled
     NodeInfo *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
-    bool updateTextMessage = false;    // if true, the GUI should show a new text message
     Observable<const meshtastic::NodeStatus *> newStatus;
 
     /// don't do mesh based algoritm for node id assignment (initially)

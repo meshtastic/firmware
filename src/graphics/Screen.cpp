@@ -32,6 +32,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "meshwifi/meshwifi.h"
+#include "plugins/TextMessagePlugin.h"
 #include "target_specific.h"
 #include "utils.h"
 
@@ -720,6 +721,7 @@ void Screen::setup()
     powerStatusObserver.observe(&powerStatus->onNewStatus);
     gpsStatusObserver.observe(&gpsStatus->onNewStatus);
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
+    textMessageObserver.observe(&textMessagePlugin);
 }
 
 void Screen::forceDisplay()
@@ -1183,14 +1185,24 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
     // DEBUG_MSG("Screen got status update %d\n", arg->getStatusType());
     switch (arg->getStatusType()) {
     case STATUS_TYPE_NODE:
-        if (showingNormalScreen && (nodeDB.updateTextMessage || nodeStatus->getLastNumTotal() != nodeStatus->getNumTotal())) {
+        if (showingNormalScreen &&
+            nodeStatus->getLastNumTotal() != nodeStatus->getNumTotal()) {
             setFrames(); // Regen the list of screens
         }
         nodeDB.updateGUI = false;
-        nodeDB.updateTextMessage = false;
         break;
     }
 
     return 0;
 }
+
+int Screen::handleTextMessage(const MeshPacket *arg)
+{
+    if (showingNormalScreen) {
+        setFrames(); // Regen the list of screens (will show new text message)
+    }
+
+    return 0;
+}
+
 } // namespace graphics

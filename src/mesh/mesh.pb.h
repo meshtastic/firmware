@@ -4,6 +4,7 @@
 #ifndef PB_MESH_PB_H_INCLUDED
 #define PB_MESH_PB_H_INCLUDED
 #include <pb.h>
+#include "portnums.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
@@ -51,12 +52,6 @@ typedef enum _LocationSharing {
     LocationSharing_LocDisabled = 2
 } LocationSharing;
 
-typedef enum _Data_Type {
-    Data_Type_OPAQUE = 0,
-    Data_Type_CLEAR_TEXT = 1,
-    Data_Type_CLEAR_READACK = 2
-} Data_Type;
-
 typedef enum _ChannelSettings_ModemConfig {
     ChannelSettings_ModemConfig_Bw125Cr45Sf128 = 0,
     ChannelSettings_ModemConfig_Bw500Cr45Sf128 = 1,
@@ -79,7 +74,7 @@ typedef struct _ChannelSettings {
 
 typedef PB_BYTES_ARRAY_T(240) Data_payload_t;
 typedef struct _Data {
-    Data_Type typ;
+    PortNum portnum;
     Data_payload_t payload;
 } Data;
 
@@ -276,10 +271,6 @@ typedef struct _ToRadio {
 #define _LocationSharing_MAX LocationSharing_LocDisabled
 #define _LocationSharing_ARRAYSIZE ((LocationSharing)(LocationSharing_LocDisabled+1))
 
-#define _Data_Type_MIN Data_Type_OPAQUE
-#define _Data_Type_MAX Data_Type_CLEAR_READACK
-#define _Data_Type_ARRAYSIZE ((Data_Type)(Data_Type_CLEAR_READACK+1))
-
 #define _ChannelSettings_ModemConfig_MIN ChannelSettings_ModemConfig_Bw125Cr45Sf128
 #define _ChannelSettings_ModemConfig_MAX ChannelSettings_ModemConfig_Bw125Cr48Sf4096
 #define _ChannelSettings_ModemConfig_ARRAYSIZE ((ChannelSettings_ModemConfig)(ChannelSettings_ModemConfig_Bw125Cr48Sf4096+1))
@@ -287,7 +278,7 @@ typedef struct _ToRadio {
 
 /* Initializer values for message structs */
 #define Position_init_default                    {0, 0, 0, 0, 0}
-#define Data_init_default                        {_Data_Type_MIN, {0, {0}}}
+#define Data_init_default                        {_PortNum_MIN, {0, {0}}}
 #define User_init_default                        {"", "", "", {0}}
 #define RouteDiscovery_init_default              {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define SubPacket_init_default                   {0, {Position_init_default}, 0, 0, 0, 0, {0}, 0}
@@ -303,7 +294,7 @@ typedef struct _ToRadio {
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
 #define ManufacturingData_init_default           {0, {{NULL}, NULL}, {{NULL}, NULL}, 0}
 #define Position_init_zero                       {0, 0, 0, 0, 0}
-#define Data_init_zero                           {_Data_Type_MIN, {0, {0}}}
+#define Data_init_zero                           {_PortNum_MIN, {0, {0}}}
 #define User_init_zero                           {"", "", "", {0}}
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define SubPacket_init_zero                      {0, {Position_init_zero}, 0, 0, 0, 0, {0}, 0}
@@ -328,7 +319,7 @@ typedef struct _ToRadio {
 #define ChannelSettings_channel_num_tag          9
 #define ChannelSettings_psk_tag                  4
 #define ChannelSettings_name_tag                 5
-#define Data_typ_tag                             1
+#define Data_portnum_tag                         1
 #define Data_payload_tag                         2
 #define DebugString_message_tag                  1
 #define ManufacturingData_fradioFreq_tag         1
@@ -443,7 +434,7 @@ X(a, STATIC,   SINGULAR, FIXED32,  time,              9)
 #define Position_DEFAULT NULL
 
 #define Data_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UENUM,    typ,               1) \
+X(a, STATIC,   SINGULAR, UENUM,    portnum,           1) \
 X(a, STATIC,   SINGULAR, BYTES,    payload,           2)
 #define Data_CALLBACK NULL
 #define Data_DEFAULT NULL
@@ -669,20 +660,20 @@ extern const pb_msgdesc_t ManufacturingData_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define Position_size                            39
-#define Data_size                                245
+#define Data_size                                246
 #define User_size                                72
 #define RouteDiscovery_size                      88
-#define SubPacket_size                           274
-#define MeshPacket_size                          313
+#define SubPacket_size                           275
+#define MeshPacket_size                          314
 #define ChannelSettings_size                     84
 #define RadioConfig_size                         308
 #define RadioConfig_UserPreferences_size         219
 #define NodeInfo_size                            132
 #define MyNodeInfo_size                          110
-#define DeviceState_size                         5460
+#define DeviceState_size                         5462
 #define DebugString_size                         258
-#define FromRadio_size                           322
-#define ToRadio_size                             316
+#define FromRadio_size                           323
+#define ToRadio_size                             317
 /* ManufacturingData_size depends on runtime parameters */
 
 #ifdef __cplusplus

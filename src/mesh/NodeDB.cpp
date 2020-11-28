@@ -150,13 +150,13 @@ bool NodeDB::resetRadioConfig()
         radioConfig.preferences.region = RegionCode_TW;
 
         // Enter super deep sleep soon and stay there not very long
-        //radioConfig.preferences.mesh_sds_timeout_secs = 10;
-        //radioConfig.preferences.sds_secs = 60;
+        // radioConfig.preferences.mesh_sds_timeout_secs = 10;
+        // radioConfig.preferences.sds_secs = 60;
     }
 
     // Update the global myRegion
     initRegion();
-    
+
     return didFactoryReset;
 }
 
@@ -403,6 +403,8 @@ size_t NodeDB::getNumOnlineNodes()
     return numseen;
 }
 
+#include "MeshPlugin.h"
+
 /// given a subpacket sniffed from the network, update our DB state
 /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
 void NodeDB::updateFrom(const MeshPacket &mp)
@@ -433,25 +435,8 @@ void NodeDB::updateFrom(const MeshPacket &mp)
         }
 
         case SubPacket_data_tag: {
-            // Keep a copy of the most recent text message.
-            if (p.data.typ == Data_Type_CLEAR_TEXT) {
-                DEBUG_MSG("Received text msg from=0x%0x, id=%d, msg=%.*s\n", mp.from, mp.id, p.data.payload.size,
-                          p.data.payload.bytes);
-                if (mp.to == NODENUM_BROADCAST || mp.to == nodeDB.getNodeNum()) {
-                    // We only store/display messages destined for us.
-                    devicestate.rx_text_message = mp;
-                    devicestate.has_rx_text_message = true;
-                    updateTextMessage = true;
-                    powerFSM.trigger(EVENT_RECEIVED_TEXT_MSG);
-                    notifyObservers(true); // Force an update whether or not our node counts have changed
-
-                    // This is going into the wifidev feature branch
-                    // Only update the WebUI if WiFi is enabled
-                    //#if WiFi_MODE != 0
-                    //  notifyWebUI();
-                    //#endif
-                }
-            }
+            if(mp.to == NODENUM_BROADCAST || mp.to == nodeDB.getNodeNum())
+                MeshPlugin::callPlugins(mp);
             break;
         }
 

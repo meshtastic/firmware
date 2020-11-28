@@ -2,21 +2,21 @@
 
 You probably don't care about this section - skip to the next one.
 
+For app cleanup:
+
+* add app handlers in device code (make new app framework)
+* move positions into regular data packets (use new app framework)
+* move user info into regular data packets (use new app framework)
+* test that positions, text messages and user info still work
+* test that position, text messages and user info work properly with new android app and old device code
+* call the plugin setup functions
+
 For high speed/lots of devices/short range tasks:
 
 - When guessing numhops for sending: if I've heard from many local (0 hop neighbors) decrease hopcount by 2 rather than 1. 
 This should nicely help 'router' nodes do the right thing when long range, or if there are many local nodes for short range.
 - fix timeouts/delays to be based on packet length at current radio settings
 
-Nimble tasks:
-
-- readerror.txt stress test bug
-- started RPA long test, jul 22 6pm
-- implement nimble software update api
-- update to latest bins, test OTA again (measure times) and then checkin bins
-- do alpha release
-
-* update protocol description per cyclomies email thread
 * update faq with antennas https://meshtastic.discourse.group/t/range-test-ideas-requested/738/2
 * update faq on recommended android version and phones
 * add help link inside the app, reference a page on the wiki
