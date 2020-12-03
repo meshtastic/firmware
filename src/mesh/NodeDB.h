@@ -57,6 +57,10 @@ class NodeDB
     /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
     void updateFrom(const MeshPacket &p);
 
+    /** Update position info for this node based on received position data
+     */
+    void updatePosition(uint32_t nodeId, const Position &p);
+
     /// @return our node number
     NodeNum getNodeNum() { return myNodeInfo.my_node_num; }
 

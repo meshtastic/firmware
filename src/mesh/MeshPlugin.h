@@ -14,8 +14,6 @@
  */
 class MeshPlugin
 {
-    const char *name;
-
     static std::vector<MeshPlugin *> *plugins;
 
   public:
@@ -31,6 +29,8 @@ class MeshPlugin
     static void callPlugins(const MeshPacket &mp);
 
   protected:
+    const char *name;
+
     /**
      * Initialize your plugin.  This setup function is called once after all hardware and mesh protocol layers have
      * been initialized

@@ -14,6 +14,7 @@
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "power.h"
+#include "plugins/PositionPlugin.h"
 
 /*
 receivedPacketQueue - this is a queue of messages we've received from the mesh, which we are keeping to deliver to the phone.
@@ -254,7 +255,7 @@ void MeshService::sendToMesh(MeshPacket *p)
     // Strip out any time information before sending packets to other  nodes - to keep the wire size small (and because other
     // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS to include the time, so that gpsless
     // devices can get time.
-    if (p->which_payload == MeshPacket_decoded_tag && p->decoded.which_payload == SubPacket_position_tag) {
+    if (p->which_payload == MeshPacket_decoded_tag && p->decoded.which_payload == SubPacket_position_tag && p->decoded.position.time) {
         if (getRTCQuality() < RTCQualityGPS) {
             DEBUG_MSG("Stripping time %u from position send\n", p->decoded.position.time);
             p->decoded.position.time = 0;
@@ -273,27 +274,12 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
 
     DEBUG_MSG("Sending network ping to 0x%x, with position=%d, wantReplies=%d\n", dest, node->has_position, wantReplies);
     if (node->has_position)
-        sendOurPosition(dest, wantReplies);
+        positionPlugin.sendOurPosition(dest, wantReplies);
     else
         sendOurOwner(dest, wantReplies);
 }
 
-void MeshService::sendOurPosition(NodeNum dest, bool wantReplies)
-{
-    NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
-    assert(node);
-    assert(node->has_position);
 
-    // Update our local node info with our position (even if we don't decide to update anyone else)
-    MeshPacket *p = router->allocForSending();
-    p->to = dest;
-    p->decoded.which_payload = SubPacket_position_tag;
-    p->decoded.position = node->position;
-    p->decoded.want_response = wantReplies;
-    p->decoded.position.time =
-        getValidTime(RTCQualityGPS); // This nodedb timestamp might be stale, so update it if our clock is valid.
-    sendToMesh(p);
-}
 
 int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
 {

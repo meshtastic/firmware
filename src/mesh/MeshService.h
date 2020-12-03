@@ -78,14 +78,12 @@ class MeshService
     /// Send our owner info to a particular node
     void sendOurOwner(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
 
-  private:
-    /// Broadcasts our last known position
-    void sendOurPosition(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
-
     /// Send a packet into the mesh - note p must have been allocated from packetPool.  We will return it to that pool after
     /// sending. This is the ONLY function you should use for sending messages into the mesh, because it also updates the nodedb
     /// cache
     void sendToMesh(MeshPacket *p);
+
+  private:
 
     /// Called when our gps position has changed - updates nodedb and sends Location message out into the mesh
     /// returns 0 to allow futher processing
