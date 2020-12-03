@@ -39,6 +39,10 @@ This software is 100% open source and developed by a group of hobbyist experimen
 
 For an detailed walk-through aimed at beginners, we recommend [meshtastic.letstalkthis.com](https://meshtastic.letstalkthis.com/).
 
+### Related Groups
+
+Telegram group for **Italy**-based users [t.me/meshtastic_italia](http://t.me/meshtastic_italia) (Italian language, unofficial).
+
 # Updates
 
 Note: Updates are happening almost daily, only major updates are listed below. For more details see our forum.
