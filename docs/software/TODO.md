@@ -4,9 +4,11 @@ You probably don't care about this section - skip to the next one.
 
 For app cleanup:
 
+* have python tool check max packet size before sending to device
 * require a recent python api to talk to these new device loads
 * on android for received positions handle either old or new positions
 * on android side send old or new positions as needed
+* fix position sending to use new plugin
 * move positions into regular data packets (use new app framework)
 * move user info into regular data packets (use new app framework)
 * test that positions, text messages and user info still work

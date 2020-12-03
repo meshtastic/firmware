@@ -405,6 +405,19 @@ size_t NodeDB::getNumOnlineNodes()
 
 #include "MeshPlugin.h"
 
+/** Update position info for this node based on received position data
+ */
+void NodeDB::updatePosition(uint32_t nodeId, const Position &p) {
+
+    NodeInfo *info = getOrCreateNode(nodeId);
+
+            // we always trust our local timestamps more
+            info->position = p;
+            info->has_position = true;
+            updateGUIforNode = info;
+            notifyObservers(true); // Force an update whether or not our node counts have changed
+}
+
 /// given a subpacket sniffed from the network, update our DB state
 /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
 void NodeDB::updateFrom(const MeshPacket &mp)
@@ -423,48 +436,44 @@ void NodeDB::updateFrom(const MeshPacket &mp)
         info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
 
         switch (p.which_payload) {
-        case SubPacket_position_tag: {
-            // we always trust our local timestamps more
-            info->position = p.position;
-            if (mp.rx_time)
-                info->position.time = mp.rx_time;
-            info->has_position = true;
-            updateGUIforNode = info;
-            notifyObservers(true); // Force an update whether or not our node counts have changed
-            break;
-        }
-
-        case SubPacket_data_tag: {
-            if(mp.to == NODENUM_BROADCAST || mp.to == nodeDB.getNodeNum())
-                MeshPlugin::callPlugins(mp);
-            break;
-        }
-
-        case SubPacket_user_tag: {
-            DEBUG_MSG("old user %s/%s/%s\n", info->user.id, info->user.long_name, info->user.short_name);
-
-            bool changed = memcmp(&info->user, &p.user,
-                                  sizeof(info->user)); // Both of these blocks start as filled with zero so I think this is okay
-
-            info->user = p.user;
-            DEBUG_MSG("updating changed=%d user %s/%s/%s\n", changed, info->user.id, info->user.long_name, info->user.short_name);
-            info->has_user = true;
-
-            if (changed) {
-                updateGUIforNode = info;
-                powerFSM.trigger(EVENT_NODEDB_UPDATED);
-                notifyObservers(true); // Force an update whether or not our node counts have changed
-
-                // Not really needed - we will save anyways when we go to sleep
-                // We just changed something important about the user, store our DB
-                // saveToDisk();
+            case SubPacket_position_tag: {
+                // handle a legacy position packet 
+                DEBUG_MSG("WARNING: Processing a (deprecated) position packet from %d\n", mp.from);
+                updatePosition(mp.from, p.position);
+                break;
             }
-            break;
-        }
 
-        default: {
-            notifyObservers(); // If the node counts have changed, notify observers
-        }
+            case SubPacket_data_tag: {
+                if(mp.to == NODENUM_BROADCAST || mp.to == nodeDB.getNodeNum())
+                    MeshPlugin::callPlugins(mp);
+                break;
+            }
+
+            case SubPacket_user_tag: {
+                DEBUG_MSG("old user %s/%s/%s\n", info->user.id, info->user.long_name, info->user.short_name);
+
+                bool changed = memcmp(&info->user, &p.user,
+                                    sizeof(info->user)); // Both of these blocks start as filled with zero so I think this is okay
+
+                info->user = p.user;
+                DEBUG_MSG("updating changed=%d user %s/%s/%s\n", changed, info->user.id, info->user.long_name, info->user.short_name);
+                info->has_user = true;
+
+                if (changed) {
+                    updateGUIforNode = info;
+                    powerFSM.trigger(EVENT_NODEDB_UPDATED);
+                    notifyObservers(true); // Force an update whether or not our node counts have changed
+
+                    // Not really needed - we will save anyways when we go to sleep
+                    // We just changed something important about the user, store our DB
+                    // saveToDisk();
+                }
+                break;
+            }
+
+            default: {
+                notifyObservers(); // If the node counts have changed, notify observers
+            }
         }
     }
 }
