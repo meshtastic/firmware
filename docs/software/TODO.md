@@ -9,6 +9,7 @@ For app cleanup:
 * on android for received positions handle either old or new positions
 * on android side send old or new positions as needed
 * fix position sending to use new plugin
+* Add SinglePortNumPlugin - as the new most useful baseclass
 * move positions into regular data packets (use new app framework)
 * move user info into regular data packets (use new app framework)
 * test that positions, text messages and user info still work
@@ -26,6 +27,45 @@ This should nicely help 'router' nodes do the right thing when long range, or if
 * add help link inside the app, reference a page on the wiki
 * turn on amazon reviews support
 * add a tablet layout (with map next to messages) in the android app
+
+# Old docs to merge
+
+MESH RADIO PROTOCOL
+
+Old TODO notes on the mesh radio protocol, merge into real docs someday...
+
+for each named group we have a pre-shared key known by all group members and
+wrapped around the device. you can only be in one group at a time (FIXME?!) To
+join the group we read a qr code with the preshared key and ParamsCodeEnum. that
+gets sent via bluetooth to the device.  ParamsCodeEnum maps to a set of various
+radio params (regulatory region, center freq, SF, bandwidth, bitrate, power
+etc...) so all members of the mesh can have their radios set the same way.
+
+once in that group, we can talk between 254 node numbers.
+to get our node number (and announce our presence in the channel) we pick a
+random node number and broadcast as that node with WANT-NODENUM(my globally
+unique name).  If anyone on the channel has seen someone _else_ using that name
+within the last 24 hrs(?) they reply with DENY-NODENUM. Note: we might receive
+multiple denies.  Note: this allows others to speak up for some other node that
+might be saving battery right now. Any time we hear from another node (for any
+message type), we add that node number to the unpickable list.  To dramatically
+decrease the odds a node number we request is already used by someone. If no one
+denies within TBD seconds, we assume that we have that node number.  As long as
+we keep talking to folks at least once every 24 hrs, others should remember we
+have it.
+
+Once we have a node number we can broadcast POSITION-UPDATE(my globally unique
+name, lat, lon, alt, amt battery remaining).  All receivers will use this to a)
+update the mapping of who is at what node nums, b) the time of last rx, c)
+position.  If we haven't heard from that node in a while we reply to that node
+(only) with our current POSITION_UPDATE state - so that node (presumably just
+rejoined the network) can build a map of all participants.
+
+We will periodically broadcast POSITION-UPDATE as needed based on distance moved
+or a periodic minimum heartbeat.
+
+If user wants to send a text they can SEND_TEXT(dest user, short text message).
+Dest user is a node number, or 0xff for broadcast.
 
 # Medium priority
 
