@@ -82,13 +82,6 @@ typedef struct _DebugString {
     char message[256];
 } DebugString;
 
-typedef struct _ManufacturingData {
-    uint32_t fradioFreq;
-    pb_callback_t hw_model;
-    pb_callback_t hw_version;
-    int32_t selftest_result;
-} ManufacturingData;
-
 typedef struct _MyNodeInfo {
     uint32_t my_node_num;
     bool has_gps;
@@ -292,7 +285,6 @@ typedef struct _ToRadio {
 #define DebugString_init_default                 {""}
 #define FromRadio_init_default                   {0, 0, {MeshPacket_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
-#define ManufacturingData_init_default           {0, {{NULL}, NULL}, {{NULL}, NULL}, 0}
 #define Position_init_zero                       {0, 0, 0, 0, 0}
 #define Data_init_zero                           {_PortNum_MIN, {0, {0}}}
 #define User_init_zero                           {"", "", "", {0}}
@@ -308,7 +300,6 @@ typedef struct _ToRadio {
 #define DebugString_init_zero                    {""}
 #define FromRadio_init_zero                      {0, 0, {MeshPacket_init_zero}}
 #define ToRadio_init_zero                        {0, {MeshPacket_init_zero}}
-#define ManufacturingData_init_zero              {0, {{NULL}, NULL}, {{NULL}, NULL}, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define ChannelSettings_tx_power_tag             1
@@ -322,10 +313,6 @@ typedef struct _ToRadio {
 #define Data_portnum_tag                         1
 #define Data_payload_tag                         2
 #define DebugString_message_tag                  1
-#define ManufacturingData_fradioFreq_tag         1
-#define ManufacturingData_hw_model_tag           2
-#define ManufacturingData_hw_version_tag         3
-#define ManufacturingData_selftest_result_tag    4
 #define MyNodeInfo_my_node_num_tag               1
 #define MyNodeInfo_has_gps_tag                   2
 #define MyNodeInfo_num_channels_tag              3
@@ -615,14 +602,6 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_owner,variant.set_owner), 102)
 #define ToRadio_variant_set_radio_MSGTYPE RadioConfig
 #define ToRadio_variant_set_owner_MSGTYPE User
 
-#define ManufacturingData_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UINT32,   fradioFreq,        1) \
-X(a, CALLBACK, SINGULAR, STRING,   hw_model,          2) \
-X(a, CALLBACK, SINGULAR, STRING,   hw_version,        3) \
-X(a, STATIC,   SINGULAR, SINT32,   selftest_result,   4)
-#define ManufacturingData_CALLBACK pb_default_field_callback
-#define ManufacturingData_DEFAULT NULL
-
 extern const pb_msgdesc_t Position_msg;
 extern const pb_msgdesc_t Data_msg;
 extern const pb_msgdesc_t User_msg;
@@ -638,7 +617,6 @@ extern const pb_msgdesc_t DeviceState_msg;
 extern const pb_msgdesc_t DebugString_msg;
 extern const pb_msgdesc_t FromRadio_msg;
 extern const pb_msgdesc_t ToRadio_msg;
-extern const pb_msgdesc_t ManufacturingData_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define Position_fields &Position_msg
@@ -656,7 +634,6 @@ extern const pb_msgdesc_t ManufacturingData_msg;
 #define DebugString_fields &DebugString_msg
 #define FromRadio_fields &FromRadio_msg
 #define ToRadio_fields &ToRadio_msg
-#define ManufacturingData_fields &ManufacturingData_msg
 
 /* Maximum encoded size of messages (where known) */
 #define Position_size                            39
@@ -674,7 +651,6 @@ extern const pb_msgdesc_t ManufacturingData_msg;
 #define DebugString_size                         258
 #define FromRadio_size                           323
 #define ToRadio_size                             317
-/* ManufacturingData_size depends on runtime parameters */
 
 #ifdef __cplusplus
 } /* extern "C" */
