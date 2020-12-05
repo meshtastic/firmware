@@ -8,13 +8,14 @@ For app cleanup:
 * require a recent python api to talk to these new device loads
 * on android for received positions handle either old or new positions
 * on android side send old or new positions as needed
-* fix position sending to use new plugin
+* DONE fix position sending to use new plugin
 * Add SinglePortNumPlugin - as the new most useful baseclass
-* move positions into regular data packets (use new app framework)
+* DONE move positions into regular data packets (use new app framework)
 * move user info into regular data packets (use new app framework)
 * test that positions, text messages and user info still work
 * test that position, text messages and user info work properly with new android app and old device code
 * call the plugin setup functions
+* fix the RTC drift bug
 
 For high speed/lots of devices/short range tasks:
 
