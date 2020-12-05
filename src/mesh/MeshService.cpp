@@ -13,8 +13,9 @@
 #include "RTC.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
-#include "power.h"
 #include "plugins/PositionPlugin.h"
+#include "plugins/NodeInfoPlugin.h"
+#include "power.h"
 
 /*
 receivedPacketQueue - this is a queue of messages we've received from the mesh, which we are keeping to deliver to the phone.
@@ -52,7 +53,7 @@ MeshService service;
 
 static int32_t sendOwnerCb()
 {
-    service.sendOurOwner();
+    nodeInfoPlugin.sendOurNodeInfo();
 
     return getPref_send_owner_interval() * getPref_position_broadcast_secs() * 1000;
 }
@@ -75,114 +76,28 @@ void MeshService::init()
     packetReceivedObserver.observe(&router->notifyPacketReceived);
 }
 
-void MeshService::sendOurOwner(NodeNum dest, bool wantReplies)
-{
-    MeshPacket *p = router->allocForSending();
-    p->to = dest;
-    p->decoded.want_response = wantReplies;
-    p->decoded.which_payload = SubPacket_user_tag;
-    User &u = p->decoded.user;
-    u = owner;
-    DEBUG_MSG("sending owner %s/%s/%s\n", u.id, u.long_name, u.short_name);
-
-    sendToMesh(p);
-}
-
-/// handle a user packet that just arrived on the radio, return NULL if we should not process this packet at all
-const MeshPacket *MeshService::handleFromRadioUser(const MeshPacket *mp)
-{
-    bool wasBroadcast = mp->to == NODENUM_BROADCAST;
-
-    // Disable this collision testing if we use 32 bit nodenums
-    // (We do this always now, because we don't use 8 bit nodenums since 0.6 ish)
-    bool isCollision = false; // (sizeof(NodeNum) == 1) && (mp->from == myNodeInfo.my_node_num);
-
-    if (isCollision) {
-        // we win if we have a lower macaddr
-        bool weWin = memcmp(&owner.macaddr, &mp->decoded.user.macaddr, sizeof(owner.macaddr)) < 0;
-
-        if (weWin) {
-            DEBUG_MSG("NOTE! Received a nodenum collision and we are vetoing\n");
-
-            mp = NULL;
-
-            sendOurOwner(); // send our owner as a _broadcast_ because that other guy is mistakenly using our nodenum
-        } else {
-            // we lost, we need to try for a new nodenum!
-            DEBUG_MSG("NOTE! Received a nodenum collision we lost, so picking a new nodenum\n");
-            nodeDB.updateFrom(
-                *mp); // update the DB early - before trying to repick (so we don't select the same node number again)
-            nodeDB.pickNewNodeNum();
-            sendOurOwner(); // broadcast our new attempt at a node number
-        }
-    } else if (wasBroadcast) {
-        // If we haven't yet abandoned the packet and it was a broadcast, reply (just to them) with our User record so they can
-        // build their DB
-
-        // Someone just sent us a User, reply with our Owner
-        DEBUG_MSG("Received broadcast Owner from 0x%x, replying with our owner\n", mp->from);
-
-        sendOurOwner(mp->from);
-
-        String lcd = String("Joined: ") + mp->decoded.user.long_name + "\n";
-        screen->print(lcd.c_str());
-    }
-
-    return mp;
-}
-
-void MeshService::handleIncomingPosition(const MeshPacket *mp)
-{
-    if (mp->which_payload == MeshPacket_decoded_tag && mp->decoded.which_payload == SubPacket_position_tag) {
-        DEBUG_MSG("handled incoming position time=%u\n", mp->decoded.position.time);
-
-        if (mp->decoded.position.time) {
-            struct timeval tv;
-            uint32_t secs = mp->decoded.position.time;
-
-            tv.tv_sec = secs;
-            tv.tv_usec = 0;
-
-            perhapsSetRTC(RTCQualityFromNet, &tv);
-        }
-    } else {
-        DEBUG_MSG("Ignoring incoming packet - not a position\n");
-    }
-}
 
 int MeshService::handleFromRadio(const MeshPacket *mp)
 {
     powerFSM.trigger(EVENT_RECEIVED_PACKET); // Possibly keep the node from sleeping
 
-    // If it is a position packet, perhaps set our clock - this must be before nodeDB.updateFrom
-    handleIncomingPosition(mp);
+    printPacket("Forwarding to phone", mp);
+    nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
 
-    if (mp->which_payload == MeshPacket_decoded_tag && mp->decoded.which_payload == SubPacket_user_tag) {
-        mp = handleFromRadioUser(mp);
+    fromNum++;
+
+    if (toPhoneQueue.numFree() == 0) {
+        DEBUG_MSG("NOTE: tophone queue is full, discarding oldest\n");
+        MeshPacket *d = toPhoneQueue.dequeuePtr(0);
+        if (d)
+            releaseToPool(d);
     }
 
-    // If we veto a received User packet, we don't put it into the DB or forward it to the phone (to prevent confusing it)
-    if (mp) {
-        printPacket("Forwarding to phone", mp);
-        nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
+    MeshPacket *copied = packetPool.allocCopy(*mp);
+    assert(toPhoneQueue.enqueue(copied, 0)); // FIXME, instead of failing for full queue, delete the oldest mssages
 
-        fromNum++;
-
-        if (toPhoneQueue.numFree() == 0) {
-            DEBUG_MSG("NOTE: tophone queue is full, discarding oldest\n");
-            MeshPacket *d = toPhoneQueue.dequeuePtr(0);
-            if (d)
-                releaseToPool(d);
-        }
-
-        MeshPacket *copied = packetPool.allocCopy(*mp);
-        assert(toPhoneQueue.enqueue(copied, 0)); // FIXME, instead of failing for full queue, delete the oldest mssages
-
-        if (mp->decoded.want_response)
-            sendNetworkPing(mp->from);
-    } else {
-        DEBUG_MSG("Not delivering vetoed User message\n");
-    }
+    if (mp->decoded.want_response)
+        sendNetworkPing(mp->from);
 
     return 0;
 }
@@ -203,7 +118,7 @@ bool MeshService::reloadConfig()
 
     // This will also update the region as needed
     bool didReset = nodeDB.resetRadioConfig(); // Don't let the phone send us fatally bad settings
-    
+
     configChanged.notifyObservers(NULL);
     nodeDB.saveToDisk();
 
@@ -213,7 +128,7 @@ bool MeshService::reloadConfig()
 /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
 void MeshService::reloadOwner()
 {
-    sendOurOwner();
+    nodeInfoPlugin.sendOurNodeInfo();
     nodeDB.saveToDisk();
 }
 
@@ -224,8 +139,6 @@ void MeshService::reloadOwner()
  */
 void MeshService::handleToRadio(MeshPacket &p)
 {
-    handleIncomingPosition(&p); // If it is a position packet, perhaps set our clock
-
     if (p.from == 0) // If the phone didn't set a sending node ID, use ours
         p.from = nodeDB.getNodeNum();
 
@@ -255,7 +168,8 @@ void MeshService::sendToMesh(MeshPacket *p)
     // Strip out any time information before sending packets to other  nodes - to keep the wire size small (and because other
     // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS to include the time, so that gpsless
     // devices can get time.
-    if (p->which_payload == MeshPacket_decoded_tag && p->decoded.which_payload == SubPacket_position_tag && p->decoded.position.time) {
+    if (p->which_payload == MeshPacket_decoded_tag && p->decoded.which_payload == SubPacket_position_tag &&
+        p->decoded.position.time) {
         if (getRTCQuality() < RTCQualityGPS) {
             DEBUG_MSG("Stripping time %u from position send\n", p->decoded.position.time);
             p->decoded.position.time = 0;
@@ -276,10 +190,8 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
     if (node->has_position)
         positionPlugin.sendOurPosition(dest, wantReplies);
     else
-        sendOurOwner(dest, wantReplies);
+        nodeInfoPlugin.sendOurNodeInfo(dest, wantReplies);
 }
-
-
 
 int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
 {
@@ -314,7 +226,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
         lastGpsSend = now;
         DEBUG_MSG("Sending position to mesh (not requesting replies)\n");
         positionPlugin.sendOurPosition();
-    } 
+    }
 
     return 0;
 }

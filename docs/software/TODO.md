@@ -6,12 +6,16 @@ For app cleanup:
 
 * have python tool check max packet size before sending to device
 * require a recent python api to talk to these new device loads
-* on android for received positions handle either old or new positions
-* on android side send old or new positions as needed
+* DONE fix handleIncomingPosition
+* move want_replies handling into plugins
+* on android for received positions handle either old or new positions / user messages
+* on android side send old or new positions as needed / user messages
+* on python side print error messages if old position/user messages seen
+* on python side handle new position/user messages
 * DONE fix position sending to use new plugin
 * Add SinglePortNumPlugin - as the new most useful baseclass
 * DONE move positions into regular data packets (use new app framework)
-* move user info into regular data packets (use new app framework)
+* DONE move user info into regular data packets (use new app framework)
 * test that positions, text messages and user info still work
 * test that position, text messages and user info work properly with new android app and old device code
 * call the plugin setup functions
