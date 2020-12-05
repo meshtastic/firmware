@@ -1,4 +1,5 @@
 #include "MeshPlugin.h"
+#include "NodeDB.h"
 #include <assert.h>
 
 std::vector<MeshPlugin *> *MeshPlugin::plugins;
@@ -27,6 +28,11 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
         auto &pi = **i;
         if (pi.wantPortnum(mp.decoded.data.portnum)) {
             bool handled = pi.handleReceived(mp);
+
+            // Possibly send replies (unless we are handling a locally generated message)
+            if (mp.decoded.want_response && mp.from != nodeDB.getNodeNum())
+                pi.sendResponse(mp.from);
+
             DEBUG_MSG("Plugin %s handled=%d\n", pi.name, handled);
             if (handled)
                 break;

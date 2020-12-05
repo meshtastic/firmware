@@ -96,9 +96,6 @@ int MeshService::handleFromRadio(const MeshPacket *mp)
     MeshPacket *copied = packetPool.allocCopy(*mp);
     assert(toPhoneQueue.enqueue(copied, 0)); // FIXME, instead of failing for full queue, delete the oldest mssages
 
-    if (mp->decoded.want_response)
-        sendNetworkPing(mp->from);
-
     return 0;
 }
 

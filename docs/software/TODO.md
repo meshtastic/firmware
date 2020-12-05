@@ -8,7 +8,7 @@ For app cleanup:
 * DONE require a recent python api to talk to these new device loads
 * DONE require a recent android app to talk to these new device loads
 * DONE fix handleIncomingPosition
-* move want_replies handling into plugins
+* DONE move want_replies handling into plugins
 * on android for received positions handle either old or new positions / user messages
 * on android side send old or new positions as needed / user messages
 * on python side handle new position/user messages
