@@ -1,5 +1,5 @@
 #pragma once
-#include "MeshPlugin.h"
+#include "SinglePortPlugin.h"
 #include "Router.h"
 
 /**
@@ -9,25 +9,20 @@
  * If you are using protobufs to encode your packets (recommended) you can use this as a baseclass for your plugin
  * and avoid a bunch of boilerplate code.
  */
-template <class T> class ProtobufPlugin : private MeshPlugin
+template <class T> class ProtobufPlugin : private SinglePortPlugin
 {
     const pb_msgdesc_t *fields;
-    PortNum ourPortNum;
 
   public:
     /** Constructor
      * name is for debugging output
      */
     ProtobufPlugin(const char *_name, PortNum _ourPortNum, const pb_msgdesc_t *_fields)
-        : MeshPlugin(_name), fields(_fields), ourPortNum(_ourPortNum)
+        : SinglePortPlugin(_name, _ourPortNum), fields(_fields)
     {
     }
 
   protected:
-    /**
-     * @return true if you want to receive the specified portnum
-     */
-    virtual bool wantPortnum(PortNum p) { return p == ourPortNum; }
 
     /**
      * Handle a received message, the data field in the message is already decoded and is provided
