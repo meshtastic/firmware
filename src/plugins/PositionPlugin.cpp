@@ -44,3 +44,12 @@ void PositionPlugin::sendOurPosition(NodeNum dest, bool wantReplies)
 
     service.sendToMesh(p);
 }
+
+/** Messages can be received that have the want_response bit set.  If set, this callback will be invoked
+ * so that subclasses can (optionally) send a response back to the original sender.  Implementing this method
+ * is optional
+ */
+void PositionPlugin::sendResponse(NodeNum to) {
+    DEBUG_MSG("Sending posistion reply\n");
+    sendOurPosition(to, false);
+}
