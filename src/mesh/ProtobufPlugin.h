@@ -1,3 +1,4 @@
+#pragma once
 #include "MeshPlugin.h"
 #include "Router.h"
 
@@ -47,6 +48,7 @@ template <class T> class ProtobufPlugin : private MeshPlugin
 
         p->decoded.data.payload.size =
             pb_encode_to_bytes(p->decoded.data.payload.bytes, sizeof(p->decoded.data.payload.bytes), fields, &payload);
+        // DEBUG_MSG("did encode\n");
         return p;
     }
 
@@ -61,7 +63,7 @@ template <class T> class ProtobufPlugin : private MeshPlugin
         // it would be better to update even if the message was destined to others.
 
         auto &p = mp.decoded.data;
-        DEBUG_MSG("Received %s from=0x%0x, id=%d, msg=%.*s\n", name, mp.from, mp.id, p.payload.size, p.payload.bytes);
+        DEBUG_MSG("Received %s from=0x%0x, id=%d, payloadlen=%d\n", name, mp.from, mp.id, p.payload.size);
 
         T scratch;
         if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, fields, &scratch))

@@ -1,3 +1,4 @@
+#pragma once
 #include "MeshPlugin.h"
 #include "Observer.h"
 
