@@ -5,12 +5,12 @@ You probably don't care about this section - skip to the next one.
 For app cleanup:
 
 * have python tool check max packet size before sending to device
-* require a recent python api to talk to these new device loads
+* DONE require a recent python api to talk to these new device loads
+* DONE require a recent android app to talk to these new device loads
 * DONE fix handleIncomingPosition
 * move want_replies handling into plugins
 * on android for received positions handle either old or new positions / user messages
 * on android side send old or new positions as needed / user messages
-* on python side print error messages if old position/user messages seen
 * on python side handle new position/user messages
 * DONE fix position sending to use new plugin
 * DONE Add SinglePortNumPlugin - as the new most useful baseclass

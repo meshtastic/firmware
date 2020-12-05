@@ -184,7 +184,7 @@ void NodeDB::installDefaultDeviceState()
     // default to no GPS, until one has been found by probing
     myNodeInfo.has_gps = false;
     myNodeInfo.message_timeout_msec = FLOOD_EXPIRE_TIME;
-    myNodeInfo.min_app_version = 172;
+    myNodeInfo.min_app_version = 20120; // format is Mmmss (where M is 1+the numeric major number. i.e. 20120 means 1.1.20
     generatePacketId(); // FIXME - ugly way to init current_packet_id;
 
     // Init our blank owner info to reasonable defaults
