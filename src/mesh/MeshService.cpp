@@ -284,10 +284,10 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
 int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
 {
     // Update our local node info with our position (even if we don't decide to update anyone else)
-    MeshPacket *p = router->allocForSending();
-    p->decoded.which_payload = SubPacket_position_tag;
 
-    Position &pos = p->decoded.position;
+    Position pos;
+
+    memset(&pos, 0, sizeof(pos));
 
     if (gps->hasLock()) {
         if (gps->altitude != 0)
@@ -304,20 +304,17 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
 
     // DEBUG_MSG("got gps notify time=%u, lat=%d, bat=%d\n", pos.latitude_i, pos.time, pos.battery_level);
 
+    // Update our current position in the local DB
+    nodeDB.updatePosition(nodeDB.getNodeNum(), pos);
+
     // We limit our GPS broadcasts to a max rate
     static uint32_t lastGpsSend;
     uint32_t now = millis();
     if (lastGpsSend == 0 || now - lastGpsSend > getPref_position_broadcast_secs() * 1000) {
         lastGpsSend = now;
-        DEBUG_MSG("Sending position to mesh\n");
-
-        sendToMesh(p);
-    } else {
-        // We don't need to send this packet to anyone else, but it still serves as a nice uniform way to update our local state
-        nodeDB.updateFrom(*p);
-
-        releaseToPool(p);
-    }
+        DEBUG_MSG("Sending position to mesh (not requesting replies)\n");
+        positionPlugin.sendOurPosition();
+    } 
 
     return 0;
 }
