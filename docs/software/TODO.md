@@ -13,7 +13,7 @@ For app cleanup:
 * on python side print error messages if old position/user messages seen
 * on python side handle new position/user messages
 * DONE fix position sending to use new plugin
-* Add SinglePortNumPlugin - as the new most useful baseclass
+* DONE Add SinglePortNumPlugin - as the new most useful baseclass
 * DONE move positions into regular data packets (use new app framework)
 * DONE move user info into regular data packets (use new app framework)
 * test that positions, text messages and user info still work

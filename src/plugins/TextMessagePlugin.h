@@ -1,23 +1,19 @@
 #pragma once
-#include "MeshPlugin.h"
+#include "SinglePortPlugin.h"
 #include "Observer.h"
 
 /**
  * Text message handling for meshtastic - draws on the OLED display the most recent received message
  */
-class TextMessagePlugin : public MeshPlugin, public Observable<const MeshPacket *>
+class TextMessagePlugin : public SinglePortPlugin, public Observable<const MeshPacket *>
 {
   public:
     /** Constructor
      * name is for debugging output
      */
-    TextMessagePlugin() : MeshPlugin("text") {}
+    TextMessagePlugin() : SinglePortPlugin("text", PortNum_TEXT_MESSAGE_APP) {}
 
   protected:
-    /**
-     * @return true if you want to receive the specified portnum
-     */
-    virtual bool wantPortnum(PortNum p) { return p == PortNum_TEXT_MESSAGE_APP; }
 
     /** Called to handle a particular incoming message
 
