@@ -17,7 +17,7 @@ extern "C" {
 typedef enum _PortNum {
     PortNum_UNKNOWN_APP = 0,
     PortNum_TEXT_MESSAGE_APP = 1,
-    PortNum_GPIO_APP = 2,
+    PortNum_REMOTE_HARDWARE_APP = 2,
     PortNum_POSITION_APP = 3,
     PortNum_NODEINFO_APP = 4,
     PortNum_PRIVATE_APP = 256,
