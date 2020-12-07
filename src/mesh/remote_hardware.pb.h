@@ -14,32 +14,32 @@ extern "C" {
 #endif
 
 /* Enum definitions */
-typedef enum _HardwareMessage_MessageType {
-    HardwareMessage_MessageType_UNSET = 0,
-    HardwareMessage_MessageType_WRITE_GPIOS = 1,
-    HardwareMessage_MessageType_WATCH_GPIOS = 2,
-    HardwareMessage_MessageType_GPIOS_CHANGED = 3,
-    HardwareMessage_MessageType_READ_GPIOS = 4,
-    HardwareMessage_MessageType_READ_GPIOS_REPLY = 5
-} HardwareMessage_MessageType;
+typedef enum _HardwareMessage_Type {
+    HardwareMessage_Type_UNSET = 0,
+    HardwareMessage_Type_WRITE_GPIOS = 1,
+    HardwareMessage_Type_WATCH_GPIOS = 2,
+    HardwareMessage_Type_GPIOS_CHANGED = 3,
+    HardwareMessage_Type_READ_GPIOS = 4,
+    HardwareMessage_Type_READ_GPIOS_REPLY = 5
+} HardwareMessage_Type;
 
 /* Struct definitions */
 typedef struct _HardwareMessage {
-    HardwareMessage_MessageType typ;
+    HardwareMessage_Type typ;
     uint64_t gpio_mask;
     uint64_t gpio_value;
 } HardwareMessage;
 
 
 /* Helper constants for enums */
-#define _HardwareMessage_MessageType_MIN HardwareMessage_MessageType_UNSET
-#define _HardwareMessage_MessageType_MAX HardwareMessage_MessageType_READ_GPIOS_REPLY
-#define _HardwareMessage_MessageType_ARRAYSIZE ((HardwareMessage_MessageType)(HardwareMessage_MessageType_READ_GPIOS_REPLY+1))
+#define _HardwareMessage_Type_MIN HardwareMessage_Type_UNSET
+#define _HardwareMessage_Type_MAX HardwareMessage_Type_READ_GPIOS_REPLY
+#define _HardwareMessage_Type_ARRAYSIZE ((HardwareMessage_Type)(HardwareMessage_Type_READ_GPIOS_REPLY+1))
 
 
 /* Initializer values for message structs */
-#define HardwareMessage_init_default             {_HardwareMessage_MessageType_MIN, 0, 0}
-#define HardwareMessage_init_zero                {_HardwareMessage_MessageType_MIN, 0, 0}
+#define HardwareMessage_init_default             {_HardwareMessage_Type_MIN, 0, 0}
+#define HardwareMessage_init_zero                {_HardwareMessage_Type_MIN, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define HardwareMessage_typ_tag                  1
