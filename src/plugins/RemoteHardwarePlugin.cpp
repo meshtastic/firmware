@@ -13,6 +13,7 @@ RemoteHardwarePlugin remoteHardwarePlugin;
 // A macro for clearing a struct, FIXME, move elsewhere
 #define CLEAR_STRUCT(r) memset(&r, 0, sizeof(r))
 
+
 bool RemoteHardwarePlugin::handleReceivedProtobuf(const MeshPacket &req, const HardwareMessage &p)
 {
     switch (p.typ) {
@@ -43,8 +44,7 @@ bool RemoteHardwarePlugin::handleReceivedProtobuf(const MeshPacket &req, const H
         }
 
         // Send the reply
-        HardwareMessage reply;
-        CLEAR_STRUCT(reply);
+        HardwareMessage reply = HardwareMessage_init_default;
         reply.typ = HardwareMessage_Type_READ_GPIOS_REPLY;
         reply.gpio_value = res;
         MeshPacket *p = allocDataProtobuf(reply);

@@ -194,9 +194,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
 {
     // Update our local node info with our position (even if we don't decide to update anyone else)
 
-    Position pos;
-
-    memset(&pos, 0, sizeof(pos));
+    Position pos = Position_init_default;
 
     if (gps->hasLock()) {
         if (gps->altitude != 0)
