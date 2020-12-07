@@ -26,10 +26,8 @@ class PositionPlugin : public ProtobufPlugin<Position>
     virtual bool handleReceivedProtobuf(const MeshPacket &mp, const Position &p);
 
     /** Messages can be received that have the want_response bit set.  If set, this callback will be invoked
-     * so that subclasses can (optionally) send a response back to the original sender.  Implementing this method
-     * is optional
-     */
-    virtual void sendResponse(NodeNum to);
+     * so that subclasses can (optionally) send a response back to the original sender.  */
+    virtual MeshPacket *allocReply();
 };
 
 extern PositionPlugin positionPlugin;

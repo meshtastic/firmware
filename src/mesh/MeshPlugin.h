@@ -49,8 +49,19 @@ class MeshPlugin
     virtual bool handleReceived(const MeshPacket &mp) { return false; }
 
     /** Messages can be received that have the want_response bit set.  If set, this callback will be invoked
-     * so that subclasses can (optionally) send a response back to the original sender.  Implementing this method
-     * is optional
+     * so that subclasses can (optionally) send a response back to the original sender.  */
+    virtual MeshPacket *allocReply() { return NULL; }
+
+  private:
+
+    /** Messages can be received that have the want_response bit set.  If set, this callback will be invoked
+     * so that subclasses can (optionally) send a response back to the original sender.  This method calls allocReply()
+     * to generate the reply message, and if !NULL that message will be delivered to whoever sent req
      */
-    virtual void sendResponse(NodeNum to) {}
+    void sendResponse(const MeshPacket &req);
 };
+
+/** set the destination and packet parameters of packet p intended as a reply to a particular "to" packet 
+ * This ensures that if the request packet was sent reliably, the reply is sent that way as well.
+*/
+void setReplyTo(MeshPacket *p, const MeshPacket &to);

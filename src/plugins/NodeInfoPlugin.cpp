@@ -28,22 +28,17 @@ bool NodeInfoPlugin::handleReceivedProtobuf(const MeshPacket &mp, const User &p)
 
 void NodeInfoPlugin::sendOurNodeInfo(NodeNum dest, bool wantReplies)
 {
-    User &u = owner;
-
-    DEBUG_MSG("sending owner %s/%s/%s\n", u.id, u.long_name, u.short_name);
-    MeshPacket *p = allocForSending(u);
+    MeshPacket *p = allocReply();
     p->to = dest;
     p->decoded.want_response = wantReplies;
 
     service.sendToMesh(p);
 }
 
+MeshPacket *NodeInfoPlugin::allocReply()
+{
+    User &u = owner;
 
-/** Messages can be received that have the want_response bit set.  If set, this callback will be invoked
- * so that subclasses can (optionally) send a response back to the original sender.  Implementing this method
- * is optional
- */
-void NodeInfoPlugin::sendResponse(NodeNum to) {
-    DEBUG_MSG("Sending user reply\n");
-    sendOurNodeInfo(to, false);
+    DEBUG_MSG("sending owner %s/%s/%s\n", u.id, u.long_name, u.short_name);
+    return allocDataProtobuf(u);
 }

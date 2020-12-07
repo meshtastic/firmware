@@ -28,7 +28,7 @@ bool PositionPlugin::handleReceivedProtobuf(const MeshPacket &mp, const Position
     return false; // Let others look at this message also if they want
 }
 
-void PositionPlugin::sendOurPosition(NodeNum dest, bool wantReplies)
+MeshPacket *PositionPlugin::allocReply()
 {
     NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
     assert(node);
@@ -38,18 +38,15 @@ void PositionPlugin::sendOurPosition(NodeNum dest, bool wantReplies)
     auto position = node->position;
     position.time = getValidTime(RTCQualityGPS); // This nodedb timestamp might be stale, so update it if our clock is valid.
 
-    MeshPacket *p = allocForSending(position);
+    return allocDataProtobuf(position);
+}
+
+void PositionPlugin::sendOurPosition(NodeNum dest, bool wantReplies)
+{
+    MeshPacket *p = allocReply();
     p->to = dest;
     p->decoded.want_response = wantReplies;
 
     service.sendToMesh(p);
 }
 
-/** Messages can be received that have the want_response bit set.  If set, this callback will be invoked
- * so that subclasses can (optionally) send a response back to the original sender.  Implementing this method
- * is optional
- */
-void PositionPlugin::sendResponse(NodeNum to) {
-    DEBUG_MSG("Sending posistion reply\n");
-    sendOurPosition(to, false);
-}

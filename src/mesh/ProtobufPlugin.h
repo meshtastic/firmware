@@ -1,6 +1,5 @@
 #pragma once
 #include "SinglePortPlugin.h"
-#include "Router.h"
 
 /**
  * A base class for mesh plugins that assume that they are sending/receiving one particular protobuf based
@@ -34,12 +33,10 @@ template <class T> class ProtobufPlugin : private SinglePortPlugin
      * You can then send this packet (after customizing any of the payload fields you might need) with
      * service.sendToMesh()
      */
-    MeshPacket *allocForSending(const T &payload)
+    MeshPacket *allocDataProtobuf(const T &payload)
     {
         // Update our local node info with our position (even if we don't decide to update anyone else)
-        MeshPacket *p = router->allocForSending();
-        p->decoded.which_payload = SubPacket_data_tag;
-        p->decoded.data.portnum = ourPortNum;
+        MeshPacket *p = allocDataPacket();
 
         p->decoded.data.payload.size =
             pb_encode_to_bytes(p->decoded.data.payload.bytes, sizeof(p->decoded.data.payload.bytes), fields, &payload);

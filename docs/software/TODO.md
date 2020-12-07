@@ -13,7 +13,7 @@ For app cleanup:
 * on android for received positions handle either old or new positions / user messages
 * on android side send old or new positions as needed / user messages
 * test python side handle new position/user messages
-* make a gpio example
+* make a gpio example. --gpiowrb 5, --gpiord 0x444, --gpiowatch 0x3ff
 * DONE fix position sending to use new plugin
 * DONE Add SinglePortNumPlugin - as the new most useful baseclass
 * DONE move positions into regular data packets (use new app framework)
