@@ -10,16 +10,13 @@ RemoteHardwarePlugin remoteHardwarePlugin;
 
 #define NUM_GPIOS 64
 
-// A macro for clearing a struct, FIXME, move elsewhere
-#define CLEAR_STRUCT(r) memset(&r, 0, sizeof(r))
-
 
 bool RemoteHardwarePlugin::handleReceivedProtobuf(const MeshPacket &req, const HardwareMessage &p)
 {
     switch (p.typ) {
     case HardwareMessage_Type_WRITE_GPIOS:
         // Print notification to LCD screen
-        screen->print("Write GPIOs");
+        screen->print("Write GPIOs\n");
 
         for (uint8_t i = 0; i < NUM_GPIOS; i++) {
             uint64_t mask = 1 << i;
@@ -29,9 +26,10 @@ bool RemoteHardwarePlugin::handleReceivedProtobuf(const MeshPacket &req, const H
             }
         }
         break;
+        
     case HardwareMessage_Type_READ_GPIOS: {
         // Print notification to LCD screen
-        screen->print("Read GPIOs");
+        screen->print("Read GPIOs\n");
 
         uint64_t res = 0;
         for (uint8_t i = 0; i < NUM_GPIOS; i++) {
@@ -52,6 +50,11 @@ bool RemoteHardwarePlugin::handleReceivedProtobuf(const MeshPacket &req, const H
         service.sendToMesh(p);
         break;
     }
+
+    case HardwareMessage_Type_READ_GPIOS_REPLY:
+    case HardwareMessage_Type_GPIOS_CHANGED:
+        break; // Ignore - we might see our own replies
+
     default:
         DEBUG_MSG("Hardware operation %d not yet implemented! FIXME\n", p.typ);
         break;

@@ -4,25 +4,32 @@ You probably don't care about this section - skip to the next one.
 
 For app cleanup:
 
+* do fixed position bug
+* DONE update android code: https://developer.android.com/topic/libraries/view-binding/migration
+* make gpio watch work, use thread and setup
+* make hello world example service
+* make python ping command
+* make python gpio read a bit cleaner
 * DONE have python tool check max packet size before sending to device
-* if request was sent reliably, send reply reliably
+* DONE if request was sent reliably, send reply reliably
 * DONE require a recent python api to talk to these new device loads
 * DONE require a recent android app to talk to these new device loads
 * DONE fix handleIncomingPosition
 * DONE move want_replies handling into plugins
-* on android for received positions handle either old or new positions / user messages
+* DONE on android for received positions handle either old or new positions / user messages
 * on android side send old or new positions as needed / user messages
 * test python side handle new position/user messages
-* make a gpio example. --gpiowrb 5, --gpiord 0x444, --gpiowatch 0x3ff
+* DONE make a gpio example. --gpiowrb 4 1, --gpiord 0x444, --gpiowatch 0x3ff
 * DONE fix position sending to use new plugin
 * DONE Add SinglePortNumPlugin - as the new most useful baseclass
 * DONE move positions into regular data packets (use new app framework)
 * DONE move user info into regular data packets (use new app framework)
 * test that positions, text messages and user info still work
 * test that position, text messages and user info work properly with new android app and old device code
-* call the plugin setup functions
 * fix the RTC drift bug
 * move ping functionality into device, reply with rxsnr info
+* use channels for gpio security https://github.com/meshtastic/Meshtastic-device/issues/104
+* implement GPIO watch
 
 For high speed/lots of devices/short range tasks:
 
