@@ -75,17 +75,12 @@ class MeshService
     /// sends our owner
     void sendNetworkPing(NodeNum dest, bool wantReplies = false);
 
-    /// Send our owner info to a particular node
-    void sendOurOwner(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
-
-  private:
-    /// Broadcasts our last known position
-    void sendOurPosition(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
-
     /// Send a packet into the mesh - note p must have been allocated from packetPool.  We will return it to that pool after
     /// sending. This is the ONLY function you should use for sending messages into the mesh, because it also updates the nodedb
     /// cache
     void sendToMesh(MeshPacket *p);
+
+  private:
 
     /// Called when our gps position has changed - updates nodedb and sends Location message out into the mesh
     /// returns 0 to allow futher processing
@@ -94,12 +89,6 @@ class MeshService
     /// Handle a packet that just arrived from the radio.  This method does _not_ free the provided packet.  If it needs
     /// to keep the packet around it makes a copy
     int handleFromRadio(const MeshPacket *p);
-
-    /// handle a user packet that just arrived on the radio, return NULL if we should not process this packet at all
-    const MeshPacket *handleFromRadioUser(const MeshPacket *mp);
-
-    /// look at inbound packets and if they contain a position with time, possibly set our clock
-    void handleIncomingPosition(const MeshPacket *mp);
 };
 
 extern MeshService service;
