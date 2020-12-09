@@ -8,7 +8,7 @@ See [this site](https://www.rfwireless-world.com/Tutorials/LoRa-channels-list.ht
 
 ## LoRaWAN Europe Frequency Band
 
-The maximum power allowed is +14dBM.
+The maximum power allowed is +14dBm ERP (Effective Radiated Power, see [this site](https://en.wikipedia.org/wiki/Effective_radiated_power) for more information).
 
 ### 433 MHz
 
