@@ -134,6 +134,14 @@ bool Power::setup()
     return found;
 }
 
+void Power::shutdown()
+{
+#ifdef TBEAM_V10
+    DEBUG_MSG("Shutting down\n");
+    axp.shutdown();
+#endif
+}
+
 /// Reads power status to powerStatus singleton.
 //
 // TODO(girts): move this and other axp stuff to power.h/power.cpp.

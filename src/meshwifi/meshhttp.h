@@ -22,6 +22,7 @@ void handleRoot();
 void handleScriptsScriptJS();
 void handleJSONChatHistoryDummy();
 
+void replaceAll(std::string& str, const std::string& from, const std::string& to);
 
 class HttpAPI : public PhoneAPI
 {

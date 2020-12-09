@@ -254,7 +254,7 @@ void RadioLibInterface::handleReceiveInterrupt()
         }
     }
 }
-
+ 
 /** start an immediate transmit */
 void RadioLibInterface::startSend(MeshPacket *txp)
 {

@@ -50,9 +50,11 @@ void deinitWifi()
         saving on the 2.4g transceiver.
     */
 
-    WiFi.mode(WIFI_MODE_NULL);
-    DEBUG_MSG("WiFi Turned Off\n");
-    // WiFi.printDiag(Serial);
+    if (isWifiAvailable()) {
+        WiFi.mode(WIFI_MODE_NULL);
+        DEBUG_MSG("WiFi Turned Off\n");
+        // WiFi.printDiag(Serial);
+    }
 }
 
 // Startup WiFi
@@ -118,7 +120,7 @@ void initWifi()
             }
         }
 
-        if (!MDNS.begin( "Meshtastic" )) {
+        if (!MDNS.begin("Meshtastic")) {
             DEBUG_MSG("Error setting up MDNS responder!\n");
 
             while (1) {
