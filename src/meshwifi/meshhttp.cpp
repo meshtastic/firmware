@@ -5,6 +5,10 @@
 #include "meshhttpStatic.h"
 #include "meshwifi/meshwifi.h"
 #include "sleep.h"
+#include <HTTPBodyParser.hpp>
+#include <HTTPMultipartBodyParser.hpp>
+#include <HTTPURLEncodedBodyParser.hpp>
+#include <SPIFFS.h>
 #include <WebServer.h>
 #include <WiFi.h>
 
@@ -49,11 +53,11 @@ void handleStyleCSS(HTTPRequest *req, HTTPResponse *res);
 void handleHotspot(HTTPRequest *req, HTTPResponse *res);
 void handleFavicon(HTTPRequest *req, HTTPResponse *res);
 void handleRoot(HTTPRequest *req, HTTPResponse *res);
-void handleBasicHTML(HTTPRequest *req, HTTPResponse *res);
-void handleBasicJS(HTTPRequest *req, HTTPResponse *res);
-void handleScriptsScriptJS(HTTPRequest *req, HTTPResponse *res);
+void handleStaticBrowse(HTTPRequest *req, HTTPResponse *res);
+void handleStaticPost(HTTPRequest *req, HTTPResponse *res);
 void handleStatic(HTTPRequest *req, HTTPResponse *res);
 void handle404(HTTPRequest *req, HTTPResponse *res);
+void handleFormUpload(HTTPRequest *req, HTTPResponse *res);
 
 void middlewareSpeedUp240(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
 void middlewareSpeedUp160(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
@@ -63,6 +67,13 @@ bool isWebServerReady = 0;
 bool isCertReady = 0;
 
 uint32_t timeSpeedUp = 0;
+
+// We need to specify some content-type mapping, so the resources get delivered with the
+// right content type and are displayed correctly in the browser
+char contentTypes[][2][32] = {{".txt", "text/plain"}, {".html", "text/html"},        {".js", "text/javascript"},
+                              {".png", "image/png"},  {".jpg", "image/jpg"},         {".gz", "application/gzip"},
+                              {".gif", "image/gif"},  {".json", "application/json"}, {".css", "text/css"},
+                              {"", ""}};
 
 void handleWebResponse()
 {
@@ -79,7 +90,7 @@ void handleWebResponse()
         insecureServer->loop();
     }
 
-    /* 
+    /*
         Slow down the CPU if we have not received a request within the last few
         seconds.
     */
@@ -219,11 +230,11 @@ void initWebServer()
     ResourceNode *nodeHotspot = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
     ResourceNode *nodeFavicon = new ResourceNode("/favicon.ico", "GET", &handleFavicon);
     ResourceNode *nodeRoot = new ResourceNode("/", "GET", &handleRoot);
-    ResourceNode *nodeScriptScriptsJS = new ResourceNode("/scripts/script.js", "GET", &handleScriptsScriptJS);
-    ResourceNode *nodeBasicHTML = new ResourceNode("/basic.html", "GET", &handleBasicHTML);
-    ResourceNode *nodeBasicJS = new ResourceNode("/basic.js", "GET", &handleBasicJS);
+    ResourceNode *nodeStaticBrowse = new ResourceNode("/static", "GET", &handleStaticBrowse);
+    ResourceNode *nodeStaticPOST = new ResourceNode("/static", "POST", &handleStaticPost);
     ResourceNode *nodeStatic = new ResourceNode("/static/*", "GET", &handleStatic);
     ResourceNode *node404 = new ResourceNode("", "GET", &handle404);
+    ResourceNode *nodeFormUpload = new ResourceNode("/upload", "POST", &handleFormUpload);
 
     // Secure nodes
     secureServer->registerNode(nodeAPIv1ToRadioOptions);
@@ -232,11 +243,11 @@ void initWebServer()
     secureServer->registerNode(nodeHotspot);
     secureServer->registerNode(nodeFavicon);
     secureServer->registerNode(nodeRoot);
-    secureServer->registerNode(nodeScriptScriptsJS);
-    secureServer->registerNode(nodeBasicHTML);
-    secureServer->registerNode(nodeBasicJS);
+    secureServer->registerNode(nodeStaticBrowse);
+    secureServer->registerNode(nodeStaticPOST);
     secureServer->registerNode(nodeStatic);
     secureServer->setDefaultNode(node404);
+    secureServer->setDefaultNode(nodeFormUpload);
 
     secureServer->addMiddleware(&middlewareSpeedUp240);
 
@@ -247,11 +258,11 @@ void initWebServer()
     insecureServer->registerNode(nodeHotspot);
     insecureServer->registerNode(nodeFavicon);
     insecureServer->registerNode(nodeRoot);
-    insecureServer->registerNode(nodeScriptScriptsJS);
-    insecureServer->registerNode(nodeBasicHTML);
-    insecureServer->registerNode(nodeBasicJS);
+    insecureServer->registerNode(nodeStaticBrowse);
+    insecureServer->registerNode(nodeStaticPOST);
     insecureServer->registerNode(nodeStatic);
     insecureServer->setDefaultNode(node404);
+    insecureServer->setDefaultNode(nodeFormUpload);
 
     insecureServer->addMiddleware(&middlewareSpeedUp160);
 
@@ -289,40 +300,401 @@ void middlewareSpeedUp160(HTTPRequest *req, HTTPResponse *res, std::function<voi
     timeSpeedUp = millis();
 }
 
+void handleStaticPost(HTTPRequest *req, HTTPResponse *res)
+{
+    // Assume POST request. Contains submitted data.
+    res->println("<html><head><title>File Edited</title><meta http-equiv=\"refresh\" content=\"3;url=/static\" "
+                 "/><head><body><h1>File Edited</h1>");
+
+    // The form is submitted with the x-www-form-urlencoded content type, so we need the
+    // HTTPURLEncodedBodyParser to read the fields.
+    // Note that the content of the file's content comes from a <textarea>, so we
+    // can use the URL encoding here, since no file upload from an <input type="file"
+    // is involved.
+    HTTPURLEncodedBodyParser parser(req);
+
+    // The bodyparser will consume the request body. That means you can iterate over the
+    // fields only ones. For that reason, we need to create variables for all fields that
+    // we expect. So when parsing is done, you can process the field values from your
+    // temporary variables.
+    std::string filename;
+    bool savedFile = false;
+
+    // Iterate over the fields from the request body by calling nextField(). This function
+    // will update the field name and value of the body parsers. If the last field has been
+    // reached, it will return false and the while loop stops.
+    while (parser.nextField()) {
+        // Get the field name, so that we can decide what the value is for
+        std::string name = parser.getFieldName();
+
+        if (name == "filename") {
+            // Read the filename from the field's value, add the /public prefix and store it in
+            // the filename variable.
+            char buf[512];
+            size_t readLength = parser.read((byte *)buf, 512);
+            // filename = std::string("/public/") + std::string(buf, readLength);
+            filename = std::string(buf, readLength);
+
+        } else if (name == "content") {
+            // Browsers must return the fields in the order that they are placed in
+            // the HTML form, so if the broweser behaves correctly, this condition will
+            // never be true. We include it for safety reasons.
+            if (filename == "") {
+                res->println("<p>Error: form contained content before filename.</p>");
+                break;
+            }
+
+            // With parser.read() and parser.endOfField(), we can stream the field content
+            // into a buffer. That allows handling arbitrarily-sized field contents. Here,
+            // we use it and write the file contents directly to the SPIFFS:
+            size_t fieldLength = 0;
+            File file = SPIFFS.open(filename.c_str(), "w");
+            savedFile = true;
+            while (!parser.endOfField()) {
+                byte buf[512];
+                size_t readLength = parser.read(buf, 512);
+                file.write(buf, readLength);
+                fieldLength += readLength;
+            }
+            file.close();
+            res->printf("<p>Saved %d bytes to %s</p>", int(fieldLength), filename.c_str());
+
+        } else {
+            res->printf("<p>Unexpected field %s</p>", name.c_str());
+        }
+    }
+    if (!savedFile) {
+        res->println("<p>No file to save...</p>");
+    }
+    res->println("</body></html>");
+}
+
+void handleStaticBrowse(HTTPRequest *req, HTTPResponse *res)
+{
+    // Get access to the parameters
+    ResourceParameters *params = req->getParams();
+    std::string paramValDelete;
+    std::string paramValEdit;
+
+    // Set a default content type
+    res->setHeader("Content-Type", "text/html");
+
+    if (params->getQueryParameter("delete", paramValDelete)) {
+        std::string pathDelete = "/" + paramValDelete;
+        if (SPIFFS.remove(pathDelete.c_str())) {
+            Serial.println(pathDelete.c_str());
+            res->println("<html><head><meta http-equiv=\"refresh\" content=\"3;url=/static\" /><title>File "
+                         "deleted!</title></head><body><h1>File deleted!</h1>");
+            res->println("<meta http-equiv=\"refresh\" content=\"2;url=/static\" />\n");
+            res->println("</body></html>");
+
+            return;
+        } else {
+            Serial.println(pathDelete.c_str());
+            res->println("<html><head><meta http-equiv=\"refresh\" content=\"3;url=/static\" /><title>Error deleteing "
+                         "file!</title></head><body><h1>Error deleteing file!</h1>");
+            res->println("Error deleteing file!<br>");
+
+            return;
+        }
+    }
+
+    if (params->getQueryParameter("edit", paramValEdit)) {
+        std::string pathEdit = "/" + paramValEdit;
+        res->println("<html><head><title>Edit "
+                     "file</title></head><body><h1>Edit file - ");
+
+        res->println(pathEdit.c_str());
+
+        res->println("</h1>");
+        res->println("<form method=post action=/static enctype=application/x-www-form-urlencoded>");
+        res->printf("<input name=\"filename\" type=\"hidden\" value=\"%s\">", pathEdit.c_str());
+        res->print("<textarea id=id name=content rows=20 cols=80>");
+
+        // Try to open the file from SPIFFS
+        File file = SPIFFS.open(pathEdit.c_str());
+
+        if (file.available()) {
+            // Read the file from SPIFFS and write it to the HTTP response body
+            size_t length = 0;
+            do {
+                char buffer[256];
+                length = file.read((uint8_t *)buffer, 256);
+                std::string bufferString(buffer, length);
+
+                // Escape gt and lt
+                replaceAll(bufferString, "<", "&lt;");
+                replaceAll(bufferString, ">", "&gt;");
+
+                res->write((uint8_t *)bufferString.c_str(), bufferString.size());
+            } while (length > 0);
+        } else {
+            res->println("Error: File not found");
+        }
+
+        res->println("</textarea><br>");
+        res->println("<input type=submit value=Submit>");
+        res->println("</form>");
+        res->println("</body></html>");
+
+        return;
+    }
+
+    res->println("<h2>Upload new file</h2>");
+    res->println("<p><b>*** This interface is experimental ***</b></p>");
+    res->println("<p>This form allows you to upload files. Keep your filenames very short and files small. Big filenames and big "
+                 "files are a known problem.</p>");
+    res->println("<form method=\"POST\" action=\"/upload\" enctype=\"multipart/form-data\">");
+    res->println("file: <input type=\"file\" name=\"file\"><br>");
+    res->println("<input type=\"submit\" value=\"Upload\">");
+    res->println("</form>");
+
+    res->println("<h2>All Files</h2>");
+
+    File root = SPIFFS.open("/");
+    if (root.isDirectory()) {
+        res->println("<script type=\"text/javascript\">function confirm_delete() {return confirm('Are you sure?');}</script>");
+
+        res->println("<table>");
+        res->println("<tr>");
+        res->println("<td>File");
+        res->println("</td>");
+        res->println("<td>Size");
+        res->println("</td>");
+        res->println("<td colspan=2>Actions");
+        res->println("</td>");
+        res->println("</tr>");
+
+        File file = root.openNextFile();
+        while (file) {
+            String filePath = String(file.name());
+            if (filePath.indexOf("/static") == 0) {
+                res->println("<tr>");
+                res->println("<td>");
+
+                if (String(file.name()).substring(1).endsWith(".gz")) {
+                    String modifiedFile = String(file.name()).substring(1);
+                    modifiedFile.remove((modifiedFile.length() - 3), 3);
+                    res->print("<a href=\"" + modifiedFile + "\">" + String(file.name()).substring(1) + "</a>");
+                } else {
+                    res->print("<a href=\"" + String(file.name()).substring(1) + "\">" + String(file.name()).substring(1) +
+                               "</a>");
+                }
+                res->println("</td>");
+                res->println("<td>");
+                res->print(String(file.size()));
+                res->println("</td>");
+                res->println("<td>");
+                res->print("<a href=\"/static?delete=" + String(file.name()).substring(1) +
+                           "\" onclick=\"return confirm_delete()\">Delete</a> ");
+                res->println("</td>");
+                res->println("<td>");
+                if (!String(file.name()).substring(1).endsWith(".gz")) {
+                    res->print("<a href=\"/static?edit=" + String(file.name()).substring(1) + "\">Edit</a>");
+                }
+                res->println("</td>");
+                res->println("</tr>");
+            }
+
+            file = root.openNextFile();
+        }
+        res->println("</table>");
+
+        res->print("<br>");
+        // res->print("Total : " + String(SPIFFS.totalBytes()) + " Bytes<br>");
+        res->print("Used : " + String(SPIFFS.usedBytes()) + " Bytes<br>");
+        res->print("Free : " + String(SPIFFS.totalBytes() - SPIFFS.usedBytes()) + " Bytes<br>");
+    }
+}
+
 void handleStatic(HTTPRequest *req, HTTPResponse *res)
 {
     // Get access to the parameters
     ResourceParameters *params = req->getParams();
 
-    // Set a default content type
-    res->setHeader("Content-Type", "text/plain");
 
     std::string parameter1;
     // Print the first parameter value
     if (params->getPathParameter(0, parameter1)) {
-        if (parameter1 == "meshtastic.js") {
-            res->setHeader("Content-Encoding", "gzip");
-            res->setHeader("Content-Type", "application/json");
-            res->write(STATIC_MESHTASTIC_JS_DATA, STATIC_MESHTASTIC_JS_LENGTH);
-            return;
 
-        } else if (parameter1 == "style.css") {
-            res->setHeader("Content-Encoding", "gzip");
-            res->setHeader("Content-Type", "text/css");
-            res->write(STATIC_STYLE_CSS_DATA, STATIC_STYLE_CSS_LENGTH);
-            return;
+        std::string filename = "/static/" + parameter1;
+        std::string filenameGzip = "/static/" + parameter1 + ".gz";
 
-        } else {
-            res->print("Parameter 1: ");
-            res->printStd(parameter1);
-
+        if (!SPIFFS.exists(filename.c_str()) && !SPIFFS.exists(filenameGzip.c_str())) {
+            // Send "404 Not Found" as response, as the file doesn't seem to exist
+            res->setStatusCode(404);
+            res->setStatusText("Not found");
+            res->println("404 Not Found");
+            res->printf("<p>File not found: %s</p>\n", filename.c_str());
             return;
         }
+
+        // Try to open the file from SPIFFS
+        File file;
+
+        if (SPIFFS.exists(filename.c_str())) {
+            file = SPIFFS.open(filename.c_str());
+            if (!file.available()) {
+                DEBUG_MSG("File not available - %s\n", filename.c_str());
+            }
+
+        } else if (SPIFFS.exists(filenameGzip.c_str())) {
+            file = SPIFFS.open(filenameGzip.c_str());
+            res->setHeader("Content-Encoding", "gzip");
+            if (!file.available()) {
+                DEBUG_MSG("File not available\n");
+            }
+        }
+
+        res->setHeader("Content-Length", httpsserver::intToString(file.size()));
+
+        bool has_set_content_type = false;
+        // Content-Type is guessed using the definition of the contentTypes-table defined above
+        int cTypeIdx = 0;
+        do {
+            if (filename.rfind(contentTypes[cTypeIdx][0]) != std::string::npos) {
+                res->setHeader("Content-Type", contentTypes[cTypeIdx][1]);
+                has_set_content_type = true;
+                break;
+            }
+            cTypeIdx += 1;
+        } while (strlen(contentTypes[cTypeIdx][0]) > 0);
+
+        if(!has_set_content_type) {
+            // Set a default content type
+            res->setHeader("Content-Type", "application/octet-stream");
+        }
+
+        // Read the file from SPIFFS and write it to the HTTP response body
+        size_t length = 0;
+        do {
+            char buffer[256];
+            length = file.read((uint8_t *)buffer, 256);
+            std::string bufferString(buffer, length);
+            res->write((uint8_t *)bufferString.c_str(), bufferString.size());
+        } while (length > 0);
+
+        file.close();
+
+        return;
 
     } else {
         res->println("ERROR: This should not have happened...");
     }
 }
+
+void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
+{
+    // First, we need to check the encoding of the form that we have received.
+    // The browser will set the Content-Type request header, so we can use it for that purpose.
+    // Then we select the body parser based on the encoding.
+    // Actually we do this only for documentary purposes, we know the form is going
+    // to be multipart/form-data.
+    HTTPBodyParser *parser;
+    std::string contentType = req->getHeader("Content-Type");
+
+    // The content type may have additional properties after a semicolon, for exampel:
+    // Content-Type: text/html;charset=utf-8
+    // Content-Type: multipart/form-data;boundary=------s0m3w31rdch4r4c73rs
+    // As we're interested only in the actual mime _type_, we strip everything after the
+    // first semicolon, if one exists:
+    size_t semicolonPos = contentType.find(";");
+    if (semicolonPos != std::string::npos) {
+        contentType = contentType.substr(0, semicolonPos);
+    }
+
+    // Now, we can decide based on the content type:
+    if (contentType == "multipart/form-data") {
+        parser = new HTTPMultipartBodyParser(req);
+    } else {
+        Serial.printf("Unknown POST Content-Type: %s\n", contentType.c_str());
+        return;
+    }
+
+    res->println("<html><head><meta http-equiv=\"refresh\" content=\"3;url=/static\" /><title>File "
+                 "Upload</title></head><body><h1>File Upload</h1>");
+
+    // We iterate over the fields. Any field with a filename is uploaded.
+    // Note that the BodyParser consumes the request body, meaning that you can iterate over the request's
+    // fields only a single time. The reason for this is that it allows you to handle large requests
+    // which would not fit into memory.
+    bool didwrite = false;
+
+    // parser->nextField() will move the parser to the next field in the request body (field meaning a
+    // form field, if you take the HTML perspective). After the last field has been processed, nextField()
+    // returns false and the while loop ends.
+    while (parser->nextField()) {
+        // For Multipart data, each field has three properties:
+        // The name ("name" value of the <input> tag)
+        // The filename (If it was a <input type="file">, this is the filename on the machine of the
+        //   user uploading it)
+        // The mime type (It is determined by the client. So do not trust this value and blindly start
+        //   parsing files only if the type matches)
+        std::string name = parser->getFieldName();
+        std::string filename = parser->getFieldFilename();
+        std::string mimeType = parser->getFieldMimeType();
+        // We log all three values, so that you can observe the upload on the serial monitor:
+        DEBUG_MSG("handleFormUpload: field name='%s', filename='%s', mimetype='%s'\n", name.c_str(), filename.c_str(),
+                  mimeType.c_str());
+
+        // Double check that it is what we expect
+        if (name != "file") {
+            DEBUG_MSG("Skipping unexpected field");
+            res->println("<p>No file found.</p>");
+            return;
+        }
+
+        // Double check that it is what we expect
+        if (filename == "") {
+            DEBUG_MSG("Skipping unexpected field");
+            res->println("<p>No file found.</p>");
+            return;
+        }
+
+        // SPIFFS limits the total lenth of a path + file to 31 characters.
+        if (filename.length() + 8 > 31) {
+            DEBUG_MSG("Uploaded filename too long!");
+            res->println("<p>Uploaded filename too long! Limit of 23 characters.</p>");
+            delete parser;
+            return;
+        }
+
+        // You should check file name validity and all that, but we skip that to make the core
+        // concepts of the body parser functionality easier to understand.
+        std::string pathname = "/static/" + filename;
+
+        // Create a new file on spiffs to stream the data into
+        File file = SPIFFS.open(pathname.c_str(), "w");
+        size_t fileLength = 0;
+        didwrite = true;
+
+        // With endOfField you can check whether the end of field has been reached or if there's
+        // still data pending. With multipart bodies, you cannot know the field size in advance.
+        while (!parser->endOfField()) {
+            byte buf[512];
+            size_t readLength = parser->read(buf, 512);
+            file.write(buf, readLength);
+            fileLength += readLength;
+
+            // Abort the transfer if there is less than 50k space left on the filesystem.
+            if (SPIFFS.totalBytes() - SPIFFS.usedBytes() < 51200) {
+                file.close();
+                res->println("<p>Write aborted! File is won't fit!</p>");
+
+                delete parser;
+                return;
+            }
+        }
+        file.close();
+        res->printf("<p>Saved %d bytes to %s</p>", (int)fileLength, pathname.c_str());
+    }
+    if (!didwrite) {
+        res->println("<p>Did not write any file</p>");
+    }
+    res->println("</body></html>");
+    delete parser;
+}
+
 void handle404(HTTPRequest *req, HTTPResponse *res)
 {
 
@@ -397,15 +769,22 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
     uint32_t len = 1;
 
     if (params->getQueryParameter("all", valueAll)) {
+
+        // If all is ture, return all the buffers we have available
+        //   to us at this point in time.
         if (valueAll == "true") {
             while (len) {
                 len = webAPI.getFromRadio(txBuf);
                 res->write(txBuf, len);
             }
+
+            // Otherwise, just return one protobuf
         } else {
             len = webAPI.getFromRadio(txBuf);
             res->write(txBuf, len);
         }
+
+        // the param "all" was not spcified. Return just one protobuf
     } else {
         len = webAPI.getFromRadio(txBuf);
         res->write(txBuf, len);
@@ -458,248 +837,56 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
 */
 void handleRoot(HTTPRequest *req, HTTPResponse *res)
 {
-
-    String out = "";
-    out +=
-        "<!DOCTYPE html>\n"
-        "<html lang=\"en\" >\n"
-        "<!-- Updated 20200923 - Change JSON input -->\n"
-        "<!-- Updated 20200924 - Replace FontAwesome with SVG -->\n"
-        "<head>\n"
-        "  <meta charset=\"UTF-8\">\n"
-        "  <title>Meshtastic - Chat</title>\n"
-        "  <link rel=\"stylesheet\" href=\"static/style.css\">\n"
-        "\n"
-        "</head>\n"
-        "<body>\n"
-        "<center><h1>This area is under development. Please don't file bugs.</h1></center><!-- Add SVG for Symbols -->\n"
-        "<svg aria-hidden=\"true\" style=\"position: absolute; width: 0; height: 0; overflow: hidden;\" version=\"1.1\" "
-        "xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n"
-        "<defs>\n"
-        "<symbol id=\"icon-map-marker\" viewBox=\"0 0 16 28\">\n"
-        "<path d=\"M12 10c0-2.203-1.797-4-4-4s-4 1.797-4 4 1.797 4 4 4 4-1.797 4-4zM16 10c0 0.953-0.109 1.937-0.516 2.797l-5.688 "
-        "12.094c-0.328 0.688-1.047 1.109-1.797 1.109s-1.469-0.422-1.781-1.109l-5.703-12.094c-0.406-0.859-0.516-1.844-0.516-2.797 "
-        "0-4.422 3.578-8 8-8s8 3.578 8 8z\"></path>\n"
-        "</symbol>\n"
-        "<symbol id=\"icon-circle\" viewBox=\"0 0 24 28\">\n"
-        "<path d=\"M24 14c0 6.625-5.375 12-12 12s-12-5.375-12-12 5.375-12 12-12 12 5.375 12 12z\"></path>\n"
-        "</symbol>\n"
-        "</defs>\n"
-        "</svg>\n"
-        "<div class=\"grid\">\n"
-        "\t<div class=\"top\">\n"
-        "\t\t<div class=\"top-text\">Meshtastic - Chat</div>\n"
-        "\t</div>\n"
-        "\n"
-        "\t<div class=\"side clearfix\">\n"
-        "    <div class=\"channel-list\" id=\"channel-list\">\n"
-        "\t  <div class=\"side-header\">\n"
-        "\t\t<div class=\"side-text\">Users</div>\n"
-        "\t  </div>\n"
-        "      <ul class=\"list\" id='userlist-id'>\n"
-        "      </ul>\n"
-        "    </div>\n"
-        "    </div>\n"
-        "    <div class=\"content\">\n"
-        "      <div class=\"content-header clearfix\">\n"
-        "<!--      <div class=\"content-about\"> -->\n"
-        "          <div class=\"content-from\">\n"
-        "\t\t      <span class=\"content-from-highlight\" id=\"content-from-id\">All Users</span>\n"
-        "\t\t  </div>\n"
-        "<!--      </div> -->\n"
-        "      </div> <!-- end content-header -->\n"
-        "      \n"
-        "      <div class=\"content-history\" id='chat-div-id'>\n"
-        "        <ul id='chat-history-id'>\n"
-        "\t\t</ul>\n"
-        "        \n"
-        "      </div> <!-- end content-history -->\n"
-        "      \n"
-        "      <div class=\"content-message clearfix\">\n"
-        "        <textarea name=\"message-to-send\" id=\"message-to-send\" placeholder =\"Type your message\" "
-        "rows=\"3\"></textarea>\n"
-        "                \n"
-        "       \n"
-        "        <button>Send</button>\n"
-        "\n"
-        "      </div> <!-- end content-message -->\n"
-        "      \n"
-        "    </div> <!-- end content -->\n"
-        "    \n"
-        "  </div> <!-- end container -->\n"
-        "\n"
-        "<script  src=\"/scripts/script.js\"></script>\n"
-        "\n"
-        "</body>\n"
-        "</html>\n"
-        "";
-
-    // Status code is 200 OK by default.
-    // We want to deliver a simple HTML page, so we send a corresponding content type:
     res->setHeader("Content-Type", "text/html");
 
-    // The response implements the Print interface, so you can use it just like
-    // you would write to Serial etc.
-    res->print(out);
-}
+    randomSeed(millis());
 
-void handleScriptsScriptJS(HTTPRequest *req, HTTPResponse *res)
-{
-    String out = "";
-    out += "String.prototype.toHHMMSS = function () {\n"
-           "    var sec_num = parseInt(this, 10); // don't forget the second param\n"
-           "    var hours   = Math.floor(sec_num / 3600);\n"
-           "    var minutes = Math.floor((sec_num - (hours * 3600)) / 60);\n"
-           "    var seconds = sec_num - (hours * 3600) - (minutes * 60);\n"
-           "\n"
-           "    if (hours   < 10) {hours   = \"0\"+hours;}\n"
-           "    if (minutes < 10) {minutes = \"0\"+minutes;}\n"
-           "    if (seconds < 10) {seconds = \"0\"+seconds;}\n"
-           "//    return hours+':'+minutes+':'+seconds;\n"
-           "\treturn hours+'h'+minutes+'m';\n"
-           "}\n"
-           "String.prototype.padLeft = function (length, character) { \n"
-           "    return new Array(length - this.length + 1).join(character || ' ') + this; \n"
-           "};\n"
-           "\n"
-           "Date.prototype.toFormattedString = function () {\n"
-           "    return [String(this.getFullYear()).substr(2, 2),\n"
-           "\t\t\tString(this.getMonth()+1).padLeft(2, '0'),\n"
-           "            String(this.getDate()).padLeft(2, '0')].join(\"/\") + \" \" +\n"
-           "           [String(this.getHours()).padLeft(2, '0'),\n"
-           "            String(this.getMinutes()).padLeft(2, '0')].join(\":\");\n"
-           "};\n"
-           "\n"
-           "function getData(file) {\n"
-           "\tfetch(file)\n"
-           "\t.then(function (response) {\n"
-           "\t\treturn response.json();\n"
-           "\t})\n"
-           "\t.then(function (datafile) {\n"
-           "\t\tupdateData(datafile);\n"
-           "\t})\n"
-           "\t.catch(function (err) {\n"
-           "\t\tconsole.log('error: ' + err);\n"
-           "\t});\n"
-           "}\n"
-           "\t\n"
-           "function updateData(datafile) {\n"
-           "//  Update System Details\n"
-           "\tupdateSystem(datafile);\n"
-           "//\tUpdate Userlist and message count\n"
-           "\tupdateUsers(datafile);\n"
-           "//  Update Chat\n"
-           "\tupdateChat(datafile);\n"
-           "}\n"
-           "\n"
-           "function updateSystem(datafile) {\n"
-           "//  Update System Info \n"
-           "\tvar sysContainer = document.getElementById(\"content-from-id\");\n"
-           "\tvar newHTML = datafile.data.system.channel;\n"
-           "\tvar myDate = new Date( datafile.data.system.timeGPS *1000);\n"
-           "\tnewHTML += ' @' + myDate.toFormattedString();\n"
-           "\tvar newSec = datafile.data.system.timeSinceStart;\n"
-           "\tvar strsecondUp = newSec.toString();\n"
-           "\tnewHTML += ' Up:' + strsecondUp.toHHMMSS();\n"
-           "\tsysContainer.innerHTML = newHTML;\n"
-           "}\n"
-           "\n"
-           "function updateUsers(datafile) {\n"
-           "\tvar mainContainer = document.getElementById(\"userlist-id\");\n"
-           "\tvar htmlUsers = '';\n"
-           "\tvar timeBase = datafile.data.system.timeSinceStart;\n"
-           "//\tvar lookup = {};\n"
-           "    for (var i = 0; i < datafile.data.users.length; i++) {\n"
-           "        htmlUsers += formatUsers(datafile.data.users[i],timeBase);\n"
-           "\t}\n"
-           "\tmainContainer.innerHTML = htmlUsers;\n"
-           "}\n"
-           "\n"
-           "function formatUsers(user,timeBase) {\n"
-           "\tnewHTML = '<li class=\"clearfix\">';\n"
-           "    newHTML += '<div class=\"channel-name clearfix\">' + user.NameLong + '(' + user.NameShort + ')</div>';\n"
-           "    newHTML += '<div class=\"message-count clearfix\">';\n"
-           "\tvar secondsLS = timeBase - user.lastSeen;\n"
-           "\tvar strsecondsLS = secondsLS.toString();\n"
-           "\tnewHTML += '<svg class=\"icon icon-circle '+onlineStatus(secondsLS)+'\"><use "
-           "xlink:href=\"#icon-circle\"></use></svg></i>Seen: '+strsecondsLS.toHHMMSS()+' ago&nbsp;';\n"
-           "\tif (user.lat == 0 || user.lon == 0) {\n"
-           "\t\tnewHTML += '';\n"
-           "\t} else {\n"
-           "\t\tnewHTML += '<div class=\"tooltip\"><svg class=\"icon icon-map-marker\"><use "
-           "xlink:href=\"#icon-map-marker\"></use></svg><span class=\"tooltiptext\">lat:' + user.lat + ' lon:'+ user.lon+ "
-           "'</span>';\n"
-           "\t}\n"
-           "    newHTML += '</div></div>';\n"
-           "    newHTML += '</li>';\n"
-           "\treturn(newHTML);\n"
-           "}\n"
-           "\n"
-           "function onlineStatus(time) {\n"
-           "\tif (time < 3600) {\n"
-           "\t\treturn \"online\"\n"
-           "\t} else {\n"
-           "\t\treturn \"offline\"\n"
-           "\t}\n"
-           "}\n"
-           "\n"
-           "function updateChat(datafile) {\n"
-           "//  Update Chat\n"
-           "\tvar chatContainer = document.getElementById(\"chat-history-id\");\n"
-           "\tvar htmlChat = '';\n"
-           "\tvar timeBase = datafile.data.system.timeSinceStart;\n"
-           "\tfor (var i = 0; i < datafile.data.chat.length; i++) {\n"
-           "\t\thtmlChat += formatChat(datafile.data.chat[i],timeBase);\n"
-           "\t}\n"
-           "\tchatContainer.innerHTML = htmlChat;\n"
-           "\tscrollHistory();\n"
-           "}\n"
-           "\n"
-           "function formatChat(data,timeBase) {\n"
-           "\tvar secondsTS = timeBase - data.timestamp;\n"
-           "\tvar strsecondsTS = secondsTS.toString();\n"
-           "\tnewHTML = '<li class=\"clearfix\">';\n"
-           "\tif (data.local == 1) {\n"
-           "\t\tnewHTML += '<div class=\"message-data\">';\n"
-           "\t\tnewHTML += '<span class=\"message-data-name\" >' + data.NameLong + '(' + data.NameShort + ')</span>';\n"
-           "\t\tnewHTML += '<span class=\"message-data-time\" >' + strsecondsTS.toHHMMSS() + ' ago</span>';\n"
-           "\t\tnewHTML += '</div>';\n"
-           "\t\tnewHTML += '<div class=\"message my-message\">' + data.chatLine + '</div>';\n"
-           "\t} else {\n"
-           "\t\tnewHTML += '<div class=\"message-data align-right\">';\n"
-           "\t\tnewHTML += '<span class=\"message-data-time\" >' + strsecondsTS.toHHMMSS() + ' ago</span> &nbsp; &nbsp;';\n"
-           "\t\tnewHTML += '<span class=\"message-data-name\" >' + data.NameLong + '(' + data.NameShort + ')</span>';\n"
-           "//\t\tnewHTML += '<i class=\"fa fa-circle online\"></i>';\n"
-           "\t\tnewHTML += '</div>';\n"
-           "\t\tnewHTML += '<div class=\"message other-message float-right\">' + data.chatLine + '</div>';\n"
-           "\t}\n"
-           "\n"
-           "    newHTML += '</li>';\n"
-           "\treturn(newHTML);\t\n"
-           "}\n"
-           "\n"
-           "function scrollHistory() {\n"
-           "\tvar chatContainer = document.getElementById(\"chat-div-id\");\n"
-           "\tchatContainer.scrollTop = chatContainer.scrollHeight;\n"
-           "}\n"
-           "\n"
-           "\n"
-           "getData('/json/chat/history/dummy');\n"
-           "\n"
-           "\n"
-           "//window.onload=function(){\n"
-           "//\talert('onload');\n"
-           "//  Async - Run scroll 0.5sec after onload event\n"
-           "//\tsetTimeout(scrollHistory(),500);\n"
-           "// }";
+    res->setHeader("Set-Cookie",
+                   "mt_session=" + httpsserver::intToString(random(1, 9999999)) + "; Expires=Wed, 20 Apr 2049 4:20:00 PST");
 
-    // Status code is 200 OK by default.
-    // We want to deliver a simple HTML page, so we send a corresponding content type:
-    res->setHeader("Content-Type", "text/html");
+    std::string cookie = req->getHeader("Cookie");
+    //String cookieString = cookie.c_str();
+    //uint8_t nameIndex = cookieString.indexOf("mt_session");
+    //DEBUG_MSG(cookie.c_str());
 
-    // The response implements the Print interface, so you can use it just like
-    // you would write to Serial etc.
-    res->print(out);
+    std::string filename = "/static/index.html";
+    std::string filenameGzip = "/static/index.html.gz";
+
+    if (!SPIFFS.exists(filename.c_str()) && !SPIFFS.exists(filenameGzip.c_str())) {
+        // Send "404 Not Found" as response, as the file doesn't seem to exist
+        res->setStatusCode(404);
+        res->setStatusText("Not found");
+        res->println("404 Not Found");
+        res->printf("<p>File not found: %s</p>\n", filename.c_str());
+        return;
+    }
+
+    // Try to open the file from SPIFFS
+    File file;
+
+    if (SPIFFS.exists(filename.c_str())) {
+        file = SPIFFS.open(filename.c_str());
+        if (!file.available()) {
+            DEBUG_MSG("File not available - %s\n", filename.c_str());
+        }
+
+    } else if (SPIFFS.exists(filenameGzip.c_str())) {
+        file = SPIFFS.open(filenameGzip.c_str());
+        res->setHeader("Content-Encoding", "gzip");
+        if (!file.available()) {
+            DEBUG_MSG("File not available\n");
+        }
+    }
+
+
+    // Read the file from SPIFFS and write it to the HTTP response body
+    size_t length = 0;
+    do {
+        char buffer[256];
+        length = file.read((uint8_t *)buffer, 256);
+        std::string bufferString(buffer, length);
+        res->write((uint8_t *)bufferString.c_str(), bufferString.size());
+    } while (length > 0);
 }
 
 void handleFavicon(HTTPRequest *req, HTTPResponse *res)
@@ -710,98 +897,15 @@ void handleFavicon(HTTPRequest *req, HTTPResponse *res)
     res->write(FAVICON_DATA, FAVICON_LENGTH);
 }
 
-/*
-    To convert text to c strings:
 
-    https://tomeko.net/online_tools/cpp_text_escape.php?lang=en
-*/
-void handleBasicJS(HTTPRequest *req, HTTPResponse *res)
+void replaceAll(std::string &str, const std::string &from, const std::string &to)
 {
-    String out = "";
-    out += "var meshtasticClient;\n"
-           "var connectionOne;\n"
-           "\n"
-           "\n"
-           "// Important: the connect action must be called from a user interaction (e.g. button press), otherwise the browsers "
-           "won't allow the connect\n"
-           "function connect() {\n"
-           "\n"
-           "    // Create new connection\n"
-           "    var httpconn = new meshtasticjs.IHTTPConnection();\n"
-           "\n"
-           "    // Set connection params\n"
-           "    let sslActive;\n"
-           "    if (window.location.protocol === 'https:') {\n"
-           "        sslActive = true;\n"
-           "    } else {\n"
-           "        sslActive = false;\n"
-           "    }\n"
-           "    let deviceIp = window.location.hostname; // Your devices IP here\n"
-           "   \n"
-           "\n"
-           "    // Add event listeners that get called when a new packet is received / state of device changes\n"
-           "    httpconn.addEventListener('fromRadio', function(packet) { console.log(packet)});\n"
-           "\n"
-           "    // Connect to the device async, then send a text message\n"
-           "    httpconn.connect(deviceIp, sslActive)\n"
-           "    .then(result => { \n"
-           "\n"
-           "        alert('device has been configured')\n"
-           "        // This gets called when the connection has been established\n"
-           "        // -> send a message over the mesh network. If no recipient node is provided, it gets sent as a broadcast\n"
-           "        return httpconn.sendText('meshtastic is awesome');\n"
-           "\n"
-           "    })\n"
-           "    .then(result => { \n"
-           "\n"
-           "        // This gets called when the message has been sucessfully sent\n"
-           "        console.log('Message sent!');})\n"
-           "\n"
-           "    .catch(error => { console.log(error); });\n"
-           "\n"
-           "}";
-
-    // Status code is 200 OK by default.
-    // We want to deliver a simple HTML page, so we send a corresponding content type:
-    res->setHeader("Content-Type", "text/javascript");
-
-    // The response implements the Print interface, so you can use it just like
-    // you would write to Serial etc.
-    res->print(out);
+    if (from.empty())
+        return;
+    size_t start_pos = 0;
+    while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
+        str.replace(start_pos, from.length(), to);
+        start_pos += to.length(); // In case 'to' contains 'from', like replacing 'x' with 'yx'
+    }
 }
 
-/*
-    To convert text to c strings:
-
-    https://tomeko.net/online_tools/cpp_text_escape.php?lang=en
-*/
-void handleBasicHTML(HTTPRequest *req, HTTPResponse *res)
-{
-    String out = "";
-    out += "<!doctype html>\n"
-           "<html class=\"no-js\" lang=\"\">\n"
-           "\n"
-           "<head>\n"
-           "  <meta charset=\"utf-8\">\n"
-           "  <title></title>\n"
-           "\n"
-           "  <script src=\"/static/meshtastic.js\"></script>\n"
-           "  <script src=\"basic.js\"></script>\n"
-           "</head>\n"
-           "\n"
-           "<body>\n"
-           "\n"
-           "  <button id=\"connect_button\" onclick=\"connect()\">Connect to Meshtastic device</button>\n"
-           " \n"
-           "</body>\n"
-           "\n"
-           "</html>";
-
-    // Status code is 200 OK by default.
-    // We want to deliver a simple HTML page, so we send a corresponding content type:
-    res->setHeader("Content-Type", "text/html");
-
-    // The response implements the Print interface, so you can use it just like
-    // you would write to Serial etc.
-    res->print(out);
-}
