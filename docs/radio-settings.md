@@ -24,7 +24,7 @@ Channel zero starts at 865.20 MHz
 
 LoRaWAN defines 64, 125 kHz channels from 902.3 to 914.9 MHz increments.
 
-The maximum output power for North America is +30 dBM.
+The maximum output power for North America is +30 dBm ERP.
 
 The band is from 902 to 928 MHz. It mentions channel number and its respective channel frequency. All the 13 channels are separated by 2.16 MHz with respect to the adjacent channels.  
 Channel zero starts at 903.08 MHz center frequency.
