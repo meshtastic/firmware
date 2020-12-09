@@ -4,7 +4,10 @@ You probably don't care about this section - skip to the next one.
 
 For app cleanup:
 
-* do fixed position bug
+* do fixed position bug https://github.com/meshtastic/Meshtastic-device/issues/536
+* check build guide
+* generate autodocs
+* write user guide
 * DONE update android code: https://developer.android.com/topic/libraries/view-binding/migration
 * make gpio watch work, use thread and setup
 * make hello world example service

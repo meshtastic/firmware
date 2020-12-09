@@ -129,7 +129,9 @@ typedef struct _RadioConfig_UserPreferences {
     uint32_t gps_attempt_time;
     bool is_router;
     bool is_low_power;
+    bool fixed_position;
     bool factory_reset;
+    bool debug_log_enabled;
     pb_size_t ignore_incoming_count;
     uint32_t ignore_incoming[3];
 } RadioConfig_UserPreferences;
@@ -278,7 +280,7 @@ typedef struct _ToRadio {
 #define MeshPacket_init_default                  {0, 0, 0, {SubPacket_init_default}, 0, 0, 0, 0, 0}
 #define ChannelSettings_init_default             {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, "", 0, 0, 0, 0}
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default, false, ChannelSettings_init_default}
-#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, {0, 0, 0}}
+#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}}
 #define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0}
 #define MyNodeInfo_init_default                  {0, 0, 0, "", "", "", 0, 0, 0, 0, 0, 0, 0, 0}
 #define DeviceState_init_default                 {false, RadioConfig_init_default, false, MyNodeInfo_init_default, false, User_init_default, 0, {NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default}, 0, {MeshPacket_init_default}, false, MeshPacket_init_default, 0, 0, 0}
@@ -293,7 +295,7 @@ typedef struct _ToRadio {
 #define MeshPacket_init_zero                     {0, 0, 0, {SubPacket_init_zero}, 0, 0, 0, 0, 0}
 #define ChannelSettings_init_zero                {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, "", 0, 0, 0, 0}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero, false, ChannelSettings_init_zero}
-#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, {0, 0, 0}}
+#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}}
 #define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0}
 #define MyNodeInfo_init_zero                     {0, 0, 0, "", "", "", 0, 0, 0, 0, 0, 0, 0, 0}
 #define DeviceState_init_zero                    {false, RadioConfig_init_zero, false, MyNodeInfo_init_zero, false, User_init_zero, 0, {NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero}, 0, {MeshPacket_init_zero}, false, MeshPacket_init_zero, 0, 0, 0}
@@ -349,7 +351,9 @@ typedef struct _ToRadio {
 #define RadioConfig_UserPreferences_region_tag   15
 #define RadioConfig_UserPreferences_is_router_tag 37
 #define RadioConfig_UserPreferences_is_low_power_tag 38
+#define RadioConfig_UserPreferences_fixed_position_tag 39
 #define RadioConfig_UserPreferences_factory_reset_tag 100
+#define RadioConfig_UserPreferences_debug_log_enabled_tag 101
 #define RadioConfig_UserPreferences_location_share_tag 32
 #define RadioConfig_UserPreferences_gps_operation_tag 33
 #define RadioConfig_UserPreferences_gps_update_interval_tag 34
@@ -516,7 +520,9 @@ X(a, STATIC,   SINGULAR, UINT32,   gps_update_interval,  34) \
 X(a, STATIC,   SINGULAR, UINT32,   gps_attempt_time,  36) \
 X(a, STATIC,   SINGULAR, BOOL,     is_router,        37) \
 X(a, STATIC,   SINGULAR, BOOL,     is_low_power,     38) \
+X(a, STATIC,   SINGULAR, BOOL,     fixed_position,   39) \
 X(a, STATIC,   SINGULAR, BOOL,     factory_reset,   100) \
+X(a, STATIC,   SINGULAR, BOOL,     debug_log_enabled, 101) \
 X(a, STATIC,   REPEATED, UINT32,   ignore_incoming, 103)
 #define RadioConfig_UserPreferences_CALLBACK NULL
 #define RadioConfig_UserPreferences_DEFAULT NULL
@@ -643,14 +649,14 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define SubPacket_size                           275
 #define MeshPacket_size                          314
 #define ChannelSettings_size                     84
-#define RadioConfig_size                         308
-#define RadioConfig_UserPreferences_size         219
+#define RadioConfig_size                         314
+#define RadioConfig_UserPreferences_size         225
 #define NodeInfo_size                            132
 #define MyNodeInfo_size                          110
-#define DeviceState_size                         5462
+#define DeviceState_size                         5468
 #define DebugString_size                         258
 #define FromRadio_size                           323
-#define ToRadio_size                             317
+#define ToRadio_size                             318
 
 #ifdef __cplusplus
 } /* extern "C" */
