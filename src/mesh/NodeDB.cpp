@@ -386,7 +386,8 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p)
 {
     NodeInfo *info = getOrCreateNode(nodeId);
 
-    // we always trust our local timestamps more
+    DEBUG_MSG("DB update position node=0x%x time=%u, latI=%d, lonI=%d\n", nodeId, p.time, p.latitude_i, p.longitude_i);
+
     info->position = p;
     info->has_position = true;
     updateGUIforNode = info;
