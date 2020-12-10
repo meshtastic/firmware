@@ -2,7 +2,7 @@
 
 set -e
 
-source bin/version.sh
+VERSION=`bin/buildinfo.py`
 
 COUNTRIES="US EU433 EU865 CN JP ANZ KR"
 #COUNTRIES=US
