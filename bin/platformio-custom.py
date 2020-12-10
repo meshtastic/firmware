@@ -2,10 +2,16 @@
 Import("projenv")
 
 import configparser
-config = configparser.RawConfigParser()
-config.read(projenv["PROJECT_DIR"] + "/version.properties")
-version = dict(config.items('VERSION'))
-verStr = "{}.{}.{}".format(version["major"], version["minor"], version["build"])
+prefsLoc = projenv["PROJECT_DIR"] + "/version.properties"
+print(f"Preferences in {prefsLoc}")
+try:
+	config = configparser.RawConfigParser()
+	config.read(prefsLoc)
+	version = dict(config.items('VERSION'))
+	verStr = "{}.{}.{}".format(version["major"], version["minor"], version["build"])
+except:
+	print("Can't read preferences, using 0.0.0")
+	verStr = "0.0.0"
 
 print(f"Using meshtastic platform-custom.py, firmare version {verStr}")
 
