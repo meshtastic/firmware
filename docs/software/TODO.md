@@ -4,11 +4,11 @@ You probably don't care about this section - skip to the next one.
 
 For app cleanup:
 
-* make device build always have a valid version
+* DONE make device build always have a valid version
 * DONE do fixed position bug https://github.com/meshtastic/Meshtastic-device/issues/536
 * check build guide
 * generate autodocs
-* write user guide
+* write devapi user guide
 * DONE update android code: https://developer.android.com/topic/libraries/view-binding/migration
 * only do wantReplies once per packet type, if we change network settings force it again
 * make gpio watch work, use thread and setup
@@ -29,12 +29,11 @@ For app cleanup:
 * DONE Add SinglePortNumPlugin - as the new most useful baseclass
 * DONE move positions into regular data packets (use new app framework)
 * DONE move user info into regular data packets (use new app framework)
-* test that positions, text messages and user info still work
-* test that position, text messages and user info work properly with new android app and old device code
+* DONE test that positions, text messages and user info still work
+* DONE test that position, text messages and user info work properly with new android app and old device code
 * fix the RTC drift bug
-* move ping functionality into device, reply with rxsnr info
+* move python ping functionality into device, reply with rxsnr info
 * use channels for gpio security https://github.com/meshtastic/Meshtastic-device/issues/104
-* implement GPIO watch
 
 For high speed/lots of devices/short range tasks:
 
