@@ -4,11 +4,13 @@ You probably don't care about this section - skip to the next one.
 
 For app cleanup:
 
-* do fixed position bug https://github.com/meshtastic/Meshtastic-device/issues/536
+* make device build always have a valid version
+* DONE do fixed position bug https://github.com/meshtastic/Meshtastic-device/issues/536
 * check build guide
 * generate autodocs
 * write user guide
 * DONE update android code: https://developer.android.com/topic/libraries/view-binding/migration
+* only do wantReplies once per packet type, if we change network settings force it again
 * make gpio watch work, use thread and setup
 * make hello world example service
 * make python ping command
