@@ -7,14 +7,12 @@ For app cleanup:
 * DONE make device build always have a valid version
 * DONE do fixed position bug https://github.com/meshtastic/Meshtastic-device/issues/536
 * check build guide
-* generate autodocs
 * write devapi user guide
 * DONE update android code: https://developer.android.com/topic/libraries/view-binding/migration
 * only do wantReplies once per packet type, if we change network settings force it again
 * make gpio watch work, use thread and setup
 * make hello world example service
 * make python ping command
-* make python gpio read a bit cleaner
 * DONE have python tool check max packet size before sending to device
 * DONE if request was sent reliably, send reply reliably
 * DONE require a recent python api to talk to these new device loads
@@ -31,9 +29,11 @@ For app cleanup:
 * DONE move user info into regular data packets (use new app framework)
 * DONE test that positions, text messages and user info still work
 * DONE test that position, text messages and user info work properly with new android app and old device code
+* do UDP tunnel
 * fix the RTC drift bug
 * move python ping functionality into device, reply with rxsnr info
 * use channels for gpio security https://github.com/meshtastic/Meshtastic-device/issues/104
+* generate autodocs
 
 For high speed/lots of devices/short range tasks:
 
