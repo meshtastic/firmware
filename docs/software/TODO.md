@@ -10,7 +10,7 @@ For app cleanup:
 * DONE write devapi user guide
 * DONE update android code: https://developer.android.com/topic/libraries/view-binding/migration
 * only do wantReplies once per packet type, if we change network settings force it again
-* make gpio watch work, use thread and setup
+* test GPIO watch
 * DONE make hello world example service
 * make python ping command
 * DONE have python tool check max packet size before sending to device
