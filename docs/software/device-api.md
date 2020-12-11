@@ -1,4 +1,6 @@
-# Device API
+# Bluetooth/serial/TCP protocol API
+
+(This document describes the protocol for external API clients using our devices.  If you are interested in running your own code on the device itself, see the [on-device](plugin-api.md) documentation instead)
 
 The Device API is design to have only a simple stream of ToRadio and FromRadio packets and all polymorphism comes from the flexible set of Google Protocol Buffers which are sent over the wire. We use protocol buffers extensively both for the bluetooth API and for packets inside the mesh or when providing packets to other applications on the phone.
 
