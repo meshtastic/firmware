@@ -14,9 +14,9 @@ Packets can be sent/received either as raw binary structures or as [Protobufs](h
 
 The relevant bits of the class heirarchy are as follows
 
-* MeshPlugin (in src/mesh/MeshPlugin.h) - you probably don't want to use this baseclass directly
-  * SinglePortPlugin (in src/mesh/SinglePortPlugin.h) - for plugins that receive from a single port number (the normal case)
-    * ProtobufPlugin (in src/mesh/ProtobufPlugin.h) - for plugins that are sending/receiving a single particular Protobuf type.  Inherit from this if you are using protocol buffers in your plugin.
+* [MeshPlugin](/src/mesh/MeshPlugin.h) (in src/mesh/MeshPlugin.h) - you probably don't want to use this baseclass directly
+  * [SinglePortPlugin](/src/mesh/SinglePortPlugin.h) (in src/mesh/SinglePortPlugin.h) - for plugins that receive from a single port number (the normal case)
+    * [ProtobufPlugin](/src/mesh/ProtobufPlugin.h) (in src/mesh/ProtobufPlugin.h) - for plugins that are sending/receiving a single particular Protobuf type.  Inherit from this if you are using protocol buffers in your plugin.
 
 You will typically want to inherit from either SinglePortPlugin (if you are just sending raw bytes) or ProtobufPlugin (if you are sending protobufs).  You'll implement your own handleReceived/handleReceivedProtobuf - probably based on the example code.
 
@@ -42,7 +42,12 @@ A number of [key services](/src/plugins) are implemented using the plugin API, t
 
 ## Getting started
 
-The easiest way to get started is to copy [src/plugins/ReplyPlugin.*](/src/plugins/ReplyPlugin.h) into src/plugins/YourPlugin.*.  Then change the port number from REPLY_APP to PRIVATE_APP.
+The easiest way to get started is:
+
+* [Build and install](build-instructions.md) the standard codebase from github.
+* Copy [src/plugins/ReplyPlugin.*](/src/plugins/ReplyPlugin.cpp) into src/plugins/YourPlugin.*.  Then change the port number from REPLY_APP to PRIVATE_APP.
+* Rebuild with your new messaging goodness and install on the device
+* Use the [meshtastic commandline tool](https://github.com/meshtastic/Meshtastic-python) to send a packet to your board "meshtastic --dest 1234 --ping"
 
 ## Picking a port number
 
