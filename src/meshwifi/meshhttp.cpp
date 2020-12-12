@@ -858,6 +858,9 @@ void handleRoot(HTTPRequest *req, HTTPResponse *res)
         res->setStatusText("Not found");
         res->println("404 Not Found");
         res->printf("<p>File not found: %s</p>\n", filename.c_str());
+        res->printf("<p></p>\n");
+        res->printf("<p>You have gotten this error because the filesystem for the web server has not been loaded.</p>\n");
+        res->printf("<p>Please review the 'Common Problems' section of the <a href=https://github.com/meshtastic/Meshtastic-device/issues/552>web interface</a> documentation.</p>\n");
         return;
     }
 
