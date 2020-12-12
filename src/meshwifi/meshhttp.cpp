@@ -235,7 +235,7 @@ void initWebServer()
     ResourceNode *nodeStaticBrowse = new ResourceNode("/static", "GET", &handleStaticBrowse);
     ResourceNode *nodeStaticPOST = new ResourceNode("/static", "POST", &handleStaticPost);
     ResourceNode *nodeStatic = new ResourceNode("/static/*", "GET", &handleStatic);
-    ResourceNode *nodeRestart = new ResourceNode("/restart", "GET", &handleRestart);
+    ResourceNode *nodeRestart = new ResourceNode("/restart", "POST", &handleRestart);
     ResourceNode *node404 = new ResourceNode("", "GET", &handle404);
     ResourceNode *nodeFormUpload = new ResourceNode("/upload", "POST", &handleFormUpload);
 
