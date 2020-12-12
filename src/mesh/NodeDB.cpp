@@ -131,13 +131,13 @@ bool NodeDB::resetRadioConfig()
         radioConfig.preferences.region = RegionCode_TW;
 
         // Enter super deep sleep soon and stay there not very long
-        //radioConfig.preferences.mesh_sds_timeout_secs = 10;
-        //radioConfig.preferences.sds_secs = 60;
+        // radioConfig.preferences.mesh_sds_timeout_secs = 10;
+        // radioConfig.preferences.sds_secs = 60;
     }
 
     // Update the global myRegion
     initRegion();
-    
+
     return didFactoryReset;
 }
 
@@ -165,7 +165,6 @@ void NodeDB::installDefaultDeviceState()
     // default to no GPS, until one has been found by probing
     myNodeInfo.has_gps = false;
     myNodeInfo.message_timeout_msec = FLOOD_EXPIRE_TIME;
-    myNodeInfo.min_app_version = 172;
     generatePacketId(); // FIXME - ugly way to init current_packet_id;
 
     // Init our blank owner info to reasonable defaults
@@ -200,6 +199,9 @@ void NodeDB::init()
     myNodeInfo.node_num_bits = sizeof(NodeNum) * 8;
     myNodeInfo.packet_id_bits = sizeof(PacketId) * 8;
 
+    // likewise - we always want the app requirements to come from the running appload
+    myNodeInfo.min_app_version = 20120; // format is Mmmss (where M is 1+the numeric major number. i.e. 20120 means 1.1.20
+ 
     // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we won't
     // keep using that nodenum forever. Crummy guess at our nodenum (but we will check against the nodedb to avoid conflicts)
     pickNewNodeNum();
@@ -248,8 +250,7 @@ void NodeDB::pickNewNodeNum()
 
     // If we don't have a nodenum at app - pick an initial nodenum based on the macaddr
     if (r == 0)
-        r = sizeof(NodeNum) == 1 ? ourMacAddr[5]
-                                 : ((ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5]);
+        r = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
 
     if (r == NODENUM_BROADCAST || r < NUM_RESERVED)
         r = NUM_RESERVED; // don't pick a reserved node number
@@ -379,6 +380,48 @@ size_t NodeDB::getNumOnlineNodes()
     return numseen;
 }
 
+#include "MeshPlugin.h"
+
+/** Update position info for this node based on received position data
+ */
+void NodeDB::updatePosition(uint32_t nodeId, const Position &p)
+{
+    NodeInfo *info = getOrCreateNode(nodeId);
+
+    DEBUG_MSG("DB update position node=0x%x time=%u, latI=%d, lonI=%d\n", nodeId, p.time, p.latitude_i, p.longitude_i);
+
+    info->position = p;
+    info->has_position = true;
+    updateGUIforNode = info;
+    notifyObservers(true); // Force an update whether or not our node counts have changed
+}
+
+/** Update user info for this node based on received user data
+ */
+void NodeDB::updateUser(uint32_t nodeId, const User &p)
+{
+    NodeInfo *info = getOrCreateNode(nodeId);
+
+    DEBUG_MSG("old user %s/%s/%s\n", info->user.id, info->user.long_name, info->user.short_name);
+
+    bool changed = memcmp(&info->user, &p,
+                          sizeof(info->user)); // Both of these blocks start as filled with zero so I think this is okay
+
+    info->user = p;
+    DEBUG_MSG("updating changed=%d user %s/%s/%s\n", changed, info->user.id, info->user.long_name, info->user.short_name);
+    info->has_user = true;
+
+    if (changed) {
+        updateGUIforNode = info;
+        powerFSM.trigger(EVENT_NODEDB_UPDATED);
+        notifyObservers(true); // Force an update whether or not our node counts have changed
+
+        // Not really needed - we will save anyways when we go to sleep
+        // We just changed something important about the user, store our DB
+        // saveToDisk();
+    }
+}
+
 /// given a subpacket sniffed from the network, update our DB state
 /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
 void NodeDB::updateFrom(const MeshPacket &mp)
@@ -398,58 +441,21 @@ void NodeDB::updateFrom(const MeshPacket &mp)
 
         switch (p.which_payload) {
         case SubPacket_position_tag: {
-            // we always trust our local timestamps more
-            info->position = p.position;
-            if (mp.rx_time)
-                info->position.time = mp.rx_time;
-            info->has_position = true;
-            updateGUIforNode = info;
-            notifyObservers(true); // Force an update whether or not our node counts have changed
+            // handle a legacy position packet
+            DEBUG_MSG("WARNING: Processing a (deprecated) position packet from %d\n", mp.from);
+            updatePosition(mp.from, p.position);
             break;
         }
 
         case SubPacket_data_tag: {
-            // Keep a copy of the most recent text message.
-            if (p.data.typ == Data_Type_CLEAR_TEXT) {
-                DEBUG_MSG("Received text msg from=0x%0x, id=%d, msg=%.*s\n", mp.from, mp.id, p.data.payload.size,
-                          p.data.payload.bytes);
-                if (mp.to == NODENUM_BROADCAST || mp.to == nodeDB.getNodeNum()) {
-                    // We only store/display messages destined for us.
-                    devicestate.rx_text_message = mp;
-                    devicestate.has_rx_text_message = true;
-                    updateTextMessage = true;
-                    powerFSM.trigger(EVENT_RECEIVED_TEXT_MSG);
-                    notifyObservers(true); // Force an update whether or not our node counts have changed
-
-                    // This is going into the wifidev feature branch
-                    // Only update the WebUI if WiFi is enabled
-                    //#if WiFi_MODE != 0
-                    //  notifyWebUI();
-                    //#endif
-                }
-            }
+            if (mp.to == NODENUM_BROADCAST || mp.to == nodeDB.getNodeNum())
+                MeshPlugin::callPlugins(mp);
             break;
         }
 
         case SubPacket_user_tag: {
-            DEBUG_MSG("old user %s/%s/%s\n", info->user.id, info->user.long_name, info->user.short_name);
-
-            bool changed = memcmp(&info->user, &p.user,
-                                  sizeof(info->user)); // Both of these blocks start as filled with zero so I think this is okay
-
-            info->user = p.user;
-            DEBUG_MSG("updating changed=%d user %s/%s/%s\n", changed, info->user.id, info->user.long_name, info->user.short_name);
-            info->has_user = true;
-
-            if (changed) {
-                updateGUIforNode = info;
-                powerFSM.trigger(EVENT_NODEDB_UPDATED);
-                notifyObservers(true); // Force an update whether or not our node counts have changed
-
-                // Not really needed - we will save anyways when we go to sleep
-                // We just changed something important about the user, store our DB
-                // saveToDisk();
-            }
+            DEBUG_MSG("WARNING: Processing a (deprecated) user packet from %d\n", mp.from);
+            updateUser(mp.from, p.user);
             break;
         }
 

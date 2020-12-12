@@ -49,7 +49,8 @@
         "string_view": "cpp",
         "cassert": "cpp",
         "iterator": "cpp",
-        "shared_mutex": "cpp"
+        "shared_mutex": "cpp",
+        "iostream": "cpp"
     },
     "cSpell.words": [
         "Blox",
