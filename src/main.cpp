@@ -481,7 +481,7 @@ void setup()
     }
 #endif
 
-    if (forceSoftAP == false) {
+    if (forceSoftAP) {
         strcpy(radioConfig.preferences.wifi_ssid, "meshtasticAdmin");
         strcpy(radioConfig.preferences.wifi_password, "12345678");
         radioConfig.preferences.wifi_ap_mode = true;
