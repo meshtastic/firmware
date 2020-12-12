@@ -11,7 +11,7 @@
  *****************************************************************/
 
 /* Enable support for dynamically allocated fields */
-#define PB_ENABLE_MALLOC 1
+/* #define PB_ENABLE_MALLOC 1 */
 
 /* Define this if your CPU / compiler combination does not support
  * unaligned memory access to packed structures. */
@@ -55,7 +55,7 @@
 
 /* Version of the nanopb library. Just in case you want to check it in
  * your own program. */
-#define NANOPB_VERSION nanopb-0.4.1
+#define NANOPB_VERSION nanopb-0.4.4
 
 /* Include all the system headers needed by nanopb. You will need the
  * definitions of the following:
@@ -276,17 +276,18 @@ typedef struct pb_field_iter_s pb_field_iter_t;
 /* This structure is used in auto-generated constants
  * to specify struct fields.
  */
-PB_PACKED_STRUCT_START
 typedef struct pb_msgdesc_s pb_msgdesc_t;
 struct pb_msgdesc_s {
-    pb_size_t field_count;
     const uint32_t *field_info;
     const pb_msgdesc_t * const * submsg_info;
     const pb_byte_t *default_value;
 
     bool (*field_callback)(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_iter_t *field);
-} pb_packed;
-PB_PACKED_STRUCT_END
+
+    pb_size_t field_count;
+    pb_size_t required_field_count;
+    pb_size_t largest_tag;
+};
 
 /* Iterator for message descriptor */
 struct pb_field_iter_s {
@@ -469,137 +470,181 @@ struct pb_extension_s {
     }; \
     const pb_msgdesc_t structname ## _msg = \
     { \
-       0 msgname ## _FIELDLIST(PB_GEN_FIELD_COUNT, structname), \
        structname ## _field_info, \
        structname ## _submsg_info, \
        msgname ## _DEFAULT, \
        msgname ## _CALLBACK, \
+       0 msgname ## _FIELDLIST(PB_GEN_FIELD_COUNT, structname), \
+       0 msgname ## _FIELDLIST(PB_GEN_REQ_FIELD_COUNT, structname), \
+       0 msgname ## _FIELDLIST(PB_GEN_LARGEST_TAG, structname), \
     }; \
     msgname ## _FIELDLIST(PB_GEN_FIELD_INFO_ASSERT_ ## width, structname)
 
 #define PB_GEN_FIELD_COUNT(structname, atype, htype, ltype, fieldname, tag) +1
+#define PB_GEN_REQ_FIELD_COUNT(structname, atype, htype, ltype, fieldname, tag) \
+    + (PB_HTYPE_ ## htype == PB_HTYPE_REQUIRED)
+#define PB_GEN_LARGEST_TAG(structname, atype, htype, ltype, fieldname, tag) \
+    * 0 + tag
 
+/* X-macro for generating the entries in struct_field_info[] array. */
 #define PB_GEN_FIELD_INFO_1(structname, atype, htype, ltype, fieldname, tag) \
-    PB_GEN_FIELD_INFO(1, structname, atype, htype, ltype, fieldname, tag)
+    PB_FIELDINFO_1(tag, PB_ATYPE_ ## atype | PB_HTYPE_ ## htype | PB_LTYPE_MAP_ ## ltype, \
+                   PB_DATA_OFFSET_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_DATA_SIZE_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_SIZE_OFFSET_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_ARRAY_SIZE_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname))
 
 #define PB_GEN_FIELD_INFO_2(structname, atype, htype, ltype, fieldname, tag) \
-    PB_GEN_FIELD_INFO(2, structname, atype, htype, ltype, fieldname, tag)
+    PB_FIELDINFO_2(tag, PB_ATYPE_ ## atype | PB_HTYPE_ ## htype | PB_LTYPE_MAP_ ## ltype, \
+                   PB_DATA_OFFSET_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_DATA_SIZE_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_SIZE_OFFSET_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_ARRAY_SIZE_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname))
 
 #define PB_GEN_FIELD_INFO_4(structname, atype, htype, ltype, fieldname, tag) \
-    PB_GEN_FIELD_INFO(4, structname, atype, htype, ltype, fieldname, tag)
+    PB_FIELDINFO_4(tag, PB_ATYPE_ ## atype | PB_HTYPE_ ## htype | PB_LTYPE_MAP_ ## ltype, \
+                   PB_DATA_OFFSET_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_DATA_SIZE_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_SIZE_OFFSET_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_ARRAY_SIZE_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname))
 
 #define PB_GEN_FIELD_INFO_8(structname, atype, htype, ltype, fieldname, tag) \
-    PB_GEN_FIELD_INFO(8, structname, atype, htype, ltype, fieldname, tag)
+    PB_FIELDINFO_8(tag, PB_ATYPE_ ## atype | PB_HTYPE_ ## htype | PB_LTYPE_MAP_ ## ltype, \
+                   PB_DATA_OFFSET_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_DATA_SIZE_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_SIZE_OFFSET_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_ARRAY_SIZE_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname))
 
 #define PB_GEN_FIELD_INFO_AUTO(structname, atype, htype, ltype, fieldname, tag) \
-    PB_GEN_FIELD_INFO_AUTO2(PB_FIELDINFO_WIDTH_AUTO(atype, htype, ltype), structname, atype, htype, ltype, fieldname, tag)
+    PB_FIELDINFO_AUTO2(PB_FIELDINFO_WIDTH_AUTO(_PB_ATYPE_ ## atype, _PB_HTYPE_ ## htype, _PB_LTYPE_ ## ltype), \
+                   tag, PB_ATYPE_ ## atype | PB_HTYPE_ ## htype | PB_LTYPE_MAP_ ## ltype, \
+                   PB_DATA_OFFSET_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_DATA_SIZE_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_SIZE_OFFSET_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_ARRAY_SIZE_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname))
 
-#define PB_GEN_FIELD_INFO_AUTO2(width, structname, atype, htype, ltype, fieldname, tag) \
-    PB_GEN_FIELD_INFO(width, structname, atype, htype, ltype, fieldname, tag)
+#define PB_FIELDINFO_AUTO2(width, tag, type, data_offset, data_size, size_offset, array_size) \
+    PB_FIELDINFO_AUTO3(width, tag, type, data_offset, data_size, size_offset, array_size)
 
-#define PB_GEN_FIELD_INFO(width, structname, atype, htype, ltype, fieldname, tag) \
-    PB_FIELDINFO_ ## width(tag, PB_ATYPE_ ## atype | PB_HTYPE_ ## htype | PB_LTYPE_MAP_ ## ltype, \
-                   PB_DATA_OFFSET_ ## atype(htype, structname, fieldname), \
-                   PB_DATA_SIZE_ ## atype(htype, structname, fieldname), \
-                   PB_SIZE_OFFSET_ ## atype(htype, structname, fieldname), \
-                   PB_ARRAY_SIZE_ ## atype(htype, structname, fieldname))
+#define PB_FIELDINFO_AUTO3(width, tag, type, data_offset, data_size, size_offset, array_size) \
+    PB_FIELDINFO_ ## width(tag, type, data_offset, data_size, size_offset, array_size)
 
+/* X-macro for generating asserts that entries fit in struct_field_info[] array.
+ * The structure of macros here must match the structure above in PB_GEN_FIELD_INFO_x(),
+ * but it is not easily reused because of how macro substitutions work. */
 #define PB_GEN_FIELD_INFO_ASSERT_1(structname, atype, htype, ltype, fieldname, tag) \
-    PB_GEN_FIELD_INFO_ASSERT(1, structname, atype, htype, ltype, fieldname, tag)
+    PB_FIELDINFO_ASSERT_1(tag, PB_ATYPE_ ## atype | PB_HTYPE_ ## htype | PB_LTYPE_MAP_ ## ltype, \
+                   PB_DATA_OFFSET_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_DATA_SIZE_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_SIZE_OFFSET_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_ARRAY_SIZE_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname))
 
 #define PB_GEN_FIELD_INFO_ASSERT_2(structname, atype, htype, ltype, fieldname, tag) \
-    PB_GEN_FIELD_INFO_ASSERT(2, structname, atype, htype, ltype, fieldname, tag)
+    PB_FIELDINFO_ASSERT_2(tag, PB_ATYPE_ ## atype | PB_HTYPE_ ## htype | PB_LTYPE_MAP_ ## ltype, \
+                   PB_DATA_OFFSET_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_DATA_SIZE_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_SIZE_OFFSET_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_ARRAY_SIZE_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname))
 
 #define PB_GEN_FIELD_INFO_ASSERT_4(structname, atype, htype, ltype, fieldname, tag) \
-    PB_GEN_FIELD_INFO_ASSERT(4, structname, atype, htype, ltype, fieldname, tag)
+    PB_FIELDINFO_ASSERT_4(tag, PB_ATYPE_ ## atype | PB_HTYPE_ ## htype | PB_LTYPE_MAP_ ## ltype, \
+                   PB_DATA_OFFSET_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_DATA_SIZE_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_SIZE_OFFSET_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_ARRAY_SIZE_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname))
 
 #define PB_GEN_FIELD_INFO_ASSERT_8(structname, atype, htype, ltype, fieldname, tag) \
-    PB_GEN_FIELD_INFO_ASSERT(8, structname, atype, htype, ltype, fieldname, tag)
+    PB_FIELDINFO_ASSERT_8(tag, PB_ATYPE_ ## atype | PB_HTYPE_ ## htype | PB_LTYPE_MAP_ ## ltype, \
+                   PB_DATA_OFFSET_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_DATA_SIZE_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_SIZE_OFFSET_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_ARRAY_SIZE_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname))
 
 #define PB_GEN_FIELD_INFO_ASSERT_AUTO(structname, atype, htype, ltype, fieldname, tag) \
-    PB_GEN_FIELD_INFO_ASSERT_AUTO2(PB_FIELDINFO_WIDTH_AUTO(atype, htype, ltype), structname, atype, htype, ltype, fieldname, tag)
+    PB_FIELDINFO_ASSERT_AUTO2(PB_FIELDINFO_WIDTH_AUTO(_PB_ATYPE_ ## atype, _PB_HTYPE_ ## htype, _PB_LTYPE_ ## ltype), \
+                   tag, PB_ATYPE_ ## atype | PB_HTYPE_ ## htype | PB_LTYPE_MAP_ ## ltype, \
+                   PB_DATA_OFFSET_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_DATA_SIZE_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_SIZE_OFFSET_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname), \
+                   PB_ARRAY_SIZE_ ## atype(_PB_HTYPE_ ## htype, structname, fieldname))
 
-#define PB_GEN_FIELD_INFO_ASSERT_AUTO2(width, structname, atype, htype, ltype, fieldname, tag) \
-    PB_GEN_FIELD_INFO_ASSERT(width, structname, atype, htype, ltype, fieldname, tag)
+#define PB_FIELDINFO_ASSERT_AUTO2(width, tag, type, data_offset, data_size, size_offset, array_size) \
+    PB_FIELDINFO_ASSERT_AUTO3(width, tag, type, data_offset, data_size, size_offset, array_size)
 
-#define PB_GEN_FIELD_INFO_ASSERT(width, structname, atype, htype, ltype, fieldname, tag) \
-    PB_FIELDINFO_ASSERT_ ## width(tag, PB_ATYPE_ ## atype | PB_HTYPE_ ## htype | PB_LTYPE_MAP_ ## ltype, \
-                   PB_DATA_OFFSET_ ## atype(htype, structname, fieldname), \
-                   PB_DATA_SIZE_ ## atype(htype, structname, fieldname), \
-                   PB_SIZE_OFFSET_ ## atype(htype, structname, fieldname), \
-                   PB_ARRAY_SIZE_ ## atype(htype, structname, fieldname))
+#define PB_FIELDINFO_ASSERT_AUTO3(width, tag, type, data_offset, data_size, size_offset, array_size) \
+    PB_FIELDINFO_ASSERT_ ## width(tag, type, data_offset, data_size, size_offset, array_size)
 
-#define PB_DATA_OFFSET_STATIC(htype, structname, fieldname) PB_DATA_OFFSET_ ## htype(structname, fieldname)
-#define PB_DATA_OFFSET_POINTER(htype, structname, fieldname) PB_DATA_OFFSET_ ## htype(structname, fieldname)
-#define PB_DATA_OFFSET_CALLBACK(htype, structname, fieldname) PB_DATA_OFFSET_ ## htype(structname, fieldname)
-#define PB_DATA_OFFSET_REQUIRED(structname, fieldname) offsetof(structname, fieldname)
-#define PB_DATA_OFFSET_SINGULAR(structname, fieldname) offsetof(structname, fieldname)
-#define PB_DATA_OFFSET_ONEOF(structname, fieldname) offsetof(structname, PB_ONEOF_NAME(FULL, fieldname))
-#define PB_DATA_OFFSET_OPTIONAL(structname, fieldname) offsetof(structname, fieldname)
-#define PB_DATA_OFFSET_REPEATED(structname, fieldname) offsetof(structname, fieldname)
-#define PB_DATA_OFFSET_FIXARRAY(structname, fieldname) offsetof(structname, fieldname)
+#define PB_DATA_OFFSET_STATIC(htype, structname, fieldname) PB_DO ## htype(structname, fieldname)
+#define PB_DATA_OFFSET_POINTER(htype, structname, fieldname) PB_DO ## htype(structname, fieldname)
+#define PB_DATA_OFFSET_CALLBACK(htype, structname, fieldname) PB_DO ## htype(structname, fieldname)
+#define PB_DO_PB_HTYPE_REQUIRED(structname, fieldname) offsetof(structname, fieldname)
+#define PB_DO_PB_HTYPE_SINGULAR(structname, fieldname) offsetof(structname, fieldname)
+#define PB_DO_PB_HTYPE_ONEOF(structname, fieldname) offsetof(structname, PB_ONEOF_NAME(FULL, fieldname))
+#define PB_DO_PB_HTYPE_OPTIONAL(structname, fieldname) offsetof(structname, fieldname)
+#define PB_DO_PB_HTYPE_REPEATED(structname, fieldname) offsetof(structname, fieldname)
+#define PB_DO_PB_HTYPE_FIXARRAY(structname, fieldname) offsetof(structname, fieldname)
 
-#define PB_SIZE_OFFSET_STATIC(htype, structname, fieldname) PB_SIZE_OFFSET_ ## htype(structname, fieldname)
-#define PB_SIZE_OFFSET_POINTER(htype, structname, fieldname) PB_SIZE_OFFSET_PTR_ ## htype(structname, fieldname)
-#define PB_SIZE_OFFSET_CALLBACK(htype, structname, fieldname) PB_SIZE_OFFSET_CB_ ## htype(structname, fieldname)
-#define PB_SIZE_OFFSET_REQUIRED(structname, fieldname) 0
-#define PB_SIZE_OFFSET_SINGULAR(structname, fieldname) 0
-#define PB_SIZE_OFFSET_ONEOF(structname, fieldname) PB_SIZE_OFFSET_ONEOF2(structname, PB_ONEOF_NAME(FULL, fieldname), PB_ONEOF_NAME(UNION, fieldname))
-#define PB_SIZE_OFFSET_ONEOF2(structname, fullname, unionname) PB_SIZE_OFFSET_ONEOF3(structname, fullname, unionname)
-#define PB_SIZE_OFFSET_ONEOF3(structname, fullname, unionname) pb_delta(structname, fullname, which_ ## unionname)
-#define PB_SIZE_OFFSET_OPTIONAL(structname, fieldname) pb_delta(structname, fieldname, has_ ## fieldname)
-#define PB_SIZE_OFFSET_REPEATED(structname, fieldname) pb_delta(structname, fieldname, fieldname ## _count)
-#define PB_SIZE_OFFSET_FIXARRAY(structname, fieldname) 0
-#define PB_SIZE_OFFSET_PTR_REQUIRED(structname, fieldname) 0
-#define PB_SIZE_OFFSET_PTR_SINGULAR(structname, fieldname) 0
-#define PB_SIZE_OFFSET_PTR_ONEOF(structname, fieldname) PB_SIZE_OFFSET_ONEOF(structname, fieldname)
-#define PB_SIZE_OFFSET_PTR_OPTIONAL(structname, fieldname) 0
-#define PB_SIZE_OFFSET_PTR_REPEATED(structname, fieldname) PB_SIZE_OFFSET_REPEATED(structname, fieldname)
-#define PB_SIZE_OFFSET_PTR_FIXARRAY(structname, fieldname) 0
-#define PB_SIZE_OFFSET_CB_REQUIRED(structname, fieldname) 0
-#define PB_SIZE_OFFSET_CB_SINGULAR(structname, fieldname) 0
-#define PB_SIZE_OFFSET_CB_ONEOF(structname, fieldname) PB_SIZE_OFFSET_ONEOF(structname, fieldname)
-#define PB_SIZE_OFFSET_CB_OPTIONAL(structname, fieldname) 0
-#define PB_SIZE_OFFSET_CB_REPEATED(structname, fieldname) 0
-#define PB_SIZE_OFFSET_CB_FIXARRAY(structname, fieldname) 0
+#define PB_SIZE_OFFSET_STATIC(htype, structname, fieldname) PB_SO ## htype(structname, fieldname)
+#define PB_SIZE_OFFSET_POINTER(htype, structname, fieldname) PB_SO_PTR ## htype(structname, fieldname)
+#define PB_SIZE_OFFSET_CALLBACK(htype, structname, fieldname) PB_SO_CB ## htype(structname, fieldname)
+#define PB_SO_PB_HTYPE_REQUIRED(structname, fieldname) 0
+#define PB_SO_PB_HTYPE_SINGULAR(structname, fieldname) 0
+#define PB_SO_PB_HTYPE_ONEOF(structname, fieldname) PB_SO_PB_HTYPE_ONEOF2(structname, PB_ONEOF_NAME(FULL, fieldname), PB_ONEOF_NAME(UNION, fieldname))
+#define PB_SO_PB_HTYPE_ONEOF2(structname, fullname, unionname) PB_SO_PB_HTYPE_ONEOF3(structname, fullname, unionname)
+#define PB_SO_PB_HTYPE_ONEOF3(structname, fullname, unionname) pb_delta(structname, fullname, which_ ## unionname)
+#define PB_SO_PB_HTYPE_OPTIONAL(structname, fieldname) pb_delta(structname, fieldname, has_ ## fieldname)
+#define PB_SO_PB_HTYPE_REPEATED(structname, fieldname) pb_delta(structname, fieldname, fieldname ## _count)
+#define PB_SO_PB_HTYPE_FIXARRAY(structname, fieldname) 0
+#define PB_SO_PTR_PB_HTYPE_REQUIRED(structname, fieldname) 0
+#define PB_SO_PTR_PB_HTYPE_SINGULAR(structname, fieldname) 0
+#define PB_SO_PTR_PB_HTYPE_ONEOF(structname, fieldname) PB_SO_PB_HTYPE_ONEOF(structname, fieldname)
+#define PB_SO_PTR_PB_HTYPE_OPTIONAL(structname, fieldname) 0
+#define PB_SO_PTR_PB_HTYPE_REPEATED(structname, fieldname) PB_SO_PB_HTYPE_REPEATED(structname, fieldname)
+#define PB_SO_PTR_PB_HTYPE_FIXARRAY(structname, fieldname) 0
+#define PB_SO_CB_PB_HTYPE_REQUIRED(structname, fieldname) 0
+#define PB_SO_CB_PB_HTYPE_SINGULAR(structname, fieldname) 0
+#define PB_SO_CB_PB_HTYPE_ONEOF(structname, fieldname) PB_SO_PB_HTYPE_ONEOF(structname, fieldname)
+#define PB_SO_CB_PB_HTYPE_OPTIONAL(structname, fieldname) 0
+#define PB_SO_CB_PB_HTYPE_REPEATED(structname, fieldname) 0
+#define PB_SO_CB_PB_HTYPE_FIXARRAY(structname, fieldname) 0
 
-#define PB_ARRAY_SIZE_STATIC(htype, structname, fieldname) PB_ARRAY_SIZE_ ## htype(structname, fieldname)
-#define PB_ARRAY_SIZE_POINTER(htype, structname, fieldname) PB_ARRAY_SIZE_PTR_ ## htype(structname, fieldname)
+#define PB_ARRAY_SIZE_STATIC(htype, structname, fieldname) PB_AS ## htype(structname, fieldname)
+#define PB_ARRAY_SIZE_POINTER(htype, structname, fieldname) PB_AS_PTR ## htype(structname, fieldname)
 #define PB_ARRAY_SIZE_CALLBACK(htype, structname, fieldname) 1
-#define PB_ARRAY_SIZE_REQUIRED(structname, fieldname) 1
-#define PB_ARRAY_SIZE_SINGULAR(structname, fieldname) 1
-#define PB_ARRAY_SIZE_OPTIONAL(structname, fieldname) 1
-#define PB_ARRAY_SIZE_ONEOF(structname, fieldname) 1
-#define PB_ARRAY_SIZE_REPEATED(structname, fieldname) pb_arraysize(structname, fieldname)
-#define PB_ARRAY_SIZE_FIXARRAY(structname, fieldname) pb_arraysize(structname, fieldname)
-#define PB_ARRAY_SIZE_PTR_REQUIRED(structname, fieldname) 1
-#define PB_ARRAY_SIZE_PTR_SINGULAR(structname, fieldname) 1
-#define PB_ARRAY_SIZE_PTR_OPTIONAL(structname, fieldname) 1
-#define PB_ARRAY_SIZE_PTR_ONEOF(structname, fieldname) 1
-#define PB_ARRAY_SIZE_PTR_REPEATED(structname, fieldname) 1
-#define PB_ARRAY_SIZE_PTR_FIXARRAY(structname, fieldname) pb_arraysize(structname, fieldname[0])
+#define PB_AS_PB_HTYPE_REQUIRED(structname, fieldname) 1
+#define PB_AS_PB_HTYPE_SINGULAR(structname, fieldname) 1
+#define PB_AS_PB_HTYPE_OPTIONAL(structname, fieldname) 1
+#define PB_AS_PB_HTYPE_ONEOF(structname, fieldname) 1
+#define PB_AS_PB_HTYPE_REPEATED(structname, fieldname) pb_arraysize(structname, fieldname)
+#define PB_AS_PB_HTYPE_FIXARRAY(structname, fieldname) pb_arraysize(structname, fieldname)
+#define PB_AS_PTR_PB_HTYPE_REQUIRED(structname, fieldname) 1
+#define PB_AS_PTR_PB_HTYPE_SINGULAR(structname, fieldname) 1
+#define PB_AS_PTR_PB_HTYPE_OPTIONAL(structname, fieldname) 1
+#define PB_AS_PTR_PB_HTYPE_ONEOF(structname, fieldname) 1
+#define PB_AS_PTR_PB_HTYPE_REPEATED(structname, fieldname) 1
+#define PB_AS_PTR_PB_HTYPE_FIXARRAY(structname, fieldname) pb_arraysize(structname, fieldname[0])
 
-#define PB_DATA_SIZE_STATIC(htype, structname, fieldname) PB_DATA_SIZE_ ## htype(structname, fieldname)
-#define PB_DATA_SIZE_POINTER(htype, structname, fieldname) PB_DATA_SIZE_PTR_ ## htype(structname, fieldname)
-#define PB_DATA_SIZE_CALLBACK(htype, structname, fieldname) PB_DATA_SIZE_CB_ ## htype(structname, fieldname)
-#define PB_DATA_SIZE_REQUIRED(structname, fieldname) pb_membersize(structname, fieldname)
-#define PB_DATA_SIZE_SINGULAR(structname, fieldname) pb_membersize(structname, fieldname)
-#define PB_DATA_SIZE_OPTIONAL(structname, fieldname) pb_membersize(structname, fieldname)
-#define PB_DATA_SIZE_ONEOF(structname, fieldname) pb_membersize(structname, PB_ONEOF_NAME(FULL, fieldname))
-#define PB_DATA_SIZE_REPEATED(structname, fieldname) pb_membersize(structname, fieldname[0])
-#define PB_DATA_SIZE_FIXARRAY(structname, fieldname) pb_membersize(structname, fieldname[0])
-#define PB_DATA_SIZE_PTR_REQUIRED(structname, fieldname) pb_membersize(structname, fieldname[0])
-#define PB_DATA_SIZE_PTR_SINGULAR(structname, fieldname) pb_membersize(structname, fieldname[0])
-#define PB_DATA_SIZE_PTR_OPTIONAL(structname, fieldname) pb_membersize(structname, fieldname[0])
-#define PB_DATA_SIZE_PTR_ONEOF(structname, fieldname) pb_membersize(structname, PB_ONEOF_NAME(FULL, fieldname)[0])
-#define PB_DATA_SIZE_PTR_REPEATED(structname, fieldname) pb_membersize(structname, fieldname[0])
-#define PB_DATA_SIZE_PTR_FIXARRAY(structname, fieldname) pb_membersize(structname, fieldname[0][0])
-#define PB_DATA_SIZE_CB_REQUIRED(structname, fieldname) pb_membersize(structname, fieldname)
-#define PB_DATA_SIZE_CB_SINGULAR(structname, fieldname) pb_membersize(structname, fieldname)
-#define PB_DATA_SIZE_CB_OPTIONAL(structname, fieldname) pb_membersize(structname, fieldname)
-#define PB_DATA_SIZE_CB_ONEOF(structname, fieldname) pb_membersize(structname, PB_ONEOF_NAME(FULL, fieldname))
-#define PB_DATA_SIZE_CB_REPEATED(structname, fieldname) pb_membersize(structname, fieldname)
-#define PB_DATA_SIZE_CB_FIXARRAY(structname, fieldname) pb_membersize(structname, fieldname)
+#define PB_DATA_SIZE_STATIC(htype, structname, fieldname) PB_DS ## htype(structname, fieldname)
+#define PB_DATA_SIZE_POINTER(htype, structname, fieldname) PB_DS_PTR ## htype(structname, fieldname)
+#define PB_DATA_SIZE_CALLBACK(htype, structname, fieldname) PB_DS_CB ## htype(structname, fieldname)
+#define PB_DS_PB_HTYPE_REQUIRED(structname, fieldname) pb_membersize(structname, fieldname)
+#define PB_DS_PB_HTYPE_SINGULAR(structname, fieldname) pb_membersize(structname, fieldname)
+#define PB_DS_PB_HTYPE_OPTIONAL(structname, fieldname) pb_membersize(structname, fieldname)
+#define PB_DS_PB_HTYPE_ONEOF(structname, fieldname) pb_membersize(structname, PB_ONEOF_NAME(FULL, fieldname))
+#define PB_DS_PB_HTYPE_REPEATED(structname, fieldname) pb_membersize(structname, fieldname[0])
+#define PB_DS_PB_HTYPE_FIXARRAY(structname, fieldname) pb_membersize(structname, fieldname[0])
+#define PB_DS_PTR_PB_HTYPE_REQUIRED(structname, fieldname) pb_membersize(structname, fieldname[0])
+#define PB_DS_PTR_PB_HTYPE_SINGULAR(structname, fieldname) pb_membersize(structname, fieldname[0])
+#define PB_DS_PTR_PB_HTYPE_OPTIONAL(structname, fieldname) pb_membersize(structname, fieldname[0])
+#define PB_DS_PTR_PB_HTYPE_ONEOF(structname, fieldname) pb_membersize(structname, PB_ONEOF_NAME(FULL, fieldname)[0])
+#define PB_DS_PTR_PB_HTYPE_REPEATED(structname, fieldname) pb_membersize(structname, fieldname[0])
+#define PB_DS_PTR_PB_HTYPE_FIXARRAY(structname, fieldname) pb_membersize(structname, fieldname[0][0])
+#define PB_DS_CB_PB_HTYPE_REQUIRED(structname, fieldname) pb_membersize(structname, fieldname)
+#define PB_DS_CB_PB_HTYPE_SINGULAR(structname, fieldname) pb_membersize(structname, fieldname)
+#define PB_DS_CB_PB_HTYPE_OPTIONAL(structname, fieldname) pb_membersize(structname, fieldname)
+#define PB_DS_CB_PB_HTYPE_ONEOF(structname, fieldname) pb_membersize(structname, PB_ONEOF_NAME(FULL, fieldname))
+#define PB_DS_CB_PB_HTYPE_REPEATED(structname, fieldname) pb_membersize(structname, fieldname)
+#define PB_DS_CB_PB_HTYPE_FIXARRAY(structname, fieldname) pb_membersize(structname, fieldname)
 
 #define PB_ONEOF_NAME(type, tuple) PB_EXPAND(PB_ONEOF_NAME_ ## type tuple)
 #define PB_ONEOF_NAME_UNION(unionname,membername,fullname) unionname
@@ -607,37 +652,37 @@ struct pb_extension_s {
 #define PB_ONEOF_NAME_FULL(unionname,membername,fullname) fullname
 
 #define PB_GEN_SUBMSG_INFO(structname, atype, htype, ltype, fieldname, tag) \
-    PB_SUBMSG_INFO_ ## htype(ltype, structname, fieldname)
+    PB_SUBMSG_INFO_ ## htype(_PB_LTYPE_ ## ltype, structname, fieldname)
 
-#define PB_SUBMSG_INFO_REQUIRED(ltype, structname, fieldname) PB_SUBMSG_INFO_ ## ltype(structname ## _ ## fieldname ## _MSGTYPE)
-#define PB_SUBMSG_INFO_SINGULAR(ltype, structname, fieldname) PB_SUBMSG_INFO_ ## ltype(structname ## _ ## fieldname ## _MSGTYPE)
-#define PB_SUBMSG_INFO_OPTIONAL(ltype, structname, fieldname) PB_SUBMSG_INFO_ ## ltype(structname ## _ ## fieldname ## _MSGTYPE)
+#define PB_SUBMSG_INFO_REQUIRED(ltype, structname, fieldname) PB_SI ## ltype(structname ## _ ## fieldname ## _MSGTYPE)
+#define PB_SUBMSG_INFO_SINGULAR(ltype, structname, fieldname) PB_SI ## ltype(structname ## _ ## fieldname ## _MSGTYPE)
+#define PB_SUBMSG_INFO_OPTIONAL(ltype, structname, fieldname) PB_SI ## ltype(structname ## _ ## fieldname ## _MSGTYPE)
 #define PB_SUBMSG_INFO_ONEOF(ltype, structname, fieldname) PB_SUBMSG_INFO_ONEOF2(ltype, structname, PB_ONEOF_NAME(UNION, fieldname), PB_ONEOF_NAME(MEMBER, fieldname))
 #define PB_SUBMSG_INFO_ONEOF2(ltype, structname, unionname, membername) PB_SUBMSG_INFO_ONEOF3(ltype, structname, unionname, membername)
-#define PB_SUBMSG_INFO_ONEOF3(ltype, structname, unionname, membername) PB_SUBMSG_INFO_ ## ltype(structname ## _ ## unionname ## _ ## membername ## _MSGTYPE)
-#define PB_SUBMSG_INFO_REPEATED(ltype, structname, fieldname) PB_SUBMSG_INFO_ ## ltype(structname ## _ ## fieldname ## _MSGTYPE)
-#define PB_SUBMSG_INFO_FIXARRAY(ltype, structname, fieldname) PB_SUBMSG_INFO_ ## ltype(structname ## _ ## fieldname ## _MSGTYPE)
-#define PB_SUBMSG_INFO_BOOL(t)
-#define PB_SUBMSG_INFO_BYTES(t)
-#define PB_SUBMSG_INFO_DOUBLE(t)
-#define PB_SUBMSG_INFO_ENUM(t)
-#define PB_SUBMSG_INFO_UENUM(t)
-#define PB_SUBMSG_INFO_FIXED32(t)
-#define PB_SUBMSG_INFO_FIXED64(t)
-#define PB_SUBMSG_INFO_FLOAT(t)
-#define PB_SUBMSG_INFO_INT32(t)
-#define PB_SUBMSG_INFO_INT64(t)
-#define PB_SUBMSG_INFO_MESSAGE(t)  PB_SUBMSG_DESCRIPTOR(t)
-#define PB_SUBMSG_INFO_MSG_W_CB(t) PB_SUBMSG_DESCRIPTOR(t)
-#define PB_SUBMSG_INFO_SFIXED32(t)
-#define PB_SUBMSG_INFO_SFIXED64(t)
-#define PB_SUBMSG_INFO_SINT32(t)
-#define PB_SUBMSG_INFO_SINT64(t)
-#define PB_SUBMSG_INFO_STRING(t)
-#define PB_SUBMSG_INFO_UINT32(t)
-#define PB_SUBMSG_INFO_UINT64(t)
-#define PB_SUBMSG_INFO_EXTENSION(t)
-#define PB_SUBMSG_INFO_FIXED_LENGTH_BYTES(t)
+#define PB_SUBMSG_INFO_ONEOF3(ltype, structname, unionname, membername) PB_SI ## ltype(structname ## _ ## unionname ## _ ## membername ## _MSGTYPE)
+#define PB_SUBMSG_INFO_REPEATED(ltype, structname, fieldname) PB_SI ## ltype(structname ## _ ## fieldname ## _MSGTYPE)
+#define PB_SUBMSG_INFO_FIXARRAY(ltype, structname, fieldname) PB_SI ## ltype(structname ## _ ## fieldname ## _MSGTYPE)
+#define PB_SI_PB_LTYPE_BOOL(t)
+#define PB_SI_PB_LTYPE_BYTES(t)
+#define PB_SI_PB_LTYPE_DOUBLE(t)
+#define PB_SI_PB_LTYPE_ENUM(t)
+#define PB_SI_PB_LTYPE_UENUM(t)
+#define PB_SI_PB_LTYPE_FIXED32(t)
+#define PB_SI_PB_LTYPE_FIXED64(t)
+#define PB_SI_PB_LTYPE_FLOAT(t)
+#define PB_SI_PB_LTYPE_INT32(t)
+#define PB_SI_PB_LTYPE_INT64(t)
+#define PB_SI_PB_LTYPE_MESSAGE(t)  PB_SUBMSG_DESCRIPTOR(t)
+#define PB_SI_PB_LTYPE_MSG_W_CB(t) PB_SUBMSG_DESCRIPTOR(t)
+#define PB_SI_PB_LTYPE_SFIXED32(t)
+#define PB_SI_PB_LTYPE_SFIXED64(t)
+#define PB_SI_PB_LTYPE_SINT32(t)
+#define PB_SI_PB_LTYPE_SINT64(t)
+#define PB_SI_PB_LTYPE_STRING(t)
+#define PB_SI_PB_LTYPE_UINT32(t)
+#define PB_SI_PB_LTYPE_UINT64(t)
+#define PB_SI_PB_LTYPE_EXTENSION(t)
+#define PB_SI_PB_LTYPE_FIXED_LENGTH_BYTES(t)
 #define PB_SUBMSG_DESCRIPTOR(t)    &(t ## _msg),
 
 /* The field descriptors use a variable width format, with width of either
@@ -726,37 +771,37 @@ struct pb_extension_s {
  * The generator will give explicit size argument when it knows that a message
  * structure grows beyond 1-word format limits.
  */
-#define PB_FIELDINFO_WIDTH_AUTO(atype, htype, ltype) PB_FIELDINFO_WIDTH_ ## atype(htype, ltype)
-#define PB_FIELDINFO_WIDTH_STATIC(htype, ltype) PB_FIELDINFO_WIDTH_ ## htype(ltype)
-#define PB_FIELDINFO_WIDTH_POINTER(htype, ltype) PB_FIELDINFO_WIDTH_ ## htype(ltype)
-#define PB_FIELDINFO_WIDTH_CALLBACK(htype, ltype) 2
-#define PB_FIELDINFO_WIDTH_REQUIRED(ltype) PB_FIELDINFO_WIDTH_ ## ltype
-#define PB_FIELDINFO_WIDTH_SINGULAR(ltype) PB_FIELDINFO_WIDTH_ ## ltype
-#define PB_FIELDINFO_WIDTH_OPTIONAL(ltype) PB_FIELDINFO_WIDTH_ ## ltype
-#define PB_FIELDINFO_WIDTH_ONEOF(ltype) PB_FIELDINFO_WIDTH_ ## ltype
-#define PB_FIELDINFO_WIDTH_REPEATED(ltype) 2
-#define PB_FIELDINFO_WIDTH_FIXARRAY(ltype) 2
-#define PB_FIELDINFO_WIDTH_BOOL      1
-#define PB_FIELDINFO_WIDTH_BYTES     2
-#define PB_FIELDINFO_WIDTH_DOUBLE    1
-#define PB_FIELDINFO_WIDTH_ENUM      1
-#define PB_FIELDINFO_WIDTH_UENUM     1
-#define PB_FIELDINFO_WIDTH_FIXED32   1
-#define PB_FIELDINFO_WIDTH_FIXED64   1
-#define PB_FIELDINFO_WIDTH_FLOAT     1
-#define PB_FIELDINFO_WIDTH_INT32     1
-#define PB_FIELDINFO_WIDTH_INT64     1
-#define PB_FIELDINFO_WIDTH_MESSAGE   2
-#define PB_FIELDINFO_WIDTH_MSG_W_CB  2
-#define PB_FIELDINFO_WIDTH_SFIXED32  1
-#define PB_FIELDINFO_WIDTH_SFIXED64  1
-#define PB_FIELDINFO_WIDTH_SINT32    1
-#define PB_FIELDINFO_WIDTH_SINT64    1
-#define PB_FIELDINFO_WIDTH_STRING    2
-#define PB_FIELDINFO_WIDTH_UINT32    1
-#define PB_FIELDINFO_WIDTH_UINT64    1
-#define PB_FIELDINFO_WIDTH_EXTENSION 1
-#define PB_FIELDINFO_WIDTH_FIXED_LENGTH_BYTES 2
+#define PB_FIELDINFO_WIDTH_AUTO(atype, htype, ltype) PB_FI_WIDTH ## atype(htype, ltype)
+#define PB_FI_WIDTH_PB_ATYPE_STATIC(htype, ltype) PB_FI_WIDTH ## htype(ltype)
+#define PB_FI_WIDTH_PB_ATYPE_POINTER(htype, ltype) PB_FI_WIDTH ## htype(ltype)
+#define PB_FI_WIDTH_PB_ATYPE_CALLBACK(htype, ltype) 2
+#define PB_FI_WIDTH_PB_HTYPE_REQUIRED(ltype) PB_FI_WIDTH ## ltype
+#define PB_FI_WIDTH_PB_HTYPE_SINGULAR(ltype) PB_FI_WIDTH ## ltype
+#define PB_FI_WIDTH_PB_HTYPE_OPTIONAL(ltype) PB_FI_WIDTH ## ltype
+#define PB_FI_WIDTH_PB_HTYPE_ONEOF(ltype) PB_FI_WIDTH ## ltype
+#define PB_FI_WIDTH_PB_HTYPE_REPEATED(ltype) 2
+#define PB_FI_WIDTH_PB_HTYPE_FIXARRAY(ltype) 2
+#define PB_FI_WIDTH_PB_LTYPE_BOOL      1
+#define PB_FI_WIDTH_PB_LTYPE_BYTES     2
+#define PB_FI_WIDTH_PB_LTYPE_DOUBLE    1
+#define PB_FI_WIDTH_PB_LTYPE_ENUM      1
+#define PB_FI_WIDTH_PB_LTYPE_UENUM     1
+#define PB_FI_WIDTH_PB_LTYPE_FIXED32   1
+#define PB_FI_WIDTH_PB_LTYPE_FIXED64   1
+#define PB_FI_WIDTH_PB_LTYPE_FLOAT     1
+#define PB_FI_WIDTH_PB_LTYPE_INT32     1
+#define PB_FI_WIDTH_PB_LTYPE_INT64     1
+#define PB_FI_WIDTH_PB_LTYPE_MESSAGE   2
+#define PB_FI_WIDTH_PB_LTYPE_MSG_W_CB  2
+#define PB_FI_WIDTH_PB_LTYPE_SFIXED32  1
+#define PB_FI_WIDTH_PB_LTYPE_SFIXED64  1
+#define PB_FI_WIDTH_PB_LTYPE_SINT32    1
+#define PB_FI_WIDTH_PB_LTYPE_SINT64    1
+#define PB_FI_WIDTH_PB_LTYPE_STRING    2
+#define PB_FI_WIDTH_PB_LTYPE_UINT32    1
+#define PB_FI_WIDTH_PB_LTYPE_UINT64    1
+#define PB_FI_WIDTH_PB_LTYPE_EXTENSION 1
+#define PB_FI_WIDTH_PB_LTYPE_FIXED_LENGTH_BYTES 2
 
 /* The mapping from protobuf types to LTYPEs is done using these macros. */
 #define PB_LTYPE_MAP_BOOL               PB_LTYPE_BOOL
