@@ -236,6 +236,7 @@ class ButtonThread : public OSThread
         if (millis() - longPressTime > 10 * 1000) {
 #ifdef TBEAM_V10
             if (axp192_found == true) {
+                setLed(false);
                 power->shutdown();
             }
 #endif
