@@ -24,10 +24,14 @@ char ourHost[16];
 bool forcedSoftAP = 0;
 
 
+bool isSoftAPForced() {
+    return forcedSoftAP;
+}
+
 bool isWifiAvailable()
 {
     // If wifi status is connected, return true regardless of the radio configuration.
-    if (forcedSoftAP) {
+    if (isSoftAPForced()) {
         return 1;
     }
 
@@ -91,8 +95,8 @@ void initWifi(bool forceSoftAP)
 
                 DEBUG_MSG("----- Forcing SoftAP\n");
 
-                const char *softAPssid = "";
-                const char *softAPpasswd = "";
+                const char *softAPssid = "meshtasticAdmin";
+                const char *softAPpasswd = "12345678";
 
                 IPAddress apIP(192, 168, 42, 1);
                 WiFi.onEvent(WiFiEvent);
