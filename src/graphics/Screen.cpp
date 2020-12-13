@@ -984,7 +984,9 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
     // The coordinates define the left starting point of the text
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    if (radioConfig.preferences.wifi_ap_mode || isSoftAPForced()) {
+    if (isSoftAPForced()) {
+        display->drawString(x, y, String("WiFi: Software AP (Admin)"));
+    } else if (radioConfig.preferences.wifi_ap_mode) {
         display->drawString(x, y, String("WiFi: Software AP"));
     } else if (WiFi.status() != WL_CONNECTED) {
         display->drawString(x, y, String("WiFi: Not Connected"));
