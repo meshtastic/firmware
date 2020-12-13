@@ -178,9 +178,10 @@ void createSSLCert()
                 NULL);          /* Task handle. */
 
     DEBUG_MSG("Waiting for SSL Cert to be generated.\n");
-    if (isCertReady) {
-        DEBUG_MSG(".\n");
-        delayMicroseconds(1000);
+    while (!isCertReady) {
+        DEBUG_MSG(".");
+        delay(1000);
+        yield();
     }
     DEBUG_MSG("SSL Cert Ready!\n");
 }

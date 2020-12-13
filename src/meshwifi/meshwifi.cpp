@@ -23,6 +23,8 @@ char ourHost[16];
 
 bool forcedSoftAP = 0;
 
+bool APStartupComplete = 0;
+
 bool isSoftAPForced()
 {
     return forcedSoftAP;
@@ -40,6 +42,10 @@ bool isWifiAvailable()
 
     // strcpy(radioConfig.preferences.wifi_ssid, "");
     // strcpy(radioConfig.preferences.wifi_password, "");
+
+    // strcpy(radioConfig.preferences.wifi_ssid, "meshtasticAdmin");
+    // strcpy(radioConfig.preferences.wifi_password, "12345678");
+    // radioConfig.preferences.wifi_ap_mode = true;
 
     if (*wifiName && *wifiPsw) {
         return 1;
@@ -239,9 +245,16 @@ static void WiFiEvent(WiFiEvent_t event)
         DEBUG_MSG("WiFi access point started\n");
         Serial.println(WiFi.softAPIP());
 
-        // Start web server
-        initWebServer();
-        initApiServer();
+        if (!APStartupComplete) {
+            // Start web server
+            DEBUG_MSG("... Starting network services\n");
+            initWebServer();
+            initApiServer();
+
+            APStartupComplete = true;
+        } else {
+            DEBUG_MSG("... Not starting network services\n");
+        }
 
         break;
     case SYSTEM_EVENT_AP_STOP:

@@ -1009,12 +1009,15 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
     - WL_NO_SHIELD: assigned when no WiFi shield is present;
 
     */
-    if (WiFi.status() == WL_CONNECTED || isSoftAPForced()) {
+    if (WiFi.status() == WL_CONNECTED || isSoftAPForced() || radioConfig.preferences.wifi_ap_mode) {
         if (radioConfig.preferences.wifi_ap_mode || isSoftAPForced()) {
             display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IP: " + String(WiFi.softAPIP().toString().c_str()));
         } else {
             display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IP: " + String(WiFi.localIP().toString().c_str()));
         }
+        display->drawString(x + SCREEN_WIDTH - display->getStringWidth("(" + String(WiFi.softAPgetStationNum()) + "/4)"),
+                            y + FONT_HEIGHT_SMALL * 1, "(" + String(WiFi.softAPgetStationNum()) + "/4)");
+
     } else if (WiFi.status() == WL_NO_SSID_AVAIL) {
         display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "SSID Not Found");
     } else if (WiFi.status() == WL_CONNECTION_LOST) {
