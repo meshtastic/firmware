@@ -51,6 +51,8 @@ RemoteHardwarePlugin::RemoteHardwarePlugin()
 
 bool RemoteHardwarePlugin::handleReceivedProtobuf(const MeshPacket &req, const HardwareMessage &p)
 {
+    DEBUG_MSG("Received RemoteHardware typ=%d\n", p.typ);
+
     switch (p.typ) {
     case HardwareMessage_Type_WRITE_GPIOS:
         // Print notification to LCD screen
@@ -87,6 +89,7 @@ bool RemoteHardwarePlugin::handleReceivedProtobuf(const MeshPacket &req, const H
         lastWatchMsec = 0; // Force a new publish soon
         previousWatch = ~watchGpios; // generate a 'previous' value which is guaranteed to not match (to force an initial publish)
         enabled = true; // Let our thread run at least once
+        DEBUG_MSG("Now watching GPIOs 0x%x\n", watchGpios);
         break;
     }
 
@@ -98,6 +101,7 @@ bool RemoteHardwarePlugin::handleReceivedProtobuf(const MeshPacket &req, const H
         DEBUG_MSG("Hardware operation %d not yet implemented! FIXME\n", p.typ);
         break;
     }
+    
     return true; // handled
 }
 
@@ -110,6 +114,7 @@ int32_t RemoteHardwarePlugin::runOnce() {
 
             if(curVal != previousWatch) {
                 previousWatch = curVal;
+                DEBUG_MSG("Broadcasting GPIOS 0x%x changed!\n", curVal);
 
                 // Something changed!  Tell the world with a broadcast message
                 HardwareMessage reply = HardwareMessage_init_default;

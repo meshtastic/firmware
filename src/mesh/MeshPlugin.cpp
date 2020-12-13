@@ -27,11 +27,14 @@ MeshPlugin::~MeshPlugin()
 void MeshPlugin::callPlugins(const MeshPacket &mp)
 {
     // DEBUG_MSG("In call plugins\n");
+    bool pluginFound = false;
     for (auto i = plugins->begin(); i != plugins->end(); ++i) {
         auto &pi = **i;
 
         pi.currentRequest = &mp;
         if (pi.wantPortnum(mp.decoded.data.portnum)) {
+            pluginFound = true;
+
             bool handled = pi.handleReceived(mp);
 
             // Possibly send replies
@@ -42,11 +45,12 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
             if (handled)
                 break;
         }
-        else {
-            DEBUG_MSG("Plugin %s not interested\n", pi.name);
-        }
+       
         pi.currentRequest = NULL;
     }
+
+    if(!pluginFound)
+        DEBUG_MSG("No plugins interested in portnum=%d\n", mp.decoded.data.portnum);
 }
 
 /** Messages can be received that have the want_response bit set.  If set, this callback will be invoked
