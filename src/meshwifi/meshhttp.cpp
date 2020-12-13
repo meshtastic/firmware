@@ -927,7 +927,11 @@ void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
 
         for (int i = 0; i < n; ++i) {
             char ssidArray[50];
-            String(WiFi.SSID(i)).toCharArray(ssidArray, WiFi.SSID(i).length());
+            String ssidString = String(WiFi.SSID(i));
+            //String ssidString = String(WiFi.SSID(i)).toCharArray(ssidArray, WiFi.SSID(i).length());
+            ssidString.replace("\"", "\\\"");
+            ssidString.toCharArray(ssidArray, 50);
+                
             
             if (WiFi.encryptionType(i) != WIFI_AUTH_OPEN) {
                 //res->println("{\"ssid\": \"%s\",\"rssi\": -75}, ", String(WiFi.SSID(i).c_str() );
@@ -939,7 +943,7 @@ void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
                 }
             }
             // Yield some cpu cycles to IP stack.
-            //   This is important in case the list is large and it takes us tome to return
+            //   This is important in case the list is large and it takes us time to return
             //   to the main loop.
             yield();
         }
