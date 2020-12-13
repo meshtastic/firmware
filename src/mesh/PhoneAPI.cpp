@@ -96,9 +96,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     if (!available()) {
         // DEBUG_MSG("getFromRadio, !available\n");
         return false;
-    } else {
-        DEBUG_MSG("getFromRadio, state=%d\n", state);
-    }
+    } 
+
+    DEBUG_MSG("getFromRadio, state=%d\n", state);
 
     // In case we send a FromRadio packet
     memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
@@ -162,6 +162,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     case STATE_SEND_PACKETS:
         // Do we have a message from the mesh?
         if (packetForPhone) {
+
+            printPacket("phone downloaded packet", packetForPhone);
+            
             // Encapsulate as a FromRadio packet
             fromRadioScratch.which_variant = FromRadio_packet_tag;
             fromRadioScratch.variant.packet = *packetForPhone;

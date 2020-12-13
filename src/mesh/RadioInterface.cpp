@@ -123,7 +123,7 @@ void printPacket(const char *prefix, const MeshPacket *p)
         auto &s = p->decoded;
         switch (s.which_payload) {
         case SubPacket_data_tag:
-            DEBUG_MSG(" Payload:Data");
+            DEBUG_MSG(" Portnum=%d", s.data.portnum);
             break;
         case SubPacket_position_tag:
             DEBUG_MSG(" Payload:Position");

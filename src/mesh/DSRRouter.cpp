@@ -170,7 +170,7 @@ bool DSRRouter::weAreInRoute(const RouteDiscovery &route)
  **/
 void DSRRouter::updateRoutes(const RouteDiscovery &route, bool isRequest)
 {
-    DEBUG_MSG("FIXME not implemented");
+    DEBUG_MSG("FIXME not implemented updateRoutes\n");
 }
 
 /**
@@ -178,7 +178,7 @@ void DSRRouter::updateRoutes(const RouteDiscovery &route, bool isRequest)
  */
 void DSRRouter::sendRouteReply(const RouteDiscovery &route, NodeNum toAppend)
 {
-    DEBUG_MSG("FIXME not implemented");
+    DEBUG_MSG("FIXME not implemented sendRoute\n");
 }
 
 /**
@@ -188,7 +188,7 @@ void DSRRouter::sendRouteReply(const RouteDiscovery &route, NodeNum toAppend)
  */
 NodeNum DSRRouter::getNextHop(NodeNum dest)
 {
-    DEBUG_MSG("FIXME not implemented");
+    DEBUG_MSG("FIXME not implemented getNextHop\n");
     return 0;
 }
 
@@ -198,7 +198,7 @@ NodeNum DSRRouter::getNextHop(NodeNum dest)
  */
 void DSRRouter::resendRouteRequest(const MeshPacket *p)
 {
-    DEBUG_MSG("FIXME not implemented");
+    DEBUG_MSG("FIXME not implemented resendRoute\n");
 }
 
 /**
@@ -208,7 +208,7 @@ void DSRRouter::resendRouteRequest(const MeshPacket *p)
  */
 void DSRRouter::addRoute(NodeNum dest, NodeNum forwarder, uint8_t numHops)
 {
-    DEBUG_MSG("FIXME not implemented");
+    DEBUG_MSG("FIXME not implemented addRoute\n");
 }
 
 /**
@@ -216,7 +216,7 @@ void DSRRouter::addRoute(NodeNum dest, NodeNum forwarder, uint8_t numHops)
  */
 void DSRRouter::removeRoute(NodeNum dest)
 {
-    DEBUG_MSG("FIXME not implemented");
+    DEBUG_MSG("FIXME not implemented removeRoute\n");
 }
 
 /**
@@ -224,7 +224,7 @@ void DSRRouter::removeRoute(NodeNum dest)
  */
 void DSRRouter::sendNextHop(NodeNum n, const MeshPacket *p)
 {
-    DEBUG_MSG("FIXME not implemented");
+    DEBUG_MSG("FIXME not implemented sendNextHop\n");
 }
 
 /**
@@ -232,7 +232,7 @@ void DSRRouter::sendNextHop(NodeNum n, const MeshPacket *p)
  */
 void DSRRouter::sendRouteError(const MeshPacket *p, RouteError err)
 {
-    DEBUG_MSG("FIXME not implemented");
+    DEBUG_MSG("FIXME not implemented sendRouteError\n");
 }
 
 /** make a copy of p, start discovery, but only if we don't
@@ -241,5 +241,5 @@ void DSRRouter::sendRouteError(const MeshPacket *p, RouteError err)
  */
 void DSRRouter::startDiscovery(NodeNum dest)
 {
-    DEBUG_MSG("FIXME not implemented");
+    DEBUG_MSG("FIXME not implemented startDiscovery\n");
 }
