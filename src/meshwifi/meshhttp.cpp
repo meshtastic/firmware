@@ -912,8 +912,8 @@ void handleRestart(HTTPRequest *req, HTTPResponse *res)
 
 void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
 {
-    // res->setHeader("Content-Type", "application/json");
-    res->setHeader("Content-Type", "text/html");
+    res->setHeader("Content-Type", "application/json");
+    // res->setHeader("Content-Type", "text/html");
 
     int n = WiFi.scanNetworks();
     res->println("{");
