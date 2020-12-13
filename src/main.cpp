@@ -241,7 +241,7 @@ class ButtonThread : public OSThread
             }
 #endif
         } else {
-            //DEBUG_MSG("Long press %u\n", (millis() - longPressTime));
+            // DEBUG_MSG("Long press %u\n", (millis() - longPressTime));
         }
     }
 
@@ -296,6 +296,22 @@ void setup()
 #ifdef RESET_OLED
     pinMode(RESET_OLED, OUTPUT);
     digitalWrite(RESET_OLED, 1);
+#endif
+
+    // If BUTTON_PIN is held down during the startup process,
+    //   force the device to go into a SoftAP mode.
+    bool forceSoftAP = 0;
+#ifdef BUTTON_PIN
+#ifndef NO_ESP32
+    pinMode(BUTTON_PIN, INPUT);
+
+    // BUTTON_PIN is pulled high by a 12k resistor.
+    if (!digitalRead(BUTTON_PIN)) {
+        forceSoftAP = 1;
+        DEBUG_MSG("-------------------- Setting forceSoftAP = 1\n");
+    }
+
+#endif
 #endif
 
     OSThread::setup();
@@ -467,7 +483,7 @@ void setup()
 #endif
 
     // Initialize Wifi
-    initWifi();
+    initWifi(forceSoftAP);
 
     if (!rIf)
         recordCriticalError(ErrNoRadio);

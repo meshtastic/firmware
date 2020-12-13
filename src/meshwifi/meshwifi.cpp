@@ -21,13 +21,31 @@ uint8_t wifiDisconnectReason = 0;
 // Stores our hostname
 char ourHost[16];
 
+bool forcedSoftAP = 0;
+
+bool APStartupComplete = 0;
+
+bool isSoftAPForced()
+{
+    return forcedSoftAP;
+}
+
 bool isWifiAvailable()
 {
+    // If wifi status is connected, return true regardless of the radio configuration.
+    if (isSoftAPForced()) {
+        return 1;
+    }
+
     const char *wifiName = radioConfig.preferences.wifi_ssid;
     const char *wifiPsw = radioConfig.preferences.wifi_password;
 
     // strcpy(radioConfig.preferences.wifi_ssid, "");
     // strcpy(radioConfig.preferences.wifi_password, "");
+
+    // strcpy(radioConfig.preferences.wifi_ssid, "meshtasticAdmin");
+    // strcpy(radioConfig.preferences.wifi_password, "12345678");
+    // radioConfig.preferences.wifi_ap_mode = true;
 
     if (*wifiName && *wifiPsw) {
         return 1;
@@ -58,20 +76,44 @@ void deinitWifi()
 }
 
 // Startup WiFi
-void initWifi()
+void initWifi(bool forceSoftAP)
 {
-    if (isWifiAvailable() == 0) {
-        return;
+
+    if (forceSoftAP) {
+        // do nothing
+        // DEBUG_MSG("----- Forcing SoftAP\n");
+    } else {
+        if (isWifiAvailable() == 0) {
+            return;
+        }
     }
+
+    forcedSoftAP = forceSoftAP;
 
     createSSLCert();
 
-    if (radioConfig.has_preferences) {
+    if (radioConfig.has_preferences || forceSoftAP) {
         const char *wifiName = radioConfig.preferences.wifi_ssid;
         const char *wifiPsw = radioConfig.preferences.wifi_password;
 
-        if (*wifiName && *wifiPsw) {
-            if (radioConfig.preferences.wifi_ap_mode) {
+        if ((*wifiName && *wifiPsw) || forceSoftAP) {
+            if (forceSoftAP) {
+
+                DEBUG_MSG("Forcing SoftAP\n");
+
+                const char *softAPssid = "meshtasticAdmin";
+                const char *softAPpasswd = "12345678";
+
+                IPAddress apIP(192, 168, 42, 1);
+                WiFi.onEvent(WiFiEvent);
+
+                WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
+                DEBUG_MSG("STARTING WIFI AP: ssid=%s, ok=%d\n", softAPssid, WiFi.softAP(softAPssid, softAPpasswd));
+                DEBUG_MSG("MY IP ADDRESS: %s\n", WiFi.softAPIP().toString().c_str());
+
+                dnsServer.start(53, "*", apIP);
+
+            } else if (radioConfig.preferences.wifi_ap_mode) {
 
                 IPAddress apIP(192, 168, 42, 1);
                 WiFi.onEvent(WiFiEvent);
@@ -203,9 +245,16 @@ static void WiFiEvent(WiFiEvent_t event)
         DEBUG_MSG("WiFi access point started\n");
         Serial.println(WiFi.softAPIP());
 
-        // Start web server
-        initWebServer();
-        initApiServer();
+        if (!APStartupComplete) {
+            // Start web server
+            DEBUG_MSG("... Starting network services\n");
+            initWebServer();
+            initApiServer();
+
+            APStartupComplete = true;
+        } else {
+            DEBUG_MSG("... Not starting network services\n");
+        }
 
         break;
     case SYSTEM_EVENT_AP_STOP:
