@@ -1100,10 +1100,14 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         }
 
     } else {
-        if ((millis() / 10000) % 2) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
+        if (radioConfig.preferences.wifi_ap_mode) {
+            if ((millis() / 10000) % 2) {
+                display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
+            } else {
+                display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "PWD: " + String(wifiPsw));
+            }
         } else {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "PWD: " + String(wifiPsw));
+            display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
         }
     }
     display->drawString(x, y + FONT_HEIGHT_SMALL * 3, "http://meshtastic.local");
