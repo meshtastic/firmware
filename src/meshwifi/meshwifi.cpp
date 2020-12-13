@@ -40,6 +40,8 @@ bool isWifiAvailable()
 
     // strcpy(radioConfig.preferences.wifi_ssid, "");
     // strcpy(radioConfig.preferences.wifi_password, "");
+    strcpy(radioConfig.preferences.wifi_ssid, "meshtastic");
+    strcpy(radioConfig.preferences.wifi_password, "meshtastic!");
 
     if (*wifiName && *wifiPsw) {
         return 1;
@@ -75,7 +77,7 @@ void initWifi(bool forceSoftAP)
 
     if (forceSoftAP) {
         // do nothing
-        DEBUG_MSG("----- Forcing SoftAP\n");
+        // DEBUG_MSG("----- Forcing SoftAP\n");
     } else {
         if (isWifiAvailable() == 0) {
             return;
@@ -93,7 +95,7 @@ void initWifi(bool forceSoftAP)
         if ((*wifiName && *wifiPsw) || forceSoftAP) {
             if (forceSoftAP) {
 
-                DEBUG_MSG("----- Forcing SoftAP\n");
+                DEBUG_MSG("Forcing SoftAP\n");
 
                 const char *softAPssid = "meshtasticAdmin";
                 const char *softAPpasswd = "12345678";
