@@ -308,6 +308,7 @@ void setup()
     // BUTTON_PIN is pulled high by a 12k resistor.
     if (!digitalRead(BUTTON_PIN)) {
         forceSoftAP = 1;
+        DEBUG_MSG("-------------------- Setting forceSoftAP = 1\n");
     }
 
 #endif
@@ -481,15 +482,8 @@ void setup()
     }
 #endif
 
-    if (forceSoftAP) {
-        strcpy(radioConfig.preferences.wifi_ssid, "meshtasticAdmin");
-        strcpy(radioConfig.preferences.wifi_password, "12345678");
-        radioConfig.preferences.wifi_ap_mode = true;
-        DEBUG_MSG("Forcing SoftAP\n");
-    }
-
     // Initialize Wifi
-    initWifi();
+    initWifi(forceSoftAP);
 
     if (!rIf)
         recordCriticalError(ErrNoRadio);

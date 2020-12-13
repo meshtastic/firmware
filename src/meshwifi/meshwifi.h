@@ -9,7 +9,7 @@
 #include <WiFi.h>
 #endif
 
-void initWifi();
+void initWifi(bool forceSoftAP);
 void deinitWifi();
 
 bool isWifiAvailable();
