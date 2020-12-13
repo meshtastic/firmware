@@ -59,6 +59,7 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res);
 void handleRestart(HTTPRequest *req, HTTPResponse *res);
 void handle404(HTTPRequest *req, HTTPResponse *res);
 void handleFormUpload(HTTPRequest *req, HTTPResponse *res);
+void handleScanNetworks(HTTPRequest *req, HTTPResponse *res);
 
 void middlewareSpeedUp240(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
 void middlewareSpeedUp160(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
@@ -238,6 +239,7 @@ void initWebServer()
     ResourceNode *nodeRestart = new ResourceNode("/restart", "POST", &handleRestart);
     ResourceNode *node404 = new ResourceNode("", "GET", &handle404);
     ResourceNode *nodeFormUpload = new ResourceNode("/upload", "POST", &handleFormUpload);
+    ResourceNode *nodeJsonScanNetworks = new ResourceNode("/json/scanNetworks", "GET", &handleScanNetworks);
 
     // Secure nodes
     secureServer->registerNode(nodeAPIv1ToRadioOptions);
@@ -252,6 +254,7 @@ void initWebServer()
     secureServer->registerNode(nodeRestart);
     secureServer->setDefaultNode(node404);
     secureServer->setDefaultNode(nodeFormUpload);
+    secureServer->setDefaultNode(nodeJsonScanNetworks);
 
     secureServer->addMiddleware(&middlewareSpeedUp240);
 
@@ -268,6 +271,7 @@ void initWebServer()
     insecureServer->registerNode(nodeRestart);
     insecureServer->setDefaultNode(node404);
     insecureServer->setDefaultNode(nodeFormUpload);
+    insecureServer->setDefaultNode(nodeJsonScanNetworks);
 
     insecureServer->addMiddleware(&middlewareSpeedUp160);
 
@@ -904,6 +908,47 @@ void handleRestart(HTTPRequest *req, HTTPResponse *res)
     res->println("Restarting");
 
     ESP.restart();
+}
+
+void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
+{
+    // res->setHeader("Content-Type", "application/json");
+    res->setHeader("Content-Type", "text/html");
+
+    int n = WiFi.scanNetworks();
+    res->println("{");
+    res->println("\"data\": {");
+    if (n == 0) {
+        // No networks found.
+        res->println("\"networks\": []");
+
+    } else {
+        res->println("\"networks\": [");
+
+        for (int i = 0; i < n; ++i) {
+            char ssidArray[50];
+            String(WiFi.SSID(i)).toCharArray(ssidArray, WiFi.SSID(i).length());
+            
+            if (WiFi.encryptionType(i) != WIFI_AUTH_OPEN) {
+                //res->println("{\"ssid\": \"%s\",\"rssi\": -75}, ", String(WiFi.SSID(i).c_str() );
+                
+                res->printf("{\"ssid\": \"%s\",\"rssi\": %d}", ssidArray, WiFi.RSSI(i) ) ;
+                //WiFi.RSSI(i)
+                if (i != n-1) {
+                    res->printf(",");
+                }
+            }
+            // Yield some cpu cycles to IP stack.
+            //   This is important in case the list is large and it takes us tome to return
+            //   to the main loop.
+            yield();
+        }
+        res->println("]");
+    }
+    res->println("},");
+    res->println("\"status\": \"ok\"");
+    res->println("}");
+
 }
 
 void handleFavicon(HTTPRequest *req, HTTPResponse *res)
