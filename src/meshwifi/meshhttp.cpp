@@ -253,9 +253,9 @@ void initWebServer()
     secureServer->registerNode(nodeStaticPOST);
     secureServer->registerNode(nodeStatic);
     secureServer->registerNode(nodeRestart);
+    secureServer->registerNode(nodeFormUpload);
+    secureServer->registerNode(nodeJsonScanNetworks);
     secureServer->setDefaultNode(node404);
-    secureServer->setDefaultNode(nodeFormUpload);
-    secureServer->setDefaultNode(nodeJsonScanNetworks);
 
     secureServer->addMiddleware(&middlewareSpeedUp240);
 
@@ -270,9 +270,9 @@ void initWebServer()
     insecureServer->registerNode(nodeStaticPOST);
     insecureServer->registerNode(nodeStatic);
     insecureServer->registerNode(nodeRestart);
+    insecureServer->registerNode(nodeFormUpload);
+    insecureServer->registerNode(nodeJsonScanNetworks);
     insecureServer->setDefaultNode(node404);
-    insecureServer->setDefaultNode(nodeFormUpload);
-    insecureServer->setDefaultNode(nodeJsonScanNetworks);
 
     insecureServer->addMiddleware(&middlewareSpeedUp160);
 
