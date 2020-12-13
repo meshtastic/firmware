@@ -11,8 +11,9 @@ For app cleanup:
 * DONE update android code: https://developer.android.com/topic/libraries/view-binding/migration
 * only do wantReplies once per packet type, if we change network settings force it again
 * test GPIO watch
-* DONE make hello world example service
+* writeup docs on gpio 
 * make python ping command
+* DONE make hello world example service
 * DONE have python tool check max packet size before sending to device
 * DONE if request was sent reliably, send reply reliably
 * DONE require a recent python api to talk to these new device loads
@@ -20,8 +21,8 @@ For app cleanup:
 * DONE fix handleIncomingPosition
 * DONE move want_replies handling into plugins
 * DONE on android for received positions handle either old or new positions / user messages
-* on android side send old or new positions as needed / user messages
-* test python side handle new position/user messages
+* DONE on android side send old or new positions as needed / user messages
+* DONE test python side handle new position/user messages
 * DONE make a gpio example. --gpiowrb 4 1, --gpiord 0x444, --gpiowatch 0x3ff
 * DONE fix position sending to use new plugin
 * DONE Add SinglePortNumPlugin - as the new most useful baseclass
