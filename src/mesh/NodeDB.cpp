@@ -57,6 +57,13 @@ static uint8_t ourMacAddr[6];
  */
 NodeNum displayedNodeNum;
 
+/// A usable (but bigger) version of the channel name in the channelSettings object
+const char *channelName;
+
+/// A usable psk - which has been constructed based on the (possibly short psk) in channelSettings
+static uint8_t activePSK[32];
+static uint8_t activePSKSize;
+
 /**
  * Generate a short suffix used to disambiguate channels that might have the same "name" entered by the human but different PSKs.
  * The ideas is that the PSK changing should be visible to the user so that they see they probably messed up and that's why they
@@ -77,10 +84,10 @@ const char *getChannelName()
     static char buf[32];
 
     uint8_t code = 0;
-    for (int i = 0; i < channelSettings.psk.size; i++)
-        code ^= channelSettings.psk.bytes[i];
+    for (int i = 0; i < activePSKSize; i++)
+        code ^= activePSK[i];
 
-    snprintf(buf, sizeof(buf), "#%s-%c", channelSettings.name, 'A' + (code % 26));
+    snprintf(buf, sizeof(buf), "#%s-%c", channelName, 'A' + (code % 26));
     return buf;
 }
 
@@ -110,13 +117,47 @@ bool NodeDB::resetRadioConfig()
         channelSettings.modem_config = ChannelSettings_ModemConfig_Bw125Cr48Sf4096; // slow and long range
 
         channelSettings.tx_power = 0; // default
-        memcpy(&channelSettings.psk.bytes, defaultpsk, sizeof(channelSettings.psk));
-        channelSettings.psk.size = sizeof(defaultpsk);
-        strcpy(channelSettings.name, "Default");
+        uint8_t defaultpskIndex = 1;
+        channelSettings.psk.bytes[0] = defaultpskIndex;
+        channelSettings.psk.size = 1;
+        strcpy(channelSettings.name, "");
+    }
+
+    // Convert "Default" to our new short representation
+    if(strcmp(channelSettings.name, "Default") == 0)
+        *channelSettings.name = '\0';
+
+    // Convert the short "" representation for Default into a usable string
+    channelName = channelSettings.name;
+    if(!*channelName) // emptystring
+        channelName = "Default";
+
+    // Convert any old usage of the defaultpsk into our new short representation.
+    if(channelSettings.psk.size == sizeof(defaultpsk) && 
+            memcmp(channelSettings.psk.bytes, defaultpsk, sizeof(defaultpsk)) == 0) {
+        *channelSettings.psk.bytes = 1;
+        channelSettings.psk.size = 1;
+    }
+
+    // Convert the short single byte variants of psk into variant that can be used more generally
+    memcpy(activePSK, channelSettings.psk.bytes, channelSettings.psk.size);
+    activePSKSize = channelSettings.psk.size;
+    if(activePSKSize == 1) {
+        uint8_t pskIndex = activePSK[0];
+        DEBUG_MSG("Expanding short PSK #%d\n", pskIndex);
+        if(pskIndex == 0)
+            activePSKSize = 0; // Turn off encryption
+        else {
+            memcpy(activePSK, defaultpsk, sizeof(defaultpsk));
+            activePSKSize = sizeof(defaultpsk);
+            // Bump up the last byte of PSK as needed
+            uint8_t *last = activePSK + sizeof(defaultpsk) - 1;
+            *last = *last + pskIndex - 1; // index of 1 means no change vs defaultPSK
+        }
     }
 
     // Tell our crypto engine about the psk
-    crypto->setKey(channelSettings.psk.size, channelSettings.psk.bytes);
+    crypto->setKey(activePSKSize, activePSK);
 
     // temp hack for quicker testing
     // devicestate.no_save = true;
