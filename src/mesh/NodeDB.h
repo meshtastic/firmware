@@ -13,6 +13,7 @@ extern MyNodeInfo &myNodeInfo;
 extern RadioConfig &radioConfig;
 extern ChannelSettings &channelSettings;
 extern User &owner;
+extern const char *channelName;
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const NodeInfo *n);
