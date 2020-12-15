@@ -32,6 +32,15 @@ class MeshPlugin
     const char *name;
 
     /**
+     * If this plugin is currently handling a request currentRequest will be preset
+     * to the packet with the request.  This is mostly useful for reply handlers.
+     * 
+     * Note: this can be static because we are guaranteed to be processing only one
+     * plugin at a time.
+     */
+    static const MeshPacket *currentRequest;
+
+    /**
      * Initialize your plugin.  This setup function is called once after all hardware and mesh protocol layers have
      * been initialized
      */

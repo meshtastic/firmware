@@ -49,6 +49,11 @@ The easiest way to get started is:
 * Rebuild with your new messaging goodness and install on the device
 * Use the [meshtastic commandline tool](https://github.com/meshtastic/Meshtastic-python) to send a packet to your board "meshtastic --dest 1234 --ping"
 
+## Threading
+
+It is very common that you would like your plugin to be invoked periodically.
+We use a crude/basic cooperative threading system to allow this on any of our supported platforms.  Simply inherit from OSThread and implement runOnce().  See the OSThread [documentation](/src/concurrency/OSThread.h) for more details.  For an example consumer of this API see RemoteHardwarePlugin::runOnce.
+
 ## Picking a port number
 
 For any new 'apps' that run on the device or via sister apps on phones/PCs they should pick and use a unique 'portnum' for their application.

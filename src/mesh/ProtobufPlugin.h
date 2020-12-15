@@ -55,11 +55,11 @@ template <class T> class ProtobufPlugin : private SinglePortPlugin
         // it would be better to update even if the message was destined to others.
 
         auto &p = mp.decoded.data;
-        DEBUG_MSG("Received %s from=0x%0x, id=%d, payloadlen=%d\n", name, mp.from, mp.id, p.payload.size);
+        DEBUG_MSG("Received %s from=0x%0x, id=0x%x, payloadlen=%d\n", name, mp.from, mp.id, p.payload.size);
 
         T scratch;
         if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, fields, &scratch))
-            handleReceivedProtobuf(mp, scratch);
+            return handleReceivedProtobuf(mp, scratch);
 
         return false; // Let others look at this message also if they want
     }

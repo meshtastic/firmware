@@ -5,6 +5,8 @@
 
 std::vector<MeshPlugin *> *MeshPlugin::plugins;
 
+const MeshPacket *MeshPlugin::currentRequest;
+
 MeshPlugin::MeshPlugin(const char *_name) : name(_name)
 {
     // Can't trust static initalizer order, so we check each time
@@ -25,23 +27,30 @@ MeshPlugin::~MeshPlugin()
 void MeshPlugin::callPlugins(const MeshPacket &mp)
 {
     // DEBUG_MSG("In call plugins\n");
+    bool pluginFound = false;
     for (auto i = plugins->begin(); i != plugins->end(); ++i) {
         auto &pi = **i;
+
+        pi.currentRequest = &mp;
         if (pi.wantPortnum(mp.decoded.data.portnum)) {
+            pluginFound = true;
+
             bool handled = pi.handleReceived(mp);
 
-            // Possibly send replies (unless we are handling a locally generated message)
-            if (mp.decoded.want_response && mp.from != nodeDB.getNodeNum())
+            // Possibly send replies
+            if (mp.decoded.want_response)
                 pi.sendResponse(mp);
 
             DEBUG_MSG("Plugin %s handled=%d\n", pi.name, handled);
             if (handled)
                 break;
         }
-        else {
-            DEBUG_MSG("Plugin %s not interested\n", pi.name);
-        }
+       
+        pi.currentRequest = NULL;
     }
+
+    if(!pluginFound)
+        DEBUG_MSG("No plugins interested in portnum=%d\n", mp.decoded.data.portnum);
 }
 
 /** Messages can be received that have the want_response bit set.  If set, this callback will be invoked
