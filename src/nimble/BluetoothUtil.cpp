@@ -545,7 +545,7 @@ void setBluetoothEnable(bool on)
             if (firstTime) {
                 firstTime = 0;
             } else {
-                initWifi();
+                initWifi(0);
             }
         } else {
 
