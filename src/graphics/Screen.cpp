@@ -984,7 +984,9 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
     // The coordinates define the left starting point of the text
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    if (radioConfig.preferences.wifi_ap_mode) {
+    if (isSoftAPForced()) {
+        display->drawString(x, y, String("WiFi: Software AP (Admin)"));
+    } else if (radioConfig.preferences.wifi_ap_mode) {
         display->drawString(x, y, String("WiFi: Software AP"));
     } else if (WiFi.status() != WL_CONNECTED) {
         display->drawString(x, y, String("WiFi: Not Connected"));
@@ -1007,13 +1009,15 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
     - WL_NO_SHIELD: assigned when no WiFi shield is present;
 
     */
-
-    if (WiFi.status() == WL_CONNECTED) {
-        if (radioConfig.preferences.wifi_ap_mode) {
+    if (WiFi.status() == WL_CONNECTED || isSoftAPForced() || radioConfig.preferences.wifi_ap_mode) {
+        if (radioConfig.preferences.wifi_ap_mode || isSoftAPForced()) {
             display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IP: " + String(WiFi.softAPIP().toString().c_str()));
         } else {
             display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IP: " + String(WiFi.localIP().toString().c_str()));
         }
+        display->drawString(x + SCREEN_WIDTH - display->getStringWidth("(" + String(WiFi.softAPgetStationNum()) + "/4)"),
+                            y + FONT_HEIGHT_SMALL * 1, "(" + String(WiFi.softAPgetStationNum()) + "/4)");
+
     } else if (WiFi.status() == WL_NO_SSID_AVAIL) {
         display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "SSID Not Found");
     } else if (WiFi.status() == WL_CONNECTION_LOST) {
@@ -1088,10 +1092,23 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         }
     }
 
-    if ((millis() / 10000) % 2) {
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
+    if (isSoftAPForced()) {
+        if ((millis() / 10000) % 2) {
+            display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: meshtasticAdmin");
+        } else {
+            display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "PWD: 12345678");
+        }
+
     } else {
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "PWD: " + String(wifiPsw));
+        if (radioConfig.preferences.wifi_ap_mode) {
+            if ((millis() / 10000) % 2) {
+                display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
+            } else {
+                display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "PWD: " + String(wifiPsw));
+            }
+        } else {
+            display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
+        }
     }
     display->drawString(x, y + FONT_HEIGHT_SMALL * 3, "http://meshtastic.local");
 
@@ -1185,8 +1202,7 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
     // DEBUG_MSG("Screen got status update %d\n", arg->getStatusType());
     switch (arg->getStatusType()) {
     case STATUS_TYPE_NODE:
-        if (showingNormalScreen &&
-            nodeStatus->getLastNumTotal() != nodeStatus->getNumTotal()) {
+        if (showingNormalScreen && nodeStatus->getLastNumTotal() != nodeStatus->getNumTotal()) {
             setFrames(); // Regen the list of screens
         }
         nodeDB.updateGUI = false;
