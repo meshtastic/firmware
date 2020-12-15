@@ -70,10 +70,11 @@ static uint8_t activePSKSize;
 their nodes
  * aren't talking to each other.
  *
- * This string is of the form "#name-XY".
+ * This string is of the form "#name-X".
  *
- * Where X is a letter from A to Z (base26), and formed by xoring all the bytes of the PSK together.
- * Y is not yet used but should eventually indicate 'speed/range' of the link
+ * Where X is either:
+ * (for custom PSKS) a letter from A to Z (base26), and formed by xoring all the bytes of the PSK together,
+ * OR (for the standard minimially secure PSKs) a number from 0 to 9.
  *
  * This function will also need to be implemented in GUI apps that talk to the radio.
  *
@@ -83,11 +84,19 @@ const char *getChannelName()
 {
     static char buf[32];
 
-    uint8_t code = 0;
-    for (int i = 0; i < activePSKSize; i++)
-        code ^= activePSK[i];
+    char suffix;
+    if(channelSettings.psk.size != 1) {
+        // We have a standard PSK, so generate a letter based hash.
+        uint8_t code = 0;
+        for (int i = 0; i < activePSKSize; i++)
+            code ^= activePSK[i];
 
-    snprintf(buf, sizeof(buf), "#%s-%c", channelName, 'A' + (code % 26));
+        suffix = 'A' + (code % 26);
+    } else {
+        suffix = '0' + channelSettings.psk.bytes[0];
+    }
+
+    snprintf(buf, sizeof(buf), "#%s-%c", channelName, suffix);
     return buf;
 }
 
@@ -123,14 +132,29 @@ bool NodeDB::resetRadioConfig()
         strcpy(channelSettings.name, "");
     }
 
-    // Convert "Default" to our new short representation
+    // Convert the old string "Default" to our new short representation
     if(strcmp(channelSettings.name, "Default") == 0)
         *channelSettings.name = '\0';
 
     // Convert the short "" representation for Default into a usable string
     channelName = channelSettings.name;
-    if(!*channelName) // emptystring
-        channelName = "Default";
+    if(!*channelName) { // emptystring
+        // Per mesh.proto spec, if bandwidth is specified we must ignore modemConfig enum, we assume that in that case
+        // the app fucked up and forgot to set channelSettings.name
+        channelName = "Unset";
+        if(channelSettings.bandwidth == 0) switch(channelSettings.modem_config) {
+            case ChannelSettings_ModemConfig_Bw125Cr45Sf128:
+                channelName = "MediumRange"; break;
+            case ChannelSettings_ModemConfig_Bw500Cr45Sf128:
+                channelName = "Fast"; break;
+            case ChannelSettings_ModemConfig_Bw31_25Cr48Sf512:
+                channelName = "LongAlt"; break;
+            case ChannelSettings_ModemConfig_Bw125Cr48Sf4096:
+                channelName = "LongSlow"; break;
+            default:
+                channelName = "Invalid"; break;
+        }
+    }
 
     // Convert any old usage of the defaultpsk into our new short representation.
     if(channelSettings.psk.size == sizeof(defaultpsk) && 
