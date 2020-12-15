@@ -9,10 +9,11 @@ For app cleanup:
 * DONE check build guide
 * DONE write devapi user guide
 * DONE update android code: https://developer.android.com/topic/libraries/view-binding/migration
-* only do wantReplies once per packet type, if we change network settings force it again
-* make gpio watch work, use thread and setup
+* DONE test GPIO watch
+* DONE set --set-chan-fast, --set-chan-default
+* writeup docs on gpio 
+* DONE make python ping command
 * DONE make hello world example service
-* make python ping command
 * DONE have python tool check max packet size before sending to device
 * DONE if request was sent reliably, send reply reliably
 * DONE require a recent python api to talk to these new device loads
@@ -20,8 +21,8 @@ For app cleanup:
 * DONE fix handleIncomingPosition
 * DONE move want_replies handling into plugins
 * DONE on android for received positions handle either old or new positions / user messages
-* on android side send old or new positions as needed / user messages
-* test python side handle new position/user messages
+* DONE on android side send old or new positions as needed / user messages
+* DONE test python side handle new position/user messages
 * DONE make a gpio example. --gpiowrb 4 1, --gpiord 0x444, --gpiowatch 0x3ff
 * DONE fix position sending to use new plugin
 * DONE Add SinglePortNumPlugin - as the new most useful baseclass
@@ -31,6 +32,7 @@ For app cleanup:
 * DONE test that position, text messages and user info work properly with new android app and old device code
 * do UDP tunnel
 * fix the RTC drift bug
+* only do wantReplies once per packet type, if we change network settings force it again
 * move python ping functionality into device, reply with rxsnr info
 * use channels for gpio security https://github.com/meshtastic/Meshtastic-device/issues/104
 * generate autodocs
