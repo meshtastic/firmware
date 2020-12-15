@@ -10,7 +10,7 @@ For app cleanup:
 * DONE write devapi user guide
 * DONE update android code: https://developer.android.com/topic/libraries/view-binding/migration
 * DONE test GPIO watch
-* set --set-chan-fast, --set-chan-default
+* DONE set --set-chan-fast, --set-chan-default
 * writeup docs on gpio 
 * DONE make python ping command
 * DONE make hello world example service

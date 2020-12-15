@@ -144,9 +144,9 @@ bool NodeDB::resetRadioConfig()
         channelName = "Unset";
         if(channelSettings.bandwidth == 0) switch(channelSettings.modem_config) {
             case ChannelSettings_ModemConfig_Bw125Cr45Sf128:
-                channelName = "MediumRange"; break;
+                channelName = "Medium"; break;
             case ChannelSettings_ModemConfig_Bw500Cr45Sf128:
-                channelName = "Fast"; break;
+                channelName = "ShortFast"; break;
             case ChannelSettings_ModemConfig_Bw31_25Cr48Sf512:
                 channelName = "LongAlt"; break;
             case ChannelSettings_ModemConfig_Bw125Cr48Sf4096:
