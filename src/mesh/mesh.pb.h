@@ -159,6 +159,8 @@ typedef struct _RadioConfig {
     RadioConfig_UserPreferences preferences;
     bool has_channel_settings;
     ChannelSettings channel_settings;
+    pb_size_t secondary_channels_count;
+    ChannelSettings secondary_channels[4];
 } RadioConfig;
 
 typedef struct _SubPacket {
@@ -191,6 +193,7 @@ typedef struct _MeshPacket {
         SubPacket decoded;
         MeshPacket_encrypted_t encrypted;
     };
+    uint32_t channel_index;
     uint32_t id;
     float rx_snr;
     uint32_t rx_time;
@@ -277,9 +280,9 @@ extern "C" {
 #define User_init_default                        {"", "", "", {0}}
 #define RouteDiscovery_init_default              {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define SubPacket_init_default                   {0, {Position_init_default}, 0, 0, 0, 0, {0}, 0}
-#define MeshPacket_init_default                  {0, 0, 0, {SubPacket_init_default}, 0, 0, 0, 0, 0}
+#define MeshPacket_init_default                  {0, 0, 0, {SubPacket_init_default}, 0, 0, 0, 0, 0, 0}
 #define ChannelSettings_init_default             {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, "", 0, 0, 0, 0}
-#define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default, false, ChannelSettings_init_default}
+#define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default, false, ChannelSettings_init_default, 0, {ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default}}
 #define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}}
 #define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0}
 #define MyNodeInfo_init_default                  {0, 0, 0, "", "", "", 0, 0, 0, 0, 0, 0, 0, 0}
@@ -292,9 +295,9 @@ extern "C" {
 #define User_init_zero                           {"", "", "", {0}}
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define SubPacket_init_zero                      {0, {Position_init_zero}, 0, 0, 0, 0, {0}, 0}
-#define MeshPacket_init_zero                     {0, 0, 0, {SubPacket_init_zero}, 0, 0, 0, 0, 0}
+#define MeshPacket_init_zero                     {0, 0, 0, {SubPacket_init_zero}, 0, 0, 0, 0, 0, 0}
 #define ChannelSettings_init_zero                {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, "", 0, 0, 0, 0}
-#define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero, false, ChannelSettings_init_zero}
+#define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero, false, ChannelSettings_init_zero, 0, {ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero}}
 #define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}}
 #define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0}
 #define MyNodeInfo_init_zero                     {0, 0, 0, "", "", "", 0, 0, 0, 0, 0, 0, 0, 0}
@@ -371,6 +374,7 @@ extern "C" {
 #define NodeInfo_snr_tag                         7
 #define RadioConfig_preferences_tag              1
 #define RadioConfig_channel_settings_tag         2
+#define RadioConfig_secondary_channels_tag       3
 #define SubPacket_position_tag                   1
 #define SubPacket_data_tag                       3
 #define SubPacket_user_tag                       4
@@ -387,6 +391,7 @@ extern "C" {
 #define MeshPacket_to_tag                        2
 #define MeshPacket_decoded_tag                   3
 #define MeshPacket_encrypted_tag                 8
+#define MeshPacket_channel_index_tag             4
 #define MeshPacket_id_tag                        6
 #define MeshPacket_rx_snr_tag                    7
 #define MeshPacket_rx_time_tag                   9
@@ -469,6 +474,7 @@ X(a, STATIC,   SINGULAR, UINT32,   from,              1) \
 X(a, STATIC,   SINGULAR, UINT32,   to,                2) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,decoded,decoded),   3) \
 X(a, STATIC,   ONEOF,    BYTES,    (payload,encrypted,encrypted),   8) \
+X(a, STATIC,   SINGULAR, UINT32,   channel_index,     4) \
 X(a, STATIC,   SINGULAR, UINT32,   id,                6) \
 X(a, STATIC,   SINGULAR, FLOAT,    rx_snr,            7) \
 X(a, STATIC,   SINGULAR, FIXED32,  rx_time,           9) \
@@ -492,11 +498,13 @@ X(a, STATIC,   SINGULAR, UINT32,   channel_num,       9)
 
 #define RadioConfig_FIELDLIST(X, a) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  preferences,       1) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  channel_settings,   2)
+X(a, STATIC,   OPTIONAL, MESSAGE,  channel_settings,   2) \
+X(a, STATIC,   REPEATED, MESSAGE,  secondary_channels,   3)
 #define RadioConfig_CALLBACK NULL
 #define RadioConfig_DEFAULT NULL
 #define RadioConfig_preferences_MSGTYPE RadioConfig_UserPreferences
 #define RadioConfig_channel_settings_MSGTYPE ChannelSettings
+#define RadioConfig_secondary_channels_MSGTYPE ChannelSettings
 
 #define RadioConfig_UserPreferences_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   position_broadcast_secs,   1) \
@@ -647,16 +655,16 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define User_size                                72
 #define RouteDiscovery_size                      88
 #define SubPacket_size                           275
-#define MeshPacket_size                          314
+#define MeshPacket_size                          320
 #define ChannelSettings_size                     84
-#define RadioConfig_size                         314
+#define RadioConfig_size                         658
 #define RadioConfig_UserPreferences_size         225
 #define NodeInfo_size                            132
 #define MyNodeInfo_size                          110
-#define DeviceState_size                         5468
+#define DeviceState_size                         5824
 #define DebugString_size                         258
-#define FromRadio_size                           323
-#define ToRadio_size                             318
+#define FromRadio_size                           667
+#define ToRadio_size                             662
 
 #ifdef __cplusplus
 } /* extern "C" */
