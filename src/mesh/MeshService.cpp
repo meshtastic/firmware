@@ -53,7 +53,14 @@ MeshService service;
 
 static int32_t sendOwnerCb()
 {
-    nodeInfoPlugin.sendOurNodeInfo();
+    static uint32_t currentGeneration;
+
+    // If we changed channels, ask everyone else for their latest info
+    bool requestReplies = currentGeneration != radioGeneration;
+    currentGeneration = radioGeneration;
+
+    DEBUG_MSG("Sending our nodeinfo to mesh (wantReplies=%d)\n", requestReplies);
+    nodeInfoPlugin.sendOurNodeInfo(NODENUM_BROADCAST, requestReplies); // Send our info (don't request replies)
 
     return getPref_send_owner_interval() * getPref_position_broadcast_secs() * 1000;
 }
@@ -68,6 +75,7 @@ MeshService::MeshService() : toPhoneQueue(MAX_RX_TOPHONE)
 void MeshService::init()
 {
     sendOwnerPeriod = new concurrency::Periodic("SendOwner", sendOwnerCb);
+    sendOwnerPeriod->setIntervalFromNow(30 * 1000); // Send our initial owner announcement 30 seconds after we start (to give network time to setup)
 
     nodeDB.init();
 
@@ -230,8 +238,15 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
     uint32_t now = millis();
     if (lastGpsSend == 0 || now - lastGpsSend > getPref_position_broadcast_secs() * 1000) {
         lastGpsSend = now;
-        DEBUG_MSG("Sending position to mesh (not requesting replies)\n");
-        positionPlugin.sendOurPosition();
+
+        static uint32_t currentGeneration;
+
+        // If we changed channels, ask everyone else for their latest info
+        bool requestReplies = currentGeneration != radioGeneration;
+        currentGeneration = radioGeneration;
+
+        DEBUG_MSG("Sending position to mesh (wantReplies=%d)\n", requestReplies);
+        positionPlugin.sendOurPosition(NODENUM_BROADCAST, requestReplies);
     }
 
     return 0;

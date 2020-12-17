@@ -159,8 +159,6 @@ typedef struct _RadioConfig {
     RadioConfig_UserPreferences preferences;
     bool has_channel_settings;
     ChannelSettings channel_settings;
-    pb_size_t secondary_channels_count;
-    ChannelSettings secondary_channels[4];
 } RadioConfig;
 
 typedef struct _SubPacket {
@@ -217,6 +215,8 @@ typedef struct _DeviceState {
     uint32_t version;
     bool no_save;
     bool did_gps_reset;
+    pb_size_t secondary_channels_count;
+    ChannelSettings secondary_channels[4];
 } DeviceState;
 
 typedef struct _FromRadio {
@@ -230,6 +230,7 @@ typedef struct _FromRadio {
         DebugString debug_string;
         uint32_t config_complete_id;
         bool rebooted;
+        ChannelSettings secondary_channel;
     } variant;
 } FromRadio;
 
@@ -282,11 +283,11 @@ extern "C" {
 #define SubPacket_init_default                   {0, {Position_init_default}, 0, 0, 0, 0, {0}, 0}
 #define MeshPacket_init_default                  {0, 0, 0, {SubPacket_init_default}, 0, 0, 0, 0, 0, 0}
 #define ChannelSettings_init_default             {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, "", 0, 0, 0, 0}
-#define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default, false, ChannelSettings_init_default, 0, {ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default}}
+#define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default, false, ChannelSettings_init_default}
 #define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}}
 #define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0}
 #define MyNodeInfo_init_default                  {0, 0, 0, "", "", "", 0, 0, 0, 0, 0, 0, 0, 0}
-#define DeviceState_init_default                 {false, RadioConfig_init_default, false, MyNodeInfo_init_default, false, User_init_default, 0, {NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default}, 0, {MeshPacket_init_default}, false, MeshPacket_init_default, 0, 0, 0}
+#define DeviceState_init_default                 {false, RadioConfig_init_default, false, MyNodeInfo_init_default, false, User_init_default, 0, {NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default}, 0, {MeshPacket_init_default}, false, MeshPacket_init_default, 0, 0, 0, 0, {ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default}}
 #define DebugString_init_default                 {""}
 #define FromRadio_init_default                   {0, 0, {MeshPacket_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
@@ -297,11 +298,11 @@ extern "C" {
 #define SubPacket_init_zero                      {0, {Position_init_zero}, 0, 0, 0, 0, {0}, 0}
 #define MeshPacket_init_zero                     {0, 0, 0, {SubPacket_init_zero}, 0, 0, 0, 0, 0, 0}
 #define ChannelSettings_init_zero                {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, "", 0, 0, 0, 0}
-#define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero, false, ChannelSettings_init_zero, 0, {ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero}}
+#define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero, false, ChannelSettings_init_zero}
 #define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}}
 #define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0}
 #define MyNodeInfo_init_zero                     {0, 0, 0, "", "", "", 0, 0, 0, 0, 0, 0, 0, 0}
-#define DeviceState_init_zero                    {false, RadioConfig_init_zero, false, MyNodeInfo_init_zero, false, User_init_zero, 0, {NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero}, 0, {MeshPacket_init_zero}, false, MeshPacket_init_zero, 0, 0, 0}
+#define DeviceState_init_zero                    {false, RadioConfig_init_zero, false, MyNodeInfo_init_zero, false, User_init_zero, 0, {NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero}, 0, {MeshPacket_init_zero}, false, MeshPacket_init_zero, 0, 0, 0, 0, {ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero}}
 #define DebugString_init_zero                    {""}
 #define FromRadio_init_zero                      {0, 0, {MeshPacket_init_zero}}
 #define ToRadio_init_zero                        {0, {MeshPacket_init_zero}}
@@ -374,7 +375,6 @@ extern "C" {
 #define NodeInfo_snr_tag                         7
 #define RadioConfig_preferences_tag              1
 #define RadioConfig_channel_settings_tag         2
-#define RadioConfig_secondary_channels_tag       3
 #define SubPacket_position_tag                   1
 #define SubPacket_data_tag                       3
 #define SubPacket_user_tag                       4
@@ -406,6 +406,7 @@ extern "C" {
 #define DeviceState_version_tag                  8
 #define DeviceState_no_save_tag                  9
 #define DeviceState_did_gps_reset_tag            11
+#define DeviceState_secondary_channels_tag       12
 #define FromRadio_num_tag                        1
 #define FromRadio_packet_tag                     2
 #define FromRadio_my_info_tag                    3
@@ -414,6 +415,7 @@ extern "C" {
 #define FromRadio_debug_string_tag               7
 #define FromRadio_config_complete_id_tag         8
 #define FromRadio_rebooted_tag                   9
+#define FromRadio_secondary_channel_tag          10
 #define ToRadio_packet_tag                       1
 #define ToRadio_want_config_id_tag               100
 #define ToRadio_set_radio_tag                    101
@@ -498,13 +500,11 @@ X(a, STATIC,   SINGULAR, UINT32,   channel_num,       9)
 
 #define RadioConfig_FIELDLIST(X, a) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  preferences,       1) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  channel_settings,   2) \
-X(a, STATIC,   REPEATED, MESSAGE,  secondary_channels,   3)
+X(a, STATIC,   OPTIONAL, MESSAGE,  channel_settings,   2)
 #define RadioConfig_CALLBACK NULL
 #define RadioConfig_DEFAULT NULL
 #define RadioConfig_preferences_MSGTYPE RadioConfig_UserPreferences
 #define RadioConfig_channel_settings_MSGTYPE ChannelSettings
-#define RadioConfig_secondary_channels_MSGTYPE ChannelSettings
 
 #define RadioConfig_UserPreferences_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   position_broadcast_secs,   1) \
@@ -573,7 +573,8 @@ X(a, STATIC,   REPEATED, MESSAGE,  receive_queue,     5) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  rx_text_message,   7) \
 X(a, STATIC,   SINGULAR, UINT32,   version,           8) \
 X(a, STATIC,   SINGULAR, BOOL,     no_save,           9) \
-X(a, STATIC,   SINGULAR, BOOL,     did_gps_reset,    11)
+X(a, STATIC,   SINGULAR, BOOL,     did_gps_reset,    11) \
+X(a, STATIC,   REPEATED, MESSAGE,  secondary_channels,  12)
 #define DeviceState_CALLBACK NULL
 #define DeviceState_DEFAULT NULL
 #define DeviceState_radio_MSGTYPE RadioConfig
@@ -582,6 +583,7 @@ X(a, STATIC,   SINGULAR, BOOL,     did_gps_reset,    11)
 #define DeviceState_node_db_MSGTYPE NodeInfo
 #define DeviceState_receive_queue_MSGTYPE MeshPacket
 #define DeviceState_rx_text_message_MSGTYPE MeshPacket
+#define DeviceState_secondary_channels_MSGTYPE ChannelSettings
 
 #define DebugString_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   message,           1)
@@ -596,7 +598,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (variant,node_info,variant.node_info),   4) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,radio,variant.radio),   6) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,debug_string,variant.debug_string),   7) \
 X(a, STATIC,   ONEOF,    UINT32,   (variant,config_complete_id,variant.config_complete_id),   8) \
-X(a, STATIC,   ONEOF,    BOOL,     (variant,rebooted,variant.rebooted),   9)
+X(a, STATIC,   ONEOF,    BOOL,     (variant,rebooted,variant.rebooted),   9) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,secondary_channel,variant.secondary_channel),  10)
 #define FromRadio_CALLBACK NULL
 #define FromRadio_DEFAULT NULL
 #define FromRadio_variant_packet_MSGTYPE MeshPacket
@@ -604,6 +607,7 @@ X(a, STATIC,   ONEOF,    BOOL,     (variant,rebooted,variant.rebooted),   9)
 #define FromRadio_variant_node_info_MSGTYPE NodeInfo
 #define FromRadio_variant_radio_MSGTYPE RadioConfig
 #define FromRadio_variant_debug_string_MSGTYPE DebugString
+#define FromRadio_variant_secondary_channel_MSGTYPE ChannelSettings
 
 #define ToRadio_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,packet,variant.packet),   1) \
@@ -657,14 +661,14 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define SubPacket_size                           275
 #define MeshPacket_size                          320
 #define ChannelSettings_size                     84
-#define RadioConfig_size                         658
+#define RadioConfig_size                         314
 #define RadioConfig_UserPreferences_size         225
 #define NodeInfo_size                            132
 #define MyNodeInfo_size                          110
 #define DeviceState_size                         5824
 #define DebugString_size                         258
-#define FromRadio_size                           667
-#define ToRadio_size                             662
+#define FromRadio_size                           329
+#define ToRadio_size                             323
 
 #ifdef __cplusplus
 } /* extern "C" */
