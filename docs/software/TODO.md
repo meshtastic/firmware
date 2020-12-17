@@ -4,6 +4,8 @@ You probably don't care about this section - skip to the next one.
 
 For app cleanup:
 
+* DONE only do wantReplies once per packet type, if we change network settings force it again
+* update positions and nodeinfos based on packets we just merely witness on the mesh.  via isPromsciousPort bool, remove sniffing
 * DONE make device build always have a valid version
 * DONE do fixed position bug https://github.com/meshtastic/Meshtastic-device/issues/536
 * DONE check build guide
@@ -32,11 +34,9 @@ For app cleanup:
 * DONE test that position, text messages and user info work properly with new android app and old device code
 * do UDP tunnel
 * fix the RTC drift bug
-* only do wantReplies once per packet type, if we change network settings force it again
 * move python ping functionality into device, reply with rxsnr info
 * use channels for gpio security https://github.com/meshtastic/Meshtastic-device/issues/104
 * generate autodocs
-* update positions and nodeinfos based on packets we just merely witness on the mesh.  via isPromsciousPort bool.
 * MeshPackets for sending should be reference counted so that API clients would have the option of checking sent status (would allow removing the nasty 30 sec timer in gpio watch sending)
 
 For high speed/lots of devices/short range tasks:
