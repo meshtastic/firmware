@@ -6,10 +6,16 @@
 #include "RadioInterface.h"
 #include <assert.h>
 
+#if FromRadio_size > MAX_TO_FROM_RADIO_SIZE
+    #error FromRadio is too big
+#endif
+
+#if ToRadio_size > MAX_TO_FROM_RADIO_SIZE
+    #error ToRadio is too big
+#endif
+
 PhoneAPI::PhoneAPI()
 {
-    assert(FromRadio_size <= MAX_TO_FROM_RADIO_SIZE);
-    assert(ToRadio_size <= MAX_TO_FROM_RADIO_SIZE);
 }
 
 void PhoneAPI::init()
@@ -94,8 +100,8 @@ void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 size_t PhoneAPI::getFromRadio(uint8_t *buf)
 {
     if (!available()) {
-        // DEBUG_MSG("getFromRadio, !available\n");
-        return false;
+        DEBUG_MSG("getFromRadio, !available\n");
+        return 0;
     } 
 
     DEBUG_MSG("getFromRadio, state=%d\n", state);
@@ -215,11 +221,14 @@ bool PhoneAPI::available()
         return true;
 
     case STATE_LEGACY: // Treat as the same as send packets
-    case STATE_SEND_PACKETS:
+    case STATE_SEND_PACKETS: {
         // Try to pull a new packet from the service (if we haven't already)
         if (!packetForPhone)
             packetForPhone = service.getForPhone();
-        return !!packetForPhone;
+        bool hasPacket = !!packetForPhone;
+        DEBUG_MSG("available hasPacket=%d\n", hasPacket);
+        return hasPacket;
+    }
 
     default:
         assert(0); // unexpected state - FIXME, make an error code and reboot

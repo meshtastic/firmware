@@ -167,3 +167,8 @@ PREF_GET(ls_secs, 5 * 60)
 
 PREF_GET(phone_timeout_secs, 15 * 60)
 PREF_GET(min_wake_secs, 10)
+
+/** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings 
+ * might have changed is incremented.  Allows others to detect they might now be on a new channel.
+ */
+extern uint32_t radioGeneration;
