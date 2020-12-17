@@ -28,6 +28,11 @@ MyNodeInfo &myNodeInfo = devicestate.my_node;
 RadioConfig &radioConfig = devicestate.radio;
 ChannelSettings &channelSettings = radioConfig.channel_settings;
 
+/** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings 
+ * might have changed is incremented.  Allows others to detect they might now be on a new channel.
+ */
+uint32_t radioGeneration;
+
 /*
 DeviceState versions used to be defined in the .proto file but really only this function cares.  So changed to a
 #define here.
@@ -105,6 +110,8 @@ NodeDB::NodeDB() : nodes(devicestate.node_db), numNodes(&devicestate.node_db_cou
 bool NodeDB::resetRadioConfig()
 {
     bool didFactoryReset = false;
+
+    radioGeneration++;
 
     /// 16 bytes of random PSK for our _public_ default channel that all devices power up on (AES128)
     static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,

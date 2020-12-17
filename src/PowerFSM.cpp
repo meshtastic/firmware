@@ -144,7 +144,7 @@ static void onEnter()
 
     uint32_t now = millis();
 
-    if (now - lastPingMs > 30 * 1000) { // if more than a minute since our last press, ask other nodes to update their state
+    if (now - lastPingMs > 30 * 1000) { // if more than a minute since our last press, ask node we are looking at to update their state
         if (displayedNodeNum)
             service.sendNetworkPing(displayedNodeNum, true); // Refresh the currently displayed node
         lastPingMs = now;
