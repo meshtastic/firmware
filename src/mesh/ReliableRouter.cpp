@@ -92,7 +92,7 @@ void ReliableRouter::sendAckNak(bool isAck, NodeNum to, PacketId idFrom)
     auto p = allocForSending();
     p->hop_limit = 0; // Assume just immediate neighbors for now
     p->to = to;
-    DEBUG_MSG("Sending an ack=0x%x,to=0x%x,idFrom=%d,id=%d\n", isAck, to, idFrom, p->id);
+    DEBUG_MSG("Sending an ack=0x%x,to=0x%x,idFrom=0x%x,id=0x%x\n", isAck, to, idFrom, p->id);
 
     if (isAck) {
         p->decoded.ack.success_id = idFrom;

@@ -15,9 +15,8 @@ class ReplyPlugin : public SinglePortPlugin
 
   protected:
 
-    /** Called to handle a particular incoming message
-
-    @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
+    /** For reply plugin we do all of our processing in the (normally optional)
+     * want_replies handling
     */
-    virtual bool handleReceived(const MeshPacket &mp);
+    virtual MeshPacket *allocReply();
 };

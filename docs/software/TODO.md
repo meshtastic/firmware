@@ -4,15 +4,18 @@ You probably don't care about this section - skip to the next one.
 
 For app cleanup:
 
+* DONE only do wantReplies once per packet type, if we change network settings force it again
+* update positions and nodeinfos based on packets we just merely witness on the mesh.  via isPromsciousPort bool, remove sniffing
 * DONE make device build always have a valid version
 * DONE do fixed position bug https://github.com/meshtastic/Meshtastic-device/issues/536
 * DONE check build guide
 * DONE write devapi user guide
 * DONE update android code: https://developer.android.com/topic/libraries/view-binding/migration
-* only do wantReplies once per packet type, if we change network settings force it again
-* make gpio watch work, use thread and setup
+* DONE test GPIO watch
+* DONE set --set-chan-fast, --set-chan-default
+* writeup docs on gpio 
+* DONE make python ping command
 * DONE make hello world example service
-* make python ping command
 * DONE have python tool check max packet size before sending to device
 * DONE if request was sent reliably, send reply reliably
 * DONE require a recent python api to talk to these new device loads
@@ -20,8 +23,8 @@ For app cleanup:
 * DONE fix handleIncomingPosition
 * DONE move want_replies handling into plugins
 * DONE on android for received positions handle either old or new positions / user messages
-* on android side send old or new positions as needed / user messages
-* test python side handle new position/user messages
+* DONE on android side send old or new positions as needed / user messages
+* DONE test python side handle new position/user messages
 * DONE make a gpio example. --gpiowrb 4 1, --gpiord 0x444, --gpiowatch 0x3ff
 * DONE fix position sending to use new plugin
 * DONE Add SinglePortNumPlugin - as the new most useful baseclass
@@ -34,7 +37,6 @@ For app cleanup:
 * move python ping functionality into device, reply with rxsnr info
 * use channels for gpio security https://github.com/meshtastic/Meshtastic-device/issues/104
 * generate autodocs
-* update positions and nodeinfos based on packets we just merely witness on the mesh.  via isPromsciousPort bool.
 * MeshPackets for sending should be reference counted so that API clients would have the option of checking sent status (would allow removing the nasty 30 sec timer in gpio watch sending)
 
 For high speed/lots of devices/short range tasks:
