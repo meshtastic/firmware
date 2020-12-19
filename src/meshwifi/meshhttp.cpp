@@ -388,8 +388,8 @@ void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
 {
     // jm
 
-    // res->setHeader("Content-Type", "application/json");
-    res->setHeader("Content-Type", "text/html");
+    res->setHeader("Content-Type", "application/json");
+    // res->setHeader("Content-Type", "text/html");
 
     File root = SPIFFS.open("/");
 
