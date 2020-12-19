@@ -123,7 +123,7 @@ void printPacket(const char *prefix, const MeshPacket *p)
         auto &s = p->decoded;
         switch (s.which_payload) {
         case SubPacket_data_tag:
-            DEBUG_MSG(" Payload:Data");
+            DEBUG_MSG(" Portnum=%d", s.data.portnum);
             break;
         case SubPacket_position_tag:
             DEBUG_MSG(" Payload:Position");
@@ -262,10 +262,10 @@ void RadioInterface::applyModemConfig()
 
     // If user has manually specified a channel num, then use that, otherwise generate one by hashing the name
     int channel_num =
-        (channelSettings.channel_num ? channelSettings.channel_num - 1 : hash(channelSettings.name)) % myRegion->numChannels;
+        (channelSettings.channel_num ? channelSettings.channel_num - 1 : hash(channelName)) % myRegion->numChannels;
     freq = myRegion->freq + myRegion->spacing * channel_num;
 
-    DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, power=%d\n", channelSettings.name, channelSettings.modem_config, channel_num,
+    DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, power=%d\n", channelName, channelSettings.modem_config, channel_num,
               power);
     DEBUG_MSG("Radio myRegion->freq: %f\n", myRegion->freq);
     DEBUG_MSG("Radio myRegion->spacing: %f\n", myRegion->spacing);

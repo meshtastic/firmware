@@ -13,6 +13,7 @@ extern MyNodeInfo &myNodeInfo;
 extern RadioConfig &radioConfig;
 extern ChannelSettings &channelSettings;
 extern User &owner;
+extern const char *channelName;
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const NodeInfo *n);
@@ -166,3 +167,8 @@ PREF_GET(ls_secs, 5 * 60)
 
 PREF_GET(phone_timeout_secs, 15 * 60)
 PREF_GET(min_wake_secs, 10)
+
+/** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings 
+ * might have changed is incremented.  Allows others to detect they might now be on a new channel.
+ */
+extern uint32_t radioGeneration;
