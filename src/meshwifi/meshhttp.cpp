@@ -979,23 +979,46 @@ void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Content-Type", "application/json");
 
     // This can be cleaned up at some point to make it non-blocking and to allow for more configuration.
+    std::string contentType = req->getHeader("Content-Type");
+    std::string blink_target;
+    HTTPBodyParser *parser;
+   
+
+    if (contentType.rfind("multipart/form-data",0) == 0) {
+        // If a body was submitted to /blink, then figure out whether the user 
+        // watned to blink the LED or the screen
+        parser = new HTTPMultipartBodyParser(req);
+        while (parser->nextField()) {
+            std::string name = parser->getFieldName();
+            if (name  == "blink_target") {
+                char buf[512];
+                size_t readLength = parser->read((byte *)buf, 512);
+                // filename = std::string("/public/") + std::string(buf, readLength);
+                blink_target = std::string(buf, readLength);
+            }
+        }
+    } else {
+       blink_target = "LED";
+    }
+
+    if (blink_target == "LED" ) {
+        uint8_t count = 10;
+        while (count > 0)
+        {
+            setLed(true);
+            delay(50);
+            setLed(false);
+            delay(50);
+            count = count - 1;
+        }
+    }
+    else {
+         screen->blink();
+    }
 
     res->println("{");
-    res->println("\"status\": \"ok\"");
+    res->println("\"status\": \"Blink completed: LED\"");
     res->println("}");
-
-    uint8_t count = 10;
-
-    /*while (count > 0)
-    {
-        setLed(true);
-        delay(50);
-        setLed(false);
-        delay(50);
-        count = count - 1;
-    }*/
-
-    screen->blink();
 }
 
 void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
