@@ -986,14 +986,16 @@ void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
 
     uint8_t count = 10;
 
-    while (count > 0)
+    /*while (count > 0)
     {
         setLed(true);
         delay(50);
         setLed(false);
         delay(50);
         count = count - 1;
-    }
+    }*/
+
+    screen->blink();
 }
 
 void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
