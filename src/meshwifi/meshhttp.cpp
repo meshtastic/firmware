@@ -244,7 +244,7 @@ void initWebServer()
     ResourceNode *node404 = new ResourceNode("", "GET", &handle404);
     ResourceNode *nodeFormUpload = new ResourceNode("/upload", "POST", &handleFormUpload);
     ResourceNode *nodeJsonScanNetworks = new ResourceNode("/json/scanNetworks", "GET", &handleScanNetworks);
-    ResourceNode *nodeJsonBlinkLED = new ResourceNode("/json/blink", "GET", &handleBlinkLED);
+    ResourceNode *nodeJsonBlinkLED = new ResourceNode("/json/blink", "POST", &handleBlinkLED);
     ResourceNode *nodeJsonSpiffsBrowseStatic = new ResourceNode("/json/spiffs/browse/static/", "GET", &handleSpiffsBrowseStatic);
 
     // Secure nodes
@@ -984,14 +984,14 @@ void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
     res->println("\"status\": \"ok\"");
     res->println("}");
 
-    uint8_t count = 50;
+    uint8_t count = 10;
 
     while (count > 0)
     {
         setLed(true);
-        delay(10);
+        delay(50);
         setLed(false);
-        delay(10);
+        delay(50);
         count = count - 1;
     }
 }
