@@ -61,6 +61,7 @@ void handle404(HTTPRequest *req, HTTPResponse *res);
 void handleFormUpload(HTTPRequest *req, HTTPResponse *res);
 void handleScanNetworks(HTTPRequest *req, HTTPResponse *res);
 void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res);
+void handleBlinkLED(HTTPRequest *req, HTTPResponse *res);
 
 void middlewareSpeedUp240(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
 void middlewareSpeedUp160(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
@@ -243,6 +244,7 @@ void initWebServer()
     ResourceNode *node404 = new ResourceNode("", "GET", &handle404);
     ResourceNode *nodeFormUpload = new ResourceNode("/upload", "POST", &handleFormUpload);
     ResourceNode *nodeJsonScanNetworks = new ResourceNode("/json/scanNetworks", "GET", &handleScanNetworks);
+    ResourceNode *nodeJsonBlinkLED = new ResourceNode("/json/blink", "GET", &handleBlinkLED);
     ResourceNode *nodeJsonSpiffsBrowseStatic = new ResourceNode("/json/spiffs/browse/static/", "GET", &handleSpiffsBrowseStatic);
 
     // Secure nodes
@@ -258,6 +260,7 @@ void initWebServer()
     secureServer->registerNode(nodeRestart);
     secureServer->registerNode(nodeFormUpload);
     secureServer->registerNode(nodeJsonScanNetworks);
+    secureServer->registerNode(nodeJsonBlinkLED);
     secureServer->registerNode(nodeJsonSpiffsBrowseStatic);
     secureServer->setDefaultNode(node404);
 
@@ -276,6 +279,7 @@ void initWebServer()
     insecureServer->registerNode(nodeRestart);
     insecureServer->registerNode(nodeFormUpload);
     insecureServer->registerNode(nodeJsonScanNetworks);
+    insecureServer->registerNode(nodeJsonBlinkLED);
     insecureServer->registerNode(nodeJsonSpiffsBrowseStatic);
     insecureServer->setDefaultNode(node404);
 
@@ -968,6 +972,28 @@ void handleRestart(HTTPRequest *req, HTTPResponse *res)
     res->println("Restarting");
 
     ESP.restart();
+}
+
+void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
+{
+    res->setHeader("Content-Type", "application/json");
+
+    // This can be cleaned up at some point to make it non-blocking and to allow for more configuration.
+
+    res->println("{");
+    res->println("\"status\": \"ok\"");
+    res->println("}");
+
+    uint8_t count = 50;
+
+    while (count > 0)
+    {
+        setLed(true);
+        delay(10);
+        setLed(false);
+        delay(10);
+        count = count - 1;
+    }
 }
 
 void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
