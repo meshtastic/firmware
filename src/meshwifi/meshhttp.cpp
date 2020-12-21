@@ -979,27 +979,25 @@ void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Content-Type", "application/json");
 
     ResourceParameters *params = req->getParams();
-    std::string blink_target; 
+    std::string blink_target;
 
-    if (! params->getQueryParameter("blink_target", blink_target)) {
-        // if no blink_target was supplied in the URL parameters of the 
+    if (!params->getQueryParameter("blink_target", blink_target)) {
+        // if no blink_target was supplied in the URL parameters of the
         // POST request, then assume we should blink the LED
-       blink_target = "LED";
+        blink_target = "LED";
     }
 
-    if (blink_target == "LED" ) {
+    if (blink_target == "LED") {
         uint8_t count = 10;
-        while (count > 0)
-        {
+        while (count > 0) {
             setLed(true);
             delay(50);
             setLed(false);
             delay(50);
             count = count - 1;
         }
-    }
-    else {
-         screen->blink();
+    } else {
+        screen->blink();
     }
 
     res->println("{");
