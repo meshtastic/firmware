@@ -978,26 +978,14 @@ void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
 {
     res->setHeader("Content-Type", "application/json");
 
-    // This can be cleaned up at some point to make it non-blocking and to allow for more configuration.
-    std::string contentType = req->getHeader("Content-Type");
+    ResourceParameters *params = req->getParams();
     std::string blink_target;
     HTTPBodyParser *parser;
    
 
-    if (contentType.rfind("multipart/form-data",0) == 0) {
-        // If a body was submitted to /blink, then figure out whether the user 
-        // watned to blink the LED or the screen
-        parser = new HTTPMultipartBodyParser(req);
-        while (parser->nextField()) {
-            std::string name = parser->getFieldName();
-            if (name  == "blink_target") {
-                char buf[512];
-                size_t readLength = parser->read((byte *)buf, 512);
-                // filename = std::string("/public/") + std::string(buf, readLength);
-                blink_target = std::string(buf, readLength);
-            }
-        }
-    } else {
+    if (! params->getQueryParameter("blink_target", blink_target)) {
+        // if no blink_target was supplied in the URL parameters of the 
+        // POST request, then assume we should blink the LED
        blink_target = "LED";
     }
 
@@ -1017,7 +1005,7 @@ void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
     }
 
     res->println("{");
-    res->println("\"status\": \"Blink completed: LED\"");
+    res->println("\"status\": \"ok\"");
     res->println("}");
 }
 
