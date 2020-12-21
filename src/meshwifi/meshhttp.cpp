@@ -979,9 +979,7 @@ void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Content-Type", "application/json");
 
     ResourceParameters *params = req->getParams();
-    std::string blink_target;
-    HTTPBodyParser *parser;
-   
+    std::string blink_target; 
 
     if (! params->getQueryParameter("blink_target", blink_target)) {
         // if no blink_target was supplied in the URL parameters of the 
