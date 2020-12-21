@@ -61,6 +61,7 @@ void handle404(HTTPRequest *req, HTTPResponse *res);
 void handleFormUpload(HTTPRequest *req, HTTPResponse *res);
 void handleScanNetworks(HTTPRequest *req, HTTPResponse *res);
 void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res);
+void handleBlinkLED(HTTPRequest *req, HTTPResponse *res);
 
 void middlewareSpeedUp240(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
 void middlewareSpeedUp160(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
@@ -243,6 +244,7 @@ void initWebServer()
     ResourceNode *node404 = new ResourceNode("", "GET", &handle404);
     ResourceNode *nodeFormUpload = new ResourceNode("/upload", "POST", &handleFormUpload);
     ResourceNode *nodeJsonScanNetworks = new ResourceNode("/json/scanNetworks", "GET", &handleScanNetworks);
+    ResourceNode *nodeJsonBlinkLED = new ResourceNode("/json/blink", "POST", &handleBlinkLED);
     ResourceNode *nodeJsonSpiffsBrowseStatic = new ResourceNode("/json/spiffs/browse/static/", "GET", &handleSpiffsBrowseStatic);
 
     // Secure nodes
@@ -258,6 +260,7 @@ void initWebServer()
     secureServer->registerNode(nodeRestart);
     secureServer->registerNode(nodeFormUpload);
     secureServer->registerNode(nodeJsonScanNetworks);
+    secureServer->registerNode(nodeJsonBlinkLED);
     secureServer->registerNode(nodeJsonSpiffsBrowseStatic);
     secureServer->setDefaultNode(node404);
 
@@ -276,6 +279,7 @@ void initWebServer()
     insecureServer->registerNode(nodeRestart);
     insecureServer->registerNode(nodeFormUpload);
     insecureServer->registerNode(nodeJsonScanNetworks);
+    insecureServer->registerNode(nodeJsonBlinkLED);
     insecureServer->registerNode(nodeJsonSpiffsBrowseStatic);
     insecureServer->setDefaultNode(node404);
 
@@ -401,16 +405,16 @@ void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
         res->print("\"files\": [");
         bool firstFile = 1;
         while (file) {
-            if (firstFile) {
-                firstFile = 0;
-            } else {
-                res->println(",");
-            }
-
-            res->println("{");
-
             String filePath = String(file.name());
             if (filePath.indexOf("/static") == 0) {
+                if (firstFile) {
+                    firstFile = 0;
+                } else {
+                    res->println(",");
+                }
+
+                res->println("{");
+
                 if (String(file.name()).substring(1).endsWith(".gz")) {
                     String modifiedFile = String(file.name()).substring(1);
                     modifiedFile.remove((modifiedFile.length() - 3), 3);
@@ -421,10 +425,10 @@ void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
                     res->print("\"name\": \"" + String(file.name()).substring(1) + "\",");
                 }
                 res->print("\"size\": " + String(file.size()));
+                res->print("}");
             }
 
             file = root.openNextFile();
-            res->print("}");
         }
         res->print("],");
         res->print("\"filesystem\" : {");
@@ -968,6 +972,37 @@ void handleRestart(HTTPRequest *req, HTTPResponse *res)
     res->println("Restarting");
 
     ESP.restart();
+}
+
+void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
+{
+    res->setHeader("Content-Type", "application/json");
+
+    ResourceParameters *params = req->getParams();
+    std::string blink_target;
+
+    if (!params->getQueryParameter("blink_target", blink_target)) {
+        // if no blink_target was supplied in the URL parameters of the
+        // POST request, then assume we should blink the LED
+        blink_target = "LED";
+    }
+
+    if (blink_target == "LED") {
+        uint8_t count = 10;
+        while (count > 0) {
+            setLed(true);
+            delay(50);
+            setLed(false);
+            delay(50);
+            count = count - 1;
+        }
+    } else {
+        screen->blink();
+    }
+
+    res->println("{");
+    res->println("\"status\": \"ok\"");
+    res->println("}");
 }
 
 void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
