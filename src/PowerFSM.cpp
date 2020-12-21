@@ -173,9 +173,10 @@ void PowerFSM_setup()
 {
     // If we are not a router and we already have AC power go to POWER state after init, otherwise go to ON
     // We assume routers might be powered all the time, but from a low current (solar) source
-    bool isLowPower = radioConfig.preferences.is_low_power;
-    bool hasPower = !isLowPower && powerStatus && powerStatus->getHasUSB();
     bool isRouter = radioConfig.preferences.is_router;
+    bool isLowPower = radioConfig.preferences.is_low_power || isRouter;
+    bool hasPower = !isLowPower && powerStatus && powerStatus->getHasUSB();
+
     DEBUG_MSG("PowerFSM init, USB power=%d\n", hasPower);
     powerFSM.add_timed_transition(&stateBOOT, hasPower ? &statePOWER : &stateON, 3 * 1000, NULL, "boot timeout");
 

@@ -147,23 +147,53 @@ their nodes
  */
 const char *getChannelName();
 
+/*
+  If is_router is set, we use a number of different default values
+
+        # FIXME - after tuning, move these params into the on-device defaults based on is_router and is_low_power
+
+        # prefs.position_broadcast_secs = FIXME possibly broadcast only once an hr
+        prefs.wait_bluetooth_secs = 1  # Don't stay in bluetooth mode
+        prefs.mesh_sds_timeout_secs = never
+        prefs.phone_sds_timeout_sec = never
+        # try to stay in light sleep one full day, then briefly wake and sleep again
+
+        prefs.ls_secs = oneday
+
+        prefs.send_owner_interval = 2 # Send an owner packet every other network ping
+        prefs.position_broadcast_secs = 12 hours # send either position or owner every 12hrs
+        
+        # get a new GPS position once per day
+        prefs.gps_update_interval = oneday
+
+        prefs.is_low_power = True
+
+        # allow up to five minutes for each new GPS lock attempt
+        prefs.gps_attempt_time = 300
+*/
+
+// Our delay functions check for this for times that should never expire
+#define DELAY_FOREVER 0xffffffff
+
+#define IF_ROUTER(routerVal, normalVal) (radioConfig.preferences.is_router ? (routerVal) : (normalVal))
+
 #define PREF_GET(name, defaultVal)                                                                                               \
     inline uint32_t getPref_##name() { return radioConfig.preferences.name ? radioConfig.preferences.name : (defaultVal); }
 
-PREF_GET(send_owner_interval, 4)
-PREF_GET(position_broadcast_secs, 15 * 60)
+PREF_GET(send_owner_interval, IF_ROUTER(2, 4))
+PREF_GET(position_broadcast_secs, IF_ROUTER(12 * 60 * 60, 15 * 60))
 
 // Each time we wake into the DARK state allow 1 minute to send and receive BLE packets to the phone
-PREF_GET(wait_bluetooth_secs, 60)
+PREF_GET(wait_bluetooth_secs, IF_ROUTER(1, 60))
 
 PREF_GET(screen_on_secs, 60)
-PREF_GET(mesh_sds_timeout_secs, 2 * 60 * 60)
-PREF_GET(phone_sds_timeout_sec, 2 * 60 * 60)
+PREF_GET(mesh_sds_timeout_secs, IF_ROUTER(DELAY_FOREVER, 2 * 60 * 60))
+PREF_GET(phone_sds_timeout_sec, IF_ROUTER(DELAY_FOREVER, 2 * 60 * 60))
 PREF_GET(sds_secs, 365 * 24 * 60 * 60)
 
 // We default to sleeping (with bluetooth off for 5 minutes at a time).  This seems to be a good tradeoff between
 // latency for the user sending messages and power savings because of not having to run (expensive) ESP32 bluetooth
-PREF_GET(ls_secs, 5 * 60)
+PREF_GET(ls_secs, IF_ROUTER(24 * 60 * 60, 5 * 60))
 
 PREF_GET(phone_timeout_secs, 15 * 60)
 PREF_GET(min_wake_secs, 10)
