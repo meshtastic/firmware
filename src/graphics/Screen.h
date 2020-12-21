@@ -107,6 +107,8 @@ class Screen : public concurrency::OSThread
      */
     void doDeepSleep();
 
+    void blink();
+
     /// Handles a button press.
     void onPress() { enqueueCmd(ScreenCmd{.cmd = Cmd::ON_PRESS}); }
 
