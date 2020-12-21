@@ -92,7 +92,7 @@ void ReliableRouter::sendAckNak(bool isAck, NodeNum to, PacketId idFrom)
     auto p = allocForSending();
     p->hop_limit = 0; // Assume just immediate neighbors for now
     p->to = to;
-    DEBUG_MSG("Sending an ack=0x%x,to=0x%x,idFrom=%d,id=%d\n", isAck, to, idFrom, p->id);
+    DEBUG_MSG("Sending an ack=0x%x,to=0x%x,idFrom=0x%x,id=0x%x\n", isAck, to, idFrom, p->id);
 
     if (isAck) {
         p->decoded.ack.success_id = idFrom;
@@ -111,7 +111,6 @@ PendingPacket::PendingPacket(MeshPacket *p)
 {
     packet = p;
     numRetransmissions = NUM_RETRANSMISSIONS - 1; // We subtract one, because we assume the user just did the first send
-    setNextTx();
 }
 
 PendingPacket *ReliableRouter::findPendingPacket(GlobalPacketId key)
@@ -151,6 +150,7 @@ PendingPacket *ReliableRouter::startRetransmission(MeshPacket *p)
     auto id = GlobalPacketId(p);
     auto rec = PendingPacket(p);
 
+    setNextTx(&rec);
     stopRetransmission(p->from, p->id);
     pending[id] = rec;
 
@@ -190,10 +190,9 @@ int32_t ReliableRouter::doRetransmissions()
 
                 // Queue again
                 --p.numRetransmissions;
-                p.setNextTx();
+                setNextTx(&p);
             }
-        }
-        else {
+        } else {
             // Not yet time
             int32_t t = p.nextTxMsec - now;
 

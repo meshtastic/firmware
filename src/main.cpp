@@ -11,6 +11,7 @@
 // #include "rom/rtc.h"
 #include "DSRRouter.h"
 // #include "debug.h"
+#include "FSCommon.h"
 #include "RTC.h"
 #include "SPILock.h"
 #include "concurrency/OSThread.h"
@@ -167,21 +168,35 @@ class ButtonThread : public OSThread
 #endif
 
   public:
+    static uint32_t longPressTime;
+
     // callback returns the period for the next callback invocation (or 0 if we should no longer be called)
     ButtonThread() : OSThread("Button")
     {
 #ifdef BUTTON_PIN
         userButton = OneButton(BUTTON_PIN, true, true);
+#ifdef INPUT_PULLUP_SENSE
+        // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
+        pinMode(BUTTON_PIN, INPUT_PULLUP_SENSE);
+#endif
         userButton.attachClick(userButtonPressed);
         userButton.attachDuringLongPress(userButtonPressedLong);
         userButton.attachDoubleClick(userButtonDoublePressed);
+        userButton.attachLongPressStart(userButtonPressedLongStart);
+        userButton.attachLongPressStop(userButtonPressedLongStop);
         wakeOnIrq(BUTTON_PIN, FALLING);
 #endif
 #ifdef BUTTON_PIN_ALT
         userButtonAlt = OneButton(BUTTON_PIN_ALT, true, true);
+#ifdef INPUT_PULLUP_SENSE
+        // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
+        pinMode(BUTTON_PIN_ALT, INPUT_PULLUP_SENSE);
+#endif
         userButtonAlt.attachClick(userButtonPressed);
         userButtonAlt.attachDuringLongPress(userButtonPressedLong);
         userButtonAlt.attachDoubleClick(userButtonDoublePressed);
+        userButtonAlt.attachLongPressStart(userButtonPressedLongStart);
+        userButtonAlt.attachLongPressStop(userButtonPressedLongStop);
         wakeOnIrq(BUTTON_PIN_ALT, FALLING);
 #endif
     }
@@ -201,7 +216,7 @@ class ButtonThread : public OSThread
         canSleep &= userButtonAlt.isIdle();
 #endif
         // if (!canSleep) DEBUG_MSG("Supressing sleep!\n");
-        //else DEBUG_MSG("sleep ok\n");
+        // else DEBUG_MSG("sleep ok\n");
 
         return 5;
     }
@@ -214,25 +229,54 @@ class ButtonThread : public OSThread
     }
     static void userButtonPressedLong()
     {
-        DEBUG_MSG("Long press!\n");
+        // DEBUG_MSG("Long press!\n");
         screen->adjustBrightness();
-    }
-    
-    static void userButtonDoublePressed()
-{
-#ifndef NO_ESP32
-    disablePin();
+
+        // If user button is held down for 10 seconds, shutdown the device.
+        if (millis() - longPressTime > 10 * 1000) {
+#ifdef TBEAM_V10
+            if (axp192_found == true) {
+                setLed(false);
+                power->shutdown();
+            }
 #endif
-}
+        } else {
+            // DEBUG_MSG("Long press %u\n", (millis() - longPressTime));
+        }
+    }
+
+    static void userButtonDoublePressed()
+    {
+#ifndef NO_ESP32
+        disablePin();
+#endif
+    }
+
+    static void userButtonPressedLongStart()
+    {
+        DEBUG_MSG("Long press start!\n");
+        longPressTime = millis();
+    }
+
+    static void userButtonPressedLongStop()
+    {
+        DEBUG_MSG("Long press stop!\n");
+        longPressTime = 0;
+    }
 };
 
 static Periodic *ledPeriodic;
 static OSThread *powerFSMthread, *buttonThread;
+uint32_t ButtonThread::longPressTime = 0;
 
 RadioInterface *rIf = NULL;
 
 void setup()
 {
+#ifdef SEGGER_STDOUT_CH
+    SEGGER_RTT_ConfigUpBuffer(SEGGER_STDOUT_CH, NULL, NULL, 1024, SEGGER_RTT_MODE_NO_BLOCK_TRIM);
+#endif
+
 #ifdef USE_SEGGER
     SEGGER_RTT_ConfigUpBuffer(0, NULL, NULL, 0, SEGGER_RTT_MODE_NO_BLOCK_TRIM);
 #endif
@@ -254,9 +298,27 @@ void setup()
     digitalWrite(RESET_OLED, 1);
 #endif
 
+    // If BUTTON_PIN is held down during the startup process,
+    //   force the device to go into a SoftAP mode.
+    bool forceSoftAP = 0;
+#ifdef BUTTON_PIN
+#ifndef NO_ESP32
+    pinMode(BUTTON_PIN, INPUT);
+
+    // BUTTON_PIN is pulled high by a 12k resistor.
+    if (!digitalRead(BUTTON_PIN)) {
+        forceSoftAP = 1;
+        DEBUG_MSG("-------------------- Setting forceSoftAP = 1\n");
+    }
+
+#endif
+#endif
+
     OSThread::setup();
 
     ledPeriodic = new Periodic("Blink", ledBlinker);
+
+    fsInit();
 
     router = new DSRRouter();
 
@@ -421,7 +483,7 @@ void setup()
 #endif
 
     // Initialize Wifi
-    initWifi();
+    initWifi(forceSoftAP);
 
     if (!rIf)
         recordCriticalError(ErrNoRadio);

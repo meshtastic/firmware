@@ -50,7 +50,7 @@ From lower to higher power consumption.
 
 - At cold boot: The initial state (after setup() has run) is DARK
 - While in DARK: if we receive EVENT_BOOT, transition to ON (and show the bootscreen). This event will be sent if we detect we woke due to reset (as opposed to deep sleep)
-- While in LS: Once every position_broadcast_secs (default 15 mins) - the unit will wake into DARK mode and broadcast a "networkPing" (our position) and stay alive for wait_bluetooth_secs (default 30 seconds). This allows other nodes to have a record of our last known position if we go away and allows a paired phone to hear from us and download messages.
+- While in LS: Once every position_broadcast_secs (default 15 mins) - the unit will wake into DARK mode and broadcast a "networkPing" (our position) and stay alive for wait_bluetooth_secs (default 60 seconds). This allows other nodes to have a record of our last known position if we go away and allows a paired phone to hear from us and download messages.
 - While in LS: Every send*owner_interval (defaults to 4, i.e. one hour), when we wake to send our position we \_also* broadcast our owner. This lets new nodes on the network find out about us or correct duplicate node number assignments.
 - While in LS/NB/DARK: If the user presses a button (EVENT_PRESS) we go to full ON mode for screen_on_secs (default 30 seconds). Multiple presses keeps resetting this timeout
 - While in LS/NB/DARK: If we receive new text messages (EVENT_RECEIVED_TEXT_MSG), we go to full ON mode for screen_on_secs (same as if user pressed a button)

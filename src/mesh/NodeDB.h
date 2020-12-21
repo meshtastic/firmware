@@ -13,6 +13,7 @@ extern MyNodeInfo &myNodeInfo;
 extern RadioConfig &radioConfig;
 extern ChannelSettings &channelSettings;
 extern User &owner;
+extern const char *channelName;
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const NodeInfo *n);
@@ -33,7 +34,6 @@ class NodeDB
   public:
     bool updateGUI = false;            // we think the gui should definitely be redrawn, screen will clear this once handled
     NodeInfo *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
-    bool updateTextMessage = false;    // if true, the GUI should show a new text message
     Observable<const meshtastic::NodeStatus *> newStatus;
 
     /// don't do mesh based algoritm for node id assignment (initially)
@@ -57,6 +57,14 @@ class NodeDB
     /// given a subpacket sniffed from the network, update our DB state
     /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
     void updateFrom(const MeshPacket &p);
+
+    /** Update position info for this node based on received position data
+     */
+    void updatePosition(uint32_t nodeId, const Position &p);
+
+    /** Update user info for this node based on received user data
+     */
+    void updateUser(uint32_t nodeId, const User &p);
 
     /// @return our node number
     NodeNum getNodeNum() { return myNodeInfo.my_node_num; }
@@ -159,3 +167,8 @@ PREF_GET(ls_secs, 5 * 60)
 
 PREF_GET(phone_timeout_secs, 15 * 60)
 PREF_GET(min_wake_secs, 10)
+
+/** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings 
+ * might have changed is incremented.  Allows others to detect they might now be on a new channel.
+ */
+extern uint32_t radioGeneration;

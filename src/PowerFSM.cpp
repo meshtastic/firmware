@@ -144,7 +144,7 @@ static void onEnter()
 
     uint32_t now = millis();
 
-    if (now - lastPingMs > 30 * 1000) { // if more than a minute since our last press, ask other nodes to update their state
+    if (now - lastPingMs > 30 * 1000) { // if more than a minute since our last press, ask node we are looking at to update their state
         if (displayedNodeNum)
             service.sendNetworkPing(displayedNodeNum, true); // Refresh the currently displayed node
         lastPingMs = now;
@@ -251,13 +251,11 @@ void PowerFSM_setup()
 #ifndef NRF52_SERIES
     // We never enter light-sleep or NB states on NRF52 (because the CPU uses so little power normally)
 
-    lowPowerState = &stateDARK;
-
     powerFSM.add_timed_transition(&stateDARK, &stateNB, getPref_phone_timeout_secs() * 1000, NULL, "Phone timeout");
-
     powerFSM.add_timed_transition(&stateNB, &stateLS, getPref_min_wake_secs() * 1000, NULL, "Min wake timeout");
-
     powerFSM.add_timed_transition(&stateDARK, &stateLS, getPref_wait_bluetooth_secs() * 1000, NULL, "Bluetooth timeout");
+#else
+    lowPowerState = &stateDARK;
 #endif
 
     auto meshSds = getPref_mesh_sds_timeout_secs();
