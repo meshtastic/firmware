@@ -405,16 +405,16 @@ void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
         res->print("\"files\": [");
         bool firstFile = 1;
         while (file) {
-            if (firstFile) {
-                firstFile = 0;
-            } else {
-                res->println(",");
-            }
-
-            res->println("{");
-
             String filePath = String(file.name());
             if (filePath.indexOf("/static") == 0) {
+                if (firstFile) {
+                    firstFile = 0;
+                } else {
+                    res->println(",");
+                }
+
+                res->println("{");
+
                 if (String(file.name()).substring(1).endsWith(".gz")) {
                     String modifiedFile = String(file.name()).substring(1);
                     modifiedFile.remove((modifiedFile.length() - 3), 3);
@@ -425,10 +425,10 @@ void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
                     res->print("\"name\": \"" + String(file.name()).substring(1) + "\",");
                 }
                 res->print("\"size\": " + String(file.size()));
+                res->print("}");
             }
 
             file = root.openNextFile();
-            res->print("}");
         }
         res->print("],");
         res->print("\"filesystem\" : {");
