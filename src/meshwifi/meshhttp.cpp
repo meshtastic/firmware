@@ -244,7 +244,7 @@ void initWebServer()
     ResourceNode *node404 = new ResourceNode("", "GET", &handle404);
     ResourceNode *nodeFormUpload = new ResourceNode("/upload", "POST", &handleFormUpload);
     ResourceNode *nodeJsonScanNetworks = new ResourceNode("/json/scanNetworks", "GET", &handleScanNetworks);
-    ResourceNode *nodeJsonBlinkLED = new ResourceNode("/json/blink", "GET", &handleBlinkLED);
+    ResourceNode *nodeJsonBlinkLED = new ResourceNode("/json/blink", "POST", &handleBlinkLED);
     ResourceNode *nodeJsonSpiffsBrowseStatic = new ResourceNode("/json/spiffs/browse/static/", "GET", &handleSpiffsBrowseStatic);
 
     // Secure nodes
@@ -978,22 +978,31 @@ void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
 {
     res->setHeader("Content-Type", "application/json");
 
-    // This can be cleaned up at some point to make it non-blocking and to allow for more configuration.
+    ResourceParameters *params = req->getParams();
+    std::string blink_target;
+
+    if (!params->getQueryParameter("blink_target", blink_target)) {
+        // if no blink_target was supplied in the URL parameters of the
+        // POST request, then assume we should blink the LED
+        blink_target = "LED";
+    }
+
+    if (blink_target == "LED") {
+        uint8_t count = 10;
+        while (count > 0) {
+            setLed(true);
+            delay(50);
+            setLed(false);
+            delay(50);
+            count = count - 1;
+        }
+    } else {
+        screen->blink();
+    }
 
     res->println("{");
     res->println("\"status\": \"ok\"");
     res->println("}");
-
-    uint8_t count = 50;
-
-    while (count > 0)
-    {
-        setLed(true);
-        delay(10);
-        setLed(false);
-        delay(10);
-        count = count - 1;
-    }
 }
 
 void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)

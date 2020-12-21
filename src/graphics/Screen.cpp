@@ -894,6 +894,22 @@ void Screen::handleStartBluetoothPinScreen(uint32_t pin)
     setFastFramerate();
 }
 
+void Screen::blink() {
+    setFastFramerate();
+    uint8_t count = 10;
+    dispdev.setBrightness(254);
+    while(count>0) {
+        dispdev.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+        dispdev.display();
+        delay(50);
+        dispdev.clear();
+        dispdev.display();
+        delay(50);
+        count = count -1;
+    }
+     dispdev.setBrightness(brightness);
+}
+
 void Screen::handlePrint(const char *text)
 {
     DEBUG_MSG("Screen: %s", text);
