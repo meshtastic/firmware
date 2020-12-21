@@ -77,9 +77,6 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     PointerQueue<MeshPacket> txQueue = PointerQueue<MeshPacket>(MAX_TX_QUEUE);
 
   protected:
-    float bw = 125;
-    uint8_t sf = 9;
-    uint8_t cr = 7;
 
     /**
      * FIXME, use a meshtastic sync word, but hashed with the Channel name.  Currently picking the same default
@@ -88,7 +85,6 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     uint8_t syncWord = SX126X_SYNC_WORD_PRIVATE;
 
     float currentLimit = 100;     // FIXME
-    uint16_t preambleLength = 32; // 8 is default, but FIXME use longer to increase the amount of sleep time when receiving
 
     LockingModule module; // The HW interface to the radio
 
@@ -164,13 +160,6 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /** Do any hardware setup needed on entry into send configuration for the radio.  Subclasses can customize */
     virtual void configHardwareForSend() {}
-
-    /**
-     * Convert our modemConfig enum into wf, sf, etc...
-     *
-     * These paramaters will be pull from the channelSettings global
-     */
-    virtual void applyModemConfig();
 
     /** Could we send right now (i.e. either not actively receiving or transmitting)? */
     virtual bool canSendImmediately();

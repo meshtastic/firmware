@@ -58,50 +58,6 @@ void INTERRUPT_ATTR RadioLibInterface::isrTxLevel0()
  */
 RadioLibInterface *RadioLibInterface::instance;
 
-/**
- * Convert our modemConfig enum into wf, sf, etc...
- */
-void RadioLibInterface::applyModemConfig()
-{
-    RadioInterface::applyModemConfig();
-
-    if (channelSettings.spread_factor == 0) {
-        switch (channelSettings.modem_config) {
-        case ChannelSettings_ModemConfig_Bw125Cr45Sf128: ///< Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on. Default medium
-                                                         ///< range
-            bw = 125;
-            cr = 5;
-            sf = 7;
-            break;
-        case ChannelSettings_ModemConfig_Bw500Cr45Sf128: ///< Bw = 500 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on. Fast+short
-                                                         ///< range
-            bw = 500;
-            cr = 5;
-            sf = 7;
-            break;
-        case ChannelSettings_ModemConfig_Bw31_25Cr48Sf512: ///< Bw = 31.25 kHz, Cr = 4/8, Sf = 512chips/symbol, CRC on. Slow+long
-                                                           ///< range
-            bw = 31.25;
-            cr = 8;
-            sf = 9;
-            break;
-        case ChannelSettings_ModemConfig_Bw125Cr48Sf4096:
-            bw = 125;
-            cr = 8;
-            sf = 12;
-            break;
-        default:
-            assert(0); // Unknown enum
-        }
-    } else {
-        sf = channelSettings.spread_factor;
-        cr = channelSettings.coding_rate;
-        bw = channelSettings.bandwidth;
-
-        if (bw == 31) // This parameter is not an integer
-            bw = 31.25;
-    }
-}
 
 /** Could we send right now (i.e. either not actively receving or transmitting)? */
 bool RadioLibInterface::canSendImmediately()
@@ -130,6 +86,8 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
     // Sometimes when testing it is useful to be able to never turn on the xmitter
 #ifndef LORA_DISABLE_SENDING
     printPacket("enqueuing for send", p);
+    uint32_t xmitMsec = getPacketTime(p);
+
     DEBUG_MSG("txGood=%d,rxGood=%d,rxBad=%d\n", txGood, rxGood, rxBad);
     ErrorCode res = txQueue.enqueue(p, 0) ? ERRNO_OK : ERRNO_UNKNOWN;
 
@@ -157,19 +115,6 @@ bool RadioLibInterface::canSleep()
 
     return res;
 }
-
-/** At the low end we want to pick a delay large enough that anyone who just completed sending (some other node)
- * has had enough time to switch their radio back into receive mode.
- */
-#define MIN_TX_WAIT_MSEC 100
-
-/**
- * At the high end, this value is used to spread node attempts across time so when they are replying to a packet
- * they don't both check that the airwaves are clear at the same moment.  As long as they are off by some amount
- * one of the two will be first to start transmitting and the other will see that.  I bet 500ms is more than enough
- * to guarantee this.
- */
-#define MAX_TX_WAIT_MSEC 2000 // stress test would still fail occasionally with 1000
 
 /** radio helper thread callback.
 
@@ -226,8 +171,7 @@ void RadioLibInterface::startTransmitTimer(bool withDelay)
 {
     // If we have work to do and the timer wasn't already scheduled, schedule it now
     if (!txQueue.isEmpty()) {
-        uint32_t delay =
-            !withDelay ? 1 : random(MIN_TX_WAIT_MSEC, MAX_TX_WAIT_MSEC); // See documentation for loop() wrt these values
+        uint32_t delay = !withDelay ? 1 : getTxDelayMsec();
         // DEBUG_MSG("xmit timer %d\n", delay);
         notifyLater(delay, TRANSMIT_DELAY_COMPLETED, false); // This will implicitly enable
     }
@@ -236,20 +180,25 @@ void RadioLibInterface::startTransmitTimer(bool withDelay)
 void RadioLibInterface::handleTransmitInterrupt()
 {
     // DEBUG_MSG("handling lora TX interrupt\n");
-    assert(sendingPacket); // Were we sending? - FIXME, this was null coming out of light sleep due to RF95 ISR!
-
-    completeSending();
+    // This can be null if we forced the device to enter standby mode.  In that case
+    // ignore the transmit interrupt
+    if (sendingPacket)
+        completeSending();
 }
 
 void RadioLibInterface::completeSending()
 {
-    if (sendingPacket) {
+    // We are careful to clear sending packet before calling printPacket because
+    // that can take a long time
+    auto p = sendingPacket;
+    sendingPacket = NULL;
+
+    if (p) {
         txGood++;
-        printPacket("Completed sending", sendingPacket);
+        printPacket("Completed sending", p);
 
         // We are done sending that packet, release it
-        packetPool.release(sendingPacket);
-        sendingPacket = NULL;
+        packetPool.release(p);
         // DEBUG_MSG("Done with send\n");
     }
 }
@@ -295,7 +244,7 @@ void RadioLibInterface::handleReceiveInterrupt()
             addReceiveMetadata(mp);
 
             mp->which_payload = MeshPacket_encrypted_tag; // Mark that the payload is still encrypted at this point
-            assert(payloadLen <= sizeof(mp->encrypted.bytes));
+            assert(((uint32_t) payloadLen) <= sizeof(mp->encrypted.bytes));
             memcpy(mp->encrypted.bytes, payload, payloadLen);
             mp->encrypted.size = payloadLen;
 
@@ -305,7 +254,7 @@ void RadioLibInterface::handleReceiveInterrupt()
         }
     }
 }
-
+ 
 /** start an immediate transmit */
 void RadioLibInterface::startSend(MeshPacket *txp)
 {

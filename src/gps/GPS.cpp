@@ -25,9 +25,15 @@ uint8_t GPS::i2cAddress = 0;
 
 GPS *gps;
 
+/// Multiple GPS instances might use the same serial port (in sequence), but we can 
+/// only init that port once.
+static bool didSerialInit;
+
 bool GPS::setupGPS()
 {
-    if (_serial_gps) {
+    if (_serial_gps && !didSerialInit) {
+        didSerialInit = true;
+        
 #ifdef GPS_RX_PIN
         _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
 #else
@@ -59,8 +65,10 @@ bool GPS::setup()
     setAwake(true); // Wake GPS power before doing any init
     bool ok = setupGPS();
 
-    if (ok)
+    if (ok) {
         notifySleepObserver.observe(&notifySleep);
+        notifyDeepSleepObserver.observe(&notifyDeepSleep);
+    }
 
     return ok;
 }
@@ -275,7 +283,19 @@ void GPS::forceWake(bool on)
 /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
 int GPS::prepareSleep(void *unused)
 {
+    DEBUG_MSG("GPS prepare sleep!\n");
     forceWake(false);
+
+    return 0;
+}
+
+/// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
+int GPS::prepareDeepSleep(void *unused)
+{
+    DEBUG_MSG("GPS deep sleep!\n");
+
+    // For deep sleep we also want abandon any lock attempts (because we want minimum power)
+    setAwake(false);
 
     return 0;
 }

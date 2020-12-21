@@ -2,30 +2,93 @@
 
 You probably don't care about this section - skip to the next one.
 
-Threading tasks:
+For app cleanup:
 
-- Use https://github.com/ivanseidel/ArduinoThread? rather than full coroutines 
-- clean up main loop()
-- check that we are mostly asleep, show which thread is causing us to wake
-- 
-- use tickless idle on nrf52, and sleep X msec or until an interrupt occurs or the cooperative scheduling changes. https://devzone.nordicsemi.com/f/nordic-q-a/12363/nrf52-freertos-power-consumption-tickless-idle
-- BAD IDEA: use vTaskDelay and https://www.freertos.org/xTaskAbortDelay.html if scheduling changes. (define INCLUDE_xTaskAbortDelay on ESP32 and NRF52 - seems impossible to find?)
-- GOOD IDEA: use xSemaphoreTake to take a semaphore using a timeout.  Expect semaphore to not be set, but set it to indicate scheduling has changed.
+* DONE only do wantReplies once per packet type, if we change network settings force it again
+* update positions and nodeinfos based on packets we just merely witness on the mesh.  via isPromsciousPort bool, remove sniffing
+* DONE make device build always have a valid version
+* DONE do fixed position bug https://github.com/meshtastic/Meshtastic-device/issues/536
+* DONE check build guide
+* DONE write devapi user guide
+* DONE update android code: https://developer.android.com/topic/libraries/view-binding/migration
+* DONE test GPIO watch
+* DONE set --set-chan-fast, --set-chan-default
+* writeup docs on gpio 
+* DONE make python ping command
+* DONE make hello world example service
+* DONE have python tool check max packet size before sending to device
+* DONE if request was sent reliably, send reply reliably
+* DONE require a recent python api to talk to these new device loads
+* DONE require a recent android app to talk to these new device loads
+* DONE fix handleIncomingPosition
+* DONE move want_replies handling into plugins
+* DONE on android for received positions handle either old or new positions / user messages
+* DONE on android side send old or new positions as needed / user messages
+* DONE test python side handle new position/user messages
+* DONE make a gpio example. --gpiowrb 4 1, --gpiord 0x444, --gpiowatch 0x3ff
+* DONE fix position sending to use new plugin
+* DONE Add SinglePortNumPlugin - as the new most useful baseclass
+* DONE move positions into regular data packets (use new app framework)
+* DONE move user info into regular data packets (use new app framework)
+* DONE test that positions, text messages and user info still work
+* DONE test that position, text messages and user info work properly with new android app and old device code
+* do UDP tunnel
+* fix the RTC drift bug
+* move python ping functionality into device, reply with rxsnr info
+* use channels for gpio security https://github.com/meshtastic/Meshtastic-device/issues/104
+* generate autodocs
+* MeshPackets for sending should be reference counted so that API clients would have the option of checking sent status (would allow removing the nasty 30 sec timer in gpio watch sending)
 
-Nimble tasks:
+For high speed/lots of devices/short range tasks:
 
-- readerror.txt stress test bug
-- started RPA long test, jul 22 6pm
-- implement nimble software update api
-- update to latest bins, test OTA again (measure times) and then checkin bins
-- do alpha release
+- When guessing numhops for sending: if I've heard from many local (0 hop neighbors) decrease hopcount by 2 rather than 1. 
+This should nicely help 'router' nodes do the right thing when long range, or if there are many local nodes for short range.
+- fix timeouts/delays to be based on packet length at current radio settings
 
-* update protocol description per cyclomies email thread
 * update faq with antennas https://meshtastic.discourse.group/t/range-test-ideas-requested/738/2
 * update faq on recommended android version and phones
 * add help link inside the app, reference a page on the wiki
 * turn on amazon reviews support
 * add a tablet layout (with map next to messages) in the android app
+
+# Old docs to merge
+
+MESH RADIO PROTOCOL
+
+Old TODO notes on the mesh radio protocol, merge into real docs someday...
+
+for each named group we have a pre-shared key known by all group members and
+wrapped around the device. you can only be in one group at a time (FIXME?!) To
+join the group we read a qr code with the preshared key and ParamsCodeEnum. that
+gets sent via bluetooth to the device.  ParamsCodeEnum maps to a set of various
+radio params (regulatory region, center freq, SF, bandwidth, bitrate, power
+etc...) so all members of the mesh can have their radios set the same way.
+
+once in that group, we can talk between 254 node numbers.
+to get our node number (and announce our presence in the channel) we pick a
+random node number and broadcast as that node with WANT-NODENUM(my globally
+unique name).  If anyone on the channel has seen someone _else_ using that name
+within the last 24 hrs(?) they reply with DENY-NODENUM. Note: we might receive
+multiple denies.  Note: this allows others to speak up for some other node that
+might be saving battery right now. Any time we hear from another node (for any
+message type), we add that node number to the unpickable list.  To dramatically
+decrease the odds a node number we request is already used by someone. If no one
+denies within TBD seconds, we assume that we have that node number.  As long as
+we keep talking to folks at least once every 24 hrs, others should remember we
+have it.
+
+Once we have a node number we can broadcast POSITION-UPDATE(my globally unique
+name, lat, lon, alt, amt battery remaining).  All receivers will use this to a)
+update the mapping of who is at what node nums, b) the time of last rx, c)
+position.  If we haven't heard from that node in a while we reply to that node
+(only) with our current POSITION_UPDATE state - so that node (presumably just
+rejoined the network) can build a map of all participants.
+
+We will periodically broadcast POSITION-UPDATE as needed based on distance moved
+or a periodic minimum heartbeat.
+
+If user wants to send a text they can SEND_TEXT(dest user, short text message).
+Dest user is a node number, or 0xff for broadcast.
 
 # Medium priority
 

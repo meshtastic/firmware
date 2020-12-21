@@ -31,9 +31,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // If app version is not specified we assume we are not being invoked by the build script
 #ifndef APP_VERSION
-#error APP_VERSION, HW_VERSION, and HW_VERSION_countryname must be set by the build environment
-//#define APP_VERSION 0.0.0   // this def normally comes from build-all.sh
-//#define HW_VERSION 1.0 - US // normally comes from build-all.sh and contains the region code
+#error APP_VERSION must be set by the build environment
+#endif
+
+// If app version is not specified we assume we are not being invoked by the build script
+#ifndef HW_VERSION
+#error HW_VERSION, and HW_VERSION_countryname must be set by the build environment
 #endif
 
 // -----------------------------------------------------------------------------
@@ -404,8 +407,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Always include the SEGGER code on NRF52 - because useful for debugging
 #include "SEGGER_RTT.h"
 
+// The channel we send stdout data to
+#define SEGGER_STDOUT_CH 0
+
 // Debug printing to segger console
-#define SEGGER_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
+#define SEGGER_MSG(...) SEGGER_RTT_printf(SEGGER_STDOUT_CH, __VA_ARGS__)
 
 // If we are not on a NRF52840 (which has built in USB-ACM serial support) and we don't have serial pins hooked up, then we MUST
 // use SEGGER for debug output

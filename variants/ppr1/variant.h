@@ -112,7 +112,7 @@ static const uint8_t AREF = PIN_AREF;
 // #define PIN_GPS_WAKE 20 // CELL_CTRL in schematic? based on their example code
 #define PIN_GPS_EN 7 // GPS_EN active high
 
-#define PIN_VUSB_EN 21
+// #define PIN_VUSB_EN 21
 
 // LCD
 
@@ -168,7 +168,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define LORA_DISABLE_SENDING // Define this to disable transmission for testing (power testing etc...)
 
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
-#define USE_SEGGER
+// #define USE_SEGGER
 
 #ifdef __cplusplus
 }

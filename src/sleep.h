@@ -4,7 +4,8 @@
 #include "Observer.h"
 #include "configuration.h"
 
-void doDeepSleep(uint64_t msecToWake);
+void doDeepSleep(uint64_t msecToWake), cpuDeepSleep(uint64_t msecToWake);
+
 #ifndef NO_ESP32
 #include "esp_sleep.h"
 esp_sleep_wakeup_cause_t doLightSleep(uint64_t msecToWake);
