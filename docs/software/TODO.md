@@ -4,6 +4,8 @@ You probably don't care about this section - skip to the next one.
 
 For app cleanup:
 
+* DONE writeup nice python options docs (common cases, link to protobuf docs)
+* have android app link to user manual
 * DONE only do wantReplies once per packet type, if we change network settings force it again
 * update positions and nodeinfos based on packets we just merely witness on the mesh.  via isPromsciousPort bool, remove sniffing
 * DONE make device build always have a valid version
