@@ -144,12 +144,12 @@ static void onEnter()
 
     uint32_t now = millis();
 
-    if (now - lastPingMs > 30 * 1000) { // if more than a minute since our last press, ask node we are looking at to update their state
+    if (now - lastPingMs >
+        30 * 1000) { // if more than a minute since our last press, ask node we are looking at to update their state
         if (displayedNodeNum)
             service.sendNetworkPing(displayedNodeNum, true); // Refresh the currently displayed node
         lastPingMs = now;
     }
-
 }
 
 static void screenPress()
@@ -174,7 +174,12 @@ void PowerFSM_setup()
     // If we are not a router and we already have AC power go to POWER state after init, otherwise go to ON
     // We assume routers might be powered all the time, but from a low current (solar) source
     bool isLowPower = radioConfig.preferences.is_low_power;
-    bool hasPower = !isLowPower && powerStatus && powerStatus->getHasUSB();
+
+    /* To determine if we're externally powered, assumptions
+        1) If we're powered up and there's no battery, we must be getting power externally.
+        2) If we detect USB power from the power management chip, we must be getting power externally.
+    */
+    bool hasPower = (powerStatus && !powerStatus->getHasBattery()) || !isLowPower && powerStatus && powerStatus->getHasUSB();
     bool isRouter = radioConfig.preferences.is_router;
     DEBUG_MSG("PowerFSM init, USB power=%d\n", hasPower);
     powerFSM.add_timed_transition(&stateBOOT, hasPower ? &statePOWER : &stateON, 3 * 1000, NULL, "boot timeout");
