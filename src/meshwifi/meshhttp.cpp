@@ -393,8 +393,6 @@ void handleStaticPost(HTTPRequest *req, HTTPResponse *res)
     res->println("</body></html>");
 }
 
-
-
 void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
 {
     // jm
