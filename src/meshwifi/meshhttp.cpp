@@ -78,7 +78,8 @@ char contentTypes[][2][32] = {{".txt", "text/plain"},     {".html", "text/html"}
                               {".js", "text/javascript"}, {".png", "image/png"},
                               {".jpg", "image/jpg"},      {".gz", "application/gzip"},
                               {".gif", "image/gif"},      {".json", "application/json"},
-                              {".css", "text/css"},       {"", ""}};
+                              {".css", "text/css"},       {".ico","image/vnd.microsoft.icon"},
+                              {".svg", "image/svg+xml"},  {"", ""}};
 
 void handleWebResponse()
 {
