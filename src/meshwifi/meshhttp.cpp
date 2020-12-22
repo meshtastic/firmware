@@ -55,13 +55,13 @@ void handleFavicon(HTTPRequest *req, HTTPResponse *res);
 void handleRoot(HTTPRequest *req, HTTPResponse *res);
 void handleStaticBrowse(HTTPRequest *req, HTTPResponse *res);
 void handleStaticPost(HTTPRequest *req, HTTPResponse *res);
-void handleStaticDelete(HTTPRequest *req, HTTPResponse *res);
 void handleStatic(HTTPRequest *req, HTTPResponse *res);
 void handleRestart(HTTPRequest *req, HTTPResponse *res);
 void handle404(HTTPRequest *req, HTTPResponse *res);
 void handleFormUpload(HTTPRequest *req, HTTPResponse *res);
 void handleScanNetworks(HTTPRequest *req, HTTPResponse *res);
 void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res);
+void handleSpiffsDeleteStatic(HTTPRequest *req, HTTPResponse *res);
 void handleBlinkLED(HTTPRequest *req, HTTPResponse *res);
 
 void middlewareSpeedUp240(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
@@ -241,7 +241,6 @@ void initWebServer()
     ResourceNode *nodeRoot = new ResourceNode("/", "GET", &handleRoot);
     ResourceNode *nodeStaticBrowse = new ResourceNode("/static", "GET", &handleStaticBrowse);
     ResourceNode *nodeStaticPOST = new ResourceNode("/static", "POST", &handleStaticPost);
-    ResourceNode *nodeStaticDelete = new ResourceNode("/static", "DELETE", &handleStaticDelete);
     ResourceNode *nodeStatic = new ResourceNode("/static/*", "GET", &handleStatic);
     ResourceNode *nodeRestart = new ResourceNode("/restart", "POST", &handleRestart);
     ResourceNode *node404 = new ResourceNode("", "GET", &handle404);
@@ -249,6 +248,7 @@ void initWebServer()
     ResourceNode *nodeJsonScanNetworks = new ResourceNode("/json/scanNetworks", "GET", &handleScanNetworks);
     ResourceNode *nodeJsonBlinkLED = new ResourceNode("/json/blink", "POST", &handleBlinkLED);
     ResourceNode *nodeJsonSpiffsBrowseStatic = new ResourceNode("/json/spiffs/browse/static/", "GET", &handleSpiffsBrowseStatic);
+    ResourceNode *nodeJsonDelete = new ResourceNode("/json/spiffs/delete/static", "DELETE", &handleSpiffsDeleteStatic);
 
     // Secure nodes
     secureServer->registerNode(nodeAPIv1ToRadioOptions);
@@ -259,13 +259,13 @@ void initWebServer()
     secureServer->registerNode(nodeRoot);
     secureServer->registerNode(nodeStaticBrowse);
     secureServer->registerNode(nodeStaticPOST);
-    secureServer->registerNode(nodeStaticDelete);
     secureServer->registerNode(nodeStatic);
     secureServer->registerNode(nodeRestart);
     secureServer->registerNode(nodeFormUpload);
     secureServer->registerNode(nodeJsonScanNetworks);
     secureServer->registerNode(nodeJsonBlinkLED);
     secureServer->registerNode(nodeJsonSpiffsBrowseStatic);
+    secureServer->registerNode(nodeJsonDelete);
     secureServer->setDefaultNode(node404);
 
     secureServer->addMiddleware(&middlewareSpeedUp240);
@@ -279,13 +279,13 @@ void initWebServer()
     insecureServer->registerNode(nodeRoot);
     insecureServer->registerNode(nodeStaticBrowse);
     insecureServer->registerNode(nodeStaticPOST);
-    insecureServer->registerNode(nodeStaticDelete);
     insecureServer->registerNode(nodeStatic);
     insecureServer->registerNode(nodeRestart);
     insecureServer->registerNode(nodeFormUpload);
     insecureServer->registerNode(nodeJsonScanNetworks);
     insecureServer->registerNode(nodeJsonBlinkLED);
     insecureServer->registerNode(nodeJsonSpiffsBrowseStatic);
+    insecureServer->registerNode(nodeJsonDelete);
     insecureServer->setDefaultNode(node404);
 
     insecureServer->addMiddleware(&middlewareSpeedUp160);
@@ -393,29 +393,6 @@ void handleStaticPost(HTTPRequest *req, HTTPResponse *res)
     res->println("</body></html>");
 }
 
-void handleStaticDelete(HTTPRequest *req, HTTPResponse *res)
-{
-  ResourceParameters *params = req->getParams();
-  std::string paramValDelete;
-
-  res->setHeader("Content-Type", "application/json");
-  if (params->getQueryParameter("delete", paramValDelete)) {
-    std::string pathDelete = "/" + paramValDelete;
-    if (SPIFFS.remove(pathDelete.c_str())) {
-        Serial.println(pathDelete.c_str());
-        res->println("{");
-        res->println("\"status\": \"ok\"");
-        res->println("}");
-        return;
-    } else {
-        Serial.println(pathDelete.c_str());
-        res->println("{");
-        res->println("\"status\": \"Error\"");
-        res->println("}");
-        return;
-    }
-  }
-}
 
 
 void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
@@ -470,6 +447,30 @@ void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
         res->println("\"status\": \"ok\"");
         res->println("}");
     }
+}
+
+void handleSpiffsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
+{
+  ResourceParameters *params = req->getParams();
+  std::string paramValDelete;
+
+  res->setHeader("Content-Type", "application/json");
+  if (params->getQueryParameter("delete", paramValDelete)) {
+    std::string pathDelete = "/" + paramValDelete;
+    if (SPIFFS.remove(pathDelete.c_str())) {
+        Serial.println(pathDelete.c_str());
+        res->println("{");
+        res->println("\"status\": \"ok\"");
+        res->println("}");
+        return;
+    } else {
+        Serial.println(pathDelete.c_str());
+        res->println("{");
+        res->println("\"status\": \"Error\"");
+        res->println("}");
+        return;
+    }
+  }
 }
 
 void handleStaticBrowse(HTTPRequest *req, HTTPResponse *res)
