@@ -38,7 +38,6 @@ For app cleanup:
 * fix the RTC drift bug
 * move python ping functionality into device, reply with rxsnr info
 * use channels for gpio security https://github.com/meshtastic/Meshtastic-device/issues/104
-* generate autodocs
 * MeshPackets for sending should be reference counted so that API clients would have the option of checking sent status (would allow removing the nasty 30 sec timer in gpio watch sending)
 
 For high speed/lots of devices/short range tasks:
