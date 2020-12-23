@@ -179,7 +179,7 @@ void PowerFSM_setup()
         1) If we're powered up and there's no battery, we must be getting power externally.
         2) If we detect USB power from the power management chip, we must be getting power externally.
     */
-    bool hasPower = (powerStatus && !powerStatus->getHasBattery()) || !isLowPower && powerStatus && powerStatus->getHasUSB();
+    bool hasPower = (powerStatus && !powerStatus->getHasBattery()) || (!isLowPower && powerStatus && powerStatus->getHasUSB());
     bool isRouter = radioConfig.preferences.is_router;
     DEBUG_MSG("PowerFSM init, USB power=%d\n", hasPower);
     powerFSM.add_timed_transition(&stateBOOT, hasPower ? &statePOWER : &stateON, 3 * 1000, NULL, "boot timeout");
