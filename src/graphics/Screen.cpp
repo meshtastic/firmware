@@ -912,7 +912,7 @@ void Screen::blink() {
 
 void Screen::handlePrint(const char *text)
 {
-    DEBUG_MSG("Screen: %s", text);
+    DEBUG_MSG("Screen: %s\n", text);
     if (!useDisplay || !showingNormalScreen)
         return;
 
