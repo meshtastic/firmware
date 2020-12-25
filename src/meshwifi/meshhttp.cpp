@@ -60,6 +60,9 @@ void handleRestart(HTTPRequest *req, HTTPResponse *res);
 void handle404(HTTPRequest *req, HTTPResponse *res);
 void handleFormUpload(HTTPRequest *req, HTTPResponse *res);
 void handleScanNetworks(HTTPRequest *req, HTTPResponse *res);
+void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res);
+void handleSpiffsDeleteStatic(HTTPRequest *req, HTTPResponse *res);
+void handleBlinkLED(HTTPRequest *req, HTTPResponse *res);
 
 void middlewareSpeedUp240(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
 void middlewareSpeedUp160(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
@@ -76,7 +79,8 @@ char contentTypes[][2][32] = {{".txt", "text/plain"},     {".html", "text/html"}
                               {".js", "text/javascript"}, {".png", "image/png"},
                               {".jpg", "image/jpg"},      {".gz", "application/gzip"},
                               {".gif", "image/gif"},      {".json", "application/json"},
-                              {".css", "text/css"},       {"", ""}};
+                              {".css", "text/css"},       {".ico","image/vnd.microsoft.icon"},
+                              {".svg", "image/svg+xml"},  {"", ""}};
 
 void handleWebResponse()
 {
@@ -125,11 +129,12 @@ void taskCreateCert(void *parameter)
         DEBUG_MSG("Existing SSL Certificate found!\n");
     } else {
         DEBUG_MSG("Creating the certificate. This may take a while. Please wait...\n");
+        yield();
         cert = new SSLCert();
-        // disableCore1WDT();
+        yield();
         int createCertResult = createSelfSignedCert(*cert, KEYSIZE_2048, "CN=meshtastic.local,O=Meshtastic,C=US",
                                                     "20190101000000", "20300101000000");
-        // enableCore1WDT();
+        yield();
 
         if (createCertResult != 0) {
             DEBUG_MSG("Creating the certificate failed\n");
@@ -241,6 +246,9 @@ void initWebServer()
     ResourceNode *node404 = new ResourceNode("", "GET", &handle404);
     ResourceNode *nodeFormUpload = new ResourceNode("/upload", "POST", &handleFormUpload);
     ResourceNode *nodeJsonScanNetworks = new ResourceNode("/json/scanNetworks", "GET", &handleScanNetworks);
+    ResourceNode *nodeJsonBlinkLED = new ResourceNode("/json/blink", "POST", &handleBlinkLED);
+    ResourceNode *nodeJsonSpiffsBrowseStatic = new ResourceNode("/json/spiffs/browse/static/", "GET", &handleSpiffsBrowseStatic);
+    ResourceNode *nodeJsonDelete = new ResourceNode("/json/spiffs/delete/static", "DELETE", &handleSpiffsDeleteStatic);
 
     // Secure nodes
     secureServer->registerNode(nodeAPIv1ToRadioOptions);
@@ -255,6 +263,9 @@ void initWebServer()
     secureServer->registerNode(nodeRestart);
     secureServer->registerNode(nodeFormUpload);
     secureServer->registerNode(nodeJsonScanNetworks);
+    secureServer->registerNode(nodeJsonBlinkLED);
+    secureServer->registerNode(nodeJsonSpiffsBrowseStatic);
+    secureServer->registerNode(nodeJsonDelete);
     secureServer->setDefaultNode(node404);
 
     secureServer->addMiddleware(&middlewareSpeedUp240);
@@ -272,6 +283,9 @@ void initWebServer()
     insecureServer->registerNode(nodeRestart);
     insecureServer->registerNode(nodeFormUpload);
     insecureServer->registerNode(nodeJsonScanNetworks);
+    insecureServer->registerNode(nodeJsonBlinkLED);
+    insecureServer->registerNode(nodeJsonSpiffsBrowseStatic);
+    insecureServer->registerNode(nodeJsonDelete);
     insecureServer->setDefaultNode(node404);
 
     insecureServer->addMiddleware(&middlewareSpeedUp160);
@@ -377,6 +391,84 @@ void handleStaticPost(HTTPRequest *req, HTTPResponse *res)
         res->println("<p>No file to save...</p>");
     }
     res->println("</body></html>");
+}
+
+void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
+{
+    // jm
+
+    res->setHeader("Content-Type", "application/json");
+    // res->setHeader("Content-Type", "text/html");
+
+    File root = SPIFFS.open("/");
+
+    if (root.isDirectory()) {
+        res->println("{");
+        res->println("\"data\": {");
+
+        File file = root.openNextFile();
+        res->print("\"files\": [");
+        bool firstFile = 1;
+        while (file) {
+            String filePath = String(file.name());
+            if (filePath.indexOf("/static") == 0) {
+                if (firstFile) {
+                    firstFile = 0;
+                } else {
+                    res->println(",");
+                }
+
+                res->println("{");
+
+                if (String(file.name()).substring(1).endsWith(".gz")) {
+                    String modifiedFile = String(file.name()).substring(1);
+                    modifiedFile.remove((modifiedFile.length() - 3), 3);
+                    res->print("\"nameModified\": \"" + modifiedFile + "\",");
+                    res->print("\"name\": \"" + String(file.name()).substring(1) + "\",");
+
+                } else {
+                    res->print("\"name\": \"" + String(file.name()).substring(1) + "\",");
+                }
+                res->print("\"size\": " + String(file.size()));
+                res->print("}");
+            }
+
+            file = root.openNextFile();
+        }
+        res->print("],");
+        res->print("\"filesystem\" : {");
+        res->print("\"total\" : " + String(SPIFFS.totalBytes()) + ",");
+        res->print("\"used\" : " + String(SPIFFS.usedBytes()) + ",");
+        res->print("\"free\" : " + String(SPIFFS.totalBytes() - SPIFFS.usedBytes()));
+        res->println("}");
+        res->println("},");
+        res->println("\"status\": \"ok\"");
+        res->println("}");
+    }
+}
+
+void handleSpiffsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
+{
+  ResourceParameters *params = req->getParams();
+  std::string paramValDelete;
+
+  res->setHeader("Content-Type", "application/json");
+  if (params->getQueryParameter("delete", paramValDelete)) {
+    std::string pathDelete = "/" + paramValDelete;
+    if (SPIFFS.remove(pathDelete.c_str())) {
+        Serial.println(pathDelete.c_str());
+        res->println("{");
+        res->println("\"status\": \"ok\"");
+        res->println("}");
+        return;
+    } else {
+        Serial.println(pathDelete.c_str());
+        res->println("{");
+        res->println("\"status\": \"Error\"");
+        res->println("}");
+        return;
+    }
+  }
 }
 
 void handleStaticBrowse(HTTPRequest *req, HTTPResponse *res)
@@ -911,6 +1003,37 @@ void handleRestart(HTTPRequest *req, HTTPResponse *res)
     ESP.restart();
 }
 
+void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
+{
+    res->setHeader("Content-Type", "application/json");
+
+    ResourceParameters *params = req->getParams();
+    std::string blink_target;
+
+    if (!params->getQueryParameter("blink_target", blink_target)) {
+        // if no blink_target was supplied in the URL parameters of the
+        // POST request, then assume we should blink the LED
+        blink_target = "LED";
+    }
+
+    if (blink_target == "LED") {
+        uint8_t count = 10;
+        while (count > 0) {
+            setLed(true);
+            delay(50);
+            setLed(false);
+            delay(50);
+            count = count - 1;
+        }
+    } else {
+        screen->blink();
+    }
+
+    res->println("{");
+    res->println("\"status\": \"ok\"");
+    res->println("}");
+}
+
 void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
 {
     res->setHeader("Content-Type", "application/json");
@@ -929,17 +1052,16 @@ void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
         for (int i = 0; i < n; ++i) {
             char ssidArray[50];
             String ssidString = String(WiFi.SSID(i));
-            //String ssidString = String(WiFi.SSID(i)).toCharArray(ssidArray, WiFi.SSID(i).length());
+            // String ssidString = String(WiFi.SSID(i)).toCharArray(ssidArray, WiFi.SSID(i).length());
             ssidString.replace("\"", "\\\"");
             ssidString.toCharArray(ssidArray, 50);
-                
-            
+
             if (WiFi.encryptionType(i) != WIFI_AUTH_OPEN) {
-                //res->println("{\"ssid\": \"%s\",\"rssi\": -75}, ", String(WiFi.SSID(i).c_str() );
-                
-                res->printf("{\"ssid\": \"%s\",\"rssi\": %d}", ssidArray, WiFi.RSSI(i) ) ;
-                //WiFi.RSSI(i)
-                if (i != n-1) {
+                // res->println("{\"ssid\": \"%s\",\"rssi\": -75}, ", String(WiFi.SSID(i).c_str() );
+
+                res->printf("{\"ssid\": \"%s\",\"rssi\": %d}", ssidArray, WiFi.RSSI(i));
+                // WiFi.RSSI(i)
+                if (i != n - 1) {
                     res->printf(",");
                 }
             }
@@ -953,7 +1075,6 @@ void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
     res->println("},");
     res->println("\"status\": \"ok\"");
     res->println("}");
-
 }
 
 void handleFavicon(HTTPRequest *req, HTTPResponse *res)
