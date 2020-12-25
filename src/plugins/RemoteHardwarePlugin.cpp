@@ -89,7 +89,7 @@ bool RemoteHardwarePlugin::handleReceivedProtobuf(const MeshPacket &req, const H
         lastWatchMsec = 0; // Force a new publish soon
         previousWatch = ~watchGpios; // generate a 'previous' value which is guaranteed to not match (to force an initial publish)
         enabled = true; // Let our thread run at least once
-        DEBUG_MSG("Now watching GPIOs 0x%x\n", watchGpios);
+        DEBUG_MSG("Now watching GPIOs 0x%llx\n", watchGpios);
         break;
     }
 
@@ -114,7 +114,7 @@ int32_t RemoteHardwarePlugin::runOnce() {
 
             if(curVal != previousWatch) {
                 previousWatch = curVal;
-                DEBUG_MSG("Broadcasting GPIOS 0x%x changed!\n", curVal);
+                DEBUG_MSG("Broadcasting GPIOS 0x%llx changed!\n", curVal);
 
                 // Something changed!  Tell the world with a broadcast message
                 HardwareMessage reply = HardwareMessage_init_default;
