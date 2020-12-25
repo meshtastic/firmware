@@ -4,6 +4,7 @@
 #include "main.h"
 #include "meshhttpStatic.h"
 #include "meshwifi/meshwifi.h"
+#include "PowerFSM.h"
 #include "sleep.h"
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>
@@ -306,6 +307,10 @@ void middlewareSpeedUp240(HTTPRequest *req, HTTPResponse *res, std::function<voi
     // We want to print the response status, so we need to call next() first.
     next();
 
+    // Phone (or other device) has contacted us over WiFi. Keep the radio turned on.
+    //   TODO: This should go into its own middleware layer separate from the speedup.
+    powerFSM.trigger(EVENT_CONTACT_FROM_PHONE);
+
     setCpuFrequencyMhz(240);
     timeSpeedUp = millis();
 }
@@ -314,6 +319,10 @@ void middlewareSpeedUp160(HTTPRequest *req, HTTPResponse *res, std::function<voi
 {
     // We want to print the response status, so we need to call next() first.
     next();
+
+    // Phone (or other device) has contacted us over WiFi. Keep the radio turned on.
+    //   TODO: This should go into its own middleware layer separate from the speedup.
+    powerFSM.trigger(EVENT_CONTACT_FROM_PHONE);
 
     // If the frequency is 240mhz, we have recently gotten a HTTPS request.
     //   In that case, leave the frequency where it is and just update the
