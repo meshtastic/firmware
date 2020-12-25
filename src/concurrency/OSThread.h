@@ -42,6 +42,10 @@ class OSThread : public Thread
     static bool showWaiting;
 
   public:
+
+    /// For debug printing only (might be null)
+    static const OSThread *currentThread;
+
     OSThread(const char *name, uint32_t period = 0, ThreadController *controller = &mainController);
 
     virtual ~OSThread();
