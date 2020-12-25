@@ -949,8 +949,6 @@ void handleRoot(HTTPRequest *req, HTTPResponse *res)
 {
     res->setHeader("Content-Type", "text/html");
 
-    randomSeed(millis());
-
     res->setHeader("Set-Cookie",
                    "mt_session=" + httpsserver::intToString(random(1, 9999999)) + "; Expires=Wed, 20 Apr 2049 4:20:00 PST");
 
