@@ -14,6 +14,8 @@ bool OSThread::showRun = false;
 /// Show debugging info for threads we decide not to run;
 bool OSThread::showWaiting = false;
 
+const OSThread *OSThread::currentThread;
+
 ThreadController mainController, timerController;
 InterruptableDelay mainDelay;
 
@@ -68,12 +70,15 @@ bool OSThread::shouldRun(unsigned long time)
 
 void OSThread::run()
 {
+    currentThread = this;
     auto newDelay = runOnce();
 
     runned();
 
     if (newDelay >= 0)
         setInterval(newDelay);
+
+    currentThread = NULL;
 }
 
 } // namespace concurrency

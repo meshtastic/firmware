@@ -912,7 +912,9 @@ void Screen::blink() {
 
 void Screen::handlePrint(const char *text)
 {
-    DEBUG_MSG("Screen: %s", text);
+    // the string passed into us probably has a newline, but that would confuse the logging system
+    // so strip it
+    DEBUG_MSG("Screen: %.*s\n", strlen(text) - 1, text);
     if (!useDisplay || !showingNormalScreen)
         return;
 
