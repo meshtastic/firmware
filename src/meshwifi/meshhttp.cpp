@@ -4,6 +4,7 @@
 #include "main.h"
 #include "meshhttpStatic.h"
 #include "meshwifi/meshwifi.h"
+#include "PowerFSM.h"
 #include "sleep.h"
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>
@@ -61,6 +62,7 @@ void handle404(HTTPRequest *req, HTTPResponse *res);
 void handleFormUpload(HTTPRequest *req, HTTPResponse *res);
 void handleScanNetworks(HTTPRequest *req, HTTPResponse *res);
 void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res);
+void handleSpiffsDeleteStatic(HTTPRequest *req, HTTPResponse *res);
 void handleBlinkLED(HTTPRequest *req, HTTPResponse *res);
 
 void middlewareSpeedUp240(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
@@ -78,7 +80,8 @@ char contentTypes[][2][32] = {{".txt", "text/plain"},     {".html", "text/html"}
                               {".js", "text/javascript"}, {".png", "image/png"},
                               {".jpg", "image/jpg"},      {".gz", "application/gzip"},
                               {".gif", "image/gif"},      {".json", "application/json"},
-                              {".css", "text/css"},       {"", ""}};
+                              {".css", "text/css"},       {".ico","image/vnd.microsoft.icon"},
+                              {".svg", "image/svg+xml"},  {"", ""}};
 
 void handleWebResponse()
 {
@@ -246,6 +249,7 @@ void initWebServer()
     ResourceNode *nodeJsonScanNetworks = new ResourceNode("/json/scanNetworks", "GET", &handleScanNetworks);
     ResourceNode *nodeJsonBlinkLED = new ResourceNode("/json/blink", "POST", &handleBlinkLED);
     ResourceNode *nodeJsonSpiffsBrowseStatic = new ResourceNode("/json/spiffs/browse/static/", "GET", &handleSpiffsBrowseStatic);
+    ResourceNode *nodeJsonDelete = new ResourceNode("/json/spiffs/delete/static", "DELETE", &handleSpiffsDeleteStatic);
 
     // Secure nodes
     secureServer->registerNode(nodeAPIv1ToRadioOptions);
@@ -262,6 +266,7 @@ void initWebServer()
     secureServer->registerNode(nodeJsonScanNetworks);
     secureServer->registerNode(nodeJsonBlinkLED);
     secureServer->registerNode(nodeJsonSpiffsBrowseStatic);
+    secureServer->registerNode(nodeJsonDelete);
     secureServer->setDefaultNode(node404);
 
     secureServer->addMiddleware(&middlewareSpeedUp240);
@@ -281,6 +286,7 @@ void initWebServer()
     insecureServer->registerNode(nodeJsonScanNetworks);
     insecureServer->registerNode(nodeJsonBlinkLED);
     insecureServer->registerNode(nodeJsonSpiffsBrowseStatic);
+    insecureServer->registerNode(nodeJsonDelete);
     insecureServer->setDefaultNode(node404);
 
     insecureServer->addMiddleware(&middlewareSpeedUp160);
@@ -301,6 +307,10 @@ void middlewareSpeedUp240(HTTPRequest *req, HTTPResponse *res, std::function<voi
     // We want to print the response status, so we need to call next() first.
     next();
 
+    // Phone (or other device) has contacted us over WiFi. Keep the radio turned on.
+    //   TODO: This should go into its own middleware layer separate from the speedup.
+    powerFSM.trigger(EVENT_CONTACT_FROM_PHONE);
+
     setCpuFrequencyMhz(240);
     timeSpeedUp = millis();
 }
@@ -309,6 +319,10 @@ void middlewareSpeedUp160(HTTPRequest *req, HTTPResponse *res, std::function<voi
 {
     // We want to print the response status, so we need to call next() first.
     next();
+
+    // Phone (or other device) has contacted us over WiFi. Keep the radio turned on.
+    //   TODO: This should go into its own middleware layer separate from the speedup.
+    powerFSM.trigger(EVENT_CONTACT_FROM_PHONE);
 
     // If the frequency is 240mhz, we have recently gotten a HTTPS request.
     //   In that case, leave the frequency where it is and just update the
@@ -440,6 +454,30 @@ void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
         res->println("\"status\": \"ok\"");
         res->println("}");
     }
+}
+
+void handleSpiffsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
+{
+  ResourceParameters *params = req->getParams();
+  std::string paramValDelete;
+
+  res->setHeader("Content-Type", "application/json");
+  if (params->getQueryParameter("delete", paramValDelete)) {
+    std::string pathDelete = "/" + paramValDelete;
+    if (SPIFFS.remove(pathDelete.c_str())) {
+        Serial.println(pathDelete.c_str());
+        res->println("{");
+        res->println("\"status\": \"ok\"");
+        res->println("}");
+        return;
+    } else {
+        Serial.println(pathDelete.c_str());
+        res->println("{");
+        res->println("\"status\": \"Error\"");
+        res->println("}");
+        return;
+    }
+  }
 }
 
 void handleStaticBrowse(HTTPRequest *req, HTTPResponse *res)
@@ -910,8 +948,6 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
 void handleRoot(HTTPRequest *req, HTTPResponse *res)
 {
     res->setHeader("Content-Type", "text/html");
-
-    randomSeed(millis());
 
     res->setHeader("Set-Cookie",
                    "mt_session=" + httpsserver::intToString(random(1, 9999999)) + "; Expires=Wed, 20 Apr 2049 4:20:00 PST");

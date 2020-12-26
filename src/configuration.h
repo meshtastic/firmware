@@ -428,7 +428,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define DEBUG_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
 #else
 #ifdef DEBUG_PORT
-#define DEBUG_MSG(...) DEBUG_PORT.printf(__VA_ARGS__)
+#define DEBUG_MSG(...) DEBUG_PORT.logDebug(__VA_ARGS__)
 #else
 #define DEBUG_MSG(...)
 #endif

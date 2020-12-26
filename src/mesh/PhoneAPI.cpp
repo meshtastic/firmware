@@ -100,7 +100,7 @@ void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 size_t PhoneAPI::getFromRadio(uint8_t *buf)
 {
     if (!available()) {
-        DEBUG_MSG("getFromRadio, !available\n");
+        // DEBUG_MSG("getFromRadio, !available\n");
         return 0;
     } 
 
@@ -226,7 +226,7 @@ bool PhoneAPI::available()
         if (!packetForPhone)
             packetForPhone = service.getForPhone();
         bool hasPacket = !!packetForPhone;
-        DEBUG_MSG("available hasPacket=%d\n", hasPacket);
+        // DEBUG_MSG("available hasPacket=%d\n", hasPacket);
         return hasPacket;
     }
 
