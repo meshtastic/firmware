@@ -3,7 +3,6 @@
 #ifdef ST7735_CS
 #include "SPILock.h"
 #include "TFTDisplay.h"
-#include "graphics/configs.h"
 #include <SPI.h>
 #include <TFT_eSPI.h> // Graphics and font library for ST7735 driver chip
 
