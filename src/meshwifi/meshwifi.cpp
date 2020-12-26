@@ -40,12 +40,14 @@ bool isWifiAvailable()
     const char *wifiName = radioConfig.preferences.wifi_ssid;
     const char *wifiPsw = radioConfig.preferences.wifi_password;
 
-    // strcpy(radioConfig.preferences.wifi_ssid, "");
-    // strcpy(radioConfig.preferences.wifi_password, "");
+    // strcpy(radioConfig.preferences.wifi_ssid, "meshtastic");
+    // strcpy(radioConfig.preferences.wifi_password, "meshtastic!");
 
     // strcpy(radioConfig.preferences.wifi_ssid, "meshtasticAdmin");
     // strcpy(radioConfig.preferences.wifi_password, "12345678");
+
     // radioConfig.preferences.wifi_ap_mode = true;
+    // radioConfig.preferences.wifi_ap_mode = false;
 
     if (*wifiName && *wifiPsw) {
         return 1;
@@ -221,9 +223,16 @@ static void WiFiEvent(WiFiEvent_t event)
         DEBUG_MSG("Obtained IP address: \n");
         Serial.println(WiFi.localIP());
 
-        // Start web server
-        initWebServer();
-        initApiServer();
+        if (!APStartupComplete) {
+            // Start web server
+            DEBUG_MSG("... Starting network services\n");
+            initWebServer();
+            initApiServer();
+
+            APStartupComplete = true;
+        } else {
+            DEBUG_MSG("... Not starting network services (They're already running)\n");
+        }
 
         break;
     case SYSTEM_EVENT_STA_LOST_IP:
@@ -253,7 +262,7 @@ static void WiFiEvent(WiFiEvent_t event)
 
             APStartupComplete = true;
         } else {
-            DEBUG_MSG("... Not starting network services\n");
+            DEBUG_MSG("... Not starting network services (They're already running)\n");
         }
 
         break;
