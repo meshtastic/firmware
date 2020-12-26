@@ -34,8 +34,8 @@ For app cleanup:
 * DONE move user info into regular data packets (use new app framework)
 * DONE test that positions, text messages and user info still work
 * DONE test that position, text messages and user info work properly with new android app and old device code
-* do UDP tunnel
-* fix the RTC drift bug
+* DONE do UDP tunnel
+* DONE fix the RTC drift bug
 * move python ping functionality into device, reply with rxsnr info
 * use channels for gpio security https://github.com/meshtastic/Meshtastic-device/issues/104
 * MeshPackets for sending should be reference counted so that API clients would have the option of checking sent status (would allow removing the nasty 30 sec timer in gpio watch sending)
