@@ -5,7 +5,27 @@
 
 ## RAK815
 
-TODO:
+### PPR1 TODO
+
+* V_BK for the GPS should probably be supplied from something always on
+
+* use S113 soft device 7.2.0
+* properly test charge controller config and read battery/charge status
+* fix bluetooth
+* fix LCD max contrast (currently too high, needs to be about 40?)
+* save brightness settings in flash
+* make ST7567Wire driver less ugly, move OLED stuff into a common class treee
+* add LCD power save mode for lcd per page 31 of datasheet
+* add LCD power off sequence per datasheet to lcd driver
+* leave LCD screen on most of the time (because it needs little power)
+
+### general nrf52 TODO:
+
+- turn off transitions on eink screens
+- change update interval on eink from 1/sec frames to one frame every 5 mins
+- enter SDS state at correct time (to protect battery or loss of phone contact)
+- show screen on eink when we enter SDS state (with app info and say sleeping)
+- require button press to pair
 
 - shrink soft device RAM usage
 - get nrf52832 working again (currently OOM)

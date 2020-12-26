@@ -36,7 +36,7 @@ typedef struct {
  *
  * This defines the SOLE API for talking to radios (because soon we will have alternate radio implementations)
  */
-class RadioInterface : protected concurrency::NotifiedWorkerThread
+class RadioInterface 
 {
     friend class MeshRadio; // for debugging we let that class touch pool
     PointerQueue<MeshPacket> *rxDest = NULL;
@@ -48,9 +48,18 @@ class RadioInterface : protected concurrency::NotifiedWorkerThread
         CallbackObserver<RadioInterface, void *>(this, &RadioInterface::preflightSleepCb);
 
     CallbackObserver<RadioInterface, void *> notifyDeepSleepObserver =
-        CallbackObserver<RadioInterface, void *>(this, &RadioInterface::notifyDeepSleepDb);
+        CallbackObserver<RadioInterface, void *>(this, &RadioInterface::notifyDeepSleepCb);
+
+    /// Number of msecs we expect our shortest actual packet to be over the wire (used in retry timeout calcs)
+    uint32_t shortPacketMsec;
 
   protected:
+    float bw = 125;
+    uint8_t sf = 9;
+    uint8_t cr = 7;
+
+    uint16_t preambleLength = 32; // 8 is default, but we use longer to increase the amount of sleep time when receiving
+
     MeshPacket *sendingPacket = NULL; // The packet we are currently sending
     uint32_t lastTxStart = 0L;
 
@@ -71,6 +80,8 @@ class RadioInterface : protected concurrency::NotifiedWorkerThread
      * rxDest is where we will send any rx packets, it becomes receivers responsibility to return packet to the pool
      */
     RadioInterface();
+
+    virtual ~RadioInterface() {}
 
     /**
      * Set where to deliver received packets.  This method should only be used by the Router class
@@ -106,6 +117,22 @@ class RadioInterface : protected concurrency::NotifiedWorkerThread
     /// \return true if initialisation succeeded.
     virtual bool reconfigure() = 0;
 
+    /** The delay to use for retransmitting dropped packets */
+    uint32_t getRetransmissionMsec(const MeshPacket *p);
+
+    /** The delay to use when we want to send something but the ether is busy */
+    uint32_t getTxDelayMsec();
+
+    /**
+     * Calculate airtime per
+     * https://www.rs-online.com/designspark/rel-assets/ds-assets/uploads/knowledge-items/application-notes-for-the-internet-of-things/LoRa%20Design%20Guide.pdf
+     * section 4
+     *
+     * @return num msecs for the packet
+     */
+    uint32_t getPacketTime(MeshPacket *p);
+    uint32_t getPacketTime(uint32_t totalPacketLen);
+
   protected:
     int8_t power = 17; // Set by applyModemConfig()
 
@@ -116,8 +143,6 @@ class RadioInterface : protected concurrency::NotifiedWorkerThread
      * Used as the first step of
      */
     size_t beginSending(MeshPacket *p);
-
-    virtual void loop() {} // Idle processing
 
     /**
      * Some regulatory regions limit xmit power.
@@ -136,11 +161,7 @@ class RadioInterface : protected concurrency::NotifiedWorkerThread
     /// Return 0 if sleep is okay
     int preflightSleepCb(void *unused = NULL) { return canSleep() ? 0 : 1; }
 
-    int notifyDeepSleepDb(void *unused = NULL)
-    {
-        sleep();
-        return 0;
-    }
+    int notifyDeepSleepCb(void *unused = NULL);
 
     int reloadConfig(void *unused)
     {

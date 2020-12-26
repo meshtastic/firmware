@@ -6,10 +6,16 @@
 #include "RadioInterface.h"
 #include <assert.h>
 
+#if FromRadio_size > MAX_TO_FROM_RADIO_SIZE
+    #error FromRadio is too big
+#endif
+
+#if ToRadio_size > MAX_TO_FROM_RADIO_SIZE
+    #error ToRadio is too big
+#endif
+
 PhoneAPI::PhoneAPI()
 {
-    assert(FromRadio_size <= MAX_TO_FROM_RADIO_SIZE);
-    assert(ToRadio_size <= MAX_TO_FROM_RADIO_SIZE);
 }
 
 void PhoneAPI::init()
@@ -20,7 +26,7 @@ void PhoneAPI::init()
 void PhoneAPI::checkConnectionTimeout()
 {
     if (isConnected) {
-        bool newConnected = (millis() - lastContactMsec < radioConfig.preferences.phone_timeout_secs * 1000L);
+        bool newConnected = (millis() - lastContactMsec < getPref_phone_timeout_secs() * 1000L);
         if (!newConnected) {
             isConnected = false;
             onConnectionChanged(isConnected);
@@ -95,10 +101,10 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 {
     if (!available()) {
         // DEBUG_MSG("getFromRadio, !available\n");
-        return false;
-    } else {
-        DEBUG_MSG("getFromRadio, state=%d\n", state);
-    }
+        return 0;
+    } 
+
+    DEBUG_MSG("getFromRadio, state=%d\n", state);
 
     // In case we send a FromRadio packet
     memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
@@ -109,7 +115,11 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         break;
 
     case STATE_SEND_MY_INFO:
-        myNodeInfo.has_gps = gps && gps->isConnected; // Update with latest GPS connect info
+        // If the user has specified they don't want our node to share its location, make sure to tell the phone
+        // app not to send locations on our behalf.
+        myNodeInfo.has_gps = (radioConfig.preferences.location_share == LocationSharing_LocDisabled)
+                                 ? true
+                                 : (gps && gps->isConnected()); // Update with latest GPS connect info
         fromRadioScratch.which_variant = FromRadio_my_info_tag;
         fromRadioScratch.variant.my_info = myNodeInfo;
         state = STATE_SEND_RADIO;
@@ -117,7 +127,14 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
     case STATE_SEND_RADIO:
         fromRadioScratch.which_variant = FromRadio_radio_tag;
+
         fromRadioScratch.variant.radio = radioConfig;
+
+        // NOTE: The phone app needs to know the ls_secs value so it can properly expect sleep behavior.
+        // So even if we internally use 0 to represent 'use default' we still need to send the value we are
+        // using to the app (so that even old phone apps work with new device loads).
+        fromRadioScratch.variant.radio.preferences.ls_secs = getPref_ls_secs();
+
         state = STATE_SEND_NODEINFO;
         break;
 
@@ -151,6 +168,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     case STATE_SEND_PACKETS:
         // Do we have a message from the mesh?
         if (packetForPhone) {
+
+            printPacket("phone downloaded packet", packetForPhone);
+            
             // Encapsulate as a FromRadio packet
             fromRadioScratch.which_variant = FromRadio_packet_tag;
             fromRadioScratch.variant.packet = *packetForPhone;
@@ -201,11 +221,14 @@ bool PhoneAPI::available()
         return true;
 
     case STATE_LEGACY: // Treat as the same as send packets
-    case STATE_SEND_PACKETS:
+    case STATE_SEND_PACKETS: {
         // Try to pull a new packet from the service (if we haven't already)
         if (!packetForPhone)
             packetForPhone = service.getForPhone();
-        return !!packetForPhone;
+        bool hasPacket = !!packetForPhone;
+        // DEBUG_MSG("available hasPacket=%d\n", hasPacket);
+        return hasPacket;
+    }
 
     default:
         assert(0); // unexpected state - FIXME, make an error code and reboot

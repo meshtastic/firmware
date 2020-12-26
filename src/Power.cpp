@@ -18,6 +18,21 @@ Power *power;
 
 using namespace meshtastic;
 
+#if defined(NRF52_SERIES)
+/*
+ * Internal Reference is +/-0.6V, with an adjustable gain of 1/6, 1/5, 1/4,
+ * 1/3, 1/2 or 1, meaning 3.6, 3.0, 2.4, 1.8, 1.2 or 0.6V for the ADC levels.
+ *
+ * External Reference is VDD/4, with an adjustable gain of 1, 2 or 4, meaning
+ * VDD/4, VDD/2 or VDD for the ADC levels.
+ *
+ * Default settings are internal reference with 1/6 gain (GND..3.6V ADC range)
+ */
+#define AREF_VOLTAGE 3.6
+#else
+#define AREF_VOLTAGE 3.3
+#endif
+
 /**
  * If this board has a battery level sensor, set this to a valid implementation
  */
@@ -37,10 +52,13 @@ class AnalogBatteryLevel : public HasBatteryLevel
     {
         float v = getBattVoltage() / 1000;
 
-        if (v < 2.1)
+        if (v < noBatVolt)
             return -1; // If voltage is super low assume no battery installed
 
-        return 100 * (v - 3.27) / (4.2 - 3.27);
+        if (v > chargingVolt)
+            return 0; // While charging we can't report % full on the battery
+
+        return 100 * (v - emptyVolt) / (fullVolt - emptyVolt);
     }
 
     /**
@@ -48,9 +66,11 @@ class AnalogBatteryLevel : public HasBatteryLevel
      */
     virtual float getBattVoltage()
     {
+        // Tested ttgo eink nrf52 board and the reported value is perfect
+        // DEBUG_MSG("raw val %u", raw);
         return
 #ifdef BATTERY_PIN
-            1000.0 * analogRead(BATTERY_PIN) * 2.0 * (3.3 / 1024.0);
+            1000.0 * 2.0 * (AREF_VOLTAGE / 1024.0) * analogRead(BATTERY_PIN);
 #else
             NAN;
 #endif
@@ -59,14 +79,40 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /**
      * return true if there is a battery installed in this unit
      */
-    virtual bool isBatteryConnect() { return getBattVoltage() != -1; }
+    virtual bool isBatteryConnect() { return getBattPercentage() != -1; }
+
+    /// If we see a battery voltage higher than physics allows - assume charger is pumping
+    /// in power
+    virtual bool isVBUSPlug() { return getBattVoltage() > chargingVolt; }
+
+    /// Assume charging if we have a battery and external power is connected.
+    /// we can't be smart enough to say 'full'?
+    virtual bool isChargeing() { return isBatteryConnect() && isVBUSPlug(); }
+
+  private:
+    /// If we see a battery voltage higher than physics allows - assume charger is pumping
+    /// in power
+    const float fullVolt = 4.2, emptyVolt = 3.27, chargingVolt = 4.3, noBatVolt = 2.1;
 } analogLevel;
+
+Power::Power() : OSThread("Power") {}
 
 bool Power::analogInit()
 {
 #ifdef BATTERY_PIN
     DEBUG_MSG("Using analog input for battery level\n");
+
+    // disable any internal pullups
+    pinMode(BATTERY_PIN, INPUT);
+
+#ifndef NO_ESP32
+    // ESP32 needs special analog stuff
     adcAttachPin(BATTERY_PIN);
+#endif
+#ifdef NRF52_SERIES
+    analogReference(AR_INTERNAL); // 3.6V
+#endif
+
     // adcStart(BATTERY_PIN);
     analogReadResolution(10); // Default of 12 is not very linear. Recommended to use 10 or 11 depending on needed resolution.
     batteryLevel = &analogLevel;
@@ -83,12 +129,17 @@ bool Power::setup()
     if (!found) {
         found = analogInit();
     }
-    if (found) {
-        concurrency::PeriodicTask::setup(); // We don't start our periodic task unless we actually found the device
-        setPeriod(1);
-    }
+    enabled = found;
 
     return found;
+}
+
+void Power::shutdown()
+{
+#ifdef TBEAM_V10
+    DEBUG_MSG("Shutting down\n");
+    axp.shutdown();
+#endif
 }
 
 /// Reads power status to powerStatus singleton.
@@ -119,6 +170,8 @@ void Power::readPowerStatus()
         const PowerStatus powerStatus =
             PowerStatus(hasBattery ? OptTrue : OptFalse, batteryLevel->isVBUSPlug() ? OptTrue : OptFalse,
                         batteryLevel->isChargeing() ? OptTrue : OptFalse, batteryVoltageMv, batteryChargePercent);
+        DEBUG_MSG("Battery: usbPower=%d, isCharging=%d, batMv=%d, batPct=%d\n", powerStatus.getHasUSB(),
+                  powerStatus.getIsCharging(), powerStatus.getBatteryVoltageMv(), powerStatus.getBatteryChargePercent());
         newStatus.notifyObservers(&powerStatus);
 
         // If we have a battery at all and it is less than 10% full, force deep sleep
@@ -131,13 +184,47 @@ void Power::readPowerStatus()
     }
 }
 
-void Power::doTask()
+int32_t Power::runOnce()
 {
     readPowerStatus();
 
+#ifdef TBEAM_V10
+    // WE no longer use the IRQ line to wake the CPU (due to false wakes from sleep), but we do poll
+    // the IRQ status by reading the registers over I2C
+    axp.readIRQ();
+
+    if (axp.isVbusRemoveIRQ()) {
+        DEBUG_MSG("USB unplugged\n");
+        powerFSM.trigger(EVENT_POWER_DISCONNECTED);
+    }
+    if (axp.isVbusPlugInIRQ()) {
+        DEBUG_MSG("USB plugged In\n");
+        powerFSM.trigger(EVENT_POWER_CONNECTED);
+    }
+    /*
+    Other things we could check if we cared...
+
+    if (axp.isChargingIRQ()) {
+        DEBUG_MSG("Battery start charging\n");
+    }
+    if (axp.isChargingDoneIRQ()) {
+        DEBUG_MSG("Battery fully charged\n");
+    }
+    if (axp.isBattPlugInIRQ()) {
+        DEBUG_MSG("Battery inserted\n");
+    }
+    if (axp.isBattRemoveIRQ()) {
+        DEBUG_MSG("Battery removed\n");
+    }
+    if (axp.isPEKShortPressIRQ()) {
+        DEBUG_MSG("PEK short button press\n");
+    }
+    */
+    axp.clearIRQ();
+#endif
+
     // Only read once every 20 seconds once the power status for the app has been initialized
-    if (statusHandler && statusHandler->isInitialized())
-        setPeriod(1000 * 20);
+    return (statusHandler && statusHandler->isInitialized()) ? (1000 * 20) : RUN_SAME;
 }
 
 /**
@@ -168,7 +255,7 @@ bool Power::axp192Init()
             DEBUG_MSG("----------------------------------------\n");
 
             axp.setPowerOutPut(AXP192_LDO2, AXP202_ON); // LORA radio
-            axp.setPowerOutPut(AXP192_LDO3, AXP202_ON); // GPS main power
+            // axp.setPowerOutPut(AXP192_LDO3, AXP202_ON); // GPS main power - now turned on in setGpsPower
             axp.setPowerOutPut(AXP192_DCDC2, AXP202_ON);
             axp.setPowerOutPut(AXP192_EXTEN, AXP202_ON);
             axp.setPowerOutPut(AXP192_DCDC1, AXP202_ON);
@@ -200,9 +287,11 @@ bool Power::axp192Init()
                 PMU_IRQ, [] { pmu_irq = true; }, FALLING);
 
             axp.adc1Enable(AXP202_BATT_CUR_ADC1, 1);
-            axp.enableIRQ(AXP202_BATT_REMOVED_IRQ | AXP202_BATT_CONNECT_IRQ | AXP202_CHARGING_FINISHED_IRQ | AXP202_CHARGING_IRQ |
-                              AXP202_VBUS_REMOVED_IRQ | AXP202_VBUS_CONNECT_IRQ | AXP202_PEK_SHORTPRESS_IRQ,
-                          1);
+            // we do not look for AXP202_CHARGING_FINISHED_IRQ & AXP202_CHARGING_IRQ because it occurs repeatedly while there is
+            // no battery also it could cause inadvertent waking from light sleep just because the battery filled
+            // we don't look for AXP202_BATT_REMOVED_IRQ because it occurs repeatedly while no battery installed
+            // we don't look at AXP202_VBUS_REMOVED_IRQ because we don't have anything hooked to vbus
+            axp.enableIRQ(AXP202_BATT_CONNECT_IRQ | AXP202_VBUS_CONNECT_IRQ | AXP202_PEK_SHORTPRESS_IRQ, 1);
 
             axp.clearIRQ();
 #endif
@@ -217,43 +306,5 @@ bool Power::axp192Init()
     return axp192_found;
 #else
     return false;
-#endif
-}
-
-void Power::loop()
-{
-#ifdef PMU_IRQ
-    if (pmu_irq) {
-        pmu_irq = false;
-        axp.readIRQ();
-
-        DEBUG_MSG("pmu irq!\n");
-
-        if (axp.isChargingIRQ()) {
-            DEBUG_MSG("Battery start charging\n");
-        }
-        if (axp.isChargingDoneIRQ()) {
-            DEBUG_MSG("Battery fully charged\n");
-        }
-        if (axp.isVbusRemoveIRQ()) {
-            DEBUG_MSG("USB unplugged\n");
-        }
-        if (axp.isVbusPlugInIRQ()) {
-            DEBUG_MSG("USB plugged In\n");
-        }
-        if (axp.isBattPlugInIRQ()) {
-            DEBUG_MSG("Battery inserted\n");
-        }
-        if (axp.isBattRemoveIRQ()) {
-            DEBUG_MSG("Battery removed\n");
-        }
-        if (axp.isPEKShortPressIRQ()) {
-            DEBUG_MSG("PEK short button press\n");
-        }
-
-        readPowerStatus();
-        axp.clearIRQ();
-    }
-
 #endif
 }

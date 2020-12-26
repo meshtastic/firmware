@@ -1,6 +1,6 @@
 #pragma once
 #include "PowerStatus.h"
-#include "concurrency/PeriodicTask.h"
+#include "concurrency/OSThread.h"
 
 /**
  * Per @spattinson
@@ -15,16 +15,18 @@
 #define BAT_MILLIVOLTS_FULL 4100
 #define BAT_MILLIVOLTS_EMPTY 3500
 
-class Power : public concurrency::PeriodicTask
+class Power : private concurrency::OSThread
 {
 
   public:
     Observable<const meshtastic::PowerStatus *> newStatus;
 
+    Power();
+
+    void shutdown();
     void readPowerStatus();
-    void loop();
     virtual bool setup();
-    virtual void doTask();
+    virtual int32_t runOnce();
     void setStatusHandler(meshtastic::PowerStatus *handler) { statusHandler = handler; }
 
   protected:

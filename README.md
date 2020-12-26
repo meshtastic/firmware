@@ -25,16 +25,18 @@ We currently support three models of radios.
 - TTGO T-Beam (usually the recommended choice)
   - [T-Beam V1.1 w/ NEO-6M - special Meshtastic version](https://www.aliexpress.com/item/4001178678568.html) (Includes built-in OLED display and they have **preinstalled** the meshtastic software)
   - [T-Beam V1.1 w/ NEO-M8N](https://www.aliexpress.com/item/33047631119.html) (slightly better GPS)
-  - [T-Beam V1.1 w/ NEO-M8N /w SX1262](https://de.aliexpress.com/item/4001287221970.html) (slightly better GPS + LoRa)
+  - [T-Beam V1.1 w/ NEO-M8N /w SX1262](https://www.aliexpress.com/item/4001287221970.html) (slightly better GPS + LoRa)
     - board labels "TTGO T22_V1.1 20191212"
   - [T-Beam V0.7 w/ NEO-6M](https://www.aliexpress.com/item/4000574335430.html) (will work but **you must use the tbeam0.7 firmware ** - but the T-Beam V1.0 or later are better!)
      - board labels "TTGO T22_V07 20180711"
   - 3D printable cases
-    - [T-Beam V0](https://www.thingiverse.com/thing:3773717)
+    - [T-Beam V0](https://www.thingiverse.com/thing:3773717) (GPS and LoRa antenna misaligned if GPS placed as pictured)
     - [T-Beam V1 (SMA-antenna)](https://www.thingiverse.com/thing:3830711)
-    - [T-Beam V1 (IPEX-antenna)](https://www.thingiverse.com/thing:4587297)
+    - [T-Beam V1 (IPEX-antenna)](https://www.thingiverse.com/thing:4587297) (GPS and LoRa antenna misaligned if GPS placed as pictured)
+    - [T-Beam V1 (IPEX-antenna)](https://www.thingiverse.com/thing:4589651)
+    - [T-Beam V1 (IPEX-antenna)](https://www.thingiverse.com/thing:4619981) (GPS and LoRa antenna misaligned if GPS placed as pictured)
   - Laser-cut cases
-    - [T-Beam V1](https://www.thingiverse.com/thing:4552771)
+    - [T-Beam V1 (SMA-antenna)](https://www.thingiverse.com/thing:4552771)
 
 - [TTGO LORA32](https://www.aliexpress.com/item/4000211331316.html) - No GPS
   - version 2.1
@@ -43,7 +45,10 @@ We currently support three models of radios.
     - [TTGO LORA32 v1](https://www.thingiverse.com/thing:3385109)
 
 - [Heltec LoRa 32](https://heltec.org/project/wifi-lora-32/) - No GPS
+  - [Official Heltec case](https://www.aliexpress.com/item/4001050707951.html)
   - [3D Printable case](https://www.thingiverse.com/thing:3125854)
+  
+Note: The GPS and LoRa stock antennas should be placed in a way, that the GPS antenna faces the sky and the LoRa antenna radiates 360 degrees horizontally. For better GPS reception you might want to [upgrade the GPS antenna](https://meshtastic.discourse.group/t/the-importance-of-gps-antennas-and-request-to-3d-case-documentation-people/1505) and to properly align the antennas you might want to upgrade to a LoRa antenna that can be adjusted to radiate into the right directions.
 
 **Make sure to get the frequency for your country**
 
@@ -103,10 +108,10 @@ Hard resetting via RTS pin...
 ```
 
 5. cd into the directory where the release zip file was expanded.
-6. Install the correct firmware for your board with `device-install.sh firmware-_board_-_country_.bin`.
-   - Example: `./device-install.sh firmware-HELTEC-US-0.0.3.bin`.
-7. To update run `device-update.sh firmware-_board_-_country_.bin`
-   - Example: `./device-update.sh firmware-HELTEC-US-0.0.3.bin`.
+6. Install the correct firmware for your board with `device-install.sh -f firmware-_board_-_country_.bin`.
+   - Example: `./device-install.sh -f firmware-HELTEC-US-0.0.3.bin`.
+7. To update run `device-update.sh -f firmware-_board_-_country_.bin`
+   - Example: `./device-update.sh -f firmware-HELTEC-US-0.0.3.bin`.
 
 Note: If you have previously installed meshtastic, you don't need to run this full script instead just run `esptool.py --baud 921600 write_flash 0x10000 firmware-_board_-_country_-_version_.bin`. This will be faster, also all of your current preferences will be preserved.
 

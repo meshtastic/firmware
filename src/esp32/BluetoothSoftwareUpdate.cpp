@@ -6,6 +6,7 @@
 #include "RadioLibInterface.h"
 #include "configuration.h"
 #include "nimble/BluetoothUtil.h"
+#include "NodeDB.h"
 
 #include <CRC32.h>
 #include <Update.h>
@@ -16,6 +17,8 @@ static CRC32 crc;
 static uint32_t rebootAtMsec = 0; // If not zero we will reboot at this time (used to reboot shortly after the update completes)
 
 static uint32_t updateExpectedSize, updateActualSize;
+static uint8_t update_result;
+static uint8_t update_region;
 
 static concurrency::Lock *updateLock;
 
@@ -32,8 +35,8 @@ int update_size_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_
         crc.reset();
         if (Update.isRunning())
             Update.abort();
-        bool canBegin = Update.begin(updateExpectedSize);
-        DEBUG_MSG("Setting update size %u, result %d\n", updateExpectedSize, canBegin);
+        bool canBegin = Update.begin(updateExpectedSize, update_region);
+        DEBUG_MSG("Setting region %d update size %u, result %d\n", update_region, updateExpectedSize, canBegin);
         if (!canBegin) {
             // Indicate failure by forcing the size to 0 (client will read it back)
             updateExpectedSize = 0;
@@ -72,12 +75,10 @@ int update_data_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_
     crc.update(data, len);
     Update.write(data, len);
     updateActualSize += len;
-    powerFSM.trigger(EVENT_RECEIVED_TEXT_MSG); // Not exactly correct, but we want to force the device to not sleep now
+    powerFSM.trigger(EVENT_CONTACT_FROM_PHONE);
 
     return 0;
 }
-
-static uint8_t update_result;
 
 /// Handle writes to crc32
 int update_crc32_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
@@ -100,8 +101,14 @@ int update_crc32_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble
         result = 0xe0; // FIXME, use real error codes
     } else {
         if (Update.end()) {
-            DEBUG_MSG("OTA done, rebooting in 5 seconds!\n");
-            rebootAtMsec = millis() + 5000;
+            if (update_region == U_SPIFFS) {
+                DEBUG_MSG("SPIFFS updated!\n");
+                nodeDB.saveToDisk(); // Since we just wiped spiffs, we need to save our current state
+            }
+            else {
+                DEBUG_MSG("Appload updated, rebooting in 5 seconds!\n");
+                rebootAtMsec = millis() + 5000;
+            }
         } else {
             DEBUG_MSG("Error Occurred. Error #: %d\n", Update.getError());
         }
@@ -123,6 +130,11 @@ int update_crc32_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble
 int update_result_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
     return chr_readwrite8(&update_result, sizeof(update_result), ctxt);
+}
+
+int update_region_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
+{
+    return chr_readwrite8(&update_region, sizeof(update_region), ctxt);
 }
 
 void bluetoothRebootCheck()

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "FloodingRouter.h"
-#include "../concurrency/PeriodicTask.h"
 #include <unordered_map>
 
 /**
@@ -47,8 +46,6 @@ struct PendingPacket {
 
     PendingPacket() {}
     PendingPacket(MeshPacket *p);
-
-    void setNextTx() { nextTxMsec = millis() + random(20 * 1000L, 22 * 1000L); }
 };
 
 class GlobalPacketIdHashFunction
@@ -80,10 +77,13 @@ class ReliableRouter : public FloodingRouter
     virtual ErrorCode send(MeshPacket *p);
 
     /** Do our retransmission handling */
-    virtual void loop()
+    virtual int32_t runOnce()
     {
-        doRetransmissions();
-        FloodingRouter::loop();
+        auto d = FloodingRouter::runOnce();
+
+        int32_t r = doRetransmissions();
+
+        return min(d, r);
     }
 
   protected:
@@ -124,6 +124,12 @@ class ReliableRouter : public FloodingRouter
 
     /**
      * Do any retransmissions that are scheduled (FIXME - for the time being called from loop)
+     *
+     * @return the number of msecs until our next retransmission or MAXINT if none scheduled
      */
-    void doRetransmissions();
+    int32_t doRetransmissions();
+
+    void setNextTx(PendingPacket *pending) {  
+      assert(iface);
+      pending->nextTxMsec = millis() + iface->getRetransmissionMsec(pending->packet); }
 };
