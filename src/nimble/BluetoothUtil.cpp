@@ -1,33 +1,34 @@
 #include "BluetoothUtil.h"
 #include "BluetoothSoftwareUpdate.h"
 #include "NimbleBluetoothAPI.h"
-#include "NodeDB.h" // FIXME - we shouldn't really douch this here - we are using it only because we currently do wifi setup when ble gets turned on
 #include "PhoneAPI.h"
 #include "PowerFSM.h"
-#include "WiFi.h"
 #include "configuration.h"
 #include "esp_bt.h"
 #include "host/util/util.h"
 #include "main.h"
+#include "meshwifi/meshwifi.h"
 #include "nimble/NimbleDefs.h"
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
 #include <Arduino.h>
+#include <WiFi.h>
 
 static bool pinShowing;
+static uint32_t doublepressed;
 
 static void startCb(uint32_t pin)
 {
     pinShowing = true;
     powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
-    screen.startBluetoothPinScreen(pin);
+    screen->startBluetoothPinScreen(pin);
 };
 
 static void stopCb()
 {
     if (pinShowing) {
         pinShowing = false;
-        screen.stopBluetoothPinScreen();
+        screen->stopBluetoothPinScreen();
     }
 };
 
@@ -123,6 +124,7 @@ static int gap_event(struct ble_gap_event *event, void *arg)
 {
     struct ble_gap_conn_desc desc;
     int rc;
+    uint32_t now = millis();
 
     switch (event->type) {
     case BLE_GAP_EVENT_CONNECT:
@@ -221,8 +223,17 @@ static int gap_event(struct ble_gap_event *event, void *arg)
 
         if (event->passkey.params.action == BLE_SM_IOACT_DISP) {
             pkey.action = event->passkey.params.action;
-            pkey.passkey = random(
-                100000, 999999); // This is the passkey to be entered on peer - we pick a number >100,000 to ensure 6 digits
+            DEBUG_MSG("dp: %d now:%d\n",doublepressed, now);
+            if (doublepressed > 0 && (doublepressed + (30*1000)) > now) 
+            {
+                DEBUG_MSG("User has overridden passkey or no display available\n");
+                pkey.passkey = defaultBLEPin;  
+            }
+            else {
+                DEBUG_MSG("Using random passkey\n");
+                pkey.passkey = random(
+                    100000, 999999); // This is the passkey to be entered on peer - we pick a number >100,000 to ensure 6 digits    
+            }
             DEBUG_MSG("*** Enter passkey %d on the peer side ***\n", pkey.passkey);
 
             startCb(pkey.passkey);
@@ -381,6 +392,7 @@ void gatt_svr_register_cb(struct ble_gatt_register_ctxt *ctxt, void *arg)
     }
 }
 
+
 /**
  * A helper function that implements simple read and write handling for a uint32_t
  *
@@ -404,6 +416,7 @@ int chr_readwrite32le(uint32_t *v, struct ble_gatt_access_ctxt *ctxt)
         if (len < sizeof(le)) {
             DEBUG_MSG("Error: wrongsized write32\n");
             *v = 0;
+            return BLE_ATT_ERR_UNLIKELY;
         } else {
             *v = get_le32(le);
             DEBUG_MSG("BLE writing a uint32\n");
@@ -430,8 +443,10 @@ int chr_readwrite8(uint8_t *v, size_t vlen, struct ble_gatt_access_ctxt *ctxt)
 
         auto rc = ble_hs_mbuf_to_flat(ctxt->om, v, vlen, &len);
         assert(rc == 0);
-        if (len < vlen)
+        if (len < vlen) {
             DEBUG_MSG("Error: wrongsized write\n");
+            return BLE_ATT_ERR_UNLIKELY;
+        }
         else {
             DEBUG_MSG("BLE writing bytes\n");
         }
@@ -441,6 +456,13 @@ int chr_readwrite8(uint8_t *v, size_t vlen, struct ble_gatt_access_ctxt *ctxt)
     }
 
     return 0; // success
+}
+
+void disablePin()
+{
+    DEBUG_MSG("User Override, disabling bluetooth pin requirement\n");
+    // keep track of when it was pressed, so we know it was within X seconds
+    doublepressed = millis();  
 }
 
 // This routine is called multiple times, once each time we come back from sleep
@@ -503,33 +525,8 @@ void reinitBluetooth()
     nimble_port_freertos_init(ble_host_task);
 }
 
-void initWifi()
-{
-    // Note: Wifi is not yet supported ;-)
-    strcpy(radioConfig.preferences.wifi_ssid, "");
-    strcpy(radioConfig.preferences.wifi_password, "");
-    if (radioConfig.has_preferences) {
-        const char *wifiName = radioConfig.preferences.wifi_ssid;
-
-        if (*wifiName) {
-            const char *wifiPsw = radioConfig.preferences.wifi_password;
-            if (radioConfig.preferences.wifi_ap_mode) {
-                DEBUG_MSG("STARTING WIFI AP: ssid=%s, ok=%d\n", wifiName, WiFi.softAP(wifiName, wifiPsw));
-            } else {
-                WiFi.mode(WIFI_MODE_STA);
-                DEBUG_MSG("JOINING WIFI: ssid=%s\n", wifiName);
-                if (WiFi.begin(wifiName, wifiPsw) == WL_CONNECTED) {
-                    DEBUG_MSG("MY IP ADDRESS: %s\n", WiFi.localIP().toString().c_str());
-                } else {
-                    DEBUG_MSG("Started Joining WIFI\n");
-                }
-            }
-        }
-    } else
-        DEBUG_MSG("Not using WIFI\n");
-}
-
 bool bluetoothOn;
+bool firstTime = 1;
 
 // Enable/disable bluetooth.
 void setBluetoothEnable(bool on)
@@ -542,11 +539,29 @@ void setBluetoothEnable(bool on)
             Serial.printf("Pre BT: %u heap size\n", ESP.getFreeHeap());
             // ESP_ERROR_CHECK( heap_trace_start(HEAP_TRACE_LEAKS) );
             reinitBluetooth();
-            initWifi();
+
+            // Don't try to reconnect wifi before bluetooth is configured.
+            //   WiFi is initialized from main.cpp in setup() .
+            if (firstTime) {
+                firstTime = 0;
+            } else {
+                initWifi(0);
+            }
         } else {
+
+            /*
+            // If WiFi is in use, disable shutting down the radio.
+            if (isWifiAvailable()) {
+                return;
+            }
+            */
+
+            // shutdown wifi
+            deinitWifi();
+
             // We have to totally teardown our bluetooth objects to prevent leaks
             deinitBLE();
-            WiFi.mode(WIFI_MODE_NULL); // shutdown wifi
+
             Serial.printf("Shutdown BT: %u heap size\n", ESP.getFreeHeap());
             // ESP_ERROR_CHECK( heap_trace_stop() );
             // heap_trace_dump();

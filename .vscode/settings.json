@@ -49,13 +49,17 @@
         "string_view": "cpp",
         "cassert": "cpp",
         "iterator": "cpp",
-        "shared_mutex": "cpp"
+        "shared_mutex": "cpp",
+        "iostream": "cpp"
     },
     "cSpell.words": [
         "Blox",
+        "EINK",
         "HFSR",
         "Meshtastic",
         "NEMAGPS",
+        "NMEAGPS",
+        "RDEF",
         "Ublox",
         "bkpt",
         "cfsr",

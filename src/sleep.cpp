@@ -142,18 +142,21 @@ static void waitEnterSleep()
 
 void doDeepSleep(uint64_t msecToWake)
 {
-    DEBUG_MSG("Entering deep sleep for %llu seconds\n", msecToWake / 1000);
+    DEBUG_MSG("Entering deep sleep for %lu seconds\n", msecToWake / 1000);
 
-#ifndef NO_ESP32
     // not using wifi yet, but once we are this is needed to shutoff the radio hw
     // esp_wifi_stop();
     waitEnterSleep();
-    notifySleep.notifyObservers(NULL); // also tell the regular sleep handlers
     notifyDeepSleep.notifyObservers(NULL);
 
-    screen.setOn(false); // datasheet says this will draw only 10ua
+    screen->doDeepSleep(); // datasheet says this will draw only 10ua
 
     nodeDB.saveToDisk();
+
+    // Kill GPS power completely (even if previously we just had it in sleep mode)
+    setGPSPower(false);
+
+    setLed(false);
 
 #ifdef RESET_OLED
     digitalWrite(RESET_OLED, 1); // put the display in reset before killing its power
@@ -163,74 +166,24 @@ void doDeepSleep(uint64_t msecToWake)
     digitalWrite(VEXT_ENABLE, 1); // turn off the display power
 #endif
 
-    setLed(false);
-
 #ifdef TBEAM_V10
     if (axp192_found) {
+        // Obsolete comment: from back when we we used to receive lora packets while CPU was in deep sleep.
+        // We no longer do that, because our light-sleep current draws are low enough and it provides fast start/low cost
+        // wake.  We currently use deep sleep only for 'we want our device to actually be off - because our battery is
+        // critically low'.  So in deep sleep we DO shut down power to LORA (and when we boot later we completely reinit it)
+        //
         // No need to turn this off if the power draw in sleep mode really is just 0.2uA and turning it off would
         // leave floating input for the IRQ line
-
         // If we want to leave the radio receving in would be 11.5mA current draw, but most of the time it is just waiting
         // in its sequencer (true?) so the average power draw should be much lower even if we were listinging for packets
         // all the time.
 
-        // axp.setPowerOutPut(AXP192_LDO2, AXP202_OFF); // LORA radio
-
-        setGPSPower(false);
+        axp.setPowerOutPut(AXP192_LDO2, AXP202_OFF); // LORA radio
     }
 #endif
 
-    /*
-    Some ESP32 IOs have internal pullups or pulldowns, which are enabled by default.
-    If an external circuit drives this pin in deep sleep mode, current consumption may
-    increase due to current flowing through these pullups and pulldowns.
-
-    To isolate a pin, preventing extra current draw, call rtc_gpio_isolate() function.
-    For example, on ESP32-WROVER module, GPIO12 is pulled up externally.
-    GPIO12 also has an internal pulldown in the ESP32 chip. This means that in deep sleep,
-    some current will flow through these external and internal resistors, increasing deep
-    sleep current above the minimal possible value.
-
-    Note: we don't isolate pins that are used for the LORA, LED, i2c, spi or the wake button
-    */
-    static const uint8_t rtcGpios[] = {/* 0, */ 2,
-    /* 4, */
-#ifndef USE_JTAG
-                                       13,
-    /* 14, */ /* 15, */
-#endif
-                                       /* 25, */ 26, /* 27, */
-                                       32,           33, 34, 35,
-                                       36,           37
-                                       /* 38, 39 */};
-
-    for (int i = 0; i < sizeof(rtcGpios); i++)
-        rtc_gpio_isolate((gpio_num_t)rtcGpios[i]);
-
-    // FIXME, disable internal rtc pullups/pulldowns on the non isolated pins. for inputs that we aren't using
-    // to detect wake and in normal operation the external part drives them hard.
-
-    // We want RTC peripherals to stay on
-    esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
-
-#ifdef BUTTON_PIN
-    // Only GPIOs which are have RTC functionality can be used in this bit map: 0,2,4,12-15,25-27,32-39.
-    uint64_t gpioMask = (1ULL << BUTTON_PIN);
-
-#ifdef BUTTON_NEED_PULLUP
-    gpio_pullup_en((gpio_num_t)BUTTON_PIN);
-#endif
-
-    // Not needed because both of the current boards have external pullups
-    // FIXME change polarity in hw so we can wake on ANY_HIGH instead - that would allow us to use all three buttons (instead of
-    // just the first) gpio_pullup_en((gpio_num_t)BUTTON_PIN);
-
-    esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ALL_LOW);
-#endif
-
-    esp_sleep_enable_timer_wakeup(msecToWake * 1000ULL); // call expects usecs
-    esp_deep_sleep_start();                              // TBD mA sleep current (battery)
-#endif
+    cpuDeepSleep(msecToWake);
 }
 
 #ifndef NO_ESP32
@@ -260,12 +213,20 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // We treat the serial port as a GPIO for a fast/low power way of waking, if we see a rising edge that means
     // someone started to send something
 
-    // Alas - doesn't work reliably, instead need to use the uart specific version (which burns a little power)
-    // FIXME: gpio 3 is RXD for serialport 0 on ESP32
+    // gpio 3 is RXD for serialport 0 on ESP32
     // Send a few Z characters to wake the port
-    gpio_wakeup_enable((gpio_num_t)SERIAL0_RX_GPIO, GPIO_INTR_LOW_LEVEL);
-    // uart_set_wakeup_threshold(UART_NUM_0, 3);
-    // esp_sleep_enable_uart_wakeup(0);
+
+    // this doesn't work on TBEAMs when the USB is depowered (causes bogus interrupts)
+    // So we disable this "wake on serial" feature - because now when a TBEAM (only) has power connected it
+    // never tries to go to sleep if the user is using the API
+    // gpio_wakeup_enable((gpio_num_t)SERIAL0_RX_GPIO, GPIO_INTR_LOW_LEVEL);
+
+    // doesn't help - I think the USB-UART chip losing power is pulling the signal llow
+    // gpio_pullup_en((gpio_num_t)SERIAL0_RX_GPIO);
+
+    // alas - can only work if using the refclock, which is limited to about 9600 bps
+    // assert(uart_set_wakeup_threshold(UART_NUM_0, 3) == ESP_OK);
+    // assert(esp_sleep_enable_uart_wakeup(0) == ESP_OK);
 #endif
 #ifdef BUTTON_PIN
     gpio_wakeup_enable((gpio_num_t)BUTTON_PIN, GPIO_INTR_LOW_LEVEL); // when user presses, this button goes low
@@ -274,7 +235,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     gpio_wakeup_enable((gpio_num_t)RF95_IRQ_GPIO, GPIO_INTR_HIGH_LEVEL); // RF95 interrupt, active high
 #endif
 #ifdef PMU_IRQ
-    // FIXME, disable wake due to PMU because it seems to fire all the time?
+    // wake due to PMU can happen repeatedly if there is no battery installed or the battery fills
     if (axp192_found)
         gpio_wakeup_enable((gpio_num_t)PMU_IRQ, GPIO_INTR_LOW_LEVEL); // pmu irq
 #endif
