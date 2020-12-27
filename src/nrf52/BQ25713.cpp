@@ -18,10 +18,10 @@ bool BQ25713::setup()
     if (!writeReg(0x00, 0x0F0A))
         return false; // Config Charge Option 0
 
-    if (!writeReg(0x02, 0x0224))
+    if (!writeReg(0x02, 0x0224)) // 512mA, FIXME, this seems to be setting a number of bits marked as reserved, why?
         return false; // Config Charge Current
 
-    if (!writeReg(0x04, 0x1070))
+    if (!writeReg(0x04, 0x1070)) // about 4.29V
         return false; // Config Charge Voltage
 
     if (!writeReg(0x06, 0x099C))
@@ -32,7 +32,7 @@ bool BQ25713::setup()
 
     //	if(!writeReg(0x0A,0x0100)) return false;//Config Input Voltage
 
-    if (!writeReg(0x0C, 0x1800))
+    if (!writeReg(0x0C, 0x1800)) // 4.2Vish FIXME, we could lower this?
         return false; // Config Minimum System Voltage
 
     if (!writeReg(0x0E, 0x4900))
