@@ -1117,8 +1117,20 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 
     res->println("},");
 
-    res->println("\"something\": 123,");
-    res->println("\"something_else\": 123");
+    res->println("\"wifi\": {");
+
+    res->println("\"rssi\": " + String(WiFi.RSSI()) + ",");
+
+    if (radioConfig.preferences.wifi_ap_mode || isSoftAPForced()) {
+        res->println("\"ip\": \"" + String(WiFi.softAPIP().toString().c_str()) + "\"");
+    } else {
+        res->println("\"ip\": \"" + String(WiFi.localIP().toString().c_str()) + "\"");
+    }
+
+
+    res->println("},");
+
+    res->println("\"test\": 123");
 
     res->println("},");
 
