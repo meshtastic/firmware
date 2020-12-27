@@ -55,7 +55,8 @@ typedef enum _CriticalErrorCode {
     CriticalErrorCode_NoRadio = 3,
     CriticalErrorCode_Unspecified = 4,
     CriticalErrorCode_UBloxInitFailed = 5,
-    CriticalErrorCode_NoAXP192 = 6
+    CriticalErrorCode_NoAXP192 = 6,
+    CriticalErrorCode_InvalidRadioSetting = 7
 } CriticalErrorCode;
 
 typedef enum _ChannelSettings_ModemConfig {
@@ -289,8 +290,8 @@ typedef struct _ToRadio {
 #define _LocationSharing_ARRAYSIZE ((LocationSharing)(LocationSharing_LocDisabled+1))
 
 #define _CriticalErrorCode_MIN CriticalErrorCode_None
-#define _CriticalErrorCode_MAX CriticalErrorCode_NoAXP192
-#define _CriticalErrorCode_ARRAYSIZE ((CriticalErrorCode)(CriticalErrorCode_NoAXP192+1))
+#define _CriticalErrorCode_MAX CriticalErrorCode_InvalidRadioSetting
+#define _CriticalErrorCode_ARRAYSIZE ((CriticalErrorCode)(CriticalErrorCode_InvalidRadioSetting+1))
 
 #define _ChannelSettings_ModemConfig_MIN ChannelSettings_ModemConfig_Bw125Cr45Sf128
 #define _ChannelSettings_ModemConfig_MAX ChannelSettings_ModemConfig_Bw125Cr48Sf4096
