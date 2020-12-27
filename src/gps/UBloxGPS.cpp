@@ -43,7 +43,7 @@ bool UBloxGPS::setupGPS()
         DEBUG_MSG("Connected to UBLOX GPS successfully\n");
 
         if (!setUBXMode())
-            recordCriticalError(ErrUBloxInitFailed); // Don't halt the boot if saving the config fails, but do report the bug
+            recordCriticalError(CriticalErrorCode_UBloxInitFailed); // Don't halt the boot if saving the config fails, but do report the bug
 
         return true;
     } else {

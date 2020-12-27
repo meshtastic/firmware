@@ -428,7 +428,7 @@ void setup()
     // Do this after service.init (because that clears error_code)
 #ifdef AXP192_SLAVE_ADDRESS
     if(!axp192_found)
-        recordCriticalError(ErrNoAXP192); // Record a hardware fault for missing hardware
+        recordCriticalError(CriticalErrorCode_NoAXP192); // Record a hardware fault for missing hardware
 #endif    
 
     // Don't call screen setup until after nodedb is setup (because we need
@@ -497,7 +497,7 @@ void setup()
     initWifi(forceSoftAP);
 
     if (!rIf)
-        recordCriticalError(ErrNoRadio);
+        recordCriticalError(CriticalErrorCode_NoRadio);
     else
         router->addInterface(rIf);
 
