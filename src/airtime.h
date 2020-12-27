@@ -28,9 +28,11 @@ void logAirtime(reportTypes reportType, uint32_t airtime_ms);
 
 void airtimeCalculator();
 
-uint8_t currentHourIndex();
-uint8_t getHoursToLog();
+uint8_t currentPeriodIndex();
+uint8_t getPeriodsToLog();
 
 uint32_t getSecondsSinceBoot();
 
 uint16_t *airtimeReport(reportTypes reportType);
+
+uint32_t getSecondsPerPeriod();
