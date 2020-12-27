@@ -30,6 +30,17 @@
 
 ## 1.1. Abstract
 
+FIXME:
+
+- add channels as security
+  - have a uplinkPolicy enum (none, up only, down only, updown, stay encrypted)
+- add simpler mapping of channels/nodes/messages/portnums to mqtt topics
+- leave payloads as raw packets/protobufs 
+- explain why not UDP
+  - need to have a server anyways so that nodes can reach each other from anywhere
+  - raw UDP is dropped **very** agressively by many cellular providers
+  - mqtt provides a nice/documented/standard security model to build upon
+
 This is a mini-doc/RFC sketching out a development plan to satisfy a number of 1.1 goals.
 
 - [MQTT](https://opensource.com/article/18/6/mqtt) internet accessible API.  Issue #[369](https://github.com/meshtastic/Meshtastic-device/issues/169)
@@ -80,11 +91,23 @@ A sample [topic](https://www.hivemq.com/blog/mqtt-essentials-part-5-mqtt-topics-
 | MESHID/USERID/msg/text/DESTCLASS/DESTID | A text message from USERID to DESTCLASS/DESTID      |
 | MESHID/NODEID/msg/bin/DESTCLASS/DESTID  | A binary message from NODEID to DESTCLASS/DESTCLASS |
 | MESHID/NODEID/gpio/set/GPIONUM          | Set a GPIO output                                   |
-| MESHID/NODEID/gpio/get/GPIONUM          | Try to read a GPIO                                  |
-| MESHID/NODEID/gpio/upd/GPIONUM          | Contains the read GPIO value                        |
 | MESHID/NODEID/attr/ATTRNAME/req         | Request a current attribute value                   |
 | MESHID/NODEID/attr/ATTRNAME/set         | Set an attribute value                              |
 | MESHID/NODEID/app/APPNUM/#              | An topic from an unregistered/unknown app           |
+
+for encrypted packets (consumer would need to have access to the specified channel to be able to parse)
+
+encrypted/CHANNELID/MESHID/NODEID/PORTID
+
+If the channelid 'well known'/public it can be decrypted by a web service, in which case it will be decrypted by a web service and appear at:
+
+clear/MESHID/NODEID/PORTID
+
+FIXME, the payload published on the topic, will include the message, and full information about arrival time, who forwarded it, source channel etc...
+
+FIXME, figure out how channelids work
+FIXME, figure out rules for store and forward
+
 
 #### 1.6.1.1. MESHID
 
