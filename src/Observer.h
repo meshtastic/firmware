@@ -16,6 +16,10 @@ template <class T> class Observer
   public:
     virtual ~Observer();
 
+    /// Stop watching our current obserable
+    void unobserve();
+
+    /// Start watching a specified observable
     void observe(Observable<T> *o);
 
   private:
@@ -82,6 +86,11 @@ template <class T> class Observable
 };
 
 template <class T> Observer<T>::~Observer()
+{
+    unobserve();
+}
+
+template <class T> void Observer<T>::unobserve()
 {
     if (observed)
         observed->removeObserver(this);
