@@ -58,7 +58,6 @@ void INTERRUPT_ATTR RadioLibInterface::isrTxLevel0()
  */
 RadioLibInterface *RadioLibInterface::instance;
 
-
 /** Could we send right now (i.e. either not actively receving or transmitting)? */
 bool RadioLibInterface::canSendImmediately()
 {
@@ -88,7 +87,6 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
     printPacket("enqueuing for send", p);
     uint32_t xmitMsec = getPacketTime(p);
 
-
     DEBUG_MSG("txGood=%d,rxGood=%d,rxBad=%d\n", txGood, rxGood, rxBad);
     ErrorCode res = txQueue.enqueue(p, 0) ? ERRNO_OK : ERRNO_UNKNOWN;
 
@@ -100,7 +98,6 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
     // Count the packet toward our TX airtime utilization.
     //   We only count it if it can be added to the TX queue.
     logAirtime(TX_LOG, xmitMsec);
-    
 
     // We want all sending/receiving to be done by our daemon thread, We use a delay here because this packet might have been sent
     // in response to a packet we just received.  So we want to make sure the other side has had a chance to reconfigure its radio
@@ -211,11 +208,15 @@ void RadioLibInterface::completeSending()
 
 void RadioLibInterface::handleReceiveInterrupt()
 {
+    uint32_t xmitMsec;
     assert(isReceiving);
     isReceiving = false;
 
     // read the number of actually received bytes
     size_t length = iface->getPacketLength();
+
+    xmitMsec = getPacketTime(length);
+    logAirtime(RX_ALL_LOG, xmitMsec);
 
     int state = iface->readData(radiobuf, length);
     if (state != ERR_NONE) {
@@ -256,11 +257,14 @@ void RadioLibInterface::handleReceiveInterrupt()
 
             printPacket("Lora RX", mp);
 
+            xmitMsec = getPacketTime(mp);
+            logAirtime(RX_LOG, xmitMsec);
+
             deliverToReceiver(mp);
         }
     }
 }
- 
+
 /** start an immediate transmit */
 void RadioLibInterface::startSend(MeshPacket *txp)
 {
