@@ -32,9 +32,14 @@ void WiFiServerAPI::loop()
 {
     if (client.connected()) {
         StreamAPI::loop();
-    } else {
-        DEBUG_MSG("Client dropped connection, closing TCP server\n");
-        delete this;
+    } else if(isConnected) {
+        // If our API link was up, shut it down
+
+        DEBUG_MSG("Client dropped connection, closing API client\n");
+        // Note: we can't call delete here because this object includes other state
+        // besides the stream API.  Instead kill it later when we start a new instance
+        // delete this;
+        close();
     }
 }
 
