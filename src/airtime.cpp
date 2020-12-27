@@ -57,6 +57,8 @@ void airtimeCalculator()
                 airtimes.hourRX_ALL[i + 1] = airtimes.hourRX_ALL[i];
             }
             airtimes.hourTX[0] = 0;
+            airtimes.hourRX[0] = 0;
+            airtimes.hourRX_ALL[0] = 0;
 
             airtimes.lastHourIndex = currentHourIndex();
         }
