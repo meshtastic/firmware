@@ -21,7 +21,7 @@ class PhoneAPI
     : public Observer<uint32_t> // FIXME, we shouldn't be inheriting from Observer, instead use CallbackObserver as a member
 {
     enum State {
-        STATE_LEGACY,       // Temporary default state - until Android apps are all updated, uses the old BLE API
+        STATE_LEGACY,       // (no longer used) old default state - until Android apps are all updated, uses the old BLE API
         STATE_SEND_NOTHING, // (Eventual) Initial state, don't send anything until the client starts asking for config
         STATE_SEND_MY_INFO, // send our my info record
         STATE_SEND_RADIO,
@@ -31,7 +31,7 @@ class PhoneAPI
         STATE_SEND_PACKETS // send packets or debug strings
     };
 
-    State state = STATE_LEGACY;
+    State state = STATE_SEND_NOTHING;
 
     /**
      * Each packet sent to the phone has an incrementing count
@@ -53,13 +53,15 @@ class PhoneAPI
     /** the last msec we heard from the client on the other side of this link */
     uint32_t lastContactMsec = 0;
 
-    bool isConnected = false;
-
   public:
     PhoneAPI();
 
     /// Do late init that can't happen at constructor time
     virtual void init();
+
+    // Call this when the client drops the connection, resets the state to STATE_SEND_NOTHING
+    // Unregisters our observer
+    void close();
 
     /**
      * Handle a ToRadio protobuf
@@ -87,6 +89,9 @@ class PhoneAPI
     void handleSetRadio(const RadioConfig &r);
 
   protected:
+    /// Are we currently connected to a client?
+    bool isConnected = false;
+
     /// Our fromradio packet while it is being assembled
     FromRadio fromRadioScratch;
 
