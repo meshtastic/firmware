@@ -103,11 +103,15 @@ If the channelid 'well known'/public it can be decrypted by a web service, in wh
 
 clear/MESHID/NODEID/PORTID
 
-FIXME, the payload published on the topic, will include the message, and full information about arrival time, who forwarded it, source channel etc...
+FIXME, remove concept of meshid for now? optionally add to envelope later?
 
+FIXME, the payload published on the topic, will include the message, and full information about arrival time, who forwarded it, source channel etc... Use a ServiceEnvelope protobuf.
+
+FIXME, use public mqtt servers, leave messages encrypted
+FIXME, include testcase of trivial text message global mirroring
+FIXME, possibly don't global mirror text messages - instead rely on matrix/riot? 
 FIXME, figure out how channelids work
 FIXME, figure out rules for store and forward
-
 
 #### 1.6.1.1. MESHID
 
