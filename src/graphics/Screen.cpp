@@ -26,7 +26,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Screen.h"
-#include "configs.h"
 #include "configuration.h"
 #include "graphics/images.h"
 #include "main.h"
@@ -35,11 +34,21 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "plugins/TextMessagePlugin.h"
 #include "target_specific.h"
 #include "utils.h"
+#include "fonts.h"
 
 using namespace meshtastic; /** @todo remove */
 
 namespace graphics
 {
+
+// This means the *visible* area (sh1106 can address 132, but shows 128 for example)
+#define IDLE_FRAMERATE 1        // in fps
+#define COMPASS_DIAM 44
+
+// DEBUG
+#define NUM_EXTRA_FRAMES 3 // text message and debug frame
+// if defined a pixel will blink to show redraws
+// #define SHOW_REDRAWS
 
 // A text message frame + debug frame + all the node infos
 static FrameCallback normalFrames[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
@@ -151,6 +160,23 @@ static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, 
     strcat(buf, getDeviceName());
     display->drawString(64 + x, 48 + y, buf);
 }
+
+/// Draw the last text message we received
+static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    displayedNodeNum = 0; // Not currently showing a node pane
+
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_MEDIUM);
+
+    char tempBuf[24];
+    snprintf(tempBuf, sizeof(tempBuf), "Critical fault #%d", myNodeInfo.error_code);
+    display->drawString(0 + x, 0 + y, tempBuf);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    display->drawString(0 + x, FONT_HEIGHT_MEDIUM + y, "For help, please post on\nmeshtastic.discourse.group");
+}
+
 
 /// Draw the last text message we received
 static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -849,7 +875,11 @@ void Screen::setFrames()
 
     size_t numframes = 0;
 
-    // If we have a text message - show it first
+    // If we have a critical fault, show it first
+    if (myNodeInfo.error_code)
+        normalFrames[numframes++] = drawCriticalFaultFrame;
+
+    // If we have a text message - show it next
     if (devicestate.has_rx_text_message)
         normalFrames[numframes++] = drawTextMessageFrame;
 

@@ -12,5 +12,5 @@ print("Using meshtastic platform-custom.py, firmare version " + verStr)
 
 # General options that are passed to the C and C++ compilers
 projenv.Append(CCFLAGS=[
-    f"-DAPP_VERSION={verStr}"
+    "-DAPP_VERSION=" + verStr
     ])
