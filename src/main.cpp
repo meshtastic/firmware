@@ -5,6 +5,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "UBloxGPS.h"
+#include "airtime.h"
 #include "configuration.h"
 #include "error.h"
 #include "power.h"
@@ -558,4 +559,7 @@ void loop()
     // We want to sleep as long as possible here - because it saves power
     mainDelay.delay(delayMsec);
     // if (didWake) DEBUG_MSG("wake!\n");
+
+    // Handles cleanup for the airtime calculator.
+    airtimeCalculator();
 }
