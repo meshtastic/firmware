@@ -7,20 +7,25 @@
 #include <assert.h>
 
 #if FromRadio_size > MAX_TO_FROM_RADIO_SIZE
-    #error FromRadio is too big
+#error FromRadio is too big
 #endif
 
 #if ToRadio_size > MAX_TO_FROM_RADIO_SIZE
-    #error ToRadio is too big
+#error ToRadio is too big
 #endif
 
-PhoneAPI::PhoneAPI()
-{
-}
+PhoneAPI::PhoneAPI() {}
 
 void PhoneAPI::init()
 {
     observe(&service.fromNumChanged);
+}
+
+void PhoneAPI::close() {
+    unobserve();
+    state = STATE_SEND_NOTHING;
+    isConnected = false;
+    onConnectionChanged(isConnected);
 }
 
 void PhoneAPI::checkConnectionTimeout()
@@ -102,7 +107,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     if (!available()) {
         // DEBUG_MSG("getFromRadio, !available\n");
         return 0;
-    } 
+    }
 
     DEBUG_MSG("getFromRadio, state=%d\n", state);
 
@@ -170,7 +175,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         if (packetForPhone) {
 
             printPacket("phone downloaded packet", packetForPhone);
-            
+
             // Encapsulate as a FromRadio packet
             fromRadioScratch.which_variant = FromRadio_packet_tag;
             fromRadioScratch.variant.packet = *packetForPhone;
