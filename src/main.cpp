@@ -92,6 +92,7 @@ void scanI2Cdevice(void)
             DEBUG_MSG("Unknow error at address 0x%x\n", addr);
         }
     }
+
     if (nDevices == 0)
         DEBUG_MSG("No I2C devices found\n");
     else
@@ -362,6 +363,10 @@ void setup()
     nrf52Setup();
 #endif
 
+    // We do this as early as possible because this loads preferences from flash
+    // but we need to do this after main cpu iniot (esp32setup), because we need the random seed set
+    nodeDB.init();
+
     // Currently only the tbeam has a PMU
     power = new Power();
     power->setStatusHandler(powerStatus);
@@ -419,6 +424,12 @@ void setup()
     nodeStatus->observe(&nodeDB.newStatus);
 
     service.init();
+
+    // Do this after service.init (because that clears error_code)
+#ifdef AXP192_SLAVE_ADDRESS
+    if(!axp192_found)
+        recordCriticalError(CriticalErrorCode_NoAXP192); // Record a hardware fault for missing hardware
+#endif    
 
     // Don't call screen setup until after nodedb is setup (because we need
     // the current region name)
@@ -486,7 +497,7 @@ void setup()
     initWifi(forceSoftAP);
 
     if (!rIf)
-        recordCriticalError(ErrNoRadio);
+        recordCriticalError(CriticalErrorCode_NoRadio);
     else
         router->addInterface(rIf);
 

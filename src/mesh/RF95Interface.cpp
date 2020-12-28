@@ -1,6 +1,7 @@
 #include "RF95Interface.h"
 #include "MeshRadio.h" // kinda yucky, but we need to know which region we are in
 #include "RadioLibRF95.h"
+#include "error.h"
 #include <configuration.h>
 
 #define MAX_POWER 20
@@ -85,6 +86,8 @@ void INTERRUPT_ATTR RF95Interface::disableInterrupt()
     lora->clearDio0Action();
 }
 
+
+
 bool RF95Interface::reconfigure()
 {
     applyModemConfig();
@@ -94,13 +97,13 @@ bool RF95Interface::reconfigure()
 
     // configure publicly accessible settings
     int err = lora->setSpreadingFactor(sf);
-    assert(err == ERR_NONE);
+    if(err != ERR_NONE) recordCriticalError(CriticalErrorCode_InvalidRadioSetting);
 
     err = lora->setBandwidth(bw);
-    assert(err == ERR_NONE);
+    if(err != ERR_NONE) recordCriticalError(CriticalErrorCode_InvalidRadioSetting);
 
     err = lora->setCodingRate(cr);
-    assert(err == ERR_NONE);
+    if(err != ERR_NONE) recordCriticalError(CriticalErrorCode_InvalidRadioSetting);
 
     err = lora->setSyncWord(syncWord);
     assert(err == ERR_NONE);
@@ -112,12 +115,12 @@ bool RF95Interface::reconfigure()
     assert(err == ERR_NONE);
 
     err = lora->setFrequency(freq);
-    assert(err == ERR_NONE);
+    if(err != ERR_NONE) recordCriticalError(CriticalErrorCode_InvalidRadioSetting);
 
     if (power > MAX_POWER) // This chip has lower power limits than some
         power = MAX_POWER;
     err = lora->setOutputPower(power);
-    assert(err == ERR_NONE);
+    if(err != ERR_NONE) recordCriticalError(CriticalErrorCode_InvalidRadioSetting);
 
     startReceive(); // restart receiving
 

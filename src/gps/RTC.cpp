@@ -31,9 +31,23 @@ void readFromRTC()
 /// If we haven't yet set our RTC this boot, set it from a GPS derived time
 bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
 {
+    static uint32_t lastSetMsec = 0;
+    uint32_t now = millis();
+
+    bool shouldSet;
     if (q > currentQuality) {
-        currentQuality = q;
-        DEBUG_MSG("Setting RTC %ld secs\n", tv->tv_sec);
+        shouldSet = true;
+        DEBUG_MSG("Upgrading time to RTC %ld secs (quality %d)\n", tv->tv_sec, q);
+    } else if(q == RTCQualityGPS && (now - lastSetMsec) > (12 * 60 * 60 * 1000L)) {
+        // Every 12 hrs we will slam in a new GPS time, to correct for local RTC clock drift
+        shouldSet = true;
+        DEBUG_MSG("Reapplying GPS time to correct clock drift %ld secs\n", tv->tv_sec);
+    }
+    else
+        shouldSet = false;
+
+    if (shouldSet) {
+        lastSetMsec = now;
 #ifndef NO_ESP32
         settimeofday(tv, NULL);
 #else

@@ -77,7 +77,8 @@ void MeshService::init()
     sendOwnerPeriod = new concurrency::Periodic("SendOwner", sendOwnerCb);
     sendOwnerPeriod->setIntervalFromNow(30 * 1000); // Send our initial owner announcement 30 seconds after we start (to give network time to setup)
 
-    nodeDB.init();
+    // moved much earlier in boot (called from setup())
+    // nodeDB.init();
 
     if (gps)
         gpsObserver.observe(&gps->newStatus);
