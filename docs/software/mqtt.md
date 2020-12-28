@@ -69,14 +69,13 @@ Any gateway-device will contact the MQTT broker.
 
 ### Topics
 
-A sample [topic](https://www.hivemq.com/blog/mqtt-essentials-part-5-mqtt-topics-best-practices/) hierarchy for a complete functioning mesh:
+The "mesh/crypt/CHANNELID/GATEWAYID/NODEID/PORTID" [topic](https://www.hivemq.com/blog/mqtt-essentials-part-5-mqtt-topics-best-practices/) will be used for messages sent from/to a mesh.
 
-Gateway nodes will foward any MeshPacket from a local mesh channel with uplink_enabled.  The packet (encapsulated in a ServiceEnvelope).  The packets will remain encrypted with the key for the specified channel.
-mesh/crypt/CHANNELID/NODEID/PORTID
+Gateway nodes will foward any MeshPacket from a local mesh channel with uplink_enabled.  The packet (encapsulated in a ServiceEnvelope) will remain encrypted with the key for the specified channel.  
 
 For any channels in the local node with downlink_enabled, the gateway node will forward packets from MQTT to the local mesh.  It will do this by subscribing to mesh/crypt/CHANNELID/# and forwarding relevant packets.
 
-If the channelid 'well known'/public it could be decrypted by a web service (if the web service was provided with the associated channel key), in which case it will be decrypted by a web service and appear at "mesh/clear/NODEID/PORTID". Note: This is not in the initial deliverable. 
+If the channelid 'well known'/public it could be decrypted by a web service (if the web service was provided with the associated channel key), in which case it will be decrypted by a web service and appear at "mesh/clear/CHANNELID/GATEWAYID/NODEID/PORTID". Note: This is not in the initial deliverable. 
 
 
 FIXME, discuss how text message global mirroring could scale (or not)
@@ -158,10 +157,13 @@ Can be...
 - An app ID (to allow apps out in the web to receive arbitrary binary data from nodes or simply other apps using meshtastic as a transport). They would connect to the MQTT broker and subscribe to their topic
 
 ## Rejected idea: RAW UDP
-- FIXME explain why not UDP
-  - need to have a server anyways so that nodes can reach each other from anywhere
-  - raw UDP is dropped **very** agressively by many cellular providers
-  - mqtt provides a nice/documented/standard security model to build upon
+
+A number of commenters have requested/proposed using UDP for the transport.  We've considered this option and decided to use MQTT instead for the following reasons:
+
+  - Most UDP uses cases would need to have a server anyways so that nodes can reach each other from anywhere (i.e. if most gateways will be behind some form of NAT which would need to be tunnelled)
+  - Raw UDP is dropped **very** agressively by many cellular providers.  MQTT from the gateway to a broker can be done over a TCP connection for this reason.
+  - MQTT provides a nice/documented/standard security model to build upon
+  - MQTT is fairly wire efficient with multiple broker implementations/providers and numerous client libraries for any language.  The actual implementation of MQTT is quite simple.
   
 ## Development plan
 
@@ -184,4 +186,6 @@ on how this will be implemented and guesses at approximate work items.
 
 ### Enhancements in following releases
 
-FIXME, figure out rules for store and forward
+The initial gateway will be added to the python tool.  But the gateway implementation is designed to be fairly trivial/dumb.  After the initial release the actual gateway code can be ported to also run inside of the android app.  In fact, we could have ESP32 based nodes even *directly* contact over wifi the MQTT broker.
+
+Store and forward could be added so that nodes on the mesh could deliver messages (i.e. text messages) on an "as possible" basis.  This would allow things like "hiker sends a message to friend - mesh can not currently reach friend - eventually (days later) mesh can somehow reach friend, message gets delivered"
