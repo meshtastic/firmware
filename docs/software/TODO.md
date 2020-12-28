@@ -4,6 +4,7 @@ You probably don't care about this section - skip to the next one.
 
 For app cleanup:
 
+* use structured logging to kep logs in ram.  Also send logs as packets to api clients
 * DONE writeup nice python options docs (common cases, link to protobuf docs)
 * have android app link to user manual
 * DONE only do wantReplies once per packet type, if we change network settings force it again

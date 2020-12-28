@@ -271,7 +271,7 @@ void NodeDB::init()
     myNodeInfo.node_num_bits = sizeof(NodeNum) * 8;
     myNodeInfo.packet_id_bits = sizeof(PacketId) * 8;
 
-    myNodeInfo.error_code = NoError; // For the error code, only show values from this boot (discard value from flash)
+    myNodeInfo.error_code = CriticalErrorCode_None; // For the error code, only show values from this boot (discard value from flash)
     myNodeInfo.error_address = 0;
 
     // likewise - we always want the app requirements to come from the running appload
