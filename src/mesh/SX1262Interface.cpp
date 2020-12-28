@@ -1,4 +1,5 @@
 #include "SX1262Interface.h"
+#include "error.h"
 #include <configuration.h>
 
 // Particular boards might define a different max power based on what their hardware can do
@@ -78,13 +79,13 @@ bool SX1262Interface::reconfigure()
 
     // configure publicly accessible settings
     int err = lora.setSpreadingFactor(sf);
-    assert(err == ERR_NONE);
+    if(err != ERR_NONE) recordCriticalError(CriticalErrorCode_InvalidRadioSetting);
 
     err = lora.setBandwidth(bw);
-    assert(err == ERR_NONE);
+    if(err != ERR_NONE) recordCriticalError(CriticalErrorCode_InvalidRadioSetting);
 
     err = lora.setCodingRate(cr);
-    assert(err == ERR_NONE);
+    if(err != ERR_NONE) recordCriticalError(CriticalErrorCode_InvalidRadioSetting);
 
     // Hmm - seems to lower SNR when the signal levels are high.  Leaving off for now...
     err = lora.setRxGain(true);
@@ -100,7 +101,7 @@ bool SX1262Interface::reconfigure()
     assert(err == ERR_NONE);
 
     err = lora.setFrequency(freq);
-    assert(err == ERR_NONE);
+    if(err != ERR_NONE) recordCriticalError(CriticalErrorCode_InvalidRadioSetting);
 
     if (power > 22) // This chip has lower power limits than some
         power = 22;
