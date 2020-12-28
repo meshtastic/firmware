@@ -84,9 +84,9 @@ FIXME, possibly don't global mirror text messages - instead rely on matrix/riot?
 
 #### Service Envelope
 
-The payload published on mesh/... will always be wrapped in a ServiceEnvelope protobuf.
+The payload published on mesh/... will always be wrapped in a [ServiceEnvelope protobuf](https://github.com/meshtastic/Meshtastic-protobufs/blob/master/docs/docs.md#.ServiceEnvelope).
 
-FIXME, the payload published on the topic, will include the message, and full information about arrival time, who forwarded it, source channel, source mesh id, etc... 
+ServiceEnvelope will include the message, and full information about arrival time, who forwarded it, source channel, source mesh id, etc... 
 
 #### NODEID
 
@@ -174,6 +174,9 @@ on how this will be implemented and guesses at approximate work items.
 - DONE Refactor the position features into a position "mini-app". Use only the new public on-device API to implement this app.
 - DONE Refactor the on device texting features into a messaging "mini-app". (Similar to the position mini-app)
 - Add new multi channel concept
+- Add portion of channelid to the raw lora packet header
+- Confirm that we can now forward encrypted packets without decrypting at each node
+- Use a channel named "remotehw" to secure the GPIO service.  If that channel is not found, don't even start the service.  Document this as the standard method for securing services.
 - Add first cut of the "gateway node" code (i.e. MQTT broker client) to the python API (very little code needed for this component)
 - Confirm that texting works to/from the internet
 - Confirm that positions are optionally sent to the internet
