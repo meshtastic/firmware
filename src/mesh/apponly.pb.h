@@ -15,7 +15,7 @@ typedef struct _ServiceEnvelope {
     bool has_packet;
     MeshPacket packet;
     pb_callback_t channel_id;
-    pb_callback_t mesh_id;
+    pb_callback_t gateway_id;
 } ServiceEnvelope;
 
 
@@ -30,13 +30,13 @@ extern "C" {
 /* Field tags (for use in manual encoding/decoding) */
 #define ServiceEnvelope_packet_tag               1
 #define ServiceEnvelope_channel_id_tag           2
-#define ServiceEnvelope_mesh_id_tag              3
+#define ServiceEnvelope_gateway_id_tag           3
 
 /* Struct field encoding specification for nanopb */
 #define ServiceEnvelope_FIELDLIST(X, a) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  packet,            1) \
 X(a, CALLBACK, SINGULAR, STRING,   channel_id,        2) \
-X(a, CALLBACK, SINGULAR, STRING,   mesh_id,           3)
+X(a, CALLBACK, SINGULAR, STRING,   gateway_id,        3)
 #define ServiceEnvelope_CALLBACK pb_default_field_callback
 #define ServiceEnvelope_DEFAULT NULL
 #define ServiceEnvelope_packet_MSGTYPE MeshPacket

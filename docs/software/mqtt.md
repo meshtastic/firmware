@@ -6,7 +6,7 @@
   - [Long term goals](#long-term-goals)
   - [Multiple Channel support / Security](#multiple-channel-support--security)
   - [On device API](#on-device-api)
-  - [Efficient MQTT](#efficient-mqtt)
+  - [MQTT transport](#mqtt-transport)
     - [Topics](#topics)
       - [Service Envelope](#service-envelope)
       - [NODEID](#nodeid)
@@ -22,7 +22,7 @@
       - [DESTID (deprecated)](#destid-deprecated)
   - [Rejected idea: RAW UDP](#rejected-idea-raw-udp)
   - [Development plan](#development-plan)
-    - [Cleanup/refactoring of existing codebase](#cleanuprefactoring-of-existing-codebase)
+    - [Work items](#work-items)
     - [Enhancements in following releases](#enhancements-in-following-releases)
 
 ## Abstract
@@ -57,29 +57,28 @@ During the 1.0 timeframe only one channel was supported per node.  Starting in t
 
 FIXME - explain this more, talk about how useful for users and security domains.
 - add channels as security
-  - have a uplinkPolicy enum (none, up only, down only, updown, stay encrypted)
-  - 
+
 ## On device API
 
 For information on the related on-device API see [here](device-api.md).
 
-## Efficient MQTT
+## MQTT transport
 
 Any gateway-device will contact the MQTT broker. 
 
 ### Topics
 
-The "mesh/crypt/CHANNELID/GATEWAYID/NODEID/PORTID" [topic](https://www.hivemq.com/blog/mqtt-essentials-part-5-mqtt-topics-best-practices/) will be used for messages sent from/to a mesh.
+The "mesh/crypt/CHANNELID/NODEID/PORTID" [topic](https://www.hivemq.com/blog/mqtt-essentials-part-5-mqtt-topics-best-practices/) will be used for messages sent from/to a mesh.
 
 Gateway nodes will foward any MeshPacket from a local mesh channel with uplink_enabled.  The packet (encapsulated in a ServiceEnvelope) will remain encrypted with the key for the specified channel.  
 
 For any channels in the local node with downlink_enabled, the gateway node will forward packets from MQTT to the local mesh.  It will do this by subscribing to mesh/crypt/CHANNELID/# and forwarding relevant packets.
 
-If the channelid 'well known'/public it could be decrypted by a web service (if the web service was provided with the associated channel key), in which case it will be decrypted by a web service and appear at "mesh/clear/CHANNELID/GATEWAYID/NODEID/PORTID". Note: This is not in the initial deliverable. 
-
+If the channelid 'well known'/public it could be decrypted by a web service (if the web service was provided with the associated channel key), in which case it will be decrypted by a web service and appear at "mesh/clear/CHANNELID/NODEID/PORTID". Note: This is not in the initial deliverable. 
 
 FIXME, discuss how text message global mirroring could scale (or not)
 FIXME, possibly don't global mirror text messages - instead rely on matrix/riot? 
+FIXME, discuss possible attacks by griefers and how they can be prvented
 
 #### Service Envelope
 
@@ -170,12 +169,14 @@ A number of commenters have requested/proposed using UDP for the transport.  We'
 Given the previous problem/goals statement, here's the initial thoughts on the work items required.  As this idea becomes a bit more fully baked we should add details
 on how this will be implemented and guesses at approximate work items.
 
-### Cleanup/refactoring of existing codebase
+### Work items
 
 - Change nodeIDs to be base64 instead of eight hex digits.
 - DONE Refactor the position features into a position "mini-app". Use only the new public on-device API to implement this app.
 - DONE Refactor the on device texting features into a messaging "mini-app". (Similar to the position mini-app)
 - Add new multi channel concept
+- Send new channels to python client
+- Let python client add channels
 - Add portion of channelid to the raw lora packet header
 - Confirm that we can now forward encrypted packets without decrypting at each node
 - Use a channel named "remotehw" to secure the GPIO service.  If that channel is not found, don't even start the service.  Document this as the standard method for securing services.
@@ -186,6 +187,6 @@ on how this will be implemented and guesses at approximate work items.
 
 ### Enhancements in following releases
 
-The initial gateway will be added to the python tool.  But the gateway implementation is designed to be fairly trivial/dumb.  After the initial release the actual gateway code can be ported to also run inside of the android app.  In fact, we could have ESP32 based nodes even *directly* contact over wifi the MQTT broker.
+The initial gateway will be added to the python tool.  But the gateway implementation is designed to be fairly trivial/dumb.  After the initial release the actual gateway code can be ported to also run inside of the android app.  In fact, we could have ESP32 based nodes include a built-in "gateway node" implementation.
 
 Store and forward could be added so that nodes on the mesh could deliver messages (i.e. text messages) on an "as possible" basis.  This would allow things like "hiker sends a message to friend - mesh can not currently reach friend - eventually (days later) mesh can somehow reach friend, message gets delivered"
