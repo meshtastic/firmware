@@ -1,10 +1,11 @@
 #include "meshwifi/meshhttp.h"
 #include "NodeDB.h"
+#include "PowerFSM.h"
+#include "airtime.h"
 #include "configuration.h"
 #include "main.h"
 #include "meshhttpStatic.h"
 #include "meshwifi/meshwifi.h"
-#include "PowerFSM.h"
 #include "sleep.h"
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>
@@ -64,6 +65,7 @@ void handleScanNetworks(HTTPRequest *req, HTTPResponse *res);
 void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res);
 void handleSpiffsDeleteStatic(HTTPRequest *req, HTTPResponse *res);
 void handleBlinkLED(HTTPRequest *req, HTTPResponse *res);
+void handleReport(HTTPRequest *req, HTTPResponse *res);
 
 void middlewareSpeedUp240(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
 void middlewareSpeedUp160(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
@@ -80,7 +82,7 @@ char contentTypes[][2][32] = {{".txt", "text/plain"},     {".html", "text/html"}
                               {".js", "text/javascript"}, {".png", "image/png"},
                               {".jpg", "image/jpg"},      {".gz", "application/gzip"},
                               {".gif", "image/gif"},      {".json", "application/json"},
-                              {".css", "text/css"},       {".ico","image/vnd.microsoft.icon"},
+                              {".css", "text/css"},       {".ico", "image/vnd.microsoft.icon"},
                               {".svg", "image/svg+xml"},  {"", ""}};
 
 void handleWebResponse()
@@ -248,6 +250,7 @@ void initWebServer()
     ResourceNode *nodeFormUpload = new ResourceNode("/upload", "POST", &handleFormUpload);
     ResourceNode *nodeJsonScanNetworks = new ResourceNode("/json/scanNetworks", "GET", &handleScanNetworks);
     ResourceNode *nodeJsonBlinkLED = new ResourceNode("/json/blink", "POST", &handleBlinkLED);
+    ResourceNode *nodeJsonReport = new ResourceNode("/json/report", "GET", &handleReport);
     ResourceNode *nodeJsonSpiffsBrowseStatic = new ResourceNode("/json/spiffs/browse/static/", "GET", &handleSpiffsBrowseStatic);
     ResourceNode *nodeJsonDelete = new ResourceNode("/json/spiffs/delete/static", "DELETE", &handleSpiffsDeleteStatic);
 
@@ -267,6 +270,7 @@ void initWebServer()
     secureServer->registerNode(nodeJsonBlinkLED);
     secureServer->registerNode(nodeJsonSpiffsBrowseStatic);
     secureServer->registerNode(nodeJsonDelete);
+    secureServer->registerNode(nodeJsonReport);
     secureServer->setDefaultNode(node404);
 
     secureServer->addMiddleware(&middlewareSpeedUp240);
@@ -287,6 +291,7 @@ void initWebServer()
     insecureServer->registerNode(nodeJsonBlinkLED);
     insecureServer->registerNode(nodeJsonSpiffsBrowseStatic);
     insecureServer->registerNode(nodeJsonDelete);
+    insecureServer->registerNode(nodeJsonReport);
     insecureServer->setDefaultNode(node404);
 
     insecureServer->addMiddleware(&middlewareSpeedUp160);
@@ -458,26 +463,26 @@ void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
 
 void handleSpiffsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
 {
-  ResourceParameters *params = req->getParams();
-  std::string paramValDelete;
+    ResourceParameters *params = req->getParams();
+    std::string paramValDelete;
 
-  res->setHeader("Content-Type", "application/json");
-  if (params->getQueryParameter("delete", paramValDelete)) {
-    std::string pathDelete = "/" + paramValDelete;
-    if (SPIFFS.remove(pathDelete.c_str())) {
-        Serial.println(pathDelete.c_str());
-        res->println("{");
-        res->println("\"status\": \"ok\"");
-        res->println("}");
-        return;
-    } else {
-        Serial.println(pathDelete.c_str());
-        res->println("{");
-        res->println("\"status\": \"Error\"");
-        res->println("}");
-        return;
+    res->setHeader("Content-Type", "application/json");
+    if (params->getQueryParameter("delete", paramValDelete)) {
+        std::string pathDelete = "/" + paramValDelete;
+        if (SPIFFS.remove(pathDelete.c_str())) {
+            Serial.println(pathDelete.c_str());
+            res->println("{");
+            res->println("\"status\": \"ok\"");
+            res->println("}");
+            return;
+        } else {
+            Serial.println(pathDelete.c_str());
+            res->println("{");
+            res->println("\"status\": \"Error\"");
+            res->println("}");
+            return;
+        }
     }
-  }
 }
 
 void handleStaticBrowse(HTTPRequest *req, HTTPResponse *res)
@@ -1037,6 +1042,98 @@ void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
     }
 
     res->println("{");
+    res->println("\"status\": \"ok\"");
+    res->println("}");
+}
+
+void handleReport(HTTPRequest *req, HTTPResponse *res)
+{
+
+    ResourceParameters *params = req->getParams();
+    std::string content;
+
+    if (!params->getQueryParameter("content", content)) {
+        content = "json";
+    }
+
+    if (content == "json") {
+        res->setHeader("Content-Type", "application/json");
+
+    } else {
+        res->setHeader("Content-Type", "text/html");
+        res->println("<pre>");
+    }
+
+    res->println("{");
+
+    res->println("\"data\": {");
+
+    res->println("\"airtime\": {");
+
+    uint16_t *logArray;
+
+    res->print("\"tx_log\": [");
+
+    logArray = airtimeReport(TX_LOG);
+    for (int i = 0; i < getPeriodsToLog(); i++) {
+        uint16_t tmp;
+        tmp = *(logArray + i);
+        res->printf("%d", tmp);
+        if (i != getPeriodsToLog() - 1) {
+            res->print(", ");
+        }
+    }
+
+    res->println("],");
+    res->print("\"rx_log\": [");
+
+    logArray = airtimeReport(RX_LOG);
+    for (int i = 0; i < getPeriodsToLog(); i++) {
+        uint16_t tmp;
+        tmp = *(logArray + i);
+        res->printf("%d", tmp);
+        if (i != getPeriodsToLog() - 1) {
+            res->print(", ");
+        }
+    }
+
+    res->println("],");
+    res->print("\"rx_all_log\": [");
+
+    logArray = airtimeReport(RX_ALL_LOG);
+    for (int i = 0; i < getPeriodsToLog(); i++) {
+        uint16_t tmp;
+        tmp = *(logArray + i);
+        res->printf("%d", tmp);
+        if (i != getPeriodsToLog() - 1) {
+            res->print(", ");
+        }
+    }
+
+    res->println("],");
+    res->printf("\"seconds_since_boot\": %u,\n", getSecondsSinceBoot());
+    res->printf("\"seconds_per_period\": %u,\n", getSecondsPerPeriod());
+    res->printf("\"periods_to_log\": %u\n", getPeriodsToLog());
+
+    res->println("},");
+
+    res->println("\"wifi\": {");
+
+    res->println("\"rssi\": " + String(WiFi.RSSI()) + ",");
+
+    if (radioConfig.preferences.wifi_ap_mode || isSoftAPForced()) {
+        res->println("\"ip\": \"" + String(WiFi.softAPIP().toString().c_str()) + "\"");
+    } else {
+        res->println("\"ip\": \"" + String(WiFi.localIP().toString().c_str()) + "\"");
+    }
+
+
+    res->println("},");
+
+    res->println("\"test\": 123");
+
+    res->println("},");
+
     res->println("\"status\": \"ok\"");
     res->println("}");
 }

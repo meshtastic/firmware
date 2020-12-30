@@ -268,7 +268,9 @@ bool Power::axp192Init()
             DEBUG_MSG("DCDC3: %s\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
             DEBUG_MSG("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
 
-            axp.setChargeControlCur(AXP1XX_CHARGE_CUR_1320MA); // actual limit (in HW) on the tbeam is 450mA
+            //axp.setChargeControlCur(AXP1XX_CHARGE_CUR_1320MA); // actual limit (in HW) on the tbeam is 450mA
+            axp.setChargeControlCur(AXP1XX_CHARGE_CUR_450MA); // There's no HW limit on the tbeam. Setting to 450mz to be a good neighbor on the usb bus.
+            
 #if 0
 
       // Not connected
