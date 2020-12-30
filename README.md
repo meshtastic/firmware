@@ -32,6 +32,7 @@ We currently support three models of radios.
   - 3D printable cases
     - [T-Beam V0](https://www.thingiverse.com/thing:3773717) (GPS and LoRa antenna misaligned if GPS placed as pictured)
     - [T-Beam V1 (SMA-antenna)](https://www.thingiverse.com/thing:3830711)
+    - [T-Beam V1 (SMA-antenna)](https://www.thingiverse.com/thing:4677388) (Mounting option for larger GPS antenna but LoRa antenna enclosed)
     - [T-Beam V1 (IPEX-antenna)](https://www.thingiverse.com/thing:4587297) (GPS and LoRa antenna misaligned if GPS placed as pictured)
     - [T-Beam V1 (IPEX-antenna)](https://www.thingiverse.com/thing:4589651)
     - [T-Beam V1 (IPEX-antenna)](https://www.thingiverse.com/thing:4619981) (GPS and LoRa antenna misaligned if GPS placed as pictured)
