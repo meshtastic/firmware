@@ -2,17 +2,19 @@
 
 set -e
 
-source bin/version.sh
+VERSION=`bin/buildinfo.py`
 
 COUNTRIES="US EU433 EU865 CN JP ANZ KR"
 #COUNTRIES=US
 #COUNTRIES=CN
 
 BOARDS_ESP32="tlora-v2 tlora-v1 tlora-v2-1-1.6 tbeam heltec tbeam0.7"
-# BOARDS_ESP32=tbeam
+#BOARDS_ESP32=tbeam
 
 # FIXME note nrf52840dk build is for some reason only generating a BIN file but not a HEX file nrf52840dk-geeksville is fine
 BOARDS_NRF52="lora-relay-v1"
+
+NUM_JOBS=2
 
 OUTDIR=release/latest
 
@@ -49,7 +51,7 @@ function do_build() {
         basename=universal/firmware-$BOARD-$VERSION
     fi
 
-    pio run --jobs 4 --environment $BOARD # -v
+    pio run --jobs $NUM_JOBS --environment $BOARD # -v
     SRCELF=.pio/build/$BOARD/firmware.elf
     cp $SRCELF $OUTDIR/elfs/$basename.elf
 
@@ -87,8 +89,12 @@ platformio lib update
 do_boards "$BOARDS_ESP32" "false"
 do_boards "$BOARDS_NRF52" "true"
 
+echo "Building SPIFFS for ESP32 targets"
+pio run --environment tbeam -t buildfs
+cp .pio/build/tbeam/spiffs.bin $OUTDIR/bins/universal/spiffs-$VERSION.bin
+
 # keep the bins in archive also
-cp $OUTDIR/bins/firmware* $OUTDIR/elfs/firmware* $OUTDIR/bins/universal/firmware* $OUTDIR/elfs/universal/firmware* $ARCHIVEDIR
+cp $OUTDIR/bins/firmware* $OUTDIR/bins/universal/spiffs* $OUTDIR/elfs/firmware* $OUTDIR/bins/universal/firmware* $OUTDIR/elfs/universal/firmware* $ARCHIVEDIR
 
 echo Updating android bins $OUTDIR/forandroid
 rm -rf $OUTDIR/forandroid
@@ -109,6 +115,6 @@ XML
 
 echo Generating $ARCHIVEDIR/firmware-$VERSION.zip
 rm -f $ARCHIVEDIR/firmware-$VERSION.zip
-zip --junk-paths $ARCHIVEDIR/firmware-$VERSION.zip $OUTDIR/bins/firmware-*-$VERSION.* images/system-info.bin bin/device-install.sh bin/device-update.sh
+zip --junk-paths $ARCHIVEDIR/firmware-$VERSION.zip $ARCHIVEDIR/spiffs-$VERSION.bin $OUTDIR/bins/firmware-*-$VERSION.* images/system-info.bin bin/device-install.sh bin/device-update.sh
 
 echo BUILT ALL

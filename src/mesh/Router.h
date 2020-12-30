@@ -6,7 +6,6 @@
 #include "PointerQueue.h"
 #include "RadioInterface.h"
 #include "concurrency/OSThread.h"
-#include "mesh.pb.h"
 
 /**
  * A mesh aware router that supports multiple interfaces.

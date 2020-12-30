@@ -10,7 +10,7 @@ you'll automatically get our fixed libraries.
   IDF release/v3.3 46b12a560
   IDF release/v3.3 367c3c09c
   https://docs.espressif.com/projects/esp-idf/en/release-v3.3/get-started/linux-setup.html
-  kevinh@kevin-server:~/development/meshtastic/esp32-arduino-lib-builder\$ python /home/kevinh/development/meshtastic/esp32-arduino-lib-builder/esp-idf/components/esptool*py/esptool/esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 921600 --before default_reset --after hard_reset write_flash -z --flash_mode dout --flash_freq 40m --flash_size detect 0x1000 /home/kevinh/development/meshtastic/esp32-arduino-lib-builder/build/bootloader/bootloader.bin
+  kevinh@kevin-server:~/development/meshtastic/esp32-arduino-lib-builder\$ python /home/kevinh/development/meshtastic/
   cp -a out/tools/sdk/* components/arduino/tools/sdk
   cp -ar components/arduino/* ~/.platformio/packages/framework-arduinoespressif32
   
@@ -20,4 +20,10 @@ you'll automatically get our fixed libraries.
 
   cp -ar out/tools/sdk/* ~/.platformio/packages/framework-arduinoespressif32/tools/sdk
 
+```
+
+How to flash new bootloader
+
+```
+esp32-arduino-lib-builder/esp-idf/components/esptool*py/esptool/esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 921600 --before default_reset --after hard_reset write_flash -z --flash_mode dout --flash_freq 40m --flash_size detect 0x1000 /home/kevinh/development/meshtastic/esp32-arduino-lib-builder/build/bootloader/bootloader.bin
 ```

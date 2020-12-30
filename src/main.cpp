@@ -5,12 +5,14 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "UBloxGPS.h"
+#include "airtime.h"
 #include "configuration.h"
 #include "error.h"
 #include "power.h"
 // #include "rom/rtc.h"
 #include "DSRRouter.h"
 // #include "debug.h"
+#include "FSCommon.h"
 #include "RTC.h"
 #include "SPILock.h"
 #include "concurrency/OSThread.h"
@@ -91,6 +93,7 @@ void scanI2Cdevice(void)
             DEBUG_MSG("Unknow error at address 0x%x\n", addr);
         }
     }
+
     if (nDevices == 0)
         DEBUG_MSG("No I2C devices found\n");
     else
@@ -167,29 +170,35 @@ class ButtonThread : public OSThread
 #endif
 
   public:
+    static uint32_t longPressTime;
+
     // callback returns the period for the next callback invocation (or 0 if we should no longer be called)
     ButtonThread() : OSThread("Button")
     {
 #ifdef BUTTON_PIN
         userButton = OneButton(BUTTON_PIN, true, true);
 #ifdef INPUT_PULLUP_SENSE
-    // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
+        // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
         pinMode(BUTTON_PIN, INPUT_PULLUP_SENSE);
 #endif
         userButton.attachClick(userButtonPressed);
         userButton.attachDuringLongPress(userButtonPressedLong);
         userButton.attachDoubleClick(userButtonDoublePressed);
+        userButton.attachLongPressStart(userButtonPressedLongStart);
+        userButton.attachLongPressStop(userButtonPressedLongStop);
         wakeOnIrq(BUTTON_PIN, FALLING);
 #endif
 #ifdef BUTTON_PIN_ALT
         userButtonAlt = OneButton(BUTTON_PIN_ALT, true, true);
 #ifdef INPUT_PULLUP_SENSE
-    // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
+        // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
         pinMode(BUTTON_PIN_ALT, INPUT_PULLUP_SENSE);
-#endif        
+#endif
         userButtonAlt.attachClick(userButtonPressed);
         userButtonAlt.attachDuringLongPress(userButtonPressedLong);
         userButtonAlt.attachDoubleClick(userButtonDoublePressed);
+        userButtonAlt.attachLongPressStart(userButtonPressedLongStart);
+        userButtonAlt.attachLongPressStop(userButtonPressedLongStop);
         wakeOnIrq(BUTTON_PIN_ALT, FALLING);
 #endif
     }
@@ -209,7 +218,7 @@ class ButtonThread : public OSThread
         canSleep &= userButtonAlt.isIdle();
 #endif
         // if (!canSleep) DEBUG_MSG("Supressing sleep!\n");
-        //else DEBUG_MSG("sleep ok\n");
+        // else DEBUG_MSG("sleep ok\n");
 
         return 5;
     }
@@ -222,20 +231,45 @@ class ButtonThread : public OSThread
     }
     static void userButtonPressedLong()
     {
-        DEBUG_MSG("Long press!\n");
+        // DEBUG_MSG("Long press!\n");
         screen->adjustBrightness();
-    }
-    
-    static void userButtonDoublePressed()
-{
-#ifndef NO_ESP32
-    disablePin();
+
+        // If user button is held down for 10 seconds, shutdown the device.
+        if (millis() - longPressTime > 10 * 1000) {
+#ifdef TBEAM_V10
+            if (axp192_found == true) {
+                setLed(false);
+                power->shutdown();
+            }
 #endif
-}
+        } else {
+            // DEBUG_MSG("Long press %u\n", (millis() - longPressTime));
+        }
+    }
+
+    static void userButtonDoublePressed()
+    {
+#ifndef NO_ESP32
+        disablePin();
+#endif
+    }
+
+    static void userButtonPressedLongStart()
+    {
+        DEBUG_MSG("Long press start!\n");
+        longPressTime = millis();
+    }
+
+    static void userButtonPressedLongStop()
+    {
+        DEBUG_MSG("Long press stop!\n");
+        longPressTime = 0;
+    }
 };
 
 static Periodic *ledPeriodic;
 static OSThread *powerFSMthread, *buttonThread;
+uint32_t ButtonThread::longPressTime = 0;
 
 RadioInterface *rIf = NULL;
 
@@ -244,12 +278,6 @@ void setup()
 #ifdef SEGGER_STDOUT_CH
     SEGGER_RTT_ConfigUpBuffer(SEGGER_STDOUT_CH, NULL, NULL, 1024, SEGGER_RTT_MODE_NO_BLOCK_TRIM);
 #endif
-
-// Jm's TXRX Deduplexer
-//  if 0 - receive
-//     1 - transmit
-pinMode(RADIO_TXRX, OUTPUT);
-digitalWrite(RADIO_TXRX, 0);
 
 #ifdef USE_SEGGER
     SEGGER_RTT_ConfigUpBuffer(0, NULL, NULL, 0, SEGGER_RTT_MODE_NO_BLOCK_TRIM);
@@ -272,9 +300,27 @@ digitalWrite(RADIO_TXRX, 0);
     digitalWrite(RESET_OLED, 1);
 #endif
 
+    // If BUTTON_PIN is held down during the startup process,
+    //   force the device to go into a SoftAP mode.
+    bool forceSoftAP = 0;
+#ifdef BUTTON_PIN
+#ifndef NO_ESP32
+    pinMode(BUTTON_PIN, INPUT);
+
+    // BUTTON_PIN is pulled high by a 12k resistor.
+    if (!digitalRead(BUTTON_PIN)) {
+        forceSoftAP = 1;
+        DEBUG_MSG("-------------------- Setting forceSoftAP = 1\n");
+    }
+
+#endif
+#endif
+
     OSThread::setup();
 
     ledPeriodic = new Periodic("Blink", ledBlinker);
+
+    fsInit();
 
     router = new DSRRouter();
 
@@ -317,6 +363,10 @@ digitalWrite(RADIO_TXRX, 0);
 #ifdef NRF52_SERIES
     nrf52Setup();
 #endif
+
+    // We do this as early as possible because this loads preferences from flash
+    // but we need to do this after main cpu iniot (esp32setup), because we need the random seed set
+    nodeDB.init();
 
     // Currently only the tbeam has a PMU
     power = new Power();
@@ -375,6 +425,12 @@ digitalWrite(RADIO_TXRX, 0);
     nodeStatus->observe(&nodeDB.newStatus);
 
     service.init();
+
+    // Do this after service.init (because that clears error_code)
+#ifdef AXP192_SLAVE_ADDRESS
+    if(!axp192_found)
+        recordCriticalError(CriticalErrorCode_NoAXP192); // Record a hardware fault for missing hardware
+#endif    
 
     // Don't call screen setup until after nodedb is setup (because we need
     // the current region name)
@@ -439,10 +495,10 @@ digitalWrite(RADIO_TXRX, 0);
 #endif
 
     // Initialize Wifi
-    initWifi();
+    initWifi(forceSoftAP);
 
     if (!rIf)
-        recordCriticalError(ErrNoRadio);
+        recordCriticalError(CriticalErrorCode_NoRadio);
     else
         router->addInterface(rIf);
 
@@ -514,4 +570,7 @@ void loop()
     // We want to sleep as long as possible here - because it saves power
     mainDelay.delay(delayMsec);
     // if (didWake) DEBUG_MSG("wake!\n");
+
+    // Handles cleanup for the airtime calculator.
+    airtimeCalculator();
 }

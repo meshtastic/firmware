@@ -26,19 +26,29 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Screen.h"
-#include "configs.h"
 #include "configuration.h"
 #include "graphics/images.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "meshwifi/meshwifi.h"
+#include "plugins/TextMessagePlugin.h"
 #include "target_specific.h"
 #include "utils.h"
+#include "fonts.h"
 
 using namespace meshtastic; /** @todo remove */
 
 namespace graphics
 {
+
+// This means the *visible* area (sh1106 can address 132, but shows 128 for example)
+#define IDLE_FRAMERATE 1        // in fps
+#define COMPASS_DIAM 44
+
+// DEBUG
+#define NUM_EXTRA_FRAMES 3 // text message and debug frame
+// if defined a pixel will blink to show redraws
+// #define SHOW_REDRAWS
 
 // A text message frame + debug frame + all the node infos
 static FrameCallback normalFrames[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
@@ -150,6 +160,23 @@ static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, 
     strcat(buf, getDeviceName());
     display->drawString(64 + x, 48 + y, buf);
 }
+
+/// Draw the last text message we received
+static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    displayedNodeNum = 0; // Not currently showing a node pane
+
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_MEDIUM);
+
+    char tempBuf[24];
+    snprintf(tempBuf, sizeof(tempBuf), "Critical fault #%d", myNodeInfo.error_code);
+    display->drawString(0 + x, 0 + y, tempBuf);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    display->drawString(0 + x, FONT_HEIGHT_MEDIUM + y, "For help, please post on\nmeshtastic.discourse.group");
+}
+
 
 /// Draw the last text message we received
 static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -720,6 +747,7 @@ void Screen::setup()
     powerStatusObserver.observe(&powerStatus->onNewStatus);
     gpsStatusObserver.observe(&gpsStatus->onNewStatus);
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
+    textMessageObserver.observe(&textMessagePlugin);
 }
 
 void Screen::forceDisplay()
@@ -847,7 +875,11 @@ void Screen::setFrames()
 
     size_t numframes = 0;
 
-    // If we have a text message - show it first
+    // If we have a critical fault, show it first
+    if (myNodeInfo.error_code)
+        normalFrames[numframes++] = drawCriticalFaultFrame;
+
+    // If we have a text message - show it next
     if (devicestate.has_rx_text_message)
         normalFrames[numframes++] = drawTextMessageFrame;
 
@@ -892,9 +924,27 @@ void Screen::handleStartBluetoothPinScreen(uint32_t pin)
     setFastFramerate();
 }
 
+void Screen::blink() {
+    setFastFramerate();
+    uint8_t count = 10;
+    dispdev.setBrightness(254);
+    while(count>0) {
+        dispdev.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+        dispdev.display();
+        delay(50);
+        dispdev.clear();
+        dispdev.display();
+        delay(50);
+        count = count -1;
+    }
+     dispdev.setBrightness(brightness);
+}
+
 void Screen::handlePrint(const char *text)
 {
-    DEBUG_MSG("Screen: %s", text);
+    // the string passed into us probably has a newline, but that would confuse the logging system
+    // so strip it
+    DEBUG_MSG("Screen: %.*s\n", strlen(text) - 1, text);
     if (!useDisplay || !showingNormalScreen)
         return;
 
@@ -982,7 +1032,9 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
     // The coordinates define the left starting point of the text
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    if (radioConfig.preferences.wifi_ap_mode) {
+    if (isSoftAPForced()) {
+        display->drawString(x, y, String("WiFi: Software AP (Admin)"));
+    } else if (radioConfig.preferences.wifi_ap_mode) {
         display->drawString(x, y, String("WiFi: Software AP"));
     } else if (WiFi.status() != WL_CONNECTED) {
         display->drawString(x, y, String("WiFi: Not Connected"));
@@ -1005,13 +1057,15 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
     - WL_NO_SHIELD: assigned when no WiFi shield is present;
 
     */
-
-    if (WiFi.status() == WL_CONNECTED) {
-        if (radioConfig.preferences.wifi_ap_mode) {
+    if (WiFi.status() == WL_CONNECTED || isSoftAPForced() || radioConfig.preferences.wifi_ap_mode) {
+        if (radioConfig.preferences.wifi_ap_mode || isSoftAPForced()) {
             display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IP: " + String(WiFi.softAPIP().toString().c_str()));
         } else {
             display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IP: " + String(WiFi.localIP().toString().c_str()));
         }
+        display->drawString(x + SCREEN_WIDTH - display->getStringWidth("(" + String(WiFi.softAPgetStationNum()) + "/4)"),
+                            y + FONT_HEIGHT_SMALL * 1, "(" + String(WiFi.softAPgetStationNum()) + "/4)");
+
     } else if (WiFi.status() == WL_NO_SSID_AVAIL) {
         display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "SSID Not Found");
     } else if (WiFi.status() == WL_CONNECTION_LOST) {
@@ -1086,10 +1140,23 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         }
     }
 
-    if ((millis() / 10000) % 2) {
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
+    if (isSoftAPForced()) {
+        if ((millis() / 10000) % 2) {
+            display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: meshtasticAdmin");
+        } else {
+            display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "PWD: 12345678");
+        }
+
     } else {
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "PWD: " + String(wifiPsw));
+        if (radioConfig.preferences.wifi_ap_mode) {
+            if ((millis() / 10000) % 2) {
+                display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
+            } else {
+                display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "PWD: " + String(wifiPsw));
+            }
+        } else {
+            display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
+        }
     }
     display->drawString(x, y + FONT_HEIGHT_SMALL * 3, "http://meshtastic.local");
 
@@ -1183,14 +1250,23 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
     // DEBUG_MSG("Screen got status update %d\n", arg->getStatusType());
     switch (arg->getStatusType()) {
     case STATUS_TYPE_NODE:
-        if (showingNormalScreen && (nodeDB.updateTextMessage || nodeStatus->getLastNumTotal() != nodeStatus->getNumTotal())) {
+        if (showingNormalScreen && nodeStatus->getLastNumTotal() != nodeStatus->getNumTotal()) {
             setFrames(); // Regen the list of screens
         }
         nodeDB.updateGUI = false;
-        nodeDB.updateTextMessage = false;
         break;
     }
 
     return 0;
 }
+
+int Screen::handleTextMessage(const MeshPacket *arg)
+{
+    if (showingNormalScreen) {
+        setFrames(); // Regen the list of screens (will show new text message)
+    }
+
+    return 0;
+}
+
 } // namespace graphics

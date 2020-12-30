@@ -1,4 +1,6 @@
-# Device API
+# Bluetooth/serial/TCP protocol API
+
+(This document describes the protocol for external API clients using our devices.  If you are interested in running your own code on the device itself, see the [on-device](plugin-api.md) documentation instead)
 
 The Device API is design to have only a simple stream of ToRadio and FromRadio packets and all polymorphism comes from the flexible set of Google Protocol Buffers which are sent over the wire. We use protocol buffers extensively both for the bluetooth API and for packets inside the mesh or when providing packets to other applications on the phone.
 
@@ -111,6 +113,7 @@ Characteristics
 | e272ebac-d463-4b98-bc84-5cc1a39ee517 | write       | data, variable sized, recommended 512 bytes, write one for each block of file                                     |
 | 4826129c-c22a-43a3-b066-ce8f0d5bacc6 | write       | crc32, write last - writing this will complete the OTA operation, now you can read result                         |
 | 5e134862-7411-4424-ac4a-210937432c77 | read,notify | result code, readable but will notify when the OTA operation completes                                            |
+| 5e134862-7411-4424-ac4a-210937432c67 | write | sets the region for programming, currently only 0 (app) or 100 (spiffs) are defined, if not set app is assumed |
 | GATT_UUID_SW_VERSION_STR/0x2a28      | read        | We also implement these standard GATT entries because SW update probably needs them:                              |
 | GATT_UUID_MANU_NAME/0x2a29           | read        |                                                                                                                   |
 | GATT_UUID_HW_VERSION_STR/0x2a27      | read        |                                                                                                                   |

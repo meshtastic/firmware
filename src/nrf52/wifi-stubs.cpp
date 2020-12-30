@@ -1,7 +1,7 @@
 #include "meshwifi/meshhttp.h"
 #include "meshwifi/meshwifi.h"
 
-void initWifi() {}
+void initWifi(bool forceSoftAP) {}
 
 void deinitWifi() {}
 

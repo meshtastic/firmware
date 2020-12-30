@@ -93,19 +93,28 @@ MeshPacket *Router::allocForSending()
     p->to = NODENUM_BROADCAST;
     p->hop_limit = HOP_RELIABLE;
     p->id = generatePacketId();
-    p->rx_time = getValidTime(RTCQualityFromNet); // Just in case we process the packet locally - make sure it has a valid timestamp
+    p->rx_time =
+        getValidTime(RTCQualityFromNet); // Just in case we process the packet locally - make sure it has a valid timestamp
 
     return p;
 }
 
 ErrorCode Router::sendLocal(MeshPacket *p)
 {
+    // No need to deliver externally if the destination is the local node
     if (p->to == nodeDB.getNodeNum()) {
-        DEBUG_MSG("Enqueuing internal message for the receive queue\n");
+        printPacket("Enqueuing local", p);
         fromRadioQueue.enqueue(p);
         return ERRNO_OK;
-    } else
-        return send(p);
+    }
+
+    // If we are sending a broadcast, we also treat it as if we just received it ourself
+    // this allows local apps (and PCs) to see broadcasts sourced locally
+    if (p->to == NODENUM_BROADCAST) {
+        handleReceived(p);
+    }
+
+    return send(p);
 }
 
 /**

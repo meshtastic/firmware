@@ -134,6 +134,14 @@ bool Power::setup()
     return found;
 }
 
+void Power::shutdown()
+{
+#ifdef TBEAM_V10
+    DEBUG_MSG("Shutting down\n");
+    axp.shutdown();
+#endif
+}
+
 /// Reads power status to powerStatus singleton.
 //
 // TODO(girts): move this and other axp stuff to power.h/power.cpp.
@@ -260,7 +268,9 @@ bool Power::axp192Init()
             DEBUG_MSG("DCDC3: %s\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
             DEBUG_MSG("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
 
-            axp.setChargeControlCur(AXP1XX_CHARGE_CUR_1320MA); // actual limit (in HW) on the tbeam is 450mA
+            //axp.setChargeControlCur(AXP1XX_CHARGE_CUR_1320MA); // actual limit (in HW) on the tbeam is 450mA
+            axp.setChargeControlCur(AXP1XX_CHARGE_CUR_450MA); // There's no HW limit on the tbeam. Setting to 450mz to be a good neighbor on the usb bus.
+            
 #if 0
 
       // Not connected

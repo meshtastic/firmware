@@ -1,8 +1,11 @@
 # Build instructions
 
-This project uses the simple PlatformIO build system. PlatformIO is an extension to Microsoft VSCode.
+This project uses the simple PlatformIO build system. PlatformIO is an extension to Microsoft VSCode.  Workflows from building from the GUI or from the commandline are listed below.  
+
+If you encounter any problems, please post a question in [our forum](meshtastic.discourse.group).  And when you learn a fix, update these instructions for the next person (i.e. edit this file and send in a [pull-request](https://opensource.com/article/19/7/create-pull-request-github) which we will eagerly merge).
 
 ## GUI
+
 1. Purchase a suitable [radio](https://github.com/meshtastic/Meshtastic-device/wiki/Hardware-Information).
 2. Install [Python](https://www.python.org/downloads/).
 3. Install [Git](https://git-scm.com/downloads).
@@ -19,6 +22,7 @@ This project uses the simple PlatformIO build system. PlatformIO is an extension
 Note - To get a clean build you may have to delete the auto-generated file `./.vscode/c_cpp_properties.json`, close and re-open Visual Studio and WAIT until the file is auto-generated before compiling again.
 
 ## Command Line
+
 1. Purchase a suitable [radio](https://github.com/meshtastic/Meshtastic-device/wiki/Hardware-Information).
 2. Install [PlatformIO](https://platformio.org/platformio-ide)
 3. Download this git repo and cd into it:
