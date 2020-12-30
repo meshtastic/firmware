@@ -1,6 +1,7 @@
 #pragma once
 
-#include "mesh.pb.h"
+#include "mesh/generated/mesh.pb.h"
+#include "mesh/generated/deviceonly.pb.h"
 
 // this file defines constants which come from mesh.options
 

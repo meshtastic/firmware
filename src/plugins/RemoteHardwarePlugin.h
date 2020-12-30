@@ -1,6 +1,6 @@
 #pragma once
 #include "ProtobufPlugin.h"
-#include "remote_hardware.pb.h"
+#include "mesh/generated/remote_hardware.pb.h"
 #include "concurrency/OSThread.h"
 
 /**
