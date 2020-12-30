@@ -791,10 +791,12 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
             file.write(buf, readLength);
             fileLength += readLength;
 
+            DEBUG_MSG("readLength - %i", readLength);
+
             // Abort the transfer if there is less than 50k space left on the filesystem.
             if (SPIFFS.totalBytes() - SPIFFS.usedBytes() < 51200) {
                 file.close();
-                res->println("<p>Write aborted! File is won't fit!</p>");
+                res->println("<p>Write aborted! Reserving 50k on filesystem.</p>");
 
                 delete parser;
                 return;
