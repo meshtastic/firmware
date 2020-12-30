@@ -2,7 +2,6 @@
 
 #include "Observer.h"
 #include "mesh-pb-constants.h"
-#include "mesh.pb.h"
 #include <string>
 
 // Make sure that we never let our packets grow too large for one BLE packet

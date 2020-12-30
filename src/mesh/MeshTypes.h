@@ -3,7 +3,7 @@
 // low level types
 
 #include "MemoryPool.h"
-#include "mesh.pb.h"
+#include "mesh/mesh-pb-constants.h"
 #include <Arduino.h>
 
 typedef uint32_t NodeNum;

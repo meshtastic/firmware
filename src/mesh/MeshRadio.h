@@ -4,7 +4,6 @@
 #include "MeshTypes.h"
 #include "PointerQueue.h"
 #include "configuration.h"
-#include "mesh.pb.h"
 
 // Map from old region names to new region enums
 struct RegionInfo {
