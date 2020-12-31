@@ -8,7 +8,7 @@ echo "prebuilt binaries for your computer into nanopb-0.4.4"
 
 # the nanopb tool seems to require that the .options file be in the current directory!
 cd proto
-../nanopb-0.4.4/generator-bin/protoc --nanopb_out=-v:../src/mesh -I=../proto *.proto
+../nanopb-0.4.4/generator-bin/protoc --nanopb_out=-v:../src/mesh/generated -I=../proto *.proto
 
 echo "Regenerating protobuf documentation - if you see an error message"
 echo "you can ignore it unless doing a new protobuf release to github."
