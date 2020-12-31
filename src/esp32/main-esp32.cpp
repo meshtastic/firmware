@@ -49,7 +49,8 @@ void esp32Setup()
 
 // Since we are turning on watchdogs rather late in the release schedule, we really don't want to catch any
 // false positives.  The wait-to-sleep timeout for shutting down radios is 30 secs, so pick 45 for now.
-#define APP_WATCHDOG_SECS 45
+// #define APP_WATCHDOG_SECS 45
+#define APP_WATCHDOG_SECS 90
 
     res = esp_task_wdt_init(APP_WATCHDOG_SECS, true);
     assert(res == ESP_OK);
