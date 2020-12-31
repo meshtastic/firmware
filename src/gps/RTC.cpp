@@ -36,6 +36,7 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
 
     bool shouldSet;
     if (q > currentQuality) {
+        currentQuality = q;
         shouldSet = true;
         DEBUG_MSG("Upgrading time to RTC %ld secs (quality %d)\n", tv->tv_sec, q);
     } else if(q == RTCQualityGPS && (now - lastSetMsec) > (12 * 60 * 60 * 1000L)) {
