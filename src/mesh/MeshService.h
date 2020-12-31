@@ -10,7 +10,6 @@
 #include "MeshTypes.h"
 #include "Observer.h"
 #include "PointerQueue.h"
-#include "mesh.pb.h"
 
 /**
  * Top level app for this service.  keeps the mesh, the radio config and the queue of received packets.
