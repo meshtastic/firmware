@@ -315,7 +315,7 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
         display->drawFastImage(x + 24, y, 8, 8, imgSatellite);
 
         // Draw the number of satellites
-        sprintf(satsString, "%lu", gps->getNumSatellites());
+        sprintf(satsString, "%u", gps->getNumSatellites());
         display->drawString(x + 34, y - 2, satsString);
     }
 }
@@ -568,11 +568,11 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     uint32_t agoSecs = sinceLastSeen(node);
     static char lastStr[20];
     if (agoSecs < 120) // last 2 mins?
-        snprintf(lastStr, sizeof(lastStr), "%lu seconds ago", agoSecs);
+        snprintf(lastStr, sizeof(lastStr), "%u seconds ago", agoSecs);
     else if (agoSecs < 120 * 60) // last 2 hrs
-        snprintf(lastStr, sizeof(lastStr), "%lu minutes ago", agoSecs / 60);
+        snprintf(lastStr, sizeof(lastStr), "%u minutes ago", agoSecs / 60);
     else
-        snprintf(lastStr, sizeof(lastStr), "%lu hours ago", agoSecs / 60 / 60);
+        snprintf(lastStr, sizeof(lastStr), "%u hours ago", agoSecs / 60 / 60);
 
     static char distStr[20];
     strcpy(distStr, "? km"); // might not have location data
