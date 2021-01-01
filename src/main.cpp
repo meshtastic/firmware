@@ -389,6 +389,19 @@ void setup()
 
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 
+#ifdef GENIEBLOCKS
+    //gps setup
+    pinMode (GPS_RESET_N, OUTPUT);
+    pinMode(GPS_EXTINT, OUTPUT);
+    digitalWrite(GPS_RESET_N, HIGH);
+    digitalWrite(GPS_EXTINT, LOW);
+    //battery setup
+    // If we want to read battery level, we need to set BATTERY_EN_PIN pin to low.
+    // ToDo: For low power consumption after read battery level, set that pin to high.
+    pinMode (BATTERY_EN_PIN, OUTPUT);
+    digitalWrite(BATTERY_EN_PIN, LOW);
+#endif
+
     // If we don't have bidirectional comms, we can't even try talking to UBLOX
     UBloxGPS *ublox = NULL;
 #ifdef GPS_TX_PIN
