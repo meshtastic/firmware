@@ -584,6 +584,4 @@ void loop()
     mainDelay.delay(delayMsec);
     // if (didWake) DEBUG_MSG("wake!\n");
 
-    // Handles cleanup for the airtime calculator.
-    airtimeCalculator();
 }
