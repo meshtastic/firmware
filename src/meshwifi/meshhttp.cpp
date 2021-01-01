@@ -808,10 +808,10 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
                 return;
             }
 
-            //if (readLength) {
-                file.write(buf, readLength);
-                fileLength += readLength;
-                DEBUG_MSG("File Length %i\n", fileLength);
+            // if (readLength) {
+            file.write(buf, readLength);
+            fileLength += readLength;
+            DEBUG_MSG("File Length %i\n", fileLength);
             //}
         }
         // enableLoopWDT();
@@ -988,7 +988,8 @@ void handleRoot(HTTPRequest *req, HTTPResponse *res)
         res->printf("<p></p>\n");
         res->printf("<p>You have gotten this error because the filesystem for the web server has not been loaded.</p>\n");
         res->printf("<p>Please review the 'Common Problems' section of the <a "
-                    "href=https://github.com/meshtastic/Meshtastic-device/wiki/How-to-use-the-Meshtastic-Web-Interface-over-WiFi>web interface</a> documentation.</p>\n");
+                    "href=https://github.com/meshtastic/Meshtastic-device/wiki/"
+                    "How-to-use-the-Meshtastic-Web-Interface-over-WiFi>web interface</a> documentation.</p>\n");
         return;
     }
 
@@ -1211,4 +1212,14 @@ void replaceAll(std::string &str, const std::string &from, const std::string &to
         str.replace(start_pos, from.length(), to);
         start_pos += to.length(); // In case 'to' contains 'from', like replacing 'x' with 'yx'
     }
+}
+
+HttpServer::HttpServer() : concurrency::OSThread("HttpServer") {
+    DEBUG_MSG("22**********************************\n");
+}
+
+int32_t HttpServer::runOnce()
+{
+    DEBUG_MSG("11**********************************\n");
+    return 200; // Poll our GPIOs every 200ms (FIXME, make adjustable via protobuf arg)
 }
