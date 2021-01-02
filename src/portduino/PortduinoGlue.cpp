@@ -35,9 +35,6 @@ void cpuDeepSleep(uint64_t msecs) {
     notImplemented("cpuDeepSleep");
 }
 
-// FIXME - implement real crypto for linux
-CryptoEngine *crypto = new CryptoEngine();
-
 void updateBatteryLevel(uint8_t level) NOT_IMPLEMENTED("updateBatteryLevel");
 
 /** Dear pinetab hardware geeks!
