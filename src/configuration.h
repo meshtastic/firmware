@@ -365,7 +365,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define USE_RF95
 #define LORA_DIO0 26 // a No connect on the SX1262 module
-#define LORA_RESET 23
+#define LORA_RESET RADIOLIB_NC
 #define LORA_DIO1 33 // Not really used
 #define LORA_DIO2 32 // Not really used
 
