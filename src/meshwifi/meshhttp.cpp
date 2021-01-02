@@ -49,6 +49,7 @@ HTTPServer *insecureServer;
 // Our API to handle messages to and from the radio.
 HttpAPI webAPI;
 
+
 // Declare some handler functions for the various URLs on the server
 void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res);
 void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res);
@@ -1212,14 +1213,4 @@ void replaceAll(std::string &str, const std::string &from, const std::string &to
         str.replace(start_pos, from.length(), to);
         start_pos += to.length(); // In case 'to' contains 'from', like replacing 'x' with 'yx'
     }
-}
-
-HttpServer::HttpServer() : concurrency::OSThread("HttpServer") {
-    DEBUG_MSG("22**********************************\n");
-}
-
-int32_t HttpServer::runOnce()
-{
-    DEBUG_MSG("11**********************************\n");
-    return 200; // Poll our GPIOs every 200ms (FIXME, make adjustable via protobuf arg)
 }

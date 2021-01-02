@@ -17,27 +17,27 @@ uint32_t secSinceBoot = 0;
 
 // Don't read out of this directly. Use the helper functions.
 struct airtimeStruct {
-    uint16_t periodTX[periodsToLog];
-    uint16_t periodRX[periodsToLog];
-    uint16_t periodRX_ALL[periodsToLog];
+    uint16_t periodTX[periodsToLog];     // AirTime transmitted
+    uint16_t periodRX[periodsToLog];     // AirTime received and repeated (Only valid mesh packets)
+    uint16_t periodRX_ALL[periodsToLog]; // AirTime received regardless of valid mesh packet. Could include noise.
     uint8_t lastPeriodIndex;
 } airtimes;
 
 void AirTime::logAirtime(reportTypes reportType, uint32_t airtime_ms)
 {
-    DEBUG_MSG("Packet - logAirtime()\n");
+    //    DEBUG_MSG("Packet - logAirtime()\n");
 
     if (reportType == TX_LOG) {
-        DEBUG_MSG("Packet transmitted = %u\n", (uint32_t)round(airtime_ms / 1000));
+        DEBUG_MSG("AirTime - Packet transmitted : %us %ums\n", (uint32_t)round((float)airtime_ms / (float)1000), airtime_ms);
         airtimes.periodTX[0] = airtimes.periodTX[0] + round(airtime_ms / 1000);
     } else if (reportType == RX_LOG) {
-        DEBUG_MSG("Packet received = %u\n", (uint32_t)round(airtime_ms / 1000));
+        DEBUG_MSG("AirTime - Packet received : %us %ums\n", (uint32_t)round((float)airtime_ms / (float)1000), airtime_ms);
         airtimes.periodRX[0] = airtimes.periodRX[0] + round(airtime_ms / 1000);
     } else if (reportType == RX_ALL_LOG) {
-        DEBUG_MSG("Packet received (noise?) = %u\n", (uint32_t)round(airtime_ms / 1000));
+        DEBUG_MSG("AirTime - Packet received (noise?) : %us %ums\n", (uint32_t)round((float)airtime_ms / (float)1000), airtime_ms);
         airtimes.periodRX_ALL[0] = airtimes.periodRX_ALL[0] + round(airtime_ms / 1000);
     } else {
-        // Unknown report type
+        DEBUG_MSG("AirTime - Unknown report time. This should never happen!!\n");
     }
 }
 
@@ -67,7 +67,6 @@ void airtimeRotatePeriod()
 
 uint16_t *airtimeReport(reportTypes reportType)
 {
-    // currentHourIndexReset();
 
     if (reportType == TX_LOG) {
         return airtimes.periodTX;
@@ -98,10 +97,17 @@ AirTime::AirTime() : concurrency::OSThread("AirTime") {}
 
 int32_t AirTime::runOnce()
 {
-    DEBUG_MSG("AirTime::runOnce()\n");
+    // DEBUG_MSG("AirTime::runOnce()\n");
 
     airtimeRotatePeriod();
     secSinceBoot++;
 
-    return 1000;
+    /*
+        This actually doesn't need to be run once per second but we currently use it for the
+        secSinceBoot counter.
+
+        If we have a better counter of how long the device has been online (and not millis())
+        then we can change this to something less frequent. Maybe once ever 5 seconds?
+    */
+    return (1000 * 1);
 }

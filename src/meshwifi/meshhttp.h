@@ -25,6 +25,8 @@ void handleJSONChatHistoryDummy();
 
 void replaceAll(std::string &str, const std::string &from, const std::string &to);
 
+
+// Interface to the PhoneAPI to access the protobufs with messages
 class HttpAPI : public PhoneAPI
 {
 
@@ -37,19 +39,3 @@ class HttpAPI : public PhoneAPI
   protected:
     // Nothing here yet
 };
-
-/**
- * A plugin that provides easy low-level remote access to device hardware.
- */
-class HttpServer : public concurrency::OSThread
-{
-  public:
-    // Nothing here
-    // RemoteHardwarePlugin();
-    HttpServer();
-
-  protected:
-    virtual int32_t runOnce();
-};
-
-// extern HttpServer httpServer;
