@@ -45,5 +45,7 @@ void updateBatteryLevel(uint8_t level) NOT_IMPLEMENTED("updateBatteryLevel");
  */
 void  portduinoSetup() {
   printf("Setting up Meshtastic on Porduino...\n");
+  gpioBind((new SimGPIOPin(LORA_DIO0, "LORA_DIO0")));
+  gpioBind((new SimGPIOPin(LORA_RESET, "LORA_RESET")));
   gpioBind((new SimGPIOPin(RF95_NSS, "RF95_NSS"))->setSilent());
 }
