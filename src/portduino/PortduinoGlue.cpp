@@ -1,8 +1,11 @@
 #include "CryptoEngine.h"
 #include "target_specific.h"
 #include "PortduinoGPIO.h"
-#include <Utility.h>
+#include "mesh/RF95Interface.h"
 #include "sleep.h"
+
+#include <Utility.h>
+#include <assert.h>
 
 // FIXME - move getMacAddr/setBluetoothEnable into a HALPlatform class
 
@@ -36,9 +39,6 @@ void cpuDeepSleep(uint64_t msecs) {
 CryptoEngine *crypto = new CryptoEngine();
 
 void updateBatteryLevel(uint8_t level) NOT_IMPLEMENTED("updateBatteryLevel");
-
-#include <assert.h>
-#include "mesh/RF95Interface.h"
 
 /** Dear pinetab hardware geeks!
  * 
