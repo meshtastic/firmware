@@ -21,11 +21,17 @@ void PhoneAPI::init()
     observe(&service.fromNumChanged);
 }
 
+PhoneAPI::~PhoneAPI() {
+    close();
+}
+
 void PhoneAPI::close() {
     unobserve();
     state = STATE_SEND_NOTHING;
+    bool oldConnected = isConnected;
     isConnected = false;
-    onConnectionChanged(isConnected);
+    if(oldConnected != isConnected)
+        onConnectionChanged(isConnected);
 }
 
 void PhoneAPI::checkConnectionTimeout()
