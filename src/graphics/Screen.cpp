@@ -27,6 +27,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "NodeDB.h"
 #include "Screen.h"
 #include "configuration.h"
+#include "fonts.h"
 #include "graphics/images.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
@@ -34,7 +35,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "plugins/TextMessagePlugin.h"
 #include "target_specific.h"
 #include "utils.h"
-#include "fonts.h"
 
 using namespace meshtastic; /** @todo remove */
 
@@ -42,7 +42,7 @@ namespace graphics
 {
 
 // This means the *visible* area (sh1106 can address 132, but shows 128 for example)
-#define IDLE_FRAMERATE 1        // in fps
+#define IDLE_FRAMERATE 1 // in fps
 #define COMPASS_DIAM 44
 
 // DEBUG
@@ -176,7 +176,6 @@ static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->setFont(FONT_SMALL);
     display->drawString(0 + x, FONT_HEIGHT_MEDIUM + y, "For help, please post on\nmeshtastic.discourse.group");
 }
-
 
 /// Draw the last text message we received
 static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -316,7 +315,7 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
         display->drawFastImage(x + 24, y, 8, 8, imgSatellite);
 
         // Draw the number of satellites
-        sprintf(satsString, "%lu", gps->getNumSatellites());
+        sprintf(satsString, "%u", gps->getNumSatellites());
         display->drawString(x + 34, y - 2, satsString);
     }
 }
@@ -569,11 +568,11 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     uint32_t agoSecs = sinceLastSeen(node);
     static char lastStr[20];
     if (agoSecs < 120) // last 2 mins?
-        snprintf(lastStr, sizeof(lastStr), "%lu seconds ago", agoSecs);
+        snprintf(lastStr, sizeof(lastStr), "%u seconds ago", agoSecs);
     else if (agoSecs < 120 * 60) // last 2 hrs
-        snprintf(lastStr, sizeof(lastStr), "%lu minutes ago", agoSecs / 60);
+        snprintf(lastStr, sizeof(lastStr), "%u minutes ago", agoSecs / 60);
     else
-        snprintf(lastStr, sizeof(lastStr), "%lu hours ago", agoSecs / 60 / 60);
+        snprintf(lastStr, sizeof(lastStr), "%u hours ago", agoSecs / 60 / 60);
 
     static char distStr[20];
     strcpy(distStr, "? km"); // might not have location data
@@ -924,20 +923,21 @@ void Screen::handleStartBluetoothPinScreen(uint32_t pin)
     setFastFramerate();
 }
 
-void Screen::blink() {
+void Screen::blink()
+{
     setFastFramerate();
     uint8_t count = 10;
     dispdev.setBrightness(254);
-    while(count>0) {
+    while (count > 0) {
         dispdev.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
         dispdev.display();
         delay(50);
         dispdev.clear();
         dispdev.display();
         delay(50);
-        count = count -1;
+        count = count - 1;
     }
-     dispdev.setBrightness(brightness);
+    dispdev.setBrightness(brightness);
 }
 
 void Screen::handlePrint(const char *text)
@@ -1060,11 +1060,13 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
     if (WiFi.status() == WL_CONNECTED || isSoftAPForced() || radioConfig.preferences.wifi_ap_mode) {
         if (radioConfig.preferences.wifi_ap_mode || isSoftAPForced()) {
             display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IP: " + String(WiFi.softAPIP().toString().c_str()));
+
+            // Number of connections to the AP. Default mmax for the esp32 is 4
+            display->drawString(x + SCREEN_WIDTH - display->getStringWidth("(" + String(WiFi.softAPgetStationNum()) + "/4)"),
+                                y + FONT_HEIGHT_SMALL * 1, "(" + String(WiFi.softAPgetStationNum()) + "/4)");
         } else {
             display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IP: " + String(WiFi.localIP().toString().c_str()));
         }
-        display->drawString(x + SCREEN_WIDTH - display->getStringWidth("(" + String(WiFi.softAPgetStationNum()) + "/4)"),
-                            y + FONT_HEIGHT_SMALL * 1, "(" + String(WiFi.softAPgetStationNum()) + "/4)");
 
     } else if (WiFi.status() == WL_NO_SSID_AVAIL) {
         display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "SSID Not Found");
