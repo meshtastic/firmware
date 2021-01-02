@@ -21,6 +21,7 @@
 #include "main.h"
 #include "meshwifi/meshhttp.h"
 #include "meshwifi/meshwifi.h"
+#include "meshwifi/WebServerThread.h"
 #include "sleep.h"
 #include "target_specific.h"
 #include <OneButton.h>
