@@ -1,5 +1,6 @@
 #include "CryptoEngine.h"
 #include "target_specific.h"
+#include "PortduinoGPIO.h"
 #include <Utility.h>
 #include "sleep.h"
 
@@ -35,3 +36,14 @@ void cpuDeepSleep(uint64_t msecs) {
 CryptoEngine *crypto = new CryptoEngine();
 
 void updateBatteryLevel(uint8_t level) NOT_IMPLEMENTED("updateBatteryLevel");
+
+
+
+/** apps run under portduino can optionally define a portduinoSetup() to 
+ * use portduino specific init code (such as gpioBind) to setup portduino on their host machine,
+ * before running 'arduino' code.
+ */
+void  portduinoSetup() {
+  printf("Setting up Meshtastic on Porduino...\n");
+  gpioBind((new SimGPIOPin(RF95_NSS, "RF95_NSS"))->setSilent());
+}
