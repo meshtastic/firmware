@@ -55,12 +55,15 @@ class PhoneAPI
   public:
     PhoneAPI();
 
+    /// Destructor - calls close()
+    virtual ~PhoneAPI();
+
     /// Do late init that can't happen at constructor time
     virtual void init();
 
     // Call this when the client drops the connection, resets the state to STATE_SEND_NOTHING
-    // Unregisters our observer
-    void close();
+    // Unregisters our observer.  A closed connection **can** be reopened by calling init again.
+    virtual void close();
 
     /**
      * Handle a ToRadio protobuf
