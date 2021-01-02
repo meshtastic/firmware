@@ -239,6 +239,7 @@ int32_t GPS::runOnce()
         }
 
         // We've been awake too long - force sleep
+        now = millis();
         auto wakeTime = getWakeTime();
         bool tooLong = wakeTime != UINT32_MAX && (now - lastWakeStartMsec) > wakeTime;
 
