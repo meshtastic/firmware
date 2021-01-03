@@ -1,6 +1,6 @@
 #include "meshwifi.h"
 #include "NodeDB.h"
-#include "WiFiServerAPI.h"
+#include "mesh/wifi/WiFiServerAPI.h"
 #include "configuration.h"
 #include "main.h"
 #include "meshwifi/meshhttp.h"
