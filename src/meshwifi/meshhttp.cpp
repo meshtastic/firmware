@@ -559,9 +559,7 @@ void handleStaticBrowse(HTTPRequest *req, HTTPResponse *res)
     }
 
     res->println("<h2>Upload new file</h2>");
-    res->println("<p><b>*** This interface is experimental ***</b></p>");
-    res->println("<p>This form allows you to upload files. Keep your filenames very short and files small. Big filenames and big "
-                 "files (>200k) are a known problem.</p>");
+    res->println("<p>This form allows you to upload files. Keep your filenames small and files under 200k.</p>");
     res->println("<form method=\"POST\" action=\"/upload\" enctype=\"multipart/form-data\">");
     res->println("file: <input type=\"file\" name=\"file\"><br>");
     res->println("<input type=\"submit\" value=\"Upload\">");
