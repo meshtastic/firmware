@@ -79,6 +79,9 @@ class MeshService
     /// cache
     void sendToMesh(MeshPacket *p);
 
+    /// Pull the latest power and time info into my nodeinfo
+    NodeInfo *refreshMyNodeInfo();
+
   private:
 
     /// Called when our gps position has changed - updates nodedb and sends Location message out into the mesh

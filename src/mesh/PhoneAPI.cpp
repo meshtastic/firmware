@@ -134,6 +134,8 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         fromRadioScratch.which_variant = FromRadio_my_info_tag;
         fromRadioScratch.variant.my_info = myNodeInfo;
         state = STATE_SEND_RADIO;
+
+        service.refreshMyNodeInfo();  // Update my NodeInfo because the client will be asking for it soon.
         break;
 
     case STATE_SEND_RADIO:
