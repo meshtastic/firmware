@@ -35,9 +35,6 @@ void cpuDeepSleep(uint64_t msecs) {
     notImplemented("cpuDeepSleep");
 }
 
-// FIXME - implement real crypto for linux
-CryptoEngine *crypto = new CryptoEngine();
-
 void updateBatteryLevel(uint8_t level) NOT_IMPLEMENTED("updateBatteryLevel");
 
 /** Dear pinetab hardware geeks!
@@ -93,5 +90,5 @@ void  portduinoSetup() {
   printf("Setting up Meshtastic on Porduino...\n");
   gpioBind(new R595PolledIrqPin());
   // gpioBind((new SimGPIOPin(LORA_RESET, "LORA_RESET")));
-  gpioBind((new SimGPIOPin(RF95_NSS, "RF95_NSS"))->setSilent());
+  // gpioBind((new SimGPIOPin(RF95_NSS, "RF95_NSS"))->setSilent());
 }
