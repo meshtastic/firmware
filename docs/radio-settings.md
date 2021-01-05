@@ -2,7 +2,7 @@
 
 We use the same channel maps as LoRaWAN (though this is not LoRaWAN).
 
-![freq table](images/LoRa-Frequency-Bands.jpg)
+![freq table](/images/LoRa-Frequency-Bands.jpg)
 
 See [this site](https://www.rfwireless-world.com/Tutorials/LoRa-channels-list.html) for more information.
 
