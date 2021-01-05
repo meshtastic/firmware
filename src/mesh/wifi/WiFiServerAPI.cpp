@@ -5,7 +5,7 @@
 
 WiFiServerAPI::WiFiServerAPI(WiFiClient &_client) : StreamAPI(&client), client(_client)
 {
-    DEBUG_MSG("Incoming connection from %s\n", client.remoteIP().toString().c_str());
+    DEBUG_MSG("Incoming wifi connection\n");
 }
 
 WiFiServerAPI::~WiFiServerAPI()
