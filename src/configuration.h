@@ -394,7 +394,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define USE_RF95
 #define LORA_DIO0 26 // a No connect on the SX1262 module
-#define LORA_RESET 23
+#define LORA_RESET RADIOLIB_NC
 #define LORA_DIO1 33 // Not really used
 #define LORA_DIO2 32 // Not really used
 
@@ -402,7 +402,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define RF95_SCK 5
 #define RF95_MISO 19
 #define RF95_MOSI 27
-#define RF95_NSS 18
+#define RF95_NSS RADIOLIB_NC // the ch341f spi controller does CS for us
 
 #endif
 

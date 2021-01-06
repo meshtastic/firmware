@@ -12,7 +12,7 @@
 #define POWER_DEFAULT 17 // How much power to use if the user hasn't set a power level
 
 RF95Interface::RF95Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, SPIClass &spi)
-    : RadioLibInterface(cs, irq, rst, 0, spi)
+    : RadioLibInterface(cs, irq, rst, RADIOLIB_NC, spi)
 {
     // FIXME - we assume devices never get destroyed
 }

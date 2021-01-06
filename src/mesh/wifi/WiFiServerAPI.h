@@ -18,7 +18,11 @@ class WiFiServerAPI : public StreamAPI
 
     virtual ~WiFiServerAPI();
 
-    virtual void loop(); // Check for dropped client connections
+    /// @return true if we want to keep running, or false if we are ready to be destroyed
+    virtual bool loop(); // Check for dropped client connections
+
+    /// override close to also shutdown the TCP link
+    virtual void close();
 
   protected:
     /// Hookable to find out when connection changes
