@@ -14,6 +14,9 @@ class RF95Interface : public RadioLibInterface
   public:
     RF95Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, SPIClass &spi);
 
+    /// Some boards (Pinetab Lora module) have broken IRQ wires, so we need to poll via i2c registers
+    bool isIRQPending() { return lora->getPendingIRQ(); }
+
     /// Initialise the Driver transport hardware and software.
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
