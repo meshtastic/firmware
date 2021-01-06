@@ -97,7 +97,7 @@ AirTime::AirTime() : concurrency::OSThread("AirTime") {}
 
 int32_t AirTime::runOnce()
 {
-    // DEBUG_MSG("AirTime::runOnce()\n");
+    //DEBUG_MSG("AirTime::runOnce()\n");
 
     airtimeRotatePeriod();
     secSinceBoot++;

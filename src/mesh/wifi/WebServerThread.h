@@ -1,10 +1,9 @@
 #pragma once
 
 #include "concurrency/OSThread.h"
-#include "concurrency/Periodic.h"
+#include "configuration.h"
 #include <Arduino.h>
 #include <functional>
-#include "configuration.h"
 
 
 class WebServerThread : private concurrency::OSThread
@@ -12,7 +11,6 @@ class WebServerThread : private concurrency::OSThread
 
   public:
     WebServerThread();
-
 
   protected:
 

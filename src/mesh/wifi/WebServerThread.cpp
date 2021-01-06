@@ -1,7 +1,6 @@
-#include "meshwifi/WebServerThread.h"
+#include "mesh/wifi/WebServerThread.h"
 #include <Arduino.h>
 
-// Thread for the HTTP Server
 WebServerThread webServerThread;
 
 WebServerThread::WebServerThread() : concurrency::OSThread("WebServerThread") {}
@@ -12,3 +11,4 @@ int32_t WebServerThread::runOnce()
 
     return (1000 * 1);
 }
+
