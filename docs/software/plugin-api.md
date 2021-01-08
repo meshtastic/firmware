@@ -46,6 +46,7 @@ The easiest way to get started is:
 
 * [Build and install](build-instructions.md) the standard codebase from github.
 * Copy [src/plugins/ReplyPlugin.*](/src/plugins/ReplyPlugin.cpp) into src/plugins/YourPlugin.*.  Then change the port number from REPLY_APP to PRIVATE_APP.
+* Edit plugins/Plugins.cpp:setupPlugins() to add a call to create an instance of your plugin (see comment at head of that function)
 * Rebuild with your new messaging goodness and install on the device
 * Use the [meshtastic commandline tool](https://github.com/meshtastic/Meshtastic-python) to send a packet to your board "meshtastic --dest 1234 --ping"
 

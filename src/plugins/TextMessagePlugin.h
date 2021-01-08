@@ -22,4 +22,4 @@ class TextMessagePlugin : public SinglePortPlugin, public Observable<const MeshP
     virtual bool handleReceived(const MeshPacket &mp);
 };
 
-extern TextMessagePlugin textMessagePlugin;
+extern TextMessagePlugin *textMessagePlugin;
