@@ -5,7 +5,7 @@
 #include "Router.h"
 #include "configuration.h"
 
-PositionPlugin positionPlugin;
+PositionPlugin *positionPlugin;
 
 bool PositionPlugin::handleReceivedProtobuf(const MeshPacket &mp, const Position &p)
 {
