@@ -5,9 +5,6 @@
 
 #include <assert.h>
 
-// Create an a static instance of our plugin - this registers with the plugin system
-ReplyPlugin replyPlugin;
-
 MeshPacket *ReplyPlugin::allocReply()
 {
     assert(currentRequest); // should always be !NULL

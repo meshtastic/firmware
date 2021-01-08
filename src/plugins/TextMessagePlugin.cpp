@@ -3,7 +3,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 
-TextMessagePlugin textMessagePlugin;
+TextMessagePlugin *textMessagePlugin;
 
 bool TextMessagePlugin::handleReceived(const MeshPacket &mp)
 {
