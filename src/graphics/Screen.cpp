@@ -746,7 +746,7 @@ void Screen::setup()
     powerStatusObserver.observe(&powerStatus->onNewStatus);
     gpsStatusObserver.observe(&gpsStatus->onNewStatus);
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
-    textMessageObserver.observe(&textMessagePlugin);
+    textMessageObserver.observe(textMessagePlugin);
 }
 
 void Screen::forceDisplay()

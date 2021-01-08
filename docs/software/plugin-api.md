@@ -46,6 +46,7 @@ The easiest way to get started is:
 
 * [Build and install](build-instructions.md) the standard codebase from github.
 * Copy [src/plugins/ReplyPlugin.*](/src/plugins/ReplyPlugin.cpp) into src/plugins/YourPlugin.*.  Then change the port number from *PortNum_REPLY_APP* to *PortNum_PRIVATE_APP*.
+* Edit plugins/Plugins.cpp:setupPlugins() to add a call to create an instance of your plugin (see comment at head of that function)
 * Rebuild with your new messaging goodness and install on the device
 * Use the [meshtastic commandline tool](https://github.com/meshtastic/Meshtastic-python) to send a packet to your board, for example "*meshtastic --dest 1234 --sendping*", where *1234* is another mesh node to send the ping to.
 
@@ -53,6 +54,10 @@ The easiest way to get started is:
 
 It is very common that you would like your plugin to be invoked periodically.
 We use a crude/basic cooperative threading system to allow this on any of our supported platforms.  Simply inherit from OSThread and implement runOnce().  See the OSThread [documentation](/src/concurrency/OSThread.h) for more details.  For an example consumer of this API see RemoteHardwarePlugin::runOnce.
+
+## Sending messages
+
+If you would like to proactively send messages (rather than just responding to them), just call service.sendToMesh().  For an example of this see [NodeInfoPlugin::sendOurNodeInfo(...)](/src/plugins/NodeInfoPlugin.cpp).
 
 ## Picking a port number
 
