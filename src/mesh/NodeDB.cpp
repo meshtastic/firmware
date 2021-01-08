@@ -5,6 +5,7 @@
 #include "FS.h"
 
 #include "CryptoEngine.h"
+#include "FSCommon.h"
 #include "GPS.h"
 #include "MeshRadio.h"
 #include "NodeDB.h"
@@ -16,7 +17,6 @@
 #include "error.h"
 #include "mesh-pb-constants.h"
 #include "meshwifi/meshwifi.h"
-#include "FSCommon.h"
 #include <pb_decode.h>
 #include <pb_encode.h>
 
@@ -28,7 +28,7 @@ MyNodeInfo &myNodeInfo = devicestate.my_node;
 RadioConfig &radioConfig = devicestate.radio;
 ChannelSettings &channelSettings = radioConfig.channel_settings;
 
-/** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings 
+/** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings
  * might have changed is incremented.  Allows others to detect they might now be on a new channel.
  */
 uint32_t radioGeneration;
@@ -40,8 +40,6 @@ DeviceState versions used to be defined in the .proto file but really only this 
 
 #define DEVICESTATE_CUR_VER 11
 #define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
-
-
 
 // FIXME - move this somewhere else
 extern void getMacAddr(uint8_t *dmac);
@@ -90,7 +88,7 @@ const char *getChannelName()
     static char buf[32];
 
     char suffix;
-    if(channelSettings.psk.size != 1) {
+    if (channelSettings.psk.size != 1) {
         // We have a standard PSK, so generate a letter based hash.
         uint8_t code = 0;
         for (int i = 0; i < activePSKSize; i++)
@@ -140,32 +138,40 @@ bool NodeDB::resetRadioConfig()
     }
 
     // Convert the old string "Default" to our new short representation
-    if(strcmp(channelSettings.name, "Default") == 0)
+    if (strcmp(channelSettings.name, "Default") == 0)
         *channelSettings.name = '\0';
 
     // Convert the short "" representation for Default into a usable string
     channelName = channelSettings.name;
-    if(!*channelName) { // emptystring
+    if (!*channelName) { // emptystring
         // Per mesh.proto spec, if bandwidth is specified we must ignore modemConfig enum, we assume that in that case
         // the app fucked up and forgot to set channelSettings.name
-        channelName = "Unset";
-        if(channelSettings.bandwidth == 0) switch(channelSettings.modem_config) {
+
+        if (channelSettings.bandwidth != 0)
+            channelName = "Unset";
+        else
+            switch (channelSettings.modem_config) {
             case ChannelSettings_ModemConfig_Bw125Cr45Sf128:
-                channelName = "Medium"; break;
+                channelName = "Medium";
+                break;
             case ChannelSettings_ModemConfig_Bw500Cr45Sf128:
-                channelName = "ShortFast"; break;
+                channelName = "ShortFast";
+                break;
             case ChannelSettings_ModemConfig_Bw31_25Cr48Sf512:
-                channelName = "LongAlt"; break;
+                channelName = "LongAlt";
+                break;
             case ChannelSettings_ModemConfig_Bw125Cr48Sf4096:
-                channelName = "LongSlow"; break;
+                channelName = "LongSlow";
+                break;
             default:
-                channelName = "Invalid"; break;
-        }
+                channelName = "Invalid";
+                break;
+            }
     }
 
     // Convert any old usage of the defaultpsk into our new short representation.
-    if(channelSettings.psk.size == sizeof(defaultpsk) && 
-            memcmp(channelSettings.psk.bytes, defaultpsk, sizeof(defaultpsk)) == 0) {
+    if (channelSettings.psk.size == sizeof(defaultpsk) &&
+        memcmp(channelSettings.psk.bytes, defaultpsk, sizeof(defaultpsk)) == 0) {
         *channelSettings.psk.bytes = 1;
         channelSettings.psk.size = 1;
     }
@@ -173,10 +179,10 @@ bool NodeDB::resetRadioConfig()
     // Convert the short single byte variants of psk into variant that can be used more generally
     memcpy(activePSK, channelSettings.psk.bytes, channelSettings.psk.size);
     activePSKSize = channelSettings.psk.size;
-    if(activePSKSize == 1) {
+    if (activePSKSize == 1) {
         uint8_t pskIndex = activePSK[0];
         DEBUG_MSG("Expanding short PSK #%d\n", pskIndex);
-        if(pskIndex == 0)
+        if (pskIndex == 0)
             activePSKSize = 0; // Turn off encryption
         else {
             memcpy(activePSK, defaultpsk, sizeof(defaultpsk));
@@ -271,12 +277,13 @@ void NodeDB::init()
     myNodeInfo.node_num_bits = sizeof(NodeNum) * 8;
     myNodeInfo.packet_id_bits = sizeof(PacketId) * 8;
 
-    myNodeInfo.error_code = CriticalErrorCode_None; // For the error code, only show values from this boot (discard value from flash)
+    myNodeInfo.error_code =
+        CriticalErrorCode_None; // For the error code, only show values from this boot (discard value from flash)
     myNodeInfo.error_address = 0;
 
     // likewise - we always want the app requirements to come from the running appload
     myNodeInfo.min_app_version = 20120; // format is Mmmss (where M is 1+the numeric major number. i.e. 20120 means 1.1.20
- 
+
     // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we won't
     // keep using that nodenum forever. Crummy guess at our nodenum (but we will check against the nodedb to avoid conflicts)
     pickNewNodeNum();
