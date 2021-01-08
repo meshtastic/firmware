@@ -39,9 +39,20 @@ cd Meshtastic-device
 
 ## Decoding stack traces
 
+### Option 1
+
 If you get a crash, you can decode the addresses from the `Backtrace:` line:
 
 1. Save the `Backtrace: 0x....` line to a file, e.g., `backtrace.txt`.
 2. Run `bin/exception_decoder.py backtrace.txt` (this uses symbols from the
    last `firmware.elf`, so you must be running the same binary that's still in
    your `.pio/build` directory).
+
+### Option 2
+
+You can run the exception decoder to monitor the serial output and decode backtraces in real time.
+
+1. From within PlatformIO, open a new terminal.
+2. At the the terminal, enter:
+   `pio device monitor --port /dev/cu.SLAB_USBtoUART -f esp32_exception_decoder`
+   Replace the value of port with the location of your serial port.
