@@ -494,6 +494,9 @@ void handleStaticBrowse(HTTPRequest *req, HTTPResponse *res)
     std::string paramValDelete;
     std::string paramValEdit;
 
+    DEBUG_MSG("Static Browse - Disabling keep-alive\n");
+    res->setHeader("Connection", "close");
+
     // Set a default content type
     res->setHeader("Content-Type", "text/html");
 
@@ -700,6 +703,11 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
 
 void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
 {
+
+    DEBUG_MSG("Form Upload - Disabling keep-alive\n");
+    res->setHeader("Connection", "close");
+
+    DEBUG_MSG("Form Upload - Set frequency to 240mhz\n");
     // The upload process is very CPU intensive. Let's speed things up a bit.
     setCpuFrequencyMhz(240);
 
@@ -708,6 +716,7 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
     // Then we select the body parser based on the encoding.
     // Actually we do this only for documentary purposes, we know the form is going
     // to be multipart/form-data.
+    DEBUG_MSG("Form Upload - Creating body parser reference\n");
     HTTPBodyParser *parser;
     std::string contentType = req->getHeader("Content-Type");
 
@@ -723,6 +732,7 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
 
     // Now, we can decide based on the content type:
     if (contentType == "multipart/form-data") {
+        DEBUG_MSG("Form Upload - multipart/form-data\n");
         parser = new HTTPMultipartBodyParser(req);
     } else {
         Serial.printf("Unknown POST Content-Type: %s\n", contentType.c_str());
@@ -757,21 +767,21 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
 
         // Double check that it is what we expect
         if (name != "file") {
-            DEBUG_MSG("Skipping unexpected field");
+            DEBUG_MSG("Skipping unexpected field\n");
             res->println("<p>No file found.</p>");
             return;
         }
 
         // Double check that it is what we expect
         if (filename == "") {
-            DEBUG_MSG("Skipping unexpected field");
+            DEBUG_MSG("Skipping unexpected field\n");
             res->println("<p>No file found.</p>");
             return;
         }
 
         // SPIFFS limits the total lenth of a path + file to 31 characters.
         if (filename.length() + 8 > 31) {
-            DEBUG_MSG("Uploaded filename too long!");
+            DEBUG_MSG("Uploaded filename too long!\n");
             res->println("<p>Uploaded filename too long! Limit of 23 characters.</p>");
             delete parser;
             return;
