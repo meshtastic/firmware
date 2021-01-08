@@ -55,6 +55,10 @@ The easiest way to get started is:
 It is very common that you would like your plugin to be invoked periodically.
 We use a crude/basic cooperative threading system to allow this on any of our supported platforms.  Simply inherit from OSThread and implement runOnce().  See the OSThread [documentation](/src/concurrency/OSThread.h) for more details.  For an example consumer of this API see RemoteHardwarePlugin::runOnce.
 
+## Sending messages
+
+If you would like to proactively send messages (rather than just responding to them), just call service.sendToMesh().  For an example of this see [NodeInfoPlugin::sendOurNodeInfo(...)](/src/plugins/NodeInfoPlugin.cpp).
+
 ## Picking a port number
 
 For any new 'apps' that run on the device or via sister apps on phones/PCs they should pick and use a unique 'portnum' for their application.
