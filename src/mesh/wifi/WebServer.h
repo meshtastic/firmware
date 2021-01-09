@@ -12,18 +12,11 @@ void handleNotFound();
 
 void handleWebResponse();
 
-void handleJSONChatHistory();
 
-void notifyWebUI();
+//void handleHotspot();
 
-void handleHotspot();
-
-void handleStyleCSS();
-void handleRoot();
-void handleScriptsScriptJS();
-void handleJSONChatHistoryDummy();
-
-void replaceAll(std::string &str, const std::string &from, const std::string &to);
+//void handleStyleCSS();
+//void handleRoot();
 
 
 // Interface to the PhoneAPI to access the protobufs with messages
@@ -39,3 +32,16 @@ class HttpAPI : public PhoneAPI
   protected:
     // Nothing here yet
 };
+
+class WebServerThread : private concurrency::OSThread
+{
+
+  public:
+    WebServerThread();
+
+  protected:
+
+    virtual int32_t runOnce();
+};
+
+extern WebServerThread *webServerThread;

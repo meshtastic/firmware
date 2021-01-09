@@ -1,5 +1,5 @@
-#include "meshwifi/meshhttp.h"
-#include "meshwifi/meshwifi.h"
+#include "mesh/wifi/WebServer.h"
+#include "mesh/wifi/WiFiAPClient.h"
 
 void initWifi(bool forceSoftAP) {}
 
