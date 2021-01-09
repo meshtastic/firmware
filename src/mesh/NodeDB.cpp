@@ -16,7 +16,7 @@
 #include "configuration.h"
 #include "error.h"
 #include "mesh-pb-constants.h"
-#include "meshwifi/meshwifi.h"
+#include "mesh/wifi/WiFiAPClient.h"
 #include <pb_decode.h>
 #include <pb_encode.h>
 
