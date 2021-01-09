@@ -30,4 +30,4 @@ class PositionPlugin : public ProtobufPlugin<Position>
     virtual MeshPacket *allocReply();
 };
 
-extern PositionPlugin positionPlugin;
+extern PositionPlugin *positionPlugin;

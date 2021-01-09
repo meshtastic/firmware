@@ -29,4 +29,4 @@ class NodeInfoPlugin : public ProtobufPlugin<User>
     virtual MeshPacket *allocReply();
 };
 
-extern NodeInfoPlugin nodeInfoPlugin;
+extern NodeInfoPlugin *nodeInfoPlugin;
