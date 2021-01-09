@@ -1,12 +1,12 @@
-#include "meshwifi/meshhttp.h"
+#include "mesh/wifi/WebServer.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "airtime.h"
-#include "configuration.h"
 #include "esp_task_wdt.h"
 #include "main.h"
-#include "meshhttpStatic.h"
-#include "meshwifi/meshwifi.h"
+#include "mesh/wifi/ContentHelper.h"
+#include "mesh/wifi/ContentStatic.h"
+#include "mesh/wifi/WiFiAPClient.h"
 #include "sleep.h"
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>
@@ -14,6 +14,7 @@
 #include <SPIFFS.h>
 #include <WebServer.h>
 #include <WiFi.h>
+
 
 // Persistant Data Storage
 #include <Preferences.h>
@@ -196,6 +197,19 @@ void createSSLCert()
     DEBUG_MSG("SSL Cert Ready!\n");
 }
 
+WebServerThread *webServerThread;
+
+WebServerThread::WebServerThread() : concurrency::OSThread("WebServerThread") {}
+
+int32_t WebServerThread::runOnce()
+{
+    // DEBUG_MSG("WebServerThread::runOnce()\n");
+    handleWebResponse();
+
+    // Loop every 5ms.
+    return (5);
+}
+
 void initWebServer()
 {
     DEBUG_MSG("Initializing Web Server ...\n");
@@ -241,6 +255,7 @@ void initWebServer()
     ResourceNode *nodeAPIv1ToRadioOptions = new ResourceNode("/api/v1/toradio", "OPTIONS", &handleAPIv1ToRadio);
     ResourceNode *nodeAPIv1ToRadio = new ResourceNode("/api/v1/toradio", "PUT", &handleAPIv1ToRadio);
     ResourceNode *nodeAPIv1FromRadio = new ResourceNode("/api/v1/fromradio", "GET", &handleAPIv1FromRadio);
+
     ResourceNode *nodeHotspot = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
     ResourceNode *nodeFavicon = new ResourceNode("/favicon.ico", "GET", &handleFavicon);
     ResourceNode *nodeRoot = new ResourceNode("/", "GET", &handleRoot);
@@ -338,6 +353,97 @@ void middlewareSpeedUp160(HTTPRequest *req, HTTPResponse *res, std::function<voi
         setCpuFrequencyMhz(160);
     }
     timeSpeedUp = millis();
+}
+
+void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
+{
+
+    DEBUG_MSG("+++++++++++++++ webAPI handleAPIv1FromRadio\n");
+
+    /*
+        For documentation, see:
+            https://github.com/meshtastic/Meshtastic-device/wiki/HTTP-REST-API-discussion
+            https://github.com/meshtastic/Meshtastic-device/blob/master/docs/software/device-api.md
+
+        Example:
+            http://10.10.30.198/api/v1/fromradio
+    */
+
+    // Get access to the parameters
+    ResourceParameters *params = req->getParams();
+
+    // std::string paramAll = "all";
+    std::string valueAll;
+
+    // Status code is 200 OK by default.
+    res->setHeader("Content-Type", "application/x-protobuf");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "PUT, GET");
+    res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/Meshtastic-protobufs/master/mesh.proto");
+
+    uint8_t txBuf[MAX_STREAM_BUF_SIZE];
+    uint32_t len = 1;
+
+    if (params->getQueryParameter("all", valueAll)) {
+
+        // If all is ture, return all the buffers we have available
+        //   to us at this point in time.
+        if (valueAll == "true") {
+            while (len) {
+                len = webAPI.getFromRadio(txBuf);
+                res->write(txBuf, len);
+            }
+
+            // Otherwise, just return one protobuf
+        } else {
+            len = webAPI.getFromRadio(txBuf);
+            res->write(txBuf, len);
+        }
+
+        // the param "all" was not spcified. Return just one protobuf
+    } else {
+        len = webAPI.getFromRadio(txBuf);
+        res->write(txBuf, len);
+    }
+
+    DEBUG_MSG("--------------- webAPI handleAPIv1FromRadio, len %d\n", len);
+}
+
+void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
+{
+    DEBUG_MSG("+++++++++++++++ webAPI handleAPIv1ToRadio\n");
+
+    /*
+        For documentation, see:
+            https://github.com/meshtastic/Meshtastic-device/wiki/HTTP-REST-API-discussion
+            https://github.com/meshtastic/Meshtastic-device/blob/master/docs/software/device-api.md
+
+        Example:
+            http://10.10.30.198/api/v1/toradio
+    */
+
+    // Status code is 200 OK by default.
+
+    res->setHeader("Content-Type", "application/x-protobuf");
+    res->setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "PUT, OPTIONS");
+    res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/Meshtastic-protobufs/master/mesh.proto");
+
+    if (req->getMethod() == "OPTIONS") {
+        res->setStatusCode(204); // Success with no content
+        res->print("");
+        return;
+    }
+
+    byte buffer[MAX_TO_FROM_RADIO_SIZE];
+    size_t s = req->readBytes(buffer, MAX_TO_FROM_RADIO_SIZE);
+
+    DEBUG_MSG("Received %d bytes from PUT request\n", s);
+    webAPI.handleToRadio(buffer, s);
+
+    res->write(buffer, s);
+    DEBUG_MSG("--------------- webAPI handleAPIv1ToRadio\n");
 }
 
 void handleStaticPost(HTTPRequest *req, HTTPResponse *res)
@@ -816,10 +922,10 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
                 return;
             }
 
-            //if (readLength) {
-                file.write(buf, readLength);
-                fileLength += readLength;
-                DEBUG_MSG("File Length %i\n", fileLength);
+            // if (readLength) {
+            file.write(buf, readLength);
+            fileLength += readLength;
+            DEBUG_MSG("File Length %i\n", fileLength);
             //}
         }
         // enableLoopWDT();
@@ -876,97 +982,6 @@ void handleHotspot(HTTPRequest *req, HTTPResponse *res)
     res->println("<meta http-equiv=\"refresh\" content=\"0;url=/\" />\n");
 }
 
-void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
-{
-
-    DEBUG_MSG("+++++++++++++++ webAPI handleAPIv1FromRadio\n");
-
-    /*
-        For documentation, see:
-            https://github.com/meshtastic/Meshtastic-device/wiki/HTTP-REST-API-discussion
-            https://github.com/meshtastic/Meshtastic-device/blob/master/docs/software/device-api.md
-
-        Example:
-            http://10.10.30.198/api/v1/fromradio
-    */
-
-    // Get access to the parameters
-    ResourceParameters *params = req->getParams();
-
-    // std::string paramAll = "all";
-    std::string valueAll;
-
-    // Status code is 200 OK by default.
-    res->setHeader("Content-Type", "application/x-protobuf");
-    res->setHeader("Access-Control-Allow-Origin", "*");
-    res->setHeader("Access-Control-Allow-Methods", "PUT, GET");
-    res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/Meshtastic-protobufs/master/mesh.proto");
-
-    uint8_t txBuf[MAX_STREAM_BUF_SIZE];
-    uint32_t len = 1;
-
-    if (params->getQueryParameter("all", valueAll)) {
-
-        // If all is ture, return all the buffers we have available
-        //   to us at this point in time.
-        if (valueAll == "true") {
-            while (len) {
-                len = webAPI.getFromRadio(txBuf);
-                res->write(txBuf, len);
-            }
-
-            // Otherwise, just return one protobuf
-        } else {
-            len = webAPI.getFromRadio(txBuf);
-            res->write(txBuf, len);
-        }
-
-        // the param "all" was not spcified. Return just one protobuf
-    } else {
-        len = webAPI.getFromRadio(txBuf);
-        res->write(txBuf, len);
-    }
-
-    DEBUG_MSG("--------------- webAPI handleAPIv1FromRadio, len %d\n", len);
-}
-
-void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
-{
-    DEBUG_MSG("+++++++++++++++ webAPI handleAPIv1ToRadio\n");
-
-    /*
-        For documentation, see:
-            https://github.com/meshtastic/Meshtastic-device/wiki/HTTP-REST-API-discussion
-            https://github.com/meshtastic/Meshtastic-device/blob/master/docs/software/device-api.md
-
-        Example:
-            http://10.10.30.198/api/v1/toradio
-    */
-
-    // Status code is 200 OK by default.
-
-    res->setHeader("Content-Type", "application/x-protobuf");
-    res->setHeader("Access-Control-Allow-Headers", "Content-Type");
-    res->setHeader("Access-Control-Allow-Origin", "*");
-    res->setHeader("Access-Control-Allow-Methods", "PUT, OPTIONS");
-    res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/Meshtastic-protobufs/master/mesh.proto");
-
-    if (req->getMethod() == "OPTIONS") {
-        res->setStatusCode(204); // Success with no content
-        res->print("");
-        return;
-    }
-
-    byte buffer[MAX_TO_FROM_RADIO_SIZE];
-    size_t s = req->readBytes(buffer, MAX_TO_FROM_RADIO_SIZE);
-
-    DEBUG_MSG("Received %d bytes from PUT request\n", s);
-    webAPI.handleToRadio(buffer, s);
-
-    res->write(buffer, s);
-    DEBUG_MSG("--------------- webAPI handleAPIv1ToRadio\n");
-}
-
 /*
     To convert text to c strings:
 
@@ -996,7 +1011,8 @@ void handleRoot(HTTPRequest *req, HTTPResponse *res)
         res->printf("<p></p>\n");
         res->printf("<p>You have gotten this error because the filesystem for the web server has not been loaded.</p>\n");
         res->printf("<p>Please review the 'Common Problems' section of the <a "
-                    "href=https://github.com/meshtastic/Meshtastic-device/wiki/How-to-use-the-Meshtastic-Web-Interface-over-WiFi>web interface</a> documentation.</p>\n");
+                    "href=https://github.com/meshtastic/Meshtastic-device/wiki/"
+                    "How-to-use-the-Meshtastic-Web-Interface-over-WiFi>web interface</a> documentation.</p>\n");
         return;
     }
 
@@ -1210,13 +1226,3 @@ void handleFavicon(HTTPRequest *req, HTTPResponse *res)
     res->write(FAVICON_DATA, FAVICON_LENGTH);
 }
 
-void replaceAll(std::string &str, const std::string &from, const std::string &to)
-{
-    if (from.empty())
-        return;
-    size_t start_pos = 0;
-    while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
-        str.replace(start_pos, from.length(), to);
-        start_pos += to.length(); // In case 'to' contains 'from', like replacing 'x' with 'yx'
-    }
-}
