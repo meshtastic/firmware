@@ -2,7 +2,6 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "airtime.h"
-#include "esp_task_wdt.h"
 #include "main.h"
 #include "mesh/wifi/ContentHelper.h"
 #include "mesh/wifi/ContentStatic.h"
@@ -15,6 +14,9 @@
 #include <WebServer.h>
 #include <WiFi.h>
 
+#ifndef NO_ESP32
+#include "esp_task_wdt.h"
+#endif
 
 // Persistant Data Storage
 #include <Preferences.h>
@@ -1225,4 +1227,3 @@ void handleFavicon(HTTPRequest *req, HTTPResponse *res)
     // Write data from header file
     res->write(FAVICON_DATA, FAVICON_LENGTH);
 }
-
