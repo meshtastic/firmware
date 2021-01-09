@@ -517,6 +517,10 @@ void setup()
     // Initialize Wifi
     initWifi(forceSoftAP);
 
+    // Start web server thread.
+    //webServerThread = new WebServerThread();
+
+
     if (!rIf)
         recordCriticalError(CriticalErrorCode_NoRadio);
     else
@@ -577,7 +581,7 @@ void loop()
 #endif
 
     // TODO: This should go into a thread handled by FreeRTOS.
-    handleWebResponse();
+    //handleWebResponse();
 
     service.loop();
 
