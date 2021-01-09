@@ -516,8 +516,10 @@ void setup()
     // Initialize Wifi
     initWifi(forceSoftAP);
 
+#ifndef NO_ESP32
     // Start web server thread.
     webServerThread = new WebServerThread();
+#endif
 
     // Start airtime logger thread.
     airTime = new AirTime();
