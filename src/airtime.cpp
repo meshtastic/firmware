@@ -3,6 +3,8 @@
 
 #define periodsToLog 48
 
+AirTime *airTime;
+
 // A reminder that there are 3600 seconds in an hour so I don't have
 // to keep googling it.
 //   This can be changed to a smaller number to speed up testing.
@@ -11,25 +13,31 @@ uint32_t secondsPerPeriod = 3600;
 uint32_t lastMillis = 0;
 uint32_t secSinceBoot = 0;
 
+// AirTime at;
+
 // Don't read out of this directly. Use the helper functions.
 struct airtimeStruct {
-    uint16_t periodTX[periodsToLog];
-    uint16_t periodRX[periodsToLog];
-    uint16_t periodRX_ALL[periodsToLog];
+    uint16_t periodTX[periodsToLog];     // AirTime transmitted
+    uint16_t periodRX[periodsToLog];     // AirTime received and repeated (Only valid mesh packets)
+    uint16_t periodRX_ALL[periodsToLog]; // AirTime received regardless of valid mesh packet. Could include noise.
     uint8_t lastPeriodIndex;
 } airtimes;
 
-void logAirtime(reportTypes reportType, uint32_t airtime_ms)
+void AirTime::logAirtime(reportTypes reportType, uint32_t airtime_ms)
 {
+    //    DEBUG_MSG("Packet - logAirtime()\n");
 
     if (reportType == TX_LOG) {
+        DEBUG_MSG("AirTime - Packet transmitted : %us %ums\n", (uint32_t)round((float)airtime_ms / (float)1000), airtime_ms);
         airtimes.periodTX[0] = airtimes.periodTX[0] + round(airtime_ms / 1000);
     } else if (reportType == RX_LOG) {
+        DEBUG_MSG("AirTime - Packet received : %us %ums\n", (uint32_t)round((float)airtime_ms / (float)1000), airtime_ms);
         airtimes.periodRX[0] = airtimes.periodRX[0] + round(airtime_ms / 1000);
     } else if (reportType == RX_ALL_LOG) {
+        DEBUG_MSG("AirTime - Packet received (noise?) : %us %ums\n", (uint32_t)round((float)airtime_ms / (float)1000), airtime_ms);
         airtimes.periodRX_ALL[0] = airtimes.periodRX_ALL[0] + round(airtime_ms / 1000);
     } else {
-        // Unknown report type
+        DEBUG_MSG("AirTime - Unknown report time. This should never happen!!\n");
     }
 }
 
@@ -38,29 +46,27 @@ uint8_t currentPeriodIndex()
     return ((getSecondsSinceBoot() / secondsPerPeriod) % periodsToLog);
 }
 
-void airtimeCalculator()
+void airtimeRotatePeriod()
 {
-    if (millis() - lastMillis > 1000) {
-        lastMillis = millis();
-        secSinceBoot++;
-        if (airtimes.lastPeriodIndex != currentPeriodIndex()) {
-            for (int i = periodsToLog - 2; i >= 0; --i) {
-                airtimes.periodTX[i + 1] = airtimes.periodTX[i];
-                airtimes.periodRX[i + 1] = airtimes.periodRX[i];
-                airtimes.periodRX_ALL[i + 1] = airtimes.periodRX_ALL[i];
-            }
-            airtimes.periodTX[0] = 0;
-            airtimes.periodRX[0] = 0;
-            airtimes.periodRX_ALL[0] = 0;
 
-            airtimes.lastPeriodIndex = currentPeriodIndex();
+    if (airtimes.lastPeriodIndex != currentPeriodIndex()) {
+        DEBUG_MSG("Rotating airtimes to a new period = %u\n", currentPeriodIndex());
+
+        for (int i = periodsToLog - 2; i >= 0; --i) {
+            airtimes.periodTX[i + 1] = airtimes.periodTX[i];
+            airtimes.periodRX[i + 1] = airtimes.periodRX[i];
+            airtimes.periodRX_ALL[i + 1] = airtimes.periodRX_ALL[i];
         }
+        airtimes.periodTX[0] = 0;
+        airtimes.periodRX[0] = 0;
+        airtimes.periodRX_ALL[0] = 0;
+
+        airtimes.lastPeriodIndex = currentPeriodIndex();
     }
 }
 
 uint16_t *airtimeReport(reportTypes reportType)
 {
-    // currentHourIndexReset();
 
     if (reportType == TX_LOG) {
         return airtimes.periodTX;
@@ -85,4 +91,23 @@ uint32_t getSecondsPerPeriod()
 uint32_t getSecondsSinceBoot()
 {
     return secSinceBoot;
+}
+
+AirTime::AirTime() : concurrency::OSThread("AirTime") {}
+
+int32_t AirTime::runOnce()
+{
+    //DEBUG_MSG("AirTime::runOnce()\n");
+
+    airtimeRotatePeriod();
+    secSinceBoot++;
+
+    /*
+        This actually doesn't need to be run once per second but we currently use it for the
+        secSinceBoot counter.
+
+        If we have a better counter of how long the device has been online (and not millis())
+        then we can change this to something less frequent. Maybe once ever 5 seconds?
+    */
+    return (1000 * 1);
 }

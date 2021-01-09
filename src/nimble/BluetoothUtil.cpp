@@ -7,7 +7,7 @@
 #include "esp_bt.h"
 #include "host/util/util.h"
 #include "main.h"
-#include "meshwifi/meshwifi.h"
+#include "mesh/wifi/WiFiAPClient.h"
 #include "nimble/NimbleDefs.h"
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
