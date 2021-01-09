@@ -60,7 +60,8 @@ static int32_t sendOwnerCb()
     currentGeneration = radioGeneration;
 
     DEBUG_MSG("Sending our nodeinfo to mesh (wantReplies=%d)\n", requestReplies);
-    nodeInfoPlugin.sendOurNodeInfo(NODENUM_BROADCAST, requestReplies); // Send our info (don't request replies)
+    assert(nodeInfoPlugin);
+    nodeInfoPlugin->sendOurNodeInfo(NODENUM_BROADCAST, requestReplies); // Send our info (don't request replies)
 
     return getPref_send_owner_interval() * getPref_position_broadcast_secs() * 1000;
 }
@@ -134,7 +135,8 @@ bool MeshService::reloadConfig()
 /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
 void MeshService::reloadOwner()
 {
-    nodeInfoPlugin.sendOurNodeInfo();
+    assert(nodeInfoPlugin);
+    nodeInfoPlugin->sendOurNodeInfo();
     nodeDB.saveToDisk();
 }
 
@@ -193,17 +195,40 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
     assert(node);
 
     DEBUG_MSG("Sending network ping to 0x%x, with position=%d, wantReplies=%d\n", dest, node->has_position, wantReplies);
+    assert(positionPlugin && nodeInfoPlugin);
     if (node->has_position)
-        positionPlugin.sendOurPosition(dest, wantReplies);
+        positionPlugin->sendOurPosition(dest, wantReplies);
     else
-        nodeInfoPlugin.sendOurNodeInfo(dest, wantReplies);
+        nodeInfoPlugin->sendOurNodeInfo(dest, wantReplies);
+}
+
+
+NodeInfo *MeshService::refreshMyNodeInfo() {
+    NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
+    assert(node);
+
+    // We might not have a position yet for our local node, in that case, at least try to send the time
+    if(!node->has_position) {
+        memset(&node->position, 0, sizeof(node->position));
+        node->has_position = true;
+    }
+    
+    Position &position = node->position;
+
+    // Update our local node info with our position (even if we don't decide to update anyone else)
+    position.time = getValidTime(RTCQualityGPS); // This nodedb timestamp might be stale, so update it if our clock is valid.
+
+    position.battery_level = powerStatus->getBatteryChargePercent();
+    updateBatteryLevel(position.battery_level);
+
+    return node;
 }
 
 int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
 {
     // Update our local node info with our position (even if we don't decide to update anyone else)
-
-    Position pos = Position_init_default;
+    NodeInfo *node = refreshMyNodeInfo();
+    Position pos = node->position;
 
     if (gps->hasLock()) {
         if (gps->altitude != 0)
@@ -214,20 +239,15 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
     else {
         // The GPS has lost lock, if we are fixed position we should just keep using
         // the old position
-        if(radioConfig.preferences.fixed_position) {
-            NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
-            assert(node);
-            assert(node->has_position);
-            pos = node->position;
+        if(!radioConfig.preferences.fixed_position) {
             DEBUG_MSG("WARNING: Using fixed position\n");
+        } else {
+            // throw away old position
+            pos.latitude_i = 0;
+            pos.longitude_i = 0;
+            pos.altitude = 0;
         }
     }
-
-    pos.time = getValidTime(RTCQualityGPS);
-
-    // Include our current battery voltage in our position announcement
-    pos.battery_level = powerStatus->getBatteryChargePercent();
-    updateBatteryLevel(pos.battery_level);
 
     DEBUG_MSG("got gps notify time=%u, lat=%d, bat=%d\n", pos.latitude_i, pos.time, pos.battery_level);
 
@@ -247,7 +267,8 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
         currentGeneration = radioGeneration;
 
         DEBUG_MSG("Sending position to mesh (wantReplies=%d)\n", requestReplies);
-        positionPlugin.sendOurPosition(NODENUM_BROADCAST, requestReplies);
+        assert(positionPlugin);
+        positionPlugin->sendOurPosition(NODENUM_BROADCAST, requestReplies);
     }
 
     return 0;

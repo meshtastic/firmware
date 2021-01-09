@@ -6,8 +6,6 @@
 #include "configuration.h"
 #include "main.h"
 
-RemoteHardwarePlugin remoteHardwarePlugin;
-
 #define NUM_GPIOS 64
 
 // Because (FIXME) we currently don't tell API clients status on sent messages

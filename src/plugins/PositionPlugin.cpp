@@ -5,7 +5,7 @@
 #include "Router.h"
 #include "configuration.h"
 
-PositionPlugin positionPlugin;
+PositionPlugin *positionPlugin;
 
 bool PositionPlugin::handleReceivedProtobuf(const MeshPacket &mp, const Position &p)
 {
@@ -29,21 +29,10 @@ bool PositionPlugin::handleReceivedProtobuf(const MeshPacket &mp, const Position
 
 MeshPacket *PositionPlugin::allocReply()
 {
-    NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
-    assert(node);
-
-    // We might not have a position yet for our local node, in that case, at least try to send the time
-    if(!node->has_position) {
-        memset(&node->position, 0, sizeof(node->position));
-        node->has_position = true;
-    }
+    NodeInfo *node = service.refreshMyNodeInfo(); // should guarantee there is now a position
+    assert(node->has_position);
     
-    Position &position = node->position;
-
-    // Update our local node info with our position (even if we don't decide to update anyone else)
-    position.time = getValidTime(RTCQualityGPS); // This nodedb timestamp might be stale, so update it if our clock is valid.
-
-    return allocDataProtobuf(position);
+    return allocDataProtobuf(node->position);
 }
 
 void PositionPlugin::sendOurPosition(NodeNum dest, bool wantReplies)
