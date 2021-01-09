@@ -60,7 +60,8 @@ static int32_t sendOwnerCb()
     currentGeneration = radioGeneration;
 
     DEBUG_MSG("Sending our nodeinfo to mesh (wantReplies=%d)\n", requestReplies);
-    nodeInfoPlugin.sendOurNodeInfo(NODENUM_BROADCAST, requestReplies); // Send our info (don't request replies)
+    assert(nodeInfoPlugin);
+    nodeInfoPlugin->sendOurNodeInfo(NODENUM_BROADCAST, requestReplies); // Send our info (don't request replies)
 
     return getPref_send_owner_interval() * getPref_position_broadcast_secs() * 1000;
 }
@@ -134,7 +135,8 @@ bool MeshService::reloadConfig()
 /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
 void MeshService::reloadOwner()
 {
-    nodeInfoPlugin.sendOurNodeInfo();
+    assert(nodeInfoPlugin);
+    nodeInfoPlugin->sendOurNodeInfo();
     nodeDB.saveToDisk();
 }
 
@@ -193,10 +195,11 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
     assert(node);
 
     DEBUG_MSG("Sending network ping to 0x%x, with position=%d, wantReplies=%d\n", dest, node->has_position, wantReplies);
+    assert(positionPlugin && nodeInfoPlugin);
     if (node->has_position)
-        positionPlugin.sendOurPosition(dest, wantReplies);
+        positionPlugin->sendOurPosition(dest, wantReplies);
     else
-        nodeInfoPlugin.sendOurNodeInfo(dest, wantReplies);
+        nodeInfoPlugin->sendOurNodeInfo(dest, wantReplies);
 }
 
 
@@ -264,7 +267,8 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
         currentGeneration = radioGeneration;
 
         DEBUG_MSG("Sending position to mesh (wantReplies=%d)\n", requestReplies);
-        positionPlugin.sendOurPosition(NODENUM_BROADCAST, requestReplies);
+        assert(positionPlugin);
+        positionPlugin->sendOurPosition(NODENUM_BROADCAST, requestReplies);
     }
 
     return 0;

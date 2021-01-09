@@ -6,7 +6,7 @@
 #include "configuration.h"
 #include "main.h"
 
-NodeInfoPlugin nodeInfoPlugin;
+NodeInfoPlugin *nodeInfoPlugin;
 
 bool NodeInfoPlugin::handleReceivedProtobuf(const MeshPacket &mp, const User &p)
 {

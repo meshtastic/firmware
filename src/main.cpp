@@ -22,6 +22,7 @@
 #include "meshwifi/meshhttp.h"
 #include "meshwifi/meshwifi.h"
 #include "sleep.h"
+#include "plugins/Plugins.h"
 #include "target_specific.h"
 #include <OneButton.h>
 #include <Wire.h>
@@ -275,6 +276,8 @@ RadioInterface *rIf = NULL;
 
 void setup()
 {
+    concurrency::hasBeenSetup = true;
+
 #ifdef SEGGER_STDOUT_CH
     SEGGER_RTT_ConfigUpBuffer(SEGGER_STDOUT_CH, NULL, NULL, 1024, SEGGER_RTT_MODE_NO_BLOCK_TRIM);
 #endif
@@ -390,15 +393,15 @@ void setup()
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 
 #ifdef GENIEBLOCKS
-    //gps setup
-    pinMode (GPS_RESET_N, OUTPUT);
+    // gps setup
+    pinMode(GPS_RESET_N, OUTPUT);
     pinMode(GPS_EXTINT, OUTPUT);
     digitalWrite(GPS_RESET_N, HIGH);
     digitalWrite(GPS_EXTINT, LOW);
-    //battery setup
+    // battery setup
     // If we want to read battery level, we need to set BATTERY_EN_PIN pin to low.
     // ToDo: For low power consumption after read battery level, set that pin to high.
-    pinMode (BATTERY_EN_PIN, OUTPUT);
+    pinMode(BATTERY_EN_PIN, OUTPUT);
     digitalWrite(BATTERY_EN_PIN, LOW);
 #endif
 
@@ -439,14 +442,17 @@ void setup()
 
     service.init();
 
+    // Now that the mesh service is created, create any plugins
+    setupPlugins();
+
     // Do this after service.init (because that clears error_code)
 #ifdef AXP192_SLAVE_ADDRESS
-    if(!axp192_found)
+    if (!axp192_found)
         recordCriticalError(CriticalErrorCode_NoAXP192); // Record a hardware fault for missing hardware
-#endif    
+#endif
 
-    // Don't call screen setup until after nodedb is setup (because we need
-    // the current region name)
+        // Don't call screen setup until after nodedb is setup (because we need
+        // the current region name)
 #if defined(ST7735_CS) || defined(HAS_EINK)
     screen->setup();
 #else
