@@ -17,4 +17,4 @@ class WebServerThread : private concurrency::OSThread
     virtual int32_t runOnce();
 };
 
-extern WebServerThread webServerThread;
+extern WebServerThread *webServerThread;

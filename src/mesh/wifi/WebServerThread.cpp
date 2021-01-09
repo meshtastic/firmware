@@ -1,7 +1,7 @@
 #include "mesh/wifi/WebServerThread.h"
 #include <Arduino.h>
 
-WebServerThread webServerThread;
+WebServerThread *webServerThread;
 
 WebServerThread::WebServerThread() : concurrency::OSThread("WebServerThread") {}
 
