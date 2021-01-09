@@ -51,4 +51,4 @@ class AirTime : private concurrency::OSThread
     virtual int32_t runOnce();
 };
 
-extern AirTime airTime;
+extern AirTime *airTime;

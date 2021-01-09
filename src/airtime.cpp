@@ -3,7 +3,7 @@
 
 #define periodsToLog 48
 
-AirTime airTime;
+AirTime *airTime;
 
 // A reminder that there are 3600 seconds in an hour so I don't have
 // to keep googling it.

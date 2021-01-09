@@ -518,8 +518,10 @@ void setup()
     initWifi(forceSoftAP);
 
     // Start web server thread.
-    //webServerThread = new WebServerThread();
+    webServerThread = new WebServerThread();
 
+    // Start airtime logger thread.
+    airTime = new AirTime();
 
     if (!rIf)
         recordCriticalError(CriticalErrorCode_NoRadio);
