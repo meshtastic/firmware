@@ -1,4 +1,5 @@
 //#include "mesh/wifi/WebServer.h"
+#include "configuration.h"
 
 #ifndef NO_ESP32
 
