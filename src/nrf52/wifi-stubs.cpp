@@ -1,4 +1,4 @@
-#include "mesh/wifi/WebServer.h"
+//#include "mesh/wifi/WebServer.h"
 #include "mesh/wifi/WiFiAPClient.h"
 
 void initWifi(bool forceSoftAP) {}
@@ -9,8 +9,3 @@ bool isWifiAvailable()
 {
     return false;
 }
-
-void handleWebResponse() {}
-
-/// Perform idle loop processing required by the wifi layer
-void loopWifi() {}
