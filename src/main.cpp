@@ -19,7 +19,6 @@
 #include "concurrency/Periodic.h"
 #include "graphics/Screen.h"
 #include "main.h"
-#include "mesh/wifi/WebServer.h"
 #include "mesh/wifi/WiFiAPClient.h"
 #include "plugins/Plugins.h"
 #include "sleep.h"
@@ -29,6 +28,7 @@
 // #include <driver/rtc_io.h>
 
 #ifndef NO_ESP32
+#include "mesh/wifi/WebServer.h"
 #include "nimble/BluetoothUtil.h"
 #endif
 
