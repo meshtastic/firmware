@@ -19,7 +19,6 @@
 #include "concurrency/Periodic.h"
 #include "graphics/Screen.h"
 #include "main.h"
-#include "mesh/wifi/WiFiAPClient.h"
 #include "plugins/Plugins.h"
 #include "sleep.h"
 #include "target_specific.h"
@@ -29,6 +28,7 @@
 
 #ifndef NO_ESP32
 #include "mesh/wifi/WebServer.h"
+#include "mesh/wifi/WiFiAPClient.h"
 #include "nimble/BluetoothUtil.h"
 #endif
 
@@ -513,10 +513,11 @@ void setup()
     }
 #endif
 
+
+#ifndef NO_ESP32
     // Initialize Wifi
     initWifi(forceSoftAP);
 
-#ifndef NO_ESP32
     // Start web server thread.
     webServerThread = new WebServerThread();
 #endif
