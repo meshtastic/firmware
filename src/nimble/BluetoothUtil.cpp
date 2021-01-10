@@ -545,7 +545,9 @@ void setBluetoothEnable(bool on)
             if (firstTime) {
                 firstTime = 0;
             } else {
-                initWifi(0);
+#ifndef NO_ESP32
+            initWifi();
+#endif
             }
         } else {
 
@@ -557,7 +559,9 @@ void setBluetoothEnable(bool on)
             */
 
             // shutdown wifi
+#ifndef NO_ESP32
             deinitWifi();
+#endif
 
             // We have to totally teardown our bluetooth objects to prevent leaks
             deinitBLE();
