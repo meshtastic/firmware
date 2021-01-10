@@ -1,4 +1,7 @@
 //#include "mesh/wifi/WebServer.h"
+
+#ifndef NO_ESP32
+
 #include "mesh/wifi/WiFiAPClient.h"
 
 void initWifi(bool forceSoftAP) {}
@@ -9,3 +12,5 @@ bool isWifiAvailable()
 {
     return false;
 }
+
+#endif
