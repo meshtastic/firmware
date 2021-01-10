@@ -7,12 +7,15 @@
 #include "esp_bt.h"
 #include "host/util/util.h"
 #include "main.h"
-#include "mesh/wifi/WiFiAPClient.h"
 #include "nimble/NimbleDefs.h"
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
 #include <Arduino.h>
 #include <WiFi.h>
+
+#ifndef NO_ESP32
+#include "mesh/wifi/WiFiAPClient.h"
+#endif
 
 static bool pinShowing;
 static uint32_t doublepressed;
