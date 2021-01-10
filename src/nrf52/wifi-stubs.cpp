@@ -3,7 +3,7 @@
 
 #ifndef NO_ESP32
 
-#include "mesh/wifi/WiFiAPClient.h"
+//#include "mesh/wifi/WiFiAPClient.h"
 
 void initWifi(bool forceSoftAP) {}
 
