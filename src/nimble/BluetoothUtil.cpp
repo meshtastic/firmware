@@ -546,7 +546,7 @@ void setBluetoothEnable(bool on)
                 firstTime = 0;
             } else {
 #ifndef NO_ESP32
-            initWifi();
+            initWifi(0);
 #endif
             }
         } else {
