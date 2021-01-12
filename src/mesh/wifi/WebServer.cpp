@@ -1,6 +1,7 @@
 #include "mesh/wifi/WebServer.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "power.h"
 #include "airtime.h"
 #include "main.h"
 #include "mesh/wifi/ContentHelper.h"
@@ -1169,7 +1170,14 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 
     res->println("},");
 
-    res->println("\"test\": 123");
+    res->println("\"power\": {");
+#define BoolToString(x) ((x)?"true":"false")
+    res->printf("\"battery_percent\": %u,\n", powerStatus->getBatteryChargePercent());
+    res->printf("\"battery_voltage_mv\": %u,\n", powerStatus->getBatteryVoltageMv());
+    res->printf("\"has_battery\": %s,\n", BoolToString(powerStatus->getHasBattery()));
+    res->printf("\"has_usb\": %s,\n", BoolToString(powerStatus->getHasUSB()));
+    res->printf("\"is_charging\": %s\n", BoolToString(powerStatus->getIsCharging()));
+    res->println("}");
 
     res->println("},");
 
