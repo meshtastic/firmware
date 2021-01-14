@@ -12,16 +12,36 @@
     Designed for lora32 v1.0
         Manufacture Info: http://www.lilygo.cn/prod_view.aspx?TypeId=50003&Id=1133&FId=t3:50003:3
         Pin Mapping:      http://ae01.alicdn.com/kf/HTB1fLBcxkSWBuNjSszdq6zeSpXaJ.jpg
+
+
+    This will probably and most likely work on other boards too.
+
+    Need help with this plugin? Post your question on the Meshtastic Discourse:
+       https://meshtastic.discourse.group
+
+    Basic Usage:
+
+        1) Enable the plugin by setting SERIALPLUGIN_ENABLED to 1.
+        2) Set the pins (RXD2 / TXD2) for your preferred RX and TX GPIO pins
+        3) Set SERIALPLUGIN_TIMEOUT to the amount of time to wait before we consider
+           your packet as "done".
+        4) (Optional) In SerialPlugin.h set the port to PortNum_TEXT_MESSAGE_APP if you want to
+           send messages to/from the general text message channel.
+        5) Connect to your device over the serial interface at 38400 8N1.
+        6) Send a packet up to 240 bytes in length. This will get relayed over the mesh network.
+        7) (Optional) Set SERIALPLUGIN_ECHO to 1 and any message you send out will be echoed back
+           to your device.
+
 */
 
 #define RXD2 16
 #define TXD2 17
 #define SERIALPLUGIN_RX_BUFFER 128
 #define SERIALPLUGIN_STRING_MAX Constants_DATA_PAYLOAD_LEN
-#define SERIALPLUGIN_TIMEOUT 250
+#define SERIALPLUGIN_TIMEOUT 100
 #define SERIALPLUGIN_BAUD 38400
 #define SERIALPLUGIN_ENABLED 0
-#define SERIALPLUGIN_ECHO 1
+#define SERIALPLUGIN_ECHO 0
 
 SerialPlugin *serialPlugin;
 SerialPluginRadio *serialPluginRadio;
@@ -33,7 +53,7 @@ char serialStringChar[Constants_DATA_PAYLOAD_LEN];
 int32_t SerialPlugin::runOnce()
 {
 
-#if SERIALPLUGIN_ENABLED == 0
+#if SERIALPLUGIN_ENABLED == 1
 
     if (firstTime) {
 
@@ -46,12 +66,9 @@ int32_t SerialPlugin::runOnce()
 
         serialPluginRadio = new SerialPluginRadio();
 
-        //DEBUG_MSG("Initilizing serial peripheral interface - Done\n");
-
         firstTime = 0;
 
     } else {
-        // Interface with the serial peripheral from in here.
         String serialString;
 
         while (Serial2.available()) {
