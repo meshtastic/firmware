@@ -32,10 +32,16 @@
         7) (Optional) Set SERIALPLUGIN_ECHO to 1 and any message you send out will be echoed back
            to your device.
 
-    TODO:
+    TODO (in this order):
         * Once protobufs regenerated with the new port, update SerialPlugin.h
-        * Implement an interface to enable / disable ack
         * Ensure this works on a tbeam
+        * Define a verbose RX mode to report on mesh and packet infomration.
+            - This won't happen any time soon.
+
+    KNOWN PROBLEMS
+        * Until the plugin is initilized by the startup sequence, the TX pin is in a floating
+          state. Device connected to that pin may see this as "noise".
+
 
 */
 
@@ -43,10 +49,11 @@
 #define TXD2 17
 #define SERIALPLUGIN_RX_BUFFER 128
 #define SERIALPLUGIN_STRING_MAX Constants_DATA_PAYLOAD_LEN
-#define SERIALPLUGIN_TIMEOUT 100
+#define SERIALPLUGIN_TIMEOUT 250
 #define SERIALPLUGIN_BAUD 38400
-#define SERIALPLUGIN_ENABLED 0
+#define SERIALPLUGIN_ENABLED 1
 #define SERIALPLUGIN_ECHO 0
+#define SERIALPLUGIN_ACK 0
 
 SerialPlugin *serialPlugin;
 SerialPluginRadio *serialPluginRadio;
@@ -107,6 +114,8 @@ void SerialPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
     MeshPacket *p = allocReply();
     p->to = dest;
     p->decoded.want_response = wantReplies;
+
+    p->want_ack = SERIALPLUGIN_ACK;
 
     p->decoded.data.payload.size = strlen(serialStringChar); // You must specify how many bytes are in the reply
     memcpy(p->decoded.data.payload.bytes, serialStringChar, p->decoded.data.payload.size);
