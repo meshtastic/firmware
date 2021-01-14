@@ -46,7 +46,7 @@ int32_t SerialPlugin::runOnce()
 
         serialPluginRadio = new SerialPluginRadio();
 
-        DEBUG_MSG("Initilizing serial peripheral interface - Done\n");
+        //DEBUG_MSG("Initilizing serial peripheral interface - Done\n");
 
         firstTime = 0;
 
@@ -95,8 +95,8 @@ void SerialPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
 bool SerialPluginRadio::handleReceived(const MeshPacket &mp)
 {
     auto &p = mp.decoded.data;
-    DEBUG_MSG("* * * * * * * * * * Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s\n", nodeDB.getNodeNum(),
-              mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
+    //DEBUG_MSG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s\n", nodeDB.getNodeNum(),
+    //          mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
 
     /*
      * If SERIALPLUGIN_ECHO is true, then echo the packets that are sent out back to the TX
@@ -110,24 +110,17 @@ bool SerialPluginRadio::handleReceived(const MeshPacket &mp)
             //   TODO: need to find out why.
             if (lastRxID != mp.id) {
                 lastRxID = mp.id;
-                DEBUG_MSG("* * Message came this device\n");
-                Serial2.println("* * Message came this device");
+                //DEBUG_MSG("* * Message came this device\n");
+                //Serial2.println("* * Message came this device");
+                Serial2.printf("%s", p.payload.bytes);
             }
         }
 
     } else {
-        DEBUG_MSG("* * Message came from the mesh\n");
-        Serial2.println("* * Message came from the mesh");
+        //DEBUG_MSG("* * Message came from the mesh\n");
+        //Serial2.println("* * Message came from the mesh");
+        Serial2.printf("%s", p.payload.bytes);
     }
-
-    // We only store/display messages destined for us.
-    // Keep a copy of the most recent text message.
-    // devicestate.rx_text_message = mp;
-    // devicestate.has_rx_text_message = true;
-
-    // Serial2.print(p.payload.bytes);
-
-    // TODO: If packet came from this device, don't echo locally.
 
     return true; // Let others look at this message also if they want
 }
