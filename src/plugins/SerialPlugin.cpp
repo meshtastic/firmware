@@ -13,8 +13,8 @@
         Manufacture Info: http://www.lilygo.cn/prod_view.aspx?TypeId=50003&Id=1133&FId=t3:50003:3
         Pin Mapping:      http://ae01.alicdn.com/kf/HTB1fLBcxkSWBuNjSszdq6zeSpXaJ.jpg
 
-
-    This will probably and most likely work on other boards too.
+    This will probably and most likely work on other esp32 devices, given possible change the RX/TX
+        selection.
 
     Need help with this plugin? Post your question on the Meshtastic Discourse:
        https://meshtastic.discourse.group
@@ -31,6 +31,11 @@
         6) Send a packet up to 240 bytes in length. This will get relayed over the mesh network.
         7) (Optional) Set SERIALPLUGIN_ECHO to 1 and any message you send out will be echoed back
            to your device.
+
+    TODO:
+        * Once protobufs regenerated with the new port, update SerialPlugin.h
+        * Implement an interface to enable / disable ack
+        * Ensure this works on a tbeam
 
 */
 
