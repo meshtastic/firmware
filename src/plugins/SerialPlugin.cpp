@@ -9,7 +9,11 @@
 #include <assert.h>
 
 /*
-    Designed for lora32 v1.0
+    SerialPlugin
+        An overly simplistic interface to send messages over the mesh network by sending strings
+        over a serial port.
+
+    Originally designed for lora32 v1.0
         Manufacture Info: http://www.lilygo.cn/prod_view.aspx?TypeId=50003&Id=1133&FId=t3:50003:3
         Pin Mapping:      http://ae01.alicdn.com/kf/HTB1fLBcxkSWBuNjSszdq6zeSpXaJ.jpg
 
