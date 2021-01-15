@@ -34,7 +34,7 @@ uint8_t getPeriodsToLog();
 
 uint32_t getSecondsSinceBoot();
 
-uint16_t *airtimeReport(reportTypes reportType);
+uint32_t *airtimeReport(reportTypes reportType);
 
 uint32_t getSecondsPerPeriod();
 
