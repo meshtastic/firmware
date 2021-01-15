@@ -1,11 +1,11 @@
-#include "mesh/wifi/WebServer.h"
+#include "mesh/http/WebServer.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "airtime.h"
 #include "main.h"
-#include "mesh/wifi/ContentHelper.h"
-#include "mesh/wifi/ContentStatic.h"
-#include "mesh/wifi/WiFiAPClient.h"
+#include "mesh/http/ContentHelper.h"
+#include "mesh/http/ContentStatic.h"
+#include "mesh/http/WiFiAPClient.h"
 #include "sleep.h"
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>
