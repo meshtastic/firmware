@@ -16,9 +16,12 @@
 #include "configuration.h"
 #include "error.h"
 #include "mesh-pb-constants.h"
-#include "meshwifi/meshwifi.h"
 #include <pb_decode.h>
 #include <pb_encode.h>
+
+#ifndef NO_ESP32
+#include "mesh/http/WiFiAPClient.h"
+#endif
 
 NodeDB nodeDB;
 
