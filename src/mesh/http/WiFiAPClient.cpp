@@ -1,9 +1,9 @@
-#include "mesh/wifi/WiFiAPClient.h"
+#include "mesh/http/WiFiAPClient.h"
 #include "NodeDB.h"
-#include "mesh/wifi/WiFiServerAPI.h"
 #include "configuration.h"
 #include "main.h"
-#include "mesh/wifi/WebServer.h"
+#include "mesh/http/WebServer.h"
+#include "mesh/wifi/WiFiServerAPI.h"
 #include "target_specific.h"
 #include <DNSServer.h>
 #include <ESPmDNS.h>
