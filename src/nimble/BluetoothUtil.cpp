@@ -7,12 +7,15 @@
 #include "esp_bt.h"
 #include "host/util/util.h"
 #include "main.h"
-#include "meshwifi/meshwifi.h"
 #include "nimble/NimbleDefs.h"
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
 #include <Arduino.h>
 #include <WiFi.h>
+
+#ifndef NO_ESP32
+#include "mesh/http/WiFiAPClient.h"
+#endif
 
 static bool pinShowing;
 static uint32_t doublepressed;
@@ -545,7 +548,9 @@ void setBluetoothEnable(bool on)
             if (firstTime) {
                 firstTime = 0;
             } else {
-                initWifi(0);
+#ifndef NO_ESP32
+            initWifi(0);
+#endif
             }
         } else {
 
@@ -557,7 +562,9 @@ void setBluetoothEnable(bool on)
             */
 
             // shutdown wifi
+#ifndef NO_ESP32
             deinitWifi();
+#endif
 
             // We have to totally teardown our bluetooth objects to prevent leaks
             deinitBLE();
