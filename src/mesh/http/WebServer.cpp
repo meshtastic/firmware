@@ -1110,13 +1110,13 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 
     res->println("\"airtime\": {");
 
-    uint16_t *logArray;
+    uint32_t *logArray;
 
     res->print("\"tx_log\": [");
 
     logArray = airtimeReport(TX_LOG);
     for (int i = 0; i < getPeriodsToLog(); i++) {
-        uint16_t tmp;
+        uint32_t tmp;
         tmp = *(logArray + i);
         res->printf("%d", tmp);
         if (i != getPeriodsToLog() - 1) {
@@ -1129,7 +1129,7 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 
     logArray = airtimeReport(RX_LOG);
     for (int i = 0; i < getPeriodsToLog(); i++) {
-        uint16_t tmp;
+        uint32_t tmp;
         tmp = *(logArray + i);
         res->printf("%d", tmp);
         if (i != getPeriodsToLog() - 1) {
@@ -1142,7 +1142,7 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 
     logArray = airtimeReport(RX_ALL_LOG);
     for (int i = 0; i < getPeriodsToLog(); i++) {
-        uint16_t tmp;
+        uint32_t tmp;
         tmp = *(logArray + i);
         res->printf("%d", tmp);
         if (i != getPeriodsToLog() - 1) {
