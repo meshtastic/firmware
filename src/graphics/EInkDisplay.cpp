@@ -4,7 +4,6 @@
 #include "EInkDisplay.h"
 #include "SPILock.h"
 #include "epd1in54.h" // Screen specific library
-#include "graphics/configs.h"
 #include <SPI.h>
 #include <TFT_eSPI.h> // Graphics library and Sprite class
 
