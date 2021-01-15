@@ -27,6 +27,9 @@
 
         1) Enable the plugin by setting SERIALPLUGIN_ENABLED to 1.
         2) Set the pins (RXD2 / TXD2) for your preferred RX and TX GPIO pins.
+           On tbeam, recommend to use:
+                #define RXD2 35
+                #define TXD2 15
         3) Set SERIALPLUGIN_TIMEOUT to the amount of time to wait before we consider
            your packet as "done".
         4) (Optional) In SerialPlugin.h set the port to PortNum_TEXT_MESSAGE_APP if you want to
@@ -45,6 +48,7 @@
     KNOWN PROBLEMS
         * Until the plugin is initilized by the startup sequence, the TX pin is in a floating
           state. Device connected to that pin may see this as "noise".
+        * Will not work on NRF and the Linux device targets.
 
 
 */
