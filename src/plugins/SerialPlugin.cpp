@@ -37,6 +37,7 @@
            to your device.
 
     TODO (in this order):
+        * Add check for esp32 and only build code sections for esp32.
         * Once protobufs regenerated with the new port, update SerialPlugin.h
         * Ensure this works on a tbeam
         * Define a verbose RX mode to report on mesh and packet infomration.
@@ -45,6 +46,7 @@
     KNOWN PROBLEMS
         * Until the plugin is initilized by the startup sequence, the TX pin is in a floating
           state. Device connected to that pin may see this as "noise".
+        * This will not work on the NRF or Linux target.
 
 
 */
@@ -55,7 +57,7 @@
 #define SERIALPLUGIN_STRING_MAX Constants_DATA_PAYLOAD_LEN
 #define SERIALPLUGIN_TIMEOUT 250
 #define SERIALPLUGIN_BAUD 38400
-#define SERIALPLUGIN_ENABLED 1
+#define SERIALPLUGIN_ENABLED 0
 #define SERIALPLUGIN_ECHO 0
 #define SERIALPLUGIN_ACK 0
 
@@ -68,6 +70,7 @@ char serialStringChar[Constants_DATA_PAYLOAD_LEN];
 
 int32_t SerialPlugin::runOnce()
 {
+#ifdef NO_ESP32
 
 #if SERIALPLUGIN_ENABLED == 1
 
@@ -103,6 +106,8 @@ int32_t SerialPlugin::runOnce()
 
     return (INT32_MAX);
 #endif
+
+#endif
 }
 
 MeshPacket *SerialPluginRadio::allocReply()
@@ -129,6 +134,11 @@ void SerialPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
 
 bool SerialPluginRadio::handleReceived(const MeshPacket &mp)
 {
+
+#ifdef NO_ESP32
+
+#if SERIALPLUGIN_ENABLED == 1
+
     auto &p = mp.decoded.data;
     // DEBUG_MSG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s\n", nodeDB.getNodeNum(),
     //          mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
@@ -156,6 +166,13 @@ bool SerialPluginRadio::handleReceived(const MeshPacket &mp)
         // Serial2.println("* * Message came from the mesh");
         Serial2.printf("%s", p.payload.bytes);
     }
+
+#else
+    DEBUG_MSG("Serial Plugin Disabled\n");
+
+#endif
+
+#endif
 
     return true; // Let others look at this message also if they want
 }
