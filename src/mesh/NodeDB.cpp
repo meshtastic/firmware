@@ -20,7 +20,7 @@
 #include <pb_encode.h>
 
 #ifndef NO_ESP32
-#include "mesh/wifi/WiFiAPClient.h"
+#include "mesh/http/WiFiAPClient.h"
 #endif
 
 NodeDB nodeDB;

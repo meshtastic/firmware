@@ -1,11 +1,11 @@
-#include "mesh/wifi/WebServer.h"
+#include "mesh/http/WebServer.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "airtime.h"
 #include "main.h"
-#include "mesh/wifi/ContentHelper.h"
-#include "mesh/wifi/ContentStatic.h"
-#include "mesh/wifi/WiFiAPClient.h"
+#include "mesh/http/ContentHelper.h"
+#include "mesh/http/ContentStatic.h"
+#include "mesh/http/WiFiAPClient.h"
 #include "sleep.h"
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>
@@ -1110,13 +1110,13 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 
     res->println("\"airtime\": {");
 
-    uint16_t *logArray;
+    uint32_t *logArray;
 
     res->print("\"tx_log\": [");
 
     logArray = airtimeReport(TX_LOG);
     for (int i = 0; i < getPeriodsToLog(); i++) {
-        uint16_t tmp;
+        uint32_t tmp;
         tmp = *(logArray + i);
         res->printf("%d", tmp);
         if (i != getPeriodsToLog() - 1) {
@@ -1129,7 +1129,7 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 
     logArray = airtimeReport(RX_LOG);
     for (int i = 0; i < getPeriodsToLog(); i++) {
-        uint16_t tmp;
+        uint32_t tmp;
         tmp = *(logArray + i);
         res->printf("%d", tmp);
         if (i != getPeriodsToLog() - 1) {
@@ -1142,7 +1142,7 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 
     logArray = airtimeReport(RX_ALL_LOG);
     for (int i = 0; i < getPeriodsToLog(); i++) {
-        uint16_t tmp;
+        uint32_t tmp;
         tmp = *(logArray + i);
         res->printf("%d", tmp);
         if (i != getPeriodsToLog() - 1) {
@@ -1169,7 +1169,14 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 
     res->println("},");
 
-    res->println("\"test\": 123");
+    res->println("\"power\": {");
+#define BoolToString(x) ((x)?"true":"false")
+    res->printf("\"battery_percent\": %u,\n", powerStatus->getBatteryChargePercent());
+    res->printf("\"battery_voltage_mv\": %u,\n", powerStatus->getBatteryVoltageMv());
+    res->printf("\"has_battery\": %s,\n", BoolToString(powerStatus->getHasBattery()));
+    res->printf("\"has_usb\": %s,\n", BoolToString(powerStatus->getHasUSB()));
+    res->printf("\"is_charging\": %s\n", BoolToString(powerStatus->getIsCharging()));
+    res->println("}");
 
     res->println("},");
 
