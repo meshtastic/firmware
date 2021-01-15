@@ -11,7 +11,7 @@ namespace meshtastic
  */
 enum OptionalBool { OptFalse = 0, OptTrue = 1, OptUnknown = 2 };
 
-/// Describes the state of the GPS system.
+/// Describes the state of the Power system.
 class PowerStatus : public Status
 {
 
