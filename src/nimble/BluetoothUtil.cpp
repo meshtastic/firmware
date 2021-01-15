@@ -14,7 +14,7 @@
 #include <WiFi.h>
 
 #ifndef NO_ESP32
-#include "mesh/wifi/WiFiAPClient.h"
+#include "mesh/http/WiFiAPClient.h"
 #endif
 
 static bool pinShowing;
