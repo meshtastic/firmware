@@ -5,10 +5,6 @@
 
 AirTime *airTime;
 
-// A reminder that there are 3600 seconds in an hour so I don't have
-// to keep googling it.
-//   This can be changed to a smaller number to speed up testing.
-//
 uint32_t secondsPerPeriod = 3600;
 uint32_t lastMillis = 0;
 uint32_t secSinceBoot = 0;
@@ -17,25 +13,23 @@ uint32_t secSinceBoot = 0;
 
 // Don't read out of this directly. Use the helper functions.
 struct airtimeStruct {
-    uint16_t periodTX[periodsToLog];     // AirTime transmitted
-    uint16_t periodRX[periodsToLog];     // AirTime received and repeated (Only valid mesh packets)
-    uint16_t periodRX_ALL[periodsToLog]; // AirTime received regardless of valid mesh packet. Could include noise.
+    uint32_t periodTX[periodsToLog];     // AirTime transmitted
+    uint32_t periodRX[periodsToLog];     // AirTime received and repeated (Only valid mesh packets)
+    uint32_t periodRX_ALL[periodsToLog]; // AirTime received regardless of valid mesh packet. Could include noise.
     uint8_t lastPeriodIndex;
 } airtimes;
 
 void AirTime::logAirtime(reportTypes reportType, uint32_t airtime_ms)
 {
-    //    DEBUG_MSG("Packet - logAirtime()\n");
-
     if (reportType == TX_LOG) {
-        DEBUG_MSG("AirTime - Packet transmitted : %us %ums\n", (uint32_t)round((float)airtime_ms / (float)1000), airtime_ms);
-        airtimes.periodTX[0] = airtimes.periodTX[0] + round(airtime_ms / 1000);
+        DEBUG_MSG("AirTime - Packet transmitted : %ums\n", airtime_ms);
+        airtimes.periodTX[0] = airtimes.periodTX[0] + airtime_ms;
     } else if (reportType == RX_LOG) {
-        DEBUG_MSG("AirTime - Packet received : %us %ums\n", (uint32_t)round((float)airtime_ms / (float)1000), airtime_ms);
-        airtimes.periodRX[0] = airtimes.periodRX[0] + round(airtime_ms / 1000);
+        DEBUG_MSG("AirTime - Packet received : %ums\n", airtime_ms);
+        airtimes.periodRX[0] = airtimes.periodRX[0] + airtime_ms;
     } else if (reportType == RX_ALL_LOG) {
-        DEBUG_MSG("AirTime - Packet received (noise?) : %us %ums\n", (uint32_t)round((float)airtime_ms / (float)1000), airtime_ms);
-        airtimes.periodRX_ALL[0] = airtimes.periodRX_ALL[0] + round(airtime_ms / 1000);
+        DEBUG_MSG("AirTime - Packet received (noise?) : %ums\n", airtime_ms);
+        airtimes.periodRX_ALL[0] = airtimes.periodRX_ALL[0] + airtime_ms;
     } else {
         DEBUG_MSG("AirTime - Unknown report time. This should never happen!!\n");
     }
@@ -65,7 +59,7 @@ void airtimeRotatePeriod()
     }
 }
 
-uint16_t *airtimeReport(reportTypes reportType)
+uint32_t *airtimeReport(reportTypes reportType)
 {
 
     if (reportType == TX_LOG) {
