@@ -19,16 +19,16 @@
 #include "concurrency/Periodic.h"
 #include "graphics/Screen.h"
 #include "main.h"
-#include "meshwifi/meshhttp.h"
-#include "meshwifi/meshwifi.h"
-#include "sleep.h"
 #include "plugins/Plugins.h"
+#include "sleep.h"
 #include "target_specific.h"
 #include <OneButton.h>
 #include <Wire.h>
 // #include <driver/rtc_io.h>
 
 #ifndef NO_ESP32
+#include "mesh/http/WebServer.h"
+#include "mesh/http/WiFiAPClient.h"
 #include "nimble/BluetoothUtil.h"
 #endif
 
@@ -513,8 +513,17 @@ void setup()
     }
 #endif
 
+
+#ifndef NO_ESP32
     // Initialize Wifi
     initWifi(forceSoftAP);
+
+    // Start web server thread.
+    webServerThread = new WebServerThread();
+#endif
+
+    // Start airtime logger thread.
+    airTime = new AirTime();
 
     if (!rIf)
         recordCriticalError(CriticalErrorCode_NoRadio);
@@ -576,7 +585,7 @@ void loop()
 #endif
 
     // TODO: This should go into a thread handled by FreeRTOS.
-    handleWebResponse();
+    // handleWebResponse();
 
     service.loop();
 
@@ -589,7 +598,4 @@ void loop()
     // We want to sleep as long as possible here - because it saves power
     mainDelay.delay(delayMsec);
     // if (didWake) DEBUG_MSG("wake!\n");
-
-    // Handles cleanup for the airtime calculator.
-    airtimeCalculator();
 }

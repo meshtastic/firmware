@@ -1,5 +1,9 @@
-#include "meshwifi/meshhttp.h"
-#include "meshwifi/meshwifi.h"
+//#include "mesh/wifi/WebServer.h"
+#include "configuration.h"
+
+#ifndef NO_ESP32
+
+//#include "mesh/wifi/WiFiAPClient.h"
 
 void initWifi(bool forceSoftAP) {}
 
@@ -10,7 +14,4 @@ bool isWifiAvailable()
     return false;
 }
 
-void handleWebResponse() {}
-
-/// Perform idle loop processing required by the wifi layer
-void loopWifi() {}
+#endif
