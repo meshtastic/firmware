@@ -16,8 +16,8 @@
  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-#ifndef _VARIANT_TTGO_EINK_V1_
-#define _VARIANT_TTGO_EINK_V1_
+#ifndef _VARIANT_TTGO_EINK_V1_0_
+#define _VARIANT_TTGO_EINK_V1_0_
 
 /** Master clock frequency */
 #define VARIANT_MCK (64000000ul)
@@ -99,9 +99,9 @@ extern "C" {
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs
-#define PIN_LED1 (0 + 13) // green (but red on my prototype)
-#define PIN_LED2 (0 + 15) // blue (but red on my prototype)
-#define PIN_LED3 (0 + 14) // red (not functional on my prototype)
+#define PIN_LED1 (0 + 13) // red (confirmed on 1.0 board)
+#define PIN_LED2 (0 + 14) // blue (seems busted!)
+#define PIN_LED3 (0 + 15) // green (seems busted!)
 
 #define LED_RED PIN_LED3
 #define LED_GREEN PIN_LED1
@@ -196,7 +196,7 @@ External serial flash WP25R1635FZUIL0
  * eink display pins
  */
 
-#define PIN_EINK_EN (32 + 11)
+#define PIN_EINK_EN (32 + 11) // Note: this is really just backlight power
 #define PIN_EINK_CS (0 + 30)
 #define PIN_EINK_BUSY (0 + 3)
 #define PIN_EINK_DC (0 + 28)
