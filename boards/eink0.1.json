@@ -15,7 +15,7 @@
     ],
     "usb_product": "TTGO_eink",
     "mcu": "nrf52840",
-    "variant": "eink",
+    "variant": "eink0.1",
     "variants_dir": "variants",
     "bsp": {
       "name": "adafruit"
