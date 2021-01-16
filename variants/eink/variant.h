@@ -149,7 +149,7 @@ No longer populated on PCB
     */
 #define WIRE_INTERFACES_COUNT 1
 
-#define PIN_WIRE_SDA (26) // Not connected on board?
+#define PIN_WIRE_SDA (26)
 #define PIN_WIRE_SCL (27)
 
 /* touch sensor, active high */
@@ -167,8 +167,8 @@ External serial flash WP25R1635FZUIL0
 #define PIN_QSPI_CS (32 + 15)
 #define PIN_QSPI_IO0 (32 + 12) // MOSI if using two bit interface
 #define PIN_QSPI_IO1 (32 + 13) // MISO if using two bit interface
-//#define PIN_QSPI_IO2 22 // WP if using two bit interface (i.e. not used)
-//#define PIN_QSPI_IO3 23 // HOLD if using two bit interface (i.e. not used)
+#define PIN_QSPI_IO2 (0 + 7) // WP if using two bit interface (i.e. not used)
+#define PIN_QSPI_IO3 (0 + 5) // HOLD if using two bit interface (i.e. not used)
 
 // On-board QSPI Flash
 #define EXTERNAL_FLASH_DEVICES MX25R1635F
@@ -223,7 +223,8 @@ External serial flash WP25R1635FZUIL0
  */
 
 #define PIN_GPS_WAKE (32 + 2) // An output to wake GPS, low means allow sleep, high means force wake
-#define PIN_GPS_PPS (32 + 4)  // Pulse per second input from the GPS
+// Seems to be missing on this new board
+// #define PIN_GPS_PPS (32 + 4)  // Pulse per second input from the GPS
 #define PIN_GPS_TX (32 + 9)   // This is for bits going TOWARDS the CPU
 #define PIN_GPS_RX (32 + 8)   // This is for bits going TOWARDS the GPS
 
