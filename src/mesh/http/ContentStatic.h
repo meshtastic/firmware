@@ -2,14 +2,7 @@
 #include <functional>
 
 /*
-    Steps:
-     - Compress the .js file to .js.gz
-     - Convert to hex:
-         http://tomeko.net/online_tools/file_to_hex.php?lang=en
-     - Paste into the array
-     - Note the filesize of your .gz file and write the file
-       size into the length int.
-
+  This file contains static content.
 */
 
 // Length of the binary data

@@ -1,6 +1,7 @@
 #include "plugins/NodeInfoPlugin.h"
 #include "plugins/PositionPlugin.h"
 #include "plugins/ReplyPlugin.h"
+#include "plugins/SerialPlugin.h"
 #include "plugins/RemoteHardwarePlugin.h"
 #include "plugins/TextMessagePlugin.h"
 
@@ -17,4 +18,5 @@ void setupPlugins() {
 
     new RemoteHardwarePlugin();
     new ReplyPlugin();
+    new SerialPlugin(); // Maintained by MC Hamster (Jm Casler) jm@casler.org
 }
