@@ -25,7 +25,7 @@
 
     Basic Usage:
 
-        1) Enable the plugin by setting SERIALPLUGIN_ENABLED to 1.
+        1) Enable the plugin by setting serialplugin_enabled in the device configuration to 1.
         2) Set the pins (RXD2 / TXD2) for your preferred RX and TX GPIO pins.
         3) Set SERIALPLUGIN_TIMEOUT to the amount of time to wait before we consider
            your packet as "done".
@@ -57,8 +57,6 @@
 #define SERIALPLUGIN_STRING_MAX Constants_DATA_PAYLOAD_LEN
 #define SERIALPLUGIN_TIMEOUT 250
 #define SERIALPLUGIN_BAUD 38400
-#define SERIALPLUGIN_ENABLED 0
-#define SERIALPLUGIN_ECHO 0
 #define SERIALPLUGIN_ACK 1
 
 SerialPlugin *serialPlugin;
@@ -70,42 +68,47 @@ char serialStringChar[Constants_DATA_PAYLOAD_LEN];
 
 int32_t SerialPlugin::runOnce()
 {
-#ifdef NO_ESP32
+#ifndef NO_ESP32
+    if (radioConfig.preferences.serialplugin_enabled) {
 
-#if SERIALPLUGIN_ENABLED == 1
+        if (firstTime) {
 
-    if (firstTime) {
+            // Interface with the serial peripheral from in here.
+            DEBUG_MSG("Initilizing serial peripheral interface\n");
 
-        // Interface with the serial peripheral from in here.
-        DEBUG_MSG("Initilizing serial peripheral interface\n");
+            if (radioConfig.preferences.serialplugin_rxd && radioConfig.preferences.serialplugin_txd) {
+                Serial2.begin(SERIALPLUGIN_BAUD, SERIAL_8N1, radioConfig.preferences.serialplugin_rxd,
+                              radioConfig.preferences.serialplugin_txd);
 
-        Serial2.begin(SERIALPLUGIN_BAUD, SERIAL_8N1, RXD2, TXD2);
-        Serial2.setTimeout(SERIALPLUGIN_TIMEOUT); // Number of MS to wait to set the timeout for the string.
-        Serial2.setRxBufferSize(SERIALPLUGIN_RX_BUFFER);
+            } else {
+                Serial2.begin(SERIALPLUGIN_BAUD, SERIAL_8N1, RXD2, TXD2);
+            }
+            Serial2.setTimeout(SERIALPLUGIN_TIMEOUT); // Number of MS to wait to set the timeout for the string.
+            Serial2.setRxBufferSize(SERIALPLUGIN_RX_BUFFER);
 
-        serialPluginRadio = new SerialPluginRadio();
+            serialPluginRadio = new SerialPluginRadio();
 
-        firstTime = 0;
+            firstTime = 0;
 
-    } else {
-        String serialString;
+        } else {
+            String serialString;
 
-        while (Serial2.available()) {
-            serialString = Serial2.readString();
-            serialString.toCharArray(serialStringChar, Constants_DATA_PAYLOAD_LEN);
+            while (Serial2.available()) {
+                serialString = Serial2.readString();
+                serialString.toCharArray(serialStringChar, Constants_DATA_PAYLOAD_LEN);
 
-            serialPluginRadio->sendPayload();
+                serialPluginRadio->sendPayload();
 
-            DEBUG_MSG("Received: %s\n", serialStringChar);
+                DEBUG_MSG("Received: %s\n", serialStringChar);
+            }
         }
+
+        return (10);
+    } else {
+        DEBUG_MSG("Serial Plugin Disabled\n");
+
+        return (INT32_MAX);
     }
-
-    return (10);
-#else
-    DEBUG_MSG("Serial Plugin Disabled\n");
-
-    return (INT32_MAX);
-#endif
 
 #endif
 }
@@ -135,42 +138,41 @@ void SerialPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
 bool SerialPluginRadio::handleReceived(const MeshPacket &mp)
 {
 
-#ifdef NO_ESP32
+#ifndef NO_ESP32
 
-#if SERIALPLUGIN_ENABLED == 1
+    if (radioConfig.preferences.serialplugin_enabled) {
 
-    auto &p = mp.decoded.data;
-    // DEBUG_MSG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s\n", nodeDB.getNodeNum(),
-    //          mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
+        auto &p = mp.decoded.data;
+        // DEBUG_MSG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s\n", nodeDB.getNodeNum(),
+        //          mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
 
-    if (mp.from == nodeDB.getNodeNum()) {
+        if (mp.from == nodeDB.getNodeNum()) {
 
-        /*
-         * If SERIALPLUGIN_ECHO is true, then echo the packets that are sent out back to the TX
-         * of the serial interface.
-         */
-        if (SERIALPLUGIN_ECHO) {
+            /*
+             * If radioConfig.preferences.serialplugin_echo is true, then echo the packets that are sent out back to the TX
+             * of the serial interface.
+             */
+            if (radioConfig.preferences.serialplugin_echo) {
 
-            // For some reason, we get the packet back twice when we send out of the radio.
-            //   TODO: need to find out why.
-            if (lastRxID != mp.id) {
-                lastRxID = mp.id;
-                // DEBUG_MSG("* * Message came this device\n");
-                // Serial2.println("* * Message came this device");
-                Serial2.printf("%s", p.payload.bytes);
+                // For some reason, we get the packet back twice when we send out of the radio.
+                //   TODO: need to find out why.
+                if (lastRxID != mp.id) {
+                    lastRxID = mp.id;
+                    // DEBUG_MSG("* * Message came this device\n");
+                    // Serial2.println("* * Message came this device");
+                    Serial2.printf("%s", p.payload.bytes);
+                }
             }
+
+        } else {
+            // DEBUG_MSG("* * Message came from the mesh\n");
+            // Serial2.println("* * Message came from the mesh");
+            Serial2.printf("%s", p.payload.bytes);
         }
 
     } else {
-        // DEBUG_MSG("* * Message came from the mesh\n");
-        // Serial2.println("* * Message came from the mesh");
-        Serial2.printf("%s", p.payload.bytes);
+        DEBUG_MSG("Serial Plugin Disabled\n");
     }
-
-#else
-    DEBUG_MSG("Serial Plugin Disabled\n");
-
-#endif
 
 #endif
 
