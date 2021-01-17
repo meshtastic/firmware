@@ -13,12 +13,7 @@
         An overly simplistic interface to send messages over the mesh network by sending strings
         over a serial port.
 
-    Originally designed for lora32 v1.0
-        Manufacture Info: http://www.lilygo.cn/prod_view.aspx?TypeId=50003&Id=1133&FId=t3:50003:3
-        Pin Mapping:      http://ae01.alicdn.com/kf/HTB1fLBcxkSWBuNjSszdq6zeSpXaJ.jpg
-
-    This will probably and most likely work on other esp32 devices, given possible change the RX/TX
-        selection.
+        Default is to use RX GPIO 16 and TX GPIO 17.
 
     Need help with this plugin? Post your question on the Meshtastic Discourse:
        https://meshtastic.discourse.group
@@ -26,7 +21,8 @@
     Basic Usage:
 
         1) Enable the plugin by setting serialplugin_enabled in the device configuration to 1.
-        2) Set the pins (RXD2 / TXD2) for your preferred RX and TX GPIO pins.
+        2) Set the pins (serialplugin_rxd / serialplugin_txd) for your preferred RX and TX GPIO pins.
+           If you're using a tbeam 1.0 or newer, recommend to use RX 35 / TX 15
         3) Set SERIALPLUGIN_TIMEOUT to the amount of time to wait before we consider
            your packet as "done".
         4) (Optional) In SerialPlugin.h set the port to PortNum_TEXT_MESSAGE_APP if you want to
