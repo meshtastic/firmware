@@ -20,9 +20,11 @@
 
     Basic Usage:
 
-        1) Enable the plugin by setting serialplugin_enabled in the device configuration to 1.
-        2) Set the pins (serialplugin_rxd / serialplugin_txd) for your preferred RX and TX GPIO pins.
-           If you're using a tbeam 1.0 or newer, recommend to use RX 35 / TX 15
+        1) Enable the plugin by setting SERIALPLUGIN_ENABLED to 1.
+        2) Set the pins (RXD2 / TXD2) for your preferred RX and TX GPIO pins.
+           On tbeam, recommend to use:
+                #define RXD2 35
+                #define TXD2 15
         3) Set SERIALPLUGIN_TIMEOUT to the amount of time to wait before we consider
            your packet as "done".
         4) (Optional) In SerialPlugin.h set the port to PortNum_TEXT_MESSAGE_APP if you want to
@@ -33,7 +35,6 @@
            to your device.
 
     TODO (in this order):
-        * Add check for esp32 and only build code sections for esp32.
         * Once protobufs regenerated with the new port, update SerialPlugin.h
         * Ensure this works on a tbeam
         * Define a verbose RX mode to report on mesh and packet infomration.
@@ -42,7 +43,7 @@
     KNOWN PROBLEMS
         * Until the plugin is initilized by the startup sequence, the TX pin is in a floating
           state. Device connected to that pin may see this as "noise".
-        * This will not work on the NRF or Linux target.
+        * Will not work on NRF and the Linux device targets.
 
 
 */
@@ -133,7 +134,6 @@ void SerialPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
 
 bool SerialPluginRadio::handleReceived(const MeshPacket &mp)
 {
-
 #ifndef NO_ESP32
 
     if (radioConfig.preferences.serialplugin_enabled) {
