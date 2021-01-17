@@ -18,13 +18,15 @@ typedef enum _PortNum {
     PortNum_NODEINFO_APP = 4,
     PortNum_REPLY_APP = 32,
     PortNum_IP_TUNNEL_APP = 33,
-    PortNum_PRIVATE_APP = 256
+    PortNum_SERIAL_APP = 64,
+    PortNum_PRIVATE_APP = 256,
+    PortNum_ATAK_FORWARDER = 257
 } PortNum;
 
 /* Helper constants for enums */
 #define _PortNum_MIN PortNum_UNKNOWN_APP
-#define _PortNum_MAX PortNum_PRIVATE_APP
-#define _PortNum_ARRAYSIZE ((PortNum)(PortNum_PRIVATE_APP+1))
+#define _PortNum_MAX PortNum_ATAK_FORWARDER
+#define _PortNum_ARRAYSIZE ((PortNum)(PortNum_ATAK_FORWARDER+1))
 
 
 #ifdef __cplusplus
