@@ -1172,8 +1172,8 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     res->println("\"memory\": {");
     res->printf("\"heap_total\": %u,\n", ESP.getHeapSize());
     res->printf("\"heap_free\": %u,\n", ESP.getFreeHeap());
-    res->printf("\"psram_total\": %s,\n", ESP.getPsramSize());
-    res->printf("\"psram_free\": %s,\n", ESP.getFreePsram());
+    res->printf("\"psram_total\": %u,\n", ESP.getPsramSize());
+    res->printf("\"psram_free\": %u,\n", ESP.getFreePsram());
     res->print("\"spiffs_total\" : " + String(SPIFFS.totalBytes()) + ",");
     res->print("\"spiffs_used\" : " + String(SPIFFS.usedBytes()) + ",");
     res->print("\"spiffs_free\" : " + String(SPIFFS.totalBytes() - SPIFFS.usedBytes()));
