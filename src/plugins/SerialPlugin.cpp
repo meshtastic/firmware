@@ -80,7 +80,15 @@ int32_t SerialPlugin::runOnce()
             } else {
                 Serial2.begin(SERIALPLUGIN_BAUD, SERIAL_8N1, RXD2, TXD2);
             }
-            Serial2.setTimeout(SERIALPLUGIN_TIMEOUT); // Number of MS to wait to set the timeout for the string.
+
+            if (radioConfig.preferences.serialplugin_timeout) {
+                Serial2.setTimeout(
+                    radioConfig.preferences.serialplugin_timeout); // Number of MS to wait to set the timeout for the string.
+
+            } else {
+                Serial2.setTimeout(SERIALPLUGIN_TIMEOUT); // Number of MS to wait to set the timeout for the string.
+            }
+
             Serial2.setRxBufferSize(SERIALPLUGIN_RX_BUFFER);
 
             serialPluginRadio = new SerialPluginRadio();
