@@ -59,7 +59,7 @@
 #define SERIALPLUGIN_BAUD 38400
 #define SERIALPLUGIN_ENABLED 0
 #define SERIALPLUGIN_ECHO 0
-#define SERIALPLUGIN_ACK 0
+#define SERIALPLUGIN_ACK 1
 
 SerialPlugin *serialPlugin;
 SerialPluginRadio *serialPluginRadio;
