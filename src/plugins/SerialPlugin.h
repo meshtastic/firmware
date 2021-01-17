@@ -33,8 +33,8 @@ class SerialPluginRadio : public SinglePortPlugin
               from the main code.
     */
 
-    SerialPluginRadio() : SinglePortPlugin("SerialPluginRadio", PortNum_TEXT_MESSAGE_APP) {}
-    // SerialPluginRadio() : SinglePortPlugin("SerialPluginRadio", PortNum_SERIAL_APP) {}
+    // SerialPluginRadio() : SinglePortPlugin("SerialPluginRadio", PortNum_TEXT_MESSAGE_APP) {}
+    SerialPluginRadio() : SinglePortPlugin("SerialPluginRadio", PortNum_SERIAL_APP) {}
 
     /**
      * Send our payload into the mesh

@@ -1,14 +1,15 @@
 #include "plugins/NodeInfoPlugin.h"
 #include "plugins/PositionPlugin.h"
+#include "plugins/RemoteHardwarePlugin.h"
 #include "plugins/ReplyPlugin.h"
 #include "plugins/SerialPlugin.h"
-#include "plugins/RemoteHardwarePlugin.h"
 #include "plugins/TextMessagePlugin.h"
 
 /**
  * Create plugin instances here.  If you are adding a new plugin, you must 'new' it here (or somewhere else)
  */
-void setupPlugins() {
+void setupPlugins()
+{
     nodeInfoPlugin = new NodeInfoPlugin();
     positionPlugin = new PositionPlugin();
     textMessagePlugin = new TextMessagePlugin();
@@ -18,5 +19,11 @@ void setupPlugins() {
 
     new RemoteHardwarePlugin();
     new ReplyPlugin();
+
+#ifndef NO_ESP32
+    // Only run on an esp32 based device.
+
     new SerialPlugin(); // Maintained by MC Hamster (Jm Casler) jm@casler.org
+#endif
+
 }
