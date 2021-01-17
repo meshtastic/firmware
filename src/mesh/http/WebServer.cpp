@@ -1169,8 +1169,18 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 
     res->println("},");
 
+    res->println("\"memory\": {");
+    res->printf("\"heap_total\": %u,\n", ESP.getHeapSize());
+    res->printf("\"heap_free\": %u,\n", ESP.getFreeHeap());
+    res->printf("\"psram_total\": %s,\n", ESP.getPsramSize());
+    res->printf("\"psram_free\": %s,\n", ESP.getFreePsram());
+    res->print("\"spiffs_total\" : " + String(SPIFFS.totalBytes()) + ",");
+    res->print("\"spiffs_used\" : " + String(SPIFFS.usedBytes()) + ",");
+    res->print("\"spiffs_free\" : " + String(SPIFFS.totalBytes() - SPIFFS.usedBytes()));
+    res->println("},");
+
     res->println("\"power\": {");
-#define BoolToString(x) ((x)?"true":"false")
+#define BoolToString(x) ((x) ? "true" : "false")
     res->printf("\"battery_percent\": %u,\n", powerStatus->getBatteryChargePercent());
     res->printf("\"battery_voltage_mv\": %u,\n", powerStatus->getBatteryVoltageMv());
     res->printf("\"has_battery\": %s,\n", BoolToString(powerStatus->getHasBattery()));
