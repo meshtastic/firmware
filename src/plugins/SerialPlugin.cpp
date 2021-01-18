@@ -66,6 +66,17 @@ char serialStringChar[Constants_DATA_PAYLOAD_LEN];
 int32_t SerialPlugin::runOnce()
 {
 #ifndef NO_ESP32
+
+    /*
+        Uncomment the preferences below if you want to use the plugin
+        without having to configure it from the PythonAPI or WebUI.
+    */
+
+    // radioConfig.preferences.serialplugin_enabled = 1;
+    // radioConfig.preferences.serialplugin_rxd = 35;
+    // radioConfig.preferences.serialplugin_txd = 15;
+    // radioConfig.preferences.serialplugin_timeout = 1000;
+
     if (radioConfig.preferences.serialplugin_enabled) {
 
         if (firstTime) {
@@ -147,8 +158,8 @@ bool SerialPluginRadio::handleReceived(const MeshPacket &mp)
     if (radioConfig.preferences.serialplugin_enabled) {
 
         auto &p = mp.decoded.data;
-        // DEBUG_MSG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s\n", nodeDB.getNodeNum(),
-        //          mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
+        // DEBUG_MSG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s\n",
+        //          nodeDB.getNodeNum(), mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
 
         if (mp.from == nodeDB.getNodeNum()) {
 
