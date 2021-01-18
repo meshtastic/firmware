@@ -80,6 +80,8 @@ bool isCertReady = 0;
 
 uint32_t timeSpeedUp = 0;
 
+uint32_t numberOfRequests = 0;
+
 // We need to specify some content-type mapping, so the resources get delivered with the
 // right content type and are displayed correctly in the browser
 char contentTypes[][2][32] = {{".txt", "text/plain"},     {".html", "text/html"},
@@ -337,6 +339,8 @@ void middlewareSpeedUp240(HTTPRequest *req, HTTPResponse *res, std::function<voi
 
     setCpuFrequencyMhz(240);
     timeSpeedUp = millis();
+
+    numberOfRequests++;
 }
 
 void middlewareSpeedUp160(HTTPRequest *req, HTTPResponse *res, std::function<void()> next)
@@ -355,6 +359,8 @@ void middlewareSpeedUp160(HTTPRequest *req, HTTPResponse *res, std::function<voi
         setCpuFrequencyMhz(160);
     }
     timeSpeedUp = millis();
+
+    numberOfRequests++;
 }
 
 void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
@@ -1159,6 +1165,7 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 
     res->println("\"wifi\": {");
 
+    res->printf("\"web_request_count\": %d,\n", numberOfRequests);
     res->println("\"rssi\": " + String(WiFi.RSSI()) + ",");
 
     if (radioConfig.preferences.wifi_ap_mode || isSoftAPForced()) {
@@ -1170,13 +1177,13 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     res->println("},");
 
     res->println("\"memory\": {");
-    res->printf("\"heap_total\": %u,\n", ESP.getHeapSize());
-    res->printf("\"heap_free\": %u,\n", ESP.getFreeHeap());
-    res->printf("\"psram_total\": %s,\n", ESP.getPsramSize());
-    res->printf("\"psram_free\": %s,\n", ESP.getFreePsram());
-    res->print("\"spiffs_total\" : " + String(SPIFFS.totalBytes()) + ",");
-    res->print("\"spiffs_used\" : " + String(SPIFFS.usedBytes()) + ",");
-    res->print("\"spiffs_free\" : " + String(SPIFFS.totalBytes() - SPIFFS.usedBytes()));
+    res->printf("\"heap_total\": %d,\n", ESP.getHeapSize());
+    res->printf("\"heap_free\": %d,\n", ESP.getFreeHeap());
+    res->printf("\"psram_total\": %d,\n", ESP.getPsramSize());
+    res->printf("\"psram_free\": %d,\n", ESP.getFreePsram());
+    res->println("\"spiffs_total\" : " + String(SPIFFS.totalBytes()) + ",");
+    res->println("\"spiffs_used\" : " + String(SPIFFS.usedBytes()) + ",");
+    res->println("\"spiffs_free\" : " + String(SPIFFS.totalBytes() - SPIFFS.usedBytes()));
     res->println("},");
 
     res->println("\"power\": {");
