@@ -3,6 +3,7 @@
 #include "NodeDB.h"
 #include "SPILock.h"
 #include "mesh-pb-constants.h"
+#include "error.h"
 #include <configuration.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -67,9 +68,18 @@ bool RadioLibInterface::canSendImmediately()
     bool busyTx = sendingPacket != NULL;
     bool busyRx = isReceiving && isActivelyReceiving();
 
+
     if (busyTx || busyRx) {
         if (busyTx)
             DEBUG_MSG("Can not send yet, busyTx\n");
+        // If we've been trying to send the same packet more than one minute and we haven't gotten a
+        // TX IRQ from the radio, the radio is probably broken.
+        if (busyTx && (millis() - lastTxStart > 60000)){
+            DEBUG_MSG("Hardware Failure! busyTx for more than 60s\n");
+            recordCriticalError(CriticalErrorCode_TransmitFailed);
+            if (busyTx && (millis() - lastTxStart > 65000)) // After 5s more, reboot
+                ESP.restart();
+        }
         if (busyRx)
             DEBUG_MSG("Can not send yet, busyRx\n");
         return false;
