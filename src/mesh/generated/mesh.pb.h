@@ -76,7 +76,8 @@ typedef enum _CriticalErrorCode {
     CriticalErrorCode_Unspecified = 4,
     CriticalErrorCode_UBloxInitFailed = 5,
     CriticalErrorCode_NoAXP192 = 6,
-    CriticalErrorCode_InvalidRadioSetting = 7
+    CriticalErrorCode_InvalidRadioSetting = 7,
+    CriticalErrorCode_TransmitFailed = 8
 } CriticalErrorCode;
 
 typedef enum _ChannelSettings_ModemConfig {
