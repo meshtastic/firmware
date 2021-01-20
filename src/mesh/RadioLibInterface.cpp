@@ -77,8 +77,10 @@ bool RadioLibInterface::canSendImmediately()
         if (busyTx && (millis() - lastTxStart > 60000)){
             DEBUG_MSG("Hardware Failure! busyTx for more than 60s\n");
             recordCriticalError(CriticalErrorCode_TransmitFailed);
+#ifndef NO_ESP32
             if (busyTx && (millis() - lastTxStart > 65000)) // After 5s more, reboot
                 ESP.restart();
+#endif
         }
         if (busyRx)
             DEBUG_MSG("Can not send yet, busyRx\n");
