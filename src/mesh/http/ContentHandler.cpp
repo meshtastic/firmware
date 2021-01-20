@@ -5,10 +5,12 @@
 #include "mesh/http/ContentStatic.h"
 #include "mesh/http/WiFiAPClient.h"
 #include "power.h"
+#include "sleep.h"
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>
 #include <HTTPURLEncodedBodyParser.hpp>
 #include <SPIFFS.h>
+#include "main.h"
 
 #ifndef NO_ESP32
 #include "esp_task_wdt.h"
@@ -925,6 +927,134 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 
     res->println("},");
 
+    res->println("\"status\": \"ok\"");
+    res->println("}");
+}
+
+// --------
+
+void handle404(HTTPRequest *req, HTTPResponse *res)
+{
+
+    // Discard request body, if we received any
+    // We do this, as this is the default node and may also server POST/PUT requests
+    req->discardRequestBody();
+
+    // Set the response status
+    res->setStatusCode(404);
+    res->setStatusText("Not Found");
+
+    // Set content type of the response
+    res->setHeader("Content-Type", "text/html");
+
+    // Write a tiny HTTP page
+    res->println("<!DOCTYPE html>");
+    res->println("<html>");
+    res->println("<head><title>Not Found</title></head>");
+    res->println("<body><h1>404 Not Found</h1><p>The requested resource was not found on this server.</p></body>");
+    res->println("</html>");
+}
+
+/*
+    This supports the Apple Captive Network Assistant (CNA) Portal
+*/
+void handleHotspot(HTTPRequest *req, HTTPResponse *res)
+{
+    DEBUG_MSG("Hotspot Request\n");
+
+    /*
+        If we don't do a redirect, be sure to return a "Success" message
+        otherwise iOS will have trouble detecting that the connection to the SoftAP worked.
+    */
+
+    // Status code is 200 OK by default.
+    // We want to deliver a simple HTML page, so we send a corresponding content type:
+    res->setHeader("Content-Type", "text/html");
+
+    // res->println("<!DOCTYPE html>");
+    res->println("<meta http-equiv=\"refresh\" content=\"0;url=/\" />\n");
+}
+
+void handleRestart(HTTPRequest *req, HTTPResponse *res)
+{
+    res->setHeader("Content-Type", "text/html");
+
+    DEBUG_MSG("***** Restarted on HTTP(s) Request *****\n");
+    res->println("Restarting");
+
+    ESP.restart();
+}
+
+void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
+{
+    res->setHeader("Content-Type", "application/json");
+
+    ResourceParameters *params = req->getParams();
+    std::string blink_target;
+
+    if (!params->getQueryParameter("blink_target", blink_target)) {
+        // if no blink_target was supplied in the URL parameters of the
+        // POST request, then assume we should blink the LED
+        blink_target = "LED";
+    }
+
+    if (blink_target == "LED") {
+        uint8_t count = 10;
+        while (count > 0) {
+            setLed(true);
+            delay(50);
+            setLed(false);
+            delay(50);
+            count = count - 1;
+        }
+    } else {
+        screen->blink();
+    }
+
+    res->println("{");
+    res->println("\"status\": \"ok\"");
+    res->println("}");
+}
+
+void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
+{
+    res->setHeader("Content-Type", "application/json");
+    // res->setHeader("Content-Type", "text/html");
+
+    int n = WiFi.scanNetworks();
+    res->println("{");
+    res->println("\"data\": {");
+    if (n == 0) {
+        // No networks found.
+        res->println("\"networks\": []");
+
+    } else {
+        res->println("\"networks\": [");
+
+        for (int i = 0; i < n; ++i) {
+            char ssidArray[50];
+            String ssidString = String(WiFi.SSID(i));
+            // String ssidString = String(WiFi.SSID(i)).toCharArray(ssidArray, WiFi.SSID(i).length());
+            ssidString.replace("\"", "\\\"");
+            ssidString.toCharArray(ssidArray, 50);
+
+            if (WiFi.encryptionType(i) != WIFI_AUTH_OPEN) {
+                // res->println("{\"ssid\": \"%s\",\"rssi\": -75}, ", String(WiFi.SSID(i).c_str() );
+
+                res->printf("{\"ssid\": \"%s\",\"rssi\": %d}", ssidArray, WiFi.RSSI(i));
+                // WiFi.RSSI(i)
+                if (i != n - 1) {
+                    res->printf(",");
+                }
+            }
+            // Yield some cpu cycles to IP stack.
+            //   This is important in case the list is large and it takes us time to return
+            //   to the main loop.
+            yield();
+        }
+        res->println("]");
+    }
+    res->println("},");
     res->println("\"status\": \"ok\"");
     res->println("}");
 }
