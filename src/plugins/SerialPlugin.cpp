@@ -10,7 +10,7 @@
 
 /*
     SerialPlugin
-        An overly simplistic interface to send messages over the mesh network by sending strings
+        A simple interface to send messages over the mesh network by sending strings
         over a serial port.
 
         Default is to use RX GPIO 16 and TX GPIO 17.
@@ -20,23 +20,21 @@
 
     Basic Usage:
 
-        1) Enable the plugin by setting SERIALPLUGIN_ENABLED to 1.
-        2) Set the pins (RXD2 / TXD2) for your preferred RX and TX GPIO pins.
+        1) Enable the plugin by setting serialplugin_enabled to 1.
+        2) Set the pins (serialplugin_rxd / serialplugin_rxd) for your preferred RX and TX GPIO pins.
            On tbeam, recommend to use:
-                #define RXD2 35
-                #define TXD2 15
-        3) Set SERIALPLUGIN_TIMEOUT to the amount of time to wait before we consider
+                RXD 35
+                TXD 15
+        3) Set serialplugin_timeout to the amount of time to wait before we consider
            your packet as "done".
         4) (Optional) In SerialPlugin.h set the port to PortNum_TEXT_MESSAGE_APP if you want to
            send messages to/from the general text message channel.
         5) Connect to your device over the serial interface at 38400 8N1.
         6) Send a packet up to 240 bytes in length. This will get relayed over the mesh network.
-        7) (Optional) Set SERIALPLUGIN_ECHO to 1 and any message you send out will be echoed back
+        7) (Optional) Set serialplugin_echo to 1 and any message you send out will be echoed back
            to your device.
 
     TODO (in this order):
-        * Once protobufs regenerated with the new port, update SerialPlugin.h
-        * Ensure this works on a tbeam
         * Define a verbose RX mode to report on mesh and packet infomration.
             - This won't happen any time soon.
 
@@ -76,13 +74,14 @@ int32_t SerialPlugin::runOnce()
     // radioConfig.preferences.serialplugin_rxd = 35;
     // radioConfig.preferences.serialplugin_txd = 15;
     // radioConfig.preferences.serialplugin_timeout = 1000;
+    // radioConfig.preferences.serialplugin_echo = 1;
 
     if (radioConfig.preferences.serialplugin_enabled) {
 
         if (firstTime) {
 
             // Interface with the serial peripheral from in here.
-            DEBUG_MSG("Initilizing serial peripheral interface\n");
+            DEBUG_MSG("Initializing serial peripheral interface\n");
 
             if (radioConfig.preferences.serialplugin_rxd && radioConfig.preferences.serialplugin_txd) {
                 Serial2.begin(SERIALPLUGIN_BAUD, SERIAL_8N1, radioConfig.preferences.serialplugin_rxd,
