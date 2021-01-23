@@ -1,6 +1,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "airtime.h"
+#include "main.h"
 #include "mesh/http/ContentHelper.h"
 #include "mesh/http/ContentStatic.h"
 #include "mesh/http/WiFiAPClient.h"
@@ -10,7 +11,6 @@
 #include <HTTPMultipartBodyParser.hpp>
 #include <HTTPURLEncodedBodyParser.hpp>
 #include <SPIFFS.h>
-#include "main.h"
 
 #ifndef NO_ESP32
 #include "esp_task_wdt.h"
@@ -88,7 +88,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeJsonScanNetworks = new ResourceNode("/json/scanNetworks", "GET", &handleScanNetworks);
     ResourceNode *nodeJsonBlinkLED = new ResourceNode("/json/blink", "POST", &handleBlinkLED);
     ResourceNode *nodeJsonReport = new ResourceNode("/json/report", "GET", &handleReport);
-    ResourceNode *nodeJsonSpiffsBrowseStatic = new ResourceNode("/json/spiffs/browse/static/", "GET", &handleSpiffsBrowseStatic);
+    ResourceNode *nodeJsonSpiffsBrowseStatic = new ResourceNode("/json/spiffs/browse/static", "GET", &handleSpiffsBrowseStatic);
     ResourceNode *nodeJsonDelete = new ResourceNode("/json/spiffs/delete/static", "DELETE", &handleSpiffsDeleteStatic);
 
     // Secure nodes
@@ -192,7 +192,7 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
     // Status code is 200 OK by default.
     res->setHeader("Content-Type", "application/x-protobuf");
     res->setHeader("Access-Control-Allow-Origin", "*");
-    res->setHeader("Access-Control-Allow-Methods", "PUT, GET");
+    res->setHeader("Access-Control-Allow-Methods", "GET");
     res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/Meshtastic-protobufs/master/mesh.proto");
 
     uint8_t txBuf[MAX_STREAM_BUF_SIZE];
@@ -342,7 +342,8 @@ void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
     // jm
 
     res->setHeader("Content-Type", "application/json");
-    // res->setHeader("Content-Type", "text/html");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "GET");
 
     File root = SPIFFS.open("/");
 
@@ -397,6 +398,8 @@ void handleSpiffsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
     std::string paramValDelete;
 
     res->setHeader("Content-Type", "application/json");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "DELETE");
     if (params->getQueryParameter("delete", paramValDelete)) {
         std::string pathDelete = "/" + paramValDelete;
         if (SPIFFS.remove(pathDelete.c_str())) {
@@ -835,6 +838,8 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 
     if (content == "json") {
         res->setHeader("Content-Type", "application/json");
+        res->setHeader("Access-Control-Allow-Origin", "*");
+        res->setHeader("Access-Control-Allow-Methods", "GET");
 
     } else {
         res->setHeader("Content-Type", "text/html");
@@ -978,6 +983,8 @@ void handleHotspot(HTTPRequest *req, HTTPResponse *res)
 void handleRestart(HTTPRequest *req, HTTPResponse *res)
 {
     res->setHeader("Content-Type", "text/html");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "GET");
 
     DEBUG_MSG("***** Restarted on HTTP(s) Request *****\n");
     res->println("Restarting");
@@ -988,6 +995,8 @@ void handleRestart(HTTPRequest *req, HTTPResponse *res)
 void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
 {
     res->setHeader("Content-Type", "application/json");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "POST");
 
     ResourceParameters *params = req->getParams();
     std::string blink_target;
@@ -1019,6 +1028,8 @@ void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
 void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
 {
     res->setHeader("Content-Type", "application/json");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "GET");
     // res->setHeader("Content-Type", "text/html");
 
     int n = WiFi.scanNetworks();
