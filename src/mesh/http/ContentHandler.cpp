@@ -975,6 +975,8 @@ void handleHotspot(HTTPRequest *req, HTTPResponse *res)
     // Status code is 200 OK by default.
     // We want to deliver a simple HTML page, so we send a corresponding content type:
     res->setHeader("Content-Type", "text/html");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "GET");
 
     // res->println("<!DOCTYPE html>");
     res->println("<meta http-equiv=\"refresh\" content=\"0;url=/\" />\n");
