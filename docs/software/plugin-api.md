@@ -79,3 +79,13 @@ If you would like to use protocol buffers to define the structures you send over
 * Create a new .proto file in the protos directory.  You can use the existing [remote_hardware.proto](https://github.com/meshtastic/Meshtastic-protobufs/blob/master/remote_hardware.proto) file as an example.
 * Run "bin/regen-protos.sh" to regenerate the C code for accessing the protocol buffers.  If you don't have the required nanopb tool, follow the instructions printed by the script to get it.
 * Done!  You can now use your new protobuf just like any of the existing protobufs in meshtastic.
+
+## Using GPIO
+
+Please update this if your plugin uses a GPIO. This will help with pin reuse and avoid collissions. It's OK to reuse a GPIO.
+
+13. ExternalNotification
+14.
+15.
+16. SerialPlugin
+17. SerialPlugin
