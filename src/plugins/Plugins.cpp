@@ -1,3 +1,4 @@
+#include "plugins/ExternalNotificationPlugin.h"
 #include "plugins/NodeInfoPlugin.h"
 #include "plugins/PositionPlugin.h"
 #include "plugins/RemoteHardwarePlugin.h"
@@ -23,7 +24,7 @@ void setupPlugins()
 #ifndef NO_ESP32
     // Only run on an esp32 based device.
 
-    new SerialPlugin(); // Maintained by MC Hamster (Jm Casler) jm@casler.org
+    new SerialPlugin();               // Maintained by MC Hamster (Jm Casler) jm@casler.org
+    new ExternalNotificationPlugin(); // Maintained by MC Hamster (Jm Casler) jm@casler.org
 #endif
-
 }
