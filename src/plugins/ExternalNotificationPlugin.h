@@ -14,6 +14,9 @@ class ExternalNotificationPlugin : private concurrency::OSThread
   public:
     ExternalNotificationPlugin();
 
+    void setExternalOn();
+    void setExternalOff();
+
   protected:
     virtual int32_t runOnce();
 };

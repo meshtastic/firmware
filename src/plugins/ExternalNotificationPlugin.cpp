@@ -36,7 +36,7 @@ int32_t ExternalNotificationPlugin::runOnce()
     // radioConfig.preferences.externalnotificationplugin_enabled = 1;
     // radioConfig.preferences.externalnotificationplugin_mode = 1;
 
-    if (0) {
+    if (1) {
 
         if (firstTime) {
 
@@ -45,6 +45,16 @@ int32_t ExternalNotificationPlugin::runOnce()
             externalNotificationPluginRadio = new ExternalNotificationPluginRadio();
 
             firstTime = 0;
+
+            // Set the direction of a pin
+            pinMode(13, OUTPUT);
+
+            // if ext_notification_plugin_active
+            if (1) { 
+                setExternalOff();
+            } else {
+                setExternalOn();
+            }
 
         } else {
             /*
@@ -66,6 +76,27 @@ int32_t ExternalNotificationPlugin::runOnce()
 #endif
 }
 
+void ExternalNotificationPlugin::setExternalOn()
+{
+    // if ext_notification_plugin_active
+    if (1) {
+        digitalWrite(13, true);
+
+    } else {
+        digitalWrite(13, false);
+    }
+}
+
+void ExternalNotificationPlugin::setExternalOff()
+{
+    // if ext_notification_plugin_active
+    if (1) {
+        digitalWrite(13, false);
+    } else {
+        digitalWrite(13, true);
+    }
+}
+
 // --------
 
 MeshPacket *ExternalNotificationPluginRadio::allocReply()
@@ -80,7 +111,7 @@ bool ExternalNotificationPluginRadio::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
 
-    if (0) {
+    if (1) {
 
         auto &p = mp.decoded.data;
 
@@ -95,6 +126,9 @@ bool ExternalNotificationPluginRadio::handleReceived(const MeshPacket &mp)
                 TODO: If ext_notification_plugin_alert_message is true, trigger an external notification.
             */
             // TODO: On received packet, blink the LED.
+            externalNotificationPlugin->setExternalOn();
+            delay(500);
+            externalNotificationPlugin->setExternalOff();
 
         }
 
