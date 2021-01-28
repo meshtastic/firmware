@@ -16,8 +16,14 @@ static void printUsageErrorMsg(uint32_t cfsr)
     cfsr >>= SCB_CFSR_USGFAULTSR_Pos; // right shift to lsb
     if ((cfsr & (1 << 9)) != 0)
         FAULT_MSG("Divide by zero\n");
-    if ((cfsr & (1 << 8)) != 0)
+    else if ((cfsr & (1 << 8)) != 0)
         FAULT_MSG("Unaligned\n");
+    else if ((cfsr & (1 << 1)) != 0)
+        FAULT_MSG("Invalid state\n");
+    else if ((cfsr & (1 << 0)) != 0)
+        FAULT_MSG("Invalid instruction\n");
+    else
+        FAULT_MSG("FIXME add to printUsageErrorMsg!\n");  
 }
 
 static void printBusErrorMsg(uint32_t cfsr)
@@ -71,8 +77,9 @@ extern "C" void HardFault_Impl(uint32_t stack[])
 
     FAULT_MSG("Done with fault report - Waiting to reboot\n");
     asm volatile("bkpt #01"); // Enter the debugger if one is connected
-    while (1)
-        ;
+
+    // Don't spin, so that the debugger will let the user step to next instruction
+    // while (1) ;
 }
 
 extern "C" void HardFault_Handler(void)

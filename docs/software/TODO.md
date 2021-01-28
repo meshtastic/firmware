@@ -2,6 +2,27 @@
 
 You probably don't care about this section - skip to the next one.
 
+eink:
+
+* new battery level sensing
+* measure current draw
+* DONE: fix backlight
+* USB is busted because of power enable mode?
+* OHH BME280!  THAT IS GREAT!
+* make new screen work, ask for datasheet
+* say I think you could ship this
+* leds seem busted
+* usb doesn't stay connected
+* check GPS works
+* check GPS fast locking
+* send email about variants & faster flash programming - https://github.com/geeksville/Meshtastic-esp32/commit/f110225173a77326aac029321cdb6491bfa640f6
+* send PR for bootloader
+* fix nrf52 time/date
+* send new master bin file
+* send email about low power mode problems
+* support new flash chip in appload, possibly use low power mode
+* swbug! stuck busy tx occurred!
+  
 For app cleanup:
 
 * use structured logging to kep logs in ram.  Also send logs as packets to api clients
