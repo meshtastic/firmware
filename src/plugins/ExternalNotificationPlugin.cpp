@@ -10,14 +10,29 @@
 
 /*
 
+This plugin supports:
+  https://github.com/meshtastic/Meshtastic-device/issues/654
+  
+
     bool ext_notification_plugin_enabled = 126;
-    uint32 ext_notification_plugin_output_ms = 127;
-    uint32 ext_notification_plugin_output = 128;
     bool ext_notification_plugin_active = 129;
     bool ext_notification_plugin_alert_message = 130;
     bool ext_notification_plugin_alert_bell = 131;
+    uint32 ext_notification_plugin_output = 128;
+
+
+    uint32 ext_notification_plugin_output_ms = 127;
 
 */
+
+#define EXT_NOTIFICATION_PLUGIN_ENABLED 1
+#define EXT_NOTIFICATION_PLUGIN_ACTIVE 1
+#define EXT_NOTIFICATION_PLUGIN_ALERT_MESSAGE 1
+#define EXT_NOTIFICATION_PLUGIN_ALERT_BELL 1
+#define EXT_NOTIFICATION_PLUGIN_OUTPUT 13
+#define EXT_NOTIFICATION_PLUGIN_OUTPUT_MS 100
+
+#define ASCII_BELL 0x07
 
 ExternalNotificationPlugin *externalNotificationPlugin;
 ExternalNotificationPluginRadio *externalNotificationPluginRadio;
@@ -36,7 +51,7 @@ int32_t ExternalNotificationPlugin::runOnce()
     // radioConfig.preferences.externalnotificationplugin_enabled = 1;
     // radioConfig.preferences.externalnotificationplugin_mode = 1;
 
-    if (1) {
+    if (EXT_NOTIFICATION_PLUGIN_ENABLED) {
 
         if (firstTime) {
 
@@ -47,10 +62,10 @@ int32_t ExternalNotificationPlugin::runOnce()
             firstTime = 0;
 
             // Set the direction of a pin
-            pinMode(13, OUTPUT);
+            pinMode(EXT_NOTIFICATION_PLUGIN_OUTPUT, OUTPUT);
 
             // if ext_notification_plugin_active
-            if (1) { 
+            if (EXT_NOTIFICATION_PLUGIN_ACTIVE) {
                 setExternalOff();
             } else {
                 setExternalOn();
@@ -78,22 +93,26 @@ int32_t ExternalNotificationPlugin::runOnce()
 
 void ExternalNotificationPlugin::setExternalOn()
 {
+    externalCurrentState = 1;
+
     // if ext_notification_plugin_active
-    if (1) {
-        digitalWrite(13, true);
+    if (EXT_NOTIFICATION_PLUGIN_ACTIVE) {
+        digitalWrite(EXT_NOTIFICATION_PLUGIN_OUTPUT, true);
 
     } else {
-        digitalWrite(13, false);
+        digitalWrite(EXT_NOTIFICATION_PLUGIN_OUTPUT, false);
     }
 }
 
 void ExternalNotificationPlugin::setExternalOff()
 {
+    externalCurrentState = 0;
+
     // if ext_notification_plugin_active
-    if (1) {
-        digitalWrite(13, false);
+    if (EXT_NOTIFICATION_PLUGIN_ACTIVE) {
+        digitalWrite(EXT_NOTIFICATION_PLUGIN_OUTPUT, false);
     } else {
-        digitalWrite(13, true);
+        digitalWrite(EXT_NOTIFICATION_PLUGIN_OUTPUT, true);
     }
 }
 
@@ -111,25 +130,31 @@ bool ExternalNotificationPluginRadio::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
 
-    if (1) {
+    if (EXT_NOTIFICATION_PLUGIN_ENABLED) {
 
         auto &p = mp.decoded.data;
 
         if (mp.from != nodeDB.getNodeNum()) {
 
-            /*
-                TODO: If ext_notification_plugin_alert_bell is true and we see a bell character, trigger an external notification.
-            */
-            // TODO: Check p.payload.bytes to see if it contains a bell character. If it does, trigger an external notifcation.
+            if (EXT_NOTIFICATION_PLUGIN_ALERT_BELL) {
+                for (int i = 0; i < p.payload.size; i++) {
+                    if (p.payload.bytes[i] == ASCII_BELL) {
+                        externalNotificationPlugin->setExternalOn();
 
-            /*
-                TODO: If ext_notification_plugin_alert_message is true, trigger an external notification.
-            */
-            // TODO: On received packet, blink the LED.
-            externalNotificationPlugin->setExternalOn();
-            delay(500);
-            externalNotificationPlugin->setExternalOff();
+                        // TODO: Make this non-blocking.
+                        delay(EXT_NOTIFICATION_PLUGIN_OUTPUT_MS);
+                        externalNotificationPlugin->setExternalOff();
+                    }
+                }
+            }
 
+            if (EXT_NOTIFICATION_PLUGIN_ALERT_MESSAGE) {
+                externalNotificationPlugin->setExternalOn();
+
+                // TODO: Make this non-blocking.
+                delay(EXT_NOTIFICATION_PLUGIN_OUTPUT_MS);
+                externalNotificationPlugin->setExternalOff();
+            }
         }
 
     } else {
