@@ -303,17 +303,20 @@ void setup()
     digitalWrite(RESET_OLED, 1);
 #endif
 
+#ifdef BUTTON_PIN
+#ifndef NO_ESP32
     // If BUTTON_PIN is held down during the startup process,
     //   force the device to go into a SoftAP mode.
     bool forceSoftAP = 0;
-#ifdef BUTTON_PIN
-#ifndef NO_ESP32
     pinMode(BUTTON_PIN, INPUT);
+#ifdef BUTTON_NEED_PULLUP
+    gpio_pullup_en((gpio_num_t)BUTTON_PIN);
+#endif
 
     // BUTTON_PIN is pulled high by a 12k resistor.
     if (!digitalRead(BUTTON_PIN)) {
         forceSoftAP = 1;
-        DEBUG_MSG("-------------------- Setting forceSoftAP = 1\n");
+        DEBUG_MSG("Setting forceSoftAP = 1\n");
     }
 
 #endif
@@ -512,7 +515,6 @@ void setup()
         }
     }
 #endif
-
 
 #ifndef NO_ESP32
     // Initialize Wifi

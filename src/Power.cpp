@@ -1,4 +1,5 @@
 #include "power.h"
+#include "NodeDB.h"
 #include "PowerFSM.h"
 #include "main.h"
 #include "sleep.h"
@@ -268,9 +269,42 @@ bool Power::axp192Init()
             DEBUG_MSG("DCDC3: %s\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
             DEBUG_MSG("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
 
-            //axp.setChargeControlCur(AXP1XX_CHARGE_CUR_1320MA); // actual limit (in HW) on the tbeam is 450mA
-            axp.setChargeControlCur(AXP1XX_CHARGE_CUR_450MA); // There's no HW limit on the tbeam. Setting to 450mz to be a good neighbor on the usb bus.
-            
+            if (radioConfig.preferences.charge_current == ChargeCurrent_MAUnset) {
+                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_450MA);
+            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA100) {
+                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_100MA);
+            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA190) {
+                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_190MA);
+            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA280) {
+                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_280MA);
+            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA360) {
+                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_360MA);
+            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA450) {
+                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_450MA);
+            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA550) {
+                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_550MA);
+            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA630) {
+                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_630MA);
+            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA700) {
+                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_700MA);
+            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA780) {
+                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_780MA);
+            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA880) {
+                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_880MA);
+            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA960) {
+                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_960MA);
+            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA1000) {
+                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_1000MA);
+            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA1080) {
+                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_1080MA);
+            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA1160) {
+                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_1160MA);
+            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA1240) {
+                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_1240MA);
+            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA1320) {
+                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_1320MA);
+            }
+
 #if 0
 
       // Not connected
