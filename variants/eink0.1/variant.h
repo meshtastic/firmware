@@ -16,8 +16,8 @@
  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-#ifndef _VARIANT_TTGO_EINK_V1_0_
-#define _VARIANT_TTGO_EINK_V1_0_
+#ifndef _VARIANT_TTGO_EINK_V0_1_
+#define _VARIANT_TTGO_EINK_V0_1_
 
 /** Master clock frequency */
 #define VARIANT_MCK (64000000ul)
@@ -99,9 +99,9 @@ extern "C" {
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs
-#define PIN_LED1 (0 + 13) // red (confirmed on 1.0 board)
-#define PIN_LED2 (0 + 14) // blue (seems busted!)
-#define PIN_LED3 (0 + 15) // green (seems busted!)
+#define PIN_LED1 (0 + 13) // green (but red on my prototype)
+#define PIN_LED2 (0 + 15) // blue (but red on my prototype)
+#define PIN_LED3 (0 + 14) // red (not functional on my prototype)
 
 #define LED_RED PIN_LED3
 #define LED_GREEN PIN_LED1
@@ -149,7 +149,7 @@ No longer populated on PCB
     */
 #define WIRE_INTERFACES_COUNT 1
 
-#define PIN_WIRE_SDA (26)
+#define PIN_WIRE_SDA (26) // Not connected on board?
 #define PIN_WIRE_SCL (27)
 
 /* touch sensor, active high */
@@ -167,8 +167,8 @@ External serial flash WP25R1635FZUIL0
 #define PIN_QSPI_CS (32 + 15)
 #define PIN_QSPI_IO0 (32 + 12) // MOSI if using two bit interface
 #define PIN_QSPI_IO1 (32 + 13) // MISO if using two bit interface
-#define PIN_QSPI_IO2 (0 + 7) // WP if using two bit interface (i.e. not used)
-#define PIN_QSPI_IO3 (0 + 5) // HOLD if using two bit interface (i.e. not used)
+//#define PIN_QSPI_IO2 22 // WP if using two bit interface (i.e. not used)
+//#define PIN_QSPI_IO3 23 // HOLD if using two bit interface (i.e. not used)
 
 // On-board QSPI Flash
 #define EXTERNAL_FLASH_DEVICES MX25R1635F
@@ -196,7 +196,7 @@ External serial flash WP25R1635FZUIL0
  * eink display pins
  */
 
-#define PIN_EINK_EN (32 + 11) // Note: this is really just backlight power
+#define PIN_EINK_EN (32 + 11)
 #define PIN_EINK_CS (0 + 30)
 #define PIN_EINK_BUSY (0 + 3)
 #define PIN_EINK_DC (0 + 28)
@@ -223,8 +223,7 @@ External serial flash WP25R1635FZUIL0
  */
 
 #define PIN_GPS_WAKE (32 + 2) // An output to wake GPS, low means allow sleep, high means force wake
-// Seems to be missing on this new board
-// #define PIN_GPS_PPS (32 + 4)  // Pulse per second input from the GPS
+#define PIN_GPS_PPS (32 + 4)  // Pulse per second input from the GPS
 #define PIN_GPS_TX (32 + 9)   // This is for bits going TOWARDS the CPU
 #define PIN_GPS_RX (32 + 8)   // This is for bits going TOWARDS the GPS
 
@@ -242,8 +241,6 @@ External serial flash WP25R1635FZUIL0
 #define PIN_SPI_MISO (0 + 23)
 #define PIN_SPI_MOSI (0 + 22)
 #define PIN_SPI_SCK (0 + 19)
-
-#define PIN_PWR_EN (0 + 6)
 
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
 // #define USE_SEGGER
