@@ -122,7 +122,8 @@ bool EInkDisplay::connect()
 #endif
 
 #ifdef PIN_EINK_EN
-    digitalWrite(PIN_EINK_EN, HIGH);
+    // backlight power, HIGH is backlight on, LOW is off
+    digitalWrite(PIN_EINK_EN, LOW);
     pinMode(PIN_EINK_EN, OUTPUT);
 #endif
 
