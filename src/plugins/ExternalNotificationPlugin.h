@@ -11,6 +11,7 @@ class ExternalNotificationPlugin : private concurrency::OSThread
 {
     bool firstTime = 1;
     bool externalCurrentState = 0;
+    uint32_t externalTurnedOn = 0;
 
   public:
     ExternalNotificationPlugin();

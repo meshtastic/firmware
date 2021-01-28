@@ -12,7 +12,7 @@
 
 This plugin supports:
   https://github.com/meshtastic/Meshtastic-device/issues/654
-  
+
 
     bool ext_notification_plugin_enabled = 126;
     bool ext_notification_plugin_active = 129;
@@ -72,13 +72,13 @@ int32_t ExternalNotificationPlugin::runOnce()
             }
 
         } else {
-            /*
+            if (externalCurrentState) {
 
-                1) If GPIO is turned on ...
-                2) Check the timer. If the timer has elapsed more time than
-                   our set limit, turn the GPIO off.
-
-            */
+                // TODO: Test this part. Don't know if this should be greater than or less than.
+                if (externalTurnedOn + EXT_NOTIFICATION_PLUGIN_OUTPUT_MS < millis()) {
+                    setExternalOff();
+                }
+            }
         }
 
         return (25);
@@ -94,6 +94,7 @@ int32_t ExternalNotificationPlugin::runOnce()
 void ExternalNotificationPlugin::setExternalOn()
 {
     externalCurrentState = 1;
+    externalTurnedOn = millis();
 
     // if ext_notification_plugin_active
     if (EXT_NOTIFICATION_PLUGIN_ACTIVE) {
@@ -140,20 +141,12 @@ bool ExternalNotificationPluginRadio::handleReceived(const MeshPacket &mp)
                 for (int i = 0; i < p.payload.size; i++) {
                     if (p.payload.bytes[i] == ASCII_BELL) {
                         externalNotificationPlugin->setExternalOn();
-
-                        // TODO: Make this non-blocking.
-                        delay(EXT_NOTIFICATION_PLUGIN_OUTPUT_MS);
-                        externalNotificationPlugin->setExternalOff();
                     }
                 }
             }
 
             if (EXT_NOTIFICATION_PLUGIN_ALERT_MESSAGE) {
                 externalNotificationPlugin->setExternalOn();
-
-                // TODO: Make this non-blocking.
-                delay(EXT_NOTIFICATION_PLUGIN_OUTPUT_MS);
-                externalNotificationPlugin->setExternalOff();
             }
         }
 
