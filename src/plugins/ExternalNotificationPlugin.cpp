@@ -25,12 +25,12 @@ This plugin supports:
 
 */
 
-#define EXT_NOTIFICATION_PLUGIN_ENABLED 1
-#define EXT_NOTIFICATION_PLUGIN_ACTIVE 1
+#define EXT_NOTIFICATION_PLUGIN_ENABLED 0
+#define EXT_NOTIFICATION_PLUGIN_ACTIVE 0
 #define EXT_NOTIFICATION_PLUGIN_ALERT_MESSAGE 1
-#define EXT_NOTIFICATION_PLUGIN_ALERT_BELL 1
+#define EXT_NOTIFICATION_PLUGIN_ALERT_BELL 0
 #define EXT_NOTIFICATION_PLUGIN_OUTPUT 13
-#define EXT_NOTIFICATION_PLUGIN_OUTPUT_MS 100
+#define EXT_NOTIFICATION_PLUGIN_OUTPUT_MS 1000
 
 #define ASCII_BELL 0x07
 
@@ -38,6 +38,9 @@ ExternalNotificationPlugin *externalNotificationPlugin;
 ExternalNotificationPluginRadio *externalNotificationPluginRadio;
 
 ExternalNotificationPlugin::ExternalNotificationPlugin() : concurrency::OSThread("ExternalNotificationPlugin") {}
+
+bool externalCurrentState = 0;
+uint32_t externalTurnedOn = 0;
 
 int32_t ExternalNotificationPlugin::runOnce()
 {
@@ -57,10 +60,6 @@ int32_t ExternalNotificationPlugin::runOnce()
 
             DEBUG_MSG("Initializing External Notification Plugin\n");
 
-            externalNotificationPluginRadio = new ExternalNotificationPluginRadio();
-
-            firstTime = 0;
-
             // Set the direction of a pin
             pinMode(EXT_NOTIFICATION_PLUGIN_OUTPUT, OUTPUT);
 
@@ -71,11 +70,17 @@ int32_t ExternalNotificationPlugin::runOnce()
                 setExternalOn();
             }
 
+            externalNotificationPluginRadio = new ExternalNotificationPluginRadio();
+
+            firstTime = 0;
+
         } else {
+            // DEBUG_MSG("EN Loop\n");
             if (externalCurrentState) {
 
                 // TODO: Test this part. Don't know if this should be greater than or less than.
                 if (externalTurnedOn + EXT_NOTIFICATION_PLUGIN_OUTPUT_MS < millis()) {
+                    DEBUG_MSG("Turning off external notification\n");
                     setExternalOff();
                 }
             }
@@ -119,14 +124,6 @@ void ExternalNotificationPlugin::setExternalOff()
 
 // --------
 
-MeshPacket *ExternalNotificationPluginRadio::allocReply()
-{
-
-    auto reply = allocDataPacket(); // Allocate a packet for sending
-
-    return reply;
-}
-
 bool ExternalNotificationPluginRadio::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
@@ -134,8 +131,10 @@ bool ExternalNotificationPluginRadio::handleReceived(const MeshPacket &mp)
     if (EXT_NOTIFICATION_PLUGIN_ENABLED) {
 
         auto &p = mp.decoded.data;
+        //DEBUG_MSG("Processing handleReceived\n");
 
         if (mp.from != nodeDB.getNodeNum()) {
+            DEBUG_MSG("handleReceived from some other device\n");
 
             if (EXT_NOTIFICATION_PLUGIN_ALERT_BELL) {
                 for (int i = 0; i < p.payload.size; i++) {
@@ -146,6 +145,7 @@ bool ExternalNotificationPluginRadio::handleReceived(const MeshPacket &mp)
             }
 
             if (EXT_NOTIFICATION_PLUGIN_ALERT_MESSAGE) {
+                //DEBUG_MSG("Turning on alert\n");
                 externalNotificationPlugin->setExternalOn();
             }
         }

@@ -10,8 +10,6 @@
 class ExternalNotificationPlugin : private concurrency::OSThread
 {
     bool firstTime = 1;
-    bool externalCurrentState = 0;
-    uint32_t externalTurnedOn = 0;
 
   public:
     ExternalNotificationPlugin();
@@ -37,7 +35,7 @@ class ExternalNotificationPluginRadio : public SinglePortPlugin
     ExternalNotificationPluginRadio() : SinglePortPlugin("ExternalNotificationPluginRadio", PortNum_TEXT_MESSAGE_APP) {}
 
   protected:
-    virtual MeshPacket *allocReply();
+    //virtual MeshPacket *allocReply();
 
     /** Called to handle a particular incoming message
 
