@@ -27,7 +27,7 @@ This plugin supports:
 
 #define EXT_NOTIFICATION_PLUGIN_ENABLED 0
 #define EXT_NOTIFICATION_PLUGIN_ACTIVE 0
-#define EXT_NOTIFICATION_PLUGIN_ALERT_MESSAGE 1
+#define EXT_NOTIFICATION_PLUGIN_ALERT_MESSAGE 0
 #define EXT_NOTIFICATION_PLUGIN_ALERT_BELL 0
 #define EXT_NOTIFICATION_PLUGIN_OUTPUT 13
 #define EXT_NOTIFICATION_PLUGIN_OUTPUT_MS 1000
@@ -63,19 +63,14 @@ int32_t ExternalNotificationPlugin::runOnce()
             // Set the direction of a pin
             pinMode(EXT_NOTIFICATION_PLUGIN_OUTPUT, OUTPUT);
 
-            // if ext_notification_plugin_active
-            if (EXT_NOTIFICATION_PLUGIN_ACTIVE) {
-                setExternalOff();
-            } else {
-                setExternalOn();
-            }
+            // Turn off the pin
+            setExternalOff();
 
             externalNotificationPluginRadio = new ExternalNotificationPluginRadio();
 
             firstTime = 0;
 
         } else {
-            // DEBUG_MSG("EN Loop\n");
             if (externalCurrentState) {
 
                 // TODO: Test this part. Don't know if this should be greater than or less than.
@@ -131,7 +126,7 @@ bool ExternalNotificationPluginRadio::handleReceived(const MeshPacket &mp)
     if (EXT_NOTIFICATION_PLUGIN_ENABLED) {
 
         auto &p = mp.decoded.data;
-        //DEBUG_MSG("Processing handleReceived\n");
+        // DEBUG_MSG("Processing handleReceived\n");
 
         if (mp.from != nodeDB.getNodeNum()) {
             DEBUG_MSG("handleReceived from some other device\n");
@@ -145,7 +140,7 @@ bool ExternalNotificationPluginRadio::handleReceived(const MeshPacket &mp)
             }
 
             if (EXT_NOTIFICATION_PLUGIN_ALERT_MESSAGE) {
-                //DEBUG_MSG("Turning on alert\n");
+                // DEBUG_MSG("Turning on alert\n");
                 externalNotificationPlugin->setExternalOn();
             }
         }
