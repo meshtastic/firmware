@@ -49,10 +49,31 @@ int32_t ExternalNotificationPlugin::runOnce()
     /*
         Uncomment the preferences below if you want to use the plugin
         without having to configure it from the PythonAPI or WebUI.
-    */
 
-    // radioConfig.preferences.externalnotificationplugin_enabled = 1;
-    // radioConfig.preferences.externalnotificationplugin_mode = 1;
+        EXT_NOTIFICATION_PLUGIN_ENABLED
+            0 = Disabled (Default)
+            1 = Enabled
+
+        EXT_NOTIFICATION_PLUGIN_ACTIVE
+            0 = Active Low (Default)
+            1 = Active High
+
+        EXT_NOTIFICATION_PLUGIN_ALERT_MESSAGE
+            0 = Disabled (Default)
+            1 = Alert when a text message comes
+
+        EXT_NOTIFICATION_PLUGIN_ALERT_BELL
+            0 = Disabled (Default)
+            1 = Alert when the bell character is received
+
+        EXT_NOTIFICATION_PLUGIN_OUTPUT
+            GPIO of the output. (Default = 13)
+
+        EXT_NOTIFICATION_PLUGIN_OUTPUT_MS
+            Amount of time in ms for the alert. Default is 1000.
+
+
+    */
 
     if (EXT_NOTIFICATION_PLUGIN_ENABLED) {
 
@@ -73,7 +94,7 @@ int32_t ExternalNotificationPlugin::runOnce()
         } else {
             if (externalCurrentState) {
 
-                // TODO: Test this part. Don't know if this should be greater than or less than.
+                // If the output is turned on, turn it back off after the given period of time.
                 if (externalTurnedOn + EXT_NOTIFICATION_PLUGIN_OUTPUT_MS < millis()) {
                     DEBUG_MSG("Turning off external notification\n");
                     setExternalOff();
@@ -97,12 +118,7 @@ void ExternalNotificationPlugin::setExternalOn()
     externalTurnedOn = millis();
 
     // if ext_notification_plugin_active
-    if (EXT_NOTIFICATION_PLUGIN_ACTIVE) {
-        digitalWrite(EXT_NOTIFICATION_PLUGIN_OUTPUT, true);
-
-    } else {
-        digitalWrite(EXT_NOTIFICATION_PLUGIN_OUTPUT, false);
-    }
+    digitalWrite(EXT_NOTIFICATION_PLUGIN_OUTPUT, (EXT_NOTIFICATION_PLUGIN_ACTIVE ? true : false));
 }
 
 void ExternalNotificationPlugin::setExternalOff()
@@ -110,11 +126,7 @@ void ExternalNotificationPlugin::setExternalOff()
     externalCurrentState = 0;
 
     // if ext_notification_plugin_active
-    if (EXT_NOTIFICATION_PLUGIN_ACTIVE) {
-        digitalWrite(EXT_NOTIFICATION_PLUGIN_OUTPUT, false);
-    } else {
-        digitalWrite(EXT_NOTIFICATION_PLUGIN_OUTPUT, true);
-    }
+    digitalWrite(EXT_NOTIFICATION_PLUGIN_OUTPUT, (EXT_NOTIFICATION_PLUGIN_ACTIVE ? false : true));
 }
 
 // --------
