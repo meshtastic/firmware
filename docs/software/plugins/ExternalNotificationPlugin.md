@@ -49,6 +49,18 @@ For basic usage, start with:
 Depending on how your external cirtcuit configured is configured, you may need to set the active state to true.
 
 	ext_notification_plugin_active = 1
+	
+## Alert Types
+
+We support being alerted on two events:
+
+1) Incoming Text Message
+
+2) Incoming Text Message that contains the ascii bell character. At present, only the Python API can send an ascii bell character, but more support may be added in the future.
+
+### Bell Character
+
+The bell character is ASCII 0x07. Include 0x07 anywhere in the text message and with ext_notification_plugin_alert_bell enabled, we will issue an external notification.
     
 # External Hardware
 
