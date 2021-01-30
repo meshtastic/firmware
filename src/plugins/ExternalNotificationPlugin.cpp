@@ -10,31 +10,36 @@
 
 /*
 
-This plugin supports:
-  https://github.com/meshtastic/Meshtastic-device/issues/654
+    Documentation:
+        https://github.com/mc-hamster/Meshtastic-device/blob/master/docs/software/plugins/ExternalNotificationPlugin.md
+
+    This plugin supports:
+        https://github.com/meshtastic/Meshtastic-device/issues/654
 
 
-    radioConfig.preferences.ext_notification_plugin_enabled
-        0 = Disabled (Default)
-        1 = Enabled
+    Quick reference:
 
-    radioConfig.preferences.ext_notification_plugin_active
-        0 = Active Low (Default)
-        1 = Active High
+        radioConfig.preferences.ext_notification_plugin_enabled
+            0 = Disabled (Default)
+            1 = Enabled
 
-    radioConfig.preferences.ext_notification_plugin_alert_message
-        0 = Disabled (Default)
-        1 = Alert when a text message comes
+        radioConfig.preferences.ext_notification_plugin_active
+            0 = Active Low (Default)
+            1 = Active High
 
-    radioConfig.preferences.ext_notification_plugin_alert_bell
-        0 = Disabled (Default)
-        1 = Alert when the bell character is received
+        radioConfig.preferences.ext_notification_plugin_alert_message
+            0 = Disabled (Default)
+            1 = Alert when a text message comes
 
-    radioConfig.preferences.ext_notification_plugin_output
-        GPIO of the output. (Default = 13)
+        radioConfig.preferences.ext_notification_plugin_alert_bell
+            0 = Disabled (Default)
+            1 = Alert when the bell character is received
 
-    radioConfig.preferences.ext_notification_plugin_output_ms
-        Amount of time in ms for the alert. Default is 1000.
+        radioConfig.preferences.ext_notification_plugin_output
+            GPIO of the output. (Default = 13)
+
+        radioConfig.preferences.ext_notification_plugin_output_ms
+            Amount of time in ms for the alert. Default is 1000.
 
 */
 
