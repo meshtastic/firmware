@@ -1,4 +1,4 @@
-Documentation for ExternalNotification Plugin
+The ExternalNotification Plugin will allow you to connect a speaker, LED or other device to notify you when a message has been received from the mesh network.
 
 # Configuration
 
@@ -44,9 +44,9 @@ These are the settings that can be configured.
 For basic usage, start with:
 
 	ext_notification_plugin_enabled = 1
-    ext_notification_plugin_alert_message = 1
+	ext_notification_plugin_alert_message = 1
     
-Depending on how your external configured is configured, you may need to set the active state to true.
+Depending on how your external cirtcuit configured is configured, you may need to set the active state to true.
 
 	ext_notification_plugin_active = 1
     
@@ -54,11 +54,19 @@ Depending on how your external configured is configured, you may need to set the
 
 Be mindful of the max current sink and source of the esp32 GPIO. The easiest devices to interface with would be either an LED or Active Buzzer.
 
+Ideas for external hardware:
+
+* LED
+* Active Buzzer
+* Flame thrower
+* Strobe Light
+* Siren
     
 # Known Problems
 
 * This won't directly support an passive (normal) speaker as it does not generate any audio wave forms.
 * This currently only supports the esp32. Other targets may be possible, I just don't have to test with.
+* This plugin only monitors text messages. We won't trigger on any other packet types.
 
 # Need more help?
 
