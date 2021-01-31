@@ -1,3 +1,5 @@
+# About
+
 The ExternalNotification Plugin will allow you to connect a speaker, LED or other device to notify you when a message has been received from the mesh network.
 
 # Configuration
