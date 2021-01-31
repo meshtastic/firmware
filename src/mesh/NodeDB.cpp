@@ -180,10 +180,14 @@ bool NodeDB::resetRadioConfig()
         channelSettings.psk.size = 1;
     }
 
-    // Convert the short single byte variants of psk into variant that can be used more generally
+    memset(activePSK, 0, sizeof(activePSK)); // In case the user provided a short key, we want to pad the rest with zeros
     memcpy(activePSK, channelSettings.psk.bytes, channelSettings.psk.size);
     activePSKSize = channelSettings.psk.size;
-    if (activePSKSize == 1) {
+    if(activePSKSize == 0)
+        DEBUG_MSG("Warning: User disabled encryption\n");
+    else if (activePSKSize == 1) {
+        // Convert the short single byte variants of psk into variant that can be used more generally
+
         uint8_t pskIndex = activePSK[0];
         DEBUG_MSG("Expanding short PSK #%d\n", pskIndex);
         if (pskIndex == 0)
@@ -195,6 +199,16 @@ bool NodeDB::resetRadioConfig()
             uint8_t *last = activePSK + sizeof(defaultpsk) - 1;
             *last = *last + pskIndex - 1; // index of 1 means no change vs defaultPSK
         }
+    } else if(activePSKSize < 16) {
+        // Error! The user specified only the first few bits of an AES128 key.  So by convention we just pad the rest of the key
+        // with zeros
+        DEBUG_MSG("Warning: User provided a too short AES128 key - padding\n");
+        activePSKSize = 16;
+    } else if(activePSKSize < 32 && activePSKSize != 16) {
+        // Error! The user specified only the first few bits of an AES256 key.  So by convention we just pad the rest of the key
+        // with zeros
+        DEBUG_MSG("Warning: User provided a too short AES256 key - padding\n");
+        activePSKSize = 32;
     }
 
     // Tell our crypto engine about the psk
