@@ -10,6 +10,7 @@
 #include "nimble/NimbleDefs.h"
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
+#include "sleep.h"
 #include <Arduino.h>
 #include <WiFi.h>
 
@@ -226,16 +227,14 @@ static int gap_event(struct ble_gap_event *event, void *arg)
 
         if (event->passkey.params.action == BLE_SM_IOACT_DISP) {
             pkey.action = event->passkey.params.action;
-            DEBUG_MSG("dp: %d now:%d\n",doublepressed, now);
-            if (doublepressed > 0 && (doublepressed + (30*1000)) > now) 
-            {
+            DEBUG_MSG("dp: %d now:%d\n", doublepressed, now);
+            if (doublepressed > 0 && (doublepressed + (30 * 1000)) > now) {
                 DEBUG_MSG("User has overridden passkey or no display available\n");
-                pkey.passkey = defaultBLEPin;  
-            }
-            else {
+                pkey.passkey = defaultBLEPin;
+            } else {
                 DEBUG_MSG("Using random passkey\n");
                 pkey.passkey = random(
-                    100000, 999999); // This is the passkey to be entered on peer - we pick a number >100,000 to ensure 6 digits    
+                    100000, 999999); // This is the passkey to be entered on peer - we pick a number >100,000 to ensure 6 digits
             }
             DEBUG_MSG("*** Enter passkey %d on the peer side ***\n", pkey.passkey);
 
@@ -395,7 +394,6 @@ void gatt_svr_register_cb(struct ble_gatt_register_ctxt *ctxt, void *arg)
     }
 }
 
-
 /**
  * A helper function that implements simple read and write handling for a uint32_t
  *
@@ -449,8 +447,7 @@ int chr_readwrite8(uint8_t *v, size_t vlen, struct ble_gatt_access_ctxt *ctxt)
         if (len < vlen) {
             DEBUG_MSG("Error: wrongsized write\n");
             return BLE_ATT_ERR_UNLIKELY;
-        }
-        else {
+        } else {
             DEBUG_MSG("BLE writing bytes\n");
         }
     } else {
@@ -465,7 +462,21 @@ void disablePin()
 {
     DEBUG_MSG("User Override, disabling bluetooth pin requirement\n");
     // keep track of when it was pressed, so we know it was within X seconds
-    doublepressed = millis();  
+
+    // Flash the LED
+    setLed(true);
+    delay(100);
+    setLed(false);
+    delay(100);
+    setLed(true);
+    delay(100);
+    setLed(false);
+    delay(100);
+    setLed(true);
+    delay(100);
+    setLed(false);
+
+    doublepressed = millis();
 }
 
 // This routine is called multiple times, once each time we come back from sleep
@@ -549,7 +560,7 @@ void setBluetoothEnable(bool on)
                 firstTime = 0;
             } else {
 #ifndef NO_ESP32
-            initWifi(0);
+                initWifi(0);
 #endif
             }
         } else {
