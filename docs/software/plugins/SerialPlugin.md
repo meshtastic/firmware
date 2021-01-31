@@ -1,4 +1,4 @@
-# SerialPlugin
+# About
 
 A simple interface to send messages over the mesh network by sending strings
 over a serial port.
