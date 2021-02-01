@@ -5,11 +5,16 @@
 #include "Router.h"
 #include "configuration.h"
 #include <Arduino.h>
-
 #include <assert.h>
+//#include <iostream>
+//#include <sstream>
+//#include <string>
+
+//#undef str
+
 
 #define RANGETESTPLUGIN_ENABLED 1
-#define RANGETESTPLUGIN_SENDER 0
+#define RANGETESTPLUGIN_SENDER 20000
 
 RangeTestPlugin *rangeTestPlugin;
 RangeTestPluginRadio *rangeTestPluginRadio;
@@ -34,10 +39,21 @@ int32_t RangeTestPlugin::runOnce()
             firstTime = 0;
 
         } else {
+
+            // If sender
+            if (RANGETESTPLUGIN_SENDER) {
+
+                return (RANGETESTPLUGIN_SENDER);
+
+                // Otherwise, we're a receiver.
+            } else {
+
+                rangeTestPluginRadio->sendPayload();
+                return (500);
+            }
             // TBD
         }
 
-        return (10);
     } else {
         DEBUG_MSG("Range Test Plugin - Disabled\n");
 
@@ -60,6 +76,15 @@ void RangeTestPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
     MeshPacket *p = allocReply();
     p->to = dest;
     p->decoded.want_response = wantReplies;
+
+    p->want_ack = true;
+
+    uint16_t packetSequence = 123456;
+    static char heartbeatString[20];
+    snprintf(heartbeatString, sizeof(heartbeatString), "Seq: %d%%", packetSequence);
+
+    p->decoded.data.payload.size = strlen(heartbeatString); // You must specify how many bytes are in the reply
+    memcpy(p->decoded.data.payload.bytes, heartbeatString, p->decoded.data.payload.size);
 
     service.sendToMesh(p);
 }
@@ -88,9 +113,6 @@ bool RangeTestPluginRadio::handleReceived(const MeshPacket &mp)
             mp.hop_limit;
             mp.decoded.position.latitude_i;
             mp.decoded.position.longitude_i;
-
-
-            
         }
 
     } else {
