@@ -39,3 +39,7 @@ Various data-rates are selectable when configuring a channel and are inversely p
 | Medium range (but fast)    | Medium           | 5.469 kbps           | 7  | 512     | 4/5         | 500       |
 | Long range (but slower)    | Long Alt         | 0.275 kbps           | 9  | 512     | 4/8         | 31        |
 | Very long range (but slow) | Long Slow        | 0.183 kbps (default) | 12 | 4096    | 4/8         | 125       |
+
+Other radio settings can be configured by using the Python API. An easy calculator of other bit rates is:
+
+https://unsigned.io/understanding-lora-parameters/
