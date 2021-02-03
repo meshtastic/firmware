@@ -33,9 +33,9 @@ Channel zero starts at 903.08 MHz center frequency.
 
 Various data-rates are selectable when configuring a channel and are inversely proportional to the theoretical range of the devices:  
 
-|       Channel setting      |     Data-rate        |
-|----------------------------|----------------------|
-| Short range (but fast)     | 21.875 kbps          |
-| Medium range (but fast)    | 5.469 kbps           |
-| Long range (but slower)    | 0.275 kbps           |
-| Very long range (but slow) | 0.183 kbps (default) |
+|       Channel setting      | Alt Channel Name |     Data-rate        | SF | Symbols | Coding Rate | Bandwidth |
+|----------------------------|------------------|----------------------|--------------|-------------------------|
+| Short range (but fast)     | Short Fast       | 21.875 kbps          | 7  | 128     | 4/5         | 125       |
+| Medium range (but fast)    | Medium           | 5.469 kbps           | 7  | 512     | 4/5         | 500       |
+| Long range (but slower)    | Long Alt         | 0.275 kbps           | 9  | 512     | 4/8         | 31        |
+| Very long range (but slow) | Long Slow        | 0.183 kbps (default) | 12 | 4096    | 4/8         | 125       |
