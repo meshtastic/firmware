@@ -52,7 +52,7 @@ Considerations:
 
 ### Pre-Defined
 
-Predefined Channels:
+We have four predefined channels. These are the most common settings and have been proven to work well:
 
 | Channel setting            | Alt Channel Name | Data-rate            | SF / Symbols | Coding Rate | Bandwidth |
 |:---------------------------|:-----------------|:---------------------|:-------------|:------------|:----------|
@@ -63,7 +63,7 @@ Predefined Channels:
 
 ### Custom Settings
 
-Other settings can be set by using the Python API. 
+You may want to select other channels for your usage. The other settings can be set by using the Python API.
 
 > meshtastic --set spread_factor 10 --set coding_rate 8 --bandwidth 125
 
