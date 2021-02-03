@@ -66,7 +66,7 @@ We have four predefined channels. These are the most common settings and have be
 
 You may want to select other channels for your usage. The other settings can be set by using the Python API.
 
-> meshtastic --set spread_factor 10 --set coding_rate 8 --bandwidth 125
+> meshtastic --setchan spread_factor 10 --setchan coding_rate 8 --setchan bandwidth 125
 
 Some example settings:
 
