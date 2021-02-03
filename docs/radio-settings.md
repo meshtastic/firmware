@@ -31,7 +31,23 @@ Channel zero starts at 903.08 MHz center frequency.
 
 ## Data-rates
 
-Various data-rates are selectable when configuring a channel and are inversely proportional to the theoretical range of the devices:  
+Various data-rates are selectable when configuring a channel and are inversely proportional to the theoretical range of the devices.
+
+Considerations:
+
+* Spreading Factor
+* * Each step up in Spreading Factor dobules the airtime to transmit.
+* * Each step up in Spreading Factor adds about 2.5db extra link budget.
+* Bandwidth
+* * Each doubling of the bandwidth is almost 3db less link budget.
+* Coding Rate
+* * Increasing coding rate increases reliability while decrasing data-rate.
+* * 4/5 - 1.25x overhead
+* * 4/6 - 1.5x overhead
+* * 4/7 - 1.75x overhead
+* * 4/8 - 2x overhead
+
+Predefined Channels:
 
 | Channel setting            | Alt Channel Name | Data-rate            | SF / Symbols | Coding Rate | Bandwidth |
 |:---------------------------|:-----------------|:---------------------|:-------------|:------------|:----------|
@@ -40,7 +56,26 @@ Various data-rates are selectable when configuring a channel and are inversely p
 | Long range (but slower)    | Long Alt         | 0.275 kbps           | 9 / 512      | 4/8         | 31        |
 | Very long range (but slow) | Long Slow        | 0.183 kbps (default) | 12 / 4096    | 4/8         | 125       |
 
-Other radio settings can be configured by using the Python API. An easy calculator of other bit rates is:
+Other settings can be set by using the Python API. 
+
+> meshtastic --set spread_factor 10 --set coding_rate 8 --bandwidth 125
+
+Some example settings:
+
+| Data-rate            | SF / Symbols | Coding Rate | Bandwidth | Note |
+|:---------------------|:-------------|:------------|:----------|:-----|
+| 3.125 kbps           | 8 / 256      | 4/5         | 125       | |
+| 1.953 kbps           | 8 / 256      | 4/8         | 125       | |
+| 1.343 kbps           | 11 / 2048    | 4/8         | 512       | | 
+| 1.099 kbps           | 9 / 512      | 4/8         | 125       | |
+| 0.814 kbps           | 10 / 1024    | 4/6         | 125       | |
+| 0.610 kbps           | 10 / 1024    | 4/8         | 125       | |
+| 0.488 kbps           | 11 / 2048    | 4/6         | 125       | |
+| 0.336 kbps           | 11 / 2048    | 4/8         | 125       | |
+| 0.092 kbps           | 12 / 4096    | 4/8         | 62        | |
+| 0.046 kbps           | 12 / 4096    | 4/8         | 31        | Twice the range of "Long Slow" |
+
+An easy calculator of other bit rates is:
 
 [Lora Parameters](https://unsigned.io/understanding-lora-parameters/)
 
