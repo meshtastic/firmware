@@ -31,6 +31,8 @@ Channel zero starts at 903.08 MHz center frequency.
 
 ## Data-rates
 
+### About
+
 Various data-rates are selectable when configuring a channel and are inversely proportional to the theoretical range of the devices.
 
 Considerations:
@@ -47,6 +49,9 @@ Considerations:
 * * 4/7 - 1.75x overhead
 * * 4/8 - 2x overhead
 
+
+### Pre-Defined
+
 Predefined Channels:
 
 | Channel setting            | Alt Channel Name | Data-rate            | SF / Symbols | Coding Rate | Bandwidth |
@@ -55,6 +60,8 @@ Predefined Channels:
 | Medium range (but fast)    | Medium           | 5.469 kbps           | 7 / 512      | 4/5         | 500       |
 | Long range (but slower)    | Long Alt         | 0.275 kbps           | 9 / 512      | 4/8         | 31        |
 | Very long range (but slow) | Long Slow        | 0.183 kbps (default) | 12 / 4096    | 4/8         | 125       |
+
+### Custom Settings
 
 Other settings can be set by using the Python API. 
 
@@ -75,7 +82,4 @@ Some example settings:
 | 0.092 kbps           | 12 / 4096    | 4/8         | 62        | |
 | 0.046 kbps           | 12 / 4096    | 4/8         | 31        | Twice the range of "Long Slow" |
 
-An easy calculator of other bit rates is:
-
-[Lora Parameters](https://unsigned.io/understanding-lora-parameters/)
 
