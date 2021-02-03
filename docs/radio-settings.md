@@ -31,11 +31,56 @@ Channel zero starts at 903.08 MHz center frequency.
 
 ## Data-rates
 
-Various data-rates are selectable when configuring a channel and are inversely proportional to the theoretical range of the devices:  
+### About
 
-|       Channel setting      |     Data-rate        |
-|----------------------------|----------------------|
-| Short range (but fast)     | 21.875 kbps          |
-| Medium range (but fast)    | 5.469 kbps           |
-| Long range (but slower)    | 0.275 kbps           |
-| Very long range (but slow) | 0.183 kbps (default) |
+Various data-rates are selectable when configuring a channel and are inversely proportional to the theoretical range of the devices.
+
+Considerations:
+
+* Spreading Factor - How much we "spread" our data over time.
+* * Each step up in Spreading Factor dobules the airtime to transmit.
+* * Each step up in Spreading Factor adds about 2.5db extra link budget.
+* Bandwidth - How big of a slice of the spectrum we use.
+* * Each doubling of the bandwidth is almost 3db less link budget.
+* * Bandwidths less than 31 may be unstable unless you have a high quality Crystal Ossilator.
+* Coding Rate - How much redundency we encode to resist noise.
+* * Increasing coding rate increases reliability while decrasing data-rate.
+* * 4/5 - 1.25x overhead
+* * 4/6 - 1.5x overhead
+* * 4/7 - 1.75x overhead
+* * 4/8 - 2x overhead
+
+
+### Pre-Defined
+
+We have four predefined channels. These are the most common settings and have been proven to work well:
+
+| Channel setting            | Alt Channel Name | Data-rate            | SF / Symbols | Coding Rate | Bandwidth |
+|:---------------------------|:-----------------|:---------------------|:-------------|:------------|:----------|
+| Short range (but fast)     | Short Fast       | 21.875 kbps          | 7 / 128      | 4/5         | 125       |
+| Medium range (but fast)    | Medium           | 5.469 kbps           | 7 / 512      | 4/5         | 500       |
+| Long range (but slower)    | Long Alt         | 0.275 kbps           | 9 / 512      | 4/8         | 31        |
+| Very long range (but slow) | Long Slow        | 0.183 kbps (default) | 12 / 4096    | 4/8         | 125       |
+
+### Custom Settings
+
+You may want to select other channels for your usage. The other settings can be set by using the Python API.
+
+> meshtastic --setchan spread_factor 10 --setchan coding_rate 8 --setchan bandwidth 125
+
+Some example settings:
+
+| Data-rate            | SF / Symbols | Coding Rate | Bandwidth | Note |
+|:---------------------|:-------------|:------------|:----------|:-----|
+| 3.125 kbps           | 8 / 256      | 4/5         | 125       | |
+| 1.953 kbps           | 8 / 256      | 4/8         | 125       | |
+| 1.343 kbps           | 11 / 2048    | 4/8         | 512       | | 
+| 1.099 kbps           | 9 / 512      | 4/8         | 125       | |
+| 0.814 kbps           | 10 / 1024    | 4/6         | 125       | |
+| 0.610 kbps           | 10 / 1024    | 4/8         | 125       | |
+| 0.488 kbps           | 11 / 2048    | 4/6         | 125       | |
+| 0.336 kbps           | 11 / 2048    | 4/8         | 125       | |
+| 0.092 kbps           | 12 / 4096    | 4/8         | 62        | |
+| 0.046 kbps           | 12 / 4096    | 4/8         | 31        | Twice the range of "Long Slow" |
+
+
