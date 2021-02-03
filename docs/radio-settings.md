@@ -42,6 +42,7 @@ Considerations:
 * * Each step up in Spreading Factor adds about 2.5db extra link budget.
 * Bandwidth - How big of a slice of the spectrum we use.
 * * Each doubling of the bandwidth is almost 3db less link budget.
+* * Bandwidths less than 31 may be unstable unless you have a high quality Crystal Ossilator.
 * Coding Rate - How much redundency we encode to resist noise.
 * * Increasing coding rate increases reliability while decrasing data-rate.
 * * 4/5 - 1.25x overhead
