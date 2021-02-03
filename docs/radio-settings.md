@@ -37,12 +37,12 @@ Various data-rates are selectable when configuring a channel and are inversely p
 
 Considerations:
 
-* Spreading Factor
+* Spreading Factor - How much we "spread" our data over time.
 * * Each step up in Spreading Factor dobules the airtime to transmit.
 * * Each step up in Spreading Factor adds about 2.5db extra link budget.
-* Bandwidth
+* Bandwidth - How big of a slice of the spectrum we use.
 * * Each doubling of the bandwidth is almost 3db less link budget.
-* Coding Rate
+* Coding Rate - How much redundency we encode to resist noise.
 * * Increasing coding rate increases reliability while decrasing data-rate.
 * * 4/5 - 1.25x overhead
 * * 4/6 - 1.5x overhead
