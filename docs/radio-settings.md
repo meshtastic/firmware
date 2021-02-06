@@ -91,3 +91,15 @@ Some example settings:
 The link budget used by these calculations assumes a transmit power of 17dBm. Adjust your link budget assumptions based on your actual devices.
 
 These channel settings may have not been tested. Use at your own discression. Share on https://meshtastic.discourse.group with your successes or failure.
+
+## Cryptography
+
+The preshared key used by the devices can be modified.
+
+* 0 = No crypto
+* 1 = Default channel key
+* 2 - 10 = The default channel key, except with 1 through 9 added to the last byte
+
+Use of cryptography can also be modified. To disable cryptography (maybe useful if you have HAM radio license):
+
+> meshtastic --setchan psk 0
