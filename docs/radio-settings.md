@@ -55,12 +55,14 @@ Considerations:
 
 We have four predefined channels. These are the most common settings and have been proven to work well:
 
-| Channel setting            | Alt Channel Name | Data-rate            | SF / Symbols | Coding Rate | Bandwidth |
-|:---------------------------|:-----------------|:---------------------|:-------------|:------------|:----------|
-| Short range (but fast)     | Short Fast       | 21.875 kbps          | 7 / 128      | 4/5         | 125       |
-| Medium range (but fast)    | Medium           | 5.469 kbps           | 7 / 512      | 4/5         | 500       |
-| Long range (but slower)    | Long Alt         | 0.275 kbps           | 9 / 512      | 4/8         | 31        |
-| Very long range (but slow) | Long Slow        | 0.183 kbps (default) | 12 / 4096    | 4/8         | 125       |
+| Channel setting            | Alt Channel Name | Data-rate            | SF / Symbols | Coding Rate | Bandwidth | Link Budget |
+|:---------------------------|:-----------------|:---------------------|:-------------|:------------|:----------|:------------|
+| Short range (but fast)     | Short Fast       | 21.875 kbps          | 7 / 128      | 4/5         | 125       | 134dB       |
+| Medium range (but fast)    | Medium           | 5.469 kbps           | 7 / 128      | 4/5         | 500       | 140dB       |
+| Long range (but slower)    | Long Alt         | 0.275 kbps           | 9 / 512      | 4/8         | 31        | 153dB       |
+| Very long range (but slow) | Long Slow        | 0.183 kbps (default) | 12 / 4096    | 4/8         | 125       | 154dB       |
+
+The link budget used by these calculations assumes a transmit power of 17dBm. Adjust your link budget assumptions based on your actual devices.
 
 ### Custom Settings
 
@@ -68,19 +70,24 @@ You may want to select other channels for your usage. The other settings can be 
 
 > meshtastic --setchan spread_factor 10 --setchan coding_rate 8 --setchan bandwidth 125
 
+After applying the settings, you will need to restart the device. After your device is restarted, it will generate a new crypto key and you will need to share the newly generated QR Code or URL to all your other devices.
+
 Some example settings:
 
-| Data-rate            | SF / Symbols | Coding Rate | Bandwidth | Note |
-|:---------------------|:-------------|:------------|:----------|:-----|
-| 3.125 kbps           | 8 / 256      | 4/5         | 125       | |
-| 1.953 kbps           | 8 / 256      | 4/8         | 125       | |
-| 1.343 kbps           | 11 / 2048    | 4/8         | 512       | | 
-| 1.099 kbps           | 9 / 512      | 4/8         | 125       | |
-| 0.814 kbps           | 10 / 1024    | 4/6         | 125       | |
-| 0.610 kbps           | 10 / 1024    | 4/8         | 125       | |
-| 0.488 kbps           | 11 / 2048    | 4/6         | 125       | |
-| 0.336 kbps           | 11 / 2048    | 4/8         | 125       | |
-| 0.092 kbps           | 12 / 4096    | 4/8         | 62        | |
-| 0.046 kbps           | 12 / 4096    | 4/8         | 31        | Twice the range of "Long Slow" |
+| Data-rate            | SF / Symbols | Coding Rate | Bandwidth | Link Budget | Note |
+|:---------------------|:-------------|:------------|:----------|:------------|:-----|
+| 37.50 kbps           | 6 / 64       | 4/5         | 500       | 129dB       | Fastest possible speed |
+| 3.125 kbps           | 8 / 256      | 4/5         | 125       | 143dB       | |
+| 1.953 kbps           | 8 / 256      | 4/8         | 125       | 143dB       | |
+| 1.343 kbps           | 11 / 2048    | 4/8         | 500       | 145dB       | | 
+| 1.099 kbps           | 9 / 512      | 4/8         | 125       | 146dB       | |
+| 0.814 kbps           | 10 / 1024    | 4/6         | 125       | 149dB       | |
+| 0.610 kbps           | 10 / 1024    | 4/8         | 125       | 149dB       | |
+| 0.488 kbps           | 11 / 2048    | 4/6         | 125       | 152dB       | |
+| 0.336 kbps           | 11 / 2048    | 4/8         | 125       | 152dB       | |
+| 0.073 kbps           | 12 / 4096    | 4/5         | 31        | 160dB       | Twice the range of "Long Slow", low resliance to noise |
+| 0.046 kbps           | 12 / 4096    | 4/8         | 31        | 160dB       | Twice the range of "Long Slow", high resliance to noise |
 
+The link budget used by these calculations assumes a transmit power of 17dBm. Adjust your link budget assumptions based on your actual devices.
 
+These channel settings may have not been tested. Use at your own discression. Share on https://meshtastic.discourse.group with your successes or failure.
