@@ -84,3 +84,14 @@ Some example settings:
 | 0.046 kbps           | 12 / 4096    | 4/8         | 31        | Twice the range of "Long Slow" |
 
 
+## Cryptography
+
+The presahred key used by the devices can be updated.
+
+* 0 = No crypto
+* 1 = Default channel key
+* 2 - 10 = The default channel key, except with 1 through 9 added to the last byte
+
+To disable cryptography:
+
+> meshtastic --setchan psk 0
