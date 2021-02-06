@@ -62,7 +62,7 @@ We have four predefined channels. These are the most common settings and have be
 | Long range (but slower)    | Long Alt         | 0.275 kbps           | 9 / 512      | 4/8         | 31        | 153dB       |
 | Very long range (but slow) | Long Slow        | 0.183 kbps (default) | 12 / 4096    | 4/8         | 125       | 154dB       |
 
-The link budget used by these calculations assumes a transmit power of 17dBm. Adjust your link budget assumptions based on your actual devices.
+The link budget used by these calculations assumes a transmit power of 17dBm and an antenna with 0dB gain. Adjust your link budget assumptions based on your actual devices.
 
 ### Custom Settings
 
@@ -88,7 +88,7 @@ Some example settings:
 | 0.073 kbps           | 12 / 4096    | 4/5         | 31        | 160dB       | Twice the range of "Long Slow", low resliance to noise |
 | 0.046 kbps           | 12 / 4096    | 4/8         | 31        | 160dB       | Twice the range of "Long Slow", high resliance to noise |
 
-The link budget used by these calculations assumes a transmit power of 17dBm. Adjust your link budget assumptions based on your actual devices.
+The link budget used by these calculations assumes a transmit power of 17dBm and an antenna with 0dB gain. Adjust your link budget assumptions based on your actual devices.
 
 These channel settings may have not been tested. Use at your own discression. Share on https://meshtastic.discourse.group with your successes or failure.
 
