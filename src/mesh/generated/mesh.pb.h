@@ -16,7 +16,8 @@ typedef enum _ErrorReason {
     ErrorReason_NO_ROUTE = 1,
     ErrorReason_GOT_NAK = 2,
     ErrorReason_TIMEOUT = 3,
-    ErrorReason_NO_INTERFACE = 4
+    ErrorReason_NO_INTERFACE = 4,
+    ErrorReason_MAX_RETRANSMIT = 5
 } ErrorReason;
 
 typedef enum _Constants {
@@ -290,8 +291,8 @@ typedef struct _ToRadio {
 
 /* Helper constants for enums */
 #define _ErrorReason_MIN ErrorReason_NONE
-#define _ErrorReason_MAX ErrorReason_NO_INTERFACE
-#define _ErrorReason_ARRAYSIZE ((ErrorReason)(ErrorReason_NO_INTERFACE+1))
+#define _ErrorReason_MAX ErrorReason_MAX_RETRANSMIT
+#define _ErrorReason_ARRAYSIZE ((ErrorReason)(ErrorReason_MAX_RETRANSMIT+1))
 
 #define _Constants_MIN Constants_Unused
 #define _Constants_MAX Constants_DATA_PAYLOAD_LEN

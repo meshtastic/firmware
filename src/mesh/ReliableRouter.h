@@ -109,10 +109,6 @@ class ReliableRouter : public FloodingRouter
     PendingPacket *startRetransmission(MeshPacket *p);
 
   private:
-    /**
-     * Send an ack or a nak packet back towards whoever sent idFrom
-     */
-    void sendAckNak(bool isAck, NodeNum to, PacketId idFrom);
 
     /**
      * Stop any retransmissions we are doing of the specified node/packet ID pair
