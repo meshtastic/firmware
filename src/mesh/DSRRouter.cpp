@@ -105,7 +105,7 @@ void DSRRouter::sniffReceived(const MeshPacket *p)
         // packets until ack arrives)
         // FIXME, if we don't get a route reply at all (or a route error), timeout and generate a routeerror TIMEOUT on our own...
         break;
-    case SubPacket_route_error_tag:
+    case SubPacket_error_reason_tag:
         removeRoute(p->decoded.dest);
 
         // FIXME: if any pending packets were waiting on this route, delete them
@@ -131,7 +131,7 @@ void DSRRouter::sniffReceived(const MeshPacket *p)
                 assert(p->decoded.source); // I think this is guaranteed by now
 
                 // FIXME - what if the current packet _is_ a route error packet?
-                sendRouteError(p, RouteError_NO_ROUTE);
+                sendRouteError(p, ErrorReason_NO_ROUTE);
             }
 
             // FIXME, stop local processing of this packet
@@ -145,7 +145,7 @@ void DSRRouter::sniffReceived(const MeshPacket *p)
             if (pending && pending->packet->decoded.source) { // if source not set, this was not a multihop packet, just ignore
                 removeRoute(pending->packet->decoded.dest);   // We no longer have a route to the specified node
 
-                sendRouteError(p, RouteError_GOT_NAK);
+                sendRouteError(p, ErrorReason_GOT_NAK);
             }
         }
     }
@@ -230,7 +230,7 @@ void DSRRouter::sendNextHop(NodeNum n, const MeshPacket *p)
 /**
  * Send a route error packet towards whoever originally sent this message
  */
-void DSRRouter::sendRouteError(const MeshPacket *p, RouteError err)
+void DSRRouter::sendRouteError(const MeshPacket *p, ErrorReason err)
 {
     DEBUG_MSG("FIXME not implemented sendRouteError\n");
 }

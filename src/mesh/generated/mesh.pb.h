@@ -11,12 +11,14 @@
 #endif
 
 /* Enum definitions */
-typedef enum _RouteError {
-    RouteError_NONE = 0,
-    RouteError_NO_ROUTE = 1,
-    RouteError_GOT_NAK = 2,
-    RouteError_TIMEOUT = 3
-} RouteError;
+typedef enum _ErrorReason {
+    ErrorReason_NONE = 0,
+    ErrorReason_NO_ROUTE = 1,
+    ErrorReason_GOT_NAK = 2,
+    ErrorReason_TIMEOUT = 3,
+    ErrorReason_NO_INTERFACE = 4,
+    ErrorReason_MAX_RETRANSMIT = 5
+} ErrorReason;
 
 typedef enum _Constants {
     Constants_Unused = 0,
@@ -230,7 +232,7 @@ typedef struct _SubPacket {
         User user;
         RouteDiscovery route_request;
         RouteDiscovery route_reply;
-        RouteError route_error;
+        ErrorReason error_reason;
     };
     uint32_t original_id;
     bool want_response;
@@ -288,9 +290,9 @@ typedef struct _ToRadio {
 
 
 /* Helper constants for enums */
-#define _RouteError_MIN RouteError_NONE
-#define _RouteError_MAX RouteError_TIMEOUT
-#define _RouteError_ARRAYSIZE ((RouteError)(RouteError_TIMEOUT+1))
+#define _ErrorReason_MIN ErrorReason_NONE
+#define _ErrorReason_MAX ErrorReason_MAX_RETRANSMIT
+#define _ErrorReason_ARRAYSIZE ((ErrorReason)(ErrorReason_MAX_RETRANSMIT+1))
 
 #define _Constants_MIN Constants_Unused
 #define _Constants_MAX Constants_DATA_PAYLOAD_LEN
@@ -450,7 +452,7 @@ extern "C" {
 #define SubPacket_user_tag                       4
 #define SubPacket_route_request_tag              6
 #define SubPacket_route_reply_tag                7
-#define SubPacket_route_error_tag                13
+#define SubPacket_error_reason_tag               13
 #define SubPacket_original_id_tag                2
 #define SubPacket_want_response_tag              5
 #define SubPacket_dest_tag                       9
@@ -517,7 +519,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload,data,data),   3) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,user,user),   4) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,route_request,route_request),   6) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,route_reply,route_reply),   7) \
-X(a, STATIC,   ONEOF,    UENUM,    (payload,route_error,route_error),  13) \
+X(a, STATIC,   ONEOF,    UENUM,    (payload,error_reason,error_reason),  13) \
 X(a, STATIC,   SINGULAR, UINT32,   original_id,       2) \
 X(a, STATIC,   SINGULAR, BOOL,     want_response,     5) \
 X(a, STATIC,   SINGULAR, UINT32,   dest,              9) \
