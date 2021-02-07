@@ -490,6 +490,8 @@ void setup()
             DEBUG_MSG("Warning: Failed to find RF95 radio\n");
             delete rIf;
             rIf = NULL;
+        } else {
+            DEBUG_MSG("Radio init succeeded, using RF95 radio\n");
         }
     }
 #endif
@@ -501,6 +503,8 @@ void setup()
             DEBUG_MSG("Warning: Failed to find SX1262 radio\n");
             delete rIf;
             rIf = NULL;
+        } else {
+            DEBUG_MSG("Radio init succeeded, using SX1262 radio\n");
         }
     }
 #endif
@@ -512,6 +516,8 @@ void setup()
             DEBUG_MSG("Warning: Failed to find simulated radio\n");
             delete rIf;
             rIf = NULL;
+        } else {
+            DEBUG_MSG("Using SIMULATED radio!\n");
         }
     }
 #endif

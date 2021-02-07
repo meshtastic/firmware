@@ -48,7 +48,8 @@ class Router : protected concurrency::OSThread
     virtual int32_t runOnce();
 
     /**
-     * Works like send, but if we are sending to the local node, we directly put the message in the receive queue
+     * Works like send, but if we are sending to the local node, we directly put the message in the receive queue.
+     * This is the primary method used for sending packets, because it handles both the remote and local cases.
      *
      * NOTE: This method will free the provided packet (even if we return an error code)
      */
@@ -92,6 +93,11 @@ class Router : protected concurrency::OSThread
      */
     bool perhapsDecode(MeshPacket *p);
 
+    /**
+     * Send an ack or a nak packet back towards whoever sent idFrom
+     */
+    void sendAckNak(ErrorReason err, NodeNum to, PacketId idFrom);
+    
   private:
     /**
      * Called from loop()
