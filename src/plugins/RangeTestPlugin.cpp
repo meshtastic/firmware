@@ -6,15 +6,6 @@
 #include "configuration.h"
 #include <Arduino.h>
 #include <assert.h>
-//#include <iostream>
-//#include <sstream>
-//#include <string>
-
-//#undef str
-
-#define RANGETESTPLUGIN_ENABLED 1
-//#define RANGETESTPLUGIN_SENDER 60 * 1000
-#define RANGETESTPLUGIN_SENDER 0
 
 RangeTestPlugin *rangeTestPlugin;
 RangeTestPluginRadio *rangeTestPluginRadio;
@@ -29,7 +20,18 @@ int32_t RangeTestPlugin::runOnce()
 {
 #ifndef NO_ESP32
 
-    if (RANGETESTPLUGIN_ENABLED) {
+    /*
+        Uncomment the preferences below if you want to use the plugin
+        without having to configure it from the PythonAPI or WebUI.
+    */
+
+    radioConfig.preferences.range_test_plugin_enabled = 1;
+    radioConfig.preferences.range_test_plugin_sender = 60;
+    radioConfig.preferences.fixed_position = 1;
+
+    uint32_t senderHeartbeat = radioConfig.preferences.range_test_plugin_sender * 1000;
+
+    if (radioConfig.preferences.range_test_plugin_enabled) {
 
         if (firstTime) {
 
@@ -39,9 +41,9 @@ int32_t RangeTestPlugin::runOnce()
 
             firstTime = 0;
 
-            if (RANGETESTPLUGIN_SENDER) {
+            if (radioConfig.preferences.range_test_plugin_sender) {
                 DEBUG_MSG("Initializing Range Test Plugin -- Sender\n");
-                return (RANGETESTPLUGIN_SENDER);
+                return (senderHeartbeat);
             } else {
                 DEBUG_MSG("Initializing Range Test Plugin -- Receiver\n");
                 return (500);
@@ -49,16 +51,23 @@ int32_t RangeTestPlugin::runOnce()
 
         } else {
 
-            if (RANGETESTPLUGIN_SENDER) {
+            if (radioConfig.preferences.range_test_plugin_sender) {
                 // If sender
-                DEBUG_MSG("Range Test Plugin - Sending heartbeat\n");
+                DEBUG_MSG("Range Test Plugin - Sending heartbeat every %d ms\n",
+                          (senderHeartbeat));
+
+                DEBUG_MSG("gpsStatus->getLatitude()     %d\n", gpsStatus->getLatitude());
+                DEBUG_MSG("gpsStatus->getLongitude()    %d\n", gpsStatus->getLongitude());
+                DEBUG_MSG("gpsStatus->getHasLock()      %d\n", gpsStatus->getHasLock());
+                DEBUG_MSG("gpsStatus->getDOP()          %d\n", gpsStatus->getDOP());
+                DEBUG_MSG("pref.fixed_position()        %d\n", radioConfig.preferences.fixed_position);
 
                 rangeTestPluginRadio->sendPayload();
-                return (RANGETESTPLUGIN_SENDER);
+                return ((senderHeartbeat));
             } else {
                 // Otherwise, we're a receiver.
 
-                return (INT32_MAX);
+                return (500);
             }
             // TBD
         }
@@ -102,7 +111,7 @@ bool RangeTestPluginRadio::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
 
-    if (RANGETESTPLUGIN_ENABLED) {
+    if (radioConfig.preferences.range_test_plugin_enabled) {
 
         auto &p = mp.decoded.data;
         // DEBUG_MSG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s\n",
@@ -112,7 +121,7 @@ bool RangeTestPluginRadio::handleReceived(const MeshPacket &mp)
 
             // DEBUG_MSG("* * Message came from the mesh\n");
             // Serial2.println("* * Message came from the mesh");
-            //Serial2.printf("%s", p.payload.bytes);
+            // Serial2.printf("%s", p.payload.bytes);
             /*
 
 
@@ -137,7 +146,6 @@ bool RangeTestPluginRadio::handleReceived(const MeshPacket &mp)
             DEBUG_MSG("gpsStatus->getLongitude()    %d\n", gpsStatus->getLongitude());
             DEBUG_MSG("gpsStatus->getHasLock()      %d\n", gpsStatus->getHasLock());
             DEBUG_MSG("gpsStatus->getDOP()          %d\n", gpsStatus->getDOP());
-
         }
 
     } else {
