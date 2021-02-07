@@ -68,5 +68,6 @@
         "protobufs",
         "wifi"
     ],
-    "C_Cpp.dimInactiveRegions": true
+    "C_Cpp.dimInactiveRegions": true,
+    "cmake.configureOnOpen": true
 }
