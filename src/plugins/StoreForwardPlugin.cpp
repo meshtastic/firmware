@@ -8,7 +8,7 @@
 
 #include <assert.h>
 
-#define STORE_RECORDS  10
+#define STORE_RECORDS  5000
 #define BYTES_PER_RECORDS  512
  
 struct sfRecord
@@ -23,7 +23,7 @@ struct sfRecord records[STORE_RECORDS];
 
 StoreForwardPlugin *storeForwardPlugin;
 StoreForwardPluginRadio *storeForwardPluginRadio;
-
+ 
 StoreForwardPlugin::StoreForwardPlugin() : concurrency::OSThread("SerialPlugin") {}
 
 // char serialStringChar[Constants_DATA_PAYLOAD_LEN];
@@ -32,7 +32,15 @@ int32_t StoreForwardPlugin::runOnce()
 {
 #ifndef NO_ESP32
 
-    if (STOREFORWARDPLUGIN_ENABLED) {
+    /*
+        Uncomment the preferences below if you want to use the plugin
+        without having to configure it from the PythonAPI or WebUI.
+    */
+
+   //radioConfig.preferences.store_forward_plugin_enabled = 1;
+   //radioConfig.preferences.store_forward_plugin_records = 80;
+
+    if (radioConfig.preferences.store_forward_plugin_enabled) {
 
         if (firstTime) {
 

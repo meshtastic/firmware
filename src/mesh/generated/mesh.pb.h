@@ -193,6 +193,11 @@ typedef struct _RadioConfig_UserPreferences {
     bool ext_notification_plugin_active;
     bool ext_notification_plugin_alert_message;
     bool ext_notification_plugin_alert_bell;
+    bool range_test_plugin_enabled;
+    uint32_t range_test_plugin_sender;
+    bool range_test_plugin_save;
+    bool store_forward_plugin_enabled;
+    uint32_t store_forward_plugin_records;
 } RadioConfig_UserPreferences;
 
 typedef struct _RouteDiscovery {
@@ -340,7 +345,7 @@ extern "C" {
 #define MeshPacket_init_default                  {0, 0, 0, {SubPacket_init_default}, 0, 0, 0, 0, 0, 0}
 #define ChannelSettings_init_default             {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, "", 0, 0, 0, 0, 0, 0, 0}
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default, false, ChannelSettings_init_default}
-#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0}
 #define MyNodeInfo_init_default                  {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0}
 #define LogRecord_init_default                   {"", 0, "", _LogRecord_Level_MIN}
@@ -354,7 +359,7 @@ extern "C" {
 #define MeshPacket_init_zero                     {0, 0, 0, {SubPacket_init_zero}, 0, 0, 0, 0, 0, 0}
 #define ChannelSettings_init_zero                {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, "", 0, 0, 0, 0, 0, 0, 0}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero, false, ChannelSettings_init_zero}
-#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0}
 #define MyNodeInfo_init_zero                     {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0}
 #define LogRecord_init_zero                      {"", 0, "", _LogRecord_Level_MIN}
@@ -435,6 +440,11 @@ extern "C" {
 #define RadioConfig_UserPreferences_ext_notification_plugin_active_tag 129
 #define RadioConfig_UserPreferences_ext_notification_plugin_alert_message_tag 130
 #define RadioConfig_UserPreferences_ext_notification_plugin_alert_bell_tag 131
+#define RadioConfig_UserPreferences_range_test_plugin_enabled_tag 132
+#define RadioConfig_UserPreferences_range_test_plugin_sender_tag 133
+#define RadioConfig_UserPreferences_range_test_plugin_save_tag 134
+#define RadioConfig_UserPreferences_store_forward_plugin_enabled_tag 136
+#define RadioConfig_UserPreferences_store_forward_plugin_records_tag 137
 #define RouteDiscovery_route_tag                 2
 #define User_id_tag                              1
 #define User_long_name_tag                       2
@@ -609,7 +619,12 @@ X(a, STATIC,   SINGULAR, UINT32,   ext_notification_plugin_output_ms, 127) \
 X(a, STATIC,   SINGULAR, UINT32,   ext_notification_plugin_output, 128) \
 X(a, STATIC,   SINGULAR, BOOL,     ext_notification_plugin_active, 129) \
 X(a, STATIC,   SINGULAR, BOOL,     ext_notification_plugin_alert_message, 130) \
-X(a, STATIC,   SINGULAR, BOOL,     ext_notification_plugin_alert_bell, 131)
+X(a, STATIC,   SINGULAR, BOOL,     ext_notification_plugin_alert_bell, 131) \
+X(a, STATIC,   SINGULAR, BOOL,     range_test_plugin_enabled, 132) \
+X(a, STATIC,   SINGULAR, UINT32,   range_test_plugin_sender, 133) \
+X(a, STATIC,   SINGULAR, BOOL,     range_test_plugin_save, 134) \
+X(a, STATIC,   SINGULAR, BOOL,     store_forward_plugin_enabled, 136) \
+X(a, STATIC,   SINGULAR, UINT32,   store_forward_plugin_records, 137)
 #define RadioConfig_UserPreferences_CALLBACK NULL
 #define RadioConfig_UserPreferences_DEFAULT NULL
 
@@ -721,13 +736,13 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define SubPacket_size                           275
 #define MeshPacket_size                          320
 #define ChannelSettings_size                     95
-#define RadioConfig_size                         382
-#define RadioConfig_UserPreferences_size         282
+#define RadioConfig_size                         405
+#define RadioConfig_UserPreferences_size         305
 #define NodeInfo_size                            132
 #define MyNodeInfo_size                          106
 #define LogRecord_size                           81
-#define FromRadio_size                           391
-#define ToRadio_size                             386
+#define FromRadio_size                           414
+#define ToRadio_size                             409
 
 #ifdef __cplusplus
 } /* extern "C" */
