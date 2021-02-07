@@ -53,13 +53,13 @@ int32_t RangeTestPlugin::runOnce()
 
             if (radioConfig.preferences.range_test_plugin_sender) {
                 // If sender
-                DEBUG_MSG("Range Test Plugin - Sending heartbeat every %d ms\n",
-                          (senderHeartbeat));
+                DEBUG_MSG("Range Test Plugin - Sending heartbeat every %d ms\n", (senderHeartbeat));
 
                 DEBUG_MSG("gpsStatus->getLatitude()     %d\n", gpsStatus->getLatitude());
                 DEBUG_MSG("gpsStatus->getLongitude()    %d\n", gpsStatus->getLongitude());
                 DEBUG_MSG("gpsStatus->getHasLock()      %d\n", gpsStatus->getHasLock());
                 DEBUG_MSG("gpsStatus->getDOP()          %d\n", gpsStatus->getDOP());
+                DEBUG_MSG("gpsStatus->getHasLock()      %d\n", gpsStatus->getHasLock());
                 DEBUG_MSG("pref.fixed_position()        %d\n", radioConfig.preferences.fixed_position);
 
                 rangeTestPluginRadio->sendPayload();
@@ -125,23 +125,27 @@ bool RangeTestPluginRadio::handleReceived(const MeshPacket &mp)
             /*
 
 
-            p.payload.size;
-            gpsStatus->getLatitude();
-            gpsStatus->getLongitude();
-            gpsStatus->getHasLock();
-            gpsStatus->getDOP();
-            mp.rx_snr;
-            mp.hop_limit;
-            mp.decoded.position.latitude_i;
-            mp.decoded.position.longitude_i;
 
             */
+
+            NodeInfo *n = nodeDB.getNode(mp.from);
+
             DEBUG_MSG("p.payload.bytes  \"%s\"\n", p.payload.bytes);
             DEBUG_MSG("p.payload.size   %d\n", p.payload.size);
+            DEBUG_MSG("mp.from          %d\n", mp.from);
             DEBUG_MSG("mp.rx_snr        %f\n", mp.rx_snr);
             DEBUG_MSG("mp.hop_limit     %d\n", mp.hop_limit);
-            DEBUG_MSG("mp.decoded.position.latitude_i     %d\n", mp.decoded.position.latitude_i);
-            DEBUG_MSG("mp.decoded.position.longitude_i    %d\n", mp.decoded.position.longitude_i);
+            // DEBUG_MSG("mp.decoded.position.latitude_i     %d\n", mp.decoded.position.latitude_i);
+            // DEBUG_MSG("mp.decoded.position.longitude_i    %d\n", mp.decoded.position.longitude_i);
+            DEBUG_MSG("n->has_position          %d\n", n->has_position);
+            DEBUG_MSG("n->position.latitude_i   %d\n", n->position.latitude_i);
+            DEBUG_MSG("n->position.longitude_i  %d\n", n->position.longitude_i);
+
+            n->user.long_name;
+            n->user.short_name;
+            n->user.macaddr;
+            n->position.battery_level;
+
             DEBUG_MSG("gpsStatus->getLatitude()     %d\n", gpsStatus->getLatitude());
             DEBUG_MSG("gpsStatus->getLongitude()    %d\n", gpsStatus->getLongitude());
             DEBUG_MSG("gpsStatus->getHasLock()      %d\n", gpsStatus->getHasLock());
