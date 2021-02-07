@@ -85,8 +85,8 @@ Some example settings:
 | 0.610 kbps           | 10 / 1024    | 4/8         | 125       | 149dB       | |
 | 0.488 kbps           | 11 / 2048    | 4/6         | 125       | 152dB       | |
 | 0.336 kbps           | 11 / 2048    | 4/8         | 125       | 152dB       | |
-| 0.073 kbps           | 12 / 4096    | 4/5         | 31        | 160dB       | Twice the range of "Long Slow", low resliance to noise |
-| 0.046 kbps           | 12 / 4096    | 4/8         | 31        | 160dB       | Twice the range of "Long Slow", high resliance to noise |
+| 0.073 kbps           | 12 / 4096    | 4/5         | 31        | 160dB       | Twice the range and/or coverage of "Long Slow", low resliance to noise |
+| 0.046 kbps           | 12 / 4096    | 4/8         | 31        | 160dB       | Twice the range and/or coverage of "Long Slow", high resliance to noise |
 
 The link budget used by these calculations assumes a transmit power of 17dBm and an antenna with 0dB gain. Adjust your link budget assumptions based on your actual devices.
 
