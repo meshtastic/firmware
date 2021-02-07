@@ -34,7 +34,7 @@ bool ReliableRouter::shouldFilterReceived(const MeshPacket *p)
         // the original sending process.
         if (stopRetransmission(p->from, p->id)) {
             DEBUG_MSG("Someone is retransmitting for us, generate implicit ack\n");
-            sendAckNak(true, p->from, p->id);
+            sendAckNak(ErrorReason_NONE, p->from, p->id);
         }
     }
 
@@ -60,7 +60,7 @@ void ReliableRouter::sniffReceived(const MeshPacket *p)
     if (p->to == ourNode) { // ignore ack/nak/want_ack packets that are not address to us (we only handle 0 hop reliability
                             // - not DSR routing)
         if (p->want_ack) {
-            sendAckNak(true, p->from, p->id);
+            sendAckNak(ErrorReason_NONE, p->from, p->id);
         }
 
         // If the payload is valid, look for ack/nak
@@ -82,27 +82,6 @@ void ReliableRouter::sniffReceived(const MeshPacket *p)
 
     // handle the packet as normal
     FloodingRouter::sniffReceived(p);
-}
-
-/**
- * Send an ack or a nak packet back towards whoever sent idFrom
- */
-void ReliableRouter::sendAckNak(bool isAck, NodeNum to, PacketId idFrom)
-{
-    auto p = allocForSending();
-    p->hop_limit = 0; // Assume just immediate neighbors for now
-    p->to = to;
-    DEBUG_MSG("Sending an ack=0x%x,to=0x%x,idFrom=0x%x,id=0x%x\n", isAck, to, idFrom, p->id);
-
-    if (isAck) {
-        p->decoded.ack.success_id = idFrom;
-        p->decoded.which_ack = SubPacket_success_id_tag;
-    } else {
-        p->decoded.ack.fail_id = idFrom;
-        p->decoded.which_ack = SubPacket_fail_id_tag;
-    }
-
-    sendLocal(p); // we sometimes send directly to the local node
 }
 
 #define NUM_RETRANSMISSIONS 3
@@ -176,7 +155,7 @@ int32_t ReliableRouter::doRetransmissions()
             if (p.numRetransmissions == 0) {
                 DEBUG_MSG("Reliable send failed, returning a nak fr=0x%x,to=0x%x,id=%d\n", p.packet->from, p.packet->to,
                           p.packet->id);
-                sendAckNak(false, p.packet->from, p.packet->id);
+                sendAckNak(ErrorReason_MAX_RETRANSMIT, p.packet->from, p.packet->id);
                 // Note: we don't stop retransmission here, instead the Nak packet gets processed in sniffReceived - which
                 // allows the DSR version to still be able to look at the PendingPacket
                 stopRetransmission(it->first);

@@ -99,6 +99,31 @@ MeshPacket *Router::allocForSending()
     return p;
 }
 
+/**
+ * Send an ack or a nak packet back towards whoever sent idFrom
+ */
+void Router::sendAckNak(ErrorReason err, NodeNum to, PacketId idFrom)
+{
+    auto p = allocForSending();
+    p->hop_limit = 0; // Assume just immediate neighbors for now
+    p->to = to;
+    DEBUG_MSG("Sending an err=%d,to=0x%x,idFrom=0x%x,id=0x%x\n", err, to, idFrom, p->id);
+
+    if (!err) {
+        p->decoded.ack.success_id = idFrom;
+        p->decoded.which_ack = SubPacket_success_id_tag;
+    } else {
+        p->decoded.ack.fail_id = idFrom;
+        p->decoded.which_ack = SubPacket_fail_id_tag;
+
+        // Also send back the error reason
+        p->decoded.which_payload = SubPacket_error_reason_tag;
+        p->decoded.error_reason = err;
+    }
+
+    sendLocal(p); // we sometimes send directly to the local node
+}
+
 ErrorCode Router::sendLocal(MeshPacket *p)
 {
     // No need to deliver externally if the destination is the local node
@@ -106,15 +131,24 @@ ErrorCode Router::sendLocal(MeshPacket *p)
         printPacket("Enqueuing local", p);
         fromRadioQueue.enqueue(p);
         return ERRNO_OK;
-    }
+    } else if (!iface) {
+        // We must be sending to remote nodes also, fail if no interface found
 
-    // If we are sending a broadcast, we also treat it as if we just received it ourself
-    // this allows local apps (and PCs) to see broadcasts sourced locally
-    if (p->to == NODENUM_BROADCAST) {
-        handleReceived(p);
-    }
+        // ERROR! no radio found, report failure back to the client and drop the packet
+        DEBUG_MSG("Error: No interface, returning NAK and dropping packet.\n");
+        sendAckNak(ErrorReason_NO_INTERFACE, p->from, p->id);
+        packetPool.release(p);
 
-    return send(p);
+        return ERRNO_NO_INTERFACES;
+    } else {
+        // If we are sending a broadcast, we also treat it as if we just received it ourself
+        // this allows local apps (and PCs) to see broadcasts sourced locally
+        if (p->to == NODENUM_BROADCAST) {
+            handleReceived(p);
+        }
+
+        return send(p);
+    }
 }
 
 /**
@@ -154,14 +188,15 @@ ErrorCode Router::send(MeshPacket *p)
         p->which_payload = MeshPacket_encrypted_tag;
     }
 
-    if (iface) {
-        // DEBUG_MSG("Sending packet via interface fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
-        return iface->send(p);
-    } else {
+    assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
+    // if (iface) {
+    // DEBUG_MSG("Sending packet via interface fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+    return iface->send(p);
+    /* } else {
         DEBUG_MSG("Dropping packet - no interfaces - fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
         packetPool.release(p);
         return ERRNO_NO_INTERFACES;
-    }
+    } */
 }
 
 /**

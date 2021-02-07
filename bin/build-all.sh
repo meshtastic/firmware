@@ -14,8 +14,6 @@ BOARDS_ESP32="tlora-v2 tlora-v1 tlora-v2-1-1.6 tbeam heltec tbeam0.7"
 # FIXME note nrf52840dk build is for some reason only generating a BIN file but not a HEX file nrf52840dk-geeksville is fine
 BOARDS_NRF52="lora-relay-v1"
 
-NUM_JOBS=2 || true
-
 OUTDIR=release/latest
 
 # We keep all old builds (and their map files in the archive dir)
@@ -51,7 +49,7 @@ function do_build() {
         basename=universal/firmware-$BOARD-$VERSION
     fi
 
-    pio run --jobs $NUM_JOBS --environment $BOARD # -v
+    pio run --environment $BOARD # -v
     SRCELF=.pio/build/$BOARD/firmware.elf
     cp $SRCELF $OUTDIR/elfs/$basename.elf
 
