@@ -265,15 +265,14 @@ void NodeDB::installDefaultDeviceState()
 
     // Init our blank owner info to reasonable defaults
     getMacAddr(ourMacAddr);
-    sprintf(owner.id, "!%02x%02x%02x%02x%02x%02x", ourMacAddr[0], ourMacAddr[1], ourMacAddr[2], ourMacAddr[3], ourMacAddr[4],
-            ourMacAddr[5]);
-    memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 
     // Set default owner name
-    pickNewNodeNum(); // Note: we will repick later, just in case the settings are corrupted, but we need a valid
-    // owner.short_name now
+    pickNewNodeNum(); // based on macaddr now
     sprintf(owner.long_name, "Unknown %02x%02x", ourMacAddr[4], ourMacAddr[5]);
     sprintf(owner.short_name, "?%02X", (unsigned)(myNodeInfo.my_node_num & 0xff));
+
+    sprintf(owner.id, "!%08x", getNodeNum()); // Default node ID now based on nodenum
+    memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 
     // Restore region if possible
     if (oldRegionCode != RegionCode_Unset)
