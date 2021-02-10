@@ -265,15 +265,14 @@ void NodeDB::installDefaultDeviceState()
 
     // Init our blank owner info to reasonable defaults
     getMacAddr(ourMacAddr);
-    sprintf(owner.id, "!%02x%02x%02x%02x%02x%02x", ourMacAddr[0], ourMacAddr[1], ourMacAddr[2], ourMacAddr[3], ourMacAddr[4],
-            ourMacAddr[5]);
-    memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 
     // Set default owner name
-    pickNewNodeNum(); // Note: we will repick later, just in case the settings are corrupted, but we need a valid
-    // owner.short_name now
+    pickNewNodeNum(); // based on macaddr now
     sprintf(owner.long_name, "Unknown %02x%02x", ourMacAddr[4], ourMacAddr[5]);
     sprintf(owner.short_name, "?%02X", (unsigned)(myNodeInfo.my_node_num & 0xff));
+
+    sprintf(owner.id, "!%08x", getNodeNum()); // Default node ID now based on nodenum
+    memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 
     // Restore region if possible
     if (oldRegionCode != RegionCode_Unset)
@@ -526,7 +525,7 @@ void NodeDB::updateUser(uint32_t nodeId, const User &p)
 /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
 void NodeDB::updateFrom(const MeshPacket &mp)
 {
-    if (mp.which_payload == MeshPacket_decoded_tag) {
+    if (mp.which_payloadVariant == MeshPacket_decoded_tag) {
         const SubPacket &p = mp.decoded;
         DEBUG_MSG("Update DB node 0x%x, rx_time=%u\n", mp.from, mp.rx_time);
 
@@ -539,7 +538,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
 
         info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
 
-        switch (p.which_payload) {
+        switch (p.which_payloadVariant) {
         case SubPacket_position_tag: {
             // handle a legacy position packet
             DEBUG_MSG("WARNING: Processing a (deprecated) position packet from %d\n", mp.from);
