@@ -133,8 +133,21 @@ class RadioInterface
     uint32_t getPacketTime(MeshPacket *p);
     uint32_t getPacketTime(uint32_t totalPacketLen);
 
+    /**
+     * Get the channel we saved.
+     */
+    uint32_t getChannelNum();
+
+    /**
+     * Get the frequency we saved.
+     */
+    float getFreq();
+
   protected:
     int8_t power = 17; // Set by applyModemConfig()
+
+    float savedFreq;
+    uint32_t savedChannelNum;
 
     /***
      * given a packet set sendingPacket and decode the protobufs into radiobuf.  Returns # of bytes to send (including the
@@ -156,6 +169,16 @@ class RadioInterface
      * These paramaters will be pull from the channelSettings global
      */
     virtual void applyModemConfig();
+
+    /**
+     * Save the frequency we selected for later reuse.
+     */
+    virtual void saveFreq(float savedFreq);
+
+    /**
+     * Save the chanel we selected for later reuse.
+     */
+    virtual void saveChannelNum(uint32_t savedChannelNum);
 
   private:
     /// Return 0 if sleep is okay

@@ -11,6 +11,7 @@
 #include <HTTPMultipartBodyParser.hpp>
 #include <HTTPURLEncodedBodyParser.hpp>
 #include <SPIFFS.h>
+#include "RadioLibInterface.h"
 
 #ifndef NO_ESP32
 #include "esp_task_wdt.h"
@@ -928,9 +929,17 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     res->printf("\"has_battery\": %s,\n", BoolToString(powerStatus->getHasBattery()));
     res->printf("\"has_usb\": %s,\n", BoolToString(powerStatus->getHasUSB()));
     res->printf("\"is_charging\": %s\n", BoolToString(powerStatus->getIsCharging()));
-    res->println("}");
+    res->println("},");
+
+    res->println("\"radio\": {");
+    res->printf("\"frequecy\": %f,\n", RadioLibInterface::instance->getFreq());
+    res->printf("\"lora_channel\": %d\n", RadioLibInterface::instance->getChannelNum());
+    res->println("},");
+
 
     res->println("},");
+
+
 
     res->println("\"status\": \"ok\"");
     res->println("}");
