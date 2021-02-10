@@ -72,7 +72,7 @@ void DSRRouter::sniffReceived(const MeshPacket *p)
         addRoute(p->from, p->from, 0); // We are adjacent with zero hops
     }
 
-    switch (p->decoded.which_payload) {
+    switch (p->decoded.which_payloadVariant) {
     case SubPacket_route_request_tag:
         // Handle route discovery packets (will be a broadcast message)
         // FIXME - always start request with the senders nodenum
@@ -139,7 +139,7 @@ void DSRRouter::sniffReceived(const MeshPacket *p)
 
         // handle naks - convert them to route error packets
         // All naks are generated locally, because we failed resending the packet too many times
-        PacketId nakId = p->decoded.which_ack == SubPacket_fail_id_tag ? p->decoded.ack.fail_id : 0;
+        PacketId nakId = p->decoded.which_ackVariant == SubPacket_fail_id_tag ? p->decoded.ackVariant.fail_id : 0;
         if (nakId) {
             auto pending = findPendingPacket(p->to, nakId);
             if (pending && pending->packet->decoded.source) { // if source not set, this was not a multihop packet, just ignore

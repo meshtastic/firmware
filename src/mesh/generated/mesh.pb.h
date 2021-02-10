@@ -238,7 +238,7 @@ typedef struct _SubPacket {
         RouteDiscovery route_request;
         RouteDiscovery route_reply;
         ErrorReason error_reason;
-    } payloadVariant;
+    };
     uint32_t original_id;
     bool want_response;
     uint32_t dest;
@@ -258,7 +258,7 @@ typedef struct _MeshPacket {
     union {
         SubPacket decoded;
         MeshPacket_encrypted_t encrypted;
-    } payloadVariant;
+    };
     uint32_t channel_index;
     uint32_t id;
     float rx_snr;
@@ -279,7 +279,7 @@ typedef struct _FromRadio {
         uint32_t config_complete_id;
         bool rebooted;
         ChannelSettings channel;
-    } payloadVariant;
+    };
 } FromRadio;
 
 typedef struct _ToRadio {
@@ -290,7 +290,7 @@ typedef struct _ToRadio {
         RadioConfig set_radio;
         User set_owner;
         ChannelSettings set_channel;
-    } payloadVariant;
+    };
 } ToRadio;
 
 
@@ -524,12 +524,12 @@ X(a, STATIC,   REPEATED, INT32,    route,             2)
 #define RouteDiscovery_DEFAULT NULL
 
 #define SubPacket_FIELDLIST(X, a) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,position,payloadVariant.position),   1) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,data,payloadVariant.data),   3) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,user,payloadVariant.user),   4) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,route_request,payloadVariant.route_request),   6) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,route_reply,payloadVariant.route_reply),   7) \
-X(a, STATIC,   ONEOF,    UENUM,    (payloadVariant,error_reason,payloadVariant.error_reason),  13) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,position,position),   1) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,data,data),   3) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,user,user),   4) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,route_request,route_request),   6) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,route_reply,route_reply),   7) \
+X(a, STATIC,   ONEOF,    UENUM,    (payloadVariant,error_reason,error_reason),  13) \
 X(a, STATIC,   SINGULAR, UINT32,   original_id,       2) \
 X(a, STATIC,   SINGULAR, BOOL,     want_response,     5) \
 X(a, STATIC,   SINGULAR, UINT32,   dest,              9) \
@@ -547,8 +547,8 @@ X(a, STATIC,   SINGULAR, UINT32,   source,           12)
 #define MeshPacket_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   from,              1) \
 X(a, STATIC,   SINGULAR, UINT32,   to,                2) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,decoded,payloadVariant.decoded),   3) \
-X(a, STATIC,   ONEOF,    BYTES,    (payloadVariant,encrypted,payloadVariant.encrypted),   8) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,decoded,decoded),   3) \
+X(a, STATIC,   ONEOF,    BYTES,    (payloadVariant,encrypted,encrypted),   8) \
 X(a, STATIC,   SINGULAR, UINT32,   channel_index,     4) \
 X(a, STATIC,   SINGULAR, UINT32,   id,                6) \
 X(a, STATIC,   SINGULAR, FLOAT,    rx_snr,            7) \
@@ -667,14 +667,14 @@ X(a, STATIC,   SINGULAR, UENUM,    level,             4)
 
 #define FromRadio_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   num,               1) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,packet,payloadVariant.packet),   2) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,my_info,payloadVariant.my_info),   3) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,node_info,payloadVariant.node_info),   4) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,radio,payloadVariant.radio),   6) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,log_record,payloadVariant.log_record),   7) \
-X(a, STATIC,   ONEOF,    UINT32,   (payloadVariant,config_complete_id,payloadVariant.config_complete_id),   8) \
-X(a, STATIC,   ONEOF,    BOOL,     (payloadVariant,rebooted,payloadVariant.rebooted),   9) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,channel,payloadVariant.channel),  10)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,packet,packet),   2) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,my_info,my_info),   3) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,node_info,node_info),   4) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,radio,radio),   6) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,log_record,log_record),   7) \
+X(a, STATIC,   ONEOF,    UINT32,   (payloadVariant,config_complete_id,config_complete_id),   8) \
+X(a, STATIC,   ONEOF,    BOOL,     (payloadVariant,rebooted,rebooted),   9) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,channel,channel),  10)
 #define FromRadio_CALLBACK NULL
 #define FromRadio_DEFAULT NULL
 #define FromRadio_payloadVariant_packet_MSGTYPE MeshPacket
@@ -685,11 +685,11 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,channel,payloadVariant.channe
 #define FromRadio_payloadVariant_channel_MSGTYPE ChannelSettings
 
 #define ToRadio_FIELDLIST(X, a) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,packet,payloadVariant.packet),   1) \
-X(a, STATIC,   ONEOF,    UINT32,   (payloadVariant,want_config_id,payloadVariant.want_config_id), 100) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,set_radio,payloadVariant.set_radio), 101) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,set_owner,payloadVariant.set_owner), 102) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,set_channel,payloadVariant.set_channel), 103)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,packet,packet),   1) \
+X(a, STATIC,   ONEOF,    UINT32,   (payloadVariant,want_config_id,want_config_id), 100) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,set_radio,set_radio), 101) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,set_owner,set_owner), 102) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,set_channel,set_channel), 103)
 #define ToRadio_CALLBACK NULL
 #define ToRadio_DEFAULT NULL
 #define ToRadio_payloadVariant_packet_MSGTYPE MeshPacket
