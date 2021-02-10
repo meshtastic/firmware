@@ -210,6 +210,38 @@ unsigned long hash(const char *str)
 }
 
 /**
+ * Save our frequency for later reuse.
+ */
+void RadioInterface::saveFreq(float freq)
+{
+    savedFreq = freq;
+}
+
+/**
+ * Save our channel for later reuse.
+ */
+void RadioInterface::saveChannelNum(uint32_t channel_num)
+{
+    savedChannelNum = channel_num;
+}
+
+/**
+ * Save our frequency for later reuse.
+ */
+float RadioInterface::getFreq()
+{
+    return savedFreq;
+}
+
+/**
+ * Save our channel for later reuse.
+ */
+uint32_t RadioInterface::getChannelNum()
+{
+    return savedChannelNum;
+}
+
+/**
  * Pull our channel settings etc... from protobufs to the dumb interface settings
  */
 void RadioInterface::applyModemConfig()
@@ -261,18 +293,19 @@ void RadioInterface::applyModemConfig()
     assert(myRegion); // Should have been found in init
 
     // If user has manually specified a channel num, then use that, otherwise generate one by hashing the name
-    int channel_num =
-        (channelSettings.channel_num ? channelSettings.channel_num - 1 : hash(channelName)) % myRegion->numChannels;
+    int channel_num = (channelSettings.channel_num ? channelSettings.channel_num - 1 : hash(channelName)) % myRegion->numChannels;
     freq = myRegion->freq + myRegion->spacing * channel_num;
 
-    DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, power=%d\n", channelName, channelSettings.modem_config, channel_num,
-              power);
+    DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, power=%d\n", channelName, channelSettings.modem_config, channel_num, power);
     DEBUG_MSG("Radio myRegion->freq: %f\n", myRegion->freq);
     DEBUG_MSG("Radio myRegion->spacing: %f\n", myRegion->spacing);
     DEBUG_MSG("Radio myRegion->numChannels: %d\n", myRegion->numChannels);
     DEBUG_MSG("Radio channel_num: %d\n", channel_num);
     DEBUG_MSG("Radio frequency: %f\n", freq);
     DEBUG_MSG("Short packet time: %u msec\n", shortPacketMsec);
+
+    saveChannelNum(channel_num);
+    saveFreq(freq);
 }
 
 /**
