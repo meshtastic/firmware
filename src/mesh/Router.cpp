@@ -88,7 +88,7 @@ MeshPacket *Router::allocForSending()
 {
     MeshPacket *p = packetPool.allocZeroed();
 
-    p->which_payload = MeshPacket_decoded_tag; // Assume payload is decoded at start.
+    p->which_payloadVariant = MeshPacket_decoded_tag; // Assume payload is decoded at start.
     p->from = nodeDB.getNodeNum();
     p->to = NODENUM_BROADCAST;
     p->hop_limit = HOP_RELIABLE;
@@ -110,14 +110,14 @@ void Router::sendAckNak(ErrorReason err, NodeNum to, PacketId idFrom)
     DEBUG_MSG("Sending an err=%d,to=0x%x,idFrom=0x%x,id=0x%x\n", err, to, idFrom, p->id);
 
     if (!err) {
-        p->decoded.ack.success_id = idFrom;
-        p->decoded.which_ack = SubPacket_success_id_tag;
+        p->decoded.ackVariant.success_id = idFrom;
+        p->decoded.which_ackVariant = SubPacket_success_id_tag;
     } else {
-        p->decoded.ack.fail_id = idFrom;
-        p->decoded.which_ack = SubPacket_fail_id_tag;
+        p->decoded.ackVariant.fail_id = idFrom;
+        p->decoded.which_ackVariant = SubPacket_fail_id_tag;
 
         // Also send back the error reason
-        p->decoded.which_payload = SubPacket_error_reason_tag;
+        p->decoded.which_payloadVariant = SubPacket_error_reason_tag;
         p->decoded.error_reason = err;
     }
 
@@ -160,7 +160,7 @@ ErrorCode Router::send(MeshPacket *p)
 {
     assert(p->to != nodeDB.getNodeNum()); // should have already been handled by sendLocal
 
-    PacketId nakId = p->decoded.which_ack == SubPacket_fail_id_tag ? p->decoded.ack.fail_id : 0;
+    PacketId nakId = p->decoded.which_ackVariant == SubPacket_fail_id_tag ? p->decoded.ackVariant.fail_id : 0;
     assert(
         !nakId); // I don't think we ever send 0hop naks over the wire (other than to the phone), test that assumption with assert
 
@@ -170,11 +170,11 @@ ErrorCode Router::send(MeshPacket *p)
 
     // If the packet hasn't yet been encrypted, do so now (it might already be encrypted if we are just forwarding it)
 
-    assert(p->which_payload == MeshPacket_encrypted_tag ||
-           p->which_payload == MeshPacket_decoded_tag); // I _think_ all packets should have a payload by now
+    assert(p->which_payloadVariant == MeshPacket_encrypted_tag ||
+           p->which_payloadVariant == MeshPacket_decoded_tag); // I _think_ all packets should have a payload by now
 
     // First convert from protobufs to raw bytes
-    if (p->which_payload == MeshPacket_decoded_tag) {
+    if (p->which_payloadVariant == MeshPacket_decoded_tag) {
         static uint8_t bytes[MAX_RHPACKETLEN]; // we have to use a scratch buffer because a union
 
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), SubPacket_fields, &p->decoded);
@@ -185,7 +185,7 @@ ErrorCode Router::send(MeshPacket *p)
         // Copy back into the packet and set the variant type
         memcpy(p->encrypted.bytes, bytes, numbytes);
         p->encrypted.size = numbytes;
-        p->which_payload = MeshPacket_encrypted_tag;
+        p->which_payloadVariant = MeshPacket_encrypted_tag;
     }
 
     assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
@@ -211,10 +211,10 @@ void Router::sniffReceived(const MeshPacket *p)
 
 bool Router::perhapsDecode(MeshPacket *p)
 {
-    if (p->which_payload == MeshPacket_decoded_tag)
+    if (p->which_payloadVariant == MeshPacket_decoded_tag)
         return true; // If packet was already decoded just return
 
-    assert(p->which_payload == MeshPacket_encrypted_tag);
+    assert(p->which_payloadVariant == MeshPacket_encrypted_tag);
 
     // FIXME - someday don't send routing packets encrypted.  That would allow us to route for other channels without
     // being able to decrypt their data.
@@ -230,7 +230,7 @@ bool Router::perhapsDecode(MeshPacket *p)
         return false;
     } else {
         // parsing was successful
-        p->which_payload = MeshPacket_decoded_tag;
+        p->which_payloadVariant = MeshPacket_decoded_tag;
         return true;
     }
 }
