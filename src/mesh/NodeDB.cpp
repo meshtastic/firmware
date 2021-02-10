@@ -525,7 +525,7 @@ void NodeDB::updateUser(uint32_t nodeId, const User &p)
 /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
 void NodeDB::updateFrom(const MeshPacket &mp)
 {
-    if (mp.which_payload == MeshPacket_decoded_tag) {
+    if (mp.which_payloadVariant == MeshPacket_decoded_tag) {
         const SubPacket &p = mp.decoded;
         DEBUG_MSG("Update DB node 0x%x, rx_time=%u\n", mp.from, mp.rx_time);
 
@@ -538,7 +538,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
 
         info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
 
-        switch (p.which_payload) {
+        switch (p.which_payloadVariant) {
         case SubPacket_position_tag: {
             // handle a legacy position packet
             DEBUG_MSG("WARNING: Processing a (deprecated) position packet from %d\n", mp.from);
