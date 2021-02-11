@@ -83,6 +83,15 @@ typedef enum _CriticalErrorCode {
     CriticalErrorCode_TransmitFailed = 8
 } CriticalErrorCode;
 
+typedef enum _MeshPacket_Priority {
+    MeshPacket_Priority_UNSET = 0,
+    MeshPacket_Priority_MIN = 1,
+    MeshPacket_Priority_BACKGROUND = 10,
+    MeshPacket_Priority_DEFAULT = 64,
+    MeshPacket_Priority_ACK = 120,
+    MeshPacket_Priority_MAX = 127
+} MeshPacket_Priority;
+
 typedef enum _ChannelSettings_ModemConfig {
     ChannelSettings_ModemConfig_Bw125Cr45Sf128 = 0,
     ChannelSettings_ModemConfig_Bw500Cr45Sf128 = 1,
@@ -265,6 +274,7 @@ typedef struct _MeshPacket {
     uint32_t rx_time;
     uint32_t hop_limit;
     bool want_ack;
+    MeshPacket_Priority priority;
 } MeshPacket;
 
 typedef struct _FromRadio {
@@ -323,6 +333,10 @@ typedef struct _ToRadio {
 #define _CriticalErrorCode_MAX CriticalErrorCode_TransmitFailed
 #define _CriticalErrorCode_ARRAYSIZE ((CriticalErrorCode)(CriticalErrorCode_TransmitFailed+1))
 
+#define _MeshPacket_Priority_MIN MeshPacket_Priority_UNSET
+#define _MeshPacket_Priority_MAX MeshPacket_Priority_MAX
+#define _MeshPacket_Priority_ARRAYSIZE ((MeshPacket_Priority)(MeshPacket_Priority_MAX+1))
+
 #define _ChannelSettings_ModemConfig_MIN ChannelSettings_ModemConfig_Bw125Cr45Sf128
 #define _ChannelSettings_ModemConfig_MAX ChannelSettings_ModemConfig_Bw125Cr48Sf4096
 #define _ChannelSettings_ModemConfig_ARRAYSIZE ((ChannelSettings_ModemConfig)(ChannelSettings_ModemConfig_Bw125Cr48Sf4096+1))
@@ -342,7 +356,7 @@ extern "C" {
 #define User_init_default                        {"", "", "", {0}}
 #define RouteDiscovery_init_default              {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define SubPacket_init_default                   {0, {Position_init_default}, 0, 0, 0, 0, {0}, 0}
-#define MeshPacket_init_default                  {0, 0, 0, {SubPacket_init_default}, 0, 0, 0, 0, 0, 0}
+#define MeshPacket_init_default                  {0, 0, 0, {SubPacket_init_default}, 0, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN}
 #define ChannelSettings_init_default             {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, "", 0, 0, 0, 0, 0, 0, 0}
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default, false, ChannelSettings_init_default}
 #define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -356,7 +370,7 @@ extern "C" {
 #define User_init_zero                           {"", "", "", {0}}
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define SubPacket_init_zero                      {0, {Position_init_zero}, 0, 0, 0, 0, {0}, 0}
-#define MeshPacket_init_zero                     {0, 0, 0, {SubPacket_init_zero}, 0, 0, 0, 0, 0, 0}
+#define MeshPacket_init_zero                     {0, 0, 0, {SubPacket_init_zero}, 0, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN}
 #define ChannelSettings_init_zero                {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, "", 0, 0, 0, 0, 0, 0, 0}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero, false, ChannelSettings_init_zero}
 #define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -479,6 +493,7 @@ extern "C" {
 #define MeshPacket_rx_time_tag                   9
 #define MeshPacket_hop_limit_tag                 10
 #define MeshPacket_want_ack_tag                  11
+#define MeshPacket_priority_tag                  12
 #define FromRadio_num_tag                        1
 #define FromRadio_packet_tag                     2
 #define FromRadio_my_info_tag                    3
@@ -554,7 +569,8 @@ X(a, STATIC,   SINGULAR, UINT32,   id,                6) \
 X(a, STATIC,   SINGULAR, FLOAT,    rx_snr,            7) \
 X(a, STATIC,   SINGULAR, FIXED32,  rx_time,           9) \
 X(a, STATIC,   SINGULAR, UINT32,   hop_limit,        10) \
-X(a, STATIC,   SINGULAR, BOOL,     want_ack,         11)
+X(a, STATIC,   SINGULAR, BOOL,     want_ack,         11) \
+X(a, STATIC,   SINGULAR, UENUM,    priority,         12)
 #define MeshPacket_CALLBACK NULL
 #define MeshPacket_DEFAULT NULL
 #define MeshPacket_payloadVariant_decoded_MSGTYPE SubPacket
@@ -734,7 +750,7 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define User_size                                72
 #define RouteDiscovery_size                      88
 #define SubPacket_size                           275
-#define MeshPacket_size                          320
+#define MeshPacket_size                          322
 #define ChannelSettings_size                     95
 #define RadioConfig_size                         405
 #define RadioConfig_UserPreferences_size         305
