@@ -120,6 +120,7 @@ void Router::sendAckNak(ErrorReason err, NodeNum to, PacketId idFrom)
         p->decoded.which_payloadVariant = SubPacket_error_reason_tag;
         p->decoded.error_reason = err;
     }
+    p->priority = MeshPacket_Priority_ACK;
 
     sendLocal(p); // we sometimes send directly to the local node
 }

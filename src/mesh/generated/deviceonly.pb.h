@@ -80,7 +80,7 @@ extern const pb_msgdesc_t DeviceState_msg;
 #define DeviceState_fields &DeviceState_msg
 
 /* Maximum encoded size of messages (where known) */
-#define DeviceState_size                         6262
+#define DeviceState_size                         6266
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -35,8 +35,9 @@ void NodeInfoPlugin::sendOurNodeInfo(NodeNum dest, bool wantReplies)
     MeshPacket *p = allocReply();
     p->to = dest;
     p->decoded.want_response = wantReplies;
+    p->priority = MeshPacket_Priority_BACKGROUND;
     prevPacketId = p->id;
-    
+
     service.sendToMesh(p);
 }
 
