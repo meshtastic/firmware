@@ -124,6 +124,8 @@ void Router::sendAckNak(ErrorReason err, NodeNum to, PacketId idFrom)
     sendLocal(p); // we sometimes send directly to the local node
 }
 
+
+
 ErrorCode Router::sendLocal(MeshPacket *p)
 {
     // No need to deliver externally if the destination is the local node
@@ -198,6 +200,13 @@ ErrorCode Router::send(MeshPacket *p)
         return ERRNO_NO_INTERFACES;
     } */
 }
+
+/** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
+bool Router::cancelSending(NodeNum from, PacketId id) {
+    return iface ? iface->cancelSending(from, id) : false;
+}
+
+
 
 /**
  * Every (non duplicate) packet this node receives will be passed through this method.  This allows subclasses to

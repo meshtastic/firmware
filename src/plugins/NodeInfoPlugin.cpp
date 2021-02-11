@@ -28,10 +28,15 @@ bool NodeInfoPlugin::handleReceivedProtobuf(const MeshPacket &mp, const User &p)
 
 void NodeInfoPlugin::sendOurNodeInfo(NodeNum dest, bool wantReplies)
 {
+    // cancel any not yet sent (now stale) position packets
+    if(prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
+        service.cancelSending(prevPacketId);
+
     MeshPacket *p = allocReply();
     p->to = dest;
     p->decoded.want_response = wantReplies;
-
+    prevPacketId = p->id;
+    
     service.sendToMesh(p);
 }
 
