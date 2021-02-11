@@ -105,6 +105,9 @@ class RadioInterface
      */
     virtual ErrorCode send(MeshPacket *p) = 0;
 
+    /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
+    virtual bool cancelSending(NodeNum from, PacketId id) { return false; }
+
     // methods from radiohead
 
     /// Initialise the Driver transport hardware and software.

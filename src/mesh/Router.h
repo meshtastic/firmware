@@ -55,7 +55,12 @@ class Router : protected concurrency::OSThread
      */
     ErrorCode sendLocal(MeshPacket *p);
 
-    /// Allocate and return a meshpacket which defaults as send to broadcast from the current node.
+    /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
+    bool cancelSending(NodeNum from, PacketId id);    
+
+    /** Allocate and return a meshpacket which defaults as send to broadcast from the current node.
+     * The returned packet is guaranteed to have a unique packet ID already assigned
+     */
     MeshPacket *allocForSending();
 
     /**

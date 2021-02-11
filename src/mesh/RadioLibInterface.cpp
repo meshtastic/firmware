@@ -132,6 +132,13 @@ bool RadioLibInterface::canSleep()
     return res;
 }
 
+/** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
+bool RadioLibInterface::cancelSending(NodeNum from, PacketId id) {
+    assert(0);
+    return false;
+}
+
+
 /** radio helper thread callback.
 
 We never immediately transmit after any operation (either rx or tx).  Instead we should start receiving and
