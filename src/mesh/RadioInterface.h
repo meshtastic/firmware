@@ -54,6 +54,8 @@ class RadioInterface
     uint32_t shortPacketMsec;
 
   protected:
+    bool disabled = false;
+
     float bw = 125;
     uint8_t sf = 9;
     uint8_t cr = 7;
@@ -97,6 +99,9 @@ class RadioInterface
 
     /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.
     virtual bool sleep() { return true; }
+
+    /// Disable this interface (while disabled, no packets can be sent or received)
+    void disable() { disabled = true; sleep(); }
 
     /**
      * Send a packet (possibly by enquing in a private fifo).  This routine will
