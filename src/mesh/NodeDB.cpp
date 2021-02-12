@@ -600,7 +600,7 @@ void recordCriticalError(CriticalErrorCode code, uint32_t address)
     // Print error to screen and serial port
     String lcd = String("Critical error ") + code + "!\n";
     screen->print(lcd.c_str());
-    DEBUG_MSG("NOTE! Recording critical error %d, address=%x\n", code, address);
+    DEBUG_MSG("NOTE! Recording critical error %d, address=%lx\n", code, address);
     
     // Record error to DB
     myNodeInfo.error_code = code;

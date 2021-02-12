@@ -100,7 +100,7 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
     uint32_t xmitMsec = getPacketTime(p);
 
     DEBUG_MSG("txGood=%d,rxGood=%d,rxBad=%d\n", txGood, rxGood, rxBad);
-    ErrorCode res = txQueue.enqueue(p, 0) ? ERRNO_OK : ERRNO_UNKNOWN;
+    ErrorCode res = txQueue.enqueue(p) ? ERRNO_OK : ERRNO_UNKNOWN;
 
     if (res != ERRNO_OK) { // we weren't able to queue it, so we must drop it to prevent leaks
         packetPool.release(p);
@@ -125,12 +125,24 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
 
 bool RadioLibInterface::canSleep()
 {
-    bool res = txQueue.isEmpty();
+    bool res = txQueue.empty();
     if (!res) // only print debug messages if we are vetoing sleep
         DEBUG_MSG("radio wait to sleep, txEmpty=%d\n", res);
 
     return res;
 }
+
+/** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
+bool RadioLibInterface::cancelSending(NodeNum from, PacketId id) {
+    auto p = txQueue.remove(from, id);
+    if(p)
+        packetPool.release(p); // free the packet we just removed
+
+    bool result = (p != NULL);
+    DEBUG_MSG("cancelSending id=0x%x, removed=%d", id, result);
+    return result;
+}
+
 
 /** radio helper thread callback.
 
@@ -165,12 +177,12 @@ void RadioLibInterface::onNotify(uint32_t notification)
 
         // If we are not currently in receive mode, then restart the timer and try again later (this can happen if the main thread
         // has placed the unit into standby)  FIXME, how will this work if the chipset is in sleep mode?
-        if (!txQueue.isEmpty()) {
+        if (!txQueue.empty()) {
             if (!canSendImmediately()) {
                 startTransmitTimer(); // try again in a little while
             } else {
                 // Send any outgoing packets we have ready
-                MeshPacket *txp = txQueue.dequeuePtr(0);
+                MeshPacket *txp = txQueue.dequeue();
                 assert(txp);
                 startSend(txp);
             }
@@ -186,7 +198,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
 void RadioLibInterface::startTransmitTimer(bool withDelay)
 {
     // If we have work to do and the timer wasn't already scheduled, schedule it now
-    if (!txQueue.isEmpty()) {
+    if (!txQueue.empty()) {
         uint32_t delay = !withDelay ? 1 : getTxDelayMsec();
         // DEBUG_MSG("xmit timer %d\n", delay);
         notifyLater(delay, TRANSMIT_DELAY_COMPLETED, false); // This will implicitly enable

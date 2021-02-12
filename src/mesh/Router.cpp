@@ -120,9 +120,12 @@ void Router::sendAckNak(ErrorReason err, NodeNum to, PacketId idFrom)
         p->decoded.which_payloadVariant = SubPacket_error_reason_tag;
         p->decoded.error_reason = err;
     }
+    p->priority = MeshPacket_Priority_ACK;
 
     sendLocal(p); // we sometimes send directly to the local node
 }
+
+
 
 ErrorCode Router::sendLocal(MeshPacket *p)
 {
@@ -198,6 +201,13 @@ ErrorCode Router::send(MeshPacket *p)
         return ERRNO_NO_INTERFACES;
     } */
 }
+
+/** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
+bool Router::cancelSending(NodeNum from, PacketId id) {
+    return iface ? iface->cancelSending(from, id) : false;
+}
+
+
 
 /**
  * Every (non duplicate) packet this node receives will be passed through this method.  This allows subclasses to
