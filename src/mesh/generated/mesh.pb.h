@@ -88,6 +88,7 @@ typedef enum _MeshPacket_Priority {
     MeshPacket_Priority_MIN = 1,
     MeshPacket_Priority_BACKGROUND = 10,
     MeshPacket_Priority_DEFAULT = 64,
+    MeshPacket_Priority_RELIABLE = 70,
     MeshPacket_Priority_ACK = 120,
     MeshPacket_Priority_MAX = 127
 } MeshPacket_Priority;
