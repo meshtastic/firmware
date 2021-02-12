@@ -20,19 +20,29 @@ bool CompareMeshPacket::operator()(MeshPacket *p1, MeshPacket *p2)
                         : (p1->id >= p2->id); // prefer smaller packet ids
 }
 
-MeshPacketQueue::MeshPacketQueue(size_t _maxLen) : maxLen(_maxLen)
+MeshPacketQueue::MeshPacketQueue(size_t _maxLen) : maxLen(_maxLen) {}
+
+/** Some clients might not properly set priority, therefore we fix it here.
+ */
+void fixPriority(MeshPacket *p)
 {
+    // We might receive acks from other nodes (and since generated remotely, they won't have priority assigned.  Check for that
+    // and fix it
+    if (p->priority == MeshPacket_Priority_UNSET) {
+        // if acks give high priority
+        // if a reliable message give a bit higher default priority
+        p->priority = p->decoded.which_ackVariant ? MeshPacket_Priority_ACK :                
+                          (p->want_ack ? MeshPacket_Priority_RELIABLE : MeshPacket_Priority_DEFAULT);
+    }
 }
 
 /** enqueue a packet, return false if full */
 bool MeshPacketQueue::enqueue(MeshPacket *p)
 {
 
-    // We might receive acks from other nodes (and since generated remotely, they won't have priority assigned.  Check for that
-    // and fix it
-    if (p->priority == MeshPacket_Priority_UNSET)
-        p->priority = p->decoded.which_ackVariant ? MeshPacket_Priority_ACK : MeshPacket_Priority_DEFAULT;
+    fixPriority(p);
 
+    // fixme if there is something lower priority in the queue that can be deleted to make space, delete that instead
     if (size() >= maxLen)
         return false;
     else {
