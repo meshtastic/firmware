@@ -1,5 +1,7 @@
 #include "MeshPacketQueue.h"
 
+#include <algorithm>
+
 /// @return the priority of the specified packet
 inline uint32_t getPriority(MeshPacket *p)
 {
