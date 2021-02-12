@@ -2,8 +2,8 @@
 #include "MeshTypes.h"
 #include "NodeDB.h"
 #include "SPILock.h"
-#include "mesh-pb-constants.h"
 #include "error.h"
+#include "mesh-pb-constants.h"
 #include <configuration.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -68,13 +68,12 @@ bool RadioLibInterface::canSendImmediately()
     bool busyTx = sendingPacket != NULL;
     bool busyRx = isReceiving && isActivelyReceiving();
 
-
     if (busyTx || busyRx) {
         if (busyTx)
             DEBUG_MSG("Can not send yet, busyTx\n");
         // If we've been trying to send the same packet more than one minute and we haven't gotten a
         // TX IRQ from the radio, the radio is probably broken.
-        if (busyTx && (millis() - lastTxStart > 60000)){
+        if (busyTx && (millis() - lastTxStart > 60000)) {
             DEBUG_MSG("Hardware Failure! busyTx for more than 60s\n");
             recordCriticalError(CriticalErrorCode_TransmitFailed);
 #ifndef NO_ESP32
@@ -94,6 +93,11 @@ bool RadioLibInterface::canSendImmediately()
 /// bluetooth comms code.  If the txmit queue is empty it might return an error
 ErrorCode RadioLibInterface::send(MeshPacket *p)
 {
+    if (disabled) {
+        packetPool.release(p);
+        return ERRNO_DISABLED;
+    }
+
     // Sometimes when testing it is useful to be able to never turn on the xmitter
 #ifndef LORA_DISABLE_SENDING
     printPacket("enqueuing for send", p);
@@ -110,7 +114,7 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
     // Count the packet toward our TX airtime utilization.
     //   We only count it if it can be added to the TX queue.
     airTime->logAirtime(TX_LOG, xmitMsec);
-    //airTime.logAirtime(TX_LOG, xmitMsec);
+    // airTime.logAirtime(TX_LOG, xmitMsec);
 
     // We want all sending/receiving to be done by our daemon thread, We use a delay here because this packet might have been sent
     // in response to a packet we just received.  So we want to make sure the other side has had a chance to reconfigure its radio
@@ -119,7 +123,7 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
     return res;
 #else
     packetPool.release(p);
-    return ERRNO_UNKNOWN;
+    return ERRNO_DISABLED;
 #endif
 }
 
@@ -133,16 +137,16 @@ bool RadioLibInterface::canSleep()
 }
 
 /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
-bool RadioLibInterface::cancelSending(NodeNum from, PacketId id) {
+bool RadioLibInterface::cancelSending(NodeNum from, PacketId id)
+{
     auto p = txQueue.remove(from, id);
-    if(p)
+    if (p)
         packetPool.release(p); // free the packet we just removed
 
     bool result = (p != NULL);
-    DEBUG_MSG("cancelSending id=0x%x, removed=%d", id, result);
+    DEBUG_MSG("cancelSending id=0x%x, removed=%d\n", id, result);
     return result;
 }
-
 
 /** radio helper thread callback.
 
@@ -242,7 +246,7 @@ void RadioLibInterface::handleReceiveInterrupt()
 
     xmitMsec = getPacketTime(length);
     airTime->logAirtime(RX_ALL_LOG, xmitMsec);
-    //airTime.logAirtime(RX_ALL_LOG, xmitMsec);
+    // airTime.logAirtime(RX_ALL_LOG, xmitMsec);
 
     int state = iface->readData(radiobuf, length);
     if (state != ERR_NONE) {
@@ -277,7 +281,7 @@ void RadioLibInterface::handleReceiveInterrupt()
             addReceiveMetadata(mp);
 
             mp->which_payloadVariant = MeshPacket_encrypted_tag; // Mark that the payload is still encrypted at this point
-            assert(((uint32_t) payloadLen) <= sizeof(mp->encrypted.bytes));
+            assert(((uint32_t)payloadLen) <= sizeof(mp->encrypted.bytes));
             memcpy(mp->encrypted.bytes, payload, payloadLen);
             mp->encrypted.size = payloadLen;
 
@@ -285,7 +289,7 @@ void RadioLibInterface::handleReceiveInterrupt()
 
             xmitMsec = getPacketTime(mp);
             airTime->logAirtime(RX_LOG, xmitMsec);
-            //airTime.logAirtime(RX_LOG, xmitMsec);
+            // airTime.logAirtime(RX_LOG, xmitMsec);
 
             deliverToReceiver(mp);
         }
@@ -295,16 +299,21 @@ void RadioLibInterface::handleReceiveInterrupt()
 /** start an immediate transmit */
 void RadioLibInterface::startSend(MeshPacket *txp)
 {
-    printPacket("Starting low level send", txp);
-    setStandby(); // Cancel any already in process receives
+    printPacket("Starting low level send", txp);    
+    if (disabled) {
+        DEBUG_MSG("startSend is dropping tx packet because we are disabled\n");
+        packetPool.release(txp);
+    } else {
+        setStandby(); // Cancel any already in process receives
 
-    configHardwareForSend(); // must be after setStandby
+        configHardwareForSend(); // must be after setStandby
 
-    size_t numbytes = beginSending(txp);
+        size_t numbytes = beginSending(txp);
 
-    int res = iface->startTransmit(radiobuf, numbytes);
-    assert(res == ERR_NONE);
+        int res = iface->startTransmit(radiobuf, numbytes);
+        assert(res == ERR_NONE);
 
-    // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
-    enableInterrupt(isrTxLevel0);
+        // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
+        enableInterrupt(isrTxLevel0);
+    }
 }
