@@ -169,6 +169,11 @@ void MeshService::handleToRadio(MeshPacket &p)
     }
 }
 
+/** Attempt to cancel a previously sent packet from this _local_ node.  Returns true if a packet was found we could cancel */
+bool MeshService::cancelSending(PacketId id) {
+    return router->cancelSending(nodeDB.getNodeNum(), id);
+}
+
 void MeshService::sendToMesh(MeshPacket *p)
 {
     nodeDB.updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
