@@ -934,8 +934,7 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     res->println("\"radio\": {");
     res->printf("\"frequecy\": %f,\n", RadioLibInterface::instance->getFreq());
     res->printf("\"lora_channel\": %d\n", RadioLibInterface::instance->getChannelNum());
-    res->println("},");
-
+    res->println("}");
 
     res->println("},");
 
