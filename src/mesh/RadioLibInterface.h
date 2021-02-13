@@ -2,6 +2,7 @@
 
 #include "../concurrency/OSThread.h"
 #include "RadioInterface.h"
+#include "MeshPacketQueue.h"
 
 #ifdef CubeCell_BoardPlus
 #define RADIOLIB_SOFTWARE_SERIAL_UNSUPPORTED
@@ -74,7 +75,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     uint32_t rxBad = 0, rxGood = 0, txGood = 0;
 
-    PointerQueue<MeshPacket> txQueue = PointerQueue<MeshPacket>(MAX_TX_QUEUE);
+    MeshPacketQueue txQueue = MeshPacketQueue(MAX_TX_QUEUE);
 
   protected:
 
@@ -135,6 +136,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      *  This method is only public to facilitate debugging.  Do not call.
      */
     virtual bool isActivelyReceiving() = 0;
+
+    /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
+    virtual bool cancelSending(NodeNum from, PacketId id);
 
   private:
     /** if we have something waiting to send, start a short random timer so we can come check for collision before actually doing
