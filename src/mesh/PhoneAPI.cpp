@@ -59,15 +59,15 @@ void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
     // return (lastContactMsec != 0) &&
 
     if (pb_decode_from_bytes(buf, bufLength, ToRadio_fields, &toRadioScratch)) {
-        switch (toRadioScratch.which_variant) {
+        switch (toRadioScratch.which_payloadVariant) {
         case ToRadio_packet_tag: {
-            MeshPacket &p = toRadioScratch.variant.packet;
+            MeshPacket &p = toRadioScratch.packet;
             printPacket("PACKET FROM PHONE", &p);
             service.handleToRadio(p);
             break;
         }
         case ToRadio_want_config_id_tag:
-            config_nonce = toRadioScratch.variant.want_config_id;
+            config_nonce = toRadioScratch.want_config_id;
             DEBUG_MSG("Client wants config, nonce=%u\n", config_nonce);
             state = STATE_SEND_MY_INFO;
 
@@ -79,12 +79,12 @@ void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 
         case ToRadio_set_owner_tag:
             DEBUG_MSG("Client is setting owner\n");
-            handleSetOwner(toRadioScratch.variant.set_owner);
+            handleSetOwner(toRadioScratch.set_owner);
             break;
 
         case ToRadio_set_radio_tag:
             DEBUG_MSG("Client is setting radio\n");
-            handleSetRadio(toRadioScratch.variant.set_radio);
+            handleSetRadio(toRadioScratch.set_radio);
             break;
 
         default:
@@ -131,22 +131,22 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         myNodeInfo.has_gps = (radioConfig.preferences.location_share == LocationSharing_LocDisabled)
                                  ? true
                                  : (gps && gps->isConnected()); // Update with latest GPS connect info
-        fromRadioScratch.which_variant = FromRadio_my_info_tag;
-        fromRadioScratch.variant.my_info = myNodeInfo;
+        fromRadioScratch.which_payloadVariant = FromRadio_my_info_tag;
+        fromRadioScratch.my_info = myNodeInfo;
         state = STATE_SEND_RADIO;
 
         service.refreshMyNodeInfo();  // Update my NodeInfo because the client will be asking for it soon.
         break;
 
     case STATE_SEND_RADIO:
-        fromRadioScratch.which_variant = FromRadio_radio_tag;
+        fromRadioScratch.which_payloadVariant = FromRadio_radio_tag;
 
-        fromRadioScratch.variant.radio = radioConfig;
+        fromRadioScratch.radio = radioConfig;
 
         // NOTE: The phone app needs to know the ls_secs value so it can properly expect sleep behavior.
         // So even if we internally use 0 to represent 'use default' we still need to send the value we are
         // using to the app (so that even old phone apps work with new device loads).
-        fromRadioScratch.variant.radio.preferences.ls_secs = getPref_ls_secs();
+        fromRadioScratch.radio.preferences.ls_secs = getPref_ls_secs();
 
         state = STATE_SEND_NODEINFO;
         break;
@@ -158,8 +158,8 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         if (info) {
             DEBUG_MSG("Sending nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s\n", info->num, info->position.time, info->user.id,
                       info->user.long_name);
-            fromRadioScratch.which_variant = FromRadio_node_info_tag;
-            fromRadioScratch.variant.node_info = *info;
+            fromRadioScratch.which_payloadVariant = FromRadio_node_info_tag;
+            fromRadioScratch.node_info = *info;
             // Stay in current state until done sending nodeinfos
         } else {
             DEBUG_MSG("Done sending nodeinfos\n");
@@ -171,8 +171,8 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     }
 
     case STATE_SEND_COMPLETE_ID:
-        fromRadioScratch.which_variant = FromRadio_config_complete_id_tag;
-        fromRadioScratch.variant.config_complete_id = config_nonce;
+        fromRadioScratch.which_payloadVariant = FromRadio_config_complete_id_tag;
+        fromRadioScratch.config_complete_id = config_nonce;
         config_nonce = 0;
         state = STATE_SEND_PACKETS;
         break;
@@ -185,8 +185,8 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             printPacket("phone downloaded packet", packetForPhone);
 
             // Encapsulate as a FromRadio packet
-            fromRadioScratch.which_variant = FromRadio_packet_tag;
-            fromRadioScratch.variant.packet = *packetForPhone;
+            fromRadioScratch.which_payloadVariant = FromRadio_packet_tag;
+            fromRadioScratch.packet = *packetForPhone;
 
             service.releaseToPool(packetForPhone); // we just copied the bytes, so don't need this buffer anymore
             packetForPhone = NULL;
@@ -198,9 +198,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     }
 
     // Do we have a message from the mesh?
-    if (fromRadioScratch.which_variant != 0) {
+    if (fromRadioScratch.which_payloadVariant != 0) {
         // Encapsulate as a FromRadio packet
-        DEBUG_MSG("encoding toPhone packet to phone variant=%d", fromRadioScratch.which_variant);
+        DEBUG_MSG("encoding toPhone packet to phone variant=%d", fromRadioScratch.which_payloadVariant);
         size_t numbytes = pb_encode_to_bytes(buf, FromRadio_size, FromRadio_fields, &fromRadioScratch);
         DEBUG_MSG(", %d bytes\n", numbytes);
         return numbytes;
