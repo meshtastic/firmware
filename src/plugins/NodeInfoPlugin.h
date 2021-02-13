@@ -6,6 +6,9 @@
  */
 class NodeInfoPlugin : public ProtobufPlugin<User>
 {
+    /// The id of the last packet we sent, to allow us to cancel it if we make something fresher
+    PacketId prevPacketId = 0;
+      
   public:
     /** Constructor
      * name is for debugging output

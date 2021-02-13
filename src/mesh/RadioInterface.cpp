@@ -83,7 +83,7 @@ uint32_t RadioInterface::getPacketTime(uint32_t pl)
 
 uint32_t RadioInterface::getPacketTime(MeshPacket *p)
 {
-    assert(p->which_payload == MeshPacket_encrypted_tag); // It should have already been encoded by now
+    assert(p->which_payloadVariant == MeshPacket_encrypted_tag); // It should have already been encoded by now
     uint32_t pl = p->encrypted.size + sizeof(PacketHeader);
 
     return getPacketTime(pl);
@@ -119,9 +119,9 @@ void printPacket(const char *prefix, const MeshPacket *p)
 {
     DEBUG_MSG("%s (id=0x%08x Fr0x%02x To0x%02x, WantAck%d, HopLim%d", prefix, p->id, p->from & 0xff, p->to & 0xff, p->want_ack,
               p->hop_limit);
-    if (p->which_payload == MeshPacket_decoded_tag) {
+    if (p->which_payloadVariant == MeshPacket_decoded_tag) {
         auto &s = p->decoded;
-        switch (s.which_payload) {
+        switch (s.which_payloadVariant) {
         case SubPacket_data_tag:
             DEBUG_MSG(" Portnum=%d", s.data.portnum);
             break;
@@ -135,7 +135,7 @@ void printPacket(const char *prefix, const MeshPacket *p)
             DEBUG_MSG(" Payload:None");
             break;
         default:
-            DEBUG_MSG(" Payload:%d", s.which_payload);
+            DEBUG_MSG(" Payload:%d", s.which_payloadVariant);
             break;
         }
         if (s.want_response)
@@ -147,10 +147,10 @@ void printPacket(const char *prefix, const MeshPacket *p)
         if (s.dest != 0)
             DEBUG_MSG(" dest=%08x", s.dest);
 
-        if (s.which_ack == SubPacket_success_id_tag)
-            DEBUG_MSG(" successId=%08x", s.ack.success_id);
-        else if (s.which_ack == SubPacket_fail_id_tag)
-            DEBUG_MSG(" failId=%08x", s.ack.fail_id);
+        if (s.which_ackVariant == SubPacket_success_id_tag)
+            DEBUG_MSG(" successId=%08x", s.ackVariant.success_id);
+        else if (s.which_ackVariant == SubPacket_fail_id_tag)
+            DEBUG_MSG(" failId=%08x", s.ackVariant.fail_id);
     } else {
         DEBUG_MSG(" encrypted");
     }
@@ -161,6 +161,9 @@ void printPacket(const char *prefix, const MeshPacket *p)
     if (p->rx_snr != 0.0) {
         DEBUG_MSG(" rxSNR=%g", p->rx_snr);
     }
+    if(p->priority != 0)
+        DEBUG_MSG(" priority=%d", p->priority);
+        
     DEBUG_MSG(")\n");
 }
 
@@ -348,7 +351,7 @@ size_t RadioInterface::beginSending(MeshPacket *p)
     assert(!sendingPacket);
 
     // DEBUG_MSG("sending queued packet on mesh (txGood=%d,rxGood=%d,rxBad=%d)\n", rf95.txGood(), rf95.rxGood(), rf95.rxBad());
-    assert(p->which_payload == MeshPacket_encrypted_tag); // It should have already been encoded by now
+    assert(p->which_payloadVariant == MeshPacket_encrypted_tag); // It should have already been encoded by now
 
     lastTxStart = millis();
 

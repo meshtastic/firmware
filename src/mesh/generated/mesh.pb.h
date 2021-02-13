@@ -83,6 +83,16 @@ typedef enum _CriticalErrorCode {
     CriticalErrorCode_TransmitFailed = 8
 } CriticalErrorCode;
 
+typedef enum _MeshPacket_Priority {
+    MeshPacket_Priority_UNSET = 0,
+    MeshPacket_Priority_MIN = 1,
+    MeshPacket_Priority_BACKGROUND = 10,
+    MeshPacket_Priority_DEFAULT = 64,
+    MeshPacket_Priority_RELIABLE = 70,
+    MeshPacket_Priority_ACK = 120,
+    MeshPacket_Priority_MAX = 127
+} MeshPacket_Priority;
+
 typedef enum _ChannelSettings_ModemConfig {
     ChannelSettings_ModemConfig_Bw125Cr45Sf128 = 0,
     ChannelSettings_ModemConfig_Bw500Cr45Sf128 = 1,
@@ -230,7 +240,7 @@ typedef struct _RadioConfig {
 } RadioConfig;
 
 typedef struct _SubPacket {
-    pb_size_t which_payload;
+    pb_size_t which_payloadVariant;
     union {
         Position position;
         Data data;
@@ -242,11 +252,11 @@ typedef struct _SubPacket {
     uint32_t original_id;
     bool want_response;
     uint32_t dest;
-    pb_size_t which_ack;
+    pb_size_t which_ackVariant;
     union {
         uint32_t success_id;
         uint32_t fail_id;
-    } ack;
+    } ackVariant;
     uint32_t source;
 } SubPacket;
 
@@ -254,7 +264,7 @@ typedef PB_BYTES_ARRAY_T(256) MeshPacket_encrypted_t;
 typedef struct _MeshPacket {
     uint32_t from;
     uint32_t to;
-    pb_size_t which_payload;
+    pb_size_t which_payloadVariant;
     union {
         SubPacket decoded;
         MeshPacket_encrypted_t encrypted;
@@ -265,11 +275,12 @@ typedef struct _MeshPacket {
     uint32_t rx_time;
     uint32_t hop_limit;
     bool want_ack;
+    MeshPacket_Priority priority;
 } MeshPacket;
 
 typedef struct _FromRadio {
     uint32_t num;
-    pb_size_t which_variant;
+    pb_size_t which_payloadVariant;
     union {
         MeshPacket packet;
         MyNodeInfo my_info;
@@ -279,18 +290,18 @@ typedef struct _FromRadio {
         uint32_t config_complete_id;
         bool rebooted;
         ChannelSettings channel;
-    } variant;
+    };
 } FromRadio;
 
 typedef struct _ToRadio {
-    pb_size_t which_variant;
+    pb_size_t which_payloadVariant;
     union {
         MeshPacket packet;
         uint32_t want_config_id;
         RadioConfig set_radio;
         User set_owner;
         ChannelSettings set_channel;
-    } variant;
+    };
 } ToRadio;
 
 
@@ -323,6 +334,10 @@ typedef struct _ToRadio {
 #define _CriticalErrorCode_MAX CriticalErrorCode_TransmitFailed
 #define _CriticalErrorCode_ARRAYSIZE ((CriticalErrorCode)(CriticalErrorCode_TransmitFailed+1))
 
+#define _MeshPacket_Priority_MIN MeshPacket_Priority_UNSET
+#define _MeshPacket_Priority_MAX MeshPacket_Priority_MAX
+#define _MeshPacket_Priority_ARRAYSIZE ((MeshPacket_Priority)(MeshPacket_Priority_MAX+1))
+
 #define _ChannelSettings_ModemConfig_MIN ChannelSettings_ModemConfig_Bw125Cr45Sf128
 #define _ChannelSettings_ModemConfig_MAX ChannelSettings_ModemConfig_Bw125Cr48Sf4096
 #define _ChannelSettings_ModemConfig_ARRAYSIZE ((ChannelSettings_ModemConfig)(ChannelSettings_ModemConfig_Bw125Cr48Sf4096+1))
@@ -342,7 +357,7 @@ extern "C" {
 #define User_init_default                        {"", "", "", {0}}
 #define RouteDiscovery_init_default              {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define SubPacket_init_default                   {0, {Position_init_default}, 0, 0, 0, 0, {0}, 0}
-#define MeshPacket_init_default                  {0, 0, 0, {SubPacket_init_default}, 0, 0, 0, 0, 0, 0}
+#define MeshPacket_init_default                  {0, 0, 0, {SubPacket_init_default}, 0, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN}
 #define ChannelSettings_init_default             {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, "", 0, 0, 0, 0, 0, 0, 0}
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default, false, ChannelSettings_init_default}
 #define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -356,7 +371,7 @@ extern "C" {
 #define User_init_zero                           {"", "", "", {0}}
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define SubPacket_init_zero                      {0, {Position_init_zero}, 0, 0, 0, 0, {0}, 0}
-#define MeshPacket_init_zero                     {0, 0, 0, {SubPacket_init_zero}, 0, 0, 0, 0, 0, 0}
+#define MeshPacket_init_zero                     {0, 0, 0, {SubPacket_init_zero}, 0, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN}
 #define ChannelSettings_init_zero                {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, "", 0, 0, 0, 0, 0, 0, 0}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero, false, ChannelSettings_init_zero}
 #define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -479,6 +494,7 @@ extern "C" {
 #define MeshPacket_rx_time_tag                   9
 #define MeshPacket_hop_limit_tag                 10
 #define MeshPacket_want_ack_tag                  11
+#define MeshPacket_priority_tag                  12
 #define FromRadio_num_tag                        1
 #define FromRadio_packet_tag                     2
 #define FromRadio_my_info_tag                    3
@@ -524,40 +540,41 @@ X(a, STATIC,   REPEATED, INT32,    route,             2)
 #define RouteDiscovery_DEFAULT NULL
 
 #define SubPacket_FIELDLIST(X, a) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload,position,position),   1) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload,data,data),   3) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload,user,user),   4) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload,route_request,route_request),   6) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload,route_reply,route_reply),   7) \
-X(a, STATIC,   ONEOF,    UENUM,    (payload,error_reason,error_reason),  13) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,position,position),   1) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,data,data),   3) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,user,user),   4) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,route_request,route_request),   6) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,route_reply,route_reply),   7) \
+X(a, STATIC,   ONEOF,    UENUM,    (payloadVariant,error_reason,error_reason),  13) \
 X(a, STATIC,   SINGULAR, UINT32,   original_id,       2) \
 X(a, STATIC,   SINGULAR, BOOL,     want_response,     5) \
 X(a, STATIC,   SINGULAR, UINT32,   dest,              9) \
-X(a, STATIC,   ONEOF,    UINT32,   (ack,success_id,ack.success_id),  10) \
-X(a, STATIC,   ONEOF,    UINT32,   (ack,fail_id,ack.fail_id),  11) \
+X(a, STATIC,   ONEOF,    UINT32,   (ackVariant,success_id,ackVariant.success_id),  10) \
+X(a, STATIC,   ONEOF,    UINT32,   (ackVariant,fail_id,ackVariant.fail_id),  11) \
 X(a, STATIC,   SINGULAR, UINT32,   source,           12)
 #define SubPacket_CALLBACK NULL
 #define SubPacket_DEFAULT NULL
-#define SubPacket_payload_position_MSGTYPE Position
-#define SubPacket_payload_data_MSGTYPE Data
-#define SubPacket_payload_user_MSGTYPE User
-#define SubPacket_payload_route_request_MSGTYPE RouteDiscovery
-#define SubPacket_payload_route_reply_MSGTYPE RouteDiscovery
+#define SubPacket_payloadVariant_position_MSGTYPE Position
+#define SubPacket_payloadVariant_data_MSGTYPE Data
+#define SubPacket_payloadVariant_user_MSGTYPE User
+#define SubPacket_payloadVariant_route_request_MSGTYPE RouteDiscovery
+#define SubPacket_payloadVariant_route_reply_MSGTYPE RouteDiscovery
 
 #define MeshPacket_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   from,              1) \
 X(a, STATIC,   SINGULAR, UINT32,   to,                2) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload,decoded,decoded),   3) \
-X(a, STATIC,   ONEOF,    BYTES,    (payload,encrypted,encrypted),   8) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,decoded,decoded),   3) \
+X(a, STATIC,   ONEOF,    BYTES,    (payloadVariant,encrypted,encrypted),   8) \
 X(a, STATIC,   SINGULAR, UINT32,   channel_index,     4) \
 X(a, STATIC,   SINGULAR, UINT32,   id,                6) \
 X(a, STATIC,   SINGULAR, FLOAT,    rx_snr,            7) \
 X(a, STATIC,   SINGULAR, FIXED32,  rx_time,           9) \
 X(a, STATIC,   SINGULAR, UINT32,   hop_limit,        10) \
-X(a, STATIC,   SINGULAR, BOOL,     want_ack,         11)
+X(a, STATIC,   SINGULAR, BOOL,     want_ack,         11) \
+X(a, STATIC,   SINGULAR, UENUM,    priority,         12)
 #define MeshPacket_CALLBACK NULL
 #define MeshPacket_DEFAULT NULL
-#define MeshPacket_payload_decoded_MSGTYPE SubPacket
+#define MeshPacket_payloadVariant_decoded_MSGTYPE SubPacket
 
 #define ChannelSettings_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, INT32,    tx_power,          1) \
@@ -667,35 +684,35 @@ X(a, STATIC,   SINGULAR, UENUM,    level,             4)
 
 #define FromRadio_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   num,               1) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,packet,variant.packet),   2) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,my_info,variant.my_info),   3) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,node_info,variant.node_info),   4) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,radio,variant.radio),   6) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,log_record,variant.log_record),   7) \
-X(a, STATIC,   ONEOF,    UINT32,   (variant,config_complete_id,variant.config_complete_id),   8) \
-X(a, STATIC,   ONEOF,    BOOL,     (variant,rebooted,variant.rebooted),   9) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,channel,variant.channel),  10)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,packet,packet),   2) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,my_info,my_info),   3) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,node_info,node_info),   4) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,radio,radio),   6) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,log_record,log_record),   7) \
+X(a, STATIC,   ONEOF,    UINT32,   (payloadVariant,config_complete_id,config_complete_id),   8) \
+X(a, STATIC,   ONEOF,    BOOL,     (payloadVariant,rebooted,rebooted),   9) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,channel,channel),  10)
 #define FromRadio_CALLBACK NULL
 #define FromRadio_DEFAULT NULL
-#define FromRadio_variant_packet_MSGTYPE MeshPacket
-#define FromRadio_variant_my_info_MSGTYPE MyNodeInfo
-#define FromRadio_variant_node_info_MSGTYPE NodeInfo
-#define FromRadio_variant_radio_MSGTYPE RadioConfig
-#define FromRadio_variant_log_record_MSGTYPE LogRecord
-#define FromRadio_variant_channel_MSGTYPE ChannelSettings
+#define FromRadio_payloadVariant_packet_MSGTYPE MeshPacket
+#define FromRadio_payloadVariant_my_info_MSGTYPE MyNodeInfo
+#define FromRadio_payloadVariant_node_info_MSGTYPE NodeInfo
+#define FromRadio_payloadVariant_radio_MSGTYPE RadioConfig
+#define FromRadio_payloadVariant_log_record_MSGTYPE LogRecord
+#define FromRadio_payloadVariant_channel_MSGTYPE ChannelSettings
 
 #define ToRadio_FIELDLIST(X, a) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,packet,variant.packet),   1) \
-X(a, STATIC,   ONEOF,    UINT32,   (variant,want_config_id,variant.want_config_id), 100) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_radio,variant.set_radio), 101) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_owner,variant.set_owner), 102) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_channel,variant.set_channel), 103)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,packet,packet),   1) \
+X(a, STATIC,   ONEOF,    UINT32,   (payloadVariant,want_config_id,want_config_id), 100) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,set_radio,set_radio), 101) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,set_owner,set_owner), 102) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,set_channel,set_channel), 103)
 #define ToRadio_CALLBACK NULL
 #define ToRadio_DEFAULT NULL
-#define ToRadio_variant_packet_MSGTYPE MeshPacket
-#define ToRadio_variant_set_radio_MSGTYPE RadioConfig
-#define ToRadio_variant_set_owner_MSGTYPE User
-#define ToRadio_variant_set_channel_MSGTYPE ChannelSettings
+#define ToRadio_payloadVariant_packet_MSGTYPE MeshPacket
+#define ToRadio_payloadVariant_set_radio_MSGTYPE RadioConfig
+#define ToRadio_payloadVariant_set_owner_MSGTYPE User
+#define ToRadio_payloadVariant_set_channel_MSGTYPE ChannelSettings
 
 extern const pb_msgdesc_t Position_msg;
 extern const pb_msgdesc_t Data_msg;
@@ -734,7 +751,7 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define User_size                                72
 #define RouteDiscovery_size                      88
 #define SubPacket_size                           275
-#define MeshPacket_size                          320
+#define MeshPacket_size                          322
 #define ChannelSettings_size                     95
 #define RadioConfig_size                         405
 #define RadioConfig_UserPreferences_size         305
