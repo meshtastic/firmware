@@ -19,7 +19,7 @@ struct sfRecord
 
 struct sfRecord records[STORE_RECORDS];
 
-#define STOREFORWARDPLUGIN_ENABLED 1
+#define STOREFORWARDPLUGIN_ENABLED 0
 
 StoreForwardPlugin *storeForwardPlugin;
 StoreForwardPluginRadio *storeForwardPluginRadio;
