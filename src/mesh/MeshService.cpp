@@ -169,6 +169,11 @@ void MeshService::handleToRadio(MeshPacket &p)
     }
 }
 
+/** Attempt to cancel a previously sent packet from this _local_ node.  Returns true if a packet was found we could cancel */
+bool MeshService::cancelSending(PacketId id) {
+    return router->cancelSending(nodeDB.getNodeNum(), id);
+}
+
 void MeshService::sendToMesh(MeshPacket *p)
 {
     nodeDB.updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
@@ -176,7 +181,7 @@ void MeshService::sendToMesh(MeshPacket *p)
     // Strip out any time information before sending packets to other  nodes - to keep the wire size small (and because other
     // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS to include the time, so that gpsless
     // devices can get time.
-    if (p->which_payload == MeshPacket_decoded_tag && p->decoded.which_payload == SubPacket_position_tag &&
+    if (p->which_payloadVariant == MeshPacket_decoded_tag && p->decoded.which_payloadVariant == SubPacket_position_tag &&
         p->decoded.position.time) {
         if (getRTCQuality() < RTCQualityGPS) {
             DEBUG_MSG("Stripping time %u from position send\n", p->decoded.position.time);

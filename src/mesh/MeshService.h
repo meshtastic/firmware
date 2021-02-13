@@ -79,6 +79,9 @@ class MeshService
     /// cache
     void sendToMesh(MeshPacket *p);
 
+    /** Attempt to cancel a previously sent packet from this _local_ node.  Returns true if a packet was found we could cancel */
+    bool cancelSending(PacketId id);
+
     /// Pull the latest power and time info into my nodeinfo
     NodeInfo *refreshMyNodeInfo();
 
