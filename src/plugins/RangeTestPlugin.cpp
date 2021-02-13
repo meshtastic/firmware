@@ -32,9 +32,9 @@ int32_t RangeTestPlugin::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    radioConfig.preferences.range_test_plugin_enabled = 1;
-    radioConfig.preferences.range_test_plugin_sender = 0;
-    radioConfig.preferences.fixed_position = 1;
+    // radioConfig.preferences.range_test_plugin_enabled = 1;
+    // radioConfig.preferences.range_test_plugin_sender = 0;
+    // radioConfig.preferences.fixed_position = 1;
 
     uint32_t senderHeartbeat = radioConfig.preferences.range_test_plugin_sender * 1000;
 
