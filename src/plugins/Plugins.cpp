@@ -1,9 +1,11 @@
 #include "plugins/ExternalNotificationPlugin.h"
 #include "plugins/NodeInfoPlugin.h"
 #include "plugins/PositionPlugin.h"
+#include "plugins/RangeTestPlugin.h"
 #include "plugins/RemoteHardwarePlugin.h"
 #include "plugins/ReplyPlugin.h"
 #include "plugins/SerialPlugin.h"
+#include "plugins/StoreForwardPlugin.h"
 #include "plugins/TextMessagePlugin.h"
 
 /**
@@ -24,7 +26,12 @@ void setupPlugins()
 #ifndef NO_ESP32
     // Only run on an esp32 based device.
 
-    new SerialPlugin();               // Maintained by MC Hamster (Jm Casler) jm@casler.org
-    new ExternalNotificationPlugin(); // Maintained by MC Hamster (Jm Casler) jm@casler.org
+    /*
+        Maintained by MC Hamster (Jm Casler) jm@casler.org
+    */
+    new SerialPlugin();
+    new ExternalNotificationPlugin();
+    //storeForwardPlugin = new StoreForwardPlugin();
+    rangeTestPlugin = new RangeTestPlugin();
 #endif
 }
