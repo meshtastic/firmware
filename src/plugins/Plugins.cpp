@@ -31,7 +31,11 @@ void setupPlugins()
     */
     new SerialPlugin();
     new ExternalNotificationPlugin();
+
+    //rangeTestPlugin = new RangeTestPlugin();
     //storeForwardPlugin = new StoreForwardPlugin();
-    rangeTestPlugin = new RangeTestPlugin();
+
+    new RangeTestPlugin();
+    new StoreForwardPlugin();
 #endif
 }

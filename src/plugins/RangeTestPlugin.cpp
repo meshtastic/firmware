@@ -6,7 +6,7 @@
 #include "configuration.h"
 #include <Arduino.h>
 #include <SPIFFS.h>
-#include <assert.h>
+//#include <assert.h>
 
 /*
     As a sender, I can send packets every n-seonds. These packets include an incramented PacketID.
