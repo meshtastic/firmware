@@ -21,7 +21,7 @@ Not necessarily in this order:
 
 UC 1) MVP - automagically forward packets to a client that may have missed packets.
 
-UC 2) Client Interface (Web, Android, Python or iOS when that happens) to optionally request packets be resent. This is to support the case where the client may not have received the message the Router has not detected that the client was away. This is because the router will only know you're away if you've been gone for a long time but will have no way of knowing if you were offline for a few minutes. This will cover the case where you have ducked into a cave or you're swapping out your battery.
+UC 2) Client Interface (Web, Android, Python or iOS when that happens) to optionally request packets be resent. This is to support the case where Router has not detected that the client was away. This is because the router will only know you're away if you've been gone for a period of time but will have no way of knowing if you were offline for a short number of minutes. This will cover the case where you have ducked into a cave or you're swapping out your battery.
 
 UC 3) router sends a periodic “heartbeat” to let the clients know they’re part of the main mesh
 

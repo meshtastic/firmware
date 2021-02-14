@@ -6,22 +6,15 @@
 #include "configuration.h"
 #include <Arduino.h>
 
-#include <assert.h>
-
-#define STORE_RECORDS 5000
-#define BYTES_PER_RECORDS 512
-
-#define STOREFORWARDPLUGIN_ENABLED 0
-
 StoreForwardPlugin *storeForwardPlugin;
 StoreForwardPluginRadio *storeForwardPluginRadio;
 
-StoreForwardPlugin::StoreForwardPlugin() : concurrency::OSThread("SerialPlugin") {}
-
-// char serialStringChar[Constants_DATA_PAYLOAD_LEN];
+StoreForwardPlugin::StoreForwardPlugin() : concurrency::OSThread("StoreForwardPlugin") {}
 
 int32_t StoreForwardPlugin::runOnce()
 {
+#if 0
+
 #ifndef NO_ESP32
 
     /*
@@ -29,15 +22,15 @@ int32_t StoreForwardPlugin::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    // radioConfig.preferences.store_forward_plugin_enabled = 1;
-    // radioConfig.preferences.store_forward_plugin_records = 80;
+    radioConfig.preferences.store_forward_plugin_enabled = 0;
 
     if (radioConfig.preferences.store_forward_plugin_enabled) {
 
         if (firstTime) {
 
-            // Interface with the serial peripheral from in here.
             DEBUG_MSG("Initializing Store & Forward Plugin\n");
+            /*
+             */
 
             // Router
             if (radioConfig.preferences.is_router) {
@@ -62,8 +55,7 @@ int32_t StoreForwardPlugin::runOnce()
                 // Non-Router
             } else {
             }
-
-            storeForwardPluginRadio = new StoreForwardPluginRadio();
+            // storeForwardPluginRadio = new StoreForwardPluginRadio();
 
             firstTime = 0;
 
@@ -71,7 +63,7 @@ int32_t StoreForwardPlugin::runOnce()
             // TBD
         }
 
-        return (10);
+        return (1000);
     } else {
         DEBUG_MSG("Store & Forward Plugin - Disabled\n");
 
@@ -79,6 +71,8 @@ int32_t StoreForwardPlugin::runOnce()
     }
 
 #endif
+#endif
+    return (INT32_MAX);
 }
 
 MeshPacket *StoreForwardPluginRadio::allocReply()
@@ -91,35 +85,36 @@ MeshPacket *StoreForwardPluginRadio::allocReply()
 
 void StoreForwardPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
 {
+#if 0
     MeshPacket *p = allocReply();
     p->to = dest;
     p->decoded.want_response = wantReplies;
 
-    // p->want_ack = SERIALPLUGIN_ACK;
-
-    // p->decoded.data.payload.size = strlen(serialStringChar); // You must specify how many bytes are in the reply
-    // memcpy(p->decoded.data.payload.bytes, serialStringChar, p->decoded.data.payload.size);
-
     service.sendToMesh(p);
+#endif
 }
 
 bool StoreForwardPluginRadio::handleReceived(const MeshPacket &mp)
 {
+
+#if 0
 #ifndef NO_ESP32
 
-    if (STOREFORWARDPLUGIN_ENABLED) {
+    if (radioConfig.preferences.store_forward_plugin_enabled) {
 
         // auto &p = mp.decoded.data;
 
         if (mp.from != nodeDB.getNodeNum()) {
-            DEBUG_MSG("Store & Forward Plugin ---------- ---------- ---------- ---------- ----------\n");
-            printPacket("PACKET FROM PHONE", &mp);
+            DEBUG_MSG("Store & Forward Plugin -- Print Start ---------- ---------- ---------- ---------- ----------\n");
+            printPacket("PACKET FROM RADIO", &mp);
+            DEBUG_MSG("Store & Forward Plugin -- Print End ---------- ---------- ---------- ---------- ----------\n");
         }
 
     } else {
         DEBUG_MSG("Store & Forward Plugin - Disabled\n");
     }
 
+#endif
 #endif
 
     return true; // Let others look at this message also if they want
