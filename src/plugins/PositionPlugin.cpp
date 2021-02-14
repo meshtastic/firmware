@@ -7,6 +7,14 @@
 
 PositionPlugin *positionPlugin;
 
+PositionPlugin::PositionPlugin()
+    : ProtobufPlugin("position", PortNum_POSITION_APP, Position_fields), concurrency::OSThread("PositionPlugin")
+{
+    setIntervalFromNow(60 *
+                       1000); // Send our initial position 60 seconds after we start (to give GPS time to setup)
+
+}
+
 bool PositionPlugin::handleReceivedProtobuf(const MeshPacket &mp, const Position &p)
 {
     // FIXME - we currently update position data in the DB only if the message was a broadcast or destined to us
@@ -61,8 +69,8 @@ void PositionPlugin::sendOurPosition(NodeNum dest, bool wantReplies)
     service.sendToMesh(p);
 }
 
-
-int32_t PositionPlugin::runOnce(){
+int32_t PositionPlugin::runOnce()
+{
 
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();

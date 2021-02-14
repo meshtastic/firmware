@@ -20,8 +20,8 @@ class PositionPlugin : public ProtobufPlugin<Position>, private concurrency::OST
     /** Constructor
      * name is for debugging output
      */
-    PositionPlugin() : ProtobufPlugin("position", PortNum_POSITION_APP, Position_fields), concurrency::OSThread("PositionPlugin")  {}
-
+    PositionPlugin();
+    
     /**
      * Send our position into the mesh
      */
