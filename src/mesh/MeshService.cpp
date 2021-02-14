@@ -232,7 +232,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
     else {
         // The GPS has lost lock, if we are fixed position we should just keep using
         // the old position
-        if(!radioConfig.preferences.fixed_position) {
+        if(radioConfig.preferences.fixed_position) {
             DEBUG_MSG("WARNING: Using fixed position\n");
         } else {
             // throw away old position
@@ -242,7 +242,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
         }
     }
 
-    DEBUG_MSG("got gps notify time=%u, lat=%d, bat=%d\n", pos.latitude_i, pos.time, pos.battery_level);
+    DEBUG_MSG("got gps notify time=%u, lat=%d, bat=%d\n", pos.time, pos.latitude_i, pos.battery_level);
 
     // Update our current position in the local DB
     nodeDB.updatePosition(nodeDB.getNodeNum(), pos);
