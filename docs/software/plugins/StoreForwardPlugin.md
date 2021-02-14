@@ -72,7 +72,7 @@ Structure of nodes and last time we heard from them. This is a record of any pac
 # General Operation for UC1 - automagically forward packets to a client that may have missed packets
 
 On every handled packet
-* Record the sender from and the time we heard from that sender.
+* Record the sender from and the time we heard from that sender into senderRecord.
 
 On every handled packet
 
@@ -87,3 +87,7 @@ On every handled packet, if we have not heard from that sender in a period of ti
 * If the client has been away for less than 5 minutes and has received the previously sent message, the client will gracefully ignore it. This is thanks to PacketHistory::wasSeenRecently in PacketHistory.cpp.
 * * If the client has been away for more than 5 minutes and we resend packets that they have already received, it's possible they will see duplicate messages. This should be unlikely but is still possible. 
 
+
+# Designed limitations
+
+The Store and Forward plugin will subscribe to specific packet types and channels and only save those. This will both reduce the amount of data we will need to store and reduce the overhead on the network. Eg: There's no need to replay ACK packets nor is there's no need to replay old location packets.
