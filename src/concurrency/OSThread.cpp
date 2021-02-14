@@ -32,8 +32,10 @@ OSThread::OSThread(const char *_name, uint32_t period, ThreadController *_contro
 
     ThreadName = _name;
 
-    if (controller)
-        controller->add(this);
+    if (controller) {
+        bool added = controller->add(this);
+        assert(added);
+    }
 }
 
 OSThread::~OSThread()
