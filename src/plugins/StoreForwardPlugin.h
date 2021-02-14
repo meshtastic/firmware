@@ -34,6 +34,7 @@ class StoreForwardPluginRadio : public SinglePortPlugin
     */
 
     // SerialPluginRadio() : SinglePortPlugin("SerialPluginRadio", PortNum_TEXT_MESSAGE_APP) {}
+    // SerialPluginRadio() : SinglePortPlugin("SerialPluginRadio", PortNum_STORE_FORWARD_APP) {}
     StoreForwardPluginRadio() : SinglePortPlugin("SerialPluginRadio", PortNum_SERIAL_APP) {}
 
     /**
@@ -43,6 +44,8 @@ class StoreForwardPluginRadio : public SinglePortPlugin
 
   protected:
     virtual MeshPacket *allocReply();
+
+    virtual bool wantPortnum(PortNum p){return true;};
 
     /** Called to handle a particular incoming message
 
