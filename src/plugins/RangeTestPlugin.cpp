@@ -41,7 +41,6 @@ int32_t RangeTestPlugin::runOnce()
     // Fixed position is useful when testing indoors.
     // radioConfig.preferences.fixed_position = 1;
 
-
     uint32_t senderHeartbeat = radioConfig.preferences.range_test_plugin_sender * 1000;
 
     if (radioConfig.preferences.range_test_plugin_enabled) {
