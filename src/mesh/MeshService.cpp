@@ -247,22 +247,5 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
     // Update our current position in the local DB
     nodeDB.updatePosition(nodeDB.getNodeNum(), pos);
 
-    // We limit our GPS broadcasts to a max rate
-    static uint32_t lastGpsSend;
-    uint32_t now = millis();
-    if (lastGpsSend == 0 || now - lastGpsSend > getPref_position_broadcast_secs() * 1000) {
-        lastGpsSend = now;
-
-        static uint32_t currentGeneration;
-
-        // If we changed channels, ask everyone else for their latest info
-        bool requestReplies = currentGeneration != radioGeneration;
-        currentGeneration = radioGeneration;
-
-        DEBUG_MSG("Sending position to mesh (wantReplies=%d)\n", requestReplies);
-        assert(positionPlugin);
-        positionPlugin->sendOurPosition(NODENUM_BROADCAST, requestReplies);
-    }
-
     return 0;
 }

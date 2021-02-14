@@ -60,3 +60,22 @@ void PositionPlugin::sendOurPosition(NodeNum dest, bool wantReplies)
 
     service.sendToMesh(p);
 }
+
+
+int32_t PositionPlugin::runOnce(){
+
+    // We limit our GPS broadcasts to a max rate
+    uint32_t now = millis();
+    if (lastGpsSend == 0 || now - lastGpsSend >= getPref_position_broadcast_secs() * 1000) {
+        lastGpsSend = now;
+
+        // If we changed channels, ask everyone else for their latest info
+        bool requestReplies = currentGeneration != radioGeneration;
+        currentGeneration = radioGeneration;
+
+        DEBUG_MSG("Sending position to mesh (wantReplies=%d)\n", requestReplies);
+        sendOurPosition(NODENUM_BROADCAST, requestReplies);
+    }
+
+    return 5000; // to save power only wake for our callback occasionally
+}
