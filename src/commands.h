@@ -9,6 +9,7 @@ enum class Cmd {
         SET_OFF,
         ON_PRESS,
         START_BLUETOOTH_PIN_SCREEN,
+        START_FIRMWARE_UPDATE_SCREEN,
         STOP_BLUETOOTH_PIN_SCREEN,
         STOP_BOOT_SCREEN,
         PRINT,

@@ -164,6 +164,20 @@ static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, 
     display->drawString(64 + x, 48 + y, buf);
 }
 
+static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->setFont(FONT_MEDIUM);
+    display->drawString(64 + x, y, "Updating");
+
+    display->setFont(FONT_SMALL);
+    display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait...");
+
+    //display->setFont(FONT_LARGE);
+    //display->drawString(64 + x, 26 + y, btPIN);
+}
+
+
 /// Draw the last text message we received
 static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -798,6 +812,9 @@ int32_t Screen::runOnce()
         case Cmd::START_BLUETOOTH_PIN_SCREEN:
             handleStartBluetoothPinScreen(cmd.bluetooth_pin);
             break;
+        case Cmd::START_FIRMWARE_UPDATE_SCREEN:
+            handleStartFirmwareUpdateScreen();
+            break;            
         case Cmd::STOP_BLUETOOTH_PIN_SCREEN:
         case Cmd::STOP_BOOT_SCREEN:
             setFrames();
@@ -922,6 +939,18 @@ void Screen::handleStartBluetoothPinScreen(uint32_t pin)
     static FrameCallback btFrames[] = {drawFrameBluetooth};
 
     snprintf(btPIN, sizeof(btPIN), "%06lu", pin);
+
+    ui.disableAllIndicators();
+    ui.setFrames(btFrames, 1);
+    setFastFramerate();
+}
+
+void Screen::handleStartFirmwareUpdateScreen()
+{
+    DEBUG_MSG("showing firmware screen\n");
+    showingNormalScreen = false;
+
+    static FrameCallback btFrames[] = {drawFrameFirmware};
 
     ui.disableAllIndicators();
     ui.setFrames(btFrames, 1);
