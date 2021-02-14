@@ -51,22 +51,7 @@ MeshService service;
 
 #include "Router.h"
 
-static int32_t sendOwnerCb()
-{
-    static uint32_t currentGeneration;
 
-    // If we changed channels, ask everyone else for their latest info
-    bool requestReplies = currentGeneration != radioGeneration;
-    currentGeneration = radioGeneration;
-
-    DEBUG_MSG("Sending our nodeinfo to mesh (wantReplies=%d)\n", requestReplies);
-    assert(nodeInfoPlugin);
-    nodeInfoPlugin->sendOurNodeInfo(NODENUM_BROADCAST, requestReplies); // Send our info (don't request replies)
-
-    return getPref_send_owner_interval() * getPref_position_broadcast_secs() * 1000;
-}
-
-static concurrency::Periodic *sendOwnerPeriod;
 
 MeshService::MeshService() : toPhoneQueue(MAX_RX_TOPHONE)
 {
@@ -75,9 +60,6 @@ MeshService::MeshService() : toPhoneQueue(MAX_RX_TOPHONE)
 
 void MeshService::init()
 {
-    sendOwnerPeriod = new concurrency::Periodic("SendOwner", sendOwnerCb);
-    sendOwnerPeriod->setIntervalFromNow(30 * 1000); // Send our initial owner announcement 30 seconds after we start (to give network time to setup)
-
     // moved much earlier in boot (called from setup())
     // nodeDB.init();
 
