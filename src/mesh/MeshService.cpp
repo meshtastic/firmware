@@ -178,18 +178,6 @@ void MeshService::sendToMesh(MeshPacket *p)
 {
     nodeDB.updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
 
-    // Strip out any time information before sending packets to other  nodes - to keep the wire size small (and because other
-    // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS to include the time, so that gpsless
-    // devices can get time.
-    if (p->which_payloadVariant == MeshPacket_decoded_tag && p->decoded.which_payloadVariant == SubPacket_position_tag &&
-        p->decoded.position.time) {
-        if (getRTCQuality() < RTCQualityGPS) {
-            DEBUG_MSG("Stripping time %u from position send\n", p->decoded.position.time);
-            p->decoded.position.time = 0;
-        } else
-            DEBUG_MSG("Providing time to mesh %u\n", p->decoded.position.time);
-    }
-
     // Note: We might return !OK if our fifo was full, at that point the only option we have is to drop it
     router->sendLocal(p);
 }
@@ -221,7 +209,7 @@ NodeInfo *MeshService::refreshMyNodeInfo() {
     Position &position = node->position;
 
     // Update our local node info with our position (even if we don't decide to update anyone else)
-    position.time = getValidTime(RTCQualityGPS); // This nodedb timestamp might be stale, so update it if our clock is valid.
+    position.time = getValidTime(RTCQualityFromNet); // This nodedb timestamp might be stale, so update it if our clock is kinda valid
 
     position.battery_level = powerStatus->getBatteryChargePercent();
     updateBatteryLevel(position.battery_level);
