@@ -8,22 +8,14 @@
 
 #include <assert.h>
 
-#define STORE_RECORDS  5000
-#define BYTES_PER_RECORDS  512
- 
-struct sfRecord
-{
-    uint8_t bytes[BYTES_PER_RECORDS];
-    uint32_t timestamp; // Time the packet was received
-};
-
-struct sfRecord records[STORE_RECORDS];
+#define STORE_RECORDS 5000
+#define BYTES_PER_RECORDS 512
 
 #define STOREFORWARDPLUGIN_ENABLED 0
 
 StoreForwardPlugin *storeForwardPlugin;
 StoreForwardPluginRadio *storeForwardPluginRadio;
- 
+
 StoreForwardPlugin::StoreForwardPlugin() : concurrency::OSThread("SerialPlugin") {}
 
 // char serialStringChar[Constants_DATA_PAYLOAD_LEN];
@@ -37,8 +29,8 @@ int32_t StoreForwardPlugin::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-   //radioConfig.preferences.store_forward_plugin_enabled = 1;
-   //radioConfig.preferences.store_forward_plugin_records = 80;
+    // radioConfig.preferences.store_forward_plugin_enabled = 1;
+    // radioConfig.preferences.store_forward_plugin_records = 80;
 
     if (radioConfig.preferences.store_forward_plugin_enabled) {
 
@@ -67,9 +59,8 @@ int32_t StoreForwardPlugin::runOnce()
                     return (INT32_MAX);
                 }
 
-            // Non-Router
+                // Non-Router
             } else {
-
             }
 
             storeForwardPluginRadio = new StoreForwardPluginRadio();
@@ -104,7 +95,7 @@ void StoreForwardPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
     p->to = dest;
     p->decoded.want_response = wantReplies;
 
-    //p->want_ack = SERIALPLUGIN_ACK;
+    // p->want_ack = SERIALPLUGIN_ACK;
 
     // p->decoded.data.payload.size = strlen(serialStringChar); // You must specify how many bytes are in the reply
     // memcpy(p->decoded.data.payload.bytes, serialStringChar, p->decoded.data.payload.size);
@@ -118,36 +109,15 @@ bool StoreForwardPluginRadio::handleReceived(const MeshPacket &mp)
 
     if (STOREFORWARDPLUGIN_ENABLED) {
 
-        auto &p = mp.decoded.data;
-        // DEBUG_MSG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s\n",
-        //          nodeDB.getNodeNum(), mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
+        // auto &p = mp.decoded.data;
 
-        if (mp.from == nodeDB.getNodeNum()) {
-
-            /*
-             * If radioConfig.preferences.serialplugin_echo is true, then echo the packets that are sent out back to the TX
-             * of the serial interface.
-             */
-            if (radioConfig.preferences.serialplugin_echo) {
-
-                // For some reason, we get the packet back twice when we send out of the radio.
-                //   TODO: need to find out why.
-                if (lastRxID != mp.id) {
-                    lastRxID = mp.id;
-                    // DEBUG_MSG("* * Message came this device\n");
-                    // Serial2.println("* * Message came this device");
-                    Serial2.printf("%s", p.payload.bytes);
-                }
-            }
-
-        } else {
-            // DEBUG_MSG("* * Message came from the mesh\n");
-            // Serial2.println("* * Message came from the mesh");
-            Serial2.printf("%s", p.payload.bytes);
+        if (mp.from != nodeDB.getNodeNum()) {
+            DEBUG_MSG("Store & Forward Plugin ---------- ---------- ---------- ---------- ----------\n");
+            printPacket("PACKET FROM PHONE", &mp);
         }
 
     } else {
-        DEBUG_MSG("Serial Plugin Disabled\n");
+        DEBUG_MSG("Store & Forward Plugin - Disabled\n");
     }
 
 #endif
