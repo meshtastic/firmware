@@ -38,6 +38,10 @@ To save a log of the messages:
 
     range_test_plugin_save = 1
 
+Be sure to turn off either the plugin configured as a sender or the device where the plugin setup as sender when not in use. This will use a lot of time on air and will spam your channel.
+
+Also be mindful of your space usage on the file system. It has protections from filling up the space but it's best to delete old range test results.
+
 
 # Known Problems
 
