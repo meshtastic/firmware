@@ -21,7 +21,7 @@ int32_t StoreForwardPlugin::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    radioConfig.preferences.store_forward_plugin_enabled = 1;
+    radioConfig.preferences.store_forward_plugin_enabled = 0;
     radioConfig.preferences.is_router = 0;
 
     if (radioConfig.preferences.store_forward_plugin_enabled) {
