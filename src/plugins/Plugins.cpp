@@ -36,6 +36,6 @@ void setupPlugins()
     //storeForwardPlugin = new StoreForwardPlugin();
 
     new RangeTestPlugin();
-    //new StoreForwardPlugin();
+    new StoreForwardPlugin();
 #endif
 }
