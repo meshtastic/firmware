@@ -53,6 +53,26 @@ Also be mindful of your space usage on the file system. It has protections from 
 
 * Right now range test messages go over the TEXT_MESSAGE_APP port. We need a toggle to switch to optionally send over RANGE_TEST_APP.
 
+# FAQ
+
+Q: Where is rangetest.csv saved?
+A: Turn on the WiFi on your device as either a WiFi client or a WiFi AP. Once you can connect to your device, go to /static and you will see rangetest.csv.
+
+Q: Do I need to have WiFi turned on for the file to be saved?
+A: Nope, it'll just work.
+
+Q: Do I need a phone for this plugin?
+A: There's no need for a phone.
+
+Q: Can I use this as a message logger?
+A: While it's not the intended purpose, sure, why not. Do it!
+
+Q: What will happen if I run out of space on my device?
+A: We have a protection in place to keep you from completly filling up your device. This will make sure that other device critical functions will continue to work. We will reserve at least 50k of free space.
+
+Q: What do I do with the rangetest.csv file when I'm done?
+A: Go to /static and delete the file.
+
 # Need more help?
 
 Go to the Meshtastic Discourse Group if you have any questions or to share how you have used this.
