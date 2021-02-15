@@ -35,8 +35,8 @@ int32_t RangeTestPlugin::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    // radioConfig.preferences.range_test_plugin_enabled = 1;
-    // radioConfig.preferences.range_test_plugin_sender = 0;
+    //radioConfig.preferences.range_test_plugin_enabled = 1;
+    //radioConfig.preferences.range_test_plugin_sender = 45;
     // radioConfig.preferences.range_test_plugin_save = 1;
 
     // Fixed position is useful when testing indoors.
@@ -56,7 +56,7 @@ int32_t RangeTestPlugin::runOnce()
 
             if (radioConfig.preferences.range_test_plugin_sender) {
                 DEBUG_MSG("Initializing Range Test Plugin -- Sender\n");
-                return (senderHeartbeat);
+                return (5000); // Sending first message 5 seconds after initilization.
             } else {
                 DEBUG_MSG("Initializing Range Test Plugin -- Receiver\n");
                 return (500);
@@ -76,7 +76,7 @@ int32_t RangeTestPlugin::runOnce()
                 DEBUG_MSG("pref.fixed_position()        %d\n", radioConfig.preferences.fixed_position);
 
                 rangeTestPluginRadio->sendPayload();
-                return ((senderHeartbeat));
+                return (senderHeartbeat);
             } else {
                 // Otherwise, we're a receiver.
 
