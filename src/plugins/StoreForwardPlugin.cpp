@@ -6,10 +6,6 @@
 #include "configuration.h"
 #include <Arduino.h>
 
-#include <assert.h>
-
-
-
 StoreForwardPlugin *storeForwardPlugin;
 StoreForwardPluginRadio *storeForwardPluginRadio;
 
@@ -17,6 +13,7 @@ StoreForwardPlugin::StoreForwardPlugin() : concurrency::OSThread("StoreForwardPl
 
 int32_t StoreForwardPlugin::runOnce()
 {
+
 #ifndef NO_ESP32
 
     /*
@@ -24,27 +21,60 @@ int32_t StoreForwardPlugin::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    if (0) {
+    radioConfig.preferences.store_forward_plugin_enabled = 1;
+    radioConfig.preferences.is_router = 0;
+
+    if (radioConfig.preferences.store_forward_plugin_enabled) {
 
         if (firstTime) {
 
+            /*
+             */
 
-            storeForwardPluginRadio = new StoreForwardPluginRadio();
+            if (radioConfig.preferences.is_router) {
+                DEBUG_MSG("Initializing Store & Forward Plugin - Enabled\n");
+                // Router
+                if (ESP.getPsramSize()) {
+                    if (ESP.getFreePsram() >= 1024 * 1024) {
+                        // Do the startup here
+                        storeForwardPluginRadio = new StoreForwardPluginRadio();
 
-            firstTime = 0;
+                        firstTime = 0;
+
+                    } else {
+                        DEBUG_MSG("Device has less than 1M of PSRAM free. Aborting startup.\n");
+                        DEBUG_MSG("Store & Forward Plugin - Aborting Startup.\n");
+
+                        return (INT32_MAX);
+                    }
+
+                } else {
+                    DEBUG_MSG("Device doesn't have PSRAM.\n");
+                    DEBUG_MSG("Store & Forward Plugin - Aborting Startup.\n");
+
+                    return (INT32_MAX);
+                }
+
+            } else {
+                DEBUG_MSG("Initializing Store & Forward Plugin - Enabled but is_router is not turned on.\n");
+                DEBUG_MSG(
+                    "Initializing Store & Forward Plugin - If you want to use this plugin, you must also turn on is_router.\n");
+                // Non-Router
+            }
 
         } else {
-
+            // TBD
         }
 
-        return (10);
+        return (1000);
     } else {
-        DEBUG_MSG("StoreForwardPlugin Disabled\n");
+        DEBUG_MSG("Store & Forward Plugin - Disabled\n");
 
         return (INT32_MAX);
     }
 
 #endif
+    return (INT32_MAX);
 }
 
 MeshPacket *StoreForwardPluginRadio::allocReply()
@@ -54,6 +84,7 @@ MeshPacket *StoreForwardPluginRadio::allocReply()
 
     return reply;
 }
+
 void StoreForwardPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
 {
     MeshPacket *p = allocReply();
@@ -66,7 +97,18 @@ void StoreForwardPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
 bool StoreForwardPluginRadio::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
+    if (radioConfig.preferences.store_forward_plugin_enabled) {
+        // auto &p = mp.decoded.data;
 
+        if (mp.from != nodeDB.getNodeNum()) {
+            DEBUG_MSG("Store & Forward Plugin -- Print Start ---------- ---------- ---------- ---------- ----------\n");
+            printPacket("----- PACKET FROM RADIO", &mp);
+            DEBUG_MSG("Store & Forward Plugin -- Print End ---------- ---------- ---------- ---------- ----------\n");
+        }
+
+    } else {
+        DEBUG_MSG("Store & Forward Plugin - Disabled\n");
+    }
 
 #endif
 
