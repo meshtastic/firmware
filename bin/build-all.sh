@@ -21,7 +21,7 @@ ARCHIVEDIR=release/archive
 
 rm -f $OUTDIR/firmware*
 
-mkdir -p $OUTDIR/bins
+mkdir -p $OUTDIR/bins $ARCHIVEDIR
 rm -r $OUTDIR/bins/*
 mkdir -p $OUTDIR/bins/universal $OUTDIR/elfs/universal
 

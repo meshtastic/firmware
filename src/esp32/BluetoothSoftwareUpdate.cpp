@@ -7,6 +7,8 @@
 #include "configuration.h"
 #include "nimble/BluetoothUtil.h"
 #include "NodeDB.h"
+#include "../graphics/Screen.h"
+#include "../main.h"
 
 #include <CRC32.h>
 #include <Update.h>
@@ -47,8 +49,9 @@ int update_size_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_
             // void stopMeshBluetoothService();
             // stopMeshBluetoothService();
 
+            screen->startFirmwareUpdateScreen();
             if (RadioLibInterface::instance)
-                RadioLibInterface::instance->sleep(); // FIXME, nasty hack - the RF95 ISR/SPI code on ESP32 can fail while we are
+                RadioLibInterface::instance->disable(); // FIXME, nasty hack - the RF95 ISR/SPI code on ESP32 can fail while we are
                                                       // writing flash - shut the radio off during updates
         }
     }
