@@ -38,6 +38,8 @@ To save a log of the messages:
 
     range_test_plugin_save = 1
 
+## Other things to keep in mind
+
 Be sure to turn off either the plugin configured as a sender or the device where the plugin setup as sender when not in use. This will use a lot of time on air and will spam your channel.
 
 Also be mindful of your space usage on the file system. It has protections from filling up the space but it's best to delete old range test results.
@@ -49,7 +51,7 @@ Also be mindful of your space usage on the file system. It has protections from 
 
 # TODO
 
-* Right now range test messages go over the TEXT_MESSAGE_APP port. We need a toggle to switch to RANGE_TEST_APP.
+* Right now range test messages go over the TEXT_MESSAGE_APP port. We need a toggle to switch to optionally send over RANGE_TEST_APP.
 
 # Need more help?
 
