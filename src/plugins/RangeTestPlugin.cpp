@@ -1,6 +1,7 @@
 #include "RangeTestPlugin.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
 #include "configuration.h"
@@ -117,6 +118,9 @@ void RangeTestPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
     memcpy(p->decoded.data.payload.bytes, heartbeatString, p->decoded.data.payload.size);
 
     service.sendToMesh(p);
+
+    // TODO: Handle this better. We want to keep the phone awake otherwise it stops sending.
+    powerFSM.trigger(EVENT_CONTACT_FROM_PHONE);
 }
 
 bool RangeTestPluginRadio::handleReceived(const MeshPacket &mp)

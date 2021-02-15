@@ -73,6 +73,9 @@ A: We have a protection in place to keep you from completly filling up your devi
 Q: What do I do with the rangetest.csv file when I'm done?
 A: Go to /static and delete the file.
 
+Q: Can I use this as a sender while on battery power?
+A: Yes, but your battery will run down quicker than normal. While sending, we tell the device not to go into low-power mode since it needs to keep to a fairly strict timer.
+
 # Need more help?
 
 Go to the Meshtastic Discourse Group if you have any questions or to share how you have used this.
