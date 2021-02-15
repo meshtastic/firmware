@@ -153,12 +153,12 @@ bool RangeTestPluginRadio::handleReceived(const MeshPacket &mp)
             DEBUG_MSG("mp.from          %d\n", mp.from);
             DEBUG_MSG("mp.rx_snr        %f\n", mp.rx_snr);
             DEBUG_MSG("mp.hop_limit     %d\n", mp.hop_limit);
-            DEBUG_MSG("mp.decoded.position.latitude_i     %d\n", mp.decoded.position.latitude_i);
-            DEBUG_MSG("mp.decoded.position.longitude_i    %d\n", mp.decoded.position.longitude_i);
+            // DEBUG_MSG("mp.decoded.position.latitude_i     %d\n", mp.decoded.position.latitude_i); // Depricated
+            // DEBUG_MSG("mp.decoded.position.longitude_i    %d\n", mp.decoded.position.longitude_i); // Depricated
             DEBUG_MSG("---- Node Information of Received Packet (mp.from):\n");
             DEBUG_MSG("n->user.long_name         %s\n", n->user.long_name);
             DEBUG_MSG("n->user.short_name        %s\n", n->user.short_name);
-            DEBUG_MSG("n->user.macaddr           %X\n", n->user.macaddr);
+            // DEBUG_MSG("n->user.macaddr           %X\n", n->user.macaddr);
             DEBUG_MSG("n->has_position           %d\n", n->has_position);
             DEBUG_MSG("n->position.latitude_i    %d\n", n->position.latitude_i);
             DEBUG_MSG("n->position.longitude_i   %d\n", n->position.longitude_i);
@@ -241,21 +241,24 @@ bool RangeTestPluginRadio::appendFile(const MeshPacket &mp)
         return 0;
     }
 
-    //--------- Write to file
-    File fileToWrite = SPIFFS.open("/static/rangetest.csv", FILE_WRITE);
+    // If the file doesn't exist, write the header.
+    if (!SPIFFS.exists("/static/rangetest.csv")) {
+        //--------- Write to file
+        File fileToWrite = SPIFFS.open("/static/rangetest.csv", FILE_WRITE);
 
-    if (!fileToWrite) {
-        DEBUG_MSG("There was an error opening the file for writing\n");
-        return 0;
+        if (!fileToWrite) {
+            DEBUG_MSG("There was an error opening the file for writing\n");
+            return 0;
+        }
+
+        if (fileToWrite.println("time,from,sender name,sender lat,sender long,rx lat,rx long,rx snr,distance,payload")) {
+            DEBUG_MSG("File was written\n");
+        } else {
+            DEBUG_MSG("File write failed\n");
+        }
+
+        fileToWrite.close();
     }
-
-    if (fileToWrite.println("time,sender mac,rx snr,sender lat,sender long,rx lat,rx long,distance,payload")) {
-        DEBUG_MSG("File was written\n");
-    } else {
-        DEBUG_MSG("File write failed\n");
-    }
-
-    fileToWrite.close();
 
     //--------- Apend content to file
     File fileToAppend = SPIFFS.open("/static/rangetest.csv", FILE_APPEND);
@@ -278,21 +281,26 @@ bool RangeTestPluginRadio::appendFile(const MeshPacket &mp)
         int min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
         int sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
 
-        fileToAppend.printf("%02d:%02d:%02d ", hour, min, sec); // Time
+        fileToAppend.printf("%02d:%02d:%02d,", hour, min, sec); // Time
     } else {
-        fileToAppend.printf("??:??:?? "); // Time
+        fileToAppend.printf("??:??:??,"); // Time
     }
 
-    fileToAppend.printf("$X,", n->user.macaddr);           // Mac Address
-    fileToAppend.printf("%f,", mp.rx_snr);                 // RX SNR
-    fileToAppend.printf("%d,", n->position.latitude_i);    // Sender Lat
-    fileToAppend.printf("%d,", n->position.longitude_i);   // Sender Long
-    fileToAppend.printf("%d,", gpsStatus->getLatitude());  // RX Lat
-    fileToAppend.printf("%d,", gpsStatus->getLongitude()); // RX Long
+    fileToAppend.printf("%d,", mp.from);                          // From
+    fileToAppend.printf("%s,", n->user.long_name);                // Long Name
+    fileToAppend.printf("%f,", n->position.latitude_i * 1e-7);    // Sender Lat
+    fileToAppend.printf("%f,", n->position.longitude_i * 1e-7);   // Sender Long
+    fileToAppend.printf("%f,", gpsStatus->getLatitude() * 1e-7);  // RX Lat
+    fileToAppend.printf("%f,", gpsStatus->getLongitude() * 1e-7); // RX Long
+    fileToAppend.printf("%f,", mp.rx_snr);                        // RX SNR
 
-    float distance = latLongToMeter(n->position.latitude_i * 1e-7, n->position.longitude_i * 1e-7,
-                                    gpsStatus->getLatitude() * 1e-7, gpsStatus->getLongitude() * 1e-7);
-    fileToAppend.printf("%f,", distance); // Distance in meters
+    if (n->position.latitude_i && n->position.longitude_i && gpsStatus->getLatitude() && gpsStatus->getLongitude()) {
+        float distance = latLongToMeter(n->position.latitude_i * 1e-7, n->position.longitude_i * 1e-7,
+                                        gpsStatus->getLatitude() * 1e-7, gpsStatus->getLongitude() * 1e-7);
+        fileToAppend.printf("%f,", distance); // Distance in meters
+    } else {
+        fileToAppend.printf("0,");
+    }
 
     // TODO: If quotes are found in the payload, it has to be escaped.
     fileToAppend.printf("\"%s\"\n", p.payload.bytes);
