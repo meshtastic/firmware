@@ -33,9 +33,9 @@ void setupPlugins()
     new ExternalNotificationPlugin();
 
     //rangeTestPlugin = new RangeTestPlugin();
-    //storeForwardPlugin = new StoreForwardPlugin();
+    storeForwardPlugin = new StoreForwardPlugin();
 
     new RangeTestPlugin();
-    new StoreForwardPlugin();
+    //new StoreForwardPlugin();
 #endif
 }

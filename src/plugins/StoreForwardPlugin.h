@@ -19,13 +19,17 @@ class StoreForwardPlugin : private concurrency::OSThread
 
 extern StoreForwardPlugin *storeForwardPlugin;
 
+/*
+ * Radio interface for StoreForwardPlugin
+ *
+ */
 class StoreForwardPluginRadio : public SinglePortPlugin
 {
-    uint32_t lastRxID;
+    //uint32_t lastRxID;
 
   public:
-
-    StoreForwardPluginRadio() : SinglePortPlugin("StoreForwardPluginRadio", PortNum_TEXT_MESSAGE_APP) {}
+    StoreForwardPluginRadio() : SinglePortPlugin("StoreForwardPluginRadio", PortNum_STORE_FORWARD_APP) {}
+    //StoreForwardPluginRadio() : SinglePortPlugin("StoreForwardPluginRadio", PortNum_TEXT_MESSAGE_APP) {}
 
     /**
      * Send our payload into the mesh
@@ -35,6 +39,8 @@ class StoreForwardPluginRadio : public SinglePortPlugin
   protected:
     virtual MeshPacket *allocReply();
 
+    virtual bool wantPortnum(PortNum p){return true;};
+
     /** Called to handle a particular incoming message
 
     @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
@@ -43,3 +49,4 @@ class StoreForwardPluginRadio : public SinglePortPlugin
 };
 
 extern StoreForwardPluginRadio *storeForwardPluginRadio;
+
