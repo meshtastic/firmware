@@ -87,6 +87,10 @@ void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
             handleSetRadio(toRadioScratch.set_radio);
             break;
 
+        case ToRadio_set_channel_tag:
+            DEBUG_MSG("Client is setting channel\n");
+            handleSetChannel(toRadioScratch.set_channel);
+            break;
         default:
             DEBUG_MSG("Error: unexpected ToRadio variant\n");
             break;
@@ -273,6 +277,17 @@ void PhoneAPI::handleSetOwner(const User &o)
 
     if (changed) // If nothing really changed, don't broadcast on the network or write to flash
         service.reloadOwner();
+}
+
+void PhoneAPI::handleSetChannel(const ChannelSettings &cc)
+{
+    radioConfig.channel_settings = cc;
+
+    bool didReset = service.reloadConfig();
+    if (didReset) {
+        state = STATE_SEND_MY_INFO; // Squirt a completely new set of configs to the client
+    }
+
 }
 
 void PhoneAPI::handleSetRadio(const RadioConfig &r)
