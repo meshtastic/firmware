@@ -88,6 +88,7 @@ class PhoneAPI
     //
 
     void handleSetOwner(const User &o);
+    void handleSetChannel(const ChannelSettings &cc);
     void handleSetRadio(const RadioConfig &r);
 
   protected:
