@@ -83,6 +83,9 @@ A: Go to /static and delete the file.
 Q: Can I use this as a sender while on battery power?
 A: Yes, but your battery will run down quicker than normal. While sending, we tell the device not to go into low-power mode since it needs to keep to a fairly strict timer.
 
+Q: Why is this operating on incoming messages instead of the existing location discovery protocol?
+A: This plugin is still young and currently supports monitoring just one port at a time. I decided to use the existing message port because that is easy to test with. A future version will listen to multiple ports to be more promiscuous. 
+
 # Need more help?
 
 Go to the Meshtastic Discourse Group if you have any questions or to share how you have used this.
