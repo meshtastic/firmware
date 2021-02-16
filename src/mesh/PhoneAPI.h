@@ -83,14 +83,6 @@ class PhoneAPI
      */
     bool available();
 
-    //
-    // The following routines are only public for now - until the rev1 bluetooth API is removed
-    //
-
-    void handleSetOwner(const User &o);
-    void handleSetChannel(const ChannelSettings &cc);
-    void handleSetRadio(const RadioConfig &r);
-
   protected:
     /// Are we currently connected to a client?
     bool isConnected = false;
@@ -108,6 +100,10 @@ class PhoneAPI
      * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
      */
     virtual void onNowHasData(uint32_t fromRadioNum) {}
+
+    void handleSetOwner(const User &o);
+    void handleSetChannel(const Channel &cc);
+    void handleSetRadio(const RadioConfig &r);
 
   private:
     /**

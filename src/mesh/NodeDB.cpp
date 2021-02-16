@@ -7,7 +7,6 @@
 #include "CryptoEngine.h"
 #include "FSCommon.h"
 #include "GPS.h"
-#include "main.h"
 #include "MeshRadio.h"
 #include "NodeDB.h"
 #include "PacketHistory.h"
@@ -16,6 +15,8 @@
 #include "Router.h"
 #include "configuration.h"
 #include "error.h"
+#include "main.h"
+#include "Channels.h"
 #include "mesh-pb-constants.h"
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -30,7 +31,6 @@ NodeDB nodeDB;
 EXT_RAM_ATTR DeviceState devicestate;
 MyNodeInfo &myNodeInfo = devicestate.my_node;
 RadioConfig &radioConfig = devicestate.radio;
-ChannelSettings &channelSettings = radioConfig.channel_settings;
 
 /** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings
  * might have changed is incremented.  Allows others to detect they might now be on a new channel.
@@ -64,49 +64,6 @@ static uint8_t ourMacAddr[6];
  */
 NodeNum displayedNodeNum;
 
-/// A usable (but bigger) version of the channel name in the channelSettings object
-const char *channelName;
-
-/// A usable psk - which has been constructed based on the (possibly short psk) in channelSettings
-static uint8_t activePSK[32];
-static uint8_t activePSKSize;
-
-/**
- * Generate a short suffix used to disambiguate channels that might have the same "name" entered by the human but different PSKs.
- * The ideas is that the PSK changing should be visible to the user so that they see they probably messed up and that's why they
-their nodes
- * aren't talking to each other.
- *
- * This string is of the form "#name-X".
- *
- * Where X is either:
- * (for custom PSKS) a letter from A to Z (base26), and formed by xoring all the bytes of the PSK together,
- * OR (for the standard minimially secure PSKs) a number from 0 to 9.
- *
- * This function will also need to be implemented in GUI apps that talk to the radio.
- *
- * https://github.com/meshtastic/Meshtastic-device/issues/269
- */
-const char *getChannelName()
-{
-    static char buf[32];
-
-    char suffix;
-    if (channelSettings.psk.size != 1) {
-        // We have a standard PSK, so generate a letter based hash.
-        uint8_t code = 0;
-        for (int i = 0; i < activePSKSize; i++)
-            code ^= activePSK[i];
-
-        suffix = 'A' + (code % 26);
-    } else {
-        suffix = '0' + channelSettings.psk.bytes[0];
-    }
-
-    snprintf(buf, sizeof(buf), "#%s-%c", channelName, suffix);
-    return buf;
-}
-
 NodeDB::NodeDB() : nodes(devicestate.node_db), numNodes(&devicestate.node_db_count) {}
 
 bool NodeDB::resetRadioConfig()
@@ -115,104 +72,19 @@ bool NodeDB::resetRadioConfig()
 
     radioGeneration++;
 
-    /// 16 bytes of random PSK for our _public_ default channel that all devices power up on (AES128)
-    static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
-                                         0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0xbf};
-
     if (radioConfig.preferences.factory_reset) {
         DEBUG_MSG("Performing factory reset!\n");
         installDefaultDeviceState();
         didFactoryReset = true;
-    } else if (!channelSettings.psk.size) {
-        DEBUG_MSG("Setting default preferences!\n");
+    } else if (devicestate.channels_count == 0) {
+        DEBUG_MSG("Setting default channel and radio preferences!\n");
 
-        radioConfig.has_channel_settings = true;
+        channels.initDefaults();
+
         radioConfig.has_preferences = true;
-
-        // radioConfig.modem_config = RadioConfig_ModemConfig_Bw125Cr45Sf128;  // medium range and fast
-        // channelSettings.modem_config = ChannelSettings_ModemConfig_Bw500Cr45Sf128;  // short range and fast, but wide
-        // bandwidth so incompatible radios can talk together
-        channelSettings.modem_config = ChannelSettings_ModemConfig_Bw125Cr48Sf4096; // slow and long range
-
-        channelSettings.tx_power = 0; // default
-        uint8_t defaultpskIndex = 1;
-        channelSettings.psk.bytes[0] = defaultpskIndex;
-        channelSettings.psk.size = 1;
-        strcpy(channelSettings.name, "");
     }
 
-    // Convert the old string "Default" to our new short representation
-    if (strcmp(channelSettings.name, "Default") == 0)
-        *channelSettings.name = '\0';
-
-    // Convert the short "" representation for Default into a usable string
-    channelName = channelSettings.name;
-    if (!*channelName) { // emptystring
-        // Per mesh.proto spec, if bandwidth is specified we must ignore modemConfig enum, we assume that in that case
-        // the app fucked up and forgot to set channelSettings.name
-
-        if (channelSettings.bandwidth != 0)
-            channelName = "Unset";
-        else
-            switch (channelSettings.modem_config) {
-            case ChannelSettings_ModemConfig_Bw125Cr45Sf128:
-                channelName = "Medium";
-                break;
-            case ChannelSettings_ModemConfig_Bw500Cr45Sf128:
-                channelName = "ShortFast";
-                break;
-            case ChannelSettings_ModemConfig_Bw31_25Cr48Sf512:
-                channelName = "LongAlt";
-                break;
-            case ChannelSettings_ModemConfig_Bw125Cr48Sf4096:
-                channelName = "LongSlow";
-                break;
-            default:
-                channelName = "Invalid";
-                break;
-            }
-    }
-
-    // Convert any old usage of the defaultpsk into our new short representation.
-    if (channelSettings.psk.size == sizeof(defaultpsk) &&
-        memcmp(channelSettings.psk.bytes, defaultpsk, sizeof(defaultpsk)) == 0) {
-        *channelSettings.psk.bytes = 1;
-        channelSettings.psk.size = 1;
-    }
-
-    memset(activePSK, 0, sizeof(activePSK)); // In case the user provided a short key, we want to pad the rest with zeros
-    memcpy(activePSK, channelSettings.psk.bytes, channelSettings.psk.size);
-    activePSKSize = channelSettings.psk.size;
-    if(activePSKSize == 0)
-        DEBUG_MSG("Warning: User disabled encryption\n");
-    else if (activePSKSize == 1) {
-        // Convert the short single byte variants of psk into variant that can be used more generally
-
-        uint8_t pskIndex = activePSK[0];
-        DEBUG_MSG("Expanding short PSK #%d\n", pskIndex);
-        if (pskIndex == 0)
-            activePSKSize = 0; // Turn off encryption
-        else {
-            memcpy(activePSK, defaultpsk, sizeof(defaultpsk));
-            activePSKSize = sizeof(defaultpsk);
-            // Bump up the last byte of PSK as needed
-            uint8_t *last = activePSK + sizeof(defaultpsk) - 1;
-            *last = *last + pskIndex - 1; // index of 1 means no change vs defaultPSK
-        }
-    } else if(activePSKSize < 16) {
-        // Error! The user specified only the first few bits of an AES128 key.  So by convention we just pad the rest of the key
-        // with zeros
-        DEBUG_MSG("Warning: User provided a too short AES128 key - padding\n");
-        activePSKSize = 16;
-    } else if(activePSKSize < 32 && activePSKSize != 16) {
-        // Error! The user specified only the first few bits of an AES256 key.  So by convention we just pad the rest of the key
-        // with zeros
-        DEBUG_MSG("Warning: User provided a too short AES256 key - padding\n");
-        activePSKSize = 32;
-    }
-
-    // Tell our crypto engine about the psk
-    crypto->setKey(activePSKSize, activePSK);
+    channels.onConfigChanged();
 
     // temp hack for quicker testing
     // devicestate.no_save = true;
@@ -251,7 +123,6 @@ void NodeDB::installDefaultDeviceState()
     devicestate.has_my_node = true;
     devicestate.has_radio = true;
     devicestate.has_owner = true;
-    devicestate.radio.has_channel_settings = true;
     devicestate.radio.has_preferences = true;
     devicestate.node_db_count = 0;
     devicestate.receive_queue_count = 0; // Not yet implemented FIXME
@@ -289,17 +160,14 @@ void NodeDB::init()
     loadFromDisk();
     // saveToDisk();
 
-    // We set node_num and packet_id _after_ loading from disk, because we always want to use the values this
-    // rom was compiled for, not what happens to be in the save file.
-    myNodeInfo.node_num_bits = sizeof(NodeNum) * 8;
-    myNodeInfo.packet_id_bits = sizeof(PacketId) * 8;
+    myNodeInfo.max_channels = MAX_CHANNELS; // tell others the max # of channels we can understand
 
     myNodeInfo.error_code =
         CriticalErrorCode_None; // For the error code, only show values from this boot (discard value from flash)
     myNodeInfo.error_address = 0;
 
     // likewise - we always want the app requirements to come from the running appload
-    myNodeInfo.min_app_version = 20120; // format is Mmmss (where M is 1+the numeric major number. i.e. 20120 means 1.1.20
+    myNodeInfo.min_app_version = 20200; // format is Mmmss (where M is 1+the numeric major number. i.e. 20120 means 1.1.20
 
     // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we won't
     // keep using that nodenum forever. Crummy guess at our nodenum (but we will check against the nodedb to avoid conflicts)
@@ -539,22 +407,10 @@ void NodeDB::updateFrom(const MeshPacket &mp)
         info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
 
         switch (p.which_payloadVariant) {
-        case SubPacket_position_tag: {
-            // handle a legacy position packet
-            DEBUG_MSG("WARNING: Processing a (deprecated) position packet from %d\n", mp.from);
-            updatePosition(mp.from, p.position);
-            break;
-        }
 
         case SubPacket_data_tag: {
             if (mp.to == NODENUM_BROADCAST || mp.to == nodeDB.getNodeNum())
                 MeshPlugin::callPlugins(mp);
-            break;
-        }
-
-        case SubPacket_user_tag: {
-            DEBUG_MSG("WARNING: Processing a (deprecated) user packet from %d\n", mp.from);
-            updateUser(mp.from, p.user);
             break;
         }
 
@@ -601,10 +457,9 @@ void recordCriticalError(CriticalErrorCode code, uint32_t address)
     String lcd = String("Critical error ") + code + "!\n";
     screen->print(lcd.c_str());
     DEBUG_MSG("NOTE! Recording critical error %d, address=%lx\n", code, address);
-    
+
     // Record error to DB
     myNodeInfo.error_code = code;
     myNodeInfo.error_address = address;
     myNodeInfo.error_count++;
-
 }

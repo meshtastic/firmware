@@ -6,6 +6,7 @@
 #include "assert.h"
 #include "configuration.h"
 #include "sleep.h"
+#include "Channels.h"
 #include <assert.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -36,7 +37,7 @@ void initRegion()
     myRegion = r;
     DEBUG_MSG("Wanted region %d, using %s\n", radioConfig.preferences.region, r->name);
 
-    myNodeInfo.num_channels = myRegion->numChannels; // Tell our android app how many channels we have
+    myNodeInfo.num_bands = myRegion->numChannels; // Tell our android app how many channels we have
 }
 
 /**
@@ -124,12 +125,6 @@ void printPacket(const char *prefix, const MeshPacket *p)
         switch (s.which_payloadVariant) {
         case SubPacket_data_tag:
             DEBUG_MSG(" Portnum=%d", s.data.portnum);
-            break;
-        case SubPacket_position_tag:
-            DEBUG_MSG(" Payload:Position");
-            break;
-        case SubPacket_user_tag:
-            DEBUG_MSG(" Payload:User");
             break;
         case 0:
             DEBUG_MSG(" Payload:None");
@@ -252,6 +247,7 @@ void RadioInterface::applyModemConfig()
     // Set up default configuration
     // No Sync Words in LORA mode
 
+    auto channelSettings = channels.getPrimary();
     if (channelSettings.spread_factor == 0) {
         switch (channelSettings.modem_config) {
         case ChannelSettings_ModemConfig_Bw125Cr45Sf128: ///< Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on. Default medium
@@ -296,7 +292,8 @@ void RadioInterface::applyModemConfig()
     assert(myRegion); // Should have been found in init
 
     // If user has manually specified a channel num, then use that, otherwise generate one by hashing the name
-    int channel_num = (channelSettings.channel_num ? channelSettings.channel_num - 1 : hash(channelName)) % myRegion->numChannels;
+    const char *channelName = channels.getName(channels.getPrimaryIndex());
+    int channel_num = channelSettings.channel_num ? channelSettings.channel_num - 1 : hash(channelName) % myRegion->numChannels;
     freq = myRegion->freq + myRegion->spacing * channel_num;
 
     DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, power=%d\n", channelName, channelSettings.modem_config, channel_num, power);

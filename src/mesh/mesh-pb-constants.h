@@ -16,6 +16,9 @@
 /// max number of nodes allowed in the mesh
 #define MAX_NUM_NODES (member_size(DeviceState, node_db) / member_size(DeviceState, node_db[0]))
 
+/// Max number of channels allowed
+#define MAX_CHANNELS (member_size(DeviceState, channels) / member_size(DeviceState, channels[0]))
+
 /// helper function for encoding a record as a protobuf, any failures to encode are fatal and we will panic
 /// returns the encoded packet size
 size_t pb_encode_to_bytes(uint8_t *destbuf, size_t destbufsize, const pb_msgdesc_t *fields, const void *src_struct);
