@@ -80,7 +80,6 @@ PacketId generatePacketId()
 
     i++;
     PacketId id = (i % numPacketId) + 1; // return number between 1 and numPacketId (ie - never zero)
-    myNodeInfo.current_packet_id = id;   // Kinda crufty - we keep updating this so the phone can see a current value
     return id;
 }
 

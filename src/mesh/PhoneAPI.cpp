@@ -4,6 +4,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
+#include "Channels.h"
 #include <assert.h>
 
 #if FromRadio_size > MAX_TO_FROM_RADIO_SIZE
@@ -279,9 +280,9 @@ void PhoneAPI::handleSetOwner(const User &o)
         service.reloadOwner();
 }
 
-void PhoneAPI::handleSetChannel(const ChannelSettings &cc)
+void PhoneAPI::handleSetChannel(const Channel &cc)
 {
-    radioConfig.channel_settings = cc;
+    channels.setChannel(cc);
 
     bool didReset = service.reloadConfig();
     if (didReset) {

@@ -32,6 +32,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "plugins/TextMessagePlugin.h"
+#include "mesh/Channels.h"
 #include "target_specific.h"
 #include "utils.h"
 
@@ -790,9 +791,6 @@ int32_t Screen::runOnce()
         showingBootScreen = false;
     }
 
-    // Update the screen last, after we've figured out what to show.
-    debug_info()->setChannelNameStatus(getChannelName());
-
     // Process incoming commands.
     for (;;) {
         ScreenCmd cmd;
@@ -1022,7 +1020,8 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     char channelStr[20];
     {
         concurrency::LockGuard guard(&lock);
-        snprintf(channelStr, sizeof(channelStr), "%s", channelName.c_str());
+        auto chName = channels.getPrimaryName();
+        snprintf(channelStr, sizeof(channelStr), "%s", chName);
     }
 
     // Display power status
@@ -1229,8 +1228,8 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
         display->drawString(x, y, String("USB"));
     }
 
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth("Mode " + String(channelSettings.modem_config)), y,
-                        "Mode " + String(channelSettings.modem_config));
+    auto mode = "Mode " + String(channels.getPrimary().modem_config);
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(mode), y, mode);
 
     // Line 2
     uint32_t currentMillis = millis();
