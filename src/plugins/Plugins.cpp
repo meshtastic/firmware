@@ -6,7 +6,7 @@
 #include "plugins/TextMessagePlugin.h"
 
 #ifndef NO_ESP32
-#include "plugins/RangeTestPlugin.h"
+#include "plugins/esp32/RangeTestPlugin.h"
 #include "plugins/SerialPlugin.h"
 #include "plugins/StoreForwardPlugin.h"
 #endif
