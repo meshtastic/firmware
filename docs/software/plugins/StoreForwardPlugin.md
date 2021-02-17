@@ -65,9 +65,9 @@ Structure of received messages:
 
 Structure of nodes and last time we heard from them. This is a record of any packet type.
 
-    senderRecord
+    receivedRecord
       From
-      rxTimeMsec
+      rxTimeMillis
 
 # General Operation for UC1 - automagically forward packets to a client that may have missed packets
 
