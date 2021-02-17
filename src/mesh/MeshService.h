@@ -19,8 +19,6 @@ class MeshService
 {
     CallbackObserver<MeshService, const meshtastic::GPSStatus *> gpsObserver =
         CallbackObserver<MeshService, const meshtastic::GPSStatus *>(this, &MeshService::onGPSChanged);
-    CallbackObserver<MeshService, const MeshPacket *> packetReceivedObserver =
-        CallbackObserver<MeshService, const MeshPacket *>(this, &MeshService::handleFromRadio);
 
     /// received packets waiting for the phone to process them
     /// FIXME, change to a DropOldestQueue and keep a count of the number of dropped packets to ensure

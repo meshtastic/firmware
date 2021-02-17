@@ -240,15 +240,15 @@ typedef PB_BYTES_ARRAY_T(256) MeshPacket_encrypted_t;
 typedef struct _MeshPacket {
     uint32_t from;
     uint32_t to;
+    uint32_t channel_index;
     pb_size_t which_payloadVariant;
     union {
         Data decoded;
         MeshPacket_encrypted_t encrypted;
     };
-    uint32_t channel_index;
     uint32_t id;
-    float rx_snr;
     uint32_t rx_time;
+    float rx_snr;
     uint32_t hop_limit;
     bool want_ack;
     MeshPacket_Priority priority;
@@ -364,7 +364,7 @@ extern "C" {
 #define RouteDiscovery_init_default              {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_default                     {0, {RouteDiscovery_init_default}, 0}
 #define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0}
-#define MeshPacket_init_default                  {0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN}
+#define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN}
 #define ChannelSettings_init_default             {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, "", 0, 0, 0, 0, 0, 0, 0}
 #define Channel_init_default                     {0, false, ChannelSettings_init_default, _Channel_Role_MIN}
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default}
@@ -379,7 +379,7 @@ extern "C" {
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_zero                        {0, {RouteDiscovery_init_zero}, 0}
 #define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0}
-#define MeshPacket_init_zero                     {0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN}
+#define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN}
 #define ChannelSettings_init_zero                {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, "", 0, 0, 0, 0, 0, 0, 0}
 #define Channel_init_zero                        {0, false, ChannelSettings_init_zero, _Channel_Role_MIN}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero}
@@ -404,9 +404,9 @@ extern "C" {
 #define ChannelSettings_downlink_enabled_tag     17
 #define Data_portnum_tag                         1
 #define Data_payload_tag                         2
-#define Data_want_response_tag                   5
-#define Data_dest_tag                            9
-#define Data_source_tag                          12
+#define Data_want_response_tag                   3
+#define Data_dest_tag                            4
+#define Data_source_tag                          5
 #define LogRecord_message_tag                    1
 #define LogRecord_time_tag                       2
 #define LogRecord_source_tag                     3
@@ -480,15 +480,15 @@ extern "C" {
 #define Channel_role_tag                         3
 #define MeshPacket_from_tag                      1
 #define MeshPacket_to_tag                        2
-#define MeshPacket_decoded_tag                   3
-#define MeshPacket_encrypted_tag                 8
-#define MeshPacket_channel_index_tag             4
+#define MeshPacket_channel_index_tag             3
+#define MeshPacket_decoded_tag                   4
+#define MeshPacket_encrypted_tag                 5
 #define MeshPacket_id_tag                        6
-#define MeshPacket_rx_snr_tag                    7
-#define MeshPacket_rx_time_tag                   9
-#define MeshPacket_hop_limit_tag                 10
-#define MeshPacket_want_ack_tag                  11
-#define MeshPacket_priority_tag                  12
+#define MeshPacket_rx_time_tag                   7
+#define MeshPacket_rx_snr_tag                    8
+#define MeshPacket_hop_limit_tag                 9
+#define MeshPacket_want_ack_tag                  10
+#define MeshPacket_priority_tag                  11
 #define NodeInfo_num_tag                         1
 #define NodeInfo_user_tag                        2
 #define NodeInfo_position_tag                    3
@@ -554,24 +554,24 @@ X(a, STATIC,   SINGULAR, FIXED32,  original_id,       6)
 #define Data_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    portnum,           1) \
 X(a, STATIC,   SINGULAR, BYTES,    payload,           2) \
-X(a, STATIC,   SINGULAR, BOOL,     want_response,     5) \
-X(a, STATIC,   SINGULAR, FIXED32,  dest,              9) \
-X(a, STATIC,   SINGULAR, FIXED32,  source,           12)
+X(a, STATIC,   SINGULAR, BOOL,     want_response,     3) \
+X(a, STATIC,   SINGULAR, FIXED32,  dest,              4) \
+X(a, STATIC,   SINGULAR, FIXED32,  source,            5)
 #define Data_CALLBACK NULL
 #define Data_DEFAULT NULL
 
 #define MeshPacket_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, FIXED32,  from,              1) \
 X(a, STATIC,   SINGULAR, FIXED32,  to,                2) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,decoded,decoded),   3) \
-X(a, STATIC,   ONEOF,    BYTES,    (payloadVariant,encrypted,encrypted),   8) \
-X(a, STATIC,   SINGULAR, UINT32,   channel_index,     4) \
+X(a, STATIC,   SINGULAR, UINT32,   channel_index,     3) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,decoded,decoded),   4) \
+X(a, STATIC,   ONEOF,    BYTES,    (payloadVariant,encrypted,encrypted),   5) \
 X(a, STATIC,   SINGULAR, FIXED32,  id,                6) \
-X(a, STATIC,   SINGULAR, FLOAT,    rx_snr,            7) \
-X(a, STATIC,   SINGULAR, FIXED32,  rx_time,           9) \
-X(a, STATIC,   SINGULAR, UINT32,   hop_limit,        10) \
-X(a, STATIC,   SINGULAR, BOOL,     want_ack,         11) \
-X(a, STATIC,   SINGULAR, UENUM,    priority,         12)
+X(a, STATIC,   SINGULAR, FIXED32,  rx_time,           7) \
+X(a, STATIC,   SINGULAR, FLOAT,    rx_snr,            8) \
+X(a, STATIC,   SINGULAR, UINT32,   hop_limit,         9) \
+X(a, STATIC,   SINGULAR, BOOL,     want_ack,         10) \
+X(a, STATIC,   SINGULAR, UENUM,    priority,         11)
 #define MeshPacket_CALLBACK NULL
 #define MeshPacket_DEFAULT NULL
 #define MeshPacket_payloadVariant_decoded_MSGTYPE Data

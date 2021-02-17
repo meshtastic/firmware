@@ -28,22 +28,35 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
 {
     // DEBUG_MSG("In call plugins\n");
     bool pluginFound = false;
+
+    assert(mp.which_payloadVariant == MeshPacket_decoded_tag); // I think we are guarnteed the packet is decoded by this point?
+
+    // Was this message directed to us specifically?  Will be false if we are sniffing someone elses packets
+    bool toUs = mp.to == NODENUM_BROADCAST || mp.to == nodeDB.getNodeNum();
     for (auto i = plugins->begin(); i != plugins->end(); ++i) {
         auto &pi = **i;
 
         pi.currentRequest = &mp;
-        if (pi.wantPortnum(mp.decoded.portnum)) {
+
+        // We only call plugins that are interested in the packet (and the message is destined to us or we are promiscious)
+        bool wantsPacket = (pi.isPromiscuous || toUs) && pi.wantPacket(&mp);
+        if (wantsPacket) {
             pluginFound = true;
 
             bool handled = pi.handleReceived(mp);
 
-            // Possibly send replies
-            if (mp.decoded.want_response)
+            // Possibly send replies (but only if the message was directed to us specifically, i.e. not for promiscious sniffing)
+            if (mp.decoded.want_response && toUs) {
                 pi.sendResponse(mp);
-
-            DEBUG_MSG("Plugin %s handled=%d\n", pi.name, handled);
-            if (handled)
+                DEBUG_MSG("Plugin %s sent a response\n", pi.name);
+            }
+            else {
+                DEBUG_MSG("Plugin %s considered\n", pi.name);
+            }
+            if (handled) {
+                DEBUG_MSG("Plugin %s handled and skipped other processing\n", pi.name);
                 break;
+            }
         }
        
         pi.currentRequest = NULL;

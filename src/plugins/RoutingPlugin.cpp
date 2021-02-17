@@ -8,9 +8,9 @@
 
 RoutingPlugin *routingPlugin;
 
-bool RoutingPlugin::handleReceivedProtobuf(const MeshPacket &mp, const Routing &p)
+bool RoutingPlugin::handleReceivedProtobuf(const MeshPacket &mp, const Routing *p)
 {
-
+    assert(0);
     return false; // Let others look at this message also if they want
 }
 
