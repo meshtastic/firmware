@@ -51,6 +51,10 @@ In this case, we have two routers separate by a great distance, each serving mul
 
 Q: How do we rejoin both fragmented networks? Do we care about messages that were unrouted between fagments?
 
+## Identifing Delayed Messages
+
+When a message is replayed for a node, identify the packet as "Delayed". This will indicate that the message was not received in real time.
+
 # Router Data Structures
 
 Structure of received messages:
