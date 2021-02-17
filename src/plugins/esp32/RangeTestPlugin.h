@@ -28,13 +28,22 @@ class RangeTestPluginRadio : public SinglePortPlugin
     uint32_t lastRxID;
 
   public:
-
     RangeTestPluginRadio() : SinglePortPlugin("RangeTestPluginRadio", PortNum_TEXT_MESSAGE_APP) {}
 
     /**
      * Send our payload into the mesh
      */
     void sendPayload(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
+
+    /**
+     * Append range test data to the file on the spiffs
+     */
+    bool appendFile(const MeshPacket &mp);
+
+    /**
+     * Kevin's magical calculation of two points to meters.
+     */
+    float latLongToMeter(double lat_a, double lng_a, double lat_b, double lng_b);
 
   protected:
     virtual MeshPacket *allocReply();
