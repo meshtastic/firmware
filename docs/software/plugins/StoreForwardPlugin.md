@@ -27,6 +27,8 @@ UC 3) router sends a periodic “heartbeat” to let the clients know they’re 
 
 UC 4) support for a mesh to have multiple routers that have the store & forward functionality (for redundancy)
 
+UC 5) Support for "long term" delayed messages and "short term" delayed messages. Handle the cases slightly different to improve user expierence. A short term delayed message would be a message that was resent becaue a node was not heard from for <5 minutes. A long term delayed message is a message that has not been delivered in >5 minutes.
+
 # Things to consider
 
 Not all these cases will be initially implemented. It's just a running stream of thoughts to be considered.
