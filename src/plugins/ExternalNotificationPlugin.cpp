@@ -145,7 +145,7 @@ bool ExternalNotificationPluginRadio::handleReceived(const MeshPacket &mp)
 
     if (radioConfig.preferences.ext_notification_plugin_enabled) {
 
-        auto &p = mp.decoded.data;
+        auto &p = mp.decoded;
 
         if (mp.from != nodeDB.getNodeNum()) {
 

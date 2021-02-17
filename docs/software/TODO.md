@@ -4,16 +4,21 @@ You probably don't care about this section - skip to the next one.
 
 1.2 cleanup & multichannel:
 
+* clear priority before sending (to keep wire size small)
+* generate channel hash from the name of the channel+the psk (not just one or the other)
 * DONE remove deprecated
-* allow chaning packets in single transmission
 * DONE fix setchannel in phoneapi.cpp
 * DONE set mynodeinfo.max_channels
 * DONE set mynodeinfo.num_bands (formerly num_channels)
 * fix sniffing of non Routing packets
-* move portnum up?
+* DONE move portnum up?
 * scrub protobufs to make sure they are absoloute minimum wiresize (in particular packets, ChannelSets and positions)
 * send a hint that can be used to select which channel to try and hash against with each message
 * change syncword
+* allow chaning packets in single transmission - to increase airtime efficiency and amortize packet overhead
+* move #define PACKET_FLAGS_HOP_MASK PACKET_FLAGS_WANT_ACK_MASK out of wire header, instead include keyHint.  shrink header len to 14 bytes.
+* move most parts of meshpacket into the Data packet, so that we can chain multiple Data for sending when they all have a common destination and key.
+when selecting a MeshPacket for transmit, scan the TX queue for any Data packets we can merge together.
 * DONE move acks into routing
 * DONE make all subpackets different versions of data
 * DONE move routing control into a data packet
