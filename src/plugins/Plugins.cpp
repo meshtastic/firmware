@@ -1,12 +1,15 @@
 #include "plugins/ExternalNotificationPlugin.h"
 #include "plugins/NodeInfoPlugin.h"
 #include "plugins/PositionPlugin.h"
-#include "plugins/RangeTestPlugin.h"
 #include "plugins/RemoteHardwarePlugin.h"
 #include "plugins/ReplyPlugin.h"
+#include "plugins/TextMessagePlugin.h"
+
+#ifndef NO_ESP32
+#include "plugins/RangeTestPlugin.h"
 #include "plugins/SerialPlugin.h"
 #include "plugins/StoreForwardPlugin.h"
-#include "plugins/TextMessagePlugin.h"
+#endif
 
 /**
  * Create plugin instances here.  If you are adding a new plugin, you must 'new' it here (or somewhere else)
@@ -32,10 +35,10 @@ void setupPlugins()
     new SerialPlugin();
     new ExternalNotificationPlugin();
 
-    //rangeTestPlugin = new RangeTestPlugin();
+    // rangeTestPlugin = new RangeTestPlugin();
     storeForwardPlugin = new StoreForwardPlugin();
 
     new RangeTestPlugin();
-    //new StoreForwardPlugin();
+    // new StoreForwardPlugin();
 #endif
 }
