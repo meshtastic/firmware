@@ -55,7 +55,7 @@ class MeshPlugin
     /**
      * @return true if you want to receive the specified portnum
      */
-    virtual bool wantPortnum(PortNum p) = 0;
+    virtual bool wantPacket(const MeshPacket *p) = 0;
 
     /** Called to handle a particular incoming message
 

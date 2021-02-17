@@ -357,7 +357,13 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p)
 
     DEBUG_MSG("DB update position node=0x%x time=%u, latI=%d, lonI=%d\n", nodeId, p.time, p.latitude_i, p.longitude_i);
 
+    auto oldtime = info->position.time;
     info->position = p;
+    if(p.time == 0 && oldtime != 0) {
+        // A lot of position reports don't have time populated.  In that case, be careful to not blow away the time we
+        // recorded based on the packet rxTime
+        info->position.time = oldtime;
+    }
     info->has_position = true;
     updateGUIforNode = info;
     notifyObservers(true); // Force an update whether or not our node counts have changed
@@ -405,9 +411,6 @@ void NodeDB::updateFrom(const MeshPacket &mp)
         }
 
         info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
-
-        if (mp.to == NODENUM_BROADCAST || mp.to == nodeDB.getNodeNum())
-            MeshPlugin::callPlugins(mp);
     }
 }
 

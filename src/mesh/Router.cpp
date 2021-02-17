@@ -244,12 +244,13 @@ void Router::handleReceived(MeshPacket *p)
     if (perhapsDecode(p)) {
         // parsing was successful, queue for our recipient
 
-        assert(0); // FIXME, call any promiscious plugins here, make a (non promisiocous) plugin for forwarding messages to phone api 
+        // call any promiscious plugins here, make a (non promisiocous) plugin for forwarding messages to phone api 
         // sniffReceived(p);
+        MeshPlugin::callPlugins(*p);
 
         if (p->to == NODENUM_BROADCAST || p->to == getNodeNum()) {
             printPacket("Delivering rx packet", p);
-            notifyPacketReceived.notifyObservers(p);
+            meshservice.handleFromRadio(p);
         }
     }
 }

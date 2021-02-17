@@ -21,10 +21,6 @@ class Router : protected concurrency::OSThread
     RadioInterface *iface = NULL;
 
   public:
-    /// Local services that want to see _every_ packet this node receives can observe this.
-    /// Observers should always return 0 and _copy_ any packets they want to keep for use later (this packet will be getting
-    /// freed)
-    Observable<const MeshPacket *> notifyPacketReceived;
 
     /**
      * Constructor
