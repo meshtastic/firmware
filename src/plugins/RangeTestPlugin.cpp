@@ -120,7 +120,7 @@ bool RangeTestPluginRadio::handleReceived(const MeshPacket &mp)
 
     if (radioConfig.preferences.range_test_plugin_enabled) {
 
-        auto &p = mp.decoded.data;
+        auto &p = mp.decoded;
         // DEBUG_MSG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s\n",
         //          nodeDB.getNodeNum(), mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
 
