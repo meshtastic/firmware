@@ -10,8 +10,21 @@ class StoreForwardPlugin : private concurrency::OSThread
 {
     bool firstTime = 1;
 
+    // TODO: Move this into the PSRAM
+    // TODO: Allow configuration of the maximum number of records.
+    uint32_t receivedRecord[50][2] = {{0}};
+
   public:
     StoreForwardPlugin();
+
+    /**
+     Update our local reference of when we last saw that node.
+     @return 0 if we have never seen that node before otherwise return the last time we saw the node.
+     */
+    uint32_t sawNode(uint32_t);
+
+  private:
+  // Nothing here
 
   protected:
     virtual int32_t runOnce();
@@ -25,11 +38,11 @@ extern StoreForwardPlugin *storeForwardPlugin;
  */
 class StoreForwardPluginRadio : public SinglePortPlugin
 {
-    //uint32_t lastRxID;
+    // uint32_t lastRxID;
 
   public:
     StoreForwardPluginRadio() : SinglePortPlugin("StoreForwardPluginRadio", PortNum_STORE_FORWARD_APP) {}
-    //StoreForwardPluginRadio() : SinglePortPlugin("StoreForwardPluginRadio", PortNum_TEXT_MESSAGE_APP) {}
+    // StoreForwardPluginRadio() : SinglePortPlugin("StoreForwardPluginRadio", PortNum_TEXT_MESSAGE_APP) {}
 
     /**
      * Send our payload into the mesh
@@ -39,7 +52,7 @@ class StoreForwardPluginRadio : public SinglePortPlugin
   protected:
     virtual MeshPacket *allocReply();
 
-    virtual bool wantPortnum(PortNum p){return true;};
+    virtual bool wantPortnum(PortNum p) { return true; };
 
     /** Called to handle a particular incoming message
 
@@ -49,4 +62,3 @@ class StoreForwardPluginRadio : public SinglePortPlugin
 };
 
 extern StoreForwardPluginRadio *storeForwardPluginRadio;
-
