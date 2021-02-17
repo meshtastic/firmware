@@ -4,7 +4,9 @@ set -e
 
 VERSION=`bin/buildinfo.py`
 
-COUNTRIES="US EU433 EU865 CN JP ANZ KR"
+# We now only do regionless builds
+COUNTRIES=""
+#COUNTRIES="US EU433 EU865 CN JP ANZ KR"
 #COUNTRIES=US
 #COUNTRIES=CN
 
