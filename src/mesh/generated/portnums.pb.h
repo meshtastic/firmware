@@ -16,6 +16,7 @@ typedef enum _PortNum {
     PortNum_REMOTE_HARDWARE_APP = 2,
     PortNum_POSITION_APP = 3,
     PortNum_NODEINFO_APP = 4,
+    PortNum_ROUTING_APP = 5,
     PortNum_REPLY_APP = 32,
     PortNum_IP_TUNNEL_APP = 33,
     PortNum_SERIAL_APP = 64,

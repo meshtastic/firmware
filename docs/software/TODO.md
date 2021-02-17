@@ -4,16 +4,26 @@ You probably don't care about this section - skip to the next one.
 
 1.2 cleanup & multichannel:
 
-* remove deprecated
+* DONE remove deprecated
 * allow chaning packets in single transmission
-* fix setchannel in phoneapi.cpp
-* set mynodeinfo.max_channels
-* set mynodeinfo.num_bands (formerly num_channels)
+* DONE fix setchannel in phoneapi.cpp
+* DONE set mynodeinfo.max_channels
+* DONE set mynodeinfo.num_bands (formerly num_channels)
+* fix sniffing of non Routing packets
+* move portnum up?
+* scrub protobufs to make sure they are absoloute minimum wiresize (in particular packets, ChannelSets and positions)
 * send a hint that can be used to select which channel to try and hash against with each message
 * change syncword
-* move acks into routing
-* make all subpackets different versions of data
-* move routing control into a data packet
+* DONE move acks into routing
+* DONE make all subpackets different versions of data
+* DONE move routing control into a data packet
+* have phoneapi done via plugin
+* figure out how to add micro_delta to position, make it so that phone apps don't need to understand it?
+* only send battery updates a max of once a minute
+* add multichannel support in python
+* add channel selection for sending
+* record recevied channel in meshpacket
+* add channel restrictions for plugins (and restrict routing plugin to the "control" channel)
 * make a primaryChannel global and properly maintain it when the phone sends setChannel
 * move setCrypto call into packet send and packet decode code
 * implement'small locations' change?

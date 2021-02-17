@@ -32,7 +32,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
         auto &pi = **i;
 
         pi.currentRequest = &mp;
-        if (pi.wantPortnum(mp.decoded.data.portnum)) {
+        if (pi.wantPortnum(mp.decoded.portnum)) {
             pluginFound = true;
 
             bool handled = pi.handleReceived(mp);
@@ -50,7 +50,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
     }
 
     if(!pluginFound)
-        DEBUG_MSG("No plugins interested in portnum=%d\n", mp.decoded.data.portnum);
+        DEBUG_MSG("No plugins interested in portnum=%d\n", mp.decoded.portnum);
 }
 
 /** Messages can be received that have the want_response bit set.  If set, this callback will be invoked

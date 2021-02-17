@@ -4,6 +4,7 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include <NodeDB.h>
+#include "plugins/RoutingPlugin.h"
 
 /**
  * Router todo
@@ -101,27 +102,9 @@ MeshPacket *Router::allocForSending()
 /**
  * Send an ack or a nak packet back towards whoever sent idFrom
  */
-void Router::sendAckNak(ErrorReason err, NodeNum to, PacketId idFrom)
+void Router::sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom)
 {
-    auto p = allocForSending();
-    p->hop_limit = 0; // Assume just immediate neighbors for now
-    p->to = to;
-    DEBUG_MSG("Sending an err=%d,to=0x%x,idFrom=0x%x,id=0x%x\n", err, to, idFrom, p->id);
-
-    if (!err) {
-        p->decoded.ackVariant.success_id = idFrom;
-        p->decoded.which_ackVariant = SubPacket_success_id_tag;
-    } else {
-        p->decoded.ackVariant.fail_id = idFrom;
-        p->decoded.which_ackVariant = SubPacket_fail_id_tag;
-
-        // Also send back the error reason
-        p->decoded.which_payloadVariant = SubPacket_error_reason_tag;
-        p->decoded.error_reason = err;
-    }
-    p->priority = MeshPacket_Priority_ACK;
-
-    sendLocal(p); // we sometimes send directly to the local node
+    routingPlugin->sendAckNak(err, to, idFrom);
 }
 
 
@@ -138,7 +121,7 @@ ErrorCode Router::sendLocal(MeshPacket *p)
 
         // ERROR! no radio found, report failure back to the client and drop the packet
         DEBUG_MSG("Error: No interface, returning NAK and dropping packet.\n");
-        sendAckNak(ErrorReason_NO_INTERFACE, p->from, p->id);
+        sendAckNak(Routing_Error_NO_INTERFACE, p->from, p->id);
         packetPool.release(p);
 
         return ERRNO_NO_INTERFACES;
@@ -162,9 +145,8 @@ ErrorCode Router::send(MeshPacket *p)
 {
     assert(p->to != nodeDB.getNodeNum()); // should have already been handled by sendLocal
 
-    PacketId nakId = p->decoded.which_ackVariant == SubPacket_fail_id_tag ? p->decoded.ackVariant.fail_id : 0;
-    assert(
-        !nakId); // I don't think we ever send 0hop naks over the wire (other than to the phone), test that assumption with assert
+    // PacketId nakId = p->decoded.which_ackVariant == SubPacket_fail_id_tag ? p->decoded.ackVariant.fail_id : 0;
+    // assert(!nakId); // I don't think we ever send 0hop naks over the wire (other than to the phone), test that assumption with assert
 
     // Never set the want_ack flag on broadcast packets sent over the air.
     if (p->to == NODENUM_BROADCAST)
@@ -179,7 +161,7 @@ ErrorCode Router::send(MeshPacket *p)
     if (p->which_payloadVariant == MeshPacket_decoded_tag) {
         static uint8_t bytes[MAX_RHPACKETLEN]; // we have to use a scratch buffer because a union
 
-        size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), SubPacket_fields, &p->decoded);
+        size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), Data_fields, &p->decoded);
 
         assert(numbytes <= MAX_RHPACKETLEN);
         crypto->encrypt(p->from, p->id, numbytes, bytes);
@@ -212,7 +194,7 @@ bool Router::cancelSending(NodeNum from, PacketId id) {
  * Every (non duplicate) packet this node receives will be passed through this method.  This allows subclasses to
  * update routing tables etc... based on what we overhear (even for messages not destined to our node)
  */
-void Router::sniffReceived(const MeshPacket *p)
+void Router::sniffReceived(const MeshPacket *p, const Routing &c)
 {
     DEBUG_MSG("FIXME-update-db Sniffing packet\n");
     // FIXME, update nodedb here for any packet that passes through us
@@ -234,7 +216,7 @@ bool Router::perhapsDecode(MeshPacket *p)
     crypto->decrypt(p->from, p->id, p->encrypted.size, bytes);
 
     // Take those raw bytes and convert them back into a well structured protobuf we can understand
-    if (!pb_decode_from_bytes(bytes, p->encrypted.size, SubPacket_fields, &p->decoded)) {
+    if (!pb_decode_from_bytes(bytes, p->encrypted.size, Data_fields, &p->decoded)) {
         DEBUG_MSG("Invalid protobufs in received mesh packet!\n");
         return false;
     } else {
@@ -262,7 +244,8 @@ void Router::handleReceived(MeshPacket *p)
     if (perhapsDecode(p)) {
         // parsing was successful, queue for our recipient
 
-        sniffReceived(p);
+        assert(0); // FIXME, call any promiscious plugins here, make a (non promisiocous) plugin for forwarding messages to phone api 
+        // sniffReceived(p);
 
         if (p->to == NODENUM_BROADCAST || p->to == getNodeNum()) {
             printPacket("Delivering rx packet", p);

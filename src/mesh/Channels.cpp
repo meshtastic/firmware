@@ -118,7 +118,7 @@ void setCrypto(size_t chIndex)
 
 void Channels::initDefaults()
 {
-    devicestate.channels_count = MAX_CHANNELS;
+    devicestate.channels_count = MAX_NUM_CHANNELS;
     for (int i = 0; i < devicestate.channels_count; i++)
         fixupChannel(i);
     initDefaultChannel(0);

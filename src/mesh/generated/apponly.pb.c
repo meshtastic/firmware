@@ -9,4 +9,7 @@
 PB_BIND(ServiceEnvelope, ServiceEnvelope, 2)
 
 
+PB_BIND(ChannelSet, ChannelSet, AUTO)
+
+
 

@@ -31,6 +31,12 @@ class MeshPlugin
   protected:
     const char *name;
 
+    /* Most plugins only care about packets that are destined for their node (i.e. broadcasts or has their node as the specific recipient)
+    But some plugs might want to 'sniff' packets that are merely being routed (passing through the current node).  Those plugins can set this to
+    true and their handleReceived() will be called for every packet.
+    */
+    bool isPromiscuous = false;
+
     /**
      * If this plugin is currently handling a request currentRequest will be preset
      * to the packet with the request.  This is mostly useful for reply handlers.

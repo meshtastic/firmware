@@ -7,12 +7,14 @@
 #include "plugins/SerialPlugin.h"
 #include "plugins/StoreForwardPlugin.h"
 #include "plugins/TextMessagePlugin.h"
+#include "plugins/RoutingPlugin.h"
 
 /**
  * Create plugin instances here.  If you are adding a new plugin, you must 'new' it here (or somewhere else)
  */
 void setupPlugins()
 {
+    routingPlugin = new RoutingPlugin();
     nodeInfoPlugin = new NodeInfoPlugin();
     positionPlugin = new PositionPlugin();
     textMessagePlugin = new TextMessagePlugin();

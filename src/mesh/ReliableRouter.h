@@ -90,7 +90,7 @@ class ReliableRouter : public FloodingRouter
     /**
      * Look for acks/naks or someone retransmitting us
      */
-    virtual void sniffReceived(const MeshPacket *p);
+    virtual void sniffReceived(const MeshPacket *p, const Routing &c);
 
     /**
      * Try to find the pending packet record for this ID (or NULL if not found)

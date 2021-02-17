@@ -27,7 +27,7 @@ bool FloodingRouter::shouldFilterReceived(const MeshPacket *p)
     return Router::shouldFilterReceived(p);
 }
 
-void FloodingRouter::sniffReceived(const MeshPacket *p)
+void FloodingRouter::sniffReceived(const MeshPacket *p, const Routing &c)
 {
     // If a broadcast, possibly _also_ send copies out into the mesh.
     // (FIXME, do something smarter than naive flooding here)
@@ -48,5 +48,5 @@ void FloodingRouter::sniffReceived(const MeshPacket *p)
     }
 
     // handle the packet as normal
-    Router::sniffReceived(p);
+    Router::sniffReceived(p, c);
 }

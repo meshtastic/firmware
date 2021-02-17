@@ -68,6 +68,8 @@ class Router : protected concurrency::OSThread
     NodeNum getNodeNum();
 
   protected:
+    friend class RoutingPlugin;
+
     /**
      * Send a packet on a suitable interface.  This routine will
      * later free() the packet to pool.  This routine is not allowed to stall.
@@ -79,6 +81,8 @@ class Router : protected concurrency::OSThread
 
     /**
      * Should this incoming filter be dropped?
+     * 
+     * FIXME, move this into the new RoutingPlugin and do the filtering there using the regular plugin logic
      *
      * Called immedately on receiption, before any further processing.
      * @return true to abandon the packet
@@ -89,7 +93,7 @@ class Router : protected concurrency::OSThread
      * Every (non duplicate) packet this node receives will be passed through this method.  This allows subclasses to
      * update routing tables etc... based on what we overhear (even for messages not destined to our node)
      */
-    virtual void sniffReceived(const MeshPacket *p);
+    virtual void sniffReceived(const MeshPacket *p, const Routing &c);
 
     /**
      * Remove any encryption and decode the protobufs inside this packet (if necessary).
@@ -101,7 +105,7 @@ class Router : protected concurrency::OSThread
     /**
      * Send an ack or a nak packet back towards whoever sent idFrom
      */
-    void sendAckNak(ErrorReason err, NodeNum to, PacketId idFrom);
+    void sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom);
     
   private:
     /**
