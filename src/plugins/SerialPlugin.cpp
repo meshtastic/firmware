@@ -144,8 +144,8 @@ void SerialPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
 
     p->want_ack = SERIALPLUGIN_ACK;
 
-    p->decoded.data.payload.size = strlen(serialStringChar); // You must specify how many bytes are in the reply
-    memcpy(p->decoded.data.payload.bytes, serialStringChar, p->decoded.data.payload.size);
+    p->decoded.payload.size = strlen(serialStringChar); // You must specify how many bytes are in the reply
+    memcpy(p->decoded.payload.bytes, serialStringChar, p->decoded.payload.size);
 
     service.sendToMesh(p);
 }

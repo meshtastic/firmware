@@ -8,7 +8,7 @@
  * If you are using protobufs to encode your packets (recommended) you can use this as a baseclass for your plugin
  * and avoid a bunch of boilerplate code.
  */
-template <class T> class ProtobufPlugin : private SinglePortPlugin
+template <class T> class ProtobufPlugin : protected SinglePortPlugin
 {
     const pb_msgdesc_t *fields;
 
@@ -38,8 +38,8 @@ template <class T> class ProtobufPlugin : private SinglePortPlugin
         // Update our local node info with our position (even if we don't decide to update anyone else)
         MeshPacket *p = allocDataPacket();
 
-        p->decoded.data.payload.size =
-            pb_encode_to_bytes(p->decoded.data.payload.bytes, sizeof(p->decoded.data.payload.bytes), fields, &payload);
+        p->decoded.payload.size =
+            pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), fields, &payload);
         // DEBUG_MSG("did encode\n");
         return p;
     }
@@ -54,7 +54,7 @@ template <class T> class ProtobufPlugin : private SinglePortPlugin
         // FIXME - we currently update position data in the DB only if the message was a broadcast or destined to us
         // it would be better to update even if the message was destined to others.
 
-        auto &p = mp.decoded.data;
+        auto &p = mp.decoded;
         DEBUG_MSG("Received %s from=0x%0x, id=0x%x, payloadlen=%d\n", name, mp.from, mp.id, p.payload.size);
 
         T scratch;

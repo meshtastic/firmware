@@ -108,8 +108,8 @@ void RangeTestPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
     static char heartbeatString[20];
     snprintf(heartbeatString, sizeof(heartbeatString), "seq %d", packetSequence);
 
-    p->decoded.data.payload.size = strlen(heartbeatString); // You must specify how many bytes are in the reply
-    memcpy(p->decoded.data.payload.bytes, heartbeatString, p->decoded.data.payload.size);
+    p->decoded.payload.size = strlen(heartbeatString); // You must specify how many bytes are in the reply
+    memcpy(p->decoded.payload.bytes, heartbeatString, p->decoded.payload.size);
 
     service.sendToMesh(p);
 }

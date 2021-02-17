@@ -9,16 +9,16 @@
 PB_BIND(Position, Position, AUTO)
 
 
-PB_BIND(Data, Data, AUTO)
-
-
 PB_BIND(User, User, AUTO)
 
 
 PB_BIND(RouteDiscovery, RouteDiscovery, AUTO)
 
 
-PB_BIND(SubPacket, SubPacket, 2)
+PB_BIND(Routing, Routing, AUTO)
+
+
+PB_BIND(Data, Data, 2)
 
 
 PB_BIND(MeshPacket, MeshPacket, 2)

@@ -4,6 +4,7 @@
 
 #include "FS.h"
 
+#include "Channels.h"
 #include "CryptoEngine.h"
 #include "FSCommon.h"
 #include "GPS.h"
@@ -16,7 +17,6 @@
 #include "configuration.h"
 #include "error.h"
 #include "main.h"
-#include "Channels.h"
 #include "mesh-pb-constants.h"
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -160,7 +160,7 @@ void NodeDB::init()
     loadFromDisk();
     // saveToDisk();
 
-    myNodeInfo.max_channels = MAX_CHANNELS; // tell others the max # of channels we can understand
+    myNodeInfo.max_channels = MAX_NUM_CHANNELS; // tell others the max # of channels we can understand
 
     myNodeInfo.error_code =
         CriticalErrorCode_None; // For the error code, only show values from this boot (discard value from flash)
@@ -394,7 +394,7 @@ void NodeDB::updateUser(uint32_t nodeId, const User &p)
 void NodeDB::updateFrom(const MeshPacket &mp)
 {
     if (mp.which_payloadVariant == MeshPacket_decoded_tag) {
-        const SubPacket &p = mp.decoded;
+        const Data &p = mp.decoded;
         DEBUG_MSG("Update DB node 0x%x, rx_time=%u\n", mp.from, mp.rx_time);
 
         NodeInfo *info = getOrCreateNode(mp.from);
@@ -406,18 +406,8 @@ void NodeDB::updateFrom(const MeshPacket &mp)
 
         info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
 
-        switch (p.which_payloadVariant) {
-
-        case SubPacket_data_tag: {
-            if (mp.to == NODENUM_BROADCAST || mp.to == nodeDB.getNodeNum())
-                MeshPlugin::callPlugins(mp);
-            break;
-        }
-
-        default: {
-            notifyObservers(); // If the node counts have changed, notify observers
-        }
-        }
+        if (mp.to == NODENUM_BROADCAST || mp.to == nodeDB.getNodeNum())
+            MeshPlugin::callPlugins(mp);
     }
 }
 

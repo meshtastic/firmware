@@ -1,12 +1,12 @@
 
 #include "RadioInterface.h"
+#include "Channels.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "assert.h"
 #include "configuration.h"
 #include "sleep.h"
-#include "Channels.h"
 #include <assert.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -122,17 +122,9 @@ void printPacket(const char *prefix, const MeshPacket *p)
               p->hop_limit);
     if (p->which_payloadVariant == MeshPacket_decoded_tag) {
         auto &s = p->decoded;
-        switch (s.which_payloadVariant) {
-        case SubPacket_data_tag:
-            DEBUG_MSG(" Portnum=%d", s.data.portnum);
-            break;
-        case 0:
-            DEBUG_MSG(" Payload:None");
-            break;
-        default:
-            DEBUG_MSG(" Payload:%d", s.which_payloadVariant);
-            break;
-        }
+        
+        DEBUG_MSG(" Portnum=%d", s.portnum);
+
         if (s.want_response)
             DEBUG_MSG(" WANTRESP");
 
@@ -142,10 +134,11 @@ void printPacket(const char *prefix, const MeshPacket *p)
         if (s.dest != 0)
             DEBUG_MSG(" dest=%08x", s.dest);
 
+        /* now inside Data and therefore kinda opaque
         if (s.which_ackVariant == SubPacket_success_id_tag)
             DEBUG_MSG(" successId=%08x", s.ackVariant.success_id);
         else if (s.which_ackVariant == SubPacket_fail_id_tag)
-            DEBUG_MSG(" failId=%08x", s.ackVariant.fail_id);
+            DEBUG_MSG(" failId=%08x", s.ackVariant.fail_id); */
     } else {
         DEBUG_MSG(" encrypted");
     }
@@ -156,9 +149,9 @@ void printPacket(const char *prefix, const MeshPacket *p)
     if (p->rx_snr != 0.0) {
         DEBUG_MSG(" rxSNR=%g", p->rx_snr);
     }
-    if(p->priority != 0)
+    if (p->priority != 0)
         DEBUG_MSG(" priority=%d", p->priority);
-        
+
     DEBUG_MSG(")\n");
 }
 
