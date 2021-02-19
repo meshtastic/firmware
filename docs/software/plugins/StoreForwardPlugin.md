@@ -29,6 +29,12 @@ UC 4) support for a mesh to have multiple routers that have the store & forward 
 
 UC 5) Support for "long term" delayed messages and "short term" delayed messages. Handle the cases slightly different to improve user expierence. A short term delayed message would be a message that was resent becaue a node was not heard from for <5 minutes. A long term delayed message is a message that has not been delivered in >5 minutes.
 
+UC 6) Eventually we could add a "want_store_and_forward" bit to MeshPacket and that could be nicer than whitelists in this plugin. Initially we'd only set that bit in text messages (and any other plugin messages that can cope with this). This change would be backward wire compatible so can add easily later.
+
+UC 7) Currently the way we allocate messages in the device code is super inefficient. It always allocates the worst case message size. Really we should dynamically allocate just the # of bytes we need. This would allow many more MeshPackets to be kept in RAM.
+
+UC 8) We'll want a "delayed" bit in MeshPacket. This will indicate that the message was not received in real time.
+
 # Things to consider
 
 Not all these cases will be initially implemented. It's just a running stream of thoughts to be considered.
