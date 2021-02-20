@@ -78,9 +78,9 @@ size_t RedirectablePrint::logDebug(const char *format, ...)
             int min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
             int sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
 
-            r += printf("%02d:%02d:%02d ", hour, min, sec);
+            r += printf("%02d:%02d:%02d %u ", hour, min, sec, millis() / 1000);
         } else
-            r += printf("??:??:?? ");
+            r += printf("??:??:?? %u ", millis() / 1000);
 
         auto thread = concurrency::OSThread::currentThread;
         if(thread) {
