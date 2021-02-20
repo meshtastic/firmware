@@ -37,7 +37,7 @@ int32_t RangeTestPlugin::runOnce()
 
     //radioConfig.preferences.range_test_plugin_enabled = 1;
     //radioConfig.preferences.range_test_plugin_sender = 45;
-    // radioConfig.preferences.range_test_plugin_save = 1;
+    //radioConfig.preferences.range_test_plugin_save = 1;
 
     // Fixed position is useful when testing indoors.
     // radioConfig.preferences.fixed_position = 1;
