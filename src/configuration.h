@@ -355,9 +355,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define VEXT_ENABLE 21 // active low, powers the oled display and the lora antenna boost
 #define LED_PIN 25     // If defined we will blink this LED
 #define BUTTON_PIN                                                                                                               \
-    34 // If defined, this will be used for user button presses, if your board doesn't have a physical switch, you can wire one
+    12 // If defined, this will be used for user button presses, if your board doesn't have a physical switch, you can wire one
        // between this pin and ground
-#define BUTTON_NEED_PULLUP
+
+/* Don't enable the internal pull up on the TLORA_V2_1_16. GPIO 12 is connected to a bidirectional
+   diode. If someone needs to use a button, they should connect an external pull up that's stronger
+   than what's built into the esp32
+*/ 
+// #define BUTTON_NEED_PULLUP
 
 #define USE_RF95
 #define LORA_DIO0 26 // a No connect on the SX1262 module
