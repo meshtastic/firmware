@@ -14,7 +14,9 @@ You probably don't care about this section - skip to the next one.
 * enable remote setttings access by moving settings operations into a regular plugin (move settings ops out of PhoneAPI)
 * DONE move portnum up?
 * DONE remove region specific builds from the firmware
+* restrict settings operations to the admin channel
 * add gui in android app for setting region
+* "FIXME - move the radioconfig/user/channel READ operations into SettingsMessage as well"
 * scrub protobufs to make sure they are absoloute minimum wiresize (in particular packets, ChannelSets and positions)
 * send a hint that can be used to select which channel to try and hash against with each message
 * change syncword

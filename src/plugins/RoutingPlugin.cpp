@@ -1,7 +1,6 @@
 #include "RoutingPlugin.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "RTC.h"
 #include "Router.h"
 #include "configuration.h"
 #include "main.h"
@@ -53,7 +52,7 @@ void RoutingPlugin::sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom)
 }
 
 RoutingPlugin::RoutingPlugin()
-    : ProtobufPlugin("routing", PortNum_ROUTING_APP, User_fields)
+    : ProtobufPlugin("routing", PortNum_ROUTING_APP, Routing_fields)
 {
     isPromiscuous = true;
 }

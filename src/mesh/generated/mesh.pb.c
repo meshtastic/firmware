@@ -51,6 +51,9 @@ PB_BIND(FromRadio, FromRadio, 2)
 PB_BIND(ToRadio, ToRadio, 2)
 
 
+PB_BIND(AdminMessage, AdminMessage, 2)
+
+
 
 
 
