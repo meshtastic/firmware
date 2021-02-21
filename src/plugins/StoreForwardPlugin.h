@@ -22,6 +22,7 @@ class StoreForwardPlugin : private concurrency::OSThread
      @return 0 if we have never seen that node before otherwise return the last time we saw the node.
      */
     uint32_t sawNode(uint32_t);
+    void sawNodeReport();
 
   private:
   // Nothing here

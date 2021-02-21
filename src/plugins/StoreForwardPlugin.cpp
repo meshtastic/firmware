@@ -4,6 +4,7 @@
 #include "RTC.h"
 #include "Router.h"
 #include "configuration.h"
+#include "mesh-pb-constants.h"
 #include <Arduino.h>
 #include <map>
 
@@ -22,8 +23,8 @@ int32_t StoreForwardPlugin::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    // radioConfig.preferences.store_forward_plugin_enabled = 1;
-    // radioConfig.preferences.is_router = 1;
+    radioConfig.preferences.store_forward_plugin_enabled = 1;
+    radioConfig.preferences.is_router = 1;
 
     if (radioConfig.preferences.store_forward_plugin_enabled) {
 
@@ -41,6 +42,8 @@ int32_t StoreForwardPlugin::runOnce()
                         storeForwardPluginRadio = new StoreForwardPluginRadio();
 
                         firstTime = 0;
+
+                        return (10 * 1000);
 
                     } else {
                         DEBUG_MSG("Device has less than 1M of PSRAM free. Aborting startup.\n");
@@ -69,6 +72,8 @@ int32_t StoreForwardPlugin::runOnce()
             // What do we do if it's not our first time?
 
             // Maybe some cleanup functions?
+            this->sawNodeReport();
+            return (10 * 1000);
         }
 
     } else {
@@ -94,12 +99,12 @@ uint32_t StoreForwardPlugin::sawNode(uint32_t node)
     TODO: Implment this as a std::map for quicker lookups (maybe it doesn't matter?).
     */
 
-    DEBUG_MSG("looking for node - %i\n", node);
+    DEBUG_MSG("looking for node - %u\n", node);
     for (int i = 0; i < 50; i++) {
-        DEBUG_MSG("Iterating through the seen nodes - %d %d %d\n", i, receivedRecord[i][0], receivedRecord[i][1]);
+        //DEBUG_MSG("Iterating through the seen nodes - %u %u %u\n", i, receivedRecord[i][0], receivedRecord[i][1]);
         // First time seeing that node.
         if (receivedRecord[i][0] == 0) {
-            DEBUG_MSG("New node! Woohoo! Win!\n");
+            //DEBUG_MSG("New node! Woohoo! Win!\n");
             receivedRecord[i][0] = node;
             receivedRecord[i][1] = millis();
 
@@ -108,7 +113,7 @@ uint32_t StoreForwardPlugin::sawNode(uint32_t node)
 
         // We've seen this node before.
         if (receivedRecord[i][0] == node) {
-            DEBUG_MSG("We've seen this node before\n");
+            //DEBUG_MSG("We've seen this node before\n");
             uint32_t lastSaw = receivedRecord[i][1];
             receivedRecord[i][1] = millis();
             return lastSaw;
@@ -116,6 +121,27 @@ uint32_t StoreForwardPlugin::sawNode(uint32_t node)
     }
 
     return 0;
+}
+
+// We saw a node.
+void StoreForwardPlugin::sawNodeReport()
+{
+
+    /*
+    TODO: Move receivedRecord into the PSRAM
+
+    TODO: Gracefully handle the case where we run out of records.
+            Maybe replace the oldest record that hasn't been seen in a while and assume they won't be back.
+
+    TODO: Implment this as a std::map for quicker lookups (maybe it doesn't matter?).
+    */
+
+    DEBUG_MSG("Iterating through the seen nodes ...\n");
+    for (int i = 0; i < 50; i++) {
+        if (receivedRecord[i][1]) {
+            DEBUG_MSG("... record-%u node-%u secAgo-%u\n", i, receivedRecord[i][0], (millis() - receivedRecord[i][1]) / 1000);
+        }
+    }
 }
 
 MeshPacket *StoreForwardPluginRadio::allocReply()
@@ -139,14 +165,51 @@ bool StoreForwardPluginRadio::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
     if (radioConfig.preferences.store_forward_plugin_enabled) {
-        // auto &p = mp.decoded.data;
+        auto &p = mp;
 
         if (mp.from != nodeDB.getNodeNum()) {
-            DEBUG_MSG("Store & Forward Plugin -- Print Start ---------- ---------- ---------- ---------- ----------\n\n\n");
-            printPacket("----- PACKET FROM RADIO", &mp);
-            // DEBUG_MSG("\n\nStore & Forward Plugin -- Print End ---------- ---------- ---------- ---------- ----------\n");
+            // DEBUG_MSG("Store & Forward Plugin -- Print Start ---------- ---------- ---------- ---------- ----------\n\n\n");
+            printPacket("----- PACKET FROM RADIO -----", &mp);
             uint32_t sawTime = storeForwardPlugin->sawNode(mp.from);
-            DEBUG_MSG("Last Saw this node %d, %d millis ago\n", mp.from, (millis() - sawTime));
+            DEBUG_MSG("We last saw this node (%u), %u sec ago\n", mp.from, (millis() - sawTime) / 1000);
+
+            if (mp.decoded.data.portnum == PortNum_UNKNOWN_APP) {
+                DEBUG_MSG("Packet came from - PortNum_UNKNOWN_APP\n");
+            } else if (mp.decoded.data.portnum == PortNum_TEXT_MESSAGE_APP) {
+                DEBUG_MSG("Packet came from - PortNum_TEXT_MESSAGE_APP\n");
+            } else if (mp.decoded.data.portnum == PortNum_REMOTE_HARDWARE_APP) {
+                DEBUG_MSG("Packet came from - PortNum_REMOTE_HARDWARE_APP\n");
+            } else if (mp.decoded.data.portnum == PortNum_POSITION_APP) {
+                DEBUG_MSG("Packet came from - PortNum_POSITION_APP\n");
+            } else if (mp.decoded.data.portnum == PortNum_NODEINFO_APP) {
+                DEBUG_MSG("Packet came from - PortNum_NODEINFO_APP\n");
+            } else if (mp.decoded.data.portnum == PortNum_REPLY_APP) {
+                DEBUG_MSG("Packet came from - PortNum_REPLY_APP\n");
+            } else if (mp.decoded.data.portnum == PortNum_IP_TUNNEL_APP) {
+                DEBUG_MSG("Packet came from - PortNum_IP_TUNNEL_APP\n");
+            } else if (mp.decoded.data.portnum == PortNum_SERIAL_APP) {
+                DEBUG_MSG("Packet came from - PortNum_SERIAL_APP\n");
+            } else if (mp.decoded.data.portnum == PortNum_STORE_FORWARD_APP) {
+                DEBUG_MSG("Packet came from - PortNum_STORE_FORWARD_APP\n");
+            } else if (mp.decoded.data.portnum == PortNum_RANGE_TEST_APP) {
+                DEBUG_MSG("Packet came from - PortNum_RANGE_TEST_APP\n");
+            } else if (mp.decoded.data.portnum == PortNum_PRIVATE_APP) {
+                DEBUG_MSG("Packet came from - PortNum_PRIVATE_APP\n");
+            } else if (mp.decoded.data.portnum == PortNum_RANGE_TEST_APP) {
+                DEBUG_MSG("Packet came from - PortNum_RANGE_TEST_APP\n");
+            } else if (mp.decoded.data.portnum == PortNum_ATAK_FORWARDER) {
+                DEBUG_MSG("Packet came from - PortNum_ATAK_FORWARDER\n");
+            } else {
+                DEBUG_MSG("Packet came from an unknown port %u\n", mp.decoded.data.portnum);
+            }
+
+            static uint8_t bytes[MAX_RHPACKETLEN]; 
+            size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), SubPacket_fields, &p.decoded);
+            assert(numbytes <= MAX_RHPACKETLEN);
+
+            DEBUG_MSG("MP numbytes %u\n", numbytes);
+
+            // Serialization is in Router.cpp line 180
         }
 
     } else {
