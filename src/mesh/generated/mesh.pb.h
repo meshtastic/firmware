@@ -281,6 +281,15 @@ typedef struct _Routing {
     uint32_t original_id;
 } Routing;
 
+typedef struct _AdminMessage {
+    pb_size_t which_variant;
+    union {
+        RadioConfig set_radio;
+        User set_owner;
+        Channel set_channel;
+    };
+} AdminMessage;
+
 typedef struct _FromRadio {
     uint32_t num;
     pb_size_t which_payloadVariant;
@@ -301,9 +310,6 @@ typedef struct _ToRadio {
     union {
         MeshPacket packet;
         uint32_t want_config_id;
-        RadioConfig set_radio;
-        User set_owner;
-        Channel set_channel;
     };
 } ToRadio;
 
@@ -374,6 +380,7 @@ extern "C" {
 #define LogRecord_init_default                   {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_default                   {0, 0, {MyNodeInfo_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
+#define AdminMessage_init_default                {0, {RadioConfig_init_default}}
 #define Position_init_zero                       {0, 0, 0, 0, 0}
 #define User_init_zero                           {"", "", "", {0}}
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
@@ -389,6 +396,7 @@ extern "C" {
 #define LogRecord_init_zero                      {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_zero                      {0, 0, {MyNodeInfo_init_zero}}
 #define ToRadio_init_zero                        {0, {MeshPacket_init_zero}}
+#define AdminMessage_init_zero                   {0, {RadioConfig_init_zero}}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define ChannelSettings_tx_power_tag             1
@@ -501,6 +509,9 @@ extern "C" {
 #define Routing_success_id_tag                   4
 #define Routing_fail_id_tag                      5
 #define Routing_original_id_tag                  6
+#define AdminMessage_set_radio_tag               1
+#define AdminMessage_set_owner_tag               2
+#define AdminMessage_set_channel_tag             3
 #define FromRadio_num_tag                        1
 #define FromRadio_my_info_tag                    3
 #define FromRadio_node_info_tag                  4
@@ -512,9 +523,6 @@ extern "C" {
 #define FromRadio_packet_tag                     11
 #define ToRadio_packet_tag                       2
 #define ToRadio_want_config_id_tag               100
-#define ToRadio_set_radio_tag                    101
-#define ToRadio_set_owner_tag                    102
-#define ToRadio_set_channel_tag                  104
 
 /* Struct field encoding specification for nanopb */
 #define Position_FIELDLIST(X, a) \
@@ -707,16 +715,20 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,packet,packet),  11)
 
 #define ToRadio_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,packet,packet),   2) \
-X(a, STATIC,   ONEOF,    UINT32,   (payloadVariant,want_config_id,want_config_id), 100) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,set_radio,set_radio), 101) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,set_owner,set_owner), 102) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,set_channel,set_channel), 104)
+X(a, STATIC,   ONEOF,    UINT32,   (payloadVariant,want_config_id,want_config_id), 100)
 #define ToRadio_CALLBACK NULL
 #define ToRadio_DEFAULT NULL
 #define ToRadio_payloadVariant_packet_MSGTYPE MeshPacket
-#define ToRadio_payloadVariant_set_radio_MSGTYPE RadioConfig
-#define ToRadio_payloadVariant_set_owner_MSGTYPE User
-#define ToRadio_payloadVariant_set_channel_MSGTYPE Channel
+
+#define AdminMessage_FIELDLIST(X, a) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_radio,set_radio),   1) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_owner,set_owner),   2) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_channel,set_channel),   3)
+#define AdminMessage_CALLBACK NULL
+#define AdminMessage_DEFAULT NULL
+#define AdminMessage_variant_set_radio_MSGTYPE RadioConfig
+#define AdminMessage_variant_set_owner_MSGTYPE User
+#define AdminMessage_variant_set_channel_MSGTYPE Channel
 
 extern const pb_msgdesc_t Position_msg;
 extern const pb_msgdesc_t User_msg;
@@ -733,6 +745,7 @@ extern const pb_msgdesc_t MyNodeInfo_msg;
 extern const pb_msgdesc_t LogRecord_msg;
 extern const pb_msgdesc_t FromRadio_msg;
 extern const pb_msgdesc_t ToRadio_msg;
+extern const pb_msgdesc_t AdminMessage_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define Position_fields &Position_msg
@@ -750,6 +763,7 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define LogRecord_fields &LogRecord_msg
 #define FromRadio_fields &FromRadio_msg
 #define ToRadio_fields &ToRadio_msg
+#define AdminMessage_fields &AdminMessage_msg
 
 /* Maximum encoded size of messages (where known) */
 #define Position_size                            37
@@ -766,7 +780,8 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define MyNodeInfo_size                          89
 #define LogRecord_size                           81
 #define FromRadio_size                           317
-#define ToRadio_size                             312
+#define ToRadio_size                             305
+#define AdminMessage_size                        311
 
 #ifdef __cplusplus
 } /* extern "C" */
