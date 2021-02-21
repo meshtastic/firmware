@@ -17,6 +17,7 @@ uint32_t sensor_read_error_count = 0;
 
 #define DHT_11_GPIO_PIN 13
 //TODO: Make a related radioconfig preference to allow less-frequent reads
+#define ENVIRONMENTAL_MEASUREMENT_APP_ENABLED false // DISABLED by default; set this to true if you want to use the plugin
 #define DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS 1000
 #define SENSOR_READ_ERROR_COUNT_THRESHOLD 5
 #define SENSOR_READ_MULTIPLIER 3
@@ -27,6 +28,10 @@ DHT dht(DHT_11_GPIO_PIN,DHT11);
 
 int32_t EnvironmentalMeasurementPlugin::runOnce() {
 #ifndef NO_ESP32
+    if (!ENVIRONMENTAL_MEASUREMENT_APP_ENABLED){
+        // If this plugin is not enabled, don't waste any OSThread time on it
+        return (INT32_MAX);
+    }
     if (firstTime) {
         // This is the first time the OSThread library has called this function, so do some setup
         DEBUG_MSG("EnvironmentalMeasurement: Initializing as sender\n");
@@ -67,6 +72,10 @@ int32_t EnvironmentalMeasurementPlugin::runOnce() {
 
 bool EnvironmentalMeasurementPluginRadio::handleReceivedProtobuf(const MeshPacket &mp, const EnvironmentalMeasurement &p)
 {
+    if (!ENVIRONMENTAL_MEASUREMENT_APP_ENABLED){
+        // If this plugin is not enabled, don't handle the packet, and allow other plugins to consume 
+         return false;
+    }
     bool wasBroadcast = mp.to == NODENUM_BROADCAST;
     String sender;
     
