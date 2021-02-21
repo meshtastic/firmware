@@ -76,3 +76,17 @@ void setReplyTo(MeshPacket *p, const MeshPacket &to) {
     p->to = to.from;
     p->want_ack = to.want_ack;
 }
+
+std::vector<MeshPlugin *> MeshPlugin::GetMeshPluginsWithUIFrames() {
+
+    std::vector<MeshPlugin *> pluginsWithUIFrames;    
+    for (auto i = plugins->begin(); i != plugins->end(); ++i) {
+        auto &pi = **i;
+        if ( pi.wantUIFrame()) {
+            DEBUG_MSG("Plugin wants a UI Frame\n");
+            pluginsWithUIFrames.push_back(&pi);
+        }
+    }
+    return pluginsWithUIFrames;
+    
+}

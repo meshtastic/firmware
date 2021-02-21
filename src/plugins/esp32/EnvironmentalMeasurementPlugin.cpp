@@ -7,6 +7,8 @@
 #include "main.h"
 #include "../mesh/generated/environmental_measurement.pb.h"
 #include <DHT.h>
+#include <OLEDDisplay.h>
+#include <OLEDDisplayUi.h>
 
 EnvironmentalMeasurementPlugin *environmentalMeasurementPlugin;
 EnvironmentalMeasurementPluginRadio *environmentalMeasurementPluginRadio;
@@ -17,7 +19,7 @@ uint32_t sensor_read_error_count = 0;
 
 #define DHT_11_GPIO_PIN 13
 //TODO: Make a related radioconfig preference to allow less-frequent reads
-#define ENVIRONMENTAL_MEASUREMENT_APP_ENABLED false // DISABLED by default; set this to true if you want to use the plugin
+#define ENVIRONMENTAL_MEASUREMENT_APP_ENABLED true // DISABLED by default; set this to true if you want to use the plugin
 #define DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS 1000
 #define SENSOR_READ_ERROR_COUNT_THRESHOLD 5
 #define SENSOR_READ_MULTIPLIER 3
@@ -25,6 +27,24 @@ uint32_t sensor_read_error_count = 0;
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
 DHT dht(DHT_11_GPIO_PIN,DHT11);
+
+
+#ifdef HAS_EINK
+// The screen is bigger so use bigger fonts
+#define FONT_SMALL ArialMT_Plain_16
+#define FONT_MEDIUM ArialMT_Plain_24
+#define FONT_LARGE ArialMT_Plain_24
+#else
+#define FONT_SMALL ArialMT_Plain_10
+#define FONT_MEDIUM ArialMT_Plain_16
+#define FONT_LARGE ArialMT_Plain_24
+#endif
+
+#define fontHeight(font) ((font)[1] + 1) // height is position 1
+
+#define FONT_HEIGHT_SMALL fontHeight(FONT_SMALL)
+#define FONT_HEIGHT_MEDIUM fontHeight(FONT_MEDIUM)
+
 
 int32_t EnvironmentalMeasurementPlugin::runOnce() {
 #ifndef NO_ESP32
@@ -70,6 +90,28 @@ int32_t EnvironmentalMeasurementPlugin::runOnce() {
 #endif
 }
 
+void EnvironmentalMeasurementPluginRadio::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_MEDIUM);
+    display->drawString(x, y, "Environment");
+    display->setFont(FONT_SMALL);
+    display->drawString(x, y += fontHeight(FONT_MEDIUM), lastSender+": T:"+ String(lastMeasurement.temperature,2) + " H:" + String(lastMeasurement.relative_humidity,2));
+
+}
+
+String GetSenderName(const MeshPacket &mp) {
+    String sender;
+
+    if (nodeDB.getNode(mp.from)){
+        sender = nodeDB.getNode(mp.from)->user.short_name;
+    }
+    else {
+        sender = "UNK";
+    }
+    return sender;
+}
+
 bool EnvironmentalMeasurementPluginRadio::handleReceivedProtobuf(const MeshPacket &mp, const EnvironmentalMeasurement &p)
 {
     if (!ENVIRONMENTAL_MEASUREMENT_APP_ENABLED){
@@ -77,26 +119,24 @@ bool EnvironmentalMeasurementPluginRadio::handleReceivedProtobuf(const MeshPacke
          return false;
     }
     bool wasBroadcast = mp.to == NODENUM_BROADCAST;
-    String sender;
+
+    String sender = GetSenderName(mp);
     
-    if (nodeDB.getNode(mp.from)){
-        sender = nodeDB.getNode(mp.from)->user.short_name;
-    }
-    else {
-        sender = "UNK";
-    }
     // Show new nodes on LCD screen
     if (DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN && wasBroadcast) {
-        String lcd = String("Env Measured: ") + sender + "\n" +
+        String lcd = String("Env Measured: ") +sender + "\n" +
             "T: " + p.temperature + "\n" +
             "H: " + p.relative_humidity + "\n";
         screen->print(lcd.c_str());
     }
     DEBUG_MSG("-----------------------------------------\n");
 
-    DEBUG_MSG("EnvironmentalMeasurement: Received data from %s\n",sender);
+    DEBUG_MSG("EnvironmentalMeasurement: Received data from %s\n", sender);
     DEBUG_MSG("EnvironmentalMeasurement->relative_humidity: %f\n", p.relative_humidity);
     DEBUG_MSG("EnvironmentalMeasurement->temperature: %f\n", p.temperature);
+
+    lastMeasurement = p;
+    lastSender = sender;
     return false; // Let others look at this message also if they want
 }
 

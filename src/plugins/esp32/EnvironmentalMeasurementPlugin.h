@@ -1,6 +1,8 @@
 #pragma once
 #include "ProtobufPlugin.h"
 #include "../mesh/generated/environmental_measurement.pb.h"
+#include <OLEDDisplay.h>
+#include <OLEDDisplayUi.h>
 
 
 class EnvironmentalMeasurementPlugin : private concurrency::OSThread
@@ -31,6 +33,8 @@ class EnvironmentalMeasurementPluginRadio : public ProtobufPlugin<EnvironmentalM
      * Send our EnvironmentalMeasurement into the mesh
      */
     bool sendOurEnvironmentalMeasurement(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
+    
+    virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
   protected:
     
@@ -39,6 +43,17 @@ class EnvironmentalMeasurementPluginRadio : public ProtobufPlugin<EnvironmentalM
     @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
     virtual bool handleReceivedProtobuf(const MeshPacket &mp, const EnvironmentalMeasurement &p);
+
+    virtual bool wantUIFrame() {
+      return true;
+    }
+
+
+  private:
+  
+    EnvironmentalMeasurement lastMeasurement;
+
+    String lastSender;
 
 };
 
