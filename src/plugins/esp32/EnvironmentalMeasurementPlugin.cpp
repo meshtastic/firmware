@@ -28,7 +28,7 @@ int32_t EnvironmentalMeasurementPlugin::runOnce() {
 #ifndef NO_ESP32
     if (firstTime) {
         // This is the first time the OSThread library has called this function, so do some setup
-        DEBUG_MSG("Initializing Environmental Measurement Plugin -- Sender\n");
+        DEBUG_MSG("EnvironmentalMeasurement: Initializing as sender\n");
         environmentalMeasurementPluginRadio = new EnvironmentalMeasurementPluginRadio();
         firstTime = 0;
         // begin reading measurements from the sensor
@@ -45,11 +45,11 @@ int32_t EnvironmentalMeasurementPlugin::runOnce() {
         // so just do what we intend to do on the interval
         if(sensor_read_error_count > SENSOR_READ_ERROR_COUNT_THRESHOLD)
         {
-            DEBUG_MSG("Environmental Measurement Plugin: DISABLED; The SENSOR_READ_ERROR_COUNT_THRESHOLD has been exceed: %d\n",SENSOR_READ_ERROR_COUNT_THRESHOLD);
-            return(DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);  
+            DEBUG_MSG("EEnvironmentalMeasurement: DISABLED; The SENSOR_READ_ERROR_COUNT_THRESHOLD has been exceed: %d\n",SENSOR_READ_ERROR_COUNT_THRESHOLD);
+            return(FAILED_STATE_SENSOR_READ_MULTIPLIER * DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);  
         }
         else if (sensor_read_error_count > 0){
-            DEBUG_MSG("Environmental Measurement Plugin: There have been %d sensor read failures.\n",sensor_read_error_count);
+            DEBUG_MSG("EnvironmentalMeasurement: There have been %d sensor read failures.\n",sensor_read_error_count);
         }
         if (! environmentalMeasurementPluginRadio->sendOurEnvironmentalMeasurement() ){
             // if we failed to read the sensor, then try again 
@@ -80,13 +80,13 @@ bool EnvironmentalMeasurementPluginRadio::sendOurEnvironmentalMeasurement(NodeNu
 
     DEBUG_MSG("-----------------------------------------\n");
 
-    DEBUG_MSG("Environmental Measurement Plugin: Read data\n");
+    DEBUG_MSG("EnvironmentalMeasurement: Read data\n");
     DEBUG_MSG("EnvironmentalMeasurement->relative_humidity: %f\n", m.relative_humidity);
     DEBUG_MSG("EnvironmentalMeasurement->temperature: %f\n", m.temperature);
 
     if (isnan(m.relative_humidity) || isnan(m.temperature) ){
         sensor_read_error_count++;
-        DEBUG_MSG("Environmental Measurement Plugin: FAILED TO READ DATA\n");
+        DEBUG_MSG("EnvironmentalMeasurement: FAILED TO READ DATA\n");
         return false;
     }
 
