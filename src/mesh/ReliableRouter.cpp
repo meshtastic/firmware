@@ -53,7 +53,7 @@ bool ReliableRouter::shouldFilterReceived(const MeshPacket *p)
  *
  * Otherwise, let superclass handle it.
  */
-void ReliableRouter::sniffReceived(const MeshPacket *p, const Routing &c)
+void ReliableRouter::sniffReceived(const MeshPacket *p, const Routing *c)
 {
     NodeNum ourNode = getNodeNum();
 
@@ -64,18 +64,19 @@ void ReliableRouter::sniffReceived(const MeshPacket *p, const Routing &c)
         }
 
         // If the payload is valid, look for ack/nak
+        if (c) {
+            PacketId ackId = c->success_id;
+            PacketId nakId = c->fail_id;
 
-        PacketId ackId = c.success_id;
-        PacketId nakId = c.fail_id;
-
-        // We intentionally don't check wasSeenRecently, because it is harmless to delete non existent retransmission records
-        if (ackId || nakId) {
-            if (ackId) {
-                DEBUG_MSG("Received a ack=%d, stopping retransmissions\n", ackId);
-                stopRetransmission(p->to, ackId);
-            } else {
-                DEBUG_MSG("Received a nak=%d, stopping retransmissions\n", nakId);
-                stopRetransmission(p->to, nakId);
+            // We intentionally don't check wasSeenRecently, because it is harmless to delete non existent retransmission records
+            if (ackId || nakId) {
+                if (ackId) {
+                    DEBUG_MSG("Received a ack=%d, stopping retransmissions\n", ackId);
+                    stopRetransmission(p->to, ackId);
+                } else {
+                    DEBUG_MSG("Received a nak=%d, stopping retransmissions\n", nakId);
+                    stopRetransmission(p->to, nakId);
+                }
             }
         }
     }

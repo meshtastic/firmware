@@ -194,7 +194,7 @@ bool Router::cancelSending(NodeNum from, PacketId id) {
  * Every (non duplicate) packet this node receives will be passed through this method.  This allows subclasses to
  * update routing tables etc... based on what we overhear (even for messages not destined to our node)
  */
-void Router::sniffReceived(const MeshPacket *p, const Routing &c)
+void Router::sniffReceived(const MeshPacket *p, const Routing *c)
 {
     DEBUG_MSG("FIXME-update-db Sniffing packet\n");
     // FIXME, update nodedb here for any packet that passes through us
@@ -247,11 +247,6 @@ void Router::handleReceived(MeshPacket *p)
         // call any promiscious plugins here, make a (non promisiocous) plugin for forwarding messages to phone api 
         // sniffReceived(p);
         MeshPlugin::callPlugins(*p);
-
-        if (p->to == NODENUM_BROADCAST || p->to == getNodeNum()) {
-            printPacket("Delivering rx packet", p);
-            meshservice.handleFromRadio(p);
-        }
     }
 }
 

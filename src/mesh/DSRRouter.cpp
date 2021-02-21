@@ -62,7 +62,7 @@ ErrorCode DSRRouter::send(MeshPacket *p)
         return ReliableRouter::send(p);
 }
 
-void DSRRouter::sniffReceived(const MeshPacket *p, const Routing &c)
+void DSRRouter::sniffReceived(const MeshPacket *p, const Routing *c)
 {
     // Learn 0 hop routes by just hearing any adjacent nodes
     // But treat broadcasts carefully, because when flood broadcasts go out they keep the same original "from".  So we want to
@@ -72,47 +72,49 @@ void DSRRouter::sniffReceived(const MeshPacket *p, const Routing &c)
         addRoute(p->from, p->from, 0); // We are adjacent with zero hops
     }
 
-    switch (c.which_variant) {
-    case Routing_route_request_tag:
-        // Handle route discovery packets (will be a broadcast message)
-        // FIXME - always start request with the senders nodenum
-        if (weAreInRoute(c.route_request)) {
-            DEBUG_MSG("Ignoring a route request that contains us\n");
-        } else {
-            updateRoutes(c.route_request,
-                         true); // Update our routing tables based on the route that came in so far on this request
-
-            if (p->decoded.dest == getNodeNum()) {
-                // They were looking for us, send back a route reply (the sender address will be first in the list)
-                sendRouteReply(c.route_request);
+    if (c)
+        switch (c->which_variant) {
+        case Routing_route_request_tag:
+            // Handle route discovery packets (will be a broadcast message)
+            // FIXME - always start request with the senders nodenum
+            if (weAreInRoute(c->route_request)) {
+                DEBUG_MSG("Ignoring a route request that contains us\n");
             } else {
-                // They were looking for someone else, forward it along (as a zero hop broadcast)
-                NodeNum nextHop = getNextHop(p->decoded.dest);
-                if (nextHop) {
-                    // in our route cache, reply to the requester (the sender address will be first in the list)
-                    sendRouteReply(c.route_request, nextHop);
+                updateRoutes(c->route_request,
+                             true); // Update our routing tables based on the route that came in so far on this request
+
+                if (p->decoded.dest == getNodeNum()) {
+                    // They were looking for us, send back a route reply (the sender address will be first in the list)
+                    sendRouteReply(c->route_request);
                 } else {
-                    // Not in our route cache, rebroadcast on their behalf (after adding ourselves to the request route)
-                    resendRouteRequest(p);
+                    // They were looking for someone else, forward it along (as a zero hop broadcast)
+                    NodeNum nextHop = getNextHop(p->decoded.dest);
+                    if (nextHop) {
+                        // in our route cache, reply to the requester (the sender address will be first in the list)
+                        sendRouteReply(c->route_request, nextHop);
+                    } else {
+                        // Not in our route cache, rebroadcast on their behalf (after adding ourselves to the request route)
+                        resendRouteRequest(p);
+                    }
                 }
             }
+            break;
+        case Routing_route_reply_tag:
+            updateRoutes(c->route_reply, false);
+
+            // FIXME, if any of our current pending packets were waiting for this route, send them (and leave them as regular
+            // pending packets until ack arrives)
+            // FIXME, if we don't get a route reply at all (or a route error), timeout and generate a routeerror TIMEOUT on our
+            // own...
+            break;
+        case Routing_error_reason_tag:
+            removeRoute(p->decoded.dest);
+
+            // FIXME: if any pending packets were waiting on this route, delete them
+            break;
+        default:
+            break;
         }
-        break;
-    case Routing_route_reply_tag:
-        updateRoutes(c.route_reply, false);
-
-        // FIXME, if any of our current pending packets were waiting for this route, send them (and leave them as regular pending
-        // packets until ack arrives)
-        // FIXME, if we don't get a route reply at all (or a route error), timeout and generate a routeerror TIMEOUT on our own...
-        break;
-    case Routing_error_reason_tag:
-        removeRoute(p->decoded.dest);
-
-        // FIXME: if any pending packets were waiting on this route, delete them
-        break;
-    default:
-        break;
-    }
 
     // We simply ignore ACKs - because ReliableRouter will delete the pending packet for us
 
@@ -137,15 +139,18 @@ void DSRRouter::sniffReceived(const MeshPacket *p, const Routing &c)
             // FIXME, stop local processing of this packet
         }
 
-        // handle naks - convert them to route error packets
-        // All naks are generated locally, because we failed resending the packet too many times
-        PacketId nakId = c.fail_id;
-        if (nakId) {
-            auto pending = findPendingPacket(p->to, nakId);
-            if (pending && pending->packet->decoded.source) { // if source not set, this was not a multihop packet, just ignore
-                removeRoute(pending->packet->decoded.dest);   // We no longer have a route to the specified node
+        if (c) {
+            // handle naks - convert them to route error packets
+            // All naks are generated locally, because we failed resending the packet too many times
+            PacketId nakId = c->fail_id;
+            if (nakId) {
+                auto pending = findPendingPacket(p->to, nakId);
+                if (pending &&
+                    pending->packet->decoded.source) {          // if source not set, this was not a multihop packet, just ignore
+                    removeRoute(pending->packet->decoded.dest); // We no longer have a route to the specified node
 
-                sendRouteError(p, Routing_Error_GOT_NAK);
+                    sendRouteError(p, Routing_Error_GOT_NAK);
+                }
             }
         }
     }
