@@ -8,7 +8,7 @@ class DSRRouter : public ReliableRouter
      * Every (non duplicate) packet this node receives will be passed through this method.  This allows subclasses to
      * update routing tables etc... based on what we overhear (even for messages not destined to our node)
      */
-    virtual void sniffReceived(const MeshPacket *p, const Routing &c);
+    virtual void sniffReceived(const MeshPacket *p, const Routing *c);
 
     /**
      * Send a packet on a suitable interface.  This routine will

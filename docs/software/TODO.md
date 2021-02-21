@@ -4,14 +4,14 @@ You probably don't care about this section - skip to the next one.
 
 1.2 cleanup & multichannel support:
 
-* call RouterPlugin for *all* packets - not just Router packets
-* clear priority before sending (to keep wire size small)
+* DONE call RouterPlugin for *all* packets - not just Router packets
 * generate channel hash from the name of the channel+the psk (not just one or the other)
 * DONE remove deprecated
 * DONE fix setchannel in phoneapi.cpp
 * DONE set mynodeinfo.max_channels
 * DONE set mynodeinfo.num_bands (formerly num_channels)
-* fix sniffing of non Routing packets
+* DONE fix sniffing of non Routing packets
+* enable remote setttings access by moving settings operations into a regular plugin (move settings ops out of PhoneAPI)
 * DONE move portnum up?
 * DONE remove region specific builds from the firmware
 * add gui in android app for setting region
@@ -22,6 +22,9 @@ You probably don't care about this section - skip to the next one.
 * DONE move most parts of meshpacket into the Data packet, so that we can chain multiple Data for sending when they all have a common destination and key.
 * when selecting a MeshPacket for transmit, scan the TX queue for any Data packets we can merge together as a WirePayload.  In the low level send/rx code expand that into multiple MeshPackets as needed (thus 'hiding' from MeshPacket that over the wire we send multiple datapackets
 * confirm we are still calling the plugins for messages inbound from the phone (or generated locally)
+* confirm we are still multi hop routing flood broadcasts
+* confirm we are still doing resends on unicast reliable packets
+* add support for full DSR unicast delivery
 * DONE move acks into routing
 * DONE make all subpackets different versions of data
 * DONE move routing control into a data packet
@@ -31,6 +34,7 @@ You probably don't care about this section - skip to the next one.
 * add multichannel support in python
 * add channel selection for sending
 * record recevied channel in meshpacket
+* test remote settings operations (confirm it works 3 hops away)
 * add channel restrictions for plugins (and restrict routing plugin to the "control" channel)
 * make a primaryChannel global and properly maintain it when the phone sends setChannel
 * move setCrypto call into packet send and packet decode code

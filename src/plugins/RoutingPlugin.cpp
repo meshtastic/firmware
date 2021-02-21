@@ -8,9 +8,16 @@
 
 RoutingPlugin *routingPlugin;
 
-bool RoutingPlugin::handleReceivedProtobuf(const MeshPacket &mp, const Routing *p)
+bool RoutingPlugin::handleReceivedProtobuf(const MeshPacket &mp, const Routing *r)
 {
-    assert(0);
+    router->sniffReceived(&mp, r);
+
+    // FIXME - move this to a non promsicious PhoneAPI plugin?
+    if (mp.to == NODENUM_BROADCAST || mp.to == nodeDB.getNodeNum()) {
+        printPacket("Delivering rx packet", &mp);
+        service.handleFromRadio(&mp);
+    }
+        
     return false; // Let others look at this message also if they want
 }
 
