@@ -20,7 +20,6 @@ void setupPlugins()
     nodeInfoPlugin = new NodeInfoPlugin();
     positionPlugin = new PositionPlugin();
     textMessagePlugin = new TextMessagePlugin();
-    environmentalMeasurementPlugin = new EnvironmentalMeasurementPlugin();
 
     // Note: if the rest of meshtastic doesn't need to explicitly use your plugin, you do not need to assign the instance
     // to a global variable.
@@ -42,5 +41,6 @@ void setupPlugins()
 
     new RangeTestPlugin();
     // new StoreForwardPlugin();
+    new EnvironmentalMeasurementPlugin();
 #endif
 }
