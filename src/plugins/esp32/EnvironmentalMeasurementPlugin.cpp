@@ -20,7 +20,8 @@ uint32_t sensor_read_error_count = 0;
 #define DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS 1000
 #define SENSOR_READ_ERROR_COUNT_THRESHOLD 5
 #define SENSOR_READ_MULTIPLIER 3
-
+#define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
+#define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
 DHT dht(DHT_11_GPIO_PIN,DHT11);
 
@@ -66,7 +67,27 @@ int32_t EnvironmentalMeasurementPlugin::runOnce() {
 
 bool EnvironmentalMeasurementPluginRadio::handleReceivedProtobuf(const MeshPacket &mp, const EnvironmentalMeasurement &p)
 {
-    // This plugin doesn't really do anything with the messages it receives.
+    bool wasBroadcast = mp.to == NODENUM_BROADCAST;
+    String sender;
+    
+    if (nodeDB.getNode(mp.from)){
+        sender = nodeDB.getNode(mp.from)->user.short_name;
+    }
+    else {
+        sender = "UNK";
+    }
+    // Show new nodes on LCD screen
+    if (DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN && wasBroadcast) {
+        String lcd = String("Env Measured: ") + sender + "\n" +
+            "T: " + p.temperature + "\n" +
+            "H: " + p.relative_humidity + "\n";
+        screen->print(lcd.c_str());
+    }
+    DEBUG_MSG("-----------------------------------------\n");
+
+    DEBUG_MSG("EnvironmentalMeasurement: Received data from %s\n",sender);
+    DEBUG_MSG("EnvironmentalMeasurement->relative_humidity: %f\n", p.relative_humidity);
+    DEBUG_MSG("EnvironmentalMeasurement->temperature: %f\n", p.temperature);
     return false; // Let others look at this message also if they want
 }
 
