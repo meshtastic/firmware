@@ -71,7 +71,7 @@ int32_t EnvironmentalMeasurementPlugin::runOnce() {
         // so just do what we intend to do on the interval
         if(sensor_read_error_count > SENSOR_READ_ERROR_COUNT_THRESHOLD)
         {
-            DEBUG_MSG("EEnvironmentalMeasurement: DISABLED; The SENSOR_READ_ERROR_COUNT_THRESHOLD has been exceed: %d\n",SENSOR_READ_ERROR_COUNT_THRESHOLD);
+            DEBUG_MSG("EnvironmentalMeasurement: DISABLED; The SENSOR_READ_ERROR_COUNT_THRESHOLD has been exceed: %d\n",SENSOR_READ_ERROR_COUNT_THRESHOLD);
             return(FAILED_STATE_SENSOR_READ_MULTIPLIER * DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);  
         }
         else if (sensor_read_error_count > 0){
