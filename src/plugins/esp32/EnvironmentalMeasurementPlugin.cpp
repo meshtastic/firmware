@@ -74,19 +74,17 @@ bool EnvironmentalMeasurementPluginRadio::sendOurEnvironmentalMeasurement(NodeNu
 {
     EnvironmentalMeasurement m;
 
-    m.barometric_pressure=0;
-    float t = dht.readTemperature();
-    float h = dht.readHumidity();
-    m.relative_humidity= 0;
-    m.temperature=0;
+    m.barometric_pressure = 0; // TODO: Add support for barometric sensors
+    m.relative_humidity = dht.readHumidity();
+    m.temperature = dht.readTemperature();;
 
     DEBUG_MSG("-----------------------------------------\n");
 
     DEBUG_MSG("Environmental Measurement Plugin: Read data\n");
-    DEBUG_MSG("EnvironmentalMeasurement->relative_humidity: %f\n",h);
-    DEBUG_MSG("EnvironmentalMeasurement->temperature: %f\n",t);
+    DEBUG_MSG("EnvironmentalMeasurement->relative_humidity: %f\n", m.relative_humidity);
+    DEBUG_MSG("EnvironmentalMeasurement->temperature: %f\n", m.temperature);
 
-    if (isnan(h) || isnan(t) ){
+    if (isnan(m.relative_humidity) || isnan(m.temperature) ){
         sensor_read_error_count++;
         DEBUG_MSG("Environmental Measurement Plugin: FAILED TO READ DATA\n");
         return false;
