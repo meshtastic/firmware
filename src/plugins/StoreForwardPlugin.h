@@ -6,6 +6,12 @@
 #include <Arduino.h>
 #include <functional>
 
+struct PacketHistoryStruct {
+    uint32_t time;
+    uint32_t to;
+    uint8_t bytes[MAX_RHPACKETLEN];
+};
+
 class StoreForwardPlugin : private concurrency::OSThread
 {
     bool firstTime = 1;
@@ -23,9 +29,10 @@ class StoreForwardPlugin : private concurrency::OSThread
      */
     uint32_t sawNode(uint32_t);
     void sawNodeReport();
+    void addHistory(const MeshPacket &mp)
 
   private:
-  // Nothing here
+    // Nothing here
 
   protected:
     virtual int32_t runOnce();
