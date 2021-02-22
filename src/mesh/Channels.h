@@ -3,41 +3,57 @@
 #include "mesh-pb-constants.h"
 #include <Arduino.h>
 
+typedef uint8_t ChannelIndex;
+typedef uint8_t ChannelHash;
+
+/** The container/on device API for working with channels */
 class Channels
 {
-    size_t primaryIndex = 0;
-    
+    /// The index of the primary channel
+    ChannelIndex primaryIndex = 0;
+
+    /** The channel index that was requested for sending/receving.  Note: if this channel is a secondary
+    channel and does not have a PSK, we will use the PSK from the primary channel.  If this channel is disabled
+    no sending or receiving will be allowed */
+    ChannelIndex activeChannelIndex = 0; 
+
+    /// The in-use psk - which has been constructed based on the (possibly short psk) in channelSettings
+    uint8_t activePSK[32];
+    uint8_t activePSKSize = 0;
+
   public:
-    const ChannelSettings &getPrimary() { return getChannel(getPrimaryIndex()).settings; }
+    const ChannelSettings &getPrimary() { return getByIndex(getPrimaryIndex()).settings; }
 
-    Channel &getChannel(size_t chIndex);
+    /** Return the Channel for a specified index */
+    Channel &getByIndex(ChannelIndex chIndex);
 
-    /** Using the index inside the channel, update the specified channel's settings and role.  If this channel is being promoted to be
-     * primary, force all other channels to be secondary.
+    /** Using the index inside the channel, update the specified channel's settings and role.  If this channel is being promoted
+     * to be primary, force all other channels to be secondary.
      */
     void setChannel(const Channel &c);
 
     const char *getName(size_t chIndex);
 
     /** The index of the primary channel */
-    size_t getPrimaryIndex() const { return primaryIndex; }
+    ChannelIndex getPrimaryIndex() const { return primaryIndex; }
 
     /**
- * Generate a short suffix used to disambiguate channels that might have the same "name" entered by the human but different PSKs.
- * The ideas is that the PSK changing should be visible to the user so that they see they probably messed up and that's why they
-their nodes
- * aren't talking to each other.
- *
- * This string is of the form "#name-X".
- *
- * Where X is either:
- * (for custom PSKS) a letter from A to Z (base26), and formed by xoring all the bytes of the PSK together,
- * OR (for the standard minimially secure PSKs) a number from 0 to 9.
- *
- * This function will also need to be implemented in GUI apps that talk to the radio.
- *
- * https://github.com/meshtastic/Meshtastic-device/issues/269
- */
+     * Generate a short suffix used to disambiguate channels that might have the same "name" entered by the human but different
+    PSKs.
+     * The ideas is that the PSK changing should be visible to the user so that they see they probably messed up and that's why
+    they their nodes
+     * aren't talking to each other.
+     *
+     * This string is of the form "#name-X".
+     *
+     * Where X is either:
+     * (for custom PSKS) a letter from A to Z (base26), and formed by xoring all the bytes of the PSK together,
+     * OR (for the standard minimially secure PSKs) a number from 0 to 9.
+     *
+     * This function will also need to be implemented in GUI apps that talk to the radio.
+     *
+     * https://github.com/meshtastic/Meshtastic-device/issues/269
+    */
     const char *getPrimaryName();
 
     /// Called by NodeDB on initial boot when the radio config settings are unset.  Set a default single channel config.
@@ -47,33 +63,43 @@ their nodes
     void onConfigChanged();
 
     /** Given a channel hash setup crypto for decoding that channel (or the primary channel if that channel is unsecured)
-     * 
+     *
      * This method is called before decoding inbound packets
-     * 
+     *
      * @return false if no suitable channel could be found.
      */
-    bool setCryptoByHash(uint8_t channelHash);
+    bool setActiveByHash(ChannelHash channelHash);
 
     /** Given a channel index setup crypto for encoding that channel (or the primary channel if that channel is unsecured)
-     * 
+     *
      * This method is called before encoding inbound packets
-     * 
+     *
      * @eturn the (0 to 255) hash for that channel - if no suitable channel could be found, return -1
      */
-    int16_t setCryptoByIndex(uint8_t channelIndex);
+    int16_t setActiveByIndex(ChannelIndex channelIndex);
 
-private:
+  private:
     /** Given a channel index, change to use the crypto key specified by that index
      */
-    void setCrypto(size_t chIndex);
+    void setCrypto(ChannelIndex chIndex);
 
     /** Return the channel index for the specified channel hash, or -1 for not found */
-    int8_t getChannelIndexByHash(uint8_t channelHash);
+    int8_t getIndexByHash(ChannelHash channelHash);
 
-    /** Given a channel number, return the (0 to 255) hash for that channel 
+    /** Given a channel number, return the (0 to 255) hash for that channel
      * If no suitable channel could be found, return -1
-    */
-    int16_t getChannelHash(size_t channelNum);    
+     */
+    int16_t getHash(ChannelIndex channelNum);
+
+    /**
+     * Validate a channel, fixing any errors as needed
+     */
+    Channel &fixupChannel(ChannelIndex chIndex);
+
+    /**
+     * Write a default channel to the specified channel index
+     */
+    void initDefaultChannel(ChannelIndex chIndex);
 };
 
 /// Singleton channel table
