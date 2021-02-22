@@ -10,6 +10,7 @@
 #include <assert.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
+#include "Channels.h"
 
 #define RDEF(name, freq, spacing, num_ch, power_limit)                                                                           \
     {                                                                                                                            \
@@ -157,7 +158,7 @@ void printPacket(const char *prefix, const MeshPacket *p)
 
 RadioInterface::RadioInterface()
 {
-    assert(sizeof(PacketHeader) == 4 || sizeof(PacketHeader) == 16); // make sure the compiler did what we expected
+    assert(sizeof(PacketHeader) == 16); // make sure the compiler did what we expected
 
     // Can't print strings this early - serial not setup yet
     // DEBUG_MSG("Set meshradio defaults name=%s\n", channelSettings.name);
@@ -350,6 +351,7 @@ size_t RadioInterface::beginSending(MeshPacket *p)
     h->from = p->from;
     h->to = p->to;
     h->id = p->id;
+    h->channel = p->channel;
     assert(p->hop_limit <= HOP_MAX);
     h->flags = p->hop_limit | (p->want_ack ? PACKET_FLAGS_WANT_ACK_MASK : 0);
 
