@@ -305,12 +305,15 @@ void setup()
 
 #ifdef BUTTON_PIN
 #ifndef NO_ESP32
-    // If BUTTON_PIN is held down during the startup process,
-    //   force the device to go into a SoftAP mode.
     bool forceSoftAP = 0;
+
+    // If the button is connected to GPIO 12, don't enable the ability to use
+    // meshtasticAdmin on the device.
     pinMode(BUTTON_PIN, INPUT);
+
 #ifdef BUTTON_NEED_PULLUP
     gpio_pullup_en((gpio_num_t)BUTTON_PIN);
+    delay(10);
 #endif
 
     // BUTTON_PIN is pulled high by a 12k resistor.
