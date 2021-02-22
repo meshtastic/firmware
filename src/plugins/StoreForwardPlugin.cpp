@@ -8,6 +8,8 @@
 #include <Arduino.h>
 #include <map>
 
+#define STOREFORWARD_MAX_PACKETS 6000
+
 StoreForwardPlugin *storeForwardPlugin;
 StoreForwardPluginRadio *storeForwardPluginRadio;
 
@@ -37,16 +39,37 @@ int32_t StoreForwardPlugin::runOnce()
                 DEBUG_MSG("Initializing Store & Forward Plugin - Enabled\n");
                 // Router
                 if (ESP.getPsramSize()) {
-                    if (ESP.getFreePsram() >= 1024 * 1024) {
+                    if (ESP.getFreePsram() >= 2048 * 1024) {
                         // Do the startup here
                         storeForwardPluginRadio = new StoreForwardPluginRadio();
 
                         firstTime = 0;
 
+                        /*
+                        For PSRAM usage, see:
+                            https://learn.upesy.com/en/programmation/psram.html#psram-tab
+                        */
+
+                        DEBUG_MSG("Total heap: %d\n", ESP.getHeapSize());
+                        DEBUG_MSG("Free heap: %d\n", ESP.getFreeHeap());
+                        DEBUG_MSG("Total PSRAM: %d\n", ESP.getPsramSize());
+                        DEBUG_MSG("Free PSRAM: %d\n", ESP.getFreePsram());
+
+                        PacketHistoryStruct *packetHistory =
+                            (PacketHistoryStruct *)ps_calloc(STOREFORWARD_MAX_PACKETS, sizeof(PacketHistoryStruct));
+
+                        DEBUG_MSG("Total heap: %d\n", ESP.getHeapSize());
+                        DEBUG_MSG("Free heap: %d\n", ESP.getFreeHeap());
+                        DEBUG_MSG("Total PSRAM: %d\n", ESP.getPsramSize());
+                        DEBUG_MSG("Free PSRAM: %d\n", ESP.getFreePsram());
+
+                        DEBUG_MSG("packetHistory Size - %u", sizeof(packetHistory));
+
+                        // packetHistory[0].bytes;
                         return (10 * 1000);
 
                     } else {
-                        DEBUG_MSG("Device has less than 1M of PSRAM free. Aborting startup.\n");
+                        DEBUG_MSG("Device has less than 2M of PSRAM free. Aborting startup.\n");
                         DEBUG_MSG("Store & Forward Plugin - Aborting Startup.\n");
 
                         return (INT32_MAX);
@@ -101,10 +124,10 @@ uint32_t StoreForwardPlugin::sawNode(uint32_t node)
 
     DEBUG_MSG("looking for node - %u\n", node);
     for (int i = 0; i < 50; i++) {
-        //DEBUG_MSG("Iterating through the seen nodes - %u %u %u\n", i, receivedRecord[i][0], receivedRecord[i][1]);
+        // DEBUG_MSG("Iterating through the seen nodes - %u %u %u\n", i, receivedRecord[i][0], receivedRecord[i][1]);
         // First time seeing that node.
         if (receivedRecord[i][0] == 0) {
-            //DEBUG_MSG("New node! Woohoo! Win!\n");
+            // DEBUG_MSG("New node! Woohoo! Win!\n");
             receivedRecord[i][0] = node;
             receivedRecord[i][1] = millis();
 
@@ -113,7 +136,7 @@ uint32_t StoreForwardPlugin::sawNode(uint32_t node)
 
         // We've seen this node before.
         if (receivedRecord[i][0] == node) {
-            //DEBUG_MSG("We've seen this node before\n");
+            // DEBUG_MSG("We've seen this node before\n");
             uint32_t lastSaw = receivedRecord[i][1];
             receivedRecord[i][1] = millis();
             return lastSaw;
@@ -121,6 +144,24 @@ uint32_t StoreForwardPlugin::sawNode(uint32_t node)
     }
 
     return 0;
+}
+
+void StoreForwardPlugin::addHistory(const MeshPacket &mp)
+{
+    auto &p = mp;
+
+    static uint8_t bytes[MAX_RHPACKETLEN];
+    size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), SubPacket_fields, &p.decoded);
+    assert(numbytes <= MAX_RHPACKETLEN);
+
+    DEBUG_MSG("MP numbytes %u\n", numbytes);
+
+    // destination, source, bytes
+    // memcpy(p->encrypted.bytes, bytes, numbytes);
+
+    // pb_decode_from_bytes
+
+    // Serialization is in Router.cpp line 180
 }
 
 // We saw a node.
@@ -165,7 +206,6 @@ bool StoreForwardPluginRadio::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
     if (radioConfig.preferences.store_forward_plugin_enabled) {
-        auto &p = mp;
 
         if (mp.from != nodeDB.getNodeNum()) {
             // DEBUG_MSG("Store & Forward Plugin -- Print Start ---------- ---------- ---------- ---------- ----------\n\n\n");
@@ -177,6 +217,9 @@ bool StoreForwardPluginRadio::handleReceived(const MeshPacket &mp)
                 DEBUG_MSG("Packet came from - PortNum_UNKNOWN_APP\n");
             } else if (mp.decoded.data.portnum == PortNum_TEXT_MESSAGE_APP) {
                 DEBUG_MSG("Packet came from - PortNum_TEXT_MESSAGE_APP\n");
+
+                storeForwardPlugin->addHistory(&mp);
+
             } else if (mp.decoded.data.portnum == PortNum_REMOTE_HARDWARE_APP) {
                 DEBUG_MSG("Packet came from - PortNum_REMOTE_HARDWARE_APP\n");
             } else if (mp.decoded.data.portnum == PortNum_POSITION_APP) {
@@ -202,14 +245,6 @@ bool StoreForwardPluginRadio::handleReceived(const MeshPacket &mp)
             } else {
                 DEBUG_MSG("Packet came from an unknown port %u\n", mp.decoded.data.portnum);
             }
-
-            static uint8_t bytes[MAX_RHPACKETLEN]; 
-            size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), SubPacket_fields, &p.decoded);
-            assert(numbytes <= MAX_RHPACKETLEN);
-
-            DEBUG_MSG("MP numbytes %u\n", numbytes);
-
-            // Serialization is in Router.cpp line 180
         }
 
     } else {
