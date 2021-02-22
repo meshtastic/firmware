@@ -80,7 +80,9 @@ typedef enum _Routing_Error {
     Routing_Error_GOT_NAK = 2,
     Routing_Error_TIMEOUT = 3,
     Routing_Error_NO_INTERFACE = 4,
-    Routing_Error_MAX_RETRANSMIT = 5
+    Routing_Error_MAX_RETRANSMIT = 5,
+    Routing_Error_NO_CHANNEL = 6,
+    Routing_Error_TOO_LARGE = 7
 } Routing_Error;
 
 typedef enum _MeshPacket_Priority {
@@ -240,7 +242,7 @@ typedef PB_BYTES_ARRAY_T(256) MeshPacket_encrypted_t;
 typedef struct _MeshPacket {
     uint32_t from;
     uint32_t to;
-    uint8_t channel_index;
+    uint32_t channel;
     pb_size_t which_payloadVariant;
     union {
         Data decoded;
@@ -340,8 +342,8 @@ typedef struct _ToRadio {
 #define _CriticalErrorCode_ARRAYSIZE ((CriticalErrorCode)(CriticalErrorCode_TransmitFailed+1))
 
 #define _Routing_Error_MIN Routing_Error_NONE
-#define _Routing_Error_MAX Routing_Error_MAX_RETRANSMIT
-#define _Routing_Error_ARRAYSIZE ((Routing_Error)(Routing_Error_MAX_RETRANSMIT+1))
+#define _Routing_Error_MAX Routing_Error_TOO_LARGE
+#define _Routing_Error_ARRAYSIZE ((Routing_Error)(Routing_Error_TOO_LARGE+1))
 
 #define _MeshPacket_Priority_MIN MeshPacket_Priority_UNSET
 #define _MeshPacket_Priority_MAX MeshPacket_Priority_MAX
@@ -488,7 +490,7 @@ extern "C" {
 #define Channel_role_tag                         3
 #define MeshPacket_from_tag                      1
 #define MeshPacket_to_tag                        2
-#define MeshPacket_channel_index_tag             3
+#define MeshPacket_channel_tag                   3
 #define MeshPacket_decoded_tag                   4
 #define MeshPacket_encrypted_tag                 5
 #define MeshPacket_id_tag                        6
@@ -571,7 +573,7 @@ X(a, STATIC,   SINGULAR, FIXED32,  source,            5)
 #define MeshPacket_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, FIXED32,  from,              1) \
 X(a, STATIC,   SINGULAR, FIXED32,  to,                2) \
-X(a, STATIC,   SINGULAR, UINT32,   channel_index,     3) \
+X(a, STATIC,   SINGULAR, UINT32,   channel,           3) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,decoded,decoded),   4) \
 X(a, STATIC,   ONEOF,    BYTES,    (payloadVariant,encrypted,encrypted),   5) \
 X(a, STATIC,   SINGULAR, FIXED32,  id,                6) \
@@ -771,7 +773,7 @@ extern const pb_msgdesc_t AdminMessage_msg;
 #define RouteDiscovery_size                      40
 #define Routing_size                             47
 #define Data_size                                255
-#define MeshPacket_size                          294
+#define MeshPacket_size                          297
 #define ChannelSettings_size                     87
 #define Channel_size                             94
 #define RadioConfig_size                         308
@@ -780,7 +782,7 @@ extern const pb_msgdesc_t AdminMessage_msg;
 #define MyNodeInfo_size                          89
 #define LogRecord_size                           81
 #define FromRadio_size                           317
-#define ToRadio_size                             297
+#define ToRadio_size                             300
 #define AdminMessage_size                        311
 
 #ifdef __cplusplus

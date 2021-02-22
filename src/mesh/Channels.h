@@ -3,7 +3,13 @@
 #include "mesh-pb-constants.h"
 #include <Arduino.h>
 
+/** A channel number (index into the channel table)
+ */
 typedef uint8_t ChannelIndex;
+
+/** A low quality hash of the channel PSK and the channel name.  created by generateHash(chIndex) 
+ * Used as a hint to limit which PSKs are considered for packet decoding.
+*/
 typedef uint8_t ChannelHash;
 
 /** The container/on device API for working with channels */
@@ -20,6 +26,9 @@ class Channels
     /// The in-use psk - which has been constructed based on the (possibly short psk) in channelSettings
     uint8_t activePSK[32];
     uint8_t activePSKSize = 0;
+
+    /// the precomputed hashes for each of our channels
+    ChannelHash hashes[MAX_NUM_CHANNELS];
 
   public:
     const ChannelSettings &getPrimary() { return getByIndex(getPrimaryIndex()).settings; }
@@ -66,17 +75,20 @@ class Channels
      *
      * This method is called before decoding inbound packets
      *
-     * @return false if no suitable channel could be found.
+     * @return -1 if no suitable channel could be found, otherwise returns the channel index
      */
-    bool setActiveByHash(ChannelHash channelHash);
+    int16_t setActiveByHash(ChannelHash channelHash);
 
     /** Given a channel index setup crypto for encoding that channel (or the primary channel if that channel is unsecured)
      *
-     * This method is called before encoding inbound packets
+     * This method is called before encoding outbound packets
      *
      * @eturn the (0 to 255) hash for that channel - if no suitable channel could be found, return -1
      */
     int16_t setActiveByIndex(ChannelIndex channelIndex);
+
+    /** return the channel hash we are currently using for sending */
+    ChannelHash getActiveHash();
 
   private:
     /** Given a channel index, change to use the crypto key specified by that index
@@ -89,7 +101,7 @@ class Channels
     /** Given a channel number, return the (0 to 255) hash for that channel
      * If no suitable channel could be found, return -1
      */
-    int16_t getHash(ChannelIndex channelNum);
+    ChannelHash generateHash(ChannelIndex channelNum);
 
     /**
      * Validate a channel, fixing any errors as needed

@@ -10,12 +10,20 @@ static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0
 
 Channels channels;
 
+uint8_t xorHash(uint8_t *p, size_t len)
+{
+    uint8_t code = 0;
+    for (int i = 0; i < len; i++)
+        code ^= p[i];
+    return code;
+}
+
 /**
  * Validate a channel, fixing any errors as needed
  */
 Channel &Channels::fixupChannel(ChannelIndex chIndex)
 {
-    auto ch = getByIndex(chIndex);
+    Channel &ch = getByIndex(chIndex);
 
     ch.index = chIndex; // Preinit the index so it be ready to share with the phone (we'll never change it later)
 
@@ -31,13 +39,15 @@ Channel &Channels::fixupChannel(ChannelIndex chIndex)
         if (strcmp(channelSettings.name, "Default") == 0)
             *channelSettings.name = '\0';
 
-        // Convert any old usage of the defaultpsk into our new short representation.
+        /* Convert any old usage of the defaultpsk into our new short representation.
         if (channelSettings.psk.size == sizeof(defaultpsk) &&
             memcmp(channelSettings.psk.bytes, defaultpsk, sizeof(defaultpsk)) == 0) {
             *channelSettings.psk.bytes = 1;
             channelSettings.psk.size = 1;
-        }
+        } */
     }
+
+    hashes[chIndex] = generateHash(chIndex);
 
     return ch;
 }
@@ -47,7 +57,7 @@ Channel &Channels::fixupChannel(ChannelIndex chIndex)
  */
 void Channels::initDefaultChannel(ChannelIndex chIndex)
 {
-    auto ch = getByIndex(chIndex);
+    Channel &ch = getByIndex(chIndex);
     ChannelSettings &channelSettings = ch.settings;
 
     // radioConfig.modem_config = RadioConfig_ModemConfig_Bw125Cr45Sf128;  // medium range and fast
@@ -69,7 +79,7 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
  */
 void Channels::setCrypto(ChannelIndex chIndex)
 {
-    auto ch = getByIndex(chIndex);
+    Channel &ch = getByIndex(chIndex);
     ChannelSettings &channelSettings = ch.settings;
     assert(ch.has_settings);
 
@@ -124,7 +134,7 @@ void Channels::onConfigChanged()
 {
     // Make sure the phone hasn't mucked anything up
     for (int i = 0; i < devicestate.channels_count; i++) {
-        auto ch = fixupChannel(i);
+        Channel &ch = fixupChannel(i);
 
         if (ch.role == Channel_Role_PRIMARY)
             primaryIndex = i;
@@ -211,9 +221,7 @@ const char *Channels::getPrimaryName()
     auto channelSettings = getPrimary();
     if (channelSettings.psk.size != 1) {
         // We have a standard PSK, so generate a letter based hash.
-        uint8_t code = 0;
-        for (int i = 0; i < activePSKSize; i++)
-            code ^= activePSK[i];
+        uint8_t code = xorHash(activePSK, activePSKSize);
 
         suffix = 'A' + (code % 26);
     } else {
@@ -223,3 +231,24 @@ const char *Channels::getPrimaryName()
     snprintf(buf, sizeof(buf), "#%s-%c", channelSettings.name, suffix);
     return buf;
 }
+
+/** Given a channel hash setup crypto for decoding that channel (or the primary channel if that channel is unsecured)
+ *
+ * This method is called before decoding inbound packets
+ *
+ * @return -1 if no suitable channel could be found, otherwise returns the channel index
+ */
+int16_t Channels::setActiveByHash(ChannelHash channelHash) {}
+
+/** Given a channel index setup crypto for encoding that channel (or the primary channel if that channel is unsecured)
+ *
+ * This method is called before encoding outbound packets
+ *
+ * @eturn the (0 to 255) hash for that channel - if no suitable channel could be found, return -1
+ */
+int16_t Channels::setActiveByIndex(ChannelIndex channelIndex) {}
+
+/** Given a channel number, return the (0 to 255) hash for that channel
+ * If no suitable channel could be found, return -1
+ */
+ChannelHash Channels::generateHash(ChannelIndex channelNum) {}

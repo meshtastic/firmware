@@ -123,6 +123,9 @@ class Router : protected concurrency::OSThread
      * Note: this method will free the provided packet.
      */
     void handleReceived(MeshPacket *p);
+
+    /** Frees the provided packet, and generates a NAK indicating the speicifed error while sending */
+    void abortSendAndNak(Routing_Error err, MeshPacket *p);
 };
 
 extern Router *router;
