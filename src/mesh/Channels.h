@@ -45,6 +45,35 @@ their nodes
 
     /// called when the user has just changed our radio config and we might need to change channel keys
     void onConfigChanged();
+
+    /** Given a channel hash setup crypto for decoding that channel (or the primary channel if that channel is unsecured)
+     * 
+     * This method is called before decoding inbound packets
+     * 
+     * @return false if no suitable channel could be found.
+     */
+    bool setCryptoByHash(uint8_t channelHash);
+
+    /** Given a channel index setup crypto for encoding that channel (or the primary channel if that channel is unsecured)
+     * 
+     * This method is called before encoding inbound packets
+     * 
+     * @eturn the (0 to 255) hash for that channel - if no suitable channel could be found, return -1
+     */
+    int16_t setCryptoByIndex(uint8_t channelIndex);
+
+private:
+    /** Given a channel index, change to use the crypto key specified by that index
+     */
+    void setCrypto(size_t chIndex);
+
+    /** Return the channel index for the specified channel hash, or -1 for not found */
+    int8_t getChannelIndexByHash(uint8_t channelHash);
+
+    /** Given a channel number, return the (0 to 255) hash for that channel 
+     * If no suitable channel could be found, return -1
+    */
+    int16_t getChannelHash(size_t channelNum);    
 };
 
 /// Singleton channel table

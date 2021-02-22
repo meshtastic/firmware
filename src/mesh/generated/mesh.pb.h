@@ -119,20 +119,20 @@ typedef enum _LogRecord_Level {
 /* Struct definitions */
 typedef PB_BYTES_ARRAY_T(32) ChannelSettings_psk_t;
 typedef struct _ChannelSettings {
-    int32_t tx_power;
+    int8_t tx_power;
     ChannelSettings_ModemConfig modem_config;
     ChannelSettings_psk_t psk;
     char name[12];
-    uint32_t bandwidth;
+    uint16_t bandwidth;
     uint32_t spread_factor;
-    uint32_t coding_rate;
-    uint32_t channel_num;
+    uint8_t coding_rate;
+    uint8_t channel_num;
     uint32_t id;
     bool uplink_enabled;
     bool downlink_enabled;
 } ChannelSettings;
 
-typedef PB_BYTES_ARRAY_T(240) Data_payload_t;
+typedef PB_BYTES_ARRAY_T(237) Data_payload_t;
 typedef struct _Data {
     PortNum portnum;
     Data_payload_t payload;
@@ -230,7 +230,7 @@ typedef struct _User {
 } User;
 
 typedef struct _Channel {
-    uint32_t index;
+    uint8_t index;
     bool has_settings;
     ChannelSettings settings;
     Channel_Role role;
@@ -240,7 +240,7 @@ typedef PB_BYTES_ARRAY_T(256) MeshPacket_encrypted_t;
 typedef struct _MeshPacket {
     uint32_t from;
     uint32_t to;
-    uint32_t channel_index;
+    uint8_t channel_index;
     pb_size_t which_payloadVariant;
     union {
         Data decoded;
@@ -249,7 +249,7 @@ typedef struct _MeshPacket {
     uint32_t id;
     uint32_t rx_time;
     float rx_snr;
-    uint32_t hop_limit;
+    uint8_t hop_limit;
     bool want_ack;
     MeshPacket_Priority priority;
 } MeshPacket;
@@ -770,17 +770,17 @@ extern const pb_msgdesc_t AdminMessage_msg;
 #define User_size                                72
 #define RouteDiscovery_size                      40
 #define Routing_size                             47
-#define Data_size                                258
-#define MeshPacket_size                          302
-#define ChannelSettings_size                     95
-#define Channel_size                             105
+#define Data_size                                255
+#define MeshPacket_size                          294
+#define ChannelSettings_size                     87
+#define Channel_size                             94
 #define RadioConfig_size                         308
 #define RadioConfig_UserPreferences_size         305
 #define NodeInfo_size                            130
 #define MyNodeInfo_size                          89
 #define LogRecord_size                           81
 #define FromRadio_size                           317
-#define ToRadio_size                             305
+#define ToRadio_size                             297
 #define AdminMessage_size                        311
 
 #ifdef __cplusplus

@@ -24,13 +24,14 @@ typedef enum _PortNum {
     PortNum_STORE_FORWARD_APP = 65,
     PortNum_RANGE_TEST_APP = 66,
     PortNum_PRIVATE_APP = 256,
-    PortNum_ATAK_FORWARDER = 257
+    PortNum_ATAK_FORWARDER = 257,
+    PortNum_MAX = 511
 } PortNum;
 
 /* Helper constants for enums */
 #define _PortNum_MIN PortNum_UNKNOWN_APP
-#define _PortNum_MAX PortNum_ATAK_FORWARDER
-#define _PortNum_ARRAYSIZE ((PortNum)(PortNum_ATAK_FORWARDER+1))
+#define _PortNum_MAX PortNum_MAX
+#define _PortNum_ARRAYSIZE ((PortNum)(PortNum_MAX+1))
 
 
 #ifdef __cplusplus
