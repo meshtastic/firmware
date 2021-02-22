@@ -1,9 +1,13 @@
 #include "plugins/ExternalNotificationPlugin.h"
 #include "plugins/NodeInfoPlugin.h"
 #include "plugins/PositionPlugin.h"
-#include "plugins/RangeTestPlugin.h"
 #include "plugins/RemoteHardwarePlugin.h"
 #include "plugins/ReplyPlugin.h"
+#include "plugins/TextMessagePlugin.h" 
+#ifndef NO_ESP32
+#include "plugins/esp32/EnvironmentalMeasurementPlugin.h"
+#include "plugins/esp32/RangeTestPlugin.h"
+#endif
 #include "plugins/SerialPlugin.h"
 #include "plugins/StoreForwardPlugin.h"
 #include "plugins/TextMessagePlugin.h"
@@ -35,7 +39,12 @@ void setupPlugins()
     */
     new SerialPlugin();
     new ExternalNotificationPlugin();
-    //storeForwardPlugin = new StoreForwardPlugin();
-    rangeTestPlugin = new RangeTestPlugin();
+
+    // rangeTestPlugin = new RangeTestPlugin();
+    storeForwardPlugin = new StoreForwardPlugin();
+
+    new RangeTestPlugin();
+    // new StoreForwardPlugin();
+    new EnvironmentalMeasurementPlugin();
 #endif
 }

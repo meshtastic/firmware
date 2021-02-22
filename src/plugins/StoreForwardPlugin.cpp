@@ -5,31 +5,16 @@
 #include "Router.h"
 #include "configuration.h"
 #include <Arduino.h>
-
-#include <assert.h>
-
-#define STORE_RECORDS  5000
-#define BYTES_PER_RECORDS  512
- 
-struct sfRecord
-{
-    uint8_t bytes[BYTES_PER_RECORDS];
-    uint32_t timestamp; // Time the packet was received
-};
-
-struct sfRecord records[STORE_RECORDS];
-
-#define STOREFORWARDPLUGIN_ENABLED 0
+#include <map>
 
 StoreForwardPlugin *storeForwardPlugin;
 StoreForwardPluginRadio *storeForwardPluginRadio;
- 
-StoreForwardPlugin::StoreForwardPlugin() : concurrency::OSThread("SerialPlugin") {}
 
-// char serialStringChar[Constants_DATA_PAYLOAD_LEN];
+StoreForwardPlugin::StoreForwardPlugin() : concurrency::OSThread("StoreForwardPlugin") {}
 
 int32_t StoreForwardPlugin::runOnce()
 {
+
 #ifndef NO_ESP32
 
     /*
@@ -37,21 +22,25 @@ int32_t StoreForwardPlugin::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-   //radioConfig.preferences.store_forward_plugin_enabled = 1;
-   //radioConfig.preferences.store_forward_plugin_records = 80;
+    // radioConfig.preferences.store_forward_plugin_enabled = 1;
+    // radioConfig.preferences.is_router = 1;
 
     if (radioConfig.preferences.store_forward_plugin_enabled) {
 
         if (firstTime) {
 
-            // Interface with the serial peripheral from in here.
-            DEBUG_MSG("Initializing Store & Forward Plugin\n");
+            /*
+             */
 
-            // Router
             if (radioConfig.preferences.is_router) {
+                DEBUG_MSG("Initializing Store & Forward Plugin - Enabled\n");
+                // Router
                 if (ESP.getPsramSize()) {
-                    if (ESP.getFreePsram() <= 1024 * 1024) {
+                    if (ESP.getFreePsram() >= 1024 * 1024) {
                         // Do the startup here
+                        storeForwardPluginRadio = new StoreForwardPluginRadio();
+
+                        firstTime = 0;
 
                     } else {
                         DEBUG_MSG("Device has less than 1M of PSRAM free. Aborting startup.\n");
@@ -67,20 +56,21 @@ int32_t StoreForwardPlugin::runOnce()
                     return (INT32_MAX);
                 }
 
-            // Non-Router
             } else {
+                DEBUG_MSG("Initializing Store & Forward Plugin - Enabled but is_router is not turned on.\n");
+                DEBUG_MSG(
+                    "Initializing Store & Forward Plugin - If you want to use this plugin, you must also turn on is_router.\n");
+                // Non-Router
 
+                return (30 * 1000);
             }
 
-            storeForwardPluginRadio = new StoreForwardPluginRadio();
-
-            firstTime = 0;
-
         } else {
-            // TBD
+            // What do we do if it's not our first time?
+
+            // Maybe some cleanup functions?
         }
 
-        return (10);
     } else {
         DEBUG_MSG("Store & Forward Plugin - Disabled\n");
 
@@ -88,6 +78,44 @@ int32_t StoreForwardPlugin::runOnce()
     }
 
 #endif
+    return (INT32_MAX);
+}
+
+// We saw a node.
+uint32_t StoreForwardPlugin::sawNode(uint32_t node)
+{
+
+    /*
+    TODO: Move receivedRecord into the PSRAM
+
+    TODO: Gracefully handle the case where we run out of records.
+            Maybe replace the oldest record that hasn't been seen in a while and assume they won't be back.
+
+    TODO: Implment this as a std::map for quicker lookups (maybe it doesn't matter?).
+    */
+
+    DEBUG_MSG("looking for node - %i\n", node);
+    for (int i = 0; i < 50; i++) {
+        DEBUG_MSG("Iterating through the seen nodes - %d %d %d\n", i, receivedRecord[i][0], receivedRecord[i][1]);
+        // First time seeing that node.
+        if (receivedRecord[i][0] == 0) {
+            DEBUG_MSG("New node! Woohoo! Win!\n");
+            receivedRecord[i][0] = node;
+            receivedRecord[i][1] = millis();
+
+            return receivedRecord[i][1];
+        }
+
+        // We've seen this node before.
+        if (receivedRecord[i][0] == node) {
+            DEBUG_MSG("We've seen this node before\n");
+            uint32_t lastSaw = receivedRecord[i][1];
+            receivedRecord[i][1] = millis();
+            return lastSaw;
+        }
+    }
+
+    return 0;
 }
 
 MeshPacket *StoreForwardPluginRadio::allocReply()
@@ -104,50 +132,25 @@ void StoreForwardPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
     p->to = dest;
     p->decoded.want_response = wantReplies;
 
-    //p->want_ack = SERIALPLUGIN_ACK;
-
-    // p->decoded.data.payload.size = strlen(serialStringChar); // You must specify how many bytes are in the reply
-    // memcpy(p->decoded.data.payload.bytes, serialStringChar, p->decoded.data.payload.size);
-
     service.sendToMesh(p);
 }
 
 bool StoreForwardPluginRadio::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
+    if (radioConfig.preferences.store_forward_plugin_enabled) {
+        // auto &p = mp.decoded.data;
 
-    if (STOREFORWARDPLUGIN_ENABLED) {
-
-        auto &p = mp.decoded;
-        // DEBUG_MSG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s\n",
-        //          nodeDB.getNodeNum(), mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
-
-        if (mp.from == nodeDB.getNodeNum()) {
-
-            /*
-             * If radioConfig.preferences.serialplugin_echo is true, then echo the packets that are sent out back to the TX
-             * of the serial interface.
-             */
-            if (radioConfig.preferences.serialplugin_echo) {
-
-                // For some reason, we get the packet back twice when we send out of the radio.
-                //   TODO: need to find out why.
-                if (lastRxID != mp.id) {
-                    lastRxID = mp.id;
-                    // DEBUG_MSG("* * Message came this device\n");
-                    // Serial2.println("* * Message came this device");
-                    Serial2.printf("%s", p.payload.bytes);
-                }
-            }
-
-        } else {
-            // DEBUG_MSG("* * Message came from the mesh\n");
-            // Serial2.println("* * Message came from the mesh");
-            Serial2.printf("%s", p.payload.bytes);
+        if (mp.from != nodeDB.getNodeNum()) {
+            DEBUG_MSG("Store & Forward Plugin -- Print Start ---------- ---------- ---------- ---------- ----------\n\n\n");
+            printPacket("----- PACKET FROM RADIO", &mp);
+            // DEBUG_MSG("\n\nStore & Forward Plugin -- Print End ---------- ---------- ---------- ---------- ----------\n");
+            uint32_t sawTime = storeForwardPlugin->sawNode(mp.from);
+            DEBUG_MSG("Last Saw this node %d, %d millis ago\n", mp.from, (millis() - sawTime));
         }
 
     } else {
-        DEBUG_MSG("Serial Plugin Disabled\n");
+        DEBUG_MSG("Store & Forward Plugin - Disabled\n");
     }
 
 #endif
