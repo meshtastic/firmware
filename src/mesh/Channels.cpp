@@ -74,18 +74,23 @@ void initDefaultChannel(size_t chIndex)
 
 /** Given a channel index, change to use the crypto key specified by that index
  */
-void setCrypto(size_t chIndex)
+void Channels::setCrypto(size_t chIndex)
 {
-
     assert(chIndex < devicestate.channels_count);
     Channel *ch = devicestate.channels + chIndex;
     ChannelSettings &channelSettings = ch->settings;
+    assert(ch->has_settings);
 
     memset(activePSK, 0, sizeof(activePSK)); // In case the user provided a short key, we want to pad the rest with zeros
     memcpy(activePSK, channelSettings.psk.bytes, channelSettings.psk.size);
     activePSKSize = channelSettings.psk.size;
-    if (activePSKSize == 0)
-        DEBUG_MSG("Warning: User disabled encryption\n");
+    if (activePSKSize == 0) {
+        if(ch->role == Channel_Role_SECONDARY) {
+            DEBUG_MSG("Unset PSK for secondary channel %s. using primary key\n", ch->settings.name);
+            setCrypto(primaryIndex);
+        } else
+            DEBUG_MSG("Warning: User disabled encryption\n");
+    }
     else if (activePSKSize == 1) {
         // Convert the short single byte variants of psk into variant that can be used more generally
 
@@ -134,7 +139,7 @@ void Channels::onConfigChanged()
             primaryIndex = i;
     }
 
-    setCrypto(0); // FIXME: for the time being (still single channel - just use our only channel as the crypto key)
+    setCrypto(primaryIndex); // FIXME: for the time being (still single channel - just use our only channel as the crypto key)
 }
 
 Channel &Channels::getChannel(size_t chIndex)
