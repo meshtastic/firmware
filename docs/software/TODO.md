@@ -17,6 +17,7 @@ You probably don't care about this section - skip to the next one.
 * DONE remove region specific builds from the firmware
 * restrict settings operations to the admin channel
 * add gui in android app for setting region
+* make an alpha channel for the python API
 * "FIXME - move the radioconfig/user/channel READ operations into SettingsMessage as well"
 * DONE scrub protobufs to make sure they are absoloute minimum wiresize (in particular Data, ChannelSets and positions)
 * change syncword

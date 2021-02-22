@@ -1,12 +1,8 @@
 #include "Channels.h"
-#include "NodeDB.h"
 #include "CryptoEngine.h"
+#include "NodeDB.h"
 
 #include <assert.h>
-
-/// A usable psk - which has been constructed based on the (possibly short psk) in channelSettings
-static uint8_t activePSK[32];
-static uint8_t activePSKSize;
 
 /// 16 bytes of random PSK for our _public_ default channel that all devices power up on (AES128)
 static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
@@ -17,19 +13,19 @@ Channels channels;
 /**
  * Validate a channel, fixing any errors as needed
  */
-Channel &fixupChannel(size_t chIndex)
+Channel &Channels::fixupChannel(ChannelIndex chIndex)
 {
-    assert(chIndex < devicestate.channels_count);
+    auto ch = getByIndex(chIndex);
 
-    Channel *ch = devicestate.channels + chIndex;
+    ch.index = chIndex; // Preinit the index so it be ready to share with the phone (we'll never change it later)
 
-    ch->index = chIndex; // Preinit the index so it be ready to share with the phone (we'll never change it later)
-
-    if (!ch->has_settings) {
+    if (!ch.has_settings) {
         // No settings! Must disable and skip
-        ch->role = Channel_Role_DISABLED;
+        ch.role = Channel_Role_DISABLED;
+        memset(&ch.settings, 0, sizeof(ch.settings));
+        ch.has_settings = true;
     } else {
-        ChannelSettings &channelSettings = ch->settings;
+        ChannelSettings &channelSettings = ch.settings;
 
         // Convert the old string "Default" to our new short representation
         if (strcmp(channelSettings.name, "Default") == 0)
@@ -43,19 +39,16 @@ Channel &fixupChannel(size_t chIndex)
         }
     }
 
-    return *ch;
+    return ch;
 }
-
-
 
 /**
  * Write a default channel to the specified channel index
  */
-void initDefaultChannel(size_t chIndex)
+void Channels::initDefaultChannel(ChannelIndex chIndex)
 {
-    assert(chIndex < devicestate.channels_count);
-    Channel *ch = devicestate.channels + chIndex;
-    ChannelSettings &channelSettings = ch->settings;
+    auto ch = getByIndex(chIndex);
+    ChannelSettings &channelSettings = ch.settings;
 
     // radioConfig.modem_config = RadioConfig_ModemConfig_Bw125Cr45Sf128;  // medium range and fast
     // channelSettings.modem_config = ChannelSettings_ModemConfig_Bw500Cr45Sf128;  // short range and fast, but wide
@@ -68,30 +61,28 @@ void initDefaultChannel(size_t chIndex)
     channelSettings.psk.size = 1;
     strcpy(channelSettings.name, "");
 
-    ch->has_settings = true;
-    ch->role = Channel_Role_PRIMARY;
+    ch.has_settings = true;
+    ch.role = Channel_Role_PRIMARY;
 }
 
 /** Given a channel index, change to use the crypto key specified by that index
  */
-void Channels::setCrypto(size_t chIndex)
+void Channels::setCrypto(ChannelIndex chIndex)
 {
-    assert(chIndex < devicestate.channels_count);
-    Channel *ch = devicestate.channels + chIndex;
-    ChannelSettings &channelSettings = ch->settings;
-    assert(ch->has_settings);
+    auto ch = getByIndex(chIndex);
+    ChannelSettings &channelSettings = ch.settings;
+    assert(ch.has_settings);
 
     memset(activePSK, 0, sizeof(activePSK)); // In case the user provided a short key, we want to pad the rest with zeros
     memcpy(activePSK, channelSettings.psk.bytes, channelSettings.psk.size);
     activePSKSize = channelSettings.psk.size;
     if (activePSKSize == 0) {
-        if(ch->role == Channel_Role_SECONDARY) {
-            DEBUG_MSG("Unset PSK for secondary channel %s. using primary key\n", ch->settings.name);
+        if (ch.role == Channel_Role_SECONDARY) {
+            DEBUG_MSG("Unset PSK for secondary channel %s. using primary key\n", ch.settings.name);
             setCrypto(primaryIndex);
         } else
             DEBUG_MSG("Warning: User disabled encryption\n");
-    }
-    else if (activePSKSize == 1) {
+    } else if (activePSKSize == 1) {
         // Convert the short single byte variants of psk into variant that can be used more generally
 
         uint8_t pskIndex = activePSK[0];
@@ -135,27 +126,28 @@ void Channels::onConfigChanged()
     for (int i = 0; i < devicestate.channels_count; i++) {
         auto ch = fixupChannel(i);
 
-        if(ch.role == Channel_Role_PRIMARY)
+        if (ch.role == Channel_Role_PRIMARY)
             primaryIndex = i;
     }
 
     setCrypto(primaryIndex); // FIXME: for the time being (still single channel - just use our only channel as the crypto key)
 }
 
-Channel &Channels::getChannel(size_t chIndex)
+Channel &Channels::getByIndex(ChannelIndex chIndex)
 {
     assert(chIndex < devicestate.channels_count);
     Channel *ch = devicestate.channels + chIndex;
     return *ch;
 }
 
-void Channels::setChannel(const Channel &c) {
-    Channel &old = getChannel(c.index);
+void Channels::setChannel(const Channel &c)
+{
+    Channel &old = getByIndex(c.index);
 
     // if this is the new primary, demote any existing roles
-    if(c.role == Channel_Role_PRIMARY)
-        for (int i = 0; i < devicestate.channels_count; i++) 
-            if(devicestate.channels[i].role == Channel_Role_PRIMARY)
+    if (c.role == Channel_Role_PRIMARY)
+        for (int i = 0; i < devicestate.channels_count; i++)
+            if (devicestate.channels[i].role == Channel_Role_PRIMARY)
                 devicestate.channels[i].role = Channel_Role_SECONDARY;
 
     old = c; // slam in the new settings/role
@@ -164,7 +156,7 @@ void Channels::setChannel(const Channel &c) {
 const char *Channels::getName(size_t chIndex)
 {
     // Convert the short "" representation for Default into a usable string
-    ChannelSettings &channelSettings = getChannel(chIndex).settings;
+    ChannelSettings &channelSettings = getByIndex(chIndex).settings;
     const char *channelName = channelSettings.name;
     if (!*channelName) { // emptystring
         // Per mesh.proto spec, if bandwidth is specified we must ignore modemConfig enum, we assume that in that case
