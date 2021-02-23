@@ -15,11 +15,14 @@ You probably don't care about this section - skip to the next one.
 * DONE enable remote setttings access by moving settings operations into a regular plugin (move settings ops out of PhoneAPI)
 * DONE move portnum up?
 * DONE remove region specific builds from the firmware
-* test single channel without python
-* test single channel with python
-* implement 'get channels' Admin operation
+* DONE test single channel without python
+* DONE Use "default" for name if name is empty
+* DONE fix python data packet receiving (nothing showing in log?)
+* implement 'get channels' Admin plugin operation
 * use get-channels from python
 * use set-channel from python
+* make python tests more exhaustive
+* document the relationship between want_response (indicating remote node received it) and want_ack (indicating that this message should be sent reliably - and also get acks from the first rx node and naks if it is never delivered)
 * test multi channel
 * pick default random admin key
 * restrict gpio & serial & settings operations to the admin channel (unless local to the current node)

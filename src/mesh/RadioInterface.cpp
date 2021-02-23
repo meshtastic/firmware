@@ -119,8 +119,8 @@ uint32_t RadioInterface::getTxDelayMsec()
 
 void printPacket(const char *prefix, const MeshPacket *p)
 {
-    DEBUG_MSG("%s (id=0x%08x Fr0x%02x To0x%02x, WantAck%d, HopLim%d", prefix, p->id, p->from & 0xff, p->to & 0xff, p->want_ack,
-              p->hop_limit);
+    DEBUG_MSG("%s (id=0x%08x Fr0x%02x To0x%02x, WantAck%d, HopLim%d Ch0x%x", prefix, p->id, p->from & 0xff, p->to & 0xff, p->want_ack,
+              p->hop_limit, p->channel);
     if (p->which_payloadVariant == MeshPacket_decoded_tag) {
         auto &s = p->decoded;
         

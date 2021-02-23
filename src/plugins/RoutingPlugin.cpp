@@ -9,6 +9,7 @@ RoutingPlugin *routingPlugin;
 
 bool RoutingPlugin::handleReceivedProtobuf(const MeshPacket &mp, const Routing *r)
 {
+    DEBUG_MSG("Routing sniffing", &mp);
     router->sniffReceived(&mp, r);
 
     // FIXME - move this to a non promsicious PhoneAPI plugin?
@@ -23,8 +24,13 @@ bool RoutingPlugin::handleReceivedProtobuf(const MeshPacket &mp, const Routing *
 
 MeshPacket *RoutingPlugin::allocReply()
 {
-    assert(0); // 1.2 refactoring fixme, Not sure if anything needs this yet?
-    // return allocDataProtobuf(u);
+    assert(currentRequest);
+
+    // We only consider making replies if the request was a legit routing packet (not just something we were sniffing)
+    if(currentRequest->decoded.portnum == PortNum_ROUTING_APP) {
+        assert(0); // 1.2 refactoring fixme, Not sure if anything needs this yet?
+        // return allocDataProtobuf(u);
+    }
     return NULL;
 }
 
