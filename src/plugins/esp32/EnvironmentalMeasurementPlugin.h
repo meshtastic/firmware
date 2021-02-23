@@ -44,9 +44,7 @@ class EnvironmentalMeasurementPluginRadio : public ProtobufPlugin<EnvironmentalM
     */
     virtual bool handleReceivedProtobuf(const MeshPacket &mp, const EnvironmentalMeasurement &p);
 
-    virtual bool wantUIFrame() {
-      return true;
-    }
+    virtual bool wantUIFrame();
 
 
   private:
