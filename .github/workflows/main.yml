@@ -4,8 +4,7 @@ on:
   - pull_request
 
 jobs:
-  main:
-    name: Main
+  setup:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@master
@@ -25,12 +24,26 @@ jobs:
       - name: Install libs needed for linux build
         run: |
           sudo apt install -y libpsocksxx-dev
+
+  build-esp:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
       - name: Build for tbeam
         run: platformio run -e tbeam
       - name: Build for heltec
         run: platformio run -e heltec
+        
+  build-nrf:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
       - name: Build for lora-relay-v1
         run: platformio run -e lora-relay-v1 
+
+  build-portduino:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
       - name: Build for linux
         run: platformio run -e linux
-        
