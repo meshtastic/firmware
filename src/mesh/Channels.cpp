@@ -192,7 +192,7 @@ void Channels::setChannel(const Channel &c)
 
     // if this is the new primary, demote any existing roles
     if (c.role == Channel_Role_PRIMARY)
-        for (int i = 0; i < devicestate.channels_count; i++)
+        for (int i = 0; i < getNumChannels(); i++)
             if (devicestate.channels[i].role == Channel_Role_PRIMARY)
                 devicestate.channels[i].role = Channel_Role_SECONDARY;
 
@@ -271,11 +271,18 @@ const char *Channels::getPrimaryName()
  *
  * This method is called before decoding inbound packets
  *
- * @return -1 if no suitable channel could be found, otherwise returns the channel index
+ * @return false if the channel hash or channel is invalid
  */
-int16_t Channels::setActiveByHash(ChannelHash channelHash)
+bool Channels::decryptForHash(ChannelIndex chIndex, ChannelHash channelHash)
 {
-    // fixme cant work;
+    if(chIndex > getNumChannels() || getHash(chIndex) != channelHash) {
+        DEBUG_MSG("Skipping channel %d due to invalid hash/index\n", chIndex);
+        return false;
+    }
+    else {
+        setCrypto(chIndex);
+        return true;
+    }
 }
 
 /** Given a channel index setup crypto for encoding that channel (or the primary channel if that channel is unsecured)

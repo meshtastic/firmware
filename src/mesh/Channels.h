@@ -1,16 +1,17 @@
 #pragma once
 
+#include "CryptoEngine.h"
+#include "NodeDB.h"
 #include "mesh-pb-constants.h"
 #include <Arduino.h>
-#include "CryptoEngine.h"
 
 /** A channel number (index into the channel table)
  */
 typedef uint8_t ChannelIndex;
 
-/** A low quality hash of the channel PSK and the channel name.  created by generateHash(chIndex) 
+/** A low quality hash of the channel PSK and the channel name.  created by generateHash(chIndex)
  * Used as a hint to limit which PSKs are considered for packet decoding.
-*/
+ */
 typedef uint8_t ChannelHash;
 
 /** The container/on device API for working with channels */
@@ -22,7 +23,7 @@ class Channels
     /** The channel index that was requested for sending/receving.  Note: if this channel is a secondary
     channel and does not have a PSK, we will use the PSK from the primary channel.  If this channel is disabled
     no sending or receiving will be allowed */
-    ChannelIndex activeChannelIndex = 0; 
+    ChannelIndex activeChannelIndex = 0;
 
     /// the precomputed hashes for each of our channels, or -1 for invalid
     int16_t hashes[MAX_NUM_CHANNELS];
@@ -42,6 +43,8 @@ class Channels
 
     /** The index of the primary channel */
     ChannelIndex getPrimaryIndex() const { return primaryIndex; }
+
+    ChannelIndex getNumChannels() { return devicestate.channels_count; }
 
     /**
      * Generate a short suffix used to disambiguate channels that might have the same "name" entered by the human but different
@@ -72,9 +75,9 @@ class Channels
      *
      * This method is called before decoding inbound packets
      *
-     * @return -1 if no suitable channel could be found, otherwise returns the channel index
+     * @return false if the channel hash or channel is invalid
      */
-    int16_t setActiveByHash(ChannelHash channelHash);
+    bool decryptForHash(ChannelIndex chIndex, ChannelHash channelHash);
 
     /** Given a channel index setup crypto for encoding that channel (or the primary channel if that channel is unsecured)
      *
@@ -86,7 +89,7 @@ class Channels
 
   private:
     /** Given a channel index, change to use the crypto key specified by that index
-     * 
+     *
      * @eturn the (0 to 255) hash for that channel - if no suitable channel could be found, return -1
      */
     int16_t setCrypto(ChannelIndex chIndex);
@@ -96,7 +99,7 @@ class Channels
 
     /** Given a channel number, return the (0 to 255) hash for that channel
      * If no suitable channel could be found, return -1
-     * 
+     *
      * called by fixupChannel when a new channel is set
      */
     int16_t generateHash(ChannelIndex channelNum);
@@ -114,11 +117,10 @@ class Channels
     void initDefaultChannel(ChannelIndex chIndex);
 
     /**
-     * Return the key used for encrypting this channel (if channel is secondary and no key provided, use the primary channel's PSK)
+     * Return the key used for encrypting this channel (if channel is secondary and no key provided, use the primary channel's
+     * PSK)
      */
     CryptoKey getKey(ChannelIndex chIndex);
-
-    
 };
 
 /// Singleton channel table
