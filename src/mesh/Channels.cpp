@@ -10,12 +10,32 @@ static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0
 
 Channels channels;
 
-uint8_t xorHash(uint8_t *p, size_t len)
+uint8_t xorHash(const uint8_t *p, size_t len)
 {
     uint8_t code = 0;
     for (int i = 0; i < len; i++)
         code ^= p[i];
     return code;
+}
+
+/** Given a channel number, return the (0 to 255) hash for that channel.
+ * The hash is just an xor of the channel name followed by the channel PSK being used for encryption
+ * If no suitable channel could be found, return -1
+ */
+int16_t Channels::generateHash(ChannelIndex channelNum)
+{
+    auto k = getKey(channelNum);
+    if (k.length < 0)
+        return -1; // invalid
+    else {
+        Channel &c = getByIndex(channelNum);
+
+        uint8_t h = xorHash((const uint8_t *)c.settings.name, strlen(c.settings.name));
+
+        h ^= xorHash(k.bytes, k.length);
+
+        return h;
+    }
 }
 
 /**
@@ -75,51 +95,69 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
     ch.role = Channel_Role_PRIMARY;
 }
 
-/** Given a channel index, change to use the crypto key specified by that index
- */
-void Channels::setCrypto(ChannelIndex chIndex)
+CryptoKey Channels::getKey(ChannelIndex chIndex)
 {
     Channel &ch = getByIndex(chIndex);
     ChannelSettings &channelSettings = ch.settings;
     assert(ch.has_settings);
 
-    memset(activePSK, 0, sizeof(activePSK)); // In case the user provided a short key, we want to pad the rest with zeros
-    memcpy(activePSK, channelSettings.psk.bytes, channelSettings.psk.size);
-    activePSKSize = channelSettings.psk.size;
-    if (activePSKSize == 0) {
-        if (ch.role == Channel_Role_SECONDARY) {
-            DEBUG_MSG("Unset PSK for secondary channel %s. using primary key\n", ch.settings.name);
-            setCrypto(primaryIndex);
-        } else
-            DEBUG_MSG("Warning: User disabled encryption\n");
-    } else if (activePSKSize == 1) {
-        // Convert the short single byte variants of psk into variant that can be used more generally
+    CryptoKey k;
+    memset(k.bytes, 0, sizeof(k.bytes)); // In case the user provided a short key, we want to pad the rest with zeros
 
-        uint8_t pskIndex = activePSK[0];
-        DEBUG_MSG("Expanding short PSK #%d\n", pskIndex);
-        if (pskIndex == 0)
-            activePSKSize = 0; // Turn off encryption
-        else {
-            memcpy(activePSK, defaultpsk, sizeof(defaultpsk));
-            activePSKSize = sizeof(defaultpsk);
-            // Bump up the last byte of PSK as needed
-            uint8_t *last = activePSK + sizeof(defaultpsk) - 1;
-            *last = *last + pskIndex - 1; // index of 1 means no change vs defaultPSK
+    if (ch.role == Channel_Role_DISABLED) {
+        k.length = -1; // invalid
+    } else {
+        memcpy(k.bytes, channelSettings.psk.bytes, channelSettings.psk.size);
+        k.length = channelSettings.psk.size;
+        if (k.length == 0) {
+            if (ch.role == Channel_Role_SECONDARY) {
+                DEBUG_MSG("Unset PSK for secondary channel %s. using primary key\n", ch.settings.name);
+                k = getKey(primaryIndex);
+            } else
+                DEBUG_MSG("Warning: User disabled encryption\n");
+        } else if (k.length == 1) {
+            // Convert the short single byte variants of psk into variant that can be used more generally
+
+            uint8_t pskIndex = k.bytes[0];
+            DEBUG_MSG("Expanding short PSK #%d\n", pskIndex);
+            if (pskIndex == 0)
+                k.length = 0; // Turn off encryption
+            else {
+                memcpy(k.bytes, defaultpsk, sizeof(defaultpsk));
+                k.length = sizeof(defaultpsk);
+                // Bump up the last byte of PSK as needed
+                uint8_t *last = k.bytes + sizeof(defaultpsk) - 1;
+                *last = *last + pskIndex - 1; // index of 1 means no change vs defaultPSK
+            }
+        } else if (k.length < 16) {
+            // Error! The user specified only the first few bits of an AES128 key.  So by convention we just pad the rest of the
+            // key with zeros
+            DEBUG_MSG("Warning: User provided a too short AES128 key - padding\n");
+            k.length = 16;
+        } else if (k.length < 32 && k.length != 16) {
+            // Error! The user specified only the first few bits of an AES256 key.  So by convention we just pad the rest of the
+            // key with zeros
+            DEBUG_MSG("Warning: User provided a too short AES256 key - padding\n");
+            k.length = 32;
         }
-    } else if (activePSKSize < 16) {
-        // Error! The user specified only the first few bits of an AES128 key.  So by convention we just pad the rest of the key
-        // with zeros
-        DEBUG_MSG("Warning: User provided a too short AES128 key - padding\n");
-        activePSKSize = 16;
-    } else if (activePSKSize < 32 && activePSKSize != 16) {
-        // Error! The user specified only the first few bits of an AES256 key.  So by convention we just pad the rest of the key
-        // with zeros
-        DEBUG_MSG("Warning: User provided a too short AES256 key - padding\n");
-        activePSKSize = 32;
     }
 
-    // Tell our crypto engine about the psk
-    crypto->setKey(activePSKSize, activePSK);
+    return k;
+}
+
+/** Given a channel index, change to use the crypto key specified by that index
+ */
+int16_t Channels::setCrypto(ChannelIndex chIndex)
+{
+    CryptoKey k = getKey(chIndex);
+
+    if (k.length < 0)
+        return -1;
+    else {
+        // Tell our crypto engine about the psk
+        crypto->setKey(k);
+        return getHash(chIndex);
+    }
 }
 
 void Channels::initDefaults()
@@ -139,8 +177,6 @@ void Channels::onConfigChanged()
         if (ch.role == Channel_Role_PRIMARY)
             primaryIndex = i;
     }
-
-    setCrypto(primaryIndex); // FIXME: for the time being (still single channel - just use our only channel as the crypto key)
 }
 
 Channel &Channels::getByIndex(ChannelIndex chIndex)
@@ -207,7 +243,6 @@ their nodes
 *
 * Where X is either:
 * (for custom PSKS) a letter from A to Z (base26), and formed by xoring all the bytes of the PSK together,
-* OR (for the standard minimially secure PSKs) a number from 0 to 9.
 *
 * This function will also need to be implemented in GUI apps that talk to the radio.
 *
@@ -219,14 +254,14 @@ const char *Channels::getPrimaryName()
 
     char suffix;
     auto channelSettings = getPrimary();
-    if (channelSettings.psk.size != 1) {
-        // We have a standard PSK, so generate a letter based hash.
-        uint8_t code = xorHash(activePSK, activePSKSize);
+    // if (channelSettings.psk.size != 1) {
+    // We have a standard PSK, so generate a letter based hash.
+    uint8_t code = getHash(primaryIndex);
 
-        suffix = 'A' + (code % 26);
-    } else {
+    suffix = 'A' + (code % 26);
+    /* } else {
         suffix = '0' + channelSettings.psk.bytes[0];
-    }
+    } */
 
     snprintf(buf, sizeof(buf), "#%s-%c", channelSettings.name, suffix);
     return buf;
@@ -238,7 +273,10 @@ const char *Channels::getPrimaryName()
  *
  * @return -1 if no suitable channel could be found, otherwise returns the channel index
  */
-int16_t Channels::setActiveByHash(ChannelHash channelHash) {}
+int16_t Channels::setActiveByHash(ChannelHash channelHash)
+{
+    // fixme cant work;
+}
 
 /** Given a channel index setup crypto for encoding that channel (or the primary channel if that channel is unsecured)
  *
@@ -246,9 +284,7 @@ int16_t Channels::setActiveByHash(ChannelHash channelHash) {}
  *
  * @eturn the (0 to 255) hash for that channel - if no suitable channel could be found, return -1
  */
-int16_t Channels::setActiveByIndex(ChannelIndex channelIndex) {}
-
-/** Given a channel number, return the (0 to 255) hash for that channel
- * If no suitable channel could be found, return -1
- */
-ChannelHash Channels::generateHash(ChannelIndex channelNum) {}
+int16_t Channels::setActiveByIndex(ChannelIndex channelIndex)
+{
+    return setCrypto(channelIndex);
+}
