@@ -2,6 +2,7 @@
 
 #include "mesh-pb-constants.h"
 #include <Arduino.h>
+#include "CryptoEngine.h"
 
 /** A channel number (index into the channel table)
  */
@@ -23,12 +24,8 @@ class Channels
     no sending or receiving will be allowed */
     ChannelIndex activeChannelIndex = 0; 
 
-    /// The in-use psk - which has been constructed based on the (possibly short psk) in channelSettings
-    uint8_t activePSK[32];
-    uint8_t activePSKSize = 0;
-
-    /// the precomputed hashes for each of our channels
-    ChannelHash hashes[MAX_NUM_CHANNELS];
+    /// the precomputed hashes for each of our channels, or -1 for invalid
+    int16_t hashes[MAX_NUM_CHANNELS];
 
   public:
     const ChannelSettings &getPrimary() { return getByIndex(getPrimaryIndex()).settings; }
@@ -87,21 +84,24 @@ class Channels
      */
     int16_t setActiveByIndex(ChannelIndex channelIndex);
 
-    /** return the channel hash we are currently using for sending */
-    ChannelHash getActiveHash();
-
   private:
     /** Given a channel index, change to use the crypto key specified by that index
+     * 
+     * @eturn the (0 to 255) hash for that channel - if no suitable channel could be found, return -1
      */
-    void setCrypto(ChannelIndex chIndex);
+    int16_t setCrypto(ChannelIndex chIndex);
 
     /** Return the channel index for the specified channel hash, or -1 for not found */
     int8_t getIndexByHash(ChannelHash channelHash);
 
     /** Given a channel number, return the (0 to 255) hash for that channel
      * If no suitable channel could be found, return -1
+     * 
+     * called by fixupChannel when a new channel is set
      */
-    ChannelHash generateHash(ChannelIndex channelNum);
+    int16_t generateHash(ChannelIndex channelNum);
+
+    int16_t getHash(ChannelIndex i) { return hashes[i]; }
 
     /**
      * Validate a channel, fixing any errors as needed
@@ -112,6 +112,13 @@ class Channels
      * Write a default channel to the specified channel index
      */
     void initDefaultChannel(ChannelIndex chIndex);
+
+    /**
+     * Return the key used for encrypting this channel (if channel is secondary and no key provided, use the primary channel's PSK)
+     */
+    CryptoKey getKey(ChannelIndex chIndex);
+
+    
 };
 
 /// Singleton channel table
