@@ -27,7 +27,12 @@ class EnvironmentalMeasurementPluginRadio : public ProtobufPlugin<EnvironmentalM
     /** Constructor
      * name is for debugging output
      */
-    EnvironmentalMeasurementPluginRadio() : ProtobufPlugin("EnvironmentalMeasurement", PortNum_ENVIRONMENTAL_MEASUREMENT_APP, &EnvironmentalMeasurement_msg) {}
+    EnvironmentalMeasurementPluginRadio() : ProtobufPlugin("EnvironmentalMeasurement", PortNum_ENVIRONMENTAL_MEASUREMENT_APP, &EnvironmentalMeasurement_msg) {
+      lastMeasurement.barometric_pressure = nanf("");
+      lastMeasurement.relative_humidity =  nanf("");
+      lastMeasurement.temperature =  nanf("");
+      lastSender = "N/A";
+    }
 
     /**
      * Send our EnvironmentalMeasurement into the mesh
