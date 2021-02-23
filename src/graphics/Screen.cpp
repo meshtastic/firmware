@@ -164,9 +164,9 @@ static void drawPluginFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
     else {
         // otherwise, just display the plugin frame that's aligned with the current frame
         plugin_frame = state->currentFrame;
-        DEBUG_MSG("Screen is not in transition.  Frame: %d\n\n", plugin_frame);
+        //DEBUG_MSG("Screen is not in transition.  Frame: %d\n\n", plugin_frame);
     }
-    DEBUG_MSG("Drawing Plugin Frame %d\n\n", plugin_frame);
+    //DEBUG_MSG("Drawing Plugin Frame %d\n\n", plugin_frame);
     MeshPlugin &pi = *pluginFrames.at(plugin_frame);
     pi.drawFrame(display,state,x,y);
     
