@@ -28,9 +28,8 @@ int16_t Channels::generateHash(ChannelIndex channelNum)
     if (k.length < 0)
         return -1; // invalid
     else {
-        Channel &c = getByIndex(channelNum);
-
-        uint8_t h = xorHash((const uint8_t *)c.settings.name, strlen(c.settings.name));
+        const char *name = getName(channelNum);
+        uint8_t h = xorHash((const uint8_t *) name, strlen(name));
 
         h ^= xorHash(k.bytes, k.length);
 
@@ -253,7 +252,7 @@ const char *Channels::getPrimaryName()
     static char buf[32];
 
     char suffix;
-    auto channelSettings = getPrimary();
+    // auto channelSettings = getPrimary();
     // if (channelSettings.psk.size != 1) {
     // We have a standard PSK, so generate a letter based hash.
     uint8_t code = getHash(primaryIndex);
@@ -263,7 +262,7 @@ const char *Channels::getPrimaryName()
         suffix = '0' + channelSettings.psk.bytes[0];
     } */
 
-    snprintf(buf, sizeof(buf), "#%s-%c", channelSettings.name, suffix);
+    snprintf(buf, sizeof(buf), "#%s-%c", getName(primaryIndex), suffix);
     return buf;
 }
 

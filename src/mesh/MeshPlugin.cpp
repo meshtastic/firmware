@@ -41,6 +41,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
 
         // We only call plugins that are interested in the packet (and the message is destined to us or we are promiscious)
         bool wantsPacket = (pi.isPromiscuous || toUs) && pi.wantPacket(&mp);
+        // DEBUG_MSG("Plugin %s wantsPacket=%d\n", pi.name, wantsPacket);
         if (wantsPacket) {
             pluginFound = true;
 
@@ -79,7 +80,8 @@ void MeshPlugin::sendResponse(const MeshPacket &req) {
         service.sendToMesh(r);
     }
     else {
-        DEBUG_MSG("WARNING: Client requested response but this plugin did not provide\n");
+        // Ignore - this is now expected behavior for routing plugin (because it ignores some replies)
+        // DEBUG_MSG("WARNING: Client requested response but this plugin did not provide\n");
     }
 }
 

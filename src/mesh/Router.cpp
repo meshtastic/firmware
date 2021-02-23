@@ -232,6 +232,7 @@ bool Router::perhapsDecode(MeshPacket *p)
             } else {
                 // parsing was successful
                 p->channel = chIndex; // change to store the index instead of the hash
+                // printPacket("decoded message", p);
                 p->which_payloadVariant = MeshPacket_decoded_tag;
                 return true;
             }
@@ -257,7 +258,10 @@ void Router::handleReceived(MeshPacket *p)
     p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
 
     // Take those raw bytes and convert them back into a well structured protobuf we can understand
-    if (perhapsDecode(p)) {
+    bool decoded = perhapsDecode(p);
+    printPacket("handleReceived", p);
+    DEBUG_MSG("decoded=%d\n", decoded);    
+    if (decoded) {
         // parsing was successful, queue for our recipient
 
         // call any promiscious plugins here, make a (non promisiocous) plugin for forwarding messages to phone api

@@ -25,6 +25,9 @@ class RoutingPlugin : public ProtobufPlugin<Routing>
      * so that subclasses can (optionally) send a response back to the original sender.  */
     virtual MeshPacket *allocReply(); 
 
+    /// Override wantPacket to say we want to see all packets, not just those for our port number
+    virtual bool wantPacket(const MeshPacket *p) { return true; }
+
     void sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom);
 };
 
