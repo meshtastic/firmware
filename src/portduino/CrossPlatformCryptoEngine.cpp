@@ -27,13 +27,13 @@ class CrossPlatformCryptoEngine : public CryptoEngine
     virtual void setKey(const CryptoKey &k)
     {
         CryptoEngine::setKey(k);
-        DEBUG_MSG("Installing AES%d key!\n", numBytes * 8);
+        DEBUG_MSG("Installing AES%d key!\n", key.length * 8);
         if (ctr) {
             delete ctr;
             ctr = NULL;
         }
-        if (numBytes != 0) {
-            if (numBytes == 16)
+        if (key.length != 0) {
+            if (key.length == 16)
                 ctr = new CTR<AES128>();
             else
                 ctr = new CTR<AES256>();
