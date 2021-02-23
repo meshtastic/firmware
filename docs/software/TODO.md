@@ -21,6 +21,7 @@ You probably don't care about this section - skip to the next one.
 * implement 'get channels' Admin plugin operation
 * use get-channels from python
 * use set-channel from python
+* use portuino TCP connection to debug with python API
 * make python tests more exhaustive
 * document the relationship between want_response (indicating remote node received it) and want_ack (indicating that this message should be sent reliably - and also get acks from the first rx node and naks if it is never delivered)
 * test multi channel
