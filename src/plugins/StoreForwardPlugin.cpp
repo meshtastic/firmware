@@ -9,6 +9,7 @@
 #include <map>
 
 #define STOREFORWARD_MAX_PACKETS 6000
+#define STOREFORWARD_SEND_HISTORY_SHORT 600
 
 StoreForwardPlugin *storeForwardPlugin;
 StoreForwardPluginRadio *storeForwardPluginRadio;
@@ -45,25 +46,7 @@ int32_t StoreForwardPlugin::runOnce()
 
                         firstTime = 0;
 
-                        /*
-                        For PSRAM usage, see:
-                            https://learn.upesy.com/en/programmation/psram.html#psram-tab
-                        */
-
-                        DEBUG_MSG("Total heap: %d\n", ESP.getHeapSize());
-                        DEBUG_MSG("Free heap: %d\n", ESP.getFreeHeap());
-                        DEBUG_MSG("Total PSRAM: %d\n", ESP.getPsramSize());
-                        DEBUG_MSG("Free PSRAM: %d\n", ESP.getFreePsram());
-
-                        PacketHistoryStruct *packetHistory =
-                            (PacketHistoryStruct *)ps_calloc(STOREFORWARD_MAX_PACKETS, sizeof(PacketHistoryStruct));
-
-                        DEBUG_MSG("Total heap: %d\n", ESP.getHeapSize());
-                        DEBUG_MSG("Free heap: %d\n", ESP.getFreeHeap());
-                        DEBUG_MSG("Total PSRAM: %d\n", ESP.getPsramSize());
-                        DEBUG_MSG("Free PSRAM: %d\n", ESP.getFreePsram());
-
-                        DEBUG_MSG("packetHistory Size - %u", sizeof(packetHistory));
+                        this->populatePSRAM();
 
                         // packetHistory[0].bytes;
                         return (10 * 1000);
@@ -109,6 +92,30 @@ int32_t StoreForwardPlugin::runOnce()
     return (INT32_MAX);
 }
 
+void StoreForwardPlugin::populatePSRAM()
+{
+    /*
+    For PSRAM usage, see:
+        https://learn.upesy.com/en/programmation/psram.html#psram-tab
+    */
+
+    DEBUG_MSG("Total heap: %d\n", ESP.getHeapSize());
+    DEBUG_MSG("Free heap: %d\n", ESP.getFreeHeap());
+    DEBUG_MSG("Total PSRAM: %d\n", ESP.getPsramSize());
+    DEBUG_MSG("Free PSRAM: %d\n", ESP.getFreePsram());
+
+    // PacketHistoryStruct *packetHistory = (PacketHistoryStruct *)ps_calloc(STOREFORWARD_MAX_PACKETS,
+    // sizeof(PacketHistoryStruct));
+    this->packetHistory = (PacketHistoryStruct *)ps_calloc(STOREFORWARD_MAX_PACKETS, sizeof(PacketHistoryStruct));
+
+    DEBUG_MSG("Total heap: %d\n", ESP.getHeapSize());
+    DEBUG_MSG("Free heap: %d\n", ESP.getFreeHeap());
+    DEBUG_MSG("Total PSRAM: %d\n", ESP.getPsramSize());
+    DEBUG_MSG("Free PSRAM: %d\n", ESP.getFreePsram());
+
+    DEBUG_MSG("packetHistory Size - %u", sizeof(packetHistory));
+}
+
 // We saw a node.
 uint32_t StoreForwardPlugin::sawNode(uint32_t node)
 {
@@ -121,8 +128,9 @@ uint32_t StoreForwardPlugin::sawNode(uint32_t node)
 
     TODO: Implment this as a std::map for quicker lookups (maybe it doesn't matter?).
     */
-
-    DEBUG_MSG("looking for node - %u\n", node);
+    // DEBUG_MSG("%s (id=0x%08x Fr0x%02x To0x%02x, WantAck%d, HopLim%d", prefix, p->id, p->from & 0xff, p->to & 0xff,
+    // p->want_ack, p->hop_limit);
+    DEBUG_MSG("looking for node - from-0x%08x\n", node);
     for (int i = 0; i < 50; i++) {
         // DEBUG_MSG("Iterating through the seen nodes - %u %u %u\n", i, receivedRecord[i][0], receivedRecord[i][1]);
         // First time seeing that node.
@@ -146,19 +154,19 @@ uint32_t StoreForwardPlugin::sawNode(uint32_t node)
     return 0;
 }
 
-void StoreForwardPlugin::addHistory(const MeshPacket &mp)
+void StoreForwardPlugin::addHistory(const MeshPacket *mp)
 {
     auto &p = mp;
 
     static uint8_t bytes[MAX_RHPACKETLEN];
-    size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), SubPacket_fields, &p.decoded);
+    size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), SubPacket_fields, &p->decoded);
     assert(numbytes <= MAX_RHPACKETLEN);
 
     DEBUG_MSG("MP numbytes %u\n", numbytes);
 
     // destination, source, bytes
     // memcpy(p->encrypted.bytes, bytes, numbytes);
-
+    memcpy(this->packetHistory[0].bytes, bytes, MAX_RHPACKETLEN);
     // pb_decode_from_bytes
 
     // Serialization is in Router.cpp line 180
@@ -177,10 +185,10 @@ void StoreForwardPlugin::sawNodeReport()
     TODO: Implment this as a std::map for quicker lookups (maybe it doesn't matter?).
     */
 
-    DEBUG_MSG("Iterating through the seen nodes ...\n");
+    DEBUG_MSG("Iterating through the seen nodes in receivedRecord\n");
     for (int i = 0; i < 50; i++) {
         if (receivedRecord[i][1]) {
-            DEBUG_MSG("... record-%u node-%u secAgo-%u\n", i, receivedRecord[i][0], (millis() - receivedRecord[i][1]) / 1000);
+            DEBUG_MSG("... record-%u from-0x%08x secAgo-%u\n", i, receivedRecord[i][0], (millis() - receivedRecord[i][1]) / 1000);
         }
     }
 }
@@ -209,9 +217,11 @@ bool StoreForwardPluginRadio::handleReceived(const MeshPacket &mp)
 
         if (mp.from != nodeDB.getNodeNum()) {
             // DEBUG_MSG("Store & Forward Plugin -- Print Start ---------- ---------- ---------- ---------- ----------\n\n\n");
+            // DEBUG_MSG("%s (id=0x%08x Fr0x%02x To0x%02x, WantAck%d, HopLim%d", prefix, p->id, p->from & 0xff, p->to & 0xff,
+            // p->want_ack, p->hop_limit);
             printPacket("----- PACKET FROM RADIO -----", &mp);
-            uint32_t sawTime = storeForwardPlugin->sawNode(mp.from);
-            DEBUG_MSG("We last saw this node (%u), %u sec ago\n", mp.from, (millis() - sawTime) / 1000);
+            uint32_t sawTime = storeForwardPlugin->sawNode(mp.from & 0xffffffff);
+            DEBUG_MSG("We last saw this node (%u), %u sec ago\n", mp.from & 0xffffffff, (millis() - sawTime) / 1000);
 
             if (mp.decoded.data.portnum == PortNum_UNKNOWN_APP) {
                 DEBUG_MSG("Packet came from - PortNum_UNKNOWN_APP\n");
