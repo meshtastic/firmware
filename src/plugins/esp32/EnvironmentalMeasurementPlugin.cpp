@@ -49,10 +49,10 @@ int32_t EnvironmentalMeasurementPlugin::runOnce() {
         Uncomment the preferences below if you want to use the plugin
         without having to configure it from the PythonAPI or WebUI.
     */
-    /*radioConfig.preferences.environmental_measurement_plugin_enabled = 1;
+    radioConfig.preferences.environmental_measurement_plugin_enabled = 1;
     radioConfig.preferences.environmental_measurement_plugin_read_error_count_threshold = 5;
     radioConfig.preferences.environmental_measurement_plugin_update_interval = 30;
-    radioConfig.preferences.environmental_measurement_plugin_recovery_interval = 600;*/
+    radioConfig.preferences.environmental_measurement_plugin_recovery_interval = 600;
 
     if (!radioConfig.preferences.environmental_measurement_plugin_enabled){
         // If this plugin is not enabled, don't waste any OSThread time on it

@@ -150,8 +150,24 @@ static void drawSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int
 
 static void drawPluginFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    DEBUG_MSG("Drawing Plugin Frame %d\n\n", state->currentFrame);
-    MeshPlugin &pi = *pluginFrames.at(state->currentFrame);
+    uint8_t plugin_frame;
+    // there's a little but in the UI transition code
+    // where it invokes the function at the correct offset 
+    // in the array of "drawScreen" functions; however,
+    // the passed-state doesn't quite reflect the "current" 
+    // screen, so we have to detect it.
+    if (state->frameState == IN_TRANSITION && state->transitionFrameRelationship == INCOMING) {
+        // if we're transitioning from the end of the frame list back around to the first 
+        // frame, then we want this to be `0`
+        plugin_frame = state->transitionFrameTarget;
+    }
+    else {
+        // otherwise, just display the plugin frame that's aligned with the current frame
+        plugin_frame = state->currentFrame;
+        DEBUG_MSG("Screen is not in transition.  Frame: %d\n\n", plugin_frame);
+    }
+    DEBUG_MSG("Drawing Plugin Frame %d\n\n", plugin_frame);
+    MeshPlugin &pi = *pluginFrames.at(plugin_frame);
     pi.drawFrame(display,state,x,y);
     
 }
