@@ -20,6 +20,8 @@ class StoreForwardPlugin : private concurrency::OSThread
     // TODO: Allow configuration of the maximum number of records.
     uint32_t receivedRecord[50][2] = {{0}};
 
+    PacketHistoryStruct *packetHistory;
+
   public:
     StoreForwardPlugin();
 
@@ -29,7 +31,8 @@ class StoreForwardPlugin : private concurrency::OSThread
      */
     uint32_t sawNode(uint32_t);
     void sawNodeReport();
-    void addHistory(const MeshPacket &mp)
+    void addHistory(const MeshPacket *mp);
+    void populatePSRAM();
 
   private:
     // Nothing here
