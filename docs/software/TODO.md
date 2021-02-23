@@ -15,11 +15,17 @@ You probably don't care about this section - skip to the next one.
 * DONE enable remote setttings access by moving settings operations into a regular plugin (move settings ops out of PhoneAPI)
 * DONE move portnum up?
 * DONE remove region specific builds from the firmware
-* test single channel
+* test single channel without python
+* test single channel with python
+* implement 'get channels' Admin operation
+* use get-channels from python
+* use set-channel from python
 * test multi channel
+* pick default random admin key
 * restrict gpio & serial & settings operations to the admin channel (unless local to the current node)
 * add gui in android app for setting region
-* make an alpha channel for the python API
+* warn in python api if we are too new to talk to the device code
+* make a post warning about 1.2, telling how to stay on old android & python clients.  link to this from the android dialog message and python version warning.
 * "FIXME - move the radioconfig/user/channel READ operations into SettingsMessage as well"
 * DONE scrub protobufs to make sure they are absoloute minimum wiresize (in particular Data, ChannelSets and positions)
 * change syncword
@@ -34,11 +40,10 @@ You probably don't care about this section - skip to the next one.
 * DONE make all subpackets different versions of data
 * DONE move routing control into a data packet
 * have phoneapi done via plugin
-* figure out how to add micro_delta to position, make it so that phone apps don't need to understand it?
+* DONE figure out how to add micro_delta to position, make it so that phone apps don't need to understand it?
 * only send battery updates a max of once a minute
-* add multichannel support in python
-* add channel selection for sending
-* record recevied channel in meshpacket
+* add python channel selection for sending
+* DONE record recevied channel in meshpacket
 * test remote settings operations (confirm it works 3 hops away)
 * add channel restrictions for plugins (and restrict routing plugin to the "control" channel)
 * make a primaryChannel global and properly maintain it when the phone sends setChannel

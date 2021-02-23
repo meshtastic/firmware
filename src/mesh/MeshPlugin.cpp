@@ -32,7 +32,8 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
     assert(mp.which_payloadVariant == MeshPacket_decoded_tag); // I think we are guarnteed the packet is decoded by this point?
 
     // Was this message directed to us specifically?  Will be false if we are sniffing someone elses packets
-    bool toUs = mp.to == NODENUM_BROADCAST || mp.to == nodeDB.getNodeNum();
+    auto ourNodeNum = nodeDB.getNodeNum();
+    bool toUs = mp.to == NODENUM_BROADCAST || mp.to == ourNodeNum;
     for (auto i = plugins->begin(); i != plugins->end(); ++i) {
         auto &pi = **i;
 
@@ -45,8 +46,8 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
 
             bool handled = pi.handleReceived(mp);
 
-            // Possibly send replies (but only if the message was directed to us specifically, i.e. not for promiscious sniffing)
-            if (mp.decoded.want_response && toUs) {
+            // Possibly send replies (but only if the message was directed to us specifically, i.e. not for promiscious sniffing), also not if we sent it
+            if (mp.decoded.want_response && toUs && mp.from != ourNodeNum) {
                 pi.sendResponse(mp);
                 DEBUG_MSG("Plugin %s sent a response\n", pi.name);
             }

@@ -148,7 +148,7 @@ void NodeDB::installDefaultDeviceState()
     // Restore region if possible
     if (oldRegionCode != RegionCode_Unset)
         radioConfig.preferences.region = oldRegionCode;
-    if (oldRegion.length())
+    if (oldRegion.length()) // If the old style region was set, try to keep it up-to-date
         strcpy(myNodeInfo.region, oldRegion.c_str());
 }
 
@@ -400,7 +400,6 @@ void NodeDB::updateUser(uint32_t nodeId, const User &p)
 void NodeDB::updateFrom(const MeshPacket &mp)
 {
     if (mp.which_payloadVariant == MeshPacket_decoded_tag) {
-        const Data &p = mp.decoded;
         DEBUG_MSG("Update DB node 0x%x, rx_time=%u\n", mp.from, mp.rx_time);
 
         NodeInfo *info = getOrCreateNode(mp.from);
