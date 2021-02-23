@@ -5,8 +5,8 @@ You probably don't care about this section - skip to the next one.
 1.2 cleanup & multichannel support:
 
 * DONE call RouterPlugin for *all* packets - not just Router packets
-* generate channel hash from the name of the channel+the psk (not just one or the other)
-* send a hint that can be used to select which channel to try and hash against with each message
+* DONE generate channel hash from the name of the channel+the psk (not just one or the other)
+* DONE send a hint that can be used to select which channel to try and hash against with each message
 * DONE remove deprecated
 * DONE fix setchannel in phoneapi.cpp
 * DONE set mynodeinfo.max_channels
@@ -15,7 +15,9 @@ You probably don't care about this section - skip to the next one.
 * DONE enable remote setttings access by moving settings operations into a regular plugin (move settings ops out of PhoneAPI)
 * DONE move portnum up?
 * DONE remove region specific builds from the firmware
-* restrict settings operations to the admin channel
+* test single channel
+* test multi channel
+* restrict gpio & serial & settings operations to the admin channel (unless local to the current node)
 * add gui in android app for setting region
 * make an alpha channel for the python API
 * "FIXME - move the radioconfig/user/channel READ operations into SettingsMessage as well"

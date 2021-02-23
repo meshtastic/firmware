@@ -215,31 +215,31 @@ bool Router::perhapsDecode(MeshPacket *p)
 
     assert(p->which_payloadVariant == MeshPacket_encrypted_tag);
 
-    ChannelHash chHash = p->channel;
-    int16_t chIndex = channels.setActiveByHash(chHash);
-    if (chIndex < 0) {
-        DEBUG_MSG("No suitable channel found for decoding, hash was 0x%x!\n", chHash);
-        return false;
-    } else {
-        p->channel = chIndex;
+    // Try to find a channel that works with this hash
+    for (ChannelIndex chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
+        // Try to use this hash/channel pair
+        if (channels.decryptForHash(chIndex, p->channel)) {
+            // Try to decrypt the packet if we can
+            static uint8_t bytes[MAX_RHPACKETLEN];
+            memcpy(bytes, p->encrypted.bytes,
+                   p->encrypted
+                       .size); // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf
+            crypto->decrypt(p->from, p->id, p->encrypted.size, bytes);
 
-        // Try to decrypt the packet if we can
-        static uint8_t bytes[MAX_RHPACKETLEN];
-        memcpy(bytes, p->encrypted.bytes,
-               p->encrypted
-                   .size); // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf
-        crypto->decrypt(p->from, p->id, p->encrypted.size, bytes);
-
-        // Take those raw bytes and convert them back into a well structured protobuf we can understand
-        if (!pb_decode_from_bytes(bytes, p->encrypted.size, Data_fields, &p->decoded)) {
-            DEBUG_MSG("Invalid protobufs in received mesh packet!\n");
-            return false;
-        } else {
-            // parsing was successful
-            p->which_payloadVariant = MeshPacket_decoded_tag;
-            return true;
+            // Take those raw bytes and convert them back into a well structured protobuf we can understand
+            if (!pb_decode_from_bytes(bytes, p->encrypted.size, Data_fields, &p->decoded)) {
+                DEBUG_MSG("Invalid protobufs in received mesh packet (bad psk?!\n");
+            } else {
+                // parsing was successful
+                p->channel = chIndex; // change to store the index instead of the hash
+                p->which_payloadVariant = MeshPacket_decoded_tag;
+                return true;
+            }
         }
     }
+
+    DEBUG_MSG("No suitable channel found for decoding, hash was 0x%x!\n", p->channel);
+    return false;
 }
 
 NodeNum Router::getNodeNum()
