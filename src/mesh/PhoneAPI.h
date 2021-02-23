@@ -101,10 +101,6 @@ class PhoneAPI
      */
     virtual void onNowHasData(uint32_t fromRadioNum) {}
 
-    void handleSetOwner(const User &o);
-    void handleSetChannel(const Channel &cc);
-    void handleSetRadio(const RadioConfig &r);
-
   private:
     /**
      * Handle a packet that the phone wants us to send.  It is our responsibility to free the packet to the pool
