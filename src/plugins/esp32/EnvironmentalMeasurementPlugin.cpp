@@ -49,19 +49,20 @@ int32_t EnvironmentalMeasurementPlugin::runOnce() {
         Uncomment the preferences below if you want to use the plugin
         without having to configure it from the PythonAPI or WebUI.
     */
-    /*radioConfig.preferences.environmental_measurement_plugin_enabled = 1;
+    /*radioConfig.preferences.environmental_measurement_plugin_measurement_enabled = 1;
+    radioConfig.preferences.environmental_measurement_plugin_screen_enabled = 1;
     radioConfig.preferences.environmental_measurement_plugin_read_error_count_threshold = 5;
     radioConfig.preferences.environmental_measurement_plugin_update_interval = 30;
     radioConfig.preferences.environmental_measurement_plugin_recovery_interval = 600;*/
 
-    if (!radioConfig.preferences.environmental_measurement_plugin_enabled){
-        // If this plugin is not enabled, don't waste any OSThread time on it
+    if (! (radioConfig.preferences.environmental_measurement_plugin_measurement_enabled || radioConfig.preferences.environmental_measurement_plugin_screen_enabled)){
+        // If this plugin is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
         return (INT32_MAX);
     }
 
     if (firstTime) {
         // This is the first time the OSThread library has called this function, so do some setup
-        DEBUG_MSG("EnvironmentalMeasurement: Initializing as sender\n");
+        DEBUG_MSG("EnvironmentalMeasurement: Initializing\n");
         environmentalMeasurementPluginRadio = new EnvironmentalMeasurementPluginRadio();
         firstTime = 0;
         // begin reading measurements from the sensor
@@ -70,10 +71,22 @@ int32_t EnvironmentalMeasurementPlugin::runOnce() {
         // returning the interval here means that the next time OSThread
         // calls our plugin, we'll run the other branch of this if statement
         // and actually do a "sendOurEnvironmentalMeasurement()"
-        dht.begin();
-        return(DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);   
+        if (radioConfig.preferences.environmental_measurement_plugin_measurement_enabled)
+        {
+            // it's possible to have this plugin enabled, only for displaying values on the screen.
+            // therefore, we should only enable the sensor loop if measurement is also enabled
+            dht.begin();
+            return(DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);   
+        }
+        return (INT32_MAX);
     }
     else {
+        if (!radioConfig.preferences.environmental_measurement_plugin_measurement_enabled)
+        {
+            // if we somehow got to a second run of this plugin with measurement disabled, then just wait forever
+            // I can't imagine we'd ever get here though.
+            return (INT32_MAX);
+        }
         // this is not the first time OSThread library has called this function
         // so just do what we intend to do on the interval
         if(sensor_read_error_count > radioConfig.preferences.environmental_measurement_plugin_read_error_count_threshold)
@@ -110,6 +123,10 @@ int32_t EnvironmentalMeasurementPlugin::runOnce() {
 #endif
 }
 
+bool EnvironmentalMeasurementPluginRadio::wantUIFrame() {
+    return radioConfig.preferences.environmental_measurement_plugin_screen_enabled;
+}
+
 void EnvironmentalMeasurementPluginRadio::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -134,8 +151,8 @@ String GetSenderName(const MeshPacket &mp) {
 
 bool EnvironmentalMeasurementPluginRadio::handleReceivedProtobuf(const MeshPacket &mp, const EnvironmentalMeasurement &p)
 {
-    if (!radioConfig.preferences.environmental_measurement_plugin_enabled){
-        // If this plugin is not enabled, don't handle the packet, and allow other plugins to consume 
+    if (!(radioConfig.preferences.environmental_measurement_plugin_measurement_enabled || radioConfig.preferences.environmental_measurement_plugin_screen_enabled)){
+        // If this plugin is not enabled in any capacity, don't handle the packet, and allow other plugins to consume 
          return false;
     }
     bool wasBroadcast = mp.to == NODENUM_BROADCAST;
