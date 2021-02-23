@@ -937,7 +937,7 @@ void Screen::setFrames()
         normalFrames[numframes++] = drawPluginFrame;
     }
     
-    DEBUG_MSG("Added plugins.  numframes: %d", numframes);
+    DEBUG_MSG("Added plugins.  numframes: %d\n", numframes);
 
     // If we have a critical fault, show it first
     if (myNodeInfo.error_code)
