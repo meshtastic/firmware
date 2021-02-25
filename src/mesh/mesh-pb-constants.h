@@ -2,6 +2,7 @@
 
 #include "mesh/generated/mesh.pb.h"
 #include "mesh/generated/deviceonly.pb.h"
+#include "mesh/generated/admin.pb.h"
 
 // this file defines constants which come from mesh.options
 
