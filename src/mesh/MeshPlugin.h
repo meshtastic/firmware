@@ -2,6 +2,8 @@
 
 #include "mesh/MeshTypes.h"
 #include <vector>
+#include <OLEDDisplay.h>
+#include <OLEDDisplayUi.h>
 /** A baseclass for any mesh "plugin".
  *
  * A plugin allows you to add new features to meshtastic device code, without needing to know messaging details.
@@ -14,7 +16,7 @@
  */
 class MeshPlugin
 {
-    static std::vector<MeshPlugin *> *plugins;
+  static std::vector<MeshPlugin *> *plugins;
 
   public:
     /** Constructor
@@ -27,6 +29,10 @@ class MeshPlugin
     /** For use only by MeshService
      */
     static void callPlugins(const MeshPacket &mp);
+
+    static std::vector<MeshPlugin *> GetMeshPluginsWithUIFrames();
+
+    virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) { return; }
 
   protected:
     const char *name;
@@ -66,6 +72,13 @@ class MeshPlugin
     /** Messages can be received that have the want_response bit set.  If set, this callback will be invoked
      * so that subclasses can (optionally) send a response back to the original sender.  */
     virtual MeshPacket *allocReply() { return NULL; }
+
+    /***
+     * @return true if you want to be alloced a UI screen frame
+     */
+    virtual bool wantUIFrame() { return false; }
+
+
 
   private:
 
