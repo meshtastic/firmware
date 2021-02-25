@@ -42,6 +42,7 @@ For an detailed walk-through aimed at beginners, we recommend [meshtastic.letsta
 ### Related Groups
 
 Telegram group for **Italy**-based users [t.me/meshtastic_italia](http://t.me/meshtastic_italia) (Italian language, unofficial).
+Telegram group for **Russian**-based users [t.me/meshtastic_russia](https://t.me/meshtastic_russia) (Russian language, unofficial).
 
 # Updates
 
