@@ -8,7 +8,7 @@
 #include <Arduino.h>
 #include <map>
 
-#define STOREFORWARD_MAX_PACKETS 6000
+#define STOREFORWARD_MAX_PACKETS 7500
 #define STOREFORWARD_SEND_HISTORY_SHORT 600
 
 StoreForwardPlugin *storeForwardPlugin;
@@ -26,8 +26,8 @@ int32_t StoreForwardPlugin::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    radioConfig.preferences.store_forward_plugin_enabled = 1;
-    radioConfig.preferences.is_router = 1;
+    // radioConfig.preferences.store_forward_plugin_enabled = 1;
+    // radioConfig.preferences.is_router = 1;
 
     if (radioConfig.preferences.store_forward_plugin_enabled) {
 
@@ -79,6 +79,7 @@ int32_t StoreForwardPlugin::runOnce()
 
             // Maybe some cleanup functions?
             this->sawNodeReport();
+            this->historyReport();
             return (10 * 1000);
         }
 
@@ -99,6 +100,8 @@ void StoreForwardPlugin::populatePSRAM()
         https://learn.upesy.com/en/programmation/psram.html#psram-tab
     */
 
+    DEBUG_MSG("Before PSRAM initilization\n");
+
     DEBUG_MSG("Total heap: %d\n", ESP.getHeapSize());
     DEBUG_MSG("Free heap: %d\n", ESP.getFreeHeap());
     DEBUG_MSG("Total PSRAM: %d\n", ESP.getPsramSize());
@@ -107,6 +110,7 @@ void StoreForwardPlugin::populatePSRAM()
     // PacketHistoryStruct *packetHistory = (PacketHistoryStruct *)ps_calloc(STOREFORWARD_MAX_PACKETS,
     // sizeof(PacketHistoryStruct));
     this->packetHistory = (PacketHistoryStruct *)ps_calloc(STOREFORWARD_MAX_PACKETS, sizeof(PacketHistoryStruct));
+    DEBUG_MSG("After PSRAM initilization\n");
 
     DEBUG_MSG("Total heap: %d\n", ESP.getHeapSize());
     DEBUG_MSG("Free heap: %d\n", ESP.getFreeHeap());
@@ -154,7 +158,28 @@ uint32_t StoreForwardPlugin::sawNode(uint32_t node)
     return 0;
 }
 
-void StoreForwardPlugin::addHistory(const MeshPacket *mp)
+void StoreForwardPlugin::historyReport()
+{
+    DEBUG_MSG("Iterating through the message history...\n");
+    DEBUG_MSG("Message history contains %u records\n", this->packetHistoryCurrent);
+    uint32_t startTimer = millis();
+    for (int i = 0; i < this->packetHistoryCurrent; i++) {
+        if (this->packetHistory[i].time) {
+            // DEBUG_MSG("... time-%u to-0x%08x\n", this->packetHistory[i].time, this->packetHistory[i].to & 0xffffffff);
+        }
+    }
+    DEBUG_MSG("StoreForwardPlugin::historyReport runtime - %u ms\n", millis() - startTimer);
+}
+void StoreForwardPlugin::historySend(uint32_t msAgo, uint32_t to)
+{
+    for (int i = 0; i < this->packetHistoryCurrent; i++) {
+        if (this->packetHistory[i].time) {
+            // DEBUG_MSG("... time-%u to-0x%08x\n", this->packetHistory[i].time, this->packetHistory[i].to & 0xffffffff);
+        }
+    }
+}
+
+void StoreForwardPlugin::historyAdd(const MeshPacket *mp)
 {
     auto &p = mp;
 
@@ -166,10 +191,10 @@ void StoreForwardPlugin::addHistory(const MeshPacket *mp)
 
     // destination, source, bytes
     // memcpy(p->encrypted.bytes, bytes, numbytes);
-    memcpy(this->packetHistory[0].bytes, bytes, MAX_RHPACKETLEN);
-    // pb_decode_from_bytes
-
-    // Serialization is in Router.cpp line 180
+    memcpy(this->packetHistory[this->packetHistoryCurrent].bytes, bytes, MAX_RHPACKETLEN);
+    this->packetHistory[this->packetHistoryCurrent].time = millis();
+    this->packetHistory[this->packetHistoryCurrent].to = mp->to;
+    this->packetHistoryCurrent++;
 }
 
 // We saw a node.
@@ -185,7 +210,7 @@ void StoreForwardPlugin::sawNodeReport()
     TODO: Implment this as a std::map for quicker lookups (maybe it doesn't matter?).
     */
 
-    DEBUG_MSG("Iterating through the seen nodes in receivedRecord\n");
+    DEBUG_MSG("Iterating through the seen nodes in receivedRecord...\n");
     for (int i = 0; i < 50; i++) {
         if (receivedRecord[i][1]) {
             DEBUG_MSG("... record-%u from-0x%08x secAgo-%u\n", i, receivedRecord[i][0], (millis() - receivedRecord[i][1]) / 1000);
@@ -228,7 +253,7 @@ bool StoreForwardPluginRadio::handleReceived(const MeshPacket &mp)
             } else if (mp.decoded.data.portnum == PortNum_TEXT_MESSAGE_APP) {
                 DEBUG_MSG("Packet came from - PortNum_TEXT_MESSAGE_APP\n");
 
-                storeForwardPlugin->addHistory(&mp);
+                storeForwardPlugin->historyAdd(&mp);
 
             } else if (mp.decoded.data.portnum == PortNum_REMOTE_HARDWARE_APP) {
                 DEBUG_MSG("Packet came from - PortNum_REMOTE_HARDWARE_APP\n");
@@ -254,6 +279,11 @@ bool StoreForwardPluginRadio::handleReceived(const MeshPacket &mp)
                 DEBUG_MSG("Packet came from - PortNum_ATAK_FORWARDER\n");
             } else {
                 DEBUG_MSG("Packet came from an unknown port %u\n", mp.decoded.data.portnum);
+            }
+
+            if ((millis() - sawTime) > STOREFORWARD_SEND_HISTORY_SHORT) {
+                // Node has been away for a while. 
+                storeForwardPlugin->historySend(sawTime, mp.from);
             }
         }
 
