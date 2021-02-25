@@ -241,7 +241,7 @@ def print_addr(name, value, resolver):
 def print_stack_full(lines, resolver):
     print("stack:")
     for line in lines:
-        print(line.offset + ":")
+        print(str(line.offset) + ":")
         for content in line.content:
             print("  " + resolver.resolve_stack_addr(content))
 
