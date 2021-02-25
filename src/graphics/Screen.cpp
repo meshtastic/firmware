@@ -64,6 +64,10 @@ uint8_t imgBattery[16] = {0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 
 // Threshold values for the GPS lock accuracy bar display
 uint32_t dopThresholds[5] = {2000, 1000, 500, 200, 100};
 
+// At some point, we're going to ask all of the plugins if they would like to display a screen frame
+// we'll need to hold onto pointers for the plugins that can draw a frame.
+std::vector<MeshPlugin *> pluginFrames;
+
 // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
 static char ourId[5];
 
@@ -142,6 +146,30 @@ static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 static void drawSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     drawIconScreen("Sleeping...", display, state, x, y);
+}
+
+static void drawPluginFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    uint8_t plugin_frame;
+    // there's a little but in the UI transition code
+    // where it invokes the function at the correct offset 
+    // in the array of "drawScreen" functions; however,
+    // the passed-state doesn't quite reflect the "current" 
+    // screen, so we have to detect it.
+    if (state->frameState == IN_TRANSITION && state->transitionFrameRelationship == INCOMING) {
+        // if we're transitioning from the end of the frame list back around to the first 
+        // frame, then we want this to be `0`
+        plugin_frame = state->transitionFrameTarget;
+    }
+    else {
+        // otherwise, just display the plugin frame that's aligned with the current frame
+        plugin_frame = state->currentFrame;
+        //DEBUG_MSG("Screen is not in transition.  Frame: %d\n\n", plugin_frame);
+    }
+    //DEBUG_MSG("Drawing Plugin Frame %d\n\n", plugin_frame);
+    MeshPlugin &pi = *pluginFrames.at(plugin_frame);
+    pi.drawFrame(display,state,x,y);
+    
 }
 
 static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -887,12 +915,29 @@ void Screen::setFrames()
     DEBUG_MSG("showing standard frames\n");
     showingNormalScreen = true;
 
+    pluginFrames = MeshPlugin::GetMeshPluginsWithUIFrames();
+    DEBUG_MSG("Showing %d plugin frames\n", pluginFrames.size());
+    int totalFrameCount = MAX_NUM_NODES + NUM_EXTRA_FRAMES + pluginFrames.size();
+    DEBUG_MSG("Total frame count: %d\n", totalFrameCount);
+
     // We don't show the node info our our node (if we have it yet - we should)
     size_t numnodes = nodeStatus->getNumTotal();
     if (numnodes > 0)
         numnodes--;
 
     size_t numframes = 0;
+
+    // put all of the plugin frames first.
+    // this is a little bit of a dirty hack; since we're going to call
+    // the same drawPluginFrame handler here for all of these plugin frames
+    // and then we'll just assume that the state->currentFrame value
+    // is the same offset into the pluginFrames vector
+    // so that we can invoke the plugin's callback
+    for (auto i = pluginFrames.begin(); i != pluginFrames.end(); ++i) {
+        normalFrames[numframes++] = drawPluginFrame;
+    }
+    
+    DEBUG_MSG("Added plugins.  numframes: %d\n", numframes);
 
     // If we have a critical fault, show it first
     if (myNodeInfo.error_code)
@@ -921,6 +966,8 @@ void Screen::setFrames()
         normalFrames[numframes++] = &Screen::drawDebugInfoWiFiTrampoline;
     }
 #endif
+
+    DEBUG_MSG("Finished building frames. numframes: %d\n", numframes);
 
     ui.setFrames(normalFrames, numframes);
     ui.enableAllIndicators();
