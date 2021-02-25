@@ -6,6 +6,7 @@
 #include "plugins/TextMessagePlugin.h"
 
 #ifndef NO_ESP32
+#include "plugins/esp32/EnvironmentalMeasurementPlugin.h"
 #include "plugins/esp32/RangeTestPlugin.h"
 #include "plugins/SerialPlugin.h"
 #include "plugins/StoreForwardPlugin.h"
@@ -40,5 +41,6 @@ void setupPlugins()
 
     new RangeTestPlugin();
     // new StoreForwardPlugin();
+    new EnvironmentalMeasurementPlugin();
 #endif
 }
