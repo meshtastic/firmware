@@ -217,6 +217,11 @@ typedef struct _RadioConfig_UserPreferences {
     bool range_test_plugin_save;
     bool store_forward_plugin_enabled;
     uint32_t store_forward_plugin_records;
+    bool environmental_measurement_plugin_measurement_enabled;
+    bool environmental_measurement_plugin_screen_enabled;
+    uint32_t environmental_measurement_plugin_read_error_count_threshold;
+    uint32_t environmental_measurement_plugin_update_interval;
+    uint32_t environmental_measurement_plugin_recovery_interval;
 } RadioConfig_UserPreferences;
 
 typedef struct _RouteDiscovery {
@@ -376,7 +381,7 @@ extern "C" {
 #define ChannelSettings_init_default             {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, "", 0, 0, 0, 0, 0, 0, 0}
 #define Channel_init_default                     {0, false, ChannelSettings_init_default, _Channel_Role_MIN}
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default}
-#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0}
 #define MyNodeInfo_init_default                  {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0}
 #define LogRecord_init_default                   {"", 0, "", _LogRecord_Level_MIN}
@@ -392,7 +397,7 @@ extern "C" {
 #define ChannelSettings_init_zero                {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, "", 0, 0, 0, 0, 0, 0, 0}
 #define Channel_init_zero                        {0, false, ChannelSettings_init_zero, _Channel_Role_MIN}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero}
-#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0}
 #define MyNodeInfo_init_zero                     {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0}
 #define LogRecord_init_zero                      {"", 0, "", _LogRecord_Level_MIN}
@@ -480,6 +485,11 @@ extern "C" {
 #define RadioConfig_UserPreferences_range_test_plugin_save_tag 134
 #define RadioConfig_UserPreferences_store_forward_plugin_enabled_tag 136
 #define RadioConfig_UserPreferences_store_forward_plugin_records_tag 137
+#define RadioConfig_UserPreferences_environmental_measurement_plugin_measurement_enabled_tag 140
+#define RadioConfig_UserPreferences_environmental_measurement_plugin_screen_enabled_tag 141
+#define RadioConfig_UserPreferences_environmental_measurement_plugin_read_error_count_threshold_tag 142
+#define RadioConfig_UserPreferences_environmental_measurement_plugin_update_interval_tag 143
+#define RadioConfig_UserPreferences_environmental_measurement_plugin_recovery_interval_tag 144
 #define RouteDiscovery_route_tag                 2
 #define User_id_tag                              1
 #define User_long_name_tag                       2
@@ -496,9 +506,9 @@ extern "C" {
 #define MeshPacket_id_tag                        6
 #define MeshPacket_rx_time_tag                   7
 #define MeshPacket_rx_snr_tag                    8
-#define MeshPacket_hop_limit_tag                 9
-#define MeshPacket_want_ack_tag                  10
-#define MeshPacket_priority_tag                  11
+#define MeshPacket_hop_limit_tag                 10
+#define MeshPacket_want_ack_tag                  11
+#define MeshPacket_priority_tag                  12
 #define NodeInfo_num_tag                         1
 #define NodeInfo_user_tag                        2
 #define NodeInfo_position_tag                    3
@@ -579,9 +589,9 @@ X(a, STATIC,   ONEOF,    BYTES,    (payloadVariant,encrypted,encrypted),   5) \
 X(a, STATIC,   SINGULAR, FIXED32,  id,                6) \
 X(a, STATIC,   SINGULAR, FIXED32,  rx_time,           7) \
 X(a, STATIC,   SINGULAR, FLOAT,    rx_snr,            8) \
-X(a, STATIC,   SINGULAR, UINT32,   hop_limit,         9) \
-X(a, STATIC,   SINGULAR, BOOL,     want_ack,         10) \
-X(a, STATIC,   SINGULAR, UENUM,    priority,         11)
+X(a, STATIC,   SINGULAR, UINT32,   hop_limit,        10) \
+X(a, STATIC,   SINGULAR, BOOL,     want_ack,         11) \
+X(a, STATIC,   SINGULAR, UENUM,    priority,         12)
 #define MeshPacket_CALLBACK NULL
 #define MeshPacket_DEFAULT NULL
 #define MeshPacket_payloadVariant_decoded_MSGTYPE Data
@@ -657,7 +667,12 @@ X(a, STATIC,   SINGULAR, BOOL,     range_test_plugin_enabled, 132) \
 X(a, STATIC,   SINGULAR, UINT32,   range_test_plugin_sender, 133) \
 X(a, STATIC,   SINGULAR, BOOL,     range_test_plugin_save, 134) \
 X(a, STATIC,   SINGULAR, BOOL,     store_forward_plugin_enabled, 136) \
-X(a, STATIC,   SINGULAR, UINT32,   store_forward_plugin_records, 137)
+X(a, STATIC,   SINGULAR, UINT32,   store_forward_plugin_records, 137) \
+X(a, STATIC,   SINGULAR, BOOL,     environmental_measurement_plugin_measurement_enabled, 140) \
+X(a, STATIC,   SINGULAR, BOOL,     environmental_measurement_plugin_screen_enabled, 141) \
+X(a, STATIC,   SINGULAR, UINT32,   environmental_measurement_plugin_read_error_count_threshold, 142) \
+X(a, STATIC,   SINGULAR, UINT32,   environmental_measurement_plugin_update_interval, 143) \
+X(a, STATIC,   SINGULAR, UINT32,   environmental_measurement_plugin_recovery_interval, 144)
 #define RadioConfig_UserPreferences_CALLBACK NULL
 #define RadioConfig_UserPreferences_DEFAULT NULL
 
@@ -776,14 +791,14 @@ extern const pb_msgdesc_t AdminMessage_msg;
 #define MeshPacket_size                          297
 #define ChannelSettings_size                     87
 #define Channel_size                             94
-#define RadioConfig_size                         308
-#define RadioConfig_UserPreferences_size         305
+#define RadioConfig_size                         335
+#define RadioConfig_UserPreferences_size         332
 #define NodeInfo_size                            130
 #define MyNodeInfo_size                          89
 #define LogRecord_size                           81
-#define FromRadio_size                           317
+#define FromRadio_size                           344
 #define ToRadio_size                             300
-#define AdminMessage_size                        311
+#define AdminMessage_size                        338
 
 #ifdef __cplusplus
 } /* extern "C" */
