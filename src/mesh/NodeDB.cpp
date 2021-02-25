@@ -7,7 +7,6 @@
 #include "CryptoEngine.h"
 #include "FSCommon.h"
 #include "GPS.h"
-#include "main.h"
 #include "MeshRadio.h"
 #include "NodeDB.h"
 #include "PacketHistory.h"
@@ -16,6 +15,7 @@
 #include "Router.h"
 #include "configuration.h"
 #include "error.h"
+#include "main.h"
 #include "mesh-pb-constants.h"
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -183,7 +183,7 @@ bool NodeDB::resetRadioConfig()
     memset(activePSK, 0, sizeof(activePSK)); // In case the user provided a short key, we want to pad the rest with zeros
     memcpy(activePSK, channelSettings.psk.bytes, channelSettings.psk.size);
     activePSKSize = channelSettings.psk.size;
-    if(activePSKSize == 0)
+    if (activePSKSize == 0)
         DEBUG_MSG("Warning: User disabled encryption\n");
     else if (activePSKSize == 1) {
         // Convert the short single byte variants of psk into variant that can be used more generally
@@ -199,12 +199,12 @@ bool NodeDB::resetRadioConfig()
             uint8_t *last = activePSK + sizeof(defaultpsk) - 1;
             *last = *last + pskIndex - 1; // index of 1 means no change vs defaultPSK
         }
-    } else if(activePSKSize < 16) {
+    } else if (activePSKSize < 16) {
         // Error! The user specified only the first few bits of an AES128 key.  So by convention we just pad the rest of the key
         // with zeros
         DEBUG_MSG("Warning: User provided a too short AES128 key - padding\n");
         activePSKSize = 16;
-    } else if(activePSKSize < 32 && activePSKSize != 16) {
+    } else if (activePSKSize < 32 && activePSKSize != 16) {
         // Error! The user specified only the first few bits of an AES256 key.  So by convention we just pad the rest of the key
         // with zeros
         DEBUG_MSG("Warning: User provided a too short AES256 key - padding\n");
@@ -489,7 +489,15 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p)
 
     DEBUG_MSG("DB update position node=0x%x time=%u, latI=%d, lonI=%d\n", nodeId, p.time, p.latitude_i, p.longitude_i);
 
-    info->position = p;
+    // Be careful to only update fields that have been set by the sender
+    if (p.time)
+        info->position.time = p.time;
+    if(p.battery_level)
+        info->position.battery_level = p.battery_level;
+    if (p.latitude_i || p.longitude_i) {
+        info->position.latitude_i = p.latitude_i;
+        info->position.longitude_i = p.longitude_i;
+    }
     info->has_position = true;
     updateGUIforNode = info;
     notifyObservers(true); // Force an update whether or not our node counts have changed
@@ -601,10 +609,9 @@ void recordCriticalError(CriticalErrorCode code, uint32_t address)
     String lcd = String("Critical error ") + code + "!\n";
     screen->print(lcd.c_str());
     DEBUG_MSG("NOTE! Recording critical error %d, address=%lx\n", code, address);
-    
+
     // Record error to DB
     myNodeInfo.error_code = code;
     myNodeInfo.error_address = address;
     myNodeInfo.error_count++;
-
 }
