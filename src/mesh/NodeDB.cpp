@@ -357,12 +357,16 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p)
 
     DEBUG_MSG("DB update position node=0x%x time=%u, latI=%d, lonI=%d\n", nodeId, p.time, p.latitude_i, p.longitude_i);
 
-    auto oldtime = info->position.time;
-    info->position = p;
-    if(p.time == 0 && oldtime != 0) {
-        // A lot of position reports don't have time populated.  In that case, be careful to not blow away the time we
-        // recorded based on the packet rxTime
-        info->position.time = oldtime;
+    // Be careful to only update fields that have been set by the sender
+    // A lot of position reports don't have time populated.  In that case, be careful to not blow away the time we
+    // recorded based on the packet rxTime
+    if (!info->position.time && p.time)
+        info->position.time = p.time;
+    if(p.battery_level)
+        info->position.battery_level = p.battery_level;
+    if (p.latitude_i || p.longitude_i) {
+        info->position.latitude_i = p.latitude_i;
+        info->position.longitude_i = p.longitude_i;
     }
     info->has_position = true;
     updateGUIforNode = info;
