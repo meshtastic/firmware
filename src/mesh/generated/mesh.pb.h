@@ -141,6 +141,7 @@ typedef struct _Data {
     bool want_response;
     uint32_t dest;
     uint32_t source;
+    uint32_t request_id;
 } Data;
 
 typedef struct _LogRecord {
@@ -282,10 +283,7 @@ typedef struct _Routing {
         RouteDiscovery route_request;
         RouteDiscovery route_reply;
         Routing_Error error_reason;
-        uint32_t success_id;
-        uint32_t fail_id;
     };
-    uint32_t original_id;
 } Routing;
 
 typedef struct _FromRadio {
@@ -366,8 +364,8 @@ extern "C" {
 #define Position_init_default                    {0, 0, 0, 0, 0}
 #define User_init_default                        {"", "", "", {0}}
 #define RouteDiscovery_init_default              {0, {0, 0, 0, 0, 0, 0, 0, 0}}
-#define Routing_init_default                     {0, {RouteDiscovery_init_default}, 0}
-#define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0}
+#define Routing_init_default                     {0, {RouteDiscovery_init_default}}
+#define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0}
 #define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN}
 #define ChannelSettings_init_default             {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, "", 0, 0, 0, 0, 0, 0, 0}
 #define Channel_init_default                     {0, false, ChannelSettings_init_default, _Channel_Role_MIN}
@@ -381,8 +379,8 @@ extern "C" {
 #define Position_init_zero                       {0, 0, 0, 0, 0}
 #define User_init_zero                           {"", "", "", {0}}
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
-#define Routing_init_zero                        {0, {RouteDiscovery_init_zero}, 0}
-#define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0}
+#define Routing_init_zero                        {0, {RouteDiscovery_init_zero}}
+#define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0}
 #define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN}
 #define ChannelSettings_init_zero                {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, "", 0, 0, 0, 0, 0, 0, 0}
 #define Channel_init_zero                        {0, false, ChannelSettings_init_zero, _Channel_Role_MIN}
@@ -411,6 +409,7 @@ extern "C" {
 #define Data_want_response_tag                   3
 #define Data_dest_tag                            4
 #define Data_source_tag                          5
+#define Data_request_id_tag                      6
 #define LogRecord_message_tag                    1
 #define LogRecord_time_tag                       2
 #define LogRecord_source_tag                     3
@@ -507,9 +506,6 @@ extern "C" {
 #define Routing_route_request_tag                1
 #define Routing_route_reply_tag                  2
 #define Routing_error_reason_tag                 3
-#define Routing_success_id_tag                   4
-#define Routing_fail_id_tag                      5
-#define Routing_original_id_tag                  6
 #define FromRadio_num_tag                        1
 #define FromRadio_my_info_tag                    3
 #define FromRadio_node_info_tag                  4
@@ -548,10 +544,7 @@ X(a, STATIC,   REPEATED, FIXED32,  route,             2)
 #define Routing_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,route_request,route_request),   1) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,route_reply,route_reply),   2) \
-X(a, STATIC,   ONEOF,    UENUM,    (variant,error_reason,error_reason),   3) \
-X(a, STATIC,   ONEOF,    FIXED32,  (variant,success_id,success_id),   4) \
-X(a, STATIC,   ONEOF,    FIXED32,  (variant,fail_id,fail_id),   5) \
-X(a, STATIC,   SINGULAR, FIXED32,  original_id,       6)
+X(a, STATIC,   ONEOF,    UENUM,    (variant,error_reason,error_reason),   3)
 #define Routing_CALLBACK NULL
 #define Routing_DEFAULT NULL
 #define Routing_variant_route_request_MSGTYPE RouteDiscovery
@@ -562,7 +555,8 @@ X(a, STATIC,   SINGULAR, UENUM,    portnum,           1) \
 X(a, STATIC,   SINGULAR, BYTES,    payload,           2) \
 X(a, STATIC,   SINGULAR, BOOL,     want_response,     3) \
 X(a, STATIC,   SINGULAR, FIXED32,  dest,              4) \
-X(a, STATIC,   SINGULAR, FIXED32,  source,            5)
+X(a, STATIC,   SINGULAR, FIXED32,  source,            5) \
+X(a, STATIC,   SINGULAR, FIXED32,  request_id,        6)
 #define Data_CALLBACK NULL
 #define Data_DEFAULT NULL
 
@@ -760,9 +754,9 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define Position_size                            37
 #define User_size                                72
 #define RouteDiscovery_size                      40
-#define Routing_size                             47
-#define Data_size                                255
-#define MeshPacket_size                          294
+#define Routing_size                             42
+#define Data_size                                260
+#define MeshPacket_size                          298
 #define ChannelSettings_size                     87
 #define Channel_size                             94
 #define RadioConfig_size                         335
@@ -771,7 +765,7 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define MyNodeInfo_size                          89
 #define LogRecord_size                           81
 #define FromRadio_size                           344
-#define ToRadio_size                             297
+#define ToRadio_size                             301
 
 #ifdef __cplusplus
 } /* extern "C" */
