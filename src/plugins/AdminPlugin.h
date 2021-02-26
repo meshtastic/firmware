@@ -6,6 +6,8 @@
  */
 class AdminPlugin : public ProtobufPlugin<AdminMessage>
 {
+  MeshPacket *reply = NULL;
+  
   public:
     /** Constructor
      * name is for debugging output
@@ -27,6 +29,9 @@ class AdminPlugin : public ProtobufPlugin<AdminMessage>
     void handleSetOwner(const User &o);
     void handleSetChannel(const Channel &cc);
     void handleSetRadio(const RadioConfig &r);
+
+    void handleGetChannel(const MeshPacket &req, uint32_t channelIndex);
+    void handleGetRadio(const MeshPacket &req);
 };
 
 extern AdminPlugin *adminPlugin;
