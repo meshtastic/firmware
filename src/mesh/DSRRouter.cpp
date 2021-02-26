@@ -142,7 +142,7 @@ void DSRRouter::sniffReceived(const MeshPacket *p, const Routing *c)
         if (c) {
             // handle naks - convert them to route error packets
             // All naks are generated locally, because we failed resending the packet too many times
-            PacketId nakId = c->fail_id;
+            PacketId nakId = c->error_reason ? p->decoded.request_id : 0;
             if (nakId) {
                 auto pending = findPendingPacket(p->to, nakId);
                 if (pending &&

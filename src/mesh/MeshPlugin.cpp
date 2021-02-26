@@ -93,8 +93,10 @@ void MeshPlugin::sendResponse(const MeshPacket &req) {
  * This ensures that if the request packet was sent reliably, the reply is sent that way as well.
 */
 void setReplyTo(MeshPacket *p, const MeshPacket &to) {
+    assert(p->which_payloadVariant == MeshPacket_decoded_tag); // Should already be set by now
     p->to = to.from;
     p->want_ack = to.want_ack;
+    p->decoded.request_id = to.id;
 }
 
 std::vector<MeshPlugin *> MeshPlugin::GetMeshPluginsWithUIFrames() {

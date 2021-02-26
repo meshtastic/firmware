@@ -65,8 +65,8 @@ void ReliableRouter::sniffReceived(const MeshPacket *p, const Routing *c)
 
         // If the payload is valid, look for ack/nak
         if (c) {
-            PacketId ackId = c->success_id;
-            PacketId nakId = c->fail_id;
+            PacketId ackId = c->error_reason == Routing_Error_NONE ? p->decoded.request_id : 0;
+            PacketId nakId = c->error_reason != Routing_Error_NONE ? p->decoded.request_id : 0;
 
             // We intentionally don't check wasSeenRecently, because it is harmless to delete non existent retransmission records
             if (ackId || nakId) {
