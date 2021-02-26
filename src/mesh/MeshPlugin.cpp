@@ -47,8 +47,12 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
 
             bool handled = pi.handleReceived(mp);
 
-            // Possibly send replies (but only if the message was directed to us specifically, i.e. not for promiscious sniffing), also not if we sent it
-            if (mp.decoded.want_response && toUs && mp.from != ourNodeNum) {
+            // Possibly send replies (but only if the message was directed to us specifically, i.e. not for promiscious sniffing)
+
+            // NOTE: we send a reply *even if the (non broadcast) request was from us* which is unfortunate but necessary because currently when the phone 
+            // sends things, it sends things using the local node ID as the from address.  A better solution (FIXME) would be to let phones
+            // have their own distinct addresses and we 'route' to them like any other node.
+            if (mp.decoded.want_response && toUs && (mp.from != ourNodeNum || mp.to == ourNodeNum)) {
                 pi.sendResponse(mp);
                 DEBUG_MSG("Plugin %s sent a response\n", pi.name);
             }
