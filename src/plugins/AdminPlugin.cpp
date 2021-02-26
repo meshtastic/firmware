@@ -13,6 +13,7 @@ void AdminPlugin::handleGetChannel(const MeshPacket &req, uint32_t channelIndex)
         // We create the reply here
         AdminMessage r = AdminMessage_init_default;
         r.get_channel_response = channels.getByIndex(channelIndex);
+        r.which_variant = AdminMessage_get_channel_response_tag;
         reply = allocDataProtobuf(r);
     }
 }
@@ -23,6 +24,7 @@ void AdminPlugin::handleGetRadio(const MeshPacket &req)
         // We create the reply here
         AdminMessage r = AdminMessage_init_default;
         r.get_radio_response = devicestate.radio;
+        r.which_variant = AdminMessage_get_radio_response_tag;
         reply = allocDataProtobuf(r);
     }
 }
