@@ -17,8 +17,10 @@ typedef struct _AdminMessage {
         RadioConfig set_radio;
         User set_owner;
         Channel set_channel;
-        bool get_radio;
-        uint32_t get_channel;
+        bool get_radio_request;
+        RadioConfig get_radio_response;
+        uint32_t get_channel_request;
+        Channel get_channel_response;
     };
 } AdminMessage;
 
@@ -35,21 +37,27 @@ extern "C" {
 #define AdminMessage_set_radio_tag               1
 #define AdminMessage_set_owner_tag               2
 #define AdminMessage_set_channel_tag             3
-#define AdminMessage_get_radio_tag               4
-#define AdminMessage_get_channel_tag             5
+#define AdminMessage_get_radio_request_tag       4
+#define AdminMessage_get_radio_response_tag      5
+#define AdminMessage_get_channel_request_tag     6
+#define AdminMessage_get_channel_response_tag    7
 
 /* Struct field encoding specification for nanopb */
 #define AdminMessage_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_radio,set_radio),   1) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_owner,set_owner),   2) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_channel,set_channel),   3) \
-X(a, STATIC,   ONEOF,    BOOL,     (variant,get_radio,get_radio),   4) \
-X(a, STATIC,   ONEOF,    UINT32,   (variant,get_channel,get_channel),   5)
+X(a, STATIC,   ONEOF,    BOOL,     (variant,get_radio_request,get_radio_request),   4) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_radio_response,get_radio_response),   5) \
+X(a, STATIC,   ONEOF,    UINT32,   (variant,get_channel_request,get_channel_request),   6) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_channel_response,get_channel_response),   7)
 #define AdminMessage_CALLBACK NULL
 #define AdminMessage_DEFAULT NULL
 #define AdminMessage_variant_set_radio_MSGTYPE RadioConfig
 #define AdminMessage_variant_set_owner_MSGTYPE User
 #define AdminMessage_variant_set_channel_MSGTYPE Channel
+#define AdminMessage_variant_get_radio_response_MSGTYPE RadioConfig
+#define AdminMessage_variant_get_channel_response_MSGTYPE Channel
 
 extern const pb_msgdesc_t AdminMessage_msg;
 
