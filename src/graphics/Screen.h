@@ -196,6 +196,7 @@ class Screen : public concurrency::OSThread
 
     int handleStatusUpdate(const meshtastic::Status *arg);
     int handleTextMessage(const MeshPacket *arg);
+    void goToNextNotificaiton();
 
     /// Used to force (super slow) eink displays to draw critical frames
     void forceDisplay();
@@ -246,6 +247,8 @@ class Screen : public concurrency::OSThread
     static void drawDebugInfoSettingsTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
     static void drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+
+    uint32_t textMessageFrame;
 
     /// Queue of commands to execute in doTask.
     TypedQueue<ScreenCmd> cmdQueue;

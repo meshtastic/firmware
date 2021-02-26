@@ -941,8 +941,10 @@ void Screen::setFrames()
         normalFrames[numframes++] = drawCriticalFaultFrame;
 
     // If we have a text message - show it next
-    if (devicestate.has_rx_text_message)
+    if (devicestate.has_rx_text_message) {
+        textMessageFrame = numframes;
         normalFrames[numframes++] = drawTextMessageFrame;
+    }
 
     // then all the nodes
     for (size_t i = 0; i < numnodes; i++)
@@ -1343,11 +1345,21 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
 
 int Screen::handleTextMessage(const MeshPacket *arg)
 {
-    if (showingNormalScreen) {
-        setFrames(); // Regen the list of screens (will show new text message)
-    }
-
+    DEBUG_MSG("SCREEN: text received; telling ui to bounce the frame symbol");
+    setFastFramerate();
+    // The text message screen is currently at a variable position in the frame array
+    // it should usually come after all plugins and critical messages
+    // let's use an instance variable to track which UI frame is for text messages.
+    // TODO: Move the text messages display UI to a plugin 
+    // so we can get it out of Screen.cpp
+    std::vector<uint32_t> textFrames = {textMessageFrame};
+    ui.setFrameNotifications(textFrames);
+    
     return 0;
+}
+
+void Screen::goToNextNotificaiton() {
+    ui.switchToFrame(ui.getFirstNotifyingFrame());
 }
 
 } // namespace graphics

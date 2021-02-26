@@ -252,6 +252,7 @@ class ButtonThread : public OSThread
     {
 #ifndef NO_ESP32
         disablePin();
+        screen->goToNextNotificaiton();
 #endif
     }
 
