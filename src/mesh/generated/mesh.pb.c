@@ -24,18 +24,6 @@ PB_BIND(Data, Data, 2)
 PB_BIND(MeshPacket, MeshPacket, 2)
 
 
-PB_BIND(ChannelSettings, ChannelSettings, AUTO)
-
-
-PB_BIND(Channel, Channel, AUTO)
-
-
-PB_BIND(RadioConfig, RadioConfig, 2)
-
-
-PB_BIND(RadioConfig_UserPreferences, RadioConfig_UserPreferences, 2)
-
-
 PB_BIND(NodeInfo, NodeInfo, AUTO)
 
 
@@ -49,12 +37,6 @@ PB_BIND(FromRadio, FromRadio, 2)
 
 
 PB_BIND(ToRadio, ToRadio, 2)
-
-
-
-
-
-
 
 
 
