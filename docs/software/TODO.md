@@ -18,8 +18,9 @@ You probably don't care about this section - skip to the next one.
 * DONE test single channel without python
 * DONE Use "default" for name if name is empty
 * DONE fix python data packet receiving (nothing showing in log?)
-* implement 'get channels' Admin plugin operation
-* use get-channels from python
+* DONE implement 'get channels' Admin plugin operation
+* DONE use get-channels from python
+* use get channels & get settings from android
 * use set-channel from python
 * combine acks and responses in a single message if possible (do routing plugin LAST and drop ACK if someone else has already replied)
 * use portuino TCP connection to debug with python API
@@ -31,7 +32,7 @@ You probably don't care about this section - skip to the next one.
 * add gui in android app for setting region
 * warn in python api if we are too new to talk to the device code
 * make a post warning about 1.2, telling how to stay on old android & python clients.  link to this from the android dialog message and python version warning.
-* "FIXME - move the radioconfig/user/channel READ operations into SettingsMessage as well"
+* DONE "FIXME - move the radioconfig/user/channel READ operations into SettingsMessage as well"
 * DONE scrub protobufs to make sure they are absoloute minimum wiresize (in particular Data, ChannelSets and positions)
 * change syncword
 * allow chaning packets in single transmission - to increase airtime efficiency and amortize packet overhead
