@@ -124,22 +124,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
                                  : (gps && gps->isConnected()); // Update with latest GPS connect info
         fromRadioScratch.which_payloadVariant = FromRadio_my_info_tag;
         fromRadioScratch.my_info = myNodeInfo;
-        state = STATE_SEND_RADIO;
+        state = STATE_SEND_NODEINFO;
 
         service.refreshMyNodeInfo();  // Update my NodeInfo because the client will be asking for it soon.
-        break;
-
-    case STATE_SEND_RADIO:
-        fromRadioScratch.which_payloadVariant = FromRadio_radio_tag;
-
-        fromRadioScratch.radio = radioConfig;
-
-        // NOTE: The phone app needs to know the ls_secs value so it can properly expect sleep behavior.
-        // So even if we internally use 0 to represent 'use default' we still need to send the value we are
-        // using to the app (so that even old phone apps work with new device loads).
-        fromRadioScratch.radio.preferences.ls_secs = getPref_ls_secs();
-
-        state = STATE_SEND_NODEINFO;
         break;
 
     case STATE_SEND_NODEINFO: {
@@ -217,9 +204,6 @@ bool PhoneAPI::available()
         if (!nodeInfoForPhone)
             nodeInfoForPhone = nodeDB.readNextInfo();
         return true; // Always say we have something, because we might need to advance our state machine
-
-    case STATE_SEND_RADIO:
-        return true;
 
     case STATE_SEND_COMPLETE_ID:
         return true;
