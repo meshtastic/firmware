@@ -33,7 +33,6 @@ class SinglePortPlugin : public MeshPlugin
         // Update our local node info with our position (even if we don't decide to update anyone else)
         MeshPacket *p = router->allocForSending();
         p->decoded.portnum = ourPortNum;
-        p->which_payloadVariant = MeshPacket_decoded_tag;
 
         return p;
     }
