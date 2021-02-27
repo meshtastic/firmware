@@ -49,8 +49,8 @@ bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, const AdminMessag
         break;
 
     case AdminMessage_get_channel_request_tag:
-        DEBUG_MSG("Client is getting channel %d\n", r->get_channel_request);
-        handleGetChannel(mp, r->get_channel_request);
+        DEBUG_MSG("Client is getting channel %d\n", r->get_channel_request - 1);
+        handleGetChannel(mp, r->get_channel_request - 1);
         break;
 
     case AdminMessage_get_radio_request_tag:
