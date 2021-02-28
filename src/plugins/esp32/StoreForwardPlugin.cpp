@@ -66,12 +66,13 @@ int32_t StoreForwardPlugin::runOnce()
                 }
 
             } else {
-                DEBUG_MSG("Initializing Store & Forward Plugin - Enabled but is_router is not turned on.\n");
-                DEBUG_MSG(
-                    "Initializing Store & Forward Plugin - If you want to use this plugin, you must also turn on is_router.\n");
-                // Non-Router
+                /*
+                * If the plugin is turned on and is_router is not enabled, then we'll send a heartbeat every
+                * few minutes.
+                */
+                storeForwardPluginRadio->sendPayloadHeartbeat();
 
-                return (30 * 1000);
+                return (3 * 60 * 1000);
             }
 
         } else {
@@ -227,6 +228,15 @@ MeshPacket *StoreForwardPluginRadio::allocReply()
 }
 
 void StoreForwardPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
+{
+    MeshPacket *p = allocReply();
+    p->to = dest;
+    p->decoded.want_response = wantReplies;
+
+    service.sendToMesh(p);
+}
+
+void StoreForwardPluginRadio::sendPayloadHeartbeat(NodeNum dest, bool wantReplies)
 {
     MeshPacket *p = allocReply();
     p->to = dest;
