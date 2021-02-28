@@ -53,7 +53,8 @@ int32_t EnvironmentalMeasurementPlugin::runOnce() {
     radioConfig.preferences.environmental_measurement_plugin_screen_enabled = 1;
     radioConfig.preferences.environmental_measurement_plugin_read_error_count_threshold = 5;
     radioConfig.preferences.environmental_measurement_plugin_update_interval = 30;
-    radioConfig.preferences.environmental_measurement_plugin_recovery_interval = 600;*/
+    radioConfig.preferences.environmental_measurement_plugin_recovery_interval = 60;
+    radioConfig.preferences.environmental_measurement_plugin_display_farenheit = true;*/
 
     if (! (radioConfig.preferences.environmental_measurement_plugin_measurement_enabled || radioConfig.preferences.environmental_measurement_plugin_screen_enabled)){
         // If this plugin is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
@@ -96,6 +97,7 @@ int32_t EnvironmentalMeasurementPlugin::runOnce() {
                     "EnvironmentalMeasurement: TEMPORARILY DISABLED; The environmental_measurement_plugin_read_error_count_threshold has been exceed: %d. Will retry reads in %d seconds\n",
                     radioConfig.preferences.environmental_measurement_plugin_read_error_count_threshold,
                     radioConfig.preferences.environmental_measurement_plugin_recovery_interval);
+                    sensor_read_error_count = 0;
                 return(radioConfig.preferences.environmental_measurement_plugin_recovery_interval*1000);  
             }
              DEBUG_MSG(
@@ -127,16 +129,6 @@ bool EnvironmentalMeasurementPluginRadio::wantUIFrame() {
     return radioConfig.preferences.environmental_measurement_plugin_screen_enabled;
 }
 
-void EnvironmentalMeasurementPluginRadio::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->setFont(FONT_MEDIUM);
-    display->drawString(x, y, "Environment");
-    display->setFont(FONT_SMALL);
-    display->drawString(x, y += fontHeight(FONT_MEDIUM), lastSender+": T:"+ String(lastMeasurement.temperature,2) + " H:" + String(lastMeasurement.relative_humidity,2));
-
-}
-
 String GetSenderName(const MeshPacket &mp) {
     String sender;
 
@@ -149,7 +141,64 @@ String GetSenderName(const MeshPacket &mp) {
     return sender;
 }
 
-bool EnvironmentalMeasurementPluginRadio::handleReceivedProtobuf(const MeshPacket &mp, const EnvironmentalMeasurement *pptr)
+uint32_t GetTimeSinceMeshPacket(const MeshPacket *mp) {
+    uint32_t now = getTime();
+
+    uint32_t last_seen = mp->rx_time;
+    int delta = (int)(now - last_seen);
+    if (delta < 0) // our clock must be slightly off still - not set from GPS yet
+        delta = 0;
+
+    return delta;
+
+}
+
+
+float CelsiusToFarenheit(float c) {
+    return (c*9)/5 + 32;
+}
+
+
+void EnvironmentalMeasurementPluginRadio::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_MEDIUM);
+    display->drawString(x, y, "Environment");
+    if (lastMeasurementPacket == nullptr) {
+        display->setFont(FONT_SMALL);
+        display->drawString(x, y += fontHeight(FONT_MEDIUM), "No measurement");
+        DEBUG_MSG("EnvironmentalMeasurement: No previous measurement; not drawing frame");
+        return;
+    }
+
+    EnvironmentalMeasurement lastMeasurement;
+    
+   
+    uint32_t agoSecs = GetTimeSinceMeshPacket(lastMeasurementPacket);
+    String lastSender = GetSenderName(*lastMeasurementPacket);
+
+    auto &p = lastMeasurementPacket->decoded.data;
+    if (!pb_decode_from_bytes(p.payload.bytes, 
+            p.payload.size,
+            EnvironmentalMeasurement_fields, 
+            &lastMeasurement)) {
+        display->setFont(FONT_SMALL);
+        display->drawString(x, y += fontHeight(FONT_MEDIUM), "Measurement Error");
+        DEBUG_MSG("EnvironmentalMeasurement: unable to decode last packet");
+        return;
+    }
+
+    display->setFont(FONT_SMALL);
+    String last_temp =  String(lastMeasurement.temperature,0) +"°C";
+    if (radioConfig.preferences.environmental_measurement_plugin_display_farenheit){
+        last_temp = String(CelsiusToFarenheit(lastMeasurement.temperature),0) +"°F";;
+    }
+
+    display->drawString(x, y += fontHeight(FONT_MEDIUM), lastSender+": "+last_temp +"/"+ String(lastMeasurement.relative_humidity,0) + "%("+String(agoSecs)+"s)");
+
+}
+
+bool EnvironmentalMeasurementPluginRadio::handleReceivedProtobuf(const MeshPacket &mp, const EnvironmentalMeasurement &p)
 {
     const EnvironmentalMeasurement &p = *pptr;
     
@@ -174,8 +223,8 @@ bool EnvironmentalMeasurementPluginRadio::handleReceivedProtobuf(const MeshPacke
     DEBUG_MSG("EnvironmentalMeasurement->relative_humidity: %f\n", p.relative_humidity);
     DEBUG_MSG("EnvironmentalMeasurement->temperature: %f\n", p.temperature);
 
-    lastMeasurement = p;
-    lastSender = sender;
+    lastMeasurementPacket = packetPool.allocCopy(mp);
+
     return false; // Let others look at this message also if they want
 }
 
@@ -184,20 +233,19 @@ bool EnvironmentalMeasurementPluginRadio::sendOurEnvironmentalMeasurement(NodeNu
     EnvironmentalMeasurement m;
 
     m.barometric_pressure = 0; // TODO: Add support for barometric sensors
-    m.relative_humidity = dht.readHumidity();
-    m.temperature = dht.readTemperature();;
-
     DEBUG_MSG("-----------------------------------------\n");
 
     DEBUG_MSG("EnvironmentalMeasurement: Read data\n");
-    DEBUG_MSG("EnvironmentalMeasurement->relative_humidity: %f\n", m.relative_humidity);
-    DEBUG_MSG("EnvironmentalMeasurement->temperature: %f\n", m.temperature);
-
-    if (isnan(m.relative_humidity) || isnan(m.temperature) ){
+    if (!dht.read(true)){
         sensor_read_error_count++;
         DEBUG_MSG("EnvironmentalMeasurement: FAILED TO READ DATA\n");
         return false;
     }
+    m.relative_humidity = dht.readHumidity();
+    m.temperature = dht.readTemperature();
+
+    DEBUG_MSG("EnvironmentalMeasurement->relative_humidity: %f\n", m.relative_humidity);
+    DEBUG_MSG("EnvironmentalMeasurement->temperature: %f\n", m.temperature);
 
     sensor_read_error_count = 0;
 

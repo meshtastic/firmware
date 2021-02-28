@@ -27,11 +27,8 @@ class EnvironmentalMeasurementPluginRadio : public ProtobufPlugin<EnvironmentalM
     /** Constructor
      * name is for debugging output
      */
-    EnvironmentalMeasurementPluginRadio() : ProtobufPlugin("EnvironmentalMeasurement", PortNum_ENVIRONMENTAL_MEASUREMENT_APP, &EnvironmentalMeasurement_msg) {
-      lastMeasurement.barometric_pressure = nanf("");
-      lastMeasurement.relative_humidity =  nanf("");
-      lastMeasurement.temperature =  nanf("");
-      lastSender = "N/A";
+    EnvironmentalMeasurementPluginRadio() : ProtobufPlugin("EnvironmentalMeasurement", PortNum_ENVIRONMENTAL_MEASUREMENT_APP, &EnvironmentalMeasurement_msg) { 
+      lastMeasurementPacket = nullptr;
     }
 
     /**
@@ -54,9 +51,7 @@ class EnvironmentalMeasurementPluginRadio : public ProtobufPlugin<EnvironmentalM
 
   private:
   
-    EnvironmentalMeasurement lastMeasurement;
-
-    String lastSender;
+    const MeshPacket *lastMeasurementPacket;
 
 };
 
