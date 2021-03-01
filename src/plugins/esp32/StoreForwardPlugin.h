@@ -6,13 +6,22 @@
 #include <Arduino.h>
 #include <functional>
 
+
+struct PacketHistoryStruct {
+    uint32_t time;
+    uint32_t to;
+    bool ack;
+    uint8_t bytes[MAX_RHPACKETLEN];
+};
+
 class StoreForwardPlugin : private concurrency::OSThread
 {
     bool firstTime = 1;
 
-    // TODO: Move this into the PSRAM
-    // TODO: Allow configuration of the maximum number of records.
     uint32_t receivedRecord[50][2] = {{0}};
+
+    PacketHistoryStruct *packetHistory;
+    uint32_t packetHistoryCurrent = 0;
 
   public:
     StoreForwardPlugin();
@@ -22,9 +31,14 @@ class StoreForwardPlugin : private concurrency::OSThread
      @return 0 if we have never seen that node before otherwise return the last time we saw the node.
      */
     uint32_t sawNode(uint32_t);
+    void sawNodeReport();
+    void historyAdd(const MeshPacket *mp);
+    void historyReport();
+    void historySend(uint32_t msAgo, uint32_t to);
+    void populatePSRAM();
 
   private:
-  // Nothing here
+    // Nothing here
 
   protected:
     virtual int32_t runOnce();
