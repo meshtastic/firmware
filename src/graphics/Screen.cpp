@@ -56,6 +56,7 @@ namespace graphics
 
 // A text message frame + debug frame + all the node infos
 static FrameCallback normalFrames[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
+static FrameNotificationCallback notificationCallback;
 static uint32_t targetFramerate = IDLE_FRAMERATE;
 static char btPIN[16] = "888888";
 
@@ -134,6 +135,12 @@ static void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDispl
     screen->forceDisplay();
 
     // FIXME - draw serial # somewhere?
+}
+
+static void handleFrameNotificationCallback(uint32_t FrameNumber, void* UI) {
+    //DEBUG_MSG("SCREEN: Received notification that frame %d is active", FrameNumber);
+    OLEDDisplayUi* ui = reinterpret_cast<OLEDDisplayUi *>(UI);
+    ui->removeFrameFromNotifications(FrameNumber);
 }
 
 static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -969,6 +976,9 @@ void Screen::setFrames()
     DEBUG_MSG("Finished building frames. numframes: %d\n", numframes);
 
     ui.setFrames(normalFrames, numframes);
+
+    notificationCallback = handleFrameNotificationCallback;
+    ui.setFrameNotificationCallback(&notificationCallback);
     ui.enableAllIndicators();
 
     prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list
