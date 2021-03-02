@@ -1352,8 +1352,7 @@ int Screen::handleTextMessage(const MeshPacket *arg)
     // let's use an instance variable to track which UI frame is for text messages.
     // TODO: Move the text messages display UI to a plugin 
     // so we can get it out of Screen.cpp
-    std::vector<uint32_t> textFrames = {textMessageFrame};
-    ui.setFrameNotifications(textFrames);
+    ui.addFrameToNotifications(textMessageFrame);
     
     return 0;
 }
