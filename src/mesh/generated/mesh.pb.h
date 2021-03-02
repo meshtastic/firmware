@@ -275,7 +275,7 @@ extern "C" {
 #define Routing_error_reason_tag                 3
 #define FromRadio_num_tag                        1
 #define FromRadio_my_info_tag                    3
-#define FromRadio_node_info_tag                  5
+#define FromRadio_node_info_tag                  4
 #define FromRadio_log_record_tag                 7
 #define FromRadio_config_complete_id_tag         8
 #define FromRadio_rebooted_tag                   9
@@ -379,7 +379,7 @@ X(a, STATIC,   SINGULAR, UENUM,    level,             4)
 #define FromRadio_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   num,               1) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,my_info,my_info),   3) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,node_info,node_info),   5) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,node_info,node_info),   4) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,log_record,log_record),   7) \
 X(a, STATIC,   ONEOF,    UINT32,   (payloadVariant,config_complete_id,config_complete_id),   8) \
 X(a, STATIC,   ONEOF,    BOOL,     (payloadVariant,rebooted,rebooted),   9) \
