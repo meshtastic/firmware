@@ -196,7 +196,8 @@ class Screen : public concurrency::OSThread
 
     int handleStatusUpdate(const meshtastic::Status *arg);
     int handleTextMessage(const MeshPacket *arg);
-    void goToNextNotificaiton();
+    bool goToNextNotification();
+    void goToFirstUIFrame();
 
     /// Used to force (super slow) eink displays to draw critical frames
     void forceDisplay();

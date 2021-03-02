@@ -1366,9 +1366,16 @@ int Screen::handleTextMessage(const MeshPacket *arg)
     
     return 0;
 }
+bool Screen::goToNextNotification() {
+    uint32_t frame = ui.getFirstNotifyingFrame();
+    if (frame == -1) {
+        return false;
+    }
+    ui.switchToFrame(frame);
+}
 
-void Screen::goToNextNotificaiton() {
-    ui.switchToFrame(ui.getFirstNotifyingFrame());
+void Screen::goToFirstUIFrame() {
+    ui.switchToFrame(0);
 }
 
 } // namespace graphics
