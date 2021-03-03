@@ -10,19 +10,9 @@
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
-EnvironmentalMeasurementPlugin *environmentalMeasurementPlugin;
-EnvironmentalMeasurementPluginRadio *environmentalMeasurementPluginRadio;
-
-EnvironmentalMeasurementPlugin::EnvironmentalMeasurementPlugin() : concurrency::OSThread("EnvironmentalMeasurementPlugin") {}
-
-uint32_t sensor_read_error_count = 0;
-
-#define DHT_11_GPIO_PIN 13
 #define DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS 1000 // Some sensors (the DHT11) have a minimum required duration between read attempts
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
-
-DHT dht(DHT_11_GPIO_PIN,DHT11);
 
 
 #ifdef HAS_EINK
@@ -49,12 +39,15 @@ int32_t EnvironmentalMeasurementPlugin::runOnce() {
         Uncomment the preferences below if you want to use the plugin
         without having to configure it from the PythonAPI or WebUI.
     */
+   
     /*radioConfig.preferences.environmental_measurement_plugin_measurement_enabled = 1;
     radioConfig.preferences.environmental_measurement_plugin_screen_enabled = 1;
     radioConfig.preferences.environmental_measurement_plugin_read_error_count_threshold = 5;
     radioConfig.preferences.environmental_measurement_plugin_update_interval = 30;
     radioConfig.preferences.environmental_measurement_plugin_recovery_interval = 60;
-    radioConfig.preferences.environmental_measurement_plugin_display_farenheit = true;*/
+    radioConfig.preferences.environmental_measurement_plugin_display_farenheit = true;
+    radioConfig.preferences.environmental_measurement_plugin_sensor_pin = 13;
+    radioConfig.preferences.environmental_measurement_plugin_sensor_type = RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType::RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11;*/
 
     if (! (radioConfig.preferences.environmental_measurement_plugin_measurement_enabled || radioConfig.preferences.environmental_measurement_plugin_screen_enabled)){
         // If this plugin is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
@@ -63,20 +56,32 @@ int32_t EnvironmentalMeasurementPlugin::runOnce() {
 
     if (firstTime) {
         // This is the first time the OSThread library has called this function, so do some setup
-        DEBUG_MSG("EnvironmentalMeasurement: Initializing\n");
-        environmentalMeasurementPluginRadio = new EnvironmentalMeasurementPluginRadio();
+       
         firstTime = 0;
-        // begin reading measurements from the sensor
-        // DHT have a max read-rate of 1HZ, so we should wait at least 1 second
-        // after initializing the sensor before we try to read from it.
-        // returning the interval here means that the next time OSThread
-        // calls our plugin, we'll run the other branch of this if statement
-        // and actually do a "sendOurEnvironmentalMeasurement()"
+       
         if (radioConfig.preferences.environmental_measurement_plugin_measurement_enabled)
         {
+            DEBUG_MSG("EnvironmentalMeasurement: Initializing\n");
             // it's possible to have this plugin enabled, only for displaying values on the screen.
             // therefore, we should only enable the sensor loop if measurement is also enabled
-            dht.begin();
+            switch(radioConfig.preferences.environmental_measurement_plugin_sensor_type) {
+                case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11:
+                    dht = new DHT(radioConfig.preferences.environmental_measurement_plugin_sensor_pin,DHT11);
+                    this->dht->begin();
+                    this->dht->read();
+                    DEBUG_MSG("EnvironmentalMeasurement: Opened DHT11 on pin: %d\n",radioConfig.preferences.environmental_measurement_plugin_sensor_pin);
+                break;
+                default:
+                    DEBUG_MSG("EnvironmentalMeasurement: Invalid sensor type selected; Disabling plugin");
+                    return (INT32_MAX);
+                    break;
+            }
+            // begin reading measurements from the sensor
+            // DHT have a max read-rate of 1HZ, so we should wait at least 1 second
+            // after initializing the sensor before we try to read from it.
+            // returning the interval here means that the next time OSThread
+            // calls our plugin, we'll run the other branch of this if statement
+            // and actually do a "sendOurEnvironmentalMeasurement()"
             return(DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);   
         }
         return (INT32_MAX);
@@ -112,7 +117,7 @@ int32_t EnvironmentalMeasurementPlugin::runOnce() {
                 sensor_read_error_count, 
                 radioConfig.preferences.environmental_measurement_plugin_read_error_count_threshold-sensor_read_error_count);
         }
-        if (! environmentalMeasurementPluginRadio->sendOurEnvironmentalMeasurement() ){
+        if (!sendOurEnvironmentalMeasurement() ){
             // if we failed to read the sensor, then try again 
             // as soon as we can according to the maximum polling frequency
             return(DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
@@ -125,7 +130,7 @@ int32_t EnvironmentalMeasurementPlugin::runOnce() {
 #endif
 }
 
-bool EnvironmentalMeasurementPluginRadio::wantUIFrame() {
+bool EnvironmentalMeasurementPlugin::wantUIFrame() {
     return radioConfig.preferences.environmental_measurement_plugin_screen_enabled;
 }
 
@@ -154,12 +159,12 @@ uint32_t GetTimeSinceMeshPacket(const MeshPacket *mp) {
 }
 
 
-float CelsiusToFarenheit(float c) {
+float EnvironmentalMeasurementPlugin::CelsiusToFarenheit(float c) {
     return (c*9)/5 + 32;
 }
 
 
-void EnvironmentalMeasurementPluginRadio::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+void EnvironmentalMeasurementPlugin::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_MEDIUM);
@@ -167,7 +172,7 @@ void EnvironmentalMeasurementPluginRadio::drawFrame(OLEDDisplay *display, OLEDDi
     if (lastMeasurementPacket == nullptr) {
         display->setFont(FONT_SMALL);
         display->drawString(x, y += fontHeight(FONT_MEDIUM), "No measurement");
-        DEBUG_MSG("EnvironmentalMeasurement: No previous measurement; not drawing frame");
+        //DEBUG_MSG("EnvironmentalMeasurement: No previous measurement; not drawing frame\n");
         return;
     }
 
@@ -177,7 +182,7 @@ void EnvironmentalMeasurementPluginRadio::drawFrame(OLEDDisplay *display, OLEDDi
     uint32_t agoSecs = GetTimeSinceMeshPacket(lastMeasurementPacket);
     String lastSender = GetSenderName(*lastMeasurementPacket);
 
-    auto &p = lastMeasurementPacket->decoded.data;
+    auto &p = lastMeasurementPacket->decoded;
     if (!pb_decode_from_bytes(p.payload.bytes, 
             p.payload.size,
             EnvironmentalMeasurement_fields, 
@@ -198,37 +203,25 @@ void EnvironmentalMeasurementPluginRadio::drawFrame(OLEDDisplay *display, OLEDDi
 
 }
 
-bool EnvironmentalMeasurementPluginRadio::handleReceivedProtobuf(const MeshPacket &mp, const EnvironmentalMeasurement &p)
+bool EnvironmentalMeasurementPlugin::handleReceivedProtobuf(const MeshPacket &mp, const EnvironmentalMeasurement *p)
 {
-    const EnvironmentalMeasurement &p = *pptr;
-    
     if (!(radioConfig.preferences.environmental_measurement_plugin_measurement_enabled || radioConfig.preferences.environmental_measurement_plugin_screen_enabled)){
         // If this plugin is not enabled in any capacity, don't handle the packet, and allow other plugins to consume 
          return false;
     }
-    bool wasBroadcast = mp.to == NODENUM_BROADCAST;
 
     String sender = GetSenderName(mp);
-    
-    // Show new nodes on LCD screen
-    if (DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN && wasBroadcast) {
-        String lcd = String("Env Measured: ") +sender + "\n" +
-            "T: " + p.temperature + "\n" +
-            "H: " + p.relative_humidity + "\n";
-        screen->print(lcd.c_str());
-    }
-    DEBUG_MSG("-----------------------------------------\n");
 
     DEBUG_MSG("EnvironmentalMeasurement: Received data from %s\n", sender);
-    DEBUG_MSG("EnvironmentalMeasurement->relative_humidity: %f\n", p.relative_humidity);
-    DEBUG_MSG("EnvironmentalMeasurement->temperature: %f\n", p.temperature);
+    DEBUG_MSG("EnvironmentalMeasurement->relative_humidity: %f\n", p->relative_humidity);
+    DEBUG_MSG("EnvironmentalMeasurement->temperature: %f\n", p->temperature);
 
     lastMeasurementPacket = packetPool.allocCopy(mp);
 
     return false; // Let others look at this message also if they want
 }
 
-bool EnvironmentalMeasurementPluginRadio::sendOurEnvironmentalMeasurement(NodeNum dest, bool wantReplies)
+bool EnvironmentalMeasurementPlugin::sendOurEnvironmentalMeasurement(NodeNum dest, bool wantReplies)
 {
     EnvironmentalMeasurement m;
 
@@ -236,13 +229,13 @@ bool EnvironmentalMeasurementPluginRadio::sendOurEnvironmentalMeasurement(NodeNu
     DEBUG_MSG("-----------------------------------------\n");
 
     DEBUG_MSG("EnvironmentalMeasurement: Read data\n");
-    if (!dht.read(true)){
+    if (!this->dht->read(true)){
         sensor_read_error_count++;
         DEBUG_MSG("EnvironmentalMeasurement: FAILED TO READ DATA\n");
         return false;
     }
-    m.relative_humidity = dht.readHumidity();
-    m.temperature = dht.readTemperature();
+    m.relative_humidity = this->dht->readHumidity();
+    m.temperature = this->dht->readTemperature();
 
     DEBUG_MSG("EnvironmentalMeasurement->relative_humidity: %f\n", m.relative_humidity);
     DEBUG_MSG("EnvironmentalMeasurement->temperature: %f\n", m.temperature);
