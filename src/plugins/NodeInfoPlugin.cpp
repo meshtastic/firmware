@@ -8,10 +8,9 @@
 
 NodeInfoPlugin *nodeInfoPlugin;
 
-bool NodeInfoPlugin::handleReceivedProtobuf(const MeshPacket &mp, const User &p)
+bool NodeInfoPlugin::handleReceivedProtobuf(const MeshPacket &mp, const User *pptr)
 {
-    // FIXME - we currently update NodeInfo data in the DB only if the message was a broadcast or destined to us
-    // it would be better to update even if the message was destined to others.
+    auto p = *pptr;
 
     nodeDB.updateUser(mp.from, p);
 
@@ -52,6 +51,7 @@ MeshPacket *NodeInfoPlugin::allocReply()
 NodeInfoPlugin::NodeInfoPlugin()
     : ProtobufPlugin("nodeinfo", PortNum_NODEINFO_APP, User_fields), concurrency::OSThread("NodeInfoPlugin")
 {
+    isPromiscuous = true; // We always want to update our nodedb, even if we are sniffing on others
     setIntervalFromNow(30 *
                        1000); // Send our initial owner announcement 30 seconds after we start (to give network time to setup)
 }

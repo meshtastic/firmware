@@ -80,10 +80,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
   protected:
 
     /**
-     * FIXME, use a meshtastic sync word, but hashed with the Channel name.  Currently picking the same default
-     * the RF95 used (0x14). Note: do not use 0x34 - that is reserved for lorawan
+     * We use a meshtastic sync word, but hashed with the Channel name.  For releases before 1.2 we used 0x12 (or for very old loads 0x14)
+     * Note: do not use 0x34 - that is reserved for lorawan
+     * 
+     * We now use 0x2b (so that someday we can possibly use NOT 2b - because that would be funny pun).  We will be staying with this code
+     * for a long time.
      */
-    uint8_t syncWord = SX126X_SYNC_WORD_PRIVATE;
+    const uint8_t syncWord = 0x2b;
 
     float currentLimit = 100;     // FIXME
 

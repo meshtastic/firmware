@@ -33,7 +33,7 @@ void fixPriority(MeshPacket *p)
     if (p->priority == MeshPacket_Priority_UNSET) {
         // if acks give high priority
         // if a reliable message give a bit higher default priority
-        p->priority = p->decoded.which_ackVariant ? MeshPacket_Priority_ACK :                
+        p->priority = (p->decoded.portnum == PortNum_ROUTING_APP) ? MeshPacket_Priority_ACK :                
                           (p->want_ack ? MeshPacket_Priority_RELIABLE : MeshPacket_Priority_DEFAULT);
     }
 }

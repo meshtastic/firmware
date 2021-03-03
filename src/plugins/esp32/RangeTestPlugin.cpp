@@ -114,8 +114,8 @@ void RangeTestPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
     static char heartbeatString[20];
     snprintf(heartbeatString, sizeof(heartbeatString), "seq %d", packetSequence);
 
-    p->decoded.data.payload.size = strlen(heartbeatString); // You must specify how many bytes are in the reply
-    memcpy(p->decoded.data.payload.bytes, heartbeatString, p->decoded.data.payload.size);
+    p->decoded.payload.size = strlen(heartbeatString); // You must specify how many bytes are in the reply
+    memcpy(p->decoded.payload.bytes, heartbeatString, p->decoded.payload.size);
 
     service.sendToMesh(p);
 
@@ -129,7 +129,7 @@ bool RangeTestPluginRadio::handleReceived(const MeshPacket &mp)
 
     if (radioConfig.preferences.range_test_plugin_enabled) {
 
-        auto &p = mp.decoded.data;
+        auto &p = mp.decoded;
         // DEBUG_MSG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s\n",
         //          nodeDB.getNodeNum(), mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
 
@@ -207,7 +207,7 @@ float RangeTestPluginRadio::latLongToMeter(double lat_a, double lng_a, double la
 
 bool RangeTestPluginRadio::appendFile(const MeshPacket &mp)
 {
-    auto &p = mp.decoded.data;
+    auto &p = mp.decoded;
 
     NodeInfo *n = nodeDB.getNode(mp.from);
     /*

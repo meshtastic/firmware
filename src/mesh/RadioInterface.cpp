@@ -1,5 +1,6 @@
 
 #include "RadioInterface.h"
+#include "Channels.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -9,6 +10,7 @@
 #include <assert.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
+#include "Channels.h"
 
 #define RDEF(name, freq, spacing, num_ch, power_limit)                                                                           \
     {                                                                                                                            \
@@ -36,7 +38,7 @@ void initRegion()
     myRegion = r;
     DEBUG_MSG("Wanted region %d, using %s\n", radioConfig.preferences.region, r->name);
 
-    myNodeInfo.num_channels = myRegion->numChannels; // Tell our android app how many channels we have
+    myNodeInfo.num_bands = myRegion->numChannels; // Tell our android app how many channels we have
 }
 
 /**
@@ -117,27 +119,13 @@ uint32_t RadioInterface::getTxDelayMsec()
 
 void printPacket(const char *prefix, const MeshPacket *p)
 {
-    DEBUG_MSG("%s (id=0x%08x Fr0x%02x To0x%02x, WantAck%d, HopLim%d", prefix, p->id, p->from & 0xff, p->to & 0xff, p->want_ack,
-              p->hop_limit);
+    DEBUG_MSG("%s (id=0x%08x Fr0x%02x To0x%02x, WantAck%d, HopLim%d Ch0x%x", prefix, p->id, p->from & 0xff, p->to & 0xff, p->want_ack,
+              p->hop_limit, p->channel);
     if (p->which_payloadVariant == MeshPacket_decoded_tag) {
         auto &s = p->decoded;
-        switch (s.which_payloadVariant) {
-        case SubPacket_data_tag:
-            DEBUG_MSG(" Portnum=%d", s.data.portnum);
-            break;
-        case SubPacket_position_tag:
-            DEBUG_MSG(" Payload:Position");
-            break;
-        case SubPacket_user_tag:
-            DEBUG_MSG(" Payload:User");
-            break;
-        case 0:
-            DEBUG_MSG(" Payload:None");
-            break;
-        default:
-            DEBUG_MSG(" Payload:%d", s.which_payloadVariant);
-            break;
-        }
+        
+        DEBUG_MSG(" Portnum=%d", s.portnum);
+
         if (s.want_response)
             DEBUG_MSG(" WANTRESP");
 
@@ -147,10 +135,11 @@ void printPacket(const char *prefix, const MeshPacket *p)
         if (s.dest != 0)
             DEBUG_MSG(" dest=%08x", s.dest);
 
+        /* now inside Data and therefore kinda opaque
         if (s.which_ackVariant == SubPacket_success_id_tag)
             DEBUG_MSG(" successId=%08x", s.ackVariant.success_id);
         else if (s.which_ackVariant == SubPacket_fail_id_tag)
-            DEBUG_MSG(" failId=%08x", s.ackVariant.fail_id);
+            DEBUG_MSG(" failId=%08x", s.ackVariant.fail_id); */
     } else {
         DEBUG_MSG(" encrypted");
     }
@@ -161,15 +150,15 @@ void printPacket(const char *prefix, const MeshPacket *p)
     if (p->rx_snr != 0.0) {
         DEBUG_MSG(" rxSNR=%g", p->rx_snr);
     }
-    if(p->priority != 0)
+    if (p->priority != 0)
         DEBUG_MSG(" priority=%d", p->priority);
-        
+
     DEBUG_MSG(")\n");
 }
 
 RadioInterface::RadioInterface()
 {
-    assert(sizeof(PacketHeader) == 4 || sizeof(PacketHeader) == 16); // make sure the compiler did what we expected
+    assert(sizeof(PacketHeader) == 16); // make sure the compiler did what we expected
 
     // Can't print strings this early - serial not setup yet
     // DEBUG_MSG("Set meshradio defaults name=%s\n", channelSettings.name);
@@ -252,6 +241,7 @@ void RadioInterface::applyModemConfig()
     // Set up default configuration
     // No Sync Words in LORA mode
 
+    auto channelSettings = channels.getPrimary();
     if (channelSettings.spread_factor == 0) {
         switch (channelSettings.modem_config) {
         case ChannelSettings_ModemConfig_Bw125Cr45Sf128: ///< Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on. Default medium
@@ -296,7 +286,8 @@ void RadioInterface::applyModemConfig()
     assert(myRegion); // Should have been found in init
 
     // If user has manually specified a channel num, then use that, otherwise generate one by hashing the name
-    int channel_num = (channelSettings.channel_num ? channelSettings.channel_num - 1 : hash(channelName)) % myRegion->numChannels;
+    const char *channelName = channels.getName(channels.getPrimaryIndex());
+    int channel_num = channelSettings.channel_num ? channelSettings.channel_num - 1 : hash(channelName) % myRegion->numChannels;
     freq = myRegion->freq + myRegion->spacing * channel_num;
 
     DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, power=%d\n", channelName, channelSettings.modem_config, channel_num, power);
@@ -360,6 +351,7 @@ size_t RadioInterface::beginSending(MeshPacket *p)
     h->from = p->from;
     h->to = p->to;
     h->id = p->id;
+    h->channel = p->channel;
     assert(p->hop_limit <= HOP_MAX);
     h->flags = p->hop_limit | (p->want_ack ? PACKET_FLAGS_WANT_ACK_MASK : 0);
 

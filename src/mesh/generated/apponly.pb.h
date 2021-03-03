@@ -5,12 +5,17 @@
 #define PB_APPONLY_PB_H_INCLUDED
 #include <pb.h>
 #include "mesh.pb.h"
+#include "channel.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
 /* Struct definitions */
+typedef struct _ChannelSet {
+    pb_callback_t settings;
+} ChannelSet;
+
 typedef struct _ServiceEnvelope {
     bool has_packet;
     MeshPacket packet;
@@ -25,9 +30,12 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define ServiceEnvelope_init_default             {false, MeshPacket_init_default, {{NULL}, NULL}, {{NULL}, NULL}}
+#define ChannelSet_init_default                  {{{NULL}, NULL}}
 #define ServiceEnvelope_init_zero                {false, MeshPacket_init_zero, {{NULL}, NULL}, {{NULL}, NULL}}
+#define ChannelSet_init_zero                     {{{NULL}, NULL}}
 
 /* Field tags (for use in manual encoding/decoding) */
+#define ChannelSet_settings_tag                  1
 #define ServiceEnvelope_packet_tag               1
 #define ServiceEnvelope_channel_id_tag           2
 #define ServiceEnvelope_gateway_id_tag           3
@@ -41,13 +49,22 @@ X(a, CALLBACK, SINGULAR, STRING,   gateway_id,        3)
 #define ServiceEnvelope_DEFAULT NULL
 #define ServiceEnvelope_packet_MSGTYPE MeshPacket
 
+#define ChannelSet_FIELDLIST(X, a) \
+X(a, CALLBACK, REPEATED, MESSAGE,  settings,          1)
+#define ChannelSet_CALLBACK pb_default_field_callback
+#define ChannelSet_DEFAULT NULL
+#define ChannelSet_settings_MSGTYPE ChannelSettings
+
 extern const pb_msgdesc_t ServiceEnvelope_msg;
+extern const pb_msgdesc_t ChannelSet_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define ServiceEnvelope_fields &ServiceEnvelope_msg
+#define ChannelSet_fields &ChannelSet_msg
 
 /* Maximum encoded size of messages (where known) */
 /* ServiceEnvelope_size depends on runtime parameters */
+/* ChannelSet_size depends on runtime parameters */
 
 #ifdef __cplusplus
 } /* extern "C" */
