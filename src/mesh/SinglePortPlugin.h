@@ -21,7 +21,7 @@ class SinglePortPlugin : public MeshPlugin
     /**
      * @return true if you want to receive the specified portnum
      */
-    virtual bool wantPortnum(PortNum p) { return p == ourPortNum; }
+    virtual bool wantPacket(const MeshPacket *p) { return p->decoded.portnum == ourPortNum; }
 
     /**
      * Return a mesh packet which has been preinited as a data packet with a particular port number.
@@ -32,8 +32,7 @@ class SinglePortPlugin : public MeshPlugin
     {
         // Update our local node info with our position (even if we don't decide to update anyone else)
         MeshPacket *p = router->allocForSending();
-        p->decoded.which_payloadVariant = SubPacket_data_tag;
-        p->decoded.data.portnum = ourPortNum;
+        p->decoded.portnum = ourPortNum;
 
         return p;
     }

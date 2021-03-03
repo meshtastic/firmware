@@ -3,8 +3,11 @@
 #include "plugins/PositionPlugin.h"
 #include "plugins/RemoteHardwarePlugin.h"
 #include "plugins/ReplyPlugin.h"
+#include "plugins/TextMessagePlugin.h" 
+#include "plugins/SerialPlugin.h"
 #include "plugins/TextMessagePlugin.h"
-
+#include "plugins/RoutingPlugin.h"
+#include "plugins/AdminPlugin.h"
 #ifndef NO_ESP32
 #include "plugins/SerialPlugin.h"
 #include "plugins/esp32/EnvironmentalMeasurementPlugin.h"
@@ -17,6 +20,8 @@
  */
 void setupPlugins()
 {
+    routingPlugin = new RoutingPlugin();
+    adminPlugin = new AdminPlugin();
     nodeInfoPlugin = new NodeInfoPlugin();
     positionPlugin = new PositionPlugin();
     textMessagePlugin = new TextMessagePlugin();

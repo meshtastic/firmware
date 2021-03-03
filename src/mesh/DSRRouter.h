@@ -8,7 +8,7 @@ class DSRRouter : public ReliableRouter
      * Every (non duplicate) packet this node receives will be passed through this method.  This allows subclasses to
      * update routing tables etc... based on what we overhear (even for messages not destined to our node)
      */
-    virtual void sniffReceived(const MeshPacket *p);
+    virtual void sniffReceived(const MeshPacket *p, const Routing *c);
 
     /**
      * Send a packet on a suitable interface.  This routine will
@@ -70,7 +70,7 @@ class DSRRouter : public ReliableRouter
     /**
      * Send a route error packet towards whoever originally sent this message
      */
-    void sendRouteError(const MeshPacket *p, ErrorReason err);
+    void sendRouteError(const MeshPacket *p, Routing_Error err);
 
     /** make a copy of p, start discovery, but only if we don't
      *  already a discovery in progress for that node number.  Caller has already scheduled this message for retransmission

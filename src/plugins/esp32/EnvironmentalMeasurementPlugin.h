@@ -47,7 +47,7 @@ class EnvironmentalMeasurementPluginRadio : public ProtobufPlugin<EnvironmentalM
 
     @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
-    virtual bool handleReceivedProtobuf(const MeshPacket &mp, const EnvironmentalMeasurement &p);
+    virtual bool handleReceivedProtobuf(const MeshPacket &mp, const EnvironmentalMeasurement *p);
 
     virtual bool wantUIFrame();
 

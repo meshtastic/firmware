@@ -7,7 +7,7 @@ TextMessagePlugin *textMessagePlugin;
 
 bool TextMessagePlugin::handleReceived(const MeshPacket &mp)
 {
-    auto &p = mp.decoded.data;
+    auto &p = mp.decoded;
     DEBUG_MSG("Received text msg from=0x%0x, id=%d, msg=%.*s\n", mp.from, mp.id, p.payload.size, p.payload.bytes);
 
     // We only store/display messages destined for us.

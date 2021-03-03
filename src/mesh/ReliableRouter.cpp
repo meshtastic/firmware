@@ -34,7 +34,7 @@ bool ReliableRouter::shouldFilterReceived(const MeshPacket *p)
         // the original sending process.
         if (stopRetransmission(p->from, p->id)) {
             DEBUG_MSG("Someone is retransmitting for us, generate implicit ack\n");
-            sendAckNak(ErrorReason_NONE, p->from, p->id);
+            sendAckNak(Routing_Error_NONE, p->from, p->id);
         }
     }
 
@@ -53,35 +53,36 @@ bool ReliableRouter::shouldFilterReceived(const MeshPacket *p)
  *
  * Otherwise, let superclass handle it.
  */
-void ReliableRouter::sniffReceived(const MeshPacket *p)
+void ReliableRouter::sniffReceived(const MeshPacket *p, const Routing *c)
 {
     NodeNum ourNode = getNodeNum();
 
     if (p->to == ourNode) { // ignore ack/nak/want_ack packets that are not address to us (we only handle 0 hop reliability
                             // - not DSR routing)
         if (p->want_ack) {
-            sendAckNak(ErrorReason_NONE, p->from, p->id);
+            sendAckNak(Routing_Error_NONE, p->from, p->id);
         }
 
         // If the payload is valid, look for ack/nak
+        if (c) {
+            PacketId ackId = c->error_reason == Routing_Error_NONE ? p->decoded.request_id : 0;
+            PacketId nakId = c->error_reason != Routing_Error_NONE ? p->decoded.request_id : 0;
 
-        PacketId ackId = p->decoded.which_ackVariant == SubPacket_success_id_tag ? p->decoded.ackVariant.success_id : 0;
-        PacketId nakId = p->decoded.which_ackVariant == SubPacket_fail_id_tag ? p->decoded.ackVariant.fail_id : 0;
-
-        // We intentionally don't check wasSeenRecently, because it is harmless to delete non existent retransmission records
-        if (ackId || nakId) {
-            if (ackId) {
-                DEBUG_MSG("Received a ack=%d, stopping retransmissions\n", ackId);
-                stopRetransmission(p->to, ackId);
-            } else {
-                DEBUG_MSG("Received a nak=%d, stopping retransmissions\n", nakId);
-                stopRetransmission(p->to, nakId);
+            // We intentionally don't check wasSeenRecently, because it is harmless to delete non existent retransmission records
+            if (ackId || nakId) {
+                if (ackId) {
+                    DEBUG_MSG("Received a ack=%d, stopping retransmissions\n", ackId);
+                    stopRetransmission(p->to, ackId);
+                } else {
+                    DEBUG_MSG("Received a nak=%d, stopping retransmissions\n", nakId);
+                    stopRetransmission(p->to, nakId);
+                }
             }
         }
     }
 
     // handle the packet as normal
-    FloodingRouter::sniffReceived(p);
+    FloodingRouter::sniffReceived(p, c);
 }
 
 #define NUM_RETRANSMISSIONS 3
@@ -155,7 +156,7 @@ int32_t ReliableRouter::doRetransmissions()
             if (p.numRetransmissions == 0) {
                 DEBUG_MSG("Reliable send failed, returning a nak fr=0x%x,to=0x%x,id=%d\n", p.packet->from, p.packet->to,
                           p.packet->id);
-                sendAckNak(ErrorReason_MAX_RETRANSMIT, p.packet->from, p.packet->id);
+                sendAckNak(Routing_Error_MAX_RETRANSMIT, p.packet->from, p.packet->id);
                 // Note: we don't stop retransmission here, instead the Nak packet gets processed in sniffReceived - which
                 // allows the DSR version to still be able to look at the PendingPacket
                 stopRetransmission(it->first);

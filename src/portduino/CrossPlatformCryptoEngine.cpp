@@ -10,9 +10,6 @@ class CrossPlatformCryptoEngine : public CryptoEngine
 
     CTRCommon *ctr = NULL;
 
-    /// How many bytes in our key
-    uint8_t keySize = 0;
-
   public:
     CrossPlatformCryptoEngine() {}
 
@@ -27,21 +24,21 @@ class CrossPlatformCryptoEngine : public CryptoEngine
      * @param bytes a _static_ buffer that will remain valid for the life of this crypto instance (i.e. this class will cache the
      * provided pointer)
      */
-    virtual void setKey(size_t numBytes, uint8_t *bytes)
+    virtual void setKey(const CryptoKey &k)
     {
-        keySize = numBytes;
-        DEBUG_MSG("Installing AES%d key!\n", numBytes * 8);
+        CryptoEngine::setKey(k);
+        DEBUG_MSG("Installing AES%d key!\n", key.length * 8);
         if (ctr) {
             delete ctr;
             ctr = NULL;
         }
-        if (numBytes != 0) {
-            if (numBytes == 16)
+        if (key.length != 0) {
+            if (key.length == 16)
                 ctr = new CTR<AES128>();
             else
                 ctr = new CTR<AES256>();
 
-            ctr->setKey(bytes, numBytes);
+            ctr->setKey(key.bytes, key.length);
         }
     }
 
@@ -52,7 +49,7 @@ class CrossPlatformCryptoEngine : public CryptoEngine
      */
     virtual void encrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes)
     {
-        if (keySize != 0) {
+        if (key.length > 0) {
             uint8_t stream_block[16];
             static uint8_t scratch[MAX_BLOCKSIZE];
             size_t nc_off = 0;
