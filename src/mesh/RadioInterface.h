@@ -29,6 +29,9 @@ typedef struct {
      * The bottom three bits of flags are use to store hop_limit when sent over the wire.
      **/
     uint8_t flags;
+
+    /** The channel hash - used as a hint for the decoder to limit which channels we consider */
+    uint8_t channel;
 } PacketHeader;
 
 /**

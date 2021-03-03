@@ -1,9 +1,10 @@
 #include "CryptoEngine.h"
 #include "configuration.h"
 
-void CryptoEngine::setKey(size_t numBytes, uint8_t *bytes)
+void CryptoEngine::setKey(const CryptoKey &k)
 {
-    DEBUG_MSG("WARNING: Using stub crypto - all crypto is sent in plaintext!\n");
+    DEBUG_MSG("Installing AES%d key!\n", k.length * 8);
+    key = k;
 }
 
 /**
