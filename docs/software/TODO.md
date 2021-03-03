@@ -2,7 +2,7 @@
 
 You probably don't care about this section - skip to the next one.
 
-1.2 cleanup & multichannel support:
+## 1.2 cleanup & multichannel support:
 
 * DONE call RouterPlugin for *all* packets - not just Router packets
 * DONE generate channel hash from the name of the channel+the psk (not just one or the other)
@@ -44,8 +44,8 @@ You probably don't care about this section - skip to the next one.
 * DONE android should stop fetching channels once we've reached our first empty channel definition (hasSettings == true)
 * add channel restrictions for plugins (and restrict routing plugin to the "control" channel)
 * restrict gpio & serial & settings operations to the admin channel (unless local to the current node)
-* warn in python api if we are too new to talk to the device code
-* make a post warning about 1.2, telling how to stay on old android & python clients.  link to this from the android dialog message and python version warning.
+* DONE warn in python api if we are too new to talk to the device code
+* DONE make a post warning about 1.2, telling how to stay on old android & python clients.  link to this from the android dialog message and python version warning.
 * DONE "FIXME - move the radioconfig/user/channel READ operations into SettingsMessage as well"
 * DONE scrub protobufs to make sure they are absoloute minimum wiresize (in particular Data, ChannelSets and positions)
 * DONE change syncword (now ox2b)
