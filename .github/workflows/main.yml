@@ -4,8 +4,7 @@ on:
   - pull_request
 
 jobs:
-  main:
-    name: Main
+  setup:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@master
@@ -33,4 +32,3 @@ jobs:
         run: platformio run -e lora-relay-v1 
       - name: Build for linux
         run: platformio run -e linux
-        

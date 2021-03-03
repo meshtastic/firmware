@@ -2,6 +2,13 @@
 
 #include <Arduino.h>
 
+struct CryptoKey {
+    uint8_t bytes[32];
+
+    /// # of bytes, or -1 to mean "invalid key - do not use"
+    int8_t length;
+};
+
 /**
  * see docs/software/crypto.md for details.
  *
@@ -15,6 +22,8 @@ class CryptoEngine
     /** Our per packet nonce */
     uint8_t nonce[16];
 
+    CryptoKey key;
+
   public:
     virtual ~CryptoEngine() {}
 
@@ -27,7 +36,7 @@ class CryptoEngine
      * @param bytes a _static_ buffer that will remain valid for the life of this crypto instance (i.e. this class will cache the
      * provided pointer)
      */
-    virtual void setKey(size_t numBytes, uint8_t *bytes);
+    virtual void setKey(const CryptoKey &k);
 
     /**
      * Encrypt a packet

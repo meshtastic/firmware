@@ -149,8 +149,10 @@ String GetSenderName(const MeshPacket &mp) {
     return sender;
 }
 
-bool EnvironmentalMeasurementPluginRadio::handleReceivedProtobuf(const MeshPacket &mp, const EnvironmentalMeasurement &p)
+bool EnvironmentalMeasurementPluginRadio::handleReceivedProtobuf(const MeshPacket &mp, const EnvironmentalMeasurement *pptr)
 {
+    const EnvironmentalMeasurement &p = *pptr;
+    
     if (!(radioConfig.preferences.environmental_measurement_plugin_measurement_enabled || radioConfig.preferences.environmental_measurement_plugin_screen_enabled)){
         // If this plugin is not enabled in any capacity, don't handle the packet, and allow other plugins to consume 
          return false;

@@ -18,9 +18,6 @@ class ESP32CryptoEngine : public CryptoEngine
 
     mbedtls_aes_context aes;
 
-    /// How many bytes in our key
-    uint8_t keySize = 0;
-
   public:
     ESP32CryptoEngine() { mbedtls_aes_init(&aes); }
 
@@ -35,12 +32,12 @@ class ESP32CryptoEngine : public CryptoEngine
      * @param bytes a _static_ buffer that will remain valid for the life of this crypto instance (i.e. this class will cache the
      * provided pointer)
      */
-    virtual void setKey(size_t numBytes, uint8_t *bytes)
+    virtual void setKey(const CryptoKey &k)
     {
-        keySize = numBytes;
-        DEBUG_MSG("Installing AES%d key!\n", numBytes * 8);
-        if (numBytes != 0) {
-            auto res = mbedtls_aes_setkey_enc(&aes, bytes, numBytes * 8);
+        CryptoEngine::setKey(k);
+
+        if (key.length != 0) {
+            auto res = mbedtls_aes_setkey_enc(&aes, key.bytes, key.length * 8);
             assert(!res);
         }
     }
@@ -52,7 +49,7 @@ class ESP32CryptoEngine : public CryptoEngine
      */
     virtual void encrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes)
     {
-        if (keySize != 0) {
+        if (key.length > 0) {
             uint8_t stream_block[16];
             static uint8_t scratch[MAX_BLOCKSIZE];
             size_t nc_off = 0;
