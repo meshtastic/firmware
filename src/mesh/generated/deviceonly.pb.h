@@ -52,7 +52,7 @@ extern "C" {
 #define DeviceState_version_tag                  8
 #define DeviceState_no_save_tag                  9
 #define DeviceState_did_gps_reset_tag            11
-#define DeviceState_channels_tag                 12
+#define DeviceState_channels_tag                 13
 
 /* Struct field encoding specification for nanopb */
 #define DeviceState_FIELDLIST(X, a) \
@@ -65,7 +65,7 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  rx_text_message,   7) \
 X(a, STATIC,   SINGULAR, UINT32,   version,           8) \
 X(a, STATIC,   SINGULAR, BOOL,     no_save,           9) \
 X(a, STATIC,   SINGULAR, BOOL,     did_gps_reset,    11) \
-X(a, STATIC,   REPEATED, MESSAGE,  channels,         12)
+X(a, STATIC,   REPEATED, MESSAGE,  channels,         13)
 #define DeviceState_CALLBACK NULL
 #define DeviceState_DEFAULT NULL
 #define DeviceState_radio_MSGTYPE RadioConfig
