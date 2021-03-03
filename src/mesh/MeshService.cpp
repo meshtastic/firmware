@@ -65,7 +65,6 @@ void MeshService::init()
 
     if (gps)
         gpsObserver.observe(&gps->newStatus);
-    packetReceivedObserver.observe(&router->notifyPacketReceived);
 }
 
 
