@@ -2,6 +2,62 @@
 
 You probably don't care about this section - skip to the next one.
 
+1.2 cleanup & multichannel support:
+
+* DONE call RouterPlugin for *all* packets - not just Router packets
+* DONE generate channel hash from the name of the channel+the psk (not just one or the other)
+* DONE send a hint that can be used to select which channel to try and hash against with each message
+* DONE remove deprecated
+* DONE fix setchannel in phoneapi.cpp
+* DONE set mynodeinfo.max_channels
+* DONE set mynodeinfo.num_bands (formerly num_channels)
+* DONE fix sniffing of non Routing packets
+* DONE enable remote setttings access by moving settings operations into a regular plugin (move settings ops out of PhoneAPI)
+* DONE move portnum up?
+* DONE remove region specific builds from the firmware
+* DONE test single channel without python
+* DONE Use "default" for name if name is empty
+* DONE fix python data packet receiving (nothing showing in log?)
+* DONE implement 'get channels' Admin plugin operation
+* DONE use get-channels from python
+* use get channels & get settings from android
+* use set-channel from python
+* combine acks and responses in a single message if possible (do routing plugin LAST and drop ACK if someone else has already replied)
+* use portuino TCP connection to debug with python API
+* make python tests more exhaustive
+* document the relationship between want_response (indicating remote node received it) and want_ack (indicating that this message should be sent reliably - and also get acks from the first rx node and naks if it is never delivered)
+* test multi channel
+* pick default random admin key
+* restrict gpio & serial & settings operations to the admin channel (unless local to the current node)
+* add gui in android app for setting region
+* warn in python api if we are too new to talk to the device code
+* make a post warning about 1.2, telling how to stay on old android & python clients.  link to this from the android dialog message and python version warning.
+* DONE "FIXME - move the radioconfig/user/channel READ operations into SettingsMessage as well"
+* DONE scrub protobufs to make sure they are absoloute minimum wiresize (in particular Data, ChannelSets and positions)
+* change syncword
+* allow chaning packets in single transmission - to increase airtime efficiency and amortize packet overhead
+* DONE move most parts of meshpacket into the Data packet, so that we can chain multiple Data for sending when they all have a common destination and key.
+* when selecting a MeshPacket for transmit, scan the TX queue for any Data packets we can merge together as a WirePayload.  In the low level send/rx code expand that into multiple MeshPackets as needed (thus 'hiding' from MeshPacket that over the wire we send multiple datapackets
+* confirm we are still calling the plugins for messages inbound from the phone (or generated locally)
+* confirm we are still multi hop routing flood broadcasts
+* confirm we are still doing resends on unicast reliable packets
+* add support for full DSR unicast delivery
+* DONE move acks into routing
+* DONE make all subpackets different versions of data
+* DONE move routing control into a data packet
+* have phoneapi done via plugin
+* DONE figure out how to add micro_delta to position, make it so that phone apps don't need to understand it?
+* only send battery updates a max of once a minute
+* add python channel selection for sending
+* DONE record recevied channel in meshpacket
+* test remote settings operations (confirm it works 3 hops away)
+* add channel restrictions for plugins (and restrict routing plugin to the "control" channel)
+* make a primaryChannel global and properly maintain it when the phone sends setChannel
+* move setCrypto call into packet send and packet decode code
+* implement 'small location diffs' change
+* move battery level out of position? 
+* DOUBLE CHECK android app can still upgrade 1.1 and 1.0 loads
+ 
 eink:
 
 * new battery level sensing

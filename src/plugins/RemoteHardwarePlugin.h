@@ -27,7 +27,7 @@ class RemoteHardwarePlugin : public ProtobufPlugin<HardwareMessage>, private con
 
     @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
-    virtual bool handleReceivedProtobuf(const MeshPacket &mp, const HardwareMessage &p);
+    virtual bool handleReceivedProtobuf(const MeshPacket &mp, const HardwareMessage *p);
 
     /**
      * Periodically read the gpios we have been asked to WATCH, if they have changed,

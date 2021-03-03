@@ -4,6 +4,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
+#include "Channels.h"
 #include <assert.h>
 
 #if FromRadio_size > MAX_TO_FROM_RADIO_SIZE
@@ -77,20 +78,6 @@ void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
                                        // this will break once we have multiple instances of PhoneAPI running independently
             break;
 
-        case ToRadio_set_owner_tag:
-            DEBUG_MSG("Client is setting owner\n");
-            handleSetOwner(toRadioScratch.set_owner);
-            break;
-
-        case ToRadio_set_radio_tag:
-            DEBUG_MSG("Client is setting radio\n");
-            handleSetRadio(toRadioScratch.set_radio);
-            break;
-
-        case ToRadio_set_channel_tag:
-            DEBUG_MSG("Client is setting channel\n");
-            handleSetChannel(toRadioScratch.set_channel);
-            break;
         default:
             DEBUG_MSG("Error: unexpected ToRadio variant\n");
             break;
@@ -137,22 +124,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
                                  : (gps && gps->isConnected()); // Update with latest GPS connect info
         fromRadioScratch.which_payloadVariant = FromRadio_my_info_tag;
         fromRadioScratch.my_info = myNodeInfo;
-        state = STATE_SEND_RADIO;
+        state = STATE_SEND_NODEINFO;
 
         service.refreshMyNodeInfo();  // Update my NodeInfo because the client will be asking for it soon.
-        break;
-
-    case STATE_SEND_RADIO:
-        fromRadioScratch.which_payloadVariant = FromRadio_radio_tag;
-
-        fromRadioScratch.radio = radioConfig;
-
-        // NOTE: The phone app needs to know the ls_secs value so it can properly expect sleep behavior.
-        // So even if we internally use 0 to represent 'use default' we still need to send the value we are
-        // using to the app (so that even old phone apps work with new device loads).
-        fromRadioScratch.radio.preferences.ls_secs = getPref_ls_secs();
-
-        state = STATE_SEND_NODEINFO;
         break;
 
     case STATE_SEND_NODEINFO: {
@@ -231,9 +205,6 @@ bool PhoneAPI::available()
             nodeInfoForPhone = nodeDB.readNextInfo();
         return true; // Always say we have something, because we might need to advance our state machine
 
-    case STATE_SEND_RADIO:
-        return true;
-
     case STATE_SEND_COMPLETE_ID:
         return true;
 
@@ -252,52 +223,6 @@ bool PhoneAPI::available()
     }
 
     return false;
-}
-
-//
-// The following routines are only public for now - until the rev1 bluetooth API is removed
-//
-
-void PhoneAPI::handleSetOwner(const User &o)
-{
-    int changed = 0;
-
-    if (*o.long_name) {
-        changed |= strcmp(owner.long_name, o.long_name);
-        strcpy(owner.long_name, o.long_name);
-    }
-    if (*o.short_name) {
-        changed |= strcmp(owner.short_name, o.short_name);
-        strcpy(owner.short_name, o.short_name);
-    }
-    if (*o.id) {
-        changed |= strcmp(owner.id, o.id);
-        strcpy(owner.id, o.id);
-    }
-
-    if (changed) // If nothing really changed, don't broadcast on the network or write to flash
-        service.reloadOwner();
-}
-
-void PhoneAPI::handleSetChannel(const ChannelSettings &cc)
-{
-    radioConfig.channel_settings = cc;
-
-    bool didReset = service.reloadConfig();
-    if (didReset) {
-        state = STATE_SEND_MY_INFO; // Squirt a completely new set of configs to the client
-    }
-
-}
-
-void PhoneAPI::handleSetRadio(const RadioConfig &r)
-{
-    radioConfig = r;
-
-    bool didReset = service.reloadConfig();
-    if (didReset) {
-        state = STATE_SEND_MY_INFO; // Squirt a completely new set of configs to the client
-    }
 }
 
 /**

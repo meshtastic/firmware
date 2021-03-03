@@ -184,7 +184,7 @@ void StoreForwardPlugin::historyAdd(const MeshPacket *mp)
     auto &p = mp;
 
     static uint8_t bytes[MAX_RHPACKETLEN];
-    size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), SubPacket_fields, &p->decoded);
+    size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), Data_fields, &p->decoded);
     assert(numbytes <= MAX_RHPACKETLEN);
 
     DEBUG_MSG("MP numbytes %u\n", numbytes);
@@ -248,37 +248,37 @@ bool StoreForwardPluginRadio::handleReceived(const MeshPacket &mp)
             uint32_t sawTime = storeForwardPlugin->sawNode(mp.from & 0xffffffff);
             DEBUG_MSG("We last saw this node (%u), %u sec ago\n", mp.from & 0xffffffff, (millis() - sawTime) / 1000);
 
-            if (mp.decoded.data.portnum == PortNum_UNKNOWN_APP) {
+            if (mp.decoded.portnum == PortNum_UNKNOWN_APP) {
                 DEBUG_MSG("Packet came from - PortNum_UNKNOWN_APP\n");
-            } else if (mp.decoded.data.portnum == PortNum_TEXT_MESSAGE_APP) {
+            } else if (mp.decoded.portnum == PortNum_TEXT_MESSAGE_APP) {
                 DEBUG_MSG("Packet came from - PortNum_TEXT_MESSAGE_APP\n");
 
                 storeForwardPlugin->historyAdd(&mp);
 
-            } else if (mp.decoded.data.portnum == PortNum_REMOTE_HARDWARE_APP) {
+            } else if (mp.decoded.portnum == PortNum_REMOTE_HARDWARE_APP) {
                 DEBUG_MSG("Packet came from - PortNum_REMOTE_HARDWARE_APP\n");
-            } else if (mp.decoded.data.portnum == PortNum_POSITION_APP) {
+            } else if (mp.decoded.portnum == PortNum_POSITION_APP) {
                 DEBUG_MSG("Packet came from - PortNum_POSITION_APP\n");
-            } else if (mp.decoded.data.portnum == PortNum_NODEINFO_APP) {
+            } else if (mp.decoded.portnum == PortNum_NODEINFO_APP) {
                 DEBUG_MSG("Packet came from - PortNum_NODEINFO_APP\n");
-            } else if (mp.decoded.data.portnum == PortNum_REPLY_APP) {
+            } else if (mp.decoded.portnum == PortNum_REPLY_APP) {
                 DEBUG_MSG("Packet came from - PortNum_REPLY_APP\n");
-            } else if (mp.decoded.data.portnum == PortNum_IP_TUNNEL_APP) {
+            } else if (mp.decoded.portnum == PortNum_IP_TUNNEL_APP) {
                 DEBUG_MSG("Packet came from - PortNum_IP_TUNNEL_APP\n");
-            } else if (mp.decoded.data.portnum == PortNum_SERIAL_APP) {
+            } else if (mp.decoded.portnum == PortNum_SERIAL_APP) {
                 DEBUG_MSG("Packet came from - PortNum_SERIAL_APP\n");
-            } else if (mp.decoded.data.portnum == PortNum_STORE_FORWARD_APP) {
+            } else if (mp.decoded.portnum == PortNum_STORE_FORWARD_APP) {
                 DEBUG_MSG("Packet came from - PortNum_STORE_FORWARD_APP\n");
-            } else if (mp.decoded.data.portnum == PortNum_RANGE_TEST_APP) {
+            } else if (mp.decoded.portnum == PortNum_RANGE_TEST_APP) {
                 DEBUG_MSG("Packet came from - PortNum_RANGE_TEST_APP\n");
-            } else if (mp.decoded.data.portnum == PortNum_PRIVATE_APP) {
+            } else if (mp.decoded.portnum == PortNum_PRIVATE_APP) {
                 DEBUG_MSG("Packet came from - PortNum_PRIVATE_APP\n");
-            } else if (mp.decoded.data.portnum == PortNum_RANGE_TEST_APP) {
+            } else if (mp.decoded.portnum == PortNum_RANGE_TEST_APP) {
                 DEBUG_MSG("Packet came from - PortNum_RANGE_TEST_APP\n");
-            } else if (mp.decoded.data.portnum == PortNum_ATAK_FORWARDER) {
+            } else if (mp.decoded.portnum == PortNum_ATAK_FORWARDER) {
                 DEBUG_MSG("Packet came from - PortNum_ATAK_FORWARDER\n");
             } else {
-                DEBUG_MSG("Packet came from an unknown port %u\n", mp.decoded.data.portnum);
+                DEBUG_MSG("Packet came from an unknown port %u\n", mp.decoded.portnum);
             }
 
             if ((millis() - sawTime) > STOREFORWARD_SEND_HISTORY_SHORT) {
