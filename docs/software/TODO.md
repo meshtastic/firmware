@@ -21,32 +21,35 @@ You probably don't care about this section - skip to the next one.
 * DONE implement 'get channels' Admin plugin operation
 * DONE use get-channels from python
 * DONE use get channels & get settings from android
-* use set-channel from python
+* DONE use set-channel from python
 * DONE make settings changes from python work
 * DONE pthon should stop fetching channels once we've reached our first empty channel definition (hasSettings == true)
 * DONE add check for old devices with new API library
 * DONE release python api
 * DONE release protobufs
 * DONE release to developers
-* fix 1.1.50 android debug panel display
-* warn in android app about unset regions
-* use set-channel from android
-* DONE add gui in android app for setting region
-* stress test channel download from python, sometimes it seems like we don't get all replies
-* investigate @mc-hamster report of heap corruption
-* DONE use set-user from android
+* DONE fix setch-fast in python tool
 * combine acks and responses in a single message if possible (do routing plugin LAST and drop ACK if someone else has already replied)
 * don't send packets we received from the phone BACK TOWARDS THE PHONE (possibly use fromnode 0 for packets the phone sends?)
-* use portuino TCP connection to debug with python API
+* fix 1.1.50 android debug panel display
+* DONE warn in android app about unset regions
+* DONE use set-channel from android
+* DONE add gui in android app for setting region
+* stress test channel download from python, sometimes it seems like we don't get all replies
 * make python tests more exhaustive
-* document the relationship between want_response (indicating remote node received it) and want_ack (indicating that this message should be sent reliably - and also get acks from the first rx node and naks if it is never delivered)
-* stress test multi channel
+* pick default random admin key
+* exclude admin channels from URL?
+* make a way to share just secondary channels via URL
 * use single byte 'well known' channel names for the four default channel names (longslow etc), and for admin, gpio, etc...
 * use presence of gpio channel to enable gpio ops, same for serial etc...
-* pick default random admin key
-* DONE android should stop fetching channels once we've reached our first empty channel definition (hasSettings == true)
-* add channel restrictions for plugins (and restrict routing plugin to the "control" channel)
 * restrict gpio & serial & settings operations to the admin channel (unless local to the current node)
+* add channel restrictions for plugins (and restrict routing plugin to the "control" channel)
+* stress test multi channel
+* investigate @mc-hamster report of heap corruption
+* DONE use set-user from android
+* use portuino TCP connection to debug with python API
+* document the relationship between want_response (indicating remote node received it) and want_ack (indicating that this message should be sent reliably - and also get acks from the first rx node and naks if it is never delivered)
+* DONE android should stop fetching channels once we've reached our first empty channel definition (hasSettings == true)
 * DONE warn in python api if we are too new to talk to the device code
 * DONE make a post warning about 1.2, telling how to stay on old android & python clients.  link to this from the android dialog message and python version warning.
 * DONE "FIXME - move the radioconfig/user/channel READ operations into SettingsMessage as well"
