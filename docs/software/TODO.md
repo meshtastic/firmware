@@ -29,10 +29,11 @@ You probably don't care about this section - skip to the next one.
 * DONE release protobufs
 * DONE release to developers
 * fix 1.1.50 android debug panel display
-* add gui in android app for setting region
+* warn in android app about unset regions
+* use set-channel from android
+* DONE add gui in android app for setting region
 * stress test channel download from python, sometimes it seems like we don't get all replies
 * investigate @mc-hamster report of heap corruption
-* use set-channel from android
 * DONE use set-user from android
 * combine acks and responses in a single message if possible (do routing plugin LAST and drop ACK if someone else has already replied)
 * don't send packets we received from the phone BACK TOWARDS THE PHONE (possibly use fromnode 0 for packets the phone sends?)
@@ -40,6 +41,8 @@ You probably don't care about this section - skip to the next one.
 * make python tests more exhaustive
 * document the relationship between want_response (indicating remote node received it) and want_ack (indicating that this message should be sent reliably - and also get acks from the first rx node and naks if it is never delivered)
 * stress test multi channel
+* use single byte 'well known' channel names for the four default channel names (longslow etc), and for admin, gpio, etc...
+* use presence of gpio channel to enable gpio ops, same for serial etc...
 * pick default random admin key
 * DONE android should stop fetching channels once we've reached our first empty channel definition (hasSettings == true)
 * add channel restrictions for plugins (and restrict routing plugin to the "control" channel)
