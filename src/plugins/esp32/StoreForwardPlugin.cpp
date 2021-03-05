@@ -240,12 +240,12 @@ bool StoreForwardPluginRadio::handleReceived(const MeshPacket &mp)
 #ifndef NO_ESP32
     if (radioConfig.preferences.store_forward_plugin_enabled) {
 
-        if (mp.from != nodeDB.getNodeNum()) {
+        if (getFrom(&mp) != nodeDB.getNodeNum()) {
             // DEBUG_MSG("Store & Forward Plugin -- Print Start ---------- ---------- ---------- ---------- ----------\n\n\n");
             // DEBUG_MSG("%s (id=0x%08x Fr0x%02x To0x%02x, WantAck%d, HopLim%d", prefix, p->id, p->from & 0xff, p->to & 0xff,
             // p->want_ack, p->hop_limit);
             printPacket("----- PACKET FROM RADIO -----", &mp);
-            uint32_t sawTime = storeForwardPlugin->sawNode(mp.from & 0xffffffff);
+            uint32_t sawTime = storeForwardPlugin->sawNode(getFrom(&mp) & 0xffffffff);
             DEBUG_MSG("We last saw this node (%u), %u sec ago\n", mp.from & 0xffffffff, (millis() - sawTime) / 1000);
 
             if (mp.decoded.portnum == PortNum_UNKNOWN_APP) {
@@ -283,7 +283,7 @@ bool StoreForwardPluginRadio::handleReceived(const MeshPacket &mp)
 
             if ((millis() - sawTime) > STOREFORWARD_SEND_HISTORY_SHORT) {
                 // Node has been away for a while. 
-                storeForwardPlugin->historySend(sawTime, mp.from);
+                storeForwardPlugin->historySend(sawTime, getFrom(&mp));
             }
         }
 

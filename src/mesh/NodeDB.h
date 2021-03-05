@@ -183,3 +183,4 @@ PREF_GET(min_wake_secs, 10)
  * might have changed is incremented.  Allows others to detect they might now be on a new channel.
  */
 extern uint32_t radioGeneration;
+

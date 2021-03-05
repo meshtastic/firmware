@@ -29,13 +29,14 @@ You probably don't care about this section - skip to the next one.
 * DONE release protobufs
 * DONE release to developers
 * DONE fix setch-fast in python tool
+* age out pendingrequests in the python API
+* DONE stress test channel download from python, sometimes it seems like we don't get all replies, bug was due to simultaneous android connection
 * combine acks and responses in a single message if possible (do routing plugin LAST and drop ACK if someone else has already replied)
-* don't send packets we received from the phone BACK TOWARDS THE PHONE (possibly use fromnode 0 for packets the phone sends?)
+* DONE don't send packets we received from the phone BACK TOWARDS THE PHONE (possibly use fromnode 0 for packets the phone sends?)
 * fix 1.1.50 android debug panel display
 * DONE warn in android app about unset regions
 * DONE use set-channel from android
 * DONE add gui in android app for setting region
-* stress test channel download from python, sometimes it seems like we don't get all replies
 * make python tests more exhaustive
 * pick default random admin key
 * exclude admin channels from URL?
@@ -61,6 +62,7 @@ You probably don't care about this section - skip to the next one.
 * confirm we are still calling the plugins for messages inbound from the phone (or generated locally)
 * confirm we are still multi hop routing flood broadcasts
 * confirm we are still doing resends on unicast reliable packets
+* add history to routed packets: https://meshtastic.discourse.group/t/packet-source-tracking/2764/2
 * add support for full DSR unicast delivery
 * DONE move acks into routing
 * DONE make all subpackets different versions of data

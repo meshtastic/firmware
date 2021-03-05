@@ -52,7 +52,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
             // NOTE: we send a reply *even if the (non broadcast) request was from us* which is unfortunate but necessary because currently when the phone 
             // sends things, it sends things using the local node ID as the from address.  A better solution (FIXME) would be to let phones
             // have their own distinct addresses and we 'route' to them like any other node.
-            if (mp.decoded.want_response && toUs && (mp.from != ourNodeNum || mp.to == ourNodeNum)) {
+            if (mp.decoded.want_response && toUs && (getFrom(&mp) != ourNodeNum || mp.to == ourNodeNum)) {
                 pi.sendResponse(mp);
                 DEBUG_MSG("Plugin %s sent a response\n", pi.name);
             }
@@ -94,7 +94,7 @@ void MeshPlugin::sendResponse(const MeshPacket &req) {
 */
 void setReplyTo(MeshPacket *p, const MeshPacket &to) {
     assert(p->which_payloadVariant == MeshPacket_decoded_tag); // Should already be set by now
-    p->to = to.from;
+    p->to = getFrom(&to);
     p->want_ack = to.want_ack;
     p->decoded.request_id = to.id;
 }

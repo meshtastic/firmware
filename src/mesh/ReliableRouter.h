@@ -15,7 +15,7 @@ struct GlobalPacketId {
 
     GlobalPacketId(const MeshPacket *p)
     {
-        node = p->from;
+        node = getFrom(p);
         id = p->id;
     }
 
