@@ -59,6 +59,7 @@ void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
     }
     // return (lastContactMsec != 0) &&
 
+    memset(&toRadioScratch, 0, sizeof(toRadioScratch));
     if (pb_decode_from_bytes(buf, bufLength, ToRadio_fields, &toRadioScratch)) {
         switch (toRadioScratch.which_payloadVariant) {
         case ToRadio_packet_tag: {

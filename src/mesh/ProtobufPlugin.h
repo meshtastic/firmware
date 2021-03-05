@@ -58,11 +58,12 @@ template <class T> class ProtobufPlugin : protected SinglePortPlugin
         // it would be better to update even if the message was destined to others.
 
         auto &p = mp.decoded;
-        DEBUG_MSG("Received %s from=0x%0x, id=0x%x, payloadlen=%d\n", name, mp.from, mp.id, p.payload.size);
+        DEBUG_MSG("Received %s from=0x%0x, id=0x%x, portnum=%d, payloadlen=%d\n", name, mp.from, mp.id, p.portnum, p.payload.size);
 
         T scratch;
         T *decoded = NULL; 
         if(mp.decoded.portnum == ourPortNum) {
+            memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, fields, &scratch))
                 decoded = &scratch;
             else

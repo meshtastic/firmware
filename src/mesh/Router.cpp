@@ -111,7 +111,7 @@ void Router::sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom)
 void Router::abortSendAndNak(Routing_Error err, MeshPacket *p)
 {
     DEBUG_MSG("Error=%d, returning NAK and dropping packet.\n", err);
-    sendAckNak(Routing_Error_NO_INTERFACE, p->from, p->id);
+    sendAckNak(Routing_Error_NO_INTERFACE, getFrom(p), p->id);
     packetPool.release(p);
 }
 
@@ -154,6 +154,10 @@ ErrorCode Router::send(MeshPacket *p)
     // Never set the want_ack flag on broadcast packets sent over the air.
     if (p->to == NODENUM_BROADCAST)
         p->want_ack = false;
+
+    // Up until this point we might have been using 0 for the from address (if it started with the phone), but when we send over
+    // the lora we need to make sure we have replaced it with our local address
+    p->from = getFrom(p);
 
     // If the packet hasn't yet been encrypted, do so now (it might already be encrypted if we are just forwarding it)
 
@@ -227,6 +231,7 @@ bool Router::perhapsDecode(MeshPacket *p)
             crypto->decrypt(p->from, p->id, p->encrypted.size, bytes);
 
             // Take those raw bytes and convert them back into a well structured protobuf we can understand
+            memset(&p->decoded, 0, sizeof(p->decoded));
             if (!pb_decode_from_bytes(bytes, p->encrypted.size, Data_fields, &p->decoded)) {
                 DEBUG_MSG("Invalid protobufs in received mesh packet (bad psk?!\n");
             } else {
@@ -273,7 +278,7 @@ void Router::handleReceived(MeshPacket *p)
 void Router::perhapsHandleReceived(MeshPacket *p)
 {
     assert(radioConfig.has_preferences);
-    bool ignore = is_in_repeated(radioConfig.preferences.ignore_incoming, p->from);
+    bool ignore = is_in_repeated(radioConfig.preferences.ignore_incoming, getFrom(p));
 
     if (ignore)
         DEBUG_MSG("Ignoring incoming message, 0x%x is in our ignore list\n", p->from);

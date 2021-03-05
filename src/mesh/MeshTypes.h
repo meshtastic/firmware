@@ -33,3 +33,9 @@ typedef int ErrorCode;
 
 /// Alloc and free packets to our global, ISR safe pool
 extern Allocator<MeshPacket> &packetPool;
+
+/**
+ * Most (but not always) of the time we want to treat packets 'from' the local phone (where from == 0), as if they originated on the local node.
+ * If from is zero this function returns our node number instead
+ */
+NodeNum getFrom(const MeshPacket *p);
