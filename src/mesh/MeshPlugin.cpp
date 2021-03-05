@@ -109,7 +109,11 @@ void setReplyTo(MeshPacket *p, const MeshPacket &to)
 {
     assert(p->which_payloadVariant == MeshPacket_decoded_tag); // Should already be set by now
     p->to = getFrom(&to);
-    p->want_ack = to.want_ack;
+
+    // No need for an ack if we are just delivering locally (it just generates an ignored ack)
+    p->want_ack = (to.from != 0) ? to.want_ack : false;
+    if(p->priority == MeshPacket_Priority_UNSET)
+        p->priority = MeshPacket_Priority_RELIABLE;
     p->decoded.request_id = to.id;
 }
 
