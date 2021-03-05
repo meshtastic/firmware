@@ -66,6 +66,14 @@ NodeNum displayedNodeNum;
 
 NodeDB::NodeDB() : nodes(devicestate.node_db), numNodes(&devicestate.node_db_count) {}
 
+/**
+ * Most (but not always) of the time we want to treat packets 'from' the local phone (where from == 0), as if they originated on the local node.
+ * If from is zero this function returns our node number instead
+ */
+NodeNum getFrom(const MeshPacket *p) {
+    return (p->from == 0) ? nodeDB.getNodeNum() : p->from;
+}
+
 bool NodeDB::resetRadioConfig()
 {
     bool didFactoryReset = false;
@@ -406,7 +414,7 @@ void NodeDB::updateFrom(const MeshPacket &mp)
     if (mp.which_payloadVariant == MeshPacket_decoded_tag) {
         DEBUG_MSG("Update DB node 0x%x, rx_time=%u\n", mp.from, mp.rx_time);
 
-        NodeInfo *info = getOrCreateNode(mp.from);
+        NodeInfo *info = getOrCreateNode(getFrom(&mp));
 
         if (mp.rx_time) {              // if the packet has a valid timestamp use it to update our last_seen
             info->has_position = true; // at least the time is valid

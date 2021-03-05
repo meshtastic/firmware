@@ -13,8 +13,8 @@
 #include "RTC.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
-#include "plugins/PositionPlugin.h"
 #include "plugins/NodeInfoPlugin.h"
+#include "plugins/PositionPlugin.h"
 #include "power.h"
 
 /*
@@ -51,8 +51,6 @@ MeshService service;
 
 #include "Router.h"
 
-
-
 MeshService::MeshService() : toPhoneQueue(MAX_RX_TOPHONE)
 {
     // assert(MAX_RX_TOPHONE == 32); // FIXME, delete this, just checking my clever macro
@@ -67,25 +65,29 @@ void MeshService::init()
         gpsObserver.observe(&gps->newStatus);
 }
 
-
 int MeshService::handleFromRadio(const MeshPacket *mp)
 {
     powerFSM.trigger(EVENT_RECEIVED_PACKET); // Possibly keep the node from sleeping
 
-    printPacket("Forwarding to phone", mp);
-    nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
+    if (mp->from != 0) {
+        printPacket("Forwarding to phone", mp);
+        nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
 
-    fromNum++;
+        fromNum++;
 
-    if (toPhoneQueue.numFree() == 0) {
-        DEBUG_MSG("NOTE: tophone queue is full, discarding oldest\n");
-        MeshPacket *d = toPhoneQueue.dequeuePtr(0);
-        if (d)
-            releaseToPool(d);
+        if (toPhoneQueue.numFree() == 0) {
+            DEBUG_MSG("NOTE: tophone queue is full, discarding oldest\n");
+            MeshPacket *d = toPhoneQueue.dequeuePtr(0);
+            if (d)
+                releaseToPool(d);
+        }
+
+        MeshPacket *copied = packetPool.allocCopy(*mp);
+        assert(toPhoneQueue.enqueue(copied, 0)); // FIXME, instead of failing for full queue, delete the oldest mssages
     }
-
-    MeshPacket *copied = packetPool.allocCopy(*mp);
-    assert(toPhoneQueue.enqueue(copied, 0)); // FIXME, instead of failing for full queue, delete the oldest mssages
+    else {
+        DEBUG_MSG("Packet originally from phone, no need to send back that way...\n");
+    }
 
     return 0;
 }
@@ -128,8 +130,12 @@ void MeshService::reloadOwner()
  */
 void MeshService::handleToRadio(MeshPacket &p)
 {
-    if (p.from == 0) // If the phone didn't set a sending node ID, use ours
-        p.from = nodeDB.getNodeNum();
+    if (p.from != 0) { // We don't let phones assign nodenums to their sent messages
+        DEBUG_MSG("Warning: phone tried to pick a nodenum, we don't allow that.\n");
+        p.from = 0;
+    } else {
+        // p.from = nodeDB.getNodeNum();
+    }
 
     if (p.id == 0)
         p.id = generatePacketId(); // If the phone didn't supply one, then pick one
@@ -151,7 +157,8 @@ void MeshService::handleToRadio(MeshPacket &p)
 }
 
 /** Attempt to cancel a previously sent packet from this _local_ node.  Returns true if a packet was found we could cancel */
-bool MeshService::cancelSending(PacketId id) {
+bool MeshService::cancelSending(PacketId id)
+{
     return router->cancelSending(nodeDB.getNodeNum(), id);
 }
 
@@ -176,21 +183,22 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
         nodeInfoPlugin->sendOurNodeInfo(dest, wantReplies);
 }
 
-
-NodeInfo *MeshService::refreshMyNodeInfo() {
+NodeInfo *MeshService::refreshMyNodeInfo()
+{
     NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
     assert(node);
 
     // We might not have a position yet for our local node, in that case, at least try to send the time
-    if(!node->has_position) {
+    if (!node->has_position) {
         memset(&node->position, 0, sizeof(node->position));
         node->has_position = true;
     }
-    
+
     Position &position = node->position;
 
     // Update our local node info with our position (even if we don't decide to update anyone else)
-    position.time = getValidTime(RTCQualityFromNet); // This nodedb timestamp might be stale, so update it if our clock is kinda valid
+    position.time =
+        getValidTime(RTCQualityFromNet); // This nodedb timestamp might be stale, so update it if our clock is kinda valid
 
     position.battery_level = powerStatus->getBatteryChargePercent();
     updateBatteryLevel(position.battery_level);
@@ -209,11 +217,10 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
             pos.altitude = gps->altitude;
         pos.latitude_i = gps->latitude;
         pos.longitude_i = gps->longitude;
-    }
-    else {
+    } else {
         // The GPS has lost lock, if we are fixed position we should just keep using
         // the old position
-        if(radioConfig.preferences.fixed_position) {
+        if (radioConfig.preferences.fixed_position) {
             DEBUG_MSG("WARNING: Using fixed position\n");
         } else {
             // throw away old position

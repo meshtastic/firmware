@@ -26,15 +26,15 @@ ErrorCode ReliableRouter::send(MeshPacket *p)
 
 bool ReliableRouter::shouldFilterReceived(const MeshPacket *p)
 {
-    if (p->to == NODENUM_BROADCAST && p->from == getNodeNum()) {
+    if (p->to == NODENUM_BROADCAST && getFrom(p) == getNodeNum()) {
         printPacket("Rx someone rebroadcasting for us", p);
 
         // We are seeing someone rebroadcast one of our broadcast attempts.
         // If this is the first time we saw this, cancel any retransmissions we have queued up and generate an internal ack for
         // the original sending process.
-        if (stopRetransmission(p->from, p->id)) {
+        if (stopRetransmission(getFrom(p), p->id)) {
             DEBUG_MSG("Someone is retransmitting for us, generate implicit ack\n");
-            sendAckNak(Routing_Error_NONE, p->from, p->id);
+            sendAckNak(Routing_Error_NONE, getFrom(p), p->id);
         }
     }
 
@@ -60,7 +60,7 @@ void ReliableRouter::sniffReceived(const MeshPacket *p, const Routing *c)
     if (p->to == ourNode) { // ignore ack/nak/want_ack packets that are not address to us (we only handle 0 hop reliability
                             // - not DSR routing)
         if (p->want_ack) {
-            sendAckNak(Routing_Error_NONE, p->from, p->id);
+            sendAckNak(Routing_Error_NONE, getFrom(p), p->id);
         }
 
         // If the payload is valid, look for ack/nak
@@ -131,7 +131,7 @@ PendingPacket *ReliableRouter::startRetransmission(MeshPacket *p)
     auto rec = PendingPacket(p);
 
     setNextTx(&rec);
-    stopRetransmission(p->from, p->id);
+    stopRetransmission(getFrom(p), p->id);
     pending[id] = rec;
 
     return &pending[id];

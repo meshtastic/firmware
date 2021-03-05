@@ -229,7 +229,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     displayedNodeNum = 0; // Not currently showing a node pane
 
     MeshPacket &mp = devicestate.rx_text_message;
-    NodeInfo *node = nodeDB.getNode(mp.from);
+    NodeInfo *node = nodeDB.getNode(getFrom(&mp));
     // DEBUG_MSG("drawing text message from 0x%x: %s\n", mp.from,
     // mp.decoded.variant.data.decoded.bytes);
 

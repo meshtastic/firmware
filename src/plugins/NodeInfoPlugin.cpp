@@ -12,7 +12,7 @@ bool NodeInfoPlugin::handleReceivedProtobuf(const MeshPacket &mp, const User *pp
 {
     auto p = *pptr;
 
-    nodeDB.updateUser(mp.from, p);
+    nodeDB.updateUser(getFrom(&mp), p);
 
     bool wasBroadcast = mp.to == NODENUM_BROADCAST;
 
