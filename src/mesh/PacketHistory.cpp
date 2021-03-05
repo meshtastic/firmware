@@ -26,7 +26,7 @@ bool PacketHistory::wasSeenRecently(const MeshPacket *p, bool withUpdate)
             // DEBUG_MSG("Deleting old broadcast record %d\n", i);
             recentPackets.erase(recentPackets.begin() + i); // delete old record
         } else {
-            if (r.id == p->id && r.sender == p->from) {
+            if (r.id == p->id && r.sender == getFrom(p)) {
                 DEBUG_MSG("Found existing packet record for fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
 
                 // Update the time on this record to now
@@ -43,7 +43,7 @@ bool PacketHistory::wasSeenRecently(const MeshPacket *p, bool withUpdate)
     if (withUpdate) {
         PacketRecord r;
         r.id = p->id;
-        r.sender = p->from;
+        r.sender = getFrom(p);
         r.rxTimeMsec = now;
         recentPackets.push_back(r);
         printPacket("Adding packet record", p);

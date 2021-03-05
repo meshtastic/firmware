@@ -30,7 +30,7 @@ bool PositionPlugin::handleReceivedProtobuf(const MeshPacket &mp, const Position
         perhapsSetRTC(RTCQualityFromNet, &tv);
     }
 
-    nodeDB.updatePosition(mp.from, p);
+    nodeDB.updatePosition(getFrom(&mp), p);
 
     return false; // Let others look at this message also if they want
 }

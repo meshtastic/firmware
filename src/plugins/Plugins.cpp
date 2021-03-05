@@ -20,7 +20,6 @@
  */
 void setupPlugins()
 {
-    routingPlugin = new RoutingPlugin();
     adminPlugin = new AdminPlugin();
     nodeInfoPlugin = new NodeInfoPlugin();
     positionPlugin = new PositionPlugin();
@@ -48,4 +47,7 @@ void setupPlugins()
     // new StoreForwardPlugin();
     new EnvironmentalMeasurementPlugin();
 #endif
+
+    // NOTE! This plugin must be added LAST because it likes to check for replies from other plugins and avoid sending extra acks
+    routingPlugin = new RoutingPlugin();
 }

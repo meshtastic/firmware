@@ -137,8 +137,9 @@ bool EnvironmentalMeasurementPlugin::wantUIFrame() {
 String GetSenderName(const MeshPacket &mp) {
     String sender;
 
-    if (nodeDB.getNode(mp.from)){
-        sender = nodeDB.getNode(mp.from)->user.short_name;
+    auto node = nodeDB.getNode(getFrom(&mp));
+    if (node){
+        sender = node->user.short_name;
     }
     else {
         sender = "UNK";
