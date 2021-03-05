@@ -2,6 +2,7 @@
 #include "MeshTypes.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
+#include "MeshPlugin.h"
 
 // ReliableRouter::ReliableRouter() {}
 
@@ -26,7 +27,8 @@ ErrorCode ReliableRouter::send(MeshPacket *p)
 
 bool ReliableRouter::shouldFilterReceived(const MeshPacket *p)
 {
-    if (p->to == NODENUM_BROADCAST && getFrom(p) == getNodeNum()) {
+    // Note: do not use getFrom() here, because we want to ignore messages sent from phone
+    if (p->to == NODENUM_BROADCAST && p->from == getNodeNum()) {
         printPacket("Rx someone rebroadcasting for us", p);
 
         // We are seeing someone rebroadcast one of our broadcast attempts.
@@ -34,7 +36,8 @@ bool ReliableRouter::shouldFilterReceived(const MeshPacket *p)
         // the original sending process.
         if (stopRetransmission(getFrom(p), p->id)) {
             DEBUG_MSG("Someone is retransmitting for us, generate implicit ack\n");
-            sendAckNak(Routing_Error_NONE, getFrom(p), p->id);
+            if(p->want_ack)
+                sendAckNak(Routing_Error_NONE, getFrom(p), p->id);
         }
     }
 
@@ -60,23 +63,26 @@ void ReliableRouter::sniffReceived(const MeshPacket *p, const Routing *c)
     if (p->to == ourNode) { // ignore ack/nak/want_ack packets that are not address to us (we only handle 0 hop reliability
                             // - not DSR routing)
         if (p->want_ack) {
-            sendAckNak(Routing_Error_NONE, getFrom(p), p->id);
+            if(MeshPlugin::currentReply)
+                DEBUG_MSG("Someone else has replied to this message, no need for a 2nd ack");
+            else
+                sendAckNak(Routing_Error_NONE, getFrom(p), p->id);
         }
 
-        // If the payload is valid, look for ack/nak
-        if (c) {
-            PacketId ackId = c->error_reason == Routing_Error_NONE ? p->decoded.request_id : 0;
-            PacketId nakId = c->error_reason != Routing_Error_NONE ? p->decoded.request_id : 0;
+        // We consider an ack to be either a !routing packet with a request ID or a routing packet with !error
+        PacketId ackId = ((c && c->error_reason == Routing_Error_NONE) || !c) ? p->decoded.request_id : 0;
 
-            // We intentionally don't check wasSeenRecently, because it is harmless to delete non existent retransmission records
-            if (ackId || nakId) {
-                if (ackId) {
-                    DEBUG_MSG("Received a ack=%d, stopping retransmissions\n", ackId);
-                    stopRetransmission(p->to, ackId);
-                } else {
-                    DEBUG_MSG("Received a nak=%d, stopping retransmissions\n", nakId);
-                    stopRetransmission(p->to, nakId);
-                }
+        // A nak is a routing packt that has an  error code
+        PacketId nakId = (c && c->error_reason != Routing_Error_NONE) ? p->decoded.request_id : 0;
+
+        // We intentionally don't check wasSeenRecently, because it is harmless to delete non existent retransmission records
+        if (ackId || nakId) {
+            if (ackId) {
+                DEBUG_MSG("Received a ack for 0x%x, stopping retransmissions\n", ackId);
+                stopRetransmission(p->to, ackId);
+            } else {
+                DEBUG_MSG("Received a nak for 0x%x, stopping retransmissions\n", nakId);
+                stopRetransmission(p->to, nakId);
             }
         }
     }

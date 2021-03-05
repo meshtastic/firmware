@@ -231,6 +231,7 @@ bool Router::perhapsDecode(MeshPacket *p)
             crypto->decrypt(p->from, p->id, p->encrypted.size, bytes);
 
             // Take those raw bytes and convert them back into a well structured protobuf we can understand
+            memset(p->decoded, 0, sizeof(p->decoded));
             if (!pb_decode_from_bytes(bytes, p->encrypted.size, Data_fields, &p->decoded)) {
                 DEBUG_MSG("Invalid protobufs in received mesh packet (bad psk?!\n");
             } else {
