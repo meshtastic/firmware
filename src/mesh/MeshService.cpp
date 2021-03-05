@@ -69,25 +69,20 @@ int MeshService::handleFromRadio(const MeshPacket *mp)
 {
     powerFSM.trigger(EVENT_RECEIVED_PACKET); // Possibly keep the node from sleeping
 
-    if (mp->from != 0) {
-        printPacket("Forwarding to phone", mp);
-        nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
+    printPacket("Forwarding to phone", mp);
+    nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
 
-        fromNum++;
+    fromNum++;
 
-        if (toPhoneQueue.numFree() == 0) {
-            DEBUG_MSG("NOTE: tophone queue is full, discarding oldest\n");
-            MeshPacket *d = toPhoneQueue.dequeuePtr(0);
-            if (d)
-                releaseToPool(d);
-        }
-
-        MeshPacket *copied = packetPool.allocCopy(*mp);
-        assert(toPhoneQueue.enqueue(copied, 0)); // FIXME, instead of failing for full queue, delete the oldest mssages
+    if (toPhoneQueue.numFree() == 0) {
+        DEBUG_MSG("NOTE: tophone queue is full, discarding oldest\n");
+        MeshPacket *d = toPhoneQueue.dequeuePtr(0);
+        if (d)
+            releaseToPool(d);
     }
-    else {
-        DEBUG_MSG("Packet originally from phone, no need to send back that way...\n");
-    }
+
+    MeshPacket *copied = packetPool.allocCopy(*mp);
+    assert(toPhoneQueue.enqueue(copied, 0)); // FIXME, instead of failing for full queue, delete the oldest mssages
 
     return 0;
 }

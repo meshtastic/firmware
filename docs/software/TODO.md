@@ -31,7 +31,7 @@ You probably don't care about this section - skip to the next one.
 * DONE fix setch-fast in python tool
 * age out pendingrequests in the python API
 * DONE stress test channel download from python, sometimes it seems like we don't get all replies, bug was due to simultaneous android connection
-* combine acks and responses in a single message if possible (do routing plugin LAST and drop ACK if someone else has already replied)
+* DONE combine acks and responses in a single message if possible (do routing plugin LAST and drop ACK if someone else has already replied)
 * DONE don't send packets we received from the phone BACK TOWARDS THE PHONE (possibly use fromnode 0 for packets the phone sends?)
 * fix 1.1.50 android debug panel display
 * DONE warn in android app about unset regions
