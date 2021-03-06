@@ -65,8 +65,7 @@ int32_t NodeInfoPlugin::runOnce()
     currentGeneration = radioGeneration;
 
     DEBUG_MSG("Sending our nodeinfo to mesh (wantReplies=%d)\n", requestReplies);
-    assert(nodeInfoPlugin);
-    nodeInfoPlugin->sendOurNodeInfo(NODENUM_BROADCAST, requestReplies); // Send our info (don't request replies)
+    sendOurNodeInfo(NODENUM_BROADCAST, requestReplies); // Send our info (don't request replies)
 
     return getPref_position_broadcast_secs() * 1000;
 }

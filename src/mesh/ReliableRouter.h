@@ -125,7 +125,5 @@ class ReliableRouter : public FloodingRouter
      */
     int32_t doRetransmissions();
 
-    void setNextTx(PendingPacket *pending) {  
-      assert(iface);
-      pending->nextTxMsec = millis() + iface->getRetransmissionMsec(pending->packet); }
+    void setNextTx(PendingPacket *pending);
 };

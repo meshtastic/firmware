@@ -4,6 +4,10 @@
 void CryptoEngine::setKey(const CryptoKey &k)
 {
     DEBUG_MSG("Installing AES%d key!\n", k.length * 8);
+    /* for(uint8_t i = 0; i < k.length; i++)
+        DEBUG_MSG("%02x ", k.bytes[i]);
+    DEBUG_MSG("\n"); */
+
     key = k;
 }
 
