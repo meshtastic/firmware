@@ -35,9 +35,10 @@ bool ReliableRouter::shouldFilterReceived(const MeshPacket *p)
         // If this is the first time we saw this, cancel any retransmissions we have queued up and generate an internal ack for
         // the original sending process.
         if (stopRetransmission(getFrom(p), p->id)) {
-            DEBUG_MSG("Someone is retransmitting for us, generate implicit ack\n");
-            if (p->want_ack)
-                sendAckNak(Routing_Error_NONE, getFrom(p), p->id);
+            DEBUG_MSG("generating implicit ack\n");
+            // NOTE: we do NOT check p->wantAck here because p is the INCOMING rebroadcast and that packet is not expected to be
+            // marked as wantAck
+            sendAckNak(Routing_Error_NONE, getFrom(p), p->id);
         }
     }
 
@@ -182,9 +183,9 @@ int32_t ReliableRouter::doRetransmissions()
                 --p.numRetransmissions;
                 setNextTx(&p);
             }
-        } 
+        }
 
-        if(stillValid) {
+        if (stillValid) {
             // Update our desired sleep delay
             int32_t t = p.nextTxMsec - now;
 
