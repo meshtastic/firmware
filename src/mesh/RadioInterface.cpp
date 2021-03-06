@@ -1,16 +1,16 @@
 
+#include "configuration.h"
 #include "RadioInterface.h"
 #include "Channels.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "assert.h"
-#include "configuration.h"
+#include "Router.h"
 #include "sleep.h"
 #include <assert.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
-#include "Channels.h"
 
 #define RDEF(name, freq, spacing, num_ch, power_limit)                                                                           \
     {                                                                                                                            \
@@ -119,11 +119,11 @@ uint32_t RadioInterface::getTxDelayMsec()
 
 void printPacket(const char *prefix, const MeshPacket *p)
 {
-    DEBUG_MSG("%s (id=0x%08x Fr0x%02x To0x%02x, WantAck%d, HopLim%d Ch0x%x", prefix, p->id, p->from & 0xff, p->to & 0xff, p->want_ack,
-              p->hop_limit, p->channel);
+    DEBUG_MSG("%s (id=0x%08x Fr0x%02x To0x%02x, WantAck%d, HopLim%d Ch0x%x", prefix, p->id, p->from & 0xff, p->to & 0xff,
+              p->want_ack, p->hop_limit, p->channel);
     if (p->which_payloadVariant == MeshPacket_decoded_tag) {
         auto &s = p->decoded;
-        
+
         DEBUG_MSG(" Portnum=%d", s.portnum);
 
         if (s.want_response)
@@ -332,6 +332,10 @@ void RadioInterface::deliverToReceiver(MeshPacket *p)
 {
     assert(rxDest);
     assert(rxDest->enqueue(p, 0)); // NOWAIT - fixme, if queue is full, delete older messages
+
+    // Nasty hack because our threading is primitive.  interfaces shouldn't need to know about routers FIXME
+    if (router)
+        router->setReceivedMessage();
 }
 
 /***
