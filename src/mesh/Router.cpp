@@ -115,12 +115,17 @@ void Router::abortSendAndNak(Routing_Error err, MeshPacket *p)
     packetPool.release(p);
 }
 
+void Router::setReceivedMessage() {
+    setInterval(0); // Run ASAP, so we can figure out our correct sleep time
+}
+
 ErrorCode Router::sendLocal(MeshPacket *p)
 {
     // No need to deliver externally if the destination is the local node
     if (p->to == nodeDB.getNodeNum()) {
         printPacket("Enqueuing local", p);
         fromRadioQueue.enqueue(p);
+        setReceivedMessage();
         return ERRNO_OK;
     } else if (!iface) {
         // We must be sending to remote nodes also, fail if no interface found
