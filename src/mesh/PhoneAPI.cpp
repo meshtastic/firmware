@@ -179,7 +179,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     // Do we have a message from the mesh?
     if (fromRadioScratch.which_payloadVariant != 0) {
         // Encapsulate as a FromRadio packet
-        DEBUG_MSG("encoding toPhone packet to phone variant=%d", fromRadioScratch.which_payloadVariant);
+        DEBUG_MSG("encoding toPhone packet to phone variant=%d\n", fromRadioScratch.which_payloadVariant);
         size_t numbytes = pb_encode_to_bytes(buf, FromRadio_size, FromRadio_fields, &fromRadioScratch);
         DEBUG_MSG(", %d bytes\n", numbytes);
         return numbytes;
