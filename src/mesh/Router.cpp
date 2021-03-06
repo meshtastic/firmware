@@ -143,6 +143,13 @@ ErrorCode Router::sendLocal(MeshPacket *p)
     }
 }
 
+void printBytes(const char *label, const uint8_t *p, size_t numbytes) {
+    DEBUG_MSG("%s: ", label);
+    for(size_t i = 0; i < numbytes; i++)
+        DEBUG_MSG("%02x ", p[i]);
+    DEBUG_MSG("\n");
+}
+
 /**
  * Send a packet on a suitable interface.  This routine will
  * later free() the packet to pool.  This routine is not allowed to stall.
@@ -173,12 +180,16 @@ ErrorCode Router::send(MeshPacket *p)
     if (p->which_payloadVariant == MeshPacket_decoded_tag) {
         static uint8_t bytes[MAX_RHPACKETLEN]; // we have to use a scratch buffer because a union
 
+        // printPacket("pre encrypt", p); // portnum valid here
+
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), Data_fields, &p->decoded);
 
         if (numbytes > MAX_RHPACKETLEN) {
             abortSendAndNak(Routing_Error_TOO_LARGE, p);
             return ERRNO_TOO_LARGE;
         }
+
+        //printBytes("plaintext", bytes, numbytes);
 
         auto hash = channels.setActiveByIndex(p->channel);
         if (hash < 0) {
@@ -189,7 +200,7 @@ ErrorCode Router::send(MeshPacket *p)
 
         // Now that we are encrypting the packet channel should be the hash (no longer the index)
         p->channel = hash;
-        crypto->encrypt(p->from, p->id, numbytes, bytes);
+        crypto->encrypt(getFrom(p), p->id, numbytes, bytes);
 
         // Copy back into the packet and set the variant type
         memcpy(p->encrypted.bytes, bytes, numbytes);
@@ -230,20 +241,26 @@ bool Router::perhapsDecode(MeshPacket *p)
         if (channels.decryptForHash(chIndex, p->channel)) {
             // Try to decrypt the packet if we can
             static uint8_t bytes[MAX_RHPACKETLEN];
+            size_t rawSize = p->encrypted.size;
+            assert(rawSize <= sizeof(bytes));
             memcpy(bytes, p->encrypted.bytes,
-                   p->encrypted
-                       .size); // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf
-            crypto->decrypt(p->from, p->id, p->encrypted.size, bytes);
+                   rawSize); // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf
+            crypto->decrypt(p->from, p->id, rawSize, bytes);
+
+            //printBytes("plaintext", bytes, p->encrypted.size);            
 
             // Take those raw bytes and convert them back into a well structured protobuf we can understand
-            memset(&p->decoded, 0, sizeof(p->decoded));
-            if (!pb_decode_from_bytes(bytes, p->encrypted.size, Data_fields, &p->decoded)) {
-                DEBUG_MSG("Invalid protobufs in received mesh packet (bad psk?!\n");
-            } else {
+            memset(&p->decoded, 0, sizeof(p->decoded)); 
+            if (!pb_decode_from_bytes(bytes, rawSize, Data_fields, &p->decoded)) {
+                DEBUG_MSG("Invalid protobufs in received mesh packet (bad psk?)!\n");
+            } else if(p->decoded.portnum == PortNum_UNKNOWN_APP) {
+                DEBUG_MSG("Invalid portnum (bad psk?)!\n");
+            }
+            else {
                 // parsing was successful
+                p->which_payloadVariant = MeshPacket_decoded_tag; // change type to decoded
                 p->channel = chIndex; // change to store the index instead of the hash
-                // printPacket("decoded message", p);
-                p->which_payloadVariant = MeshPacket_decoded_tag;
+                printPacket("decoded message", p);
                 return true;
             }
         }
@@ -268,11 +285,10 @@ void Router::handleReceived(MeshPacket *p)
     p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
 
     // Take those raw bytes and convert them back into a well structured protobuf we can understand
-    bool decoded = perhapsDecode(p);
-    printPacket("handleReceived", p);
-    DEBUG_MSG("decoded=%d\n", decoded);    
+    bool decoded = perhapsDecode(p); 
     if (decoded) {
         // parsing was successful, queue for our recipient
+        printPacket("handleReceived", p);
 
         // call any promiscious plugins here, make a (non promisiocous) plugin for forwarding messages to phone api
         // sniffReceived(p);

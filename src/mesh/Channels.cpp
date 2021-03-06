@@ -275,10 +275,11 @@ const char *Channels::getPrimaryName()
 bool Channels::decryptForHash(ChannelIndex chIndex, ChannelHash channelHash)
 {
     if(chIndex > getNumChannels() || getHash(chIndex) != channelHash) {
-        DEBUG_MSG("Skipping channel %d due to invalid hash/index\n", chIndex);
+        // DEBUG_MSG("Skipping channel %d (hash %x) due to invalid hash/index, want=%x\n", chIndex, getHash(chIndex), channelHash);
         return false;
     }
     else {
+        DEBUG_MSG("Using channel %d (hash 0x%x)\n", chIndex, channelHash);
         setCrypto(chIndex);
         return true;
     }
