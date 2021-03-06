@@ -114,7 +114,8 @@ bool MeshService::reloadConfig()
 void MeshService::reloadOwner()
 {
     assert(nodeInfoPlugin);
-    nodeInfoPlugin->sendOurNodeInfo();
+    if(nodeInfoPlugin)
+        nodeInfoPlugin->sendOurNodeInfo();
     nodeDB.saveToDisk();
 }
 
@@ -170,12 +171,18 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
     NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
     assert(node);
 
-    DEBUG_MSG("Sending network ping to 0x%x, with position=%d, wantReplies=%d\n", dest, node->has_position, wantReplies);
-    assert(positionPlugin && nodeInfoPlugin);
-    if (node->has_position)
-        positionPlugin->sendOurPosition(dest, wantReplies);
-    else
-        nodeInfoPlugin->sendOurNodeInfo(dest, wantReplies);
+    if (node->has_position) {
+        if(positionPlugin) {
+            DEBUG_MSG("Sending position ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
+            positionPlugin->sendOurPosition(dest, wantReplies);
+        }
+    }
+    else {
+        if(nodeInfoPlugin) {
+            DEBUG_MSG("Sending nodeinfo ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
+            nodeInfoPlugin->sendOurNodeInfo(dest, wantReplies);
+        }
+    }
 }
 
 NodeInfo *MeshService::refreshMyNodeInfo()
