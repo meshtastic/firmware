@@ -160,14 +160,14 @@ int32_t ReliableRouter::doRetransmissions()
         // FIXME, handle 51 day rolloever here!!!
         if (p.nextTxMsec <= now) {
             if (p.numRetransmissions == 0) {
-                DEBUG_MSG("Reliable send failed, returning a nak fr=0x%x,to=0x%x,id=%d\n", p.packet->from, p.packet->to,
+                DEBUG_MSG("Reliable send failed, returning a nak fr=0x%x,to=0x%x,id=0x%x\n", p.packet->from, p.packet->to,
                           p.packet->id);
                 sendAckNak(Routing_Error_MAX_RETRANSMIT, p.packet->from, p.packet->id);
                 // Note: we don't stop retransmission here, instead the Nak packet gets processed in sniffReceived - which
                 // allows the DSR version to still be able to look at the PendingPacket
                 stopRetransmission(it->first);
             } else {
-                DEBUG_MSG("Sending reliable retransmission fr=0x%x,to=0x%x,id=%d, tries left=%d\n", p.packet->from, p.packet->to,
+                DEBUG_MSG("Sending reliable retransmission fr=0x%x,to=0x%x,id=0x%x, tries left=%d\n", p.packet->from, p.packet->to,
                           p.packet->id, p.numRetransmissions);
 
                 // Note: we call the superclass version because we don't want to have our version of send() add a new
