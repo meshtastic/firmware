@@ -25,8 +25,26 @@ const RegionInfo regions[] = {
     RDEF(KR, 921.9f, 0.2f, 8, 0),      // KR channel settings (KR920-923) Start from TTN download channel
                                        // freq. (921.9f is for download, others are for uplink)
     RDEF(TW, 923.0f, 0.2f, 10, 0),     // TW channel settings (AS2 bandplan 923-925MHz)
+    RDEF(RU, 868.9f, 0.2f, 2, 20),     // See notes below
     RDEF(Unset, 903.08f, 2.16f, 13, 0) // Assume US freqs if unset, Must be last
 };
+
+/* Notes about the RU bandplan (from @denis-d in https://meshtastic.discourse.group/t/russian-band-plan-proposal/2786/2):
+
+According to Annex 12 to GKRCh (National Radio Frequency Commission) decision № 18-46-03-1 (September 11th 2018) https://digital.gov.ru/uploaded/files/prilozhenie-12-k-reshenyu-gkrch-18-46-03-1.pdf 1
+We have 3 options for 868 MHz:
+
+864,0 - 865,0 MHz ERP 25mW, Duty Cycle 0.1% (3.6 sec in hour) or LBT (Listen Before Talk), prohibited in airports.
+866,0 - 868,0 MHz ERP 25mW, Duty Cycle 1% or LBT, PSD (Power Spectrum Density) 1000mW/MHz, prohibited in airports
+868,7 - 869,2 MHz ERP 100mW, Duty Cycle 10% or LBT, no resctrictions
+and according to RP2-1.0.2 LoRaWAN® Regional Parameters RP2-1.0.2 LoRaWAN® Regional Parameters - LoRa Alliance®
+I propose to use following meshtastic bandplan:
+1 channel - central frequency 868.9MHz 125kHz band
+Protective band - 75kHz
+2 channel - central frequency 869.1MHz 125kHz band
+
+RDEF(RU, 868.9f, 0.2f, 2, 20)
+*/
 
 const RegionInfo *myRegion;
 
