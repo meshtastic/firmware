@@ -19,7 +19,8 @@ typedef enum _RegionCode {
     RegionCode_JP = 5,
     RegionCode_ANZ = 6,
     RegionCode_KR = 7,
-    RegionCode_TW = 8
+    RegionCode_TW = 8,
+    RegionCode_RU = 9
 } RegionCode;
 
 typedef enum _ChargeCurrent {
@@ -123,8 +124,8 @@ typedef struct _RadioConfig {
 
 /* Helper constants for enums */
 #define _RegionCode_MIN RegionCode_Unset
-#define _RegionCode_MAX RegionCode_TW
-#define _RegionCode_ARRAYSIZE ((RegionCode)(RegionCode_TW+1))
+#define _RegionCode_MAX RegionCode_RU
+#define _RegionCode_ARRAYSIZE ((RegionCode)(RegionCode_RU+1))
 
 #define _ChargeCurrent_MIN ChargeCurrent_MAUnset
 #define _ChargeCurrent_MAX ChargeCurrent_MA1320
