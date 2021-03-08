@@ -20,7 +20,7 @@ size_t RedirectablePrint::write(uint8_t c)
 {
     // Always send the characters to our segger JTAG debugger
 #ifdef SEGGER_STDOUT_CH
-    SEGGER_RTT_PutCharSkip(SEGGER_STDOUT_CH, c);
+    SEGGER_RTT_PutChar(SEGGER_STDOUT_CH, c);
 #endif
 
     dest->write(c);
@@ -85,6 +85,8 @@ size_t RedirectablePrint::logDebug(const char *format, ...)
         auto thread = concurrency::OSThread::currentThread;
         if(thread) {
             print("[");
+            // printf("%p ", thread);
+            // assert(thread->ThreadName.length());
             print(thread->ThreadName);
             print("] ");
         }
