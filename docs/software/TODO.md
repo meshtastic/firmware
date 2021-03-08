@@ -87,14 +87,26 @@ eink:
 * new battery level sensing
 * measure current draw
 * DONE: fix backlight
-* USB is busted because of power enable mode?
+* DONE - USB is busted because of power enable mode?
+* test that board leaves bootloader always
+* test USB - works in bootloader
+* test LEDs
+* Test BME280
+* test gps
+* check GPS fast locking
+* tested! dlora
+* test eink backlight
+* tested! eink
+* test buttons
+* test battery charging
+* test serial flash
+* send updated app and bootloader image
 * OHH BME280!  THAT IS GREAT!
 * make new screen work, ask for datasheet
 * say I think you could ship this
 * leds seem busted
-* usb doesn't stay connected
-* check GPS works
-* check GPS fast locking
+* fix hw_model: "nrf52unknown"
+* use larger icon for meshtastic logo
 * send email about variants & faster flash programming - https://github.com/geeksville/Meshtastic-esp32/commit/f110225173a77326aac029321cdb6491bfa640f6
 * send PR for bootloader
 * fix nrf52 time/date
