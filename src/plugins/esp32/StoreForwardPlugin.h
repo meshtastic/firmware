@@ -63,6 +63,11 @@ class StoreForwardPluginRadio : public SinglePortPlugin
      */
     void sendPayload(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
 
+    /**
+     * Send our payload into the mesh
+     */
+    void sendPayloadHeartbeat(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
+
   protected:
     virtual MeshPacket *allocReply();
 
