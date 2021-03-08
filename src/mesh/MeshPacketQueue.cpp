@@ -71,7 +71,7 @@ static PacketId findId;
 
 static bool isMyPacket(MeshPacket *p)
 {
-    return p->id == findId && p->from == findFrom;
+    return p->id == findId && getFrom(p) == findFrom;
 }
 
 /** Attempt to find and remove a packet from this queue.  Returns true the packet which was removed from the queue */

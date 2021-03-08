@@ -63,6 +63,11 @@ class Router : protected concurrency::OSThread
      * @return our local nodenum */
     NodeNum getNodeNum();
 
+    /** Wake up the router thread ASAP, because we just queued a message for it.
+     * FIXME, this is kinda a hack because we don't have a nice way yet to say 'wake us because we are 'blocked on this queue'
+     */
+    void setReceivedMessage();
+
   protected:
     friend class RoutingPlugin;
 

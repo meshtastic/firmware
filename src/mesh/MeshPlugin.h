@@ -82,6 +82,13 @@ class MeshPlugin
 
   private:
 
+    /**
+     * If any of the current chain of plugins has already sent a reply, it will be here.  This is useful to allow 
+     * the RoutingPlugin to avoid sending redundant acks
+     */
+    static MeshPacket *currentReply;
+    friend class ReliableRouter;  
+
     /** Messages can be received that have the want_response bit set.  If set, this callback will be invoked
      * so that subclasses can (optionally) send a response back to the original sender.  This method calls allocReply()
      * to generate the reply message, and if !NULL that message will be delivered to whoever sent req

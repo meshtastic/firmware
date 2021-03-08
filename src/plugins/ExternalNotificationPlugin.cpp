@@ -147,7 +147,7 @@ bool ExternalNotificationPluginRadio::handleReceived(const MeshPacket &mp)
 
         auto &p = mp.decoded;
 
-        if (mp.from != nodeDB.getNodeNum()) {
+        if (getFrom(&mp) != nodeDB.getNodeNum()) {
 
             // TODO: This may be a problem if messages are sent in unicide, but I'm not sure if it will.
             //   Need to know if and how this could be a problem.

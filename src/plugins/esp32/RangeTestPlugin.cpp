@@ -133,7 +133,7 @@ bool RangeTestPluginRadio::handleReceived(const MeshPacket &mp)
         // DEBUG_MSG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s\n",
         //          nodeDB.getNodeNum(), mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
 
-        if (mp.from != nodeDB.getNodeNum()) {
+        if (getFrom(&mp) != nodeDB.getNodeNum()) {
 
             // DEBUG_MSG("* * Message came from the mesh\n");
             // Serial2.println("* * Message came from the mesh");
@@ -144,7 +144,7 @@ bool RangeTestPluginRadio::handleReceived(const MeshPacket &mp)
 
             */
 
-            NodeInfo *n = nodeDB.getNode(mp.from);
+            NodeInfo *n = nodeDB.getNode(getFrom(&mp));
 
             if (radioConfig.preferences.range_test_plugin_save) {
                 appendFile(mp);
@@ -209,7 +209,7 @@ bool RangeTestPluginRadio::appendFile(const MeshPacket &mp)
 {
     auto &p = mp.decoded;
 
-    NodeInfo *n = nodeDB.getNode(mp.from);
+    NodeInfo *n = nodeDB.getNode(getFrom(&mp));
     /*
         DEBUG_MSG("-----------------------------------------\n");
         DEBUG_MSG("p.payload.bytes  \"%s\"\n", p.payload.bytes);
@@ -290,7 +290,7 @@ bool RangeTestPluginRadio::appendFile(const MeshPacket &mp)
         fileToAppend.printf("??:??:??,"); // Time
     }
 
-    fileToAppend.printf("%d,", mp.from);                          // From
+    fileToAppend.printf("%d,", getFrom(&mp));                          // From
     fileToAppend.printf("%s,", n->user.long_name);                // Long Name
     fileToAppend.printf("%f,", n->position.latitude_i * 1e-7);    // Sender Lat
     fileToAppend.printf("%f,", n->position.longitude_i * 1e-7);   // Sender Long

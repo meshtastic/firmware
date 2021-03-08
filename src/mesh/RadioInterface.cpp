@@ -1,16 +1,16 @@
 
+#include "configuration.h"
 #include "RadioInterface.h"
 #include "Channels.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "assert.h"
-#include "configuration.h"
+#include "Router.h"
 #include "sleep.h"
 #include <assert.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
-#include "Channels.h"
 
 #define RDEF(name, freq, spacing, num_ch, power_limit)                                                                           \
     {                                                                                                                            \
@@ -25,8 +25,26 @@ const RegionInfo regions[] = {
     RDEF(KR, 921.9f, 0.2f, 8, 0),      // KR channel settings (KR920-923) Start from TTN download channel
                                        // freq. (921.9f is for download, others are for uplink)
     RDEF(TW, 923.0f, 0.2f, 10, 0),     // TW channel settings (AS2 bandplan 923-925MHz)
+    RDEF(RU, 868.9f, 0.2f, 2, 20),     // See notes below
     RDEF(Unset, 903.08f, 2.16f, 13, 0) // Assume US freqs if unset, Must be last
 };
+
+/* Notes about the RU bandplan (from @denis-d in https://meshtastic.discourse.group/t/russian-band-plan-proposal/2786/2):
+
+According to Annex 12 to GKRCh (National Radio Frequency Commission) decision № 18-46-03-1 (September 11th 2018) https://digital.gov.ru/uploaded/files/prilozhenie-12-k-reshenyu-gkrch-18-46-03-1.pdf 1
+We have 3 options for 868 MHz:
+
+864,0 - 865,0 MHz ERP 25mW, Duty Cycle 0.1% (3.6 sec in hour) or LBT (Listen Before Talk), prohibited in airports.
+866,0 - 868,0 MHz ERP 25mW, Duty Cycle 1% or LBT, PSD (Power Spectrum Density) 1000mW/MHz, prohibited in airports
+868,7 - 869,2 MHz ERP 100mW, Duty Cycle 10% or LBT, no resctrictions
+and according to RP2-1.0.2 LoRaWAN® Regional Parameters RP2-1.0.2 LoRaWAN® Regional Parameters - LoRa Alliance®
+I propose to use following meshtastic bandplan:
+1 channel - central frequency 868.9MHz 125kHz band
+Protective band - 75kHz
+2 channel - central frequency 869.1MHz 125kHz band
+
+RDEF(RU, 868.9f, 0.2f, 2, 20)
+*/
 
 const RegionInfo *myRegion;
 
@@ -119,11 +137,11 @@ uint32_t RadioInterface::getTxDelayMsec()
 
 void printPacket(const char *prefix, const MeshPacket *p)
 {
-    DEBUG_MSG("%s (id=0x%08x Fr0x%02x To0x%02x, WantAck%d, HopLim%d Ch0x%x", prefix, p->id, p->from & 0xff, p->to & 0xff, p->want_ack,
-              p->hop_limit, p->channel);
+    DEBUG_MSG("%s (id=0x%08x Fr0x%02x To0x%02x, WantAck%d, HopLim%d Ch0x%x", prefix, p->id, p->from & 0xff, p->to & 0xff,
+              p->want_ack, p->hop_limit, p->channel);
     if (p->which_payloadVariant == MeshPacket_decoded_tag) {
         auto &s = p->decoded;
-        
+
         DEBUG_MSG(" Portnum=%d", s.portnum);
 
         if (s.want_response)
@@ -332,6 +350,10 @@ void RadioInterface::deliverToReceiver(MeshPacket *p)
 {
     assert(rxDest);
     assert(rxDest->enqueue(p, 0)); // NOWAIT - fixme, if queue is full, delete older messages
+
+    // Nasty hack because our threading is primitive.  interfaces shouldn't need to know about routers FIXME
+    if (router)
+        router->setReceivedMessage();
 }
 
 /***
