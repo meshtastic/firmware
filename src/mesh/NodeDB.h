@@ -154,7 +154,7 @@ extern NodeDB nodeDB;
 */
 
 // Our delay functions check for this for times that should never expire
-#define DELAY_FOREVER 0xffffffff
+#define NODE_DELAY_FOREVER 0xffffffff
 
 #define IF_ROUTER(routerVal, normalVal) (radioConfig.preferences.is_router ? (routerVal) : (normalVal))
 
@@ -168,8 +168,8 @@ PREF_GET(position_broadcast_secs, IF_ROUTER(12 * 60 * 60, 15 * 60))
 PREF_GET(wait_bluetooth_secs, IF_ROUTER(1, 60))
 
 PREF_GET(screen_on_secs, 60)
-PREF_GET(mesh_sds_timeout_secs, IF_ROUTER(DELAY_FOREVER, 2 * 60 * 60))
-PREF_GET(phone_sds_timeout_sec, IF_ROUTER(DELAY_FOREVER, 2 * 60 * 60))
+PREF_GET(mesh_sds_timeout_secs, IF_ROUTER(NODE_DELAY_FOREVER, 2 * 60 * 60))
+PREF_GET(phone_sds_timeout_sec, IF_ROUTER(NODE_DELAY_FOREVER, 2 * 60 * 60))
 PREF_GET(sds_secs, 365 * 24 * 60 * 60)
 
 // We default to sleeping (with bluetooth off for 5 minutes at a time).  This seems to be a good tradeoff between
@@ -183,3 +183,4 @@ PREF_GET(min_wake_secs, 10)
  * might have changed is incremented.  Allows others to detect they might now be on a new channel.
  */
 extern uint32_t radioGeneration;
+

@@ -160,7 +160,7 @@ bool SerialPluginRadio::handleReceived(const MeshPacket &mp)
         // DEBUG_MSG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s\n",
         //          nodeDB.getNodeNum(), mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
 
-        if (mp.from == nodeDB.getNodeNum()) {
+        if (getFrom(&mp) == nodeDB.getNodeNum()) {
 
             /*
              * If radioConfig.preferences.serialplugin_echo is true, then echo the packets that are sent out back to the TX

@@ -31,7 +31,7 @@ void FloodingRouter::sniffReceived(const MeshPacket *p, const Routing *c)
 {
     // If a broadcast, possibly _also_ send copies out into the mesh.
     // (FIXME, do something smarter than naive flooding here)
-    if (p->to == NODENUM_BROADCAST && p->hop_limit > 0 && p->from != getNodeNum()) {
+    if (p->to == NODENUM_BROADCAST && p->hop_limit > 0 && getFrom(p) != getNodeNum()) {
         if (p->id != 0) {
             MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
 

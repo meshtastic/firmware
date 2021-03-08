@@ -19,7 +19,8 @@ typedef enum _RegionCode {
     RegionCode_JP = 5,
     RegionCode_ANZ = 6,
     RegionCode_KR = 7,
-    RegionCode_TW = 8
+    RegionCode_TW = 8,
+    RegionCode_RU = 9
 } RegionCode;
 
 typedef enum _ChargeCurrent {
@@ -55,6 +56,10 @@ typedef enum _LocationSharing {
     LocationSharing_LocEnabled = 1,
     LocationSharing_LocDisabled = 2
 } LocationSharing;
+
+typedef enum _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType {
+    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11 = 0
+} RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType;
 
 /* Struct definitions */
 typedef struct _RadioConfig_UserPreferences {
@@ -106,6 +111,9 @@ typedef struct _RadioConfig_UserPreferences {
     uint32_t environmental_measurement_plugin_read_error_count_threshold;
     uint32_t environmental_measurement_plugin_update_interval;
     uint32_t environmental_measurement_plugin_recovery_interval;
+    bool environmental_measurement_plugin_display_farenheit;
+    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType environmental_measurement_plugin_sensor_type;
+    uint32_t environmental_measurement_plugin_sensor_pin;
 } RadioConfig_UserPreferences;
 
 typedef struct _RadioConfig {
@@ -116,8 +124,8 @@ typedef struct _RadioConfig {
 
 /* Helper constants for enums */
 #define _RegionCode_MIN RegionCode_Unset
-#define _RegionCode_MAX RegionCode_TW
-#define _RegionCode_ARRAYSIZE ((RegionCode)(RegionCode_TW+1))
+#define _RegionCode_MAX RegionCode_RU
+#define _RegionCode_ARRAYSIZE ((RegionCode)(RegionCode_RU+1))
 
 #define _ChargeCurrent_MIN ChargeCurrent_MAUnset
 #define _ChargeCurrent_MAX ChargeCurrent_MA1320
@@ -131,6 +139,10 @@ typedef struct _RadioConfig {
 #define _LocationSharing_MAX LocationSharing_LocDisabled
 #define _LocationSharing_ARRAYSIZE ((LocationSharing)(LocationSharing_LocDisabled+1))
 
+#define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11
+#define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MAX RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11
+#define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_ARRAYSIZE ((RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType)(RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11+1))
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -138,9 +150,9 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default}
-#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero}
-#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define RadioConfig_UserPreferences_position_broadcast_secs_tag 1
@@ -190,6 +202,9 @@ extern "C" {
 #define RadioConfig_UserPreferences_environmental_measurement_plugin_read_error_count_threshold_tag 142
 #define RadioConfig_UserPreferences_environmental_measurement_plugin_update_interval_tag 143
 #define RadioConfig_UserPreferences_environmental_measurement_plugin_recovery_interval_tag 144
+#define RadioConfig_UserPreferences_environmental_measurement_plugin_display_farenheit_tag 145
+#define RadioConfig_UserPreferences_environmental_measurement_plugin_sensor_type_tag 146
+#define RadioConfig_UserPreferences_environmental_measurement_plugin_sensor_pin_tag 147
 #define RadioConfig_preferences_tag              1
 
 /* Struct field encoding specification for nanopb */
@@ -246,7 +261,10 @@ X(a, STATIC,   SINGULAR, BOOL,     environmental_measurement_plugin_measurement_
 X(a, STATIC,   SINGULAR, BOOL,     environmental_measurement_plugin_screen_enabled, 141) \
 X(a, STATIC,   SINGULAR, UINT32,   environmental_measurement_plugin_read_error_count_threshold, 142) \
 X(a, STATIC,   SINGULAR, UINT32,   environmental_measurement_plugin_update_interval, 143) \
-X(a, STATIC,   SINGULAR, UINT32,   environmental_measurement_plugin_recovery_interval, 144)
+X(a, STATIC,   SINGULAR, UINT32,   environmental_measurement_plugin_recovery_interval, 144) \
+X(a, STATIC,   SINGULAR, BOOL,     environmental_measurement_plugin_display_farenheit, 145) \
+X(a, STATIC,   SINGULAR, UENUM,    environmental_measurement_plugin_sensor_type, 146) \
+X(a, STATIC,   SINGULAR, UINT32,   environmental_measurement_plugin_sensor_pin, 147)
 #define RadioConfig_UserPreferences_CALLBACK NULL
 #define RadioConfig_UserPreferences_DEFAULT NULL
 
@@ -258,8 +276,8 @@ extern const pb_msgdesc_t RadioConfig_UserPreferences_msg;
 #define RadioConfig_UserPreferences_fields &RadioConfig_UserPreferences_msg
 
 /* Maximum encoded size of messages (where known) */
-#define RadioConfig_size                         335
-#define RadioConfig_UserPreferences_size         332
+#define RadioConfig_size                         348
+#define RadioConfig_UserPreferences_size         345
 
 #ifdef __cplusplus
 } /* extern "C" */

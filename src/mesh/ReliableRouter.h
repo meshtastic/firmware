@@ -15,7 +15,7 @@ struct GlobalPacketId {
 
     GlobalPacketId(const MeshPacket *p)
     {
-        node = p->from;
+        node = getFrom(p);
         id = p->id;
     }
 
@@ -125,7 +125,5 @@ class ReliableRouter : public FloodingRouter
      */
     int32_t doRetransmissions();
 
-    void setNextTx(PendingPacket *pending) {  
-      assert(iface);
-      pending->nextTxMsec = millis() + iface->getRetransmissionMsec(pending->packet); }
+    void setNextTx(PendingPacket *pending);
 };

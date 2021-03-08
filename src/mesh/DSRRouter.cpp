@@ -69,7 +69,7 @@ void DSRRouter::sniffReceived(const MeshPacket *p, const Routing *c)
     // ignore rebroadcasts.
     // this will also add records for any ACKs we receive for our messages
     if (p->to != NODENUM_BROADCAST || p->hop_limit != HOP_RELIABLE) {
-        addRoute(p->from, p->from, 0); // We are adjacent with zero hops
+        addRoute(getFrom(p), getFrom(p), 0); // We are adjacent with zero hops
     }
 
     if (c)
