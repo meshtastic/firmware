@@ -45,6 +45,18 @@ Recommended settings for a sender at different radio settings:
     Medium     ... range_test_plugin_sender = 15
     Short Fast ... range_test_plugin_sender = 15
 
+## Python API Examples
+
+### Sender 
+
+    meshtastic --set range_test_plugin_enabled 1
+    meshtastic --set range_test_plugin_sender 60
+
+### Receiver
+
+    meshtastic --set range_test_plugin_enabled 1
+    meshtastic --set range_test_plugin_save 1
+
 ## Other things to keep in mind
 
 Be sure to turn off either the plugin configured as a sender or the device where the plugin setup as sender when not in use. This will use a lot of time on air and will spam your channel.

@@ -26,25 +26,22 @@ int32_t StoreForwardPlugin::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    // radioConfig.preferences.store_forward_plugin_enabled = 1;
-    // radioConfig.preferences.is_router = 1;
+    radioConfig.preferences.store_forward_plugin_enabled = 1;
+    radioConfig.preferences.is_router = 0;
 
     if (radioConfig.preferences.store_forward_plugin_enabled) {
 
         if (firstTime) {
 
-            /*
-             */
+            firstTime = 0;
 
             if (radioConfig.preferences.is_router) {
-                DEBUG_MSG("Initializing Store & Forward Plugin - Enabled\n");
+                DEBUG_MSG("Initializing Store & Forward Plugin - Enabled as Router\n");
                 // Router
                 if (ESP.getPsramSize()) {
                     if (ESP.getFreePsram() >= 2048 * 1024) {
                         // Do the startup here
                         storeForwardPluginRadio = new StoreForwardPluginRadio();
-
-                        firstTime = 0;
 
                         this->populatePSRAM();
 
@@ -66,21 +63,30 @@ int32_t StoreForwardPlugin::runOnce()
                 }
 
             } else {
-                DEBUG_MSG("Initializing Store & Forward Plugin - Enabled but is_router is not turned on.\n");
-                DEBUG_MSG(
-                    "Initializing Store & Forward Plugin - If you want to use this plugin, you must also turn on is_router.\n");
-                // Non-Router
-
-                return (30 * 1000);
+                DEBUG_MSG("Initializing Store & Forward Plugin - Enabled as Client\n");
+                return (5 * 1000);
             }
 
         } else {
-            // What do we do if it's not our first time?
 
-            // Maybe some cleanup functions?
-            this->sawNodeReport();
-            this->historyReport();
-            return (10 * 1000);
+            if (radioConfig.preferences.is_router) {
+                // Maybe some cleanup functions?
+                this->sawNodeReport();
+                this->historyReport();
+                return (10 * 1000);
+            } else {
+                /*
+                 * If the plugin is turned on and is_router is not enabled, then we'll send a heartbeat every
+                 * few minutes.
+                 */
+
+                DEBUG_MSG("Store & Forward Plugin - Sending heartbeat\n");
+
+                // storeForwardPluginRadio->sendPayloadHeartbeat();
+                storeForwardPluginRadio->sendPayload();
+
+                return (1 * 60 * 1000);
+            }
         }
 
     } else {
@@ -220,15 +226,32 @@ void StoreForwardPlugin::sawNodeReport()
 
 MeshPacket *StoreForwardPluginRadio::allocReply()
 {
-
-    auto reply = allocDataPacket(); // Allocate a packet for sending
-
-    return reply;
+    //auto reply = allocDataPacket(); // Allocate a packet for sending
+    //return reply;
 }
 
 void StoreForwardPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
 {
-    MeshPacket *p = allocReply();
+    MeshPacket *p = this->allocReply();
+    /*
+    p->to = dest;
+    p->decoded.want_response = wantReplies;
+
+    p->want_ack = true;
+*/
+    // static char heartbeatString[20];
+    // snprintf(heartbeatString, sizeof(heartbeatString), "1");
+
+    // p->decoded.data.payload.size = strlen(heartbeatString); // You must specify how many bytes are in the reply
+    // memcpy(p->decoded.data.payload.bytes, "1", 1);
+
+    // service.sendToMesh(p);
+}
+
+void StoreForwardPluginRadio::sendPayloadHeartbeat(NodeNum dest, bool wantReplies)
+{
+    DEBUG_MSG("Sending S&F Heartbeat\n");
+    MeshPacket *p = this->allocReply();
     p->to = dest;
     p->decoded.want_response = wantReplies;
 
@@ -282,8 +305,8 @@ bool StoreForwardPluginRadio::handleReceived(const MeshPacket &mp)
             }
 
             if ((millis() - sawTime) > STOREFORWARD_SEND_HISTORY_SHORT) {
-                // Node has been away for a while. 
-                storeForwardPlugin->historySend(sawTime, getFrom(&mp));
+                // Node has been away for a while.
+                storeForwardPlugin->historySend(sawTime, mp.from);
             }
         }
 
