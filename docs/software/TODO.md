@@ -29,6 +29,7 @@ You probably don't care about this section - skip to the next one.
 * DONE release protobufs
 * DONE release to developers
 * DONE fix setch-fast in python tool
+* turn off fault 8: https://github.com/meshtastic/Meshtastic-device/issues/734
 * age out pendingrequests in the python API
 * DONE stress test channel download from python, sometimes it seems like we don't get all replies, bug was due to simultaneous android connection
 * DONE combine acks and responses in a single message if possible (do routing plugin LAST and drop ACK if someone else has already replied)
