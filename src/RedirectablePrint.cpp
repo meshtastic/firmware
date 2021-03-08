@@ -38,7 +38,7 @@ size_t RedirectablePrint::vprintf(const char *format, va_list arg)
         va_end(arg);
         return 0;
     };
-    if (len >= printBufLen) {
+    if (len >= (int) printBufLen) {
         delete[] printBuf;
         printBufLen *= 2;
         printBuf = new char[printBufLen];
