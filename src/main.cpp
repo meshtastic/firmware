@@ -589,6 +589,9 @@ void loop()
 #ifndef NO_ESP32
     esp32Loop();
 #endif
+#ifdef NRF52_SERIES
+    nrf52Loop();
+#endif
 
     // For debugging
     // if (rIf) ((RadioLibInterface *)rIf)->isActivelyReceiving();
