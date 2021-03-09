@@ -99,16 +99,16 @@ extern "C" {
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs
-#define PIN_LED1 (0 + 13) // red (confirmed on 1.0 board)
-#define PIN_LED2 (0 + 14) // blue (seems busted!)
-#define PIN_LED3 (0 + 15) // green (seems busted!)
+#define PIN_LED1 (0 + 14) // 13 red (confirmed on 1.0 board)
+#define PIN_LED2 (0 + 15) // 14 blue 
+#define PIN_LED3 (0 + 13) // 15 green 
 
 #define LED_RED PIN_LED3
-#define LED_GREEN PIN_LED1
-#define LED_BLUE PIN_LED2
+#define LED_BLUE PIN_LED1
+#define LED_GREEN PIN_LED2
 
-#define LED_BUILTIN LED_GREEN
-#define LED_CONN PIN_BLUE
+#define LED_BUILTIN LED_BLUE
+#define LED_CONN PIN_GREEN
 
 #define LED_STATE_ON 0 // State when LED is lit
 #define LED_INVERTED 1
@@ -190,7 +190,7 @@ External serial flash WP25R1635FZUIL0
 // Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
 // code)
 
-// #define LORA_DISABLE_SENDING // Define this to disable transmission for testing (power testing etc...)
+#define LORA_DISABLE_SENDING // Define this to disable transmission for testing (power testing etc...)
 
 /*
  * eink display pins
