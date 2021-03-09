@@ -852,7 +852,7 @@ int32_t Screen::runOnce()
             free(cmd.print_text);
             break;
         default:
-            DEBUG_MSG("BUG: invalid cmd");
+            DEBUG_MSG("BUG: invalid cmd\n");
         }
     }
 
