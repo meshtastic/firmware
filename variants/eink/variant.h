@@ -190,7 +190,10 @@ External serial flash WP25R1635FZUIL0
 // Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
 // code)
 
-#define LORA_DISABLE_SENDING // Define this to disable transmission for testing (power testing etc...)
+// #define LORA_DISABLE_SENDING // Define this to disable transmission for testing (power testing etc...)
+
+// #undef SX1262_CS
+// #define USE_SIM_RADIO // define to not use the lora radio hardware at all
 
 /*
  * eink display pins
