@@ -19,9 +19,11 @@ bool NodeInfoPlugin::handleReceivedProtobuf(const MeshPacket &mp, const User *pp
     // Show new nodes on LCD screen
     if (wasBroadcast) {
         String lcd = String("Joined: ") + p.long_name + "\n";
-        screen->print(lcd.c_str());
+        if(screen)
+            screen->print(lcd.c_str());
     }
 
+    // DEBUG_MSG("did handleReceived\n");
     return false; // Let others look at this message also if they want
 }
 

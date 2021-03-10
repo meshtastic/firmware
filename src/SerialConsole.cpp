@@ -1,12 +1,20 @@
 #include "SerialConsole.h"
+#include "NodeDB.h"
 #include "PowerFSM.h"
 #include "configuration.h"
-#include "NodeDB.h"
 #include <Arduino.h>
 
 #define Port Serial
 
 SerialConsole console;
+
+void consolePrintf(const char *format, ...)
+{
+    va_list arg;
+    va_start(arg, format);
+    console.vprintf(format, arg);
+    va_end(arg);
+}
 
 SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port)
 {
@@ -29,7 +37,7 @@ void SerialConsole::init()
 void SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
 {
     // Turn off debug serial printing once the API is activated, because other threads could print and corrupt packets
-    if(!radioConfig.preferences.debug_log_enabled)
+    if (!radioConfig.preferences.debug_log_enabled)
         setDestination(&noopPrint);
     canWrite = true;
 
