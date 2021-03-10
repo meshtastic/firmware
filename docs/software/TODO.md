@@ -84,10 +84,13 @@ You probably don't care about this section - skip to the next one.
  
 eink:
 
+* DONE check email of reported issues
+* DONE turn off vbus driving (in bootloader)
 * new battery level sensing
-* measure current draw
+* current draw no good
 * DONE: fix backlight
 * DONE - USB is busted because of power enable mode?
+* test CPU voltage? something is bad with RAM (removing eink module does not help)
 * test that board leaves bootloader always
 * test USB - works in bootloader
 * test LEDs
