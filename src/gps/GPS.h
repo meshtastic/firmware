@@ -47,7 +47,7 @@ class GPS : private concurrency::OSThread
 
     GPS() : concurrency::OSThread("GPS") {}
 
-    virtual ~GPS() {} // FIXME, we really should unregister our sleep observer
+    virtual ~GPS();
 
     /** We will notify this observable anytime GPS state has changed meaningfully */
     Observable<const meshtastic::GPSStatus *> newStatus;

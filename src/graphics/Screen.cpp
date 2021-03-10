@@ -143,11 +143,13 @@ static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     drawIconScreen(region, display, state, x, y);
 }
 
+#ifdef HAS_EINK
 /// Used on eink displays while in deep sleep
 static void drawSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     drawIconScreen("Sleeping...", display, state, x, y);
 }
+#endif
 
 static void drawPluginFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -791,7 +793,8 @@ void Screen::setup()
     powerStatusObserver.observe(&powerStatus->onNewStatus);
     gpsStatusObserver.observe(&gpsStatus->onNewStatus);
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
-    textMessageObserver.observe(textMessagePlugin);
+    if(textMessagePlugin)
+        textMessageObserver.observe(textMessagePlugin);
 }
 
 void Screen::forceDisplay()
@@ -849,7 +852,7 @@ int32_t Screen::runOnce()
             free(cmd.print_text);
             break;
         default:
-            DEBUG_MSG("BUG: invalid cmd");
+            DEBUG_MSG("BUG: invalid cmd\n");
         }
     }
 

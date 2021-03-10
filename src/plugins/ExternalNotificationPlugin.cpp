@@ -114,7 +114,8 @@ int32_t ExternalNotificationPlugin::runOnce()
 
         return (INT32_MAX);
     }
-
+#else
+    return INT32_MAX;
 #endif
 }
 
