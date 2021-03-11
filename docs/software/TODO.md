@@ -40,8 +40,9 @@ You probably don't care about this section - skip to the next one.
 * DONE warn in android app about unset regions
 * DONE use set-channel from android
 * DONE add gui in android app for setting region
-* clean up python channel usage
-* use bindToChannel to limit admin access for remote nodes
+* DONE clean up python channel usage
+* DONE use bindToChannel to limit admin access for remote nodes
+* move channels and radio config out of device settings
 * make python tests more exhaustive
 * pick default random admin key
 * exclude admin channels from URL?
@@ -84,7 +85,7 @@ You probably don't care about this section - skip to the next one.
 * implement 'small location diffs' change
 * move battery level out of position? 
 * consider "A special exception (FIXME, not sure if this is a good idea) - packets that arrive on the local interface 
-  are allowed on any channel (this lets the local user do anything)."
+  are allowed on any channel (this lets the local user do anything)."  Probably by adding a "secure_local_interface" settings bool.
 * DOUBLE CHECK android app can still upgrade 1.1 and 1.0 loads
  
 eink:

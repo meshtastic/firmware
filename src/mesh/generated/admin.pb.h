@@ -23,6 +23,8 @@ typedef struct _AdminMessage {
         RadioConfig get_radio_response;
         uint32_t get_channel_request;
         Channel get_channel_response;
+        bool confirm_set_channel;
+        bool confirm_set_radio;
     };
 } AdminMessage;
 
@@ -43,6 +45,8 @@ extern "C" {
 #define AdminMessage_get_radio_response_tag      5
 #define AdminMessage_get_channel_request_tag     6
 #define AdminMessage_get_channel_response_tag    7
+#define AdminMessage_confirm_set_channel_tag     32
+#define AdminMessage_confirm_set_radio_tag       33
 
 /* Struct field encoding specification for nanopb */
 #define AdminMessage_FIELDLIST(X, a) \
@@ -52,7 +56,9 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_channel,set_channel),   3) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,get_radio_request,get_radio_request),   4) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_radio_response,get_radio_response),   5) \
 X(a, STATIC,   ONEOF,    UINT32,   (variant,get_channel_request,get_channel_request),   6) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_channel_response,get_channel_response),   7)
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_channel_response,get_channel_response),   7) \
+X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_channel,confirm_set_channel),  32) \
+X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_radio,confirm_set_radio),  33)
 #define AdminMessage_CALLBACK NULL
 #define AdminMessage_DEFAULT NULL
 #define AdminMessage_variant_set_radio_MSGTYPE RadioConfig
