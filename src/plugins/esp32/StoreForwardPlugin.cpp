@@ -83,7 +83,8 @@ int32_t StoreForwardPlugin::runOnce()
                 DEBUG_MSG("Store & Forward Plugin - Sending heartbeat\n");
 
                 // storeForwardPluginRadio->sendPayloadHeartbeat();
-                storeForwardPluginRadio->sendPayload();
+                if(storeForwardPluginRadio)
+                    storeForwardPluginRadio->sendPayload();
 
                 return (1 * 60 * 1000);
             }
