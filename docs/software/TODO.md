@@ -40,6 +40,8 @@ You probably don't care about this section - skip to the next one.
 * DONE warn in android app about unset regions
 * DONE use set-channel from android
 * DONE add gui in android app for setting region
+* clean up python channel usage
+* use bindToChannel to limit admin access for remote nodes
 * make python tests more exhaustive
 * pick default random admin key
 * exclude admin channels from URL?
@@ -51,6 +53,7 @@ You probably don't care about this section - skip to the next one.
 * stress test multi channel
 * investigate @mc-hamster report of heap corruption
 * DONE use set-user from android
+* generalize the concept of "shortstrings" use it for both PSKs and well known channel names.  Possibly use a ShortString class.
 * use portuino TCP connection to debug with python API
 * document the relationship between want_response (indicating remote node received it) and want_ack (indicating that this message should be sent reliably - and also get acks from the first rx node and naks if it is never delivered)
 * DONE android should stop fetching channels once we've reached our first empty channel definition (hasSettings == true)
@@ -80,6 +83,8 @@ You probably don't care about this section - skip to the next one.
 * DONE move setCrypto call into packet send and packet decode code
 * implement 'small location diffs' change
 * move battery level out of position? 
+* consider "A special exception (FIXME, not sure if this is a good idea) - packets that arrive on the local interface 
+  are allowed on any channel (this lets the local user do anything)."
 * DOUBLE CHECK android app can still upgrade 1.1 and 1.0 loads
  
 eink:
