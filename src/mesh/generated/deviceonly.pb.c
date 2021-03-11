@@ -9,4 +9,7 @@
 PB_BIND(DeviceState, DeviceState, 2)
 
 
+PB_BIND(ChannelFile, ChannelFile, 2)
+
+
 

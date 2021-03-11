@@ -9,8 +9,9 @@
 #include "mesh-pb-constants.h"
 
 extern DeviceState devicestate;
+extern ChannelFile channelFile;
 extern MyNodeInfo &myNodeInfo;
-extern RadioConfig &radioConfig;
+extern RadioConfig radioConfig;
 extern User &owner;
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
@@ -117,7 +118,7 @@ class NodeDB
     void loadFromDisk();
 
     /// Reinit device state from scratch (not loading from disk)
-    void installDefaultDeviceState();
+    void installDefaultDeviceState(), installDefaultRadioConfig(), installDefaultChannels();
 };
 
 /**

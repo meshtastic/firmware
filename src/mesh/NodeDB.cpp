@@ -30,7 +30,8 @@ NodeDB nodeDB;
 // we have plenty of ram so statically alloc this tempbuf (for now)
 EXT_RAM_ATTR DeviceState devicestate;
 MyNodeInfo &myNodeInfo = devicestate.my_node;
-RadioConfig &radioConfig = devicestate.radio;
+RadioConfig radioConfig;
+ChannelFile channelFile;
 
 /** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings
  * might have changed is incremented.  Allows others to detect they might now be on a new channel.
@@ -67,10 +68,11 @@ NodeNum displayedNodeNum;
 NodeDB::NodeDB() : nodes(devicestate.node_db), numNodes(&devicestate.node_db_count) {}
 
 /**
- * Most (but not always) of the time we want to treat packets 'from' the local phone (where from == 0), as if they originated on the local node.
- * If from is zero this function returns our node number instead
+ * Most (but not always) of the time we want to treat packets 'from' the local phone (where from == 0), as if they originated on
+ * the local node. If from is zero this function returns our node number instead
  */
-NodeNum getFrom(const MeshPacket *p) {
+NodeNum getFrom(const MeshPacket *p)
+{
     return (p->from == 0) ? nodeDB.getNodeNum() : p->from;
 }
 
@@ -84,7 +86,7 @@ bool NodeDB::resetRadioConfig()
         DEBUG_MSG("Performing factory reset!\n");
         installDefaultDeviceState();
         didFactoryReset = true;
-    } else if (devicestate.channels_count == 0) {
+    } else if (channelFile.channels_count == 0) {
         DEBUG_MSG("Setting default channel and radio preferences!\n");
 
         channels.initDefaults();
@@ -117,6 +119,18 @@ bool NodeDB::resetRadioConfig()
     return didFactoryReset;
 }
 
+void NodeDB::installDefaultRadioConfig()
+{
+    memset(&radioConfig, 0, sizeof(radioConfig));
+    radioConfig.has_preferences = true;
+    resetRadioConfig();
+}
+
+void NodeDB::installDefaultChannels()
+{
+        memset(&channelFile, 0, sizeof(channelFile));
+}
+
 void NodeDB::installDefaultDeviceState()
 {
     // We try to preserve the region setting because it will really bum users out if we discard it
@@ -129,13 +143,9 @@ void NodeDB::installDefaultDeviceState()
 
     // init our devicestate with valid flags so protobuf writing/reading will work
     devicestate.has_my_node = true;
-    devicestate.has_radio = true;
     devicestate.has_owner = true;
-    devicestate.radio.has_preferences = true;
     devicestate.node_db_count = 0;
     devicestate.receive_queue_count = 0; // Not yet implemented FIXME
-
-    resetRadioConfig();
 
     // default to no GPS, until one has been found by probing
     myNodeInfo.has_gps = false;
@@ -158,6 +168,9 @@ void NodeDB::installDefaultDeviceState()
         radioConfig.preferences.region = oldRegionCode;
     if (oldRegion.length()) // If the old style region was set, try to keep it up-to-date
         strcpy(myNodeInfo.region, oldRegion.c_str());
+
+    installDefaultChannels();    
+    installDefaultRadioConfig();        
 }
 
 void NodeDB::init()
@@ -241,34 +254,29 @@ void NodeDB::pickNewNodeNum()
 }
 
 const char *preffile = "/db.proto";
-const char *preftmp = "/db.proto.tmp";
+const char *radiofile = "/radio.proto";
+const char *channelfile = "/channels.proto";
+// const char *preftmp = "/db.proto.tmp";
 
-void NodeDB::loadFromDisk()
+/** Load a protobuf from a file, return true for success */
+bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, void *dest_struct)
 {
 #ifdef FS
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
 
-    auto f = FS.open(preffile);
+    auto f = FS.open(filename);
+    bool okay = false;
     if (f) {
-        DEBUG_MSG("Loading saved preferences\n");
-        pb_istream_t stream = {&readcb, &f, DeviceState_size};
+        DEBUG_MSG("Loading %s\n", filename);
+        pb_istream_t stream = {&readcb, &f, protoSize};
 
         // DEBUG_MSG("Preload channel name=%s\n", channelSettings.name);
 
-        memset(&devicestate, 0, sizeof(devicestate));
-        if (!pb_decode(&stream, DeviceState_fields, &devicestate)) {
+        memset(dest_struct, 0, objSize);
+        if (!pb_decode(&stream, fields, dest_struct)) {
             DEBUG_MSG("Error: can't decode protobuf %s\n", PB_GET_ERROR(&stream));
-            installDefaultDeviceState(); // Our in RAM copy might now be corrupt
-            // FIXME - report failure to phone
         } else {
-            if (devicestate.version < DEVICESTATE_MIN_VER) {
-                DEBUG_MSG("Warn: devicestate is old, discarding\n");
-                installDefaultDeviceState();
-            } else {
-                DEBUG_MSG("Loaded saved preferences version %d\n", devicestate.version);
-            }
-
-            // DEBUG_MSG("Postload channel name=%s\n", channelSettings.name);
+            okay = true;
         }
 
         f.close();
@@ -279,6 +287,30 @@ void NodeDB::loadFromDisk()
 #else
     DEBUG_MSG("ERROR: Filesystem not implemented\n");
 #endif
+    return okay;
+}
+
+void NodeDB::loadFromDisk()
+{
+    // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
+    if (!loadProto(preffile, DeviceState_size, sizeof(devicestate), DeviceState_fields, &devicestate)) {
+        installDefaultDeviceState(); // Our in RAM copy might now be corrupt
+    } else {
+        if (devicestate.version < DEVICESTATE_MIN_VER) {
+            DEBUG_MSG("Warn: devicestate is old, discarding\n");
+            installDefaultDeviceState();
+        } else {
+            DEBUG_MSG("Loaded saved preferences version %d\n", devicestate.version);
+        }
+    }
+
+    if (!loadProto(radiofile, RadioConfig_size, sizeof(RadioConfig), RadioConfig_fields, &radioConfig)) {
+        installDefaultRadioConfig(); // Our in RAM copy might now be corrupt
+    }
+
+    if (!loadProto(channelfile, ChannelFile_size, sizeof(ChannelFile), ChannelFile_fields, &channelFile)) {
+        installDefaultRadioConfig(); // Our in RAM copy might now be corrupt
+    }    
 }
 
 void NodeDB::saveToDisk()
@@ -370,7 +402,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p)
     // recorded based on the packet rxTime
     if (!info->position.time && p.time)
         info->position.time = p.time;
-    if(p.battery_level)
+    if (p.battery_level)
         info->position.battery_level = p.battery_level;
     if (p.latitude_i || p.longitude_i) {
         info->position.latitude_i = p.latitude_i;

@@ -24,7 +24,7 @@ void AdminPlugin::handleGetRadio(const MeshPacket &req)
     if (req.decoded.want_response) {
         // We create the reply here
         AdminMessage r = AdminMessage_init_default;
-        r.get_radio_response = devicestate.radio;
+        r.get_radio_response = radioConfig;
 
         // NOTE: The phone app needs to know the ls_secs value so it can properly expect sleep behavior.
         // So even if we internally use 0 to represent 'use default' we still need to send the value we are

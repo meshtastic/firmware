@@ -40,7 +40,7 @@ typedef struct _ChannelSettings {
 } ChannelSettings;
 
 typedef struct _Channel {
-    uint8_t index;
+    int8_t index;
     bool has_settings;
     ChannelSettings settings;
     Channel_Role role;
@@ -100,7 +100,7 @@ X(a, STATIC,   SINGULAR, BOOL,     downlink_enabled,  17)
 #define ChannelSettings_DEFAULT NULL
 
 #define Channel_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UINT32,   index,             1) \
+X(a, STATIC,   SINGULAR, INT32,    index,             1) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  settings,          2) \
 X(a, STATIC,   SINGULAR, UENUM,    role,              3)
 #define Channel_CALLBACK NULL
@@ -116,7 +116,7 @@ extern const pb_msgdesc_t Channel_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define ChannelSettings_size                     87
-#define Channel_size                             94
+#define Channel_size                             102
 
 #ifdef __cplusplus
 } /* extern "C" */
