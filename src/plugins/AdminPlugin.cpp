@@ -8,8 +8,9 @@
 
 AdminPlugin *adminPlugin;
 
-void AdminPlugin::handleGetChannel(const MeshPacket &req, uint32_t channelIndex) {
-        if (req.decoded.want_response) {
+void AdminPlugin::handleGetChannel(const MeshPacket &req, uint32_t channelIndex)
+{
+    if (req.decoded.want_response) {
         // We create the reply here
         AdminMessage r = AdminMessage_init_default;
         r.get_channel_response = channels.getByIndex(channelIndex);
@@ -121,5 +122,6 @@ MeshPacket *AdminPlugin::allocReply()
 
 AdminPlugin::AdminPlugin() : ProtobufPlugin("Admin", PortNum_ADMIN_APP, AdminMessage_fields)
 {
-    // FIXME, restrict to the admin channel for rx
+    // restrict to the admin channel for rx
+    boundChannel = "admin";
 }
