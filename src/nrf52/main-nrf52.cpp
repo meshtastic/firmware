@@ -1,5 +1,6 @@
 #include "NRF52Bluetooth.h"
 #include "configuration.h"
+#include "error.h"
 #include "graphics/TFTDisplay.h"
 #include <SPI.h>
 #include <Wire.h>
@@ -51,14 +52,14 @@ void getMacAddr(uint8_t *dmac)
 NRF52Bluetooth *nrf52Bluetooth;
 
 static bool bleOn = false;
-static const bool enableBle = false; // Set to false for easier debugging
+static const bool useSoftDevice = false; // Set to false for easier debugging
 
 void setBluetoothEnable(bool on)
 {
     if (on != bleOn) {
         if (on) {
             if (!nrf52Bluetooth) {
-                if (!enableBle)
+                if (!useSoftDevice)
                     DEBUG_MSG("DISABLING NRF52 BLUETOOTH WHILE DEBUGGING\n");
                 else {
                     nrf52Bluetooth = new NRF52Bluetooth();
@@ -87,6 +88,49 @@ int printf(const char *fmt, ...)
 
 #include "BQ25713.h"
 
+void initBrownout()
+{
+    auto vccthresh = POWER_POFCON_THRESHOLD_V28;
+    auto vcchthresh = POWER_POFCON_THRESHOLDVDDH_V27;
+
+    if (useSoftDevice) {
+        auto err_code = sd_power_pof_enable(POWER_POFCON_POF_Enabled);
+        assert(err_code == NRF_SUCCESS);
+
+        err_code = sd_power_pof_threshold_set(vccthresh);
+        assert(err_code == NRF_SUCCESS);
+    }
+    else {
+        NRF_POWER->POFCON = POWER_POFCON_POF_Msk | (vccthresh << POWER_POFCON_THRESHOLD_Pos) | (vcchthresh << POWER_POFCON_THRESHOLDVDDH_Pos);
+    }
+}
+
+void checkSDEvents()
+{
+    if (useSoftDevice) {
+        uint32_t evt;
+        while (NRF_ERROR_NOT_FOUND == sd_evt_get(&evt)) {
+            switch (evt) {
+            case NRF_EVT_POWER_FAILURE_WARNING:
+                recordCriticalError(CriticalErrorCode_Brownout);
+                break;
+
+            default:
+                DEBUG_MSG("Unexpected SDevt %d\n", evt);
+                break;
+            }
+        }
+    } else {
+        if(NRF_POWER->EVENTS_POFWARN)
+            recordCriticalError(CriticalErrorCode_Brownout);
+    }
+}
+
+void nrf52Loop()
+{
+    checkSDEvents();
+}
+
 void nrf52Setup()
 {
 
@@ -112,6 +156,8 @@ void nrf52Setup()
     // randomSeed(r);
     DEBUG_MSG("FIXME, call randomSeed\n");
     // ::printf("TESTING PRINTF\n");
+
+    initBrownout();
 }
 
 void cpuDeepSleep(uint64_t msecToWake)
@@ -128,7 +174,7 @@ void cpuDeepSleep(uint64_t msecToWake)
     // https://devzone.nordicsemi.com/f/nordic-q-a/48919/ram-retention-settings-with-softdevice-enabled
 
     auto ok = sd_power_system_off();
-    if(ok != NRF_SUCCESS) {
+    if (ok != NRF_SUCCESS) {
         DEBUG_MSG("FIXME: Ignoring soft device (EasyDMA pending?) and forcing system-off!\n");
         NRF_POWER->SYSTEMOFF = 1;
     }

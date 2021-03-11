@@ -25,7 +25,8 @@ typedef enum _CriticalErrorCode {
     CriticalErrorCode_UBloxInitFailed = 5,
     CriticalErrorCode_NoAXP192 = 6,
     CriticalErrorCode_InvalidRadioSetting = 7,
-    CriticalErrorCode_TransmitFailed = 8
+    CriticalErrorCode_TransmitFailed = 8,
+    CriticalErrorCode_Brownout = 9
 } CriticalErrorCode;
 
 typedef enum _Routing_Error {
@@ -177,8 +178,8 @@ typedef struct _ToRadio {
 #define _Constants_ARRAYSIZE ((Constants)(Constants_DATA_PAYLOAD_LEN+1))
 
 #define _CriticalErrorCode_MIN CriticalErrorCode_None
-#define _CriticalErrorCode_MAX CriticalErrorCode_TransmitFailed
-#define _CriticalErrorCode_ARRAYSIZE ((CriticalErrorCode)(CriticalErrorCode_TransmitFailed+1))
+#define _CriticalErrorCode_MAX CriticalErrorCode_Brownout
+#define _CriticalErrorCode_ARRAYSIZE ((CriticalErrorCode)(CriticalErrorCode_Brownout+1))
 
 #define _Routing_Error_MIN Routing_Error_NONE
 #define _Routing_Error_MAX Routing_Error_TOO_LARGE

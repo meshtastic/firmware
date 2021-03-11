@@ -13,7 +13,7 @@ Channels channels;
 uint8_t xorHash(const uint8_t *p, size_t len)
 {
     uint8_t code = 0;
-    for (int i = 0; i < len; i++)
+    for (size_t i = 0; i < len; i++)
         code ^= p[i];
     return code;
 }
