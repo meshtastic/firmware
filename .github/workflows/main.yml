@@ -7,11 +7,12 @@ jobs:
   setup:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@master
-      - name: Checkout submodules
-        uses: textbook/git-checkout-submodule-action@master
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          submodules: true
       - name: Setup Python
-        uses: actions/setup-python@master
+        uses: actions/setup-python@v2
         with:
           python-version: 3.x
       - name: Install Platform IO

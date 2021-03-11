@@ -29,6 +29,7 @@ You probably don't care about this section - skip to the next one.
 * DONE release protobufs
 * DONE release to developers
 * DONE fix setch-fast in python tool
+* turn off fault 8: https://github.com/meshtastic/Meshtastic-device/issues/734
 * age out pendingrequests in the python API
 * DONE stress test channel download from python, sometimes it seems like we don't get all replies, bug was due to simultaneous android connection
 * DONE combine acks and responses in a single message if possible (do routing plugin LAST and drop ACK if someone else has already replied)
@@ -83,17 +84,32 @@ You probably don't care about this section - skip to the next one.
  
 eink:
 
+* DONE check email of reported issues
+* DONE turn off vbus driving (in bootloader)
 * new battery level sensing
-* measure current draw
+* current draw no good
 * DONE: fix backlight
-* USB is busted because of power enable mode?
+* DONE - USB is busted because of power enable mode?
+* test CPU voltage? something is bad with RAM (removing eink module does not help)
+* test that board leaves bootloader always
+* test USB - works in bootloader
+* test LEDs
+* Test BME280
+* test gps
+* check GPS fast locking
+* tested! dlora
+* test eink backlight
+* tested! eink
+* test buttons
+* test battery charging
+* test serial flash
+* send updated app and bootloader image
 * OHH BME280!  THAT IS GREAT!
 * make new screen work, ask for datasheet
 * say I think you could ship this
 * leds seem busted
-* usb doesn't stay connected
-* check GPS works
-* check GPS fast locking
+* fix hw_model: "nrf52unknown"
+* use larger icon for meshtastic logo
 * send email about variants & faster flash programming - https://github.com/geeksville/Meshtastic-esp32/commit/f110225173a77326aac029321cdb6491bfa640f6
 * send PR for bootloader
 * fix nrf52 time/date

@@ -124,7 +124,8 @@ int32_t SerialPlugin::runOnce()
 
         return (INT32_MAX);
     }
-
+#else
+    return INT32_MAX;
 #endif
 }
 
