@@ -359,6 +359,16 @@ bool saveProto(const char *filename, size_t protoSize, size_t objSize, const pb_
     return okay;
 }
 
+void NodeDB::saveChannelsToDisk()
+{
+    if (!devicestate.no_save) {
+#ifdef FS
+        FS.mkdir("/prefs");
+#endif
+        saveProto(channelfile, ChannelFile_size, sizeof(ChannelFile), ChannelFile_fields, &channelFile);
+    }  
+}
+
 void NodeDB::saveToDisk()
 {
     if (!devicestate.no_save) {
@@ -367,7 +377,7 @@ void NodeDB::saveToDisk()
 #endif
         bool okay = saveProto(preffile, DeviceState_size, sizeof(devicestate), DeviceState_fields, &devicestate);
         okay &= saveProto(radiofile, RadioConfig_size, sizeof(RadioConfig), RadioConfig_fields, &radioConfig);
-        okay &= saveProto(channelfile, ChannelFile_size, sizeof(ChannelFile), ChannelFile_fields, &channelFile);
+        saveChannelsToDisk();
 
         // remove any pre 1.2 pref files, turn on after 1.2 is in beta
         // if(okay) FS.remove(preffileOld);
