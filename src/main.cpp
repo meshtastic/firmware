@@ -279,7 +279,7 @@ void setup()
     concurrency::hasBeenSetup = true;
 
 #ifdef SEGGER_STDOUT_CH
-    auto mode = true ? SEGGER_RTT_MODE_BLOCK_IF_FIFO_FULL : SEGGER_RTT_MODE_NO_BLOCK_TRIM;
+    auto mode = false ? SEGGER_RTT_MODE_BLOCK_IF_FIFO_FULL : SEGGER_RTT_MODE_NO_BLOCK_TRIM;
 #ifdef NRF52840_XXAA
     auto buflen = 4096; // this board has a fair amount of ram
 #else
