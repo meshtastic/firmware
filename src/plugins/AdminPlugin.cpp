@@ -96,21 +96,22 @@ void AdminPlugin::handleSetChannel(const Channel &cc)
 {
     channels.setChannel(cc);
 
-    bool didReset = service.reloadConfig();
-    /* FIXME - do we need this still?
-    if (didReset) {
-        state = STATE_SEND_MY_INFO; // Squirt a completely new set of configs to the client
-    } */
+    // Just update and save the channels - no need to update the radio for ! primary channel changes
+    if (cc.index == 0) {
+        // FIXME, this updates the user preferences also, which isn't needed - we really just want to notify on configChanged
+        service.reloadConfig();
+    }
+    else {
+        channels.onConfigChanged(); // tell the radios about this change
+        nodeDB.saveChannelsToDisk();
+    }
 }
 
 void AdminPlugin::handleSetRadio(const RadioConfig &r)
 {
     radioConfig = r;
 
-    bool didReset = service.reloadConfig();
-    /* FIXME - do we need this still?  if (didReset) {
-        state = STATE_SEND_MY_INFO; // Squirt a completely new set of configs to the client
-    } */
+    service.reloadConfig();
 }
 
 MeshPacket *AdminPlugin::allocReply()
