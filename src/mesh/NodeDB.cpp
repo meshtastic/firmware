@@ -128,7 +128,7 @@ void NodeDB::installDefaultRadioConfig()
 
 void NodeDB::installDefaultChannels()
 {
-        memset(&channelFile, 0, sizeof(channelFile));
+    memset(&channelFile, 0, sizeof(channelFile));
 }
 
 void NodeDB::installDefaultDeviceState()
@@ -169,8 +169,8 @@ void NodeDB::installDefaultDeviceState()
     if (oldRegion.length()) // If the old style region was set, try to keep it up-to-date
         strcpy(myNodeInfo.region, oldRegion.c_str());
 
-    installDefaultChannels();    
-    installDefaultRadioConfig();        
+    installDefaultChannels();
+    installDefaultRadioConfig();
 }
 
 void NodeDB::init()
@@ -199,12 +199,16 @@ void NodeDB::init()
     info->user = owner;
     info->has_user = true;
 
+    // removed from 1.2 (though we do use old values if found)
     // We set these _after_ loading from disk - because they come from the build and are more trusted than
     // what is stored in flash
-    if (xstr(HW_VERSION)[0])
-        strncpy(myNodeInfo.region, optstr(HW_VERSION), sizeof(myNodeInfo.region));
-    else
-        DEBUG_MSG("This build does not specify a HW_VERSION\n"); // Eventually new builds will no longer include this build flag
+    //if (xstr(HW_VERSION)[0])
+    //    strncpy(myNodeInfo.region, optstr(HW_VERSION), sizeof(myNodeInfo.region));
+    // else DEBUG_MSG("This build does not specify a HW_VERSION\n"); // Eventually new builds will no longer include this build flag
+
+    // DEBUG_MSG("legacy region %d\n", devicestate.legacyRadio.preferences.region);
+    if(radioConfig.preferences.region == RegionCode_Unset)
+        radioConfig.preferences.region = devicestate.legacyRadio.preferences.region;
 
     // Check for the old style of region code strings, if found, convert to the new enum.
     // Those strings will look like "1.0-EU433"
@@ -222,8 +226,7 @@ void NodeDB::init()
 
     resetRadioConfig(); // If bogus settings got saved, then fix them
 
-    DEBUG_MSG("legacy_region=%s, region=%d, NODENUM=0x%x, dbsize=%d\n", myNodeInfo.region, radioConfig.preferences.region,
-              myNodeInfo.my_node_num, *numNodes);
+    DEBUG_MSG("region=%d, NODENUM=0x%x, dbsize=%d\n", radioConfig.preferences.region, myNodeInfo.my_node_num, *numNodes);
 }
 
 // We reserve a few nodenums for future use
@@ -253,9 +256,10 @@ void NodeDB::pickNewNodeNum()
     myNodeInfo.my_node_num = r;
 }
 
-const char *preffile = "/db.proto";
-const char *radiofile = "/radio.proto";
-const char *channelfile = "/channels.proto";
+static const char *preffileOld = "/db.proto";
+static const char *preffile = "/prefs/db.proto";
+static const char *radiofile = "/prefs/radio.proto";
+static const char *channelfile = "/prefs/channels.proto";
 // const char *preftmp = "/db.proto.tmp";
 
 /** Load a protobuf from a file, return true for success */
@@ -265,6 +269,14 @@ bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
 
     auto f = FS.open(filename);
+
+    // FIXME, temporary hack until every node in the universe is 1.2 or later - look for prefs in the old location (so we can
+    // preserve region)
+    if (!f && filename == preffile) {
+        filename = preffileOld;
+        f = FS.open(filename);
+    }
+
     bool okay = false;
     if (f) {
         DEBUG_MSG("Loading %s\n", filename);
@@ -281,9 +293,8 @@ bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_
 
         f.close();
     } else {
-        DEBUG_MSG("No saved preferences found\n");
+        DEBUG_MSG("No %s preferences found\n", filename);
     }
-
 #else
     DEBUG_MSG("ERROR: Filesystem not implemented\n");
 #endif
@@ -309,47 +320,60 @@ void NodeDB::loadFromDisk()
     }
 
     if (!loadProto(channelfile, ChannelFile_size, sizeof(ChannelFile), ChannelFile_fields, &channelFile)) {
-        installDefaultRadioConfig(); // Our in RAM copy might now be corrupt
-    }    
+        installDefaultChannels(); // Our in RAM copy might now be corrupt
+    }
+}
+
+/** Save a protobuf from a file, return true for success */
+bool saveProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, const void *dest_struct)
+{
+#ifdef FS
+    // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
+    String filenameTmp = filename;
+    filenameTmp += ".tmp";
+    auto f = FS.open(filenameTmp.c_str(), FILE_O_WRITE);
+    bool okay = false;
+    if (f) {
+        DEBUG_MSG("Saving %s\n", filename);
+        pb_ostream_t stream = {&writecb, &f, protoSize};
+
+        if (!pb_encode(&stream, fields, dest_struct)) {
+            DEBUG_MSG("Error: can't encode protobuf %s\n", PB_GET_ERROR(&stream));
+        } else {
+            okay = true;
+        }
+
+        f.close();
+
+        // brief window of risk here ;-)
+        if (!FS.remove(filename))
+            DEBUG_MSG("Warning: Can't remove old pref file\n");
+        if (!FS.rename(filenameTmp.c_str(), filename))
+            DEBUG_MSG("Error: can't rename new pref file\n");
+    } else {
+        DEBUG_MSG("Can't write prefs\n");
+    }
+#else
+    DEBUG_MSG("ERROR: Filesystem not implemented\n");
+#endif
+    return okay;
 }
 
 void NodeDB::saveToDisk()
 {
-#ifdef FS
     if (!devicestate.no_save) {
-        auto f = FS.open(preftmp, FILE_O_WRITE);
-        if (f) {
-            DEBUG_MSG("Writing preferences\n");
+#ifdef FS
+        FS.mkdir("/prefs");
+#endif
+        bool okay = saveProto(preffile, DeviceState_size, sizeof(devicestate), DeviceState_fields, &devicestate);
+        okay &= saveProto(radiofile, RadioConfig_size, sizeof(RadioConfig), RadioConfig_fields, &radioConfig);
+        okay &= saveProto(channelfile, ChannelFile_size, sizeof(ChannelFile), ChannelFile_fields, &channelFile);
 
-            pb_ostream_t stream = {&writecb, &f, SIZE_MAX, 0};
-
-            // DEBUG_MSG("Presave channel name=%s\n", channelSettings.name);
-
-            devicestate.version = DEVICESTATE_CUR_VER;
-            if (!pb_encode(&stream, DeviceState_fields, &devicestate)) {
-                DEBUG_MSG("Error: can't write protobuf %s\n", PB_GET_ERROR(&stream));
-                // FIXME - report failure to phone
-
-                f.close();
-            } else {
-                // Success - replace the old file
-                f.close();
-
-                // brief window of risk here ;-)
-                if (!FS.remove(preffile))
-                    DEBUG_MSG("Warning: Can't remove old pref file\n");
-                if (!FS.rename(preftmp, preffile))
-                    DEBUG_MSG("Error: can't rename new pref file\n");
-            }
-        } else {
-            DEBUG_MSG("ERROR: can't write prefs\n"); // FIXME report to app
-        }
+        // remove any pre 1.2 pref files, turn on after 1.2 is in beta
+        // if(okay) FS.remove(preffileOld);
     } else {
         DEBUG_MSG("***** DEVELOPMENT MODE - DO NOT RELEASE - not saving to flash *****\n");
     }
-#else
-    DEBUG_MSG("ERROR filesystem not implemented\n");
-#endif
 }
 
 const NodeInfo *NodeDB::readNextInfo()
