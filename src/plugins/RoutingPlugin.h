@@ -1,5 +1,6 @@
 #pragma once
 #include "ProtobufPlugin.h"
+#include "Channels.h"
 
 /**
  * Routing plugin for router control messages
@@ -11,6 +12,8 @@ class RoutingPlugin : public ProtobufPlugin<Routing>
      * name is for debugging output
      */
     RoutingPlugin();
+
+    void sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex);
 
   protected:
     friend class Router;
@@ -27,8 +30,6 @@ class RoutingPlugin : public ProtobufPlugin<Routing>
 
     /// Override wantPacket to say we want to see all packets, not just those for our port number
     virtual bool wantPacket(const MeshPacket *p) { return true; }
-
-    void sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom);
 };
 
 extern RoutingPlugin *routingPlugin;

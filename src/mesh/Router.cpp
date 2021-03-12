@@ -103,15 +103,15 @@ MeshPacket *Router::allocForSending()
 /**
  * Send an ack or a nak packet back towards whoever sent idFrom
  */
-void Router::sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom)
+void Router::sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex)
 {
-    routingPlugin->sendAckNak(err, to, idFrom);
+    routingPlugin->sendAckNak(err, to, idFrom, chIndex);
 }
 
 void Router::abortSendAndNak(Routing_Error err, MeshPacket *p)
 {
     DEBUG_MSG("Error=%d, returning NAK and dropping packet.\n", err);
-    sendAckNak(Routing_Error_NO_INTERFACE, getFrom(p), p->id);
+    sendAckNak(Routing_Error_NO_INTERFACE, getFrom(p), p->id, p->channel);
     packetPool.release(p);
 }
 

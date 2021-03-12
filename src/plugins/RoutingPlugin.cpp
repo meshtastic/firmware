@@ -35,7 +35,7 @@ MeshPacket *RoutingPlugin::allocReply()
     return NULL;
 }
 
-void RoutingPlugin::sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom)
+void RoutingPlugin::sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex)
 {
     Routing c = Routing_init_default;
     
@@ -47,6 +47,7 @@ void RoutingPlugin::sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom)
     p->hop_limit = 0; // Assume just immediate neighbors for now
     p->to = to;
     p->decoded.request_id = idFrom;
+    p->channel = chIndex;
     DEBUG_MSG("Sending an err=%d,to=0x%x,idFrom=0x%x,id=0x%x\n", err, to, idFrom, p->id);
 
     router->sendLocal(p); // we sometimes send directly to the local node

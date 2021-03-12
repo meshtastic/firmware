@@ -44,7 +44,7 @@ class Channels
     /** The index of the primary channel */
     ChannelIndex getPrimaryIndex() const { return primaryIndex; }
 
-    ChannelIndex getNumChannels() { return devicestate.channels_count; }
+    ChannelIndex getNumChannels() { return channelFile.channels_count; }
 
     /**
      * Generate a short suffix used to disambiguate channels that might have the same "name" entered by the human but different

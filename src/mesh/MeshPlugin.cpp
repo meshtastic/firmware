@@ -1,6 +1,8 @@
 #include "MeshPlugin.h"
+#include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "plugins/RoutingPlugin.h"
 #include <assert.h>
 
 std::vector<MeshPlugin *> *MeshPlugin::plugins;
@@ -11,7 +13,7 @@ const MeshPacket *MeshPlugin::currentRequest;
  * If any of the current chain of plugins has already sent a reply, it will be here.  This is useful to allow
  * the RoutingPlugin to avoid sending redundant acks
  */
- MeshPacket *MeshPlugin::currentReply;
+MeshPacket *MeshPlugin::currentReply;
 
 MeshPlugin::MeshPlugin(const char *_name) : name(_name)
 {
@@ -46,8 +48,15 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
 
         pi.currentRequest = &mp;
 
-        // We only call plugins that are interested in the packet (and the message is destined to us or we are promiscious)
-        bool wantsPacket = (pi.isPromiscuous || toUs) && pi.wantPacket(&mp);
+        /// received channel
+        auto ch = channels.getByIndex(mp.channel);
+        assert(ch.has_settings);
+
+        /// Is the channel this packet arrived on acceptable? (security check)
+        bool rxChannelOk = !pi.boundChannel || (mp.from == 0) || (strcmp(ch.settings.name, pi.boundChannel) == 0);
+
+        /// We only call plugins that are interested in the packet (and the message is destined to us or we are promiscious)
+        bool wantsPacket = rxChannelOk && (pi.isPromiscuous || toUs) && pi.wantPacket(&mp);
         // DEBUG_MSG("Plugin %s wantsPacket=%d\n", pi.name, wantsPacket);
         if (wantsPacket) {
             pluginFound = true;
@@ -76,10 +85,17 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
         pi.currentRequest = NULL;
     }
 
-    if(currentReply) {
-        DEBUG_MSG("Sending response\n"); 
-        service.sendToMesh(currentReply);
-        currentReply = NULL;
+    if (mp.decoded.want_response && toUs) {
+        if (currentReply) {
+            DEBUG_MSG("Sending response\n");
+            service.sendToMesh(currentReply);
+            currentReply = NULL;
+        }
+        else {
+            // No one wanted to reply to this requst, tell the requster that happened
+            DEBUG_MSG("No one responded, send a nak\n");
+            routingPlugin->sendAckNak(Routing_Error_NO_RESPONSE, getFrom(&mp), mp.id, mp.channel);
+        }
     }
 
     if (!pluginFound)
@@ -95,7 +111,7 @@ void MeshPlugin::sendResponse(const MeshPacket &req)
     auto r = allocReply();
     if (r) {
         setReplyTo(r, req);
-        currentReply = r;       
+        currentReply = r;
     } else {
         // Ignore - this is now expected behavior for routing plugin (because it ignores some replies)
         // DEBUG_MSG("WARNING: Client requested response but this plugin did not provide\n");
@@ -109,10 +125,11 @@ void setReplyTo(MeshPacket *p, const MeshPacket &to)
 {
     assert(p->which_payloadVariant == MeshPacket_decoded_tag); // Should already be set by now
     p->to = getFrom(&to);
+    p->channel = to.channel; // Use the same channel that the request came in on
 
     // No need for an ack if we are just delivering locally (it just generates an ignored ack)
     p->want_ack = (to.from != 0) ? to.want_ack : false;
-    if(p->priority == MeshPacket_Priority_UNSET)
+    if (p->priority == MeshPacket_Priority_UNSET)
         p->priority = MeshPacket_Priority_RELIABLE;
     p->decoded.request_id = to.id;
 }

@@ -38,7 +38,7 @@ bool ReliableRouter::shouldFilterReceived(const MeshPacket *p)
             DEBUG_MSG("generating implicit ack\n");
             // NOTE: we do NOT check p->wantAck here because p is the INCOMING rebroadcast and that packet is not expected to be
             // marked as wantAck
-            sendAckNak(Routing_Error_NONE, getFrom(p), p->id);
+            sendAckNak(Routing_Error_NONE, getFrom(p), p->id, p->channel);
         }
     }
 
@@ -65,9 +65,9 @@ void ReliableRouter::sniffReceived(const MeshPacket *p, const Routing *c)
                             // - not DSR routing)
         if (p->want_ack) {
             if (MeshPlugin::currentReply)
-                DEBUG_MSG("Someone else has replied to this message, no need for a 2nd ack");
+                DEBUG_MSG("Someone else has replied to this message, no need for a 2nd ack\n");
             else
-                sendAckNak(Routing_Error_NONE, getFrom(p), p->id);
+                sendAckNak(Routing_Error_NONE, getFrom(p), p->id, p->channel);
         }
 
         // We consider an ack to be either a !routing packet with a request ID or a routing packet with !error
@@ -166,7 +166,7 @@ int32_t ReliableRouter::doRetransmissions()
             if (p.numRetransmissions == 0) {
                 DEBUG_MSG("Reliable send failed, returning a nak for fr=0x%x,to=0x%x,id=0x%x\n", p.packet->from, p.packet->to,
                           p.packet->id);
-                sendAckNak(Routing_Error_MAX_RETRANSMIT, getFrom(p.packet), p.packet->id);
+                sendAckNak(Routing_Error_MAX_RETRANSMIT, getFrom(p.packet), p.packet->id, p.packet->channel);
                 // Note: we don't stop retransmission here, instead the Nak packet gets processed in sniffReceived - which
                 // allows the DSR version to still be able to look at the PendingPacket
                 stopRetransmission(it->first);
