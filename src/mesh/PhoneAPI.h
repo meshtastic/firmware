@@ -20,7 +20,7 @@ class PhoneAPI
     : public Observer<uint32_t> // FIXME, we shouldn't be inheriting from Observer, instead use CallbackObserver as a member
 {
     enum State {
-        STATE_LEGACY,       // (no longer used) old default state - until Android apps are all updated, uses the old BLE API
+        STATE_UNUSED,       // (no longer used) old default state - until Android apps are all updated, uses the old BLE API
         STATE_SEND_NOTHING, // (Eventual) Initial state, don't send anything until the client starts asking for config
         STATE_SEND_MY_INFO, // send our my info record
         // STATE_SEND_RADIO, // in 1.2 we now send this as a regular mesh packet
