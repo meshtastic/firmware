@@ -53,7 +53,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
         assert(ch.has_settings);
 
         /// Is the channel this packet arrived on acceptable? (security check)
-        bool rxChannelOk = true || !pi.boundChannel || (mp.from == 0) || (strcmp(ch.settings.name, pi.boundChannel) == 0);
+        bool rxChannelOk = !pi.boundChannel || (mp.from == 0) || (strcmp(ch.settings.name, pi.boundChannel) == 0);
 
         /// We only call plugins that are interested in the packet (and the message is destined to us or we are promiscious)
         bool wantsPacket = rxChannelOk && (pi.isPromiscuous || toUs) && pi.wantPacket(&mp);
