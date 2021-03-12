@@ -243,11 +243,11 @@ static int mem_test(uint32_t _start, uint32_t _end, uint32_t pattern_unused)
     }
 }
 #else
-static int mem_test(uint32_t _start, uint32_t _end, bool doRead = true, bool doWrite = true)
+static int mem_test(uint32_t *_start, size_t len, bool doRead = true, bool doWrite = true)
 {
     volatile uint32_t *addr;
     volatile uint32_t *start = (volatile uint32_t *)_start;
-    volatile uint32_t *end = (volatile uint32_t *)_end;
+    volatile uint32_t *end = start + len / sizeof(uint32_t);
     uint32_t pattern = 0;
     uint32_t val;
     uint32_t readback;
@@ -311,7 +311,7 @@ void doMemTest()
         testBuf = (uint32_t *)malloc(TESTBUF_LEN);
 
     assert(testBuf);
-    if (mem_test((uint32_t)testBuf, ((uint32_t)testBuf) + TESTBUF_LEN, iter % 2 == 1, iter % 2 == 0) > 0)
+    if (mem_test(testBuf, TESTBUF_LEN, iter % 2 == 1, iter % 2 == 0) > 0)
         assert(0); // FIXME report error better
 
     iter++;
