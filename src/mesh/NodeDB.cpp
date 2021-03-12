@@ -145,6 +145,7 @@ void NodeDB::installDefaultDeviceState()
     devicestate.has_my_node = true;
     devicestate.has_owner = true;
     devicestate.node_db_count = 0;
+    devicestate.version = DEVICESTATE_CUR_VER;
     devicestate.receive_queue_count = 0; // Not yet implemented FIXME
 
     // default to no GPS, until one has been found by probing
@@ -308,7 +309,7 @@ void NodeDB::loadFromDisk()
         installDefaultDeviceState(); // Our in RAM copy might now be corrupt
     } else {
         if (devicestate.version < DEVICESTATE_MIN_VER) {
-            DEBUG_MSG("Warn: devicestate is old, discarding\n");
+            DEBUG_MSG("Warn: devicestate %d is old, discarding\n", devicestate.version);
             installDefaultDeviceState();
         } else {
             DEBUG_MSG("Loaded saved preferences version %d\n", devicestate.version);
