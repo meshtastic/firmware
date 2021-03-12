@@ -2,6 +2,7 @@
 #include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "plugins/RoutingPlugin.h"
 #include <assert.h>
 
 std::vector<MeshPlugin *> *MeshPlugin::plugins;
@@ -52,7 +53,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
         assert(ch.has_settings);
 
         /// Is the channel this packet arrived on acceptable? (security check)
-        bool rxChannelOk = !pi.boundChannel || (mp.from == 0) || (strcmp(ch.settings.name, pi.boundChannel) == 0);
+        bool rxChannelOk = true || !pi.boundChannel || (mp.from == 0) || (strcmp(ch.settings.name, pi.boundChannel) == 0);
 
         /// We only call plugins that are interested in the packet (and the message is destined to us or we are promiscious)
         bool wantsPacket = rxChannelOk && (pi.isPromiscuous || toUs) && pi.wantPacket(&mp);
@@ -84,10 +85,17 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
         pi.currentRequest = NULL;
     }
 
-    if (currentReply) {
-        DEBUG_MSG("Sending response\n");
-        service.sendToMesh(currentReply);
-        currentReply = NULL;
+    if (mp.decoded.want_response && toUs) {
+        if (currentReply) {
+            DEBUG_MSG("Sending response\n");
+            service.sendToMesh(currentReply);
+            currentReply = NULL;
+        }
+        else {
+            // No one wanted to reply to this requst, tell the requster that happened
+            DEBUG_MSG("No one responded, send a nak\n");
+            routingPlugin->sendAckNak(Routing_Error_NO_RESPONSE, getFrom(&mp), mp.id, mp.channel);
+        }
     }
 
     if (!pluginFound)

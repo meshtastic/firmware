@@ -37,7 +37,8 @@ typedef enum _Routing_Error {
     Routing_Error_NO_INTERFACE = 4,
     Routing_Error_MAX_RETRANSMIT = 5,
     Routing_Error_NO_CHANNEL = 6,
-    Routing_Error_TOO_LARGE = 7
+    Routing_Error_TOO_LARGE = 7,
+    Routing_Error_NO_RESPONSE = 8
 } Routing_Error;
 
 typedef enum _MeshPacket_Priority {
@@ -182,8 +183,8 @@ typedef struct _ToRadio {
 #define _CriticalErrorCode_ARRAYSIZE ((CriticalErrorCode)(CriticalErrorCode_Brownout+1))
 
 #define _Routing_Error_MIN Routing_Error_NONE
-#define _Routing_Error_MAX Routing_Error_TOO_LARGE
-#define _Routing_Error_ARRAYSIZE ((Routing_Error)(Routing_Error_TOO_LARGE+1))
+#define _Routing_Error_MAX Routing_Error_NO_RESPONSE
+#define _Routing_Error_ARRAYSIZE ((Routing_Error)(Routing_Error_NO_RESPONSE+1))
 
 #define _MeshPacket_Priority_MIN MeshPacket_Priority_UNSET
 #define _MeshPacket_Priority_MAX MeshPacket_Priority_MAX
