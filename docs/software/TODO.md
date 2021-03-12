@@ -4,6 +4,11 @@ You probably don't care about this section - skip to the next one.
 
 ## 1.2 cleanup & multichannel support:
 
+nastybug
+try again on esp32
+emittx thinks it emitted but client sees nothing.  works again later
+segger logs have errors in formatting that should be impossible (because not going through serial, try stalling on segger)
+
 * DONE call RouterPlugin for *all* packets - not just Router packets
 * DONE generate channel hash from the name of the channel+the psk (not just one or the other)
 * DONE send a hint that can be used to select which channel to try and hash against with each message
@@ -42,7 +47,8 @@ You probably don't care about this section - skip to the next one.
 * DONE add gui in android app for setting region
 * DONE clean up python channel usage
 * DONE use bindToChannel to limit admin access for remote nodes
-* move channels and radio config out of device settings
+* DONE move channels and radio config out of device settings
+* test remote info and remote settings changes
 * make python tests more exhaustive
 * pick default random admin key
 * exclude admin channels from URL?

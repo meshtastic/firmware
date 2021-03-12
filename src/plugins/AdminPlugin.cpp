@@ -66,6 +66,8 @@ bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, const AdminMessag
         break;
 
     default:
+        // Probably a message sent by us or sent to our local node.  FIXME, we should avoid scanning these messages
+        DEBUG_MSG("Ignoring nonrelevant admin %d\n", r->which_variant);
         break;
     }
     return false; // Let others look at this message also if they want
