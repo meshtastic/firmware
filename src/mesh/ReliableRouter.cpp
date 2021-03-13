@@ -34,11 +34,19 @@ bool ReliableRouter::shouldFilterReceived(const MeshPacket *p)
         // We are seeing someone rebroadcast one of our broadcast attempts.
         // If this is the first time we saw this, cancel any retransmissions we have queued up and generate an internal ack for
         // the original sending process.
-        if (stopRetransmission(getFrom(p), p->id)) {
+
+        // FIXME - we might want to turn off this "optimization", it does save lots of airtime but it assumes that once we've heard one
+        // one adjacent node hear our packet that a) probably other adjacent nodes heard it and b) we can trust those nodes to reach
+        // our destination.  Both of which might be incorrect.
+        auto key = GlobalPacketId(getFrom(p), p->id);
+        auto old = findPendingPacket(key);
+        if (old) {
             DEBUG_MSG("generating implicit ack\n");
             // NOTE: we do NOT check p->wantAck here because p is the INCOMING rebroadcast and that packet is not expected to be
             // marked as wantAck
-            sendAckNak(Routing_Error_NONE, getFrom(p), p->id, p->channel);
+            sendAckNak(Routing_Error_NONE, getFrom(p), p->id, old->packet->channel);
+
+            stopRetransmission(key);
         }
     }
 
