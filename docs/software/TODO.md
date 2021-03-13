@@ -4,9 +4,13 @@ You probably don't care about this section - skip to the next one.
 
 ## 1.2 cleanup & multichannel support:
 
+* cleanup the external notification and serial plugins
+* non ack version of stress test fails sometimes!
 * timestamps on oled screen are wrong - don't seem to be updating based on message rx
 * luxon bug report - seeing rx acks for nodes that are not on the network
 * channel hash suffixes are wrong on android
+* tx fault test has a bug #734
+  
 * cdcacm bug on nrf52: emittx thinks it emitted but client sees nothing.  works again later
 * nrf52: segger logs have errors in formatting that should be impossible (because not going through serial, try stalling on segger)
 * DONE call RouterPlugin for *all* packets - not just Router packets
