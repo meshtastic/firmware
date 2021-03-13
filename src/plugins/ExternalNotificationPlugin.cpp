@@ -43,25 +43,17 @@
 
 */
 
-
 // Default configurations
 #define EXT_NOTIFICATION_PLUGIN_OUTPUT 13
 #define EXT_NOTIFICATION_PLUGIN_OUTPUT_MS 1000
 
 #define ASCII_BELL 0x07
 
-ExternalNotificationPlugin *externalNotificationPlugin;
-ExternalNotificationPluginRadio *externalNotificationPluginRadio;
-
-ExternalNotificationPlugin::ExternalNotificationPlugin() : concurrency::OSThread("ExternalNotificationPlugin") {}
-
 bool externalCurrentState = 0;
 uint32_t externalTurnedOn = 0;
 
 int32_t ExternalNotificationPlugin::runOnce()
 {
-#ifndef NO_ESP32
-
     /*
         Uncomment the preferences below if you want to use the plugin
         without having to configure it from the PythonAPI or WebUI.
@@ -75,48 +67,19 @@ int32_t ExternalNotificationPlugin::runOnce()
     // radioConfig.preferences.ext_notification_plugin_output_ms = 1000;
     // radioConfig.preferences.ext_notification_plugin_output = 13;
 
-    if (radioConfig.preferences.ext_notification_plugin_enabled) {
+    if (externalCurrentState) {
 
-        if (firstTime) {
-
-            DEBUG_MSG("Initializing External Notification Plugin\n");
-
-            // Set the direction of a pin
-            pinMode((radioConfig.preferences.ext_notification_plugin_output
-                         ? radioConfig.preferences.ext_notification_plugin_output
-                         : EXT_NOTIFICATION_PLUGIN_OUTPUT),
-                    OUTPUT);
-
-            // Turn off the pin
+        // If the output is turned on, turn it back off after the given period of time.
+        if (externalTurnedOn + (radioConfig.preferences.ext_notification_plugin_output_ms
+                                    ? radioConfig.preferences.ext_notification_plugin_output_ms
+                                    : EXT_NOTIFICATION_PLUGIN_OUTPUT_MS) <
+            millis()) {
+            DEBUG_MSG("Turning off external notification\n");
             setExternalOff();
-
-            externalNotificationPluginRadio = new ExternalNotificationPluginRadio();
-
-            firstTime = 0;
-
-        } else {
-            if (externalCurrentState) {
-
-                // If the output is turned on, turn it back off after the given period of time.
-                if (externalTurnedOn + (radioConfig.preferences.ext_notification_plugin_output_ms
-                                            ? radioConfig.preferences.ext_notification_plugin_output_ms
-                                            : EXT_NOTIFICATION_PLUGIN_OUTPUT_MS) <
-                    millis()) {
-                    DEBUG_MSG("Turning off external notification\n");
-                    setExternalOff();
-                }
-            }
         }
-
-        return (25);
-    } else {
-        DEBUG_MSG("External Notification Plugin Disabled\n");
-
-        return (INT32_MAX);
     }
-#else
-    return INT32_MAX;
-#endif
+
+    return (25);
 }
 
 void ExternalNotificationPlugin::setExternalOn()
@@ -140,12 +103,47 @@ void ExternalNotificationPlugin::setExternalOff()
 
 // --------
 
-ExternalNotificationPluginRadio::ExternalNotificationPluginRadio() : SinglePortPlugin("ExternalNotificationPluginRadio", PortNum_TEXT_MESSAGE_APP) {
+ExternalNotificationPlugin::ExternalNotificationPlugin()
+    : SinglePortPlugin("ExternalNotificationPlugin", PortNum_TEXT_MESSAGE_APP), concurrency::OSThread(
+                                                                                         "ExternalNotificationPlugin")
+{
     // restrict to the admin channel for rx
     boundChannel = Channels::gpioChannel;
+
+#ifndef NO_ESP32
+
+    /*
+        Uncomment the preferences below if you want to use the plugin
+        without having to configure it from the PythonAPI or WebUI.
+    */
+
+    // radioConfig.preferences.ext_notification_plugin_enabled = 1;
+    // radioConfig.preferences.ext_notification_plugin_alert_message = 1;
+
+    // radioConfig.preferences.ext_notification_plugin_active = 1;
+    // radioConfig.preferences.ext_notification_plugin_alert_bell = 1;
+    // radioConfig.preferences.ext_notification_plugin_output_ms = 1000;
+    // radioConfig.preferences.ext_notification_plugin_output = 13;
+
+    if (radioConfig.preferences.ext_notification_plugin_enabled) {
+
+        DEBUG_MSG("Initializing External Notification Plugin\n");
+
+        // Set the direction of a pin
+        pinMode((radioConfig.preferences.ext_notification_plugin_output ? radioConfig.preferences.ext_notification_plugin_output
+                                                                        : EXT_NOTIFICATION_PLUGIN_OUTPUT),
+                OUTPUT);
+
+        // Turn off the pin
+        setExternalOff();
+    } else {
+        DEBUG_MSG("External Notification Plugin Disabled\n");
+        enabled = false;
+    }
+#endif
 }
 
-bool ExternalNotificationPluginRadio::handleReceived(const MeshPacket &mp)
+bool ExternalNotificationPlugin::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
 
@@ -161,14 +159,14 @@ bool ExternalNotificationPluginRadio::handleReceived(const MeshPacket &mp)
                 DEBUG_MSG("externalNotificationPlugin - Notification Bell\n");
                 for (int i = 0; i < p.payload.size; i++) {
                     if (p.payload.bytes[i] == ASCII_BELL) {
-                        externalNotificationPlugin->setExternalOn();
+                        setExternalOn();
                     }
                 }
             }
 
             if (radioConfig.preferences.ext_notification_plugin_alert_message) {
                 DEBUG_MSG("externalNotificationPlugin - Notification Plugin\n");
-                externalNotificationPlugin->setExternalOn();
+                setExternalOn();
             }
         }
 

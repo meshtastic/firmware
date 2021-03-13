@@ -6,11 +6,12 @@
 #include <Arduino.h>
 #include <functional>
 
-
-class ExternalNotificationPlugin : private concurrency::OSThread
+/*
+ * Radio interface for ExternalNotificationPlugin
+ *
+ */
+class ExternalNotificationPlugin : public SinglePortPlugin, private concurrency::OSThread
 {
-    bool firstTime = 1;
-
   public:
     ExternalNotificationPlugin();
 
@@ -19,29 +20,13 @@ class ExternalNotificationPlugin : private concurrency::OSThread
     void getExternal();
 
   protected:
-    virtual int32_t runOnce();
-};
-
-extern ExternalNotificationPlugin *externalNotificationPlugin;
-
-/*
- * Radio interface for ExternalNotificationPlugin
- *
- */
-class ExternalNotificationPluginRadio : public SinglePortPlugin
-{
-
-  public:
-    ExternalNotificationPluginRadio();
-
-  protected:
-    //virtual MeshPacket *allocReply();
+    // virtual MeshPacket *allocReply();
 
     /** Called to handle a particular incoming message
 
     @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
     virtual bool handleReceived(const MeshPacket &mp);
-};
 
-extern ExternalNotificationPluginRadio *externalNotificationPluginRadio;
+    virtual int32_t runOnce();
+};
