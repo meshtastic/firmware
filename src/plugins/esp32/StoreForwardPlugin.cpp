@@ -227,14 +227,14 @@ void StoreForwardPlugin::sawNodeReport()
 
 MeshPacket *StoreForwardPluginRadio::allocReply()
 {
-    //auto reply = allocDataPacket(); // Allocate a packet for sending
-    //return reply;
+    auto reply = allocDataPacket(); // Allocate a packet for sending
+    return reply; // attn @mc-hamster this code was commented out and was causing memory corruption
 }
 
 void StoreForwardPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
 {
-    MeshPacket *p = this->allocReply();
     /*
+    MeshPacket *p = this->allocReply(); // attn @mc-hamster, I moved inside the commented block to prevent leaking memory 
     p->to = dest;
     p->decoded.want_response = wantReplies;
 
