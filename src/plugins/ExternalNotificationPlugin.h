@@ -32,7 +32,7 @@ class ExternalNotificationPluginRadio : public SinglePortPlugin
 {
 
   public:
-    ExternalNotificationPluginRadio() : SinglePortPlugin("ExternalNotificationPluginRadio", PortNum_TEXT_MESSAGE_APP) {}
+    ExternalNotificationPluginRadio();
 
   protected:
     //virtual MeshPacket *allocReply();

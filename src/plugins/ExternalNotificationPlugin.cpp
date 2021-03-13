@@ -140,6 +140,11 @@ void ExternalNotificationPlugin::setExternalOff()
 
 // --------
 
+ExternalNotificationPluginRadio::ExternalNotificationPluginRadio() : SinglePortPlugin("ExternalNotificationPluginRadio", PortNum_TEXT_MESSAGE_APP) {
+    // restrict to the admin channel for rx
+    boundChannel = Channels::gpioChannel;
+}
+
 bool ExternalNotificationPluginRadio::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
