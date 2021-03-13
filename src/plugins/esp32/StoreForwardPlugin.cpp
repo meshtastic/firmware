@@ -24,10 +24,13 @@ int32_t StoreForwardPlugin::runOnce()
     /*
         Uncomment the preferences below if you want to use the plugin
         without having to configure it from the PythonAPI or WebUI.
-    */
 
+    attn @mc-hamster I moved this back inside the comment because I don't think it was intended to checkin.  It was forcing all
+    nodes to be running this and turning off is_router.
+    
     radioConfig.preferences.store_forward_plugin_enabled = 1;
-    radioConfig.preferences.is_router = 0;
+    radioConfig.preferences.is_router = 0;        
+    */
 
     if (radioConfig.preferences.store_forward_plugin_enabled) {
 
