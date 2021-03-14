@@ -161,8 +161,8 @@ int16_t Channels::setCrypto(ChannelIndex chIndex)
 
 void Channels::initDefaults()
 {
-    devicestate.channels_count = MAX_NUM_CHANNELS;
-    for (int i = 0; i < devicestate.channels_count; i++)
+    channelFile.channels_count = MAX_NUM_CHANNELS;
+    for (int i = 0; i < channelFile.channels_count; i++)
         fixupChannel(i);
     initDefaultChannel(0);
 }
@@ -170,7 +170,7 @@ void Channels::initDefaults()
 void Channels::onConfigChanged()
 {
     // Make sure the phone hasn't mucked anything up
-    for (int i = 0; i < devicestate.channels_count; i++) {
+    for (int i = 0; i < channelFile.channels_count; i++) {
         Channel &ch = fixupChannel(i);
 
         if (ch.role == Channel_Role_PRIMARY)
@@ -180,8 +180,8 @@ void Channels::onConfigChanged()
 
 Channel &Channels::getByIndex(ChannelIndex chIndex)
 {
-    assert(chIndex < devicestate.channels_count);
-    Channel *ch = devicestate.channels + chIndex;
+    assert(chIndex < channelFile.channels_count);
+    Channel *ch = channelFile.channels + chIndex;
     return *ch;
 }
 
@@ -192,8 +192,8 @@ void Channels::setChannel(const Channel &c)
     // if this is the new primary, demote any existing roles
     if (c.role == Channel_Role_PRIMARY)
         for (int i = 0; i < getNumChannels(); i++)
-            if (devicestate.channels[i].role == Channel_Role_PRIMARY)
-                devicestate.channels[i].role = Channel_Role_SECONDARY;
+            if (channelFile.channels[i].role == Channel_Role_PRIMARY)
+                channelFile.channels[i].role = Channel_Role_SECONDARY;
 
     old = c; // slam in the new settings/role
 }

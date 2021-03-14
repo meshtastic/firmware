@@ -104,7 +104,6 @@ typedef struct _RadioConfig_UserPreferences {
     bool range_test_plugin_enabled;
     uint32_t range_test_plugin_sender;
     bool range_test_plugin_save;
-    bool store_forward_plugin_enabled;
     uint32_t store_forward_plugin_records;
     bool environmental_measurement_plugin_measurement_enabled;
     bool environmental_measurement_plugin_screen_enabled;
@@ -114,6 +113,7 @@ typedef struct _RadioConfig_UserPreferences {
     bool environmental_measurement_plugin_display_farenheit;
     RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType environmental_measurement_plugin_sensor_type;
     uint32_t environmental_measurement_plugin_sensor_pin;
+    bool store_forward_plugin_enabled;
 } RadioConfig_UserPreferences;
 
 typedef struct _RadioConfig {
@@ -150,9 +150,9 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default}
-#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0}
+#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero}
-#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0}
+#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define RadioConfig_UserPreferences_position_broadcast_secs_tag 1
@@ -195,7 +195,6 @@ extern "C" {
 #define RadioConfig_UserPreferences_range_test_plugin_enabled_tag 132
 #define RadioConfig_UserPreferences_range_test_plugin_sender_tag 133
 #define RadioConfig_UserPreferences_range_test_plugin_save_tag 134
-#define RadioConfig_UserPreferences_store_forward_plugin_enabled_tag 136
 #define RadioConfig_UserPreferences_store_forward_plugin_records_tag 137
 #define RadioConfig_UserPreferences_environmental_measurement_plugin_measurement_enabled_tag 140
 #define RadioConfig_UserPreferences_environmental_measurement_plugin_screen_enabled_tag 141
@@ -205,6 +204,7 @@ extern "C" {
 #define RadioConfig_UserPreferences_environmental_measurement_plugin_display_farenheit_tag 145
 #define RadioConfig_UserPreferences_environmental_measurement_plugin_sensor_type_tag 146
 #define RadioConfig_UserPreferences_environmental_measurement_plugin_sensor_pin_tag 147
+#define RadioConfig_UserPreferences_store_forward_plugin_enabled_tag 148
 #define RadioConfig_preferences_tag              1
 
 /* Struct field encoding specification for nanopb */
@@ -255,7 +255,6 @@ X(a, STATIC,   SINGULAR, BOOL,     ext_notification_plugin_alert_bell, 131) \
 X(a, STATIC,   SINGULAR, BOOL,     range_test_plugin_enabled, 132) \
 X(a, STATIC,   SINGULAR, UINT32,   range_test_plugin_sender, 133) \
 X(a, STATIC,   SINGULAR, BOOL,     range_test_plugin_save, 134) \
-X(a, STATIC,   SINGULAR, BOOL,     store_forward_plugin_enabled, 136) \
 X(a, STATIC,   SINGULAR, UINT32,   store_forward_plugin_records, 137) \
 X(a, STATIC,   SINGULAR, BOOL,     environmental_measurement_plugin_measurement_enabled, 140) \
 X(a, STATIC,   SINGULAR, BOOL,     environmental_measurement_plugin_screen_enabled, 141) \
@@ -264,7 +263,8 @@ X(a, STATIC,   SINGULAR, UINT32,   environmental_measurement_plugin_update_inter
 X(a, STATIC,   SINGULAR, UINT32,   environmental_measurement_plugin_recovery_interval, 144) \
 X(a, STATIC,   SINGULAR, BOOL,     environmental_measurement_plugin_display_farenheit, 145) \
 X(a, STATIC,   SINGULAR, UENUM,    environmental_measurement_plugin_sensor_type, 146) \
-X(a, STATIC,   SINGULAR, UINT32,   environmental_measurement_plugin_sensor_pin, 147)
+X(a, STATIC,   SINGULAR, UINT32,   environmental_measurement_plugin_sensor_pin, 147) \
+X(a, STATIC,   SINGULAR, BOOL,     store_forward_plugin_enabled, 148)
 #define RadioConfig_UserPreferences_CALLBACK NULL
 #define RadioConfig_UserPreferences_DEFAULT NULL
 

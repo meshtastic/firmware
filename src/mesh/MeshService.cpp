@@ -104,7 +104,7 @@ bool MeshService::reloadConfig()
     // This will also update the region as needed
     bool didReset = nodeDB.resetRadioConfig(); // Don't let the phone send us fatally bad settings
 
-    configChanged.notifyObservers(NULL);
+    configChanged.notifyObservers(NULL); // This will cause radio hardware to change freqs etc
     nodeDB.saveToDisk();
 
     return didReset;
