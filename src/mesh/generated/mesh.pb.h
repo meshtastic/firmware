@@ -51,6 +51,24 @@ typedef enum _MeshPacket_Priority {
     MeshPacket_Priority_MAX = 127
 } MeshPacket_Priority;
 
+typedef enum _NodeInfo_HardwareModel {
+    NodeInfo_HardwareModel_UNSET = 0,
+    NodeInfo_HardwareModel_TLORA_V2 = 1,
+    NodeInfo_HardwareModel_TLORA_V1 = 2,
+    NodeInfo_HardwareModel_TLORA_V2_1_1p6 = 3,
+    NodeInfo_HardwareModel_TBEAM = 4,
+    NodeInfo_HardwareModel_HELTEC = 5,
+    NodeInfo_HardwareModel_TBEAM0p7 = 6,
+    NodeInfo_HardwareModel_T_ECHO = 7,
+    NodeInfo_HardwareModel_TLORA_V1_1p3 = 8,
+    NodeInfo_HardwareModel_LORA_RELAY_V1 = 32,
+    NodeInfo_HardwareModel_NRF52840DK = 33,
+    NodeInfo_HardwareModel_PPR = 34,
+    NodeInfo_HardwareModel_GENIEBLOCKS = 35,
+    NodeInfo_HardwareModel_NRF52_UNKNOWN = 36,
+    NodeInfo_HardwareModel_PORTDUINO = 37
+} NodeInfo_HardwareModel;
+
 typedef enum _LogRecord_Level {
     LogRecord_Level_UNSET = 0,
     LogRecord_Level_CRITICAL = 50,
@@ -138,7 +156,7 @@ typedef struct _NodeInfo {
     User user;
     bool has_position;
     Position position;
-    uint32_t next_hop;
+    NodeInfo_HardwareModel hw_model;
     float snr;
 } NodeInfo;
 
@@ -190,6 +208,10 @@ typedef struct _ToRadio {
 #define _MeshPacket_Priority_MAX MeshPacket_Priority_MAX
 #define _MeshPacket_Priority_ARRAYSIZE ((MeshPacket_Priority)(MeshPacket_Priority_MAX+1))
 
+#define _NodeInfo_HardwareModel_MIN NodeInfo_HardwareModel_UNSET
+#define _NodeInfo_HardwareModel_MAX NodeInfo_HardwareModel_PORTDUINO
+#define _NodeInfo_HardwareModel_ARRAYSIZE ((NodeInfo_HardwareModel)(NodeInfo_HardwareModel_PORTDUINO+1))
+
 #define _LogRecord_Level_MIN LogRecord_Level_UNSET
 #define _LogRecord_Level_MAX LogRecord_Level_CRITICAL
 #define _LogRecord_Level_ARRAYSIZE ((LogRecord_Level)(LogRecord_Level_CRITICAL+1))
@@ -206,7 +228,7 @@ extern "C" {
 #define Routing_init_default                     {0, {RouteDiscovery_init_default}}
 #define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0}
 #define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN}
-#define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0}
+#define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, _NodeInfo_HardwareModel_MIN, 0}
 #define MyNodeInfo_init_default                  {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0}
 #define LogRecord_init_default                   {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_default                   {0, 0, {MyNodeInfo_init_default}}
@@ -217,7 +239,7 @@ extern "C" {
 #define Routing_init_zero                        {0, {RouteDiscovery_init_zero}}
 #define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0}
 #define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN}
-#define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0}
+#define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, _NodeInfo_HardwareModel_MIN, 0}
 #define MyNodeInfo_init_zero                     {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0}
 #define LogRecord_init_zero                      {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_zero                      {0, 0, {MyNodeInfo_init_zero}}
@@ -270,7 +292,7 @@ extern "C" {
 #define NodeInfo_num_tag                         1
 #define NodeInfo_user_tag                        2
 #define NodeInfo_position_tag                    3
-#define NodeInfo_next_hop_tag                    5
+#define NodeInfo_hw_model_tag                    6
 #define NodeInfo_snr_tag                         7
 #define Routing_route_request_tag                1
 #define Routing_route_reply_tag                  2
@@ -347,7 +369,7 @@ X(a, STATIC,   SINGULAR, UENUM,    priority,         12)
 X(a, STATIC,   SINGULAR, UINT32,   num,               1) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  user,              2) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  position,          3) \
-X(a, STATIC,   SINGULAR, UINT32,   next_hop,          5) \
+X(a, STATIC,   SINGULAR, UENUM,    hw_model,          6) \
 X(a, STATIC,   SINGULAR, FLOAT,    snr,               7)
 #define NodeInfo_CALLBACK NULL
 #define NodeInfo_DEFAULT NULL
@@ -432,7 +454,7 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define Routing_size                             42
 #define Data_size                                260
 #define MeshPacket_size                          298
-#define NodeInfo_size                            130
+#define NodeInfo_size                            126
 #define MyNodeInfo_size                          89
 #define LogRecord_size                           81
 #define FromRadio_size                           307
