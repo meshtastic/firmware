@@ -195,11 +195,13 @@ void NodeDB::init()
     // keep using that nodenum forever. Crummy guess at our nodenum (but we will check against the nodedb to avoid conflicts)
     pickNewNodeNum();
 
+    // Set our board type so we can share it with others
+    owner.hw_model = HW_VENDOR;
+
     // Include our owner in the node db under our nodenum
     NodeInfo *info = getOrCreateNode(getNodeNum());
     info->user = owner;
     info->has_user = true;
-    info->hw_model = HW_VENDOR;
 
     // removed from 1.2 (though we do use old values if found)
     // We set these _after_ loading from disk - because they come from the build and are more trusted than
