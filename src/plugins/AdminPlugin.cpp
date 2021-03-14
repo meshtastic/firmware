@@ -8,8 +8,9 @@
 
 AdminPlugin *adminPlugin;
 
-void AdminPlugin::handleGetChannel(const MeshPacket &req, uint32_t channelIndex) {
-        if (req.decoded.want_response) {
+void AdminPlugin::handleGetChannel(const MeshPacket &req, uint32_t channelIndex)
+{
+    if (req.decoded.want_response) {
         // We create the reply here
         AdminMessage r = AdminMessage_init_default;
         r.get_channel_response = channels.getByIndex(channelIndex);
@@ -23,7 +24,7 @@ void AdminPlugin::handleGetRadio(const MeshPacket &req)
     if (req.decoded.want_response) {
         // We create the reply here
         AdminMessage r = AdminMessage_init_default;
-        r.get_radio_response = devicestate.radio;
+        r.get_radio_response = radioConfig;
 
         // NOTE: The phone app needs to know the ls_secs value so it can properly expect sleep behavior.
         // So even if we internally use 0 to represent 'use default' we still need to send the value we are
@@ -65,6 +66,8 @@ bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, const AdminMessag
         break;
 
     default:
+        // Probably a message sent by us or sent to our local node.  FIXME, we should avoid scanning these messages
+        DEBUG_MSG("Ignoring nonrelevant admin %d\n", r->which_variant);
         break;
     }
     return false; // Let others look at this message also if they want
@@ -95,21 +98,22 @@ void AdminPlugin::handleSetChannel(const Channel &cc)
 {
     channels.setChannel(cc);
 
-    bool didReset = service.reloadConfig();
-    /* FIXME - do we need this still?
-    if (didReset) {
-        state = STATE_SEND_MY_INFO; // Squirt a completely new set of configs to the client
-    } */
+    // Just update and save the channels - no need to update the radio for ! primary channel changes
+    if (cc.index == 0) {
+        // FIXME, this updates the user preferences also, which isn't needed - we really just want to notify on configChanged
+        service.reloadConfig();
+    }
+    else {
+        channels.onConfigChanged(); // tell the radios about this change
+        nodeDB.saveChannelsToDisk();
+    }
 }
 
 void AdminPlugin::handleSetRadio(const RadioConfig &r)
 {
     radioConfig = r;
 
-    bool didReset = service.reloadConfig();
-    /* FIXME - do we need this still?  if (didReset) {
-        state = STATE_SEND_MY_INFO; // Squirt a completely new set of configs to the client
-    } */
+    service.reloadConfig();
 }
 
 MeshPacket *AdminPlugin::allocReply()
@@ -121,5 +125,6 @@ MeshPacket *AdminPlugin::allocReply()
 
 AdminPlugin::AdminPlugin() : ProtobufPlugin("Admin", PortNum_ADMIN_APP, AdminMessage_fields)
 {
-    // FIXME, restrict to the admin channel for rx
+    // restrict to the admin channel for rx
+    boundChannel = "admin";
 }

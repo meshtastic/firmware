@@ -4,6 +4,11 @@ You probably don't care about this section - skip to the next one.
 
 ## 1.2 cleanup & multichannel support:
 
+* timestamps on oled screen are wrong - don't seem to be updating based on message rx
+* luxon bug report - seeing rx acks for nodes that are not on the network
+* channel hash suffixes are wrong on android
+* cdcacm bug on nrf52: emittx thinks it emitted but client sees nothing.  works again later
+* nrf52: segger logs have errors in formatting that should be impossible (because not going through serial, try stalling on segger)
 * DONE call RouterPlugin for *all* packets - not just Router packets
 * DONE generate channel hash from the name of the channel+the psk (not just one or the other)
 * DONE send a hint that can be used to select which channel to try and hash against with each message
@@ -40,6 +45,10 @@ You probably don't care about this section - skip to the next one.
 * DONE warn in android app about unset regions
 * DONE use set-channel from android
 * DONE add gui in android app for setting region
+* DONE clean up python channel usage
+* DONE use bindToChannel to limit admin access for remote nodes
+* DONE move channels and radio config out of device settings
+* test remote info and remote settings changes
 * make python tests more exhaustive
 * pick default random admin key
 * exclude admin channels from URL?
@@ -51,6 +60,7 @@ You probably don't care about this section - skip to the next one.
 * stress test multi channel
 * investigate @mc-hamster report of heap corruption
 * DONE use set-user from android
+* generalize the concept of "shortstrings" use it for both PSKs and well known channel names.  Possibly use a ShortString class.
 * use portuino TCP connection to debug with python API
 * document the relationship between want_response (indicating remote node received it) and want_ack (indicating that this message should be sent reliably - and also get acks from the first rx node and naks if it is never delivered)
 * DONE android should stop fetching channels once we've reached our first empty channel definition (hasSettings == true)
@@ -80,6 +90,8 @@ You probably don't care about this section - skip to the next one.
 * DONE move setCrypto call into packet send and packet decode code
 * implement 'small location diffs' change
 * move battery level out of position? 
+* consider "A special exception (FIXME, not sure if this is a good idea) - packets that arrive on the local interface 
+  are allowed on any channel (this lets the local user do anything)."  Probably by adding a "secure_local_interface" settings bool.
 * DOUBLE CHECK android app can still upgrade 1.1 and 1.0 loads
  
 eink:

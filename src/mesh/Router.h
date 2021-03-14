@@ -6,6 +6,7 @@
 #include "PointerQueue.h"
 #include "RadioInterface.h"
 #include "concurrency/OSThread.h"
+#include "Channels.h"
 
 /**
  * A mesh aware router that supports multiple interfaces.
@@ -106,7 +107,7 @@ class Router : protected concurrency::OSThread
     /**
      * Send an ack or a nak packet back towards whoever sent idFrom
      */
-    void sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom);
+    void sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex);
     
   private:
     /**

@@ -153,6 +153,9 @@ void printPacket(const char *prefix, const MeshPacket *p)
         if (s.dest != 0)
             DEBUG_MSG(" dest=%08x", s.dest);
 
+        if(s.request_id)
+            DEBUG_MSG(" requestId=%0x", s.request_id);
+
         /* now inside Data and therefore kinda opaque
         if (s.which_ackVariant == SubPacket_success_id_tag)
             DEBUG_MSG(" successId=%08x", s.ackVariant.success_id);

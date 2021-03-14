@@ -156,7 +156,6 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         state = STATE_SEND_PACKETS;
         break;
 
-    case STATE_LEGACY: // Treat as the same as send packets
     case STATE_SEND_PACKETS:
         // Do we have a message from the mesh?
         if (packetForPhone) {
@@ -208,7 +207,6 @@ bool PhoneAPI::available()
     case STATE_SEND_COMPLETE_ID:
         return true;
 
-    case STATE_LEGACY: // Treat as the same as send packets
     case STATE_SEND_PACKETS: {
         // Try to pull a new packet from the service (if we haven't already)
         if (!packetForPhone)
@@ -236,7 +234,7 @@ int PhoneAPI::onNotify(uint32_t newValue)
     checkConnectionTimeout(); // a handy place to check if we've heard from the phone (since the BLE version doesn't call this
                               // from idle)
 
-    if (state == STATE_SEND_PACKETS || state == STATE_LEGACY) {
+    if (state == STATE_SEND_PACKETS) {
         DEBUG_MSG("Telling client we have new packets %u\n", newValue);
         onNowHasData(newValue);
     } else
