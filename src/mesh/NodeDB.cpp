@@ -228,7 +228,7 @@ void NodeDB::init()
     strncpy(myNodeInfo.firmware_version, optstr(APP_VERSION), sizeof(myNodeInfo.firmware_version));
     
     // hw_model is no longer stored in myNodeInfo (as of 1.2.11) - we now store it as an enum in nodeinfo
-    myNodeInfo.hw_model[0] = '\0';
+    myNodeInfo.hw_model_deprecated[0] = '\0';
     // strncpy(myNodeInfo.hw_model, HW_VENDOR, sizeof(myNodeInfo.hw_model));
 
     resetRadioConfig(); // If bogus settings got saved, then fix them

@@ -102,7 +102,7 @@ typedef struct _MyNodeInfo {
     bool has_gps;
     uint32_t num_bands;
     char region[12];
-    char hw_model[16];
+    char hw_model_deprecated[16];
     char firmware_version[12];
     CriticalErrorCode error_code;
     uint32_t error_address;
@@ -260,7 +260,7 @@ extern "C" {
 #define MyNodeInfo_has_gps_tag                   2
 #define MyNodeInfo_num_bands_tag                 3
 #define MyNodeInfo_region_tag                    4
-#define MyNodeInfo_hw_model_tag                  5
+#define MyNodeInfo_hw_model_deprecated_tag       5
 #define MyNodeInfo_firmware_version_tag          6
 #define MyNodeInfo_error_code_tag                7
 #define MyNodeInfo_error_address_tag             8
@@ -381,7 +381,7 @@ X(a, STATIC,   SINGULAR, UINT32,   my_node_num,       1) \
 X(a, STATIC,   SINGULAR, BOOL,     has_gps,           2) \
 X(a, STATIC,   SINGULAR, UINT32,   num_bands,         3) \
 X(a, STATIC,   SINGULAR, STRING,   region,            4) \
-X(a, STATIC,   SINGULAR, STRING,   hw_model,          5) \
+X(a, STATIC,   SINGULAR, STRING,   hw_model_deprecated,   5) \
 X(a, STATIC,   SINGULAR, STRING,   firmware_version,   6) \
 X(a, STATIC,   SINGULAR, UENUM,    error_code,        7) \
 X(a, STATIC,   SINGULAR, UINT32,   error_address,     8) \
