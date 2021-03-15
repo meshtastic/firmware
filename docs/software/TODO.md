@@ -2,19 +2,132 @@
 
 You probably don't care about this section - skip to the next one.
 
+## 1.2 cleanup & multichannel support:
+
+* DONE cleanup the external notification and serial plugins
+* non ack version of stress test fails sometimes!
+* timestamps on oled screen are wrong - don't seem to be updating based on message rx
+* luxon bug report - seeing rx acks for nodes that are not on the network
+* channel hash suffixes are wrong on android
+* tx fault test has a bug #734
+* DONE move device types into an enum in nodeinfo
+* fix android to use new device types for firmware update
+  
+* cdcacm bug on nrf52: emittx thinks it emitted but client sees nothing.  works again later
+* nrf52: segger logs have errors in formatting that should be impossible (because not going through serial, try stalling on segger)
+* DONE call RouterPlugin for *all* packets - not just Router packets
+* DONE generate channel hash from the name of the channel+the psk (not just one or the other)
+* DONE send a hint that can be used to select which channel to try and hash against with each message
+* DONE remove deprecated
+* DONE fix setchannel in phoneapi.cpp
+* DONE set mynodeinfo.max_channels
+* DONE set mynodeinfo.num_bands (formerly num_channels)
+* DONE fix sniffing of non Routing packets
+* DONE enable remote setttings access by moving settings operations into a regular plugin (move settings ops out of PhoneAPI)
+* DONE move portnum up?
+* DONE remove region specific builds from the firmware
+* DONE test single channel without python
+* DONE Use "default" for name if name is empty
+* DONE fix python data packet receiving (nothing showing in log?)
+* DONE implement 'get channels' Admin plugin operation
+* DONE use get-channels from python
+* DONE use get channels & get settings from android
+* DONE use set-channel from python
+* DONE make settings changes from python work
+* DONE pthon should stop fetching channels once we've reached our first empty channel definition (hasSettings == true)
+* DONE add check for old devices with new API library
+* DONE release python api
+* DONE release protobufs
+* DONE release to developers
+* DONE fix setch-fast in python tool
+* turn off fault 8: https://github.com/meshtastic/Meshtastic-device/issues/734
+* age out pendingrequests in the python API
+* DONE stress test channel download from python, sometimes it seems like we don't get all replies, bug was due to simultaneous android connection
+* DONE combine acks and responses in a single message if possible (do routing plugin LAST and drop ACK if someone else has already replied)
+* DONE don't send packets we received from the phone BACK TOWARDS THE PHONE (possibly use fromnode 0 for packets the phone sends?)
+* fix 1.1.50 android debug panel display
+* DONE test android channel setting
+* DONE release to users
+* DONE warn in android app about unset regions
+* DONE use set-channel from android
+* DONE add gui in android app for setting region
+* DONE clean up python channel usage
+* DONE use bindToChannel to limit admin access for remote nodes
+* DONE move channels and radio config out of device settings
+* test remote info and remote settings changes
+* make python tests more exhaustive
+* pick default random admin key
+* exclude admin channels from URL?
+* make a way to share just secondary channels via URL
+* use single byte 'well known' channel names for the four default channel names (longslow etc), and for admin, gpio, etc...
+* use presence of gpio channel to enable gpio ops, same for serial etc...
+* restrict gpio & serial & settings operations to the admin channel (unless local to the current node)
+* add channel restrictions for plugins (and restrict routing plugin to the "control" channel)
+* stress test multi channel
+* investigate @mc-hamster report of heap corruption
+* DONE use set-user from android
+* generalize the concept of "shortstrings" use it for both PSKs and well known channel names.  Possibly use a ShortString class.
+* use portuino TCP connection to debug with python API
+* document the relationship between want_response (indicating remote node received it) and want_ack (indicating that this message should be sent reliably - and also get acks from the first rx node and naks if it is never delivered)
+* DONE android should stop fetching channels once we've reached our first empty channel definition (hasSettings == true)
+* DONE warn in python api if we are too new to talk to the device code
+* DONE make a post warning about 1.2, telling how to stay on old android & python clients.  link to this from the android dialog message and python version warning.
+* DONE "FIXME - move the radioconfig/user/channel READ operations into SettingsMessage as well"
+* DONE scrub protobufs to make sure they are absoloute minimum wiresize (in particular Data, ChannelSets and positions)
+* DONE change syncword (now ox2b)
+* allow chaning packets in single transmission - to increase airtime efficiency and amortize packet overhead
+* DONE move most parts of meshpacket into the Data packet, so that we can chain multiple Data for sending when they all have a common destination and key.
+* when selecting a MeshPacket for transmit, scan the TX queue for any Data packets we can merge together as a WirePayload.  In the low level send/rx code expand that into multiple MeshPackets as needed (thus 'hiding' from MeshPacket that over the wire we send multiple datapackets
+* confirm we are still calling the plugins for messages inbound from the phone (or generated locally)
+* confirm we are still multi hop routing flood broadcasts
+* confirm we are still doing resends on unicast reliable packets
+* add history to routed packets: https://meshtastic.discourse.group/t/packet-source-tracking/2764/2
+* add support for full DSR unicast delivery
+* DONE move acks into routing
+* DONE make all subpackets different versions of data
+* DONE move routing control into a data packet
+* have phoneapi done via plugin (will allow multiple simultaneous API clients - stop disabling BLE while using phone API)
+* DONE figure out how to add micro_delta to position, make it so that phone apps don't need to understand it?
+* only send battery updates a max of once a minute
+* add python channel selection for sending
+* DONE record recevied channel in meshpacket
+* test remote settings operations (confirm it works 3 hops away)
+* DONE make a primaryChannel global and properly maintain it when the phone sends setChannel
+* DONE move setCrypto call into packet send and packet decode code
+* implement 'small location diffs' change
+* move battery level out of position? 
+* consider "A special exception (FIXME, not sure if this is a good idea) - packets that arrive on the local interface 
+  are allowed on any channel (this lets the local user do anything)."  Probably by adding a "secure_local_interface" settings bool.
+* DOUBLE CHECK android app can still upgrade 1.1 and 1.0 loads
+ 
 eink:
 
+* DONE check email of reported issues
+* DONE turn off vbus driving (in bootloader)
 * new battery level sensing
-* measure current draw
+* current draw no good
 * DONE: fix backlight
-* USB is busted because of power enable mode?
+* DONE - USB is busted because of power enable mode?
+* test CPU voltage? something is bad with RAM (removing eink module does not help)
+* test that board leaves bootloader always
+* test USB - works in bootloader
+* test LEDs
+* Test BME280
+* test gps
+* check GPS fast locking
+* tested! dlora
+* test eink backlight
+* tested! eink
+* test buttons
+* test battery charging
+* test serial flash
+* send updated app and bootloader image
 * OHH BME280!  THAT IS GREAT!
 * make new screen work, ask for datasheet
 * say I think you could ship this
 * leds seem busted
-* usb doesn't stay connected
-* check GPS works
-* check GPS fast locking
+* fix hw_model: "nrf52unknown"
+* use larger icon for meshtastic logo
 * send email about variants & faster flash programming - https://github.com/geeksville/Meshtastic-esp32/commit/f110225173a77326aac029321cdb6491bfa640f6
 * send PR for bootloader
 * fix nrf52 time/date

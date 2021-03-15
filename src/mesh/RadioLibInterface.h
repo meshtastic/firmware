@@ -2,6 +2,7 @@
 
 #include "../concurrency/OSThread.h"
 #include "RadioInterface.h"
+#include "MeshPacketQueue.h"
 
 #ifdef CubeCell_BoardPlus
 #define RADIOLIB_SOFTWARE_SERIAL_UNSUPPORTED
@@ -74,15 +75,18 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     uint32_t rxBad = 0, rxGood = 0, txGood = 0;
 
-    PointerQueue<MeshPacket> txQueue = PointerQueue<MeshPacket>(MAX_TX_QUEUE);
+    MeshPacketQueue txQueue = MeshPacketQueue(MAX_TX_QUEUE);
 
   protected:
 
     /**
-     * FIXME, use a meshtastic sync word, but hashed with the Channel name.  Currently picking the same default
-     * the RF95 used (0x14). Note: do not use 0x34 - that is reserved for lorawan
+     * We use a meshtastic sync word, but hashed with the Channel name.  For releases before 1.2 we used 0x12 (or for very old loads 0x14)
+     * Note: do not use 0x34 - that is reserved for lorawan
+     * 
+     * We now use 0x2b (so that someday we can possibly use NOT 2b - because that would be funny pun).  We will be staying with this code
+     * for a long time.
      */
-    uint8_t syncWord = SX126X_SYNC_WORD_PRIVATE;
+    const uint8_t syncWord = 0x2b;
 
     float currentLimit = 100;     // FIXME
 
@@ -135,6 +139,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      *  This method is only public to facilitate debugging.  Do not call.
      */
     virtual bool isActivelyReceiving() = 0;
+
+    /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
+    virtual bool cancelSending(NodeNum from, PacketId id);
 
   private:
     /** if we have something waiting to send, start a short random timer so we can come check for collision before actually doing

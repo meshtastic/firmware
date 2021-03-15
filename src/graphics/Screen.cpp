@@ -32,6 +32,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "plugins/TextMessagePlugin.h"
+#include "mesh/Channels.h"
 #include "target_specific.h"
 #include "utils.h"
 
@@ -63,6 +64,10 @@ uint8_t imgBattery[16] = {0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 
 
 // Threshold values for the GPS lock accuracy bar display
 uint32_t dopThresholds[5] = {2000, 1000, 500, 200, 100};
+
+// At some point, we're going to ask all of the plugins if they would like to display a screen frame
+// we'll need to hold onto pointers for the plugins that can draw a frame.
+std::vector<MeshPlugin *> pluginFrames;
 
 // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
 static char ourId[5];
@@ -138,10 +143,36 @@ static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     drawIconScreen(region, display, state, x, y);
 }
 
+#ifdef HAS_EINK
 /// Used on eink displays while in deep sleep
 static void drawSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     drawIconScreen("Sleeping...", display, state, x, y);
+}
+#endif
+
+static void drawPluginFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    uint8_t plugin_frame;
+    // there's a little but in the UI transition code
+    // where it invokes the function at the correct offset 
+    // in the array of "drawScreen" functions; however,
+    // the passed-state doesn't quite reflect the "current" 
+    // screen, so we have to detect it.
+    if (state->frameState == IN_TRANSITION && state->transitionFrameRelationship == INCOMING) {
+        // if we're transitioning from the end of the frame list back around to the first 
+        // frame, then we want this to be `0`
+        plugin_frame = state->transitionFrameTarget;
+    }
+    else {
+        // otherwise, just display the plugin frame that's aligned with the current frame
+        plugin_frame = state->currentFrame;
+        //DEBUG_MSG("Screen is not in transition.  Frame: %d\n\n", plugin_frame);
+    }
+    //DEBUG_MSG("Drawing Plugin Frame %d\n\n", plugin_frame);
+    MeshPlugin &pi = *pluginFrames.at(plugin_frame);
+    pi.drawFrame(display,state,x,y);
+    
 }
 
 static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -163,6 +194,20 @@ static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, 
     strcat(buf, getDeviceName());
     display->drawString(64 + x, 48 + y, buf);
 }
+
+static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->setFont(FONT_MEDIUM);
+    display->drawString(64 + x, y, "Updating");
+
+    display->setFont(FONT_SMALL);
+    display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait...");
+
+    //display->setFont(FONT_LARGE);
+    //display->drawString(64 + x, 26 + y, btPIN);
+}
+
 
 /// Draw the last text message we received
 static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -186,7 +231,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     displayedNodeNum = 0; // Not currently showing a node pane
 
     MeshPacket &mp = devicestate.rx_text_message;
-    NodeInfo *node = nodeDB.getNode(mp.from);
+    NodeInfo *node = nodeDB.getNode(getFrom(&mp));
     // DEBUG_MSG("drawing text message from 0x%x: %s\n", mp.from,
     // mp.decoded.variant.data.decoded.bytes);
 
@@ -201,8 +246,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
 
     // the max length of this buffer is much longer than we can possibly print
     static char tempBuf[96];
-    assert(mp.decoded.which_payloadVariant == SubPacket_data_tag);
-    snprintf(tempBuf, sizeof(tempBuf), "         %s", mp.decoded.data.payload.bytes);
+    snprintf(tempBuf, sizeof(tempBuf), "         %s", mp.decoded.payload.bytes);
 
     display->drawStringMaxWidth(4 + x, 10 + y, SCREEN_WIDTH - (6 + x), tempBuf);
 }
@@ -749,7 +793,8 @@ void Screen::setup()
     powerStatusObserver.observe(&powerStatus->onNewStatus);
     gpsStatusObserver.observe(&gpsStatus->onNewStatus);
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
-    textMessageObserver.observe(textMessagePlugin);
+    if(textMessagePlugin)
+        textMessageObserver.observe(textMessagePlugin);
 }
 
 void Screen::forceDisplay()
@@ -776,9 +821,6 @@ int32_t Screen::runOnce()
         showingBootScreen = false;
     }
 
-    // Update the screen last, after we've figured out what to show.
-    debug_info()->setChannelNameStatus(getChannelName());
-
     // Process incoming commands.
     for (;;) {
         ScreenCmd cmd;
@@ -798,6 +840,9 @@ int32_t Screen::runOnce()
         case Cmd::START_BLUETOOTH_PIN_SCREEN:
             handleStartBluetoothPinScreen(cmd.bluetooth_pin);
             break;
+        case Cmd::START_FIRMWARE_UPDATE_SCREEN:
+            handleStartFirmwareUpdateScreen();
+            break;            
         case Cmd::STOP_BLUETOOTH_PIN_SCREEN:
         case Cmd::STOP_BOOT_SCREEN:
             setFrames();
@@ -807,7 +852,7 @@ int32_t Screen::runOnce()
             free(cmd.print_text);
             break;
         default:
-            DEBUG_MSG("BUG: invalid cmd");
+            DEBUG_MSG("BUG: invalid cmd\n");
         }
     }
 
@@ -870,12 +915,29 @@ void Screen::setFrames()
     DEBUG_MSG("showing standard frames\n");
     showingNormalScreen = true;
 
+    pluginFrames = MeshPlugin::GetMeshPluginsWithUIFrames();
+    DEBUG_MSG("Showing %d plugin frames\n", pluginFrames.size());
+    int totalFrameCount = MAX_NUM_NODES + NUM_EXTRA_FRAMES + pluginFrames.size();
+    DEBUG_MSG("Total frame count: %d\n", totalFrameCount);
+
     // We don't show the node info our our node (if we have it yet - we should)
     size_t numnodes = nodeStatus->getNumTotal();
     if (numnodes > 0)
         numnodes--;
 
     size_t numframes = 0;
+
+    // put all of the plugin frames first.
+    // this is a little bit of a dirty hack; since we're going to call
+    // the same drawPluginFrame handler here for all of these plugin frames
+    // and then we'll just assume that the state->currentFrame value
+    // is the same offset into the pluginFrames vector
+    // so that we can invoke the plugin's callback
+    for (auto i = pluginFrames.begin(); i != pluginFrames.end(); ++i) {
+        normalFrames[numframes++] = drawPluginFrame;
+    }
+    
+    DEBUG_MSG("Added plugins.  numframes: %d\n", numframes);
 
     // If we have a critical fault, show it first
     if (myNodeInfo.error_code)
@@ -905,6 +967,8 @@ void Screen::setFrames()
     }
 #endif
 
+    DEBUG_MSG("Finished building frames. numframes: %d\n", numframes);
+
     ui.setFrames(normalFrames, numframes);
     ui.enableAllIndicators();
 
@@ -922,6 +986,18 @@ void Screen::handleStartBluetoothPinScreen(uint32_t pin)
     static FrameCallback btFrames[] = {drawFrameBluetooth};
 
     snprintf(btPIN, sizeof(btPIN), "%06lu", pin);
+
+    ui.disableAllIndicators();
+    ui.setFrames(btFrames, 1);
+    setFastFramerate();
+}
+
+void Screen::handleStartFirmwareUpdateScreen()
+{
+    DEBUG_MSG("showing firmware screen\n");
+    showingNormalScreen = false;
+
+    static FrameCallback btFrames[] = {drawFrameFirmware};
 
     ui.disableAllIndicators();
     ui.setFrames(btFrames, 1);
@@ -993,7 +1069,8 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     char channelStr[20];
     {
         concurrency::LockGuard guard(&lock);
-        snprintf(channelStr, sizeof(channelStr), "%s", channelName.c_str());
+        auto chName = channels.getPrimaryName();
+        snprintf(channelStr, sizeof(channelStr), "%s", chName);
     }
 
     // Display power status
@@ -1200,8 +1277,8 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
         display->drawString(x, y, String("USB"));
     }
 
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth("Mode " + String(channelSettings.modem_config)), y,
-                        "Mode " + String(channelSettings.modem_config));
+    auto mode = "Mode " + String(channels.getPrimary().modem_config);
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(mode), y, mode);
 
     // Line 2
     uint32_t currentMillis = millis();
