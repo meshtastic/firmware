@@ -1,6 +1,8 @@
 #pragma once
 
 #include "mesh/MeshTypes.h"
+#include <OLEDDisplay.h>
+#include <OLEDDisplayUi.h>
 #include <vector>
 /** A baseclass for any mesh "plugin".
  *
@@ -28,13 +30,31 @@ class MeshPlugin
      */
     static void callPlugins(const MeshPacket &mp);
 
+    static std::vector<MeshPlugin *> GetMeshPluginsWithUIFrames();
+
+    virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) { return; }
+
   protected:
     const char *name;
+
+    /* Most plugins only care about packets that are destined for their node (i.e. broadcasts or has their node as the specific
+    recipient) But some plugs might want to 'sniff' packets that are merely being routed (passing through the current node). Those
+    plugins can set this to true and their handleReceived() will be called for every packet.
+    */
+    bool isPromiscuous = false;
+
+    /** If a bound channel name is set, we will only accept received packets that come in on that channel.
+     * A special exception (FIXME, not sure if this is a good idea) - packets that arrive on the local interface
+     * are allowed on any channel (this lets the local user do anything).
+     *
+     * We will send responses on the same channel that the request arrived on.
+     */
+    const char *boundChannel = NULL;
 
     /**
      * If this plugin is currently handling a request currentRequest will be preset
      * to the packet with the request.  This is mostly useful for reply handlers.
-     * 
+     *
      * Note: this can be static because we are guaranteed to be processing only one
      * plugin at a time.
      */
@@ -49,7 +69,7 @@ class MeshPlugin
     /**
      * @return true if you want to receive the specified portnum
      */
-    virtual bool wantPortnum(PortNum p) = 0;
+    virtual bool wantPacket(const MeshPacket *p) = 0;
 
     /** Called to handle a particular incoming message
 
@@ -61,7 +81,18 @@ class MeshPlugin
      * so that subclasses can (optionally) send a response back to the original sender.  */
     virtual MeshPacket *allocReply() { return NULL; }
 
+    /***
+     * @return true if you want to be alloced a UI screen frame
+     */
+    virtual bool wantUIFrame() { return false; }
+
   private:
+    /**
+     * If any of the current chain of plugins has already sent a reply, it will be here.  This is useful to allow
+     * the RoutingPlugin to avoid sending redundant acks
+     */
+    static MeshPacket *currentReply;
+    friend class ReliableRouter;
 
     /** Messages can be received that have the want_response bit set.  If set, this callback will be invoked
      * so that subclasses can (optionally) send a response back to the original sender.  This method calls allocReply()
@@ -70,7 +101,7 @@ class MeshPlugin
     void sendResponse(const MeshPacket &req);
 };
 
-/** set the destination and packet parameters of packet p intended as a reply to a particular "to" packet 
+/** set the destination and packet parameters of packet p intended as a reply to a particular "to" packet
  * This ensures that if the request packet was sent reliably, the reply is sent that way as well.
-*/
+ */
 void setReplyTo(MeshPacket *p, const MeshPacket &to);

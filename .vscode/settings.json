@@ -69,5 +69,13 @@
         "wifi"
     ],
     "C_Cpp.dimInactiveRegions": true,
-    "cmake.configureOnOpen": true
+    "cmake.configureOnOpen": true,
+    "protoc": {
+        "compile_on_save": false,
+        "compile_all_path": "/home/kevinh/development/meshtastic/meshtastic-esp32/proto",
+        "options": [
+            "--java_out=/tmp",
+            "-I=/home/kevinh/development/meshtastic/meshtastic-esp32/proto"
+        ]
+    }    
 }

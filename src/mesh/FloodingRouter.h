@@ -55,5 +55,5 @@ class FloodingRouter : public Router, protected PacketHistory
     /**
      * Look for broadcasts we need to rebroadcast
      */
-    virtual void sniffReceived(const MeshPacket *p);
+    virtual void sniffReceived(const MeshPacket *p, const Routing *c);
 };

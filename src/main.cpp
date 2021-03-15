@@ -283,7 +283,13 @@ void setup()
     concurrency::hasBeenSetup = true;
 
 #ifdef SEGGER_STDOUT_CH
-    SEGGER_RTT_ConfigUpBuffer(SEGGER_STDOUT_CH, NULL, NULL, 1024, SEGGER_RTT_MODE_NO_BLOCK_TRIM);
+    auto mode = false ? SEGGER_RTT_MODE_BLOCK_IF_FIFO_FULL : SEGGER_RTT_MODE_NO_BLOCK_TRIM;
+#ifdef NRF52840_XXAA
+    auto buflen = 4096; // this board has a fair amount of ram
+#else
+    auto buflen = 256; // this board has a fair amount of ram
+#endif
+    SEGGER_RTT_ConfigUpBuffer(SEGGER_STDOUT_CH, NULL, NULL, buflen, mode);
 #endif
 
 #ifdef USE_SEGGER
@@ -309,12 +315,15 @@ void setup()
 
 #ifdef BUTTON_PIN
 #ifndef NO_ESP32
-    // If BUTTON_PIN is held down during the startup process,
-    //   force the device to go into a SoftAP mode.
     bool forceSoftAP = 0;
+
+    // If the button is connected to GPIO 12, don't enable the ability to use
+    // meshtasticAdmin on the device.
     pinMode(BUTTON_PIN, INPUT);
+
 #ifdef BUTTON_NEED_PULLUP
     gpio_pullup_en((gpio_num_t)BUTTON_PIN);
+    delay(10);
 #endif
 
     // BUTTON_PIN is pulled high by a 12k resistor.
@@ -360,7 +369,7 @@ void setup()
 #endif
 
     // Hello
-    DEBUG_MSG("Meshtastic swver=%s, hwver=%s\n", optstr(APP_VERSION), optstr(HW_VERSION));
+    DEBUG_MSG("Meshtastic hwvendor=%d, swver=%s, hwver=%s\n", HW_VENDOR, optstr(APP_VERSION), optstr(HW_VERSION));
 
 #ifndef NO_ESP32
     // Don't init display if we don't have one or we are waking headless due to a timer event
@@ -587,6 +596,9 @@ void loop()
 
 #ifndef NO_ESP32
     esp32Loop();
+#endif
+#ifdef NRF52_SERIES
+    nrf52Loop();
 #endif
 
     // For debugging

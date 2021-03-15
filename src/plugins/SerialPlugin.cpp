@@ -61,6 +61,12 @@ SerialPlugin::SerialPlugin() : concurrency::OSThread("SerialPlugin") {}
 
 char serialStringChar[Constants_DATA_PAYLOAD_LEN];
 
+SerialPluginRadio::SerialPluginRadio() : SinglePortPlugin("SerialPluginRadio", PortNum_SERIAL_APP)
+{
+    // restrict to the admin channel for rx
+    boundChannel = Channels::serialChannel;
+}
+
 int32_t SerialPlugin::runOnce()
 {
 #ifndef NO_ESP32
@@ -124,7 +130,8 @@ int32_t SerialPlugin::runOnce()
 
         return (INT32_MAX);
     }
-
+#else
+    return INT32_MAX;
 #endif
 }
 
@@ -144,8 +151,8 @@ void SerialPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
 
     p->want_ack = SERIALPLUGIN_ACK;
 
-    p->decoded.data.payload.size = strlen(serialStringChar); // You must specify how many bytes are in the reply
-    memcpy(p->decoded.data.payload.bytes, serialStringChar, p->decoded.data.payload.size);
+    p->decoded.payload.size = strlen(serialStringChar); // You must specify how many bytes are in the reply
+    memcpy(p->decoded.payload.bytes, serialStringChar, p->decoded.payload.size);
 
     service.sendToMesh(p);
 }
@@ -156,11 +163,11 @@ bool SerialPluginRadio::handleReceived(const MeshPacket &mp)
 
     if (radioConfig.preferences.serialplugin_enabled) {
 
-        auto &p = mp.decoded.data;
+        auto &p = mp.decoded;
         // DEBUG_MSG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s\n",
         //          nodeDB.getNodeNum(), mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
 
-        if (mp.from == nodeDB.getNodeNum()) {
+        if (getFrom(&mp) == nodeDB.getNodeNum()) {
 
             /*
              * If radioConfig.preferences.serialplugin_echo is true, then echo the packets that are sent out back to the TX

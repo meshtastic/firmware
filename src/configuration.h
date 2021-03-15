@@ -163,7 +163,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #if defined(TBEAM_V10)
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "tbeam"
+#define HW_VENDOR HardwareModel_TBEAM
 
 // #define BUTTON_NEED_PULLUP // if set we need to turn on the internal CPU pullup during sleep
 
@@ -204,7 +204,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #elif defined(TBEAM_V07)
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "tbeam0.7"
+#define HW_VENDOR HardwareModel_TBEAM0p7
 
 // #define BUTTON_NEED_PULLUP // if set we need to turn on the internal CPU pullup during sleep
 
@@ -228,7 +228,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #elif defined(ARDUINO_HELTEC_WIFI_LORA_32_V2)
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "heltec"
+#define HW_VENDOR HardwareModel_HELTEC
 
 // the default ESP32 Pin of 15 is the Oled SCL, set to 36 and 37 and works fine.
 // Tested on Neo6m module.
@@ -258,7 +258,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #elif defined(TLORA_V1)
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "tlora-v1"
+#define HW_VENDOR HardwareModel_TLORA_V1
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 #define GPS_RX_PIN 36
@@ -282,7 +282,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #elif defined(TLORA_V2)
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "tlora-v2"
+#define HW_VENDOR HardwareModel_TLORA_V2
 
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
@@ -309,14 +309,41 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LORA_DIO1 35 // Not really used
 #define LORA_DIO2 34 // Not really used
 
-#elif defined(TLORA_V2_1_16)
+#elif defined(TLORA_V1_3)
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "tlora-v2-1-1.6"
+#define HW_VENDOR HardwareModel_TLORA_V1p3
 
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 #define GPS_RX_PIN 36
-#define GPS_TX_PIN 39
+#define GPS_TX_PIN 13 // per @eugene
+
+#define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+
+#define I2C_SDA 4 // I2C pins for this board
+#define I2C_SCL 15
+
+#define RESET_OLED 16 // If defined, this pin will be used to reset the display controller
+
+#define VEXT_ENABLE 21 // active low, powers the oled display and the lora antenna boost
+#define LED_PIN 25     // If defined we will blink this LED
+#define BUTTON_PIN 36
+#define BUTTON_NEED_PULLUP
+
+#define USE_RF95
+#define LORA_DIO0 26 // a No connect on the SX1262 module
+#define LORA_RESET 14
+#define LORA_DIO1 35 // Not really used
+#define LORA_DIO2 34 // Not really used
+
+#elif defined(TLORA_V2_1_16)
+// This string must exactly match the case used in release file names or the android updater won't work
+#define HW_VENDOR HardwareModel_TLORA_V2_1p6_
+
+#undef GPS_RX_PIN
+#undef GPS_TX_PIN
+#define GPS_RX_PIN 36
+#define GPS_TX_PIN 13
 
 #define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 
@@ -327,9 +354,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define VEXT_ENABLE 21 // active low, powers the oled display and the lora antenna boost
 #define LED_PIN 25     // If defined we will blink this LED
-#define BUTTON_PIN                                                                                                               \
-    12 // If defined, this will be used for user button presses, if your board doesn't have a physical switch, you can wire one
-       // between this pin and ground
+#define BUTTON_PIN 12  // If defined, this will be used for user button presses,
+
 #define BUTTON_NEED_PULLUP
 
 #define USE_RF95
@@ -340,7 +366,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #elif defined(GENIEBLOCKS)
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "genieblocks"
+#define HW_VENDOR HardwareModel_GENIEBLOCKS
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 #define GPS_RX_PIN 5
@@ -348,15 +374,16 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define GPS_RESET_N 10
 #define GPS_EXTINT 23 // On MAX-M8 module pin name is EXTINT. On L70 module pin name is STANDBY.
 
-#define BATTERY_PIN 39 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+#define BATTERY_PIN 39    // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define BATTERY_EN_PIN 14 // Voltage voltage divider enable pin connected to mosfet
 
 #define I2C_SDA 4 // I2C pins for this board
 #define I2C_SCL 2
 
-#define LED_PIN 12     // If defined we will blink this LED
-//#define BUTTON_PIN 36  // If defined, this will be used for user button presses (ToDo problem on that line on debug screen -->   Long press start!)
-//#define BUTTON_NEED_PULLUP //GPIOs 34 to 39 are GPIs – input only pins. These pins don’t have internal pull-ups or pull-down resistors. 
+#define LED_PIN 12 // If defined we will blink this LED
+//#define BUTTON_PIN 36  // If defined, this will be used for user button presses (ToDo problem on that line on debug screen -->
+//Long press start!) #define BUTTON_NEED_PULLUP //GPIOs 34 to 39 are GPIs – input only pins. These pins don’t have internal
+//pull-ups or pull-down resistors.
 
 #define USE_RF95
 #define LORA_DIO0 38 // a No connect on the SX1262 module
@@ -372,7 +399,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifdef ARDUINO_NRF52840_PCA10056
 
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "nrf52dk"
+#define HW_VENDOR HardwareModel_NRF52840DK
 
 // This board uses 0 to be mean LED on
 #undef LED_INVERTED
@@ -380,15 +407,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #elif defined(ARDUINO_NRF52840_PPR)
 
-#define HW_VENDOR "ppr"
+#define HW_VENDOR HardwareModel_PPR
 
 #elif NRF52_SERIES
 
-#define HW_VENDOR "nrf52unknown" // FIXME - unknown nrf52 board
+#define HW_VENDOR HardwareModel_NRF52_UNKNOWN
 
 #elif PORTDUINO
 
-#define HW_VENDOR "portduino"
+#define HW_VENDOR HardwareModel_PORTDUINO
 
 #define USE_SIM_RADIO
 
