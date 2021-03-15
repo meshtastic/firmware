@@ -32,7 +32,7 @@ public:
   virtual bool isBatteryConnect() { return false; }
 
   virtual bool isVBUSPlug() { return false; }
-  virtual bool isCharging() { return false; }
+  virtual bool isChargeing() { return false; }
 };
 #endif
 
@@ -124,7 +124,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
     /// Assume charging if we have a battery and external power is connected.
     /// we can't be smart enough to say 'full'?
-    virtual bool isCharging() { return isBatteryConnect() && isVBUSPlug(); }
+    virtual bool isChargeing() { return isBatteryConnect() && isVBUSPlug(); }
 
   private:
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
@@ -210,7 +210,7 @@ void Power::readPowerStatus()
         // Notify any status instances that are observing us
         const PowerStatus powerStatus =
             PowerStatus(hasBattery ? OptTrue : OptFalse, batteryLevel->isVBUSPlug() ? OptTrue : OptFalse,
-                        batteryLevel->isCharging() ? OptTrue : OptFalse, batteryVoltageMv, batteryChargePercent);
+                        batteryLevel->isChargeing() ? OptTrue : OptFalse, batteryVoltageMv, batteryChargePercent);
         DEBUG_MSG("Battery: usbPower=%d, isCharging=%d, batMv=%d, batPct=%d\n", powerStatus.getHasUSB(),
                   powerStatus.getIsCharging(), powerStatus.getBatteryVoltageMv(), powerStatus.getBatteryChargePercent());
         newStatus.notifyObservers(&powerStatus);
