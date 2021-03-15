@@ -300,3 +300,49 @@ int GPS::prepareDeepSleep(void *unused)
 
     return 0;
 }
+
+#ifdef GPS_TX_PIN
+#include "UBloxGPS.h"
+#endif
+
+#ifdef HAS_AIR530_GPS
+#include "Air530GPS.h"
+#elif !defined(NO_GPS)
+#include "NMEAGPS.h"
+#endif
+
+
+GPS* createGps() {
+
+#ifdef NO_GPS
+    return nullptr;
+#else
+// If we don't have bidirectional comms, we can't even try talking to UBLOX
+#ifdef GPS_TX_PIN
+    // Init GPS - first try ublox
+    UBloxGPS *ublox = new UBloxGPS();
+    
+    if (!ublox->setup()) {
+        DEBUG_MSG("ERROR: No UBLOX GPS found\n");
+        delete ublox;
+        ublox = NULL;
+    } else {
+        return ublox;
+    }
+#endif
+
+    if (GPS::_serial_gps) {
+        // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
+        // assume NMEA at 9600 baud.
+        DEBUG_MSG("Hoping that NMEA might work\n");
+#ifdef HAS_AIR530_GPS
+        GPS* new_gps = new Air530GPS();
+#else
+        GPS* new_gps = new NMEAGPS();
+#endif
+        new_gps->setup();
+        return new_gps;
+    }
+    return nullptr;
+#endif
+}

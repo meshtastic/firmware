@@ -3,8 +3,8 @@
 #include "configuration.h"
 #include "main.h"
 #include <bluefruit.h>
-
-
+#include "mesh/mesh-pb-constants.h"
+#include "mesh/PhoneAPI.h"
 
 static BLEService meshBleService = BLEService(BLEUuid(MESH_SERVICE_UUID_16));
 static BLECharacteristic fromNum = BLECharacteristic(BLEUuid(FROMNUM_UUID_16));
@@ -213,6 +213,7 @@ void NRF52Bluetooth::setup()
 {
     // Initialise the Bluefruit module
     DEBUG_MSG("Initialise the Bluefruit nRF52 module\n");
+    Bluefruit.autoConnLed(false);
     Bluefruit.begin();
 
     // Set the advertised device name (keep it short!)
