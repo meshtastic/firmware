@@ -18,6 +18,9 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/CMakeListsUser.txt)
 include(CMakeListsUser.txt)
 endif()
 
+include_directories("$ENV{HOME}/.platformio/packages/framework-portduino")
+include_directories("/usr/include")
+
 add_custom_target(
     Production ALL
     COMMAND platformio -c clion run "$<$<NOT:$<CONFIG:All>>:-e${CMAKE_BUILD_TYPE}>"
