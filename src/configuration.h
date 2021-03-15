@@ -384,7 +384,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #elif NRF52_SERIES
 
+#ifndef HW_VENDOR
 #define HW_VENDOR "nrf52unknown" // FIXME - unknown nrf52 board
+#endif
 
 #elif PORTDUINO
 
@@ -431,6 +433,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "SerialConsole.h"
 
 #define DEBUG_PORT console // Serial debug port
+
+
 
 // What platforms should use SEGGER?
 #ifdef NRF52_SERIES

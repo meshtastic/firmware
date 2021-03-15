@@ -1,6 +1,5 @@
 #include "NRF52Bluetooth.h"
 #include "configuration.h"
-#include "graphics/TFTDisplay.h"
 #include <SPI.h>
 #include <Wire.h>
 #include <assert.h>
@@ -118,10 +117,15 @@ void cpuDeepSleep(uint64_t msecToWake)
 {
     // FIXME, configure RTC or button press to wake us
     // FIXME, power down SPI, I2C, RAMs
+  #if WIRE_INTERFACES_COUNT > 0
     Wire.end();
+  #endif
     SPI.end();
     Serial.end();
+    
+  #ifdef PIN_SERIAL_RX1
     Serial1.end();
+  #endif
 
     // FIXME, use system off mode with ram retention for key state?
     // FIXME, use non-init RAM per
