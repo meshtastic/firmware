@@ -7,13 +7,13 @@
 
 #ifndef PIN_BUZZER
 
+// Noop methods for boards w/o buzzer
 void playBeep(){};
 void playStartMelody(){};
 void playShutdownMelody(){};
 
 #else
 #include "Tone.h"
-#include "pitches.h"
 
 extern "C" void delay(uint32_t dwMs);
 
@@ -21,6 +21,20 @@ struct ToneDuration {
   int frequency_khz;
   int duration_ms;
 };
+
+// Some common frequencies.
+#define NOTE_C3 131
+#define NOTE_CS3 139
+#define NOTE_D3 147
+#define NOTE_DS3 156
+#define NOTE_E3 165
+#define NOTE_F3 175
+#define NOTE_FS3 185
+#define NOTE_G3 196
+#define NOTE_GS3 208
+#define NOTE_A3 220
+#define NOTE_AS3 233
+#define NOTE_B3 247
 
 const int DURATION_1_8 = 125;  // 1/8 note
 const int DURATION_1_4 = 250;  // 1/4 note
