@@ -20,10 +20,10 @@ class PhoneAPI
     : public Observer<uint32_t> // FIXME, we shouldn't be inheriting from Observer, instead use CallbackObserver as a member
 {
     enum State {
-        STATE_LEGACY,       // (no longer used) old default state - until Android apps are all updated, uses the old BLE API
+        STATE_UNUSED,       // (no longer used) old default state - until Android apps are all updated, uses the old BLE API
         STATE_SEND_NOTHING, // (Eventual) Initial state, don't send anything until the client starts asking for config
         STATE_SEND_MY_INFO, // send our my info record
-        STATE_SEND_RADIO,
+        // STATE_SEND_RADIO, // in 1.2 we now send this as a regular mesh packet
         // STATE_SEND_OWNER, no need to send Owner specially, it is just part of the nodedb
         STATE_SEND_NODEINFO, // states progress in this order as the device sends to to the client
         STATE_SEND_COMPLETE_ID,
@@ -82,13 +82,6 @@ class PhoneAPI
      * Return true if we have data available to send to the phone
      */
     bool available();
-
-    //
-    // The following routines are only public for now - until the rev1 bluetooth API is removed
-    //
-
-    void handleSetOwner(const User &o);
-    void handleSetRadio(const RadioConfig &r);
 
   protected:
     /// Are we currently connected to a client?

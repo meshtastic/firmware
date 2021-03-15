@@ -13,8 +13,8 @@
 #include "RTC.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
-#include "plugins/PositionPlugin.h"
 #include "plugins/NodeInfoPlugin.h"
+#include "plugins/PositionPlugin.h"
 #include "power.h"
 
 /*
@@ -51,23 +51,6 @@ MeshService service;
 
 #include "Router.h"
 
-static int32_t sendOwnerCb()
-{
-    static uint32_t currentGeneration;
-
-    // If we changed channels, ask everyone else for their latest info
-    bool requestReplies = currentGeneration != radioGeneration;
-    currentGeneration = radioGeneration;
-
-    DEBUG_MSG("Sending our nodeinfo to mesh (wantReplies=%d)\n", requestReplies);
-    assert(nodeInfoPlugin);
-    nodeInfoPlugin->sendOurNodeInfo(NODENUM_BROADCAST, requestReplies); // Send our info (don't request replies)
-
-    return getPref_send_owner_interval() * getPref_position_broadcast_secs() * 1000;
-}
-
-static concurrency::Periodic *sendOwnerPeriod;
-
 MeshService::MeshService() : toPhoneQueue(MAX_RX_TOPHONE)
 {
     // assert(MAX_RX_TOPHONE == 32); // FIXME, delete this, just checking my clever macro
@@ -75,17 +58,12 @@ MeshService::MeshService() : toPhoneQueue(MAX_RX_TOPHONE)
 
 void MeshService::init()
 {
-    sendOwnerPeriod = new concurrency::Periodic("SendOwner", sendOwnerCb);
-    sendOwnerPeriod->setIntervalFromNow(30 * 1000); // Send our initial owner announcement 30 seconds after we start (to give network time to setup)
-
     // moved much earlier in boot (called from setup())
     // nodeDB.init();
 
     if (gps)
         gpsObserver.observe(&gps->newStatus);
-    packetReceivedObserver.observe(&router->notifyPacketReceived);
 }
-
 
 int MeshService::handleFromRadio(const MeshPacket *mp)
 {
@@ -126,7 +104,7 @@ bool MeshService::reloadConfig()
     // This will also update the region as needed
     bool didReset = nodeDB.resetRadioConfig(); // Don't let the phone send us fatally bad settings
 
-    configChanged.notifyObservers(NULL);
+    configChanged.notifyObservers(NULL); // This will cause radio hardware to change freqs etc
     nodeDB.saveToDisk();
 
     return didReset;
@@ -136,7 +114,8 @@ bool MeshService::reloadConfig()
 void MeshService::reloadOwner()
 {
     assert(nodeInfoPlugin);
-    nodeInfoPlugin->sendOurNodeInfo();
+    if(nodeInfoPlugin)
+        nodeInfoPlugin->sendOurNodeInfo();
     nodeDB.saveToDisk();
 }
 
@@ -147,8 +126,12 @@ void MeshService::reloadOwner()
  */
 void MeshService::handleToRadio(MeshPacket &p)
 {
-    if (p.from == 0) // If the phone didn't set a sending node ID, use ours
-        p.from = nodeDB.getNodeNum();
+    if (p.from != 0) { // We don't let phones assign nodenums to their sent messages
+        DEBUG_MSG("Warning: phone tried to pick a nodenum, we don't allow that.\n");
+        p.from = 0;
+    } else {
+        // p.from = nodeDB.getNodeNum();
+    }
 
     if (p.id == 0)
         p.id = generatePacketId(); // If the phone didn't supply one, then pick one
@@ -169,21 +152,15 @@ void MeshService::handleToRadio(MeshPacket &p)
     }
 }
 
+/** Attempt to cancel a previously sent packet from this _local_ node.  Returns true if a packet was found we could cancel */
+bool MeshService::cancelSending(PacketId id)
+{
+    return router->cancelSending(nodeDB.getNodeNum(), id);
+}
+
 void MeshService::sendToMesh(MeshPacket *p)
 {
     nodeDB.updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
-
-    // Strip out any time information before sending packets to other  nodes - to keep the wire size small (and because other
-    // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS to include the time, so that gpsless
-    // devices can get time.
-    if (p->which_payload == MeshPacket_decoded_tag && p->decoded.which_payload == SubPacket_position_tag &&
-        p->decoded.position.time) {
-        if (getRTCQuality() < RTCQualityGPS) {
-            DEBUG_MSG("Stripping time %u from position send\n", p->decoded.position.time);
-            p->decoded.position.time = 0;
-        } else
-            DEBUG_MSG("Providing time to mesh %u\n", p->decoded.position.time);
-    }
 
     // Note: We might return !OK if our fifo was full, at that point the only option we have is to drop it
     router->sendLocal(p);
@@ -194,29 +171,36 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
     NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
     assert(node);
 
-    DEBUG_MSG("Sending network ping to 0x%x, with position=%d, wantReplies=%d\n", dest, node->has_position, wantReplies);
-    assert(positionPlugin && nodeInfoPlugin);
-    if (node->has_position)
-        positionPlugin->sendOurPosition(dest, wantReplies);
-    else
-        nodeInfoPlugin->sendOurNodeInfo(dest, wantReplies);
+    if (node->has_position) {
+        if(positionPlugin) {
+            DEBUG_MSG("Sending position ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
+            positionPlugin->sendOurPosition(dest, wantReplies);
+        }
+    }
+    else {
+        if(nodeInfoPlugin) {
+            DEBUG_MSG("Sending nodeinfo ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
+            nodeInfoPlugin->sendOurNodeInfo(dest, wantReplies);
+        }
+    }
 }
 
-
-NodeInfo *MeshService::refreshMyNodeInfo() {
+NodeInfo *MeshService::refreshMyNodeInfo()
+{
     NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
     assert(node);
 
     // We might not have a position yet for our local node, in that case, at least try to send the time
-    if(!node->has_position) {
+    if (!node->has_position) {
         memset(&node->position, 0, sizeof(node->position));
         node->has_position = true;
     }
-    
+
     Position &position = node->position;
 
     // Update our local node info with our position (even if we don't decide to update anyone else)
-    position.time = getValidTime(RTCQualityGPS); // This nodedb timestamp might be stale, so update it if our clock is valid.
+    position.time =
+        getValidTime(RTCQualityFromNet); // This nodedb timestamp might be stale, so update it if our clock is kinda valid
 
     position.battery_level = powerStatus->getBatteryChargePercent();
     updateBatteryLevel(position.battery_level);
@@ -235,11 +219,10 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
             pos.altitude = gps->altitude;
         pos.latitude_i = gps->latitude;
         pos.longitude_i = gps->longitude;
-    }
-    else {
+    } else {
         // The GPS has lost lock, if we are fixed position we should just keep using
         // the old position
-        if(!radioConfig.preferences.fixed_position) {
+        if (radioConfig.preferences.fixed_position) {
             DEBUG_MSG("WARNING: Using fixed position\n");
         } else {
             // throw away old position
@@ -249,27 +232,10 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
         }
     }
 
-    DEBUG_MSG("got gps notify time=%u, lat=%d, bat=%d\n", pos.latitude_i, pos.time, pos.battery_level);
+    DEBUG_MSG("got gps notify time=%u, lat=%d, bat=%d\n", pos.time, pos.latitude_i, pos.battery_level);
 
     // Update our current position in the local DB
     nodeDB.updatePosition(nodeDB.getNodeNum(), pos);
-
-    // We limit our GPS broadcasts to a max rate
-    static uint32_t lastGpsSend;
-    uint32_t now = millis();
-    if (lastGpsSend == 0 || now - lastGpsSend > getPref_position_broadcast_secs() * 1000) {
-        lastGpsSend = now;
-
-        static uint32_t currentGeneration;
-
-        // If we changed channels, ask everyone else for their latest info
-        bool requestReplies = currentGeneration != radioGeneration;
-        currentGeneration = radioGeneration;
-
-        DEBUG_MSG("Sending position to mesh (wantReplies=%d)\n", requestReplies);
-        assert(positionPlugin);
-        positionPlugin->sendOurPosition(NODENUM_BROADCAST, requestReplies);
-    }
 
     return 0;
 }

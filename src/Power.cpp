@@ -120,7 +120,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
     /// in power
-    virtual bool isVBUSPlug() { return getBattVoltage() > chargingVolt; }
+    virtual bool isVBUSPlug() { return getBattVoltage() > 1000 * chargingVolt; }
 
     /// Assume charging if we have a battery and external power is connected.
     /// we can't be smart enough to say 'full'?

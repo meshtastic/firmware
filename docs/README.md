@@ -1,13 +1,13 @@
 # What is Meshtastic?
 
-Meshtastic™ is a project that lets you use
+Meshtastic® is a project that lets you use
 inexpensive (\$30 ish) GPS radios as an extensible, long battery life, secure, mesh GPS communicator. These radios are great for hiking, skiing, paragliding - essentially any hobby where you don't have reliable internet access. Each member of your private mesh can always see the location and distance of all other members and any text messages sent to your group chat.
 
 The radios automatically create a mesh to forward packets as needed, so everyone in the group can receive messages from even the furthest member. The radios will optionally work with your phone, but no phone is required.
 
 Note: Questions after reading this? See our new [forum](https://meshtastic.discourse.group/).
 
-### Uses
+## Uses
 
 - Outdoor sports where cellular coverage is limited. (Hiking, Skiing, Boating, Paragliding, Gliders etc..)
 - Applications where closed source GPS communicators just won't cut it (it is easy to add features for glider pilots etc...)
@@ -17,7 +17,7 @@ Note: Questions after reading this? See our new [forum](https://meshtastic.disco
 
 [![Youtube video demo](desk-video-screenshot.png)](https://www.youtube.com/watch?v=WlNbMbVZlHI "Meshtastic early demo")
 
-### Features
+## Features
 
 Not all of these features are fully implemented yet - see **important** disclaimers below. But they should be in by the time we decide to call this project beta (three months?)
 
@@ -41,7 +41,8 @@ For an detailed walk-through aimed at beginners, we recommend [meshtastic.letsta
 
 ### Related Groups
 
-Telegram group for **Italy**-based users [t.me/meshtastic_italia](http://t.me/meshtastic_italia) (Italian language, unofficial).
+Telegram group for **Italy**-based users [t.me/meshtastic_italia](http://t.me/meshtastic_italia) (Italian language, unofficial).<br/>
+Telegram group for **Russian**-based users [t.me/meshtastic_russia](https://t.me/meshtastic_russia) (Russian language, unofficial).
 
 # Updates
 

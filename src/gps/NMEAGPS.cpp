@@ -47,6 +47,8 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         t.tm_mon = d.month() - 1;
         t.tm_year = d.year() - 1900;
         t.tm_isdst = false;
+        DEBUG_MSG("NMEA GPS time %d\n", t.tm_sec);
+        
         perhapsSetRTC(RTCQualityGPS, t);
 
         return true;
@@ -87,11 +89,17 @@ bool NMEAGPS::lookForLocation()
         auto loc = reader.location.value();
         latitude = toDegInt(loc.lat);
         longitude = toDegInt(loc.lng);
-        foundLocation = true;
 
-        // expect gps pos lat=37.520825, lon=-122.309162, alt=158
-        DEBUG_MSG("new NMEA GPS pos lat=%f, lon=%f, alt=%d, hdop=%g, heading=%f\n", latitude * 1e-7, longitude * 1e-7, altitude,
-                  dop * 1e-2, heading * 1e-5);
+        // Some GPSes (Air530) seem to send a zero longitude when the current fix is bogus
+        if(longitude == 0)
+            DEBUG_MSG("Ignoring bogus NMEA position\n");
+        else {
+            foundLocation = true;
+
+            // expect gps pos lat=37.520825, lon=-122.309162, alt=158
+            DEBUG_MSG("new NMEA GPS pos lat=%f, lon=%f, alt=%d, hdop=%g, heading=%f\n", latitude * 1e-7, longitude * 1e-7, altitude,
+                    dop * 1e-2, heading * 1e-5);
+        }
     }
 
     return foundLocation;

@@ -1,15 +1,26 @@
+#include "plugins/ExternalNotificationPlugin.h"
 #include "plugins/NodeInfoPlugin.h"
 #include "plugins/PositionPlugin.h"
 #include "plugins/RemoteHardwarePlugin.h"
 #include "plugins/ReplyPlugin.h"
+#include "plugins/TextMessagePlugin.h" 
 #include "plugins/SerialPlugin.h"
 #include "plugins/TextMessagePlugin.h"
+#include "plugins/RoutingPlugin.h"
+#include "plugins/AdminPlugin.h"
+#ifndef NO_ESP32
+#include "plugins/SerialPlugin.h"
+#include "plugins/esp32/EnvironmentalMeasurementPlugin.h"
+#include "plugins/esp32/RangeTestPlugin.h"
+#include "plugins/esp32/StoreForwardPlugin.h"
+#endif
 
 /**
  * Create plugin instances here.  If you are adding a new plugin, you must 'new' it here (or somewhere else)
  */
 void setupPlugins()
 {
+    adminPlugin = new AdminPlugin();
     nodeInfoPlugin = new NodeInfoPlugin();
     positionPlugin = new PositionPlugin();
     textMessagePlugin = new TextMessagePlugin();
@@ -23,7 +34,20 @@ void setupPlugins()
 #ifndef NO_ESP32
     // Only run on an esp32 based device.
 
-    new SerialPlugin(); // Maintained by MC Hamster (Jm Casler) jm@casler.org
+    /*
+        Maintained by MC Hamster (Jm Casler) jm@casler.org
+    */
+    new SerialPlugin();
+    new ExternalNotificationPlugin();
+
+    // rangeTestPlugin = new RangeTestPlugin();
+    storeForwardPlugin = new StoreForwardPlugin();
+
+    new RangeTestPlugin();
+    // new StoreForwardPlugin();
+    new EnvironmentalMeasurementPlugin();
 #endif
 
+    // NOTE! This plugin must be added LAST because it likes to check for replies from other plugins and avoid sending extra acks
+    routingPlugin = new RoutingPlugin();
 }

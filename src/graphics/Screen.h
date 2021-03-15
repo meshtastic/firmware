@@ -57,13 +57,6 @@ class DebugInfo
     DebugInfo(const DebugInfo &) = delete;
     DebugInfo &operator=(const DebugInfo &) = delete;
 
-    /// Sets the name of the channel.
-    void setChannelNameStatus(const char *name)
-    {
-        concurrency::LockGuard guard(&lock);
-        channelName = name;
-    }
-
   private:
     friend Screen;
 
@@ -73,8 +66,6 @@ class DebugInfo
     void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     void drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-
-    std::string channelName;
 
     /// Protects all of internal state.
     concurrency::Lock lock;
@@ -145,6 +136,14 @@ class Screen : public concurrency::OSThread
         cmd.bluetooth_pin = pin;
         enqueueCmd(cmd);
     }
+
+    void startFirmwareUpdateScreen()
+    {
+        ScreenCmd cmd;
+        cmd.cmd = Cmd::START_FIRMWARE_UPDATE_SCREEN;
+        enqueueCmd(cmd);
+    }
+
 
     /// Stops showing the bluetooth PIN screen.
     void stopBluetoothPinScreen() { enqueueCmd(ScreenCmd{.cmd = Cmd::STOP_BLUETOOTH_PIN_SCREEN}); }
@@ -251,6 +250,7 @@ class Screen : public concurrency::OSThread
     void handleOnPress();
     void handleStartBluetoothPinScreen(uint32_t pin);
     void handlePrint(const char *text);
+    void handleStartFirmwareUpdateScreen();
 
     /// Rebuilds our list of frames (screens) to default ones.
     void setFrames();
