@@ -19,8 +19,6 @@ class MeshService
 {
     CallbackObserver<MeshService, const meshtastic::GPSStatus *> gpsObserver =
         CallbackObserver<MeshService, const meshtastic::GPSStatus *>(this, &MeshService::onGPSChanged);
-    CallbackObserver<MeshService, const MeshPacket *> packetReceivedObserver =
-        CallbackObserver<MeshService, const MeshPacket *>(this, &MeshService::handleFromRadio);
 
     /// received packets waiting for the phone to process them
     /// FIXME, change to a DropOldestQueue and keep a count of the number of dropped packets to ensure
@@ -79,6 +77,9 @@ class MeshService
     /// cache
     void sendToMesh(MeshPacket *p);
 
+    /** Attempt to cancel a previously sent packet from this _local_ node.  Returns true if a packet was found we could cancel */
+    bool cancelSending(PacketId id);
+
     /// Pull the latest power and time info into my nodeinfo
     NodeInfo *refreshMyNodeInfo();
 
@@ -88,9 +89,10 @@ class MeshService
     /// returns 0 to allow futher processing
     int onGPSChanged(const meshtastic::GPSStatus *arg);
 
-    /// Handle a packet that just arrived from the radio.  This method does _not_ free the provided packet.  If it needs
+    /// Handle a packet that just arrived from the radio.  This method does _ReliableRouternot_ free the provided packet.  If it needs
     /// to keep the packet around it makes a copy
     int handleFromRadio(const MeshPacket *p);
+    friend class RoutingPlugin;
 };
 
 extern MeshService service;

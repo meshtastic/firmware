@@ -32,4 +32,7 @@ class SerialConsole : public StreamAPI, public RedirectablePrint
     virtual void onConnectionChanged(bool connected);
 };
 
+// A simple wrapper to allow non class aware code write to the console
+void consolePrintf(const char *format, ...);
+
 extern SerialConsole console;

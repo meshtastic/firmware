@@ -71,12 +71,18 @@ void StreamAPI::writeStream()
 void StreamAPI::emitTxBuffer(size_t len)
 {
     if (len != 0) {
+        DEBUG_MSG("emit tx %d\n", len);
         txBuf[0] = START1;
         txBuf[1] = START2;
         txBuf[2] = (len >> 8) & 0xff;
         txBuf[3] = len & 0xff;
 
-        stream->write(txBuf, len + HEADER_LEN);
+        auto totalLen = len + HEADER_LEN;
+        stream->write(txBuf, totalLen);
+        /* for(size_t i = 0; i < totalLen; i++) {
+            stream->write(txBuf[i]);
+            // stream->flush();
+        } */
     }
 }
 
@@ -84,8 +90,8 @@ void StreamAPI::emitRebooted()
 {
     // In case we send a FromRadio packet
     memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
-    fromRadioScratch.which_variant = FromRadio_rebooted_tag;
-    fromRadioScratch.variant.rebooted = true;
+    fromRadioScratch.which_payloadVariant = FromRadio_rebooted_tag;
+    fromRadioScratch.rebooted = true;
 
     DEBUG_MSG("Emitting reboot packet for serial shell\n");
     emitTxBuffer(pb_encode_to_bytes(txBuf + HEADER_LEN, FromRadio_size, FromRadio_fields, &fromRadioScratch));

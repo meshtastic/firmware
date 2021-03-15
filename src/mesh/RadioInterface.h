@@ -29,6 +29,9 @@ typedef struct {
      * The bottom three bits of flags are use to store hop_limit when sent over the wire.
      **/
     uint8_t flags;
+
+    /** The channel hash - used as a hint for the decoder to limit which channels we consider */
+    uint8_t channel;
 } PacketHeader;
 
 /**
@@ -54,6 +57,8 @@ class RadioInterface
     uint32_t shortPacketMsec;
 
   protected:
+    bool disabled = false;
+
     float bw = 125;
     uint8_t sf = 9;
     uint8_t cr = 7;
@@ -98,12 +103,18 @@ class RadioInterface
     /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.
     virtual bool sleep() { return true; }
 
+    /// Disable this interface (while disabled, no packets can be sent or received)
+    void disable() { disabled = true; sleep(); }
+
     /**
      * Send a packet (possibly by enquing in a private fifo).  This routine will
      * later free() the packet to pool.  This routine is not allowed to stall.
      * If the txmit queue is full it might return an error
      */
     virtual ErrorCode send(MeshPacket *p) = 0;
+
+    /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
+    virtual bool cancelSending(NodeNum from, PacketId id) { return false; }
 
     // methods from radiohead
 
@@ -133,8 +144,21 @@ class RadioInterface
     uint32_t getPacketTime(MeshPacket *p);
     uint32_t getPacketTime(uint32_t totalPacketLen);
 
+    /**
+     * Get the channel we saved.
+     */
+    uint32_t getChannelNum();
+
+    /**
+     * Get the frequency we saved.
+     */
+    float getFreq();
+
   protected:
     int8_t power = 17; // Set by applyModemConfig()
+
+    float savedFreq;
+    uint32_t savedChannelNum;
 
     /***
      * given a packet set sendingPacket and decode the protobufs into radiobuf.  Returns # of bytes to send (including the
@@ -156,6 +180,16 @@ class RadioInterface
      * These paramaters will be pull from the channelSettings global
      */
     virtual void applyModemConfig();
+
+    /**
+     * Save the frequency we selected for later reuse.
+     */
+    virtual void saveFreq(float savedFreq);
+
+    /**
+     * Save the chanel we selected for later reuse.
+     */
+    virtual void saveChannelNum(uint32_t savedChannelNum);
 
   private:
     /// Return 0 if sleep is okay

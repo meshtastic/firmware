@@ -2,6 +2,7 @@
 #include "MeshTypes.h"
 #include "NodeDB.h"
 #include "SPILock.h"
+#include "error.h"
 #include "mesh-pb-constants.h"
 #include <configuration.h>
 #include <pb_decode.h>
@@ -70,6 +71,16 @@ bool RadioLibInterface::canSendImmediately()
     if (busyTx || busyRx) {
         if (busyTx)
             DEBUG_MSG("Can not send yet, busyTx\n");
+        // If we've been trying to send the same packet more than one minute and we haven't gotten a
+        // TX IRQ from the radio, the radio is probably broken.
+        if (busyTx && (millis() - lastTxStart > 60000)) {
+            DEBUG_MSG("Hardware Failure! busyTx for more than 60s\n");
+            recordCriticalError(CriticalErrorCode_TransmitFailed);
+#ifndef NO_ESP32
+            if (busyTx && (millis() - lastTxStart > 65000)) // After 5s more, reboot
+                ESP.restart();
+#endif
+        }
         if (busyRx)
             DEBUG_MSG("Can not send yet, busyRx\n");
         return false;
@@ -82,13 +93,18 @@ bool RadioLibInterface::canSendImmediately()
 /// bluetooth comms code.  If the txmit queue is empty it might return an error
 ErrorCode RadioLibInterface::send(MeshPacket *p)
 {
+    if (disabled) {
+        packetPool.release(p);
+        return ERRNO_DISABLED;
+    }
+
     // Sometimes when testing it is useful to be able to never turn on the xmitter
 #ifndef LORA_DISABLE_SENDING
     printPacket("enqueuing for send", p);
     uint32_t xmitMsec = getPacketTime(p);
 
     DEBUG_MSG("txGood=%d,rxGood=%d,rxBad=%d\n", txGood, rxGood, rxBad);
-    ErrorCode res = txQueue.enqueue(p, 0) ? ERRNO_OK : ERRNO_UNKNOWN;
+    ErrorCode res = txQueue.enqueue(p) ? ERRNO_OK : ERRNO_UNKNOWN;
 
     if (res != ERRNO_OK) { // we weren't able to queue it, so we must drop it to prevent leaks
         packetPool.release(p);
@@ -98,7 +114,6 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
     // Count the packet toward our TX airtime utilization.
     //   We only count it if it can be added to the TX queue.
     airTime->logAirtime(TX_LOG, xmitMsec);
-    //airTime.logAirtime(TX_LOG, xmitMsec);
 
     // We want all sending/receiving to be done by our daemon thread, We use a delay here because this packet might have been sent
     // in response to a packet we just received.  So we want to make sure the other side has had a chance to reconfigure its radio
@@ -107,17 +122,29 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
     return res;
 #else
     packetPool.release(p);
-    return ERRNO_UNKNOWN;
+    return ERRNO_DISABLED;
 #endif
 }
 
 bool RadioLibInterface::canSleep()
 {
-    bool res = txQueue.isEmpty();
+    bool res = txQueue.empty();
     if (!res) // only print debug messages if we are vetoing sleep
         DEBUG_MSG("radio wait to sleep, txEmpty=%d\n", res);
 
     return res;
+}
+
+/** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
+bool RadioLibInterface::cancelSending(NodeNum from, PacketId id)
+{
+    auto p = txQueue.remove(from, id);
+    if (p)
+        packetPool.release(p); // free the packet we just removed
+
+    bool result = (p != NULL);
+    DEBUG_MSG("cancelSending id=0x%x, removed=%d\n", id, result);
+    return result;
 }
 
 /** radio helper thread callback.
@@ -153,12 +180,12 @@ void RadioLibInterface::onNotify(uint32_t notification)
 
         // If we are not currently in receive mode, then restart the timer and try again later (this can happen if the main thread
         // has placed the unit into standby)  FIXME, how will this work if the chipset is in sleep mode?
-        if (!txQueue.isEmpty()) {
+        if (!txQueue.empty()) {
             if (!canSendImmediately()) {
                 startTransmitTimer(); // try again in a little while
             } else {
                 // Send any outgoing packets we have ready
-                MeshPacket *txp = txQueue.dequeuePtr(0);
+                MeshPacket *txp = txQueue.dequeue();
                 assert(txp);
                 startSend(txp);
             }
@@ -174,7 +201,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
 void RadioLibInterface::startTransmitTimer(bool withDelay)
 {
     // If we have work to do and the timer wasn't already scheduled, schedule it now
-    if (!txQueue.isEmpty()) {
+    if (!txQueue.empty()) {
         uint32_t delay = !withDelay ? 1 : getTxDelayMsec();
         // DEBUG_MSG("xmit timer %d\n", delay);
         notifyLater(delay, TRANSMIT_DELAY_COMPLETED, false); // This will implicitly enable
@@ -217,13 +244,14 @@ void RadioLibInterface::handleReceiveInterrupt()
     size_t length = iface->getPacketLength();
 
     xmitMsec = getPacketTime(length);
-    airTime->logAirtime(RX_ALL_LOG, xmitMsec);
-    //airTime.logAirtime(RX_ALL_LOG, xmitMsec);
 
     int state = iface->readData(radiobuf, length);
     if (state != ERR_NONE) {
         DEBUG_MSG("ignoring received packet due to error=%d\n", state);
         rxBad++;
+
+        airTime->logAirtime(RX_ALL_LOG, xmitMsec);
+
     } else {
         // Skip the 4 headers that are at the beginning of the rxBuf
         int32_t payloadLen = length - sizeof(PacketHeader);
@@ -233,6 +261,7 @@ void RadioLibInterface::handleReceiveInterrupt()
         if (payloadLen < 0) {
             DEBUG_MSG("ignoring received packet too short\n");
             rxBad++;
+            airTime->logAirtime(RX_ALL_LOG, xmitMsec);
         } else {
             const PacketHeader *h = (PacketHeader *)radiobuf;
 
@@ -246,22 +275,22 @@ void RadioLibInterface::handleReceiveInterrupt()
             mp->from = h->from;
             mp->to = h->to;
             mp->id = h->id;
+            mp->channel = h->channel;
             assert(HOP_MAX <= PACKET_FLAGS_HOP_MASK); // If hopmax changes, carefully check this code
             mp->hop_limit = h->flags & PACKET_FLAGS_HOP_MASK;
             mp->want_ack = !!(h->flags & PACKET_FLAGS_WANT_ACK_MASK);
 
             addReceiveMetadata(mp);
 
-            mp->which_payload = MeshPacket_encrypted_tag; // Mark that the payload is still encrypted at this point
-            assert(((uint32_t) payloadLen) <= sizeof(mp->encrypted.bytes));
+            mp->which_payloadVariant = MeshPacket_encrypted_tag; // Mark that the payload is still encrypted at this point
+            assert(((uint32_t)payloadLen) <= sizeof(mp->encrypted.bytes));
             memcpy(mp->encrypted.bytes, payload, payloadLen);
             mp->encrypted.size = payloadLen;
 
             printPacket("Lora RX", mp);
 
-            xmitMsec = getPacketTime(mp);
+            //xmitMsec = getPacketTime(mp);
             airTime->logAirtime(RX_LOG, xmitMsec);
-            //airTime.logAirtime(RX_LOG, xmitMsec);
 
             deliverToReceiver(mp);
         }
@@ -272,15 +301,20 @@ void RadioLibInterface::handleReceiveInterrupt()
 void RadioLibInterface::startSend(MeshPacket *txp)
 {
     printPacket("Starting low level send", txp);
-    setStandby(); // Cancel any already in process receives
+    if (disabled) {
+        DEBUG_MSG("startSend is dropping tx packet because we are disabled\n");
+        packetPool.release(txp);
+    } else {
+        setStandby(); // Cancel any already in process receives
 
-    configHardwareForSend(); // must be after setStandby
+        configHardwareForSend(); // must be after setStandby
 
-    size_t numbytes = beginSending(txp);
+        size_t numbytes = beginSending(txp);
 
-    int res = iface->startTransmit(radiobuf, numbytes);
-    assert(res == ERR_NONE);
+        int res = iface->startTransmit(radiobuf, numbytes);
+        assert(res == ERR_NONE);
 
-    // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
-    enableInterrupt(isrTxLevel0);
+        // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
+        enableInterrupt(isrTxLevel0);
+    }
 }

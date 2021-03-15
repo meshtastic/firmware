@@ -15,7 +15,7 @@ struct GlobalPacketId {
 
     GlobalPacketId(const MeshPacket *p)
     {
-        node = p->from;
+        node = getFrom(p);
         id = p->id;
     }
 
@@ -90,7 +90,7 @@ class ReliableRouter : public FloodingRouter
     /**
      * Look for acks/naks or someone retransmitting us
      */
-    virtual void sniffReceived(const MeshPacket *p);
+    virtual void sniffReceived(const MeshPacket *p, const Routing *c);
 
     /**
      * Try to find the pending packet record for this ID (or NULL if not found)
@@ -109,10 +109,6 @@ class ReliableRouter : public FloodingRouter
     PendingPacket *startRetransmission(MeshPacket *p);
 
   private:
-    /**
-     * Send an ack or a nak packet back towards whoever sent idFrom
-     */
-    void sendAckNak(bool isAck, NodeNum to, PacketId idFrom);
 
     /**
      * Stop any retransmissions we are doing of the specified node/packet ID pair
@@ -129,7 +125,5 @@ class ReliableRouter : public FloodingRouter
      */
     int32_t doRetransmissions();
 
-    void setNextTx(PendingPacket *pending) {  
-      assert(iface);
-      pending->nextTxMsec = millis() + iface->getRetransmissionMsec(pending->packet); }
+    void setNextTx(PendingPacket *pending);
 };

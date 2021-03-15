@@ -9,11 +9,10 @@
 #include "mesh-pb-constants.h"
 
 extern DeviceState devicestate;
+extern ChannelFile channelFile;
 extern MyNodeInfo &myNodeInfo;
-extern RadioConfig &radioConfig;
-extern ChannelSettings &channelSettings;
+extern RadioConfig radioConfig;
 extern User &owner;
-extern const char *channelName;
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const NodeInfo *n);
@@ -44,7 +43,7 @@ class NodeDB
     void init();
 
     /// write to flash
-    void saveToDisk();
+    void saveToDisk(), saveChannelsToDisk();
 
     /** Reinit radio config if needed, because either:
      * a) sometimes a buggy android app might send us bogus settings or
@@ -119,7 +118,7 @@ class NodeDB
     void loadFromDisk();
 
     /// Reinit device state from scratch (not loading from disk)
-    void installDefaultDeviceState();
+    void installDefaultDeviceState(), installDefaultRadioConfig(), installDefaultChannels();
 };
 
 /**
@@ -129,23 +128,6 @@ class NodeDB
 extern NodeNum displayedNodeNum;
 
 extern NodeDB nodeDB;
-
-/**
- * Generate a short suffix used to disambiguate channels that might have the same "name" entered by the human but different PSKs.
- * The ideas is that the PSK changing should be visible to the user so that they see they probably messed up and that's why they
-their nodes
- * aren't talking to each other.
- *
- * This string is of the form "#name-XY".
- *
- * Where X is a letter from A to Z (base26), and formed by xoring all the bytes of the PSK together.
- * Y is not yet used but should eventually indicate 'speed/range' of the link
- *
- * This function will also need to be implemented in GUI apps that talk to the radio.
- *
- * https://github.com/meshtastic/Meshtastic-device/issues/269
- */
-const char *getChannelName();
 
 /*
   If is_router is set, we use a number of different default values
@@ -173,7 +155,7 @@ const char *getChannelName();
 */
 
 // Our delay functions check for this for times that should never expire
-#define DELAY_FOREVER 0xffffffff
+#define NODE_DELAY_FOREVER 0xffffffff
 
 #define IF_ROUTER(routerVal, normalVal) (radioConfig.preferences.is_router ? (routerVal) : (normalVal))
 
@@ -187,8 +169,8 @@ PREF_GET(position_broadcast_secs, IF_ROUTER(12 * 60 * 60, 15 * 60))
 PREF_GET(wait_bluetooth_secs, IF_ROUTER(1, 60))
 
 PREF_GET(screen_on_secs, 60)
-PREF_GET(mesh_sds_timeout_secs, IF_ROUTER(DELAY_FOREVER, 2 * 60 * 60))
-PREF_GET(phone_sds_timeout_sec, IF_ROUTER(DELAY_FOREVER, 2 * 60 * 60))
+PREF_GET(mesh_sds_timeout_secs, IF_ROUTER(NODE_DELAY_FOREVER, 2 * 60 * 60))
+PREF_GET(phone_sds_timeout_sec, IF_ROUTER(NODE_DELAY_FOREVER, 2 * 60 * 60))
 PREF_GET(sds_secs, 365 * 24 * 60 * 60)
 
 // We default to sleeping (with bluetooth off for 5 minutes at a time).  This seems to be a good tradeoff between
@@ -202,3 +184,4 @@ PREF_GET(min_wake_secs, 10)
  * might have changed is incremented.  Allows others to detect they might now be on a new channel.
  */
 extern uint32_t radioGeneration;
+

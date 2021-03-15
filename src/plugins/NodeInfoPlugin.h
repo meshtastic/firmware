@@ -4,14 +4,18 @@
 /**
  * NodeInfo plugin for sending/receiving NodeInfos into the mesh
  */
-class NodeInfoPlugin : public ProtobufPlugin<User>
+class NodeInfoPlugin : public ProtobufPlugin<User>, private concurrency::OSThread
 {
+    /// The id of the last packet we sent, to allow us to cancel it if we make something fresher
+    PacketId prevPacketId = 0;
+    
+    uint32_t currentGeneration = 0;
   public:
     /** Constructor
      * name is for debugging output
      */
-    NodeInfoPlugin() : ProtobufPlugin("nodeinfo", PortNum_NODEINFO_APP, User_fields) {}
-
+    NodeInfoPlugin();
+    
     /**
      * Send our NodeInfo into the mesh
      */
@@ -22,11 +26,14 @@ class NodeInfoPlugin : public ProtobufPlugin<User>
 
     @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
-    virtual bool handleReceivedProtobuf(const MeshPacket &mp, const User &p);
+    virtual bool handleReceivedProtobuf(const MeshPacket &mp, const User *p);
 
     /** Messages can be received that have the want_response bit set.  If set, this callback will be invoked
      * so that subclasses can (optionally) send a response back to the original sender.  */
     virtual MeshPacket *allocReply();
+
+    /** Does our periodic broadcast */
+    virtual int32_t runOnce();      
 };
 
 extern NodeInfoPlugin *nodeInfoPlugin;

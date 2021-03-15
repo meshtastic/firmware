@@ -25,7 +25,7 @@ uint8_t GPS::i2cAddress = 0;
 
 GPS *gps;
 
-/// Multiple GPS instances might use the same serial port (in sequence), but we can 
+/// Multiple GPS instances might use the same serial port (in sequence), but we can
 /// only init that port once.
 static bool didSerialInit;
 
@@ -33,7 +33,7 @@ bool GPS::setupGPS()
 {
     if (_serial_gps && !didSerialInit) {
         didSerialInit = true;
-        
+
 #ifdef GPS_RX_PIN
         _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
 #else
@@ -73,6 +73,13 @@ bool GPS::setup()
     return ok;
 }
 
+GPS::~GPS()
+{
+    // we really should unregister our sleep observer
+    notifySleepObserver.unobserve();
+    notifyDeepSleepObserver.unobserve();
+}
+
 // Allow defining the polarity of the WAKE output.  default is active high
 #ifndef GPS_WAKE_ACTIVE
 #define GPS_WAKE_ACTIVE 1
@@ -86,8 +93,8 @@ void GPS::wake()
 #endif
 }
 
-
-void GPS::sleep() {
+void GPS::sleep()
+{
 #ifdef PIN_GPS_WAKE
     digitalWrite(PIN_GPS_WAKE, GPS_WAKE_ACTIVE ? 0 : 1);
     pinMode(PIN_GPS_WAKE, OUTPUT);
@@ -158,7 +165,8 @@ uint32_t GPS::getWakeTime() const
         return t; // already maxint
 
     if (t == 0)
-        t = radioConfig.preferences.is_router ? 5 * 60 : 15 * 60; // Allow up to 15 mins for each attempt (probably will be much less if we can find sats) or less if a router
+        t = radioConfig.preferences.is_router ? 5 * 60 : 15 * 60; // Allow up to 15 mins for each attempt (probably will be much
+                                                                  // less if we can find sats) or less if a router
 
     t *= 1000; // msecs
 
@@ -179,8 +187,8 @@ uint32_t GPS::getSleepTime() const
     if (t == UINT32_MAX)
         return t; // already maxint
 
-    if (t == 0) // default - unset in preferences
-        t = radioConfig.preferences.is_router  ? 24 * 60 * 60 : 2 * 60; // 2 mins or once per day for routers
+    if (t == 0)                                                        // default - unset in preferences
+        t = radioConfig.preferences.is_router ? 24 * 60 * 60 : 2 * 60; // 2 mins or once per day for routers
 
     t *= 1000;
 
