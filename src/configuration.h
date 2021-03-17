@@ -411,9 +411,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #elif NRF52_SERIES
 
-#ifndef HW_VENDOR
 #define HW_VENDOR HardwareModel_NRF52_UNKNOWN
-#endif
 
 #elif PORTDUINO
 
