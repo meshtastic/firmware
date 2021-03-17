@@ -126,5 +126,5 @@ MeshPacket *AdminPlugin::allocReply()
 AdminPlugin::AdminPlugin() : ProtobufPlugin("Admin", PortNum_ADMIN_APP, AdminMessage_fields)
 {
     // restrict to the admin channel for rx
-    boundChannel = "admin";
+    boundChannel = Channels::adminChannel;
 }

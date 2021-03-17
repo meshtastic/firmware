@@ -224,7 +224,8 @@ void NRF52Bluetooth::setup()
 
     // Configure and Start the Device Information Service
     DEBUG_MSG("Configuring the Device Information Service\n");
-    bledis.setManufacturer(HW_VENDOR);
+    // FIXME, we should set a mfg string based on our HW_VENDOR enum
+    // bledis.setManufacturer(HW_VENDOR);
     bledis.setModel(optstr(HW_VERSION));
     bledis.setFirmwareRev(optstr(APP_VERSION));
     bledis.begin();

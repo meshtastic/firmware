@@ -195,6 +195,9 @@ void NodeDB::init()
     // keep using that nodenum forever. Crummy guess at our nodenum (but we will check against the nodedb to avoid conflicts)
     pickNewNodeNum();
 
+    // Set our board type so we can share it with others
+    owner.hw_model = HW_VENDOR;
+
     // Include our owner in the node db under our nodenum
     NodeInfo *info = getOrCreateNode(getNodeNum());
     info->user = owner;
@@ -223,7 +226,10 @@ void NodeDB::init()
     }
 
     strncpy(myNodeInfo.firmware_version, optstr(APP_VERSION), sizeof(myNodeInfo.firmware_version));
-    strncpy(myNodeInfo.hw_model, HW_VENDOR, sizeof(myNodeInfo.hw_model));
+    
+    // hw_model is no longer stored in myNodeInfo (as of 1.2.11) - we now store it as an enum in nodeinfo
+    myNodeInfo.hw_model_deprecated[0] = '\0';
+    // strncpy(myNodeInfo.hw_model, HW_VENDOR, sizeof(myNodeInfo.hw_model));
 
     resetRadioConfig(); // If bogus settings got saved, then fix them
 
