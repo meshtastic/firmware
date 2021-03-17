@@ -22,8 +22,6 @@
 #define HW_VERSION_US 1
 #undef HW_VERSION
 #define HW_VERSION "1.0"
-#undef HW_VENDOR
-#define HW_VENDOR "lora_ISP4520"
 
 #define USE_SEGGER
 /*----------------------------------------------------------------------------
