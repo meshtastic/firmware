@@ -26,7 +26,8 @@ typedef enum _HardwareModel {
     HardwareModel_PPR = 34,
     HardwareModel_GENIEBLOCKS = 35,
     HardwareModel_NRF52_UNKNOWN = 36,
-    HardwareModel_PORTDUINO = 37
+    HardwareModel_PORTDUINO = 37,
+    HardwareModel_ANDROID_SIM = 38
 } HardwareModel;
 
 typedef enum _Constants {
@@ -193,8 +194,8 @@ typedef struct _ToRadio {
 
 /* Helper constants for enums */
 #define _HardwareModel_MIN HardwareModel_UNSET
-#define _HardwareModel_MAX HardwareModel_PORTDUINO
-#define _HardwareModel_ARRAYSIZE ((HardwareModel)(HardwareModel_PORTDUINO+1))
+#define _HardwareModel_MAX HardwareModel_ANDROID_SIM
+#define _HardwareModel_ARRAYSIZE ((HardwareModel)(HardwareModel_ANDROID_SIM+1))
 
 #define _Constants_MIN Constants_Unused
 #define _Constants_MAX Constants_DATA_PAYLOAD_LEN

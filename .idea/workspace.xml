@@ -14,11 +14,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="58922733-b05b-4b90-9655-b9b18914977a" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.gitignore" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/CMakeLists.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/mesh/wifi/WiFiServerAPI.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/mesh/wifi/WiFiServerAPI.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/portduino/PortduinoGlue.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/portduino/PortduinoGlue.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/software/TODO.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/software/TODO.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/proto" beforeDir="false" afterPath="$PROJECT_DIR$/proto" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mesh/generated/mesh.pb.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/mesh/generated/mesh.pb.h" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -51,11 +50,6 @@
     <property name="settings.editor.selected.configurable" value="CMakeSettings" />
   </component>
   <component name="RunManager" selected="PlatformIO.PlatformIO Upload">
-    <configuration default="true" type="CLionExternalRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" PASS_PARENT_ENVS_2="true">
-      <method v="2">
-        <option name="CLION.EXTERNAL.BUILD" enabled="true" />
-      </method>
-    </configuration>
     <configuration default="true" type="CLion_Remote" version="1" remoteCommand="tcp:localhost:2345" symbolFile="" sysroot="">
       <debugger kind="GDB" isBundled="true" />
       <method v="2" />
@@ -99,7 +93,9 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1615788661896</updated>
-      <workItem from="1615788663210" duration="4775000" />
+      <workItem from="1615788663210" duration="6661000" />
+      <workItem from="1615938346019" duration="1208000" />
+      <workItem from="1615971126983" duration="5945000" />
     </task>
     <servers />
   </component>
@@ -116,14 +112,20 @@
         </entry>
       </map>
     </option>
+    <option name="oldMeFiltersMigrated" value="true" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
       <breakpoints>
         <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
-          <url>file://$PROJECT_DIR$/src/main.cpp</url>
-          <line>282</line>
-          <option name="timeStamp" value="1" />
+          <url>file://$PROJECT_DIR$/src/mesh/StreamAPI.cpp</url>
+          <line>20</line>
+          <option name="timeStamp" value="4" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
+          <url>file://$PROJECT_DIR$/src/mesh/wifi/WiFiServerAPI.cpp</url>
+          <line>53</line>
+          <option name="timeStamp" value="6" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>

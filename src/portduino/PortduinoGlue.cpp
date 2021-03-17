@@ -28,7 +28,7 @@ void getMacAddr(uint8_t *dmac)
 
 void setBluetoothEnable(bool on)
 {
-    notImplemented("setBluetoothEnable");
+    // not needed
 }
 
 void cpuDeepSleep(uint64_t msecs) {
