@@ -19,12 +19,13 @@
 #ifndef _VARIANT_LORA_ISP4520_
 #define _VARIANT_LORA_ISP4520_
 
-#define HW_VERSION_US
+#define HW_VERSION_US 1
 #undef HW_VERSION
-#define HW_VERSION "0.1.0"
+#define HW_VERSION "1.0"
 #undef HW_VENDOR
 #define HW_VENDOR "lora_ISP4520"
 
+#define USE_SEGGER
 /*----------------------------------------------------------------------------
  *        Headers
  *----------------------------------------------------------------------------*/
@@ -33,7 +34,7 @@
 
 #define USE_LFXO
 
-#define USE_SEGGER
+//#define USE_SEGGER
 
 // Number of pins defined in PinDescription array
 #define PINS_COUNT (16)
