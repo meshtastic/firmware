@@ -35,6 +35,8 @@ shift "$((OPTIND-1))"
 if [ -f "${FILENAME}" ]; then
 	echo "Trying to flash update ${FILENAME}."
 	esptool.py --baud 921600 write_flash 0x10000 ${FILENAME}
+	echo "Erasing the otadata partition, which will turn off flash flippy-flop and force the first image to be used"
+	esptool.py --baud 921600 erase_region 0xe000 0x2000
 else
 	echo "Invalid file: ${FILENAME}"
 	show_help

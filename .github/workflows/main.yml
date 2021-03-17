@@ -32,5 +32,5 @@ jobs:
       - name: Build for lora-relay-v1
         run: platformio run -e lora-relay-v1 
       # Turn off linux for now
-      #- name: Build for linux
-      #  run: platformio run -e linux
+      name: Build for native
+        run: platformio run -e native
