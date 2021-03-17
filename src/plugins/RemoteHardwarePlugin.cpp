@@ -69,7 +69,8 @@ bool RemoteHardwarePlugin::handleReceivedProtobuf(const MeshPacket &req, const H
 
     case HardwareMessage_Type_READ_GPIOS: {
         // Print notification to LCD screen
-        screen->print("Read GPIOs\n");
+        if(screen)
+            screen->print("Read GPIOs\n");
 
         uint64_t res = digitalReads(p.gpio_mask);
 
