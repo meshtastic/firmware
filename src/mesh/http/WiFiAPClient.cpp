@@ -14,8 +14,6 @@ static void WiFiEvent(WiFiEvent_t event);
 // DNS Server for the Captive Portal
 DNSServer dnsServer;
 
-static WiFiServerPort *apiPort;
-
 uint8_t wifiDisconnectReason = 0;
 
 // Stores our hostname
@@ -180,14 +178,7 @@ void initWifi(bool forceSoftAP)
         DEBUG_MSG("Not using WIFI\n");
 }
 
-static void initApiServer()
-{
-    // Start API server on port 4403
-    if (!apiPort) {
-        apiPort = new WiFiServerPort();
-        apiPort->init();
-    }
-}
+
 
 // Called by the Espressif SDK to
 static void WiFiEvent(WiFiEvent_t event)

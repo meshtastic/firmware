@@ -4,12 +4,6 @@ set -e
 
 VERSION=`bin/buildinfo.py`
 
-# We now only do regionless builds
-COUNTRIES=""
-#COUNTRIES="US EU433 EU865 CN JP ANZ KR"
-#COUNTRIES=US
-#COUNTRIES=CN
-
 BOARDS_ESP32="tlora-v2 tlora-v1 tlora-v2-1-1.6 tbeam heltec tbeam0.7"
 #BOARDS_ESP32=tbeam
 
@@ -30,26 +24,17 @@ mkdir -p $OUTDIR/bins/universal $OUTDIR/elfs/universal
 # build the named environment and copy the bins to the release directory
 function do_build() {
 	BOARD=$1
-	COUNTRY=$2
 	isNrf=$3
 	
-    echo "Building $COUNTRY for $BOARD with $PLATFORMIO_BUILD_FLAGS"
+    echo "Building for $BOARD with $PLATFORMIO_BUILD_FLAGS"
     rm -f .pio/build/$BOARD/firmware.*
 
     # The shell vars the build tool expects to find
     export APP_VERSION=$VERSION
 
     # Are we building a universal/regionless rom?
-    if [ "x$COUNTRY" != "x" ]
-    then
-        export HW_VERSION="1.0-$COUNTRY"
-        export COUNTRY
-        basename=firmware-$BOARD-$COUNTRY-$VERSION
-    else
-        export HW_VERSION="1.0"
-        unset COUNTRY
-        basename=universal/firmware-$BOARD-$VERSION
-    fi
+    export HW_VERSION="1.0"
+    basename=universal/firmware-$BOARD-$VERSION
 
     pio run --environment $BOARD # -v
     SRCELF=.pio/build/$BOARD/firmware.elf
@@ -71,10 +56,6 @@ function do_boards() {
 	declare boards=$1
 	declare isNrf=$2
 	for board in $boards; do
-		for country in $COUNTRIES; do 
-		    do_build $board $country "$isNrf"   
-		done
-
 		# Build universal
 		do_build $board "" "$isNrf" 
 	done

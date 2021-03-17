@@ -163,7 +163,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #if defined(TBEAM_V10)
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "tbeam"
+#define HW_VENDOR HardwareModel_TBEAM
 
 // #define BUTTON_NEED_PULLUP // if set we need to turn on the internal CPU pullup during sleep
 
@@ -204,7 +204,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #elif defined(TBEAM_V07)
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "tbeam0.7"
+#define HW_VENDOR HardwareModel_TBEAM0p7
 
 // #define BUTTON_NEED_PULLUP // if set we need to turn on the internal CPU pullup during sleep
 
@@ -228,7 +228,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #elif defined(ARDUINO_HELTEC_WIFI_LORA_32_V2)
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "heltec"
+#define HW_VENDOR HardwareModel_HELTEC
 
 // the default ESP32 Pin of 15 is the Oled SCL, set to 36 and 37 and works fine.
 // Tested on Neo6m module.
@@ -258,7 +258,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #elif defined(TLORA_V1)
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "tlora-v1"
+#define HW_VENDOR HardwareModel_TLORA_V1
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 #define GPS_RX_PIN 36
@@ -282,7 +282,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #elif defined(TLORA_V2)
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "tlora-v2"
+#define HW_VENDOR HardwareModel_TLORA_V2
 
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
@@ -311,7 +311,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #elif defined(TLORA_V1_3)
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "tlora-v1-3"
+#define HW_VENDOR HardwareModel_TLORA_V1p3
 
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
@@ -338,7 +338,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #elif defined(TLORA_V2_1_16)
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "tlora-v2-1-1.6"
+#define HW_VENDOR HardwareModel_TLORA_V2_1p6_
 
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
@@ -366,7 +366,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #elif defined(GENIEBLOCKS)
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "genieblocks"
+#define HW_VENDOR HardwareModel_GENIEBLOCKS
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 #define GPS_RX_PIN 5
@@ -399,7 +399,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifdef ARDUINO_NRF52840_PCA10056
 
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "nrf52dk"
+#define HW_VENDOR HardwareModel_NRF52840DK
 
 // This board uses 0 to be mean LED on
 #undef LED_INVERTED
@@ -407,17 +407,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #elif defined(ARDUINO_NRF52840_PPR)
 
-#define HW_VENDOR "ppr"
+#define HW_VENDOR HardwareModel_PPR
 
 #elif NRF52_SERIES
 
 #ifndef HW_VENDOR
-#define HW_VENDOR "nrf52unknown" // FIXME - unknown nrf52 board
+#define HW_VENDOR HardwareModel_NRF52_UNKNOWN
 #endif
 
 #elif PORTDUINO
 
-#define HW_VENDOR "portduino"
+#define HW_VENDOR HardwareModel_PORTDUINO
 
 #define USE_SIM_RADIO
 
