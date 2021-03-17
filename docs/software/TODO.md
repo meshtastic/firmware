@@ -4,6 +4,9 @@ You probably don't care about this section - skip to the next one.
 
 ## 1.2 cleanup & multichannel support:
 
+* before next relase: test empty channel sets on android
+* test link sharing on android
+  
 * DONE cleanup the external notification and serial plugins
 * non ack version of stress test fails sometimes!
 * timestamps on oled screen are wrong - don't seem to be updating based on message rx
