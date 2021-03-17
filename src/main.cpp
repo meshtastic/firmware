@@ -32,6 +32,10 @@
 #include "nimble/BluetoothUtil.h"
 #endif
 
+#ifdef PORTDUINO
+#include "mesh/wifi/WiFiServerAPI.h"
+#endif
+
 #include "RF95Interface.h"
 #include "SX1262Interface.h"
 
@@ -537,6 +541,10 @@ void setup()
 
     // Start web server thread.
     webServerThread = new WebServerThread();
+#endif
+
+#ifdef PORTDUINO
+    initApiServer();
 #endif
 
     // Start airtime logger thread.

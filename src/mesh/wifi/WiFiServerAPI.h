@@ -48,3 +48,5 @@ class WiFiServerPort : public WiFiServer, private concurrency::OSThread
 
     int32_t runOnce();
 };
+
+void initApiServer();

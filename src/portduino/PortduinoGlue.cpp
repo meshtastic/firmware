@@ -28,7 +28,7 @@ void getMacAddr(uint8_t *dmac)
 
 void setBluetoothEnable(bool on)
 {
-    notImplemented("setBluetoothEnable");
+    // not needed
 }
 
 void cpuDeepSleep(uint64_t msecs) {
@@ -88,7 +88,10 @@ public:
  */
 void  portduinoSetup() {
   printf("Setting up Meshtastic on Porduino...\n");
-  gpioBind(new R595PolledIrqPin());
+
+  // FIXME: disable while not testing with real hardware
+  // gpioBind(new R595PolledIrqPin());
+
   // gpioBind((new SimGPIOPin(LORA_RESET, "LORA_RESET")));
   // gpioBind((new SimGPIOPin(RF95_NSS, "RF95_NSS"))->setSilent());
 }
