@@ -10,6 +10,10 @@ static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0
 
 Channels channels;
 
+const char *Channels::adminChannel = "admin";
+const char *Channels::gpioChannel = "gpio";
+const char *Channels::serialChannel = "serial";
+
 uint8_t xorHash(const uint8_t *p, size_t len)
 {
     uint8_t code = 0;

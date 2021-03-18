@@ -32,6 +32,10 @@
 #include "nimble/BluetoothUtil.h"
 #endif
 
+#ifdef PORTDUINO
+#include "mesh/wifi/WiFiServerAPI.h"
+#endif
+
 #include "RF95Interface.h"
 #include "SX1262Interface.h"
 
@@ -365,7 +369,7 @@ void setup()
 #endif
 
     // Hello
-    DEBUG_MSG("Meshtastic hwvendor=%s, swver=%s, hwver=%s\n", HW_VENDOR, optstr(APP_VERSION), optstr(HW_VERSION));
+    DEBUG_MSG("Meshtastic hwvendor=%d, swver=%s, hwver=%s\n", HW_VENDOR, optstr(APP_VERSION), optstr(HW_VERSION));
 
 #ifndef NO_ESP32
     // Don't init display if we don't have one or we are waking headless due to a timer event
@@ -537,6 +541,10 @@ void setup()
 
     // Start web server thread.
     webServerThread = new WebServerThread();
+#endif
+
+#ifdef PORTDUINO
+    initApiServer();
 #endif
 
     // Start airtime logger thread.
