@@ -15,10 +15,10 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: 3.x
-      - name: Install Platform IO
+      - name: Install Platform IO and meshtastic-python
         run: |
           python -m pip install --upgrade pip
-          pip install -U platformio
+          pip install -U platformio meshtastic
       - name: Install extra python tools
         run: |
           pip install -U adafruit-nrfutil
@@ -31,6 +31,11 @@ jobs:
         run: platformio run -e heltec
       - name: Build for lora-relay-v1
         run: platformio run -e lora-relay-v1 
-      # Turn off linux for now
-      name: Build for native
+      - name: Build for native
         run: platformio run -e native
+      - name: Integration test
+        run: |
+          .pio/build/native/program &
+          sleep 1
+          python3 -c 'from meshtastic.test import testSimulator; testSimulator()'
+
