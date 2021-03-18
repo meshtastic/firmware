@@ -29,6 +29,10 @@ class Channels
     int16_t hashes[MAX_NUM_CHANNELS];
 
   public:
+
+    /// Well known channel names
+    static const char *adminChannel, *gpioChannel, *serialChannel;
+
     const ChannelSettings &getPrimary() { return getByIndex(getPrimaryIndex()).settings; }
 
     /** Return the Channel for a specified index */

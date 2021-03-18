@@ -61,6 +61,12 @@ SerialPlugin::SerialPlugin() : concurrency::OSThread("SerialPlugin") {}
 
 char serialStringChar[Constants_DATA_PAYLOAD_LEN];
 
+SerialPluginRadio::SerialPluginRadio() : SinglePortPlugin("SerialPluginRadio", PortNum_SERIAL_APP)
+{
+    // restrict to the admin channel for rx
+    boundChannel = Channels::serialChannel;
+}
+
 int32_t SerialPlugin::runOnce()
 {
 #ifndef NO_ESP32

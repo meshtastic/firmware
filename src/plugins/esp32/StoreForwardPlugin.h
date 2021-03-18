@@ -6,7 +6,6 @@
 #include <Arduino.h>
 #include <functional>
 
-
 struct PacketHistoryStruct {
     uint32_t time;
     uint32_t to;
@@ -14,7 +13,7 @@ struct PacketHistoryStruct {
     uint8_t bytes[MAX_RHPACKETLEN];
 };
 
-class StoreForwardPlugin : private concurrency::OSThread
+class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThread
 {
     bool firstTime = 1;
 
@@ -37,41 +36,18 @@ class StoreForwardPlugin : private concurrency::OSThread
     void historySend(uint32_t msAgo, uint32_t to);
     void populatePSRAM();
 
+    /**
+     * Send our payload into the mesh
+     */
+    void sendPayload(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
+    virtual MeshPacket *allocReply();
+    virtual bool wantPortnum(PortNum p) { return true; };
+
   private:
     // Nothing here
 
   protected:
     virtual int32_t runOnce();
-};
-
-extern StoreForwardPlugin *storeForwardPlugin;
-
-/*
- * Radio interface for StoreForwardPlugin
- *
- */
-class StoreForwardPluginRadio : public SinglePortPlugin
-{
-    // uint32_t lastRxID;
-
-  public:
-    StoreForwardPluginRadio() : SinglePortPlugin("StoreForwardPluginRadio", PortNum_STORE_FORWARD_APP) {}
-    // StoreForwardPluginRadio() : SinglePortPlugin("StoreForwardPluginRadio", PortNum_TEXT_MESSAGE_APP) {}
-
-    /**
-     * Send our payload into the mesh
-     */
-    void sendPayload(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
-
-    /**
-     * Send our payload into the mesh
-     */
-    void sendPayloadHeartbeat(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
-
-  protected:
-    virtual MeshPacket *allocReply();
-
-    virtual bool wantPortnum(PortNum p) { return true; };
 
     /** Called to handle a particular incoming message
 
@@ -80,4 +56,28 @@ class StoreForwardPluginRadio : public SinglePortPlugin
     virtual bool handleReceived(const MeshPacket &mp);
 };
 
+extern StoreForwardPlugin *storeForwardPlugin;
+
+/*
+ * Radio interface for StoreForwardPlugin
+ *
+ */
+
+/*
+class StoreForwardPluginRadio : public SinglePortPlugin
+{
+    // uint32_t lastRxID;
+
+  public:
+    StoreForwardPluginRadio() : SinglePortPlugin("StoreForwardPluginRadio", PortNum_STORE_FORWARD_APP) {}
+    // StoreForwardPluginRadio() : SinglePortPlugin("StoreForwardPluginRadio", PortNum_TEXT_MESSAGE_APP) {}
+
+    void sendPayloadHeartbeat(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
+
+  protected:
+    virtual MeshPacket *allocReply2();
+};
+
 extern StoreForwardPluginRadio *storeForwardPluginRadio;
+*/
+

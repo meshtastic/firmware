@@ -15,7 +15,8 @@ Thumbs.db
 .built
 .context
 .cproject
-.idea/*
 .vagrant
 nanopb*
 flash.uf2
+cmake-build*
+
