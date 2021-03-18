@@ -6,6 +6,10 @@
 #include "configuration.h"
 #include "main.h"
 
+#ifdef PORTDUINO
+#include "unistd.h"
+#endif
+
 AdminPlugin *adminPlugin;
 
 void AdminPlugin::handleGetChannel(const MeshPacket &req, uint32_t channelIndex)
@@ -64,6 +68,13 @@ bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, const AdminMessag
         DEBUG_MSG("Client is getting radio\n");
         handleGetRadio(mp);
         break;
+
+#ifdef PORTDUINO
+    case AdminMessage_exit_simulator_tag:
+        DEBUG_MSG("Exiting simulator");
+        _exit(0);
+        break;
+#endif
 
     default:
         // Probably a message sent by us or sent to our local node.  FIXME, we should avoid scanning these messages
