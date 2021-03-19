@@ -2,16 +2,19 @@
 
 You probably don't care about this section - skip to the next one.
 
-## 1.2 cleanup & multichannel support:
+## before next release
 
 * before next relase: test empty channel sets on android
 * test link sharing on android
+* timestamps on oled screen are wrong - don't seem to be updating based on message rx
+* channel hash suffixes are wrong on android
+* luxon bug report - seeing rx acks for nodes that are not on the network
   
+## 1.2 cleanup & multichannel support:
+
 * DONE cleanup the external notification and serial plugins
 * non ack version of stress test fails sometimes!
-* timestamps on oled screen are wrong - don't seem to be updating based on message rx
-* luxon bug report - seeing rx acks for nodes that are not on the network
-* channel hash suffixes are wrong on android
+
 * tx fault test has a bug #734
 * DONE move device types into an enum in nodeinfo
 * fix android to use new device types for firmware update
