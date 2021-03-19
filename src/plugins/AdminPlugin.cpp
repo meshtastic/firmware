@@ -55,7 +55,7 @@ bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, const AdminMessag
         break;
 
     case AdminMessage_set_channel_tag:
-        DEBUG_MSG("Client is setting channel\n");
+        DEBUG_MSG("Client is setting channel %d\n", r->set_channel.index);
         handleSetChannel(r->set_channel);
         break;
 
