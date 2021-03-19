@@ -55,7 +55,7 @@ bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, const AdminMessag
         break;
 
     case AdminMessage_set_channel_tag:
-        DEBUG_MSG("Client is setting channel\n");
+        DEBUG_MSG("Client is setting channel %d\n", r->set_channel.index);
         handleSetChannel(r->set_channel);
         break;
 
@@ -113,8 +113,7 @@ void AdminPlugin::handleSetChannel(const Channel &cc)
     if (cc.index == 0) {
         // FIXME, this updates the user preferences also, which isn't needed - we really just want to notify on configChanged
         service.reloadConfig();
-    }
-    else {
+    } else {
         channels.onConfigChanged(); // tell the radios about this change
         nodeDB.saveChannelsToDisk();
     }
