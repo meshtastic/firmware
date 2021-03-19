@@ -4,11 +4,18 @@ You probably don't care about this section - skip to the next one.
 
 ## before next release
 
-* before next relase: test empty channel sets on android
-* test link sharing on android
-* timestamps on oled screen are wrong - don't seem to be updating based on message rx
-* channel hash suffixes are wrong on android
+* DONE timestamps on oled screen are wrong - don't seem to be updating based on message rx (actually: this is expected behavior when no node on the mesh has GPS time)
+* DONE add ch-del
+* DONE channel hash suffixes are wrong on android
+* DONE before next relase: test empty channel sets on android
+* DONE channel sharing in android
+* DONE test 1.0 firmware update on android
+* DONE test 1.1 firmware update on android
+* test 1.2.10 firmware update on android
+* DONE test link sharing on android
 * luxon bug report - seeing rx acks for nodes that are not on the network
+* document how to do remote admin
+* release py, android, device
   
 ## 1.2 cleanup & multichannel support:
 
