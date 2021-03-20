@@ -1,11 +1,11 @@
 
-#include "Air530GPS.h"
+#include "GPS.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
-#include "UBloxGPS.h"
 #include "airtime.h"
+#include "buzz.h"
 #include "configuration.h"
 #include "error.h"
 #include "power.h"
@@ -67,7 +67,7 @@ Router *router = NULL; // Users of router don't care what sort of subclass imple
 // -----------------------------------------------------------------------------
 // Application
 // -----------------------------------------------------------------------------
-
+#if WIRE_INTERFACES_COUNT > 0
 void scanI2Cdevice(void)
 {
     byte err, addr;
@@ -104,6 +104,9 @@ void scanI2Cdevice(void)
     else
         DEBUG_MSG("done\n");
 }
+#else
+void scanI2Cdevice(void) {}
+#endif
 
 const char *getDeviceName()
 {
@@ -173,7 +176,7 @@ class ButtonThread : public OSThread
 #ifdef BUTTON_PIN_ALT
     OneButton userButtonAlt;
 #endif
-
+    static bool shutdown_on_long_stop;
   public:
     static uint32_t longPressTime;
 
@@ -239,13 +242,23 @@ class ButtonThread : public OSThread
         // DEBUG_MSG("Long press!\n");
         screen->adjustBrightness();
 
-        // If user button is held down for 10 seconds, shutdown the device.
-        if (millis() - longPressTime > 10 * 1000) {
+        // If user button is held down for 5 seconds, shutdown the device.
+        if (millis() - longPressTime > 5 * 1000) {
 #ifdef TBEAM_V10
             if (axp192_found == true) {
                 setLed(false);
                 power->shutdown();
             }
+#elif NRF52_SERIES
+        // Do actual shutdown when button released, otherwise the button release
+        // may wake the board immediatedly.
+        if (!shutdown_on_long_stop) {
+            DEBUG_MSG("Shutdown from long press");
+            playBeep();
+            ledOff(PIN_LED1);
+            ledOff(PIN_LED2);
+            shutdown_on_long_stop = true;
+        }
 #endif
         } else {
             // DEBUG_MSG("Long press %u\n", (millis() - longPressTime));
@@ -269,8 +282,14 @@ class ButtonThread : public OSThread
     {
         DEBUG_MSG("Long press stop!\n");
         longPressTime = 0;
+        if (shutdown_on_long_stop) {
+            playShutdownMelody();
+            power->shutdown();
+        }
     }
 };
+
+bool ButtonThread::shutdown_on_long_stop = false;
 
 static Periodic *ledPeriodic;
 static OSThread *powerFSMthread, *buttonThread;
@@ -345,7 +364,7 @@ void setup()
 
 #ifdef I2C_SDA
     Wire.begin(I2C_SDA, I2C_SCL);
-#else
+#elif WIRE_INTERFACES_COUNT > 0
     Wire.begin();
 #endif
 
@@ -382,7 +401,7 @@ void setup()
 #ifdef NRF52_SERIES
     nrf52Setup();
 #endif
-
+    playStartMelody();
     // We do this as early as possible because this loads preferences from flash
     // but we need to do this after main cpu iniot (esp32setup), because we need the random seed set
     nodeDB.init();
@@ -420,34 +439,7 @@ void setup()
     pinMode(BATTERY_EN_PIN, OUTPUT);
     digitalWrite(BATTERY_EN_PIN, LOW);
 #endif
-
-    // If we don't have bidirectional comms, we can't even try talking to UBLOX
-    UBloxGPS *ublox = NULL;
-#ifdef GPS_TX_PIN
-    // Init GPS - first try ublox
-    ublox = new UBloxGPS();
-    gps = ublox;
-    if (!gps->setup()) {
-        DEBUG_MSG("ERROR: No UBLOX GPS found\n");
-
-        delete ublox;
-        gps = ublox = NULL;
-    }
-#endif
-
-    if (!gps && GPS::_serial_gps) {
-        // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
-        // assume NMEA at 9600 baud.
-        // dumb NMEA access only work for serial GPSes)
-        DEBUG_MSG("Hoping that NMEA might work\n");
-
-#ifdef HAS_AIR530_GPS
-        gps = new Air530GPS();
-#else
-        gps = new NMEAGPS();
-#endif
-        gps->setup();
-    }
+    gps = createGps();
 
     if (gps)
         gpsStatus->observe(&gps->newStatus);
@@ -481,8 +473,8 @@ void setup()
     // We have now loaded our saved preferences from flash
 
     // ONCE we will factory reset the GPS for bug #327
-    if (ublox && !devicestate.did_gps_reset) {
-        if (ublox->factoryReset()) { // If we don't succeed try again next time
+    if (gps && !devicestate.did_gps_reset) {
+        if (gps->factoryReset()) { // If we don't succeed try again next time
             devicestate.did_gps_reset = true;
             nodeDB.saveToDisk();
         }

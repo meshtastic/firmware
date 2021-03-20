@@ -71,6 +71,9 @@ class GPS : private concurrency::OSThread
      * */
     void forceWake(bool on);
 
+    // Some GPS modules (ublock) require factory reset
+    virtual bool factoryReset() { return true; }
+
   protected:
     /// Do gps chipset specific init, return true for success
     virtual bool setupGPS();
@@ -144,5 +147,9 @@ class GPS : private concurrency::OSThread
 
     virtual int32_t runOnce();
 };
+
+// Creates an instance of the GPS class. 
+// Returns the new instance or null if the GPS is not present.
+GPS* createGps();
 
 extern GPS *gps;

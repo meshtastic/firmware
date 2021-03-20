@@ -42,19 +42,20 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
     } else if(q == RTCQualityGPS && (now - lastSetMsec) > (12 * 60 * 60 * 1000L)) {
         // Every 12 hrs we will slam in a new GPS time, to correct for local RTC clock drift
         shouldSet = true;
-        DEBUG_MSG("Reapplying GPS time to correct clock drift %ld secs\n", tv->tv_sec);
+        DEBUG_MSG("Reapplying external time to correct clock drift %ld secs\n", tv->tv_sec);
     }
     else
         shouldSet = false;
 
     if (shouldSet) {
-        lastSetMsec = now;
+        lastSetMsec = now;       
 #ifndef NO_ESP32
         settimeofday(tv, NULL);
-#else
-        DEBUG_MSG("ERROR TIME SETTING NOT IMPLEMENTED!\n");
-#endif
         readFromRTC();
+#else 
+        timeStartMsec = now;
+        zeroOffsetSecs = tv->tv_sec;
+#endif
         return true;
     } else {
         return false;

@@ -1,9 +1,13 @@
 #pragma once
 
 #include "mesh/MeshTypes.h"
+#include <vector>
+
+#ifndef NO_SCREEN
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
-#include <vector>
+#endif
+
 /** A baseclass for any mesh "plugin".
  *
  * A plugin allows you to add new features to meshtastic device code, without needing to know messaging details.
@@ -31,9 +35,9 @@ class MeshPlugin
     static void callPlugins(const MeshPacket &mp);
 
     static std::vector<MeshPlugin *> GetMeshPluginsWithUIFrames();
-
+#ifndef NO_SCREEN
     virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) { return; }
-
+#endif
   protected:
     const char *name;
 
