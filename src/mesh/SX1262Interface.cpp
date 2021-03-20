@@ -34,7 +34,7 @@ bool SX1262Interface::init()
     pinMode(SX1262_TXEN, OUTPUT);
 #endif
 
-#if !defined(SX1262_E22) && !defined(SX1262_USE_DIO3_FOR_TCXO)
+#ifndef SX1262_E22
     float tcxoVoltage = 0; // None - we use an XTAL
 #else
     // Use DIO3 to power tcxo per https://github.com/jgromes/RadioLib/issues/12#issuecomment-520695575
