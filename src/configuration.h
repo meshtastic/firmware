@@ -338,7 +338,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #elif defined(TLORA_V2_1_16)
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR HardwareModel_TLORA_V2_1p6_
+#define HW_VENDOR HardwareModel_TLORA_V2_1_1p6
 
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
@@ -382,8 +382,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define LED_PIN 12 // If defined we will blink this LED
 //#define BUTTON_PIN 36  // If defined, this will be used for user button presses (ToDo problem on that line on debug screen -->
-//Long press start!) #define BUTTON_NEED_PULLUP //GPIOs 34 to 39 are GPIs – input only pins. These pins don’t have internal
-//pull-ups or pull-down resistors.
+// Long press start!) #define BUTTON_NEED_PULLUP //GPIOs 34 to 39 are GPIs – input only pins. These pins don’t have internal
+// pull-ups or pull-down resistors.
 
 #define USE_RF95
 #define LORA_DIO0 38 // a No connect on the SX1262 module

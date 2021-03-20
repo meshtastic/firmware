@@ -6,6 +6,10 @@
 #include "configuration.h"
 #include "main.h"
 
+#ifdef PORTDUINO
+#include "unistd.h"
+#endif
+
 AdminPlugin *adminPlugin;
 
 void AdminPlugin::handleGetChannel(const MeshPacket &req, uint32_t channelIndex)
@@ -51,7 +55,7 @@ bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, const AdminMessag
         break;
 
     case AdminMessage_set_channel_tag:
-        DEBUG_MSG("Client is setting channel\n");
+        DEBUG_MSG("Client is setting channel %d\n", r->set_channel.index);
         handleSetChannel(r->set_channel);
         break;
 
@@ -64,6 +68,13 @@ bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, const AdminMessag
         DEBUG_MSG("Client is getting radio\n");
         handleGetRadio(mp);
         break;
+
+#ifdef PORTDUINO
+    case AdminMessage_exit_simulator_tag:
+        DEBUG_MSG("Exiting simulator\n");
+        _exit(0);
+        break;
+#endif
 
     default:
         // Probably a message sent by us or sent to our local node.  FIXME, we should avoid scanning these messages
@@ -102,8 +113,7 @@ void AdminPlugin::handleSetChannel(const Channel &cc)
     if (cc.index == 0) {
         // FIXME, this updates the user preferences also, which isn't needed - we really just want to notify on configChanged
         service.reloadConfig();
-    }
-    else {
+    } else {
         channels.onConfigChanged(); // tell the radios about this change
         nodeDB.saveChannelsToDisk();
     }

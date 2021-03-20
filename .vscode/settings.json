@@ -77,5 +77,6 @@
             "--java_out=/tmp",
             "-I=/home/kevinh/development/meshtastic/meshtastic-esp32/proto"
         ]
-    }    
+    },
+    "editor.formatOnSave": true
 }
