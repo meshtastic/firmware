@@ -28,11 +28,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "Screen.h"
 #include "configuration.h"
 #include "fonts.h"
+#include "gps/RTC.h"
 #include "graphics/images.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
-#include "plugins/TextMessagePlugin.h"
 #include "mesh/Channels.h"
+#include "plugins/TextMessagePlugin.h"
 #include "target_specific.h"
 #include "utils.h"
 
@@ -155,24 +156,22 @@ static void drawPluginFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
 {
     uint8_t plugin_frame;
     // there's a little but in the UI transition code
-    // where it invokes the function at the correct offset 
+    // where it invokes the function at the correct offset
     // in the array of "drawScreen" functions; however,
-    // the passed-state doesn't quite reflect the "current" 
+    // the passed-state doesn't quite reflect the "current"
     // screen, so we have to detect it.
     if (state->frameState == IN_TRANSITION && state->transitionFrameRelationship == INCOMING) {
-        // if we're transitioning from the end of the frame list back around to the first 
+        // if we're transitioning from the end of the frame list back around to the first
         // frame, then we want this to be `0`
         plugin_frame = state->transitionFrameTarget;
-    }
-    else {
+    } else {
         // otherwise, just display the plugin frame that's aligned with the current frame
         plugin_frame = state->currentFrame;
-        //DEBUG_MSG("Screen is not in transition.  Frame: %d\n\n", plugin_frame);
+        // DEBUG_MSG("Screen is not in transition.  Frame: %d\n\n", plugin_frame);
     }
-    //DEBUG_MSG("Drawing Plugin Frame %d\n\n", plugin_frame);
+    // DEBUG_MSG("Drawing Plugin Frame %d\n\n", plugin_frame);
     MeshPlugin &pi = *pluginFrames.at(plugin_frame);
-    pi.drawFrame(display,state,x,y);
-    
+    pi.drawFrame(display, state, x, y);
 }
 
 static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -204,10 +203,9 @@ static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, i
     display->setFont(FONT_SMALL);
     display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait...");
 
-    //display->setFont(FONT_LARGE);
-    //display->drawString(64 + x, 26 + y, btPIN);
+    // display->setFont(FONT_LARGE);
+    // display->drawString(64 + x, 26 + y, btPIN);
 }
-
 
 /// Draw the last text message we received
 static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -793,7 +791,7 @@ void Screen::setup()
     powerStatusObserver.observe(&powerStatus->onNewStatus);
     gpsStatusObserver.observe(&gpsStatus->onNewStatus);
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
-    if(textMessagePlugin)
+    if (textMessagePlugin)
         textMessageObserver.observe(textMessagePlugin);
 }
 
@@ -842,7 +840,7 @@ int32_t Screen::runOnce()
             break;
         case Cmd::START_FIRMWARE_UPDATE_SCREEN:
             handleStartFirmwareUpdateScreen();
-            break;            
+            break;
         case Cmd::STOP_BLUETOOTH_PIN_SCREEN:
         case Cmd::STOP_BOOT_SCREEN:
             setFrames();
@@ -936,7 +934,7 @@ void Screen::setFrames()
     for (auto i = pluginFrames.begin(); i != pluginFrames.end(); ++i) {
         normalFrames[numframes++] = drawPluginFrame;
     }
-    
+
     DEBUG_MSG("Added plugins.  numframes: %d\n", numframes);
 
     // If we have a critical fault, show it first
@@ -1286,14 +1284,41 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     uint32_t minutes = seconds / 60;
     uint32_t hours = minutes / 60;
     uint32_t days = hours / 24;
-    currentMillis %= 1000;
-    seconds %= 60;
-    minutes %= 60;
-    hours %= 24;
+    // currentMillis %= 1000;
+    // seconds %= 60;
+    // minutes %= 60;
+    // hours %= 24;
 
-    display->drawString(x, y + FONT_HEIGHT_SMALL * 1,
-                        String(days) + "d " + (hours < 10 ? "0" : "") + String(hours) + ":" + (minutes < 10 ? "0" : "") +
-                            String(minutes) + ":" + (seconds < 10 ? "0" : "") + String(seconds));
+    // Show uptime as days, hours, minutes OR seconds
+    String uptime;
+    if (days >= 2)
+        uptime += String(days) + "d ";
+    else if (hours >= 2)
+        uptime += String(hours) + "h ";
+    else if (minutes >= 1)
+        uptime += String(minutes) + "m ";
+    else
+        uptime += String(seconds) + "s ";
+
+    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityFromNet);
+    if (rtc_sec > 0) {
+        long hms = rtc_sec % SEC_PER_DAY;
+        // hms += tz.tz_dsttime * SEC_PER_HOUR;
+        // hms -= tz.tz_minuteswest * SEC_PER_MIN;
+        // mod `hms` to ensure in positive range of [0...SEC_PER_DAY)
+        hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
+
+        // Tear apart hms into h:m:s
+        int hour = hms / SEC_PER_HOUR;
+        int min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
+        int sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
+
+        char timebuf[9];
+        snprintf(timebuf, sizeof(timebuf), "%02d:%02d:%02d", hour, min, sec);
+        uptime += timebuf;
+    }
+
+    display->drawString(x, y + FONT_HEIGHT_SMALL * 1, uptime);
 
 #ifndef NO_ESP32
     // Show CPU Frequency.
