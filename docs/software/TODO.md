@@ -11,11 +11,15 @@ You probably don't care about this section - skip to the next one.
 * DONE channel sharing in android
 * DONE test 1.0 firmware update on android
 * DONE test 1.1 firmware update on android
-* test 1.2.10 firmware update on android
+* DONE test 1.2.10 firmware update on android
 * DONE test link sharing on android
 * luxon bug report - seeing rx acks for nodes that are not on the network
 * document how to do remote admin
-* release py, android, device
+* release py
+* DONE show GPS time only if we know what global time is
+* android should always provide time to nodes - so that it is easier for the mesh to learn the current time
+* nrf52 should preserve local time across reset
+* firmware OTA updates of is_router true nodes fails?
   
 ## 1.2 cleanup & multichannel support:
 
