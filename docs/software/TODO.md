@@ -15,7 +15,7 @@ You probably don't care about this section - skip to the next one.
 * DONE test link sharing on android
 * luxon bug report - seeing rx acks for nodes that are not on the network
 * document how to do remote admin
-* release py
+* DONE release py
 * DONE show GPS time only if we know what global time is
 * android should always provide time to nodes - so that it is easier for the mesh to learn the current time
 * nrf52 should preserve local time across reset
@@ -81,8 +81,9 @@ You probably don't care about this section - skip to the next one.
 * restrict gpio & serial & settings operations to the admin channel (unless local to the current node)
 * add channel restrictions for plugins (and restrict routing plugin to the "control" channel)
 * stress test multi channel
-* investigate @mc-hamster report of heap corruption
+* DONE investigate @mc-hamster report of heap corruption
 * DONE use set-user from android
+* untrusted users should not be allowed to provide bogus times (via position broadcasts) to the rest of the mesh.  Invent a new lowest quality notion of UntrustedTime.
 * generalize the concept of "shortstrings" use it for both PSKs and well known channel names.  Possibly use a ShortString class.
 * use portuino TCP connection to debug with python API
 * document the relationship between want_response (indicating remote node received it) and want_ack (indicating that this message should be sent reliably - and also get acks from the first rx node and naks if it is never delivered)
