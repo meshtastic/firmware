@@ -34,11 +34,11 @@ bool SX1262Interface::init()
     pinMode(SX1262_TXEN, OUTPUT);
 #endif
 
-#ifndef SX1262_E22
+#if !defined(SX1262_E22) && !defined(SX1262_USE_DIO3_FOR_TCXO)
     float tcxoVoltage = 0; // None - we use an XTAL
 #else
-    float tcxoVoltage =
-        1.8; // E22 uses DIO3 to power tcxo per https://github.com/jgromes/RadioLib/issues/12#issuecomment-520695575
+    // Use DIO3 to power tcxo per https://github.com/jgromes/RadioLib/issues/12#issuecomment-520695575
+    float tcxoVoltage = 1.8; 
 #endif
     bool useRegulatorLDO = false; // Seems to depend on the connection to pin 9/DCC_SW - if an inductor DCDC?
 

@@ -1,5 +1,23 @@
 #pragma once
 
+#ifdef NO_SCREEN
+namespace graphics
+{
+// Noop class for boards without screen.
+class Screen 
+{
+  public:
+    Screen(char){}
+    void onPress() {}
+    void setup() {}
+    void setOn(bool) {}
+    void print(const char*){}
+    void adjustBrightness(){}
+    void doDeepSleep() {}
+};
+}
+
+#else
 #include <cstring>
 
 #include <OLEDDisplayUi.h>
@@ -278,3 +296,4 @@ class Screen : public concurrency::OSThread
 };
 
 } // namespace graphics
+#endif
