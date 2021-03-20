@@ -93,6 +93,7 @@
 
 #define SX1262_E22 // Not really an E22 but this board clones using DIO3 for tcxo control
 
+#define NO_WIRE
 #define NO_GPS
 #define NO_SCREEN
 #endif

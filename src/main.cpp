@@ -67,7 +67,7 @@ Router *router = NULL; // Users of router don't care what sort of subclass imple
 // -----------------------------------------------------------------------------
 // Application
 // -----------------------------------------------------------------------------
-#if WIRE_INTERFACES_COUNT > 0
+#ifndef NO_WIRE
 void scanI2Cdevice(void)
 {
     byte err, addr;
@@ -364,7 +364,7 @@ void setup()
 
 #ifdef I2C_SDA
     Wire.begin(I2C_SDA, I2C_SCL);
-#elif WIRE_INTERFACES_COUNT > 0
+#elif !defined(NO_WIRE)
     Wire.begin();
 #endif
 
