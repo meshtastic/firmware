@@ -65,9 +65,11 @@ Also be mindful of your space usage on the file system. It has protections from 
 
 # Application Examples
 
-## Google Earth Integration
+## Google Integration
 
-@jfirwin on our forum [meshtastic.discourse.org](https://meshtastic.discourse.group/t/new-plugin-rangetestplugin/2591/49?u=mc-hamster) shared how to integrate the resulting csv file with Google Earth.
+@jfirwin on our forum [meshtastic.discourse.org](https://meshtastic.discourse.group/t/new-plugin-rangetestplugin/2591/49?u=mc-hamster) shared how to integrate the resulting csv file with Google Products.
+
+### Earth
 
 Steps:
 
@@ -83,6 +85,14 @@ Steps:
    2. select a color, icon, etc. and hit ok.
 
 Your data will load onto the map, make sure to click the checkbox next to your dataset in the sidebar to view it.
+
+### My Maps
+
+You can use [My Maps](http://mymaps.google.com/). It takes CSVs and the whole interface is much easier to work with.
+
+Google has instructions on how to do that [here](https://support.google.com/mymaps/answer/3024836?co=GENIE.Platform%3DDesktop&hl=en#zippy=%2Cstep-prepare-your-info%2Cstep-import-info-into-the-map).
+
+You can style the ranges differently based on the values, so you can have the pins be darker the if the SNR or RSSI (if that gets added) is higher. 
 
 # Known Problems
 
