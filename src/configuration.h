@@ -311,7 +311,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #elif defined(TLORA_V1_3)
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR HardwareModel_TLORA_V1p3
+#define HW_VENDOR HardwareModel_TLORA_V1_1p3
 
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
