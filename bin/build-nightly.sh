@@ -28,7 +28,8 @@ date_stamp=$(date +'%Y-%m-%d')
 cd ..
 
 # TODO: Archive the same binaries used by the build-all script.
-zip -r meshtastic_device_nightly_${date_stamp} Meshtastic-device/release/latest/bins
+#zip -r meshtastic_device_nightly_${date_stamp} Meshtastic-device/release/latest/bins
+cp Meshtastic-device/release/archive/`ls -t ./Meshtastic-device/release/archive/| head -1` meshtastic_device_nightly_${date_stamp}.zip
 
 # Copy the file to the webserver
 scp meshtastic_device_nightly_${date_stamp}.zip jm@10.11.12.20:/volume1/web/meshtastic/nightly_builds/
