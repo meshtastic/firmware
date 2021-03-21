@@ -231,6 +231,10 @@ bool StoreForwardPlugin::handleReceived(const MeshPacket &mp)
                 DEBUG_MSG("Packet came from - PortNum_POSITION_APP\n");
             } else if (mp.decoded.portnum == PortNum_NODEINFO_APP) {
                 DEBUG_MSG("Packet came from - PortNum_NODEINFO_APP\n");
+            } else if (mp.decoded.portnum == PortNum_ROUTING_APP) {
+                DEBUG_MSG("Packet came from - PortNum_ROUTING_APP\n");
+            } else if (mp.decoded.portnum == PortNum_ADMIN_APP) {
+                DEBUG_MSG("Packet came from - PortNum_ADMIN_APP\n");
             } else if (mp.decoded.portnum == PortNum_REPLY_APP) {
                 DEBUG_MSG("Packet came from - PortNum_REPLY_APP\n");
             } else if (mp.decoded.portnum == PortNum_IP_TUNNEL_APP) {
@@ -276,40 +280,34 @@ StoreForwardPlugin::StoreForwardPlugin()
         Uncomment the preferences below if you want to use the plugin
         without having to configure it from the PythonAPI or WebUI.
 
+    */
     radioConfig.preferences.store_forward_plugin_enabled = 1;
     radioConfig.preferences.is_router = 1;
-    */
 
     if (radioConfig.preferences.store_forward_plugin_enabled) {
+
+        // Router
         if (radioConfig.preferences.is_router) {
             DEBUG_MSG("Initializing Store & Forward Plugin - Enabled as Router\n");
-            // Router
             if (ESP.getPsramSize()) {
-                if (ESP.getFreePsram() >= 2048 * 1024) {
+                if (ESP.getFreePsram() >= 1024 * 1024) {
+
                     // Do the startup here
 
                     this->populatePSRAM();
-
-                    // packetHistory[0].bytes;
-                    // return (10 * 1000);
-
                 } else {
-                    DEBUG_MSG("Device has less than 2M of PSRAM free. Aborting startup.\n");
+                    DEBUG_MSG("Device has less than 1M of PSRAM free. Aborting startup.\n");
                     DEBUG_MSG("Store & Forward Plugin - Aborting Startup.\n");
-
-                    // return (INT32_MAX);
                 }
 
             } else {
                 DEBUG_MSG("Device doesn't have PSRAM.\n");
                 DEBUG_MSG("Store & Forward Plugin - Aborting Startup.\n");
-
-                // return (INT32_MAX);
             }
 
+        // Client
         } else {
             DEBUG_MSG("Initializing Store & Forward Plugin - Enabled as Client\n");
-            // return (5 * 1000);
         }
     }
 #endif

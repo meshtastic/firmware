@@ -47,8 +47,7 @@ class AirTime : private concurrency::OSThread
     void logAirtime(reportTypes reportType, uint32_t airtime_ms);
 
   protected:
-
-    virtual int32_t runOnce();
+    virtual int32_t runOnce() override;
 };
 
 extern AirTime *airTime;
