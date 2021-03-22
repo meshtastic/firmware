@@ -23,6 +23,7 @@
 
 #ifndef NO_ESP32
 #include "mesh/http/WiFiAPClient.h"
+#include "plugins/esp32/StoreForwardPlugin.h"
 #endif
 
 NodeDB nodeDB;
@@ -206,12 +207,13 @@ void NodeDB::init()
     // removed from 1.2 (though we do use old values if found)
     // We set these _after_ loading from disk - because they come from the build and are more trusted than
     // what is stored in flash
-    //if (xstr(HW_VERSION)[0])
+    // if (xstr(HW_VERSION)[0])
     //    strncpy(myNodeInfo.region, optstr(HW_VERSION), sizeof(myNodeInfo.region));
-    // else DEBUG_MSG("This build does not specify a HW_VERSION\n"); // Eventually new builds will no longer include this build flag
+    // else DEBUG_MSG("This build does not specify a HW_VERSION\n"); // Eventually new builds will no longer include this build
+    // flag
 
     // DEBUG_MSG("legacy region %d\n", devicestate.legacyRadio.preferences.region);
-    if(radioConfig.preferences.region == RegionCode_Unset)
+    if (radioConfig.preferences.region == RegionCode_Unset)
         radioConfig.preferences.region = devicestate.legacyRadio.preferences.region;
 
     // Check for the old style of region code strings, if found, convert to the new enum.
@@ -226,7 +228,7 @@ void NodeDB::init()
     }
 
     strncpy(myNodeInfo.firmware_version, optstr(APP_VERSION), sizeof(myNodeInfo.firmware_version));
-    
+
     // hw_model is no longer stored in myNodeInfo (as of 1.2.11) - we now store it as an enum in nodeinfo
     myNodeInfo.hw_model_deprecated[0] = '\0';
     // strncpy(myNodeInfo.hw_model, HW_VENDOR, sizeof(myNodeInfo.hw_model));
@@ -373,7 +375,7 @@ void NodeDB::saveChannelsToDisk()
         FS.mkdir("/prefs");
 #endif
         saveProto(channelfile, ChannelFile_size, sizeof(ChannelFile), ChannelFile_fields, &channelFile);
-    }  
+    }
 }
 
 void NodeDB::saveToDisk()
@@ -484,15 +486,32 @@ void NodeDB::updateUser(uint32_t nodeId, const User &p)
 /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
 void NodeDB::updateFrom(const MeshPacket &mp)
 {
+    uint32_t sawSecAgo = 0;
+
     if (mp.which_payloadVariant == MeshPacket_decoded_tag) {
         DEBUG_MSG("Update DB node 0x%x, rx_time=%u\n", mp.from, mp.rx_time);
 
         NodeInfo *info = getOrCreateNode(getFrom(&mp));
 
-        if (mp.rx_time) {              // if the packet has a valid timestamp use it to update our last_seen
+        if (mp.rx_time) { // if the packet has a valid timestamp use it to update our last_seen
+
+            sawSecAgo = sinceLastSeen(info); // Used by S&F
+
             info->has_position = true; // at least the time is valid
             info->position.time = mp.rx_time;
         }
+
+// Used by the store & forward plugin.
+#ifndef NO_ESP32
+
+        // Check that both the plugin is
+        if (radioConfig.preferences.store_forward_plugin_enabled && storeForwardPlugin) {
+            /* Notify the store and forward plugin that we just saw a node.
+             */
+            storeForwardPlugin.sawNode(getFrom(&mp), sawSecAgo);
+        }
+
+#endif
 
         info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
     }
