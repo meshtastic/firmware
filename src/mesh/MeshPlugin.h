@@ -1,5 +1,6 @@
 #pragma once
 
+#include "mesh/Channels.h"
 #include "mesh/MeshTypes.h"
 #include <vector>
 
@@ -89,6 +90,11 @@ class MeshPlugin
      * @return true if you want to be alloced a UI screen frame
      */
     virtual bool wantUIFrame() { return false; }
+
+    MeshPacket *allocAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex);
+
+    /// Send an error response for the specified packet.
+    MeshPacket *allocErrorResponse(Routing_Error err, const MeshPacket *p);
 
   private:
     /**
