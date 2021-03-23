@@ -64,7 +64,7 @@ bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, const AdminMessag
 
     case AdminMessage_get_channel_request_tag: {
         uint32_t i = r->get_channel_request - 1;
-        DEBUG_MSG("Client is getting channel %d\n", i);
+        DEBUG_MSG("Client is getting channel %u\n", i);
         if (i >= MAX_NUM_CHANNELS)
             reply = allocErrorResponse(Routing_Error_BAD_REQUEST, &mp);
         else

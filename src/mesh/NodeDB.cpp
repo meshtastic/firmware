@@ -86,7 +86,9 @@ bool NodeDB::resetRadioConfig()
         DEBUG_MSG("Performing factory reset!\n");
         installDefaultDeviceState();
         didFactoryReset = true;
-    } else if (channelFile.channels_count == 0) {
+    }
+
+    if (channelFile.channels_count != MAX_NUM_CHANNELS) {
         DEBUG_MSG("Setting default channel and radio preferences!\n");
 
         channels.initDefaults();
@@ -206,12 +208,13 @@ void NodeDB::init()
     // removed from 1.2 (though we do use old values if found)
     // We set these _after_ loading from disk - because they come from the build and are more trusted than
     // what is stored in flash
-    //if (xstr(HW_VERSION)[0])
+    // if (xstr(HW_VERSION)[0])
     //    strncpy(myNodeInfo.region, optstr(HW_VERSION), sizeof(myNodeInfo.region));
-    // else DEBUG_MSG("This build does not specify a HW_VERSION\n"); // Eventually new builds will no longer include this build flag
+    // else DEBUG_MSG("This build does not specify a HW_VERSION\n"); // Eventually new builds will no longer include this build
+    // flag
 
     // DEBUG_MSG("legacy region %d\n", devicestate.legacyRadio.preferences.region);
-    if(radioConfig.preferences.region == RegionCode_Unset)
+    if (radioConfig.preferences.region == RegionCode_Unset)
         radioConfig.preferences.region = devicestate.legacyRadio.preferences.region;
 
     // Check for the old style of region code strings, if found, convert to the new enum.
@@ -226,7 +229,7 @@ void NodeDB::init()
     }
 
     strncpy(myNodeInfo.firmware_version, optstr(APP_VERSION), sizeof(myNodeInfo.firmware_version));
-    
+
     // hw_model is no longer stored in myNodeInfo (as of 1.2.11) - we now store it as an enum in nodeinfo
     myNodeInfo.hw_model_deprecated[0] = '\0';
     // strncpy(myNodeInfo.hw_model, HW_VENDOR, sizeof(myNodeInfo.hw_model));
@@ -373,7 +376,7 @@ void NodeDB::saveChannelsToDisk()
         FS.mkdir("/prefs");
 #endif
         saveProto(channelfile, ChannelFile_size, sizeof(ChannelFile), ChannelFile_fields, &channelFile);
-    }  
+    }
 }
 
 void NodeDB::saveToDisk()
