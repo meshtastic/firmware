@@ -4,6 +4,7 @@ You probably don't care about this section - skip to the next one.
 
 ## before next release
 
+* DONE test latest firmware update with is_router
 * DONE firmware OTA updates of is_router true nodes fails?
 * add UI in android app to reset to defaults https://github.com/meshtastic/Meshtastic-Android/issues/263 
 * TEST THIS! changing channels requires a reboot to take effect https://github.com/meshtastic/Meshtastic-device/issues/752 
