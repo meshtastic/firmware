@@ -1,57 +1,55 @@
 #include "RedirectablePrint.h"
+#include "RTC.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include <assert.h>
 #include <sys/time.h>
 #include <time.h>
-#include "RTC.h"
 
 /**
  * A printer that doesn't go anywhere
  */
 NoopPrint noopPrint;
 
-void RedirectablePrint::setDestination(Print *_dest) {
-  assert(_dest);
-  dest = _dest;
+void RedirectablePrint::setDestination(Print *_dest)
+{
+    assert(_dest);
+    dest = _dest;
 }
 
-size_t RedirectablePrint::write(uint8_t c) {
-  // Always send the characters to our segger JTAG debugger
+size_t RedirectablePrint::write(uint8_t c)
+{
+    // Always send the characters to our segger JTAG debugger
 #ifdef SEGGER_STDOUT_CH
     SEGGER_RTT_PutChar(SEGGER_STDOUT_CH, c);
 #endif
 
-  dest->write(c);
-  return 1;  // We always claim one was written, rather than trusting what the
-             // serial port said (which could be zero)
+    dest->write(c);
+    return 1; // We always claim one was written, rather than trusting what the
+              // serial port said (which could be zero)
 }
 
 size_t RedirectablePrint::vprintf(const char *format, va_list arg)
 {
-  va_list copy;
-  
-  va_copy(copy, arg);
-  int len = vsnprintf(printBuf, printBufLen, format, copy);
-  va_end(copy);
-  if (len < 0) {
-    va_end(arg);
-    return 0;
-  };
-  if (len >= printBufLen) {
-    delete[] printBuf;
-    printBufLen *= 2;
-    printBuf = new char[printBufLen];
-    len = vsnprintf(printBuf, printBufLen, format, arg);
-  }
+    va_list copy;
 
-  len = Print::write(printBuf, len);
-  return len;
+    va_copy(copy, arg);
+    int len = vsnprintf(printBuf, printBufLen, format, copy);
+    va_end(copy);
+    if (len < 0) {
+        va_end(arg);
+        return 0;
+    };
+    if (len >= printBufLen) {
+        delete[] printBuf;
+        printBufLen *= 2;
+        printBuf = new char[printBufLen];
+        len = vsnprintf(printBuf, printBufLen, format, arg);
+    }
+
+    len = Print::write(printBuf, len);
+    return len;
 }
-
-#define SEC_PER_DAY 86400
-#define SEC_PER_HOUR 3600
-#define SEC_PER_MIN 60
 
 size_t RedirectablePrint::logDebug(const char *format, ...)
 {
@@ -70,7 +68,7 @@ size_t RedirectablePrint::logDebug(const char *format, ...)
         if (!isContinuationMessage) {
             uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityFromNet);
             if (rtc_sec > 0) {
-                long hms =rtc_sec % SEC_PER_DAY;
+                long hms = rtc_sec % SEC_PER_DAY;
                 // hms += tz.tz_dsttime * SEC_PER_HOUR;
                 // hms -= tz.tz_minuteswest * SEC_PER_MIN;
                 // mod `hms` to ensure in positive range of [0...SEC_PER_DAY)
@@ -102,5 +100,5 @@ size_t RedirectablePrint::logDebug(const char *format, ...)
         inDebugPrint = false;
     }
 
-  return r;
+    return r;
 }
