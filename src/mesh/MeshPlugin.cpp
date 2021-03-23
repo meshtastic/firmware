@@ -31,6 +31,39 @@ MeshPlugin::~MeshPlugin()
     assert(0); // FIXME - remove from list of plugins once someone needs this feature
 }
 
+MeshPacket *MeshPlugin::allocAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex)
+{
+    Routing c = Routing_init_default;
+
+    c.error_reason = err;
+
+    // Now that we have moded sendAckNak up one level into the class heirarchy we can no longer assume we are a RoutingPlugin
+    // So we manually call pb_encode_to_bytes and specify routing port number
+    // auto p = allocDataProtobuf(c);
+    MeshPacket *p = router->allocForSending();
+    p->decoded.portnum = PortNum_ROUTING_APP;
+    p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), Routing_fields, &c);
+
+    p->priority = MeshPacket_Priority_ACK;
+
+    p->hop_limit = 0; // Assume just immediate neighbors for now
+    p->to = to;
+    p->decoded.request_id = idFrom;
+    p->channel = chIndex;
+    DEBUG_MSG("Alloc an err=%d,to=0x%x,idFrom=0x%x,id=0x%x\n", err, to, idFrom, p->id);
+
+    return p;
+}
+
+MeshPacket *MeshPlugin::allocErrorResponse(Routing_Error err, const MeshPacket *p)
+{
+    auto r = allocAckNak(err, getFrom(p), p->id, p->channel);
+
+    setReplyTo(r, *p);
+
+    return r;
+}
+
 void MeshPlugin::callPlugins(const MeshPacket &mp)
 {
     // DEBUG_MSG("In call plugins\n");
@@ -56,9 +89,17 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
         bool rxChannelOk = !pi.boundChannel || (mp.from == 0) || (strcmp(ch.settings.name, pi.boundChannel) == 0);
 
         /// We only call plugins that are interested in the packet (and the message is destined to us or we are promiscious)
-        bool wantsPacket = rxChannelOk && (pi.isPromiscuous || toUs) && pi.wantPacket(&mp);
-        // DEBUG_MSG("Plugin %s wantsPacket=%d\n", pi.name, wantsPacket);
-        if (wantsPacket) {
+        if (!rxChannelOk && toUs) {
+            // no one should have already replied!
+            assert(!currentReply);
+
+            if (mp.decoded.want_response) {
+                DEBUG_MSG("packet on wrong channel, returning error\n");
+                currentReply = pi.allocErrorResponse(Routing_Error_NOT_AUTHORIZED, &mp);
+            } else
+                DEBUG_MSG("packet on wrong channel, but client didn't want response\n");
+        } else if ((pi.isPromiscuous || toUs) && pi.wantPacket(&mp)) {
+            // DEBUG_MSG("Plugin %s wantsPacket=%d\n", pi.name, wantsPacket);
             pluginFound = true;
 
             bool handled = pi.handleReceived(mp);
@@ -90,8 +131,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
             DEBUG_MSG("Sending response\n");
             service.sendToMesh(currentReply);
             currentReply = NULL;
-        }
-        else {
+        } else {
             // No one wanted to reply to this requst, tell the requster that happened
             DEBUG_MSG("No one responded, send a nak\n");
             routingPlugin->sendAckNak(Routing_Error_NO_RESPONSE, getFrom(&mp), mp.id, mp.channel);
