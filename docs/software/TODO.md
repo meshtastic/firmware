@@ -4,7 +4,7 @@ You probably don't care about this section - skip to the next one.
 
 ## before next release
 
-* changing channels requires a reboot to take effect https://github.com/meshtastic/Meshtastic-device/issues/752 
+* TEST THIS! changing channels requires a reboot to take effect https://github.com/meshtastic/Meshtastic-device/issues/752 
 * add UI in android app to reset to defaults https://github.com/meshtastic/Meshtastic-Android/issues/263 
 * bug report with remote info request timing out
 * firmware OTA updates of is_router true nodes fails?
