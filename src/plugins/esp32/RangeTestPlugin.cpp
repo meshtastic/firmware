@@ -35,9 +35,9 @@ int32_t RangeTestPlugin::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    //radioConfig.preferences.range_test_plugin_enabled = 1;
-    //radioConfig.preferences.range_test_plugin_sender = 45;
-    //radioConfig.preferences.range_test_plugin_save = 1;
+    // radioConfig.preferences.range_test_plugin_enabled = 1;
+    // radioConfig.preferences.range_test_plugin_sender = 45;
+    // radioConfig.preferences.range_test_plugin_save = 1;
 
     // Fixed position is useful when testing indoors.
     // radioConfig.preferences.fixed_position = 1;
@@ -112,7 +112,7 @@ void RangeTestPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
     packetSequence++;
 
     static char heartbeatString[20];
-    snprintf(heartbeatString, sizeof(heartbeatString), "seq %d", packetSequence);
+    snprintf(heartbeatString, sizeof(heartbeatString), "seq %u", packetSequence);
 
     p->decoded.payload.size = strlen(heartbeatString); // You must specify how many bytes are in the reply
     memcpy(p->decoded.payload.bytes, heartbeatString, p->decoded.payload.size);
@@ -290,7 +290,7 @@ bool RangeTestPluginRadio::appendFile(const MeshPacket &mp)
         fileToAppend.printf("??:??:??,"); // Time
     }
 
-    fileToAppend.printf("%d,", getFrom(&mp));                          // From
+    fileToAppend.printf("%d,", getFrom(&mp));                     // From
     fileToAppend.printf("%s,", n->user.long_name);                // Long Name
     fileToAppend.printf("%f,", n->position.latitude_i * 1e-7);    // Sender Lat
     fileToAppend.printf("%f,", n->position.longitude_i * 1e-7);   // Sender Long
