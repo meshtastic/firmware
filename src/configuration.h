@@ -311,7 +311,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #elif defined(TLORA_V1_3)
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR HardwareModel_TLORA_V1p3
+#define HW_VENDOR HardwareModel_TLORA_V1_1p3
 
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
@@ -342,7 +342,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
-#define GPS_RX_PIN 36
+#define GPS_RX_PIN 15 // per @der_bear on the forum, 36 is incorrect for this board type and 15 is a better pick
 #define GPS_TX_PIN 13
 
 #define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
@@ -458,8 +458,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "SerialConsole.h"
 
 #define DEBUG_PORT console // Serial debug port
-
-
 
 // What platforms should use SEGGER?
 #ifdef NRF52_SERIES
