@@ -97,7 +97,8 @@ static void lsIdle()
 static void lsExit()
 {
     // setGPSPower(true); // restore GPS power
-    if (gps) gps->forceWake(true);
+    if (gps)
+        gps->forceWake(true);
 }
 
 static void nbEnter()
@@ -172,7 +173,7 @@ Fsm powerFSM(&stateBOOT);
 void PowerFSM_setup()
 {
     bool isRouter = radioConfig.preferences.is_router;
-        
+
     // If we are not a router and we already have AC power go to POWER state after init, otherwise go to ON
     // We assume routers might be powered all the time, but from a low current (solar) source
     bool isLowPower = radioConfig.preferences.is_low_power || isRouter;
@@ -180,7 +181,7 @@ void PowerFSM_setup()
     /* To determine if we're externally powered, assumptions
         1) If we're powered up and there's no battery, we must be getting power externally. (because we'd be dead otherwise)
 
-        2) If we detect USB power from the power management chip, we must be getting power externally. 
+        2) If we detect USB power from the power management chip, we must be getting power externally.
     */
     bool hasPower = !isLowPower && powerStatus && (!powerStatus->getHasBattery() || powerStatus->getHasUSB());
 
@@ -248,6 +249,11 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateSERIAL, &stateNB, EVENT_SERIAL_DISCONNECTED, NULL, "serial disconnect");
 
     powerFSM.add_transition(&stateDARK, &stateDARK, EVENT_CONTACT_FROM_PHONE, NULL, "Contact from phone");
+
+    // each time we get a new update packet make sure we are staying in the ON state so the screen stays awake (also we don't
+    // shutdown bluetooth if is_router)
+    powerFSM.add_transition(&stateDARK, &stateON, EVENT_FIRMWARE_UPDATE, NULL, "Got firmware update");
+    powerFSM.add_transition(&stateON, &stateON, EVENT_FIRMWARE_UPDATE, NULL, "Got firmware update");
 
     powerFSM.add_transition(&stateNB, &stateDARK, EVENT_PACKET_FOR_PHONE, NULL, "Packet for phone");
 

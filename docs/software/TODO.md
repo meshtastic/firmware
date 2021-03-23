@@ -4,12 +4,14 @@ You probably don't care about this section - skip to the next one.
 
 ## before next release
 
-* TEST THIS! changing channels requires a reboot to take effect https://github.com/meshtastic/Meshtastic-device/issues/752 
+* DONE firmware OTA updates of is_router true nodes fails?
 * add UI in android app to reset to defaults https://github.com/meshtastic/Meshtastic-Android/issues/263 
+* TEST THIS! changing channels requires a reboot to take effect https://github.com/meshtastic/Meshtastic-device/issues/752 
 * bug report with remote info request timing out
-* firmware OTA updates of is_router true nodes fails?
-* move remote admin doc from forum into git
-* ask for a documentation czar
+* retest channel changing in android (using sim?)
+* DONE move remote admin doc from forum into git
+* DONE check crashlytics
+* DONE ask for a documentation czar
 * DONE timestamps on oled screen are wrong - don't seem to be updating based on message rx (actually: this is expected behavior when no node on the mesh has GPS time)
 * DONE add ch-del
 * DONE channel hash suffixes are wrong on android
