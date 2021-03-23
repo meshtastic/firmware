@@ -56,13 +56,21 @@ bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, const AdminMessag
 
     case AdminMessage_set_channel_tag:
         DEBUG_MSG("Client is setting channel %d\n", r->set_channel.index);
-        handleSetChannel(r->set_channel);
+        if (r->set_channel.index < 0 || r->set_channel.index >= MAX_NUM_CHANNELS)
+            reply = allocErrorResponse(Routing_Error_BAD_REQUEST, &mp);
+        else
+            handleSetChannel(r->set_channel);
         break;
 
-    case AdminMessage_get_channel_request_tag:
-        DEBUG_MSG("Client is getting channel %d\n", r->get_channel_request - 1);
-        handleGetChannel(mp, r->get_channel_request - 1);
+    case AdminMessage_get_channel_request_tag: {
+        uint32_t i = r->get_channel_request - 1;
+        DEBUG_MSG("Client is getting channel %u\n", i);
+        if (i >= MAX_NUM_CHANNELS)
+            reply = allocErrorResponse(Routing_Error_BAD_REQUEST, &mp);
+        else
+            handleGetChannel(mp, i);
         break;
+    }
 
     case AdminMessage_get_radio_request_tag:
         DEBUG_MSG("Client is getting radio\n");

@@ -31,6 +31,39 @@ MeshPlugin::~MeshPlugin()
     assert(0); // FIXME - remove from list of plugins once someone needs this feature
 }
 
+MeshPacket *MeshPlugin::allocAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex)
+{
+    Routing c = Routing_init_default;
+
+    c.error_reason = err;
+
+    // Now that we have moded sendAckNak up one level into the class heirarchy we can no longer assume we are a RoutingPlugin
+    // So we manually call pb_encode_to_bytes and specify routing port number
+    // auto p = allocDataProtobuf(c);
+    MeshPacket *p = router->allocForSending();
+    p->decoded.portnum = PortNum_ROUTING_APP;
+    p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), Routing_fields, &c);
+
+    p->priority = MeshPacket_Priority_ACK;
+
+    p->hop_limit = 0; // Assume just immediate neighbors for now
+    p->to = to;
+    p->decoded.request_id = idFrom;
+    p->channel = chIndex;
+    DEBUG_MSG("Alloc an err=%d,to=0x%x,idFrom=0x%x,id=0x%x\n", err, to, idFrom, p->id);
+
+    return p;
+}
+
+MeshPacket *MeshPlugin::allocErrorResponse(Routing_Error err, const MeshPacket *p)
+{
+    auto r = allocAckNak(err, getFrom(p), p->id, p->channel);
+
+    setReplyTo(r, *p);
+
+    return r;
+}
+
 void MeshPlugin::callPlugins(const MeshPacket &mp)
 {
     // DEBUG_MSG("In call plugins\n");
@@ -52,33 +85,47 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
         auto ch = channels.getByIndex(mp.channel);
         assert(ch.has_settings);
 
-        /// Is the channel this packet arrived on acceptable? (security check)
-        bool rxChannelOk = !pi.boundChannel || (mp.from == 0) || (strcmp(ch.settings.name, pi.boundChannel) == 0);
-
         /// We only call plugins that are interested in the packet (and the message is destined to us or we are promiscious)
-        bool wantsPacket = rxChannelOk && (pi.isPromiscuous || toUs) && pi.wantPacket(&mp);
-        // DEBUG_MSG("Plugin %s wantsPacket=%d\n", pi.name, wantsPacket);
+        bool wantsPacket = (pi.isPromiscuous || toUs) && pi.wantPacket(&mp);
+
         if (wantsPacket) {
+            // DEBUG_MSG("Plugin %s wantsPacket=%d\n", pi.name, wantsPacket);
             pluginFound = true;
 
-            bool handled = pi.handleReceived(mp);
+            /// Is the channel this packet arrived on acceptable? (security check)
+            bool rxChannelOk = !pi.boundChannel || (mp.from == 0) || (strcmp(ch.settings.name, pi.boundChannel) == 0);
 
-            // Possibly send replies (but only if the message was directed to us specifically, i.e. not for promiscious sniffing)
-            // also: we only let the one plugin send a reply, once that happens, remaining plugins are not considered
+            if (!rxChannelOk) {
+                // no one should have already replied!
+                assert(!currentReply);
 
-            // NOTE: we send a reply *even if the (non broadcast) request was from us* which is unfortunate but necessary because
-            // currently when the phone sends things, it sends things using the local node ID as the from address.  A better
-            // solution (FIXME) would be to let phones have their own distinct addresses and we 'route' to them like any other
-            // node.
-            if (mp.decoded.want_response && toUs && (getFrom(&mp) != ourNodeNum || mp.to == ourNodeNum) && !currentReply) {
-                pi.sendResponse(mp);
-                DEBUG_MSG("Plugin %s sent a response\n", pi.name);
+                if (mp.decoded.want_response) {
+                    DEBUG_MSG("packet on wrong channel, returning error\n");
+                    currentReply = pi.allocErrorResponse(Routing_Error_NOT_AUTHORIZED, &mp);
+                } else
+                    DEBUG_MSG("packet on wrong channel, but client didn't want response\n");
             } else {
-                DEBUG_MSG("Plugin %s considered\n", pi.name);
-            }
-            if (handled) {
-                DEBUG_MSG("Plugin %s handled and skipped other processing\n", pi.name);
-                break;
+
+                bool handled = pi.handleReceived(mp);
+
+                // Possibly send replies (but only if the message was directed to us specifically, i.e. not for promiscious
+                // sniffing) also: we only let the one plugin send a reply, once that happens, remaining plugins are not
+                // considered
+
+                // NOTE: we send a reply *even if the (non broadcast) request was from us* which is unfortunate but necessary
+                // because currently when the phone sends things, it sends things using the local node ID as the from address.  A
+                // better solution (FIXME) would be to let phones have their own distinct addresses and we 'route' to them like
+                // any other node.
+                if (mp.decoded.want_response && toUs && (getFrom(&mp) != ourNodeNum || mp.to == ourNodeNum) && !currentReply) {
+                    pi.sendResponse(mp);
+                    DEBUG_MSG("Plugin %s sent a response\n", pi.name);
+                } else {
+                    DEBUG_MSG("Plugin %s considered\n", pi.name);
+                }
+                if (handled) {
+                    DEBUG_MSG("Plugin %s handled and skipped other processing\n", pi.name);
+                    break;
+                }
             }
         }
 
@@ -90,8 +137,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
             DEBUG_MSG("Sending response\n");
             service.sendToMesh(currentReply);
             currentReply = NULL;
-        }
-        else {
+        } else {
             // No one wanted to reply to this requst, tell the requster that happened
             DEBUG_MSG("No one responded, send a nak\n");
             routingPlugin->sendAckNak(Routing_Error_NO_RESPONSE, getFrom(&mp), mp.id, mp.channel);
