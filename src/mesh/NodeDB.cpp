@@ -451,6 +451,8 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p)
         info->position.latitude_i = p.latitude_i;
         info->position.longitude_i = p.longitude_i;
     }
+    if (p.altitude)
+        info->position.altitude = p.altitude;
     info->has_position = true;
     updateGUIforNode = info;
     notifyObservers(true); // Force an update whether or not our node counts have changed
