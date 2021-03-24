@@ -1,6 +1,5 @@
 #pragma once
 
-#include "configuration.h"
 #include "../freertosinc.h"
 
 namespace concurrency
@@ -28,4 +27,4 @@ class BinarySemaphoreFreeRTOS
 
 #endif
 
-} 
+} // namespace concurrency

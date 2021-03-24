@@ -2,6 +2,7 @@
 
 #include "PhoneAPI.h"
 #include "Stream.h"
+#include "concurrency/OSThread.h"
 
 // A To/FromRadio packet + our 32 bit header
 #define MAX_STREAM_BUF_SIZE (MAX_TO_FROM_RADIO_SIZE + sizeof(uint32_t))
@@ -27,7 +28,7 @@ valid utf8 encoding. This makes it a bit easier to start a device outputting reg
 after it has received a valid packet from the PC, turn off unencoded debug printing and switch to this packet encoding.
 
  */
-class StreamAPI : public PhoneAPI
+class StreamAPI : public PhoneAPI, protected concurrency::OSThread
 {
     /**
      * The stream we read/write from
@@ -37,21 +38,23 @@ class StreamAPI : public PhoneAPI
     uint8_t rxBuf[MAX_STREAM_BUF_SIZE];
     size_t rxPtr = 0;
 
+    /// time of last rx, used, to slow down our polling if we haven't heard from anyone
+    uint32_t lastRxMsec = 0;
+
   public:
-    StreamAPI(Stream *_stream) : stream(_stream) {}
+    StreamAPI(Stream *_stream) : concurrency::OSThread("StreamAPI"), stream(_stream) {}
 
     /**
      * Currently we require frequent invocation from loop() to check for arrived serial packets and to send new packets to the
      * phone.
-     * FIXME, to support better power behavior instead move to a thread and block on serial reads.
      */
-    void loop();
+    virtual int32_t runOnce();
 
   private:
     /**
      * Read any rx chars from the link and call handleToRadio
      */
-    void readStream();
+    int32_t readStream();
 
     /**
      * call getFromRadio() and deliver encapsulated packets to the Stream
@@ -63,7 +66,7 @@ class StreamAPI : public PhoneAPI
      * Send a FromRadio.rebooted = true packet to the phone
      */
     void emitRebooted();
-    
+
     /**
      * Send the current txBuffer over our stream
      */

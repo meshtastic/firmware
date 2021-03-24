@@ -67,8 +67,9 @@ class PhoneAPI
 
     /**
      * Handle a ToRadio protobuf
+     * @return true true if a packet was queued for sending (so that caller can yield)
      */
-    virtual void handleToRadio(const uint8_t *buf, size_t len);
+    virtual bool handleToRadio(const uint8_t *buf, size_t len);
 
     /**
      * Get the next packet we want to send to the phone
@@ -93,7 +94,7 @@ class PhoneAPI
     /// Hookable to find out when connection changes
     virtual void onConnectionChanged(bool connected) {}
 
-  /// If we haven't heard from the other side in a while then say not connected
+    /// If we haven't heard from the other side in a while then say not connected
     void checkConnectionTimeout();
 
     /**
@@ -103,9 +104,10 @@ class PhoneAPI
 
   private:
     /**
-     * Handle a packet that the phone wants us to send.  It is our responsibility to free the packet to the pool
+     * Handle a packet that the phone wants us to send.  We can write to it but can not keep a reference to it
+     * @return true true if a packet was queued for sending
      */
-    void handleToRadioPacket(MeshPacket *p);
+    bool handleToRadioPacket(MeshPacket &p);
 
     /// If the mesh service tells us fromNum has changed, tell the phone
     virtual int onNotify(uint32_t newValue);
