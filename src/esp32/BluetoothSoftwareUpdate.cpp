@@ -1,14 +1,14 @@
 #include <Arduino.h>
 
 #include "../concurrency/LockGuard.h"
+#include "../graphics/Screen.h"
+#include "../main.h"
 #include "BluetoothSoftwareUpdate.h"
+#include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RadioLibInterface.h"
 #include "configuration.h"
 #include "nimble/BluetoothUtil.h"
-#include "NodeDB.h"
-#include "../graphics/Screen.h"
-#include "../main.h"
 
 #include <CRC32.h>
 #include <Update.h>
@@ -51,8 +51,8 @@ int update_size_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_
 
             screen->startFirmwareUpdateScreen();
             if (RadioLibInterface::instance)
-                RadioLibInterface::instance->disable(); // FIXME, nasty hack - the RF95 ISR/SPI code on ESP32 can fail while we are
-                                                      // writing flash - shut the radio off during updates
+                RadioLibInterface::instance->disable(); // FIXME, nasty hack - the RF95 ISR/SPI code on ESP32 can fail while we
+                                                        // are writing flash - shut the radio off during updates
         }
     }
 
@@ -78,7 +78,7 @@ int update_data_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_
     crc.update(data, len);
     Update.write(data, len);
     updateActualSize += len;
-    powerFSM.trigger(EVENT_CONTACT_FROM_PHONE);
+    powerFSM.trigger(EVENT_FIRMWARE_UPDATE);
 
     return 0;
 }
@@ -107,8 +107,7 @@ int update_crc32_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble
             if (update_region == U_SPIFFS) {
                 DEBUG_MSG("SPIFFS updated!\n");
                 nodeDB.saveToDisk(); // Since we just wiped spiffs, we need to save our current state
-            }
-            else {
+            } else {
                 DEBUG_MSG("Appload updated, rebooting in 5 seconds!\n");
                 rebootAtMsec = millis() + 5000;
             }
