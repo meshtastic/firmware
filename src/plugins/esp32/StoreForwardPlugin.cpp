@@ -280,9 +280,9 @@ StoreForwardPlugin::StoreForwardPlugin()
         Uncomment the preferences below if you want to use the plugin
         without having to configure it from the PythonAPI or WebUI.
 
-    */
     radioConfig.preferences.store_forward_plugin_enabled = 1;
     radioConfig.preferences.is_router = 1;
+    */
 
     if (radioConfig.preferences.store_forward_plugin_enabled) {
 
@@ -305,7 +305,7 @@ StoreForwardPlugin::StoreForwardPlugin()
                 DEBUG_MSG("Store & Forward Plugin - Aborting Startup.\n");
             }
 
-        // Client
+            // Client
         } else {
             DEBUG_MSG("Initializing Store & Forward Plugin - Enabled as Client\n");
         }
