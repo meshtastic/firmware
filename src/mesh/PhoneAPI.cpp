@@ -1,10 +1,10 @@
 #include "PhoneAPI.h"
+#include "Channels.h"
 #include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
-#include "Channels.h"
 #include <assert.h>
 
 #if FromRadio_size > MAX_TO_FROM_RADIO_SIZE
@@ -22,16 +22,18 @@ void PhoneAPI::init()
     observe(&service.fromNumChanged);
 }
 
-PhoneAPI::~PhoneAPI() {
+PhoneAPI::~PhoneAPI()
+{
     close();
 }
 
-void PhoneAPI::close() {
+void PhoneAPI::close()
+{
     unobserve();
     state = STATE_SEND_NOTHING;
     bool oldConnected = isConnected;
     isConnected = false;
-    if(oldConnected != isConnected)
+    if (oldConnected != isConnected)
         onConnectionChanged(isConnected);
 }
 
@@ -49,7 +51,7 @@ void PhoneAPI::checkConnectionTimeout()
 /**
  * Handle a ToRadio protobuf
  */
-void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
+bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 {
     powerFSM.trigger(EVENT_CONTACT_FROM_PHONE); // As long as the phone keeps talking to us, don't let the radio go to sleep
     lastContactMsec = millis();
@@ -62,12 +64,9 @@ void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
     memset(&toRadioScratch, 0, sizeof(toRadioScratch));
     if (pb_decode_from_bytes(buf, bufLength, ToRadio_fields, &toRadioScratch)) {
         switch (toRadioScratch.which_payloadVariant) {
-        case ToRadio_packet_tag: {
-            MeshPacket &p = toRadioScratch.packet;
-            printPacket("PACKET FROM PHONE", &p);
-            service.handleToRadio(p);
-            break;
-        }
+        case ToRadio_packet_tag:
+            return handleToRadioPacket(toRadioScratch.packet);
+
         case ToRadio_want_config_id_tag:
             config_nonce = toRadioScratch.want_config_id;
             DEBUG_MSG("Client wants config, nonce=%u\n", config_nonce);
@@ -86,6 +85,8 @@ void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
     } else {
         DEBUG_MSG("Error: ignoring malformed toradio\n");
     }
+
+    return false;
 }
 
 /**
@@ -127,7 +128,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         fromRadioScratch.my_info = myNodeInfo;
         state = STATE_SEND_NODEINFO;
 
-        service.refreshMyNodeInfo();  // Update my NodeInfo because the client will be asking for it soon.
+        service.refreshMyNodeInfo(); // Update my NodeInfo because the client will be asking for it soon.
         break;
 
     case STATE_SEND_NODEINFO: {
@@ -226,7 +227,13 @@ bool PhoneAPI::available()
 /**
  * Handle a packet that the phone wants us to send.  It is our responsibility to free the packet to the pool
  */
-void PhoneAPI::handleToRadioPacket(MeshPacket *p) {}
+bool PhoneAPI::handleToRadioPacket(MeshPacket &p)
+{
+    printPacket("PACKET FROM PHONE", &p);
+    service.handleToRadio(p);
+
+    return true;
+}
 
 /// If the mesh service tells us fromNum has changed, tell the phone
 int PhoneAPI::onNotify(uint32_t newValue)

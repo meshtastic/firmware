@@ -457,7 +457,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "SerialConsole.h"
 
-#define DEBUG_PORT console // Serial debug port
+#define DEBUG_PORT (*console) // Serial debug port
 
 // What platforms should use SEGGER?
 #ifdef NRF52_SERIES
