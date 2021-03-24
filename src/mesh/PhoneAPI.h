@@ -22,6 +22,7 @@ class PhoneAPI
     enum State {
         STATE_UNUSED,       // (no longer used) old default state - until Android apps are all updated, uses the old BLE API
         STATE_SEND_NOTHING, // (Eventual) Initial state, don't send anything until the client starts asking for config
+                            // (disconnected)
         STATE_SEND_MY_INFO, // send our my info record
         // STATE_SEND_RADIO, // in 1.2 we now send this as a regular mesh packet
         // STATE_SEND_OWNER, no need to send Owner specially, it is just part of the nodedb
@@ -58,9 +59,6 @@ class PhoneAPI
     /// Destructor - calls close()
     virtual ~PhoneAPI();
 
-    /// Do late init that can't happen at constructor time
-    virtual void init();
-
     // Call this when the client drops the connection, resets the state to STATE_SEND_NOTHING
     // Unregisters our observer.  A closed connection **can** be reopened by calling init again.
     virtual void close();
@@ -84,10 +82,9 @@ class PhoneAPI
      */
     bool available();
 
-  protected:
-    /// Are we currently connected to a client?
-    bool isConnected = false;
+    bool isConnected() { return state != STATE_SEND_NOTHING; }
 
+  protected:
     /// Our fromradio packet while it is being assembled
     FromRadio fromRadioScratch;
 
@@ -102,7 +99,17 @@ class PhoneAPI
      */
     virtual void onNowHasData(uint32_t fromRadioNum) {}
 
+    /**
+     * Subclasses can use this to find out when a client drops the link
+     */
+    virtual void handleDisconnect();
+
   private:
+    void releasePhonePacket();
+
+    /// begin a new connection
+    void handleStartConfig();
+
     /**
      * Handle a packet that the phone wants us to send.  We can write to it but can not keep a reference to it
      * @return true true if a packet was queued for sending

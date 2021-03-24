@@ -191,6 +191,7 @@ typedef struct _ToRadio {
     union {
         MeshPacket packet;
         uint32_t want_config_id;
+        bool disconnect;
     };
 } ToRadio;
 
@@ -311,6 +312,7 @@ extern "C" {
 #define FromRadio_packet_tag                     11
 #define ToRadio_packet_tag                       2
 #define ToRadio_want_config_id_tag               100
+#define ToRadio_disconnect_tag                   104
 
 /* Struct field encoding specification for nanopb */
 #define Position_FIELDLIST(X, a) \
@@ -423,7 +425,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,packet,packet),  11)
 
 #define ToRadio_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,packet,packet),   2) \
-X(a, STATIC,   ONEOF,    UINT32,   (payloadVariant,want_config_id,want_config_id), 100)
+X(a, STATIC,   ONEOF,    UINT32,   (payloadVariant,want_config_id,want_config_id), 100) \
+X(a, STATIC,   ONEOF,    BOOL,     (payloadVariant,disconnect,disconnect), 104)
 #define ToRadio_CALLBACK NULL
 #define ToRadio_DEFAULT NULL
 #define ToRadio_payloadVariant_packet_MSGTYPE MeshPacket

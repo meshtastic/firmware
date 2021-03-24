@@ -487,7 +487,6 @@ void reinitBluetooth()
     DEBUG_MSG("Starting bluetooth\n");
     if (isFirstTime) {
         bluetoothPhoneAPI = new BluetoothPhoneAPI();
-        bluetoothPhoneAPI->init();
     }
 
     // FIXME - if waking from light sleep, only esp_nimble_hci_init?

@@ -4,6 +4,8 @@ You probably don't care about this section - skip to the next one.
 
 ## before next release
 
+* turn off bluetooth interface ENTIRELY while using serial API (was python client times out on connect sometimes)
+* gps assistance from phone not working?
 * DONE test latest firmware update with is_router
 * DONE firmware OTA updates of is_router true nodes fails?
 * DONE add UI in android app to reset to defaults https://github.com/meshtastic/Meshtastic-Android/issues/263 
