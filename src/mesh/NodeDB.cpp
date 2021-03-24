@@ -82,6 +82,7 @@ bool NodeDB::resetRadioConfig()
 
     radioGeneration++;
 
+    radioConfig.has_preferences = true;
     if (radioConfig.preferences.factory_reset) {
         DEBUG_MSG("Performing factory reset!\n");
         installDefaultDeviceState();
@@ -92,8 +93,6 @@ bool NodeDB::resetRadioConfig()
         DEBUG_MSG("Setting default channel and radio preferences!\n");
 
         channels.initDefaults();
-
-        radioConfig.has_preferences = true;
     }
 
     channels.onConfigChanged();
@@ -487,7 +486,7 @@ void NodeDB::updateUser(uint32_t nodeId, const User &p)
 /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
 void NodeDB::updateFrom(const MeshPacket &mp)
 {
-    if (mp.which_payloadVariant == MeshPacket_decoded_tag) {
+    if (mp.which_payloadVariant == MeshPacket_decoded_tag && mp.from) {
         DEBUG_MSG("Update DB node 0x%x, rx_time=%u\n", mp.from, mp.rx_time);
 
         NodeInfo *info = getOrCreateNode(getFrom(&mp));
@@ -497,7 +496,8 @@ void NodeDB::updateFrom(const MeshPacket &mp)
             info->position.time = mp.rx_time;
         }
 
-        info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
+        if (mp.rx_snr)
+            info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
     }
 }
 
