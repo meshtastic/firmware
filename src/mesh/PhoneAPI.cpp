@@ -17,34 +17,45 @@
 
 PhoneAPI::PhoneAPI() {}
 
-void PhoneAPI::init()
-{
-    observe(&service.fromNumChanged);
-}
-
 PhoneAPI::~PhoneAPI()
 {
     close();
 }
 
+void PhoneAPI::handleStartConfig()
+{
+    if (!isConnected()) {
+        onConnectionChanged(true);
+        observe(&service.fromNumChanged);
+    }
+
+    // even if we were already connected - restart our state machine
+    state = STATE_SEND_MY_INFO;
+
+    DEBUG_MSG("Reset nodeinfo read pointer\n");
+    nodeInfoForPhone = NULL;   // Don't keep returning old nodeinfos
+    nodeDB.resetReadPointer(); // FIXME, this read pointer should be moved out of nodeDB and into this class - because
+                               // this will break once we have multiple instances of PhoneAPI running independently
+}
+
 void PhoneAPI::close()
 {
-    unobserve();
-    state = STATE_SEND_NOTHING;
-    bool oldConnected = isConnected;
-    isConnected = false;
-    if (oldConnected != isConnected)
-        onConnectionChanged(isConnected);
+    if (state != STATE_SEND_NOTHING) {
+        state = STATE_SEND_NOTHING;
+
+        unobserve();
+        releasePhonePacket(); // Don't leak phone packets on shutdown
+
+        onConnectionChanged(false);
+    }
 }
 
 void PhoneAPI::checkConnectionTimeout()
 {
-    if (isConnected) {
+    if (isConnected()) {
         bool newConnected = (millis() - lastContactMsec < getPref_phone_timeout_secs() * 1000L);
-        if (!newConnected) {
-            isConnected = false;
-            onConnectionChanged(isConnected);
-        }
+        if (!newConnected)
+            close();
     }
 }
 
@@ -55,10 +66,7 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 {
     powerFSM.trigger(EVENT_CONTACT_FROM_PHONE); // As long as the phone keeps talking to us, don't let the radio go to sleep
     lastContactMsec = millis();
-    if (!isConnected) {
-        isConnected = true;
-        onConnectionChanged(isConnected);
-    }
+
     // return (lastContactMsec != 0) &&
 
     memset(&toRadioScratch, 0, sizeof(toRadioScratch));
@@ -70,12 +78,12 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
         case ToRadio_want_config_id_tag:
             config_nonce = toRadioScratch.want_config_id;
             DEBUG_MSG("Client wants config, nonce=%u\n", config_nonce);
-            state = STATE_SEND_MY_INFO;
 
-            DEBUG_MSG("Reset nodeinfo read pointer\n");
-            nodeInfoForPhone = NULL;   // Don't keep returning old nodeinfos
-            nodeDB.resetReadPointer(); // FIXME, this read pointer should be moved out of nodeDB and into this class - because
-                                       // this will break once we have multiple instances of PhoneAPI running independently
+            handleStartConfig();
+            break;
+
+        case ToRadio_disconnect_tag:
+            close();
             break;
 
         default:
@@ -166,10 +174,8 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             // Encapsulate as a FromRadio packet
             fromRadioScratch.which_payloadVariant = FromRadio_packet_tag;
             fromRadioScratch.packet = *packetForPhone;
-
-            service.releaseToPool(packetForPhone); // we just copied the bytes, so don't need this buffer anymore
-            packetForPhone = NULL;
         }
+        releasePhonePacket();
         break;
 
     default:
@@ -186,6 +192,16 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
     DEBUG_MSG("no FromRadio packet available\n");
     return 0;
+}
+
+void PhoneAPI::handleDisconnect() {}
+
+void PhoneAPI::releasePhonePacket()
+{
+    if (packetForPhone) {
+        service.releaseToPool(packetForPhone); // we just copied the bytes, so don't need this buffer anymore
+        packetForPhone = NULL;
+    }
 }
 
 /**

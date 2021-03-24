@@ -29,7 +29,6 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port)
                       // setDestination(&noopPrint); for testing, try turning off 'all' debug output and see what leaks
 
     Port.begin(SERIAL_BAUD);
-    StreamAPI::init();
     emitRebooted();
 }
 
