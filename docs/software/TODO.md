@@ -6,10 +6,10 @@ You probably don't care about this section - skip to the next one.
 
 * DONE test latest firmware update with is_router
 * DONE firmware OTA updates of is_router true nodes fails?
-* add UI in android app to reset to defaults https://github.com/meshtastic/Meshtastic-Android/issues/263 
-* TEST THIS! changing channels requires a reboot to take effect https://github.com/meshtastic/Meshtastic-device/issues/752 
-* bug report with remote info request timing out
-* retest channel changing in android (using sim?)
+* DONE add UI in android app to reset to defaults https://github.com/meshtastic/Meshtastic-Android/issues/263 
+* DONE TEST THIS! changing channels requires a reboot to take effect https://github.com/meshtastic/Meshtastic-device/issues/752 
+* DIBE bug report with remote info request timing out
+* DONE retest channel changing in android (using sim?)
 * DONE move remote admin doc from forum into git
 * DONE check crashlytics
 * DONE ask for a documentation czar
