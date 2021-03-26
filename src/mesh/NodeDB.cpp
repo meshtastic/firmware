@@ -494,8 +494,6 @@ void NodeDB::updateFrom(const MeshPacket &mp)
 
         if (mp.rx_time) { // if the packet has a valid timestamp use it to update our last_seen
 
-            sawSecAgo = sinceLastSeen(info); // Used by S&F
-
             info->has_position = true; // at least the time is valid
             info->position.time = mp.rx_time;
         }
