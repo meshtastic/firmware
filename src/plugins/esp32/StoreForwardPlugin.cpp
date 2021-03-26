@@ -24,7 +24,7 @@ int32_t StoreForwardPlugin::runOnce()
         if (radioConfig.preferences.is_router) {
             // Maybe some cleanup functions?
             this->historyReport();
-            return (10 * 1000);
+            return (60 * 1000);
         } else {
             /*
              * If the plugin is turned on and is_router is not enabled, then we'll send a heartbeat every
@@ -166,7 +166,13 @@ void StoreForwardPlugin::sendPayload(NodeNum dest, bool wantReplies)
 
 void StoreForwardPlugin::sendPayloadWelcome(NodeNum dest, bool wantReplies)
 {
+    DEBUG_MSG("*********************************\n");
+    DEBUG_MSG("*********************************\n");
+    DEBUG_MSG("*********************************\n");
     DEBUG_MSG("Sending S&F Welcome Message\n");
+    DEBUG_MSG("*********************************\n");
+    DEBUG_MSG("*********************************\n");
+    DEBUG_MSG("*********************************\n");
     MeshPacket *p = allocReply();
     p->to = dest;
     p->decoded.want_response = wantReplies;
@@ -219,13 +225,15 @@ StoreForwardPlugin::StoreForwardPlugin()
 
 #ifndef NO_ESP32
 
+    isPromiscuous = true; // Brown chicken brown cow
+
     /*
         Uncomment the preferences below if you want to use the plugin
         without having to configure it from the PythonAPI or WebUI.
 
+    */
     radioConfig.preferences.store_forward_plugin_enabled = 1;
     radioConfig.preferences.is_router = 1;
-    */
 
     if (radioConfig.preferences.store_forward_plugin_enabled) {
 
