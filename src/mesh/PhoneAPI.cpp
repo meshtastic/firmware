@@ -129,9 +129,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     case STATE_SEND_MY_INFO:
         // If the user has specified they don't want our node to share its location, make sure to tell the phone
         // app not to send locations on our behalf.
-        myNodeInfo.has_gps = (radioConfig.preferences.location_share == LocationSharing_LocDisabled)
-                                 ? true
-                                 : (gps && gps->isConnected()); // Update with latest GPS connect info
+        myNodeInfo.has_gps = gps && gps->isConnected(); // Update with latest GPS connect info
         fromRadioScratch.which_payloadVariant = FromRadio_my_info_tag;
         fromRadioScratch.my_info = myNodeInfo;
         state = STATE_SEND_NODEINFO;
@@ -144,7 +142,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         nodeInfoForPhone = NULL; // We just consumed a nodeinfo, will need a new one next time
 
         if (info) {
-            DEBUG_MSG("Sending nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s\n", info->num, info->position.time, info->user.id,
+            DEBUG_MSG("Sending nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s\n", info->num, info->last_heard, info->user.id,
                       info->user.long_name);
             fromRadioScratch.which_payloadVariant = FromRadio_node_info_tag;
             fromRadioScratch.node_info = *info;
@@ -168,7 +166,6 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     case STATE_SEND_PACKETS:
         // Do we have a message from the mesh?
         if (packetForPhone) {
-
             printPacket("phone downloaded packet", packetForPhone);
 
             // Encapsulate as a FromRadio packet
