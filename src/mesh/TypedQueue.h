@@ -31,7 +31,9 @@ template <class T> class TypedQueue
 
     bool isEmpty() { return uxQueueMessagesWaiting(h) == 0; }
 
-    bool enqueue(T x, TickType_t maxWait = portMAX_DELAY)
+    /** euqueue a packet.  Also, maxWait used to default to portMAX_DELAY, but we now want to callers to THINK about what blocking
+     * they want */
+    bool enqueue(T x, TickType_t maxWait)
     {
         if (reader) {
             reader->setInterval(0);

@@ -142,6 +142,7 @@ void SX1262Interface::addReceiveMetadata(MeshPacket *mp)
 {
     // DEBUG_MSG("PacketStatus %x\n", lora.getPacketStatus());
     mp->rx_snr = lora.getSNR();
+    mp->rx_rssi = lround(lora.getRSSI());
 }
 
 /** We override to turn on transmitter power as needed.

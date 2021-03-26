@@ -115,7 +115,8 @@ void Router::abortSendAndNak(Routing_Error err, MeshPacket *p)
     packetPool.release(p);
 }
 
-void Router::setReceivedMessage() {
+void Router::setReceivedMessage()
+{
     setInterval(0); // Run ASAP, so we can figure out our correct sleep time
 }
 
@@ -123,9 +124,13 @@ ErrorCode Router::sendLocal(MeshPacket *p)
 {
     // No need to deliver externally if the destination is the local node
     if (p->to == nodeDB.getNodeNum()) {
-        printPacket("Enqueuing local", p);
-        fromRadioQueue.enqueue(p);
-        setReceivedMessage();
+        if (fromRadioQueue.enqueue(p, 0)) {
+            printPacket("Enqueued local", p);
+            setReceivedMessage();
+        } else {
+            printPacket("BUG! fromRadioQueue is full! Discarding!", p);
+            packetPool.release(p);
+        }
         return ERRNO_OK;
     } else if (!iface) {
         // We must be sending to remote nodes also, fail if no interface found
@@ -143,9 +148,10 @@ ErrorCode Router::sendLocal(MeshPacket *p)
     }
 }
 
-void printBytes(const char *label, const uint8_t *p, size_t numbytes) {
+void printBytes(const char *label, const uint8_t *p, size_t numbytes)
+{
     DEBUG_MSG("%s: ", label);
-    for(size_t i = 0; i < numbytes; i++)
+    for (size_t i = 0; i < numbytes; i++)
         DEBUG_MSG("%02x ", p[i]);
     DEBUG_MSG("\n");
 }
@@ -189,7 +195,7 @@ ErrorCode Router::send(MeshPacket *p)
             return ERRNO_TOO_LARGE;
         }
 
-        //printBytes("plaintext", bytes, numbytes);
+        // printBytes("plaintext", bytes, numbytes);
 
         auto hash = channels.setActiveByIndex(p->channel);
         if (hash < 0) {
@@ -247,19 +253,18 @@ bool Router::perhapsDecode(MeshPacket *p)
                    rawSize); // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf
             crypto->decrypt(p->from, p->id, rawSize, bytes);
 
-            //printBytes("plaintext", bytes, p->encrypted.size);            
+            // printBytes("plaintext", bytes, p->encrypted.size);
 
             // Take those raw bytes and convert them back into a well structured protobuf we can understand
-            memset(&p->decoded, 0, sizeof(p->decoded)); 
+            memset(&p->decoded, 0, sizeof(p->decoded));
             if (!pb_decode_from_bytes(bytes, rawSize, Data_fields, &p->decoded)) {
                 DEBUG_MSG("Invalid protobufs in received mesh packet (bad psk?)!\n");
-            } else if(p->decoded.portnum == PortNum_UNKNOWN_APP) {
+            } else if (p->decoded.portnum == PortNum_UNKNOWN_APP) {
                 DEBUG_MSG("Invalid portnum (bad psk?)!\n");
-            }
-            else {
+            } else {
                 // parsing was successful
                 p->which_payloadVariant = MeshPacket_decoded_tag; // change type to decoded
-                p->channel = chIndex; // change to store the index instead of the hash
+                p->channel = chIndex;                             // change to store the index instead of the hash
                 printPacket("decoded message", p);
                 return true;
             }
@@ -285,7 +290,7 @@ void Router::handleReceived(MeshPacket *p)
     p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
 
     // Take those raw bytes and convert them back into a well structured protobuf we can understand
-    bool decoded = perhapsDecode(p); 
+    bool decoded = perhapsDecode(p);
     if (decoded) {
         // parsing was successful, queue for our recipient
         printPacket("handleReceived", p);
@@ -293,18 +298,20 @@ void Router::handleReceived(MeshPacket *p)
         // call any promiscious plugins here, make a (non promisiocous) plugin for forwarding messages to phone api
         // sniffReceived(p);
         MeshPlugin::callPlugins(*p);
+    } else {
+        DEBUG_MSG("packet decoding failed\n");
     }
 }
 
 void Router::perhapsHandleReceived(MeshPacket *p)
 {
     assert(radioConfig.has_preferences);
-    bool ignore = is_in_repeated(radioConfig.preferences.ignore_incoming, getFrom(p));
+    bool ignore = is_in_repeated(radioConfig.preferences.ignore_incoming, p->from);
 
     if (ignore)
         DEBUG_MSG("Ignoring incoming message, 0x%x is in our ignore list\n", p->from);
     else if (ignore |= shouldFilterReceived(p)) {
-        // DEBUG_MSG("Incoming message was filtered 0x%x\n", p->from);
+        DEBUG_MSG("Incoming message was filtered 0x%x\n", p->from);
     }
 
     // Note: we avoid calling shouldFilterReceived if we are supposed to ignore certain nodes - because some overrides might
