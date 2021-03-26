@@ -4,13 +4,16 @@ You probably don't care about this section - skip to the next one.
 
 ## before next release
 
-* turn off bluetooth interface ENTIRELY while using serial API (was python client times out on connect sometimes)
-* gps assistance from phone not working?
+* split position.time and last_heard
+* update android app to use last_heard
+* have android fill in if local GPS has poor signal
+* DONE turn off bluetooth interface ENTIRELY while using serial API (was python client times out on connect sometimes)
+* DONE gps assistance from phone not working?
 * DONE test latest firmware update with is_router
 * DONE firmware OTA updates of is_router true nodes fails?
 * DONE add UI in android app to reset to defaults https://github.com/meshtastic/Meshtastic-Android/issues/263 
 * DONE TEST THIS! changing channels requires a reboot to take effect https://github.com/meshtastic/Meshtastic-device/issues/752 
-* DIBE bug report with remote info request timing out
+* DONE bug report with remote info request timing out
 * DONE retest channel changing in android (using sim?)
 * DONE move remote admin doc from forum into git
 * DONE check crashlytics
