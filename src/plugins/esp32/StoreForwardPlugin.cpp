@@ -5,6 +5,7 @@
 #include "Router.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
+#include "plugins/PluginDev.h"
 #include <Arduino.h>
 #include <map>
 
@@ -232,8 +233,11 @@ StoreForwardPlugin::StoreForwardPlugin()
         without having to configure it from the PythonAPI or WebUI.
 
     */
-    radioConfig.preferences.store_forward_plugin_enabled = 1;
-    radioConfig.preferences.is_router = 1;
+
+    if (StoreForward_Dev) {
+        radioConfig.preferences.store_forward_plugin_enabled = 1;
+        radioConfig.preferences.is_router = 1;
+    }
 
     if (radioConfig.preferences.store_forward_plugin_enabled) {
 
