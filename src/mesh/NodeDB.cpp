@@ -23,6 +23,7 @@
 
 #ifndef NO_ESP32
 #include "mesh/http/WiFiAPClient.h"
+#include "plugins/esp32/StoreForwardPlugin.h"
 #endif
 
 NodeDB nodeDB;
@@ -493,7 +494,8 @@ void NodeDB::updateFrom(const MeshPacket &mp)
 
         NodeInfo *info = getOrCreateNode(getFrom(&mp));
 
-        if (mp.rx_time) {              // if the packet has a valid timestamp use it to update our last_seen
+        if (mp.rx_time) { // if the packet has a valid timestamp use it to update our last_seen
+
             info->has_position = true; // at least the time is valid
             info->position.time = mp.rx_time;
         }
