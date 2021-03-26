@@ -408,8 +408,7 @@ uint32_t sinceLastSeen(const NodeInfo *n)
 {
     uint32_t now = getTime();
 
-    uint32_t last_seen = n->position.time;
-    int delta = (int)(now - last_seen);
+    int delta = (int)(now - n->last_heard);
     if (delta < 0) // our clock must be slightly off still - not set from GPS yet
         delta = 0;
 
@@ -443,7 +442,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p)
     // Be careful to only update fields that have been set by the sender
     // A lot of position reports don't have time populated.  In that case, be careful to not blow away the time we
     // recorded based on the packet rxTime
-    if (!info->position.time && p.time)
+    if (p.time)
         info->position.time = p.time;
     if (p.battery_level)
         info->position.battery_level = p.battery_level;
@@ -493,10 +492,8 @@ void NodeDB::updateFrom(const MeshPacket &mp)
 
         NodeInfo *info = getOrCreateNode(getFrom(&mp));
 
-        if (mp.rx_time) {              // if the packet has a valid timestamp use it to update our last_seen
-            info->has_position = true; // at least the time is valid
-            info->position.time = mp.rx_time;
-        }
+        if (mp.rx_time) // if the packet has a valid timestamp use it to update our last_heard
+            info->last_heard = mp.rx_time;
 
         if (mp.rx_snr)
             info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.

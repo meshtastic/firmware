@@ -198,7 +198,7 @@ NodeInfo *MeshService::refreshMyNodeInfo()
     Position &position = node->position;
 
     // Update our local node info with our position (even if we don't decide to update anyone else)
-    position.time =
+    node->last_heard =
         getValidTime(RTCQualityFromNet); // This nodedb timestamp might be stale, so update it if our clock is kinda valid
 
     position.battery_level = powerStatus->getBatteryChargePercent();

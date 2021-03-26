@@ -161,6 +161,7 @@ typedef struct _NodeInfo {
     User user;
     bool has_position;
     Position position;
+    uint32_t last_heard;
     float snr;
 } NodeInfo;
 
@@ -233,7 +234,7 @@ extern "C" {
 #define Routing_init_default                     {0, {RouteDiscovery_init_default}}
 #define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0}
 #define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0}
-#define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0}
+#define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0}
 #define MyNodeInfo_init_default                  {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0}
 #define LogRecord_init_default                   {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_default                   {0, 0, {MyNodeInfo_init_default}}
@@ -244,7 +245,7 @@ extern "C" {
 #define Routing_init_zero                        {0, {RouteDiscovery_init_zero}}
 #define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0}
 #define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0}
-#define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0}
+#define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0}
 #define MyNodeInfo_init_zero                     {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0}
 #define LogRecord_init_zero                      {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_zero                      {0, 0, {MyNodeInfo_init_zero}}
@@ -299,6 +300,7 @@ extern "C" {
 #define NodeInfo_num_tag                         1
 #define NodeInfo_user_tag                        2
 #define NodeInfo_position_tag                    3
+#define NodeInfo_last_heard_tag                  4
 #define NodeInfo_snr_tag                         7
 #define Routing_route_request_tag                1
 #define Routing_route_reply_tag                  2
@@ -378,6 +380,7 @@ X(a, STATIC,   SINGULAR, INT32,    rx_rssi,          13)
 X(a, STATIC,   SINGULAR, UINT32,   num,               1) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  user,              2) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  position,          3) \
+X(a, STATIC,   SINGULAR, FIXED32,  last_heard,        4) \
 X(a, STATIC,   SINGULAR, FLOAT,    snr,               7)
 #define NodeInfo_CALLBACK NULL
 #define NodeInfo_DEFAULT NULL
@@ -463,7 +466,7 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define Routing_size                             42
 #define Data_size                                260
 #define MeshPacket_size                          309
-#define NodeInfo_size                            126
+#define NodeInfo_size                            131
 #define MyNodeInfo_size                          89
 #define LogRecord_size                           81
 #define FromRadio_size                           318
