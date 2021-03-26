@@ -486,7 +486,6 @@ void NodeDB::updateUser(uint32_t nodeId, const User &p)
 /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
 void NodeDB::updateFrom(const MeshPacket &mp)
 {
-    uint32_t sawSecAgo = 0;
 
     if (mp.which_payloadVariant == MeshPacket_decoded_tag) {
         DEBUG_MSG("Update DB node 0x%x, rx_time=%u\n", mp.from, mp.rx_time);
@@ -500,18 +499,6 @@ void NodeDB::updateFrom(const MeshPacket &mp)
             info->has_position = true; // at least the time is valid
             info->position.time = mp.rx_time;
         }
-
-// Used by the store & forward plugin.
-#ifndef NO_ESP32
-
-        // Check that both the plugin is
-        if (radioConfig.preferences.store_forward_plugin_enabled && storeForwardPlugin) {
-            /* Notify the store and forward plugin that we just saw a node.
-             */
-            storeForwardPlugin.sawNode(getFrom(&mp), sawSecAgo);
-        }
-
-#endif
 
         info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
     }
