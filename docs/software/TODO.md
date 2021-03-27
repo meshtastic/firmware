@@ -5,7 +5,6 @@ You probably don't care about this section - skip to the next one.
 ## before next release
 
 * DONE have android fill in if local GPS has poor signal
-* release
 * fix heltec battery scaling
 * add reference counting to mesh packets
 * allow multiple simultanteous phoneapi connections
