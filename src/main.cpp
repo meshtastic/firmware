@@ -177,6 +177,7 @@ class ButtonThread : public OSThread
     OneButton userButtonAlt;
 #endif
     static bool shutdown_on_long_stop;
+
   public:
     static uint32_t longPressTime;
 
@@ -250,15 +251,15 @@ class ButtonThread : public OSThread
                 power->shutdown();
             }
 #elif NRF52_SERIES
-        // Do actual shutdown when button released, otherwise the button release
-        // may wake the board immediatedly.
-        if (!shutdown_on_long_stop) {
-            DEBUG_MSG("Shutdown from long press");
-            playBeep();
-            ledOff(PIN_LED1);
-            ledOff(PIN_LED2);
-            shutdown_on_long_stop = true;
-        }
+            // Do actual shutdown when button released, otherwise the button release
+            // may wake the board immediatedly.
+            if (!shutdown_on_long_stop) {
+                DEBUG_MSG("Shutdown from long press");
+                playBeep();
+                ledOff(PIN_LED1);
+                ledOff(PIN_LED2);
+                shutdown_on_long_stop = true;
+            }
 #endif
         } else {
             // DEBUG_MSG("Long press %u\n", (millis() - longPressTime));
@@ -315,9 +316,8 @@ void setup()
     SEGGER_RTT_ConfigUpBuffer(0, NULL, NULL, 0, SEGGER_RTT_MODE_NO_BLOCK_TRIM);
 #endif
 
-// Debug
 #ifdef DEBUG_PORT
-    DEBUG_PORT.init(); // Set serial baud rate and init our mesh console
+    consoleInit(); // Set serial baud rate and init our mesh console
 #endif
 
     initDeepSleep();
@@ -576,13 +576,23 @@ Periodic axpDebugOutput(axpDebugRead);
 axpDebugOutput.setup();
 #endif
 
+uint32_t rebootAtMsec; // If not zero we will reboot at this time (used to reboot shortly after the update completes)
+
+void rebootCheck()
+{
+    if (rebootAtMsec && millis() > rebootAtMsec) {
+#ifndef NO_ESP32
+        DEBUG_MSG("Rebooting for update\n");
+        ESP.restart();
+#else
+        DEBUG_MSG("FIXME implement reboot for this platform");
+#endif
+    }
+}
+
 void loop()
 {
     // axpDebugOutput.loop();
-
-#ifdef DEBUG_PORT
-    DEBUG_PORT.loop(); // Send/receive protobufs over the serial port
-#endif
 
     // heap_caps_check_integrity_all(true); // FIXME - disable this expensive check
 
@@ -592,6 +602,7 @@ void loop()
 #ifdef NRF52_SERIES
     nrf52Loop();
 #endif
+    rebootCheck();
 
     // For debugging
     // if (rIf) ((RadioLibInterface *)rIf)->isActivelyReceiving();

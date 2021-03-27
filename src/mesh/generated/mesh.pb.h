@@ -162,6 +162,7 @@ typedef struct _NodeInfo {
     User user;
     bool has_position;
     Position position;
+    uint32_t last_heard;
     float snr;
 } NodeInfo;
 
@@ -192,6 +193,7 @@ typedef struct _ToRadio {
     union {
         MeshPacket packet;
         uint32_t want_config_id;
+        bool disconnect;
     };
 } ToRadio;
 
@@ -233,7 +235,7 @@ extern "C" {
 #define Routing_init_default                     {0, {RouteDiscovery_init_default}}
 #define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0}
 #define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0}
-#define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0}
+#define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0}
 #define MyNodeInfo_init_default                  {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0}
 #define LogRecord_init_default                   {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_default                   {0, 0, {MyNodeInfo_init_default}}
@@ -244,7 +246,7 @@ extern "C" {
 #define Routing_init_zero                        {0, {RouteDiscovery_init_zero}}
 #define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0}
 #define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0}
-#define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0}
+#define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0}
 #define MyNodeInfo_init_zero                     {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0}
 #define LogRecord_init_zero                      {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_zero                      {0, 0, {MyNodeInfo_init_zero}}
@@ -300,6 +302,7 @@ extern "C" {
 #define NodeInfo_num_tag                         1
 #define NodeInfo_user_tag                        2
 #define NodeInfo_position_tag                    3
+#define NodeInfo_last_heard_tag                  4
 #define NodeInfo_snr_tag                         7
 #define Routing_route_request_tag                1
 #define Routing_route_reply_tag                  2
@@ -313,6 +316,7 @@ extern "C" {
 #define FromRadio_packet_tag                     11
 #define ToRadio_packet_tag                       2
 #define ToRadio_want_config_id_tag               100
+#define ToRadio_disconnect_tag                   104
 
 /* Struct field encoding specification for nanopb */
 #define Position_FIELDLIST(X, a) \
@@ -378,6 +382,7 @@ X(a, STATIC,   SINGULAR, INT32,    rx_rssi,          13)
 X(a, STATIC,   SINGULAR, UINT32,   num,               1) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  user,              2) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  position,          3) \
+X(a, STATIC,   SINGULAR, FIXED32,  last_heard,        4) \
 X(a, STATIC,   SINGULAR, FLOAT,    snr,               7)
 #define NodeInfo_CALLBACK NULL
 #define NodeInfo_DEFAULT NULL
@@ -426,7 +431,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,packet,packet),  11)
 
 #define ToRadio_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,packet,packet),   2) \
-X(a, STATIC,   ONEOF,    UINT32,   (payloadVariant,want_config_id,want_config_id), 100)
+X(a, STATIC,   ONEOF,    UINT32,   (payloadVariant,want_config_id,want_config_id), 100) \
+X(a, STATIC,   ONEOF,    BOOL,     (payloadVariant,disconnect,disconnect), 104)
 #define ToRadio_CALLBACK NULL
 #define ToRadio_DEFAULT NULL
 #define ToRadio_payloadVariant_packet_MSGTYPE MeshPacket
@@ -463,7 +469,7 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define Routing_size                             42
 #define Data_size                                260
 #define MeshPacket_size                          309
-#define NodeInfo_size                            126
+#define NodeInfo_size                            131
 #define MyNodeInfo_size                          95
 #define LogRecord_size                           81
 #define FromRadio_size                           318
