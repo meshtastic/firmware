@@ -23,6 +23,7 @@
 
 #ifndef NO_ESP32
 #include "mesh/http/WiFiAPClient.h"
+#include "plugins/esp32/StoreForwardPlugin.h"
 #endif
 
 NodeDB nodeDB;
