@@ -10,10 +10,8 @@ PositionPlugin *positionPlugin;
 PositionPlugin::PositionPlugin()
     : ProtobufPlugin("position", PortNum_POSITION_APP, Position_fields), concurrency::OSThread("PositionPlugin")
 {
-    isPromiscuous = true; // We always want to update our nodedb, even if we are sniffing on others
-    setIntervalFromNow(60 *
-                       1000); // Send our initial position 60 seconds after we start (to give GPS time to setup)
-
+    isPromiscuous = true;          // We always want to update our nodedb, even if we are sniffing on others
+    setIntervalFromNow(60 * 1000); // Send our initial position 60 seconds after we start (to give GPS time to setup)
 }
 
 bool PositionPlugin::handleReceivedProtobuf(const MeshPacket &mp, const Position *pptr)

@@ -4,9 +4,13 @@ You probably don't care about this section - skip to the next one.
 
 ## before next release
 
-* split position.time and last_heard
-* update android app to use last_heard
-* have android fill in if local GPS has poor signal
+* DONE have android fill in if local GPS has poor signal
+* release
+* fix heltec battery scaling
+* add reference counting to mesh packets
+* allow multiple simultanteous phoneapi connections
+* DONE split position.time and last_heard
+* DONE update android app to use last_heard
 * DONE turn off bluetooth interface ENTIRELY while using serial API (was python client times out on connect sometimes)
 * DONE gps assistance from phone not working?
 * DONE test latest firmware update with is_router
