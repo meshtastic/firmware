@@ -941,7 +941,7 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     res->println("},");
 
     res->println("\"device\": {");
-    res->printf("\"reboot_counter\": %d\n", rebootCounter);
+    res->printf("\"reboot_counter\": %d\n", myNodeInfo.reboot_count);
     res->println("},");
 
     res->println("\"radio\": {");
