@@ -29,8 +29,7 @@ class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThrea
      Update our local reference of when we last saw that node.
      @return 0 if we have never seen that node before otherwise return the last time we saw the node.
      */
-    uint32_t sawNode(uint32_t);
-    void sawNodeReport();
+    void sawNode(uint32_t whoWeSaw, uint32_t sawSecAgo);
     void historyAdd(const MeshPacket *mp);
     void historyReport();
     void historySend(uint32_t msAgo, uint32_t to);
@@ -40,6 +39,7 @@ class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThrea
      * Send our payload into the mesh
      */
     void sendPayload(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
+    void sendPayloadWelcome(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
     virtual MeshPacket *allocReply();
     virtual bool wantPortnum(PortNum p) { return true; };
 
@@ -80,4 +80,3 @@ class StoreForwardPluginRadio : public SinglePortPlugin
 
 extern StoreForwardPluginRadio *storeForwardPluginRadio;
 */
-

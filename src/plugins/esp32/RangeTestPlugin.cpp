@@ -255,7 +255,9 @@ bool RangeTestPluginRadio::appendFile(const MeshPacket &mp)
             return 0;
         }
 
-        if (fileToWrite.println("time,from,sender name,sender lat,sender long,rx lat,rx long,rx snr,distance,payload")) {
+        // Print the CSV header
+        if (fileToWrite.println(
+                "time,from,sender name,sender lat,sender long,rx lat,rx long,rx snr,rx elevation,distance,payload")) {
             DEBUG_MSG("File was written\n");
         } else {
             DEBUG_MSG("File write failed\n");
@@ -296,7 +298,9 @@ bool RangeTestPluginRadio::appendFile(const MeshPacket &mp)
     fileToAppend.printf("%f,", n->position.longitude_i * 1e-7);   // Sender Long
     fileToAppend.printf("%f,", gpsStatus->getLatitude() * 1e-7);  // RX Lat
     fileToAppend.printf("%f,", gpsStatus->getLongitude() * 1e-7); // RX Long
-    fileToAppend.printf("%f,", mp.rx_snr);                        // RX SNR
+    fileToAppend.printf("%d,", gpsStatus->getAltitude());         // RX Altitude
+
+    fileToAppend.printf("%f,", mp.rx_snr); // RX SNR
 
     if (n->position.latitude_i && n->position.longitude_i && gpsStatus->getLatitude() && gpsStatus->getLongitude()) {
         float distance = latLongToMeter(n->position.latitude_i * 1e-7, n->position.longitude_i * 1e-7,
