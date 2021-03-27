@@ -1,6 +1,6 @@
 #!/bin/sh
 
-PYTHON=${PYTHON:-python}
+PYTHON=${PYTHON:-python3}
 
 # Usage info
 show_help() {
