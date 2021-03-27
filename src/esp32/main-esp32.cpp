@@ -7,9 +7,10 @@
 #include "sleep.h"
 #include "target_specific.h"
 #include "utils.h"
+#include <Preferences.h>
+#include <driver/rtc_io.h>
 #include <nvs.h>
 #include <nvs_flash.h>
-#include <driver/rtc_io.h>
 
 void getMacAddr(uint8_t *dmac)
 {
@@ -44,6 +45,18 @@ void esp32Setup()
     assert(res == ESP_OK);
     DEBUG_MSG("NVS: UsedEntries %d, FreeEntries %d, AllEntries %d\n", nvs_stats.used_entries, nvs_stats.free_entries,
               nvs_stats.total_entries);
+
+    DEBUG_MSG("Setup Preferences in Flash Storage\n");
+
+    // Create object to store our persistant data
+    Preferences preferences;
+    preferences.begin("meshtastic", false);
+
+    uint32_t rebootCounter = preferences.getUInt("rebootCounter", 0);
+    rebootCounter++;
+    preferences.putUInt("rebootCounter", rebootCounter);
+    preferences.end();
+    DEBUG_MSG("Number of Device Reboots: %d\n", rebootCounter);
 
     // enableModemSleep();
 
