@@ -197,9 +197,12 @@ NodeInfo *MeshService::refreshMyNodeInfo()
 
     Position &position = node->position;
 
-    // Update our local node info with our position (even if we don't decide to update anyone else)
+    // Update our local node info with our time (even if we don't decide to update anyone else)
     node->last_heard =
         getValidTime(RTCQualityFromNet); // This nodedb timestamp might be stale, so update it if our clock is kinda valid
+
+    // For the time in the position field, only set that if we have a real GPS clock
+    position.time = getValidTime(RTCQualityGPS);
 
     position.battery_level = powerStatus->getBatteryChargePercent();
     updateBatteryLevel(position.battery_level);
