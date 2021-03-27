@@ -576,6 +576,20 @@ Periodic axpDebugOutput(axpDebugRead);
 axpDebugOutput.setup();
 #endif
 
+uint32_t rebootAtMsec; // If not zero we will reboot at this time (used to reboot shortly after the update completes)
+
+void rebootCheck()
+{
+    if (rebootAtMsec && millis() > rebootAtMsec) {
+#ifndef NO_ESP32
+        DEBUG_MSG("Rebooting for update\n");
+        ESP.restart();
+#else
+        DEBUG_MSG("FIXME implement reboot for this platform");
+#endif
+    }
+}
+
 void loop()
 {
     // axpDebugOutput.loop();
@@ -588,6 +602,7 @@ void loop()
 #ifdef NRF52_SERIES
     nrf52Loop();
 #endif
+    rebootCheck();
 
     // For debugging
     // if (rIf) ((RadioLibInterface *)rIf)->isActivelyReceiving();

@@ -16,7 +16,6 @@
 int16_t updateResultHandle = -1;
 
 static CRC32 crc;
-static uint32_t rebootAtMsec = 0; // If not zero we will reboot at this time (used to reboot shortly after the update completes)
 
 static uint32_t updateExpectedSize, updateActualSize;
 static uint8_t update_result;
@@ -137,14 +136,6 @@ int update_result_callback(uint16_t conn_handle, uint16_t attr_handle, struct bl
 int update_region_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
     return chr_readwrite8(&update_region, sizeof(update_region), ctxt);
-}
-
-void bluetoothRebootCheck()
-{
-    if (rebootAtMsec && millis() > rebootAtMsec) {
-        DEBUG_MSG("Rebooting for update\n");
-        ESP.restart();
-    }
 }
 
 /*

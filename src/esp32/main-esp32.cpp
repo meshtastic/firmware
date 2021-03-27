@@ -7,9 +7,9 @@
 #include "sleep.h"
 #include "target_specific.h"
 #include "utils.h"
+#include <driver/rtc_io.h>
 #include <nvs.h>
 #include <nvs_flash.h>
-#include <driver/rtc_io.h>
 
 void getMacAddr(uint8_t *dmac)
 {
@@ -84,7 +84,6 @@ void esp32Loop()
 {
     esp_task_wdt_reset(); // service our app level watchdog
     loopBLE();
-    bluetoothRebootCheck();
 
     // for debug printing
     // radio.radioIf.canSleep();
