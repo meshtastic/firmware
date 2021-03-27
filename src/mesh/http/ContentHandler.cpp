@@ -1,5 +1,6 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "RadioLibInterface.h"
 #include "airtime.h"
 #include "main.h"
 #include "mesh/http/ContentHelper.h"
@@ -10,8 +11,8 @@
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>
 #include <HTTPURLEncodedBodyParser.hpp>
+#include <Preferences.h>
 #include <SPIFFS.h>
-#include "RadioLibInterface.h"
 
 #ifndef NO_ESP32
 #include "esp_task_wdt.h"
@@ -836,6 +837,11 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     ResourceParameters *params = req->getParams();
     std::string content;
 
+    Preferences preferences;
+    preferences.begin("meshtastic", false);
+
+    uint32_t rebootCounter = preferences.getUInt("rebootCounter", 0);
+
     if (!params->getQueryParameter("content", content)) {
         content = "json";
     }
@@ -934,14 +940,16 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     res->printf("\"is_charging\": %s\n", BoolToString(powerStatus->getIsCharging()));
     res->println("},");
 
+    res->println("\"device\": {");
+    res->printf("\"reboot_counter\": %d\n", myNodeInfo.reboot_count);
+    res->println("},");
+
     res->println("\"radio\": {");
     res->printf("\"frequecy\": %f,\n", RadioLibInterface::instance->getFreq());
     res->printf("\"lora_channel\": %d\n", RadioLibInterface::instance->getChannelNum());
     res->println("}");
 
     res->println("},");
-
-
 
     res->println("\"status\": \"ok\"");
     res->println("}");
