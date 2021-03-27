@@ -24,6 +24,7 @@
 #ifndef NO_ESP32
 #include "mesh/http/WiFiAPClient.h"
 #include "plugins/esp32/StoreForwardPlugin.h"
+#include <Preferences.h>
 #endif
 
 NodeDB nodeDB;
@@ -233,6 +234,15 @@ void NodeDB::init()
     // hw_model is no longer stored in myNodeInfo (as of 1.2.11) - we now store it as an enum in nodeinfo
     myNodeInfo.hw_model_deprecated[0] = '\0';
     // strncpy(myNodeInfo.hw_model, HW_VENDOR, sizeof(myNodeInfo.hw_model));
+
+#ifndef NO_ESP32
+    Preferences preferences;
+    preferences.begin("meshtastic", false);
+    myNodeInfo.reboot_count = preferences.getUInt("rebootCounter", 0);
+    preferences.end();
+    DEBUG_MSG("Number of Device Reboots: %d\n", myNodeInfo.reboot_count);
+
+#endif
 
     resetRadioConfig(); // If bogus settings got saved, then fix them
 
