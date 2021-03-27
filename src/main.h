@@ -20,4 +20,6 @@ extern graphics::Screen *screen;
 // Return a human readable string of the form "Meshtastic_ab13"
 const char *getDeviceName();
 
+extern uint32_t rebootAtMsec;
+
 void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop();
