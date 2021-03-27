@@ -77,6 +77,13 @@ bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, const AdminMessag
         handleGetRadio(mp);
         break;
 
+    case AdminMessage_reboot_seconds_tag: {
+        int32_t s = r->reboot_seconds;
+        DEBUG_MSG("Rebooting in %d seconds\n", s);
+        rebootAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
+        break;
+    }
+
 #ifdef PORTDUINO
     case AdminMessage_exit_simulator_tag:
         DEBUG_MSG("Exiting simulator\n");

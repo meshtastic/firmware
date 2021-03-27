@@ -4,8 +4,6 @@
 
 void reinitUpdateService();
 
-void bluetoothRebootCheck();
-
 #ifdef __cplusplus
 extern "C" {
 #endif
