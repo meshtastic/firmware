@@ -840,7 +840,7 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     Preferences preferences;
     preferences.begin("meshtastic", false);
 
-    uint32_t rebootCounter = preferences.getUInt("rebootCounter", 0);
+    // uint32_t rebootCounter = preferences.getUInt("rebootCounter", 0);
 
     if (!params->getQueryParameter("content", content)) {
         content = "json";
