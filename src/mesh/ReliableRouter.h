@@ -79,9 +79,10 @@ class ReliableRouter : public FloodingRouter
     /** Do our retransmission handling */
     virtual int32_t runOnce()
     {
-        auto d = FloodingRouter::runOnce();
+        // Note: We must doRetransmissions FIRST, because it might queue up work for the base class runOnce implementation
+        auto d = doRetransmissions();
 
-        int32_t r = doRetransmissions();
+        int32_t r = FloodingRouter::runOnce();
 
         return min(d, r);
     }
@@ -109,7 +110,6 @@ class ReliableRouter : public FloodingRouter
     PendingPacket *startRetransmission(MeshPacket *p);
 
   private:
-
     /**
      * Stop any retransmissions we are doing of the specified node/packet ID pair
      *

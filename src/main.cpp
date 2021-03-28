@@ -590,8 +590,14 @@ void rebootCheck()
     }
 }
 
+// If a thread does something that might need for it to be rescheduled ASAP it can set this flag
+// This will supress the current delay and instead try to run ASAP.
+bool runASAP;
+
 void loop()
 {
+    runASAP = false;
+
     // axpDebugOutput.loop();
 
     // heap_caps_check_integrity_all(true); // FIXME - disable this expensive check
@@ -627,6 +633,7 @@ void loop()
                   mainController.nextThread->tillRun(millis())); */
 
     // We want to sleep as long as possible here - because it saves power
-    mainDelay.delay(delayMsec);
+    if (!runASAP)
+        mainDelay.delay(delayMsec);
     // if (didWake) DEBUG_MSG("wake!\n");
 }
