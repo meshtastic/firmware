@@ -22,4 +22,8 @@ const char *getDeviceName();
 
 extern uint32_t rebootAtMsec;
 
+// If a thread does something that might need for it to be rescheduled ASAP it can set this flag
+// This will supress the current delay and instead try to run ASAP.
+extern bool runASAP;
+
 void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop();
