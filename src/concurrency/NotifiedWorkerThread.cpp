@@ -1,5 +1,6 @@
 #include "NotifiedWorkerThread.h"
 #include "configuration.h"
+#include "main.h"
 #include <assert.h>
 
 namespace concurrency
@@ -28,6 +29,7 @@ IRAM_ATTR bool NotifiedWorkerThread::notifyCommon(uint32_t v, bool overwrite)
     if (overwrite || notification == 0) {
         enabled = true;
         setInterval(0); // Run ASAP
+        runASAP = true;
 
         notification = v;
         if (debugNotification)

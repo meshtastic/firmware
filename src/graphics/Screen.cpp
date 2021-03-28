@@ -717,6 +717,7 @@ void Screen::handleSetOn(bool on)
             dispdev.displayOn();
             enabled = true;
             setInterval(0); // Draw ASAP
+            runASAP = true;
         } else {
             DEBUG_MSG("Turning off screen\n");
             dispdev.displayOff();
@@ -1053,6 +1054,7 @@ void Screen::setFastFramerate()
     targetFramerate = SCREEN_TRANSITION_FRAMERATE;
     ui.setTargetFPS(targetFramerate);
     setInterval(0); // redraw ASAP
+    runASAP = true;
 }
 
 void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)

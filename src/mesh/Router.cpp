@@ -4,6 +4,7 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include "configuration.h"
+#include "main.h"
 #include "mesh-pb-constants.h"
 #include "plugins/RoutingPlugin.h"
 
@@ -55,9 +56,11 @@ int32_t Router::runOnce()
 {
     MeshPacket *mp;
     while ((mp = fromRadioQueue.dequeuePtr(0)) != NULL) {
+        // printPacket("handle fromRadioQ", mp);
         perhapsHandleReceived(mp);
     }
 
+    // DEBUG_MSG("sleeping forever!\n");
     return INT32_MAX; // Wait a long time - until we get woken for the message queue
 }
 
@@ -117,7 +120,9 @@ void Router::abortSendAndNak(Routing_Error err, MeshPacket *p)
 
 void Router::setReceivedMessage()
 {
+    // DEBUG_MSG("set interval to ASAP\n");
     setInterval(0); // Run ASAP, so we can figure out our correct sleep time
+    runASAP = true;
 }
 
 ErrorCode Router::sendLocal(MeshPacket *p)
