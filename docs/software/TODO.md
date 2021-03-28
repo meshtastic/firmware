@@ -4,6 +4,7 @@ You probably don't care about this section - skip to the next one.
 
 ## before next release
 
+* DONE naks are being dropped (though enqueuedLocal) sometimes before phone/PC gets them
 * DONE have android fill in if local GPS has poor signal
 * fix heltec battery scaling
 * add reference counting to mesh packets
