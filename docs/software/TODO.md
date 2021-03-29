@@ -4,8 +4,14 @@ You probably don't care about this section - skip to the next one.
 
 ## before next release
 
+* TCP mode for android, localhost is at 10.0.2.2
+* make sure USB still works in android
+* add portduino builds to zip
+* add license to portduino and make announcement
+* @havealoha comments about odd sleep behavior
 * DONE naks are being dropped (though enqueuedLocal) sometimes before phone/PC gets them
 * DONE have android fill in if local GPS has poor signal
+* release to beta and amazon
 * fix heltec battery scaling
 * add reference counting to mesh packets
 * allow multiple simultanteous phoneapi connections
@@ -37,6 +43,10 @@ You probably don't care about this section - skip to the next one.
 * DONE android should always provide time to nodes - so that it is easier for the mesh to learn the current time
 
 ## MQTT
+
+* do initial development inside of portduino
+* do as much possible on the device side (so we can eventually just have ESP32 talk directly to server)
+* eventually add a MQTTPacket on the ToRadio & FromRadio links
 
 ## Multichannel support
 
