@@ -15,7 +15,10 @@
 #error ToRadio is too big
 #endif
 
-PhoneAPI::PhoneAPI() {}
+PhoneAPI::PhoneAPI()
+{
+    lastContactMsec = millis();
+}
 
 PhoneAPI::~PhoneAPI()
 {
@@ -53,9 +56,12 @@ void PhoneAPI::close()
 void PhoneAPI::checkConnectionTimeout()
 {
     if (isConnected()) {
-        bool newConnected = (millis() - lastContactMsec < getPref_phone_timeout_secs() * 1000L);
-        if (!newConnected)
+        uint32_t now = millis();
+        bool newContact = (now - lastContactMsec) < getPref_phone_timeout_secs() * 1000UL;
+        if (!newContact) {
+            DEBUG_MSG("Timed out on phone contact, dropping phone connection\n");
             close();
+        }
     }
 }
 
