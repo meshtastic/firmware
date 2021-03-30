@@ -36,6 +36,7 @@ MeshPacket *MeshPlugin::allocAckNak(Routing_Error err, NodeNum to, PacketId idFr
     Routing c = Routing_init_default;
 
     c.error_reason = err;
+    c.which_variant = Routing_error_reason_tag;
 
     // Now that we have moded sendAckNak up one level into the class heirarchy we can no longer assume we are a RoutingPlugin
     // So we manually call pb_encode_to_bytes and specify routing port number

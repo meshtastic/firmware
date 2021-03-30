@@ -11,14 +11,11 @@ class SerialConsole : public StreamAPI, public RedirectablePrint
   public:
     SerialConsole();
 
-    /// Do late init that can't happen at constructor time
-    virtual void init();
-
     /**
      * we override this to notice when we've received a protobuf over the serial stream.  Then we shunt off
      * debug serial output.
      */
-    virtual void handleToRadio(const uint8_t *buf, size_t len);
+    virtual bool handleToRadio(const uint8_t *buf, size_t len);
 
     virtual size_t write(uint8_t c)
     {
@@ -34,5 +31,6 @@ class SerialConsole : public StreamAPI, public RedirectablePrint
 
 // A simple wrapper to allow non class aware code write to the console
 void consolePrintf(const char *format, ...);
+void consoleInit();
 
-extern SerialConsole console;
+extern SerialConsole *console;

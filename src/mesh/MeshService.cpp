@@ -114,7 +114,7 @@ bool MeshService::reloadConfig()
 void MeshService::reloadOwner()
 {
     assert(nodeInfoPlugin);
-    if(nodeInfoPlugin)
+    if (nodeInfoPlugin)
         nodeInfoPlugin->sendOurNodeInfo();
     nodeDB.saveToDisk();
 }
@@ -172,13 +172,12 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
     assert(node);
 
     if (node->has_position) {
-        if(positionPlugin) {
+        if (positionPlugin) {
             DEBUG_MSG("Sending position ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
             positionPlugin->sendOurPosition(dest, wantReplies);
         }
-    }
-    else {
-        if(nodeInfoPlugin) {
+    } else {
+        if (nodeInfoPlugin) {
             DEBUG_MSG("Sending nodeinfo ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
             nodeInfoPlugin->sendOurNodeInfo(dest, wantReplies);
         }
@@ -198,9 +197,12 @@ NodeInfo *MeshService::refreshMyNodeInfo()
 
     Position &position = node->position;
 
-    // Update our local node info with our position (even if we don't decide to update anyone else)
-    position.time =
+    // Update our local node info with our time (even if we don't decide to update anyone else)
+    node->last_heard =
         getValidTime(RTCQualityFromNet); // This nodedb timestamp might be stale, so update it if our clock is kinda valid
+
+    // For the time in the position field, only set that if we have a real GPS clock
+    position.time = getValidTime(RTCQualityGPS);
 
     position.battery_level = powerStatus->getBatteryChargePercent();
     updateBatteryLevel(position.battery_level);

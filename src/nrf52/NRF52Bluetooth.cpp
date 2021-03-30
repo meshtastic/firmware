@@ -2,9 +2,9 @@
 #include "BluetoothCommon.h"
 #include "configuration.h"
 #include "main.h"
-#include <bluefruit.h>
-#include "mesh/mesh-pb-constants.h"
 #include "mesh/PhoneAPI.h"
+#include "mesh/mesh-pb-constants.h"
+#include <bluefruit.h>
 
 static BLEService meshBleService = BLEService(BLEUuid(MESH_SERVICE_UUID_16));
 static BLECharacteristic fromNum = BLECharacteristic(BLEUuid(FROMNUM_UUID_16));
@@ -155,7 +155,6 @@ void fromNumAuthorizeCb(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_evt
 void setupMeshService(void)
 {
     bluetoothPhoneAPI = new BluetoothPhoneAPI();
-    bluetoothPhoneAPI->init();
 
     meshBleService.begin();
 
