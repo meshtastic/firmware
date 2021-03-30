@@ -112,6 +112,8 @@ uint32_t RadioInterface::getPacketTime(MeshPacket *p)
 /** The delay to use for retransmitting dropped packets */
 uint32_t RadioInterface::getRetransmissionMsec(const MeshPacket *p)
 {
+    assert(shortPacketMsec); // Better be non zero
+
     // was 20 and 22 secs respectively, but now with shortPacketMsec as 2269, this should give the same range
     return random(9 * shortPacketMsec, 10 * shortPacketMsec);
 }
