@@ -4,6 +4,8 @@ You probably don't care about this section - skip to the next one.
 
 ## before next release
 
+* don't store User admin or position broadcasts in the ToPhone queue
+* DONE tcp stream problem in python+pordtuino, server thinks client dropped when client DID NOT DROP
 * TCP mode for android, localhost is at 10.0.2.2
 * make sure USB still works in android
 * add portduino builds to zip
