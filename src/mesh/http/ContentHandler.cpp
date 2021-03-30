@@ -11,7 +11,6 @@
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>
 #include <HTTPURLEncodedBodyParser.hpp>
-#include <Preferences.h>
 #include <SPIFFS.h>
 
 #ifndef NO_ESP32
@@ -836,11 +835,6 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 
     ResourceParameters *params = req->getParams();
     std::string content;
-
-    Preferences preferences;
-    preferences.begin("meshtastic", false);
-
-    uint32_t rebootCounter = preferences.getUInt("rebootCounter", 0);
 
     if (!params->getQueryParameter("content", content)) {
         content = "json";

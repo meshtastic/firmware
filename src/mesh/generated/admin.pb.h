@@ -26,6 +26,7 @@ typedef struct _AdminMessage {
         bool confirm_set_channel;
         bool confirm_set_radio;
         bool exit_simulator;
+        int32_t reboot_seconds;
     };
 } AdminMessage;
 
@@ -49,6 +50,7 @@ extern "C" {
 #define AdminMessage_confirm_set_channel_tag     32
 #define AdminMessage_confirm_set_radio_tag       33
 #define AdminMessage_exit_simulator_tag          34
+#define AdminMessage_reboot_seconds_tag          35
 
 /* Struct field encoding specification for nanopb */
 #define AdminMessage_FIELDLIST(X, a) \
@@ -61,7 +63,8 @@ X(a, STATIC,   ONEOF,    UINT32,   (variant,get_channel_request,get_channel_requ
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_channel_response,get_channel_response),   7) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_channel,confirm_set_channel),  32) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_radio,confirm_set_radio),  33) \
-X(a, STATIC,   ONEOF,    BOOL,     (variant,exit_simulator,exit_simulator),  34)
+X(a, STATIC,   ONEOF,    BOOL,     (variant,exit_simulator,exit_simulator),  34) \
+X(a, STATIC,   ONEOF,    INT32,    (variant,reboot_seconds,reboot_seconds),  35)
 #define AdminMessage_CALLBACK NULL
 #define AdminMessage_DEFAULT NULL
 #define AdminMessage_variant_set_radio_MSGTYPE RadioConfig

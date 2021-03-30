@@ -97,7 +97,6 @@ void esp32Loop()
 {
     esp_task_wdt_reset(); // service our app level watchdog
     loopBLE();
-    bluetoothRebootCheck();
 
     // for debug printing
     // radio.radioIf.canSleep();
