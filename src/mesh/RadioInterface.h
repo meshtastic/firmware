@@ -104,7 +104,11 @@ class RadioInterface
     virtual bool sleep() { return true; }
 
     /// Disable this interface (while disabled, no packets can be sent or received)
-    void disable() { disabled = true; sleep(); }
+    void disable()
+    {
+        disabled = true;
+        sleep();
+    }
 
     /**
      * Send a packet (possibly by enquing in a private fifo).  This routine will
@@ -126,7 +130,7 @@ class RadioInterface
     /// Apply any radio provisioning changes
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
-    virtual bool reconfigure() = 0;
+    virtual bool reconfigure();
 
     /** The delay to use for retransmitting dropped packets */
     uint32_t getRetransmissionMsec(const MeshPacket *p);
@@ -175,13 +179,6 @@ class RadioInterface
     void limitPower();
 
     /**
-     * Convert our modemConfig enum into wf, sf, etc...
-     *
-     * These paramaters will be pull from the channelSettings global
-     */
-    virtual void applyModemConfig();
-
-    /**
      * Save the frequency we selected for later reuse.
      */
     virtual void saveFreq(float savedFreq);
@@ -192,6 +189,13 @@ class RadioInterface
     virtual void saveChannelNum(uint32_t savedChannelNum);
 
   private:
+    /**
+     * Convert our modemConfig enum into wf, sf, etc...
+     *
+     * These paramaters will be pull from the channelSettings global
+     */
+    void applyModemConfig();
+
     /// Return 0 if sleep is okay
     int preflightSleepCb(void *unused = NULL) { return canSleep() ? 0 : 1; }
 
@@ -215,11 +219,6 @@ class SimRadio : public RadioInterface
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
     virtual bool init() { return true; }
-
-    /// Apply any radio provisioning changes
-    /// Make sure the Driver is properly configured before calling init().
-    /// \return true if initialisation succeeded.
-    virtual bool reconfigure() { return true; }
 };
 
 /// Debug printing for packets
