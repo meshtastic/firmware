@@ -212,13 +212,6 @@ class SimRadio : public RadioInterface
 {
   public:
     virtual ErrorCode send(MeshPacket *p);
-
-    // methods from radiohead
-
-    /// Initialise the Driver transport hardware and software.
-    /// Make sure the Driver is properly configured before calling init().
-    /// \return true if initialisation succeeded.
-    virtual bool init() { return true; }
 };
 
 /// Debug printing for packets

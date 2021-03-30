@@ -16,15 +16,16 @@
     <list default="true" id="58922733-b05b-4b90-9655-b9b18914977a" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/docs/software/TODO.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/software/TODO.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/proto" beforeDir="false" afterPath="$PROJECT_DIR$/proto" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/mesh/generated/mesh.pb.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/mesh/generated/mesh.pb.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/platformio.ini" beforeDir="false" afterPath="$PROJECT_DIR$/platformio.ini" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mesh/RF95Interface.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/mesh/RF95Interface.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mesh/RadioInterface.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/mesh/RadioInterface.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mesh/SX1262Interface.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/mesh/SX1262Interface.cpp" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
-  <component name="ExecutionTargetManager" SELECTED_TARGET="CMakeBuildProfile:native" />
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
@@ -49,7 +50,7 @@
     <property name="node.js.selected.package.tslint" value="(autodetect)" />
     <property name="settings.editor.selected.configurable" value="CMakeSettings" />
   </component>
-  <component name="RunManager" selected="PlatformIO.PlatformIO Upload">
+  <component name="RunManager" selected="GDB Remote Debug.gdbremote-localhost-2345">
     <configuration default="true" type="CLion_Remote" version="1" remoteCommand="tcp:localhost:2345" symbolFile="" sysroot="">
       <debugger kind="GDB" isBundled="true" />
       <method v="2" />
@@ -96,6 +97,9 @@
       <workItem from="1615788663210" duration="6661000" />
       <workItem from="1615938346019" duration="1208000" />
       <workItem from="1615971126983" duration="5945000" />
+      <workItem from="1617115374907" duration="357000" />
+      <workItem from="1617115747078" duration="1391000" />
+      <workItem from="1617117632667" duration="307000" />
     </task>
     <servers />
   </component>
@@ -118,17 +122,22 @@
     <breakpoint-manager>
       <breakpoints>
         <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
-          <url>file://$PROJECT_DIR$/src/mesh/StreamAPI.cpp</url>
-          <line>20</line>
-          <option name="timeStamp" value="4" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
           <url>file://$PROJECT_DIR$/src/mesh/wifi/WiFiServerAPI.cpp</url>
           <line>53</line>
           <option name="timeStamp" value="6" />
         </line-breakpoint>
+        <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
+          <url>file://$PROJECT_DIR$/src/mesh/wifi/WiFiServerAPI.cpp</url>
+          <line>37</line>
+          <option name="timeStamp" value="7" />
+        </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
+    <watches-manager>
+      <configuration name="CLion_Remote">
+        <watch expression="radioConfig" language="ObjectiveC" />
+      </configuration>
+    </watches-manager>
   </component>
   <component name="XSLT-Support.FileAssociations.UIState">
     <expand />
