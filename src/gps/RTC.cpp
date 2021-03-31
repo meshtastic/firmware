@@ -39,7 +39,7 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
         currentQuality = q;
         shouldSet = true;
         DEBUG_MSG("Upgrading time to RTC %ld secs (quality %d)\n", tv->tv_sec, q);
-    } else if(q == RTCQualityGPS && (now - lastSetMsec) > (12 * 60 * 60 * 1000L)) {
+    } else if(q == RTCQualityGPS && (now - lastSetMsec) > (12 * 60 * 60 * 1000UL)) {
         // Every 12 hrs we will slam in a new GPS time, to correct for local RTC clock drift
         shouldSet = true;
         DEBUG_MSG("Reapplying external time to correct clock drift %ld secs\n", tv->tv_sec);
