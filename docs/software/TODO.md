@@ -5,7 +5,6 @@ You probably don't care about this section - skip to the next one.
 ## before next release
 
 * fix github actions per sasha tip
-* have simulator save state in ~/.meshtastic/native
 * DONE sendtext busted in portduino, due to bytetime calculations
 * remove linux dependency in native build
 * DONE tcp stream problem in python+pordtuino, server thinks client dropped when client DID NOT DROP
