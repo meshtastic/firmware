@@ -1,12 +1,12 @@
 
-#include "configuration.h"
 #include "RadioInterface.h"
 #include "Channels.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "assert.h"
 #include "Router.h"
+#include "assert.h"
+#include "configuration.h"
 #include "sleep.h"
 #include <assert.h>
 #include <pb_decode.h>
@@ -31,8 +31,8 @@ const RegionInfo regions[] = {
 
 /* Notes about the RU bandplan (from @denis-d in https://meshtastic.discourse.group/t/russian-band-plan-proposal/2786/2):
 
-According to Annex 12 to GKRCh (National Radio Frequency Commission) decision № 18-46-03-1 (September 11th 2018) https://digital.gov.ru/uploaded/files/prilozhenie-12-k-reshenyu-gkrch-18-46-03-1.pdf 1
-We have 3 options for 868 MHz:
+According to Annex 12 to GKRCh (National Radio Frequency Commission) decision № 18-46-03-1 (September 11th 2018)
+https://digital.gov.ru/uploaded/files/prilozhenie-12-k-reshenyu-gkrch-18-46-03-1.pdf 1 We have 3 options for 868 MHz:
 
 864,0 - 865,0 MHz ERP 25mW, Duty Cycle 0.1% (3.6 sec in hour) or LBT (Listen Before Talk), prohibited in airports.
 866,0 - 868,0 MHz ERP 25mW, Duty Cycle 1% or LBT, PSD (Power Spectrum Density) 1000mW/MHz, prohibited in airports
@@ -112,6 +112,8 @@ uint32_t RadioInterface::getPacketTime(MeshPacket *p)
 /** The delay to use for retransmitting dropped packets */
 uint32_t RadioInterface::getRetransmissionMsec(const MeshPacket *p)
 {
+    assert(shortPacketMsec); // Better be non zero
+
     // was 20 and 22 secs respectively, but now with shortPacketMsec as 2269, this should give the same range
     return random(9 * shortPacketMsec, 10 * shortPacketMsec);
 }
@@ -153,7 +155,7 @@ void printPacket(const char *prefix, const MeshPacket *p)
         if (s.dest != 0)
             DEBUG_MSG(" dest=%08x", s.dest);
 
-        if(s.request_id)
+        if (s.request_id)
             DEBUG_MSG(" requestId=%0x", s.request_id);
 
         /* now inside Data and therefore kinda opaque
@@ -185,6 +187,12 @@ RadioInterface::RadioInterface()
     // DEBUG_MSG("Set meshradio defaults name=%s\n", channelSettings.name);
 }
 
+bool RadioInterface::reconfigure()
+{
+    applyModemConfig();
+    return true;
+}
+
 bool RadioInterface::init()
 {
     DEBUG_MSG("Starting meshradio init...\n");
@@ -196,6 +204,8 @@ bool RadioInterface::init()
     // we now expect interfaces to operate in promiscous mode
     // radioIf.setThisAddress(nodeDB.getNodeNum()); // Note: we must do this here, because the nodenum isn't inited at constructor
     // time.
+
+    applyModemConfig();
 
     return true;
 }

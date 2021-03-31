@@ -4,9 +4,20 @@ You probably don't care about this section - skip to the next one.
 
 ## before next release
 
+* test github actions locally on linux
+* fix github actions per sasha tip
+* @havealoha comments about odd sleep behavior
+* fix heltec battery scaling
+* DONE sendtext busted in portduino, due to bytetime calculations
+* remove linux dependency in native build
+* DONE tcp stream problem in python+pordtuino, server thinks client dropped when client DID NOT DROP
+* DONE TCP mode for android, localhost is at 10.0.2.2
+* make sure USB still works in android
+* add portduino builds to zip
+* add license to portduino and make announcement
 * DONE naks are being dropped (though enqueuedLocal) sometimes before phone/PC gets them
 * DONE have android fill in if local GPS has poor signal
-* fix heltec battery scaling
+* release to beta and amazon
 * add reference counting to mesh packets
 * allow multiple simultanteous phoneapi connections
 * DONE split position.time and last_heard
@@ -37,6 +48,10 @@ You probably don't care about this section - skip to the next one.
 * DONE android should always provide time to nodes - so that it is easier for the mesh to learn the current time
 
 ## MQTT
+
+* do initial development inside of portduino
+* do as much possible on the device side (so we can eventually just have ESP32 talk directly to server)
+* eventually add a MQTTPacket on the ToRadio & FromRadio links
 
 ## Multichannel support
 
@@ -138,6 +153,7 @@ You probably don't care about this section - skip to the next one.
  
 For app cleanup:
 
+* don't store redundant User admin or position broadcasts in the ToPhone queue (only keep one per sending node per proto type, and only most recent)
 * use structured logging to kep logs in ram.  Also send logs as packets to api clients
 * DONE writeup nice python options docs (common cases, link to protobuf docs)
 * have android app link to user manual
