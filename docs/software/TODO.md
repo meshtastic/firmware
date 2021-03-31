@@ -4,10 +4,12 @@ You probably don't care about this section - skip to the next one.
 
 ## before next release
 
-* sendtext busted in portduino, due to bytetime calculations
-* don't store User admin or position broadcasts in the ToPhone queue
+* fix github actions per sasha tip
+* have simulator save state in ~/.meshtastic/native
+* DONE sendtext busted in portduino, due to bytetime calculations
+* remove linux dependency in native build
 * DONE tcp stream problem in python+pordtuino, server thinks client dropped when client DID NOT DROP
-* TCP mode for android, localhost is at 10.0.2.2
+* DONE TCP mode for android, localhost is at 10.0.2.2
 * make sure USB still works in android
 * add portduino builds to zip
 * add license to portduino and make announcement
@@ -151,6 +153,7 @@ You probably don't care about this section - skip to the next one.
  
 For app cleanup:
 
+* don't store redundant User admin or position broadcasts in the ToPhone queue (only keep one per sending node per proto type, and only most recent)
 * use structured logging to kep logs in ram.  Also send logs as packets to api clients
 * DONE writeup nice python options docs (common cases, link to protobuf docs)
 * have android app link to user manual
