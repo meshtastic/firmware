@@ -36,6 +36,7 @@ jobs:
       - name: Integration test
         run: |
           .pio/build/native/program &
-          sleep 1
+          sleep 5
+          echo "Simulator started, launching python test...""
           python3 -c 'from meshtastic.test import testSimulator; testSimulator()'
 
