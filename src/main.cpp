@@ -317,7 +317,9 @@ void setup()
 #endif
 
 #ifdef DEBUG_PORT
-    consoleInit(); // Set serial baud rate and init our mesh console
+    if (radioConfig.preferences.serial_disabled) {
+        consoleInit(); // Set serial baud rate and init our mesh console
+    }
 #endif
 
     initDeepSleep();
