@@ -5,6 +5,8 @@ You probably don't care about this section - skip to the next one.
 ## before next release
 
 * fix github actions per sasha tip
+* @havealoha comments about odd sleep behavior
+* fix heltec battery scaling
 * DONE sendtext busted in portduino, due to bytetime calculations
 * remove linux dependency in native build
 * DONE tcp stream problem in python+pordtuino, server thinks client dropped when client DID NOT DROP
@@ -12,11 +14,9 @@ You probably don't care about this section - skip to the next one.
 * make sure USB still works in android
 * add portduino builds to zip
 * add license to portduino and make announcement
-* @havealoha comments about odd sleep behavior
 * DONE naks are being dropped (though enqueuedLocal) sometimes before phone/PC gets them
 * DONE have android fill in if local GPS has poor signal
 * release to beta and amazon
-* fix heltec battery scaling
 * add reference counting to mesh packets
 * allow multiple simultanteous phoneapi connections
 * DONE split position.time and last_heard
