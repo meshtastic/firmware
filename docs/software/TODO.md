@@ -4,6 +4,7 @@ You probably don't care about this section - skip to the next one.
 
 ## before next release
 
+* test github actions locally on linux
 * fix github actions per sasha tip
 * @havealoha comments about odd sleep behavior
 * fix heltec battery scaling
