@@ -4,9 +4,11 @@ You probably don't care about this section - skip to the next one.
 
 ## before next release
 
-* test github actions locally on linux
+* remote admin busted? https://github.com/meshtastic/Meshtastic-device/issues/772
+* ABANDONED test github actions locally on linux
 * DONE fix github actions per sasha tip
 * @havealoha comments about odd sleep behavior
+* tell ttgo to preinstall new bins
 * fix heltec battery scaling
 * DONE sendtext busted in portduino, due to bytetime calculations
 * remove linux dependency in native build
@@ -17,6 +19,7 @@ You probably don't care about this section - skip to the next one.
 * add license to portduino and make announcement
 * DONE naks are being dropped (though enqueuedLocal) sometimes before phone/PC gets them
 * DONE have android fill in if local GPS has poor signal
+* optionally restrict position sends to a named channel
 * release to beta and amazon
 * add reference counting to mesh packets
 * allow multiple simultanteous phoneapi connections
@@ -135,7 +138,7 @@ You probably don't care about this section - skip to the next one.
 * DONE make all subpackets different versions of data
 * DONE move routing control into a data packet
 * have phoneapi done via plugin (will allow multiple simultaneous API clients - stop disabling BLE while using phone API)
-* use reference counting and dynamic sizing for meshpackets.
+* use reference counting and dynamic sizing for meshpackets. - use https://docs.microsoft.com/en-us/cpp/cpp/how-to-create-and-use-shared-ptr-instances?view=msvc-160 (already used in arduino)
 * let multiple PhoneAPI endpoints work at once
 * allow multiple simultaneous bluetooth connections (create the bluetooth phoneapi instance dynamically based on client id)
 * DONE figure out how to add micro_delta to position, make it so that phone apps don't need to understand it?
