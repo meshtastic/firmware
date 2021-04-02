@@ -319,7 +319,7 @@ void RadioInterface::applyModemConfig()
     // If user has manually specified a channel num, then use that, otherwise generate one by hashing the name
     const char *channelName = channels.getName(channels.getPrimaryIndex());
     int channel_num = channelSettings.channel_num ? channelSettings.channel_num - 1 : hash(channelName) % myRegion->numChannels;
-    freq = myRegion->freq + myRegion->spacing * channel_num;
+    freq = myRegion->freq + radioConfig.preferences.frequency_offset + myRegion->spacing * channel_num;
 
     DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, power=%d\n", channelName, channelSettings.modem_config, channel_num, power);
     DEBUG_MSG("Radio myRegion->freq: %f\n", myRegion->freq);
