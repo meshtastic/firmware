@@ -4,12 +4,12 @@ You probably don't care about this section - skip to the next one.
 
 ## before next release
 
-* remote admin busted? https://github.com/meshtastic/Meshtastic-device/issues/772
+* fix heltec battery scaling
+* DONE remote admin busted? 
+* DONE check android code - @havealoha comments about odd sleep behavior
 * ABANDONED test github actions locally on linux
 * DONE fix github actions per sasha tip
-* @havealoha comments about odd sleep behavior
 * tell ttgo to preinstall new bins
-* fix heltec battery scaling
 * DONE sendtext busted in portduino, due to bytetime calculations
 * remove linux dependency in native build
 * DONE tcp stream problem in python+pordtuino, server thinks client dropped when client DID NOT DROP
@@ -52,6 +52,8 @@ You probably don't care about this section - skip to the next one.
 
 ## MQTT
 
+* mqtt.meshtastic.org should have VERY basic auth at launch (to prevent abuse)
+* use MQTT for simulator mesh network
 * do initial development inside of portduino
 * do as much possible on the device side (so we can eventually just have ESP32 talk directly to server)
 * eventually add a MQTTPacket on the ToRadio & FromRadio links
