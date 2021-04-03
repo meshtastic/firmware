@@ -4,6 +4,7 @@ You probably don't care about this section - skip to the next one.
 
 ## before next release
 
+* android speed settings https://github.com/meshtastic/Meshtastic-Android/issues/271
 * fix heltec battery scaling
 * DONE remote admin busted? 
 * DONE check android code - @havealoha comments about odd sleep behavior
@@ -14,7 +15,7 @@ You probably don't care about this section - skip to the next one.
 * remove linux dependency in native build
 * DONE tcp stream problem in python+pordtuino, server thinks client dropped when client DID NOT DROP
 * DONE TCP mode for android, localhost is at 10.0.2.2
-* make sure USB still works in android
+* DONE make sure USB still works in android
 * add portduino builds to zip
 * add license to portduino and make announcement
 * DONE naks are being dropped (though enqueuedLocal) sometimes before phone/PC gets them
@@ -42,7 +43,7 @@ You probably don't care about this section - skip to the next one.
 * DONE before next relase: test empty channel sets on android
 * DONE channel sharing in android
 * DONE test 1.0 firmware update on android
-* DONE test 1.1 firmware update on android
+* DONE test 1.1 firmwhttps://github.com/meshtastic/Meshtastic-Android/issues/271are update on android
 * DONE test 1.2.10 firmware update on android
 * DONE test link sharing on android
 * FIXED? luxon bug report - seeing rx acks for nodes that are not on the network
