@@ -53,6 +53,10 @@ You probably don't care about this section - skip to the next one.
 
 ## MQTT
 
+* reply to MC
+* reply to question about MQTT
+* add test case of preencrypting in the python tool (and sending through a node that lacks keys)
+* leave encrypted messages as forwarded (need fixes on both tx and rx sides)
 * DONE have sim provide a fake wifi connection status saying connected
 * DONE don't start MQTT if we don't have wifi connected
 * have plugin send uplinks from mesh
