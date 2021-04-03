@@ -1,1 +1,1 @@
-mosquitto_sub -h test.mosquitto.org -v -t mesh/\#
+mosquitto_sub -h test.mosquitto.org -v -t mesh/\# -F "%j"

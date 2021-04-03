@@ -1,6 +1,7 @@
 #include "MQTT.h"
 #include "MQTTPlugin.h"
 #include "NodeDB.h"
+#include "main.h"
 #include "mesh/generated/mqtt.pb.h"
 #include <WiFi.h>
 #include <assert.h>
@@ -30,7 +31,7 @@ void mqttInit()
     }
 }
 
-MQTT::MQTT() : pubSub(mqttClient)
+MQTT::MQTT() : concurrency::OSThread("mqtt"), pubSub(mqttClient)
 {
     assert(!mqtt);
     mqtt = this;
@@ -50,6 +51,8 @@ MQTT::MQTT() : pubSub(mqttClient)
     bool connected = pubSub.connect(owner.id, myStatus.c_str(), 1, true, "offline");
     if (connected) {
         DEBUG_MSG("MQTT connected\n");
+        enabled = true; // Start running background process again
+        runASAP = true;
 
         static char subsStr[64]; /* We keep this static because the mqtt lib
                                     might not be copying it */
@@ -60,6 +63,15 @@ MQTT::MQTT() : pubSub(mqttClient)
         bool ok = pubSub.publish(myStatus.c_str(), "online", true);
         DEBUG_MSG("published %d\n", ok);
     }
+}
+
+int32_t MQTT::runOnce()
+{
+    // If connected poll rapidly, otherwise sleep forever
+    if (!pubSub.loop())
+        enabled = false;
+
+    return 20;
 }
 
 void MQTT::publish(const MeshPacket &mp)
