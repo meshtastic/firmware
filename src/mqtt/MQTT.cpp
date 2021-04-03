@@ -1,12 +1,13 @@
 #include "MQTT.h"
+#include "MQTTPlugin.h"
 #include "NodeDB.h"
+#include "mesh/generated/mqtt.pb.h"
 #include <WiFi.h>
 #include <assert.h>
 
 MQTT *mqtt;
 
-String statusTopic = "mstat/";
-String packetTopic = "mesh/";
+String statusTopic = "mesh/stat/";
 
 void mqttCallback(char *topic, byte *payload, unsigned int length)
 {
@@ -23,8 +24,10 @@ void mqttInit()
         DEBUG_MSG("MQTT disabled...\n");
     else if (!WiFi.isConnected())
         DEBUG_MSG("WiFi is not connected, can not start MQTT\n");
-    else
+    else {
         new MQTT();
+        new MQTTPlugin();
+    }
 }
 
 MQTT::MQTT() : pubSub(mqttClient)
@@ -59,18 +62,35 @@ MQTT::MQTT() : pubSub(mqttClient)
     }
 }
 
-void MQTT::publish(const MeshPacket *mp)
+void MQTT::publish(const MeshPacket &mp)
 {
-    // DEBUG_MSG("publish %s = %s\n", suffix.c_str(), payload.c_str());
+    // don't bother sending if not connected...
+    if (pubSub.connected()) {
+        // FIXME - check uplink enabled
 
-    // pubSub.publish(getTopic(suffix), payload.c_str(), retained);
+        const char *channelId = "fixmechan";
+
+        ServiceEnvelope env = ServiceEnvelope_init_default;
+        env.channel_id = (char *)channelId;
+        env.gateway_id = owner.id;
+        env.packet = (MeshPacket *)&mp;
+
+        // FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets
+        static uint8_t bytes[MeshPacket_size + 64];
+        size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), ServiceEnvelope_fields, &env);
+
+        const char *topic = getCryptTopic(channelId);
+        DEBUG_MSG("publish %s, %u bytes\n", topic, numBytes);
+
+        pubSub.publish(topic, bytes, numBytes, false);
+    }
 }
 
-const char *MQTT::getTopic(String suffix, const char *direction)
+const char *MQTT::getCryptTopic(const char *channelId)
 {
     static char buf[128];
 
     // "mesh/crypt/CHANNELID/NODEID/PORTID"
-    snprintf(buf, sizeof(buf), "mesh/%s/%s/%s", direction, owner.id, suffix.c_str());
+    snprintf(buf, sizeof(buf), "mesh/crypt/%s/%s", channelId, owner.id);
     return buf;
 }
