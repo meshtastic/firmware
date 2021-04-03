@@ -11,9 +11,6 @@
  */
 class MQTT
 {
-    /// Our globally unique node ID
-    String nodeId = "fixmemode";
-
     // supposedly the current version is busted:
     // http://www.iotsharing.com/2017/08/how-to-use-esp32-mqtts-with-mqtts-mosquitto-broker-tls-ssl.html
     // WiFiClientSecure wifiClient;
@@ -25,9 +22,8 @@ class MQTT
 
     /**
      * Publish a packet on the glboal MQTT server.
-     * @param channelId must be a globally unique channel ID
      */
-    void publish(const MeshPacket *mp, String channelId);
+    void publish(const MeshPacket *mp);
 
   private:
     const char *getTopic(String suffix, const char *direction = "dev");
