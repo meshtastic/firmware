@@ -60,9 +60,9 @@
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
     </configuration>
-    <configuration default="true" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" PASS_PARENT_ENVS_2="true">
+    <configuration default="true" type="GradleAppRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" PASS_PARENT_ENVS_2="true">
       <method v="2">
-        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+        <option name="com.jetbrains.cidr.cpp.gradle.execution.GradleNativeBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
     </configuration>
     <configuration name="PlatformIO Debug" type="platformio" factoryName="PlatformIO Debug" REDIRECT_INPUT="false" ELEVATE="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="meshtastic-esp32" TARGET_NAME="Debug" CONFIG_NAME="native" RUN_TARGET_PROJECT_NAME="meshtastic-esp32" RUN_TARGET_NAME="Debug">
@@ -97,6 +97,7 @@
       <workItem from="1617115747078" duration="1391000" />
       <workItem from="1617117632667" duration="307000" />
       <workItem from="1617160691713" duration="1016000" />
+      <workItem from="1617279002260" duration="1626000" />
     </task>
     <servers />
   </component>
