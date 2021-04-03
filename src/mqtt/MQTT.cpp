@@ -42,9 +42,9 @@ MQTT::MQTT() : pubSub(mqttClient)
     pubSub.setCallback(mqttCallback);
 
     DEBUG_MSG("Connecting to MQTT server: %s\n", serverAddr);
-    auto myStatus = (statusTopic + nodeId);
+    auto myStatus = (statusTopic + owner.id);
     // bool connected = pubSub.connect(nodeId.c_str(), "meshdev", "apes4cats", myStatus.c_str(), 1, true, "offline");
-    bool connected = pubSub.connect(nodeId.c_str(), myStatus.c_str(), 1, true, "offline");
+    bool connected = pubSub.connect(owner.id, myStatus.c_str(), 1, true, "offline");
     if (connected) {
         DEBUG_MSG("MQTT connected\n");
 
@@ -59,7 +59,7 @@ MQTT::MQTT() : pubSub(mqttClient)
     }
 }
 
-void MQTT::publish(const MeshPacket *mp, String channelId)
+void MQTT::publish(const MeshPacket *mp)
 {
     // DEBUG_MSG("publish %s = %s\n", suffix.c_str(), payload.c_str());
 
@@ -71,6 +71,6 @@ const char *MQTT::getTopic(String suffix, const char *direction)
     static char buf[128];
 
     // "mesh/crypt/CHANNELID/NODEID/PORTID"
-    snprintf(buf, sizeof(buf), "mesh/%s/%s/%s", direction, nodeId.c_str(), suffix.c_str());
+    snprintf(buf, sizeof(buf), "mesh/%s/%s/%s", direction, owner.id, suffix.c_str());
     return buf;
 }
