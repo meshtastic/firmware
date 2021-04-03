@@ -15,7 +15,15 @@
   <component name="ChangeListManager">
     <list default="true" id="58922733-b05b-4b90-9655-b9b18914977a" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/software/TODO.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/software/TODO.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/software/mqtt.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/software/mqtt.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/platformio.ini" beforeDir="false" afterPath="$PROJECT_DIR$/platformio.ini" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/proto" beforeDir="false" afterPath="$PROJECT_DIR$/proto" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/main.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mesh/generated/admin.pb.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/mesh/generated/admin.pb.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mesh/generated/apponly.pb.c" beforeDir="false" afterPath="$PROJECT_DIR$/src/mesh/generated/apponly.pb.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mesh/generated/apponly.pb.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/mesh/generated/apponly.pb.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mesh/generated/radioconfig.pb.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/mesh/generated/radioconfig.pb.h" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -47,6 +55,11 @@
     <property name="settings.editor.selected.configurable" value="CMakeSettings" />
   </component>
   <component name="RunManager" selected="GDB Remote Debug.gdbremote-localhost-2345">
+    <configuration default="true" type="CLionExternalRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" PASS_PARENT_ENVS_2="true">
+      <method v="2">
+        <option name="CLION.EXTERNAL.BUILD" enabled="true" />
+      </method>
+    </configuration>
     <configuration default="true" type="CLion_Remote" version="1" remoteCommand="tcp:localhost:2345" symbolFile="" sysroot="">
       <debugger kind="GDB" isBundled="true" />
       <method v="2" />
@@ -60,9 +73,9 @@
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
     </configuration>
-    <configuration default="true" type="GradleAppRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" PASS_PARENT_ENVS_2="true">
+    <configuration default="true" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" PASS_PARENT_ENVS_2="true">
       <method v="2">
-        <option name="com.jetbrains.cidr.cpp.gradle.execution.GradleNativeBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
     </configuration>
     <configuration name="PlatformIO Debug" type="platformio" factoryName="PlatformIO Debug" REDIRECT_INPUT="false" ELEVATE="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="meshtastic-esp32" TARGET_NAME="Debug" CONFIG_NAME="native" RUN_TARGET_PROJECT_NAME="meshtastic-esp32" RUN_TARGET_NAME="Debug">
@@ -98,6 +111,7 @@
       <workItem from="1617117632667" duration="307000" />
       <workItem from="1617160691713" duration="1016000" />
       <workItem from="1617279002260" duration="1626000" />
+      <workItem from="1617425689081" duration="1896000" />
     </task>
     <servers />
   </component>
@@ -128,6 +142,11 @@
           <url>file://$PROJECT_DIR$/src/mesh/wifi/WiFiServerAPI.cpp</url>
           <line>37</line>
           <option name="timeStamp" value="7" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
+          <url>file://$USER_HOME$/.platformio/packages/framework-portduino/libraries/WiFi/src/WiFiClient.cpp</url>
+          <line>49</line>
+          <option name="timeStamp" value="9" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
