@@ -70,19 +70,19 @@ Any gateway-device will contact the MQTT broker.
 
 ### Topics
 
-* The "/mesh/crypt/CHANNELID/NODEID/PORTID" [topic](https://www.hivemq.com/blog/mqtt-essentials-part-5-mqtt-topics-best-practices/) will be used for messages sent from/to a mesh.
+* The "/mesh/crypt/CHANNELID/NODEID" [topic](https://www.hivemq.com/blog/mqtt-essentials-part-5-mqtt-topics-best-practices/) will be used for (encrypted) messages sent from/to a mesh.
 
 Gateway nodes will foward any MeshPacket from a local mesh channel with uplink_enabled.  The packet (encapsulated in a ServiceEnvelope) will remain encrypted with the key for the specified channel.  
 
 For any channels in the gateway node with downlink_enabled, the gateway node will forward packets from MQTT to the local mesh.  It will do this by subscribing to mesh/crypt/CHANNELID/# and forwarding relevant packets.
 
-If the channelid 'well known'/public it could be decrypted by a web service (if the web service was provided with the associated channel key), in which case it will be decrypted by a web service and appear at "mesh/clear/CHANNELID/NODEID/PORTID". Note: This is not in the initial deliverable. 
+* If the channelid 'well known'/public it could be decrypted by a web service (if the web service was provided with the associated channel key), in which case it will be decrypted by a web service and appear at "mesh/clear/CHANNELID/NODEID/PORTID". Note: This is not in the initial deliverable. 
 
 FIXME, consider how text message global mirroring could scale (or not)
 FIXME, possibly don't global mirror text messages - instead rely on matrix/riot? 
 FIXME, consider possible attacks by griefers and how they can be prvented
 
-* The "/mstat/NODEID" topic contains a simple string showing connection status of nodes.  We rely on the MQTT feature for automatically publishing special failrue messages to this topic when the device disconnects.
+* The "/mesh/stat/NODEID" topic contains a simple string showing connection status of nodes.  We rely on the MQTT feature for automatically publishing special failrue messages to this topic when the device disconnects.
 
 #### Service Envelope
 

@@ -1,1 +1,1 @@
-mosquitto_pub -h test.mosquitto.org -t mstat/FakeNode -m online -d
+mosquitto_pub -h test.mosquitto.org -t mesh/stat/FakeNode -m online -d

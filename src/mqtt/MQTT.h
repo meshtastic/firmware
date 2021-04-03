@@ -23,10 +23,10 @@ class MQTT
     /**
      * Publish a packet on the glboal MQTT server.
      */
-    void publish(const MeshPacket *mp);
+    void publish(const MeshPacket &mp);
 
   private:
-    const char *getTopic(String suffix, const char *direction = "dev");
+    const char *getCryptTopic(const char *channelId);
 };
 
 void mqttInit();
