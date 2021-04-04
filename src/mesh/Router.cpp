@@ -6,6 +6,7 @@
 #include "configuration.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
+#include "mqtt/MQTT.h"
 #include "plugins/RoutingPlugin.h"
 
 /**
@@ -187,7 +188,7 @@ ErrorCode Router::send(MeshPacket *p)
     assert(p->which_payloadVariant == MeshPacket_encrypted_tag ||
            p->which_payloadVariant == MeshPacket_decoded_tag); // I _think_ all packets should have a payload by now
 
-    // First convert from protobufs to raw bytes
+    // If the packet is not yet encrypted, do so now
     if (p->which_payloadVariant == MeshPacket_decoded_tag) {
         static uint8_t bytes[MAX_RHPACKETLEN]; // we have to use a scratch buffer because a union
 
@@ -202,7 +203,8 @@ ErrorCode Router::send(MeshPacket *p)
 
         // printBytes("plaintext", bytes, numbytes);
 
-        auto hash = channels.setActiveByIndex(p->channel);
+        ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
+        auto hash = channels.setActiveByIndex(chIndex);
         if (hash < 0) {
             // No suitable channel could be found for sending
             abortSendAndNak(Routing_Error_NO_CHANNEL, p);
@@ -217,6 +219,9 @@ ErrorCode Router::send(MeshPacket *p)
         memcpy(p->encrypted.bytes, bytes, numbytes);
         p->encrypted.size = numbytes;
         p->which_payloadVariant = MeshPacket_encrypted_tag;
+
+        if (mqtt)
+            mqtt->onSend(*p, chIndex);
     }
 
     assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)

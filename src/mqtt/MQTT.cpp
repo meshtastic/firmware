@@ -1,7 +1,7 @@
 #include "MQTT.h"
-#include "MQTTPlugin.h"
 #include "NodeDB.h"
 #include "main.h"
+#include "mesh/Channels.h"
 #include "mesh/generated/mqtt.pb.h"
 #include <WiFi.h>
 #include <assert.h>
@@ -27,7 +27,6 @@ void mqttInit()
         DEBUG_MSG("WiFi is not connected, can not start MQTT\n");
     else {
         new MQTT();
-        new MQTTPlugin();
     }
 }
 
@@ -74,13 +73,13 @@ int32_t MQTT::runOnce()
     return 20;
 }
 
-void MQTT::publish(const MeshPacket &mp)
+void MQTT::onSend(const MeshPacket &mp, ChannelIndex chIndex)
 {
     // don't bother sending if not connected...
     if (pubSub.connected()) {
         // FIXME - check uplink enabled
 
-        const char *channelId = "fixmechan";
+        const char *channelId = channels.getName(chIndex); // FIXME, for now we just use the human name for the channel
 
         ServiceEnvelope env = ServiceEnvelope_init_default;
         env.channel_id = (char *)channelId;
