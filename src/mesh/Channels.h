@@ -29,7 +29,6 @@ class Channels
     int16_t hashes[MAX_NUM_CHANNELS];
 
   public:
-
     /// Well known channel names
     static const char *adminChannel, *gpioChannel, *serialChannel;
 
@@ -43,7 +42,14 @@ class Channels
      */
     void setChannel(const Channel &c);
 
+    /** Return a human friendly name for this channel (and expand any short strings as needed)
+     */
     const char *getName(size_t chIndex);
+
+    /**
+     * Return a globally unique channel ID usable with MQTT.
+     */
+    const char *getGlobalId(size_t chIndex) { return getName(chIndex); } // FIXME, not correct
 
     /** The index of the primary channel */
     ChannelIndex getPrimaryIndex() const { return primaryIndex; }
