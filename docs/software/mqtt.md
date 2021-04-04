@@ -15,13 +15,14 @@
       - [PORTID](#portid)
     - [Gateway nodes](#gateway-nodes)
     - [MQTTSimInterface](#mqttsiminterface)
-    - [Optional web services](#optional-web-services)
-      - [Public MQTT broker service](#public-mqtt-broker-service)
-      - [Riot.im messaging bridge](#riotim-messaging-bridge)
-    - [Deprecated concepts](#deprecated-concepts)
-      - [MESHID (deprecated)](#meshid-deprecated)
-      - [DESTCLASS (deprecated)](#destclass-deprecated)
-      - [DESTID (deprecated)](#destid-deprecated)
+  - [Web services](#web-services)
+    - [Public MQTT broker service](#public-mqtt-broker-service)
+    - [Admin service](#admin-service)
+    - [Riot.im messaging bridge](#riotim-messaging-bridge)
+  - [Deprecated concepts](#deprecated-concepts)
+    - [MESHID (deprecated)](#meshid-deprecated)
+    - [DESTCLASS (deprecated)](#destclass-deprecated)
+    - [DESTID (deprecated)](#destid-deprecated)
   - [Rejected idea: RAW UDP](#rejected-idea-raw-udp)
   - [Development plan](#development-plan)
     - [Work items](#work-items)
@@ -130,31 +131,57 @@ This service uses the standard mesh/crypt/... topic, but it picks a special CHAN
 FIXME: Figure out how to secure the creation and use of well known CHANNEL_IDs.
 
 
-### Optional web services
+## Web services
 
-#### Public MQTT broker service
+### Public MQTT broker service
 
 An existing public [MQTT broker](https://mosquitto.org/) will be the default for this service, but clients can use any MQTT broker they choose. 
 
 FIXME - figure out how to avoid impersonation (because we are initially using a public mqtt server with no special security options).  FIXME, include some ideas on this in the ServiceEnvelope documentation.
 
-#### Riot.im messaging bridge
+### Admin service
+
+(This is a WIP draft collection of not complete ideas)
+
+The admin service deals with misc global arbibration/access tasks.  It is actually reached **through** the MQTT broker, though for security we depend on that broker having a few specialized rules about who can post to or see particular topics (see below).
+
+Topics:
+
+* mesh/ta/# - all requests going towards the admin server (only the admin server can see this topic)
+* mesh/tn/NODEID/# - all responses/requests going towards a particlar gateway node (only this particular gateway node is allowed to see this topic)
+* mesh/to/NODEID/# - unsecured messages sent to a gateway node (any attacker can see this topic) - used only for "request gateway id" responses
+* mesh/ta/toadmin - a request to the admin server, payload is a ToAdmin protobuf
+* mesh/tn/NODEID/tonode - a request/response to a particular gateway node.  payload is a ToNode protobuf
+
+Operations provided via the ToAdmin/ToNode protocol:
+
+* Request global channel ID (request a new channel ID)
+* Request gateway ID - the response is used to re-sign in to the broker.  
+
+Possibly might need public key encryption for the gateway request?  Since the response is sent to the mesh/to endpoint?  I would really like to use MQTT for all comms so I don't need yet another protocol/port from the device.
+
+Idea 1: A gateway ID/signin can only be assigned once per node ID.  If a user loses their signin info, they'll need to change their node number.  yucky.
+Idea 2: Instead gateway signins are assigned at "manufacture" time (and if lost, yes the user would need to "remanufacture" their node).  Possibly a simple web service (which can be accessed via the python install script?) that goes to an https endpoint, gets signin info (and server keeps a copy) and stores it in the device.  Hardware manufacturers could ask for N gateway IDs via the same API and get back a bunch of small files that could be programmed on each device.  Would include node id, etc...  Investigate alternatives like storing a particular private key to allow each device to generate their own signin key and the server would trust it by checking against a public key?
+
+TODO/FIXME: look into mqtt broker options, possibly find one with better API support than mosquitto?
+
+### Riot.im messaging bridge
 
 @Geeksville will run a riot.im bridge that talks to the public MQTT broker and sends/receives into the riot.im network.
 
 There is apparently [already](https://github.com/derEisele/tuple) a riot.im [bridge](https://matrix.org/bridges/) for MQTT. That will possibly need to be customized a bit. But by doing this, we should be able to let random riot.im users send/receive messages to/from any meshtastic device. (FIXME ponder security).  See this [issue](https://github.com/meshtastic/Meshtastic-Android/issues/2#issuecomment-645660990) with discussion with the dev.
 
-### Deprecated concepts
+## Deprecated concepts
 
 You can ignore these for now...
 
-#### MESHID (deprecated)
+### MESHID (deprecated)
 
 Earlier drafts of this document included the concept of a MESHID.  That concept has been removed for now, but might be useful in the future.  The old idea is listed below:
 
 A unique ID for this mesh. There will be some sort of key exchange process so that the mesh ID can not be impersonated by other meshes. 
 
-#### DESTCLASS (deprecated)
+### DESTCLASS (deprecated)
 
 Earlier drafts of this document included the concept of a DESTCLASS.  That concept has been removed for now, but might be useful in the future.  The old idea is listed below:
 
@@ -168,7 +195,7 @@ The type of DESTID this message should be delivered to. A short one letter seque
 | S      | SMS gateway, DESTID is a phone number to reach via Twilio.com |
 | E      | Emergency message, see bug #fixme for more context            |
 
-#### DESTID (deprecated)
+### DESTID (deprecated)
 
 Earlier drafts of this document included the concept of a DESTCLASS.  That concept has been removed for now, but might be useful in the future.  The old idea is listed below:
 

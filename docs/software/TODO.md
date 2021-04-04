@@ -61,7 +61,7 @@ You probably don't care about this section - skip to the next one.
 * DONE don't start MQTT if we don't have wifi connected
 * have plugin send uplinks from mesh
 * have plugin send downlinks to mesh
-* don't decrypt messages before uplinking them to MQTT (move out of plugin)
+* DONE don't decrypt messages before uplinking them to MQTT (move out of plugin)
 * mqtt.meshtastic.org should have VERY basic auth at launch (to prevent abuse)
 * make a GlobalChat channel as an initial test (with a well known AES128 key), figure out how globally unique IDs work
 * Give place in android app for users to select which channel they are sending on (and which channels they are watching)
