@@ -37,6 +37,14 @@ class MQTT : private concurrency::OSThread
 
   private:
     const char *getCryptTopic(const char *channelId);
+
+    /** return true if we have a channel that wants uplink/downlink
+     */
+    bool wantsLink() const;
+
+    /** Attempt to connect to server if necessary
+     */
+    void reconnect();
 };
 
 void mqttInit();

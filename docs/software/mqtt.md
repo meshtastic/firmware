@@ -17,6 +17,7 @@
     - [MQTTSimInterface](#mqttsiminterface)
   - [Web services](#web-services)
     - [Public MQTT broker service](#public-mqtt-broker-service)
+      - [Broker selection](#broker-selection)
     - [Admin service](#admin-service)
     - [Riot.im messaging bridge](#riotim-messaging-bridge)
   - [Deprecated concepts](#deprecated-concepts)
@@ -139,6 +140,12 @@ An existing public [MQTT broker](https://mosquitto.org/) will be the default for
 
 FIXME - figure out how to avoid impersonation (because we are initially using a public mqtt server with no special security options).  FIXME, include some ideas on this in the ServiceEnvelope documentation.
 
+#### Broker selection
+
+On a previous project I used mosqitto, which I liked, but the admin interface for programmatically managing access was ugly.  [This](https://www.openlogic.com/blog/activemq-vs-rabbitmq) article makes me think RabbitMQ might be best for us.
+
+Initially I will try to avoid using any non MQTT broker/library/API
+
 ### Admin service
 
 (This is a WIP draft collection of not complete ideas)
@@ -155,7 +162,7 @@ Topics:
 
 Operations provided via the ToAdmin/ToNode protocol:
 
-* Request global channel ID (request a new channel ID)
+* Register a global channel ID (request a new channel ID).  Optionally include the AES key if you would like the web service to automatically decrypt in the cloud
 * Request gateway ID - the response is used to re-sign in to the broker.  
 
 Possibly might need public key encryption for the gateway request?  Since the response is sent to the mesh/to endpoint?  I would really like to use MQTT for all comms so I don't need yet another protocol/port from the device.
