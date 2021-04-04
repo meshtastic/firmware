@@ -109,11 +109,11 @@ int32_t MQTT::runOnce()
 
 void MQTT::onSend(const MeshPacket &mp, ChannelIndex chIndex)
 {
-    // don't bother sending if not connected...
-    if (pubSub.connected()) {
-        // FIXME - check uplink enabled
+    auto &ch = channels.getByIndex(chIndex);
 
-        const char *channelId = channels.getName(chIndex); // FIXME, for now we just use the human name for the channel
+    // don't bother sending if not connected...
+    if (pubSub.connected() && ch.settings.uplink_enabled) {
+        const char *channelId = channels.getGlobalId(chIndex); // FIXME, for now we just use the human name for the channel
 
         ServiceEnvelope env = ServiceEnvelope_init_default;
         env.channel_id = (char *)channelId;
