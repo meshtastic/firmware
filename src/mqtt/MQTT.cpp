@@ -2,6 +2,7 @@
 #include "NodeDB.h"
 #include "main.h"
 #include "mesh/Channels.h"
+#include "mesh/Router.h"
 #include "mesh/generated/mqtt.pb.h"
 #include <WiFi.h>
 #include <assert.h>
@@ -26,6 +27,11 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
         DEBUG_MSG("Received MQTT topic %s, len=%u\n", topic, length);
 
         // FIXME, ignore messages sent by us (requires decryption) or if we don't have the channel key
+        if (e.packet) {
+            MeshPacket *p = packetPool.allocCopy(*e.packet);
+            if (router)
+                router->enqueueReceivedMessage(p);
+        }
 
         // make sure to free both strings and the MeshPacket (passing in NULL is acceptable)
         free(e.channel_id);
