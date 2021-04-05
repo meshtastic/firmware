@@ -78,7 +78,9 @@ Gateway nodes will foward any MeshPacket from a local mesh channel with uplink_e
 
 For any channels in the gateway node with downlink_enabled, the gateway node will forward packets from MQTT to the local mesh.  It will do this by subscribing to mesh/crypt/CHANNELID/# and forwarding relevant packets.
 
-* If the channelid 'well known'/public it could be decrypted by a web service (if the web service was provided with the associated channel key), in which case it will be decrypted by a web service and appear at "mesh/clear/CHANNELID/NODEID/PORTID". Note: This is not in the initial deliverable. 
+* If the channelid 'well known'/public it could be decrypted by a web service (if the web service was provided with the associated channel key), in which case it will be decrypted by a web service and appear at "mesh/clear/CHANNELID/NODEID/PORTID". 
+
+* If it was possible to republish on mesh/clear/... and the PORTID is wellknown (i.e. the protobufs needed for decoding it are in the master github), it will be decoded and republished as JSON on mesh/json/CHANNELID/NODEID/PortName.  This is to facilitate the development of third party apps to visualize 'live' node positions and 'texts' (for users that have opted to send on those explicitly public channels).
 
 FIXME, consider how text message global mirroring could scale (or not)
 FIXME, possibly don't global mirror text messages - instead rely on matrix/riot? 
