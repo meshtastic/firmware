@@ -304,13 +304,12 @@ void Router::handleReceived(MeshPacket *p)
     if (decoded) {
         // parsing was successful, queue for our recipient
         printPacket("handleReceived", p);
-
-        // call any promiscious plugins here, make a (non promisiocous) plugin for forwarding messages to phone api
-        // sniffReceived(p);
-        MeshPlugin::callPlugins(*p);
     } else {
-        DEBUG_MSG("packet decoding failed\n");
+        printPacket("packet decoding failed (no PSK?)", p);
     }
+
+    // call plugins here
+    MeshPlugin::callPlugins(*p);
 }
 
 void Router::perhapsHandleReceived(MeshPacket *p)

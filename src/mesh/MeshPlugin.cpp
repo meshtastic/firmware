@@ -70,7 +70,8 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
     // DEBUG_MSG("In call plugins\n");
     bool pluginFound = false;
 
-    assert(mp.which_payloadVariant == MeshPacket_decoded_tag); // I think we are guarnteed the packet is decoded by this point?
+    // We now allow **encrypted** packets to pass through the plugins
+    bool isDecoded = mp.which_payloadVariant == MeshPacket_decoded_tag;
 
     currentReply = NULL; // No reply yet
 
@@ -82,19 +83,19 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
 
         pi.currentRequest = &mp;
 
-        /// received channel
-        auto ch = channels.getByIndex(mp.channel);
-        assert(ch.has_settings);
-
         /// We only call plugins that are interested in the packet (and the message is destined to us or we are promiscious)
-        bool wantsPacket = (pi.isPromiscuous || toUs) && pi.wantPacket(&mp);
+        bool wantsPacket = (isDecoded || pi.encryptedOk) && (pi.isPromiscuous || toUs) && pi.wantPacket(&mp);
 
         if (wantsPacket) {
             // DEBUG_MSG("Plugin %s wantsPacket=%d\n", pi.name, wantsPacket);
             pluginFound = true;
 
+            /// received channel (or NULL if not decoded)
+            Channel *ch = isDecoded ? &channels.getByIndex(mp.channel) : NULL;
+
             /// Is the channel this packet arrived on acceptable? (security check)
-            bool rxChannelOk = !pi.boundChannel || (mp.from == 0) || (strcmp(ch.settings.name, pi.boundChannel) == 0);
+            /// Note: we can't know channel names for encrypted packets, so those are NEVER sent to boundChannel plugins
+            bool rxChannelOk = !pi.boundChannel || (ch && ((mp.from == 0) || (strcmp(ch->settings.name, pi.boundChannel) == 0)));
 
             if (!rxChannelOk) {
                 // no one should have already replied!
