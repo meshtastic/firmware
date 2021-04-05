@@ -6,8 +6,11 @@
 #include "configuration.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
-#include "mqtt/MQTT.h"
 #include "plugins/RoutingPlugin.h"
+
+#if defined(HAS_WIFI) || defined(PORTDUINO)
+#include "mqtt/MQTT.h"
+#endif
 
 /**
  * Router todo
@@ -209,8 +212,10 @@ ErrorCode Router::send(MeshPacket *p)
             return encodeResult; // FIXME - this isn't a valid ErrorCode
         }
 
+#if defined(HAS_WIFI) || defined(PORTDUINO)
         if (mqtt)
             mqtt->onSend(*p, chIndex);
+#endif
     }
 
     assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
