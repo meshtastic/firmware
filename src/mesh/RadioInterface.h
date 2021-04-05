@@ -42,7 +42,6 @@ typedef struct {
 class RadioInterface
 {
     friend class MeshRadio; // for debugging we let that class touch pool
-    PointerQueue<MeshPacket> *rxDest = NULL;
 
     CallbackObserver<RadioInterface, void *> configChangedObserver =
         CallbackObserver<RadioInterface, void *>(this, &RadioInterface::reloadConfig);
@@ -82,16 +81,10 @@ class RadioInterface
     float freq = 915.0;
 
     /** pool is the pool we will alloc our rx packets from
-     * rxDest is where we will send any rx packets, it becomes receivers responsibility to return packet to the pool
      */
     RadioInterface();
 
     virtual ~RadioInterface() {}
-
-    /**
-     * Set where to deliver received packets.  This method should only be used by the Router class
-     */
-    void setReceiver(PointerQueue<MeshPacket> *_rxDest) { rxDest = _rxDest; }
 
     /**
      * Return true if we think the board can go to sleep (i.e. our tx queue is empty, we are not sending or receiving)
