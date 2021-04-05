@@ -4,7 +4,7 @@ You probably don't care about this section - skip to the next one.
 
 ## before next release
 
-* android speed settings https://github.com/meshtastic/Meshtastic-Android/issues/271
+* DONE android speed settings https://github.com/meshtastic/Meshtastic-Android/issues/271
 * fix heltec battery scaling
 
 * DONE remote admin busted? 
