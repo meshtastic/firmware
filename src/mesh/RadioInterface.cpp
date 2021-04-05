@@ -361,12 +361,8 @@ ErrorCode SimRadio::send(MeshPacket *p)
 
 void RadioInterface::deliverToReceiver(MeshPacket *p)
 {
-    assert(rxDest);
-    assert(rxDest->enqueue(p, 0)); // NOWAIT - fixme, if queue is full, delete older messages
-
-    // Nasty hack because our threading is primitive.  interfaces shouldn't need to know about routers FIXME
     if (router)
-        router->setReceivedMessage();
+        router->enqueueReceivedMessage(p);
 }
 
 /***

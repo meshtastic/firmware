@@ -36,6 +36,14 @@ If you are reviewing our implementation, this is a brief statement of our method
 - Each 16 byte BLOCK for a packet has an incrementing COUNTER. COUNTER starts at zero for the first block of each packet.
 - The IV for each block is constructed by concatenating the NONCE as the upper 96 bits of the IV and the COUNTER as the bottom 32 bits. Since our packets are small counter portion will really never be higher than 32 (five bits).
 
+### Details on the nonce encoding
+
+(For those porting to other architectures)
+Bytes 0-3 of the nonce are the "packet number" in little-endian order
+Bytes 4-7 are currently zero
+Bytes 8-11 are the sending node ID in little-endian order
+Bytes 12-15 are currently zero
+
 ## Comments from reviewer #1
 
 This reviewer is a cryptography professional, but would like to remain anonymous. We thank them for their comments ;-):
