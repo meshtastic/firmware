@@ -56,7 +56,7 @@ bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, const AdminMessag
 
     case AdminMessage_set_channel_tag:
         DEBUG_MSG("Client is setting channel %d\n", r->set_channel.index);
-        if (r->set_channel.index < 0 || r->set_channel.index >= MAX_NUM_CHANNELS)
+        if (r->set_channel.index < 0 || r->set_channel.index >= (int)MAX_NUM_CHANNELS)
             reply = allocErrorResponse(Routing_Error_BAD_REQUEST, &mp);
         else
             handleSetChannel(r->set_channel);

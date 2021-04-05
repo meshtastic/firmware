@@ -32,8 +32,9 @@
 #include "nimble/BluetoothUtil.h"
 #endif
 
-#ifdef PORTDUINO
+#if defined(HAS_WIFI) || defined(PORTDUINO)
 #include "mesh/wifi/WiFiServerAPI.h"
+#include "mqtt/MQTT.h"
 #endif
 
 #include "RF95Interface.h"
@@ -539,6 +540,10 @@ void setup()
 
 #ifdef PORTDUINO
     initApiServer();
+#endif
+
+#if defined(PORTDUINO) || defined(HAS_WIFI)
+    mqttInit();
 #endif
 
     // Start airtime logger thread.
