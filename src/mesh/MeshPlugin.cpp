@@ -142,6 +142,10 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
         } else {
             // No one wanted to reply to this requst, tell the requster that happened
             DEBUG_MSG("No one responded, send a nak\n");
+
+            // SECURITY NOTE! I considered sending back a different error code if we didn't find the psk (i.e. !isDecoded)
+            // but opted NOT TO.  Because it is not a good idea to let remote nodes 'probe' to find out which PSKs were "good" vs
+            // bad.
             routingPlugin->sendAckNak(Routing_Error_NO_RESPONSE, getFrom(&mp), mp.id, mp.channel);
         }
     }
