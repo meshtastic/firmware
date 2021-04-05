@@ -26,11 +26,14 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
     } else {
         DEBUG_MSG("Received MQTT topic %s, len=%u\n", topic, length);
 
-        // FIXME, ignore messages sent by us (requires decryption) or if we don't have the channel key
         if (e.packet) {
             MeshPacket *p = packetPool.allocCopy(*e.packet);
-            if (router)
+
+            // ignore messages sent by us or if we don't have the channel key
+            if (router && p->from != nodeDB.getNodeNum() && perhapsDecode(p))
                 router->enqueueReceivedMessage(p);
+            else
+                packetPool.release(p);
         }
 
         // make sure to free both strings and the MeshPacket (passing in NULL is acceptable)
