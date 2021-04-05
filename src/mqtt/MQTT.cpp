@@ -75,11 +75,6 @@ void MQTT::reconnect()
         enabled = true; // Start running background process again
         runASAP = true;
 
-        static char subsStr[64]; /* We keep this static because the mqtt lib
-                                    might not be copying it */
-        // snprintf(subsStr, sizeof(subsStr), "/ezd/todev/%s/#", clientId);
-        // pubSub.subscribe(subsStr, 1); // we use qos 1 because we don't want to miss messages
-
         /// FIXME, include more information in the status text
         bool ok = pubSub.publish(myStatus.c_str(), "online", true);
         DEBUG_MSG("published %d\n", ok);
