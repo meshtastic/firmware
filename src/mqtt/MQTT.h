@@ -36,8 +36,6 @@ class MQTT : private concurrency::OSThread
     virtual int32_t runOnce();
 
   private:
-    const char *getCryptTopic(const char *channelId);
-
     /** return true if we have a channel that wants uplink/downlink
      */
     bool wantsLink() const;
@@ -45,6 +43,16 @@ class MQTT : private concurrency::OSThread
     /** Attempt to connect to server if necessary
      */
     void reconnect();
+
+    /** Tell the server what subscriptions we want (based on channels.downlink_enabled)
+     */
+    void sendSubscriptions();
+
+    /// Just C glue to call onPublish
+    static void mqttCallback(char *topic, byte *payload, unsigned int length);
+
+    /// Called when a new publish arrives from the MQTT server
+    void onPublish(char *topic, byte *payload, unsigned int length);
 };
 
 void mqttInit();
