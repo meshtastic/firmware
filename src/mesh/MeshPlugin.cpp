@@ -86,8 +86,10 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
         /// We only call plugins that are interested in the packet (and the message is destined to us or we are promiscious)
         bool wantsPacket = (isDecoded || pi.encryptedOk) && (pi.isPromiscuous || toUs) && pi.wantPacket(&mp);
 
+        DEBUG_MSG("Plugin %s wantsPacket=%d\n", pi.name, wantsPacket);
+        assert(!pi.myReply); // If it is !null it means we have a bug, because it should have been sent the previous time
+
         if (wantsPacket) {
-            // DEBUG_MSG("Plugin %s wantsPacket=%d\n", pi.name, wantsPacket);
             pluginFound = true;
 
             /// received channel (or NULL if not decoded)
@@ -124,6 +126,14 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
                 } else {
                     DEBUG_MSG("Plugin %s considered\n", pi.name);
                 }
+
+                // If the requester didn't ask for a response we might need to discard unused replies to prevent memory leaks
+                if (pi.myReply) {
+                    DEBUG_MSG("Discarding an unneeded response\n");
+                    packetPool.release(pi.myReply);
+                    pi.myReply = NULL;
+                }
+
                 if (handled) {
                     DEBUG_MSG("Plugin %s handled and skipped other processing\n", pi.name);
                     break;
@@ -136,7 +146,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
 
     if (mp.decoded.want_response && toUs) {
         if (currentReply) {
-            DEBUG_MSG("Sending response\n");
+            printPacket("Sending response", currentReply);
             service.sendToMesh(currentReply);
             currentReply = NULL;
         } else {
@@ -152,6 +162,13 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
 
     if (!pluginFound)
         DEBUG_MSG("No plugins interested in portnum=%d\n", mp.decoded.portnum);
+}
+
+MeshPacket *MeshPlugin::allocReply()
+{
+    auto r = myReply;
+    myReply = NULL; // Only use each reply once
+    return r;
 }
 
 /** Messages can be received that have the want_response bit set.  If set, this callback will be invoked
@@ -176,7 +193,7 @@ void MeshPlugin::sendResponse(const MeshPacket &req)
 void setReplyTo(MeshPacket *p, const MeshPacket &to)
 {
     assert(p->which_payloadVariant == MeshPacket_decoded_tag); // Should already be set by now
-    p->to = getFrom(&to);
+    p->to = getFrom(&to);    // Make sure that if we are sending to the local node, we use our local node addr, not 0
     p->channel = to.channel; // Use the same channel that the request came in on
 
     // No need for an ack if we are just delivering locally (it just generates an ignored ack)
