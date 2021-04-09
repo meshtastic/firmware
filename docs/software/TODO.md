@@ -4,9 +4,6 @@ You probably don't care about this section - skip to the next one.
 
 ## before next release
 
-* DONE android speed settings https://github.com/meshtastic/Meshtastic-Android/issues/271
-* fix heltec battery scaling
-
 * DONE remote admin busted? 
 * DONE check android code - @havealoha comments about odd sleep behavior
 * ABANDONED test github actions locally on linux
