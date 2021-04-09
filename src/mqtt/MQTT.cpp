@@ -59,7 +59,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), pubSub(mqttClient)
 void MQTT::reconnect()
 {
     // pubSub.setServer("devsrv.ezdevice.net", 1883); or 192.168.10.188
-    const char *serverAddr = "test.mosquitto.org"; // "mqtt.meshtastic.org"; // default hostname
+    const char *serverAddr = "mqtt.meshtastic.org"; // default hostname
 
     if (*radioConfig.preferences.mqtt_server)
         serverAddr = radioConfig.preferences.mqtt_server; // Override the default
