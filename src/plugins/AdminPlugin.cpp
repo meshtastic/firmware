@@ -115,6 +115,10 @@ void AdminPlugin::handleSetOwner(const User &o)
         changed |= strcmp(owner.id, o.id);
         strcpy(owner.id, o.id);
     }
+    if (owner.is_licensed != o.is_licensed) {
+        changed = true;
+        owner.is_licensed = o.is_licensed;
+    }
 
     if (changed) // If nothing really changed, don't broadcast on the network or write to flash
         service.reloadOwner();
