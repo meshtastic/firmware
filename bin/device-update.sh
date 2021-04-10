@@ -1,6 +1,6 @@
 #!/bin/sh
 
-PYTHON=${PYTHON:-python3}
+PYTHON=${PYTHON:-$(which python3 python|head -n 1)}
 
 # Usage info
 show_help() {
