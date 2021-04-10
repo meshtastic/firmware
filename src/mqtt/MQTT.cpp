@@ -9,8 +9,8 @@
 
 MQTT *mqtt;
 
-String statusTopic = "mesh/stat/";
-String cryptTopic = "mesh/crypt/"; // mesh/crypt/CHANNELID/NODEID
+String statusTopic = "msh/1/stat/";
+String cryptTopic = "msh/1/c/"; // msh/1/c/CHANNELID/NODEID
 
 void MQTT::mqttCallback(char *topic, byte *payload, unsigned int length)
 {
@@ -68,8 +68,7 @@ void MQTT::reconnect()
 
     DEBUG_MSG("Connecting to MQTT server\n", serverAddr);
     auto myStatus = (statusTopic + owner.id);
-    // bool connected = pubSub.connect(nodeId.c_str(), "meshdev", "apes4cats", myStatus.c_str(), 1, true, "offline");
-    bool connected = pubSub.connect(owner.id, myStatus.c_str(), 1, true, "offline");
+    bool connected = pubSub.connect(owner.id, "meshdev", "large4cats", myStatus.c_str(), 1, true, "offline");
     if (connected) {
         DEBUG_MSG("MQTT connected\n");
         enabled = true; // Start running background process again

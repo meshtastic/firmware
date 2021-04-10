@@ -72,15 +72,17 @@ Any gateway-device will contact the MQTT broker.
 
 ### Topics
 
-* The "/mesh/crypt/CHANNELID/NODEID" [topic](https://www.hivemq.com/blog/mqtt-essentials-part-5-mqtt-topics-best-practices/) will be used for (encrypted) messages sent from/to a mesh.
+* The "/msh/1/c/CHANNELID/NODEID" [topic](https://www.hivemq.com/blog/mqtt-essentials-part-5-mqtt-topics-best-practices/) will be used for (encrypted) messages sent from/to a mesh. (The "1" in this path is for protocol version 1, other values are reserved. "c" is for "enCrypted")
 
 Gateway nodes will foward any MeshPacket from a local mesh channel with uplink_enabled.  The packet (encapsulated in a ServiceEnvelope) will remain encrypted with the key for the specified channel.  
 
-For any channels in the gateway node with downlink_enabled, the gateway node will forward packets from MQTT to the local mesh.  It will do this by subscribing to mesh/crypt/CHANNELID/# and forwarding relevant packets.
+For any channels in the gateway node with downlink_enabled, the gateway node will forward packets from MQTT to the local mesh.  It will do this by subscribing to msh/1/c/CHANNELID/# and forwarding relevant packets.
 
-* If the channelid 'well known'/public it could be decrypted by a web service (if the web service was provided with the associated channel key), in which case it will be decrypted by a web service and appear at "mesh/clear/CHANNELID/NODEID/PORTID". 
+* If the channelid 'well known'/public it could be decrypted by a web service (if the web service was provided with the associated channel key), in which case it will be decrypted by a web service and appear at "msh/1/CLEAR/CHANNELID/NODEID/PORTID". 
 
-* If it was possible to republish on mesh/clear/... and the PORTID is wellknown (i.e. the protobufs needed for decoding it are in the master github), it will be decoded and republished as JSON on mesh/json/CHANNELID/NODEID/PortName.  This is to facilitate the development of third party apps to visualize 'live' node positions and 'texts' (for users that have opted to send on those explicitly public channels).
+* If it was possible to republish on msh/1/CLEAR/... and the PORTID is wellknown (i.e. the protobufs needed for decoding it are in the master github), it will be decoded and republished as JSON on msh/1/JSON/CHANNELID/NODEID/PortName.  This is to facilitate the development of third party apps to visualize 'live' node positions and 'texts' (for users that have opted to send on those explicitly public channels).
+
+Note: Normally "CLEAR" is simply "clear" (for cleartext), but during development we might run **multiple** testing services, and in that case those service might appear using a different string here (i.e. "cleardev" etc...).  Similarly normally "JSON" is "json", but other values might be used.
 
 FIXME, consider how text message global mirroring could scale (or not)
 FIXME, possibly don't global mirror text messages - instead rely on matrix/riot? 
