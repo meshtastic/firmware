@@ -32,8 +32,9 @@
 #include "nimble/BluetoothUtil.h"
 #endif
 
-#ifdef PORTDUINO
+#if defined(HAS_WIFI) || defined(PORTDUINO)
 #include "mesh/wifi/WiFiServerAPI.h"
+#include "mqtt/MQTT.h"
 #endif
 
 #include "RF95Interface.h"
@@ -317,7 +318,7 @@ void setup()
 #endif
 
 #ifdef DEBUG_PORT
-    if (radioConfig.preferences.serial_disabled) {
+    if (!radioConfig.preferences.serial_disabled) {
         consoleInit(); // Set serial baud rate and init our mesh console
     }
 #endif
@@ -539,6 +540,10 @@ void setup()
 
 #ifdef PORTDUINO
     initApiServer();
+#endif
+
+#if defined(PORTDUINO) || defined(HAS_WIFI)
+    mqttInit();
 #endif
 
     // Start airtime logger thread.

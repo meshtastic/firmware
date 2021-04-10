@@ -70,7 +70,8 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
     // DEBUG_MSG("In call plugins\n");
     bool pluginFound = false;
 
-    assert(mp.which_payloadVariant == MeshPacket_decoded_tag); // I think we are guarnteed the packet is decoded by this point?
+    // We now allow **encrypted** packets to pass through the plugins
+    bool isDecoded = mp.which_payloadVariant == MeshPacket_decoded_tag;
 
     currentReply = NULL; // No reply yet
 
@@ -82,19 +83,21 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
 
         pi.currentRequest = &mp;
 
-        /// received channel
-        auto ch = channels.getByIndex(mp.channel);
-        assert(ch.has_settings);
-
         /// We only call plugins that are interested in the packet (and the message is destined to us or we are promiscious)
-        bool wantsPacket = (pi.isPromiscuous || toUs) && pi.wantPacket(&mp);
+        bool wantsPacket = (isDecoded || pi.encryptedOk) && (pi.isPromiscuous || toUs) && pi.wantPacket(&mp);
+
+        DEBUG_MSG("Plugin %s wantsPacket=%d\n", pi.name, wantsPacket);
+        assert(!pi.myReply); // If it is !null it means we have a bug, because it should have been sent the previous time
 
         if (wantsPacket) {
-            // DEBUG_MSG("Plugin %s wantsPacket=%d\n", pi.name, wantsPacket);
             pluginFound = true;
 
+            /// received channel (or NULL if not decoded)
+            Channel *ch = isDecoded ? &channels.getByIndex(mp.channel) : NULL;
+
             /// Is the channel this packet arrived on acceptable? (security check)
-            bool rxChannelOk = !pi.boundChannel || (mp.from == 0) || (strcmp(ch.settings.name, pi.boundChannel) == 0);
+            /// Note: we can't know channel names for encrypted packets, so those are NEVER sent to boundChannel plugins
+            bool rxChannelOk = !pi.boundChannel || (ch && ((mp.from == 0) || (strcmp(ch->settings.name, pi.boundChannel) == 0)));
 
             if (!rxChannelOk) {
                 // no one should have already replied!
@@ -123,6 +126,14 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
                 } else {
                     DEBUG_MSG("Plugin %s considered\n", pi.name);
                 }
+
+                // If the requester didn't ask for a response we might need to discard unused replies to prevent memory leaks
+                if (pi.myReply) {
+                    DEBUG_MSG("Discarding an unneeded response\n");
+                    packetPool.release(pi.myReply);
+                    pi.myReply = NULL;
+                }
+
                 if (handled) {
                     DEBUG_MSG("Plugin %s handled and skipped other processing\n", pi.name);
                     break;
@@ -135,18 +146,29 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
 
     if (mp.decoded.want_response && toUs) {
         if (currentReply) {
-            DEBUG_MSG("Sending response\n");
+            printPacket("Sending response", currentReply);
             service.sendToMesh(currentReply);
             currentReply = NULL;
         } else {
             // No one wanted to reply to this requst, tell the requster that happened
             DEBUG_MSG("No one responded, send a nak\n");
+
+            // SECURITY NOTE! I considered sending back a different error code if we didn't find the psk (i.e. !isDecoded)
+            // but opted NOT TO.  Because it is not a good idea to let remote nodes 'probe' to find out which PSKs were "good" vs
+            // bad.
             routingPlugin->sendAckNak(Routing_Error_NO_RESPONSE, getFrom(&mp), mp.id, mp.channel);
         }
     }
 
     if (!pluginFound)
         DEBUG_MSG("No plugins interested in portnum=%d\n", mp.decoded.portnum);
+}
+
+MeshPacket *MeshPlugin::allocReply()
+{
+    auto r = myReply;
+    myReply = NULL; // Only use each reply once
+    return r;
 }
 
 /** Messages can be received that have the want_response bit set.  If set, this callback will be invoked
@@ -171,7 +193,7 @@ void MeshPlugin::sendResponse(const MeshPacket &req)
 void setReplyTo(MeshPacket *p, const MeshPacket &to)
 {
     assert(p->which_payloadVariant == MeshPacket_decoded_tag); // Should already be set by now
-    p->to = getFrom(&to);
+    p->to = getFrom(&to);    // Make sure that if we are sending to the local node, we use our local node addr, not 0
     p->channel = to.channel; // Use the same channel that the request came in on
 
     // No need for an ack if we are just delivering locally (it just generates an ignored ack)

@@ -26,7 +26,7 @@ These are the settings that can be configured.
 
 For basic usage, you will need two devices both with a GPS. A device with a paired phone with GPS may work, I have not tried it. 
 
-The first thing to do is to turn on the plugin. With the plugin turned on, the other settings will be available:
+The first thing to do is to turn on the plugin. The device will need to be restarted after appling the settings. With the plugin turned on, the other settings will be available:
 
 	range_test_plugin_enabled = 1
 

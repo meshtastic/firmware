@@ -42,11 +42,15 @@ class MeshPlugin
   protected:
     const char *name;
 
-    /* Most plugins only care about packets that are destined for their node (i.e. broadcasts or has their node as the specific
+    /** Most plugins only care about packets that are destined for their node (i.e. broadcasts or has their node as the specific
     recipient) But some plugs might want to 'sniff' packets that are merely being routed (passing through the current node). Those
     plugins can set this to true and their handleReceived() will be called for every packet.
     */
     bool isPromiscuous = false;
+
+    /** Most plugins only understand decrypted packets.  For plugins that also want to see encrypted packets, they should set this
+     * flag */
+    bool encryptedOk = false;
 
     /** If a bound channel name is set, we will only accept received packets that come in on that channel.
      * A special exception (FIXME, not sure if this is a good idea) - packets that arrive on the local interface
@@ -66,6 +70,11 @@ class MeshPlugin
     static const MeshPacket *currentRequest;
 
     /**
+     * If your handler wants to send a response, simply set currentReply and it will be sent at the end of response handling.
+     */
+    MeshPacket *myReply = NULL;
+
+    /**
      * Initialize your plugin.  This setup function is called once after all hardware and mesh protocol layers have
      * been initialized
      */
@@ -83,8 +92,12 @@ class MeshPlugin
     virtual bool handleReceived(const MeshPacket &mp) { return false; }
 
     /** Messages can be received that have the want_response bit set.  If set, this callback will be invoked
-     * so that subclasses can (optionally) send a response back to the original sender.  */
-    virtual MeshPacket *allocReply() { return NULL; }
+     * so that subclasses can (optionally) send a response back to the original sender.
+     *
+     * Note: most implementers don't need to override this, instead: If while handling a request you have a reply, just set
+     * the protected reply field in this instance.
+     * */
+    virtual MeshPacket *allocReply();
 
     /***
      * @return true if you want to be alloced a UI screen frame
@@ -102,6 +115,7 @@ class MeshPlugin
      * the RoutingPlugin to avoid sending redundant acks
      */
     static MeshPacket *currentReply;
+
     friend class ReliableRouter;
 
     /** Messages can be received that have the want_response bit set.  If set, this callback will be invoked

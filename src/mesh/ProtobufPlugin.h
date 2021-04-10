@@ -22,10 +22,9 @@ template <class T> class ProtobufPlugin : protected SinglePortPlugin
     }
 
   protected:
-
     /**
      * Handle a received message, the data field in the message is already decoded and is provided
-     * 
+     *
      * In general decoded will always be !NULL.  But in some special applications (where you have handling packets
      * for multiple port numbers, decoding will ONLY be attempted for packets where the portnum matches our expected ourPortNum.
      */
@@ -58,11 +57,12 @@ template <class T> class ProtobufPlugin : protected SinglePortPlugin
         // it would be better to update even if the message was destined to others.
 
         auto &p = mp.decoded;
-        DEBUG_MSG("Received %s from=0x%0x, id=0x%x, portnum=%d, payloadlen=%d\n", name, mp.from, mp.id, p.portnum, p.payload.size);
+        DEBUG_MSG("Received %s from=0x%0x, id=0x%x, portnum=%d, payloadlen=%d\n", name, mp.from, mp.id, p.portnum,
+                  p.payload.size);
 
         T scratch;
-        T *decoded = NULL; 
-        if(mp.decoded.portnum == ourPortNum) {
+        T *decoded = NULL;
+        if (mp.which_payloadVariant == MeshPacket_decoded_tag && mp.decoded.portnum == ourPortNum) {
             memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, fields, &scratch))
                 decoded = &scratch;

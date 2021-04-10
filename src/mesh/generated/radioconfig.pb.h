@@ -86,6 +86,9 @@ typedef struct _RadioConfig_UserPreferences {
     bool is_low_power;
     bool fixed_position;
     bool serial_disabled;
+    float frequency_offset;
+    char mqtt_server[32];
+    bool mqtt_disabled;
     bool factory_reset;
     bool debug_log_enabled;
     pb_size_t ignore_incoming_count;
@@ -151,9 +154,9 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default}
-#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0}
+#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero}
-#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0}
+#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define RadioConfig_UserPreferences_position_broadcast_secs_tag 1
@@ -179,6 +182,9 @@ extern "C" {
 #define RadioConfig_UserPreferences_is_low_power_tag 38
 #define RadioConfig_UserPreferences_fixed_position_tag 39
 #define RadioConfig_UserPreferences_serial_disabled_tag 40
+#define RadioConfig_UserPreferences_frequency_offset_tag 41
+#define RadioConfig_UserPreferences_mqtt_server_tag 42
+#define RadioConfig_UserPreferences_mqtt_disabled_tag 43
 #define RadioConfig_UserPreferences_factory_reset_tag 100
 #define RadioConfig_UserPreferences_debug_log_enabled_tag 101
 #define RadioConfig_UserPreferences_ignore_incoming_tag 103
@@ -240,6 +246,9 @@ X(a, STATIC,   SINGULAR, BOOL,     is_router,        37) \
 X(a, STATIC,   SINGULAR, BOOL,     is_low_power,     38) \
 X(a, STATIC,   SINGULAR, BOOL,     fixed_position,   39) \
 X(a, STATIC,   SINGULAR, BOOL,     serial_disabled,  40) \
+X(a, STATIC,   SINGULAR, FLOAT,    frequency_offset,  41) \
+X(a, STATIC,   SINGULAR, STRING,   mqtt_server,      42) \
+X(a, STATIC,   SINGULAR, BOOL,     mqtt_disabled,    43) \
 X(a, STATIC,   SINGULAR, BOOL,     factory_reset,   100) \
 X(a, STATIC,   SINGULAR, BOOL,     debug_log_enabled, 101) \
 X(a, STATIC,   REPEATED, UINT32,   ignore_incoming, 103) \
@@ -279,8 +288,8 @@ extern const pb_msgdesc_t RadioConfig_UserPreferences_msg;
 #define RadioConfig_UserPreferences_fields &RadioConfig_UserPreferences_msg
 
 /* Maximum encoded size of messages (where known) */
-#define RadioConfig_size                         351
-#define RadioConfig_UserPreferences_size         348
+#define RadioConfig_size                         394
+#define RadioConfig_UserPreferences_size         391
 
 #ifdef __cplusplus
 } /* extern "C" */
