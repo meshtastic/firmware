@@ -4,9 +4,25 @@ You probably don't care about this section - skip to the next one.
 
 ## before next release
 
+* DONE android speed settings https://github.com/meshtastic/Meshtastic-Android/issues/271
+* fix heltec battery scaling
+
+* DONE remote admin busted? 
+* DONE check android code - @havealoha comments about odd sleep behavior
+* ABANDONED test github actions locally on linux
+* DONE fix github actions per sasha tip
+* tell ttgo to preinstall new bins
+* DONE sendtext busted in portduino, due to bytetime calculations
+* remove linux dependency in native build
+* DONE tcp stream problem in python+pordtuino, server thinks client dropped when client DID NOT DROP
+* DONE TCP mode for android, localhost is at 10.0.2.2
+* DONE make sure USB still works in android
+* add portduino builds to zip
+* add license to portduino and make announcement
 * DONE naks are being dropped (though enqueuedLocal) sometimes before phone/PC gets them
 * DONE have android fill in if local GPS has poor signal
-* fix heltec battery scaling
+* optionally restrict position sends to a named channel
+* release to beta and amazon
 * add reference counting to mesh packets
 * allow multiple simultanteous phoneapi connections
 * DONE split position.time and last_heard
@@ -28,15 +44,13 @@ You probably don't care about this section - skip to the next one.
 * DONE before next relase: test empty channel sets on android
 * DONE channel sharing in android
 * DONE test 1.0 firmware update on android
-* DONE test 1.1 firmware update on android
+* DONE test 1.1 firmwhttps://github.com/meshtastic/Meshtastic-Android/issues/271are update on android
 * DONE test 1.2.10 firmware update on android
 * DONE test link sharing on android
 * FIXED? luxon bug report - seeing rx acks for nodes that are not on the network
 * DONE release py
 * DONE show GPS time only if we know what global time is
 * DONE android should always provide time to nodes - so that it is easier for the mesh to learn the current time
-
-## MQTT
 
 ## Multichannel support
 
@@ -120,7 +134,7 @@ You probably don't care about this section - skip to the next one.
 * DONE make all subpackets different versions of data
 * DONE move routing control into a data packet
 * have phoneapi done via plugin (will allow multiple simultaneous API clients - stop disabling BLE while using phone API)
-* use reference counting and dynamic sizing for meshpackets.
+* use reference counting and dynamic sizing for meshpackets. - use https://docs.microsoft.com/en-us/cpp/cpp/how-to-create-and-use-shared-ptr-instances?view=msvc-160 (already used in arduino)
 * let multiple PhoneAPI endpoints work at once
 * allow multiple simultaneous bluetooth connections (create the bluetooth phoneapi instance dynamically based on client id)
 * DONE figure out how to add micro_delta to position, make it so that phone apps don't need to understand it?
@@ -138,6 +152,7 @@ You probably don't care about this section - skip to the next one.
  
 For app cleanup:
 
+* don't store redundant User admin or position broadcasts in the ToPhone queue (only keep one per sending node per proto type, and only most recent)
 * use structured logging to kep logs in ram.  Also send logs as packets to api clients
 * DONE writeup nice python options docs (common cases, link to protobuf docs)
 * have android app link to user manual

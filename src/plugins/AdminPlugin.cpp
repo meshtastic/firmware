@@ -19,7 +19,7 @@ void AdminPlugin::handleGetChannel(const MeshPacket &req, uint32_t channelIndex)
         AdminMessage r = AdminMessage_init_default;
         r.get_channel_response = channels.getByIndex(channelIndex);
         r.which_variant = AdminMessage_get_channel_response_tag;
-        reply = allocDataProtobuf(r);
+        myReply = allocDataProtobuf(r);
     }
 }
 
@@ -36,7 +36,7 @@ void AdminPlugin::handleGetRadio(const MeshPacket &req)
         r.get_radio_response.preferences.ls_secs = getPref_ls_secs();
 
         r.which_variant = AdminMessage_get_radio_response_tag;
-        reply = allocDataProtobuf(r);
+        myReply = allocDataProtobuf(r);
     }
 }
 
@@ -56,8 +56,8 @@ bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, const AdminMessag
 
     case AdminMessage_set_channel_tag:
         DEBUG_MSG("Client is setting channel %d\n", r->set_channel.index);
-        if (r->set_channel.index < 0 || r->set_channel.index >= MAX_NUM_CHANNELS)
-            reply = allocErrorResponse(Routing_Error_BAD_REQUEST, &mp);
+        if (r->set_channel.index < 0 || r->set_channel.index >= (int)MAX_NUM_CHANNELS)
+            myReply = allocErrorResponse(Routing_Error_BAD_REQUEST, &mp);
         else
             handleSetChannel(r->set_channel);
         break;
@@ -66,7 +66,7 @@ bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, const AdminMessag
         uint32_t i = r->get_channel_request - 1;
         DEBUG_MSG("Client is getting channel %u\n", i);
         if (i >= MAX_NUM_CHANNELS)
-            reply = allocErrorResponse(Routing_Error_BAD_REQUEST, &mp);
+            myReply = allocErrorResponse(Routing_Error_BAD_REQUEST, &mp);
         else
             handleGetChannel(mp, i);
         break;
@@ -139,13 +139,6 @@ void AdminPlugin::handleSetRadio(const RadioConfig &r)
     radioConfig = r;
 
     service.reloadConfig();
-}
-
-MeshPacket *AdminPlugin::allocReply()
-{
-    auto r = reply;
-    reply = NULL; // Only use each reply once
-    return r;
 }
 
 AdminPlugin::AdminPlugin() : ProtobufPlugin("Admin", PortNum_ADMIN_APP, AdminMessage_fields)

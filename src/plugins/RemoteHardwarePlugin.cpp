@@ -10,12 +10,13 @@
 
 // Because (FIXME) we currently don't tell API clients status on sent messages
 // we need to throttle our sending, so that if a gpio is bouncing up and down we
-// don't generate more messages than the net can send. So we limit watch messages to 
+// don't generate more messages than the net can send. So we limit watch messages to
 // a max of one change per 30 seconds
 #define WATCH_INTERVAL_MSEC (30 * 1000)
 
 /// Set pin modes for every set bit in a mask
-static void pinModes(uint64_t mask, uint8_t mode) {
+static void pinModes(uint64_t mask, uint8_t mode)
+{
     for (uint8_t i = 0; i < NUM_GPIOS; i++) {
         if (mask & (1 << i)) {
             pinMode(i, mode);
@@ -24,7 +25,8 @@ static void pinModes(uint64_t mask, uint8_t mode) {
 }
 
 /// Read all the pins mentioned in a mask
-static uint64_t digitalReads(uint64_t mask) {
+static uint64_t digitalReads(uint64_t mask)
+{
     uint64_t res = 0;
 
     pinModes(mask, INPUT_PULLUP);
@@ -40,10 +42,9 @@ static uint64_t digitalReads(uint64_t mask) {
     return res;
 }
 
-
 RemoteHardwarePlugin::RemoteHardwarePlugin()
-    : ProtobufPlugin("remotehardware", PortNum_REMOTE_HARDWARE_APP, HardwareMessage_fields),
-    concurrency::OSThread("remotehardware")
+    : ProtobufPlugin("remotehardware", PortNum_REMOTE_HARDWARE_APP, HardwareMessage_fields), concurrency::OSThread(
+                                                                                                 "remotehardware")
 {
 }
 
@@ -69,26 +70,26 @@ bool RemoteHardwarePlugin::handleReceivedProtobuf(const MeshPacket &req, const H
 
     case HardwareMessage_Type_READ_GPIOS: {
         // Print notification to LCD screen
-        if(screen)
+        if (screen)
             screen->print("Read GPIOs\n");
 
         uint64_t res = digitalReads(p.gpio_mask);
 
         // Send the reply
-        HardwareMessage reply = HardwareMessage_init_default;
-        reply.typ = HardwareMessage_Type_READ_GPIOS_REPLY;
-        reply.gpio_value = res;
-        MeshPacket *p = allocDataProtobuf(reply);
+        HardwareMessage r = HardwareMessage_init_default;
+        r.typ = HardwareMessage_Type_READ_GPIOS_REPLY;
+        r.gpio_value = res;
+        MeshPacket *p = allocDataProtobuf(r);
         setReplyTo(p, req);
-        service.sendToMesh(p);
+        myReply = p;
         break;
     }
 
     case HardwareMessage_Type_WATCH_GPIOS: {
         watchGpios = p.gpio_mask;
-        lastWatchMsec = 0; // Force a new publish soon
+        lastWatchMsec = 0;           // Force a new publish soon
         previousWatch = ~watchGpios; // generate a 'previous' value which is guaranteed to not match (to force an initial publish)
-        enabled = true; // Let our thread run at least once
+        enabled = true;              // Let our thread run at least once
         DEBUG_MSG("Now watching GPIOs 0x%llx\n", watchGpios);
         break;
     }
@@ -101,31 +102,31 @@ bool RemoteHardwarePlugin::handleReceivedProtobuf(const MeshPacket &req, const H
         DEBUG_MSG("Hardware operation %d not yet implemented! FIXME\n", p.typ);
         break;
     }
-    
-    return true; // handled
+
+    return false;
 }
 
-int32_t RemoteHardwarePlugin::runOnce() {
-    if(watchGpios) {
+int32_t RemoteHardwarePlugin::runOnce()
+{
+    if (watchGpios) {
         uint32_t now = millis();
 
-        if(now - lastWatchMsec >= WATCH_INTERVAL_MSEC) {
+        if (now - lastWatchMsec >= WATCH_INTERVAL_MSEC) {
             uint64_t curVal = digitalReads(watchGpios);
 
-            if(curVal != previousWatch) {
+            if (curVal != previousWatch) {
                 previousWatch = curVal;
                 DEBUG_MSG("Broadcasting GPIOS 0x%llx changed!\n", curVal);
 
                 // Something changed!  Tell the world with a broadcast message
-                HardwareMessage reply = HardwareMessage_init_default;
-                reply.typ = HardwareMessage_Type_GPIOS_CHANGED;
-                reply.gpio_value = curVal;
-                MeshPacket *p = allocDataProtobuf(reply);
+                HardwareMessage r = HardwareMessage_init_default;
+                r.typ = HardwareMessage_Type_GPIOS_CHANGED;
+                r.gpio_value = curVal;
+                MeshPacket *p = allocDataProtobuf(r);
                 service.sendToMesh(p);
             }
         }
-    }
-    else {
+    } else {
         // No longer watching anything - stop using CPU
         enabled = false;
     }

@@ -40,7 +40,7 @@ bool scheduleHWCallback(PendableFunction callback, void *param1, uint32_t param2
     tParam1 = param1;
     tParam2 = param2;
 
-    timerAlarmWrite(timer, delayMsec * 1000L, false); // Do not reload, we want it to be a single shot timer
+    timerAlarmWrite(timer, delayMsec * 1000UL, false); // Do not reload, we want it to be a single shot timer
     timerRestart(timer);
     timerAlarmEnable(timer);
     return true;
