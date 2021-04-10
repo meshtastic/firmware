@@ -135,6 +135,7 @@ typedef struct _User {
     char short_name[5];
     pb_byte_t macaddr[6];
     HardwareModel hw_model;
+    bool is_licensed;
 } User;
 
 typedef PB_BYTES_ARRAY_T(256) MeshPacket_encrypted_t;
@@ -230,7 +231,7 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define Position_init_default                    {0, 0, 0, 0, 0}
-#define User_init_default                        {"", "", "", {0}, _HardwareModel_MIN}
+#define User_init_default                        {"", "", "", {0}, _HardwareModel_MIN, 0}
 #define RouteDiscovery_init_default              {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_default                     {0, {RouteDiscovery_init_default}}
 #define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0}
@@ -241,7 +242,7 @@ extern "C" {
 #define FromRadio_init_default                   {0, 0, {MyNodeInfo_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
 #define Position_init_zero                       {0, 0, 0, 0, 0}
-#define User_init_zero                           {"", "", "", {0}, _HardwareModel_MIN}
+#define User_init_zero                           {"", "", "", {0}, _HardwareModel_MIN, 0}
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_zero                        {0, {RouteDiscovery_init_zero}}
 #define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0}
@@ -287,6 +288,7 @@ extern "C" {
 #define User_short_name_tag                      3
 #define User_macaddr_tag                         4
 #define User_hw_model_tag                        6
+#define User_is_licensed_tag                     7
 #define MeshPacket_from_tag                      1
 #define MeshPacket_to_tag                        2
 #define MeshPacket_channel_tag                   3
@@ -333,7 +335,8 @@ X(a, STATIC,   SINGULAR, STRING,   id,                1) \
 X(a, STATIC,   SINGULAR, STRING,   long_name,         2) \
 X(a, STATIC,   SINGULAR, STRING,   short_name,        3) \
 X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, macaddr,           4) \
-X(a, STATIC,   SINGULAR, UENUM,    hw_model,          6)
+X(a, STATIC,   SINGULAR, UENUM,    hw_model,          6) \
+X(a, STATIC,   SINGULAR, BOOL,     is_licensed,       7)
 #define User_CALLBACK NULL
 #define User_DEFAULT NULL
 
@@ -464,12 +467,12 @@ extern const pb_msgdesc_t ToRadio_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define Position_size                            37
-#define User_size                                74
+#define User_size                                76
 #define RouteDiscovery_size                      40
 #define Routing_size                             42
 #define Data_size                                260
 #define MeshPacket_size                          309
-#define NodeInfo_size                            131
+#define NodeInfo_size                            133
 #define MyNodeInfo_size                          95
 #define LogRecord_size                           81
 #define FromRadio_size                           318
