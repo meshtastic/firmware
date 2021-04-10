@@ -88,7 +88,7 @@ void MQTT::sendSubscriptions()
     size_t numChan = channels.getNumChannels();
     for (size_t i = 0; i < numChan; i++) {
         auto &ch = channels.getByIndex(i);
-        if (ch.settings.uplink_enabled) {
+        if (ch.settings.downlink_enabled) {
             String topic = cryptTopic + channels.getGlobalId(i) + "/#";
             DEBUG_MSG("Subscribing to %s\n", topic.c_str());
             pubSub.subscribe(topic.c_str(), 1); // FIXME, is QOS 1 right?
