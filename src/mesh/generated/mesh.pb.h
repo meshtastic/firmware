@@ -129,6 +129,11 @@ typedef struct _RouteDiscovery {
     uint32_t route[8];
 } RouteDiscovery;
 
+typedef struct _ToRadio_PeerInfo {
+    uint32_t app_version;
+    bool mqtt_gateway;
+} ToRadio_PeerInfo;
+
 typedef struct _User {
     char id[16];
     char long_name[40];
@@ -193,6 +198,7 @@ typedef struct _ToRadio {
     pb_size_t which_payloadVariant;
     union {
         MeshPacket packet;
+        ToRadio_PeerInfo peer_info;
         uint32_t want_config_id;
         bool disconnect;
     };
@@ -241,6 +247,7 @@ extern "C" {
 #define LogRecord_init_default                   {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_default                   {0, 0, {MyNodeInfo_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
+#define ToRadio_PeerInfo_init_default            {0, 0}
 #define Position_init_zero                       {0, 0, 0, 0, 0}
 #define User_init_zero                           {"", "", "", {0}, _HardwareModel_MIN, 0}
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
@@ -252,6 +259,7 @@ extern "C" {
 #define LogRecord_init_zero                      {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_zero                      {0, 0, {MyNodeInfo_init_zero}}
 #define ToRadio_init_zero                        {0, {MeshPacket_init_zero}}
+#define ToRadio_PeerInfo_init_zero               {0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define Data_portnum_tag                         1
@@ -283,6 +291,8 @@ extern "C" {
 #define Position_battery_level_tag               4
 #define Position_time_tag                        9
 #define RouteDiscovery_route_tag                 2
+#define ToRadio_PeerInfo_app_version_tag         1
+#define ToRadio_PeerInfo_mqtt_gateway_tag        2
 #define User_id_tag                              1
 #define User_long_name_tag                       2
 #define User_short_name_tag                      3
@@ -317,6 +327,7 @@ extern "C" {
 #define FromRadio_rebooted_tag                   9
 #define FromRadio_packet_tag                     11
 #define ToRadio_packet_tag                       2
+#define ToRadio_peer_info_tag                    3
 #define ToRadio_want_config_id_tag               100
 #define ToRadio_disconnect_tag                   104
 
@@ -434,11 +445,19 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,packet,packet),  11)
 
 #define ToRadio_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,packet,packet),   2) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,peer_info,peer_info),   3) \
 X(a, STATIC,   ONEOF,    UINT32,   (payloadVariant,want_config_id,want_config_id), 100) \
 X(a, STATIC,   ONEOF,    BOOL,     (payloadVariant,disconnect,disconnect), 104)
 #define ToRadio_CALLBACK NULL
 #define ToRadio_DEFAULT NULL
 #define ToRadio_payloadVariant_packet_MSGTYPE MeshPacket
+#define ToRadio_payloadVariant_peer_info_MSGTYPE ToRadio_PeerInfo
+
+#define ToRadio_PeerInfo_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   app_version,       1) \
+X(a, STATIC,   SINGULAR, BOOL,     mqtt_gateway,      2)
+#define ToRadio_PeerInfo_CALLBACK NULL
+#define ToRadio_PeerInfo_DEFAULT NULL
 
 extern const pb_msgdesc_t Position_msg;
 extern const pb_msgdesc_t User_msg;
@@ -451,6 +470,7 @@ extern const pb_msgdesc_t MyNodeInfo_msg;
 extern const pb_msgdesc_t LogRecord_msg;
 extern const pb_msgdesc_t FromRadio_msg;
 extern const pb_msgdesc_t ToRadio_msg;
+extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define Position_fields &Position_msg
@@ -464,6 +484,7 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define LogRecord_fields &LogRecord_msg
 #define FromRadio_fields &FromRadio_msg
 #define ToRadio_fields &ToRadio_msg
+#define ToRadio_PeerInfo_fields &ToRadio_PeerInfo_msg
 
 /* Maximum encoded size of messages (where known) */
 #define Position_size                            37
@@ -477,6 +498,7 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define LogRecord_size                           81
 #define FromRadio_size                           318
 #define ToRadio_size                             312
+#define ToRadio_PeerInfo_size                    8
 
 #ifdef __cplusplus
 } /* extern "C" */
