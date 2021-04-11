@@ -39,6 +39,9 @@ PB_BIND(FromRadio, FromRadio, 2)
 PB_BIND(ToRadio, ToRadio, 2)
 
 
+PB_BIND(ToRadio_PeerInfo, ToRadio_PeerInfo, AUTO)
+
+
 
 
 

@@ -24,16 +24,19 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
     if (!pb_decode_from_bytes(payload, length, ServiceEnvelope_fields, &e)) {
         DEBUG_MSG("Invalid MQTT service envelope, topic %s, len %u!\n", topic, length);
     } else {
-        DEBUG_MSG("Received MQTT topic %s, len=%u\n", topic, length);
+        if (strcmp(e.gateway_id, owner.id) == 0)
+            DEBUG_MSG("Ignoring downlink message we originally sent.\n");
+        else {
+            if (e.packet) {
+                DEBUG_MSG("Received MQTT topic %s, len=%u\n", topic, length);
+                MeshPacket *p = packetPool.allocCopy(*e.packet);
 
-        if (e.packet) {
-            MeshPacket *p = packetPool.allocCopy(*e.packet);
-
-            // ignore messages sent by us or if we don't have the channel key
-            if (router && p->from != nodeDB.getNodeNum() && perhapsDecode(p))
-                router->enqueueReceivedMessage(p);
-            else
-                packetPool.release(p);
+                // ignore messages sent by us or if we don't have the channel key
+                if (router && p->from != nodeDB.getNodeNum() && perhapsDecode(p))
+                    router->enqueueReceivedMessage(p);
+                else
+                    packetPool.release(p);
+            }
         }
 
         // make sure to free both strings and the MeshPacket (passing in NULL is acceptable)
