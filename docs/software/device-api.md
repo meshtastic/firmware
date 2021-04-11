@@ -33,6 +33,7 @@ Typical flow when a phone connects to the device should be the following (if you
 - There are only three relevant endpoints (and they have built in BLE documentation - so use a BLE tool of your choice to watch them): FromRadio, FromNum (sends notifies when new data is available in FromRadio) and ToRadio
 - SetMTU size to 512
 - Write a ToRadio.startConfig protobuf to the "ToRadio" endpoint" - this tells the radio you are a new connection and you need the entire NodeDB sent down.
+- Wrote a ToRadio.peerInfo protobuf to the endpoint - this tells the radio important information about your application version and if you are able to forward MQTT packets (see below).  Sending this protobuf is optional but highly recommended.
 - Read repeatedly from the "FromRadio" endpoint. Each time you read you will get back a FromRadio protobuf (see Meshtatastic-protobuf). Keep reading from this endpoint until you get back and empty buffer.
 - See below for the expected sequence for your initial download.
 - After the initial download, you should subscribe for BLE "notify" on the "FromNum" endpoint. If a notification arrives, that means there are now one or more FromRadio packets waiting inside FromRadio. Read from FromRadio until you get back an empty packet.
@@ -113,7 +114,7 @@ Characteristics
 | e272ebac-d463-4b98-bc84-5cc1a39ee517 | write       | data, variable sized, recommended 512 bytes, write one for each block of file                                     |
 | 4826129c-c22a-43a3-b066-ce8f0d5bacc6 | write       | crc32, write last - writing this will complete the OTA operation, now you can read result                         |
 | 5e134862-7411-4424-ac4a-210937432c77 | read,notify | result code, readable but will notify when the OTA operation completes                                            |
-| 5e134862-7411-4424-ac4a-210937432c67 | write | sets the region for programming, currently only 0 (app) or 100 (spiffs) are defined, if not set app is assumed |
+| 5e134862-7411-4424-ac4a-210937432c67 | write       | sets the region for programming, currently only 0 (app) or 100 (spiffs) are defined, if not set app is assumed    |
 | GATT_UUID_SW_VERSION_STR/0x2a28      | read        | We also implement these standard GATT entries because SW update probably needs them:                              |
 | GATT_UUID_MANU_NAME/0x2a29           | read        |                                                                                                                   |
 | GATT_UUID_HW_VERSION_STR/0x2a27      | read        |                                                                                                                   |
