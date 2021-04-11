@@ -1,5 +1,7 @@
 # RAK Wireless RisBlock
 
+## Docs
+
 https://docs.rakwireless.com/Product-Categories/WisBlock/Quickstart/#wisblock-base-2
 
 GPS module:
@@ -17,3 +19,20 @@ Must be installed on the front for the I2C wires to lineup
 Solar enclosure
 https://docs.rakwireless.com/Product-Categories/Accessories/RAKBox-B2/Overview/#product-description
 
+## TODO
+
+* DONE solder header
+* DONE attach antenna
+* get building (LORA disabled)
+* FIX LEDs
+* FIX BUTTONs
+* FIX I2C assignment
+* FIX LORA SPI
+* FIX GPS GPIO assignment
+* Disable Bluetooth
+* Disable LORA
+* Boot
+* Enable LORA but no TX
+* Enable LORA TX
+* send in PR to https://github.com/geeksville/WisBlock for boards define
+* 
