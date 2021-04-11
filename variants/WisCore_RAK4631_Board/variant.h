@@ -136,8 +136,42 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define EXTERNAL_FLASH_DEVICES IS25LP080D
 #define EXTERNAL_FLASH_USE_QSPI
 
+/* @note RAK5005-O GPIO mapping to RAK4631 GPIO ports
+   RAK5005-O <->  nRF52840
+   IO1       <->  P0.17 (Arduino GPIO number 17)
+   IO2       <->  P1.02 (Arduino GPIO number 34)
+   IO3       <->  P0.21 (Arduino GPIO number 21)
+   IO4       <->  P0.04 (Arduino GPIO number 4)
+   IO5       <->  P0.09 (Arduino GPIO number 9)
+   IO6       <->  P0.10 (Arduino GPIO number 10)
+   SW1       <->  P0.01 (Arduino GPIO number 1)
+   A0        <->  P0.04/AIN2 (Arduino Analog A2
+   A1        <->  P0.31/AIN7 (Arduino Analog A7
+   SPI_CS    <->  P0.26 (Arduino GPIO number 26)
+ */
+
+// RAK4630 LoRa module
+#define SX1262_CS (42)
+#define SX1262_DIO1 (47)
+#define SX1262_BUSY (46)
+#define SX1262_RESET (38)
+#define SX1262_TXEN (39)
+#define SX1262_RXEN (37)
+#define SX1262_E22 // DIO2 controlls an antenna switch and the TCXO voltage is controlled by DIO3
+
+// RAK1910 GPS module
+// If using the wisblock GPS module and pluged into Port A on WisBlock base
+// IO1 is hooked to PPS (pin 12 on header) = gpio 17
+// IO2 is hooked to GPS RESET = gpio 34, but it can not be used to this because IO2 is ALSO used to control 3V3_S power (1 is on).
+// Therefore must be 1 to keep peripherals powered
+// Power is on the controllable 3V3_S rail
+// #define PIN_GPS_RESET (34)
+#define PIN_GPS_EN (34)
+#define PIN_GPS_PPS (17) // Pulse per second input from the GPS
+#define GPS_RX_PIN PIN_SERIAL1_RX
+#define GPS_TX_PIN PIN_SERIAL1_TX
+
 // Meshtastic specific flags
-#define USE_SIM_RADIO
 #define USE_SEGGER
 
 #ifdef __cplusplus
