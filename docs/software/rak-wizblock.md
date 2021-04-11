@@ -24,9 +24,9 @@ https://docs.rakwireless.com/Product-Categories/Accessories/RAKBox-B2/Overview/#
 * DONE solder header
 * DONE attach antenna
 * get building (LORA disabled)
-* FIX LEDs
-* FIX BUTTONs
-* FIX I2C assignment
+* DONE FIX LEDs
+* DONE FIX BUTTONs
+* DONE FIX I2C assignment
 * FIX LORA SPI
 * FIX GPS GPIO assignment
 * Disable Bluetooth
