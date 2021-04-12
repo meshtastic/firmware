@@ -427,11 +427,12 @@ void setup()
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 
 #ifdef GENIEBLOCKS
-    I'm intentionally breaking your build so you see this note.  Feel free to revert if not correct. I think you can
-        removed this code by instead defining PIN_GPS_RESET and use the shared code in GPS.cpp instead.
+    Im intentionally breaking your build so you see this note.Feel free to revert if not correct.I think you can
+            remove this GPS_RESET_N code by instead defining PIN_GPS_RESET and
+        use the shared code in GPS.cpp instead.- geeksville
 
-        // gps setup
-        pinMode(GPS_RESET_N, OUTPUT);
+                                                     // gps setup
+                                                     pinMode(GPS_RESET_N, OUTPUT);
     pinMode(GPS_EXTINT, OUTPUT);
     digitalWrite(GPS_RESET_N, HIGH);
     digitalWrite(GPS_EXTINT, LOW);

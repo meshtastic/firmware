@@ -44,10 +44,23 @@ void getMacAddr(uint8_t *dmac)
     }
 }
 
+static void initBrownout()
+{
+    auto vccthresh = POWER_POFCON_THRESHOLD_V17;
+
+    auto err_code = sd_power_pof_enable(POWER_POFCON_POF_Enabled);
+    assert(err_code == NRF_SUCCESS);
+
+    err_code = sd_power_pof_threshold_set(vccthresh);
+    assert(err_code == NRF_SUCCESS);
+
+    // We don't bother with setting up brownout if soft device is disabled - because during production we always use softdevice
+}
+
 NRF52Bluetooth *nrf52Bluetooth;
 
 static bool bleOn = false;
-static const bool useSoftDevice = false; // Set to false for easier debugging
+static const bool useSoftDevice = true; // Set to false for easier debugging
 
 void setBluetoothEnable(bool on)
 {
@@ -59,6 +72,9 @@ void setBluetoothEnable(bool on)
                 else {
                     nrf52Bluetooth = new NRF52Bluetooth();
                     nrf52Bluetooth->setup();
+
+                    // We delay brownout init until after BLE because BLE starts soft device
+                    initBrownout();
                 }
             }
         } else {
@@ -79,20 +95,6 @@ int printf(const char *fmt, ...)
     auto res = SEGGER_RTT_vprintf(0, fmt, &args);
     va_end(args);
     return res;
-}
-
-void initBrownout()
-{
-    auto vccthresh = POWER_POFCON_THRESHOLD_V17;
-
-    if (useSoftDevice) {
-        auto err_code = sd_power_pof_enable(POWER_POFCON_POF_Enabled);
-        assert(err_code == NRF_SUCCESS);
-
-        err_code = sd_power_pof_threshold_set(vccthresh);
-        assert(err_code == NRF_SUCCESS);
-    }
-    // We don't bother with setting up brownout if soft device is disabled - because during production we always use softdevice
 }
 
 void checkSDEvents()
@@ -147,8 +149,6 @@ void nrf52Setup()
     // randomSeed(r);
     DEBUG_MSG("FIXME, call randomSeed\n");
     // ::printf("TESTING PRINTF\n");
-
-    initBrownout();
 }
 
 void cpuDeepSleep(uint64_t msecToWake)
