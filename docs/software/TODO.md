@@ -4,9 +4,9 @@ You probably don't care about this section - skip to the next one.
 
 ## before next release
 
-* fix android nrf52 problem
-* meshm reported a crash
-* @havealoha reported android overrides fixed positions
+* DONE @vfurman fixed android nrf52 problem
+* probably fixed (stack overflow generating qr code) meshm reported a crash
+* DONE @havealoha reported android overrides fixed positions
 * @luxonn reports that after a while the android app stops showing new messages
 * DONE android speed settings https://github.com/meshtastic/Meshtastic-Android/issues/271
 * add cloudflare
