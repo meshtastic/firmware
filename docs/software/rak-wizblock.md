@@ -29,20 +29,22 @@ Set IO2=0, 3V3_S is off.
 
 * Fix android bug with detecting nrf52 BLE devices
 * Make this doc into a nice HOWTO: what to order, how to connect (which device in which slots), how to install software
-* Setup battery voltage sensing
+* Setup battery voltage sensing, Vbatt seems direct connected to AIN0 on RAK4631 carrier which is apparently  P0.5/AIN3 on the RAK4630 module, per this schematic.  https://docs.rakwireless.com/Product-Categories/WisBlock/RAK4631/Datasheet/#description But no voltage divider to be found, so ask them.
 * Set bluetooth PIN support
 * Confirm low power draw
 * Confirm that OLED works
+* add purchash links
 * send in PR to https://github.com/geeksville/WisBlock for boards define
 
 ## Docs
 
+Quickstart
 https://docs.rakwireless.com/Product-Categories/WisBlock/Quickstart/#wisblock-base-2
 
 FIXME - list required, recommended and optional components
 
 GPS module:
-Supposedly "Install in slot A only" but I think installing on the back would fit better with the OLED.  FIXME.
+Must be installed in "Slot A"
 https://docs.rakwireless.com/Product-Categories/WisBlock/RAK1910/Overview/#product-description
 
 ST LPS22HB 
