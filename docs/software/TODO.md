@@ -4,6 +4,19 @@ You probably don't care about this section - skip to the next one.
 
 ## before next release
 
+* fix android nrf52 problem
+* meshm reported a crash
+* @havealoha reported android overrides fixed positions
+* @luxonn reports that after a while the android app stops showing new messages
+* DONE android speed settings https://github.com/meshtastic/Meshtastic-Android/issues/271
+* add cloudflare
+* fix heltec battery scaling
+* check android 1.2.20 usage, possibly release to general
+* release android APK
+
+* add rak4600 support (with rf95 radio and limited ram)
+
+* Switch to use https://github.com/adafruit/Adafruit_nRF52_Arduino.git when available (see arduino code for examples)
 * DONE remote admin busted? 
 * DONE check android code - @havealoha comments about odd sleep behavior
 * ABANDONED test github actions locally on linux
