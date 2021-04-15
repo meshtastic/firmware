@@ -171,6 +171,9 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define GPS_RX_PIN PIN_SERIAL1_RX
 #define GPS_TX_PIN PIN_SERIAL1_TX
 
+// The battery sense is hooked to pin A0
+#define BATTERY_PIN PIN_A0
+
 #ifdef __cplusplus
 }
 #endif
