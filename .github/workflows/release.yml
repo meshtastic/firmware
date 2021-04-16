@@ -12,7 +12,7 @@ on:
       - "v*"
 
 jobs:
-  build:
+  release-build:
     runs-on: ubuntu-latest
     steps:
 
