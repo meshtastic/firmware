@@ -21,7 +21,8 @@ def readProps(prefsLoc):
             ['git', 'diff', 'HEAD']).decode("utf-8").strip()
         suffix = sha
         if isDirty:
-            suffix = sha + "-dirty"
+            # short for 'dirty', we want to keep our verstrings source for protobuf reasons
+            suffix = sha + "-d"
         verStr = "{}.{}.{}.{}".format(
             version["major"], version["minor"], version["build"], suffix)
     except:

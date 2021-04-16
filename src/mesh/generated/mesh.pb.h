@@ -107,7 +107,7 @@ typedef struct _MyNodeInfo {
     uint32_t num_bands;
     char region[12];
     char hw_model_deprecated[16];
-    char firmware_version[12];
+    char firmware_version[18];
     CriticalErrorCode error_code;
     uint32_t error_address;
     uint32_t error_count;
@@ -495,7 +495,7 @@ extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 #define Data_size                                260
 #define MeshPacket_size                          309
 #define NodeInfo_size                            133
-#define MyNodeInfo_size                          95
+#define MyNodeInfo_size                          101
 #define LogRecord_size                           81
 #define FromRadio_size                           318
 #define ToRadio_size                             312
