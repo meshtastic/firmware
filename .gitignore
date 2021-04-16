@@ -19,4 +19,4 @@ Thumbs.db
 nanopb*
 flash.uf2
 cmake-build*
-
+__pycache__
