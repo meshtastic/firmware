@@ -8,14 +8,14 @@ on:
 
 jobs:
   setup:
-    runs-on: ubuntu-latest
-    steps:
+    # runs-on: ubuntu-latest
+    # steps:
     
-    - name: Startup
-      run: echo "No action setup currently needed, skipping..."
+    # - name: Startup
+    #   run: echo "No action setup currently needed, skipping..."
 
   build:
-    needs: setup
+    # needs: setup
     runs-on: ubuntu-latest
     steps:
 
