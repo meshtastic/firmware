@@ -18,7 +18,7 @@ ARCHIVEDIR=release/archive
 rm -f $OUTDIR/firmware*
 
 mkdir -p $OUTDIR/bins $ARCHIVEDIR
-rm -r $OUTDIR/bins/*
+rm -r $OUTDIR/bins/* || true
 mkdir -p $OUTDIR/bins/universal $OUTDIR/elfs/universal
 
 # build the named environment and copy the bins to the release directory
