@@ -77,5 +77,6 @@ jobs:
     - name: Store release zip as an artifact
       uses: actions/upload-artifact@v2
       with:
-        name: firmware
-        path: release/archive/firmware-*.zip 
+        name: built
+        path: release/archive/firmware-*.zip
+        rentention-days: 30
