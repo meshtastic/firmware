@@ -1,3 +1,7 @@
+name: 'Common init'
+
+# WARNING due to https://github.com/actions/runner/issues/646
+# this code can't work - must copy and paste into workflows for now because 'uses' is not supported
 runs:
   using: "composite"
   steps:

@@ -14,7 +14,35 @@ jobs:
       with:
         submodules: 'recursive'
 
-    - uses: ./.github/actions/initbuild
+    - name: Setup Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.x
+
+    - name: Cache python libs
+      uses: actions/cache@v1
+      id: cache-pip # needed in if test
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip
+
+    - name: Upgrade python tools
+      # We actually want to run this every time
+      # if: steps.cache-pip.outputs.cache-hit != 'true'
+      run: |
+        python -m pip install --upgrade pip
+        pip install -U platformio meshtastic adafruit-nrfutil
+
+    - name: Cache platformio
+      uses: actions/cache@v1
+      id: cache-platformio # needed in if test
+      with:
+        path: ~/.platformio
+        key: ${{ runner.os }}-platformio
+
+    - name: Upgrade platformio
+      run: |
+        pio upgrade
 
     # Will be available in steps.version.outputs.version
     - name: Get version string
