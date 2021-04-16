@@ -7,12 +7,12 @@ on:
     branches: [ master ]
 
 jobs:
-  setup:
-    # runs-on: ubuntu-latest
-    # steps:
-    
-    # - name: Startup
-    #   run: echo "No action setup currently needed, skipping..."
+  # setup:
+  # runs-on: ubuntu-latest
+  # steps:
+  
+  # - name: Startup
+  #   run: echo "No action setup currently needed, skipping..."
 
   build:
     # needs: setup
