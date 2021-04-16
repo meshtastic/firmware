@@ -1,0 +1,75 @@
+name: Make Release
+on:
+  # Can optionally take parameters from the github UI, more info here https://github.blog/changelog/2020-07-06-github-actions-manual-triggers-with-workflow_dispatch/#:~:text=You%20can%20now%20create%20workflows,the%20workflow%20is%20run%20on.
+  workflow_dispatch:
+    inputs:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Checkout code
+      uses: actions/checkout@v2
+      with:
+        submodules: 'recursive'
+
+    - name: Setup Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.x
+
+    - name: Cache python libs
+      uses: actions/cache@v1
+      id: cache-pip # needed in if test
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip
+
+    - name: Upgrade python tools
+      # We actually want to run this every time
+      # if: steps.cache-pip.outputs.cache-hit != 'true'
+      run: |
+        python -m pip install --upgrade pip
+        pip install -U platformio meshtastic adafruit-nrfutil
+
+    - name: Cache platformio
+      uses: actions/cache@v1
+      id: cache-platformio # needed in if test
+      with:
+        path: ~/.platformio
+        key: ${{ runner.os }}-platformio
+
+    - name: Upgrade platformio
+      run: |
+        pio upgrade
+
+    # Will be available in steps.version.outputs.version
+    - name: Get version string
+      run: echo "::set-output name=version::$(./bin/buildinfo.py)"
+      id: version
+
+    - name: Build everything
+      run: bin/build-all.sh
+
+    - name: release
+      uses: actions/create-release@v1
+      id: create_release
+      with:
+        draft: true
+        prerelease: true
+        release_name: ${{ steps.version.outputs.version }}
+        tag_name: ${{ github.ref }}
+        body: Text to be filled in by human
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+
+    - name: upload artifact
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: release/archive/firmware-${{ steps.version.outputs.version }}.zip
+        asset_name: firmware-${{ steps.version.outputs.version }}.zip
+        asset_content_type: application/zip
