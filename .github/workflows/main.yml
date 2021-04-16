@@ -54,18 +54,28 @@ jobs:
       run: |
         pio upgrade
 
-    - name: Build for tbeam
-      run: platformio run -e tbeam
-    - name: Build for heltec
-      run: platformio run -e heltec
-    - name: Build for wisblock RAK4631
-      run: platformio run -e rak4631
+    # We now run integration test before other build steps (to quickly see runtime failures)
     - name: Build for native
       run: platformio run -e native
     - name: Integration test
       run: |
         .pio/build/native/program &
-        sleep 30 # 5 seconds was not enough
+        sleep 20 # 5 seconds was not enough
         echo "Simulator started, launching python test..."
         python3 -c 'from meshtastic.test import testSimulator; testSimulator()'
 
+    # - name: Build for tbeam
+    #   run: platformio run -e tbeam
+    # - name: Build for heltec
+    #   run: platformio run -e heltec
+    # - name: Build for wisblock RAK4631
+    #   run: platformio run -e rak4631
+
+    - name: Build everything
+      run: bin/build-all.sh
+
+    - name: Store release zip as an artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: firmware
+        path: release/archive/firmware-*.zip 
