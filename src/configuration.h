@@ -409,6 +409,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define HW_VENDOR HardwareModel_PPR
 
+#elif defined(RAK4630)
+
+#define HW_VENDOR HardwareModel_RAK4631
+
 #elif NRF52_SERIES
 
 #define HW_VENDOR HardwareModel_NRF52_UNKNOWN

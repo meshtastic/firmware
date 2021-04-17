@@ -8,7 +8,7 @@ BOARDS_ESP32="tlora-v2 tlora-v1 tlora_v1_3 tlora-v2-1-1.6 tbeam heltec tbeam0.7"
 #BOARDS_ESP32=tbeam
 
 # FIXME note nrf52840dk build is for some reason only generating a BIN file but not a HEX file nrf52840dk-geeksville is fine
-BOARDS_NRF52="lora-relay-v1"
+BOARDS_NRF52="rak4631"
 
 OUTDIR=release/latest
 
@@ -18,7 +18,7 @@ ARCHIVEDIR=release/archive
 rm -f $OUTDIR/firmware*
 
 mkdir -p $OUTDIR/bins $ARCHIVEDIR
-rm -r $OUTDIR/bins/*
+rm -r $OUTDIR/bins/* || true
 mkdir -p $OUTDIR/bins/universal $OUTDIR/elfs/universal
 
 # build the named environment and copy the bins to the release directory
