@@ -313,10 +313,6 @@ void setup()
     SEGGER_RTT_ConfigUpBuffer(SEGGER_STDOUT_CH, NULL, NULL, buflen, mode);
 #endif
 
-#ifdef USE_SEGGER
-    SEGGER_RTT_ConfigUpBuffer(0, NULL, NULL, 0, SEGGER_RTT_MODE_NO_BLOCK_TRIM);
-#endif
-
 #ifdef DEBUG_PORT
     if (!radioConfig.preferences.serial_disabled) {
         consoleInit(); // Set serial baud rate and init our mesh console
@@ -431,8 +427,12 @@ void setup()
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 
 #ifdef GENIEBLOCKS
-    // gps setup
-    pinMode(GPS_RESET_N, OUTPUT);
+    Im intentionally breaking your build so you see this note.Feel free to revert if not correct.I think you can
+            remove this GPS_RESET_N code by instead defining PIN_GPS_RESET and
+        use the shared code in GPS.cpp instead.- geeksville
+
+                                                     // gps setup
+                                                     pinMode(GPS_RESET_N, OUTPUT);
     pinMode(GPS_EXTINT, OUTPUT);
     digitalWrite(GPS_RESET_N, HIGH);
     digitalWrite(GPS_EXTINT, LOW);

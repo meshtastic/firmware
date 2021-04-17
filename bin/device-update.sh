@@ -1,11 +1,11 @@
 #!/bin/sh
 
-PYTHON=${PYTHON:-python3}
+PYTHON=${PYTHON:-$(which python3 python|head -n 1)}
 
 # Usage info
 show_help() {
 cat << EOF
-Usage: ${0##*/} [-h] [-p ESPTOOL_PORT] [-P PYTHON] -f FILENAME
+Usage: $(basename $0) [-h] [-p ESPTOOL_PORT] [-P PYTHON] [-f FILENAME|FILENAME]
 Flash image file to device, leave existing system intact."
 
     -h               Display this help and exit
@@ -36,6 +36,11 @@ while getopts ":hp:P:f:" opt; do
     esac
 done
 shift "$((OPTIND-1))"
+
+[ -z "$FILENAME" -a -n "$1" ] && {
+    FILENAME=$1
+    shift
+}
 
 if [ -f "${FILENAME}" ]; then
 	echo "Trying to flash update ${FILENAME}."

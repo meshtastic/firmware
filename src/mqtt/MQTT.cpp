@@ -9,8 +9,8 @@
 
 MQTT *mqtt;
 
-String statusTopic = "mesh/stat/";
-String cryptTopic = "mesh/crypt/"; // mesh/crypt/CHANNELID/NODEID
+String statusTopic = "msh/1/stat/";
+String cryptTopic = "msh/1/c/"; // msh/1/c/CHANNELID/NODEID
 
 void MQTT::mqttCallback(char *topic, byte *payload, unsigned int length)
 {
@@ -24,16 +24,19 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
     if (!pb_decode_from_bytes(payload, length, ServiceEnvelope_fields, &e)) {
         DEBUG_MSG("Invalid MQTT service envelope, topic %s, len %u!\n", topic, length);
     } else {
-        DEBUG_MSG("Received MQTT topic %s, len=%u\n", topic, length);
+        if (strcmp(e.gateway_id, owner.id) == 0)
+            DEBUG_MSG("Ignoring downlink message we originally sent.\n");
+        else {
+            if (e.packet) {
+                DEBUG_MSG("Received MQTT topic %s, len=%u\n", topic, length);
+                MeshPacket *p = packetPool.allocCopy(*e.packet);
 
-        if (e.packet) {
-            MeshPacket *p = packetPool.allocCopy(*e.packet);
-
-            // ignore messages sent by us or if we don't have the channel key
-            if (router && p->from != nodeDB.getNodeNum() && perhapsDecode(p))
-                router->enqueueReceivedMessage(p);
-            else
-                packetPool.release(p);
+                // ignore messages sent by us or if we don't have the channel key
+                if (router && p->from != nodeDB.getNodeNum() && perhapsDecode(p))
+                    router->enqueueReceivedMessage(p);
+                else
+                    packetPool.release(p);
+            }
         }
 
         // make sure to free both strings and the MeshPacket (passing in NULL is acceptable)
@@ -59,7 +62,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), pubSub(mqttClient)
 void MQTT::reconnect()
 {
     // pubSub.setServer("devsrv.ezdevice.net", 1883); or 192.168.10.188
-    const char *serverAddr = "test.mosquitto.org"; // "mqtt.meshtastic.org"; // default hostname
+    const char *serverAddr = "mqtt.meshtastic.org"; // default hostname
 
     if (*radioConfig.preferences.mqtt_server)
         serverAddr = radioConfig.preferences.mqtt_server; // Override the default
@@ -68,8 +71,7 @@ void MQTT::reconnect()
 
     DEBUG_MSG("Connecting to MQTT server\n", serverAddr);
     auto myStatus = (statusTopic + owner.id);
-    // bool connected = pubSub.connect(nodeId.c_str(), "meshdev", "apes4cats", myStatus.c_str(), 1, true, "offline");
-    bool connected = pubSub.connect(owner.id, myStatus.c_str(), 1, true, "offline");
+    bool connected = pubSub.connect(owner.id, "meshdev", "large4cats", myStatus.c_str(), 1, true, "offline");
     if (connected) {
         DEBUG_MSG("MQTT connected\n");
         enabled = true; // Start running background process again
@@ -89,7 +91,7 @@ void MQTT::sendSubscriptions()
     size_t numChan = channels.getNumChannels();
     for (size_t i = 0; i < numChan; i++) {
         auto &ch = channels.getByIndex(i);
-        if (ch.settings.uplink_enabled) {
+        if (ch.settings.downlink_enabled) {
             String topic = cryptTopic + channels.getGlobalId(i) + "/#";
             DEBUG_MSG("Subscribing to %s\n", topic.c_str());
             pubSub.subscribe(topic.c_str(), 1); // FIXME, is QOS 1 right?

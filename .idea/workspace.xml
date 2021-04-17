@@ -15,9 +15,6 @@
   <component name="ChangeListManager">
     <list default="true" id="58922733-b05b-4b90-9655-b9b18914977a" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/proto" beforeDir="false" afterPath="$PROJECT_DIR$/proto" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/proto/docs/docs.md" beforeDir="false" afterPath="$PROJECT_DIR$/proto/docs/docs.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/mqtt/MQTT.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/mqtt/MQTT.h" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -62,11 +59,6 @@
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
     </configuration>
-    <configuration default="true" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" PASS_PARENT_ENVS_2="true">
-      <method v="2">
-        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
-      </method>
-    </configuration>
     <configuration default="true" type="GradleAppRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" PASS_PARENT_ENVS_2="true">
       <method v="2">
         <option name="com.jetbrains.cidr.cpp.gradle.execution.GradleNativeBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
@@ -107,6 +99,7 @@
       <workItem from="1617279002260" duration="1626000" />
       <workItem from="1617425689081" duration="1896000" />
       <workItem from="1617437366919" duration="1182000" />
+      <workItem from="1618544034975" duration="1185000" />
     </task>
     <servers />
   </component>
@@ -140,7 +133,7 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
           <url>file://$PROJECT_DIR$/src/mqtt/MQTT.cpp</url>
-          <line>84</line>
+          <line>166</line>
           <option name="timeStamp" value="10" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
@@ -148,11 +141,17 @@
           <line>468</line>
           <option name="timeStamp" value="11" />
         </line-breakpoint>
+        <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
+          <url>file://$PROJECT_DIR$/src/mesh/mesh-pb-constants.cpp</url>
+          <line>20</line>
+          <option name="timeStamp" value="12" />
+        </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
     <watches-manager>
       <configuration name="CLion_Remote">
         <watch expression="radioConfig" language="ObjectiveC" />
+        <watch expression="fromRadioScratch" language="ObjectiveC" />
       </configuration>
     </watches-manager>
   </component>

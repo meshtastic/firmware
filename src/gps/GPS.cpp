@@ -7,7 +7,7 @@
 #include <assert.h>
 
 // If we have a serial GPS port it will not be null
-#ifdef GPS_RX_PIN
+#ifdef GPS_SERIAL_NUM
 HardwareSerial _serial_gps_real(GPS_SERIAL_NUM);
 HardwareSerial *GPS::_serial_gps = &_serial_gps_real;
 #elif defined(NRF52840_XXAA) || defined(NRF52833_XXAA)
@@ -34,7 +34,8 @@ bool GPS::setupGPS()
     if (_serial_gps && !didSerialInit) {
         didSerialInit = true;
 
-#ifdef GPS_RX_PIN
+// ESP32 has a special set of parameters vs other arduino ports
+#if defined(GPS_RX_PIN) && !defined(NO_ESP32)
         _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
 #else
         _serial_gps->begin(GPS_BAUDRATE);
@@ -319,8 +320,8 @@ int GPS::prepareDeepSleep(void *unused)
 #include "NMEAGPS.h"
 #endif
 
-
-GPS* createGps() {
+GPS *createGps()
+{
 
 #ifdef NO_GPS
     return nullptr;
@@ -329,7 +330,7 @@ GPS* createGps() {
 #ifdef GPS_TX_PIN
     // Init GPS - first try ublox
     UBloxGPS *ublox = new UBloxGPS();
-    
+
     if (!ublox->setup()) {
         DEBUG_MSG("ERROR: No UBLOX GPS found\n");
         delete ublox;
@@ -344,9 +345,9 @@ GPS* createGps() {
         // assume NMEA at 9600 baud.
         DEBUG_MSG("Hoping that NMEA might work\n");
 #ifdef HAS_AIR530_GPS
-        GPS* new_gps = new Air530GPS();
+        GPS *new_gps = new Air530GPS();
 #else
-        GPS* new_gps = new NMEAGPS();
+        GPS *new_gps = new NMEAGPS();
 #endif
         new_gps->setup();
         return new_gps;
