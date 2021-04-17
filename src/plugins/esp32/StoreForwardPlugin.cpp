@@ -197,10 +197,10 @@ bool StoreForwardPlugin::handleReceived(const MeshPacket &mp)
     if (radioConfig.preferences.store_forward_plugin_enabled) {
 
         if (getFrom(&mp) != nodeDB.getNodeNum()) {
-            printPacket("----- PACKET FROM RADIO -----", &mp);
+            printPacket("PACKET FROM RADIO", &mp);
             // uint32_t sawTime = storeForwardPlugin->sawNode(getFrom(&mp) & 0xffffffff);
             // DEBUG_MSG("We last saw this node (%u), %u sec ago\n", mp.from & 0xffffffff, (millis() - sawTime) / 1000);
-            DEBUG_MSG("    --------------   ");
+            // DEBUG_MSG("    --------------   ");
             if (mp.decoded.portnum == PortNum_TEXT_MESSAGE_APP) {
                 DEBUG_MSG("Packet came from - PortNum_TEXT_MESSAGE_APP\n");
 
