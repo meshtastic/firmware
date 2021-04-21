@@ -14,7 +14,17 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="58922733-b05b-4b90-9655-b9b18914977a" name="Default Changelist" comment="">
+      <change afterPath="$PROJECT_DIR$/geeksville-private/pine64.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.vscode/settings.json" beforeDir="false" afterPath="$PROJECT_DIR$/.vscode/settings.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/geeksville-private/TODO.md" beforeDir="false" afterPath="$PROJECT_DIR$/geeksville-private/TODO.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/platformio.ini" beforeDir="false" afterPath="$PROJECT_DIR$/platformio.ini" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/configuration.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/configuration.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/main.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mesh/RF95Interface.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/mesh/RF95Interface.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mesh/RadioInterface.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/mesh/RadioInterface.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mesh/SX1262Interface.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/mesh/SX1262Interface.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/portduino/PortduinoGlue.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/portduino/PortduinoGlue.cpp" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -59,9 +69,9 @@
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
     </configuration>
-    <configuration default="true" type="GradleAppRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" PASS_PARENT_ENVS_2="true">
+    <configuration default="true" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" PASS_PARENT_ENVS_2="true">
       <method v="2">
-        <option name="com.jetbrains.cidr.cpp.gradle.execution.GradleNativeBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
     </configuration>
     <configuration name="PlatformIO Debug" type="platformio" factoryName="PlatformIO Debug" REDIRECT_INPUT="false" ELEVATE="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="meshtastic-esp32" TARGET_NAME="Debug" CONFIG_NAME="native" RUN_TARGET_PROJECT_NAME="meshtastic-esp32" RUN_TARGET_NAME="Debug">
@@ -100,6 +110,7 @@
       <workItem from="1617425689081" duration="1896000" />
       <workItem from="1617437366919" duration="1182000" />
       <workItem from="1618544034975" duration="1185000" />
+      <workItem from="1618624455224" duration="860000" />
     </task>
     <servers />
   </component>
@@ -145,6 +156,11 @@
           <url>file://$PROJECT_DIR$/src/mesh/mesh-pb-constants.cpp</url>
           <line>20</line>
           <option name="timeStamp" value="12" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
+          <url>file://$USER_HOME$/.platformio/packages/framework-portduino/cores/portduino/PortduinoGPIO.cpp</url>
+          <line>41</line>
+          <option name="timeStamp" value="13" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>

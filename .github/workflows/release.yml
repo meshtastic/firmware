@@ -9,7 +9,7 @@ on:
     branches:
       - "!*"
     tags:
-      - "v*"
+      - "v1*"
 
 jobs:
   release-build:
