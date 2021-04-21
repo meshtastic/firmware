@@ -4,10 +4,10 @@ You probably don't care about this section - skip to the next one.
 
 ## before next release
 
-* @havealoha fixedposition not working
 * pine64 lora module
-* merge https://meshtastic.discourse.group/t/spanish-translation-update/2986/5
 * nrf52 USB is unreliable while sleeping?
+* @havealoha fixedposition not working
+* merge https://meshtastic.discourse.group/t/spanish-translation-update/2986/5
 * @luxonn reports that after a while the android app stops showing new messages
 * nrf52 shows as "sleeping" in android app? (but led is blinking)
 * ask for vercel access

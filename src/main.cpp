@@ -499,7 +499,7 @@ void setup()
             delete rIf;
             rIf = NULL;
         } else {
-            DEBUG_MSG("Radio init succeeded, using RF95 radio\n");
+            DEBUG_MSG("RF95 Radio init succeeded, using RF95 radio\n");
         }
     }
 #endif
@@ -512,7 +512,7 @@ void setup()
             delete rIf;
             rIf = NULL;
         } else {
-            DEBUG_MSG("Radio init succeeded, using SX1262 radio\n");
+            DEBUG_MSG("SX1262 Radio init succeeded, using SX1262 radio\n");
         }
     }
 #endif
