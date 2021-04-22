@@ -25,6 +25,8 @@ class SX1262Interface : public RadioLibInterface
     /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.
     virtual bool sleep();
 
+    bool isIRQPending() { return lora.getIrqStatus() != 0; }
+
   protected:
     /**
      * Glue functions called from ISR land
