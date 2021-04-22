@@ -44,10 +44,10 @@ void updateBatteryLevel(uint8_t level) NOT_IMPLEMENTED("updateBatteryLevel");
  *
  * Porduino helper class to do this i2c based polling:
  */
-class R595PolledIrqPin : public GPIOPin
+class PolledIrqPin : public GPIOPin
 {
   public:
-    R595PolledIrqPin() : GPIOPin(LORA_DIO0, "LORA_DIO0") {}
+    PolledIrqPin() : GPIOPin(LORA_DIO0, "LORA_DIO0") {}
 
     /// Read the low level hardware for this pin
     virtual PinStatus readPinHardware()
@@ -58,9 +58,9 @@ class R595PolledIrqPin : public GPIOPin
             extern RadioInterface *rIf; // FIXME, temporary hack until we know if we need to keep this
 
             assert(rIf);
-            RF95Interface *rIf95 = static_cast<RF95Interface *>(rIf);
-            bool p = rIf95->isIRQPending();
-            // log(SysGPIO, LogDebug, "R595PolledIrqPin::readPinHardware(%s, %d, %d)", getName(), getPinNum(), p);
+            bool p = rIf->isIRQPending();
+            if(p)
+                log(SysGPIO, LogDebug, "R595PolledIrqPin::readPinHardware(%s, %d, %d)", getName(), getPinNum(), p);
             return p ? HIGH : LOW;
         }
     }
@@ -74,8 +74,8 @@ void portduinoSetup()
 {
     printf("Setting up Meshtastic on Porduino...\n");
 
-    // FIXME: disable while not testing with real hardware
-    // gpioBind(new R595PolledIrqPin());
+    // FIXME: remove this hack once interrupts are confirmed to work on new pine64 board
+    gpioBind(new PolledIrqPin());
 
     // gpioBind((new SimGPIOPin(LORA_RESET, "LORA_RESET")));
     // gpioBind((new SimGPIOPin(RF95_NSS, "RF95_NSS"))->setSilent());
