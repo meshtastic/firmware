@@ -424,8 +424,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define USE_SIM_RADIO
 
 // Pine64 uses a common pinout for their SX1262 vs RF95 modules - both can be enabled and we will probe at runtime for RF95 and if
-// not found then probe for SX1262
-#define USE_RF95
+// not found then probe for SX1262.  Currently the RF95 code is disabled because I think the RF95 module won't need to ship.
+// #define USE_RF95
 #define USE_SX1262
 
 // Fake SPI device selections
@@ -436,12 +436,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define LORA_DIO0 26 // a No connect on the SX1262 module
 #define LORA_RESET RADIOLIB_NC
-#define LORA_DIO1 33 // SX1262 IRQ - FIXME, attach to gpio4/IRQ with linux spidev
-#define LORA_DIO2 32 // SX1262 BUSY - FIXME, misassigned in schematic?
+#define LORA_DIO1 33 // SX1262 IRQ, called DIO0 on pinelora schematic, pin 7 on ch341f "ack" - FIXME, enable hwints in linux
+#define LORA_DIO2 32 // SX1262 BUSY, actually connected to "DIO5" on pinelora schematic, pin 8 on ch341f "slct" 
 #define LORA_DIO3    // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TXCO is enabled
 
 #ifdef USE_SX1262
-#define SX1262_CS 20 // FIXME - we need to assign a pinetab CS GPIO binding (so host can manually control it wrt BUSY)
+#define SX1262_CS 20 // CS0 on pinelora schematic, hooked to gpio D0 on ch341f
 #define SX1262_DIO1 LORA_DIO1
 #define SX1262_BUSY LORA_DIO2
 #define SX1262_RESET LORA_RESET

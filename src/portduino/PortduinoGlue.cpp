@@ -6,6 +6,7 @@
 
 #include <Utility.h>
 #include <assert.h>
+#include <linux/gpio/LinuxGPIOPin.h>
 
 // FIXME - move setBluetoothEnable into a HALPlatform class
 
@@ -44,10 +45,10 @@ void updateBatteryLevel(uint8_t level) NOT_IMPLEMENTED("updateBatteryLevel");
  *
  * Porduino helper class to do this i2c based polling:
  */
-class PolledIrqPin : public GPIOPin
+class PolledIrqPin : public LinuxGPIOPin
 {
   public:
-    PolledIrqPin() : GPIOPin(LORA_DIO0, "LORA_DIO0") {}
+    PolledIrqPin() : LinuxGPIOPin(LORA_DIO1, "ch341", "int", "loraIrq") {}
 
     /// Read the low level hardware for this pin
     virtual PinStatus readPinHardware()
@@ -76,6 +77,14 @@ void portduinoSetup()
 
     // FIXME: remove this hack once interrupts are confirmed to work on new pine64 board
     gpioBind(new PolledIrqPin());
+
+    // BUSY hw is busted on current board - just use the simulated pin (which will read low)
+    // gpioBind(new LinuxGPIOPin(SX1262_BUSY, "ch341", "slct", "loraBusy"));
+    auto fakeBusy = new SimGPIOPin(SX1262_BUSY, "fakeBusy");
+    fakeBusy->writePin(LOW);
+    gpioBind(fakeBusy);
+
+    gpioBind(new LinuxGPIOPin(SX1262_CS, "ch341", "cs0", "loraCs"));
 
     // gpioBind((new SimGPIOPin(LORA_RESET, "LORA_RESET")));
     // gpioBind((new SimGPIOPin(RF95_NSS, "RF95_NSS"))->setSilent());
