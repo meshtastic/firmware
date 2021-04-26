@@ -195,7 +195,7 @@ We offer a [python API](https://github.com/meshtastic/Meshtastic-python) that ma
 
 # Development
 
-We'd love to have you join us on this merry little project. Please see our [development documents](./docs/software/sw-design.md) and [join us in our discussion forum](https://meshtastic.discourse.group/).
+We'd love to have you join us on this merry little project. Please see our [development documents](https://meshtastic.org/docs/software/other/sw-design) and [join us in our discussion forum](https://meshtastic.discourse.group/).
 
 # Credits
 
