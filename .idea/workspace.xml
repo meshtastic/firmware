@@ -16,7 +16,8 @@
     <list default="true" id="58922733-b05b-4b90-9655-b9b18914977a" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/platformio.ini" beforeDir="false" afterPath="$PROJECT_DIR$/platformio.ini" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/configuration.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/configuration.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/main.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mesh/SX1262Interface.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/mesh/SX1262Interface.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/portduino/PortduinoGlue.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/portduino/PortduinoGlue.cpp" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -104,7 +105,7 @@
       <workItem from="1617437366919" duration="1182000" />
       <workItem from="1618544034975" duration="1185000" />
       <workItem from="1618624455224" duration="860000" />
-      <workItem from="1619062544208" duration="2347000" />
+      <workItem from="1619062544208" duration="14562000" />
     </task>
     <servers />
   </component>
@@ -151,20 +152,20 @@
           <line>20</line>
           <option name="timeStamp" value="12" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
-          <url>file://$PROJECT_DIR$/.pio/libdeps/native/RadioLib/src/modules/SX126x/SX126x.cpp</url>
-          <line>27</line>
-          <option name="timeStamp" value="15" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
+        <line-breakpoint type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
           <url>file://$PROJECT_DIR$/.pio/libdeps/native/RadioLib/src/modules/SX126x/SX126x.cpp</url>
           <line>168</line>
-          <option name="timeStamp" value="16" />
+          <option name="timeStamp" value="21" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
           <url>file://$PROJECT_DIR$/.pio/libdeps/native/RadioLib/src/modules/SX126x/SX126x.cpp</url>
-          <line>1537</line>
-          <option name="timeStamp" value="17" />
+          <line>79</line>
+          <option name="timeStamp" value="28" />
+        </line-breakpoint>
+        <line-breakpoint type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
+          <url>file://$PROJECT_DIR$/.pio/libdeps/native/RadioLib/src/modules/SX126x/SX126x.cpp</url>
+          <line>27</line>
+          <option name="timeStamp" value="30" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
