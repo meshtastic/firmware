@@ -299,6 +299,13 @@ uint32_t ButtonThread::longPressTime = 0;
 
 RadioInterface *rIf = NULL;
 
+/**
+ * Some platforms (nrf52) might provide an alterate version that supresses calling delay from sleep.
+ */
+__attribute__ ((weak, noinline)) bool loopCanSleep() {
+    return true;
+}
+
 void setup()
 {
     concurrency::hasBeenSetup = true;
@@ -640,7 +647,7 @@ void loop()
                   mainController.nextThread->tillRun(millis())); */
 
     // We want to sleep as long as possible here - because it saves power
-    if (!runASAP)
+    if (!runASAP && loopCanSleep())
         mainDelay.delay(delayMsec);
     // if (didWake) DEBUG_MSG("wake!\n");
 }
