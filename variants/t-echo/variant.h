@@ -92,6 +92,8 @@ Note: Turning off EINK PWR_ON produces no noticeable power savings over just put
 extern "C" {
 #endif // __cplusplus
 
+#define TTGO_T_ECHO
+
 // Number of pins defined in PinDescription array
 #define PINS_COUNT (48)
 #define NUM_DIGITAL_PINS (48)

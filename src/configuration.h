@@ -413,6 +413,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define HW_VENDOR HardwareModel_RAK4631
 
+#elif defined(TTGO_T_ECHO)
+
+#define HW_VENDOR HardwareModel_T_ECHO
+
 #elif NRF52_SERIES
 
 #define HW_VENDOR HardwareModel_NRF52_UNKNOWN
