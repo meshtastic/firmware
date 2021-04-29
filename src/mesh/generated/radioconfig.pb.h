@@ -118,6 +118,8 @@ typedef struct _RadioConfig_UserPreferences {
     RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType environmental_measurement_plugin_sensor_type;
     uint32_t environmental_measurement_plugin_sensor_pin;
     bool store_forward_plugin_enabled;
+    bool tunnelplugin_enabled;
+    bool tunnelplugin_echo_enabled;
 } RadioConfig_UserPreferences;
 
 typedef struct _RadioConfig {

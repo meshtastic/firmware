@@ -10,6 +10,7 @@
 #include "plugins/AdminPlugin.h"
 #ifndef NO_ESP32
 #include "plugins/SerialPlugin.h"
+#include "plugins/TunnelPlugin.h"
 #include "plugins/esp32/EnvironmentalMeasurementPlugin.h"
 #include "plugins/esp32/RangeTestPlugin.h"
 #include "plugins/esp32/StoreForwardPlugin.h"
@@ -38,6 +39,7 @@ void setupPlugins()
         Maintained by MC Hamster (Jm Casler) jm@casler.org
     */
     new SerialPlugin();
+    new TunnelPlugin();
     new ExternalNotificationPlugin();
 
     // rangeTestPlugin = new RangeTestPlugin();
