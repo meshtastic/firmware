@@ -541,12 +541,15 @@ NodeInfo *NodeDB::getOrCreateNode(NodeNum n)
 }
 
 /// Record an error that should be reported via analytics
-void recordCriticalError(CriticalErrorCode code, uint32_t address)
+void recordCriticalError(CriticalErrorCode code, uint32_t address, const char *filename)
 {
     // Print error to screen and serial port
     String lcd = String("Critical error ") + code + "!\n";
     screen->print(lcd.c_str());
-    DEBUG_MSG("NOTE! Recording critical error %d, address=%lx\n", code, address);
+    if(filename)
+        DEBUG_MSG("NOTE! Recording critical error %d at %s:%lx\n", code, filename, address);
+    else
+        DEBUG_MSG("NOTE! Recording critical error %d, address=%lx\n", code, address);
 
     // Record error to DB
     myNodeInfo.error_code = code;
