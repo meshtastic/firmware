@@ -102,7 +102,7 @@ class MeshPlugin
     /***
      * @return true if you want to be alloced a UI screen frame
      */
-    virtual bool wantUIFrame() { return true; }
+    virtual bool wantUIFrame() { return false; }
 
     MeshPacket *allocAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex);
 
