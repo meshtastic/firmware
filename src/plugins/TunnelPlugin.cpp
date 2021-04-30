@@ -5,7 +5,7 @@
 #include "Router.h"
 #include "configuration.h"
 #include <Arduino.h>
-#include "main.h"
+
 #include <assert.h>
 
 #define RXD2 16
@@ -17,10 +17,16 @@
 #define SERIALPLUGIN_ACK 1
 
 TunnelPlugin *tunnelPlugin;
+TunnelPluginRadio *tunnelPluginRadio;
 
 TunnelPlugin::TunnelPlugin() : concurrency::OSThread("TunnelPlugin") {}
 
 char tunnelSerialStringChar[Constants_DATA_PAYLOAD_LEN];
+
+TunnelPluginRadio::TunnelPluginRadio() : SinglePortPlugin("TunnelPluginRadio", PortNum_TUNNEL_APP)
+{
+    boundChannel = Channels::serialChannel;
+}
 
 int32_t TunnelPlugin::runOnce()
 {
@@ -33,24 +39,27 @@ int32_t TunnelPlugin::runOnce()
 
         if (firstTime) {
             DEBUG_MSG("Initializing tunnel serial peripheral interface\n");
-            Serial2.begin(SERIALPLUGIN_BAUD, SERIAL_8N1, RXD2, TXD2);
-            Serial2.setTimeout(SERIALPLUGIN_TIMEOUT);
-            Serial2.setRxBufferSize(SERIALPLUGIN_RX_BUFFER);
+            Serial1.begin(SERIALPLUGIN_BAUD, SERIAL_8N1, RXD2, TXD2);
+            Serial1.setTimeout(SERIALPLUGIN_TIMEOUT);
+            Serial1.setRxBufferSize(SERIALPLUGIN_RX_BUFFER);
+
+            tunnelPluginRadio = new TunnelPluginRadio();
 
             firstTime = 0;
 
         } else {
             String serialString;
 
-            while (Serial2.available()) {
-                serialString = Serial2.readString();
+            while (Serial1.available()) {
+                serialString = Serial1.readString();
                 serialString.toCharArray(tunnelSerialStringChar, Constants_DATA_PAYLOAD_LEN);
-                Serial2.println(serialString);
-                if(screen)
-                    screen->print(serialString.c_str());
+
+                tunnelPluginRadio->sendPayload();
+
                 DEBUG_MSG("Tunnel Reading Recevied: %s\n", tunnelSerialStringChar);
             }
         }
+
         return (10);
     } else {
         DEBUG_MSG("Tunnel Plugin Disabled\n");
@@ -60,4 +69,50 @@ int32_t TunnelPlugin::runOnce()
 #else
     return INT32_MAX;`
 #endif
+}
+
+MeshPacket *TunnelPluginRadio::allocReply()
+{
+
+    auto reply = allocDataPacket(); // Allocate a packet for sending
+
+    return reply;
+}
+
+void TunnelPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
+{
+    MeshPacket *p = allocReply();
+    p->to = dest;
+    p->decoded.want_response = wantReplies;
+
+    p->want_ack = SERIALPLUGIN_ACK;
+
+    p->decoded.payload.size = strlen(tunnelSerialStringChar); // You must specify how many bytes are in the reply
+    memcpy(p->decoded.payload.bytes, tunnelSerialStringChar, p->decoded.payload.size);
+
+    service.sendToMesh(p);
+}
+
+bool TunnelPluginRadio::handleReceived(const MeshPacket &mp)
+{
+#ifndef NO_ESP32
+
+    if (radioConfig.preferences.tunnelplugin_enabled) {
+
+        auto &p = mp.decoded;
+        if (getFrom(&mp) == nodeDB.getNodeNum()) {
+
+            if (radioConfig.preferences.tunnelplugin_echo_enabled) {
+                if (lastRxID != mp.id) {
+                    lastRxID = mp.id;
+                    Serial1.printf("%s", p.payload.bytes);
+                }
+            }
+        }
+    } else {
+        DEBUG_MSG("Tunnel Plugin Disabled\n");
+    }
+
+#endif
+    return true; // Let others look at this message also if they want
 }
