@@ -76,11 +76,11 @@ int32_t SerialPlugin::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    radioConfig.preferences.serialplugin_enabled = 0;
+    radioConfig.preferences.serialplugin_enabled = 1;
     // radioConfig.preferences.serialplugin_rxd = 35;
     // radioConfig.preferences.serialplugin_txd = 15;
     // radioConfig.preferences.serialplugin_timeout = 1000;
-    // radioConfig.preferences.serialplugin_echo = 1;
+    radioConfig.preferences.serialplugin_echo = 1;
 
     if (radioConfig.preferences.serialplugin_enabled) {
 

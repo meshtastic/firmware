@@ -38,7 +38,7 @@ void setupPlugins()
     /*
         Maintained by MC Hamster (Jm Casler) jm@casler.org
     */
-    new SerialPlugin();
+    //new SerialPlugin();
     new TunnelPlugin();
     new ExternalNotificationPlugin();
 
