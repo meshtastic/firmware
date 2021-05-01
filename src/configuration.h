@@ -449,7 +449,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define SX1262_DIO1 LORA_DIO1
 #define SX1262_BUSY LORA_DIO2
 #define SX1262_RESET LORA_RESET
-#define SX1262_E22 // Seems to be an E22 clone
+// HOPE RFM90 does not have a TCXO therefore not SX1262_E22 
 #endif
 
 #endif

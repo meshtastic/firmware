@@ -312,7 +312,13 @@ void RadioLibInterface::startSend(MeshPacket *txp)
         size_t numbytes = beginSending(txp);
 
         int res = iface->startTransmit(radiobuf, numbytes);
-        assert(res == ERR_NONE);
+        if(res != ERR_NONE) {
+            RECORD_CRITICALERROR(CriticalErrorCode_RadioSpiBug);
+
+            // This send failed, but make sure to 'complete' it properly
+            completeSending();
+            startReceive(); // Restart receive mode (because startTransmit failed to put us in xmit mode)
+        }
 
         // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
         enableInterrupt(isrTxLevel0);
