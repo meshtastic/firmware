@@ -47,7 +47,8 @@ typedef enum _CriticalErrorCode {
     CriticalErrorCode_InvalidRadioSetting = 7,
     CriticalErrorCode_TransmitFailed = 8,
     CriticalErrorCode_Brownout = 9,
-    CriticalErrorCode_SX1262Failure = 10
+    CriticalErrorCode_SX1262Failure = 10,
+    CriticalErrorCode_RadioSpiBug = 11
 } CriticalErrorCode;
 
 typedef enum _Routing_Error {
@@ -217,8 +218,8 @@ typedef struct _ToRadio {
 #define _Constants_ARRAYSIZE ((Constants)(Constants_DATA_PAYLOAD_LEN+1))
 
 #define _CriticalErrorCode_MIN CriticalErrorCode_None
-#define _CriticalErrorCode_MAX CriticalErrorCode_SX1262Failure
-#define _CriticalErrorCode_ARRAYSIZE ((CriticalErrorCode)(CriticalErrorCode_SX1262Failure+1))
+#define _CriticalErrorCode_MAX CriticalErrorCode_RadioSpiBug
+#define _CriticalErrorCode_ARRAYSIZE ((CriticalErrorCode)(CriticalErrorCode_RadioSpiBug+1))
 
 #define _Routing_Error_MIN Routing_Error_NONE
 #define _Routing_Error_MAX Routing_Error_NOT_AUTHORIZED

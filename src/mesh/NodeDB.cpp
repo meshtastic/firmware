@@ -555,4 +555,10 @@ void recordCriticalError(CriticalErrorCode code, uint32_t address, const char *f
     myNodeInfo.error_code = code;
     myNodeInfo.error_address = address;
     myNodeInfo.error_count++;
+
+    // Currently portuino is mostly used for simulation.  Make sue the user notices something really bad happend
+#ifdef PORTDUINO
+    DEBUG_MSG("A critical failure occurred, portduino is exiting...");
+    exit(2);
+#endif
 }
