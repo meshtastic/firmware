@@ -59,6 +59,30 @@ bool SX1262Interface::init()
         res = lora.setDio2AsRfSwitch(false);
 #endif
 
+#if 0
+    // Read/write a register we are not using (only used for FSK mode) to test SPI comms
+    uint8_t crcLSB = 0;
+    int err = lora.readRegister(SX126X_REG_CRC_POLYNOMIAL_LSB, &crcLSB, 1);
+    if(err != ERR_NONE)
+        RECORD_CRITICALERROR(CriticalErrorCode_SX1262Failure);
+
+    //if(crcLSB != 0x0f)
+    //    RECORD_CRITICALERROR(CriticalErrorCode_SX1262Failure);
+    
+    crcLSB = 0x5a;
+    err = lora.writeRegister(SX126X_REG_CRC_POLYNOMIAL_LSB, &crcLSB, 1);
+    if(err != ERR_NONE)
+        RECORD_CRITICALERROR(CriticalErrorCode_SX1262Failure);  
+
+    err = lora.readRegister(SX126X_REG_CRC_POLYNOMIAL_LSB, &crcLSB, 1);
+    if(err != ERR_NONE)
+        RECORD_CRITICALERROR(CriticalErrorCode_SX1262Failure);
+
+    if(crcLSB != 0x5a)
+        RECORD_CRITICALERROR(CriticalErrorCode_SX1262Failure);
+    // If we got this far register accesses (and therefore SPI comms) are good
+#endif
+
     if (res == ERR_NONE)
         res = lora.setCRC(SX126X_LORA_CRC_ON);
 
@@ -78,15 +102,15 @@ bool SX1262Interface::reconfigure()
     // configure publicly accessible settings
     int err = lora.setSpreadingFactor(sf);
     if (err != ERR_NONE)
-        recordCriticalError(CriticalErrorCode_InvalidRadioSetting);
+        RECORD_CRITICALERROR(CriticalErrorCode_InvalidRadioSetting);
 
     err = lora.setBandwidth(bw);
     if (err != ERR_NONE)
-        recordCriticalError(CriticalErrorCode_InvalidRadioSetting);
+        RECORD_CRITICALERROR(CriticalErrorCode_InvalidRadioSetting);
 
     err = lora.setCodingRate(cr);
     if (err != ERR_NONE)
-        recordCriticalError(CriticalErrorCode_InvalidRadioSetting);
+        RECORD_CRITICALERROR(CriticalErrorCode_InvalidRadioSetting);
 
     // Hmm - seems to lower SNR when the signal levels are high.  Leaving off for now...
     err = lora.setRxGain(true);
@@ -103,7 +127,7 @@ bool SX1262Interface::reconfigure()
 
     err = lora.setFrequency(freq);
     if (err != ERR_NONE)
-        recordCriticalError(CriticalErrorCode_InvalidRadioSetting);
+        RECORD_CRITICALERROR(CriticalErrorCode_InvalidRadioSetting);
 
     if (power > 22) // This chip has lower power limits than some
         power = 22;

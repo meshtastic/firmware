@@ -4,6 +4,7 @@ You probably don't care about this section - skip to the next one.
 
 ## before next release
 
+* turn on setTx(timeout) and   state = setDioIrqParams(SX126X_IRQ_TX_DONE | SX126X_IRQ_TIMEOUT, SX126X_IRQ_TX_DONE | SX126X_IRQ_TIMEOUT); in sx1262 code
 * pine64 lora module
 * nrf52 USB is unreliable while sleeping?
 * @havealoha fixedposition not working

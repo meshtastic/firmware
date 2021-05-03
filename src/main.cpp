@@ -299,6 +299,13 @@ uint32_t ButtonThread::longPressTime = 0;
 
 RadioInterface *rIf = NULL;
 
+/**
+ * Some platforms (nrf52) might provide an alterate version that supresses calling delay from sleep.
+ */
+__attribute__ ((weak, noinline)) bool loopCanSleep() {
+    return true;
+}
+
 void setup()
 {
     concurrency::hasBeenSetup = true;
@@ -459,7 +466,7 @@ void setup()
     // Do this after service.init (because that clears error_code)
 #ifdef AXP192_SLAVE_ADDRESS
     if (!axp192_found)
-        recordCriticalError(CriticalErrorCode_NoAXP192); // Record a hardware fault for missing hardware
+        RECORD_CRITICALERROR(CriticalErrorCode_NoAXP192); // Record a hardware fault for missing hardware
 #endif
 
         // Don't call screen setup until after nodedb is setup (because we need
@@ -550,7 +557,7 @@ void setup()
     airTime = new AirTime();
 
     if (!rIf)
-        recordCriticalError(CriticalErrorCode_NoRadio);
+        RECORD_CRITICALERROR(CriticalErrorCode_NoRadio);
     else
         router->addInterface(rIf);
 
@@ -640,7 +647,7 @@ void loop()
                   mainController.nextThread->tillRun(millis())); */
 
     // We want to sleep as long as possible here - because it saves power
-    if (!runASAP)
+    if (!runASAP && loopCanSleep())
         mainDelay.delay(delayMsec);
     // if (didWake) DEBUG_MSG("wake!\n");
 }

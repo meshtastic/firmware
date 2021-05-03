@@ -40,7 +40,9 @@ class HttpAPI : public PhoneAPI
     // Nothing here yet
 
   protected:
-    // Nothing here yet
+  
+    /// Check the current underlying physical link to see if the client is currently connected
+    virtual bool checkIsConnected() { return true; } // FIXME, be smarter about this
 };
 
 

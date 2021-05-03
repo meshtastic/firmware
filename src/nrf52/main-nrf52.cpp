@@ -19,6 +19,10 @@ static inline void debugger_break(void)
                    "mov pc, lr\n\t");
 }
 
+bool loopCanSleep() {
+    return !tud_cdc_connected();
+}
+
 // handle standard gcc assert failures
 void __attribute__((noreturn)) __assert_func(const char *file, int line, const char *func, const char *failedexpr)
 {
@@ -104,7 +108,7 @@ void checkSDEvents()
         while (NRF_SUCCESS == sd_evt_get(&evt)) {
             switch (evt) {
             case NRF_EVT_POWER_FAILURE_WARNING:
-                recordCriticalError(CriticalErrorCode_Brownout);
+                RECORD_CRITICALERROR(CriticalErrorCode_Brownout);
                 break;
 
             default:
@@ -114,7 +118,7 @@ void checkSDEvents()
         }
     } else {
         if (NRF_POWER->EVENTS_POFWARN)
-            recordCriticalError(CriticalErrorCode_Brownout);
+            RECORD_CRITICALERROR(CriticalErrorCode_Brownout);
     }
 }
 
