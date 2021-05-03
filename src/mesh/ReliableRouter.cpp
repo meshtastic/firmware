@@ -50,7 +50,7 @@ bool ReliableRouter::shouldFilterReceived(const MeshPacket *p)
             stopRetransmission(key);
         }
         else {
-            DEBUG_MSG("Possible bug? didn't find pending packet");
+            DEBUG_MSG("didn't find pending packet\n");
         }
     }
 

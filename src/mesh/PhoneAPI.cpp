@@ -27,11 +27,6 @@ PhoneAPI::~PhoneAPI()
 
 void PhoneAPI::handleStartConfig()
 {
-    if (!isConnected()) {
-        onConnectionChanged(true);
-        observe(&service.fromNumChanged);
-    }
-
     // even if we were already connected - restart our state machine
     state = STATE_SEND_MY_INFO;
 
@@ -39,6 +34,11 @@ void PhoneAPI::handleStartConfig()
     nodeInfoForPhone = NULL;   // Don't keep returning old nodeinfos
     nodeDB.resetReadPointer(); // FIXME, this read pointer should be moved out of nodeDB and into this class - because
                                // this will break once we have multiple instances of PhoneAPI running independently
+
+    if (!isConnected()) {
+        onConnectionChanged(true);
+        observe(&service.fromNumChanged);
+    }
 }
 
 void PhoneAPI::close()
@@ -56,10 +56,9 @@ void PhoneAPI::close()
 void PhoneAPI::checkConnectionTimeout()
 {
     if (isConnected()) {
-        uint32_t now = millis();
-        bool newContact = (now - lastContactMsec) < getPref_phone_timeout_secs() * 1000UL;
+        bool newContact = checkIsConnected();
         if (!newContact) {
-            DEBUG_MSG("Timed out on phone contact, dropping phone connection\n");
+            DEBUG_MSG("Lost phone connection\n");
             close();
         }
     }
@@ -93,7 +92,8 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
             break;
 
         default:
-            DEBUG_MSG("Error: unexpected ToRadio variant\n");
+            // Ignore nop messages
+            // DEBUG_MSG("Error: unexpected ToRadio variant\n");
             break;
         }
     } else {

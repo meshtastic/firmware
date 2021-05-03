@@ -67,6 +67,11 @@ class StreamAPI : public PhoneAPI, protected concurrency::OSThread
      */
     void emitRebooted();
 
+    virtual void onConnectionChanged(bool connected);
+    
+    /// Check the current underlying physical link to see if the client is currently connected
+    virtual bool checkIsConnected() = 0;
+
     /**
      * Send the current txBuffer over our stream
      */

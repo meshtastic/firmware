@@ -1,5 +1,4 @@
 #include "WiFiServerAPI.h"
-#include "PowerFSM.h"
 #include "configuration.h"
 #include <Arduino.h>
 
@@ -26,24 +25,19 @@ WiFiServerAPI::~WiFiServerAPI()
     // FIXME - delete this if the client dropps the connection!
 }
 
-/// Hookable to find out when connection changes
-void WiFiServerAPI::onConnectionChanged(bool connected)
-{
-    // FIXME - we really should be doing global reference counting to see if anyone is currently using serial or wifi and if so,
-    // block sleep
 
-    if (connected) { // To prevent user confusion, turn off bluetooth while using the serial port api
-        powerFSM.trigger(EVENT_SERIAL_CONNECTED);
-    } else {
-        powerFSM.trigger(EVENT_SERIAL_DISCONNECTED);
-    }
-}
 
 /// override close to also shutdown the TCP link
 void WiFiServerAPI::close()
 {
     client.stop(); // drop tcp connection
     StreamAPI::close();
+}
+
+/// Check the current underlying physical link to see if the client is currently connected
+bool WiFiServerAPI::checkIsConnected()
+{
+    return client.connected();
 }
 
 int32_t WiFiServerAPI::runOnce()

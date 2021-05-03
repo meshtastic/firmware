@@ -50,9 +50,6 @@ class PhoneAPI
     /// Use to ensure that clients don't get confused about old messages from the radio
     uint32_t config_nonce = 0;
 
-    /** the last msec we heard from the client on the other side of this link */
-    uint32_t lastContactMsec = 0;
-
   public:
     PhoneAPI();
 
@@ -88,11 +85,17 @@ class PhoneAPI
     /// Our fromradio packet while it is being assembled
     FromRadio fromRadioScratch;
 
+    /** the last msec we heard from the client on the other side of this link */
+    uint32_t lastContactMsec = 0;
+    
     /// Hookable to find out when connection changes
     virtual void onConnectionChanged(bool connected) {}
 
     /// If we haven't heard from the other side in a while then say not connected
     void checkConnectionTimeout();
+
+    /// Check the current underlying physical link to see if the client is currently connected
+    virtual bool checkIsConnected() = 0;
 
     /**
      * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
