@@ -3,5 +3,5 @@ import configparser
 from readprops import readProps
 
 
-verStr = readProps('version.properties')
-print(f"{verStr}")
+verObj = readProps('version.properties')
+print(f"{verObj['long']}")
