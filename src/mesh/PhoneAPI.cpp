@@ -27,18 +27,19 @@ PhoneAPI::~PhoneAPI()
 
 void PhoneAPI::handleStartConfig()
 {
-    // even if we were already connected - restart our state machine
-    state = STATE_SEND_MY_INFO;
-
-    DEBUG_MSG("Reset nodeinfo read pointer\n");
-    nodeInfoForPhone = NULL;   // Don't keep returning old nodeinfos
-    nodeDB.resetReadPointer(); // FIXME, this read pointer should be moved out of nodeDB and into this class - because
-                               // this will break once we have multiple instances of PhoneAPI running independently
-
+    // Must be before setting state (because state is how we know !connected)
     if (!isConnected()) {
         onConnectionChanged(true);
         observe(&service.fromNumChanged);
     }
+
+    // even if we were already connected - restart our state machine
+    state = STATE_SEND_MY_INFO;
+
+    DEBUG_MSG("Starting API client config\n");
+    nodeInfoForPhone = NULL;   // Don't keep returning old nodeinfos
+    nodeDB.resetReadPointer(); // FIXME, this read pointer should be moved out of nodeDB and into this class - because
+                               // this will break once we have multiple instances of PhoneAPI running independently
 }
 
 void PhoneAPI::close()
