@@ -43,12 +43,12 @@ jobs:
         python -m pip install --upgrade pip
         pip install -U platformio meshtastic adafruit-nrfutil
 
-    - name: Cache platformio
-      uses: actions/cache@v1
-      id: cache-platformio # needed in if test
-      with:
-        path: ~/.platformio
-        key: ${{ runner.os }}-platformio
+    # - name: Cache platformio
+    #  uses: actions/cache@v1
+    #  id: cache-platformio # needed in if test
+    #  with:
+    #    path: ~/.platformio
+    #    key: ${{ runner.os }}-platformio
 
     - name: Upgrade platformio
       run: |
