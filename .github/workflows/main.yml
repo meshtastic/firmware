@@ -36,6 +36,10 @@ jobs:
         path: ~/.cache/pip
         key: ${{ runner.os }}-pip
 
+    - name: Install linux apt packages
+      run: |
+        sudo apt-get install -y libgpiod-dev
+
     - name: Upgrade python tools
       # We actually want to run this every time
       # if: steps.cache-pip.outputs.cache-hit != 'true'
