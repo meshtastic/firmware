@@ -104,10 +104,10 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
                 assert(!currentReply);
 
                 if (mp.decoded.want_response) {
-                    DEBUG_MSG("packet on wrong channel, returning error\n");
+                    printPacket("packet on wrong channel, returning error", &mp);
                     currentReply = pi.allocErrorResponse(Routing_Error_NOT_AUTHORIZED, &mp);
                 } else
-                    DEBUG_MSG("packet on wrong channel, but client didn't want response\n");
+                    printPacket("packet on wrong channel, but can't respond", &mp);
             } else {
 
                 bool handled = pi.handleReceived(mp);
@@ -151,7 +151,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
             currentReply = NULL;
         } else if(mp.from != ourNodeNum) {
             // Note: if the message started with the local node we don't want to send a no response reply
-            
+
             // No one wanted to reply to this requst, tell the requster that happened
             DEBUG_MSG("No one responded, send a nak\n");
 

@@ -49,6 +49,9 @@ bool ReliableRouter::shouldFilterReceived(const MeshPacket *p)
 
             stopRetransmission(key);
         }
+        else {
+            DEBUG_MSG("Possible bug? didn't find pending packet");
+        }
     }
 
     return FloodingRouter::shouldFilterReceived(p);
