@@ -176,5 +176,5 @@ bool ExternalNotificationPlugin::handleReceived(const MeshPacket &mp)
 
 #endif
 
-    return true; // Let others look at this message also if they want
+    return false; // Very important to never return TRUE here.  TRUE means we handled the packet and we will stop letting other plugins see it
 }
