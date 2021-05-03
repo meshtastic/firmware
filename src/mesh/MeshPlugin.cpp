@@ -86,10 +86,11 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
         /// We only call plugins that are interested in the packet (and the message is destined to us or we are promiscious)
         bool wantsPacket = (isDecoded || pi.encryptedOk) && (pi.isPromiscuous || toUs) && pi.wantPacket(&mp);
 
-        DEBUG_MSG("Plugin %s wantsPacket=%d\n", pi.name, wantsPacket);
         assert(!pi.myReply); // If it is !null it means we have a bug, because it should have been sent the previous time
 
         if (wantsPacket) {
+            DEBUG_MSG("Plugin %s wantsPacket=%d\n", pi.name, wantsPacket);
+
             pluginFound = true;
 
             /// received channel (or NULL if not decoded)
@@ -97,7 +98,11 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
 
             /// Is the channel this packet arrived on acceptable? (security check)
             /// Note: we can't know channel names for encrypted packets, so those are NEVER sent to boundChannel plugins
-            bool rxChannelOk = !pi.boundChannel || (ch && ((mp.from == 0) || (strcmp(ch->settings.name, pi.boundChannel) == 0)));
+
+            /// Also: if a packet comes in on the local PC interface, we don't check for bound channels, because it is TRUSTED and it needs to
+            /// to be able to fetch the initial admin packets without yet knowing any channels.
+
+            bool rxChannelOk = !pi.boundChannel || (mp.from == 0) || (ch && (strcmp(ch->settings.name, pi.boundChannel) == 0));
 
             if (!rxChannelOk) {
                 // no one should have already replied!
