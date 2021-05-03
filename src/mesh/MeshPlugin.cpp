@@ -149,7 +149,9 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
             printPacket("Sending response", currentReply);
             service.sendToMesh(currentReply);
             currentReply = NULL;
-        } else {
+        } else if(mp.from != ourNodeNum) {
+            // Note: if the message started with the local node we don't want to send a no response reply
+            
             // No one wanted to reply to this requst, tell the requster that happened
             DEBUG_MSG("No one responded, send a nak\n");
 
