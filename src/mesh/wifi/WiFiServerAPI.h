@@ -21,10 +21,11 @@ class WiFiServerAPI : public StreamAPI
     virtual void close();
 
   protected:
-    /// Hookable to find out when connection changes
-    virtual void onConnectionChanged(bool connected);
 
     virtual int32_t runOnce(); // Check for dropped client connections
+
+    /// Check the current underlying physical link to see if the client is currently connected
+    virtual bool checkIsConnected();
 };
 
 /**

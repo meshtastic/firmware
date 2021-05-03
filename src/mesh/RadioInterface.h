@@ -151,6 +151,9 @@ class RadioInterface
      */
     float getFreq();
 
+    /// Some boards (1st gen Pinetab Lora module) have broken IRQ wires, so we need to poll via i2c registers
+    virtual bool isIRQPending() { return false; }
+
   protected:
     int8_t power = 17; // Set by applyModemConfig()
 

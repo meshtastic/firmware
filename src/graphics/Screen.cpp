@@ -130,7 +130,7 @@ static void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDispl
     // Draw version in upper right
     char buf[16];
     snprintf(buf, sizeof(buf), "%s",
-             xstr(APP_VERSION)); // Note: we don't bother printing region or now, it makes the string too long
+             xstr(APP_VERSION_SHORT)); // Note: we don't bother printing region or now, it makes the string too long
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(buf), y + 0, buf);
     screen->forceDisplay();
 

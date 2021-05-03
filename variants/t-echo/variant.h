@@ -92,6 +92,8 @@ Note: Turning off EINK PWR_ON produces no noticeable power savings over just put
 extern "C" {
 #endif // __cplusplus
 
+#define TTGO_T_ECHO
+
 // Number of pins defined in PinDescription array
 #define PINS_COUNT (48)
 #define NUM_DIGITAL_PINS (48)
@@ -230,8 +232,6 @@ External serial flash WP25R1635FZUIL0
 // #define PIN_GPS_PPS (32 + 4)  // Pulse per second input from the GPS
 #define PIN_GPS_TX (32 + 9)   // This is for bits going TOWARDS the CPU
 #define PIN_GPS_RX (32 + 8)   // This is for bits going TOWARDS the GPS
-
-#define HAS_AIR530_GPS
 
 #define PIN_SERIAL1_RX PIN_GPS_TX
 #define PIN_SERIAL1_TX PIN_GPS_RX
