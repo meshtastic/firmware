@@ -5,6 +5,7 @@
 #include "Router.h"
 #include "configuration.h"
 
+
 PositionPlugin *positionPlugin;
 
 PositionPlugin::PositionPlugin()

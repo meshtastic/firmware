@@ -38,9 +38,6 @@ bool isWifiAvailable()
     const char *wifiName = radioConfig.preferences.wifi_ssid;
     const char *wifiPsw = radioConfig.preferences.wifi_password;
 
-    // strcpy(radioConfig.preferences.wifi_ssid, "meshtastic");
-    // strcpy(radioConfig.preferences.wifi_password, "meshtastic!");
-
     // strcpy(radioConfig.preferences.wifi_ssid, "meshtasticAdmin");
     // strcpy(radioConfig.preferences.wifi_password, "12345678");
 
