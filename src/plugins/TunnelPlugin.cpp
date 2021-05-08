@@ -58,7 +58,7 @@ int32_t TunnelPlugin::runOnce()
                 serialString = Serial1.readString();
                 serialString.toCharArray(tunnelSerialStringChar, Constants_DATA_PAYLOAD_LEN);
 
-                tunnelPluginRadio->sendPayload();
+                tunnelPluginRadio->sendPayload(NODENUM_BROADCAST, false, 987654321);
 
                 DEBUG_MSG("Tunnel Reading Recevied: %s\n", tunnelSerialStringChar);
             }
@@ -75,15 +75,32 @@ int32_t TunnelPlugin::runOnce()
 #endif
 }
 
-MeshPacket *TunnelPluginRadio::allocReply()
+MeshPacket *TunnelPluginRadio::allocReply(int)
 {
 
-    auto reply = allocDataPacket(); // Allocate a packet for sending
+   NodeInfo *node = service.refreshMyNodeInfo(); // should guarantee there is now a position
+    
+    if(node->has_position){
+        Position p = node->position;
+
+        // Strip out any time information before sending packets to other nodes - to keep the wire size small (and because other
+        // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS to include the time, so that gpsless
+        // devices can get time.
+        if (getRTCQuality() < RTCQualityGPS) {
+            DEBUG_MSG("Tunnel node does not have a time! Will send a null time.\n");
+            p.time = 0;
+        } else
+            DEBUG_MSG("Tunnel node has time. Adding to Sighting Msg: %u\n", p.time);
+    }
+
+   
+
+    return allocDataProtobuf(p);
 
     return reply;
 }
 
-void TunnelPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
+void TunnelPluginRadio::sendPayload(NodeNum dest, bool wantReplies, int animalId)
 {
     MeshPacket *p = allocReply();
     p->to = dest;
