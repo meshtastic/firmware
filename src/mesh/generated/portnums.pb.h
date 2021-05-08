@@ -24,7 +24,7 @@ typedef enum _PortNum {
     PortNum_STORE_FORWARD_APP = 65,
     PortNum_RANGE_TEST_APP = 66,
     PortNum_ENVIRONMENTAL_MEASUREMENT_APP = 67,
-    PortNum_TUNNEL_APP= 68,
+    PortNum_TUNNEL_APP= 268,
     PortNum_PRIVATE_APP = 256,
     PortNum_ATAK_FORWARDER = 257,
     PortNum_MAX = 511

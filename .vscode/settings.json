@@ -51,7 +51,9 @@
         "iterator": "cpp",
         "shared_mutex": "cpp",
         "iostream": "cpp",
-        "xstring": "c"
+        "xstring": "c",
+        "xmemory0": "cpp",
+        "xutility": "cpp"
     },
     "cSpell.words": [
         "Blox",

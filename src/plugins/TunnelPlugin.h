@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SinglePortPlugin.h"
+#include "mesh/generated/tag_sighting.pb.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include <Arduino.h>

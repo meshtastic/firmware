@@ -57,10 +57,9 @@ int32_t TunnelPlugin::runOnce()
             while (Serial1.available()) {
                 serialString = Serial1.readString();
                 serialString.toCharArray(tunnelSerialStringChar, Constants_DATA_PAYLOAD_LEN);
-
-                tunnelPluginRadio->sendPayload(NODENUM_BROADCAST, false, 987654321);
-
                 DEBUG_MSG("Tunnel Reading Recevied: %s\n", tunnelSerialStringChar);
+                tunnelPluginRadio->sendPayload(NODENUM_BROADCAST, false, tunnelSerialStringChar);
+
             }
         }
 
@@ -71,58 +70,57 @@ int32_t TunnelPlugin::runOnce()
         return (INT32_MAX);
     }
 #else
-    return INT32_MAX;`
+    return INT32_MAX;
 #endif
 }
 
-MeshPacket *TunnelPluginRadio::allocReply(int)
+MeshPacket *TunnelPluginRadio::allocReply(char* tagId)
 {
 
-   NodeInfo *node = service.refreshMyNodeInfo(); // should guarantee there is now a position
+    NodeInfo *node = service.refreshMyNodeInfo(); // should guarantee there is now a position
+    User *user = node->user;
+    TagSightingMessage m = TagSightingMessage_init_default;
     
+    m.tagId = tagId
+
     if(node->has_position){
         Position p = node->position;
 
-        // Strip out any time information before sending packets to other nodes - to keep the wire size small (and because other
-        // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS to include the time, so that gpsless
-        // devices can get time.
+        m.latitude_i = p.latitude_i;
+        m.longitude_i = p.longitude_i;
+
         if (getRTCQuality() < RTCQualityGPS) {
             DEBUG_MSG("Tunnel node does not have a time! Will send a null time.\n");
             p.time = 0;
         } else
             DEBUG_MSG("Tunnel node has time. Adding to Sighting Msg: %u\n", p.time);
+            m.time = p.time;
     }
 
-   
-
     return allocDataProtobuf(p);
-
     return reply;
 }
 
-void TunnelPluginRadio::sendPayload(NodeNum dest, bool wantReplies, int animalId)
+void TunnelPluginRadio::sendPayload(NodeNum dest, bool wantReplies, char* tagId)
 {
-    MeshPacket *p = allocReply();
+    MeshPacket *p = allocReply(tagId);
     p->to = dest;
     p->decoded.want_response = wantReplies;
-
-    p->want_ack = SERIALPLUGIN_ACK;
-
-    p->decoded.payload.size = strlen(tunnelSerialStringChar); // You must specify how many bytes are in the reply
-    memcpy(p->decoded.payload.bytes, tunnelSerialStringChar, p->decoded.payload.size);
-
     service.sendToMesh(p);
 }
 
-bool TunnelPluginRadio::handleReceived(const MeshPacket &mp)
+bool TunnelPluginRadio::handleReceived(const MeshPacket &mp, const TagSightingMessage *pptr)
 {
 #ifndef NO_ESP32
+    auto p = *pptr;
+    DEBUG_MSG("Received Tag sighting=%u\n", p.time);
 
     if (radioConfig.preferences.tunnelplugin_enabled && WiFi.status() == WL_CONNECTED) {
+        DEBUG_MSG("Sending To Server\n");
 
-        auto &p = mp.decoded;
-        if (getFrom(&mp) == nodeDB.getNodeNum()) {
-
+        if (getFrom(&mp) == nodeDB.getNodeNum() || mp.to == NODENUM_BROADCAST) {
+            
+            char* baseServerUrl = "https://wildlife-server.azurewebsites.net/api/Sightings/AnimalSighted?";
             char *tag_id_str = "TagId=";
             char *tag_id = "1";
             char *tracker_id_str = "&TrackerId=";
@@ -130,27 +128,31 @@ bool TunnelPluginRadio::handleReceived(const MeshPacket &mp)
             char *sight_time_str = "&SightingTime=";
             char *sight_time = "2021-05-07T08:01:50.557Z";
 
-            char *query_str;  
-            query_str =  (char*) malloc(
-                strlen(tag_id_str) 
-                + strlen(tag_id) + strlen(tracker_id_str) 
+            char *url;  
+            url =  (char*) malloc(
+                strlen(baseServerUrl)
+                + strlen(tag_id_str) 
+                + strlen(tag_id) 
+                + strlen(tracker_id_str) 
                 + strlen(tracker_id) 
                 + strlen(sight_time_str) 
                 + strlen(sight_time)
             );
 
-            strcpy(query_str, tag_id_str);
-            strcat(query_str, tag_id);
-            strcat(query_str, tracker_id_str);
-            strcat(query_str, tracker_id);
-            strcat(query_str, sight_time_str);
-            strcat(query_str, sight_time);
+            strcpy(url, baseServerUrl);
+            strcat(url, tag_id_str);
+            strcat(url, tag_id);
+            strcat(url, tracker_id_str);
+            strcat(url, tracker_id);
+            strcat(url, sight_time_str);
+            strcat(url, sight_time);
             
+            DEBUG_MSG("Uri %s\n", url);
+
             WiFiClientSecure *client = new WiFiClientSecure;
             if (client) {
                 client -> setCACert(rootCACertificate);
                 HTTPClient https;
-                String url = "https://wildlife-server.azurewebsites.net/api/Sightings/AnimalSighted?TagId=1&SightingTime=2021-05-07T08:01:50.557Z&TrackerId=10";
 
                 if (https.begin(*client, url)) {
                     https.addHeader("Content-Type", "application/json");
@@ -166,13 +168,19 @@ bool TunnelPluginRadio::handleReceived(const MeshPacket &mp)
                             String payload = https.getString();
                             DEBUG_MSG("[HTTPS] Post OK: %s", payload);
                         }
+                        else{
+                            DEBUG_MSG("Sending To Server FAILED. Not OK\n");
+                        }
                     } else {
                         DEBUG_MSG("[HTTPS] Post... failed, error: %s, %i\n", https.errorToString(httpCode).c_str(), httpCode);
                     }
                 }
+            }else{
+                DEBUG_MSG("Sending To Server FAILED. No Client\n");
             }
             
         }
+        DEBUG_MSG("Sending To Server DONE\n");
     } else {
         DEBUG_MSG("Tunnel Plugin Disabled\n");
     }
