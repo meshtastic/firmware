@@ -29,8 +29,8 @@ void setupPlugins()
     // Note: if the rest of meshtastic doesn't need to explicitly use your plugin, you do not need to assign the instance
     // to a global variable.
 
-    new RemoteHardwarePlugin();
-    new ReplyPlugin();
+    // new RemoteHardwarePlugin();
+    // new ReplyPlugin();
 
 #ifndef NO_ESP32
     // Only run on an esp32 based device.
@@ -40,14 +40,14 @@ void setupPlugins()
     */
     //new SerialPlugin();
     new TunnelPlugin();
-    new ExternalNotificationPlugin();
+    // new ExternalNotificationPlugin();
 
     // rangeTestPlugin = new RangeTestPlugin();
     storeForwardPlugin = new StoreForwardPlugin();
 
     new RangeTestPlugin();
     // new StoreForwardPlugin();
-    new EnvironmentalMeasurementPlugin();
+    // new EnvironmentalMeasurementPlugin();
 #endif
 
     // NOTE! This plugin must be added LAST because it likes to check for replies from other plugins and avoid sending extra acks

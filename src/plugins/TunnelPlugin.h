@@ -1,11 +1,11 @@
 #pragma once
-
-#include "SinglePortPlugin.h"
+#include "ProtobufPlugin.h"
 #include "mesh/generated/tag_sighting.pb.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include <Arduino.h>
 #include <functional>
+#include <WiFiClientSecure.h>
 
 #ifdef HAS_EINK
 // The screen is bigger so use bigger fonts
@@ -18,26 +18,34 @@
 #define FONT_LARGE ArialMT_Plain_24
 #endif
 
-class TunnelPlugin : private concurrency::OSThread
+class TunnelPlugin : public ProtobufPlugin<TagSightingMessage>, private concurrency::OSThread
 {
     bool firstTime = 1;
+    WiFiClientSecure *client = NULL;
 
   public:
     TunnelPlugin();
 
+    void sendPayload(char* tagId, NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
+  
+    #ifndef NO_SCREEN
+      virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) { 
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->setFont(FONT_SMALL);
+        display->drawString(64 + x, y, "Tunnel");
+       }
+    #endif
+  
   protected:
-    virtual int32_t runOnce();
-};
-
-extern TunnelPlugin *tunnelPlugin;
-
-/*
- * Radio interface for SerialPlugin
- *
- */
-class TunnelPluginRadio : public SinglePortPlugin
-{
-    uint32_t lastRxID;
+    // const char* baseServerUrl = "https://wildlife-server.azurewebsites.net/api/Sightings/AnimalSighted?";
+    // const char* tag_id_str = "TagId=";
+    // const char* tag_id = "1";
+    // const char* tracker_id_str = "&TrackerId=";
+    // const char* tracker_id = "1234";
+    // const char* sight_time_str = "&SightingTime=";
+    // const char* sight_time = "2021-05-07T08:01:50.557Z";
+    
+    const char* url = "https://wildlife-server.azurewebsites.net/api/Sightings/AnimalSighted?TagId=1&TrackerId=1234&SightingTime=2021-05-07T08:01:50.557Z";
     const char* rootCACertificate = \
             "-----BEGIN CERTIFICATE-----\n" \
             "MIIDdzCCAl+gAwIBAgIEAgAAuTANBgkqhkiG9w0BAQUFADBaMQswCQYDVQQGEwJJ\n" \
@@ -60,31 +68,13 @@ class TunnelPluginRadio : public SinglePortPlugin
             "ksLi4xaNmjICq44Y3ekQEe5+NauQrz4wlHrQMz2nZQ/1/I6eYs9HRCwBXbsdtTLS\n" \
             "R9I4LtD+gdwyah617jzV/OeBHRnDJELqYzmp\n" \
             "-----END CERTIFICATE-----\n";
-  public:
-
-    TunnelPluginRadio();
     
-    void sendPayload(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
-  
-    #ifndef NO_SCREEN
-      virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) { 
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->setFont(FONT_SMALL);
-        display->drawString(64 + x, y, "Tunnel");
-       }
-    #endif
-  
-  protected:
-    virtual MeshPacket *allocReply();
+    
 
-    /** Called to handle a particular incoming message
-
-    @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
-    */
-    virtual bool handleReceived(const MeshPacket &mp);
-
+    virtual MeshPacket *allocReply(char* tagId);
+    virtual bool handleReceivedProtobuf(const MeshPacket &mp, const TagSightingMessage *pptr);
     virtual bool wantUIFrame() { return true; }
-
+    virtual int32_t runOnce();
 };
 
-extern TunnelPluginRadio *tunnelPluginRadio;
+extern TunnelPlugin tunnelPlugin;

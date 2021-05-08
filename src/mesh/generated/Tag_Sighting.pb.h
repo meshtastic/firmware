@@ -11,8 +11,8 @@
 
 /* Struct definitions */
 typedef struct _TagSightingMessage {
-    pb_callback_t id;
-    pb_callback_t tagId;
+    char id[16];
+    char tagId[16];
     uint32_t time;
     int32_t latitude_i;
     int32_t longitude_i;
@@ -24,8 +24,8 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define TagSightingMessage_init_default          {{{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0}
-#define TagSightingMessage_init_zero             {{{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0}
+#define TagSightingMessage_init_default          {"", "", 0, 0, 0}
+#define TagSightingMessage_init_zero             {"", "", 0, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define TagSightingMessage_id_tag                1
@@ -36,12 +36,12 @@ extern "C" {
 
 /* Struct field encoding specification for nanopb */
 #define TagSightingMessage_FIELDLIST(X, a) \
-X(a, CALLBACK, SINGULAR, STRING,   id,                1) \
-X(a, CALLBACK, SINGULAR, STRING,   tagId,             2) \
+X(a, STATIC,   SINGULAR, STRING,   id,                1) \
+X(a, STATIC,   SINGULAR, STRING,   tagId,             2) \
 X(a, STATIC,   SINGULAR, FIXED32,  time,              3) \
 X(a, STATIC,   SINGULAR, SFIXED32, latitude_i,        4) \
 X(a, STATIC,   SINGULAR, SFIXED32, longitude_i,       5)
-#define TagSightingMessage_CALLBACK pb_default_field_callback
+#define TagSightingMessage_CALLBACK NULL
 #define TagSightingMessage_DEFAULT NULL
 
 extern const pb_msgdesc_t TagSightingMessage_msg;
@@ -50,7 +50,7 @@ extern const pb_msgdesc_t TagSightingMessage_msg;
 #define TagSightingMessage_fields &TagSightingMessage_msg
 
 /* Maximum encoded size of messages (where known) */
-/* TagSightingMessage_size depends on runtime parameters */
+#define TagSightingMessage_size                  49
 
 #ifdef __cplusplus
 } /* extern "C" */
