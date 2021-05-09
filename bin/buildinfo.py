@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 import configparser
+import sys
 from readprops import readProps
 
 
 verObj = readProps('version.properties')
-print(f"{verObj['long']}")
+propName = sys.argv[1]
+print(f"{verObj[propName]}")
