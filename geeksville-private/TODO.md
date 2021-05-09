@@ -4,17 +4,18 @@ You probably don't care about this section - skip to the next one.
 
 ## before next release
 
+* fix python tool problem
+* fix ttgo eink screen
+* make native sim not touch hardware
+* reenable sim in CI builds
+* figure our wss for mqtt.meshtastic - use cloudflare? 2052 ws, 2053 crypt
+* release android APK - fix recent 1.2.28 crash report
 * turn on setTx(timeout) and   state = setDioIrqParams(SX126X_IRQ_TX_DONE | SX126X_IRQ_TIMEOUT, SX126X_IRQ_TX_DONE | SX126X_IRQ_TIMEOUT); in sx1262 code
 * pine64 lora module
-* nrf52 USB is unreliable while sleeping?
 * @havealoha fixedposition not working
-* merge https://meshtastic.discourse.group/t/spanish-translation-update/2986/5
 * @luxonn reports that after a while the android app stops showing new messages
-* nrf52 shows as "sleeping" in android app? (but led is blinking)
 * ask for vercel access
-* fix heltec battery scaling
-* check android 1.2.20 usage, possibly release to general
-* release android APK
+* finish plan for riot.im
 
 * add rak4600 support (with rf95 radio and limited ram)
 
