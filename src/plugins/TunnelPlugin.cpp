@@ -10,7 +10,8 @@
 #include <WiFi.h>
 #include <WiFiMulti.h>
 #include <HTTPClient.h>
-#include <WiFiClientSecure.h>
+#include <OLEDDisplay.h>
+#include <OLEDDisplayUi.h>
 
 #define RXD2 35
 #define TXD2 15
@@ -20,11 +21,22 @@
 #define SERIALPLUGIN_BAUD 9600
 #define SERIALPLUGIN_ACK 1
 
-TunnelPlugin::TunnelPlugin()
-    : ProtobufPlugin("tunnelplugin", PortNum_TUNNEL_APP, TagSightingMessage_fields), concurrency::OSThread(
-                                                                                                 "tunnelplugin")
-{
-}
+
+#ifdef HAS_EINK
+// The screen is bigger so use bigger fonts
+#define FONT_SMALL ArialMT_Plain_16
+#define FONT_MEDIUM ArialMT_Plain_24
+#define FONT_LARGE ArialMT_Plain_24
+#else
+#define FONT_SMALL ArialMT_Plain_10
+#define FONT_MEDIUM ArialMT_Plain_16
+#define FONT_LARGE ArialMT_Plain_24
+#endif
+
+#define fontHeight(font) ((font)[1] + 1) // height is position 1
+
+#define FONT_HEIGHT_SMALL fontHeight(FONT_SMALL)
+#define FONT_HEIGHT_MEDIUM fontHeight(FONT_MEDIUM)
 
 char tunnelSerialStringChar[Constants_DATA_PAYLOAD_LEN];
 
@@ -74,19 +86,21 @@ MeshPacket *TunnelPlugin::allocReply(char* tagId)
 
     NodeInfo *node = service.refreshMyNodeInfo(); // should guarantee there is now a position
     TagSightingMessage m = TagSightingMessage_init_default;
+    
+    memcpy(&m.tagId, tagId, 16);
 
     if(node->has_position){
         Position p = node->position;
 
         m.latitude_i = p.latitude_i;
         m.longitude_i = p.longitude_i;
-
-        if (getRTCQuality() < RTCQualityGPS) {
-            DEBUG_MSG("Tunnel node does not have a time! Will send a null time.\n");
-            p.time = 0;
-        } else
-            DEBUG_MSG("Tunnel node has time. Adding to Sighting Msg: %u\n", p.time);
-            m.time = p.time;
+        m.time = p.time;
+        // if (getRTCQuality() < RTCQualityGPS) {
+        //     DEBUG_MSG("Tunnel node does not have a time! Will send a null time.\n");
+        //     p.time = 0;
+        // } else
+        //     DEBUG_MSG("Tunnel node has time. Adding to Sighting Msg: %u\n", p.time);
+        //     m.time = p.time;
     }
 
     return allocDataProtobuf(m);
@@ -102,82 +116,88 @@ void TunnelPlugin::sendPayload(char* tagId, NodeNum dest, bool wantReplies)
 
 bool TunnelPlugin::handleReceivedProtobuf(const MeshPacket &mp, const TagSightingMessage *pptr)
 {
+    lastSightingPacket = packetPool.allocCopy(mp);
+
 #ifndef NO_ESP32
     auto p = *pptr;
-    DEBUG_MSG("Received Tag sighting=%u\n", p.time);
+    DEBUG_MSG("Received Tag tagId:%s time:%u\n", pptr -> tagId, p.time);
 
     if (radioConfig.preferences.tunnelplugin_enabled && WiFi.status() == WL_CONNECTED) {
-        DEBUG_MSG("Sending To Server\n");
-
         if (getFrom(&mp) == nodeDB.getNodeNum() || mp.to == NODENUM_BROADCAST) {
-            DEBUG_MSG("2");
-            if(*client == NULL){
-                DEBUG_MSG("Creating a new client");
-                client = new WiFiClientSecure;
-                client -> setCACert(rootCACertificate);
+            DEBUG_MSG("Sending To Server\n");
+            HTTPClient https;
+            char requestUrl [256];
+            snprintf( requestUrl,  sizeof(requestUrl), url, 
+                p.tagId,
+                getFrom(&mp),
+                p.time,
+                p.latitude_i,
+                p.longitude_i
+            );
+            // DEBUG_MSG("TUNNEL SIZE BEFORE: %d \n", heap_caps_get_free_size(MALLOC_CAP_8BIT));
+            if (https.begin(requestUrl)) {
+                https.addHeader("Content-Type", "application/json");
+                https.addHeader("Content-Length", "0");
+                
+                DEBUG_MSG("[HTTPS] Post:");
+                int httpCode = https.POST("");
+
+                if (httpCode > 0) {
+                    // HTTP header has been send and Server response header has been handled
+                    DEBUG_MSG(" Success (%d)\n", httpCode);
+                } else {
+                    DEBUG_MSG(" Failed (%d, %s)\n", https.errorToString(httpCode).c_str(), httpCode);
+                }
+                https.end();
             }
             
-            DEBUG_MSG("[TUNNEL] CLIENT: available:%d connected:%d",  client -> available(), client -> connected());
-
-            if(client) {
-                HTTPClient https;
-
-                // char *url;  
-                // url =  (char*) malloc(
-                //     strlen(baseServerUrl)
-                //     + strlen(tag_id_str) 
-                //     + strlen(tag_id) 
-                //     + strlen(tracker_id_str) 
-                //     + strlen(tracker_id) 
-                //     + strlen(sight_time_str) 
-                //     + strlen(sight_time)
-                // );
-
-                // strcpy(url, baseServerUrl);
-                // strcat(url, tag_id_str);
-                // strcat(url, tag_id);
-                // strcat(url, tracker_id_str);
-                // strcat(url, tracker_id);
-                // strcat(url, sight_time_str);
-                // strcat(url, sight_time);
-                
-                // DEBUG_MSG("Uri %s\n", url);
-                DEBUG_MSG("TUNNEL SIZE BEFORE: %d \n", heap_caps_get_free_size(MALLOC_CAP_8BIT));
-                if (https.begin(*client, url)) {
-                    https.addHeader("Content-Type", "application/json");
-                    https.addHeader("Content-Length", "0");
-                    int httpCode = https.POST("");
-
-                    if (httpCode > 0) {
-                        // HTTP header has been send and Server response header has been handled
-                        DEBUG_MSG("[HTTPS] Post... code: %d\n", httpCode);
-
-                        // file found at server
-                        if (httpCode == HTTP_CODE_OK) {
-                            String payload = https.getString();
-                            DEBUG_MSG("[HTTPS] Post OK: %s", payload);
-                        }
-                        else{
-                            DEBUG_MSG("Sending To Server FAILED. Not OK\n");
-                        }
-                    } else {
-                        DEBUG_MSG("[HTTPS] Post... failed, error: %s, %i\n", https.errorToString(httpCode).c_str(), httpCode);
-                    }
-                    https.end();
-                    DEBUG_MSG("TUNNEL SIZE AFTER: %d \n", heap_caps_get_free_size(MALLOC_CAP_8BIT));
-                }
-                
-                // client->stop();
-                // free(url);
-            }else{
-                DEBUG_MSG("Sending To Server FAILED. No Available Client\n");
-            }
         }
-        DEBUG_MSG("Sending To Server DONE\n");
     } else {
         DEBUG_MSG("Tunnel Plugin Disabled\n");
     }
 
 #endif
     return true; // Let others look at this message also if they want
+}
+
+void TunnelPlugin::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_MEDIUM);
+    display->drawString(x, y, "Sightings");
+    if (lastSightingPacket == nullptr) {
+        display->setFont(FONT_SMALL);
+        display->drawString(x, y += fontHeight(FONT_MEDIUM), "No Sightings Yet");
+        return;
+    }
+
+    TagSightingMessage lastMeasurement;
+    
+    auto &p = lastSightingPacket->decoded;
+    if (!pb_decode_from_bytes(p.payload.bytes, 
+            p.payload.size,
+            TagSightingMessage_fields, 
+            &lastMeasurement)) {
+        display->setFont(FONT_SMALL);
+        display->drawString(x, y += fontHeight(FONT_MEDIUM), "Parse Error");
+        return;
+    }
+
+    long hms = lastMeasurement.time % SEC_PER_DAY;
+    DEBUG_MSG("Time %u, %l", lastMeasurement.time, hms);
+    
+    hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
+
+    int hour = hms / SEC_PER_HOUR;
+    int min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
+    int sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN;
+
+    char timebuf[9];
+    snprintf(timebuf, sizeof(timebuf), "%02d:%02d:%02d", hour, min, sec);
+
+    display->setFont(FONT_SMALL);
+
+    char msg[32];
+    snprintf(msg, sizeof(msg), "Seen [%s] at %s", lastMeasurement.tagId, timebuf);
+    display -> drawString(x, y += fontHeight(FONT_MEDIUM), msg);
 }

@@ -38,8 +38,10 @@ bool isWifiAvailable()
     const char *wifiName = radioConfig.preferences.wifi_ssid;
     const char *wifiPsw = radioConfig.preferences.wifi_password;
 
-    strcpy(radioConfig.preferences.wifi_ssid, "x");
-    strcpy(radioConfig.preferences.wifi_password, "y");
+
+
+    // strcpy(radioConfig.preferences.wifi_ssid, "iPhone");
+    // strcpy(radioConfig.preferences.wifi_password, "123456789");
 
     // radioConfig.preferences.wifi_ap_mode = true;
     radioConfig.preferences.wifi_ap_mode = false;
