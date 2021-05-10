@@ -49,7 +49,7 @@ int32_t TunnelPlugin::runOnce()
     if (radioConfig.preferences.tunnelplugin_enabled) {
 
         if (firstTime) {
-            DEBUG_MSG("Initializing tunnel serial peripheral interface\n");
+            DEBUG_MSG("Initializing Serial 2\n");
             Serial2.begin(SERIALPLUGIN_BAUD, SERIAL_8N1, RXD2, TXD2);
             Serial2.setTimeout(SERIALPLUGIN_TIMEOUT);
             Serial2.setRxBufferSize(SERIALPLUGIN_RX_BUFFER);
@@ -57,13 +57,11 @@ int32_t TunnelPlugin::runOnce()
 
         } else {
             String serialString;
-
-            DEBUG_MSG("Tunnel tick");
             while (Serial2.available()) {
-                DEBUG_MSG(".\n");
+                DEBUG_MSG("Serial Has Data\n");
                 serialString = Serial2.readString();
                 serialString.toCharArray(tunnelSerialStringChar, Constants_DATA_PAYLOAD_LEN);
-                DEBUG_MSG("Tunnel Reading Recevied: %s\n", tunnelSerialStringChar);
+                DEBUG_MSG("Recevied: %s\n", tunnelSerialStringChar);
                 sendPayload(tunnelSerialStringChar);
 
             }
@@ -123,7 +121,7 @@ bool TunnelPlugin::handleReceivedProtobuf(const MeshPacket &mp, const TagSightin
     DEBUG_MSG("Received Tag tagId:%s time:%u\n", pptr -> tagId, p.time);
 
     if (radioConfig.preferences.tunnelplugin_enabled && WiFi.status() == WL_CONNECTED) {
-        if (getFrom(&mp) == nodeDB.getNodeNum() || mp.to == NODENUM_BROADCAST) {
+        if (getFrom(&mp) != nodeDB.getNodeNum() || mp.to == NODENUM_BROADCAST) {
             DEBUG_MSG("Sending To Server\n");
             HTTPClient https;
             char requestUrl [256];

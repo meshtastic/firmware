@@ -33,7 +33,7 @@ class TunnelPlugin : public ProtobufPlugin<TagSightingMessage>, private concurre
     virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
   
   protected:
-    const char* url = "http://wildlife-server.azurewebsites.net/api/Devices/AnimalSighted?TagId=%s&TrackerId=%u&SightingTime=%u&Latitude=%dLongitude=%d";
+    const char* url = "http://wildlife-server.azurewebsites.net/api/Devices/AnimalSighted?TagId=%s&TrackerId=%u&SightingTime=%u&Latitude=%d&Longitude=%d";
   
     virtual MeshPacket *allocReply(char* tagId);
     virtual bool handleReceivedProtobuf(const MeshPacket &mp, const TagSightingMessage *pptr);
