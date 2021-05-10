@@ -184,7 +184,6 @@ void TunnelPlugin::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, in
     }
 
     long hms = lastMeasurement.time % SEC_PER_DAY;
-    DEBUG_MSG("Time %u, %l", lastMeasurement.time, hms);
     
     hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
 
@@ -197,7 +196,11 @@ void TunnelPlugin::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, in
 
     display->setFont(FONT_SMALL);
 
-    char msg[32];
-    snprintf(msg, sizeof(msg), "Seen [%s] at %s", lastMeasurement.tagId, timebuf);
-    display -> drawString(x, y += fontHeight(FONT_MEDIUM), msg);
+    char idString[25];
+    snprintf(idString, sizeof(idString), "Id:%s", lastMeasurement.tagId);
+    display -> drawString(x, y += fontHeight(FONT_MEDIUM), idString);
+
+    char timeString[25];
+    snprintf(timeString, sizeof(timeString), "Time:%s", timebuf);
+    display -> drawString(x, y += fontHeight(FONT_SMALL), timeString);
 }
