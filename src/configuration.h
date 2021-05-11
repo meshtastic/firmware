@@ -227,8 +227,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define GPS_TX_PIN 15
 
 #elif defined(ARDUINO_HELTEC_WIFI_LORA_32_V2)
-// This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR HardwareModel_HELTEC
 
 // the default ESP32 Pin of 15 is the Oled SCL, set to 36 and 37 and works fine.
 // Tested on Neo6m module.
@@ -255,6 +253,25 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #define LORA_DIO1 35 // Not really used
 #define LORA_DIO2 34 // Not really used
+
+// ratio of voltage divider = 3.20 (R1=100k, R2=220k)
+#define ADC_MULTIPLIER 3.2
+
+#ifdef HELTEC_V2_0
+// This string must exactly match the case used in release file names or the android updater won't work
+#define HW_VENDOR HardwareModel_HELTEC_V2_0
+
+#define BATTERY_PIN 13 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+
+#endif
+
+#ifdef HELTEC_V2_1
+// This string must exactly match the case used in release file names or the android updater won't work
+#define HW_VENDOR HardwareModel_HELTEC_V2_1
+
+#define BATTERY_PIN 37 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+
+#endif
 
 #elif defined(TLORA_V1)
 // This string must exactly match the case used in release file names or the android updater won't work

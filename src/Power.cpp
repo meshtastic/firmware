@@ -102,7 +102,8 @@ class AnalogBatteryLevel : public HasBatteryLevel
             last_read_time_ms = millis();
             uint32_t raw = analogRead(BATTERY_PIN);
             float scaled = 1000.0 * ADC_MULTIPLIER * (AREF_VOLTAGE / 1024.0) * raw;
-            // DEBUG_MSG("raw val=%u scaled=%u\n", raw, (uint32_t)(scaled));
+            
+            // DEBUG_MSG("battery gpio %d raw val=%u scaled=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled));
             last_read_value = scaled;
             return scaled;
         } else {
@@ -141,7 +142,7 @@ Power::Power() : OSThread("Power") {}
 bool Power::analogInit()
 {
 #ifdef BATTERY_PIN
-    DEBUG_MSG("Using analog input for battery level\n");
+    DEBUG_MSG("Using analog input %d for battery level\n", BATTERY_PIN);
 
     // disable any internal pullups
     pinMode(BATTERY_PIN, INPUT);
