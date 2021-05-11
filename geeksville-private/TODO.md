@@ -4,8 +4,9 @@ You probably don't care about this section - skip to the next one.
 
 ## before next release
 
-* fix python tool problem
+* fix python tool problem with windows and the heartbeat
 * fix ttgo eink screen
+* fix this sleep problem: https://meshtastic.discourse.group/t/new-device-release-1-2-30-ready-for-alpha-testing/3272/13?u=geeksville
 * make native sim not touch hardware
 * reenable sim in CI builds
 * figure our wss for mqtt.meshtastic - use cloudflare? 2052 ws, 2053 crypt
