@@ -102,7 +102,8 @@ class AnalogBatteryLevel : public HasBatteryLevel
             last_read_time_ms = millis();
             uint32_t raw = analogRead(BATTERY_PIN);
             float scaled = 1000.0 * ADC_MULTIPLIER * (AREF_VOLTAGE / 1024.0) * raw;
-            // DEBUG_MSG("raw val=%u scaled=%u\n", raw, (uint32_t)(scaled));
+            
+            // DEBUG_MSG("battery gpio %d raw val=%u scaled=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled));
             last_read_value = scaled;
             return scaled;
         } else {
@@ -129,7 +130,9 @@ class AnalogBatteryLevel : public HasBatteryLevel
   private:
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
     /// in power
-    const float fullVolt = 4200, emptyVolt = 3270, chargingVolt = 4210, noBatVolt = 2100;
+
+    /// For heltecs with no battery connected, the measured voltage is 2204, so raising to 2230 from 2100
+    const float fullVolt = 4200, emptyVolt = 3270, chargingVolt = 4210, noBatVolt = 2230;
     float last_read_value = 0.0;
     uint32_t last_read_time_ms = 0;
 } analogLevel;
@@ -139,7 +142,7 @@ Power::Power() : OSThread("Power") {}
 bool Power::analogInit()
 {
 #ifdef BATTERY_PIN
-    DEBUG_MSG("Using analog input for battery level\n");
+    DEBUG_MSG("Using analog input %d for battery level\n", BATTERY_PIN);
 
     // disable any internal pullups
     pinMode(BATTERY_PIN, INPUT);
