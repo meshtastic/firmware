@@ -59,9 +59,9 @@ void portduinoSetup()
 {
     printf("Setting up Meshtastic on Porduino...\n");
 
+#ifdef PORTDUINO_LINUX_HARDWARE
     SPI.begin(); // We need to create SPI 
     bool usePineLora = !spiChip->isSimulated();
-
     if(usePineLora) {
         printf("Connecting to PineLora board...\n");
 
@@ -82,7 +82,10 @@ void portduinoSetup()
         loraCs->setSilent();
         gpioBind(loraCs);
     }
-    else {
+    else 
+#endif
+
+    {
         auto fakeBusy = new SimGPIOPin(SX1262_BUSY, "fakeBusy");
         fakeBusy->writePin(LOW);
         fakeBusy->setSilent(true);
