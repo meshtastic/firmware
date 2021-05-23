@@ -45,7 +45,7 @@ int32_t StreamAPI::readStream()
             } else if (ptr >= HEADER_LEN - 1) {            // we have at least read our 4 byte framing
                 uint32_t len = (rxBuf[2] << 8) + rxBuf[3]; // big endian 16 bit length follows framing
 
-                console->printf("len %d\n", len);
+                // console->printf("len %d\n", len);
 
                 if (ptr == HEADER_LEN - 1) {
                     // we _just_ finished our 4 byte header, validate length now (note: a length of zero is a valid

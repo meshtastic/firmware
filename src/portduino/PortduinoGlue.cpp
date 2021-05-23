@@ -1,5 +1,6 @@
 #include "CryptoEngine.h"
 #include "PortduinoGPIO.h"
+#include "SPIChip.h"
 #include "mesh/RF95Interface.h"
 #include "sleep.h"
 #include "target_specific.h"
@@ -48,7 +49,7 @@ class PolledIrqPin : public GPIOPin
     }
 };
 
-GPIOPin *loraIrq;
+static GPIOPin *loraIrq;
 
 /** apps run under portduino can optionally define a portduinoSetup() to
  * use portduino specific init code (such as gpioBind) to setup portduino on their host machine,
@@ -58,26 +59,45 @@ void portduinoSetup()
 {
     printf("Setting up Meshtastic on Porduino...\n");
 
-    // FIXME: remove this hack once interrupts are confirmed to work on new pine64 board
-    // loraIrq = new PolledIrqPin();
-    loraIrq = new LinuxGPIOPin(LORA_DIO1, "ch341", "int", "loraIrq"); // or "err"?
-    loraIrq->setSilent();
-    gpioBind(loraIrq);
+#ifdef PORTDUINO_LINUX_HARDWARE
+    SPI.begin(); // We need to create SPI 
+    bool usePineLora = !spiChip->isSimulated();
+    if(usePineLora) {
+        printf("Connecting to PineLora board...\n");
 
-    // BUSY hw was busted on current board - just use the simulated pin (which will read low)
-    auto busy = new LinuxGPIOPin(SX1262_BUSY, "ch341", "slct", "loraBusy");
-    busy->setSilent();
-    gpioBind(busy);
-    //auto fakeBusy = new SimGPIOPin(SX1262_BUSY, "fakeBusy");
-    //fakeBusy->writePin(LOW);
-    //fakeBusy->setSilent(true);
-    //gpioBind(fakeBusy);
+        // FIXME: remove this hack once interrupts are confirmed to work on new pine64 board
+        // loraIrq = new PolledIrqPin();
+        loraIrq = new LinuxGPIOPin(LORA_DIO1, "ch341", "int", "loraIrq"); // or "err"?
+        loraIrq->setSilent();
+        gpioBind(loraIrq);
 
-    gpioBind(new LinuxGPIOPin(SX1262_RESET, "ch341", "ini", "loraReset"));    
+        // BUSY hw was busted on current board - just use the simulated pin (which will read low)
+        auto busy = new LinuxGPIOPin(SX1262_BUSY, "ch341", "slct", "loraBusy");
+        busy->setSilent();
+        gpioBind(busy);
 
-    auto loraCs = new LinuxGPIOPin(SX1262_CS, "ch341", "cs0", "loraCs");
-    loraCs->setSilent();
-    gpioBind(loraCs);
+        gpioBind(new LinuxGPIOPin(SX1262_RESET, "ch341", "ini", "loraReset"));    
+
+        auto loraCs = new LinuxGPIOPin(SX1262_CS, "ch341", "cs0", "loraCs");
+        loraCs->setSilent();
+        gpioBind(loraCs);
+    }
+    else 
+#endif
+
+    {
+        auto fakeBusy = new SimGPIOPin(SX1262_BUSY, "fakeBusy");
+        fakeBusy->writePin(LOW);
+        fakeBusy->setSilent(true);
+        gpioBind(fakeBusy);
+
+        auto cs = new SimGPIOPin(SX1262_CS, "fakeLoraCS");
+        cs->setSilent(true);
+        gpioBind(cs);
+
+        gpioBind(new SimGPIOPin(SX1262_RESET, "fakeLoraReset"));
+        gpioBind(new SimGPIOPin(LORA_DIO1, "fakeLoraIrq"));
+    }
 
     // gpioBind((new SimGPIOPin(LORA_RESET, "LORA_RESET")));
     // gpioBind((new SimGPIOPin(RF95_NSS, "RF95_NSS"))->setSilent());
