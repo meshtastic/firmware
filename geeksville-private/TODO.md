@@ -5,8 +5,8 @@ You probably don't care about this section - skip to the next one.
 * fix python tool problem with windows and the heartbeat
 * router mode dropping messages? https://meshtastic.discourse.group/t/router-mode-missing-messages/3329/3
 * fix ttgo eink screen
-* make native sim not touch hardware
-* reenable sim in CI builds
+* DONE make native sim not touch hardware
+* DONE reenable sim in CI builds
 * figure our wss for mqtt.meshtastic - use cloudflare? 2052 ws, 2053 crypt
 * pine64 lora module
 * @havealoha fixedposition not working
