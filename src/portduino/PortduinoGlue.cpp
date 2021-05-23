@@ -1,5 +1,6 @@
 #include "CryptoEngine.h"
 #include "PortduinoGPIO.h"
+#include "SPIChip.h"
 #include "mesh/RF95Interface.h"
 #include "sleep.h"
 #include "target_specific.h"
@@ -50,8 +51,6 @@ class PolledIrqPin : public GPIOPin
 
 static GPIOPin *loraIrq;
 
-static bool usePineLora;
-
 /** apps run under portduino can optionally define a portduinoSetup() to
  * use portduino specific init code (such as gpioBind) to setup portduino on their host machine,
  * before running 'arduino' code.
@@ -59,6 +58,9 @@ static bool usePineLora;
 void portduinoSetup()
 {
     printf("Setting up Meshtastic on Porduino...\n");
+
+    SPI.begin(); // We need to create SPI 
+    bool usePineLora = !spiChip->isSimulated();
 
     if(usePineLora) {
         printf("Connecting to PineLora board...\n");
