@@ -1,14 +1,14 @@
 #include <Arduino.h>
 
 #include "../concurrency/LockGuard.h"
+#include "../graphics/Screen.h"
+#include "../main.h"
 #include "BluetoothSoftwareUpdate.h"
+#include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RadioLibInterface.h"
 #include "configuration.h"
 #include "nimble/BluetoothUtil.h"
-#include "NodeDB.h"
-#include "../graphics/Screen.h"
-#include "../main.h"
 
 #include <CRC32.h>
 #include <Update.h>
@@ -16,7 +16,6 @@
 int16_t updateResultHandle = -1;
 
 static CRC32 crc;
-static uint32_t rebootAtMsec = 0; // If not zero we will reboot at this time (used to reboot shortly after the update completes)
 
 static uint32_t updateExpectedSize, updateActualSize;
 static uint8_t update_result;
@@ -51,8 +50,8 @@ int update_size_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_
 
             screen->startFirmwareUpdateScreen();
             if (RadioLibInterface::instance)
-                RadioLibInterface::instance->disable(); // FIXME, nasty hack - the RF95 ISR/SPI code on ESP32 can fail while we are
-                                                      // writing flash - shut the radio off during updates
+                RadioLibInterface::instance->disable(); // FIXME, nasty hack - the RF95 ISR/SPI code on ESP32 can fail while we
+                                                        // are writing flash - shut the radio off during updates
         }
     }
 
@@ -78,7 +77,7 @@ int update_data_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_
     crc.update(data, len);
     Update.write(data, len);
     updateActualSize += len;
-    powerFSM.trigger(EVENT_CONTACT_FROM_PHONE);
+    powerFSM.trigger(EVENT_FIRMWARE_UPDATE);
 
     return 0;
 }
@@ -107,8 +106,7 @@ int update_crc32_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble
             if (update_region == U_SPIFFS) {
                 DEBUG_MSG("SPIFFS updated!\n");
                 nodeDB.saveToDisk(); // Since we just wiped spiffs, we need to save our current state
-            }
-            else {
+            } else {
                 DEBUG_MSG("Appload updated, rebooting in 5 seconds!\n");
                 rebootAtMsec = millis() + 5000;
             }
@@ -138,14 +136,6 @@ int update_result_callback(uint16_t conn_handle, uint16_t attr_handle, struct bl
 int update_region_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
     return chr_readwrite8(&update_region, sizeof(update_region), ctxt);
-}
-
-void bluetoothRebootCheck()
-{
-    if (rebootAtMsec && millis() > rebootAtMsec) {
-        DEBUG_MSG("Rebooting for update\n");
-        ESP.restart();
-    }
 }
 
 /*

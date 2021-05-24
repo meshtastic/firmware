@@ -17,10 +17,12 @@ typedef enum _HardwareModel {
     HardwareModel_TLORA_V1 = 2,
     HardwareModel_TLORA_V2_1_1p6 = 3,
     HardwareModel_TBEAM = 4,
-    HardwareModel_HELTEC = 5,
+    HardwareModel_HELTEC_V2_0 = 5,
     HardwareModel_TBEAM0p7 = 6,
     HardwareModel_T_ECHO = 7,
     HardwareModel_TLORA_V1_1p3 = 8,
+    HardwareModel_RAK4631 = 9,
+    HardwareModel_HELTEC_V2_1 = 10,
     HardwareModel_LORA_RELAY_V1 = 32,
     HardwareModel_NRF52840DK = 33,
     HardwareModel_PPR = 34,
@@ -45,7 +47,9 @@ typedef enum _CriticalErrorCode {
     CriticalErrorCode_NoAXP192 = 6,
     CriticalErrorCode_InvalidRadioSetting = 7,
     CriticalErrorCode_TransmitFailed = 8,
-    CriticalErrorCode_Brownout = 9
+    CriticalErrorCode_Brownout = 9,
+    CriticalErrorCode_SX1262Failure = 10,
+    CriticalErrorCode_RadioSpiBug = 11
 } CriticalErrorCode;
 
 typedef enum _Routing_Error {
@@ -57,7 +61,9 @@ typedef enum _Routing_Error {
     Routing_Error_MAX_RETRANSMIT = 5,
     Routing_Error_NO_CHANNEL = 6,
     Routing_Error_TOO_LARGE = 7,
-    Routing_Error_NO_RESPONSE = 8
+    Routing_Error_NO_RESPONSE = 8,
+    Routing_Error_BAD_REQUEST = 32,
+    Routing_Error_NOT_AUTHORIZED = 33
 } Routing_Error;
 
 typedef enum _MeshPacket_Priority {
@@ -104,10 +110,11 @@ typedef struct _MyNodeInfo {
     uint32_t num_bands;
     char region[12];
     char hw_model_deprecated[16];
-    char firmware_version[12];
+    char firmware_version[18];
     CriticalErrorCode error_code;
     uint32_t error_address;
     uint32_t error_count;
+    uint32_t reboot_count;
     uint32_t message_timeout_msec;
     uint32_t min_app_version;
     uint32_t max_channels;
@@ -126,12 +133,18 @@ typedef struct _RouteDiscovery {
     uint32_t route[8];
 } RouteDiscovery;
 
+typedef struct _ToRadio_PeerInfo {
+    uint32_t app_version;
+    bool mqtt_gateway;
+} ToRadio_PeerInfo;
+
 typedef struct _User {
     char id[16];
     char long_name[40];
     char short_name[5];
     pb_byte_t macaddr[6];
     HardwareModel hw_model;
+    bool is_licensed;
 } User;
 
 typedef PB_BYTES_ARRAY_T(256) MeshPacket_encrypted_t;
@@ -150,6 +163,7 @@ typedef struct _MeshPacket {
     uint8_t hop_limit;
     bool want_ack;
     MeshPacket_Priority priority;
+    int32_t rx_rssi;
 } MeshPacket;
 
 typedef struct _NodeInfo {
@@ -158,6 +172,7 @@ typedef struct _NodeInfo {
     User user;
     bool has_position;
     Position position;
+    uint32_t last_heard;
     float snr;
 } NodeInfo;
 
@@ -187,7 +202,9 @@ typedef struct _ToRadio {
     pb_size_t which_payloadVariant;
     union {
         MeshPacket packet;
+        ToRadio_PeerInfo peer_info;
         uint32_t want_config_id;
+        bool disconnect;
     };
 } ToRadio;
 
@@ -202,12 +219,12 @@ typedef struct _ToRadio {
 #define _Constants_ARRAYSIZE ((Constants)(Constants_DATA_PAYLOAD_LEN+1))
 
 #define _CriticalErrorCode_MIN CriticalErrorCode_None
-#define _CriticalErrorCode_MAX CriticalErrorCode_Brownout
-#define _CriticalErrorCode_ARRAYSIZE ((CriticalErrorCode)(CriticalErrorCode_Brownout+1))
+#define _CriticalErrorCode_MAX CriticalErrorCode_RadioSpiBug
+#define _CriticalErrorCode_ARRAYSIZE ((CriticalErrorCode)(CriticalErrorCode_RadioSpiBug+1))
 
 #define _Routing_Error_MIN Routing_Error_NONE
-#define _Routing_Error_MAX Routing_Error_NO_RESPONSE
-#define _Routing_Error_ARRAYSIZE ((Routing_Error)(Routing_Error_NO_RESPONSE+1))
+#define _Routing_Error_MAX Routing_Error_NOT_AUTHORIZED
+#define _Routing_Error_ARRAYSIZE ((Routing_Error)(Routing_Error_NOT_AUTHORIZED+1))
 
 #define _MeshPacket_Priority_MIN MeshPacket_Priority_UNSET
 #define _MeshPacket_Priority_MAX MeshPacket_Priority_MAX
@@ -224,27 +241,29 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define Position_init_default                    {0, 0, 0, 0, 0}
-#define User_init_default                        {"", "", "", {0}, _HardwareModel_MIN}
+#define User_init_default                        {"", "", "", {0}, _HardwareModel_MIN, 0}
 #define RouteDiscovery_init_default              {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_default                     {0, {RouteDiscovery_init_default}}
 #define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0}
-#define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN}
-#define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0}
-#define MyNodeInfo_init_default                  {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0}
+#define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0}
+#define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0}
+#define MyNodeInfo_init_default                  {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0}
 #define LogRecord_init_default                   {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_default                   {0, 0, {MyNodeInfo_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
+#define ToRadio_PeerInfo_init_default            {0, 0}
 #define Position_init_zero                       {0, 0, 0, 0, 0}
-#define User_init_zero                           {"", "", "", {0}, _HardwareModel_MIN}
+#define User_init_zero                           {"", "", "", {0}, _HardwareModel_MIN, 0}
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_zero                        {0, {RouteDiscovery_init_zero}}
 #define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0}
-#define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN}
-#define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0}
-#define MyNodeInfo_init_zero                     {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0}
+#define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0}
+#define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0}
+#define MyNodeInfo_init_zero                     {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0}
 #define LogRecord_init_zero                      {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_zero                      {0, 0, {MyNodeInfo_init_zero}}
 #define ToRadio_init_zero                        {0, {MeshPacket_init_zero}}
+#define ToRadio_PeerInfo_init_zero               {0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define Data_portnum_tag                         1
@@ -266,6 +285,7 @@ extern "C" {
 #define MyNodeInfo_error_code_tag                7
 #define MyNodeInfo_error_address_tag             8
 #define MyNodeInfo_error_count_tag               9
+#define MyNodeInfo_reboot_count_tag              10
 #define MyNodeInfo_message_timeout_msec_tag      13
 #define MyNodeInfo_min_app_version_tag           14
 #define MyNodeInfo_max_channels_tag              15
@@ -275,11 +295,14 @@ extern "C" {
 #define Position_battery_level_tag               4
 #define Position_time_tag                        9
 #define RouteDiscovery_route_tag                 2
+#define ToRadio_PeerInfo_app_version_tag         1
+#define ToRadio_PeerInfo_mqtt_gateway_tag        2
 #define User_id_tag                              1
 #define User_long_name_tag                       2
 #define User_short_name_tag                      3
 #define User_macaddr_tag                         4
 #define User_hw_model_tag                        6
+#define User_is_licensed_tag                     7
 #define MeshPacket_from_tag                      1
 #define MeshPacket_to_tag                        2
 #define MeshPacket_channel_tag                   3
@@ -291,9 +314,11 @@ extern "C" {
 #define MeshPacket_hop_limit_tag                 10
 #define MeshPacket_want_ack_tag                  11
 #define MeshPacket_priority_tag                  12
+#define MeshPacket_rx_rssi_tag                   13
 #define NodeInfo_num_tag                         1
 #define NodeInfo_user_tag                        2
 #define NodeInfo_position_tag                    3
+#define NodeInfo_last_heard_tag                  4
 #define NodeInfo_snr_tag                         7
 #define Routing_route_request_tag                1
 #define Routing_route_reply_tag                  2
@@ -306,7 +331,9 @@ extern "C" {
 #define FromRadio_rebooted_tag                   9
 #define FromRadio_packet_tag                     11
 #define ToRadio_packet_tag                       2
+#define ToRadio_peer_info_tag                    3
 #define ToRadio_want_config_id_tag               100
+#define ToRadio_disconnect_tag                   104
 
 /* Struct field encoding specification for nanopb */
 #define Position_FIELDLIST(X, a) \
@@ -323,7 +350,8 @@ X(a, STATIC,   SINGULAR, STRING,   id,                1) \
 X(a, STATIC,   SINGULAR, STRING,   long_name,         2) \
 X(a, STATIC,   SINGULAR, STRING,   short_name,        3) \
 X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, macaddr,           4) \
-X(a, STATIC,   SINGULAR, UENUM,    hw_model,          6)
+X(a, STATIC,   SINGULAR, UENUM,    hw_model,          6) \
+X(a, STATIC,   SINGULAR, BOOL,     is_licensed,       7)
 #define User_CALLBACK NULL
 #define User_DEFAULT NULL
 
@@ -362,7 +390,8 @@ X(a, STATIC,   SINGULAR, FIXED32,  rx_time,           7) \
 X(a, STATIC,   SINGULAR, FLOAT,    rx_snr,            8) \
 X(a, STATIC,   SINGULAR, UINT32,   hop_limit,        10) \
 X(a, STATIC,   SINGULAR, BOOL,     want_ack,         11) \
-X(a, STATIC,   SINGULAR, UENUM,    priority,         12)
+X(a, STATIC,   SINGULAR, UENUM,    priority,         12) \
+X(a, STATIC,   SINGULAR, INT32,    rx_rssi,          13)
 #define MeshPacket_CALLBACK NULL
 #define MeshPacket_DEFAULT NULL
 #define MeshPacket_payloadVariant_decoded_MSGTYPE Data
@@ -371,6 +400,7 @@ X(a, STATIC,   SINGULAR, UENUM,    priority,         12)
 X(a, STATIC,   SINGULAR, UINT32,   num,               1) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  user,              2) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  position,          3) \
+X(a, STATIC,   SINGULAR, FIXED32,  last_heard,        4) \
 X(a, STATIC,   SINGULAR, FLOAT,    snr,               7)
 #define NodeInfo_CALLBACK NULL
 #define NodeInfo_DEFAULT NULL
@@ -387,6 +417,7 @@ X(a, STATIC,   SINGULAR, STRING,   firmware_version,   6) \
 X(a, STATIC,   SINGULAR, UENUM,    error_code,        7) \
 X(a, STATIC,   SINGULAR, UINT32,   error_address,     8) \
 X(a, STATIC,   SINGULAR, UINT32,   error_count,       9) \
+X(a, STATIC,   SINGULAR, UINT32,   reboot_count,     10) \
 X(a, STATIC,   SINGULAR, UINT32,   message_timeout_msec,  13) \
 X(a, STATIC,   SINGULAR, UINT32,   min_app_version,  14) \
 X(a, STATIC,   SINGULAR, UINT32,   max_channels,     15)
@@ -418,10 +449,19 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,packet,packet),  11)
 
 #define ToRadio_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,packet,packet),   2) \
-X(a, STATIC,   ONEOF,    UINT32,   (payloadVariant,want_config_id,want_config_id), 100)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,peer_info,peer_info),   3) \
+X(a, STATIC,   ONEOF,    UINT32,   (payloadVariant,want_config_id,want_config_id), 100) \
+X(a, STATIC,   ONEOF,    BOOL,     (payloadVariant,disconnect,disconnect), 104)
 #define ToRadio_CALLBACK NULL
 #define ToRadio_DEFAULT NULL
 #define ToRadio_payloadVariant_packet_MSGTYPE MeshPacket
+#define ToRadio_payloadVariant_peer_info_MSGTYPE ToRadio_PeerInfo
+
+#define ToRadio_PeerInfo_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   app_version,       1) \
+X(a, STATIC,   SINGULAR, BOOL,     mqtt_gateway,      2)
+#define ToRadio_PeerInfo_CALLBACK NULL
+#define ToRadio_PeerInfo_DEFAULT NULL
 
 extern const pb_msgdesc_t Position_msg;
 extern const pb_msgdesc_t User_msg;
@@ -434,6 +474,7 @@ extern const pb_msgdesc_t MyNodeInfo_msg;
 extern const pb_msgdesc_t LogRecord_msg;
 extern const pb_msgdesc_t FromRadio_msg;
 extern const pb_msgdesc_t ToRadio_msg;
+extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define Position_fields &Position_msg
@@ -447,19 +488,21 @@ extern const pb_msgdesc_t ToRadio_msg;
 #define LogRecord_fields &LogRecord_msg
 #define FromRadio_fields &FromRadio_msg
 #define ToRadio_fields &ToRadio_msg
+#define ToRadio_PeerInfo_fields &ToRadio_PeerInfo_msg
 
 /* Maximum encoded size of messages (where known) */
 #define Position_size                            37
-#define User_size                                74
+#define User_size                                76
 #define RouteDiscovery_size                      40
 #define Routing_size                             42
 #define Data_size                                260
-#define MeshPacket_size                          298
-#define NodeInfo_size                            126
-#define MyNodeInfo_size                          89
+#define MeshPacket_size                          309
+#define NodeInfo_size                            133
+#define MyNodeInfo_size                          101
 #define LogRecord_size                           81
-#define FromRadio_size                           307
-#define ToRadio_size                             301
+#define FromRadio_size                           318
+#define ToRadio_size                             312
+#define ToRadio_PeerInfo_size                    8
 
 #ifdef __cplusplus
 } /* extern "C" */

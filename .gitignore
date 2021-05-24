@@ -9,6 +9,8 @@ main/credentials.h
 !.vscode/extensions.json
 *.code-workspace
 
+.idea/workspace.xml
+
 .DS_Store
 Thumbs.db
 .autotools
@@ -19,4 +21,5 @@ Thumbs.db
 nanopb*
 flash.uf2
 cmake-build*
+__pycache__
 

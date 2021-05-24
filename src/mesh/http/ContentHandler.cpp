@@ -1,5 +1,6 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "RadioLibInterface.h"
 #include "airtime.h"
 #include "main.h"
 #include "mesh/http/ContentHelper.h"
@@ -11,7 +12,6 @@
 #include <HTTPMultipartBodyParser.hpp>
 #include <HTTPURLEncodedBodyParser.hpp>
 #include <SPIFFS.h>
-#include "RadioLibInterface.h"
 
 #ifndef NO_ESP32
 #include "esp_task_wdt.h"
@@ -77,7 +77,8 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeAPIv1ToRadio = new ResourceNode("/api/v1/toradio", "PUT", &handleAPIv1ToRadio);
     ResourceNode *nodeAPIv1FromRadio = new ResourceNode("/api/v1/fromradio", "GET", &handleAPIv1FromRadio);
 
-    ResourceNode *nodeHotspot = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
+    ResourceNode *nodeHotspotApple = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
+    ResourceNode *nodeHotspotAndroid = new ResourceNode("/generate_204", "GET", &handleHotspot);
     ResourceNode *nodeFavicon = new ResourceNode("/favicon.ico", "GET", &handleFavicon);
     ResourceNode *nodeRoot = new ResourceNode("/", "GET", &handleRoot);
     ResourceNode *nodeStaticBrowse = new ResourceNode("/static", "GET", &handleStaticBrowse);
@@ -96,7 +97,8 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     secureServer->registerNode(nodeAPIv1ToRadioOptions);
     secureServer->registerNode(nodeAPIv1ToRadio);
     secureServer->registerNode(nodeAPIv1FromRadio);
-    secureServer->registerNode(nodeHotspot);
+    secureServer->registerNode(nodeHotspotApple);
+    secureServer->registerNode(nodeHotspotAndroid);
     secureServer->registerNode(nodeFavicon);
     secureServer->registerNode(nodeRoot);
     secureServer->registerNode(nodeStaticBrowse);
@@ -117,7 +119,8 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     insecureServer->registerNode(nodeAPIv1ToRadioOptions);
     insecureServer->registerNode(nodeAPIv1ToRadio);
     insecureServer->registerNode(nodeAPIv1FromRadio);
-    insecureServer->registerNode(nodeHotspot);
+    insecureServer->registerNode(nodeHotspotApple);
+    insecureServer->registerNode(nodeHotspotAndroid);
     insecureServer->registerNode(nodeFavicon);
     insecureServer->registerNode(nodeRoot);
     insecureServer->registerNode(nodeStaticBrowse);
@@ -931,14 +934,16 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     res->printf("\"is_charging\": %s\n", BoolToString(powerStatus->getIsCharging()));
     res->println("},");
 
+    res->println("\"device\": {");
+    res->printf("\"reboot_counter\": %d\n", myNodeInfo.reboot_count);
+    res->println("},");
+
     res->println("\"radio\": {");
     res->printf("\"frequecy\": %f,\n", RadioLibInterface::instance->getFreq());
     res->printf("\"lora_channel\": %d\n", RadioLibInterface::instance->getChannelNum());
     res->println("}");
 
     res->println("},");
-
-
 
     res->println("\"status\": \"ok\"");
     res->println("}");

@@ -195,11 +195,11 @@ We offer a [python API](https://github.com/meshtastic/Meshtastic-python) that ma
 
 # Development
 
-We'd love to have you join us on this merry little project. Please see our [development documents](./docs/software/sw-design.md) and [join us in our discussion forum](https://meshtastic.discourse.group/).
+We'd love to have you join us on this merry little project. Please see our [development documents](https://meshtastic.org/docs/software/other/sw-design) and [join us in our discussion forum](https://meshtastic.discourse.group/).
 
 # Credits
 
-This project is run by volunteers. Past contributors include:
+This project is run by volunteers. We are a friendly group and welcome any contribution (code fixes, documentation, features, bug reports etc...).  We try to be good about listing contributor names in release notes, but it has become unwieldy for the main-devs to keep updating the list below and we've neglected it too long.  If you'd like your name included in this list please send a pull request to edit this README and simply add your line yourself.  Thank you very much for your help!
 
 - @astro-arphid: Added support for 433MHz radios in europe.
 - @claesg: Various documentation fixes and 3D print enclosures

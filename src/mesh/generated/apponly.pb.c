@@ -6,9 +6,6 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
-PB_BIND(ServiceEnvelope, ServiceEnvelope, 2)
-
-
 PB_BIND(ChannelSet, ChannelSet, AUTO)
 
 

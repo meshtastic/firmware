@@ -18,6 +18,7 @@
 #define EVENT_SERIAL_DISCONNECTED 12
 #define EVENT_POWER_CONNECTED 13
 #define EVENT_POWER_DISCONNECTED 14
+#define EVENT_FIRMWARE_UPDATE 15 // We just received a new firmware update packet from the phone
 
 extern Fsm powerFSM;
 extern State statePOWER, stateSERIAL;

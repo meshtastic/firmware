@@ -75,7 +75,7 @@ bool RadioLibInterface::canSendImmediately()
         // TX IRQ from the radio, the radio is probably broken.
         if (busyTx && (millis() - lastTxStart > 60000)) {
             DEBUG_MSG("Hardware Failure! busyTx for more than 60s\n");
-            recordCriticalError(CriticalErrorCode_TransmitFailed);
+            RECORD_CRITICALERROR(CriticalErrorCode_TransmitFailed);
 #ifndef NO_ESP32
             if (busyTx && (millis() - lastTxStart > 65000)) // After 5s more, reboot
                 ESP.restart();
@@ -312,7 +312,13 @@ void RadioLibInterface::startSend(MeshPacket *txp)
         size_t numbytes = beginSending(txp);
 
         int res = iface->startTransmit(radiobuf, numbytes);
-        assert(res == ERR_NONE);
+        if(res != ERR_NONE) {
+            RECORD_CRITICALERROR(CriticalErrorCode_RadioSpiBug);
+
+            // This send failed, but make sure to 'complete' it properly
+            completeSending();
+            startReceive(); // Restart receive mode (because startTransmit failed to put us in xmit mode)
+        }
 
         // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
         enableInterrupt(isrTxLevel0);

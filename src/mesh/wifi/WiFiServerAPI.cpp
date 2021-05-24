@@ -1,5 +1,4 @@
 #include "WiFiServerAPI.h"
-#include "PowerFSM.h"
 #include "configuration.h"
 #include <Arduino.h>
 
@@ -26,32 +25,29 @@ WiFiServerAPI::~WiFiServerAPI()
     // FIXME - delete this if the client dropps the connection!
 }
 
-/// Hookable to find out when connection changes
-void WiFiServerAPI::onConnectionChanged(bool connected)
-{
-    // FIXME - we really should be doing global reference counting to see if anyone is currently using serial or wifi and if so,
-    // block sleep
 
-    if (connected) { // To prevent user confusion, turn off bluetooth while using the serial port api
-        powerFSM.trigger(EVENT_SERIAL_CONNECTED);
-    } else {
-        powerFSM.trigger(EVENT_SERIAL_DISCONNECTED);
-    }
-}
 
 /// override close to also shutdown the TCP link
-void WiFiServerAPI::close() {
+void WiFiServerAPI::close()
+{
     client.stop(); // drop tcp connection
     StreamAPI::close();
 }
 
-bool WiFiServerAPI::loop()
+/// Check the current underlying physical link to see if the client is currently connected
+bool WiFiServerAPI::checkIsConnected()
+{
+    return client.connected();
+}
+
+int32_t WiFiServerAPI::runOnce()
 {
     if (client.connected()) {
-        StreamAPI::loop();
-        return true;
+        return StreamAPI::runOnce();
     } else {
-        return false;       
+        DEBUG_MSG("Client dropped connection, suspending API service\n");
+        enabled = false; // we no longer need to run
+        return 0;
     }
 }
 
@@ -78,18 +74,5 @@ int32_t WiFiServerPort::runOnce()
         openAPI = new WiFiServerAPI(client);
     }
 
-    if (openAPI) {
-        // Allow idle processing so the API can read from its incoming stream
-        if(!openAPI->loop()) {
-            // If our API link was up, shut it down
-
-            DEBUG_MSG("Client dropped connection, closing API client\n");
-            // Note: we can't call delete here because this object includes other state
-            // besides the stream API.  Instead kill it later when we start a new instance
-            delete openAPI;
-            openAPI = NULL;
-        }
-        return 0; // run fast while our API server is running
-    } else
-        return 100; // only check occasionally for incoming connections
+    return 100; // only check occasionally for incoming connections
 }

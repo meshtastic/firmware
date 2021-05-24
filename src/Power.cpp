@@ -5,12 +5,35 @@
 #include "sleep.h"
 #include "utils.h"
 
+#ifdef TBEAM_V10
 // FIXME. nasty hack cleanup how we load axp192
 #undef AXP192_SLAVE_ADDRESS
 #include "axp20x.h"
 
-#ifdef TBEAM_V10
 AXP20X_Class axp;
+#else
+// Copy of the base class defined in axp20x.h. 
+// I'd rather not inlude axp20x.h as it brings Wire dependency.
+class HasBatteryLevel {
+public:
+  /**
+   * Battery state of charge, from 0 to 100 or -1 for unknown
+   */
+  virtual int getBattPercentage() { return -1; }
+
+  /**
+   * The raw voltage of the battery or NAN if unknown
+   */
+  virtual float getBattVoltage() { return NAN; }
+
+  /**
+   * return true if there is a battery installed in this unit
+   */
+  virtual bool isBatteryConnect() { return false; }
+
+  virtual bool isVBUSPlug() { return false; }
+  virtual bool isChargeing() { return false; }
+};
 #endif
 
 bool pmu_irq = false;
@@ -51,7 +74,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
      */
     virtual int getBattPercentage()
     {
-        float v = getBattVoltage() / 1000;
+        float v = getBattVoltage();
 
         if (v < noBatVolt)
             return -1; // If voltage is super low assume no battery installed
@@ -67,13 +90,27 @@ class AnalogBatteryLevel : public HasBatteryLevel
      */
     virtual float getBattVoltage()
     {
-        // Tested ttgo eink nrf52 board and the reported value is perfect
-        // DEBUG_MSG("raw val %u", raw);
-        return
+
+#ifndef ADC_MULTIPLIER
+#define ADC_MULTIPLIER 2.0
+#endif 
+
 #ifdef BATTERY_PIN
-            1000.0 * 2.0 * (AREF_VOLTAGE / 1024.0) * analogRead(BATTERY_PIN);
+        // Do not call analogRead() often. 
+        const uint32_t min_read_interval = 5000;
+        if (millis() - last_read_time_ms > min_read_interval) {
+            last_read_time_ms = millis();
+            uint32_t raw = analogRead(BATTERY_PIN);
+            float scaled = 1000.0 * ADC_MULTIPLIER * (AREF_VOLTAGE / 1024.0) * raw;
+            
+            // DEBUG_MSG("battery gpio %d raw val=%u scaled=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled));
+            last_read_value = scaled;
+            return scaled;
+        } else {
+            return last_read_value;
+        }
 #else
-            NAN;
+        return NAN;
 #endif
     }
 
@@ -84,7 +121,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
     /// in power
-    virtual bool isVBUSPlug() { return getBattVoltage() > 1000 * chargingVolt; }
+    virtual bool isVBUSPlug() { return getBattVoltage() > chargingVolt; }
 
     /// Assume charging if we have a battery and external power is connected.
     /// we can't be smart enough to say 'full'?
@@ -93,7 +130,11 @@ class AnalogBatteryLevel : public HasBatteryLevel
   private:
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
     /// in power
-    const float fullVolt = 4.2, emptyVolt = 3.27, chargingVolt = 4.3, noBatVolt = 2.1;
+
+    /// For heltecs with no battery connected, the measured voltage is 2204, so raising to 2230 from 2100
+    const float fullVolt = 4200, emptyVolt = 3270, chargingVolt = 4210, noBatVolt = 2230;
+    float last_read_value = 0.0;
+    uint32_t last_read_time_ms = 0;
 } analogLevel;
 
 Power::Power() : OSThread("Power") {}
@@ -101,7 +142,7 @@ Power::Power() : OSThread("Power") {}
 bool Power::analogInit()
 {
 #ifdef BATTERY_PIN
-    DEBUG_MSG("Using analog input for battery level\n");
+    DEBUG_MSG("Using analog input %d for battery level\n", BATTERY_PIN);
 
     // disable any internal pullups
     pinMode(BATTERY_PIN, INPUT);
@@ -140,6 +181,8 @@ void Power::shutdown()
 #ifdef TBEAM_V10
     DEBUG_MSG("Shutting down\n");
     axp.shutdown();
+#elif NRF52_SERIES
+    doDeepSleep(DELAY_FOREVER);
 #endif
 }
 
