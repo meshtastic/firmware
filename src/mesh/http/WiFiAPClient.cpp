@@ -36,7 +36,6 @@ bool isWifiAvailable()
     }
 
     const char *wifiName = radioConfig.preferences.wifi_ssid;
-    const char *wifiPsw = radioConfig.preferences.wifi_password;
 
     // strcpy(radioConfig.preferences.wifi_ssid, "meshtastic");
     // strcpy(radioConfig.preferences.wifi_password, "meshtastic!");
@@ -47,7 +46,7 @@ bool isWifiAvailable()
     // radioConfig.preferences.wifi_ap_mode = true;
     // radioConfig.preferences.wifi_ap_mode = false;
 
-    if (*wifiName && *wifiPsw) {
+    if (*wifiName) {
         return 1;
     } else {
         return 0;
@@ -96,7 +95,10 @@ void initWifi(bool forceSoftAP)
         const char *wifiName = radioConfig.preferences.wifi_ssid;
         const char *wifiPsw = radioConfig.preferences.wifi_password;
 
-        if ((*wifiName && *wifiPsw) || forceSoftAP) {
+        if (!*wifiPsw) // Treat empty password as no password
+            wifiPsw = NULL;
+
+        if (*wifiName || forceSoftAP) {
             if (forceSoftAP) {
 
                 DEBUG_MSG("Forcing SoftAP\n");
@@ -177,8 +179,6 @@ void initWifi(bool forceSoftAP)
     } else
         DEBUG_MSG("Not using WIFI\n");
 }
-
-
 
 // Called by the Espressif SDK to
 static void WiFiEvent(WiFiEvent_t event)
@@ -304,12 +304,15 @@ void handleDNSResponse()
 
 void reconnectWiFi()
 {
-    const char *wifiName = radioConfig.preferences.wifi_ssid;
-    const char *wifiPsw = radioConfig.preferences.wifi_password;
-
     if (radioConfig.has_preferences) {
 
-        if (*wifiName && *wifiPsw) {
+        const char *wifiName = radioConfig.preferences.wifi_ssid;
+        const char *wifiPsw = radioConfig.preferences.wifi_password;
+
+        if (!*wifiPsw) // Treat empty password as no password
+            wifiPsw = NULL;
+
+        if (*wifiName) {
 
             DEBUG_MSG("... Reconnecting to WiFi access point");
 
