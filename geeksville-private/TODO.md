@@ -2,9 +2,11 @@
 
 You probably don't care about this section - skip to the next one.
 
+* DONE investigate TCP on ESP32 https://github.com/meshtastic/Meshtastic-device/issues/807
 * fix python tool problem with windows and the heartbeat
 * router mode dropping messages? https://meshtastic.discourse.group/t/router-mode-missing-messages/3329/3
 * fix ttgo eink screen
+* list portduino on platformio
 * DONE make native sim not touch hardware
 * DONE reenable sim in CI builds
 * figure our wss for mqtt.meshtastic - use cloudflare? 2052 ws, 2053 crypt
