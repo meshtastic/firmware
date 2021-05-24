@@ -9,6 +9,23 @@
 #include "sleep.h"
 #include "target_specific.h"
 
+/// Should we behave as if we have AC power now?
+static bool isPowered()
+{
+    bool isRouter = radioConfig.preferences.is_router;
+
+    // If we are not a router and we already have AC power go to POWER state after init, otherwise go to ON
+    // We assume routers might be powered all the time, but from a low current (solar) source
+    bool isLowPower = radioConfig.preferences.is_low_power || isRouter;
+
+    /* To determine if we're externally powered, assumptions
+        1) If we're powered up and there's no battery, we must be getting power externally. (because we'd be dead otherwise)
+
+        2) If we detect USB power from the power management chip, we must be getting power externally.
+    */
+    return !isLowPower && powerStatus && (!powerStatus->getHasBattery() || powerStatus->getHasUSB());
+}
+
 static void sdsEnter()
 {
     // FIXME - make sure GPS and LORA radio are off first - because we want close to zero current draw
@@ -97,7 +114,8 @@ static void lsIdle()
 static void lsExit()
 {
     // setGPSPower(true); // restore GPS power
-    gps->forceWake(true);
+    if (gps)
+        gps->forceWake(true);
 }
 
 static void nbEnter()
@@ -118,14 +136,34 @@ static void serialEnter()
 {
     setBluetoothEnable(false);
     screen->setOn(true);
-    screen->print("Using API...\n");
+    screen->print("Serial connected\n");
+}
+
+static void serialExit()
+{
+    screen->print("Serial disconnected\n");
 }
 
 static void powerEnter()
 {
-    screen->setOn(true);
-    setBluetoothEnable(true);
-    screen->print("Powered...\n");
+    if (!isPowered()) {
+        // If we got here, we are in the wrong state - we should be in powered, let that state ahndle things
+        DEBUG_MSG("Loss of power in Powered\n");
+        powerFSM.trigger(EVENT_POWER_DISCONNECTED);
+    } else {
+        screen->setOn(true);
+        setBluetoothEnable(true);
+        screen->print("Powered...\n");
+    }
+}
+
+static void powerIdle()
+{
+    if (!isPowered()) {
+        // If we got here, we are in the wrong state
+        DEBUG_MSG("Loss of power in Powered\n");
+        powerFSM.trigger(EVENT_POWER_DISCONNECTED);
+    }
 }
 
 static void powerExit()
@@ -152,6 +190,14 @@ static void onEnter()
     }
 }
 
+static void onIdle()
+{
+    if (isPowered()) {
+        // If we got here, we are in the wrong state - we should be in powered, let that state ahndle things
+        powerFSM.trigger(EVENT_POWER_CONNECTED);
+    }
+}
+
 static void screenPress()
 {
     screen->onPress();
@@ -163,26 +209,16 @@ State stateSDS(sdsEnter, NULL, NULL, "SDS");
 State stateLS(lsEnter, lsIdle, lsExit, "LS");
 State stateNB(nbEnter, NULL, NULL, "NB");
 State stateDARK(darkEnter, NULL, NULL, "DARK");
-State stateSERIAL(serialEnter, NULL, NULL, "SERIAL");
+State stateSERIAL(serialEnter, NULL, serialExit, "SERIAL");
 State stateBOOT(bootEnter, NULL, NULL, "BOOT");
-State stateON(onEnter, NULL, NULL, "ON");
-State statePOWER(powerEnter, NULL, powerExit, "POWER");
+State stateON(onEnter, onIdle, NULL, "ON");
+State statePOWER(powerEnter, powerIdle, powerExit, "POWER");
 Fsm powerFSM(&stateBOOT);
 
 void PowerFSM_setup()
 {
     bool isRouter = radioConfig.preferences.is_router;
-        
-    // If we are not a router and we already have AC power go to POWER state after init, otherwise go to ON
-    // We assume routers might be powered all the time, but from a low current (solar) source
-    bool isLowPower = radioConfig.preferences.is_low_power || isRouter;
-
-    /* To determine if we're externally powered, assumptions
-        1) If we're powered up and there's no battery, we must be getting power externally. (because we'd be dead otherwise)
-
-        2) If we detect USB power from the power management chip, we must be getting power externally. 
-    */
-    bool hasPower = !isLowPower && powerStatus && (!powerStatus->getHasBattery() || powerStatus->getHasUSB());
+    bool hasPower = isPowered();
 
     DEBUG_MSG("PowerFSM init, USB power=%d\n", hasPower);
     powerFSM.add_timed_transition(&stateBOOT, hasPower ? &statePOWER : &stateON, 3 * 1000, NULL, "boot timeout");
@@ -230,24 +266,32 @@ void PowerFSM_setup()
         powerFSM.add_transition(&stateON, &stateON, EVENT_RECEIVED_TEXT_MSG, NULL, "Received text"); // restarts the sleep timer
     }
 
+    // If we are not in statePOWER but get a serial connection, suppress sleep (and keep the screen on) while connected
     powerFSM.add_transition(&stateLS, &stateSERIAL, EVENT_SERIAL_CONNECTED, NULL, "serial API");
     powerFSM.add_transition(&stateNB, &stateSERIAL, EVENT_SERIAL_CONNECTED, NULL, "serial API");
     powerFSM.add_transition(&stateDARK, &stateSERIAL, EVENT_SERIAL_CONNECTED, NULL, "serial API");
     powerFSM.add_transition(&stateON, &stateSERIAL, EVENT_SERIAL_CONNECTED, NULL, "serial API");
+    powerFSM.add_transition(&statePOWER, &stateSERIAL, EVENT_SERIAL_CONNECTED, NULL, "serial API");
 
-    if (!isLowPower) {
-        powerFSM.add_transition(&stateLS, &statePOWER, EVENT_POWER_CONNECTED, NULL, "power connect");
-        powerFSM.add_transition(&stateNB, &statePOWER, EVENT_POWER_CONNECTED, NULL, "power connect");
-        powerFSM.add_transition(&stateDARK, &statePOWER, EVENT_POWER_CONNECTED, NULL, "power connect");
-        powerFSM.add_transition(&stateON, &statePOWER, EVENT_POWER_CONNECTED, NULL, "power connect");
-    }
+    // If we get power connected, go to the power connect state
+    powerFSM.add_transition(&stateLS, &statePOWER, EVENT_POWER_CONNECTED, NULL, "power connect");
+    powerFSM.add_transition(&stateNB, &statePOWER, EVENT_POWER_CONNECTED, NULL, "power connect");
+    powerFSM.add_transition(&stateDARK, &statePOWER, EVENT_POWER_CONNECTED, NULL, "power connect");
+    powerFSM.add_transition(&stateON, &statePOWER, EVENT_POWER_CONNECTED, NULL, "power connect");
 
     powerFSM.add_transition(&statePOWER, &stateON, EVENT_POWER_DISCONNECTED, NULL, "power disconnected");
-    powerFSM.add_transition(&stateSERIAL, &stateON, EVENT_POWER_DISCONNECTED, NULL, "power disconnected");
+    // powerFSM.add_transition(&stateSERIAL, &stateON, EVENT_POWER_DISCONNECTED, NULL, "power disconnected");
 
-    powerFSM.add_transition(&stateSERIAL, &stateNB, EVENT_SERIAL_DISCONNECTED, NULL, "serial disconnect");
+    // the only way to leave state serial is for the client to disconnect (or we timeout and force disconnect them)
+    // when we leave, go to ON (which might not be the correct state if we have power connected, we will fix that in onEnter)
+    powerFSM.add_transition(&stateSERIAL, &stateON, EVENT_SERIAL_DISCONNECTED, NULL, "serial disconnect");
 
     powerFSM.add_transition(&stateDARK, &stateDARK, EVENT_CONTACT_FROM_PHONE, NULL, "Contact from phone");
+
+    // each time we get a new update packet make sure we are staying in the ON state so the screen stays awake (also we don't
+    // shutdown bluetooth if is_router)
+    powerFSM.add_transition(&stateDARK, &stateON, EVENT_FIRMWARE_UPDATE, NULL, "Got firmware update");
+    powerFSM.add_transition(&stateON, &stateON, EVENT_FIRMWARE_UPDATE, NULL, "Got firmware update");
 
     powerFSM.add_transition(&stateNB, &stateDARK, EVENT_PACKET_FOR_PHONE, NULL, "Packet for phone");
 
@@ -259,7 +303,9 @@ void PowerFSM_setup()
 #ifndef NRF52_SERIES
     // We never enter light-sleep or NB states on NRF52 (because the CPU uses so little power normally)
 
-    powerFSM.add_timed_transition(&stateDARK, &stateNB, getPref_phone_timeout_secs() * 1000, NULL, "Phone timeout");
+    // I don't think this transition is correct, turning off for now - @geeksville
+    // powerFSM.add_timed_transition(&stateDARK, &stateNB, getPref_phone_timeout_secs() * 1000, NULL, "Phone timeout");
+
     powerFSM.add_timed_transition(&stateNB, &stateLS, getPref_min_wake_secs() * 1000, NULL, "Min wake timeout");
     powerFSM.add_timed_transition(&stateDARK, &stateLS, getPref_wait_bluetooth_secs() * 1000, NULL, "Bluetooth timeout");
 #else

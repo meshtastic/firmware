@@ -4,8 +4,13 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include "configuration.h"
+#include "main.h"
 #include "mesh-pb-constants.h"
 #include "plugins/RoutingPlugin.h"
+
+#if defined(HAS_WIFI) || defined(PORTDUINO)
+#include "mqtt/MQTT.h"
+#endif
 
 /**
  * Router todo
@@ -55,10 +60,28 @@ int32_t Router::runOnce()
 {
     MeshPacket *mp;
     while ((mp = fromRadioQueue.dequeuePtr(0)) != NULL) {
+        // printPacket("handle fromRadioQ", mp);
         perhapsHandleReceived(mp);
     }
 
+    // DEBUG_MSG("sleeping forever!\n");
     return INT32_MAX; // Wait a long time - until we get woken for the message queue
+}
+
+/**
+ * RadioInterface calls this to queue up packets that have been received from the radio.  The router is now responsible for
+ * freeing the packet
+ */
+void Router::enqueueReceivedMessage(MeshPacket *p)
+{
+    if (fromRadioQueue.enqueue(p, 0)) { // NOWAIT - fixme, if queue is full, delete older messages
+
+        // Nasty hack because our threading is primitive.  interfaces shouldn't need to know about routers FIXME
+        setReceivedMessage();
+    } else {
+        printPacket("BUG! fromRadioQueue is full! Discarding!", p);
+        packetPool.release(p);
+    }
 }
 
 /// Generate a unique packet id
@@ -115,17 +138,19 @@ void Router::abortSendAndNak(Routing_Error err, MeshPacket *p)
     packetPool.release(p);
 }
 
-void Router::setReceivedMessage() {
+void Router::setReceivedMessage()
+{
+    // DEBUG_MSG("set interval to ASAP\n");
     setInterval(0); // Run ASAP, so we can figure out our correct sleep time
+    runASAP = true;
 }
 
 ErrorCode Router::sendLocal(MeshPacket *p)
 {
     // No need to deliver externally if the destination is the local node
     if (p->to == nodeDB.getNodeNum()) {
-        printPacket("Enqueuing local", p);
-        fromRadioQueue.enqueue(p);
-        setReceivedMessage();
+        printPacket("Enqueued local", p);
+        enqueueReceivedMessage(p);
         return ERRNO_OK;
     } else if (!iface) {
         // We must be sending to remote nodes also, fail if no interface found
@@ -143,9 +168,10 @@ ErrorCode Router::sendLocal(MeshPacket *p)
     }
 }
 
-void printBytes(const char *label, const uint8_t *p, size_t numbytes) {
+void printBytes(const char *label, const uint8_t *p, size_t numbytes)
+{
     DEBUG_MSG("%s: ", label);
-    for(size_t i = 0; i < numbytes; i++)
+    for (size_t i = 0; i < numbytes; i++)
         DEBUG_MSG("%02x ", p[i]);
     DEBUG_MSG("\n");
 }
@@ -176,36 +202,20 @@ ErrorCode Router::send(MeshPacket *p)
     assert(p->which_payloadVariant == MeshPacket_encrypted_tag ||
            p->which_payloadVariant == MeshPacket_decoded_tag); // I _think_ all packets should have a payload by now
 
-    // First convert from protobufs to raw bytes
+    // If the packet is not yet encrypted, do so now
     if (p->which_payloadVariant == MeshPacket_decoded_tag) {
-        static uint8_t bytes[MAX_RHPACKETLEN]; // we have to use a scratch buffer because a union
+        ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
 
-        // printPacket("pre encrypt", p); // portnum valid here
-
-        size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), Data_fields, &p->decoded);
-
-        if (numbytes > MAX_RHPACKETLEN) {
-            abortSendAndNak(Routing_Error_TOO_LARGE, p);
-            return ERRNO_TOO_LARGE;
+        auto encodeResult = perhapsEncode(p);
+        if (encodeResult != Routing_Error_NONE) {
+            abortSendAndNak(encodeResult, p);
+            return encodeResult; // FIXME - this isn't a valid ErrorCode
         }
 
-        //printBytes("plaintext", bytes, numbytes);
-
-        auto hash = channels.setActiveByIndex(p->channel);
-        if (hash < 0) {
-            // No suitable channel could be found for sending
-            abortSendAndNak(Routing_Error_NO_CHANNEL, p);
-            return ERRNO_NO_CHANNEL;
-        }
-
-        // Now that we are encrypting the packet channel should be the hash (no longer the index)
-        p->channel = hash;
-        crypto->encrypt(getFrom(p), p->id, numbytes, bytes);
-
-        // Copy back into the packet and set the variant type
-        memcpy(p->encrypted.bytes, bytes, numbytes);
-        p->encrypted.size = numbytes;
-        p->which_payloadVariant = MeshPacket_encrypted_tag;
+#if defined(HAS_WIFI) || defined(PORTDUINO)
+        if (mqtt)
+            mqtt->onSend(*p, chIndex);
+#endif
     }
 
     assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
@@ -228,7 +238,7 @@ void Router::sniffReceived(const MeshPacket *p, const Routing *c)
     // FIXME, update nodedb here for any packet that passes through us
 }
 
-bool Router::perhapsDecode(MeshPacket *p)
+bool perhapsDecode(MeshPacket *p)
 {
     if (p->which_payloadVariant == MeshPacket_decoded_tag)
         return true; // If packet was already decoded just return
@@ -247,19 +257,18 @@ bool Router::perhapsDecode(MeshPacket *p)
                    rawSize); // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf
             crypto->decrypt(p->from, p->id, rawSize, bytes);
 
-            //printBytes("plaintext", bytes, p->encrypted.size);            
+            // printBytes("plaintext", bytes, p->encrypted.size);
 
             // Take those raw bytes and convert them back into a well structured protobuf we can understand
-            memset(&p->decoded, 0, sizeof(p->decoded)); 
+            memset(&p->decoded, 0, sizeof(p->decoded));
             if (!pb_decode_from_bytes(bytes, rawSize, Data_fields, &p->decoded)) {
                 DEBUG_MSG("Invalid protobufs in received mesh packet (bad psk?)!\n");
-            } else if(p->decoded.portnum == PortNum_UNKNOWN_APP) {
+            } else if (p->decoded.portnum == PortNum_UNKNOWN_APP) {
                 DEBUG_MSG("Invalid portnum (bad psk?)!\n");
-            }
-            else {
+            } else {
                 // parsing was successful
                 p->which_payloadVariant = MeshPacket_decoded_tag; // change type to decoded
-                p->channel = chIndex; // change to store the index instead of the hash
+                p->channel = chIndex;                             // change to store the index instead of the hash
                 printPacket("decoded message", p);
                 return true;
             }
@@ -268,6 +277,42 @@ bool Router::perhapsDecode(MeshPacket *p)
 
     DEBUG_MSG("No suitable channel found for decoding, hash was 0x%x!\n", p->channel);
     return false;
+}
+
+/** Return 0 for success or a Routing_Errror code for failure
+ */
+Routing_Error perhapsEncode(MeshPacket *p)
+{
+    // If the packet is not yet encrypted, do so now
+    if (p->which_payloadVariant == MeshPacket_decoded_tag) {
+        static uint8_t bytes[MAX_RHPACKETLEN]; // we have to use a scratch buffer because a union
+
+        // printPacket("pre encrypt", p); // portnum valid here
+
+        size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), Data_fields, &p->decoded);
+
+        if (numbytes > MAX_RHPACKETLEN)
+            return Routing_Error_TOO_LARGE;
+
+        // printBytes("plaintext", bytes, numbytes);
+
+        ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
+        auto hash = channels.setActiveByIndex(chIndex);
+        if (hash < 0)
+            // No suitable channel could be found for sending
+            return Routing_Error_NO_CHANNEL;
+
+        // Now that we are encrypting the packet channel should be the hash (no longer the index)
+        p->channel = hash;
+        crypto->encrypt(getFrom(p), p->id, numbytes, bytes);
+
+        // Copy back into the packet and set the variant type
+        memcpy(p->encrypted.bytes, bytes, numbytes);
+        p->encrypted.size = numbytes;
+        p->which_payloadVariant = MeshPacket_encrypted_tag;
+    }
+
+    return Routing_Error_NONE;
 }
 
 NodeNum Router::getNodeNum()
@@ -285,26 +330,27 @@ void Router::handleReceived(MeshPacket *p)
     p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
 
     // Take those raw bytes and convert them back into a well structured protobuf we can understand
-    bool decoded = perhapsDecode(p); 
+    bool decoded = perhapsDecode(p);
     if (decoded) {
         // parsing was successful, queue for our recipient
         printPacket("handleReceived", p);
-
-        // call any promiscious plugins here, make a (non promisiocous) plugin for forwarding messages to phone api
-        // sniffReceived(p);
-        MeshPlugin::callPlugins(*p);
+    } else {
+        printPacket("packet decoding failed (no PSK?)", p);
     }
+
+    // call plugins here
+    MeshPlugin::callPlugins(*p);
 }
 
 void Router::perhapsHandleReceived(MeshPacket *p)
 {
     assert(radioConfig.has_preferences);
-    bool ignore = is_in_repeated(radioConfig.preferences.ignore_incoming, getFrom(p));
+    bool ignore = is_in_repeated(radioConfig.preferences.ignore_incoming, p->from);
 
     if (ignore)
         DEBUG_MSG("Ignoring incoming message, 0x%x is in our ignore list\n", p->from);
     else if (ignore |= shouldFilterReceived(p)) {
-        // DEBUG_MSG("Incoming message was filtered 0x%x\n", p->from);
+        DEBUG_MSG("Incoming message was filtered 0x%x\n", p->from);
     }
 
     // Note: we avoid calling shouldFilterReceived if we are supposed to ignore certain nodes - because some overrides might

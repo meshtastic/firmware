@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 import configparser
+import sys
+from readprops import readProps
 
-config = configparser.RawConfigParser()
-config.read('version.properties')
 
-version = dict(config.items('VERSION'))
-
-verStr = "{}.{}.{}".format(version["major"], version["minor"], version["build"])
-
-print(f"{verStr}")
+verObj = readProps('version.properties')
+propName = sys.argv[1]
+print(f"{verObj[propName]}")

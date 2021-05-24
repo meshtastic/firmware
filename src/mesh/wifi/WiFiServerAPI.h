@@ -1,7 +1,6 @@
 #pragma once
 
 #include "StreamAPI.h"
-#include "concurrency/OSThread.h"
 #include <WiFi.h>
 
 /**
@@ -18,15 +17,18 @@ class WiFiServerAPI : public StreamAPI
 
     virtual ~WiFiServerAPI();
 
-    /// @return true if we want to keep running, or false if we are ready to be destroyed
-    virtual bool loop(); // Check for dropped client connections
-
     /// override close to also shutdown the TCP link
     virtual void close();
 
   protected:
-    /// Hookable to find out when connection changes
-    virtual void onConnectionChanged(bool connected);
+
+    /// We override this method to prevent publishing EVENT_SERIAL_CONNECTED/DISCONNECTED for wifi links (we want the board to stay in the POWERED state to prevent disabling wifi)
+    virtual void onConnectionChanged(bool connected) {}
+
+    virtual int32_t runOnce(); // Check for dropped client connections
+
+    /// Check the current underlying physical link to see if the client is currently connected
+    virtual bool checkIsConnected();
 };
 
 /**

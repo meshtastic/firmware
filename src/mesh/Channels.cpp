@@ -33,7 +33,7 @@ int16_t Channels::generateHash(ChannelIndex channelNum)
         return -1; // invalid
     else {
         const char *name = getName(channelNum);
-        uint8_t h = xorHash((const uint8_t *) name, strlen(name));
+        uint8_t h = xorHash((const uint8_t *)name, strlen(name));
 
         h ^= xorHash(k.bytes, k.length);
 
@@ -184,7 +184,7 @@ void Channels::onConfigChanged()
 
 Channel &Channels::getByIndex(ChannelIndex chIndex)
 {
-    assert(chIndex < channelFile.channels_count);
+    assert(chIndex < channelFile.channels_count); // This should be equal to MAX_NUM_CHANNELS
     Channel *ch = channelFile.channels + chIndex;
     return *ch;
 }
@@ -278,11 +278,11 @@ const char *Channels::getPrimaryName()
  */
 bool Channels::decryptForHash(ChannelIndex chIndex, ChannelHash channelHash)
 {
-    if(chIndex > getNumChannels() || getHash(chIndex) != channelHash) {
-        // DEBUG_MSG("Skipping channel %d (hash %x) due to invalid hash/index, want=%x\n", chIndex, getHash(chIndex), channelHash);
+    if (chIndex > getNumChannels() || getHash(chIndex) != channelHash) {
+        // DEBUG_MSG("Skipping channel %d (hash %x) due to invalid hash/index, want=%x\n", chIndex, getHash(chIndex),
+        // channelHash);
         return false;
-    }
-    else {
+    } else {
         DEBUG_MSG("Using channel %d (hash 0x%x)\n", chIndex, channelHash);
         setCrypto(chIndex);
         return true;

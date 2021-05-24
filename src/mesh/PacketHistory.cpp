@@ -27,7 +27,7 @@ bool PacketHistory::wasSeenRecently(const MeshPacket *p, bool withUpdate)
             recentPackets.erase(recentPackets.begin() + i); // delete old record
         } else {
             if (r.id == p->id && r.sender == getFrom(p)) {
-                DEBUG_MSG("Found existing packet record for fr=0x%x,to=0x%x,id=%d\n", p->from, p->to, p->id);
+                DEBUG_MSG("Found existing packet record for fr=0x%x,to=0x%x,id=0x%x\n", p->from, p->to, p->id);
 
                 // Update the time on this record to now
                 if (withUpdate)

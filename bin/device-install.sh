@@ -1,21 +1,24 @@
 #!/bin/sh
 
+PYTHON=${PYTHON:-$(which python3 python|head -n 1)}
+
 set -e
 
 # Usage info
 show_help() {
 cat << EOF
-Usage: ${0##*/} [-h] [-p ESPTOOL_PORT] [-f FILENAME]
+Usage: $(basename $0) [-h] [-p ESPTOOL_PORT] [-P PYTHON] [-f FILENAME|FILENAME]
 Flash image file to device, but first erasing and writing system information"
 
     -h               Display this help and exit
     -p ESPTOOL_PORT  Set the environment variable for ESPTOOL_PORT.  If not set, ESPTOOL iterates all ports (Dangerrous).
-    -f FILENAME         The .bin file to flash.  Custom to your device type and region.
+    -P PYTHON        Specify alternate python interpreter to use to invoke esptool. (Default: "$PYTHON")
+    -f FILENAME      The .bin file to flash.  Custom to your device type and region.
 EOF
 }
 
 
-while getopts ":h:p:f:" opt; do
+while getopts ":hp:P:f:" opt; do
     case "${opt}" in
         h)
             show_help
@@ -23,6 +26,8 @@ while getopts ":h:p:f:" opt; do
             ;;
         p)  export ESPTOOL_PORT=${OPTARG}
 	    ;;
+        P)  PYTHON=${OPTARG}
+            ;;
         f)  FILENAME=${OPTARG}
             ;;
         *)
@@ -34,12 +39,17 @@ while getopts ":h:p:f:" opt; do
 done
 shift "$((OPTIND-1))"
 
+[ -z "$FILENAME" -a -n "$1" ] && {
+    FILENAME=$1
+    shift
+}
+
 if [ -f "${FILENAME}" ]; then
 	echo "Trying to flash ${FILENAME}, but first erasing and writing system information"
-	esptool.py --baud 921600 erase_flash
-	esptool.py --baud 921600 write_flash 0x1000 system-info.bin
-    esptool.py --baud 921600 write_flash 0x00390000 spiffs-*.bin
-	esptool.py --baud 921600 write_flash 0x10000 ${FILENAME}
+	$PYTHON -m esptool --baud 921600 erase_flash
+	$PYTHON -m esptool --baud 921600 write_flash 0x1000 system-info.bin
+	$PYTHON -m esptool --baud 921600 write_flash 0x00390000 spiffs-*.bin
+	$PYTHON -m esptool --baud 921600 write_flash 0x10000 ${FILENAME}
 else
 	echo "Invalid file: ${FILENAME}"
 	show_help

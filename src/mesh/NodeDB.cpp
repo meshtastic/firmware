@@ -23,6 +23,8 @@
 
 #ifndef NO_ESP32
 #include "mesh/http/WiFiAPClient.h"
+#include "plugins/esp32/StoreForwardPlugin.h"
+#include <Preferences.h>
 #endif
 
 NodeDB nodeDB;
@@ -82,16 +84,17 @@ bool NodeDB::resetRadioConfig()
 
     radioGeneration++;
 
+    radioConfig.has_preferences = true;
     if (radioConfig.preferences.factory_reset) {
         DEBUG_MSG("Performing factory reset!\n");
         installDefaultDeviceState();
         didFactoryReset = true;
-    } else if (channelFile.channels_count == 0) {
+    }
+
+    if (channelFile.channels_count != MAX_NUM_CHANNELS) {
         DEBUG_MSG("Setting default channel and radio preferences!\n");
 
         channels.initDefaults();
-
-        radioConfig.has_preferences = true;
     }
 
     channels.onConfigChanged();
@@ -206,12 +209,13 @@ void NodeDB::init()
     // removed from 1.2 (though we do use old values if found)
     // We set these _after_ loading from disk - because they come from the build and are more trusted than
     // what is stored in flash
-    //if (xstr(HW_VERSION)[0])
+    // if (xstr(HW_VERSION)[0])
     //    strncpy(myNodeInfo.region, optstr(HW_VERSION), sizeof(myNodeInfo.region));
-    // else DEBUG_MSG("This build does not specify a HW_VERSION\n"); // Eventually new builds will no longer include this build flag
+    // else DEBUG_MSG("This build does not specify a HW_VERSION\n"); // Eventually new builds will no longer include this build
+    // flag
 
     // DEBUG_MSG("legacy region %d\n", devicestate.legacyRadio.preferences.region);
-    if(radioConfig.preferences.region == RegionCode_Unset)
+    if (radioConfig.preferences.region == RegionCode_Unset)
         radioConfig.preferences.region = devicestate.legacyRadio.preferences.region;
 
     // Check for the old style of region code strings, if found, convert to the new enum.
@@ -226,10 +230,19 @@ void NodeDB::init()
     }
 
     strncpy(myNodeInfo.firmware_version, optstr(APP_VERSION), sizeof(myNodeInfo.firmware_version));
-    
+
     // hw_model is no longer stored in myNodeInfo (as of 1.2.11) - we now store it as an enum in nodeinfo
     myNodeInfo.hw_model_deprecated[0] = '\0';
     // strncpy(myNodeInfo.hw_model, HW_VENDOR, sizeof(myNodeInfo.hw_model));
+
+#ifndef NO_ESP32
+    Preferences preferences;
+    preferences.begin("meshtastic", false);
+    myNodeInfo.reboot_count = preferences.getUInt("rebootCounter", 0);
+    preferences.end();
+    DEBUG_MSG("Number of Device Reboots: %d\n", myNodeInfo.reboot_count);
+
+#endif
 
     resetRadioConfig(); // If bogus settings got saved, then fix them
 
@@ -373,7 +386,7 @@ void NodeDB::saveChannelsToDisk()
         FS.mkdir("/prefs");
 #endif
         saveProto(channelfile, ChannelFile_size, sizeof(ChannelFile), ChannelFile_fields, &channelFile);
-    }  
+    }
 }
 
 void NodeDB::saveToDisk()
@@ -406,8 +419,7 @@ uint32_t sinceLastSeen(const NodeInfo *n)
 {
     uint32_t now = getTime();
 
-    uint32_t last_seen = n->position.time;
-    int delta = (int)(now - last_seen);
+    int delta = (int)(now - n->last_heard);
     if (delta < 0) // our clock must be slightly off still - not set from GPS yet
         delta = 0;
 
@@ -441,7 +453,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p)
     // Be careful to only update fields that have been set by the sender
     // A lot of position reports don't have time populated.  In that case, be careful to not blow away the time we
     // recorded based on the packet rxTime
-    if (!info->position.time && p.time)
+    if (p.time)
         info->position.time = p.time;
     if (p.battery_level)
         info->position.battery_level = p.battery_level;
@@ -449,6 +461,8 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p)
         info->position.latitude_i = p.latitude_i;
         info->position.longitude_i = p.longitude_i;
     }
+    if (p.altitude)
+        info->position.altitude = p.altitude;
     info->has_position = true;
     updateGUIforNode = info;
     notifyObservers(true); // Force an update whether or not our node counts have changed
@@ -484,17 +498,16 @@ void NodeDB::updateUser(uint32_t nodeId, const User &p)
 /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
 void NodeDB::updateFrom(const MeshPacket &mp)
 {
-    if (mp.which_payloadVariant == MeshPacket_decoded_tag) {
+    if (mp.which_payloadVariant == MeshPacket_decoded_tag && mp.from) {
         DEBUG_MSG("Update DB node 0x%x, rx_time=%u\n", mp.from, mp.rx_time);
 
         NodeInfo *info = getOrCreateNode(getFrom(&mp));
 
-        if (mp.rx_time) {              // if the packet has a valid timestamp use it to update our last_seen
-            info->has_position = true; // at least the time is valid
-            info->position.time = mp.rx_time;
-        }
+        if (mp.rx_time) // if the packet has a valid timestamp use it to update our last_heard
+            info->last_heard = mp.rx_time;
 
-        info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
+        if (mp.rx_snr)
+            info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
     }
 }
 
@@ -528,15 +541,24 @@ NodeInfo *NodeDB::getOrCreateNode(NodeNum n)
 }
 
 /// Record an error that should be reported via analytics
-void recordCriticalError(CriticalErrorCode code, uint32_t address)
+void recordCriticalError(CriticalErrorCode code, uint32_t address, const char *filename)
 {
     // Print error to screen and serial port
     String lcd = String("Critical error ") + code + "!\n";
     screen->print(lcd.c_str());
-    DEBUG_MSG("NOTE! Recording critical error %d, address=%lx\n", code, address);
+    if(filename)
+        DEBUG_MSG("NOTE! Recording critical error %d at %s:%lx\n", code, filename, address);
+    else
+        DEBUG_MSG("NOTE! Recording critical error %d, address=%lx\n", code, address);
 
     // Record error to DB
     myNodeInfo.error_code = code;
     myNodeInfo.error_address = address;
     myNodeInfo.error_count++;
+
+    // Currently portuino is mostly used for simulation.  Make sue the user notices something really bad happend
+#ifdef PORTDUINO
+    DEBUG_MSG("A critical failure occurred, portduino is exiting...");
+    exit(2);
+#endif
 }

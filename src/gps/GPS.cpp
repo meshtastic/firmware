@@ -7,7 +7,7 @@
 #include <assert.h>
 
 // If we have a serial GPS port it will not be null
-#ifdef GPS_RX_PIN
+#ifdef GPS_SERIAL_NUM
 HardwareSerial _serial_gps_real(GPS_SERIAL_NUM);
 HardwareSerial *GPS::_serial_gps = &_serial_gps_real;
 #elif defined(NRF52840_XXAA) || defined(NRF52833_XXAA)
@@ -34,7 +34,8 @@ bool GPS::setupGPS()
     if (_serial_gps && !didSerialInit) {
         didSerialInit = true;
 
-#ifdef GPS_RX_PIN
+// ESP32 has a special set of parameters vs other arduino ports
+#if defined(GPS_RX_PIN) && !defined(NO_ESP32)
         _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
 #else
         _serial_gps->begin(GPS_BAUDRATE);
@@ -307,4 +308,50 @@ int GPS::prepareDeepSleep(void *unused)
     setAwake(false);
 
     return 0;
+}
+
+#ifdef GPS_TX_PIN
+#include "UBloxGPS.h"
+#endif
+
+#ifdef HAS_AIR530_GPS
+#include "Air530GPS.h"
+#elif !defined(NO_GPS)
+#include "NMEAGPS.h"
+#endif
+
+GPS *createGps()
+{
+
+#ifdef NO_GPS
+    return nullptr;
+#else
+// If we don't have bidirectional comms, we can't even try talking to UBLOX
+#ifdef GPS_TX_PIN
+    // Init GPS - first try ublox
+    UBloxGPS *ublox = new UBloxGPS();
+
+    if (!ublox->setup()) {
+        DEBUG_MSG("ERROR: No UBLOX GPS found\n");
+        delete ublox;
+        ublox = NULL;
+    } else {
+        return ublox;
+    }
+#endif
+
+    if (GPS::_serial_gps) {
+        // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
+        // assume NMEA at 9600 baud.
+        DEBUG_MSG("Hoping that NMEA might work\n");
+#ifdef HAS_AIR530_GPS
+        GPS *new_gps = new Air530GPS();
+#else
+        GPS *new_gps = new NMEAGPS();
+#endif
+        new_gps->setup();
+        return new_gps;
+    }
+    return nullptr;
+#endif
 }

@@ -1,10 +1,10 @@
 #include "PhoneAPI.h"
+#include "Channels.h"
 #include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
-#include "Channels.h"
 #include <assert.h>
 
 #if FromRadio_size > MAX_TO_FROM_RADIO_SIZE
@@ -15,33 +15,52 @@
 #error ToRadio is too big
 #endif
 
-PhoneAPI::PhoneAPI() {}
-
-void PhoneAPI::init()
+PhoneAPI::PhoneAPI()
 {
-    observe(&service.fromNumChanged);
+    lastContactMsec = millis();
 }
 
-PhoneAPI::~PhoneAPI() {
+PhoneAPI::~PhoneAPI()
+{
     close();
 }
 
-void PhoneAPI::close() {
-    unobserve();
-    state = STATE_SEND_NOTHING;
-    bool oldConnected = isConnected;
-    isConnected = false;
-    if(oldConnected != isConnected)
-        onConnectionChanged(isConnected);
+void PhoneAPI::handleStartConfig()
+{
+    // Must be before setting state (because state is how we know !connected)
+    if (!isConnected()) {
+        onConnectionChanged(true);
+        observe(&service.fromNumChanged);
+    }
+
+    // even if we were already connected - restart our state machine
+    state = STATE_SEND_MY_INFO;
+
+    DEBUG_MSG("Starting API client config\n");
+    nodeInfoForPhone = NULL;   // Don't keep returning old nodeinfos
+    nodeDB.resetReadPointer(); // FIXME, this read pointer should be moved out of nodeDB and into this class - because
+                               // this will break once we have multiple instances of PhoneAPI running independently
+}
+
+void PhoneAPI::close()
+{
+    if (state != STATE_SEND_NOTHING) {
+        state = STATE_SEND_NOTHING;
+
+        unobserve();
+        releasePhonePacket(); // Don't leak phone packets on shutdown
+
+        onConnectionChanged(false);
+    }
 }
 
 void PhoneAPI::checkConnectionTimeout()
 {
-    if (isConnected) {
-        bool newConnected = (millis() - lastContactMsec < getPref_phone_timeout_secs() * 1000L);
-        if (!newConnected) {
-            isConnected = false;
-            onConnectionChanged(isConnected);
+    if (isConnected()) {
+        bool newContact = checkIsConnected();
+        if (!newContact) {
+            DEBUG_MSG("Lost phone connection\n");
+            close();
         }
     }
 }
@@ -49,43 +68,40 @@ void PhoneAPI::checkConnectionTimeout()
 /**
  * Handle a ToRadio protobuf
  */
-void PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
+bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 {
     powerFSM.trigger(EVENT_CONTACT_FROM_PHONE); // As long as the phone keeps talking to us, don't let the radio go to sleep
     lastContactMsec = millis();
-    if (!isConnected) {
-        isConnected = true;
-        onConnectionChanged(isConnected);
-    }
+
     // return (lastContactMsec != 0) &&
 
     memset(&toRadioScratch, 0, sizeof(toRadioScratch));
     if (pb_decode_from_bytes(buf, bufLength, ToRadio_fields, &toRadioScratch)) {
         switch (toRadioScratch.which_payloadVariant) {
-        case ToRadio_packet_tag: {
-            MeshPacket &p = toRadioScratch.packet;
-            printPacket("PACKET FROM PHONE", &p);
-            service.handleToRadio(p);
-            break;
-        }
+        case ToRadio_packet_tag:
+            return handleToRadioPacket(toRadioScratch.packet);
+
         case ToRadio_want_config_id_tag:
             config_nonce = toRadioScratch.want_config_id;
             DEBUG_MSG("Client wants config, nonce=%u\n", config_nonce);
-            state = STATE_SEND_MY_INFO;
 
-            DEBUG_MSG("Reset nodeinfo read pointer\n");
-            nodeInfoForPhone = NULL;   // Don't keep returning old nodeinfos
-            nodeDB.resetReadPointer(); // FIXME, this read pointer should be moved out of nodeDB and into this class - because
-                                       // this will break once we have multiple instances of PhoneAPI running independently
+            handleStartConfig();
+            break;
+
+        case ToRadio_disconnect_tag:
+            close();
             break;
 
         default:
-            DEBUG_MSG("Error: unexpected ToRadio variant\n");
+            // Ignore nop messages
+            // DEBUG_MSG("Error: unexpected ToRadio variant\n");
             break;
         }
     } else {
         DEBUG_MSG("Error: ignoring malformed toradio\n");
     }
+
+    return false;
 }
 
 /**
@@ -120,14 +136,12 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     case STATE_SEND_MY_INFO:
         // If the user has specified they don't want our node to share its location, make sure to tell the phone
         // app not to send locations on our behalf.
-        myNodeInfo.has_gps = (radioConfig.preferences.location_share == LocationSharing_LocDisabled)
-                                 ? true
-                                 : (gps && gps->isConnected()); // Update with latest GPS connect info
+        myNodeInfo.has_gps = gps && gps->isConnected(); // Update with latest GPS connect info
         fromRadioScratch.which_payloadVariant = FromRadio_my_info_tag;
         fromRadioScratch.my_info = myNodeInfo;
         state = STATE_SEND_NODEINFO;
 
-        service.refreshMyNodeInfo();  // Update my NodeInfo because the client will be asking for it soon.
+        service.refreshMyNodeInfo(); // Update my NodeInfo because the client will be asking for it soon.
         break;
 
     case STATE_SEND_NODEINFO: {
@@ -135,7 +149,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         nodeInfoForPhone = NULL; // We just consumed a nodeinfo, will need a new one next time
 
         if (info) {
-            DEBUG_MSG("Sending nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s\n", info->num, info->position.time, info->user.id,
+            DEBUG_MSG("Sending nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s\n", info->num, info->last_heard, info->user.id,
                       info->user.long_name);
             fromRadioScratch.which_payloadVariant = FromRadio_node_info_tag;
             fromRadioScratch.node_info = *info;
@@ -159,16 +173,13 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     case STATE_SEND_PACKETS:
         // Do we have a message from the mesh?
         if (packetForPhone) {
-
             printPacket("phone downloaded packet", packetForPhone);
 
             // Encapsulate as a FromRadio packet
             fromRadioScratch.which_payloadVariant = FromRadio_packet_tag;
             fromRadioScratch.packet = *packetForPhone;
-
-            service.releaseToPool(packetForPhone); // we just copied the bytes, so don't need this buffer anymore
-            packetForPhone = NULL;
         }
+        releasePhonePacket();
         break;
 
     default:
@@ -185,6 +196,16 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
     DEBUG_MSG("no FromRadio packet available\n");
     return 0;
+}
+
+void PhoneAPI::handleDisconnect() {}
+
+void PhoneAPI::releasePhonePacket()
+{
+    if (packetForPhone) {
+        service.releaseToPool(packetForPhone); // we just copied the bytes, so don't need this buffer anymore
+        packetForPhone = NULL;
+    }
 }
 
 /**
@@ -226,7 +247,13 @@ bool PhoneAPI::available()
 /**
  * Handle a packet that the phone wants us to send.  It is our responsibility to free the packet to the pool
  */
-void PhoneAPI::handleToRadioPacket(MeshPacket *p) {}
+bool PhoneAPI::handleToRadioPacket(MeshPacket &p)
+{
+    printPacket("PACKET FROM PHONE", &p);
+    service.handleToRadio(p);
+
+    return true;
+}
 
 /// If the mesh service tells us fromNum has changed, tell the phone
 int PhoneAPI::onNotify(uint32_t newValue)

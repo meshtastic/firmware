@@ -1,12 +1,12 @@
 #pragma once
 
+#include "Channels.h"
 #include "MemoryPool.h"
 #include "MeshTypes.h"
 #include "Observer.h"
 #include "PointerQueue.h"
 #include "RadioInterface.h"
 #include "concurrency/OSThread.h"
-#include "Channels.h"
 
 /**
  * A mesh aware router that supports multiple interfaces.
@@ -22,7 +22,6 @@ class Router : protected concurrency::OSThread
     RadioInterface *iface = NULL;
 
   public:
-
     /**
      * Constructor
      *
@@ -32,11 +31,7 @@ class Router : protected concurrency::OSThread
     /**
      * Currently we only allow one interface, that may change in the future
      */
-    void addInterface(RadioInterface *_iface)
-    {
-        iface = _iface;
-        iface->setReceiver(&fromRadioQueue);
-    }
+    void addInterface(RadioInterface *_iface) { iface = _iface; }
 
     /**
      * do idle processing
@@ -53,7 +48,7 @@ class Router : protected concurrency::OSThread
     ErrorCode sendLocal(MeshPacket *p);
 
     /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
-    bool cancelSending(NodeNum from, PacketId id);    
+    bool cancelSending(NodeNum from, PacketId id);
 
     /** Allocate and return a meshpacket which defaults as send to broadcast from the current node.
      * The returned packet is guaranteed to have a unique packet ID already assigned
@@ -69,6 +64,12 @@ class Router : protected concurrency::OSThread
      */
     void setReceivedMessage();
 
+    /**
+     * RadioInterface calls this to queue up packets that have been received from the radio.  The router is now responsible for
+     * freeing the packet
+     */
+    void enqueueReceivedMessage(MeshPacket *p);
+
   protected:
     friend class RoutingPlugin;
 
@@ -83,7 +84,7 @@ class Router : protected concurrency::OSThread
 
     /**
      * Should this incoming filter be dropped?
-     * 
+     *
      * FIXME, move this into the new RoutingPlugin and do the filtering there using the regular plugin logic
      *
      * Called immedately on receiption, before any further processing.
@@ -98,17 +99,10 @@ class Router : protected concurrency::OSThread
     virtual void sniffReceived(const MeshPacket *p, const Routing *c);
 
     /**
-     * Remove any encryption and decode the protobufs inside this packet (if necessary).
-     *
-     * @return true for success, false for corrupt packet.
-     */
-    bool perhapsDecode(MeshPacket *p);
-
-    /**
      * Send an ack or a nak packet back towards whoever sent idFrom
      */
     void sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex);
-    
+
   private:
     /**
      * Called from loop()
@@ -133,6 +127,17 @@ class Router : protected concurrency::OSThread
     /** Frees the provided packet, and generates a NAK indicating the speicifed error while sending */
     void abortSendAndNak(Routing_Error err, MeshPacket *p);
 };
+
+/** FIXME - move this into a mesh packet class
+ * Remove any encryption and decode the protobufs inside this packet (if necessary).
+ *
+ * @return true for success, false for corrupt packet.
+ */
+bool perhapsDecode(MeshPacket *p);
+
+/** Return 0 for success or a Routing_Errror code for failure
+ */
+Routing_Error perhapsEncode(MeshPacket *p);
 
 extern Router *router;
 

@@ -42,7 +42,6 @@ typedef struct {
 class RadioInterface
 {
     friend class MeshRadio; // for debugging we let that class touch pool
-    PointerQueue<MeshPacket> *rxDest = NULL;
 
     CallbackObserver<RadioInterface, void *> configChangedObserver =
         CallbackObserver<RadioInterface, void *>(this, &RadioInterface::reloadConfig);
@@ -82,16 +81,10 @@ class RadioInterface
     float freq = 915.0;
 
     /** pool is the pool we will alloc our rx packets from
-     * rxDest is where we will send any rx packets, it becomes receivers responsibility to return packet to the pool
      */
     RadioInterface();
 
     virtual ~RadioInterface() {}
-
-    /**
-     * Set where to deliver received packets.  This method should only be used by the Router class
-     */
-    void setReceiver(PointerQueue<MeshPacket> *_rxDest) { rxDest = _rxDest; }
 
     /**
      * Return true if we think the board can go to sleep (i.e. our tx queue is empty, we are not sending or receiving)
@@ -104,7 +97,11 @@ class RadioInterface
     virtual bool sleep() { return true; }
 
     /// Disable this interface (while disabled, no packets can be sent or received)
-    void disable() { disabled = true; sleep(); }
+    void disable()
+    {
+        disabled = true;
+        sleep();
+    }
 
     /**
      * Send a packet (possibly by enquing in a private fifo).  This routine will
@@ -126,7 +123,7 @@ class RadioInterface
     /// Apply any radio provisioning changes
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
-    virtual bool reconfigure() = 0;
+    virtual bool reconfigure();
 
     /** The delay to use for retransmitting dropped packets */
     uint32_t getRetransmissionMsec(const MeshPacket *p);
@@ -154,6 +151,9 @@ class RadioInterface
      */
     float getFreq();
 
+    /// Some boards (1st gen Pinetab Lora module) have broken IRQ wires, so we need to poll via i2c registers
+    virtual bool isIRQPending() { return false; }
+
   protected:
     int8_t power = 17; // Set by applyModemConfig()
 
@@ -175,13 +175,6 @@ class RadioInterface
     void limitPower();
 
     /**
-     * Convert our modemConfig enum into wf, sf, etc...
-     *
-     * These paramaters will be pull from the channelSettings global
-     */
-    virtual void applyModemConfig();
-
-    /**
      * Save the frequency we selected for later reuse.
      */
     virtual void saveFreq(float savedFreq);
@@ -192,6 +185,13 @@ class RadioInterface
     virtual void saveChannelNum(uint32_t savedChannelNum);
 
   private:
+    /**
+     * Convert our modemConfig enum into wf, sf, etc...
+     *
+     * These paramaters will be pull from the channelSettings global
+     */
+    void applyModemConfig();
+
     /// Return 0 if sleep is okay
     int preflightSleepCb(void *unused = NULL) { return canSleep() ? 0 : 1; }
 
@@ -208,18 +208,6 @@ class SimRadio : public RadioInterface
 {
   public:
     virtual ErrorCode send(MeshPacket *p);
-
-    // methods from radiohead
-
-    /// Initialise the Driver transport hardware and software.
-    /// Make sure the Driver is properly configured before calling init().
-    /// \return true if initialisation succeeded.
-    virtual bool init() { return true; }
-
-    /// Apply any radio provisioning changes
-    /// Make sure the Driver is properly configured before calling init().
-    /// \return true if initialisation succeeded.
-    virtual bool reconfigure() { return true; }
 };
 
 /// Debug printing for packets

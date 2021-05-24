@@ -186,9 +186,19 @@ bool SerialPluginRadio::handleReceived(const MeshPacket &mp)
             }
 
         } else {
-            // DEBUG_MSG("* * Message came from the mesh\n");
-            // Serial2.println("* * Message came from the mesh");
-            Serial2.printf("%s", p.payload.bytes);
+
+            if (radioConfig.preferences.serialplugin_mode == 0 || radioConfig.preferences.serialplugin_mode == 1) {
+                // DEBUG_MSG("* * Message came from the mesh\n");
+                // Serial2.println("* * Message came from the mesh");
+                Serial2.printf("%s", p.payload.bytes);
+
+            } else if (radioConfig.preferences.serialplugin_mode == 10) {
+                /*
+                 @jobionekabnoi
+                    Add code here to handle what gets sent out to the serial interface.
+                    Format it the way you want.
+                 */
+            }
         }
 
     } else {

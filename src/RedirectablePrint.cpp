@@ -1,4 +1,5 @@
 #include "RedirectablePrint.h"
+#include "RTC.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include <assert.h>
@@ -27,7 +28,8 @@ size_t RedirectablePrint::write(uint8_t c)
 #endif
 
     dest->write(c);
-    return 1; // We always claim one was written, rather than trusting what the serial port said (which could be zero)
+    return 1; // We always claim one was written, rather than trusting what the
+              // serial port said (which could be zero)
 }
 
 size_t RedirectablePrint::vprintf(const char *format, va_list arg)
@@ -52,10 +54,6 @@ size_t RedirectablePrint::vprintf(const char *format, va_list arg)
     return len;
 }
 
-#define SEC_PER_DAY 86400
-#define SEC_PER_HOUR 3600
-#define SEC_PER_MIN 60
-
 size_t RedirectablePrint::logDebug(const char *format, ...)
 {
     size_t r = 0;
@@ -71,9 +69,9 @@ size_t RedirectablePrint::logDebug(const char *format, ...)
 
         // If we are the first message on a report, include the header
         if (!isContinuationMessage) {
-            struct timeval tv;
-            if (!gettimeofday(&tv, NULL)) {
-                long hms = tv.tv_sec % SEC_PER_DAY;
+            uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityFromNet);
+            if (rtc_sec > 0) {
+                long hms = rtc_sec % SEC_PER_DAY;
                 // hms += tz.tz_dsttime * SEC_PER_HOUR;
                 // hms -= tz.tz_minuteswest * SEC_PER_MIN;
                 // mod `hms` to ensure in positive range of [0...SEC_PER_DAY)
