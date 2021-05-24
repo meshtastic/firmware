@@ -32,7 +32,7 @@ bool isWifiAvailable()
 {
     // If wifi status is connected, return true regardless of the radio configuration.
     if (isSoftAPForced()) {
-        return 1;
+        return true;
     }
 
     const char *wifiName = radioConfig.preferences.wifi_ssid;
@@ -47,9 +47,9 @@ bool isWifiAvailable()
     // radioConfig.preferences.wifi_ap_mode = false;
 
     if (*wifiName) {
-        return 1;
+        return true;
     } else {
-        return 0;
+        return false;
     }
 }
 
