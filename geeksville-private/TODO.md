@@ -2,7 +2,7 @@
 
 You probably don't care about this section - skip to the next one.
 
-* investigate TCP on ESP32 https://github.com/meshtastic/Meshtastic-python/issues/90
+* DONE investigate TCP on ESP32 https://github.com/meshtastic/Meshtastic-device/issues/807
 * fix python tool problem with windows and the heartbeat
 * router mode dropping messages? https://meshtastic.discourse.group/t/router-mode-missing-messages/3329/3
 * fix ttgo eink screen
