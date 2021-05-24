@@ -22,6 +22,9 @@ class WiFiServerAPI : public StreamAPI
 
   protected:
 
+    /// We override this method to prevent publishing EVENT_SERIAL_CONNECTED/DISCONNECTED for wifi links (we want the board to stay in the POWERED state to prevent disabling wifi)
+    virtual void onConnectionChanged(bool connected) {}
+
     virtual int32_t runOnce(); // Check for dropped client connections
 
     /// Check the current underlying physical link to see if the client is currently connected
