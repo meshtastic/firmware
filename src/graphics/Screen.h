@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string.h>
 #include <cstring>
 
 #include <OLEDDisplayUi.h>
@@ -25,6 +26,8 @@
 #ifndef BRIGHTNESS_DEFAULT
 #define BRIGHTNESS_DEFAULT 150
 #endif
+
+using namespace std;
 
 namespace graphics
 {

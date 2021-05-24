@@ -4,6 +4,9 @@
 #include <assert.h>
 #include <sys/time.h>
 #include <time.h>
+#include <cstring>
+
+using namespace std;
 
 /**
  * A printer that doesn't go anywhere
