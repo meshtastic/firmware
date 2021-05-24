@@ -44,8 +44,6 @@ class Screen
 #define BRIGHTNESS_DEFAULT 150
 #endif
 
-using namespace std;
-
 namespace graphics
 {
 

@@ -7,8 +7,6 @@
 #include <time.h>
 #include <cstring>
 
-using namespace std;
-
 /**
  * A printer that doesn't go anywhere
  */
