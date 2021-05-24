@@ -51,7 +51,7 @@ struct PendingPacket {
 class GlobalPacketIdHashFunction
 {
   public:
-    size_t operator()(const GlobalPacketId &p) const { return (hash<NodeNum>()(p.node)) ^ (hash<PacketId>()(p.id)); }
+    size_t operator()(const GlobalPacketId &p) const { return (std::hash<NodeNum>()(p.node)) ^ (std::hash<PacketId>()(p.id)); }
 };
 
 /**
@@ -60,7 +60,7 @@ class GlobalPacketIdHashFunction
 class ReliableRouter : public FloodingRouter
 {
   private:
-    unordered_map<GlobalPacketId, PendingPacket, GlobalPacketIdHashFunction> pending;
+    std::unordered_map<GlobalPacketId, PendingPacket, GlobalPacketIdHashFunction> pending;
 
   public:
     /**
