@@ -1,6 +1,8 @@
+set -e 
+
 echo "This script is only for developers who are publishing new builds on github.  Most users don't need it"
 
-VERSION=`bin/buildinfo.py`
+VERSION=`bin/buildinfo.py short`
 
 # Must have a V prefix to trigger github
 git tag "v${VERSION}"
