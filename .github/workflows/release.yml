@@ -49,7 +49,7 @@ jobs:
 
     # Will be available in steps.version.outputs.version
     - name: Get version string
-      run: echo "::set-output name=version::$(./bin/buildinfo.py)"
+      run: echo "::set-output name=version::$(./bin/buildinfo.py long)"
       id: version
 
     - name: Build everything

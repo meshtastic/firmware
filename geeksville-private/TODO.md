@@ -2,25 +2,21 @@
 
 You probably don't care about this section - skip to the next one.
 
-## before next release
-
-* fix python tool problem with windows and the heartbeat
+* admin remote nodes reboot sometimes https://github.com/meshtastic/Meshtastic-device/issues/811
+* router mode dropping messages? https://meshtastic.discourse.group/t/router-mode-missing-messages/3329/3
 * fix ttgo eink screen
-* fix this sleep problem: https://meshtastic.discourse.group/t/new-device-release-1-2-30-ready-for-alpha-testing/3272/13?u=geeksville
-* make native sim not touch hardware
-* reenable sim in CI builds
+* list portduino on platformio
 * figure our wss for mqtt.meshtastic - use cloudflare? 2052 ws, 2053 crypt
-* release android APK - fix recent 1.2.28 crash report
-* turn on setTx(timeout) and   state = setDioIrqParams(SX126X_IRQ_TX_DONE | SX126X_IRQ_TIMEOUT, SX126X_IRQ_TX_DONE | SX126X_IRQ_TIMEOUT); in sx1262 code
 * pine64 lora module
 * @havealoha fixedposition not working
-* @luxonn reports that after a while the android app stops showing new messages
 * ask for vercel access
 * finish plan for riot.im
-
+* turn on setTx(timeout) and   state = setDioIrqParams(SX126X_IRQ_TX_DONE | SX126X_IRQ_TIMEOUT, SX126X_IRQ_TX_DONE | SX126X_IRQ_TIMEOUT); in sx1262 code
 * add rak4600 support (with rf95 radio and limited ram)
 
 * Switch to use https://github.com/adafruit/Adafruit_nRF52_Arduino.git when available (see arduino code for examples)
+* DONE @luxonn reports that after a while the android app stops showing new messages
+* DONE release android APK - fix recent 1.2.28 crash report
 * DONE remote admin busted? 
 * DONE check android code - @havealoha comments about odd sleep behavior
 * ABANDONED test github actions locally on linux
