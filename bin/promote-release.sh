@@ -5,7 +5,7 @@ echo "This script is only for developers who are publishing new builds on github
 VERSION=`bin/buildinfo.py short`
 
 # Must have a V prefix to trigger github
-git tag "v${VERSION}"
-git push root "v${VERSION}" # push the tag
+git tag -f "v${VERSION}"
+git push root -f "v${VERSION}" # push the tag
 
 echo "Tag ${VERSION} pushed to github, github actions should now be building the draft release.  If it seems good, click to publish it"
