@@ -2,20 +2,16 @@
 
 You probably don't care about this section - skip to the next one.
 
-* DONE investigate TCP on ESP32 https://github.com/meshtastic/Meshtastic-device/issues/807
-* DONE fix python tool problem with windows and the heartbeat
+* admin remote nodes reboot sometimes https://github.com/meshtastic/Meshtastic-device/issues/811
 * router mode dropping messages? https://meshtastic.discourse.group/t/router-mode-missing-messages/3329/3
 * fix ttgo eink screen
 * list portduino on platformio
-* DONE make native sim not touch hardware
-* DONE reenable sim in CI builds
 * figure our wss for mqtt.meshtastic - use cloudflare? 2052 ws, 2053 crypt
 * pine64 lora module
 * @havealoha fixedposition not working
 * ask for vercel access
 * finish plan for riot.im
 * turn on setTx(timeout) and   state = setDioIrqParams(SX126X_IRQ_TX_DONE | SX126X_IRQ_TIMEOUT, SX126X_IRQ_TX_DONE | SX126X_IRQ_TIMEOUT); in sx1262 code
-* DONE fix this sleep problem: https://meshtastic.discourse.group/t/new-device-release-1-2-30-ready-for-alpha-testing/3272/13?u=geeksville
 * add rak4600 support (with rf95 radio and limited ram)
 
 * Switch to use https://github.com/adafruit/Adafruit_nRF52_Arduino.git when available (see arduino code for examples)
