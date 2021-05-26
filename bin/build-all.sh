@@ -98,6 +98,6 @@ XML
 
 echo Generating $ARCHIVEDIR/firmware-$VERSION.zip
 rm -f $ARCHIVEDIR/firmware-$VERSION.zip
-zip --junk-paths $ARCHIVEDIR/firmware-$VERSION.zip $ARCHIVEDIR/spiffs-$VERSION.bin $OUTDIR/bins/universal/firmware-*-$VERSION.* images/system-info.bin bin/device-install.sh bin/device-update.sh
+zip --junk-paths $ARCHIVEDIR/firmware-$VERSION.zip $ARCHIVEDIR/spiffs-$VERSION.bin $OUTDIR/bins/universal/firmware-*-$VERSION.* images/system-info.bin bin/device-install.sh bin/device-update.sh images/system-info.bin bin/device-install.bat bin/device-update.bat
 
 echo BUILT ALL
