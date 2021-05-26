@@ -1,7 +1,7 @@
 //#include "mesh/wifi/WebServer.h"
 #include "configuration.h"
 
-#ifndef NO_ESP32
+#ifdef NO_ESP32
 
 //#include "mesh/wifi/WiFiAPClient.h"
 
