@@ -4,8 +4,6 @@
 #include <queue>
 #include <unordered_set>
 
-using namespace std;
-
 /// We clear our old flood record five minute after we see the last of it
 #define FLOOD_EXPIRE_TIME (5 * 60 * 1000L)
 
@@ -23,7 +21,7 @@ struct PacketRecord {
 class PacketRecordHashFunction
 {
   public:
-    size_t operator()(const PacketRecord &p) const { return (hash<NodeNum>()(p.sender)) ^ (hash<PacketId>()(p.id)); }
+    size_t operator()(const PacketRecord &p) const { return (std::hash<NodeNum>()(p.sender)) ^ (std::hash<PacketId>()(p.id)); }
 };
 
 /// Order packet records by arrival time, we want the oldest packets to be in the front of our heap
@@ -54,7 +52,7 @@ class PacketHistory
     /** FIXME: really should be a std::unordered_set with the key being sender,id.
      * This would make checking packets in wasSeenRecently faster.
      */
-    vector<PacketRecord> recentPackets;
+    std::vector<PacketRecord> recentPackets;
     // priority_queue<PacketRecord, vector<PacketRecord>, PacketRecordOrderFunction> arrivalTimes;
     // unordered_set<PacketRecord, PacketRecordHashFunction> recentPackets;
 

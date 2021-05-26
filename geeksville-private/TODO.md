@@ -2,10 +2,10 @@
 
 You probably don't care about this section - skip to the next one.
 
-* admin remote nodes reboot sometimes https://github.com/meshtastic/Meshtastic-device/issues/811
+* list portduino on platformio
+* add crash logging to flash and use memory pools - admin remote nodes reboot sometimes https://github.com/meshtastic/Meshtastic-device/issues/811
 * router mode dropping messages? https://meshtastic.discourse.group/t/router-mode-missing-messages/3329/3
 * fix ttgo eink screen
-* list portduino on platformio
 * figure our wss for mqtt.meshtastic - use cloudflare? 2052 ws, 2053 crypt
 * pine64 lora module
 * @havealoha fixedposition not working
