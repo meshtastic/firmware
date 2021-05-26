@@ -78,9 +78,16 @@ jobs:
     - name: Build everything
       run: bin/build-all.sh
 
-    - name: Store release zip as an artifact
+    - name: Store binaries as an artifact
       uses: actions/upload-artifact@v2
       with:
         name: built
         path: release/archive/firmware-*.zip
         retention-days: 30
+
+    - name: Store debugging elf files as an artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: debug-elfs
+        path: release/archive/elfs-*.zip
+        retention-days: 7
