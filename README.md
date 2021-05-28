@@ -187,7 +187,7 @@ Hard resetting via RTS pin...
 
 # Meshtastic Android app
 
-The companion (optional) Meshtastic Android app is [here](https://play.google.com/store/apps/details?id=com.geeksville.mesh&referrer=utm_source%3Dgithub-dev-readme). You can also download it on Google Play.
+The companion (optional, free, open-source) Meshtastic Android app is available on various appstores [see this page for details](https://github.com/meshtastic/Meshtastic-Android/blob/master/README.md).
 
 # Python API
 
