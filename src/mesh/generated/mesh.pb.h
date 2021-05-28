@@ -34,7 +34,7 @@ typedef enum _HardwareModel {
 
 typedef enum _Constants {
     Constants_Unused = 0,
-    Constants_DATA_PAYLOAD_LEN = 240
+    Constants_DATA_PAYLOAD_LEN = 237
 } Constants;
 
 typedef enum _CriticalErrorCode {
