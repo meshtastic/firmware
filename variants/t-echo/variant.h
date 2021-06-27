@@ -213,7 +213,7 @@ External serial flash WP25R1635FZUIL0
 // FIXME - I think this is actually just the board power enable - it enables power to the CPU also 
 #define PIN_EINK_PWR_ON (0 + 12)
 
-#define HAS_EINK2
+#define HAS_EINK
 
 // No screen wipes on eink
 #define SCREEN_TRANSITION_MSECS 0
