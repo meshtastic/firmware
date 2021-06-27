@@ -35,7 +35,7 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
     uint32_t now = millis();
     uint32_t sinceLast = now - lastDrawMsec;
 
-    if (false && adafruitDisplay && (sinceLast > msecLimit || lastDrawMsec == 0)) {
+    if (adafruitDisplay && (sinceLast > msecLimit || lastDrawMsec == 0)) {
         lastDrawMsec = now;
 
         // FIXME - only draw bits have changed (use backbuf similar to the other displays)
@@ -54,7 +54,7 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
         // ePaper.Reset(); // wake the screen from sleep
         adafruitDisplay->display(false); // FIXME, use partial update mode
         // Put screen to sleep to save power (possibly not necessary because we already did poweroff inside of display)
-        // adafruitDisplay->hibernate();
+        adafruitDisplay->hibernate();
         DEBUG_MSG("done\n");
 
         return true;
@@ -100,15 +100,15 @@ bool EInkDisplay::connect()
     auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS,
                                                             PIN_EINK_DC,
                                                             PIN_EINK_RES,
-                                                            PIN_EINK_BUSY);
+                                                            PIN_EINK_BUSY, SPI1);
 
     adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
     adafruitDisplay->init();
     adafruitDisplay->setRotation(1);
-    adafruitDisplay->setFullWindow();
-    adafruitDisplay->fillScreen(UNCOLORED);
-    adafruitDisplay->drawCircle(100, 100, 20, COLORED);
-    adafruitDisplay->display(false);
+    //adafruitDisplay->setFullWindow();
+    //adafruitDisplay->fillScreen(UNCOLORED);
+    //adafruitDisplay->drawCircle(100, 100, 20, COLORED);
+    //adafruitDisplay->display(false);
 
     return true;
 }
