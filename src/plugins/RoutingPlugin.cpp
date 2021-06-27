@@ -1,8 +1,8 @@
+#include "configuration.h"
 #include "RoutingPlugin.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Router.h"
-#include "configuration.h"
 #include "main.h"
 
 RoutingPlugin *routingPlugin;

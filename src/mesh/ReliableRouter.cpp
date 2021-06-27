@@ -1,7 +1,7 @@
+#include "configuration.h"
 #include "ReliableRouter.h"
 #include "MeshPlugin.h"
 #include "MeshTypes.h"
-#include "configuration.h"
 #include "mesh-pb-constants.h"
 
 // ReliableRouter::ReliableRouter() {}

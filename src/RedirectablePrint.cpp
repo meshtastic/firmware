@@ -1,7 +1,7 @@
+#include "configuration.h"
 #include "RedirectablePrint.h"
 #include "RTC.h"
 #include "concurrency/OSThread.h"
-#include "configuration.h"
 #include <assert.h>
 #include <sys/time.h>
 #include <time.h>

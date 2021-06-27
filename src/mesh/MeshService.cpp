@@ -1,5 +1,4 @@
-
-#include <Arduino.h>
+#include "configuration.h"
 #include <assert.h>
 #include <string>
 

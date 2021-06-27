@@ -1,3 +1,4 @@
+#include "configuration.h"
 #include "PhoneAPI.h"
 #include "Channels.h"
 #include "GPS.h"

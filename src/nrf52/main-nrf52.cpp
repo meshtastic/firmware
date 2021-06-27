@@ -1,3 +1,4 @@
+#include "configuration.h"
 #include <SPI.h>
 #include <Wire.h>
 #include <assert.h>
@@ -6,7 +7,6 @@
 #include <stdio.h>
 
 #include "NRF52Bluetooth.h"
-#include "configuration.h"
 #include "error.h"
 
 #ifdef BQ25703A_ADDR

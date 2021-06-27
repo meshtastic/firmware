@@ -1,3 +1,4 @@
+#include "configuration.h"
 #include "UBloxGPS.h"
 #include "RTC.h"
 #include "error.h"

@@ -30,7 +30,7 @@ class Screen
 #include <SSD1306Wire.h>
 #endif
 
-#include "EInkDisplay.h"
+#include "EInkDisplay2.h"
 #include "TFTDisplay.h"
 #include "TypedQueue.h"
 #include "commands.h"

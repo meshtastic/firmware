@@ -1,5 +1,5 @@
+#include "configuration.h"
 #include "airtime.h"
-#include <Arduino.h>
 
 #define periodsToLog 48
 
