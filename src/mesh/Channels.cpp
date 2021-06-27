@@ -1,3 +1,4 @@
+#include "configuration.h"
 #include "Channels.h"
 #include "CryptoEngine.h"
 #include "NodeDB.h"

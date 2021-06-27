@@ -1,9 +1,9 @@
+#include "configuration.h"
 #include "AdminPlugin.h"
 #include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Router.h"
-#include "configuration.h"
 #include "main.h"
 
 #ifdef PORTDUINO

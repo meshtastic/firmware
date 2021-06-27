@@ -1,10 +1,10 @@
+#include "configuration.h"
 #include "RadioLibInterface.h"
 #include "MeshTypes.h"
 #include "NodeDB.h"
 #include "SPILock.h"
 #include "error.h"
 #include "mesh-pb-constants.h"
-#include <configuration.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
 

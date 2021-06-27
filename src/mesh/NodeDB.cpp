@@ -1,5 +1,4 @@
-
-#include <Arduino.h>
+#include "configuration.h"
 #include <assert.h>
 
 #include "FS.h"
@@ -14,7 +13,6 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
-#include "configuration.h"
 #include "error.h"
 #include "main.h"
 #include "mesh-pb-constants.h"

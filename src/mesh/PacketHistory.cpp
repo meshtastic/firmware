@@ -1,5 +1,5 @@
-#include "PacketHistory.h"
 #include "configuration.h"
+#include "PacketHistory.h"
 #include "mesh-pb-constants.h"
 
 PacketHistory::PacketHistory()

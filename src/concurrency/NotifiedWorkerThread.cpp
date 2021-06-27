@@ -1,5 +1,5 @@
-#include "NotifiedWorkerThread.h"
 #include "configuration.h"
+#include "NotifiedWorkerThread.h"
 #include "main.h"
 #include <assert.h>
 

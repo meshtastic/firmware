@@ -1,8 +1,8 @@
+#include "configuration.h"
 #include "RF95Interface.h"
 #include "MeshRadio.h" // kinda yucky, but we need to know which region we are in
 #include "RadioLibRF95.h"
 #include "error.h"
-#include <configuration.h>
 
 #define MAX_POWER 20
 // if we use 20 we are limited to 1% duty cycle or hw might overheat.  For continuous operation set a limit of 17
