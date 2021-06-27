@@ -1,3 +1,4 @@
+#include "configuration.h"
 #include "Air530GPS.h"
 #include <assert.h>
 

@@ -1,3 +1,4 @@
+#include "configuration.h"
 #include "RadioLibRF95.h"
 
 #define RF95_CHIP_VERSION 0x12

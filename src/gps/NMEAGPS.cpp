@@ -1,6 +1,6 @@
+#include "configuration.h"
 #include "NMEAGPS.h"
 #include "RTC.h"
-#include "configuration.h"
 
 static int32_t toDegInt(RawDegrees d)
 {

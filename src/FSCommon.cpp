@@ -1,3 +1,4 @@
+#include "configuration.h"
 #include "FSCommon.h"
 
 void fsInit()

@@ -19,14 +19,13 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
-
+#include "configuration.h"
 #include <OLEDDisplay.h>
 
 #include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Screen.h"
-#include "configuration.h"
 #include "fonts.h"
 #include "gps/RTC.h"
 #include "graphics/images.h"
