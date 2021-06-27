@@ -1,9 +1,8 @@
-
+#include "configuration.h"
 #include "PowerFSM.h"
 #include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "configuration.h"
 #include "graphics/Screen.h"
 #include "main.h"
 #include "sleep.h"

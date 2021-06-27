@@ -1,8 +1,7 @@
+#include "configuration.h"
 #include "SerialConsole.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
-#include "configuration.h"
-#include <Arduino.h>
 
 #define Port Serial
 

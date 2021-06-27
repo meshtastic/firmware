@@ -1,3 +1,4 @@
+#include "configuration.h"
 #include "MeshPlugin.h"
 #include "Channels.h"
 #include "MeshService.h"

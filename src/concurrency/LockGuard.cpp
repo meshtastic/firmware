@@ -1,3 +1,4 @@
+#include "configuration.h"
 #include "LockGuard.h"
 
 namespace concurrency {

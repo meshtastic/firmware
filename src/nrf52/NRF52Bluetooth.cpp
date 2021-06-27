@@ -1,6 +1,6 @@
+#include "configuration.h"
 #include "NRF52Bluetooth.h"
 #include "BluetoothCommon.h"
-#include "configuration.h"
 #include "main.h"
 #include "mesh/PhoneAPI.h"
 #include "mesh/mesh-pb-constants.h"

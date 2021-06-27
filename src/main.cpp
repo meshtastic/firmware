@@ -1,4 +1,4 @@
-
+#include "configuration.h"
 #include "GPS.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
@@ -6,7 +6,6 @@
 #include "PowerFSM.h"
 #include "airtime.h"
 #include "buzz.h"
-#include "configuration.h"
 #include "error.h"
 #include "power.h"
 // #include "rom/rtc.h"

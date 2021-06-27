@@ -1,9 +1,9 @@
+#include "configuration.h"
 #include "ExternalNotificationPlugin.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
 #include "Router.h"
-#include "configuration.h"
 #include <Arduino.h>
 
 //#include <assert.h>

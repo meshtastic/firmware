@@ -1,9 +1,9 @@
+#include "configuration.h"
 #include "PositionPlugin.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
 #include "Router.h"
-#include "configuration.h"
 
 PositionPlugin *positionPlugin;
 

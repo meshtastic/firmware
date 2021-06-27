@@ -1,4 +1,4 @@
-
+#include "configuration.h"
 #include "RadioInterface.h"
 #include "Channels.h"
 #include "MeshRadio.h"
@@ -6,7 +6,6 @@
 #include "NodeDB.h"
 #include "Router.h"
 #include "assert.h"
-#include "configuration.h"
 #include "sleep.h"
 #include <assert.h>
 #include <pb_decode.h>

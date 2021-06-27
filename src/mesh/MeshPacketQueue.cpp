@@ -1,3 +1,4 @@
+#include "configuration.h"
 #include "MeshPacketQueue.h"
 
 #include <algorithm>

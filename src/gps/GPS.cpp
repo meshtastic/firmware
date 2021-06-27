@@ -1,8 +1,7 @@
-
+#include "configuration.h"
 #include "GPS.h"
 #include "NodeDB.h"
 #include "RTC.h"
-#include "configuration.h"
 #include "sleep.h"
 #include <assert.h>
 

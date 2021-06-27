@@ -1,3 +1,4 @@
+#include "configuration.h"
 #include "power.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
