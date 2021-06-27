@@ -1,22 +1,22 @@
 #include "configuration.h"
 
-#ifdef HAS_EINK2
-#include "EInkDisplay.h"
+#ifdef HAS_EINK
+#include "EInkDisplay2.h"
 #include "SPILock.h"
 #include <SPI.h>
+#include "GxEPD2_BW.h"
 
-#define COLORED 0
-#define UNCOLORED 1
+#define COLORED GxEPD_BLACK
+#define UNCOLORED GxEPD_WHITE
 
-#define INK COLORED     // Black ink
-#define PAPER UNCOLORED // 'paper' background colour
 
-#define EPD_WIDTH 200 // FIXME
-#define EPD_HEIGHT 200
+#define TECHO_DISPLAY_MODEL GxEPD2_154_D67
+
+GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT> *adafruitDisplay;
 
 EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl)
 {
-    setGeometry(GEOMETRY_RAWMODE, EPD_WIDTH, EPD_HEIGHT);
+    setGeometry(GEOMETRY_RAWMODE, TECHO_DISPLAY_MODEL::WIDTH, TECHO_DISPLAY_MODEL::HEIGHT);
     // setGeometry(GEOMETRY_RAWMODE, 128, 64); // old resolution
     // setGeometry(GEOMETRY_128_64); // We originally used this because I wasn't sure if rawmode worked - it does
 }
@@ -35,7 +35,7 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
     uint32_t now = millis();
     uint32_t sinceLast = now - lastDrawMsec;
 
-    if (sinceLast > msecLimit || lastDrawMsec == 0) {
+    if (false && adafruitDisplay && (sinceLast > msecLimit || lastDrawMsec == 0)) {
         lastDrawMsec = now;
 
         // FIXME - only draw bits have changed (use backbuf similar to the other displays)
@@ -46,15 +46,15 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
                 // get src pixel in the page based ordering the OLED lib uses FIXME, super inefficent
                 auto b = buffer[x + (y / 8) * displayWidth];
                 auto isset = b & (1 << (y & 7));
-                // frame.drawPixel(x, y, isset ? INK : PAPER);
+                adafruitDisplay->drawPixel(x, y, isset ? COLORED : UNCOLORED);
             }
         }
 
         DEBUG_MSG("Updating eink... ");
         // ePaper.Reset(); // wake the screen from sleep
-        // updateDisplay(); // Send image to display and refresh
-        // Put screen to sleep to save power
-        // ePaper.Sleep();
+        adafruitDisplay->display(false); // FIXME, use partial update mode
+        // Put screen to sleep to save power (possibly not necessary because we already did poweroff inside of display)
+        // adafruitDisplay->hibernate();
         DEBUG_MSG("done\n");
 
         return true;
@@ -97,14 +97,20 @@ bool EInkDisplay::connect()
     pinMode(PIN_EINK_EN, OUTPUT);
 #endif
 
-    // Initialise the ePaper library
-    // FIXME - figure out how to use lut_partial_update
-    if (false) {
-        DEBUG_MSG("ePaper init failed\n");
-        return false;
-    } else {
-        return true;
-    }
+    auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS,
+                                                            PIN_EINK_DC,
+                                                            PIN_EINK_RES,
+                                                            PIN_EINK_BUSY);
+
+    adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+    adafruitDisplay->init();
+    adafruitDisplay->setRotation(1);
+    adafruitDisplay->setFullWindow();
+    adafruitDisplay->fillScreen(UNCOLORED);
+    adafruitDisplay->drawCircle(100, 100, 20, COLORED);
+    adafruitDisplay->display(false);
+
+    return true;
 }
 
 #endif
