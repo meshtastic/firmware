@@ -104,7 +104,7 @@ bool EInkDisplay::connect()
 
     adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
     adafruitDisplay->init();
-    adafruitDisplay->setRotation(1);
+    adafruitDisplay->setRotation(3);
     //adafruitDisplay->setFullWindow();
     //adafruitDisplay->fillScreen(UNCOLORED);
     //adafruitDisplay->drawCircle(100, 100, 20, COLORED);
