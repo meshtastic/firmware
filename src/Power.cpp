@@ -43,6 +43,7 @@ Power *power;
 
 using namespace meshtastic;
 
+#ifndef AREF_VOLTAGE
 #if defined(NRF52_SERIES)
 /*
  * Internal Reference is +/-0.6V, with an adjustable gain of 1/6, 1/5, 1/4,
@@ -56,6 +57,7 @@ using namespace meshtastic;
 #define AREF_VOLTAGE 3.6
 #else
 #define AREF_VOLTAGE 3.3
+#endif
 #endif
 
 /**
@@ -102,8 +104,12 @@ class AnalogBatteryLevel : public HasBatteryLevel
         if (millis() - last_read_time_ms > min_read_interval) {
             last_read_time_ms = millis();
             uint32_t raw = analogRead(BATTERY_PIN);
-            float scaled = 1000.0 * ADC_MULTIPLIER * (AREF_VOLTAGE / 1024.0) * raw;
-            
+            float scaled;
+            #ifndef VBAT_RAW_TO_SCALED
+            scaled = 1000.0 * ADC_MULTIPLIER * (AREF_VOLTAGE / 1024.0) * raw;
+            #else
+            scaled = VBAT_RAW_TO_SCALED(raw); //defined in variant.h
+            #endif
             // DEBUG_MSG("battery gpio %d raw val=%u scaled=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled));
             last_read_value = scaled;
             return scaled;
@@ -136,7 +142,9 @@ class AnalogBatteryLevel : public HasBatteryLevel
     const float fullVolt = 4200, emptyVolt = 3270, chargingVolt = 4210, noBatVolt = 2230;
     float last_read_value = 0.0;
     uint32_t last_read_time_ms = 0;
-} analogLevel;
+};
+
+AnalogBatteryLevel analogLevel;
 
 Power::Power() : OSThread("Power") {}
 
@@ -153,11 +161,19 @@ bool Power::analogInit()
     adcAttachPin(BATTERY_PIN);
 #endif
 #ifdef NRF52_SERIES
+#ifdef AREF_VOLTAGE
+     analogReference(AREF_VOLTAGE);
+#else
     analogReference(AR_INTERNAL); // 3.6V
 #endif
+#endif
 
+#ifndef BATTERY_SENSE_RESOLUTION_BITS
+#define BATTERY_SENSE_RESOLUTION_BITS 10
+#endif
+    
     // adcStart(BATTERY_PIN);
-    analogReadResolution(10); // Default of 12 is not very linear. Recommended to use 10 or 11 depending on needed resolution.
+    analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS); // Default of 12 is not very linear. Recommended to use 10 or 11 depending on needed resolution.
     batteryLevel = &analogLevel;
     return true;
 #else
