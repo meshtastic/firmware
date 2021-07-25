@@ -19,35 +19,57 @@ bool PacketHistory::wasSeenRecently(const MeshPacket *p, bool withUpdate)
     }
 
     uint32_t now = millis();
-    for (size_t i = 0; i < recentPackets.size();) {
-        PacketRecord &r = recentPackets[i];
 
-        if ((now - r.rxTimeMsec) >= FLOOD_EXPIRE_TIME) {
-            // DEBUG_MSG("Deleting old broadcast record %d\n", i);
-            recentPackets.erase(recentPackets.begin() + i); // delete old record
+    PacketRecord r;
+    r.id = p->id;
+    r.sender = getFrom(p);
+    r.rxTimeMsec = now;
+
+    auto found = recentPackets.find(r);
+    bool seenRecently = (found != recentPackets.end());  // found not equal to .end() means packet was seen recently
+
+    if (seenRecently && (now - found->rxTimeMsec) >= FLOOD_EXPIRE_TIME) { // Check whether found packet has already expired
+        recentPackets.erase(found);  // Erase and pretend packet has not been seen recently
+        found = recentPackets.end();
+        seenRecently = false;
+    }
+
+    if (seenRecently) {
+        DEBUG_MSG("Found existing packet record for fr=0x%x,to=0x%x,id=0x%x\n", p->from, p->to, p->id);
+    }
+
+    if (withUpdate) {
+        if (found != recentPackets.end()) { // delete existing to updated timestamp (re-insert)
+            recentPackets.erase(found);     // as unsorted_set::iterator is const (can't update timestamp - so re-insert..)
+        }
+        recentPackets.insert(r);
+        printPacket("Add packet record", p);
+    }
+
+    // Capacity is reerved, so only purge expired packets if recentPackets fills past 90% capacity
+    // Expiry is normally dealt with after having searched/found a packet (above)
+    if (recentPackets.size() > (MAX_NUM_NODES * 0.9)) {
+        clearExpiredRecentPackets();
+    }
+
+    return seenRecently;
+}
+
+/**
+ * Iterate through all recent packets, and remove all older than FLOOD_EXPIRE_TIME
+ */
+void PacketHistory::clearExpiredRecentPackets() {
+    uint32_t now = millis();
+
+    DEBUG_MSG("recentPackets size=%ld\n", recentPackets.size());
+
+    for (auto it = recentPackets.begin(); it != recentPackets.end(); ) {
+        if ((now - it->rxTimeMsec) >= FLOOD_EXPIRE_TIME) {
+            it = recentPackets.erase(it); // erase returns iterator pointing to element immediately following the one erased
         } else {
-            if (r.id == p->id && r.sender == getFrom(p)) {
-                DEBUG_MSG("Found existing packet record for fr=0x%x,to=0x%x,id=0x%x\n", p->from, p->to, p->id);
-
-                // Update the time on this record to now
-                if (withUpdate)
-                    r.rxTimeMsec = now;
-                return true;
-            }
-
-            i++;
+            ++it;
         }
     }
 
-    // Didn't find an existing record, make one
-    if (withUpdate) {
-        PacketRecord r;
-        r.id = p->id;
-        r.sender = getFrom(p);
-        r.rxTimeMsec = now;
-        recentPackets.push_back(r);
-        printPacket("Adding packet record", p);
-    }
-
-    return false;
+    DEBUG_MSG("recentPackets size=%ld (after clearing expired packets)\n", recentPackets.size());
 }
