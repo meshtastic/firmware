@@ -62,12 +62,21 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), pubSub(mqttClient)
 void MQTT::reconnect()
 {
     // pubSub.setServer("devsrv.ezdevice.net", 1883); or 192.168.10.188
-    const char *serverAddr = "mqtt.meshtastic.org"; // default hostname
+    const char *serverAddr = "mqtt.meshtastic.org:1883"; // default hostname
 
     if (*radioConfig.preferences.mqtt_server)
         serverAddr = radioConfig.preferences.mqtt_server; // Override the default
 
-    pubSub.setServer(serverAddr, 1883);
+    String server = String(serverAddr);  
+    int delimIndex = server.indexOf(':'); 
+    if (delimIndex > 0) {
+        String host = server.substring(0, delimIndex);
+        String port = server.substring(delimIndex+1, server.length());
+        pubSub.setServer(host.c_str(), port.toInt());
+    }
+    else {
+        pubSub.setServer(serverAddr, 1883);
+    }
 
     DEBUG_MSG("Connecting to MQTT server\n", serverAddr);
     auto myStatus = (statusTopic + owner.id);
