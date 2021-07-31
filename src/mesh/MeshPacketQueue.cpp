@@ -1,6 +1,8 @@
 #include "configuration.h"
 #include "MeshPacketQueue.h"
 
+#include <algorithm>
+
 /// @return the priority of the specified packet
 inline uint32_t getPriority(const MeshPacket *p)
 {
@@ -77,7 +79,7 @@ MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id)
         auto p = (*it);
         if (getFrom(p) == from && p->id == id) {
             queue.erase(it);
-            make_heap(queue.begin(), queue.end(), &CompareMeshPacketFunc);
+            std::make_heap(queue.begin(), queue.end(), &CompareMeshPacketFunc);
             return p;
         }
     }
@@ -109,6 +111,6 @@ bool MeshPacketQueue::replaceLowerPriorityPacket(MeshPacket *p) {
         *low = p; // replace low-pri packet at this position with incoming packet with higher priority
     }
 
-    make_heap(queue.begin(), queue.end(), &CompareMeshPacketFunc);
+    std::make_heap(queue.begin(), queue.end(), &CompareMeshPacketFunc);
     return true;
 }
