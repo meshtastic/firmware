@@ -4,14 +4,14 @@
 #include <algorithm>
 
 /// @return the priority of the specified packet
-inline uint32_t getPriority(MeshPacket *p)
+inline uint32_t getPriority(const MeshPacket *p)
 {
     auto pri = p->priority;
     return pri;
 }
 
 /// @return "true" if "p1" is ordered before "p2"
-bool CompareMeshPacket::operator()(MeshPacket *p1, MeshPacket *p2)
+bool CompareMeshPacketFunc(const MeshPacket *p1, const MeshPacket *p2)
 {
     assert(p1 && p2);
     auto p1p = getPriority(p1), p2p = getPriority(p2);
@@ -25,7 +25,12 @@ bool CompareMeshPacket::operator()(MeshPacket *p1, MeshPacket *p2)
 
 MeshPacketQueue::MeshPacketQueue(size_t _maxLen) : maxLen(_maxLen) {}
 
-/** Some clients might not properly set priority, therefore we fix it here.
+bool MeshPacketQueue::empty() {
+    return queue.empty();
+}
+
+/**
+ * Some clients might not properly set priority, therefore we fix it here.
  */
 void fixPriority(MeshPacket *p)
 {
@@ -34,7 +39,7 @@ void fixPriority(MeshPacket *p)
     if (p->priority == MeshPacket_Priority_UNSET) {
         // if acks give high priority
         // if a reliable message give a bit higher default priority
-        p->priority = (p->decoded.portnum == PortNum_ROUTING_APP) ? MeshPacket_Priority_ACK :                
+        p->priority = (p->decoded.portnum == PortNum_ROUTING_APP) ? MeshPacket_Priority_ACK :
                           (p->want_ack ? MeshPacket_Priority_RELIABLE : MeshPacket_Priority_DEFAULT);
     }
 }
@@ -42,51 +47,70 @@ void fixPriority(MeshPacket *p)
 /** enqueue a packet, return false if full */
 bool MeshPacketQueue::enqueue(MeshPacket *p)
 {
-
     fixPriority(p);
 
-    // fixme if there is something lower priority in the queue that can be deleted to make space, delete that instead
-    if (size() >= maxLen)
-        return false;
-    else {
-        push(p);
-        return true;
+    // no space - try to replace a lower priority packet in the queue
+    if (queue.size() >= maxLen) {
+        return replaceLowerPriorityPacket(p);
     }
+
+    queue.push_back(p);
+    std::push_heap(queue.begin(), queue.end(), &CompareMeshPacketFunc);
+    return true;
 }
 
 MeshPacket *MeshPacketQueue::dequeue()
 {
-    if (empty())
+    if (empty()) {
         return NULL;
-    else {
-        auto p = top();
-        pop(); // remove the first item
-        return p;
     }
+
+    auto *p = queue.front();
+    std::pop_heap(queue.begin(), queue.end(), &CompareMeshPacketFunc);
+    queue.pop_back();
+
+    return p;
 }
 
-// this is kinda yucky, but I'm not sure if all arduino c++ compilers support closuers.  And we only have one
-// thread that can run at a time - so safe
-static NodeNum findFrom;
-static PacketId findId;
-
-static bool isMyPacket(MeshPacket *p)
-{
-    return p->id == findId && getFrom(p) == findFrom;
-}
-
-/** Attempt to find and remove a packet from this queue.  Returns true the packet which was removed from the queue */
+/** Attempt to find and remove a packet from this queue.  Returns a pointer to the removed packet, or NULL if not found */
 MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id)
 {
-    findFrom = from;
-    findId = id;
-    auto it = std::find_if(this->c.begin(), this->c.end(), isMyPacket);
-    if (it != this->c.end()) {
-        auto p = *it;
-        this->c.erase(it);
-        std::make_heap(this->c.begin(), this->c.end(), this->comp);
-        return p;
-    } else {
-        return NULL;
+    for (auto it = queue.begin(); it != queue.end(); it++) {
+        auto p = (*it);
+        if (getFrom(p) == from && p->id == id) {
+            queue.erase(it);
+            std::make_heap(queue.begin(), queue.end(), &CompareMeshPacketFunc);
+            return p;
+        }
     }
+
+    return NULL;
+}
+
+/** Attempt to find and remove a packet from this queue.  Returns the packet which was removed from the queue */
+bool MeshPacketQueue::replaceLowerPriorityPacket(MeshPacket *p) {
+    std::sort_heap(queue.begin(), queue.end(), &CompareMeshPacketFunc); // sort ascending based on priority (0 -> 127)
+
+    // find first packet which does not compare less (in priority) than parameter packet
+    auto low = std::lower_bound(queue.begin(), queue.end(), p, &CompareMeshPacketFunc);
+
+    if (low == queue.begin()) { // if already at start, there are no packets with lower priority
+        return false;
+    }
+
+    if (low == queue.end()) {
+        // all priorities in the vector are smaller than the incoming packet. Replace the lowest priority (first) element
+        low = queue.begin();
+    } else {
+        // 'low' iterator points to first packet which does not compare less than parameter
+        --low; // iterate to lower priority packet
+    }
+
+    if (getPriority(p) > getPriority(*low)) {
+        packetPool.release(*low); // deallocate and drop the packet we're replacing
+        *low = p; // replace low-pri packet at this position with incoming packet with higher priority
+    }
+
+    std::make_heap(queue.begin(), queue.end(), &CompareMeshPacketFunc);
+    return true;
 }
