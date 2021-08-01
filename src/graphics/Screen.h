@@ -22,6 +22,8 @@ class Screen
 
 #include <OLEDDisplayUi.h>
 
+#include "../configuration.h"
+
 #ifdef USE_SH1106
 #include <SH1106Wire.h>
 #elif defined(USE_ST7567)
