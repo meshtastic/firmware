@@ -1,5 +1,6 @@
 #include "mesh/http/WiFiAPClient.h"
 #include "NodeDB.h"
+#include "concurrency/Periodic.h"
 #include "configuration.h"
 #include "main.h"
 #include "mesh/http/WebServer.h"
@@ -8,6 +9,8 @@
 #include <DNSServer.h>
 #include <ESPmDNS.h>
 #include <WiFi.h>
+
+using namespace concurrency;
 
 static void WiFiEvent(WiFiEvent_t event);
 
@@ -22,6 +25,32 @@ char ourHost[16];
 bool forcedSoftAP = 0;
 
 bool APStartupComplete = 0;
+
+static bool needReconnect = true; // If we create our reconnector, run it once at the beginning
+
+static int32_t reconnectWiFi()
+{
+    if (radioConfig.has_preferences && needReconnect) {
+
+        const char *wifiName = radioConfig.preferences.wifi_ssid;
+        const char *wifiPsw = radioConfig.preferences.wifi_password;
+
+        if (!*wifiPsw) // Treat empty password as no password
+            wifiPsw = NULL;
+
+        if (*wifiName) {
+            needReconnect = false;
+
+            DEBUG_MSG("... Reconnecting to WiFi access point");
+            WiFi.mode(WIFI_MODE_STA);
+            WiFi.begin(wifiName, wifiPsw);
+        }
+    }
+
+    return 30 * 1000; // every 30 seconds
+}
+
+static Periodic *wifiReconnect;
 
 bool isSoftAPForced()
 {
@@ -155,12 +184,8 @@ void initWifi(bool forceSoftAP)
                     },
                     WiFiEvent_t::SYSTEM_EVENT_STA_DISCONNECTED);
 
-                DEBUG_MSG("JOINING WIFI: ssid=%s\n", wifiName);
-                if (WiFi.begin(wifiName, wifiPsw) == WL_CONNECTED) {
-                    DEBUG_MSG("MY IP ADDRESS: %s\n", WiFi.localIP().toString().c_str());
-                } else {
-                    DEBUG_MSG("Started Joining WIFI\n");
-                }
+                DEBUG_MSG("JOINING WIFI soon: ssid=%s\n", wifiName);
+                wifiReconnect = new Periodic("WifiConnect", reconnectWiFi);
             }
         }
 
@@ -205,7 +230,7 @@ static void WiFiEvent(WiFiEvent_t event)
         DEBUG_MSG("Disconnected from WiFi access point\n");
         // Event 5
 
-        reconnectWiFi();
+        needReconnect = true;
         break;
     case SYSTEM_EVENT_STA_AUTHMODE_CHANGE:
         DEBUG_MSG("Authentication mode of access point has changed\n");
@@ -299,26 +324,6 @@ void handleDNSResponse()
 {
     if (radioConfig.preferences.wifi_ap_mode) {
         dnsServer.processNextRequest();
-    }
-}
-
-void reconnectWiFi()
-{
-    if (radioConfig.has_preferences) {
-
-        const char *wifiName = radioConfig.preferences.wifi_ssid;
-        const char *wifiPsw = radioConfig.preferences.wifi_password;
-
-        if (!*wifiPsw) // Treat empty password as no password
-            wifiPsw = NULL;
-
-        if (*wifiName) {
-
-            DEBUG_MSG("... Reconnecting to WiFi access point");
-
-            WiFi.mode(WIFI_MODE_STA);
-            WiFi.begin(wifiName, wifiPsw);
-        }
     }
 }
 
