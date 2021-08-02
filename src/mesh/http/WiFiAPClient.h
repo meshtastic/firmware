@@ -16,8 +16,6 @@ bool isWifiAvailable();
 
 void handleDNSResponse();
 
-void reconnectWiFi();
-
 bool isSoftAPForced();
 
 uint8_t getWifiDisconnectReason();
