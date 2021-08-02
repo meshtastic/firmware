@@ -74,11 +74,9 @@ void MQTT::reconnect()
         String port = server.substring(delimIndex+1, server.length());
         server[delimIndex] = 0;
         serverPort = port.toInt();
-        pubSub.setServer(server.c_str(), serverPort);
+        serverAddr = server.c_str();
     }
-    else {
-        pubSub.setServer(serverAddr, serverPort);
-    }
+    pubSub.setServer(serverAddr, serverPort);
 
     DEBUG_MSG("Connecting to MQTT server %s, port: %d\n", server.c_str(), serverPort);
     auto myStatus = (statusTopic + owner.id);
