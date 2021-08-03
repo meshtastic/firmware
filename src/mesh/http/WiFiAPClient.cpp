@@ -28,6 +28,21 @@ bool APStartupComplete = 0;
 
 static bool needReconnect = true; // If we create our reconnector, run it once at the beginning
 
+// FIXME, veto light sleep if we have a TCP server running
+#if 0
+class WifiSleepObserver : public Observer<uint32_t> {
+protected:
+
+    /// Return 0 if sleep is okay
+    virtual int onNotify(uint32_t newValue) {
+
+    }
+};
+
+static WifiSleepObserver wifiSleepObserver;
+//preflightSleepObserver.observe(&preflightSleep);
+#endif
+
 static int32_t reconnectWiFi()
 {
     if (radioConfig.has_preferences && needReconnect) {
@@ -218,10 +233,10 @@ static void WiFiEvent(WiFiEvent_t event)
         DEBUG_MSG("Completed scan for access points\n");
         break;
     case SYSTEM_EVENT_STA_START:
-        DEBUG_MSG("WiFi client started\n");
+        DEBUG_MSG("WiFi station started\n");
         break;
     case SYSTEM_EVENT_STA_STOP:
-        DEBUG_MSG("WiFi clients stopped\n");
+        DEBUG_MSG("WiFi station stopped\n");
         break;
     case SYSTEM_EVENT_STA_CONNECTED:
         DEBUG_MSG("Connected to access point\n");

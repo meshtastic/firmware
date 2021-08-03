@@ -4,6 +4,7 @@
 #include "mesh/Channels.h"
 #include "mesh/Router.h"
 #include "mesh/generated/mqtt.pb.h"
+#include "sleep.h"
 #include <WiFi.h>
 #include <assert.h>
 
@@ -57,11 +58,12 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), pubSub(mqttClient)
     mqtt = this;
 
     pubSub.setCallback(mqttCallback);
+
+    preflightSleepObserver.observe(&preflightSleep);    
 }
 
 void MQTT::reconnect()
 {
-    // pubSub.setServer("devsrv.ezdevice.net", 1883); or 192.168.10.188
     const char *serverAddr = "mqtt.meshtastic.org"; // default hostname
     int serverPort = 1883; // default server port
 
@@ -78,7 +80,7 @@ void MQTT::reconnect()
     }
     pubSub.setServer(serverAddr, serverPort);
 
-    DEBUG_MSG("Connecting to MQTT server %s, port: %d\n", server.c_str(), serverPort);
+    DEBUG_MSG("Connecting to MQTT server %s, port: %d\n", serverAddr, serverPort);
     auto myStatus = (statusTopic + owner.id);
     bool connected = pubSub.connect(owner.id, "meshdev", "large4cats", myStatus.c_str(), 1, true, "offline");
     if (connected) {

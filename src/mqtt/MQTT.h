@@ -19,6 +19,9 @@ class MQTT : private concurrency::OSThread
     WiFiClient mqttClient;
     PubSubClient pubSub;
 
+    CallbackObserver<MQTT, void *> preflightSleepObserver =
+        CallbackObserver<MQTT, void *>(this, &MQTT::preflightSleepCb);
+
   public:
     MQTT();
 
@@ -53,6 +56,9 @@ class MQTT : private concurrency::OSThread
 
     /// Called when a new publish arrives from the MQTT server
     void onPublish(char *topic, byte *payload, unsigned int length);
+
+    /// Return 0 if sleep is okay, veto sleep if we are connected to pubsub server
+    int preflightSleepCb(void *unused = NULL) { return pubSub.connected() ? 1 : 0; }    
 };
 
 void mqttInit();
