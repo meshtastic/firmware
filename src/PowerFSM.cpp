@@ -41,7 +41,7 @@ static void lsEnter()
     screen->setOn(false);
     secsSlept = 0; // How long have we been sleeping this time
 
-    DEBUG_MSG("lsEnter end\n");
+    // DEBUG_MSG("lsEnter end\n");
 }
 
 static void lsIdle()
@@ -226,8 +226,8 @@ void PowerFSM_setup()
     // if we are a router node, we go to NB (no need for bluetooth) otherwise we go to DARK (so we can send message to phone)
     powerFSM.add_transition(&stateLS, isRouter ? &stateNB : &stateDARK, EVENT_WAKE_TIMER, NULL, "Wake timer");
 
-    // Note we don't really use this transition, because when we wake from light sleep we _always_ transition to NB or dark and
-    // then it handles things powerFSM.add_transition(&stateLS, &stateNB, EVENT_RECEIVED_PACKET, NULL, "Received packet");
+    // We need this transition, because we might not transition if we were waiting to enter light-sleep, because when we wake from light sleep we _always_ transition to NB or dark and
+    powerFSM.add_transition(&stateLS, &stateNB, EVENT_RECEIVED_PACKET, NULL, "Received packet");
 
     powerFSM.add_transition(&stateNB, &stateNB, EVENT_RECEIVED_PACKET, NULL, "Received packet, resetting win wake");
 
