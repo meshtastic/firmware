@@ -27,6 +27,7 @@ static bool isPowered()
 
 static void sdsEnter()
 {
+    DEBUG_MSG("Enter state: SDS\n");
     // FIXME - make sure GPS and LORA radio are off first - because we want close to zero current draw
     doDeepSleep(getPref_sds_secs() * 1000LL);
 }
@@ -112,6 +113,7 @@ static void lsIdle()
 
 static void lsExit()
 {
+    DEBUG_MSG("Exit state: LS\n");
     // setGPSPower(true); // restore GPS power
     if (gps)
         gps->forceWake(true);
@@ -119,6 +121,7 @@ static void lsExit()
 
 static void nbEnter()
 {
+    DEBUG_MSG("Enter state: NB\n");
     screen->setOn(false);
     setBluetoothEnable(false);
 
@@ -133,6 +136,7 @@ static void darkEnter()
 
 static void serialEnter()
 {
+    DEBUG_MSG("Enter state: SERIAL\n");
     setBluetoothEnable(false);
     screen->setOn(true);
     screen->print("Serial connected\n");
@@ -145,6 +149,7 @@ static void serialExit()
 
 static void powerEnter()
 {
+    DEBUG_MSG("Enter state: POWER\n");
     if (!isPowered()) {
         // If we got here, we are in the wrong state - we should be in powered, let that state ahndle things
         DEBUG_MSG("Loss of power in Powered\n");
@@ -174,6 +179,7 @@ static void powerExit()
 
 static void onEnter()
 {
+    DEBUG_MSG("Enter state: ON\n");
     screen->setOn(true);
     setBluetoothEnable(true);
 
@@ -202,7 +208,9 @@ static void screenPress()
     screen->onPress();
 }
 
-static void bootEnter() {}
+static void bootEnter() {
+    DEBUG_MSG("Enter state: BOOT\n");
+}
 
 State stateSDS(sdsEnter, NULL, NULL, "SDS");
 State stateLS(lsEnter, lsIdle, lsExit, "LS");
