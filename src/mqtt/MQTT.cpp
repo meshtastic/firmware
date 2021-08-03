@@ -4,6 +4,7 @@
 #include "mesh/Channels.h"
 #include "mesh/Router.h"
 #include "mesh/generated/mqtt.pb.h"
+#include "PowerFSM.h"
 #include "sleep.h"
 #include <WiFi.h>
 #include <assert.h>
@@ -59,7 +60,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), pubSub(mqttClient)
 
     pubSub.setCallback(mqttCallback);
 
-    preflightSleepObserver.observe(&preflightSleep);    
+    // preflightSleepObserver.observe(&preflightSleep);    
 }
 
 void MQTT::reconnect()
@@ -151,6 +152,7 @@ int32_t MQTT::runOnce()
             pubSub.disconnect();
         }
 
+        powerFSM.trigger(EVENT_CONTACT_FROM_PHONE); // Suppress entering light sleep (because that would turn off bluetooth)
         return 20;
     }
 }
