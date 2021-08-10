@@ -299,7 +299,7 @@ void PowerFSM_setup()
     // On most boards we use light-sleep to be our main state, but on NRF52 we just stay in DARK
     State *lowPowerState = &stateLS;
 
-    auto meshSds = 0;
+    uint32_t meshSds = 0;
 
 #ifndef NRF52_SERIES
     // We never enter light-sleep or NB states on NRF52 (because the CPU uses so little power normally)
