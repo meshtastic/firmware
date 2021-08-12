@@ -946,7 +946,9 @@ void Screen::setFrames()
         normalFrames[numframes++] = drawTextMessageFrame;
 
     // then all the nodes
-    for (size_t i = 0; i < numnodes; i++)
+    // We only show a few nodes in our scrolling list - because meshes with many nodes would have too many screens
+    size_t numToShow = min(numnodes, 4U);
+    for (size_t i = 0; i < numToShow; i++)
         normalFrames[numframes++] = drawNodeInfo;
 
     // then the debug info

@@ -18,7 +18,7 @@ class EnvironmentalMeasurementPlugin : private concurrency::OSThread, public Pro
     /** Called to handle a particular incoming message
     @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
-    virtual bool handleReceivedProtobuf(const MeshPacket &mp, const EnvironmentalMeasurement *p);
+    virtual bool handleReceivedProtobuf(const MeshPacket &mp, EnvironmentalMeasurement *p);
     virtual int32_t runOnce();
     /**
      * Send our EnvironmentalMeasurement into the mesh

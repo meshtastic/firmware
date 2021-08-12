@@ -27,6 +27,7 @@ static bool isPowered()
 
 static void sdsEnter()
 {
+    DEBUG_MSG("Enter state: SDS\n");
     // FIXME - make sure GPS and LORA radio are off first - because we want close to zero current draw
     doDeepSleep(getPref_sds_secs() * 1000LL);
 }
@@ -41,7 +42,7 @@ static void lsEnter()
     screen->setOn(false);
     secsSlept = 0; // How long have we been sleeping this time
 
-    DEBUG_MSG("lsEnter end\n");
+    // DEBUG_MSG("lsEnter end\n");
 }
 
 static void lsIdle()
@@ -112,6 +113,7 @@ static void lsIdle()
 
 static void lsExit()
 {
+    DEBUG_MSG("Exit state: LS\n");
     // setGPSPower(true); // restore GPS power
     if (gps)
         gps->forceWake(true);
@@ -119,6 +121,7 @@ static void lsExit()
 
 static void nbEnter()
 {
+    DEBUG_MSG("Enter state: NB\n");
     screen->setOn(false);
     setBluetoothEnable(false);
 
@@ -133,6 +136,7 @@ static void darkEnter()
 
 static void serialEnter()
 {
+    DEBUG_MSG("Enter state: SERIAL\n");
     setBluetoothEnable(false);
     screen->setOn(true);
     screen->print("Serial connected\n");
@@ -145,6 +149,7 @@ static void serialExit()
 
 static void powerEnter()
 {
+    DEBUG_MSG("Enter state: POWER\n");
     if (!isPowered()) {
         // If we got here, we are in the wrong state - we should be in powered, let that state ahndle things
         DEBUG_MSG("Loss of power in Powered\n");
@@ -174,6 +179,7 @@ static void powerExit()
 
 static void onEnter()
 {
+    DEBUG_MSG("Enter state: ON\n");
     screen->setOn(true);
     setBluetoothEnable(true);
 
@@ -202,7 +208,9 @@ static void screenPress()
     screen->onPress();
 }
 
-static void bootEnter() {}
+static void bootEnter() {
+    DEBUG_MSG("Enter state: BOOT\n");
+}
 
 State stateSDS(sdsEnter, NULL, NULL, "SDS");
 State stateLS(lsEnter, lsIdle, lsExit, "LS");
@@ -226,10 +234,9 @@ void PowerFSM_setup()
     // if we are a router node, we go to NB (no need for bluetooth) otherwise we go to DARK (so we can send message to phone)
     powerFSM.add_transition(&stateLS, isRouter ? &stateNB : &stateDARK, EVENT_WAKE_TIMER, NULL, "Wake timer");
 
-    // Note we don't really use this transition, because when we wake from light sleep we _always_ transition to NB or dark and
-    // then it handles things powerFSM.add_transition(&stateLS, &stateNB, EVENT_RECEIVED_PACKET, NULL, "Received packet");
-
-    powerFSM.add_transition(&stateNB, &stateNB, EVENT_RECEIVED_PACKET, NULL, "Received packet, resetting win wake");
+    // We need this transition, because we might not transition if we were waiting to enter light-sleep, because when we wake from light sleep we _always_ transition to NB or dark and
+    powerFSM.add_transition(&stateLS, isRouter ? &stateNB : &stateDARK, EVENT_PACKET_FOR_PHONE, NULL, "Received packet, exiting light sleep");
+    powerFSM.add_transition(&stateNB, &stateNB, EVENT_PACKET_FOR_PHONE, NULL, "Received packet, resetting win wake");
 
     // Handle press events - note: we ignore button presses when in API mode
     powerFSM.add_transition(&stateLS, &stateON, EVENT_PRESS, NULL, "Press");
@@ -253,6 +260,9 @@ void PowerFSM_setup()
 
     // if we are a router we don't turn the screen on for these things
     if (!isRouter) {
+        // if any packet destined for phone arrives, turn on bluetooth at least
+        powerFSM.add_transition(&stateNB, &stateDARK, EVENT_PACKET_FOR_PHONE, NULL, "Packet for phone");
+
         // show the latest node when we get a new node db update
         powerFSM.add_transition(&stateNB, &stateON, EVENT_NODEDB_UPDATED, NULL, "NodeDB update");
         powerFSM.add_transition(&stateDARK, &stateON, EVENT_NODEDB_UPDATED, NULL, "NodeDB update");
@@ -291,8 +301,6 @@ void PowerFSM_setup()
     // shutdown bluetooth if is_router)
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_FIRMWARE_UPDATE, NULL, "Got firmware update");
     powerFSM.add_transition(&stateON, &stateON, EVENT_FIRMWARE_UPDATE, NULL, "Got firmware update");
-
-    powerFSM.add_transition(&stateNB, &stateDARK, EVENT_PACKET_FOR_PHONE, NULL, "Packet for phone");
 
     powerFSM.add_timed_transition(&stateON, &stateDARK, getPref_screen_on_secs() * 1000, NULL, "Screen-on timeout");
 
