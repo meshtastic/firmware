@@ -48,7 +48,7 @@ RemoteHardwarePlugin::RemoteHardwarePlugin()
 {
 }
 
-bool RemoteHardwarePlugin::handleReceivedProtobuf(const MeshPacket &req, const HardwareMessage *pptr)
+bool RemoteHardwarePlugin::handleReceivedProtobuf(const MeshPacket &req, HardwareMessage *pptr)
 {
     auto p = *pptr;
     DEBUG_MSG("Received RemoteHardware typ=%d\n", p.typ);

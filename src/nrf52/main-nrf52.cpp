@@ -5,6 +5,7 @@
 #include <ble_gap.h>
 #include <memory.h>
 #include <stdio.h>
+#include <Adafruit_USBD_Device.h>
 
 #include "NRF52Bluetooth.h"
 #include "error.h"
@@ -20,7 +21,8 @@ static inline void debugger_break(void)
 }
 
 bool loopCanSleep() {
-    return !tud_cdc_connected();
+    // turn off sleep only while connected via USB
+    return !(TinyUSBDevice.mounted() && !TinyUSBDevice.suspended());
 }
 
 // handle standard gcc assert failures
@@ -37,7 +39,7 @@ void getMacAddr(uint8_t *dmac)
     ble_gap_addr_t addr;
     if (sd_ble_gap_addr_get(&addr) == NRF_SUCCESS) {
         memcpy(dmac, addr.addr, 6);
-    } else {
+    } else { 
         const uint8_t *src = (const uint8_t *)NRF_FICR->DEVICEADDR;
         dmac[5] = src[0];
         dmac[4] = src[1];

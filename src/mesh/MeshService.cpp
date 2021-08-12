@@ -66,7 +66,7 @@ void MeshService::init()
 
 int MeshService::handleFromRadio(const MeshPacket *mp)
 {
-    powerFSM.trigger(EVENT_RECEIVED_PACKET); // Possibly keep the node from sleeping
+    powerFSM.trigger(EVENT_PACKET_FOR_PHONE); // Possibly keep the node from sleeping
 
     printPacket("Forwarding to phone", mp);
     nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio

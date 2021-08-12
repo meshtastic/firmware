@@ -8,7 +8,7 @@
 
 NodeInfoPlugin *nodeInfoPlugin;
 
-bool NodeInfoPlugin::handleReceivedProtobuf(const MeshPacket &mp, const User *pptr)
+bool NodeInfoPlugin::handleReceivedProtobuf(const MeshPacket &mp, User *pptr)
 {
     auto p = *pptr;
 
