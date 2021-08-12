@@ -4,6 +4,8 @@
 #include "mesh/Channels.h"
 #include "mesh/Router.h"
 #include "mesh/generated/mqtt.pb.h"
+#include "PowerFSM.h"
+#include "sleep.h"
 #include <WiFi.h>
 #include <assert.h>
 
@@ -57,12 +59,14 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), pubSub(mqttClient)
     mqtt = this;
 
     pubSub.setCallback(mqttCallback);
+
+    // preflightSleepObserver.observe(&preflightSleep);    
 }
 
 void MQTT::reconnect()
 {
-    // pubSub.setServer("devsrv.ezdevice.net", 1883); or 192.168.10.188
-    const char *serverAddr = "mqtt.meshtastic.org:1883"; // default hostname
+    const char *serverAddr = "mqtt.meshtastic.org"; // default hostname
+    int serverPort = 1883; // default server port
 
     if (*radioConfig.preferences.mqtt_server)
         serverAddr = radioConfig.preferences.mqtt_server; // Override the default
@@ -70,15 +74,14 @@ void MQTT::reconnect()
     String server = String(serverAddr);  
     int delimIndex = server.indexOf(':'); 
     if (delimIndex > 0) {
-        String host = server.substring(0, delimIndex);
         String port = server.substring(delimIndex+1, server.length());
-        pubSub.setServer(host.c_str(), port.toInt());
+        server[delimIndex] = 0;
+        serverPort = port.toInt();
+        serverAddr = server.c_str();
     }
-    else {
-        pubSub.setServer(serverAddr, 1883);
-    }
+    pubSub.setServer(serverAddr, serverPort);
 
-    DEBUG_MSG("Connecting to MQTT server\n", serverAddr);
+    DEBUG_MSG("Connecting to MQTT server %s, port: %d\n", serverAddr, serverPort);
     auto myStatus = (statusTopic + owner.id);
     bool connected = pubSub.connect(owner.id, "meshdev", "large4cats", myStatus.c_str(), 1, true, "offline");
     if (connected) {
@@ -149,6 +152,7 @@ int32_t MQTT::runOnce()
             pubSub.disconnect();
         }
 
+        powerFSM.trigger(EVENT_CONTACT_FROM_PHONE); // Suppress entering light sleep (because that would turn off bluetooth)
         return 20;
     }
 }

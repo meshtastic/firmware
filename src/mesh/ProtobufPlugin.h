@@ -28,7 +28,7 @@ template <class T> class ProtobufPlugin : protected SinglePortPlugin
      * In general decoded will always be !NULL.  But in some special applications (where you have handling packets
      * for multiple port numbers, decoding will ONLY be attempted for packets where the portnum matches our expected ourPortNum.
      */
-    virtual bool handleReceivedProtobuf(const MeshPacket &mp, const T *decoded) = 0;
+    virtual bool handleReceivedProtobuf(const MeshPacket &mp, T *decoded) = 0;
 
     /**
      * Return a mesh packet which has been preinited with a particular protobuf data payload and port number.

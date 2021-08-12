@@ -7,7 +7,7 @@
 
 RoutingPlugin *routingPlugin;
 
-bool RoutingPlugin::handleReceivedProtobuf(const MeshPacket &mp, const Routing *r)
+bool RoutingPlugin::handleReceivedProtobuf(const MeshPacket &mp, Routing *r)
 {
     printPacket("Routing sniffing", &mp);
     router->sniffReceived(&mp, r);

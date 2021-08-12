@@ -17,12 +17,12 @@ class AdminPlugin : public ProtobufPlugin<AdminMessage>
 
     @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
-    virtual bool handleReceivedProtobuf(const MeshPacket &mp, const AdminMessage *p);
+    virtual bool handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *p);
 
   private:
     void handleSetOwner(const User &o);
     void handleSetChannel(const Channel &cc);
-    void handleSetRadio(const RadioConfig &r);
+    void handleSetRadio(RadioConfig &r);
 
     void handleGetChannel(const MeshPacket &req, uint32_t channelIndex);
     void handleGetRadio(const MeshPacket &req);
