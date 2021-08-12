@@ -204,7 +204,7 @@ void EnvironmentalMeasurementPlugin::drawFrame(OLEDDisplay *display, OLEDDisplay
 
 }
 
-bool EnvironmentalMeasurementPlugin::handleReceivedProtobuf(const MeshPacket &mp, const EnvironmentalMeasurement *p)
+bool EnvironmentalMeasurementPlugin::handleReceivedProtobuf(const MeshPacket &mp, EnvironmentalMeasurement *p)
 {
     if (!(radioConfig.preferences.environmental_measurement_plugin_measurement_enabled || radioConfig.preferences.environmental_measurement_plugin_screen_enabled)){
         // If this plugin is not enabled in any capacity, don't handle the packet, and allow other plugins to consume 
