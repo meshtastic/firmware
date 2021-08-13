@@ -5,7 +5,7 @@
 #include <ble_gap.h>
 #include <memory.h>
 #include <stdio.h>
-#include <Adafruit_USBD_Device.h>
+// #include <Adafruit_USBD_Device.h>
 
 #include "NRF52Bluetooth.h"
 #include "error.h"
@@ -22,7 +22,9 @@ static inline void debugger_break(void)
 
 bool loopCanSleep() {
     // turn off sleep only while connected via USB
-    return !(TinyUSBDevice.mounted() && !TinyUSBDevice.suspended());
+    // return true;
+    return !Serial; // the bool operator on the nrf52 serial class returns true if connected to a PC currently
+    // return !(TinyUSBDevice.mounted() && !TinyUSBDevice.suspended());
 }
 
 // handle standard gcc assert failures
@@ -92,7 +94,7 @@ void setBluetoothEnable(bool on)
 }
 
 /**
- * Override printf to use the SEGGER output library
+ * Override printf to use the SEGGER output library (note - this does not effect the printf method on the debug console)
  */
 int printf(const char *fmt, ...)
 {

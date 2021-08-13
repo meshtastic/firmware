@@ -2,13 +2,15 @@
 
 You probably don't care about this section - skip to the next one.
 
-* list portduino on platformio
+* USB nrf52 blocks on reads!!! https://github.com/meshtastic/Meshtastic-device/issues/838
+* send debug info 'in-band'
+* fix wifi connections for mqtt
 * router mode dropping messages? https://meshtastic.discourse.group/t/router-mode-missing-messages/3329/3
-* fix ttgo eink screen
+* usb lora dongle from pine64
+  
+* list portduino on platformio
 * figure our wss for mqtt.meshtastic - use cloudflare? 2052 ws, 2053 crypt
 * measure rak4630 power draw and turn off power for GPS most of the time.  We should be able to run on the small solar panel.
-* pine64 lora module
-* @havealoha fixedposition not working
 * ask for vercel access
 * finish plan for riot.im
 * turn on setTx(timeout) and   state = setDioIrqParams(SX126X_IRQ_TX_DONE | SX126X_IRQ_TIMEOUT, SX126X_IRQ_TX_DONE | SX126X_IRQ_TIMEOUT); in sx1262 code
