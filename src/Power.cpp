@@ -82,10 +82,13 @@ class AnalogBatteryLevel : public HasBatteryLevel
         if (v < noBatVolt)
             return -1; // If voltage is super low assume no battery installed
 
+#ifndef NRF52_SERIES
+        // This does not work on a RAK4631 with battery connected
         if (v > chargingVolt)
             return 0; // While charging we can't report % full on the battery
+#endif
 
-        return 100 * (v - emptyVolt) / (fullVolt - emptyVolt);
+        return clamp((int)(100 * (v - emptyVolt) / (fullVolt - emptyVolt)), 0, 100);
     }
 
     /**
