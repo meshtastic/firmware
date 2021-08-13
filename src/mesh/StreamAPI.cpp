@@ -26,7 +26,11 @@ int32_t StreamAPI::readStream()
         return recentRx ? 5 : 250;
     } else {
         while (stream->available()) { // Currently we never want to block
-            uint8_t c = stream->read();
+            int cInt = stream->read();
+            if(cInt < 0)
+                break; // We ran out of characters (even though available said otherwise) - this can happen on rf52 adafruit arduino
+
+            uint8_t c = (uint8_t) cInt;
 
             // Use the read pointer for a little state machine, first look for framing, then length bytes, then payload
             size_t ptr = rxPtr;
