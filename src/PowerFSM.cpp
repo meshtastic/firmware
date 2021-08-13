@@ -307,6 +307,8 @@ void PowerFSM_setup()
     // On most boards we use light-sleep to be our main state, but on NRF52 we just stay in DARK
     State *lowPowerState = &stateLS;
 
+    uint32_t meshSds = 0;
+
 #ifndef NRF52_SERIES
     // We never enter light-sleep or NB states on NRF52 (because the CPU uses so little power normally)
 
@@ -315,11 +317,12 @@ void PowerFSM_setup()
 
     powerFSM.add_timed_transition(&stateNB, &stateLS, getPref_min_wake_secs() * 1000, NULL, "Min wake timeout");
     powerFSM.add_timed_transition(&stateDARK, &stateLS, getPref_wait_bluetooth_secs() * 1000, NULL, "Bluetooth timeout");
+    meshSds = getPref_mesh_sds_timeout_secs();
 #else
     lowPowerState = &stateDARK;
+    meshSds = UINT32_MAX; //Workaround for now: Don't go into deep sleep on the RAK4631
 #endif
 
-    auto meshSds = getPref_mesh_sds_timeout_secs();
     if (meshSds != UINT32_MAX)
         powerFSM.add_timed_transition(lowPowerState, &stateSDS, meshSds * 1000, NULL, "mesh timeout");
     // removing for now, because some users don't even have phones
