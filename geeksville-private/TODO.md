@@ -2,6 +2,24 @@
 
 You probably don't care about this section - skip to the next one.
 
+* assertion failur
+22:57:36 64409 [PositionPlugin] FIXME-update-db Sniffing packet
+22:57:36 64409 [PositionPlugin] Delivering rx packet (id=0x5851f437 Fr0xa1 To0xff, WantAck0, HopLim3 Ch0x0 Portnum=3 rxtime=1628895456 priority=10)
+22:57:36 64409 [PositionPlugin] Forwarding to phone (id=0x5851f437 Fr0xa1 To0xff, WantAck0, HopLim3 Ch0x0 Portnum=3 rxtime=1628895456 priority=10)
+22:57:36 64409 [PositionPlugin] Update DB node 0x85f4da1, rx_time=1628895456
+22:57:36 64409 [PositionPlugin] Plugin routing considered
+22:57:36 64409 [PositionPlugin] Add packet record (id=0x5851f437 Fr0xa1 To0xff, WantAck0, HopLim3 Ch0x0 Portnum=3 rxtime=1628895456 priority=10)
+22:57:36 64409 [PositionPlugin] Expanding short PSK #1
+22:57:36 64409 [PositionPlugin] Installing AES128 key!
+22:57:36 64409 [PositionPlugin] enqueuing for send (id=0x5851f437 Fr0xa1 To0xff, WantAck0, HopLim3 Ch0xb1 encrypted rxtime=1628895456 priority=10)
+22:57:36 64409 [PositionPlugin] (bw=125, sf=12, cr=4/8) packet symLen=32 ms, payloadSize=22, time 2596 ms
+22:57:36 64409 [PositionPlugin] txGood=6,rxGood=10,rxBad=0
+22:57:36 64409 [PositionPlugin] AirTime - Packet transmitted : 2596ms
+22:57:36 64409 [RadioIf] assert failed src/mesh/RadioLibInterface.cpp: 240, void RadioLibInterface::handleReceiveInterrupt(), test=isReceiving
+
+
+add segger systemview documentation
+
 * USB nrf52 blocks on reads!!! https://github.com/meshtastic/Meshtastic-device/issues/838
 * send debug info 'in-band'
 * fix wifi connections for mqtt
