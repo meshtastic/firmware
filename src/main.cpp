@@ -646,7 +646,9 @@ void loop()
                   mainController.nextThread->tillRun(millis())); */
 
     // We want to sleep as long as possible here - because it saves power
-    if (!runASAP && loopCanSleep())
+    if (!runASAP && loopCanSleep()) {
+        // if(delayMsec > 100) DEBUG_MSG("sleeping %ld\n", delayMsec);
         mainDelay.delay(delayMsec);
+    }
     // if (didWake) DEBUG_MSG("wake!\n");
 }
