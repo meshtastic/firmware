@@ -81,15 +81,6 @@ bool isWifiAvailable()
 
     const char *wifiName = radioConfig.preferences.wifi_ssid;
 
-    // strcpy(radioConfig.preferences.wifi_ssid, "meshtastic");
-    // strcpy(radioConfig.preferences.wifi_password, "meshtastic!");
-
-    // strcpy(radioConfig.preferences.wifi_ssid, "meshtasticAdmin");
-    // strcpy(radioConfig.preferences.wifi_password, "12345678");
-
-    // radioConfig.preferences.wifi_ap_mode = true;
-    // radioConfig.preferences.wifi_ap_mode = false;
-
     if (*wifiName) {
         return true;
     } else {
@@ -119,25 +110,15 @@ void deinitWifi()
 }
 
 // Startup WiFi
-void initWifi(bool forceSoftAP)
+bool initWifi(bool forceSoftAP)
 {
-
-    if (forceSoftAP) {
-        // do nothing
-        // DEBUG_MSG("----- Forcing SoftAP\n");
-    } else {
-        if (isWifiAvailable() == 0) {
-            return;
-        }
-    }
-
     forcedSoftAP = forceSoftAP;
 
-    createSSLCert();
-
-    if (radioConfig.has_preferences || forceSoftAP) {
+    if ((radioConfig.has_preferences && radioConfig.preferences.wifi_ssid)  || forceSoftAP) {
         const char *wifiName = radioConfig.preferences.wifi_ssid;
         const char *wifiPsw = radioConfig.preferences.wifi_password;
+
+        createSSLCert();
 
         if (!*wifiPsw) // Treat empty password as no password
             wifiPsw = NULL;
@@ -215,9 +196,11 @@ void initWifi(bool forceSoftAP)
         DEBUG_MSG("mDNS Host: Meshtastic.local\n");
         MDNS.addService("http", "tcp", 80);
         MDNS.addService("https", "tcp", 443);
-
-    } else
+        return true;
+    } else {
         DEBUG_MSG("Not using WIFI\n");
+        return false;
+    }
 }
 
 // Called by the Espressif SDK to

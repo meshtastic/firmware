@@ -337,9 +337,10 @@ void setup()
     digitalWrite(RESET_OLED, 1);
 #endif
 
+    bool forceSoftAP = 0;
+    
 #ifdef BUTTON_PIN
 #ifndef NO_ESP32
-    bool forceSoftAP = 0;
 
     // If the button is connected to GPIO 12, don't enable the ability to use
     // meshtasticAdmin on the device.
@@ -536,10 +537,10 @@ void setup()
     }
 #endif
 
-#ifndef NO_ESP32
     // Initialize Wifi
     initWifi(forceSoftAP);
 
+#ifndef NO_ESP32
     // Start web server thread.
     webServerThread = new WebServerThread();
 #endif
