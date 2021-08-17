@@ -2,7 +2,10 @@
 
 You probably don't care about this section - skip to the next one.
 
-* assertion failur
+
+
+* fix assertion failure 
+```
 22:57:36 64409 [PositionPlugin] FIXME-update-db Sniffing packet
 22:57:36 64409 [PositionPlugin] Delivering rx packet (id=0x5851f437 Fr0xa1 To0xff, WantAck0, HopLim3 Ch0x0 Portnum=3 rxtime=1628895456 priority=10)
 22:57:36 64409 [PositionPlugin] Forwarding to phone (id=0x5851f437 Fr0xa1 To0xff, WantAck0, HopLim3 Ch0x0 Portnum=3 rxtime=1628895456 priority=10)
@@ -16,17 +19,15 @@ You probably don't care about this section - skip to the next one.
 22:57:36 64409 [PositionPlugin] txGood=6,rxGood=10,rxBad=0
 22:57:36 64409 [PositionPlugin] AirTime - Packet transmitted : 2596ms
 22:57:36 64409 [RadioIf] assert failed src/mesh/RadioLibInterface.cpp: 240, void RadioLibInterface::handleReceiveInterrupt(), test=isReceiving
-
-
-add segger systemview documentation
-
-* USB nrf52 blocks on reads!!! https://github.com/meshtastic/Meshtastic-device/issues/838
+```
 * send debug info 'in-band'
 * fix wifi connections for mqtt
-* router mode dropping messages? https://meshtastic.discourse.group/t/router-mode-missing-messages/3329/3
 * usb lora dongle from pine64
-  
+* turn on watchdog reset if app hangs on nrf52 or esp32
 * list portduino on platformio
+* pine64 solar board
+
+* for the matrix gateway?  recommended by @sam-uk https://github.com/matrix-org/coap-proxy
 * figure our wss for mqtt.meshtastic - use cloudflare? 2052 ws, 2053 crypt
 * measure rak4630 power draw and turn off power for GPS most of the time.  We should be able to run on the small solar panel.
 * ask for vercel access
@@ -34,7 +35,7 @@ add segger systemview documentation
 * turn on setTx(timeout) and   state = setDioIrqParams(SX126X_IRQ_TX_DONE | SX126X_IRQ_TIMEOUT, SX126X_IRQ_TX_DONE | SX126X_IRQ_TIMEOUT); in sx1262 code
 * add rak4600 support (with rf95 radio and limited ram)
 * store esp32 crashes to flash (and 64KB coredump partition) - https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/core_dump.html
-* 
+* If more nodes appear than the nodedb can hold, delete oldest entries from DB
 * Switch to use https://github.com/adafruit/Adafruit_nRF52_Arduino.git when available (see arduino code for examples)
 * DONE @luxonn reports that after a while the android app stops showing new messages
 * DONE release android APK - fix recent 1.2.28 crash report
