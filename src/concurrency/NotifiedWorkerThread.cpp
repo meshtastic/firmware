@@ -72,14 +72,21 @@ bool NotifiedWorkerThread::notifyLater(uint32_t delay, uint32_t v, bool overwrit
     return didIt;
 }
 
-int32_t NotifiedWorkerThread::runOnce()
+void NotifiedWorkerThread::checkNotification()
 {
     auto n = notification;
-    enabled = false;  // Only run once per notification
     notification = 0; // clear notification
     if (n) {
         onNotify(n);
     }
+}
+
+
+
+int32_t NotifiedWorkerThread::runOnce()
+{
+    enabled = false;  // Only run once per notification
+    checkNotification();
 
     return RUN_SAME;
 }
