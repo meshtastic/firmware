@@ -539,7 +539,6 @@ void reinitBluetooth()
 }
 
 bool bluetoothOn;
-bool firstTime = 1;
 
 // Enable/disable bluetooth.
 void setBluetoothEnable(bool on)
@@ -549,32 +548,15 @@ void setBluetoothEnable(bool on)
 
         bluetoothOn = on;
         if (on) {
-            Serial.printf("Pre BT: %u heap size\n", ESP.getFreeHeap());
-            // ESP_ERROR_CHECK( heap_trace_start(HEAP_TRACE_LEAKS) );
-            reinitBluetooth();
-
-            // Don't try to reconnect wifi before bluetooth is configured.
-            //   WiFi is initialized from main.cpp in setup() .
-            if (firstTime) {
-                firstTime = 0;
-            } else {
-#ifndef NO_ESP32
-                initWifi(0);
-#endif
+            if (!initWifi(0)) // if we are using wifi, don't turn on bluetooth also
+            {
+                Serial.printf("Pre BT: %u heap size\n", ESP.getFreeHeap());
+                // ESP_ERROR_CHECK( heap_trace_start(HEAP_TRACE_LEAKS) );
+                reinitBluetooth();
             }
         } else {
-
-            /*
-            // If WiFi is in use, disable shutting down the radio.
-            if (isWifiAvailable()) {
-                return;
-            }
-            */
-
             // shutdown wifi
-#ifndef NO_ESP32
             deinitWifi();
-#endif
 
             // We have to totally teardown our bluetooth objects to prevent leaks
             deinitBLE();
