@@ -38,7 +38,13 @@ class NotifiedWorkerThread : public OSThread
   protected:
     virtual void onNotify(uint32_t notification) = 0;
 
+    /// just calls checkNotification()
     virtual int32_t runOnce();
+
+    /// Sometimes we might want to check notifications independently of when our thread was getting woken up (i.e. if we are about to change
+    /// radio transmit/receive modes we want to handle any pending interrupts first).  You can call this method and if any notifications are currently
+    /// pending they will be handled immediately.
+    void checkNotification();
 
   private:
     /**
