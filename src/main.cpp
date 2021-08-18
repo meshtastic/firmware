@@ -25,9 +25,10 @@
 #include <Wire.h>
 // #include <driver/rtc_io.h>
 
+#include "mesh/http/WiFiAPClient.h"
+
 #ifndef NO_ESP32
 #include "mesh/http/WebServer.h"
-#include "mesh/http/WiFiAPClient.h"
 #include "nimble/BluetoothUtil.h"
 #endif
 
@@ -337,9 +338,10 @@ void setup()
     digitalWrite(RESET_OLED, 1);
 #endif
 
+    bool forceSoftAP = 0;
+
 #ifdef BUTTON_PIN
 #ifndef NO_ESP32
-    bool forceSoftAP = 0;
 
     // If the button is connected to GPIO 12, don't enable the ability to use
     // meshtasticAdmin on the device.
@@ -536,20 +538,20 @@ void setup()
     }
 #endif
 
-#ifndef NO_ESP32
+#if defined(PORTDUINO) || defined(HAS_WIFI)
+    mqttInit();
+#endif
+
     // Initialize Wifi
     initWifi(forceSoftAP);
 
+#ifndef NO_ESP32
     // Start web server thread.
     webServerThread = new WebServerThread();
 #endif
 
 #ifdef PORTDUINO
     initApiServer();
-#endif
-
-#if defined(PORTDUINO) || defined(HAS_WIFI)
-    mqttInit();
 #endif
 
     // Start airtime logger thread.

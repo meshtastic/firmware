@@ -2,40 +2,19 @@
 
 You probably don't care about this section - skip to the next one.
 
-* assertion failur
-22:57:36 64409 [PositionPlugin] FIXME-update-db Sniffing packet
-22:57:36 64409 [PositionPlugin] Delivering rx packet (id=0x5851f437 Fr0xa1 To0xff, WantAck0, HopLim3 Ch0x0 Portnum=3 rxtime=1628895456 priority=10)
-22:57:36 64409 [PositionPlugin] Forwarding to phone (id=0x5851f437 Fr0xa1 To0xff, WantAck0, HopLim3 Ch0x0 Portnum=3 rxtime=1628895456 priority=10)
-22:57:36 64409 [PositionPlugin] Update DB node 0x85f4da1, rx_time=1628895456
-22:57:36 64409 [PositionPlugin] Plugin routing considered
-22:57:36 64409 [PositionPlugin] Add packet record (id=0x5851f437 Fr0xa1 To0xff, WantAck0, HopLim3 Ch0x0 Portnum=3 rxtime=1628895456 priority=10)
-22:57:36 64409 [PositionPlugin] Expanding short PSK #1
-22:57:36 64409 [PositionPlugin] Installing AES128 key!
-22:57:36 64409 [PositionPlugin] enqueuing for send (id=0x5851f437 Fr0xa1 To0xff, WantAck0, HopLim3 Ch0xb1 encrypted rxtime=1628895456 priority=10)
-22:57:36 64409 [PositionPlugin] (bw=125, sf=12, cr=4/8) packet symLen=32 ms, payloadSize=22, time 2596 ms
-22:57:36 64409 [PositionPlugin] txGood=6,rxGood=10,rxBad=0
-22:57:36 64409 [PositionPlugin] AirTime - Packet transmitted : 2596ms
-22:57:36 64409 [RadioIf] assert failed src/mesh/RadioLibInterface.cpp: 240, void RadioLibInterface::handleReceiveInterrupt(), test=isReceiving
-
-
-add segger systemview documentation
-
-* USB nrf52 blocks on reads!!! https://github.com/meshtastic/Meshtastic-device/issues/838
-* send debug info 'in-band'
-* fix wifi connections for mqtt
-* router mode dropping messages? https://meshtastic.discourse.group/t/router-mode-missing-messages/3329/3
-* usb lora dongle from pine64
-  
-* list portduino on platformio
-* figure our wss for mqtt.meshtastic - use cloudflare? 2052 ws, 2053 crypt
 * measure rak4630 power draw and turn off power for GPS most of the time.  We should be able to run on the small solar panel.
+* usb lora dongle from pine64, add end user instructions
+* turn on watchdog reset if app hangs on nrf52 or esp32
+* pine64 solar boards
+* for the matrix gateway?  recommended by @sam-uk https://github.com/matrix-org/coap-proxy
+* figure our wss for mqtt.meshtastic - use cloudflare? 2052 ws, 2053 crypt
 * ask for vercel access
 * finish plan for riot.im
 * turn on setTx(timeout) and   state = setDioIrqParams(SX126X_IRQ_TX_DONE | SX126X_IRQ_TIMEOUT, SX126X_IRQ_TX_DONE | SX126X_IRQ_TIMEOUT); in sx1262 code
-* add rak4600 support (with rf95 radio and limited ram)
+* NO add rak4600 support (with rf95 radio and limited ram)
 * store esp32 crashes to flash (and 64KB coredump partition) - https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/core_dump.html
-* 
-* Switch to use https://github.com/adafruit/Adafruit_nRF52_Arduino.git when available (see arduino code for examples)
+* If more nodes appear than the nodedb can hold, delete oldest entries from DB
+* send debug info 'in-band'
 * DONE @luxonn reports that after a while the android app stops showing new messages
 * DONE release android APK - fix recent 1.2.28 crash report
 * DONE remote admin busted? 
@@ -48,7 +27,6 @@ add segger systemview documentation
 * DONE tcp stream problem in python+pordtuino, server thinks client dropped when client DID NOT DROP
 * DONE TCP mode for android, localhost is at 10.0.2.2
 * DONE make sure USB still works in android
-* add portduino builds to zip
 * add license to portduino and make announcement
 * DONE naks are being dropped (though enqueuedLocal) sometimes before phone/PC gets them
 * DONE have android fill in if local GPS has poor signal
