@@ -109,12 +109,37 @@ void deinitWifi()
     }
 }
 
+static void startServices()
+{
+    if (!APStartupComplete) {
+        // Start web server
+        DEBUG_MSG("... Starting network services\n");
+
+        // start mdns
+        if (!MDNS.begin("Meshtastic")) {
+            DEBUG_MSG("Error setting up MDNS responder!\n");
+        } else {
+            DEBUG_MSG("mDNS responder started\n");
+            DEBUG_MSG("mDNS Host: Meshtastic.local\n");
+            MDNS.addService("http", "tcp", 80);
+            MDNS.addService("https", "tcp", 443);
+        }
+
+        initWebServer();
+        initApiServer();
+
+        APStartupComplete = true;
+    } else {
+        DEBUG_MSG("... Not starting network services (They're already running)\n");
+    }
+}
+
 // Startup WiFi
 bool initWifi(bool forceSoftAP)
 {
     forcedSoftAP = forceSoftAP;
 
-    if ((radioConfig.has_preferences && radioConfig.preferences.wifi_ssid)  || forceSoftAP) {
+    if ((radioConfig.has_preferences && radioConfig.preferences.wifi_ssid) || forceSoftAP) {
         const char *wifiName = radioConfig.preferences.wifi_ssid;
         const char *wifiPsw = radioConfig.preferences.wifi_password;
 
@@ -184,18 +209,6 @@ bool initWifi(bool forceSoftAP)
                 wifiReconnect = new Periodic("WifiConnect", reconnectWiFi);
             }
         }
-
-        if (!MDNS.begin("Meshtastic")) {
-            DEBUG_MSG("Error setting up MDNS responder!\n");
-
-            while (1) {
-                delay(1000);
-            }
-        }
-        DEBUG_MSG("mDNS responder started\n");
-        DEBUG_MSG("mDNS Host: Meshtastic.local\n");
-        MDNS.addService("http", "tcp", 80);
-        MDNS.addService("https", "tcp", 443);
         return true;
     } else {
         DEBUG_MSG("Not using WIFI\n");
@@ -236,18 +249,7 @@ static void WiFiEvent(WiFiEvent_t event)
     case SYSTEM_EVENT_STA_GOT_IP:
         DEBUG_MSG("Obtained IP address: \n");
         Serial.println(WiFi.localIP());
-
-        if (!APStartupComplete) {
-            // Start web server
-            DEBUG_MSG("... Starting network services\n");
-            initWebServer();
-            initApiServer();
-
-            APStartupComplete = true;
-        } else {
-            DEBUG_MSG("... Not starting network services (They're already running)\n");
-        }
-
+        startServices();
         break;
     case SYSTEM_EVENT_STA_LOST_IP:
         DEBUG_MSG("Lost IP address and IP address is reset to 0\n");
@@ -267,18 +269,7 @@ static void WiFiEvent(WiFiEvent_t event)
     case SYSTEM_EVENT_AP_START:
         DEBUG_MSG("WiFi access point started\n");
         Serial.println(WiFi.softAPIP());
-
-        if (!APStartupComplete) {
-            // Start web server
-            DEBUG_MSG("... Starting network services\n");
-            initWebServer();
-            initApiServer();
-
-            APStartupComplete = true;
-        } else {
-            DEBUG_MSG("... Not starting network services (They're already running)\n");
-        }
-
+        startServices();
         break;
     case SYSTEM_EVENT_AP_STOP:
         DEBUG_MSG("WiFi access point stopped\n");
