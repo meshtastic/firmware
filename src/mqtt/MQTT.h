@@ -35,6 +35,10 @@ class MQTT : private concurrency::OSThread
      */
     void onSend(const MeshPacket &mp, ChannelIndex chIndex);
 
+    /** Attempt to connect to server if necessary
+     */
+    void reconnect();
+    
   protected:
     virtual int32_t runOnce();
 
@@ -42,10 +46,6 @@ class MQTT : private concurrency::OSThread
     /** return true if we have a channel that wants uplink/downlink
      */
     bool wantsLink() const;
-
-    /** Attempt to connect to server if necessary
-     */
-    void reconnect();
 
     /** Tell the server what subscriptions we want (based on channels.downlink_enabled)
      */

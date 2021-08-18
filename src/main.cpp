@@ -338,7 +338,7 @@ void setup()
 #endif
 
     bool forceSoftAP = 0;
-    
+
 #ifdef BUTTON_PIN
 #ifndef NO_ESP32
 
@@ -537,6 +537,10 @@ void setup()
     }
 #endif
 
+#if defined(PORTDUINO) || defined(HAS_WIFI)
+    mqttInit();
+#endif
+
     // Initialize Wifi
     initWifi(forceSoftAP);
 
@@ -547,10 +551,6 @@ void setup()
 
 #ifdef PORTDUINO
     initApiServer();
-#endif
-
-#if defined(PORTDUINO) || defined(HAS_WIFI)
-    mqttInit();
 #endif
 
     // Start airtime logger thread.
