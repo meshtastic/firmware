@@ -3,6 +3,7 @@
 #include "concurrency/Periodic.h"
 #include "configuration.h"
 #include "main.h"
+#include "mqtt/MQTT.h"
 #include "mesh/http/WebServer.h"
 #include "mesh/wifi/WiFiServerAPI.h"
 #include "target_specific.h"
@@ -109,7 +110,7 @@ void deinitWifi()
     }
 }
 
-static void startServices()
+static void onNetworkConnected()
 {
     if (!APStartupComplete) {
         // Start web server
@@ -129,9 +130,11 @@ static void startServices()
         initApiServer();
 
         APStartupComplete = true;
-    } else {
-        DEBUG_MSG("... Not starting network services (They're already running)\n");
-    }
+    } 
+
+    // FIXME this is kinda yucky, instead we should just have an observable for 'wifireconnected'
+    if(mqtt)
+        mqtt->reconnect();
 }
 
 // Startup WiFi
@@ -139,7 +142,7 @@ bool initWifi(bool forceSoftAP)
 {
     forcedSoftAP = forceSoftAP;
 
-    if ((radioConfig.has_preferences && radioConfig.preferences.wifi_ssid) || forceSoftAP) {
+    if ((radioConfig.has_preferences && radioConfig.preferences.wifi_ssid[0]) || forceSoftAP) {
         const char *wifiName = radioConfig.preferences.wifi_ssid;
         const char *wifiPsw = radioConfig.preferences.wifi_password;
 
@@ -249,7 +252,7 @@ static void WiFiEvent(WiFiEvent_t event)
     case SYSTEM_EVENT_STA_GOT_IP:
         DEBUG_MSG("Obtained IP address: \n");
         Serial.println(WiFi.localIP());
-        startServices();
+        onNetworkConnected();
         break;
     case SYSTEM_EVENT_STA_LOST_IP:
         DEBUG_MSG("Lost IP address and IP address is reset to 0\n");
@@ -269,7 +272,7 @@ static void WiFiEvent(WiFiEvent_t event)
     case SYSTEM_EVENT_AP_START:
         DEBUG_MSG("WiFi access point started\n");
         Serial.println(WiFi.softAPIP());
-        startServices();
+        onNetworkConnected();
         break;
     case SYSTEM_EVENT_AP_STOP:
         DEBUG_MSG("WiFi access point stopped\n");
