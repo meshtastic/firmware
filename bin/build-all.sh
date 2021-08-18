@@ -61,9 +61,6 @@ function do_boards() {
 		# Build universal
 		do_build $board "" "$isNrf" 
 	done
-
-    pio run --environment native
-    cp .pio/build/native/program $OUTDIR/bins/universal/meshtasticd_linux_amd64
 }
 
 # Make sure our submodules are current
@@ -74,6 +71,9 @@ platformio lib update
 
 do_boards "$BOARDS_ESP32" "false"
 do_boards "$BOARDS_NRF52" "true"
+
+pio run --environment native
+cp .pio/build/native/program $OUTDIR/bins/universal/meshtasticd_linux_amd64
 
 echo "Building SPIFFS for ESP32 targets"
 pio run --environment tbeam -t buildfs
