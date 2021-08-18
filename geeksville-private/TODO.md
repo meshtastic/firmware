@@ -2,11 +2,7 @@
 
 You probably don't care about this section - skip to the next one.
 
-* disable bluetooth while wifi is active
-* failed adding https service
-* fix wifi connections for mqtt
 * send debug info 'in-band'
-
 * usb lora dongle from pine64
 * turn on watchdog reset if app hangs on nrf52 or esp32
 * list portduino on platformio

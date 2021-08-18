@@ -21,6 +21,8 @@
 static bool pinShowing;
 static uint32_t doublepressed;
 
+static bool bluetoothActive;
+
 static void startCb(uint32_t pin)
 {
     pinShowing = true;
@@ -52,23 +54,27 @@ void updateBatteryLevel(uint8_t level)
 
 void deinitBLE()
 {
-    // DEBUG_MSG("Shutting down bluetooth\n");
-    // ble_gatts_show_local();
+    if (bluetoothActive) {
+        bluetoothActive = false;
 
-    // FIXME - do we need to dealloc things? - what needs to stay alive across light sleep?
-    auto ret = nimble_port_stop();
-    assert(ret == ESP_OK);
+        // DEBUG_MSG("Shutting down bluetooth\n");
+        // ble_gatts_show_local();
 
-    nimble_port_deinit(); // teardown nimble datastructures
+        // FIXME - do we need to dealloc things? - what needs to stay alive across light sleep?
+        auto ret = nimble_port_stop();
+        assert(ret == ESP_OK);
 
-    // DEBUG_MSG("BLE port_deinit done\n");
+        nimble_port_deinit(); // teardown nimble datastructures
 
-    ret = esp_nimble_hci_and_controller_deinit();
-    assert(ret == ESP_OK);
+        // DEBUG_MSG("BLE port_deinit done\n");
 
-    // DEBUG_MSG("BLE task exiting\n");
+        ret = esp_nimble_hci_and_controller_deinit();
+        assert(ret == ESP_OK);
 
-    DEBUG_MSG("Done shutting down bluetooth\n");
+        // DEBUG_MSG("BLE task exiting\n");
+
+        DEBUG_MSG("Done shutting down bluetooth\n");
+    }
 }
 
 void loopBLE()
@@ -479,6 +485,8 @@ void disablePin()
     doublepressed = millis();
 }
 
+
+
 // This routine is called multiple times, once each time we come back from sleep
 void reinitBluetooth()
 {
@@ -536,6 +544,7 @@ void reinitBluetooth()
     ble_store_config_init();
 
     nimble_port_freertos_init(ble_host_task);
+    bluetoothActive = true;
 }
 
 bool bluetoothOn;
