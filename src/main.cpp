@@ -25,9 +25,10 @@
 #include <Wire.h>
 // #include <driver/rtc_io.h>
 
+#include "mesh/http/WiFiAPClient.h"
+
 #ifndef NO_ESP32
 #include "mesh/http/WebServer.h"
-#include "mesh/http/WiFiAPClient.h"
 #include "nimble/BluetoothUtil.h"
 #endif
 
