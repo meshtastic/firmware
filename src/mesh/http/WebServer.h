@@ -8,10 +8,6 @@
 void initWebServer();
 void createSSLCert();
 
-
-void handleWebResponse();
-
-
 class WebServerThread : private concurrency::OSThread
 {
 
