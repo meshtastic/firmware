@@ -25,8 +25,6 @@ WiFiServerAPI::~WiFiServerAPI()
     // FIXME - delete this if the client dropps the connection!
 }
 
-
-
 /// override close to also shutdown the TCP link
 void WiFiServerAPI::close()
 {
@@ -49,6 +47,13 @@ int32_t WiFiServerAPI::runOnce()
         enabled = false; // we no longer need to run
         return 0;
     }
+}
+
+/// If an api server is running, we try to spit out debug 'serial' characters there
+void WiFiServerPort::debugOut(char c)
+{
+    if (apiPort && apiPort->openAPI)
+        apiPort->openAPI->debugOut(c);
 }
 
 #define MESHTASTIC_PORTNUM 4403

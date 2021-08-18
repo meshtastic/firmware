@@ -81,6 +81,9 @@ class PhoneAPI
 
     bool isConnected() { return state != STATE_SEND_NOTHING; }
 
+    /// emit a debugging log character, FIXME - implement
+    void debugOut(char c) { }
+
   protected:
     /// Our fromradio packet while it is being assembled
     FromRadio fromRadioScratch;

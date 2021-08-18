@@ -21,8 +21,8 @@ class WiFiServerAPI : public StreamAPI
     virtual void close();
 
   protected:
-
-    /// We override this method to prevent publishing EVENT_SERIAL_CONNECTED/DISCONNECTED for wifi links (we want the board to stay in the POWERED state to prevent disabling wifi)
+    /// We override this method to prevent publishing EVENT_SERIAL_CONNECTED/DISCONNECTED for wifi links (we want the board to
+    /// stay in the POWERED state to prevent disabling wifi)
     virtual void onConnectionChanged(bool connected) {}
 
     virtual int32_t runOnce(); // Check for dropped client connections
@@ -48,6 +48,10 @@ class WiFiServerPort : public WiFiServer, private concurrency::OSThread
 
     void init();
 
+    /// If an api server is running, we try to spit out debug 'serial' characters there
+    static void debugOut(char c);
+    
+  protected:
     int32_t runOnce();
 };
 
