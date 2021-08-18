@@ -146,6 +146,8 @@ void INTERRUPT_ATTR SX1262Interface::disableInterrupt()
 
 void SX1262Interface::setStandby()
 {
+    checkNotification(); // handle any pending interrupts before we force standby
+    
     int err = lora.standby();
     assert(err == ERR_NONE);
 

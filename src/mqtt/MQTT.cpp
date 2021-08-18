@@ -1,10 +1,10 @@
 #include "MQTT.h"
 #include "NodeDB.h"
+#include "PowerFSM.h"
 #include "main.h"
 #include "mesh/Channels.h"
 #include "mesh/Router.h"
 #include "mesh/generated/mqtt.pb.h"
-#include "PowerFSM.h"
 #include "sleep.h"
 #include <WiFi.h>
 #include <assert.h>
@@ -60,42 +60,44 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), pubSub(mqttClient)
 
     pubSub.setCallback(mqttCallback);
 
-    // preflightSleepObserver.observe(&preflightSleep);    
+    // preflightSleepObserver.observe(&preflightSleep);
 }
 
 void MQTT::reconnect()
 {
-    const char *serverAddr = "mqtt.meshtastic.org"; // default hostname
-    int serverPort = 1883; // default server port
+    if (wantsLink()) {
+        const char *serverAddr = "mqtt.meshtastic.org"; // default hostname
+        int serverPort = 1883;                          // default server port
 
-    if (*radioConfig.preferences.mqtt_server)
-        serverAddr = radioConfig.preferences.mqtt_server; // Override the default
+        if (*radioConfig.preferences.mqtt_server)
+            serverAddr = radioConfig.preferences.mqtt_server; // Override the default
 
-    String server = String(serverAddr);  
-    int delimIndex = server.indexOf(':'); 
-    if (delimIndex > 0) {
-        String port = server.substring(delimIndex+1, server.length());
-        server[delimIndex] = 0;
-        serverPort = port.toInt();
-        serverAddr = server.c_str();
+        String server = String(serverAddr);
+        int delimIndex = server.indexOf(':');
+        if (delimIndex > 0) {
+            String port = server.substring(delimIndex + 1, server.length());
+            server[delimIndex] = 0;
+            serverPort = port.toInt();
+            serverAddr = server.c_str();
+        }
+        pubSub.setServer(serverAddr, serverPort);
+
+        DEBUG_MSG("Connecting to MQTT server %s, port: %d\n", serverAddr, serverPort);
+        auto myStatus = (statusTopic + owner.id);
+        bool connected = pubSub.connect(owner.id, "meshdev", "large4cats", myStatus.c_str(), 1, true, "offline");
+        if (connected) {
+            DEBUG_MSG("MQTT connected\n");
+            enabled = true; // Start running background process again
+            runASAP = true;
+
+            /// FIXME, include more information in the status text
+            bool ok = pubSub.publish(myStatus.c_str(), "online", true);
+            DEBUG_MSG("published %d\n", ok);
+
+            sendSubscriptions();
+        } else
+            DEBUG_MSG("Failed to contact MQTT server...\n");
     }
-    pubSub.setServer(serverAddr, serverPort);
-
-    DEBUG_MSG("Connecting to MQTT server %s, port: %d\n", serverAddr, serverPort);
-    auto myStatus = (statusTopic + owner.id);
-    bool connected = pubSub.connect(owner.id, "meshdev", "large4cats", myStatus.c_str(), 1, true, "offline");
-    if (connected) {
-        DEBUG_MSG("MQTT connected\n");
-        enabled = true; // Start running background process again
-        runASAP = true;
-
-        /// FIXME, include more information in the status text
-        bool ok = pubSub.publish(myStatus.c_str(), "online", true);
-        DEBUG_MSG("published %d\n", ok);
-
-        sendSubscriptions();
-    } else
-        DEBUG_MSG("Failed to contact MQTT server...\n");
 }
 
 void MQTT::sendSubscriptions()

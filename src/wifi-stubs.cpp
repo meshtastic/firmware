@@ -5,7 +5,9 @@
 
 //#include "mesh/wifi/WiFiAPClient.h"
 
-void initWifi(bool forceSoftAP) {}
+bool initWifi(bool forceSoftAP) {
+    return false;
+}
 
 void deinitWifi() {}
 

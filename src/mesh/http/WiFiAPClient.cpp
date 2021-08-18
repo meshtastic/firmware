@@ -3,6 +3,7 @@
 #include "concurrency/Periodic.h"
 #include "configuration.h"
 #include "main.h"
+#include "mqtt/MQTT.h"
 #include "mesh/http/WebServer.h"
 #include "mesh/wifi/WiFiServerAPI.h"
 #include "target_specific.h"
@@ -81,15 +82,6 @@ bool isWifiAvailable()
 
     const char *wifiName = radioConfig.preferences.wifi_ssid;
 
-    // strcpy(radioConfig.preferences.wifi_ssid, "meshtastic");
-    // strcpy(radioConfig.preferences.wifi_password, "meshtastic!");
-
-    // strcpy(radioConfig.preferences.wifi_ssid, "meshtasticAdmin");
-    // strcpy(radioConfig.preferences.wifi_password, "12345678");
-
-    // radioConfig.preferences.wifi_ap_mode = true;
-    // radioConfig.preferences.wifi_ap_mode = false;
-
     if (*wifiName) {
         return true;
     } else {
@@ -118,26 +110,43 @@ void deinitWifi()
     }
 }
 
-// Startup WiFi
-void initWifi(bool forceSoftAP)
+static void onNetworkConnected()
 {
+    if (!APStartupComplete) {
+        // Start web server
+        DEBUG_MSG("... Starting network services\n");
 
-    if (forceSoftAP) {
-        // do nothing
-        // DEBUG_MSG("----- Forcing SoftAP\n");
-    } else {
-        if (isWifiAvailable() == 0) {
-            return;
+        // start mdns
+        if (!MDNS.begin("Meshtastic")) {
+            DEBUG_MSG("Error setting up MDNS responder!\n");
+        } else {
+            DEBUG_MSG("mDNS responder started\n");
+            DEBUG_MSG("mDNS Host: Meshtastic.local\n");
+            MDNS.addService("http", "tcp", 80);
+            MDNS.addService("https", "tcp", 443);
         }
-    }
 
+        initWebServer();
+        initApiServer();
+
+        APStartupComplete = true;
+    } 
+
+    // FIXME this is kinda yucky, instead we should just have an observable for 'wifireconnected'
+    if(mqtt)
+        mqtt->reconnect();
+}
+
+// Startup WiFi
+bool initWifi(bool forceSoftAP)
+{
     forcedSoftAP = forceSoftAP;
 
-    createSSLCert();
-
-    if (radioConfig.has_preferences || forceSoftAP) {
+    if ((radioConfig.has_preferences && radioConfig.preferences.wifi_ssid[0]) || forceSoftAP) {
         const char *wifiName = radioConfig.preferences.wifi_ssid;
         const char *wifiPsw = radioConfig.preferences.wifi_password;
+
+        createSSLCert();
 
         if (!*wifiPsw) // Treat empty password as no password
             wifiPsw = NULL;
@@ -203,21 +212,11 @@ void initWifi(bool forceSoftAP)
                 wifiReconnect = new Periodic("WifiConnect", reconnectWiFi);
             }
         }
-
-        if (!MDNS.begin("Meshtastic")) {
-            DEBUG_MSG("Error setting up MDNS responder!\n");
-
-            while (1) {
-                delay(1000);
-            }
-        }
-        DEBUG_MSG("mDNS responder started\n");
-        DEBUG_MSG("mDNS Host: Meshtastic.local\n");
-        MDNS.addService("http", "tcp", 80);
-        MDNS.addService("https", "tcp", 443);
-
-    } else
+        return true;
+    } else {
         DEBUG_MSG("Not using WIFI\n");
+        return false;
+    }
 }
 
 // Called by the Espressif SDK to
@@ -253,18 +252,7 @@ static void WiFiEvent(WiFiEvent_t event)
     case SYSTEM_EVENT_STA_GOT_IP:
         DEBUG_MSG("Obtained IP address: \n");
         Serial.println(WiFi.localIP());
-
-        if (!APStartupComplete) {
-            // Start web server
-            DEBUG_MSG("... Starting network services\n");
-            initWebServer();
-            initApiServer();
-
-            APStartupComplete = true;
-        } else {
-            DEBUG_MSG("... Not starting network services (They're already running)\n");
-        }
-
+        onNetworkConnected();
         break;
     case SYSTEM_EVENT_STA_LOST_IP:
         DEBUG_MSG("Lost IP address and IP address is reset to 0\n");
@@ -284,18 +272,7 @@ static void WiFiEvent(WiFiEvent_t event)
     case SYSTEM_EVENT_AP_START:
         DEBUG_MSG("WiFi access point started\n");
         Serial.println(WiFi.softAPIP());
-
-        if (!APStartupComplete) {
-            // Start web server
-            DEBUG_MSG("... Starting network services\n");
-            initWebServer();
-            initApiServer();
-
-            APStartupComplete = true;
-        } else {
-            DEBUG_MSG("... Not starting network services (They're already running)\n");
-        }
-
+        onNetworkConnected();
         break;
     case SYSTEM_EVENT_AP_STOP:
         DEBUG_MSG("WiFi access point stopped\n");
