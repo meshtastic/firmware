@@ -2,8 +2,8 @@
 
 You probably don't care about this section - skip to the next one.
 
-* measure rak4630 power draw and turn off power for GPS most of the time.  We should be able to run on the small solar panel.
 * usb lora dongle from pine64, add end user instructions
+* measure rak4630 power draw and turn off power for GPS most of the time.  We should be able to run on the small solar panel.
 * turn on watchdog reset if app hangs on nrf52 or esp32
 * pine64 solar boards
 * for the matrix gateway?  recommended by @sam-uk https://github.com/matrix-org/coap-proxy
