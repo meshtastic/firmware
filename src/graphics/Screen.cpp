@@ -390,6 +390,19 @@ static inline double toDegrees(double r)
     return r * 180 / PI;
 }
 
+// A struct to hold the data for a DMS coordinate.
+struct DMS
+{
+    byte latDeg;
+    byte latMin;
+    double latSec;
+    char latCP;
+    byte lonDeg;
+    byte lonMin;
+    double lonSec;
+    char lonCP;
+};
+
 // A struct to hold the data for a UTM coordinate, this is also used when creating an MGRS coordinate.
 struct UTM 
 {
@@ -397,6 +410,17 @@ struct UTM
     char band;
     double easting;
     double northing;
+};
+
+// A struct to hold the data for a MGRS coordinate.
+struct MGRS
+{
+    byte zone;
+    char band;
+    char east100k;
+    char north100k;
+    uint32_t easting;
+    uint32_t northing;
 };
 
 /**
@@ -448,42 +472,22 @@ static struct UTM latLongToUTM(const double lat, const double lon)
     return utm;
 }
 
-// Converts lat long coordinates to an UTM string.
-static String latLongToUTMStr(double lat, double lon)
-{
-    UTM utm = latLongToUTM(lat, lon);
-    return String(utm.zone) + String(utm.band) + " " + String(utm.easting, 1) + " " + String(utm.northing, 1);
-}
-
-// Converts lat long coordinates to an MGRS string.
-static String latLongToMGRSStr(double lat, double lon)
+// Converts lat long coordinates to an MGRS.
+static struct MGRS latLongToMGRS(double lat, double lon)
 {
     const String e100kLetters[3] = { "ABCDEFGH", "JKLMNPQR", "STUVWXYZ" };
     const String n100kLetters[2] = { "ABCDEFGHJKLMNPQRSTUV", "FGHJKLMNPQRSTUVABCDE" };
     UTM utm = latLongToUTM(lat, lon);
-    String mgrs = String(utm.zone) + String(utm.band) + " ";
+    MGRS mgrs;
+    mgrs.zone = utm.zone;
+    mgrs.band = utm.band;
     double col = floor(utm.easting / 100000);
-    char e100k = e100kLetters[(utm.zone - 1) % 3].charAt(col - 1);
+    mgrs.east100k = e100kLetters[(mgrs.zone - 1) % 3].charAt(col - 1);
     double row = (int)floor(utm.northing / 100000.0) % 20;
-    char n100k = n100kLetters[(utm.zone - 1) % 2].charAt(row);
-    int easting = (int)utm.easting % 100000;
-    int northing = (int)utm.northing % 100000;
-    return mgrs + String(e100k) + String(n100k) + " " + String(easting) + " " + String(northing);
-}
-
-// Converts decimal degrees to degrees minutes seconds.
-static String decDegreesToDMS(double val, char compassPoint)
-{
-    double decDeg = val;
-
-    if (val < 0)
-        decDeg = decDeg * -1;
-        
-    int d = floor(decDeg);
-    double minutes = (decDeg - d) * 60;
-    int m = floor(minutes);
-    int s = (minutes - m) * 60;
-    return String(d) + "°" + String(m) + "'" + String(s) + "\"" + compassPoint;
+    mgrs.north100k = n100kLetters[(mgrs.zone-1)%2].charAt(row);
+    mgrs.easting = (int)utm.easting % 100000;
+    mgrs.northing = (int)utm.northing % 100000;
+    return mgrs;
 }
 
 /**
@@ -496,50 +500,70 @@ static String decDegreesToDMS(double val, char compassPoint)
  * it will be displayed for a couple of seconds then scroll over to the rest of the string
  * for a couple of seconds.
  */
-static String latLongToDMS(double lat, double lon)
+static struct DMS latLongToDMS(double lat, double lon)
 {
-    char latCP; // compass point direction for latitude
-    char lonCP; // compass point direction for longitude
+    DMS dms;
     
-    if (lat < 0) latCP = 'S';
-    else latCP = 'N';
+    if (lat < 0) dms.latCP = 'S';
+    else dms.latCP = 'N';
 
-    if (lon < 0) lonCP = 'W';
-    else lonCP = 'E';
+    double latDeg = lat;
 
-    return decDegreesToDMS(lat, latCP) + " " + decDegreesToDMS(lon, lonCP);
-}
+    if (lat < 0)
+        latDeg = latDeg * -1;
 
-static String getGPSCoordinateString(const GPSStatus *gps)
-{
-    auto gpsFormat = radioConfig.preferences.gps_format;
-    String coordinates = "";
+    dms.latDeg = floor(latDeg);
+    double latMin = (latDeg - dms.latDeg) * 60;
+    dms.latMin = floor(latMin);
+    dms.latSec = (latMin - dms.latMin) * 60;
 
-    if (gpsFormat == GpsCoordinateFormat_GpsFormatDMS)
-        coordinates =  latLongToDMS(gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
-    else if (gpsFormat == GpsCoordinateFormat_GpsFormatUTM)
-        coordinates =  latLongToUTMStr(gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
-    else if (gpsFormat == GpsCoordinateFormat_GpsFormatMGRS)
-        coordinates =  latLongToMGRSStr(gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
-    else // Defaults to decimal degrees
-        coordinates =  String(gps->getLatitude() * 1e-7, 6) + " " + String(gps->getLongitude() * 1e-7, 6);
+    if (lon < 0) dms.lonCP = 'W';
+    else dms.lonCP = 'E';
 
-    return coordinates;
+    double lonDeg = lon;
+
+    if (lon < 0)
+        lonDeg = lonDeg * -1;
+
+    dms.lonDeg = floor(lonDeg);
+    double lonMin = (lonDeg - dms.lonDeg) * 60;
+    dms.lonMin = floor(lonMin);
+    dms.lonSec = (lonMin - dms.lonMin) * 60;
+
+    return dms;
 }
 
 // Draw GPS status coordinates
 static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
+    auto gpsFormat = radioConfig.preferences.gps_format;
     String displayLine = "";
 
-    if (!gps->getIsConnected())
+    if (!gps->getIsConnected()) {
         displayLine = "No GPS Module";
-    else if (!gps->getHasLock())
+        display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
+    } else if (!gps->getHasLock()) {
         displayLine = "No GPS Lock";
-    else
-        displayLine = getGPSCoordinateString(gps);
-    
-    display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
+        display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
+    } else {
+        char coordinateLine[22];
+
+        if (gpsFormat == GpsCoordinateFormat_GpsFormatDMS) {
+            DMS dms = latLongToDMS(gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
+            sprintf(coordinateLine, "%2i°%2i'%2.0f\"%1c %3i°%2i'%2.0f\"", dms.latDeg, dms.latMin, dms.latSec, dms.latCP, 
+                    dms.lonDeg, dms.lonMin, dms.lonSec);
+        } else if (gpsFormat == GpsCoordinateFormat_GpsFormatUTM) {
+            UTM utm = latLongToUTM(gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
+            sprintf(coordinateLine, "%2i%1c %6.0f %7.0f", utm.zone, utm.band, utm.easting, utm.northing);
+        } else if (gpsFormat == GpsCoordinateFormat_GpsFormatMGRS) {
+            MGRS mgrs = latLongToMGRS(gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
+            sprintf(coordinateLine, "%2i%1c %1c%1c %5i %5i", mgrs.zone, mgrs.band, mgrs.east100k, mgrs.north100k, 
+                    mgrs.easting, mgrs.northing);
+        } else // Defaults to decimal degrees
+            sprintf(coordinateLine, "%f %f", gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
+        
+        display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
+    }
 }
 
 /// Ported from my old java code, returns distance in meters along the globe
