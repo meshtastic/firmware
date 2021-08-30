@@ -5,7 +5,7 @@
 #include "sleep.h"
 #include <assert.h>
 
-/ if gps_update_interval below this value, do not powercycle the GPS
+// if gps_update_interval below this value, do not powercycle the GPS
 #define UBLOX_POWEROFF_THRESHOLD 90
 
 extern RadioConfig radioConfig;
