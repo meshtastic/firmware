@@ -380,21 +380,166 @@ static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GP
     }
 }
 
+static inline double toRadians(double deg)
+{
+    return deg * PI / 180;
+}
+
+static inline double toDegrees(double r)
+{
+    return r * 180 / PI;
+}
+
+// A struct to hold the data for a UTM coordinate, this is also used when creating an MGRS coordinate.
+struct UTM 
+{
+    byte zone;
+    char band;
+    double easting;
+    double northing;
+};
+
+/**
+ * Converts lat long coordinates to UTM.
+ * based on this: https://github.com/walvok/LatLonToUTM/blob/master/latlon_utm.ino
+ */
+static struct UTM latLongToUTM(const double lat, const double lon)
+{
+    const String latBands = "CDEFGHJKLMNPQRSTUVWXX";
+    UTM utm;
+    utm.zone = int((lon + 180)/6 + 1);
+    utm.band = latBands.charAt(int(lat/8 + 10));
+    double a = 6378137; // WGS84 - equatorial radius
+    double k0 = 0.9996; // UTM point scale on the central meridian
+    double eccSquared = 0.00669438;   // eccentricity squared
+    double lonTemp = (lon + 180) - int((lon + 180)/360) * 360 - 180; //Make sure the longitude is between -180.00 .. 179.9
+    double latRad = toRadians(lat);
+    double lonRad = toRadians(lonTemp);
+
+    // Special Zones for Norway and Svalbard
+    if( lat >= 56.0 && lat < 64.0 && lonTemp >= 3.0 && lonTemp < 12.0 ) // Norway
+        utm.zone = 32;
+    if( lat >= 72.0 && lat < 84.0 ) { // Svalbard
+        if     ( lonTemp >= 0.0  && lonTemp <  9.0 ) utm.zone = 31;
+        else if( lonTemp >= 9.0  && lonTemp < 21.0 ) utm.zone = 33;
+        else if( lonTemp >= 21.0 && lonTemp < 33.0 ) utm.zone = 35;
+        else if( lonTemp >= 33.0 && lonTemp < 42.0 ) utm.zone = 37;
+    }
+    
+    double lonOrigin = (utm.zone - 1)*6 - 180 + 3;  // puts origin in middle of zone
+    double lonOriginRad = toRadians(lonOrigin);
+    double eccPrimeSquared = (eccSquared)/(1 - eccSquared);
+    double N = a/sqrt(1 - eccSquared*sin(latRad)*sin(latRad));
+    double T = tan(latRad)*tan(latRad);
+    double C = eccPrimeSquared*cos(latRad)*cos(latRad);
+    double A = cos(latRad)*(lonRad - lonOriginRad);
+    double M = a*((1 - eccSquared/4 - 3*eccSquared*eccSquared/64 - 5*eccSquared*eccSquared*eccSquared/256)*latRad 
+        - (3*eccSquared/8 + 3*eccSquared*eccSquared/32 + 45*eccSquared*eccSquared*eccSquared/1024)*sin(2*latRad)
+        + (15*eccSquared*eccSquared/256 + 45*eccSquared*eccSquared*eccSquared/1024)*sin(4*latRad) 
+        - (35*eccSquared*eccSquared*eccSquared/3072)*sin(6*latRad));
+    utm.easting = (double)(k0*N*(A+(1-T+C)*pow(A, 3)/6 + (5-18*T+T*T+72*C-58*eccPrimeSquared)*A*A*A*A*A/120) 
+        + 500000.0);
+    utm.northing = (double)(k0*(M+N*tan(latRad)*(A*A/2+(5-T+9*C+4*C*C)*A*A*A*A/24
+        + (61-58*T+T*T+600*C-330*eccPrimeSquared)*A*A*A*A*A*A/720)));
+            
+    if(lat < 0)
+        utm.northing += 10000000.0; //10000000 meter offset for southern hemisphere
+
+    return utm;
+}
+
+// Converts lat long coordinates to an UTM string.
+static String latLongToUTMStr(double lat, double lon)
+{
+    UTM utm = latLongToUTM(lat, lon);
+    return String(utm.zone) + String(utm.band) + " " + String(utm.easting, 1) + " " + String(utm.northing, 1);
+}
+
+// Converts lat long coordinates to an MGRS string.
+static String latLongToMGRSStr(double lat, double lon)
+{
+    const String e100kLetters[3] = { "ABCDEFGH", "JKLMNPQR", "STUVWXYZ" };
+    const String n100kLetters[2] = { "ABCDEFGHJKLMNPQRSTUV", "FGHJKLMNPQRSTUVABCDE" };
+    UTM utm = latLongToUTM(lat, lon);
+    String mgrs = String(utm.zone) + String(utm.band) + " ";
+    double col = floor(utm.easting / 100000);
+    char e100k = e100kLetters[(utm.zone - 1) % 3].charAt(col - 1);
+    double row = (int)floor(utm.northing / 100000.0) % 20;
+    char n100k = n100kLetters[(utm.zone - 1) % 2].charAt(row);
+    int easting = (int)utm.easting % 100000;
+    int northing = (int)utm.northing % 100000;
+    return mgrs + String(e100k) + String(n100k) + " " + String(easting) + " " + String(northing);
+}
+
+// Converts decimal degrees to degrees minutes seconds.
+static String decDegreesToDMS(double val, char compassPoint)
+{
+    double decDeg = val;
+
+    if (val < 0)
+        decDeg = decDeg * -1;
+        
+    int d = floor(decDeg);
+    double minutes = (decDeg - d) * 60;
+    int m = floor(minutes);
+    int s = (minutes - m) * 60;
+    return String(d) + "°" + String(m) + "'" + String(s) + "\"" + compassPoint;
+}
+
+/**
+ * Converts lat long coordinates from decimal degrees to degrees minutes seconds format. 
+ * DD°MM'SS"C DDD°MM'SS"C
+ * 
+ * Possible TODO - As it is currently implemented there will be a loss of fidelity due 
+ * to the space constraint of 22 characters. One solution to this is to add a scrolling 
+ * text capability for the coordinates, where if the string is too long to fit the space
+ * it will be displayed for a couple of seconds then scroll over to the rest of the string
+ * for a couple of seconds.
+ */
+static String latLongToDMS(double lat, double lon)
+{
+    char latCP; // compass point direction for latitude
+    char lonCP; // compass point direction for longitude
+    
+    if (lat < 0) latCP = 'S';
+    else latCP = 'N';
+
+    if (lon < 0) lonCP = 'W';
+    else lonCP = 'E';
+
+    return decDegreesToDMS(lat, latCP) + " " + decDegreesToDMS(lon, lonCP);
+}
+
+static String getGPSCoordinateString(const GPSStatus *gps)
+{
+    auto gpsFormat = radioConfig.preferences.gps_format;
+    String coordinates = "";
+
+    if (gpsFormat == GpsCoordinateFormat_GpsFormatDMS)
+        coordinates =  latLongToDMS(gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
+    else if (gpsFormat == GpsCoordinateFormat_GpsFormatUTM)
+        coordinates =  latLongToUTMStr(gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
+    else if (gpsFormat == GpsCoordinateFormat_GpsFormatMGRS)
+        coordinates =  latLongToMGRSStr(gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
+    else // Defaults to decimal degrees
+        coordinates =  String(gps->getLatitude() * 1e-7, 6) + " " + String(gps->getLongitude() * 1e-7, 6);
+
+    return coordinates;
+}
+
 // Draw GPS status coordinates
 static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
     String displayLine = "";
-    if (!gps->getIsConnected()) {
+
+    if (!gps->getIsConnected())
         displayLine = "No GPS Module";
-        display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
-    } else if (!gps->getHasLock()) {
+    else if (!gps->getHasLock())
         displayLine = "No GPS Lock";
-        display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
-    } else {
-        char coordinateLine[22];
-        sprintf(coordinateLine, "%f %f", gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
-        display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
-    }
+    else
+        displayLine = getGPSCoordinateString(gps);
+    
+    display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
 }
 
 /// Ported from my old java code, returns distance in meters along the globe
@@ -416,16 +561,6 @@ static float latLongToMeter(double lat_a, double lng_a, double lat_b, double lng
         tt = 0.0; // Must have been the same point?
 
     return (float)(6366000 * tt);
-}
-
-static inline double toRadians(double deg)
-{
-    return deg * PI / 180;
-}
-
-static inline double toDegrees(double r)
-{
-    return r * 180 / PI;
 }
 
 /**
