@@ -548,16 +548,16 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
     } else {
         char coordinateLine[22];
 
-        if (gpsFormat == GpsCoordinateFormat_GpsFormatDMS) {
+        if (gpsFormat == GpsCoordinateFormat_GpsFormatDMS) { // Degrees Minutes Seconds
             DMS dms = latLongToDMS(gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
-            sprintf(coordinateLine, "%2i°%2i'%2.0f\"%1c %3i°%2i'%2.0f\"", dms.latDeg, dms.latMin, dms.latSec, dms.latCP, 
-                    dms.lonDeg, dms.lonMin, dms.lonSec);
-        } else if (gpsFormat == GpsCoordinateFormat_GpsFormatUTM) {
+            sprintf(coordinateLine, "%2i°%2i'%2.0f\"%1c%3i°%2i'%2.0f\"%1c", dms.latDeg, dms.latMin, dms.latSec, dms.latCP, 
+                    dms.lonDeg, dms.lonMin, dms.lonSec, dms.lonCP);
+        } else if (gpsFormat == GpsCoordinateFormat_GpsFormatUTM) { // Universal Transverse Mercator
             UTM utm = latLongToUTM(gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
-            sprintf(coordinateLine, "%2i%1c %6.0f %7.0f", utm.zone, utm.band, utm.easting, utm.northing);
-        } else if (gpsFormat == GpsCoordinateFormat_GpsFormatMGRS) {
+            sprintf(coordinateLine, "%2i%1c %06.0f %07.0f", utm.zone, utm.band, utm.easting, utm.northing);
+        } else if (gpsFormat == GpsCoordinateFormat_GpsFormatMGRS) { // Military Grid Reference System
             MGRS mgrs = latLongToMGRS(gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
-            sprintf(coordinateLine, "%2i%1c %1c%1c %5i %5i", mgrs.zone, mgrs.band, mgrs.east100k, mgrs.north100k, 
+            sprintf(coordinateLine, "%2i%1c %1c%1c %05i %05i", mgrs.zone, mgrs.band, mgrs.east100k, mgrs.north100k, 
                     mgrs.easting, mgrs.northing);
         } else // Defaults to decimal degrees
             sprintf(coordinateLine, "%f %f", gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
