@@ -50,7 +50,7 @@ bool SX1262Interface::init()
 
     limitPower();
 
-    int res = lora.begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength, tcxoVoltage, useRegulatorLDO);
+    int res = lora.begin(freq, bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage, useRegulatorLDO);
     DEBUG_MSG("SX1262 init result %d\n", res);
 
 #ifdef SX1262_TXEN
