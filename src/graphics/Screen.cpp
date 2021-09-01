@@ -380,10 +380,165 @@ static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GP
     }
 }
 
+static inline double toRadians(double deg)
+{
+    return deg * PI / 180;
+}
+
+static inline double toDegrees(double r)
+{
+    return r * 180 / PI;
+}
+
+// A struct to hold the data for a DMS coordinate.
+struct DMS
+{
+    byte latDeg;
+    byte latMin;
+    double latSec;
+    char latCP;
+    byte lonDeg;
+    byte lonMin;
+    double lonSec;
+    char lonCP;
+};
+
+// A struct to hold the data for a UTM coordinate, this is also used when creating an MGRS coordinate.
+struct UTM 
+{
+    byte zone;
+    char band;
+    double easting;
+    double northing;
+};
+
+// A struct to hold the data for a MGRS coordinate.
+struct MGRS
+{
+    byte zone;
+    char band;
+    char east100k;
+    char north100k;
+    uint32_t easting;
+    uint32_t northing;
+};
+
+/**
+ * Converts lat long coordinates to UTM.
+ * based on this: https://github.com/walvok/LatLonToUTM/blob/master/latlon_utm.ino
+ */
+static struct UTM latLongToUTM(const double lat, const double lon)
+{
+    const String latBands = "CDEFGHJKLMNPQRSTUVWXX";
+    UTM utm;
+    utm.zone = int((lon + 180)/6 + 1);
+    utm.band = latBands.charAt(int(lat/8 + 10));
+    double a = 6378137; // WGS84 - equatorial radius
+    double k0 = 0.9996; // UTM point scale on the central meridian
+    double eccSquared = 0.00669438;   // eccentricity squared
+    double lonTemp = (lon + 180) - int((lon + 180)/360) * 360 - 180; //Make sure the longitude is between -180.00 .. 179.9
+    double latRad = toRadians(lat);
+    double lonRad = toRadians(lonTemp);
+
+    // Special Zones for Norway and Svalbard
+    if( lat >= 56.0 && lat < 64.0 && lonTemp >= 3.0 && lonTemp < 12.0 ) // Norway
+        utm.zone = 32;
+    if( lat >= 72.0 && lat < 84.0 ) { // Svalbard
+        if     ( lonTemp >= 0.0  && lonTemp <  9.0 ) utm.zone = 31;
+        else if( lonTemp >= 9.0  && lonTemp < 21.0 ) utm.zone = 33;
+        else if( lonTemp >= 21.0 && lonTemp < 33.0 ) utm.zone = 35;
+        else if( lonTemp >= 33.0 && lonTemp < 42.0 ) utm.zone = 37;
+    }
+    
+    double lonOrigin = (utm.zone - 1)*6 - 180 + 3;  // puts origin in middle of zone
+    double lonOriginRad = toRadians(lonOrigin);
+    double eccPrimeSquared = (eccSquared)/(1 - eccSquared);
+    double N = a/sqrt(1 - eccSquared*sin(latRad)*sin(latRad));
+    double T = tan(latRad)*tan(latRad);
+    double C = eccPrimeSquared*cos(latRad)*cos(latRad);
+    double A = cos(latRad)*(lonRad - lonOriginRad);
+    double M = a*((1 - eccSquared/4 - 3*eccSquared*eccSquared/64 - 5*eccSquared*eccSquared*eccSquared/256)*latRad 
+        - (3*eccSquared/8 + 3*eccSquared*eccSquared/32 + 45*eccSquared*eccSquared*eccSquared/1024)*sin(2*latRad)
+        + (15*eccSquared*eccSquared/256 + 45*eccSquared*eccSquared*eccSquared/1024)*sin(4*latRad) 
+        - (35*eccSquared*eccSquared*eccSquared/3072)*sin(6*latRad));
+    utm.easting = (double)(k0*N*(A+(1-T+C)*pow(A, 3)/6 + (5-18*T+T*T+72*C-58*eccPrimeSquared)*A*A*A*A*A/120) 
+        + 500000.0);
+    utm.northing = (double)(k0*(M+N*tan(latRad)*(A*A/2+(5-T+9*C+4*C*C)*A*A*A*A/24
+        + (61-58*T+T*T+600*C-330*eccPrimeSquared)*A*A*A*A*A*A/720)));
+            
+    if(lat < 0)
+        utm.northing += 10000000.0; //10000000 meter offset for southern hemisphere
+
+    return utm;
+}
+
+// Converts lat long coordinates to an MGRS.
+static struct MGRS latLongToMGRS(double lat, double lon)
+{
+    const String e100kLetters[3] = { "ABCDEFGH", "JKLMNPQR", "STUVWXYZ" };
+    const String n100kLetters[2] = { "ABCDEFGHJKLMNPQRSTUV", "FGHJKLMNPQRSTUVABCDE" };
+    UTM utm = latLongToUTM(lat, lon);
+    MGRS mgrs;
+    mgrs.zone = utm.zone;
+    mgrs.band = utm.band;
+    double col = floor(utm.easting / 100000);
+    mgrs.east100k = e100kLetters[(mgrs.zone - 1) % 3].charAt(col - 1);
+    double row = (int)floor(utm.northing / 100000.0) % 20;
+    mgrs.north100k = n100kLetters[(mgrs.zone-1)%2].charAt(row);
+    mgrs.easting = (int)utm.easting % 100000;
+    mgrs.northing = (int)utm.northing % 100000;
+    return mgrs;
+}
+
+/**
+ * Converts lat long coordinates from decimal degrees to degrees minutes seconds format. 
+ * DD°MM'SS"C DDD°MM'SS"C
+ * 
+ * Possible TODO - As it is currently implemented there will be a loss of fidelity due 
+ * to the space constraint of 22 characters. One solution to this is to add a scrolling 
+ * text capability for the coordinates, where if the string is too long to fit the space
+ * it will be displayed for a couple of seconds then scroll over to the rest of the string
+ * for a couple of seconds.
+ */
+static struct DMS latLongToDMS(double lat, double lon)
+{
+    DMS dms;
+    
+    if (lat < 0) dms.latCP = 'S';
+    else dms.latCP = 'N';
+
+    double latDeg = lat;
+
+    if (lat < 0)
+        latDeg = latDeg * -1;
+
+    dms.latDeg = floor(latDeg);
+    double latMin = (latDeg - dms.latDeg) * 60;
+    dms.latMin = floor(latMin);
+    dms.latSec = (latMin - dms.latMin) * 60;
+
+    if (lon < 0) dms.lonCP = 'W';
+    else dms.lonCP = 'E';
+
+    double lonDeg = lon;
+
+    if (lon < 0)
+        lonDeg = lonDeg * -1;
+
+    dms.lonDeg = floor(lonDeg);
+    double lonMin = (lonDeg - dms.lonDeg) * 60;
+    dms.lonMin = floor(lonMin);
+    dms.lonSec = (lonMin - dms.lonMin) * 60;
+
+    return dms;
+}
+
 // Draw GPS status coordinates
 static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
+    auto gpsFormat = radioConfig.preferences.gps_format;
     String displayLine = "";
+
     if (!gps->getIsConnected()) {
         displayLine = "No GPS Module";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
@@ -392,7 +547,21 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
         char coordinateLine[22];
-        sprintf(coordinateLine, "%f %f", gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
+
+        if (gpsFormat == GpsCoordinateFormat_GpsFormatDMS) { // Degrees Minutes Seconds
+            DMS dms = latLongToDMS(gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
+            sprintf(coordinateLine, "%2i°%2i'%2.0f\"%1c%3i°%2i'%2.0f\"%1c", dms.latDeg, dms.latMin, dms.latSec, dms.latCP, 
+                    dms.lonDeg, dms.lonMin, dms.lonSec, dms.lonCP);
+        } else if (gpsFormat == GpsCoordinateFormat_GpsFormatUTM) { // Universal Transverse Mercator
+            UTM utm = latLongToUTM(gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
+            sprintf(coordinateLine, "%2i%1c %06.0f %07.0f", utm.zone, utm.band, utm.easting, utm.northing);
+        } else if (gpsFormat == GpsCoordinateFormat_GpsFormatMGRS) { // Military Grid Reference System
+            MGRS mgrs = latLongToMGRS(gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
+            sprintf(coordinateLine, "%2i%1c %1c%1c %05i %05i", mgrs.zone, mgrs.band, mgrs.east100k, mgrs.north100k, 
+                    mgrs.easting, mgrs.northing);
+        } else // Defaults to decimal degrees
+            sprintf(coordinateLine, "%f %f", gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
+        
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
     }
 }
@@ -416,16 +585,6 @@ static float latLongToMeter(double lat_a, double lng_a, double lat_b, double lng
         tt = 0.0; // Must have been the same point?
 
     return (float)(6366000 * tt);
-}
-
-static inline double toRadians(double deg)
-{
-    return deg * PI / 180;
-}
-
-static inline double toDegrees(double r)
-{
-    return r * 180 / PI;
 }
 
 /**
