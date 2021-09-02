@@ -1,5 +1,5 @@
 #include "RadioLibRF95.h"
-
+#include <configuration.h>
 #define RF95_CHIP_VERSION 0x12
 #define RF95_ALT_VERSION 0x11 // Supposedly some versions of the chip have id 0x11
 
@@ -17,6 +17,16 @@ int16_t RadioLibRF95::begin(float freq, float bw, uint8_t sf, uint8_t cr, uint8_
     if (state != ERR_NONE)
         state = SX127x::begin(RF95_ALT_VERSION, syncWord, currentLimit, preambleLength);
     RADIOLIB_ASSERT(state);
+
+    DEBUG_MSG("RadioRD95 freq: %f\n", freq);
+    DEBUG_MSG("RadioRD95 bw: %f\n", bw);
+    DEBUG_MSG("RadioRD95 sf: %d\n", sf);
+    DEBUG_MSG("RadioRD95 cr: %d\n", cr);
+    DEBUG_MSG("RadioRD95 syncWord: %d\n", syncWord);
+    DEBUG_MSG("RadioRD95 power: %d\n", power);
+    DEBUG_MSG("RadioRD95 currentLimit: %d\n", currentLimit);
+    DEBUG_MSG("RadioRD95 preambleLength: %d\n", preambleLength);
+    DEBUG_MSG("RadioRD95 gain: %d\n", gain);
 
     // configure settings not accessible by API
     state = config();

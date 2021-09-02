@@ -71,7 +71,7 @@ bool RF95Interface::init()
     DEBUG_MSG("RF95 init result %d\n", res);
 
     if (res == ERR_NONE)
-        res = lora->setCRC(SX126X_LORA_CRC_ON);
+        res = lora->setCRC(SX126X_LORA_CRC_OFF); //FIXME
 
     if (res == ERR_NONE)
         startReceive(); // start receiving

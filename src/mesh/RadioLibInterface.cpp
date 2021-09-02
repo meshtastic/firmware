@@ -263,6 +263,7 @@ void RadioLibInterface::handleReceiveInterrupt()
             rxBad++;
             airTime->logAirtime(RX_ALL_LOG, xmitMsec);
         } else {
+            DEBUG_MSG("loRa msg received\n", state);
             const PacketHeader *h = (PacketHeader *)radiobuf;
 
             rxGood++;
