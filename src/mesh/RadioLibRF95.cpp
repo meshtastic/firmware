@@ -10,7 +10,7 @@
 
 RadioLibRF95::RadioLibRF95(Module *mod) : SX1278(mod) {}
 
-int16_t RadioLibRF95::begin(float freq, float bw, uint8_t sf, uint8_t cr, uint8_t syncWord, int8_t power, uint8_t currentLimit,
+int16_t RadioLibRF95::begin(float freq, float bw, uint8_t sf, uint8_t cr, uint8_t syncWord, int8_t power,
                             uint16_t preambleLength, uint8_t gain)
 {
     // execute common part
