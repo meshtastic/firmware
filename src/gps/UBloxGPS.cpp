@@ -196,6 +196,11 @@ bool UBloxGPS::lookForLocation()
     return foundLocation;
 }
 
+bool UBloxGPS::hasLock()
+{
+    return (fixType >= 3 && fixType <= 4);
+}
+
 bool UBloxGPS::whileIdle()
 {
     // if using i2c or serial look too see if any chars are ready
