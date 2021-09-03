@@ -10,13 +10,13 @@
 
 RadioLibRF95::RadioLibRF95(Module *mod) : SX1278(mod) {}
 
-int16_t RadioLibRF95::begin(float freq, float bw, uint8_t sf, uint8_t cr, uint8_t syncWord, int8_t power, uint8_t currentLimit,
+int16_t RadioLibRF95::begin(float freq, float bw, uint8_t sf, uint8_t cr, uint8_t syncWord, int8_t power,
                             uint16_t preambleLength, uint8_t gain)
 {
     // execute common part
-    int16_t state = SX127x::begin(RF95_CHIP_VERSION, syncWord, currentLimit, preambleLength);
+    int16_t state = SX127x::begin(RF95_CHIP_VERSION, syncWord, preambleLength);
     if (state != ERR_NONE)
-        state = SX127x::begin(RF95_ALT_VERSION, syncWord, currentLimit, preambleLength);
+        state = SX127x::begin(RF95_ALT_VERSION, syncWord, preambleLength);
     RADIOLIB_ASSERT(state);
 
     // configure settings not accessible by API
