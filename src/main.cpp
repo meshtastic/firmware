@@ -39,6 +39,7 @@
 
 #include "RF95Interface.h"
 #include "SX1262Interface.h"
+#include "SX1268Interface.h"
 
 #ifdef NRF52_SERIES
 #include "variant.h"
@@ -497,6 +498,12 @@ void setup()
     digitalWrite(SX1262_ANT_SW, 1);
 #endif
 
+#ifdef SX1268_ANT_SW
+    // make analog PA vs not PA switch on SX1268 eval board work properly
+    pinMode(SX1268_ANT_SW, OUTPUT);
+    digitalWrite(SX1268_ANT_SW, 1);
+#endif
+
     // radio init MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
 
 #if defined(RF95_IRQ)
@@ -521,6 +528,19 @@ void setup()
             rIf = NULL;
         } else {
             DEBUG_MSG("SX1262 Radio init succeeded, using SX1262 radio\n");
+        }
+    }
+#endif
+
+#if defined(SX1268_CS)
+    if (!rIf) {
+        rIf = new SX1268Interface(SX1268_CS, SX1268_DIO1, SX1268_RESET, SX1268_BUSY, SPI);
+        if (!rIf->init()) {
+            DEBUG_MSG("Warning: Failed to find SX1268 radio\n");
+            delete rIf;
+            rIf = NULL;
+        } else {
+            DEBUG_MSG("SX1268 Radio init succeeded, using SX1268 radio\n");
         }
     }
 #endif
