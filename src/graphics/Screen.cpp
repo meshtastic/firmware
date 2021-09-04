@@ -493,12 +493,6 @@ static struct MGRS latLongToMGRS(double lat, double lon)
 /**
  * Converts lat long coordinates from decimal degrees to degrees minutes seconds format. 
  * DD°MM'SS"C DDD°MM'SS"C
- * 
- * Possible TODO - As it is currently implemented there will be a loss of fidelity due 
- * to the space constraint of 22 characters. One solution to this is to add a scrolling 
- * text capability for the coordinates, where if the string is too long to fit the space
- * it will be displayed for a couple of seconds then scroll over to the rest of the string
- * for a couple of seconds.
  */
 static struct DMS latLongToDMS(double lat, double lon)
 {
@@ -533,6 +527,216 @@ static struct DMS latLongToDMS(double lat, double lon)
     return dms;
 }
 
+// Raises a number to an exponent, handling negative exponents.
+static double pow_neg(double base, double exponent) {
+  if (exponent == 0) {
+    return 1;
+  } else if (exponent > 0) {
+    return pow(base, exponent);
+  }
+  return 1 / pow(base, -exponent);
+}
+
+/**
+ * Converts lat long coordinates to Open Location Code.
+ * Based on: https://github.com/google/open-location-code/blob/main/c/src/olc.c
+ */
+static void latLongToOLC(double lat, double lon, char* code) {
+    char tempCode[] = "1234567890abc";
+    const char kAlphabet[] = "23456789CFGHJMPQRVWX";
+    const byte CODE_LEN = 12;
+    double latitude;
+    double longitude = lon;
+    double latitude_degrees = min(90.0, max(-90.0, lat));
+
+    if (latitude_degrees < 90) // Check latitude less than lat max
+        latitude = latitude_degrees;
+    else {
+        double precision;
+        if (CODE_LEN <= 10)
+            precision = pow_neg(20, floor((CODE_LEN / -2) + 2));
+        else
+            precision = pow_neg(20, -3) / pow(5, CODE_LEN - 10);
+        latitude = latitude_degrees - precision / 2;
+    }
+    
+    while (lon < -180) // Normalize longitude
+        longitude += 360;
+    while (lon >= 180)
+        longitude -= 360;
+    
+    int64_t lat_val = 90 * 2.5e7;
+    int64_t lng_val = 180 * 8.192e6;
+    lat_val += latitude * 2.5e7;
+    lng_val += longitude * 8.192e6;
+    size_t pos = CODE_LEN;
+    
+    if (CODE_LEN > 10) { // Compute grid part of code if needed
+        for (size_t i = 0; i < 5; i++) {
+            int lat_digit = lat_val % 5;
+            int lng_digit = lng_val % 4;
+            int ndx = lat_digit * 4 + lng_digit;
+            tempCode[pos--] = kAlphabet[ndx];
+            lat_val /= 5;
+            lng_val /= 4;
+        }
+    } else {
+        lat_val /= pow(5, 5);
+        lng_val /= pow(4, 5);
+    }
+    
+    pos = 10;
+    
+    for (size_t i = 0; i < 5; i++) { // Compute pair section of code
+        int lat_ndx = lat_val % 20;
+        int lng_ndx = lng_val % 20;
+        tempCode[pos--] = kAlphabet[lng_ndx];
+        tempCode[pos--] = kAlphabet[lat_ndx];
+        lat_val /= 20;
+        lng_val /= 20;
+
+        if (i == 0)
+            tempCode[pos--] = '+';
+    }
+
+    if (CODE_LEN < 9) { // Add padding if needed
+        for (size_t i = CODE_LEN; i < 9; i++)
+            tempCode[i] = '0';
+        tempCode[9] = '+';
+    }
+
+    size_t char_count = CODE_LEN + 1;
+    if (10 > char_count) {
+        char_count = 10;
+    }
+    for (size_t i = 0; i < char_count; i++) {
+        code[i] = tempCode[i];
+    }
+
+    code[char_count] = '\0';
+}
+
+struct GeoCoord {
+    double latitude;
+    double longitude;
+    double height;
+};
+
+struct OSGR {
+    char e100k;
+    char n100k;
+    uint32_t easting;
+    uint32_t northing;
+};
+
+// Converts the coordinate in WGS84 datum to the OSGB36 datum.
+static struct GeoCoord convertWGS84ToOSGB36(double lat, double lon) {
+    // Convert lat long to cartesian
+    double phi = toRadians(lat);
+    double lambda = toRadians(lon);
+    double h = 0.0; // No OSTN height data used, some loss of accuracy (up to 5m)
+    double wgsA = 6378137; // WGS84 datum semi major axis
+    double wgsF = 1 / 298.257223563; // WGS84 datum flattening
+    double ecc = 2*wgsF - wgsF*wgsF;
+    double vee = wgsA / sqrt(1 - ecc * pow(sin(phi), 2));
+    double wgsX = (vee + h) * cos(phi) * cos(lambda);
+    double wgsY = (vee + h) * cos(phi) * sin(lambda);
+    double wgsZ = ((1 - ecc) * vee + h) * sin(phi);
+
+    // 7-parameter Helmert transform
+    double tx = -446.448; // x shift in meters
+    double ty = 125.157; // y shift in meters
+    double tz = -542.060; // z shift in meters
+    double s = 20.4894/1e6 + 1; // scale normalized parts per million to (s + 1)
+    double rx = toRadians(-0.1502/3600); // x rotation normalize arcseconds to radians
+    double ry = toRadians(-0.2470/3600); // y rotation normalize arcseconds to radians
+    double rz = toRadians(-0.8421/3600); // z rotation normalize arcseconds to radians
+    double osgbX = tx + wgsX*s - wgsY*rz + wgsZ*ry; 
+    double osgbY = ty + wgsX*rz + wgsY*s - wgsZ*rx;
+    double osgbZ = tz - wgsX*ry + wgsY*rx + wgsZ*s;
+
+    // Convert cartesian to lat long
+    double airyA = 6377563.396; // Airy1830 datum semi major axis
+    double airyB = 6356256.909; // Airy1830 datum semi minor axis
+    double airyF = 1/ 299.3249646; // Airy1830 datum flattening
+    GeoCoord osgb;
+    double airyEcc = 2*airyF - airyF*airyF;
+    double airyEcc2 = airyEcc / (1 - airyEcc);
+    double p = sqrt(osgbX*osgbX + osgbY*osgbY);
+    double R = sqrt(p*p + osgbZ*osgbZ);
+    double tanBeta = (airyB*osgbZ) / (airyA*p) * (1 + airyEcc2*airyB/R);
+    double sinBeta = tanBeta / sqrt(1 + tanBeta*tanBeta);
+    double cosBeta = sinBeta / tanBeta;
+    osgb.latitude = atan2(osgbZ + airyEcc2*airyB*sinBeta*sinBeta*sinBeta, p - airyEcc*airyA*cosBeta*cosBeta*cosBeta); // leave in radians
+    osgb.longitude = atan2(osgbY, osgbX); // leave in radians
+    osgb.height = 0;
+    //osgb height = p*cos(osgb.latitude) + osgbZ*sin(osgb.latitude) - 
+            //(airyA*airyA/(airyA / sqrt(1 - airyEcc*sin(osgb.latitude)*sin(osgb.latitude)))); // Not used, no OSTN data
+    return osgb;
+}
+
+/**
+ * Converts lat long coordinates to Ordnance Survey Grid Reference (UK National Grid Ref).
+ * Based on: https://www.movable-type.co.uk/scripts/latlong-os-gridref.html
+ */
+static struct OSGR latLongToOSGR(double lat, double lon) {
+    char letter[] = "ABCDEFGHJKLMNOPQRSTUVWXYZ"; // No 'I' in OSGR
+    double a = 6377563.396; // Airy 1830 semi-major axis
+    double b = 6356256.909; // Airy 1830 semi-minor axis
+    double f0 = 0.9996012717; // National Grid point scale factor on the central meridian
+    double phi0 = toRadians(49); 
+    double lambda0 = toRadians(-2);
+    double n0 = -100000;
+    double e0 = 400000;
+    double e2 = 1 - (b*b)/(a*a); // eccentricity squared
+    double n = (a - b)/(a + b);
+    
+    GeoCoord osgb = convertWGS84ToOSGB36(lat, lon);
+    double phi = osgb.latitude; // already in radians
+    double lambda = osgb.longitude; // already in radians
+    double v = a * f0 / sqrt(1 - e2 * sin(phi) * sin(phi));
+    double rho = a * f0 * (1 - e2) / pow(1 - e2 * sin(phi) * sin(phi), 1.5);
+    double eta2 = v / rho - 1;
+    double mA = (1 + n + (5/4)*n*n + (5/4)*n*n*n) * (phi - phi0);
+    double mB = (3*n + 3*n*n + (21/8)*n*n*n) * sin(phi - phi0) * cos(phi + phi0);
+    // loss of precision in mC & mD due to floating point rounding can cause innaccuracy of northing by a few meters
+    double mC = (15/8*n*n + 15/8*n*n*n) * sin(2*(phi - phi0)) * cos(2*(phi + phi0));
+    double mD = (35/24)*n*n*n * sin(3*(phi - phi0)) * cos(3*(phi + phi0));
+    double m = b*f0*(mA - mB + mC - mD);
+
+    double cos3Phi = cos(phi)*cos(phi)*cos(phi);
+    double cos5Phi = cos3Phi*cos(phi)*cos(phi);
+    double tan2Phi = tan(phi)*tan(phi);
+    double tan4Phi = tan2Phi*tan2Phi;
+    double I = m + n0;
+    double II = (v/2)*sin(phi)*cos(phi);
+    double III = (v/24)*sin(phi)*cos3Phi*(5 - tan2Phi + 9*eta2);
+    double IIIA = (v/720)*sin(phi)*cos5Phi*(61 - 58*tan2Phi + tan4Phi);
+    double IV = v*cos(phi);
+    double V = (v/6)*cos3Phi*(v/rho - tan2Phi);
+    double VI = (v/120)*cos5Phi*(5 - 18*tan2Phi + tan4Phi + 14*eta2 - 58*tan2Phi*eta2);
+
+    double deltaLambda = lambda - lambda0;
+    double deltaLambda2 = deltaLambda*deltaLambda;
+    double northing = I + II*deltaLambda2 + III*deltaLambda2*deltaLambda2 + IIIA*deltaLambda2*deltaLambda2*deltaLambda2;
+    double easting = e0 + IV*deltaLambda + V*deltaLambda2*deltaLambda + VI*deltaLambda2*deltaLambda2*deltaLambda;
+
+    OSGR osgr;
+    if (easting < 0 || easting > 700000 || northing < 0 || northing > 1300000) // Check if out of boundaries
+        osgr = { 'I', 'I', 0, 0 };
+    else {
+        uint32_t e100k = floor(easting / 100000);
+        uint32_t n100k = floor(northing / 100000);
+        byte l1 = (19 - n100k) - (19 - n100k) % 5 + floor((e100k + 10) / 5);
+        byte l2 = (19 - n100k) * 5 % 25 + e100k % 5;
+        osgr.e100k = letter[l1];
+        osgr.n100k = letter[l2];
+        osgr.easting = floor((int)easting % 100000);
+        osgr.northing = floor((int)northing % 100000);
+    }
+    return osgr;
+}
+
 // Draw GPS status coordinates
 static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
@@ -546,23 +750,38 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
         displayLine = "No GPS Lock";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
-        char coordinateLine[22];
+        if (gpsFormat != GpsCoordinateFormat_GpsFormatDMS) {
+            char coordinateLine[22];
 
-        if (gpsFormat == GpsCoordinateFormat_GpsFormatDMS) { // Degrees Minutes Seconds
+            if (gpsFormat == GpsCoordinateFormat_GpsFormatDec) { // Decimal Degrees
+                sprintf(coordinateLine, "%f %f", gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
+            } else if (gpsFormat == GpsCoordinateFormat_GpsFormatUTM) { // Universal Transverse Mercator
+                UTM utm = latLongToUTM(gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
+                sprintf(coordinateLine, "%2i%1c %06.0f %07.0f", utm.zone, utm.band, utm.easting, utm.northing);
+            } else if (gpsFormat == GpsCoordinateFormat_GpsFormatMGRS) { // Military Grid Reference System
+                MGRS mgrs = latLongToMGRS(gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
+                sprintf(coordinateLine, "%2i%1c %1c%1c %05i %05i", mgrs.zone, mgrs.band, mgrs.east100k, mgrs.north100k, 
+                        mgrs.easting, mgrs.northing);
+            } else if (gpsFormat == GpsCoordinateFormat_GpsFormatOLC) { // Open Location Code
+                latLongToOLC(gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7, coordinateLine);
+            } else if (gpsFormat == GpsCoordinateFormat_GpsFormatOSGR) { // Ordnance Survey Grid Reference
+                OSGR osgr = latLongToOSGR(gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
+                if (osgr.e100k == 'I' || osgr.n100k == 'I') // OSGR is only valid around the UK region
+                    sprintf(coordinateLine, "%s", "Out of Boundary");
+                else
+                    sprintf(coordinateLine, "%1c%1c %05i %05i", osgr.e100k, osgr.n100k, osgr.easting, osgr.northing);
+            }
+            
+            display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
+        } else {
+            char latLine[22];
+            char lonLine[22];
             DMS dms = latLongToDMS(gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
-            sprintf(coordinateLine, "%2i°%2i'%2.0f\"%1c%3i°%2i'%2.0f\"%1c", dms.latDeg, dms.latMin, dms.latSec, dms.latCP, 
-                    dms.lonDeg, dms.lonMin, dms.lonSec, dms.lonCP);
-        } else if (gpsFormat == GpsCoordinateFormat_GpsFormatUTM) { // Universal Transverse Mercator
-            UTM utm = latLongToUTM(gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
-            sprintf(coordinateLine, "%2i%1c %06.0f %07.0f", utm.zone, utm.band, utm.easting, utm.northing);
-        } else if (gpsFormat == GpsCoordinateFormat_GpsFormatMGRS) { // Military Grid Reference System
-            MGRS mgrs = latLongToMGRS(gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
-            sprintf(coordinateLine, "%2i%1c %1c%1c %05i %05i", mgrs.zone, mgrs.band, mgrs.east100k, mgrs.north100k, 
-                    mgrs.easting, mgrs.northing);
-        } else // Defaults to decimal degrees
-            sprintf(coordinateLine, "%f %f", gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
-        
-        display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
+            sprintf(latLine, "%2i° %2i' %2.4f\" %1c", dms.latDeg, dms.latMin, dms.latSec, dms.latCP);
+            sprintf(lonLine, "%3i° %2i' %2.4f\" %1c", dms.lonDeg, dms.lonMin, dms.lonSec, dms.lonCP);
+            display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(latLine))) / 2, y - FONT_HEIGHT_SMALL * 1, latLine);
+            display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(lonLine))) / 2, y, lonLine);
+        }
     }
 }
 
@@ -1489,7 +1708,8 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 #endif
 
     // Line 3
-    drawGPSAltitude(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
+    if (radioConfig.preferences.gps_format != GpsCoordinateFormat_GpsFormatDMS) // if DMS then don't draw altitude
+        drawGPSAltitude(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
 
     // Line 4
     drawGPScoordinates(display, x, y + FONT_HEIGHT_SMALL * 3, gpsStatus);
