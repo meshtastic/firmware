@@ -56,6 +56,8 @@ typedef enum _GpsCoordinateFormat {
     GpsCoordinateFormat_GpsFormatDMS = 1,
     GpsCoordinateFormat_GpsFormatUTM = 2,
     GpsCoordinateFormat_GpsFormatMGRS = 3,
+    GpsCoordinateFormat_GpsFormatOLC = 4,
+    GpsCoordinateFormat_GpsFormatOSGR = 5
 } GpsCoordinateFormat;
 
 typedef enum _LocationSharing {
@@ -148,8 +150,8 @@ typedef struct _RadioConfig {
 #define _GpsOperation_ARRAYSIZE ((GpsOperation)(GpsOperation_GpsOpDisabled+1))
 
 #define _GpsCoordinateFormat_MIN GpsCoordinateFormat_GpsFormatDec
-#define _GpsCoordinateFormat_MAX GpsCoordinateFormat_GpsFormatMGRS
-#define _GpsCoordinateFormat_ARRAYSIZE ((GpsCoordinateFormat)(GpsCoordinateFormat_GpsFormatMGRS+1))
+#define _GpsCoordinateFormat_MAX GpsCoordinateFormat_GpsFormatOSGR
+#define _GpsCoordinateFormat_ARRAYSIZE ((GpsCoordinateFormat)(GpsCoordinateFormat_GpsFormatOSGR+1))
 
 #define _LocationSharing_MIN LocationSharing_LocUnset
 #define _LocationSharing_MAX LocationSharing_LocDisabled
@@ -262,7 +264,7 @@ X(a, STATIC,   SINGULAR, BOOL,     serial_disabled,  40) \
 X(a, STATIC,   SINGULAR, FLOAT,    frequency_offset,  41) \
 X(a, STATIC,   SINGULAR, STRING,   mqtt_server,      42) \
 X(a, STATIC,   SINGULAR, BOOL,     mqtt_disabled,    43) \
-X(a, STATIC,   SINGULAR, UENUM,     gps_format,      44) \
+X(a, STATIC,   SINGULAR, UENUM,    gps_format,       44) \
 X(a, STATIC,   SINGULAR, BOOL,     factory_reset,   100) \
 X(a, STATIC,   SINGULAR, BOOL,     debug_log_enabled, 101) \
 X(a, STATIC,   REPEATED, UINT32,   ignore_incoming, 103) \
