@@ -80,6 +80,8 @@ GPS::~GPS()
     notifyDeepSleepObserver.unobserve();
 }
 
+bool GPS::hasLock() { return hasValidLocation; }
+
 // Allow defining the polarity of the WAKE output.  default is active high
 #ifndef GPS_WAKE_ACTIVE
 #define GPS_WAKE_ACTIVE 1
