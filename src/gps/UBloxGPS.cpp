@@ -8,6 +8,8 @@
 // if gps_update_interval below this value, do not powercycle the GPS
 #define UBLOX_POWEROFF_THRESHOLD 90
 
+#define PDOP_INVALID 9999
+
 extern RadioConfig radioConfig;
 
 UBloxGPS::UBloxGPS() {}
@@ -116,19 +118,18 @@ bool UBloxGPS::factoryReset()
 /** Idle processing while GPS is looking for lock */
 void UBloxGPS::whileActive()
 {
+    ublox.flushPVT();  // reset ALL freshness flags first
+
     ublox.getT(maxWait()); // ask for new time data - hopefully ready when we come back
 
     // Ask for a new position fix - hopefully it will have results ready by next time
     // the order here is important, because we only check for has latitude when reading
-    ublox.getSIV(maxWait());
-    ublox.getPDOP(maxWait());
-    ublox.getP(maxWait());
 
-    // Update fixtype
-    if (ublox.moduleQueried.fixType) {
-        fixType = ublox.getFixType(0);
-        // DEBUG_MSG("GPS fix type %d, numSats %d\n", fixType, numSatellites);
-    }
+    //ublox.getSIV(maxWait());  // redundant with getPDOP below
+    ublox.getPDOP(maxWait());  // will trigger getSOL on NEO6, getP on others
+    ublox.getP(maxWait());     // will trigger getPosLLH on NEO6, getP on others
+
+    // the fixType flag will be checked and updated in lookForLocation()
 }
 
 /**
@@ -169,28 +170,78 @@ bool UBloxGPS::lookForLocation()
 {
     bool foundLocation = false;
 
-    if (ublox.moduleQueried.SIV)
-        setNumSatellites(ublox.getSIV(0));
+    // catch fixType changes here, instead of whileActive()
+    if (ublox.moduleQueried.fixType) {
+        fixType = ublox.getFixType();
+    }
 
-    if (ublox.moduleQueried.pDOP)
-        dop = ublox.getPDOP(0); // PDOP (an accuracy metric) is reported in 10^2 units so we have to scale down when we use it
+    // check if GPS has an acceptable lock
+    if (! hasLock()) {
+        return false;
+    }
 
-    // we only notify if position has changed due to a new fix
-    if ((fixType >= 3 && fixType <= 4)) {
-        if (ublox.moduleQueried.latitude) // rd fixes only
-        {
-            latitude = ublox.getLatitude(0);
-            longitude = ublox.getLongitude(0);
-            altitude = ublox.getAltitudeMSL(0) / 1000; // in mm convert to meters
+    // check if a complete GPS solution set is available for reading
+    // (some of these, like lat/lon are redundant and can be removed)
+    if ( ! (ublox.moduleQueried.latitude && 
+            ublox.moduleQueried.longitude &&
+            ublox.moduleQueried.altitude &&
+            ublox.moduleQueried.pDOP &&
+            ublox.moduleQueried.gpsiTOW)) 
+    {
+        // Not ready? No problem! We'll try again later.
+        return false;
+    }
 
-            // Note: heading is only currently implmented in the ublox for the 8m chipset - therefore
-            // don't read it here - it will generate an ignored getPVT command on the 6ms
-            // heading = ublox.getHeading(0);
+    // read lat/lon/alt/dop data into temporary variables to avoid
+    // overwriting global variables with potentially invalid data
+    int32_t tmp_dop = ublox.getPDOP(0); // PDOP (an accuracy metric) is reported in 10^2 units so we have to scale down when we use it
+    int32_t tmp_lat = ublox.getLatitude(0);
+    int32_t tmp_lon = ublox.getLongitude(0);
+    int32_t tmp_alt_msl = ublox.getAltitudeMSL(0);
+    int32_t tmp_alt_hae = ublox.getAltitude(0);
+    // Note: heading is only currently implmented in the ublox for the 8m chipset - therefore
+    // don't read it here - it will generate an ignored getPVT command on the 6ms
+    // heading = ublox.getHeading(0);
 
-            // bogus lat lon is reported as 0 or 0 (can be bogus just for one)
-            // Also: apparently when the GPS is initially reporting lock it can output a bogus latitude > 90 deg!
-            foundLocation = (latitude != 0) && (longitude != 0) && (latitude <= 900000000 && latitude >= -900000000);
-        }
+    // read positional timestamp
+    struct tm t;
+    t.tm_sec = ublox.getSecond(0);
+    t.tm_min = ublox.getMinute(0);
+    t.tm_hour = ublox.getHour(0);
+    t.tm_mday = ublox.getDay(0);
+    t.tm_mon = ublox.getMonth(0) - 1;
+    t.tm_year = ublox.getYear(0) - 1900;
+    t.tm_isdst = false;
+
+    time_t tmp_ts = mktime(&t);
+
+    // SIV number is nice-to-have if it's available
+    if (ublox.moduleQueried.SIV) {
+        uint16_t gSIV = ublox.getSIV(0);
+        setNumSatellites(gSIV);
+    }
+
+    // bogus lat lon is reported as 0 or 0 (can be bogus just for one)
+    // Also: apparently when the GPS is initially reporting lock it can output a bogus latitude > 90 deg!
+    // FIXME - NULL ISLAND is a real location on Earth!
+    foundLocation = (tmp_lat != 0) && (tmp_lon != 0) && 
+                    (tmp_lat <= 900000000) && (tmp_lat >= -900000000) &&
+                    (tmp_dop < PDOP_INVALID);
+
+    // only if entire dataset is valid, update globals from temp vars
+    if (foundLocation) {
+        longitude = tmp_lon;
+        latitude = tmp_lat;
+#ifdef GPS_ALTITUDE_HAE
+        altitude = tmp_alt_hae / 1000;
+#else
+        altitude = tmp_alt_msl / 1000;
+#endif
+        geoidal_height = (tmp_alt_hae - tmp_alt_msl) / 1000;
+        pos_timestamp = tmp_ts;
+        dop = tmp_dop;
+    } else {
+        DEBUG_MSG("Invalid location discarded\n");
     }
 
     return foundLocation;
