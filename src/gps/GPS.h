@@ -45,6 +45,9 @@ class GPS : private concurrency::OSThread
                           // scaling before use)
     uint32_t heading = 0; // Heading of motion, in degrees * 10^-5
 
+    int32_t geoidal_height = 0;  // geoidal separation, in meters!
+    time_t pos_timestamp = 0;  // positional timestamp from GPS solution
+
     GPS() : concurrency::OSThread("GPS") {}
 
     virtual ~GPS();
