@@ -54,6 +54,7 @@ class UBloxGPS : public GPS
      * @return true if we've acquired a new location
      */
     virtual bool lookForLocation();
+    virtual bool hasLock();
 
     /// If possible force the GPS into sleep/low power mode
     virtual void sleep();
