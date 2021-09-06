@@ -57,8 +57,8 @@ class GPS : private concurrency::OSThread
      */
     virtual bool setup();
 
-    /// Returns ture if we have acquired GPS lock.
-    bool hasLock() const { return hasValidLocation; }
+    /// Returns true if we have acquired GPS lock.
+    virtual bool hasLock();
 
     /// Return true if we are connected to a GPS
     bool isConnected() const { return hasGPS; }
