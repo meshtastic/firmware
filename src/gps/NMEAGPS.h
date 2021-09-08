@@ -12,6 +12,15 @@
 class NMEAGPS : public GPS
 {
     TinyGPSPlus reader;
+    uint8_t fixQual = 0;  // fix quality from GPGGA
+
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+    // (20210908) TinyGps++ can only read the GPGSA "FIX TYPE" field
+    // via optional feature "custom fields", currently disabled (bug #525)
+    TinyGPSCustom gsafixtype;  // custom extract fix type from GPGSA
+    TinyGPSCustom gsapdop;     // custom extract PDOP from GPGSA
+    uint8_t fixType = 0;  // fix type from GPGSA
+#endif
 
   public:
     virtual bool setupGPS();
@@ -38,4 +47,6 @@ class NMEAGPS : public GPS
      * @return true if we've acquired a new location
      */
     virtual bool lookForLocation();
+
+    virtual bool hasLock();
 };
