@@ -65,6 +65,7 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         t.tm_year = d.year() - 1900;
         t.tm_isdst = false;
         DEBUG_MSG("NMEA GPS time %d\n", t.tm_sec);
+
         perhapsSetRTC(RTCQualityGPS, t);
 
         return true;
@@ -198,7 +199,7 @@ bool NMEAGPS::whileIdle()
     // First consume any chars that have piled up at the receiver
     while (_serial_gps->available() > 0) {
         int c = _serial_gps->read();
-        DEBUG_MSG("%c", c);
+        // DEBUG_MSG("%c", c);
         isValid |= reader.encode(c);
     }
 
