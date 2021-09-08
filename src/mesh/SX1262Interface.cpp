@@ -50,8 +50,14 @@ bool SX1262Interface::init()
 
     limitPower();
 
-    int res = lora.begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength, tcxoVoltage, useRegulatorLDO);
+    int res = lora.begin(freq, bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage, useRegulatorLDO);
     DEBUG_MSG("SX1262 init result %d\n", res);
+
+    // current limit was removed from module' ctor
+    // override default value (60 mA)
+    res = lora.setCurrentLimit(currentLimit);
+    DEBUG_MSG("Current limit set to %f\n", currentLimit);
+    DEBUG_MSG("Current limit set result %d\n", res);
 
 #ifdef SX1262_TXEN
     // lora.begin sets Dio2 as RF switch control, which is not true if we are manually controlling RX and TX
