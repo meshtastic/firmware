@@ -327,6 +327,11 @@ GPS *createGps()
 #ifdef NO_GPS
     return nullptr;
 #else
+#ifdef GPS_ALTITUDE_HAE
+    DEBUG_MSG("Using HAE altitude model\n");
+#else
+    DEBUG_MSG("Using MSL altitude model\n");
+#endif
 // If we don't have bidirectional comms, we can't even try talking to UBLOX
 #ifdef GPS_TX_PIN
     // Init GPS - first try ublox
