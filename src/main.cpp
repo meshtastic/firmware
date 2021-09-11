@@ -519,9 +519,9 @@ void setup()
     }
 #endif
 
-#if defined(SX1262_CS)
+#if defined(SX126X_CS)
     if (!rIf) {
-        rIf = new SX1262Interface(SX1262_CS, SX1262_DIO1, SX1262_RESET, SX1262_BUSY, SPI);
+        rIf = new SX1262Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
         if (!rIf->init()) {
             DEBUG_MSG("Warning: Failed to find SX1262 radio\n");
             delete rIf;

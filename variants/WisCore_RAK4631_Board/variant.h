@@ -151,13 +151,13 @@ static const uint8_t SCK = PIN_SPI_SCK;
  */
 
 // RAK4630 LoRa module
-#define SX1262_CS (42)
-#define SX1262_DIO1 (47)
-#define SX1262_BUSY (46)
-#define SX1262_RESET (38)
-#define SX1262_TXEN (39)
-#define SX1262_RXEN (37)
-#define SX1262_E22 // DIO2 controlls an antenna switch and the TCXO voltage is controlled by DIO3
+#define SX126X_CS (42)
+#define SX126X_DIO1 (47)
+#define SX126X_BUSY (46)
+#define SX126X_RESET (38)
+#define SX126X_TXEN (39)
+#define SX126X_RXEN (37)
+#define SX126X_E22 // DIO2 controlls an antenna switch and the TCXO voltage is controlled by DIO3
 
 // RAK1910 GPS module
 // If using the wisblock GPS module and pluged into Port A on WisBlock base
