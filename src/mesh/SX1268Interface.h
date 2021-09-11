@@ -1,65 +1,15 @@
 #pragma once
 
-#include "RadioLibInterface.h"
+#include "SX126xInterface.h"
 
 /**
  * Our adapter for SX1268 radios
  */
-class SX1268Interface : public RadioLibInterface
+class SX1268Interface : public SX126xInterface<SX1268>
 {
-    SX1268 lora;
-
   public:
     /// Initializing the frequency of the SX1268 module regardless of the region
     float freq = 433.0;
 
     SX1268Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy, SPIClass &spi);
-
-    /// Initialise the Driver transport hardware and software.
-    /// Make sure the Driver is properly configured before calling init().
-    /// \return true if initialisation succeeded.
-    virtual bool init();
-
-    /// Apply any radio provisioning changes
-    /// Make sure the Driver is properly configured before calling init().
-    /// \return true if initialisation succeeded.
-    virtual bool reconfigure();
-
-    /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.
-    virtual bool sleep();
-
-    bool isIRQPending() { return lora.getIrqStatus() != 0; }
-
-  protected:
-    /**
-     * Glue functions called from ISR land
-     */
-    virtual void disableInterrupt();
-
-    /**
-     * Enable a particular ISR callback glue function
-     */
-    virtual void enableInterrupt(void (*callback)()) { lora.setDio1Action(callback); }
-
-    /** are we actively receiving a packet (only called during receiving state) */
-    virtual bool isActivelyReceiving();
-
-    /**
-     * Start waiting to receive a message
-     */
-    virtual void startReceive();
-
-    /**
-     *  We override to turn on transmitter power as needed.
-     */
-    virtual void configHardwareForSend();
-
-    /**
-     * Add SNR data to received messages
-     */
-    virtual void addReceiveMetadata(MeshPacket *mp);
-
-    virtual void setStandby();
-
-  private:
 };
