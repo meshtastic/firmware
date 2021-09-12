@@ -519,7 +519,7 @@ void setup()
     }
 #endif
 
-#if defined(SX126X_CS)
+#if defined(USE_SX1262)
     if (!rIf) {
         rIf = new SX1262Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
         if (!rIf->init()) {
@@ -532,9 +532,9 @@ void setup()
     }
 #endif
 
-#if defined(SX1268_CS)
+#if defined(USE_SX1268)
     if (!rIf) {
-        rIf = new SX1268Interface(SX1268_CS, SX1268_DIO1, SX1268_RESET, SX1268_BUSY, SPI);
+        rIf = new SX1268Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
         if (!rIf->init()) {
             DEBUG_MSG("Warning: Failed to find SX1268 radio\n");
             delete rIf;
