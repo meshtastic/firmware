@@ -52,7 +52,7 @@ bool SX126xInterface<T>::init()
 
     limitPower();
 
-    int res = lora.begin(freq, bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage, useRegulatorLDO);
+    int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage, useRegulatorLDO);
     // \todo Display actual typename of the adapter, not just `SX126x`
     DEBUG_MSG("SX126x init result %d\n", res);
 
@@ -135,7 +135,7 @@ bool SX126xInterface<T>::reconfigure()
     err = lora.setPreambleLength(preambleLength);
     assert(err == ERR_NONE);
 
-    err = lora.setFrequency(freq);
+    err = lora.setFrequency(getFreq());
     if (err != ERR_NONE)
         RECORD_CRITICALERROR(CriticalErrorCode_InvalidRadioSetting);
 
