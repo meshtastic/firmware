@@ -492,16 +492,10 @@ void setup()
         }
     }
 
-#ifdef SX1262_ANT_SW
-    // make analog PA vs not PA switch on SX1262 eval board work properly
-    pinMode(SX1262_ANT_SW, OUTPUT);
-    digitalWrite(SX1262_ANT_SW, 1);
-#endif
-
-#ifdef SX1268_ANT_SW
-    // make analog PA vs not PA switch on SX1268 eval board work properly
-    pinMode(SX1268_ANT_SW, OUTPUT);
-    digitalWrite(SX1268_ANT_SW, 1);
+#ifdef SX126X_ANT_SW
+    // make analog PA vs not PA switch on SX126x eval board work properly
+    pinMode(SX126X_ANT_SW, OUTPUT);
+    digitalWrite(SX126X_ANT_SW, 1);
 #endif
 
     // radio init MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
