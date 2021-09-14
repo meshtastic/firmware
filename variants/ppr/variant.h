@@ -134,7 +134,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define SX1262_DIO2 (26)
 #define SX126X_BUSY (31) // Supposed to be P0.18 but because of reworks, now on P0.31 (18)
 #define SX126X_RESET (17)
-// #define SX1262_ANT_SW (32 + 10)
+// #define SX126X_ANT_SW (32 + 10)
 #define SX126X_RXEN (22)
 #define SX126X_TXEN (24)
 #define SX126X_E22  // Indicates this SX1262 is inside of an ebyte E22 module and special config should be done for that
