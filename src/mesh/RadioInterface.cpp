@@ -320,6 +320,9 @@ void RadioInterface::applyModemConfig()
     int channel_num = channelSettings.channel_num ? channelSettings.channel_num - 1 : hash(channelName) % myRegion->numChannels;
     float freq = myRegion->freq + radioConfig.preferences.frequency_offset + myRegion->spacing * channel_num;
 
+    saveChannelNum(channel_num);
+    saveFreq(freq);
+
     DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, power=%d\n", channelName, channelSettings.modem_config, channel_num, power);
     DEBUG_MSG("Radio myRegion->freq: %f\n", myRegion->freq);
     DEBUG_MSG("Radio myRegion->spacing: %f\n", myRegion->spacing);
@@ -327,9 +330,6 @@ void RadioInterface::applyModemConfig()
     DEBUG_MSG("Radio channel_num: %d\n", channel_num);
     DEBUG_MSG("Radio frequency: %f\n", getFreq()); // the frequency could be overridden in RadioInterface::getFreq() for some modules
     DEBUG_MSG("Short packet time: %u msec\n", shortPacketMsec);
-
-    saveChannelNum(channel_num);
-    saveFreq(freq);
 }
 
 /**
