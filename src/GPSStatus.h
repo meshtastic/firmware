@@ -1,7 +1,10 @@
 #pragma once
 #include "Status.h"
 #include "configuration.h"
+#include "NodeDB.h"
 #include <Arduino.h>
+
+extern NodeDB nodeDB;
 
 namespace meshtastic
 {
@@ -47,11 +50,36 @@ class GPSStatus : public Status
 
     bool getIsConnected() const { return isConnected; }
 
-    int32_t getLatitude() const { return latitude; }
+    int32_t getLatitude() const {
+        if (radioConfig.preferences.fixed_position){
+            DEBUG_MSG("WARNING: Using fixed latitude\n");
+            NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
+            return node->position.latitude_i;
+        } else {
+            return latitude;
+        }
+    }
 
-    int32_t getLongitude() const { return longitude; }
+    int32_t getLongitude() const {
+        if (radioConfig.preferences.fixed_position){
+            DEBUG_MSG("WARNING: Using fixed longitude\n");
+            NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
+            return node->position.longitude_i;
+        } else {
+            return longitude;
+        }
+    }
 
-    int32_t getAltitude() const { return altitude; }
+    int32_t getAltitude() const {
+        if (radioConfig.preferences.fixed_position){
+            DEBUG_MSG("WARNING: Using fixed altitude\n");
+            NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
+            return node->position.altitude;
+        } else {
+            return altitude;
+        }
+    }
+
 
     uint32_t getDOP() const { return dop; }
 
