@@ -78,8 +78,6 @@ class RadioInterface
     void deliverToReceiver(MeshPacket *p);
 
   public:
-    float freq = 915.0;
-
     /** pool is the pool we will alloc our rx packets from
      */
     RadioInterface();
@@ -149,7 +147,7 @@ class RadioInterface
     /**
      * Get the frequency we saved.
      */
-    float getFreq();
+    virtual float getFreq();
 
     /// Some boards (1st gen Pinetab Lora module) have broken IRQ wires, so we need to poll via i2c registers
     virtual bool isIRQPending() { return false; }
