@@ -304,8 +304,8 @@ extern const pb_msgdesc_t RadioConfig_UserPreferences_msg;
 #define RadioConfig_UserPreferences_fields &RadioConfig_UserPreferences_msg
 
 /* Maximum encoded size of messages (where known) */
-#define RadioConfig_size                         394
-#define RadioConfig_UserPreferences_size         391
+#define RadioConfig_size                         397
+#define RadioConfig_UserPreferences_size         394
 
 #ifdef __cplusplus
 } /* extern "C" */

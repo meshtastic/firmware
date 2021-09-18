@@ -79,7 +79,7 @@ extern const pb_msgdesc_t AdminMessage_msg;
 #define AdminMessage_fields &AdminMessage_msg
 
 /* Maximum encoded size of messages (where known) */
-#define AdminMessage_size                        397
+#define AdminMessage_size                        400
 
 #ifdef __cplusplus
 } /* extern "C" */
