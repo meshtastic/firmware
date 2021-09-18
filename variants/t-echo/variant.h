@@ -180,21 +180,21 @@ External serial flash WP25R1635FZUIL0
  * Lora radio
  */
 
-#define SX1262_CS (0 + 24) // FIXME - we really should define LORA_CS instead
-#define SX1262_DIO1 (0 + 20)
+#define SX126X_CS (0 + 24) // FIXME - we really should define LORA_CS instead
+#define SX126X_DIO1 (0 + 20)
 // Note DIO2 is attached internally to the module to an analog switch for TX/RX switching
 #define SX1262_DIO3                                                                                                              \
     (0 + 21) // This is used as an *output* from the sx1262 and connected internally to power the tcxo, do not drive from the main
              // CPU?
-#define SX1262_BUSY (0 + 17)
-#define SX1262_RESET (0 + 25)
-#define SX1262_E22 // Not really an E22 but TTGO seems to be trying to clone that
+#define SX126X_BUSY (0 + 17)
+#define SX126X_RESET (0 + 25)
+#define SX126X_E22 // Not really an E22 but TTGO seems to be trying to clone that
 // Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
 // code)
 
 // #define LORA_DISABLE_SENDING // Define this to disable transmission for testing (power testing etc...)
 
-// #undef SX1262_CS
+// #undef SX126X_CS
 // #define USE_SIM_RADIO // define to not use the lora radio hardware at all
 
 /*
