@@ -117,21 +117,21 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define I2C_ADDR_BQ27441 0x55 // Battery gauge
 
 // CUSTOM GPIOs the SX1262
-#define SX1262_CS (32)
+#define SX126X_CS (32)
 
 // If you would prefer to get console debug output over the JTAG ICE connection rather than the CDC-ACM USB serial device, just
 // define this. #define USE_SEGGER
 
-#define SX1262_DIO1 (29)
+#define SX126X_DIO1 (29)
 #define SX1262_DIO2 (30)
-#define SX1262_BUSY (33) // Supposed to be P0.18 but because of reworks, now on P0.31 (18)
-#define SX1262_RESET (34)
-// #define SX1262_ANT_SW (32 + 10)
-#define SX1262_RXEN (14)
-#define SX1262_TXEN (31)
-#define SX1262_POWER_EN                                                                                                          \
+#define SX126X_BUSY (33) // Supposed to be P0.18 but because of reworks, now on P0.31 (18)
+#define SX126X_RESET (34)
+// #define SX126X_ANT_SW (32 + 10)
+#define SX126X_RXEN (14)
+#define SX126X_TXEN (31)
+#define SX126X_POWER_EN                                                                                                          \
     (15) // FIXME, see warning hre  https://github.com/BigCorvus/SX1262-LoRa-BLE-Relay/blob/master/LORA_RELAY_NRF52840.ino
-#define SX1262_E22 // Indicates this SX1262 is inside of an ebyte E22 module and special config should be done for that
+#define SX126X_E22 // Indicates this SX1262 is inside of an ebyte E22 module and special config should be done for that
 
 #define ST7735_RESET (11) // Output
 #define ST7735_CS (12)

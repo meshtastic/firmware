@@ -188,11 +188,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LORA_DIO3    // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TXCO is enabled
 
 #ifdef USE_SX1262
-#define SX1262_CS RF95_NSS // FIXME - we really should define LORA_CS instead
-#define SX1262_DIO1 LORA_DIO1
-#define SX1262_BUSY LORA_DIO2
-#define SX1262_RESET LORA_RESET
-#define SX1262_E22 // Not really an E22 but TTGO seems to be trying to clone that
+#define SX126X_CS RF95_NSS // FIXME - we really should define LORA_CS instead
+#define SX126X_DIO1 LORA_DIO1
+#define SX126X_BUSY LORA_DIO2
+#define SX126X_RESET LORA_RESET
+#define SX126X_E22 // Not really an E22 but TTGO seems to be trying to clone that
 // Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
 // code)
 #endif
@@ -462,11 +462,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LORA_DIO3    // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TXCO is enabled
 
 #ifdef USE_SX1262
-#define SX1262_CS 20 // CS0 on pinelora schematic, hooked to gpio D0 on ch341f
-#define SX1262_DIO1 LORA_DIO1
-#define SX1262_BUSY LORA_DIO2
-#define SX1262_RESET LORA_RESET
-// HOPE RFM90 does not have a TCXO therefore not SX1262_E22 
+#define SX126X_CS 20 // CS0 on pinelora schematic, hooked to gpio D0 on ch341f
+#define SX126X_DIO1 LORA_DIO1
+#define SX126X_BUSY LORA_DIO2
+#define SX126X_RESET LORA_RESET
+// HOPE RFM90 does not have a TCXO therefore not SX126X_E22 
 #endif
 
 #endif
