@@ -212,8 +212,8 @@ typedef struct _ToRadio {
 
 /* Helper constants for enums */
 #define _HardwareModel_MIN HardwareModel_UNSET
-#define _HardwareModel_MAX HardwareModel_ANDROID_SIM
-#define _HardwareModel_ARRAYSIZE ((HardwareModel)(HardwareModel_ANDROID_SIM+1))
+#define _HardwareModel_MAX HardwareModel_DIY_V1
+#define _HardwareModel_ARRAYSIZE ((HardwareModel)(HardwareModel_DIY_V1+1))
 
 #define _Constants_MIN Constants_Unused
 #define _Constants_MAX Constants_DATA_PAYLOAD_LEN
