@@ -39,6 +39,7 @@
 
 #include "RF95Interface.h"
 #include "SX1262Interface.h"
+#include "SX1268Interface.h"
 
 #ifdef NRF52_SERIES
 #include "variant.h"
@@ -491,10 +492,10 @@ void setup()
         }
     }
 
-#ifdef SX1262_ANT_SW
-    // make analog PA vs not PA switch on SX1262 eval board work properly
-    pinMode(SX1262_ANT_SW, OUTPUT);
-    digitalWrite(SX1262_ANT_SW, 1);
+#ifdef SX126X_ANT_SW
+    // make analog PA vs not PA switch on SX126x eval board work properly
+    pinMode(SX126X_ANT_SW, OUTPUT);
+    digitalWrite(SX126X_ANT_SW, 1);
 #endif
 
     // radio init MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
@@ -512,15 +513,28 @@ void setup()
     }
 #endif
 
-#if defined(SX1262_CS)
+#if defined(USE_SX1262)
     if (!rIf) {
-        rIf = new SX1262Interface(SX1262_CS, SX1262_DIO1, SX1262_RESET, SX1262_BUSY, SPI);
+        rIf = new SX1262Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
         if (!rIf->init()) {
             DEBUG_MSG("Warning: Failed to find SX1262 radio\n");
             delete rIf;
             rIf = NULL;
         } else {
             DEBUG_MSG("SX1262 Radio init succeeded, using SX1262 radio\n");
+        }
+    }
+#endif
+
+#if defined(USE_SX1268)
+    if (!rIf) {
+        rIf = new SX1268Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
+        if (!rIf->init()) {
+            DEBUG_MSG("Warning: Failed to find SX1268 radio\n");
+            delete rIf;
+            rIf = NULL;
+        } else {
+            DEBUG_MSG("SX1268 Radio init succeeded, using SX1268 radio\n");
         }
     }
 #endif
