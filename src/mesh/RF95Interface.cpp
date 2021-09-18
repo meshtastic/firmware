@@ -67,7 +67,7 @@ bool RF95Interface::init()
 #endif
     setTransmitEnable(false);
 
-    int res = lora->begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength);
+    int res = lora->begin(getFreq(), bw, sf, cr, syncWord, power, currentLimit, preambleLength);
     DEBUG_MSG("RF95 init result %d\n", res);
 
     // current limit was removed from module' ctor
@@ -119,7 +119,7 @@ bool RF95Interface::reconfigure()
     err = lora->setPreambleLength(preambleLength);
     assert(err == ERR_NONE);
 
-    err = lora->setFrequency(freq);
+    err = lora->setFrequency(getFreq());
     if (err != ERR_NONE)
         RECORD_CRITICALERROR(CriticalErrorCode_InvalidRadioSetting);
 
