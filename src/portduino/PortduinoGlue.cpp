@@ -72,13 +72,13 @@ void portduinoSetup()
         gpioBind(loraIrq);
 
         // BUSY hw was busted on current board - just use the simulated pin (which will read low)
-        auto busy = new LinuxGPIOPin(SX1262_BUSY, "ch341", "slct", "loraBusy");
+        auto busy = new LinuxGPIOPin(SX126X_BUSY, "ch341", "slct", "loraBusy");
         busy->setSilent();
         gpioBind(busy);
 
-        gpioBind(new LinuxGPIOPin(SX1262_RESET, "ch341", "ini", "loraReset"));    
+        gpioBind(new LinuxGPIOPin(SX126X_RESET, "ch341", "ini", "loraReset"));
 
-        auto loraCs = new LinuxGPIOPin(SX1262_CS, "ch341", "cs0", "loraCs");
+        auto loraCs = new LinuxGPIOPin(SX126X_CS, "ch341", "cs0", "loraCs");
         loraCs->setSilent();
         gpioBind(loraCs);
     }
@@ -86,16 +86,16 @@ void portduinoSetup()
 #endif
 
     {
-        auto fakeBusy = new SimGPIOPin(SX1262_BUSY, "fakeBusy");
+        auto fakeBusy = new SimGPIOPin(SX126X_BUSY, "fakeBusy");
         fakeBusy->writePin(LOW);
         fakeBusy->setSilent(true);
         gpioBind(fakeBusy);
 
-        auto cs = new SimGPIOPin(SX1262_CS, "fakeLoraCS");
+        auto cs = new SimGPIOPin(SX126X_CS, "fakeLoraCS");
         cs->setSilent(true);
         gpioBind(cs);
 
-        gpioBind(new SimGPIOPin(SX1262_RESET, "fakeLoraReset"));
+        gpioBind(new SimGPIOPin(SX126X_RESET, "fakeLoraReset"));
         gpioBind(new SimGPIOPin(LORA_DIO1, "fakeLoraIrq"));
     }
 

@@ -333,6 +333,11 @@ static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, NodeStatus *no
 // Draw GPS status summary
 static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
+    if (radioConfig.preferences.fixed_position) {
+        // GPS coordinates are currently fixed
+        display->drawString(x - 1, y - 2, "Fixed GPS");
+        return;
+    }
     if (!gps->getIsConnected()) {
         display->drawString(x, y - 2, "No GPS");
         return;
@@ -367,10 +372,10 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
 static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
     String displayLine = "";
-    if (!gps->getIsConnected()) {
+    if (!gps->getIsConnected() && !radioConfig.preferences.fixed_position) {
         // displayLine = "No GPS Module";
         // display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
-    } else if (!gps->getHasLock()) {
+    } else if (!gps->getHasLock() && !radioConfig.preferences.fixed_position) {
         // displayLine = "No GPS Lock";
         // display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
@@ -743,10 +748,10 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
     auto gpsFormat = radioConfig.preferences.gps_format;
     String displayLine = "";
 
-    if (!gps->getIsConnected()) {
+    if (!gps->getIsConnected() && !radioConfig.preferences.fixed_position) {
         displayLine = "No GPS Module";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
-    } else if (!gps->getHasLock()) {
+    } else if (!gps->getHasLock() && !radioConfig.preferences.fixed_position) {
         displayLine = "No GPS Lock";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
