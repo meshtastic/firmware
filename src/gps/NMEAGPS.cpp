@@ -163,7 +163,12 @@ bool NMEAGPS::lookForLocation()
     }
 
     if (reader.course.isUpdated() && reader.course.isValid()) {
-        heading = reader.course.value() * 1e3; // Scale the heading (in degrees * 10^-2) to match the expected degrees * 10^-5
+        if (reader.course.value() < 36000) {  // sanity check
+            heading = reader.course.value() * 1e3; // Scale the heading (in degrees * 10^-2) to match the expected degrees * 10^-5
+        } else {
+            DEBUG_MSG("BOGUS course.value() REJECTED: %d\n",
+                        reader.course.value());
+        }
     }
 
 /*
