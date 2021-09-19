@@ -192,6 +192,7 @@ bool Power::setup()
         found = analogInit();
     }
     enabled = found;
+    low_voltage_counter = 0;
 
     return found;
 }
@@ -238,9 +239,24 @@ void Power::readPowerStatus()
                   powerStatus.getIsCharging(), powerStatus.getBatteryVoltageMv(), powerStatus.getBatteryChargePercent());
         newStatus.notifyObservers(&powerStatus);
 
+
+        // If we have a battery at all and it is less than 10% full, force deep sleep if we have more than 3 low readings in a row
+        // Supect fluctuating voltage on the RAK4631 to force it to deep sleep even if battery is at 85% after only a few days
+        #ifdef NRF52_SERIES
+        if (powerStatus.getHasBattery() && !powerStatus.getHasUSB()){
+            if (batteryLevel->getBattVoltage() < MIN_BAT_MILLIVOLTS){
+                low_voltage_counter++;
+                if (low_voltage_counter>3)
+                    powerFSM.trigger(EVENT_LOW_BATTERY);
+            } else {
+                low_voltage_counter = 0;
+            }
+        }
+        #else
         // If we have a battery at all and it is less than 10% full, force deep sleep
         if (powerStatus.getHasBattery() && !powerStatus.getHasUSB() && batteryLevel->getBattVoltage() < MIN_BAT_MILLIVOLTS)
             powerFSM.trigger(EVENT_LOW_BATTERY);
+        #endif
     } else {
         // No power sensing on this board - tell everyone else we have no idea what is happening
         const PowerStatus powerStatus = PowerStatus(OptUnknown, OptUnknown, OptUnknown, -1, -1);

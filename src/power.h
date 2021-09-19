@@ -37,6 +37,9 @@ class Power : private concurrency::OSThread
 
     /// Setup a simple ADC input based battery sensor
     bool analogInit();
+
+  private:
+    uint8_t low_voltage_counter;
 };
 
 extern Power *power;
