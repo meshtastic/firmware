@@ -29,7 +29,8 @@ typedef enum _HardwareModel {
     HardwareModel_GENIEBLOCKS = 35,
     HardwareModel_NRF52_UNKNOWN = 36,
     HardwareModel_PORTDUINO = 37,
-    HardwareModel_ANDROID_SIM = 38
+    HardwareModel_ANDROID_SIM = 38,
+    HardwareModel_DIY_V1 = 39
 } HardwareModel;
 
 typedef enum _Constants {
