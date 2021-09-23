@@ -116,7 +116,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
                     printPacket("packet on wrong channel, but can't respond", &mp);
             } else {
 
-                bool handled = pi.handleReceived(mp);
+                ProcessMessage handled = pi.handleReceived(mp);
 
                 // Possibly send replies (but only if the message was directed to us specifically, i.e. not for promiscious
                 // sniffing) also: we only let the one plugin send a reply, once that happens, remaining plugins are not
@@ -140,7 +140,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
                     pi.myReply = NULL;
                 }
 
-                if (handled) {
+                if (handled == ProcessMessage::STOP) {
                     DEBUG_MSG("Plugin %s handled and skipped other processing\n", pi.name);
                     break;
                 }
