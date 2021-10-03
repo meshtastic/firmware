@@ -383,8 +383,8 @@ static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GP
         // displayLine = "No GPS Lock";
         // display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
-
-        displayLine = "Altitude: " + String(gps->getAltitude()) + "m";
+        geoCoord.updateCoords(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()), int32_t(gps->getAltitude()));
+        displayLine = "Altitude: " + String(geoCoord.getAltitude()) + "m";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     }
 }
