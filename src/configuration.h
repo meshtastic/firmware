@@ -235,10 +235,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define I2C_SCL 22
 
 // GPS
-//#undef GPS_RX_PIN
-//#define GPS_RX_PIN 12 // not connected
-#undef GPS_TX_PIN
-#define GPS_TX_PIN 15
+#undef GPS_RX_PIN
+#define GPS_RX_PIN 15
+//#undef GPS_TX_PIN
+//#define GPS_TX_PIN 12 // not connected
 
 #define BUTTON_PIN 39 // The middle button GPIO on the T-Beam
 
