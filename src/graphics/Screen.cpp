@@ -437,27 +437,6 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
     }
 }
 
-/// Ported from my old java code, returns distance in meters along the globe
-/// surface (by magic?)
-static float latLongToMeter(double lat_a, double lng_a, double lat_b, double lng_b)
-{
-    double pk = (180 / 3.14169);
-    double a1 = lat_a / pk;
-    double a2 = lng_a / pk;
-    double b1 = lat_b / pk;
-    double b2 = lng_b / pk;
-    double cos_b1 = cos(b1);
-    double cos_a1 = cos(a1);
-    double t1 = cos_a1 * cos(a2) * cos_b1 * cos(b2);
-    double t2 = cos_a1 * sin(a2) * cos_b1 * sin(b2);
-    double t3 = sin(a1) * sin(b1);
-    double tt = acos(t1 + t2 + t3);
-    if (isnan(tt))
-        tt = 0.0; // Must have been the same point?
-
-    return (float)(6366000 * tt);
-}
-
 /**
  * Computes the bearing in degrees between two points on Earth.  Ported from my
  * old Gaggle android app.
@@ -543,7 +522,7 @@ static float estimatedHeading(double lat, double lon)
         return b;
     }
 
-    float d = latLongToMeter(oldLat, oldLon, lat, lon);
+    float d = GeoCoord::latLongToMeter(oldLat, oldLon, lat, lon);
     if (d < 10) // haven't moved enough, just keep current bearing
         return b;
 
@@ -667,7 +646,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             // display direction toward node
             hasNodeHeading = true;
             Position &p = node->position;
-            float d = latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
+            float d = GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
             if (d < 2000)
                 snprintf(distStr, sizeof(distStr), "%.0f m", d);
             else
