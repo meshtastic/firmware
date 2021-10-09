@@ -345,3 +345,24 @@ void GeoCoord::convertWGS84ToOSGB36(const double lat, const double lon, double &
     //osgb height = p*cos(osgb.latitude) + osgbZ*sin(osgb.latitude) - 
             //(airyA*airyA/(airyA / sqrt(1 - airyEcc*sin(osgb.latitude)*sin(osgb.latitude)))); // Not used, no OSTN data
 }
+
+/// Ported from my old java code, returns distance in meters along the globe
+/// surface (by magic?)
+float GeoCoord::latLongToMeter(double lat_a, double lng_a, double lat_b, double lng_b)
+{
+    double pk = (180 / 3.14169);
+    double a1 = lat_a / pk;
+    double a2 = lng_a / pk;
+    double b1 = lat_b / pk;
+    double b2 = lng_b / pk;
+    double cos_b1 = cos(b1);
+    double cos_a1 = cos(a1);
+    double t1 = cos_a1 * cos(a2) * cos_b1 * cos(b2);
+    double t2 = cos_a1 * sin(a2) * cos_b1 * sin(b2);
+    double t3 = sin(a1) * sin(b1);
+    double tt = acos(t1 + t2 + t3);
+    if (std::isnan(tt))
+        tt = 0.0; // Must have been the same point?
+
+    return (float)(6366000 * tt);
+}
