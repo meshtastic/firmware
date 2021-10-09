@@ -391,3 +391,60 @@ float GeoCoord::bearing(double lat1, double lon1, double lat2, double lon2)
     double x = cos(lat1Rad) * sin(lat2Rad) - (sin(lat1Rad) * cos(lat2Rad) * cos(deltaLonRad));
     return atan2(y, x);
 }
+
+/**
+ * Ported from http://www.edwilliams.org/avform147.htm#Intro
+ * @brief Convert from meters to range in radians on a great circle
+ * @param range_meters
+ * The range in meters
+ * @return range in radians on a great circle 
+ */
+float GeoCoord::rangeMetersToRadians(double range_meters) {
+    // 1 nm is 1852 meters
+    double distance_nm = range_meters * 1852;
+    return (PI / (180 * 60)) *distance_nm;
+}
+
+/**
+ * Ported from http://www.edwilliams.org/avform147.htm#Intro
+ * @brief Convert from radians to range in meters on a great circle
+ * @param range_radians
+ * The range in radians
+ * @return Range in meters on a great circle 
+ */
+float GeoCoord::rangeRadiansToMeters(double range_radians) {
+    double distance_nm = ((180 * 60) / PI) * range_radians;
+    // 1 meter is 0.000539957 nm
+    return distance_nm * 0.000539957;
+}
+
+// Find distance from point to passed in point
+int32_t GeoCoord::distanceTo(GeoCoord pointB) {
+    return latLongToMeter(this->getLatitude() * 1e-7, this->getLongitude() * 1e-7, pointB.getLatitude() * 1e-7, pointB.getLongitude() * 1e-7);
+}
+
+// Find bearing from point to passed in point
+int32_t GeoCoord::bearingTo(GeoCoord pointB) {
+    return bearing(this->getLatitude() * 1e-7, this->getLongitude() * 1e-7, pointB.getLatitude() * 1e-7, pointB.getLongitude() * 1e-7);
+}
+
+/**
+ * Create a new point bassed on the passed in poin
+ * Ported from http://www.edwilliams.org/avform147.htm#LL
+ * @param bearing
+ * The bearing in raidans
+ * @param range_meters
+ * range in meters
+ * @return GeoCoord object of point at bearing and range from initial point
+*/ 
+std::shared_ptr<GeoCoord> GeoCoord::pointAtDistance(double bearing, double range_meters) {
+    double range_radians = rangeMetersToRadians(range_meters);
+    double lat1 = this->getLatitude() * 1e-7;
+    double lon1 = this->getLongitude() * 1e-7;
+    double lat = asin(sin(lat1) * cos(range_radians) + cos(lat1) * sin(range_radians) * cos(bearing));
+    double dlon = atan2(sin(bearing) * sin(range_radians) * cos(lat1), cos(range_radians) - sin(lat1) * sin(lat));
+    double lon = fmod(lon1 - dlon + PI, 2 * PI) - PI;
+
+    return std::make_shared<GeoCoord>(double(lat), double(lon), this->getAltitude());
+    
+}
