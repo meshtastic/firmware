@@ -71,8 +71,6 @@ jobs:
         tar -xf build.tar -C data/static
         rm build.tar
 
-
-
     # We now run integration test before other build steps (to quickly see runtime failures)
     - name: Build for native
       run: platformio run -e native
