@@ -81,9 +81,9 @@ struct OLC {
 
 class GeoCoord {
     private:
-        int32_t _lattitude = 0;
+        int32_t _latitude = 0;
         int32_t _longitude = 0;
-        int32_t _altidude = 0;
+        int32_t _altitude = 0;
 
         DMS _dms;
         UTM _utm;
@@ -114,9 +114,9 @@ class GeoCoord {
         static void convertWGS84ToOSGB36(const double lat, const double lon, double &osgb_Latitude, double &osgb_Longitude);
 
         // Lat lon alt getters
-        int32_t getLatitude() const { return _lattitude; }
+        int32_t getLatitude() const { return _latitude; }
         int32_t getLongitude() const { return _longitude; }
-        int32_t getAltitude() const { return _altidude; }
+        int32_t getAltitude() const { return _altitude; }
 
         // DMS getters
         uint8_t getDMSLatDeg() const { return _dms.latDeg; }
