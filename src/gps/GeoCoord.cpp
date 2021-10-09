@@ -366,3 +366,28 @@ float GeoCoord::latLongToMeter(double lat_a, double lng_a, double lat_b, double 
 
     return (float)(6366000 * tt);
 }
+
+/**
+ * Computes the bearing in degrees between two points on Earth.  Ported from my
+ * old Gaggle android app.
+ *
+ * @param lat1
+ * Latitude of the first point
+ * @param lon1
+ * Longitude of the first point
+ * @param lat2
+ * Latitude of the second point
+ * @param lon2
+ * Longitude of the second point
+ * @return Bearing between the two points in radians. A value of 0 means due
+ * north.
+ */
+float GeoCoord::bearing(double lat1, double lon1, double lat2, double lon2)
+{
+    double lat1Rad = toRadians(lat1);
+    double lat2Rad = toRadians(lat2);
+    double deltaLonRad = toRadians(lon2 - lon1);
+    double y = sin(deltaLonRad) * cos(lat2Rad);
+    double x = cos(lat1Rad) * sin(lat2Rad) - (sin(lat1Rad) * cos(lat2Rad) * cos(deltaLonRad));
+    return atan2(y, x);
+}
