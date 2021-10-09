@@ -437,31 +437,6 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
     }
 }
 
-/**
- * Computes the bearing in degrees between two points on Earth.  Ported from my
- * old Gaggle android app.
- *
- * @param lat1
- * Latitude of the first point
- * @param lon1
- * Longitude of the first point
- * @param lat2
- * Latitude of the second point
- * @param lon2
- * Longitude of the second point
- * @return Bearing between the two points in radians. A value of 0 means due
- * north.
- */
-static float bearing(double lat1, double lon1, double lat2, double lon2)
-{
-    double lat1Rad = toRadians(lat1);
-    double lat2Rad = toRadians(lat2);
-    double deltaLonRad = toRadians(lon2 - lon1);
-    double y = sin(deltaLonRad) * cos(lat2Rad);
-    double x = cos(lat1Rad) * sin(lat2Rad) - (sin(lat1Rad) * cos(lat2Rad) * cos(deltaLonRad));
-    return atan2(y, x);
-}
-
 namespace
 {
 
@@ -526,7 +501,7 @@ static float estimatedHeading(double lat, double lon)
     if (d < 10) // haven't moved enough, just keep current bearing
         return b;
 
-    b = bearing(oldLat, oldLon, lat, lon);
+    b = GeoCoord::bearing(oldLat, oldLon, lat, lon);
     oldLat = lat;
     oldLon = lon;
 
@@ -654,7 +629,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 
             // FIXME, also keep the guess at the operators heading and add/substract
             // it.  currently we don't do this and instead draw north up only.
-            float bearingToOther = bearing(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
+            float bearingToOther = GeoCoord::bearing(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
             headingRadian = bearingToOther - myHeading;
             drawNodeHeading(display, compassX, compassY, headingRadian);
         }
