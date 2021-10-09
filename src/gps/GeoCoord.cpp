@@ -4,27 +4,27 @@ GeoCoord::GeoCoord() {
     _dirty = true;
 }
 
-GeoCoord::GeoCoord (int32_t lat, int32_t lon, int32_t alt) : _lattitude(lat), _longitude(lon), _altidude(alt) {
+GeoCoord::GeoCoord (int32_t lat, int32_t lon, int32_t alt) : _latitude(lat), _longitude(lon), _altitude(alt) {
     GeoCoord::setCoords();
 }
 
-GeoCoord::GeoCoord (float lat, float lon, int32_t alt) : _altidude(alt) {
+GeoCoord::GeoCoord (float lat, float lon, int32_t alt) : _altitude(alt) {
     // Change decimial reprsentation to int32_t. I.e., 12.345 becomes 123450000
-    _lattitude = int32_t(lat * 1e+7);
+    _latitude = int32_t(lat * 1e+7);
     _longitude = int32_t(lon * 1e+7);
     GeoCoord::setCoords();
 }
 
-GeoCoord::GeoCoord(double lat, double lon, int32_t alt): _altidude(alt) {
+GeoCoord::GeoCoord(double lat, double lon, int32_t alt): _altitude(alt) {
     // Change decimial reprsentation to int32_t. I.e., 12.345 becomes 123450000
-    _lattitude = int32_t(lat * 1e+7);
+    _latitude = int32_t(lat * 1e+7);
     _longitude = int32_t(lon * 1e+7);
     GeoCoord::setCoords();
 }
 
 // Initialize all the coordinate systems
 void GeoCoord::setCoords() {
-    double lat = _lattitude * 1e-7;
+    double lat = _latitude * 1e-7;
     double lon = _longitude * 1e-7;
     GeoCoord::latLongToDMS(lat, lon, _dms);
     GeoCoord::latLongToUTM(lat, lon, _utm);
@@ -36,11 +36,11 @@ void GeoCoord::setCoords() {
 
 void GeoCoord::updateCoords(int32_t lat, int32_t lon, int32_t alt) {
     // If marked dirty or new coordiantes
-    if(_dirty || _lattitude != lat || _longitude != lon || _altidude != alt) {
+    if(_dirty || _latitude != lat || _longitude != lon || _altitude != alt) {
         _dirty = true;
-        _lattitude = lat;
+        _latitude = lat;
         _longitude = lon;
-        _altidude = alt;
+        _altitude = alt;
         setCoords();
     }
 }
@@ -49,11 +49,11 @@ void GeoCoord::updateCoords(const double lat, const double lon, const int32_t al
     int32_t iLat = lat * 1e+7;
     int32_t iLon = lon * 1e+7;
     // If marked dirty or new coordiantes
-    if(_dirty ||  _lattitude != iLat || _longitude != iLon || _altidude != alt) {
+    if(_dirty ||  _latitude != iLat || _longitude != iLon || _altitude != alt) {
         _dirty = true;
-        _lattitude = iLat;
+        _latitude = iLat;
         _longitude = iLon;
-        _altidude = alt;
+        _altitude = alt;
         setCoords();
     }
     
@@ -63,11 +63,11 @@ void GeoCoord::updateCoords(const float lat, const float lon, const int32_t alt)
     int32_t iLat = lat * 1e+7;
     int32_t iLon = lon * 1e+7;
     // If marked dirty or new coordiantes
-    if(_dirty || _lattitude != iLat || _longitude != iLon || _altidude != alt) {
+    if(_dirty || _latitude != iLat || _longitude != iLon || _altitude != alt) {
         _dirty = true;
-        _lattitude = iLat;
+        _latitude = iLat;
         _longitude = iLon;
-        _altidude = alt;
+        _altitude = alt;
         setCoords();
     }
 }
