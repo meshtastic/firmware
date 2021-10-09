@@ -7,6 +7,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <stdexcept>
+#include <memory>
 
 #define PI 3.1415926535897932384626433832795
 #define OLC_CODE_LEN 11
@@ -114,6 +115,13 @@ class GeoCoord {
         static void convertWGS84ToOSGB36(const double lat, const double lon, double &osgb_Latitude, double &osgb_Longitude);
         static float latLongToMeter(double lat_a, double lng_a, double lat_b, double lng_b);
         static float bearing(double lat1, double lon1, double lat2, double lon2);
+        static float rangeRadiansToMeters(double range_radians);
+        static float rangeMetersToRadians(double range_meters);
+
+        // Point to point conversions
+        int32_t distanceTo(GeoCoord pointB);
+        int32_t bearingTo(GeoCoord pointB);
+        std::shared_ptr<GeoCoord> pointAtDistance(double bearing, double range);
 
         // Lat lon alt getters
         int32_t getLatitude() const { return _latitude; }
