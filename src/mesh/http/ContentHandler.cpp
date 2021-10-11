@@ -77,7 +77,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeAPIv1FromRadio = new ResourceNode("/api/v1/fromradio", "GET", &handleAPIv1FromRadio);
 
     ResourceNode *nodeHotspotApple = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
-    ResourceNode *nodeHotspotAndroid = new ResourceNode("/generate_204", "GET", &handleGenerate204);
+    ResourceNode *nodeHotspotAndroid = new ResourceNode("/generate_204", "GET", &handleHotspot);
 
     ResourceNode *nodeRestart = new ResourceNode("/restart", "POST", &handleRestart);
     ResourceNode *nodeFormUpload = new ResourceNode("/upload", "POST", &handleFormUpload);
@@ -654,7 +654,7 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 */
 void handleHotspot(HTTPRequest *req, HTTPResponse *res)
 {
-    DEBUG_MSG("Apple Hotspot Request\n");
+    DEBUG_MSG("Hotspot Request\n");
 
     /*
         If we don't do a redirect, be sure to return a "Success" message
@@ -671,11 +671,6 @@ void handleHotspot(HTTPRequest *req, HTTPResponse *res)
     res->println("<meta http-equiv=\"refresh\" content=\"0;url=/\" />\n");
 }
 
-void handleGenerate204(HTTPRequest *req, HTTPResponse *res)
-{
-    DEBUG_MSG("Android Hotspot Request\n");
-    res->setStatusCode(204);
-}
 void handleRestart(HTTPRequest *req, HTTPResponse *res)
 {
     res->setHeader("Content-Type", "text/html");
