@@ -6,7 +6,6 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer);
 void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res);
 void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res);
 void handleHotspot(HTTPRequest *req, HTTPResponse *res);
-void handleGenerate204(HTTPRequest *req, HTTPResponse *res);
 void handleStatic(HTTPRequest *req, HTTPResponse *res);
 void handleRestart(HTTPRequest *req, HTTPResponse *res);
 void handleFormUpload(HTTPRequest *req, HTTPResponse *res);
