@@ -16,9 +16,9 @@
       "name": "adafruit"
     },
     "softdevice": {
-      "sd_flags": "-DS113",
-      "sd_name": "s113",
-      "sd_version": "7.2.0",
+      "sd_flags": "-DS140",
+      "sd_name": "s140",
+      "sd_version": "6.1.1",
       "sd_fwid": "0x00B6"
     },
     "bootloader": {
