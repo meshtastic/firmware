@@ -5,6 +5,7 @@
 #include "RTC.h"
 #include "Router.h"
 #include "configuration.h"
+#include "gps/GeoCoord.h"
 #include <Arduino.h>
 #include <SPIFFS.h>
 //#include <assert.h>
@@ -184,27 +185,6 @@ ProcessMessage RangeTestPluginRadio::handleReceived(const MeshPacket &mp)
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }
 
-/// Ported from my old java code, returns distance in meters along the globe
-/// surface (by magic?)
-float RangeTestPluginRadio::latLongToMeter(double lat_a, double lng_a, double lat_b, double lng_b)
-{
-    double pk = (180 / 3.14169);
-    double a1 = lat_a / pk;
-    double a2 = lng_a / pk;
-    double b1 = lat_b / pk;
-    double b2 = lng_b / pk;
-    double cos_b1 = cos(b1);
-    double cos_a1 = cos(a1);
-    double t1 = cos_a1 * cos(a2) * cos_b1 * cos(b2);
-    double t2 = cos_a1 * sin(a2) * cos_b1 * sin(b2);
-    double t3 = sin(a1) * sin(b1);
-    double tt = acos(t1 + t2 + t3);
-    if (isnan(tt))
-        tt = 0.0; // Must have been the same point?
-
-    return (float)(6366000 * tt);
-}
-
 bool RangeTestPluginRadio::appendFile(const MeshPacket &mp)
 {
     auto &p = mp.decoded;
@@ -303,7 +283,7 @@ bool RangeTestPluginRadio::appendFile(const MeshPacket &mp)
     fileToAppend.printf("%f,", mp.rx_snr); // RX SNR
 
     if (n->position.latitude_i && n->position.longitude_i && gpsStatus->getLatitude() && gpsStatus->getLongitude()) {
-        float distance = latLongToMeter(n->position.latitude_i * 1e-7, n->position.longitude_i * 1e-7,
+        float distance = GeoCoord::latLongToMeter(n->position.latitude_i * 1e-7, n->position.longitude_i * 1e-7,
                                         gpsStatus->getLatitude() * 1e-7, gpsStatus->getLongitude() * 1e-7);
         fileToAppend.printf("%f,", distance); // Distance in meters
     } else {
