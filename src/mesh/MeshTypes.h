@@ -15,6 +15,14 @@ typedef uint32_t PacketId; // A packet sequence number
 #define ERRNO_UNKNOWN 32  // pick something that doesn't conflict with RH_ROUTER_ERROR_UNABLE_TO_DELIVER
 #define ERRNO_DISABLED 34 // the itnerface is disabled
 
+/*
+ * Source of a received message
+ */
+enum RxSource {
+    RX_SRC_LOCAL,  // message was generated locally
+    RX_SRC_RADIO   // message was received from radio mesh
+};
+
 /**
  * the max number of hops a message can pass through, used as the default max for hop_limit in MeshPacket.
  *
