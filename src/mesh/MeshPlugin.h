@@ -33,7 +33,7 @@ class MeshPlugin
 
     /** For use only by MeshService
      */
-    static void callPlugins(const MeshPacket &mp);
+    static void callPlugins(const MeshPacket &mp, RxSource src = RX_SRC_RADIO);
 
     static std::vector<MeshPlugin *> GetMeshPluginsWithUIFrames();
 #ifndef NO_SCREEN
@@ -47,6 +47,10 @@ class MeshPlugin
     plugins can set this to true and their handleReceived() will be called for every packet.
     */
     bool isPromiscuous = false;
+
+    /** Also receive a copy of LOCALLY GENERATED messages - most plugins should leave
+     *  this setting disabled - see issue #877 */
+    bool loopbackOk = false;
 
     /** Most plugins only understand decrypted packets.  For plugins that also want to see encrypted packets, they should set this
      * flag */
