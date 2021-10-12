@@ -124,7 +124,7 @@ void RangeTestPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
     powerFSM.trigger(EVENT_CONTACT_FROM_PHONE);
 }
 
-bool RangeTestPluginRadio::handleReceived(const MeshPacket &mp)
+ProcessMessage RangeTestPluginRadio::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
 
@@ -182,7 +182,7 @@ bool RangeTestPluginRadio::handleReceived(const MeshPacket &mp)
 
 #endif
 
-    return true; // Let others look at this message also if they want
+    return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }
 
 bool RangeTestPluginRadio::appendFile(const MeshPacket &mp)
