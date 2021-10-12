@@ -143,7 +143,7 @@ ExternalNotificationPlugin::ExternalNotificationPlugin()
 #endif
 }
 
-bool ExternalNotificationPlugin::handleReceived(const MeshPacket &mp)
+ProcessMessage ExternalNotificationPlugin::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
 
@@ -176,5 +176,5 @@ bool ExternalNotificationPlugin::handleReceived(const MeshPacket &mp)
 
 #endif
 
-    return false; // Very important to never return TRUE here.  TRUE means we handled the packet and we will stop letting other plugins see it
+    return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }
