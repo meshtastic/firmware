@@ -161,7 +161,7 @@ ErrorCode Router::sendLocal(MeshPacket *p)
         // If we are sending a broadcast, we also treat it as if we just received it ourself
         // this allows local apps (and PCs) to see broadcasts sourced locally
         if (p->to == NODENUM_BROADCAST) {
-            handleReceived(p);
+            handleReceived(p, RX_SRC_LOCAL);
         }
 
         return send(p);
@@ -324,7 +324,7 @@ NodeNum Router::getNodeNum()
  * Handle any packet that is received by an interface on this node.
  * Note: some packets may merely being passed through this node and will be forwarded elsewhere.
  */
-void Router::handleReceived(MeshPacket *p)
+void Router::handleReceived(MeshPacket *p, RxSource src)
 {
     // Also, we should set the time from the ISR and it should have msec level resolution
     p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
@@ -333,13 +333,16 @@ void Router::handleReceived(MeshPacket *p)
     bool decoded = perhapsDecode(p);
     if (decoded) {
         // parsing was successful, queue for our recipient
-        printPacket("handleReceived", p);
+        if (src == RX_SRC_LOCAL)
+            printPacket("handleReceived(local)", p);
+        else
+            printPacket("handleReceived(remote)", p);
     } else {
         printPacket("packet decoding failed (no PSK?)", p);
     }
 
     // call plugins here
-    MeshPlugin::callPlugins(*p);
+    MeshPlugin::callPlugins(*p, src);
 }
 
 void Router::perhapsHandleReceived(MeshPacket *p)
