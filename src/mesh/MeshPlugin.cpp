@@ -66,7 +66,7 @@ MeshPacket *MeshPlugin::allocErrorResponse(Routing_Error err, const MeshPacket *
     return r;
 }
 
-void MeshPlugin::callPlugins(const MeshPacket &mp)
+void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
 {
     // DEBUG_MSG("In call plugins\n");
     bool pluginFound = false;
@@ -79,6 +79,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
     // Was this message directed to us specifically?  Will be false if we are sniffing someone elses packets
     auto ourNodeNum = nodeDB.getNodeNum();
     bool toUs = mp.to == NODENUM_BROADCAST || mp.to == ourNodeNum;
+
     for (auto i = plugins->begin(); i != plugins->end(); ++i) {
         auto &pi = **i;
 
@@ -86,6 +87,11 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
 
         /// We only call plugins that are interested in the packet (and the message is destined to us or we are promiscious)
         bool wantsPacket = (isDecoded || pi.encryptedOk) && (pi.isPromiscuous || toUs) && pi.wantPacket(&mp);
+
+        if ((src == RX_SRC_LOCAL) && !(pi.loopbackOk)) {
+            // new case, monitor separately for now, then FIXME merge above
+            wantsPacket = false;
+        }
 
         assert(!pi.myReply); // If it is !null it means we have a bug, because it should have been sent the previous time
 
@@ -169,7 +175,9 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
     }
 
     if (!pluginFound)
-        DEBUG_MSG("No plugins interested in portnum=%d\n", mp.decoded.portnum);
+        DEBUG_MSG("No plugins interested in portnum=%d, src=%s\n",
+                    mp.decoded.portnum, 
+                    (src == RX_SRC_LOCAL) ? "LOCAL":"REMOTE");
 }
 
 MeshPacket *MeshPlugin::allocReply()
