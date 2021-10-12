@@ -45,9 +45,9 @@ class SerialPluginRadio : public SinglePortPlugin
 
     /** Called to handle a particular incoming message
 
-    @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
+    @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
-    virtual bool handleReceived(const MeshPacket &mp);
+    virtual ProcessMessage handleReceived(const MeshPacket &mp);
 };
 
 extern SerialPluginRadio *serialPluginRadio;
