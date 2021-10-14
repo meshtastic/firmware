@@ -151,6 +151,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
  */
 
 // RAK4630 LoRa module
+#define USE_SX1262
 #define SX126X_CS (42)
 #define SX126X_DIO1 (47)
 #define SX126X_BUSY (46)

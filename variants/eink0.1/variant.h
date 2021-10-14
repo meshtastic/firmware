@@ -178,6 +178,7 @@ External serial flash WP25R1635FZUIL0
  * Lora radio
  */
 
+#define USE_SX1262
 #define SX126X_CS (0 + 24) // FIXME - we really should define LORA_CS instead
 #define SX126X_DIO1 (0 + 20)
 // Note DIO2 is attached internally to the module to an analog switch for TX/RX switching
