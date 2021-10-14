@@ -116,6 +116,9 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // I2C device addresses
 #define I2C_ADDR_BQ27441 0x55 // Battery gauge
 
+// SX1262 declaration
+#define USE_SX1262
+
 // CUSTOM GPIOs the SX1262
 #define SX126X_CS (32)
 

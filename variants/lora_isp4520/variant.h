@@ -57,6 +57,7 @@
 #define WIRE_INTERFACES_COUNT 0
 
 // GPIOs the SX1262 is connected
+#define USE_SX1262
 #define SX126X_CS 1    // aka SPI_NSS
 #define SX126X_DIO1 (4)
 #define SX126X_BUSY (5) 
