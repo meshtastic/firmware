@@ -66,6 +66,19 @@ typedef enum _LocationSharing {
     LocationSharing_LocDisabled = 2
 } LocationSharing;
 
+typedef enum _PositionFlags {
+    PositionFlags_POS_UNDEFINED = 0,
+    PositionFlags_POS_ALTITUDE = 1,
+    PositionFlags_POS_ALT_MSL = 2,
+    PositionFlags_POS_GEO_SEP = 4,
+    PositionFlags_POS_DOP = 8,
+    PositionFlags_POS_HVDOP = 16,
+    PositionFlags_POS_BATTERY = 32,
+    PositionFlags_POS_SATINVIEW = 64,
+    PositionFlags_POS_SEQ_NOS = 128,
+    PositionFlags_POS_TIMESTAMP = 256
+} PositionFlags;
+
 typedef enum _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType {
     RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11 = 0
 } RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType;
@@ -128,6 +141,7 @@ typedef struct _RadioConfig_UserPreferences {
     RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType environmental_measurement_plugin_sensor_type;
     uint32_t environmental_measurement_plugin_sensor_pin;
     bool store_forward_plugin_enabled;
+    uint32_t position_flags;
 } RadioConfig_UserPreferences;
 
 typedef struct _RadioConfig {
@@ -157,6 +171,10 @@ typedef struct _RadioConfig {
 #define _LocationSharing_MAX LocationSharing_LocDisabled
 #define _LocationSharing_ARRAYSIZE ((LocationSharing)(LocationSharing_LocDisabled+1))
 
+#define _PositionFlags_MIN PositionFlags_POS_UNDEFINED
+#define _PositionFlags_MAX PositionFlags_POS_TIMESTAMP
+#define _PositionFlags_ARRAYSIZE ((PositionFlags)(PositionFlags_POS_TIMESTAMP+1))
+
 #define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11
 #define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MAX RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11
 #define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_ARRAYSIZE ((RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType)(RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11+1))
@@ -168,9 +186,9 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default}
-#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0}
+#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0, 0}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero}
-#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0}
+#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define RadioConfig_UserPreferences_position_broadcast_secs_tag 1
@@ -228,6 +246,7 @@ extern "C" {
 #define RadioConfig_UserPreferences_environmental_measurement_plugin_sensor_type_tag 146
 #define RadioConfig_UserPreferences_environmental_measurement_plugin_sensor_pin_tag 147
 #define RadioConfig_UserPreferences_store_forward_plugin_enabled_tag 148
+#define RadioConfig_UserPreferences_position_flags_tag 150
 #define RadioConfig_preferences_tag              1
 
 /* Struct field encoding specification for nanopb */
@@ -292,7 +311,8 @@ X(a, STATIC,   SINGULAR, UINT32,   environmental_measurement_plugin_recovery_int
 X(a, STATIC,   SINGULAR, BOOL,     environmental_measurement_plugin_display_farenheit, 145) \
 X(a, STATIC,   SINGULAR, UENUM,    environmental_measurement_plugin_sensor_type, 146) \
 X(a, STATIC,   SINGULAR, UINT32,   environmental_measurement_plugin_sensor_pin, 147) \
-X(a, STATIC,   SINGULAR, BOOL,     store_forward_plugin_enabled, 148)
+X(a, STATIC,   SINGULAR, BOOL,     store_forward_plugin_enabled, 148) \
+X(a, STATIC,   SINGULAR, UINT32,   position_flags,  150)
 #define RadioConfig_UserPreferences_CALLBACK NULL
 #define RadioConfig_UserPreferences_DEFAULT NULL
 
@@ -304,8 +324,8 @@ extern const pb_msgdesc_t RadioConfig_UserPreferences_msg;
 #define RadioConfig_UserPreferences_fields &RadioConfig_UserPreferences_msg
 
 /* Maximum encoded size of messages (where known) */
-#define RadioConfig_size                         397
-#define RadioConfig_UserPreferences_size         394
+#define RadioConfig_size                         404
+#define RadioConfig_UserPreferences_size         401
 
 #ifdef __cplusplus
 } /* extern "C" */

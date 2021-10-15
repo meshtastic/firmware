@@ -53,6 +53,21 @@ typedef enum _CriticalErrorCode {
     CriticalErrorCode_RadioSpiBug = 11
 } CriticalErrorCode;
 
+typedef enum _Position_LocSource {
+    Position_LocSource_LOCSRC_UNSPECIFIED = 0,
+    Position_LocSource_LOCSRC_MANUAL_ENTRY = 1,
+    Position_LocSource_LOCSRC_GPS_INTERNAL = 2,
+    Position_LocSource_LOCSRC_GPS_EXTERNAL = 3
+} Position_LocSource;
+
+typedef enum _Position_AltSource {
+    Position_AltSource_ALTSRC_UNSPECIFIED = 0,
+    Position_AltSource_ALTSRC_MANUAL_ENTRY = 1,
+    Position_AltSource_ALTSRC_GPS_INTERNAL = 2,
+    Position_AltSource_ALTSRC_GPS_EXTERNAL = 3,
+    Position_AltSource_ALTSRC_BAROMETRIC = 4
+} Position_AltSource;
+
 typedef enum _Routing_Error {
     Routing_Error_NONE = 0,
     Routing_Error_NO_ROUTE = 1,
@@ -127,6 +142,29 @@ typedef struct _Position {
     int32_t altitude;
     int32_t battery_level;
     uint32_t time;
+    Position_LocSource location_source;
+    Position_AltSource altitude_source;
+    uint32_t pos_timestamp;
+    int32_t pos_time_millis;
+    int32_t altitude_hae;
+    int32_t alt_geoid_sep;
+    uint32_t PDOP;
+    uint32_t HDOP;
+    uint32_t VDOP;
+    uint32_t gps_accuracy;
+    uint32_t ground_speed;
+    uint32_t ground_track;
+    uint32_t fix_quality;
+    uint32_t fix_type;
+    uint32_t sats_in_view;
+    uint32_t sensor_id;
+    uint32_t heading;
+    int32_t roll;
+    int32_t pitch;
+    uint32_t air_speed;
+    uint32_t ground_distance_cm;
+    uint32_t pos_next_update;
+    uint32_t pos_seq_number;
 } Position;
 
 typedef struct _RouteDiscovery {
@@ -223,6 +261,14 @@ typedef struct _ToRadio {
 #define _CriticalErrorCode_MAX CriticalErrorCode_RadioSpiBug
 #define _CriticalErrorCode_ARRAYSIZE ((CriticalErrorCode)(CriticalErrorCode_RadioSpiBug+1))
 
+#define _Position_LocSource_MIN Position_LocSource_LOCSRC_UNSPECIFIED
+#define _Position_LocSource_MAX Position_LocSource_LOCSRC_GPS_EXTERNAL
+#define _Position_LocSource_ARRAYSIZE ((Position_LocSource)(Position_LocSource_LOCSRC_GPS_EXTERNAL+1))
+
+#define _Position_AltSource_MIN Position_AltSource_ALTSRC_UNSPECIFIED
+#define _Position_AltSource_MAX Position_AltSource_ALTSRC_BAROMETRIC
+#define _Position_AltSource_ARRAYSIZE ((Position_AltSource)(Position_AltSource_ALTSRC_BAROMETRIC+1))
+
 #define _Routing_Error_MIN Routing_Error_NONE
 #define _Routing_Error_MAX Routing_Error_NOT_AUTHORIZED
 #define _Routing_Error_ARRAYSIZE ((Routing_Error)(Routing_Error_NOT_AUTHORIZED+1))
@@ -241,7 +287,7 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define Position_init_default                    {0, 0, 0, 0, 0}
+#define Position_init_default                    {0, 0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define User_init_default                        {"", "", "", {0}, _HardwareModel_MIN, 0}
 #define RouteDiscovery_init_default              {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_default                     {0, {RouteDiscovery_init_default}}
@@ -253,7 +299,7 @@ extern "C" {
 #define FromRadio_init_default                   {0, 0, {MyNodeInfo_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
 #define ToRadio_PeerInfo_init_default            {0, 0}
-#define Position_init_zero                       {0, 0, 0, 0, 0}
+#define Position_init_zero                       {0, 0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define User_init_zero                           {"", "", "", {0}, _HardwareModel_MIN, 0}
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_zero                        {0, {RouteDiscovery_init_zero}}
@@ -295,6 +341,29 @@ extern "C" {
 #define Position_altitude_tag                    3
 #define Position_battery_level_tag               4
 #define Position_time_tag                        9
+#define Position_location_source_tag             10
+#define Position_altitude_source_tag             11
+#define Position_pos_timestamp_tag               12
+#define Position_pos_time_millis_tag             13
+#define Position_altitude_hae_tag                14
+#define Position_alt_geoid_sep_tag               15
+#define Position_PDOP_tag                        16
+#define Position_HDOP_tag                        17
+#define Position_VDOP_tag                        18
+#define Position_gps_accuracy_tag                19
+#define Position_ground_speed_tag                20
+#define Position_ground_track_tag                21
+#define Position_fix_quality_tag                 22
+#define Position_fix_type_tag                    23
+#define Position_sats_in_view_tag                24
+#define Position_sensor_id_tag                   25
+#define Position_heading_tag                     30
+#define Position_roll_tag                        31
+#define Position_pitch_tag                       32
+#define Position_air_speed_tag                   33
+#define Position_ground_distance_cm_tag          34
+#define Position_pos_next_update_tag             40
+#define Position_pos_seq_number_tag              41
 #define RouteDiscovery_route_tag                 2
 #define ToRadio_PeerInfo_app_version_tag         1
 #define ToRadio_PeerInfo_mqtt_gateway_tag        2
@@ -342,7 +411,30 @@ X(a, STATIC,   SINGULAR, SFIXED32, latitude_i,        1) \
 X(a, STATIC,   SINGULAR, SFIXED32, longitude_i,       2) \
 X(a, STATIC,   SINGULAR, INT32,    altitude,          3) \
 X(a, STATIC,   SINGULAR, INT32,    battery_level,     4) \
-X(a, STATIC,   SINGULAR, FIXED32,  time,              9)
+X(a, STATIC,   SINGULAR, FIXED32,  time,              9) \
+X(a, STATIC,   SINGULAR, UENUM,    location_source,  10) \
+X(a, STATIC,   SINGULAR, UENUM,    altitude_source,  11) \
+X(a, STATIC,   SINGULAR, FIXED32,  pos_timestamp,    12) \
+X(a, STATIC,   SINGULAR, INT32,    pos_time_millis,  13) \
+X(a, STATIC,   SINGULAR, SINT32,   altitude_hae,     14) \
+X(a, STATIC,   SINGULAR, SINT32,   alt_geoid_sep,    15) \
+X(a, STATIC,   SINGULAR, UINT32,   PDOP,             16) \
+X(a, STATIC,   SINGULAR, UINT32,   HDOP,             17) \
+X(a, STATIC,   SINGULAR, UINT32,   VDOP,             18) \
+X(a, STATIC,   SINGULAR, UINT32,   gps_accuracy,     19) \
+X(a, STATIC,   SINGULAR, UINT32,   ground_speed,     20) \
+X(a, STATIC,   SINGULAR, UINT32,   ground_track,     21) \
+X(a, STATIC,   SINGULAR, UINT32,   fix_quality,      22) \
+X(a, STATIC,   SINGULAR, UINT32,   fix_type,         23) \
+X(a, STATIC,   SINGULAR, UINT32,   sats_in_view,     24) \
+X(a, STATIC,   SINGULAR, UINT32,   sensor_id,        25) \
+X(a, STATIC,   SINGULAR, UINT32,   heading,          30) \
+X(a, STATIC,   SINGULAR, SINT32,   roll,             31) \
+X(a, STATIC,   SINGULAR, SINT32,   pitch,            32) \
+X(a, STATIC,   SINGULAR, UINT32,   air_speed,        33) \
+X(a, STATIC,   SINGULAR, UINT32,   ground_distance_cm,  34) \
+X(a, STATIC,   SINGULAR, UINT32,   pos_next_update,  40) \
+X(a, STATIC,   SINGULAR, UINT32,   pos_seq_number,   41)
 #define Position_CALLBACK NULL
 #define Position_DEFAULT NULL
 
@@ -492,13 +584,13 @@ extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 #define ToRadio_PeerInfo_fields &ToRadio_PeerInfo_msg
 
 /* Maximum encoded size of messages (where known) */
-#define Position_size                            37
+#define Position_size                            188
 #define User_size                                76
 #define RouteDiscovery_size                      40
 #define Routing_size                             42
 #define Data_size                                260
 #define MeshPacket_size                          309
-#define NodeInfo_size                            133
+#define NodeInfo_size                            285
 #define MyNodeInfo_size                          101
 #define LogRecord_size                           81
 #define FromRadio_size                           318
