@@ -206,7 +206,7 @@ void GPS::publishUpdate()
 
         // Notify any status instances that are observing us
         const meshtastic::GPSStatus status =
-            meshtastic::GPSStatus(hasLock(), isConnected(), latitude, longitude, altitude, dop, heading, numSatellites);
+            meshtastic::GPSStatus(hasValidLocation, isConnected(), latitude, longitude, altitude, dop, heading, numSatellites);
         newStatus.notifyObservers(&status);
     }
 }
