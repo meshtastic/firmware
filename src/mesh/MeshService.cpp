@@ -209,13 +209,13 @@ NodeInfo *MeshService::refreshMyNodeInfo()
     return node;
 }
 
-int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
+int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
 {
     // Update our local node info with our position (even if we don't decide to update anyone else)
     NodeInfo *node = refreshMyNodeInfo();
     Position pos = node->position;
 
-    if (gps->hasLock()) {
+    if (newStatus->getHasLock()) {
         if (gps->altitude != 0)
             pos.altitude = gps->altitude;
         pos.latitude_i = gps->latitude;
@@ -236,7 +236,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *unused)
     DEBUG_MSG("got gps notify time=%u, lat=%d, bat=%d\n", pos.time, pos.latitude_i, pos.battery_level);
 
     // Update our current position in the local DB
-    nodeDB.updatePosition(nodeDB.getNodeNum(), pos);
+    nodeDB.updatePosition(nodeDB.getNodeNum(), pos, RX_SRC_LOCAL);
 
     return 0;
 }
