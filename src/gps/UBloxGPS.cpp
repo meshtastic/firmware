@@ -246,7 +246,6 @@ bool UBloxGPS::lookForLocation()
         // INVALID solution - should never happen
         DEBUG_MSG("Invalid location lat/lon/hae/dop %d/%d/%d/%d - discarded\n",
                 tmp_lat, tmp_lon, tmp_alt_hae, tmp_dop);
-        fixType = 0;
     }
 
     ublox.flushPVT();  // reset ALL freshness flags at the end
