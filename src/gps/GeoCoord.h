@@ -14,7 +14,7 @@
 
 // Helper functions
 // Raises a number to an exponent, handling negative exponents.
-static double pow_neg(double base, double exponent) {
+static inline double pow_neg(double base, double exponent) {
   if (exponent == 0) {
     return 1;
   } else if (exponent > 0) {
