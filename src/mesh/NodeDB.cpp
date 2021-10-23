@@ -125,6 +125,11 @@ void NodeDB::installDefaultRadioConfig()
     memset(&radioConfig, 0, sizeof(radioConfig));
     radioConfig.has_preferences = true;
     resetRadioConfig();
+
+    // for backward compat, default position flags are BAT+ALT+MSL (0x23 = 35)
+    radioConfig.preferences.position_flags = (PositionFlags_POS_BATTERY |
+        PositionFlags_POS_ALTITUDE | PositionFlags_POS_ALT_MSL);
+
 }
 
 void NodeDB::installDefaultChannels()
