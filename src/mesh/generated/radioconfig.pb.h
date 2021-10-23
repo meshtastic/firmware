@@ -80,7 +80,8 @@ typedef enum _PositionFlags {
 } PositionFlags;
 
 typedef enum _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType {
-    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11 = 0
+    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11 = 0,
+    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DS18B20 = 1
 } RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType;
 
 /* Struct definitions */
