@@ -170,25 +170,27 @@ bool UBloxGPS::lookForLocation()
 {
     bool foundLocation = false;
 
-    // catch fixType changes here, instead of whileActive()
-    if (ublox.moduleQueried.fixType) {
-        fixType = ublox.getFixType();
-    }
-
-    // check if GPS has an acceptable lock
-    if (! hasLock()) {
-        return false;
-    }
-
     // check if a complete GPS solution set is available for reading
     // (some of these, like lat/lon are redundant and can be removed)
-    if ( ! (ublox.moduleQueried.latitude && 
+    if ( ! (ublox.moduleQueried.fixType &&
+            ublox.moduleQueried.latitude && 
             ublox.moduleQueried.longitude &&
             ublox.moduleQueried.altitude &&
             ublox.moduleQueried.pDOP &&
-            ublox.moduleQueried.gpsiTOW)) 
+            ublox.moduleQueried.gpsDay)) 
     {
         // Not ready? No problem! We'll try again later.
+        return false;
+    }
+
+    fixType = ublox.getFixType();
+#ifdef UBLOX_EXTRAVERBOSE
+    DEBUG_MSG("FixType=%d\n", fixType);
+#endif
+
+    // check if GPS has an acceptable lock
+    if (! hasLock()) {
+        ublox.flushPVT();  // reset ALL freshness flags
         return false;
     }
 
@@ -241,8 +243,12 @@ bool UBloxGPS::lookForLocation()
         pos_timestamp = tmp_ts;
         dop = tmp_dop;
     } else {
-        DEBUG_MSG("Invalid location discarded\n");
+        // INVALID solution - should never happen
+        DEBUG_MSG("Invalid location lat/lon/hae/dop %d/%d/%d/%d - discarded\n",
+                tmp_lat, tmp_lon, tmp_alt_hae, tmp_dop);
     }
+
+    ublox.flushPVT();  // reset ALL freshness flags at the end
 
     return foundLocation;
 }
