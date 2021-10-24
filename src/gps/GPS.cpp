@@ -202,11 +202,13 @@ void GPS::publishUpdate()
     if (shouldPublish) {
         shouldPublish = false;
 
-        DEBUG_MSG("publishing GPS lock=%d\n", hasLock());
+        // In debug logs, identify position by @timestamp:stage (stage 2 = publish)
+        DEBUG_MSG("publishing pos@%x:2, hasVal=%d, GPSlock=%d\n", 
+                    p.pos_timestamp, hasValidLocation, hasLock());
 
         // Notify any status instances that are observing us
         const meshtastic::GPSStatus status =
-            meshtastic::GPSStatus(hasValidLocation, isConnected(), latitude, longitude, altitude, dop, heading, numSatellites);
+            meshtastic::GPSStatus(hasValidLocation, isConnected(), p);
         newStatus.notifyObservers(&status);
     }
 }
@@ -244,6 +246,7 @@ int32_t GPS::runOnce()
 
         bool gotLoc = lookForLocation();
         if (gotLoc && !hasValidLocation) { // declare that we have location ASAP
+            DEBUG_MSG("hasValidLocation RISING EDGE\n");
             hasValidLocation = true;
             shouldPublish = true;
         }
@@ -260,6 +263,10 @@ int32_t GPS::runOnce()
 
             if (tooLong) {
                 // we didn't get a location during this ack window, therefore declare loss of lock
+                if (hasValidLocation) {
+                    DEBUG_MSG("hasValidLocation FALLING EDGE (last read: %d)\n", gotLoc);
+                }
+                p = Position_init_default;
                 hasValidLocation = false;
             }
 
