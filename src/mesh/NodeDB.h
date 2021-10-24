@@ -59,7 +59,7 @@ class NodeDB
 
     /** Update position info for this node based on received position data
      */
-    void updatePosition(uint32_t nodeId, const Position &p);
+    void updatePosition(uint32_t nodeId, const Position &p, RxSource src = RX_SRC_RADIO);
 
     /** Update user info for this node based on received user data
      */
