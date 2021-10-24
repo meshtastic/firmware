@@ -10,6 +10,8 @@
 
 #define PDOP_INVALID 9999
 
+// #define UBX_MODE_NMEA
+
 extern RadioConfig radioConfig;
 
 UBloxGPS::UBloxGPS() {}
@@ -48,12 +50,22 @@ bool UBloxGPS::setupGPS()
         delay(500);
 
     if (isConnected()) {
+#ifdef UBX_MODE_NMEA
+        DEBUG_MSG("Connected to UBLOX GPS, downgrading to NMEA mode\n");
+        DEBUG_MSG("- GPS errors below are related and safe to ignore\n");
+#else
         DEBUG_MSG("Connected to UBLOX GPS successfully\n");
+#endif
 
         if (!setUBXMode())
             RECORD_CRITICALERROR(CriticalErrorCode_UBloxInitFailed); // Don't halt the boot if saving the config fails, but do report the bug
 
+#ifdef UBX_MODE_NMEA
+        return false;
+#else
         return true;
+#endif
+
     } else {
         return false;
     }
@@ -61,6 +73,17 @@ bool UBloxGPS::setupGPS()
 
 bool UBloxGPS::setUBXMode()
 {
+#ifdef UBX_MODE_NMEA
+    if (_serial_gps) {
+        ublox.setUART1Output(COM_TYPE_NMEA, 1000);
+    }
+    if (i2cAddress) {
+        ublox.setI2COutput(COM_TYPE_NMEA, 1000);
+    }
+
+    return false;  // pretend initialization failed to force NMEA mode
+#endif
+
     if (_serial_gps) {
         if (!ublox.setUART1Output(COM_TYPE_UBX, 1000)) // Use native API
             return false;
@@ -119,7 +142,6 @@ bool UBloxGPS::factoryReset()
 void UBloxGPS::whileActive()
 {
     ublox.flushPVT();  // reset ALL freshness flags first
-
     ublox.getT(maxWait()); // ask for new time data - hopefully ready when we come back
 
     // Ask for a new position fix - hopefully it will have results ready by next time
@@ -177,6 +199,7 @@ bool UBloxGPS::lookForLocation()
             ublox.moduleQueried.longitude &&
             ublox.moduleQueried.altitude &&
             ublox.moduleQueried.pDOP &&
+            ublox.moduleQueried.SIV &&
             ublox.moduleQueried.gpsDay)) 
     {
         // Not ready? No problem! We'll try again later.
@@ -187,6 +210,7 @@ bool UBloxGPS::lookForLocation()
 #ifdef UBLOX_EXTRAVERBOSE
     DEBUG_MSG("FixType=%d\n", fixType);
 #endif
+
 
     // check if GPS has an acceptable lock
     if (! hasLock()) {
@@ -217,11 +241,7 @@ bool UBloxGPS::lookForLocation()
 
     time_t tmp_ts = mktime(&t);
 
-    // SIV number is nice-to-have if it's available
-    if (ublox.moduleQueried.SIV) {
-        uint16_t gSIV = ublox.getSIV(0);
-        setNumSatellites(gSIV);
-    }
+    // FIXME - can opportunistically attempt to set RTC from GPS timestamp?
 
     // bogus lat lon is reported as 0 or 0 (can be bogus just for one)
     // Also: apparently when the GPS is initially reporting lock it can output a bogus latitude > 90 deg!
@@ -232,16 +252,18 @@ bool UBloxGPS::lookForLocation()
 
     // only if entire dataset is valid, update globals from temp vars
     if (foundLocation) {
-        longitude = tmp_lon;
-        latitude = tmp_lat;
-#ifdef GPS_ALTITUDE_HAE
-        altitude = tmp_alt_hae / 1000;
-#else
-        altitude = tmp_alt_msl / 1000;
-#endif
-        geoidal_height = (tmp_alt_hae - tmp_alt_msl) / 1000;
-        pos_timestamp = tmp_ts;
-        dop = tmp_dop;
+        p.location_source = Position_LocSource_LOCSRC_GPS_INTERNAL;
+        p.longitude_i = tmp_lon;
+        p.latitude_i = tmp_lat;
+        p.altitude = tmp_alt_msl / 1000;
+        p.altitude_hae = tmp_alt_hae / 1000;
+        p.alt_geoid_sep = (tmp_alt_hae - tmp_alt_msl) / 1000;
+        p.pos_timestamp = tmp_ts;
+        p.PDOP = tmp_dop;
+        p.fix_type = fixType;
+        p.sats_in_view = ublox.getSIV(0);
+        // In debug logs, identify position by @timestamp:stage (stage 1 = birth)
+        DEBUG_MSG("lookForLocation() new pos@%x:1\n", tmp_ts);
     } else {
         // INVALID solution - should never happen
         DEBUG_MSG("Invalid location lat/lon/hae/dop %d/%d/%d/%d - discarded\n",
