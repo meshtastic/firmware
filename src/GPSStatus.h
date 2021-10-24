@@ -99,6 +99,10 @@ class GPSStatus : public Status
 
     bool matches(const GPSStatus *newStatus) const
     {
+#if GPS_EXTRAVERBOSE
+        DEBUG_MSG("GPSStatus.match() new pos@%x to old pos@%x\n",
+                    newStatus->p.pos_timestamp, p.pos_timestamp);
+#endif
         return (newStatus->hasLock != hasLock ||
                 newStatus->isConnected != isConnected ||
                 newStatus->p.latitude_i != p.latitude_i ||
@@ -109,25 +113,33 @@ class GPSStatus : public Status
                 newStatus->p.ground_track != p.ground_track ||
                 newStatus->p.sats_in_view != p.sats_in_view);
     }
+
     int updateStatus(const GPSStatus *newStatus)
     {
         // Only update the status if values have actually changed
-        bool isDirty;
-        {
-            isDirty = matches(newStatus);
-            initialized = true;
-            hasLock = newStatus->hasLock;
-            isConnected = newStatus->isConnected;
+        bool isDirty = matches(newStatus);
 
-            p = newStatus->p;
+        if (isDirty && p.pos_timestamp && 
+            (newStatus->p.pos_timestamp == p.pos_timestamp)) {
+            // We can NEVER be in two locations at the same time! (also PR #886)
+            DEBUG_MSG("BUG!! positional timestamp unchanged from prev solution\n");
         }
+
+        initialized = true;
+        hasLock = newStatus->hasLock;
+        isConnected = newStatus->isConnected;
+
+        p = newStatus->p;
+
         if (isDirty) {
-            if (hasLock)
-                DEBUG_MSG("New GPS pos lat=%f, lon=%f, alt=%d, pdop=%.2f, heading=%.2f, sats=%d\n", 
+            if (hasLock) {
+                // In debug logs, identify position by @timestamp:stage (stage 3 = notify)
+                DEBUG_MSG("New GPS pos@%x:3 lat=%f, lon=%f, alt=%d, pdop=%.2f, track=%.2f, sats=%d\n", 
+                            p.pos_timestamp,
                             p.latitude_i * 1e-7, p.longitude_i * 1e-7,
                             p.altitude, p.PDOP * 1e-2, p.ground_track * 1e-5, 
                             p.sats_in_view);
-            else
+            } else
                 DEBUG_MSG("No GPS lock\n");
             onNewStatus.notifyObservers(this);
         }
