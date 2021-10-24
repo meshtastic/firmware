@@ -95,6 +95,17 @@ bool NMEAGPS::lookForLocation()
     if (! hasLock())
         return false;
 
+#ifdef GPS_EXTRAVERBOSE
+    DEBUG_MSG("AGE: LOC=%d FIX=%d DATE=%d TIME=%d\n", 
+                reader.location.age(), 
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+                gsafixtype.age(),
+#else
+                0,
+#endif
+                reader.date.age(), reader.time.age());
+#endif  // GPS_EXTRAVERBOSE
+
     // check if a complete GPS solution set is available for reading
     //   tinyGPSDatum::age() also includes isValid() test
     // FIXME
@@ -105,7 +116,7 @@ bool NMEAGPS::lookForLocation()
             (reader.time.age() < GPS_SOL_EXPIRY_MS) &&
             (reader.date.age() < GPS_SOL_EXPIRY_MS)))
     {
-        // DEBUG_MSG("SOME data is TOO OLD\n");
+        DEBUG_MSG("SOME data is TOO OLD\n");
         return false;
     }
 
@@ -113,7 +124,7 @@ bool NMEAGPS::lookForLocation()
     if (! reader.location.isUpdated())
         return false;
 
-    // Start reading the data
+    // We know the solution is fresh and valid, so just read the data
     auto loc = reader.location.value();
 
     // Some GPSes (Air530) seem to send a zero longitude when the current fix is bogus
@@ -123,27 +134,34 @@ bool NMEAGPS::lookForLocation()
         return false;
     }
 
+    p.location_source = Position_LocSource_LOCSRC_GPS_INTERNAL;
+
     // Dilution of precision (an accuracy metric) is reported in 10^2 units, so we need to scale down when we use it
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-    dop = TinyGPSPlus::parseDecimal(gsapdop.value());
+    p.HDOP = reader.hdop.value();
+    p.PDOP = TinyGPSPlus::parseDecimal(gsapdop.value());
+    DEBUG_MSG("PDOP=%d, HDOP=%d\n", dop, reader.hdop.value());
 #else
     // FIXME! naive PDOP emulation (assumes VDOP==HDOP)
     // correct formula is PDOP = SQRT(HDOP^2 + VDOP^2)
-    dop = 1.41 * reader.hdop.value();
+    p.HDOP = reader.hdop.value();
+    p.PDOP = 1.41 * reader.hdop.value();
 #endif
 
     // Discard incomplete or erroneous readings
-    if (dop == 0)
+    if (reader.hdop.value() == 0)
         return false;
 
-    latitude = toDegInt(loc.lat);
-    longitude = toDegInt(loc.lng);
+    p.latitude_i = toDegInt(loc.lat);
+    p.longitude_i = toDegInt(loc.lng);
 
-    geoidal_height = reader.geoidHeight.meters();
-#ifdef GPS_ALTITUDE_HAE
-    altitude = reader.altitude.meters() + geoidal_height;
-#else
-    altitude = reader.altitude.meters();
+    p.alt_geoid_sep = reader.geoidHeight.meters();
+    p.altitude_hae = reader.altitude.meters() + p.alt_geoid_sep;
+    p.altitude = reader.altitude.meters();
+
+    p.fix_quality = fixQual;
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+    p.fix_type = fixType;
 #endif
 
     // positional timestamp
@@ -155,16 +173,16 @@ bool NMEAGPS::lookForLocation()
     t.tm_mon = reader.date.month() - 1;
     t.tm_year = reader.date.year() - 1900;
     t.tm_isdst = false;
-    pos_timestamp = mktime(&t);
+    p.pos_timestamp = mktime(&t);
 
     // Nice to have, if available
     if (reader.satellites.isUpdated()) {
-        setNumSatellites(reader.satellites.value());
+        p.sats_in_view = reader.satellites.value();
     }
 
     if (reader.course.isUpdated() && reader.course.isValid()) {
         if (reader.course.value() < 36000) {  // sanity check
-            heading = reader.course.value() * 1e3; // Scale the heading (in degrees * 10^-2) to match the expected degrees * 10^-5
+            p.ground_track = reader.course.value() * 1e3; // Scale the heading (in degrees * 10^-2) to match the expected degrees * 10^-5
         } else {
             DEBUG_MSG("BOGUS course.value() REJECTED: %d\n",
                         reader.course.value());
