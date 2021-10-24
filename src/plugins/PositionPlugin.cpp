@@ -38,7 +38,45 @@ MeshPacket *PositionPlugin::allocReply()
     NodeInfo *node = service.refreshMyNodeInfo(); // should guarantee there is now a position
     assert(node->has_position);
 
-    Position p = node->position;
+    // configuration of POSITION packet
+    //   consider making this a function argument?
+    uint32_t pos_flags = radioConfig.preferences.position_flags;
+
+    // Populate a Position struct with ONLY the requested fields
+    Position p = Position_init_default;  //   Start with an empty structure
+
+    // lat/lon are unconditionally included - IF AVAILABLE!
+    p.latitude_i = node->position.latitude_i;
+    p.longitude_i = node->position.longitude_i;
+    p.time = node->position.time;
+
+    if (pos_flags & PositionFlags_POS_BATTERY)
+        p.battery_level = node->position.battery_level;
+
+    if (pos_flags & PositionFlags_POS_ALTITUDE) {
+        if (pos_flags & PositionFlags_POS_ALT_MSL)
+            p.altitude = node->position.altitude;
+        else
+            p.altitude_hae = node->position.altitude_hae;
+
+        if (pos_flags & PositionFlags_POS_GEO_SEP)
+            p.alt_geoid_sep = node->position.alt_geoid_sep;
+    }
+
+    if (pos_flags & PositionFlags_POS_DOP) {
+        if (pos_flags & PositionFlags_POS_HVDOP) {
+            p.HDOP = node->position.HDOP;
+            p.VDOP = node->position.VDOP;
+        } else
+            p.PDOP = node->position.PDOP;
+    }
+
+    if (pos_flags & PositionFlags_POS_SATINVIEW)
+        p.sats_in_view = node->position.sats_in_view;
+
+    if (pos_flags & PositionFlags_POS_TIMESTAMP)
+        p.pos_timestamp = node->position.pos_timestamp;
+
 
     // Strip out any time information before sending packets to other nodes - to keep the wire size small (and because other
     // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS to include the time, so that gpsless
