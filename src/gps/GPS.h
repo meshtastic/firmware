@@ -17,6 +17,10 @@ class GPS : private concurrency::OSThread
   private:
     uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0, lastWhileActiveMsec = 0;
 
+    /**
+     * hasValidLocation - indicates that the position variables contain a complete
+     *   GPS location, valid and fresh (< gps_update_interval + gps_attempt_time)
+     */
     bool hasValidLocation = false; // default to false, until we complete our first read
 
     bool isAwake = false; // true if we want a location right now
@@ -39,14 +43,7 @@ class GPS : private concurrency::OSThread
     /** If !0 we will attempt to connect to the GPS over I2C */
     static uint8_t i2cAddress;
 
-    int32_t latitude = 0, longitude = 0; // as an int mult by 1e-7 to get value as double
-    int32_t altitude = 0;
-    uint32_t dop = 0;     // Diminution of position; PDOP where possible (UBlox), HDOP otherwise (TinyGPS) in 10^2 units (needs
-                          // scaling before use)
-    uint32_t heading = 0; // Heading of motion, in degrees * 10^-5
-
-    int32_t geoidal_height = 0;  // geoidal separation, in meters!
-    time_t pos_timestamp = 0;  // positional timestamp from GPS solution
+    Position p = Position_init_default;
 
     GPS() : concurrency::OSThread("GPS") {}
 
