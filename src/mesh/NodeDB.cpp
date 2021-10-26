@@ -451,21 +451,29 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p, RxSource src)
 {
     NodeInfo *info = getOrCreateNode(nodeId);
 
-    DEBUG_MSG("DB update position node=0x%x time=%u, latI=%d, lonI=%d\n", nodeId, p.time, p.latitude_i, p.longitude_i);
+    if (src == RX_SRC_LOCAL) {
+        // Local packet, fully authoritative
+        DEBUG_MSG("updatePosition LOCAL pos@%x:5, time=%u, latI=%d, lonI=%d\n", 
+                p.pos_timestamp, p.time, p.latitude_i, p.longitude_i);
+        info->position = p;
 
-    // Be careful to only update fields that have been set by the sender
-    // A lot of position reports don't have time populated.  In that case, be careful to not blow away the time we
-    // recorded based on the packet rxTime
-    if (p.time)
-        info->position.time = p.time;
-    if (p.battery_level)
-        info->position.battery_level = p.battery_level;
-    if (p.latitude_i || p.longitude_i) {
-        info->position.latitude_i = p.latitude_i;
-        info->position.longitude_i = p.longitude_i;
+    } else {
+        // Be careful to only update fields that have been set by the REMOTE sender
+        // A lot of position reports don't have time populated.  In that case, be careful to not blow away the time we
+        // recorded based on the packet rxTime
+        DEBUG_MSG("updatePosition REMOTE node=0x%x time=%u, latI=%d, lonI=%d\n", 
+                nodeId, p.time, p.latitude_i, p.longitude_i);
+
+        // First, back up fields that we want to protect from overwrite
+        uint32_t tmp_time = info->position.time;
+
+        // Next, update atomically
+        info->position = p;
+
+        // Last, restore any fields that may have been overwritten
+        if (! info->position.time)
+            info->position.time = tmp_time;
     }
-    if (p.altitude)
-        info->position.altitude = p.altitude;
     info->has_position = true;
     updateGUIforNode = info;
     notifyObservers(true); // Force an update whether or not our node counts have changed
