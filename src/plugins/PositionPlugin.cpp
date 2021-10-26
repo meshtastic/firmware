@@ -18,6 +18,32 @@ bool PositionPlugin::handleReceivedProtobuf(const MeshPacket &mp, Position *pptr
 {
     auto p = *pptr;
 
+    // If inbound message is a replay (or spoof!) of our own messages, do not process
+    // (why use second-hand sources for our own data?)
+    if (nodeDB.getNodeNum() == getFrom(&mp)) {
+        DEBUG_MSG("Ignored an incoming update from MYSELF\n");
+        return false;
+    }
+
+    // Log packet size and list of fields
+    DEBUG_MSG("POSITION node=%08x l=%d %s%s%s%s%s%s%s%s%s%s%s%s%s%s\n", 
+                getFrom(&mp),
+            	mp.decoded.payload.size,
+                p.latitude_i ? "LAT ":"",
+                p.longitude_i ? "LON ":"",
+                p.altitude ? "MSL ":"",
+                p.altitude_hae ? "HAE ":"",
+                p.alt_geoid_sep ? "GEO ":"",
+                p.PDOP ? "PDOP ":"",
+                p.HDOP ? "HDOP ":"",
+                p.VDOP ? "VDOP ":"",
+                p.sats_in_view ? "SIV ":"",
+                p.fix_quality ? "FXQ ":"",
+                p.fix_type ? "FXT ":"",
+                p.pos_timestamp ? "PTS ":"",
+                p.time ? "TIME ":"",
+                p.battery_level ? "BAT ":"");
+
     if (p.time) {
         struct timeval tv;
         uint32_t secs = p.time;
@@ -77,7 +103,6 @@ MeshPacket *PositionPlugin::allocReply()
     if (pos_flags & PositionFlags_POS_TIMESTAMP)
         p.pos_timestamp = node->position.pos_timestamp;
 
-
     // Strip out any time information before sending packets to other nodes - to keep the wire size small (and because other
     // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS to include the time, so that gpsless
     // devices can get time.
@@ -107,17 +132,20 @@ void PositionPlugin::sendOurPosition(NodeNum dest, bool wantReplies)
 
 int32_t PositionPlugin::runOnce()
 {
+    NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
 
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();
     if (lastGpsSend == 0 || now - lastGpsSend >= getPref_position_broadcast_secs() * 1000) {
+
         lastGpsSend = now;
 
         // If we changed channels, ask everyone else for their latest info
         bool requestReplies = currentGeneration != radioGeneration;
         currentGeneration = radioGeneration;
 
-        DEBUG_MSG("Sending position to mesh (wantReplies=%d)\n", requestReplies);
+        DEBUG_MSG("Sending pos@%x:6 to mesh (wantReplies=%d)\n", 
+                    node->position.pos_timestamp, requestReplies);
         sendOurPosition(NODENUM_BROADCAST, requestReplies);
     }
 
