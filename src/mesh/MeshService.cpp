@@ -140,7 +140,7 @@ void MeshService::handleToRadio(MeshPacket &p)
 
     // Send the packet into the mesh
 
-    sendToMesh(packetPool.allocCopy(p));
+    sendToMesh(packetPool.allocCopy(p), RX_SRC_USER);
 
     bool loopback = false; // if true send any packet the phone sends back itself (for testing)
     if (loopback) {
@@ -157,12 +157,12 @@ bool MeshService::cancelSending(PacketId id)
     return router->cancelSending(nodeDB.getNodeNum(), id);
 }
 
-void MeshService::sendToMesh(MeshPacket *p)
+void MeshService::sendToMesh(MeshPacket *p, RxSource src)
 {
     nodeDB.updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
 
     // Note: We might return !OK if our fifo was full, at that point the only option we have is to drop it
-    router->sendLocal(p);
+    router->sendLocal(p, src);
 }
 
 void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
