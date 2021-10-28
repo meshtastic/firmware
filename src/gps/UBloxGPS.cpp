@@ -268,6 +268,8 @@ bool UBloxGPS::lookForLocation()
 #ifdef GPS_EXTRAVERBOSE
             DEBUG_MSG("no altitude data (fixType=%d)\n", fixType);
 #endif
+            // clean up old values in case it's a 3d-2d fix transition
+            p.altitude = p.altitude_hae = p.alt_geoid_sep = 0;
         }
         p.pos_timestamp = tmp_ts;
         p.PDOP = tmp_dop;
