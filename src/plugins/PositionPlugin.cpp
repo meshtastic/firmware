@@ -18,11 +18,15 @@ bool PositionPlugin::handleReceivedProtobuf(const MeshPacket &mp, Position *pptr
 {
     auto p = *pptr;
 
-    // If inbound message is a replay (or spoof!) of our own messages, do not process
+    // If inbound message is a replay (or spoof!) of our own messages, we shouldn't process
     // (why use second-hand sources for our own data?)
+
+    // FIXME this can in fact happen with packets sent from EUD (src=RX_SRC_USER)
+    // to set fixed location, EUD-GPS location or just the time (see also issue #900)
     if (nodeDB.getNodeNum() == getFrom(&mp)) {
-        DEBUG_MSG("Ignored an incoming update from MYSELF\n");
-        return false;
+        DEBUG_MSG("Incoming update from MYSELF\n");
+        // DEBUG_MSG("Ignored an incoming update from MYSELF\n");
+        // return false;
     }
 
     // Log packet size and list of fields
