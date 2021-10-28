@@ -145,7 +145,7 @@ void Router::setReceivedMessage()
     runASAP = true;
 }
 
-ErrorCode Router::sendLocal(MeshPacket *p)
+ErrorCode Router::sendLocal(MeshPacket *p, RxSource src)
 {
     // No need to deliver externally if the destination is the local node
     if (p->to == nodeDB.getNodeNum()) {
@@ -161,7 +161,7 @@ ErrorCode Router::sendLocal(MeshPacket *p)
         // If we are sending a broadcast, we also treat it as if we just received it ourself
         // this allows local apps (and PCs) to see broadcasts sourced locally
         if (p->to == NODENUM_BROADCAST) {
-            handleReceived(p, RX_SRC_LOCAL);
+            handleReceived(p, src);
         }
 
         return send(p);
