@@ -1,3 +1,4 @@
+#include "configuration.h"
 #include "plugins/ExternalNotificationPlugin.h"
 #include "plugins/NodeInfoPlugin.h"
 #include "plugins/PositionPlugin.h"

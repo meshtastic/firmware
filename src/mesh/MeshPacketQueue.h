@@ -5,29 +5,29 @@
 #include <assert.h>
 #include <queue>
 
-// this is an strucure which implements the
-// operator overloading
-struct CompareMeshPacket {
-    bool operator()(MeshPacket *p1, MeshPacket *p2);
-};
 
 /**
- * A priority queue of packets.
- *
+ * A priority queue of packets
  */
-class MeshPacketQueue : public std::priority_queue<MeshPacket *, std::vector<MeshPacket *>, CompareMeshPacket>
+class MeshPacketQueue
 {
     size_t maxLen;
+    std::vector<MeshPacket *> queue;
+
+    /** Replace a lower priority package in the queue with 'mp' (provided there are lower pri packages). Return true if replaced. */
+    bool replaceLowerPriorityPacket(MeshPacket *mp);
+
   public:
     MeshPacketQueue(size_t _maxLen);
 
     /** enqueue a packet, return false if full */
     bool enqueue(MeshPacket *p);
 
-    // bool isEmpty();
+    /** return true if the queue is empty */
+    bool empty();
 
     MeshPacket *dequeue();
 
-    /** Attempt to find and remove a packet from this queue.  Returns true the packet which was removed from the queue */
+    /** Attempt to find and remove a packet from this queue.  Returns the packet which was removed from the queue */
     MeshPacket *remove(NodeNum from, PacketId id);
 };

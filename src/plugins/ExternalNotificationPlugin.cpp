@@ -1,9 +1,9 @@
+#include "configuration.h"
 #include "ExternalNotificationPlugin.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
 #include "Router.h"
-#include "configuration.h"
 #include <Arduino.h>
 
 //#include <assert.h>
@@ -143,7 +143,7 @@ ExternalNotificationPlugin::ExternalNotificationPlugin()
 #endif
 }
 
-bool ExternalNotificationPlugin::handleReceived(const MeshPacket &mp)
+ProcessMessage ExternalNotificationPlugin::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
 
@@ -176,5 +176,5 @@ bool ExternalNotificationPlugin::handleReceived(const MeshPacket &mp)
 
 #endif
 
-    return true; // Let others look at this message also if they want
+    return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }

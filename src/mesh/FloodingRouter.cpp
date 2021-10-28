@@ -1,5 +1,5 @@
-#include "FloodingRouter.h"
 #include "configuration.h"
+#include "FloodingRouter.h"
 #include "mesh-pb-constants.h"
 
 FloodingRouter::FloodingRouter() {}

@@ -5,14 +5,12 @@
 #include <HTTPMultipartBodyParser.hpp>
 #include <HTTPURLEncodedBodyParser.hpp>
 
-
 #include <WebServer.h>
 #include <WiFi.h>
 
 #ifndef NO_ESP32
 #include "esp_task_wdt.h"
 #endif
-
 
 // Persistant Data Storage
 #include <Preferences.h>
@@ -42,46 +40,41 @@ Preferences prefs;
 using namespace httpsserver;
 #include "mesh/http/ContentHandler.h"
 
-SSLCert *cert;
-HTTPSServer *secureServer;
-HTTPServer *insecureServer;
+static SSLCert *cert;
+static HTTPSServer *secureServer;
+static HTTPServer *insecureServer;
 
+volatile bool isWebServerReady;
+volatile bool isCertReady;
 
-
-
-bool isWebServerReady = 0;
-bool isCertReady = 0;
-
-
-void handleWebResponse()
+static void handleWebResponse()
 {
-    if (isWifiAvailable() == 0) {
-        return;
-    }
+    if (isWifiAvailable()) {
 
-    if (isWebServerReady) {
-        // We're going to handle the DNS responder here so it
-        // will be ignored by the NRF boards.
-        handleDNSResponse();
+        if (isWebServerReady) {
+            // We're going to handle the DNS responder here so it
+            // will be ignored by the NRF boards.
+            handleDNSResponse();
 
-        secureServer->loop();
-        insecureServer->loop();
-    }
+            if(secureServer)
+                secureServer->loop();
+            insecureServer->loop();
+        }
 
-    /*
-        Slow down the CPU if we have not received a request within the last few
-        seconds.
-    */
-   
-    if (millis() - getTimeSpeedUp() >= (25 * 1000)) {
-        setCpuFrequencyMhz(80);
-        setTimeSpeedUp();
+        /*
+            Slow down the CPU if we have not received a request within the last few
+            seconds.
+        */
+
+        if (millis() - getTimeSpeedUp() >= (25 * 1000)) {
+            setCpuFrequencyMhz(80);
+            setTimeSpeedUp();
+        }
     }
 }
 
-void taskCreateCert(void *parameter)
+static void taskCreateCert(void *parameter)
 {
-
     prefs.begin("MeshtasticHTTPS", false);
 
     // Delete the saved certs
@@ -92,13 +85,32 @@ void taskCreateCert(void *parameter)
         prefs.remove("cert");
     }
 
+    DEBUG_MSG("Checking if we have a previously saved SSL Certificate.\n");
+
     size_t pkLen = prefs.getBytesLength("PK");
     size_t certLen = prefs.getBytesLength("cert");
 
-    DEBUG_MSG("Checking if we have a previously saved SSL Certificate.\n");
-
     if (pkLen && certLen) {
         DEBUG_MSG("Existing SSL Certificate found!\n");
+
+        uint8_t *pkBuffer = new uint8_t[pkLen];
+        prefs.getBytes("PK", pkBuffer, pkLen);
+
+        uint8_t *certBuffer = new uint8_t[certLen];
+        prefs.getBytes("cert", certBuffer, certLen);
+
+        cert = new SSLCert(certBuffer, certLen, pkBuffer, pkLen);
+
+        DEBUG_MSG("Retrieved Private Key: %d Bytes\n", cert->getPKLength());
+        // DEBUG_MSG("Retrieved Private Key: " + String(cert->getPKLength()) + " Bytes");
+        // for (int i = 0; i < cert->getPKLength(); i++)
+        //  Serial.print(cert->getPKData()[i], HEX);
+        // Serial.println();
+
+        DEBUG_MSG("Retrieved Certificate: %d Bytes\n", cert->getCertLength());
+        // for (int i = 0; i < cert->getCertLength(); i++)
+        //  Serial.print(cert->getCertData()[i], HEX);
+        // Serial.println();
     } else {
         DEBUG_MSG("Creating the certificate. This may take a while. Please wait...\n");
         yield();
@@ -133,35 +145,35 @@ void taskCreateCert(void *parameter)
         }
     }
 
-    isCertReady = 1;
+    isCertReady = true;
+
+    // Must delete self, can't just fall out
     vTaskDelete(NULL);
 }
 
 void createSSLCert()
 {
+    if (isWifiAvailable() && !isCertReady) {
 
-    if (isWifiAvailable() == 0) {
-        return;
+        // Create a new process just to handle creating the cert.
+        //   This is a workaround for Bug: https://github.com/fhessel/esp32_https_server/issues/48
+        //  jm@casler.org (Oct 2020)
+        xTaskCreate(taskCreateCert, /* Task function. */
+                    "createCert",   /* String with name of task. */
+                    16384,          /* Stack size in bytes. */
+                    NULL,           /* Parameter passed as input of the task */
+                    16,             /* Priority of the task. */
+                    NULL);          /* Task handle. */
+
+        DEBUG_MSG("Waiting for SSL Cert to be generated.\n");
+        while (!isCertReady) {
+            DEBUG_MSG(".");
+            delay(1000);
+            yield();
+            esp_task_wdt_reset();
+        }
+        DEBUG_MSG("SSL Cert Ready!\n");
     }
-
-    // Create a new process just to handle creating the cert.
-    //   This is a workaround for Bug: https://github.com/fhessel/esp32_https_server/issues/48
-    //  jm@casler.org (Oct 2020)
-    xTaskCreate(taskCreateCert, /* Task function. */
-                "createCert",   /* String with name of task. */
-                16384,          /* Stack size in bytes. */
-                NULL,           /* Parameter passed as input of the task */
-                16,             /* Priority of the task. */
-                NULL);          /* Task handle. */
-
-    DEBUG_MSG("Waiting for SSL Cert to be generated.\n");
-    while (!isCertReady) {
-        DEBUG_MSG(".");
-        delay(1000);
-        yield();
-        esp_task_wdt_reset();
-    }
-    DEBUG_MSG("SSL Cert Ready!\n");
 }
 
 WebServerThread *webServerThread;
@@ -181,6 +193,8 @@ void initWebServer()
 {
     DEBUG_MSG("Initializing Web Server ...\n");
 
+#if 0
+// this seems to be a copypaste dup of taskCreateCert
     prefs.begin("MeshtasticHTTPS", false);
 
     size_t pkLen = prefs.getBytesLength("PK");
@@ -211,6 +225,7 @@ void initWebServer()
     } else {
         DEBUG_MSG("Web Server started without SSL keys! How did this happen?\n");
     }
+#endif
 
     // We can now use the new certificate to setup our server as usual.
     secureServer = new HTTPSServer(cert);
@@ -218,14 +233,16 @@ void initWebServer()
 
     registerHandlers(insecureServer, secureServer);
 
-    DEBUG_MSG("Starting Web Servers...\n");
-    secureServer->start();
+    if(secureServer) {
+        DEBUG_MSG("Starting Secure Web Server...\n");
+        secureServer->start();
+    }
+    DEBUG_MSG("Starting Insecure Web Server...\n");    
     insecureServer->start();
-    if (secureServer->isRunning() && insecureServer->isRunning()) {
-        DEBUG_MSG("HTTP and HTTPS Web Servers Ready! :-) \n");
-        isWebServerReady = 1;
+    if (insecureServer->isRunning()) {
+        DEBUG_MSG("Web Servers Ready! :-) \n");
+        isWebServerReady = true;
     } else {
-        DEBUG_MSG("HTTP and HTTPS Web Servers Failed! ;-( \n");
+        DEBUG_MSG("Web Servers Failed! ;-( \n");
     }
 }
-

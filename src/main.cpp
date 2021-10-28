@@ -1,4 +1,4 @@
-
+#include "configuration.h"
 #include "GPS.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
@@ -6,7 +6,6 @@
 #include "PowerFSM.h"
 #include "airtime.h"
 #include "buzz.h"
-#include "configuration.h"
 #include "error.h"
 #include "power.h"
 // #include "rom/rtc.h"
@@ -26,9 +25,10 @@
 #include <Wire.h>
 // #include <driver/rtc_io.h>
 
+#include "mesh/http/WiFiAPClient.h"
+
 #ifndef NO_ESP32
 #include "mesh/http/WebServer.h"
-#include "mesh/http/WiFiAPClient.h"
 #include "nimble/BluetoothUtil.h"
 #endif
 
@@ -39,6 +39,7 @@
 
 #include "RF95Interface.h"
 #include "SX1262Interface.h"
+#include "SX1268Interface.h"
 
 #ifdef NRF52_SERIES
 #include "variant.h"
@@ -299,6 +300,13 @@ uint32_t ButtonThread::longPressTime = 0;
 
 RadioInterface *rIf = NULL;
 
+/**
+ * Some platforms (nrf52) might provide an alterate version that supresses calling delay from sleep.
+ */
+__attribute__ ((weak, noinline)) bool loopCanSleep() {
+    return true;
+}
+
 void setup()
 {
     concurrency::hasBeenSetup = true;
@@ -331,9 +339,10 @@ void setup()
     digitalWrite(RESET_OLED, 1);
 #endif
 
+    bool forceSoftAP = 0;
+
 #ifdef BUTTON_PIN
 #ifndef NO_ESP32
-    bool forceSoftAP = 0;
 
     // If the button is connected to GPIO 12, don't enable the ability to use
     // meshtasticAdmin on the device.
@@ -459,7 +468,7 @@ void setup()
     // Do this after service.init (because that clears error_code)
 #ifdef AXP192_SLAVE_ADDRESS
     if (!axp192_found)
-        recordCriticalError(CriticalErrorCode_NoAXP192); // Record a hardware fault for missing hardware
+        RECORD_CRITICALERROR(CriticalErrorCode_NoAXP192); // Record a hardware fault for missing hardware
 #endif
 
         // Don't call screen setup until after nodedb is setup (because we need
@@ -483,10 +492,10 @@ void setup()
         }
     }
 
-#ifdef SX1262_ANT_SW
-    // make analog PA vs not PA switch on SX1262 eval board work properly
-    pinMode(SX1262_ANT_SW, OUTPUT);
-    digitalWrite(SX1262_ANT_SW, 1);
+#ifdef SX126X_ANT_SW
+    // make analog PA vs not PA switch on SX126x eval board work properly
+    pinMode(SX126X_ANT_SW, OUTPUT);
+    digitalWrite(SX126X_ANT_SW, 1);
 #endif
 
     // radio init MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
@@ -499,20 +508,33 @@ void setup()
             delete rIf;
             rIf = NULL;
         } else {
-            DEBUG_MSG("Radio init succeeded, using RF95 radio\n");
+            DEBUG_MSG("RF95 Radio init succeeded, using RF95 radio\n");
         }
     }
 #endif
 
-#if defined(SX1262_CS)
+#if defined(USE_SX1262)
     if (!rIf) {
-        rIf = new SX1262Interface(SX1262_CS, SX1262_DIO1, SX1262_RESET, SX1262_BUSY, SPI);
+        rIf = new SX1262Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
         if (!rIf->init()) {
             DEBUG_MSG("Warning: Failed to find SX1262 radio\n");
             delete rIf;
             rIf = NULL;
         } else {
-            DEBUG_MSG("Radio init succeeded, using SX1262 radio\n");
+            DEBUG_MSG("SX1262 Radio init succeeded, using SX1262 radio\n");
+        }
+    }
+#endif
+
+#if defined(USE_SX1268)
+    if (!rIf) {
+        rIf = new SX1268Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
+        if (!rIf->init()) {
+            DEBUG_MSG("Warning: Failed to find SX1268 radio\n");
+            delete rIf;
+            rIf = NULL;
+        } else {
+            DEBUG_MSG("SX1268 Radio init succeeded, using SX1268 radio\n");
         }
     }
 #endif
@@ -530,10 +552,14 @@ void setup()
     }
 #endif
 
-#ifndef NO_ESP32
+#if defined(PORTDUINO) || defined(HAS_WIFI)
+    mqttInit();
+#endif
+
     // Initialize Wifi
     initWifi(forceSoftAP);
 
+#ifndef NO_ESP32
     // Start web server thread.
     webServerThread = new WebServerThread();
 #endif
@@ -542,15 +568,11 @@ void setup()
     initApiServer();
 #endif
 
-#if defined(PORTDUINO) || defined(HAS_WIFI)
-    mqttInit();
-#endif
-
     // Start airtime logger thread.
     airTime = new AirTime();
 
     if (!rIf)
-        recordCriticalError(CriticalErrorCode_NoRadio);
+        RECORD_CRITICALERROR(CriticalErrorCode_NoRadio);
     else
         router->addInterface(rIf);
 
@@ -640,7 +662,9 @@ void loop()
                   mainController.nextThread->tillRun(millis())); */
 
     // We want to sleep as long as possible here - because it saves power
-    if (!runASAP)
+    if (!runASAP && loopCanSleep()) {
+        // if(delayMsec > 100) DEBUG_MSG("sleeping %ld\n", delayMsec);
         mainDelay.delay(delayMsec);
+    }
     // if (didWake) DEBUG_MSG("wake!\n");
 }

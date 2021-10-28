@@ -1,5 +1,5 @@
-#include "OSTimer.h"
 #include "configuration.h"
+#include "OSTimer.h"
 
 /**
  * Schedule a callback to run.  The callback must _not_ block, though it is called from regular thread level (not ISR)

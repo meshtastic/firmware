@@ -1,6 +1,5 @@
-
-#include "CryptoEngine.h"
 #include "configuration.h"
+#include "CryptoEngine.h"
 #include "ocrypto_aes_ctr.h"
 
 class NRF52CryptoEngine : public CryptoEngine
