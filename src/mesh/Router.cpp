@@ -334,9 +334,11 @@ void Router::handleReceived(MeshPacket *p, RxSource src)
     if (decoded) {
         // parsing was successful, queue for our recipient
         if (src == RX_SRC_LOCAL)
-            printPacket("handleReceived(local)", p);
+            printPacket("handleReceived(LOCAL)", p);
+        else if (src == RX_SRC_USER)
+            printPacket("handleReceived(USER)", p);
         else
-            printPacket("handleReceived(remote)", p);
+            printPacket("handleReceived(REMOTE)", p);
     } else {
         printPacket("packet decoding failed (no PSK?)", p);
     }
