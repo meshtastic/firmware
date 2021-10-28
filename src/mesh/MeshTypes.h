@@ -20,7 +20,8 @@ typedef uint32_t PacketId; // A packet sequence number
  */
 enum RxSource {
     RX_SRC_LOCAL,  // message was generated locally
-    RX_SRC_RADIO   // message was received from radio mesh
+    RX_SRC_RADIO,   // message was received from radio mesh
+    RX_SRC_USER    // message was received from end-user device
 };
 
 /**

@@ -75,7 +75,7 @@ class MeshService
     /// Send a packet into the mesh - note p must have been allocated from packetPool.  We will return it to that pool after
     /// sending. This is the ONLY function you should use for sending messages into the mesh, because it also updates the nodedb
     /// cache
-    void sendToMesh(MeshPacket *p);
+    void sendToMesh(MeshPacket *p, RxSource src = RX_SRC_LOCAL);
 
     /** Attempt to cancel a previously sent packet from this _local_ node.  Returns true if a packet was found we could cancel */
     bool cancelSending(PacketId id);

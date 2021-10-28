@@ -45,7 +45,7 @@ class Router : protected concurrency::OSThread
      *
      * NOTE: This method will free the provided packet (even if we return an error code)
      */
-    ErrorCode sendLocal(MeshPacket *p);
+    ErrorCode sendLocal(MeshPacket *p, RxSource src = RX_SRC_RADIO);
 
     /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
     bool cancelSending(NodeNum from, PacketId id);
