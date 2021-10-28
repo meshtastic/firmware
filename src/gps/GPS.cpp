@@ -1,8 +1,7 @@
-
+#include "configuration.h"
 #include "GPS.h"
 #include "NodeDB.h"
 #include "RTC.h"
-#include "configuration.h"
 #include "sleep.h"
 #include <assert.h>
 
@@ -80,6 +79,8 @@ GPS::~GPS()
     notifySleepObserver.unobserve();
     notifyDeepSleepObserver.unobserve();
 }
+
+bool GPS::hasLock() { return hasValidLocation; }
 
 // Allow defining the polarity of the WAKE output.  default is active high
 #ifndef GPS_WAKE_ACTIVE
@@ -201,11 +202,13 @@ void GPS::publishUpdate()
     if (shouldPublish) {
         shouldPublish = false;
 
-        DEBUG_MSG("publishing GPS lock=%d\n", hasLock());
+        // In debug logs, identify position by @timestamp:stage (stage 2 = publish)
+        DEBUG_MSG("publishing pos@%x:2, hasVal=%d, GPSlock=%d\n", 
+                    p.pos_timestamp, hasValidLocation, hasLock());
 
         // Notify any status instances that are observing us
         const meshtastic::GPSStatus status =
-            meshtastic::GPSStatus(hasLock(), isConnected(), latitude, longitude, altitude, dop, heading, numSatellites);
+            meshtastic::GPSStatus(hasValidLocation, isConnected(), p);
         newStatus.notifyObservers(&status);
     }
 }
@@ -243,6 +246,7 @@ int32_t GPS::runOnce()
 
         bool gotLoc = lookForLocation();
         if (gotLoc && !hasValidLocation) { // declare that we have location ASAP
+            DEBUG_MSG("hasValidLocation RISING EDGE\n");
             hasValidLocation = true;
             shouldPublish = true;
         }
@@ -259,6 +263,10 @@ int32_t GPS::runOnce()
 
             if (tooLong) {
                 // we didn't get a location during this ack window, therefore declare loss of lock
+                if (hasValidLocation) {
+                    DEBUG_MSG("hasValidLocation FALLING EDGE (last read: %d)\n", gotLoc);
+                }
+                p = Position_init_default;
                 hasValidLocation = false;
             }
 
@@ -326,6 +334,11 @@ GPS *createGps()
 #ifdef NO_GPS
     return nullptr;
 #else
+#ifdef GPS_ALTITUDE_HAE
+    DEBUG_MSG("Using HAE altitude model\n");
+#else
+    DEBUG_MSG("Using MSL altitude model\n");
+#endif
 // If we don't have bidirectional comms, we can't even try talking to UBLOX
 #ifdef GPS_TX_PIN
     // Init GPS - first try ublox

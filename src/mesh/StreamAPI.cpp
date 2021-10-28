@@ -1,4 +1,5 @@
 #include "StreamAPI.h"
+#include "PowerFSM.h"
 #include "configuration.h"
 
 #define START1 0x94
@@ -25,12 +26,19 @@ int32_t StreamAPI::readStream()
         return recentRx ? 5 : 250;
     } else {
         while (stream->available()) { // Currently we never want to block
-            uint8_t c = stream->read();
+            int cInt = stream->read();
+            if(cInt < 0)
+                break; // We ran out of characters (even though available said otherwise) - this can happen on rf52 adafruit arduino
+
+            uint8_t c = (uint8_t) cInt;
 
             // Use the read pointer for a little state machine, first look for framing, then length bytes, then payload
-            size_t ptr = rxPtr++; // assume we will probably advance the rxPtr
+            size_t ptr = rxPtr;
 
+            rxPtr++; // assume we will probably advance the rxPtr
             rxBuf[ptr] = c; // store all bytes (including framing)
+
+            // console->printf("rxPtr %d ptr=%d c=0x%x\n", rxPtr, ptr, c);
 
             if (ptr == 0) { // looking for START1
                 if (c != START1)
@@ -38,27 +46,29 @@ int32_t StreamAPI::readStream()
             } else if (ptr == 1) { // looking for START2
                 if (c != START2)
                     rxPtr = 0;                             // failed to find framing
-            } else if (ptr >= HEADER_LEN) {                // we have at least read our 4 byte framing
+            } else if (ptr >= HEADER_LEN - 1) {            // we have at least read our 4 byte framing
                 uint32_t len = (rxBuf[2] << 8) + rxBuf[3]; // big endian 16 bit length follows framing
 
-                if (ptr == HEADER_LEN) {
+                // console->printf("len %d\n", len);
+
+                if (ptr == HEADER_LEN - 1) {
                     // we _just_ finished our 4 byte header, validate length now (note: a length of zero is a valid
                     // protobuf also)
                     if (len > MAX_TO_FROM_RADIO_SIZE)
                         rxPtr = 0; // length is bogus, restart search for framing
                 }
 
-                if (rxPtr != 0 && ptr + 1 == len + HEADER_LEN) {
-                    rxPtr = 0; // start over again on the next packet
+                if (rxPtr != 0) // Is packet still considered 'good'?
+                    if (ptr + 1 >= len + HEADER_LEN) { // have we received all of the payload?
+                        rxPtr = 0; // start over again on the next packet
 
-                    // If we didn't just fail the packet and we now have the right # of bytes, parse it
-                    if (handleToRadio(rxBuf + HEADER_LEN, len))
-                        return 0; // we want to be called again ASAP because we still have more work to do
-                }
+                        // If we didn't just fail the packet and we now have the right # of bytes, parse it
+                        handleToRadio(rxBuf + HEADER_LEN, len);
+                    }
             }
         }
 
-        // we had packets available this time, so assume we might have them next time also
+        // we had bytes available this time, so assume we might have them next time also
         lastRxMsec = now;
         return 0;
     }
@@ -109,4 +119,18 @@ void StreamAPI::emitRebooted()
 
     // DEBUG_MSG("Emitting reboot packet for serial shell\n");
     emitTxBuffer(pb_encode_to_bytes(txBuf + HEADER_LEN, FromRadio_size, FromRadio_fields, &fromRadioScratch));
+}
+
+/// Hookable to find out when connection changes
+void StreamAPI::onConnectionChanged(bool connected)
+{
+    // FIXME do reference counting instead
+
+    if (connected) { // To prevent user confusion, turn off bluetooth while using the serial port api
+        powerFSM.trigger(EVENT_SERIAL_CONNECTED);
+    } else {
+        // FIXME, we get no notice of serial going away, we should instead automatically generate this event if we haven't
+        // received a packet in a while
+        powerFSM.trigger(EVENT_SERIAL_DISCONNECTED);
+    }
 }

@@ -4,7 +4,6 @@
 #include "airtime.h"
 #include "main.h"
 #include "mesh/http/ContentHelper.h"
-#include "mesh/http/ContentStatic.h"
 #include "mesh/http/WiFiAPClient.h"
 #include "power.h"
 #include "sleep.h"
@@ -79,19 +78,17 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
 
     ResourceNode *nodeHotspotApple = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
     ResourceNode *nodeHotspotAndroid = new ResourceNode("/generate_204", "GET", &handleHotspot);
-    ResourceNode *nodeFavicon = new ResourceNode("/favicon.ico", "GET", &handleFavicon);
-    ResourceNode *nodeRoot = new ResourceNode("/", "GET", &handleRoot);
-    ResourceNode *nodeStaticBrowse = new ResourceNode("/static", "GET", &handleStaticBrowse);
-    ResourceNode *nodeStaticPOST = new ResourceNode("/static", "POST", &handleStaticPost);
-    ResourceNode *nodeStatic = new ResourceNode("/static/*", "GET", &handleStatic);
+
     ResourceNode *nodeRestart = new ResourceNode("/restart", "POST", &handleRestart);
-    ResourceNode *node404 = new ResourceNode("", "GET", &handle404);
     ResourceNode *nodeFormUpload = new ResourceNode("/upload", "POST", &handleFormUpload);
+
     ResourceNode *nodeJsonScanNetworks = new ResourceNode("/json/scanNetworks", "GET", &handleScanNetworks);
     ResourceNode *nodeJsonBlinkLED = new ResourceNode("/json/blink", "POST", &handleBlinkLED);
     ResourceNode *nodeJsonReport = new ResourceNode("/json/report", "GET", &handleReport);
     ResourceNode *nodeJsonSpiffsBrowseStatic = new ResourceNode("/json/spiffs/browse/static", "GET", &handleSpiffsBrowseStatic);
     ResourceNode *nodeJsonDelete = new ResourceNode("/json/spiffs/delete/static", "DELETE", &handleSpiffsDeleteStatic);
+    
+    ResourceNode *nodeRoot = new ResourceNode("/*", "GET", &handleStatic);
 
     // Secure nodes
     secureServer->registerNode(nodeAPIv1ToRadioOptions);
@@ -99,11 +96,6 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     secureServer->registerNode(nodeAPIv1FromRadio);
     secureServer->registerNode(nodeHotspotApple);
     secureServer->registerNode(nodeHotspotAndroid);
-    secureServer->registerNode(nodeFavicon);
-    secureServer->registerNode(nodeRoot);
-    secureServer->registerNode(nodeStaticBrowse);
-    secureServer->registerNode(nodeStaticPOST);
-    secureServer->registerNode(nodeStatic);
     secureServer->registerNode(nodeRestart);
     secureServer->registerNode(nodeFormUpload);
     secureServer->registerNode(nodeJsonScanNetworks);
@@ -111,7 +103,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     secureServer->registerNode(nodeJsonSpiffsBrowseStatic);
     secureServer->registerNode(nodeJsonDelete);
     secureServer->registerNode(nodeJsonReport);
-    secureServer->setDefaultNode(node404);
+    secureServer->registerNode(nodeRoot);
 
     secureServer->addMiddleware(&middlewareSpeedUp240);
 
@@ -121,11 +113,6 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     insecureServer->registerNode(nodeAPIv1FromRadio);
     insecureServer->registerNode(nodeHotspotApple);
     insecureServer->registerNode(nodeHotspotAndroid);
-    insecureServer->registerNode(nodeFavicon);
-    insecureServer->registerNode(nodeRoot);
-    insecureServer->registerNode(nodeStaticBrowse);
-    insecureServer->registerNode(nodeStaticPOST);
-    insecureServer->registerNode(nodeStatic);
     insecureServer->registerNode(nodeRestart);
     insecureServer->registerNode(nodeFormUpload);
     insecureServer->registerNode(nodeJsonScanNetworks);
@@ -133,7 +120,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     insecureServer->registerNode(nodeJsonSpiffsBrowseStatic);
     insecureServer->registerNode(nodeJsonDelete);
     insecureServer->registerNode(nodeJsonReport);
-    insecureServer->setDefaultNode(node404);
+    insecureServer->registerNode(nodeRoot);
 
     insecureServer->addMiddleware(&middlewareSpeedUp160);
 }
@@ -180,11 +167,8 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
 
     /*
         For documentation, see:
-            https://github.com/meshtastic/Meshtastic-device/wiki/HTTP-REST-API-discussion
-            https://github.com/meshtastic/Meshtastic-device/blob/master/docs/software/device-api.md
-
-        Example:
-            http://10.10.30.198/api/v1/fromradio
+            https://meshtastic.org/docs/developers/device/http-api
+            https://meshtastic.org/docs/developers/device/device-api
     */
 
     // Get access to the parameters
@@ -233,14 +217,9 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
 
     /*
         For documentation, see:
-            https://github.com/meshtastic/Meshtastic-device/wiki/HTTP-REST-API-discussion
-            https://github.com/meshtastic/Meshtastic-device/blob/master/docs/software/device-api.md
-
-        Example:
-            http://10.10.30.198/api/v1/toradio
+            https://meshtastic.org/docs/developers/device/http-api
+            https://meshtastic.org/docs/developers/device/device-api
     */
-
-    // Status code is 200 OK by default.
 
     res->setHeader("Content-Type", "application/x-protobuf");
     res->setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -248,9 +227,10 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Methods", "PUT, OPTIONS");
     res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/Meshtastic-protobufs/master/mesh.proto");
 
+
     if (req->getMethod() == "OPTIONS") {
         res->setStatusCode(204); // Success with no content
-        res->print("");
+        // res->print(""); @todo remove
         return;
     }
 
@@ -264,86 +244,8 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
     DEBUG_MSG("--------------- webAPI handleAPIv1ToRadio\n");
 }
 
-void handleFavicon(HTTPRequest *req, HTTPResponse *res)
-{
-    // Set Content-Type
-    res->setHeader("Content-Type", "image/vnd.microsoft.icon");
-    // Write data from header file
-    res->write(FAVICON_DATA, FAVICON_LENGTH);
-}
-
-void handleStaticPost(HTTPRequest *req, HTTPResponse *res)
-{
-    // Assume POST request. Contains submitted data.
-    res->println("<html><head><title>File Edited</title><meta http-equiv=\"refresh\" content=\"1;url=/static\" "
-                 "/><head><body><h1>File Edited</h1>");
-
-    // The form is submitted with the x-www-form-urlencoded content type, so we need the
-    // HTTPURLEncodedBodyParser to read the fields.
-    // Note that the content of the file's content comes from a <textarea>, so we
-    // can use the URL encoding here, since no file upload from an <input type="file"
-    // is involved.
-    HTTPURLEncodedBodyParser parser(req);
-
-    // The bodyparser will consume the request body. That means you can iterate over the
-    // fields only ones. For that reason, we need to create variables for all fields that
-    // we expect. So when parsing is done, you can process the field values from your
-    // temporary variables.
-    std::string filename;
-    bool savedFile = false;
-
-    // Iterate over the fields from the request body by calling nextField(). This function
-    // will update the field name and value of the body parsers. If the last field has been
-    // reached, it will return false and the while loop stops.
-    while (parser.nextField()) {
-        // Get the field name, so that we can decide what the value is for
-        std::string name = parser.getFieldName();
-
-        if (name == "filename") {
-            // Read the filename from the field's value, add the /public prefix and store it in
-            // the filename variable.
-            char buf[512];
-            size_t readLength = parser.read((byte *)buf, 512);
-            // filename = std::string("/public/") + std::string(buf, readLength);
-            filename = std::string(buf, readLength);
-
-        } else if (name == "content") {
-            // Browsers must return the fields in the order that they are placed in
-            // the HTML form, so if the broweser behaves correctly, this condition will
-            // never be true. We include it for safety reasons.
-            if (filename == "") {
-                res->println("<p>Error: form contained content before filename.</p>");
-                break;
-            }
-
-            // With parser.read() and parser.endOfField(), we can stream the field content
-            // into a buffer. That allows handling arbitrarily-sized field contents. Here,
-            // we use it and write the file contents directly to the SPIFFS:
-            size_t fieldLength = 0;
-            File file = SPIFFS.open(filename.c_str(), "w");
-            savedFile = true;
-            while (!parser.endOfField()) {
-                byte buf[512];
-                size_t readLength = parser.read(buf, 512);
-                file.write(buf, readLength);
-                fieldLength += readLength;
-            }
-            file.close();
-            res->printf("<p>Saved %d bytes to %s</p>", int(fieldLength), filename.c_str());
-
-        } else {
-            res->printf("<p>Unexpected field %s</p>", name.c_str());
-        }
-    }
-    if (!savedFile) {
-        res->println("<p>No file to save...</p>");
-    }
-    res->println("</body></html>");
-}
-
 void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
 {
-    // jm
 
     res->setHeader("Content-Type", "application/json");
     res->setHeader("Access-Control-Allow-Origin", "*");
@@ -422,206 +324,6 @@ void handleSpiffsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
     }
 }
 
-/*
-    To convert text to c strings:
-
-    https://tomeko.net/online_tools/cpp_text_escape.php?lang=en
-*/
-void handleRoot(HTTPRequest *req, HTTPResponse *res)
-{
-    res->setHeader("Content-Type", "text/html");
-
-    res->setHeader("Set-Cookie",
-                   "mt_session=" + httpsserver::intToString(random(1, 9999999)) + "; Expires=Wed, 20 Apr 2049 4:20:00 PST");
-
-    std::string cookie = req->getHeader("Cookie");
-    // String cookieString = cookie.c_str();
-    // uint8_t nameIndex = cookieString.indexOf("mt_session");
-    // DEBUG_MSG(cookie.c_str());
-
-    std::string filename = "/static/index.html";
-    std::string filenameGzip = "/static/index.html.gz";
-
-    if (!SPIFFS.exists(filename.c_str()) && !SPIFFS.exists(filenameGzip.c_str())) {
-        // Send "404 Not Found" as response, as the file doesn't seem to exist
-        res->setStatusCode(404);
-        res->setStatusText("Not found");
-        res->println("404 Not Found");
-        res->printf("<p>File not found: %s</p>\n", filename.c_str());
-        res->printf("<p></p>\n");
-        res->printf("<p>You have gotten this error because the filesystem for the web server has not been loaded.</p>\n");
-        res->printf("<p>Please review the 'Common Problems' section of the <a "
-                    "href=https://github.com/meshtastic/Meshtastic-device/wiki/"
-                    "How-to-use-the-Meshtastic-Web-Interface-over-WiFi>web interface</a> documentation.</p>\n");
-        return;
-    }
-
-    // Try to open the file from SPIFFS
-    File file;
-
-    if (SPIFFS.exists(filename.c_str())) {
-        file = SPIFFS.open(filename.c_str());
-        if (!file.available()) {
-            DEBUG_MSG("File not available - %s\n", filename.c_str());
-        }
-
-    } else if (SPIFFS.exists(filenameGzip.c_str())) {
-        file = SPIFFS.open(filenameGzip.c_str());
-        res->setHeader("Content-Encoding", "gzip");
-        if (!file.available()) {
-            DEBUG_MSG("File not available\n");
-        }
-    }
-
-    // Read the file from SPIFFS and write it to the HTTP response body
-    size_t length = 0;
-    do {
-        char buffer[256];
-        length = file.read((uint8_t *)buffer, 256);
-        std::string bufferString(buffer, length);
-        res->write((uint8_t *)bufferString.c_str(), bufferString.size());
-    } while (length > 0);
-}
-
-void handleStaticBrowse(HTTPRequest *req, HTTPResponse *res)
-{
-    // Get access to the parameters
-    ResourceParameters *params = req->getParams();
-    std::string paramValDelete;
-    std::string paramValEdit;
-
-    DEBUG_MSG("Static Browse - Disabling keep-alive\n");
-    res->setHeader("Connection", "close");
-
-    // Set a default content type
-    res->setHeader("Content-Type", "text/html");
-
-    if (params->getQueryParameter("delete", paramValDelete)) {
-        std::string pathDelete = "/" + paramValDelete;
-        if (SPIFFS.remove(pathDelete.c_str())) {
-            Serial.println(pathDelete.c_str());
-            res->println("<html><head><meta http-equiv=\"refresh\" content=\"1;url=/static\" /><title>File "
-                         "deleted!</title></head><body><h1>File deleted!</h1>");
-            res->println("<meta http-equiv=\"refresh\" 1;url=/static\" />\n");
-            res->println("</body></html>");
-
-            return;
-        } else {
-            Serial.println(pathDelete.c_str());
-            res->println("<html><head><meta http-equiv=\"refresh\" content=\"1;url=/static\" /><title>Error deleteing "
-                         "file!</title></head><body><h1>Error deleteing file!</h1>");
-            res->println("Error deleteing file!<br>");
-
-            return;
-        }
-    }
-
-    if (params->getQueryParameter("edit", paramValEdit)) {
-        std::string pathEdit = "/" + paramValEdit;
-        res->println("<html><head><title>Edit "
-                     "file</title></head><body><h1>Edit file - ");
-
-        res->println(pathEdit.c_str());
-
-        res->println("</h1>");
-        res->println("<form method=post action=/static enctype=application/x-www-form-urlencoded>");
-        res->printf("<input name=\"filename\" type=\"hidden\" value=\"%s\">", pathEdit.c_str());
-        res->print("<textarea id=id name=content rows=20 cols=80>");
-
-        // Try to open the file from SPIFFS
-        File file = SPIFFS.open(pathEdit.c_str());
-
-        if (file.available()) {
-            // Read the file from SPIFFS and write it to the HTTP response body
-            size_t length = 0;
-            do {
-                char buffer[256];
-                length = file.read((uint8_t *)buffer, 256);
-                std::string bufferString(buffer, length);
-
-                // Escape gt and lt
-                replaceAll(bufferString, "<", "&lt;");
-                replaceAll(bufferString, ">", "&gt;");
-
-                res->write((uint8_t *)bufferString.c_str(), bufferString.size());
-            } while (length > 0);
-        } else {
-            res->println("Error: File not found");
-        }
-
-        res->println("</textarea><br>");
-        res->println("<input type=submit value=Submit>");
-        res->println("</form>");
-        res->println("</body></html>");
-
-        return;
-    }
-
-    res->println("<h2>Upload new file</h2>");
-    res->println("<p>This form allows you to upload files. Keep your filenames small and files under 200k.</p>");
-    res->println("<form method=\"POST\" action=\"/upload\" enctype=\"multipart/form-data\">");
-    res->println("file: <input type=\"file\" name=\"file\"><br>");
-    res->println("<input type=\"submit\" value=\"Upload\">");
-    res->println("</form>");
-
-    res->println("<h2>All Files</h2>");
-
-    File root = SPIFFS.open("/");
-    if (root.isDirectory()) {
-        res->println("<script type=\"text/javascript\">function confirm_delete() {return confirm('Are you sure?');}</script>");
-
-        res->println("<table>");
-        res->println("<tr>");
-        res->println("<td>File");
-        res->println("</td>");
-        res->println("<td>Size");
-        res->println("</td>");
-        res->println("<td colspan=2>Actions");
-        res->println("</td>");
-        res->println("</tr>");
-
-        File file = root.openNextFile();
-        while (file) {
-            String filePath = String(file.name());
-            if (filePath.indexOf("/static") == 0) {
-                res->println("<tr>");
-                res->println("<td>");
-
-                if (String(file.name()).substring(1).endsWith(".gz")) {
-                    String modifiedFile = String(file.name()).substring(1);
-                    modifiedFile.remove((modifiedFile.length() - 3), 3);
-                    res->print("<a href=\"" + modifiedFile + "\">" + String(file.name()).substring(1) + "</a>");
-                } else {
-                    res->print("<a href=\"" + String(file.name()).substring(1) + "\">" + String(file.name()).substring(1) +
-                               "</a>");
-                }
-                res->println("</td>");
-                res->println("<td>");
-                res->print(String(file.size()));
-                res->println("</td>");
-                res->println("<td>");
-                res->print("<a href=\"/static?delete=" + String(file.name()).substring(1) +
-                           "\" onclick=\"return confirm_delete()\">Delete</a> ");
-                res->println("</td>");
-                res->println("<td>");
-                if (!String(file.name()).substring(1).endsWith(".gz")) {
-                    res->print("<a href=\"/static?edit=" + String(file.name()).substring(1) + "\">Edit</a>");
-                }
-                res->println("</td>");
-                res->println("</tr>");
-            }
-
-            file = root.openNextFile();
-        }
-        res->println("</table>");
-
-        res->print("<br>");
-        // res->print("Total : " + String(SPIFFS.totalBytes()) + " Bytes<br>");
-        res->print("Used : " + String(SPIFFS.usedBytes()) + " Bytes<br>");
-        res->print("Free : " + String(SPIFFS.totalBytes() - SPIFFS.usedBytes()) + " Bytes<br>");
-    }
-}
-
 void handleStatic(HTTPRequest *req, HTTPResponse *res)
 {
     // Get access to the parameters
@@ -634,35 +336,33 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
         std::string filename = "/static/" + parameter1;
         std::string filenameGzip = "/static/" + parameter1 + ".gz";
 
-        if (!SPIFFS.exists(filename.c_str()) && !SPIFFS.exists(filenameGzip.c_str())) {
-            // Send "404 Not Found" as response, as the file doesn't seem to exist
-            res->setStatusCode(404);
-            res->setStatusText("Not found");
-            res->println("404 Not Found");
-            res->printf("<p>File not found: %s</p>\n", filename.c_str());
-            return;
-        }
 
         // Try to open the file from SPIFFS
         File file;
+
+        bool has_set_content_type = false;
 
         if (SPIFFS.exists(filename.c_str())) {
             file = SPIFFS.open(filename.c_str());
             if (!file.available()) {
                 DEBUG_MSG("File not available - %s\n", filename.c_str());
             }
-
         } else if (SPIFFS.exists(filenameGzip.c_str())) {
             file = SPIFFS.open(filenameGzip.c_str());
             res->setHeader("Content-Encoding", "gzip");
             if (!file.available()) {
                 DEBUG_MSG("File not available\n");
             }
+        } else {
+            has_set_content_type = true;
+            filenameGzip = "/static/index.html.gz";
+            file = SPIFFS.open(filenameGzip.c_str());
+            res->setHeader("Content-Encoding", "gzip");
+            res->setHeader("Content-Type", "text/html");
         }
 
         res->setHeader("Content-Length", httpsserver::intToString(file.size()));
 
-        bool has_set_content_type = false;
         // Content-Type is guessed using the definition of the contentTypes-table defined above
         int cTypeIdx = 0;
         do {
@@ -947,30 +647,6 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 
     res->println("\"status\": \"ok\"");
     res->println("}");
-}
-
-// --------
-
-void handle404(HTTPRequest *req, HTTPResponse *res)
-{
-
-    // Discard request body, if we received any
-    // We do this, as this is the default node and may also server POST/PUT requests
-    req->discardRequestBody();
-
-    // Set the response status
-    res->setStatusCode(404);
-    res->setStatusText("Not Found");
-
-    // Set content type of the response
-    res->setHeader("Content-Type", "text/html");
-
-    // Write a tiny HTTP page
-    res->println("<!DOCTYPE html>");
-    res->println("<html>");
-    res->println("<head><title>Not Found</title></head>");
-    res->println("<body><h1>404 Not Found</h1><p>The requested resource was not found on this server.</p></body>");
-    res->println("</html>");
 }
 
 /*

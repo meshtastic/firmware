@@ -48,14 +48,22 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
         shouldSet = false;
 
     if (shouldSet) {
-        lastSetMsec = now;       
-#ifndef NO_ESP32
-        settimeofday(tv, NULL);
-        readFromRTC();
-#else 
+        lastSetMsec = now;
+
+        // This delta value works on all platforms
         timeStartMsec = now;
         zeroOffsetSecs = tv->tv_sec;
+
+        // If this platform has a setable RTC, set it
+#ifndef NO_ESP32
+        settimeofday(tv, NULL);
 #endif
+
+        // nrf52 doesn't have a readable RTC (yet - software not written)
+#if defined(PORTDUINO) || !defined(NO_ESP32)
+        readFromRTC();
+#endif
+
         return true;
     } else {
         return false;
@@ -84,7 +92,7 @@ bool perhapsSetRTC(RTCQuality q, struct tm &t)
 
 uint32_t getTime()
 {
-    return ((millis() - timeStartMsec) / 1000) + zeroOffsetSecs;
+    return (((uint32_t) millis() - timeStartMsec) / 1000) + zeroOffsetSecs;
 }
 
 uint32_t getValidTime(RTCQuality minQuality)

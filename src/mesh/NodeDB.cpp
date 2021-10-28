@@ -1,5 +1,4 @@
-
-#include <Arduino.h>
+#include "configuration.h"
 #include <assert.h>
 
 #include "FS.h"
@@ -14,7 +13,6 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
-#include "configuration.h"
 #include "error.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
@@ -127,6 +125,11 @@ void NodeDB::installDefaultRadioConfig()
     memset(&radioConfig, 0, sizeof(radioConfig));
     radioConfig.has_preferences = true;
     resetRadioConfig();
+
+    // for backward compat, default position flags are BAT+ALT+MSL (0x23 = 35)
+    radioConfig.preferences.position_flags = (PositionFlags_POS_BATTERY |
+        PositionFlags_POS_ALTITUDE | PositionFlags_POS_ALT_MSL);
+
 }
 
 void NodeDB::installDefaultChannels()
@@ -444,25 +447,33 @@ size_t NodeDB::getNumOnlineNodes()
 
 /** Update position info for this node based on received position data
  */
-void NodeDB::updatePosition(uint32_t nodeId, const Position &p)
+void NodeDB::updatePosition(uint32_t nodeId, const Position &p, RxSource src)
 {
     NodeInfo *info = getOrCreateNode(nodeId);
 
-    DEBUG_MSG("DB update position node=0x%x time=%u, latI=%d, lonI=%d\n", nodeId, p.time, p.latitude_i, p.longitude_i);
+    if (src == RX_SRC_LOCAL) {
+        // Local packet, fully authoritative
+        DEBUG_MSG("updatePosition LOCAL pos@%x:5, time=%u, latI=%d, lonI=%d\n", 
+                p.pos_timestamp, p.time, p.latitude_i, p.longitude_i);
+        info->position = p;
 
-    // Be careful to only update fields that have been set by the sender
-    // A lot of position reports don't have time populated.  In that case, be careful to not blow away the time we
-    // recorded based on the packet rxTime
-    if (p.time)
-        info->position.time = p.time;
-    if (p.battery_level)
-        info->position.battery_level = p.battery_level;
-    if (p.latitude_i || p.longitude_i) {
-        info->position.latitude_i = p.latitude_i;
-        info->position.longitude_i = p.longitude_i;
+    } else {
+        // Be careful to only update fields that have been set by the REMOTE sender
+        // A lot of position reports don't have time populated.  In that case, be careful to not blow away the time we
+        // recorded based on the packet rxTime
+        DEBUG_MSG("updatePosition REMOTE node=0x%x time=%u, latI=%d, lonI=%d\n", 
+                nodeId, p.time, p.latitude_i, p.longitude_i);
+
+        // First, back up fields that we want to protect from overwrite
+        uint32_t tmp_time = info->position.time;
+
+        // Next, update atomically
+        info->position = p;
+
+        // Last, restore any fields that may have been overwritten
+        if (! info->position.time)
+            info->position.time = tmp_time;
     }
-    if (p.altitude)
-        info->position.altitude = p.altitude;
     info->has_position = true;
     updateGUIforNode = info;
     notifyObservers(true); // Force an update whether or not our node counts have changed
@@ -541,15 +552,24 @@ NodeInfo *NodeDB::getOrCreateNode(NodeNum n)
 }
 
 /// Record an error that should be reported via analytics
-void recordCriticalError(CriticalErrorCode code, uint32_t address)
+void recordCriticalError(CriticalErrorCode code, uint32_t address, const char *filename)
 {
     // Print error to screen and serial port
     String lcd = String("Critical error ") + code + "!\n";
     screen->print(lcd.c_str());
-    DEBUG_MSG("NOTE! Recording critical error %d, address=%lx\n", code, address);
+    if(filename)
+        DEBUG_MSG("NOTE! Recording critical error %d at %s:%lx\n", code, filename, address);
+    else
+        DEBUG_MSG("NOTE! Recording critical error %d, address=%lx\n", code, address);
 
     // Record error to DB
     myNodeInfo.error_code = code;
     myNodeInfo.error_address = address;
     myNodeInfo.error_count++;
+
+    // Currently portuino is mostly used for simulation.  Make sue the user notices something really bad happend
+#ifdef PORTDUINO
+    DEBUG_MSG("A critical failure occurred, portduino is exiting...");
+    exit(2);
+#endif
 }

@@ -28,7 +28,7 @@ template <class T> class ProtobufPlugin : protected SinglePortPlugin
      * In general decoded will always be !NULL.  But in some special applications (where you have handling packets
      * for multiple port numbers, decoding will ONLY be attempted for packets where the portnum matches our expected ourPortNum.
      */
-    virtual bool handleReceivedProtobuf(const MeshPacket &mp, const T *decoded) = 0;
+    virtual bool handleReceivedProtobuf(const MeshPacket &mp, T *decoded) = 0;
 
     /**
      * Return a mesh packet which has been preinited with a particular protobuf data payload and port number.
@@ -49,9 +49,9 @@ template <class T> class ProtobufPlugin : protected SinglePortPlugin
   private:
     /** Called to handle a particular incoming message
 
-    @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
+    @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
-    virtual bool handleReceived(const MeshPacket &mp)
+    virtual ProcessMessage handleReceived(const MeshPacket &mp)
     {
         // FIXME - we currently update position data in the DB only if the message was a broadcast or destined to us
         // it would be better to update even if the message was destined to others.
@@ -70,6 +70,6 @@ template <class T> class ProtobufPlugin : protected SinglePortPlugin
                 DEBUG_MSG("Error decoding protobuf plugin!\n");
         }
 
-        return handleReceivedProtobuf(mp, decoded);
+        return handleReceivedProtobuf(mp, decoded) ? ProcessMessage::STOP : ProcessMessage::CONTINUE;
     }
 };

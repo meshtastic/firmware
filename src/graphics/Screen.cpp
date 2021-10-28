@@ -19,14 +19,13 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
-
+#include "configuration.h"
 #include <OLEDDisplay.h>
 
 #include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Screen.h"
-#include "configuration.h"
 #include "fonts.h"
 #include "gps/RTC.h"
 #include "graphics/images.h"
@@ -36,6 +35,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "plugins/TextMessagePlugin.h"
 #include "target_specific.h"
 #include "utils.h"
+#include "gps/GeoCoord.h"
 
 #ifndef NO_ESP32
 #include "mesh/http/WiFiAPClient.h"
@@ -72,6 +72,9 @@ std::vector<MeshPlugin *> pluginFrames;
 
 // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
 static char ourId[5];
+
+// GeoCoord object for the screen
+GeoCoord geoCoord;
 
 #ifdef SHOW_REDRAWS
 static bool heartbeat = false;
@@ -130,7 +133,7 @@ static void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDispl
     // Draw version in upper right
     char buf[16];
     snprintf(buf, sizeof(buf), "%s",
-             xstr(APP_VERSION)); // Note: we don't bother printing region or now, it makes the string too long
+             xstr(APP_VERSION_SHORT)); // Note: we don't bother printing region or now, it makes the string too long
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(buf), y + 0, buf);
     screen->forceDisplay();
 
@@ -334,6 +337,11 @@ static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, NodeStatus *no
 // Draw GPS status summary
 static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
+    if (radioConfig.preferences.fixed_position) {
+        // GPS coordinates are currently fixed
+        display->drawString(x - 1, y - 2, "Fixed GPS");
+        return;
+    }
     if (!gps->getIsConnected()) {
         display->drawString(x, y - 2, "No GPS");
         return;
@@ -368,15 +376,15 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
 static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
     String displayLine = "";
-    if (!gps->getIsConnected()) {
+    if (!gps->getIsConnected() && !radioConfig.preferences.fixed_position) {
         // displayLine = "No GPS Module";
         // display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
-    } else if (!gps->getHasLock()) {
+    } else if (!gps->getHasLock() && !radioConfig.preferences.fixed_position) {
         // displayLine = "No GPS Lock";
         // display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
-
-        displayLine = "Altitude: " + String(gps->getAltitude()) + "m";
+        geoCoord.updateCoords(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()), int32_t(gps->getAltitude()));
+        displayLine = "Altitude: " + String(geoCoord.getAltitude()) + "m";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     }
 }
@@ -384,74 +392,49 @@ static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GP
 // Draw GPS status coordinates
 static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
+    auto gpsFormat = radioConfig.preferences.gps_format;
     String displayLine = "";
-    if (!gps->getIsConnected()) {
+
+    if (!gps->getIsConnected() && !radioConfig.preferences.fixed_position) {
         displayLine = "No GPS Module";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
-    } else if (!gps->getHasLock()) {
+    } else if (!gps->getHasLock() && !radioConfig.preferences.fixed_position) {
         displayLine = "No GPS Lock";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
-        char coordinateLine[22];
-        sprintf(coordinateLine, "%f %f", gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
-        display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
+        if (gpsFormat != GpsCoordinateFormat_GpsFormatDMS) {
+            char coordinateLine[22];
+            geoCoord.updateCoords(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()), int32_t(gps->getAltitude()));
+            if (gpsFormat == GpsCoordinateFormat_GpsFormatDec) { // Decimal Degrees
+                sprintf(coordinateLine, "%f %f", geoCoord.getLatitude() * 1e-7, geoCoord.getLongitude() * 1e-7);
+            } else if (gpsFormat == GpsCoordinateFormat_GpsFormatUTM) { // Universal Transverse Mercator
+                sprintf(coordinateLine, "%2i%1c %06i %07i", geoCoord.getUTMZone(), geoCoord.getUTMBand(),
+                        geoCoord.getUTMEasting(), geoCoord.getUTMNorthing());
+            } else if (gpsFormat == GpsCoordinateFormat_GpsFormatMGRS) { // Military Grid Reference System
+                sprintf(coordinateLine, "%2i%1c %1c%1c %05i %05i", geoCoord.getMGRSZone(), geoCoord.getMGRSBand(), geoCoord.getMGRSEast100k(),
+                        geoCoord.getMGRSNorth100k(), geoCoord.getMGRSEasting(), geoCoord.getMGRSNorthing());
+            } else if (gpsFormat == GpsCoordinateFormat_GpsFormatOLC) { // Open Location Code
+                geoCoord.getOLCCode(coordinateLine);
+            } else if (gpsFormat == GpsCoordinateFormat_GpsFormatOSGR) { // Ordnance Survey Grid Reference
+                if (geoCoord.getOSGRE100k() == 'I' || geoCoord.getOSGRN100k() == 'I') // OSGR is only valid around the UK region
+                    sprintf(coordinateLine, "%s", "Out of Boundary");
+                else
+                    sprintf(coordinateLine, "%1c%1c %05i %05i", geoCoord.getOSGRE100k(),geoCoord.getOSGRN100k(), 
+                            geoCoord.getOSGREasting(), geoCoord.getOSGRNorthing());
+            }
+            
+            display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
+        } else {
+            char latLine[22];
+            char lonLine[22];
+            sprintf(latLine, "%2i° %2i' %2.4f\" %1c", geoCoord.getDMSLatDeg(), geoCoord.getDMSLatMin(), geoCoord.getDMSLatSec(),
+                    geoCoord.getDMSLatCP());
+            sprintf(lonLine, "%3i° %2i' %2.4f\" %1c", geoCoord.getDMSLonDeg(), geoCoord.getDMSLonMin(), geoCoord.getDMSLonSec(), 
+                    geoCoord.getDMSLonCP());
+            display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(latLine))) / 2, y - FONT_HEIGHT_SMALL * 1, latLine);
+            display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(lonLine))) / 2, y, lonLine);
+        }
     }
-}
-
-/// Ported from my old java code, returns distance in meters along the globe
-/// surface (by magic?)
-static float latLongToMeter(double lat_a, double lng_a, double lat_b, double lng_b)
-{
-    double pk = (180 / 3.14169);
-    double a1 = lat_a / pk;
-    double a2 = lng_a / pk;
-    double b1 = lat_b / pk;
-    double b2 = lng_b / pk;
-    double cos_b1 = cos(b1);
-    double cos_a1 = cos(a1);
-    double t1 = cos_a1 * cos(a2) * cos_b1 * cos(b2);
-    double t2 = cos_a1 * sin(a2) * cos_b1 * sin(b2);
-    double t3 = sin(a1) * sin(b1);
-    double tt = acos(t1 + t2 + t3);
-    if (isnan(tt))
-        tt = 0.0; // Must have been the same point?
-
-    return (float)(6366000 * tt);
-}
-
-static inline double toRadians(double deg)
-{
-    return deg * PI / 180;
-}
-
-static inline double toDegrees(double r)
-{
-    return r * 180 / PI;
-}
-
-/**
- * Computes the bearing in degrees between two points on Earth.  Ported from my
- * old Gaggle android app.
- *
- * @param lat1
- * Latitude of the first point
- * @param lon1
- * Longitude of the first point
- * @param lat2
- * Latitude of the second point
- * @param lon2
- * Longitude of the second point
- * @return Bearing between the two points in radians. A value of 0 means due
- * north.
- */
-static float bearing(double lat1, double lon1, double lat2, double lon2)
-{
-    double lat1Rad = toRadians(lat1);
-    double lat2Rad = toRadians(lat2);
-    double deltaLonRad = toRadians(lon2 - lon1);
-    double y = sin(deltaLonRad) * cos(lat2Rad);
-    double x = cos(lat1Rad) * sin(lat2Rad) - (sin(lat1Rad) * cos(lat2Rad) * cos(deltaLonRad));
-    return atan2(y, x);
 }
 
 namespace
@@ -514,11 +497,11 @@ static float estimatedHeading(double lat, double lon)
         return b;
     }
 
-    float d = latLongToMeter(oldLat, oldLon, lat, lon);
+    float d = GeoCoord::latLongToMeter(oldLat, oldLon, lat, lon);
     if (d < 10) // haven't moved enough, just keep current bearing
         return b;
 
-    b = bearing(oldLat, oldLon, lat, lon);
+    b = GeoCoord::bearing(oldLat, oldLon, lat, lon);
     oldLat = lat;
     oldLon = lon;
 
@@ -638,7 +621,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             // display direction toward node
             hasNodeHeading = true;
             Position &p = node->position;
-            float d = latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
+            float d = GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
             if (d < 2000)
                 snprintf(distStr, sizeof(distStr), "%.0f m", d);
             else
@@ -646,7 +629,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 
             // FIXME, also keep the guess at the operators heading and add/substract
             // it.  currently we don't do this and instead draw north up only.
-            float bearingToOther = bearing(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
+            float bearingToOther = GeoCoord::bearing(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
             headingRadian = bearingToOther - myHeading;
             drawNodeHeading(display, compassX, compassY, headingRadian);
         }
@@ -947,7 +930,9 @@ void Screen::setFrames()
         normalFrames[numframes++] = drawTextMessageFrame;
 
     // then all the nodes
-    for (size_t i = 0; i < numnodes; i++)
+    // We only show a few nodes in our scrolling list - because meshes with many nodes would have too many screens
+    size_t numToShow = min(numnodes, 4U);
+    for (size_t i = 0; i < numToShow; i++)
         normalFrames[numframes++] = drawNodeInfo;
 
     // then the debug info
@@ -1329,7 +1314,8 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 #endif
 
     // Line 3
-    drawGPSAltitude(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
+    if (radioConfig.preferences.gps_format != GpsCoordinateFormat_GpsFormatDMS) // if DMS then don't draw altitude
+        drawGPSAltitude(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
 
     // Line 4
     drawGPScoordinates(display, x, y + FONT_HEIGHT_SMALL * 3, gpsStatus);

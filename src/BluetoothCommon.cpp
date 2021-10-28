@@ -1,3 +1,4 @@
+#include "configuration.h"
 #include "BluetoothCommon.h"
 
 // NRF52 wants these constants as byte arrays

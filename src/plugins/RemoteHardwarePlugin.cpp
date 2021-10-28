@@ -1,9 +1,9 @@
+#include "configuration.h"
 #include "RemoteHardwarePlugin.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
 #include "Router.h"
-#include "configuration.h"
 #include "main.h"
 
 #define NUM_GPIOS 64
@@ -48,7 +48,7 @@ RemoteHardwarePlugin::RemoteHardwarePlugin()
 {
 }
 
-bool RemoteHardwarePlugin::handleReceivedProtobuf(const MeshPacket &req, const HardwareMessage *pptr)
+bool RemoteHardwarePlugin::handleReceivedProtobuf(const MeshPacket &req, HardwareMessage *pptr)
 {
     auto p = *pptr;
     DEBUG_MSG("Received RemoteHardware typ=%d\n", p.typ);

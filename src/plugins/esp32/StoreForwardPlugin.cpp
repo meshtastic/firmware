@@ -191,7 +191,7 @@ void StoreForwardPlugin::sendPayloadWelcome(NodeNum dest, bool wantReplies)
     service.sendToMesh(p);
 }
 
-bool StoreForwardPlugin::handleReceived(const MeshPacket &mp)
+ProcessMessage StoreForwardPlugin::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
     if (radioConfig.preferences.store_forward_plugin_enabled) {
@@ -217,7 +217,7 @@ bool StoreForwardPlugin::handleReceived(const MeshPacket &mp)
 
 #endif
 
-    return true; // Let others look at this message also if they want
+    return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }
 
 StoreForwardPlugin::StoreForwardPlugin()

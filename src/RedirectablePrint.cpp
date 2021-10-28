@@ -1,10 +1,12 @@
+#include "configuration.h"
 #include "RedirectablePrint.h"
 #include "RTC.h"
 #include "concurrency/OSThread.h"
-#include "configuration.h"
+// #include "wifi/WiFiServerAPI.h"
 #include <assert.h>
 #include <sys/time.h>
 #include <time.h>
+#include <cstring>
 
 /**
  * A printer that doesn't go anywhere
@@ -23,6 +25,10 @@ size_t RedirectablePrint::write(uint8_t c)
 #ifdef SEGGER_STDOUT_CH
     SEGGER_RTT_PutChar(SEGGER_STDOUT_CH, c);
 #endif
+
+    // FIXME - clean this up, the whole relationship of this class to SerialConsole to TCP/bluetooth debug log output is kinda messed up.  But for now, just have this hack to
+    // optionally send chars to TCP also
+    //WiFiServerPort::debugOut(c);
 
     dest->write(c);
     return 1; // We always claim one was written, rather than trusting what the

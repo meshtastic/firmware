@@ -92,6 +92,8 @@ Note: Turning off EINK PWR_ON produces no noticeable power savings over just put
 extern "C" {
 #endif // __cplusplus
 
+#define TTGO_T_ECHO
+
 // Number of pins defined in PinDescription array
 #define PINS_COUNT (48)
 #define NUM_DIGITAL_PINS (48)
@@ -178,21 +180,22 @@ External serial flash WP25R1635FZUIL0
  * Lora radio
  */
 
-#define SX1262_CS (0 + 24) // FIXME - we really should define LORA_CS instead
-#define SX1262_DIO1 (0 + 20)
+#define USE_SX1262
+#define SX126X_CS (0 + 24) // FIXME - we really should define LORA_CS instead
+#define SX126X_DIO1 (0 + 20)
 // Note DIO2 is attached internally to the module to an analog switch for TX/RX switching
 #define SX1262_DIO3                                                                                                              \
     (0 + 21) // This is used as an *output* from the sx1262 and connected internally to power the tcxo, do not drive from the main
              // CPU?
-#define SX1262_BUSY (0 + 17)
-#define SX1262_RESET (0 + 25)
-#define SX1262_E22 // Not really an E22 but TTGO seems to be trying to clone that
+#define SX126X_BUSY (0 + 17)
+#define SX126X_RESET (0 + 25)
+#define SX126X_E22 // Not really an E22 but TTGO seems to be trying to clone that
 // Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
 // code)
 
 // #define LORA_DISABLE_SENDING // Define this to disable transmission for testing (power testing etc...)
 
-// #undef SX1262_CS
+// #undef SX126X_CS
 // #define USE_SIM_RADIO // define to not use the lora radio hardware at all
 
 /*
@@ -231,8 +234,6 @@ External serial flash WP25R1635FZUIL0
 #define PIN_GPS_TX (32 + 9)   // This is for bits going TOWARDS the CPU
 #define PIN_GPS_RX (32 + 8)   // This is for bits going TOWARDS the GPS
 
-#define HAS_AIR530_GPS
-
 #define PIN_SERIAL1_RX PIN_GPS_TX
 #define PIN_SERIAL1_TX PIN_GPS_RX
 
@@ -250,6 +251,26 @@ External serial flash WP25R1635FZUIL0
 
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
 // #define USE_SEGGER
+
+// Battery
+// The battery sense is hooked to pin A0 (4)
+// it is defined in the anlaolgue pin section of this file
+// and has 12 bit resolution
+#define BATTERY_SENSE_RESOLUTION_BITS 12
+#define BATTERY_SENSE_RESOLUTION 4096.0
+// Definition of milliVolt per LSB => 3.0V ADC range and 12-bit ADC resolution = 3000mV/4096
+#define VBAT_MV_PER_LSB (0.73242188F)
+// Voltage divider value => 100K + 100K voltage divider on VBAT = (100K / (100K + 100K))
+#define VBAT_DIVIDER (0.5F)
+// Compensation factor for the VBAT divider
+#define VBAT_DIVIDER_COMP (2.0)
+// Fixed calculation of milliVolt from compensation value
+#define REAL_VBAT_MV_PER_LSB (VBAT_DIVIDER_COMP * VBAT_MV_PER_LSB)
+#undef AREF_VOLTAGE
+#define AREF_VOLTAGE 3.0
+#define VBAT_AR_INTERNAL AR_INTERNAL_3_0
+#define ADC_MULTIPLIER VBAT_DIVIDER_COMP 
+#define VBAT_RAW_TO_SCALED(x) (REAL_VBAT_MV_PER_LSB * x)
 
 #ifdef __cplusplus
 }

@@ -1,12 +1,13 @@
+#include "configuration.h"
 #include <SPI.h>
 #include <Wire.h>
 #include <assert.h>
 #include <ble_gap.h>
 #include <memory.h>
 #include <stdio.h>
+// #include <Adafruit_USBD_Device.h>
 
 #include "NRF52Bluetooth.h"
-#include "configuration.h"
 #include "error.h"
 
 #ifdef BQ25703A_ADDR
@@ -17,6 +18,13 @@ static inline void debugger_break(void)
 {
     __asm volatile("bkpt #0x01\n\t"
                    "mov pc, lr\n\t");
+}
+
+bool loopCanSleep() {
+    // turn off sleep only while connected via USB
+    // return true;
+    return !Serial; // the bool operator on the nrf52 serial class returns true if connected to a PC currently
+    // return !(TinyUSBDevice.mounted() && !TinyUSBDevice.suspended());
 }
 
 // handle standard gcc assert failures
@@ -33,7 +41,7 @@ void getMacAddr(uint8_t *dmac)
     ble_gap_addr_t addr;
     if (sd_ble_gap_addr_get(&addr) == NRF_SUCCESS) {
         memcpy(dmac, addr.addr, 6);
-    } else {
+    } else { 
         const uint8_t *src = (const uint8_t *)NRF_FICR->DEVICEADDR;
         dmac[5] = src[0];
         dmac[4] = src[1];
@@ -86,7 +94,7 @@ void setBluetoothEnable(bool on)
 }
 
 /**
- * Override printf to use the SEGGER output library
+ * Override printf to use the SEGGER output library (note - this does not effect the printf method on the debug console)
  */
 int printf(const char *fmt, ...)
 {
@@ -104,7 +112,7 @@ void checkSDEvents()
         while (NRF_SUCCESS == sd_evt_get(&evt)) {
             switch (evt) {
             case NRF_EVT_POWER_FAILURE_WARNING:
-                recordCriticalError(CriticalErrorCode_Brownout);
+                RECORD_CRITICALERROR(CriticalErrorCode_Brownout);
                 break;
 
             default:
@@ -114,7 +122,7 @@ void checkSDEvents()
         }
     } else {
         if (NRF_POWER->EVENTS_POFWARN)
-            recordCriticalError(CriticalErrorCode_Brownout);
+            RECORD_CRITICALERROR(CriticalErrorCode_Brownout);
     }
 }
 
