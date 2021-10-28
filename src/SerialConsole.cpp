@@ -1,8 +1,7 @@
+#include "configuration.h"
 #include "SerialConsole.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
-#include "configuration.h"
-#include <Arduino.h>
 
 #define Port Serial
 
@@ -32,6 +31,13 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port)
     emitRebooted();
 }
 
+// For the serial port we can't really detect if any client is on the other side, so instead just look for recent messages
+bool SerialConsole::checkIsConnected()
+{
+    uint32_t now = millis();
+    return (now - lastContactMsec) < getPref_phone_timeout_secs() * 1000UL;
+}
+
 /**
  * we override this to notice when we've received a protobuf over the serial
  * stream.  Then we shunt off debug serial output.
@@ -46,14 +52,3 @@ bool SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
     return StreamAPI::handleToRadio(buf, len);
 }
 
-/// Hookable to find out when connection changes
-void SerialConsole::onConnectionChanged(bool connected)
-{
-    if (connected) { // To prevent user confusion, turn off bluetooth while using the serial port api
-        powerFSM.trigger(EVENT_SERIAL_CONNECTED);
-    } else {
-        // FIXME, we get no notice of serial going away, we should instead automatically generate this event if we haven't
-        // received a packet in a while
-        powerFSM.trigger(EVENT_SERIAL_DISCONNECTED);
-    }
-}

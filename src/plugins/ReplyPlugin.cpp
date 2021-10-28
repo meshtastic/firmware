@@ -1,6 +1,6 @@
+#include "configuration.h"
 #include "ReplyPlugin.h"
 #include "MeshService.h"
-#include "configuration.h"
 #include "main.h"
 
 #include <assert.h>

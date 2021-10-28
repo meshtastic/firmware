@@ -1,13 +1,17 @@
 #include "mesh/http/WiFiAPClient.h"
 #include "NodeDB.h"
+#include "concurrency/Periodic.h"
 #include "configuration.h"
 #include "main.h"
+#include "mqtt/MQTT.h"
 #include "mesh/http/WebServer.h"
 #include "mesh/wifi/WiFiServerAPI.h"
 #include "target_specific.h"
 #include <DNSServer.h>
 #include <ESPmDNS.h>
 #include <WiFi.h>
+
+using namespace concurrency;
 
 static void WiFiEvent(WiFiEvent_t event);
 
@@ -23,6 +27,47 @@ bool forcedSoftAP = 0;
 
 bool APStartupComplete = 0;
 
+static bool needReconnect = true; // If we create our reconnector, run it once at the beginning
+
+// FIXME, veto light sleep if we have a TCP server running
+#if 0
+class WifiSleepObserver : public Observer<uint32_t> {
+protected:
+
+    /// Return 0 if sleep is okay
+    virtual int onNotify(uint32_t newValue) {
+
+    }
+};
+
+static WifiSleepObserver wifiSleepObserver;
+//preflightSleepObserver.observe(&preflightSleep);
+#endif
+
+static int32_t reconnectWiFi()
+{
+    if (radioConfig.has_preferences && needReconnect) {
+
+        const char *wifiName = radioConfig.preferences.wifi_ssid;
+        const char *wifiPsw = radioConfig.preferences.wifi_password;
+
+        if (!*wifiPsw) // Treat empty password as no password
+            wifiPsw = NULL;
+
+        if (*wifiName) {
+            needReconnect = false;
+
+            DEBUG_MSG("... Reconnecting to WiFi access point");
+            WiFi.mode(WIFI_MODE_STA);
+            WiFi.begin(wifiName, wifiPsw);
+        }
+    }
+
+    return 30 * 1000; // every 30 seconds
+}
+
+static Periodic *wifiReconnect;
+
 bool isSoftAPForced()
 {
     return forcedSoftAP;
@@ -32,25 +77,15 @@ bool isWifiAvailable()
 {
     // If wifi status is connected, return true regardless of the radio configuration.
     if (isSoftAPForced()) {
-        return 1;
+        return true;
     }
 
     const char *wifiName = radioConfig.preferences.wifi_ssid;
-    const char *wifiPsw = radioConfig.preferences.wifi_password;
 
-    // strcpy(radioConfig.preferences.wifi_ssid, "meshtastic");
-    // strcpy(radioConfig.preferences.wifi_password, "meshtastic!");
-
-    // strcpy(radioConfig.preferences.wifi_ssid, "meshtasticAdmin");
-    // strcpy(radioConfig.preferences.wifi_password, "12345678");
-
-    // radioConfig.preferences.wifi_ap_mode = true;
-    // radioConfig.preferences.wifi_ap_mode = false;
-
-    if (*wifiName && *wifiPsw) {
-        return 1;
+    if (*wifiName) {
+        return true;
     } else {
-        return 0;
+        return false;
     }
 }
 
@@ -75,28 +110,48 @@ void deinitWifi()
     }
 }
 
-// Startup WiFi
-void initWifi(bool forceSoftAP)
+static void onNetworkConnected()
 {
+    if (!APStartupComplete) {
+        // Start web server
+        DEBUG_MSG("... Starting network services\n");
 
-    if (forceSoftAP) {
-        // do nothing
-        // DEBUG_MSG("----- Forcing SoftAP\n");
-    } else {
-        if (isWifiAvailable() == 0) {
-            return;
+        // start mdns
+        if (!MDNS.begin("Meshtastic")) {
+            DEBUG_MSG("Error setting up MDNS responder!\n");
+        } else {
+            DEBUG_MSG("mDNS responder started\n");
+            DEBUG_MSG("mDNS Host: Meshtastic.local\n");
+            MDNS.addService("http", "tcp", 80);
+            MDNS.addService("https", "tcp", 443);
         }
-    }
 
+        initWebServer();
+        initApiServer();
+
+        APStartupComplete = true;
+    } 
+
+    // FIXME this is kinda yucky, instead we should just have an observable for 'wifireconnected'
+    if(mqtt)
+        mqtt->reconnect();
+}
+
+// Startup WiFi
+bool initWifi(bool forceSoftAP)
+{
     forcedSoftAP = forceSoftAP;
 
-    createSSLCert();
-
-    if (radioConfig.has_preferences || forceSoftAP) {
+    if ((radioConfig.has_preferences && radioConfig.preferences.wifi_ssid[0]) || forceSoftAP) {
         const char *wifiName = radioConfig.preferences.wifi_ssid;
         const char *wifiPsw = radioConfig.preferences.wifi_password;
 
-        if ((*wifiName && *wifiPsw) || forceSoftAP) {
+        createSSLCert();
+
+        if (!*wifiPsw) // Treat empty password as no password
+            wifiPsw = NULL;
+
+        if (*wifiName || forceSoftAP) {
             if (forceSoftAP) {
 
                 DEBUG_MSG("Forcing SoftAP\n");
@@ -153,32 +208,16 @@ void initWifi(bool forceSoftAP)
                     },
                     WiFiEvent_t::SYSTEM_EVENT_STA_DISCONNECTED);
 
-                DEBUG_MSG("JOINING WIFI: ssid=%s\n", wifiName);
-                if (WiFi.begin(wifiName, wifiPsw) == WL_CONNECTED) {
-                    DEBUG_MSG("MY IP ADDRESS: %s\n", WiFi.localIP().toString().c_str());
-                } else {
-                    DEBUG_MSG("Started Joining WIFI\n");
-                }
+                DEBUG_MSG("JOINING WIFI soon: ssid=%s\n", wifiName);
+                wifiReconnect = new Periodic("WifiConnect", reconnectWiFi);
             }
         }
-
-        if (!MDNS.begin("Meshtastic")) {
-            DEBUG_MSG("Error setting up MDNS responder!\n");
-
-            while (1) {
-                delay(1000);
-            }
-        }
-        DEBUG_MSG("mDNS responder started\n");
-        DEBUG_MSG("mDNS Host: Meshtastic.local\n");
-        MDNS.addService("http", "tcp", 80);
-        MDNS.addService("https", "tcp", 443);
-
-    } else
+        return true;
+    } else {
         DEBUG_MSG("Not using WIFI\n");
+        return false;
+    }
 }
-
-
 
 // Called by the Espressif SDK to
 static void WiFiEvent(WiFiEvent_t event)
@@ -193,10 +232,10 @@ static void WiFiEvent(WiFiEvent_t event)
         DEBUG_MSG("Completed scan for access points\n");
         break;
     case SYSTEM_EVENT_STA_START:
-        DEBUG_MSG("WiFi client started\n");
+        DEBUG_MSG("WiFi station started\n");
         break;
     case SYSTEM_EVENT_STA_STOP:
-        DEBUG_MSG("WiFi clients stopped\n");
+        DEBUG_MSG("WiFi station stopped\n");
         break;
     case SYSTEM_EVENT_STA_CONNECTED:
         DEBUG_MSG("Connected to access point\n");
@@ -205,7 +244,7 @@ static void WiFiEvent(WiFiEvent_t event)
         DEBUG_MSG("Disconnected from WiFi access point\n");
         // Event 5
 
-        reconnectWiFi();
+        needReconnect = true;
         break;
     case SYSTEM_EVENT_STA_AUTHMODE_CHANGE:
         DEBUG_MSG("Authentication mode of access point has changed\n");
@@ -213,18 +252,7 @@ static void WiFiEvent(WiFiEvent_t event)
     case SYSTEM_EVENT_STA_GOT_IP:
         DEBUG_MSG("Obtained IP address: \n");
         Serial.println(WiFi.localIP());
-
-        if (!APStartupComplete) {
-            // Start web server
-            DEBUG_MSG("... Starting network services\n");
-            initWebServer();
-            initApiServer();
-
-            APStartupComplete = true;
-        } else {
-            DEBUG_MSG("... Not starting network services (They're already running)\n");
-        }
-
+        onNetworkConnected();
         break;
     case SYSTEM_EVENT_STA_LOST_IP:
         DEBUG_MSG("Lost IP address and IP address is reset to 0\n");
@@ -244,18 +272,7 @@ static void WiFiEvent(WiFiEvent_t event)
     case SYSTEM_EVENT_AP_START:
         DEBUG_MSG("WiFi access point started\n");
         Serial.println(WiFi.softAPIP());
-
-        if (!APStartupComplete) {
-            // Start web server
-            DEBUG_MSG("... Starting network services\n");
-            initWebServer();
-            initApiServer();
-
-            APStartupComplete = true;
-        } else {
-            DEBUG_MSG("... Not starting network services (They're already running)\n");
-        }
-
+        onNetworkConnected();
         break;
     case SYSTEM_EVENT_AP_STOP:
         DEBUG_MSG("WiFi access point stopped\n");
@@ -299,23 +316,6 @@ void handleDNSResponse()
 {
     if (radioConfig.preferences.wifi_ap_mode) {
         dnsServer.processNextRequest();
-    }
-}
-
-void reconnectWiFi()
-{
-    const char *wifiName = radioConfig.preferences.wifi_ssid;
-    const char *wifiPsw = radioConfig.preferences.wifi_password;
-
-    if (radioConfig.has_preferences) {
-
-        if (*wifiName && *wifiPsw) {
-
-            DEBUG_MSG("... Reconnecting to WiFi access point");
-
-            WiFi.mode(WIFI_MODE_STA);
-            WiFi.begin(wifiName, wifiPsw);
-        }
     }
 }
 

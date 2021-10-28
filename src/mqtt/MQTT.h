@@ -19,6 +19,9 @@ class MQTT : private concurrency::OSThread
     WiFiClient mqttClient;
     PubSubClient pubSub;
 
+    // instead we supress sleep from our runOnce() callback
+    // CallbackObserver<MQTT, void *> preflightSleepObserver = CallbackObserver<MQTT, void *>(this, &MQTT::preflightSleepCb);
+
   public:
     MQTT();
 
@@ -32,6 +35,10 @@ class MQTT : private concurrency::OSThread
      */
     void onSend(const MeshPacket &mp, ChannelIndex chIndex);
 
+    /** Attempt to connect to server if necessary
+     */
+    void reconnect();
+    
   protected:
     virtual int32_t runOnce();
 
@@ -39,10 +46,6 @@ class MQTT : private concurrency::OSThread
     /** return true if we have a channel that wants uplink/downlink
      */
     bool wantsLink() const;
-
-    /** Attempt to connect to server if necessary
-     */
-    void reconnect();
 
     /** Tell the server what subscriptions we want (based on channels.downlink_enabled)
      */
@@ -53,6 +56,9 @@ class MQTT : private concurrency::OSThread
 
     /// Called when a new publish arrives from the MQTT server
     void onPublish(char *topic, byte *payload, unsigned int length);
+
+    /// Return 0 if sleep is okay, veto sleep if we are connected to pubsub server
+    // int preflightSleepCb(void *unused = NULL) { return pubSub.connected() ? 1 : 0; }    
 };
 
 void mqttInit();

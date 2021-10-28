@@ -129,15 +129,16 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_WIRE_SCL (32)
 
 // CUSTOM GPIOs the SX1262
-#define SX1262_CS (10)
-#define SX1262_DIO1 (20)
+#define USE_SX1262
+#define SX126X_CS (10)
+#define SX126X_DIO1 (20)
 #define SX1262_DIO2 (26)
-#define SX1262_BUSY (31) // Supposed to be P0.18 but because of reworks, now on P0.31 (18)
-#define SX1262_RESET (17)
-// #define SX1262_ANT_SW (32 + 10)
-#define SX1262_RXEN (22)
-#define SX1262_TXEN (24)
-#define SX1262_E22  // Indicates this SX1262 is inside of an ebyte E22 module and special config should be done for that
+#define SX126X_BUSY (31) // Supposed to be P0.18 but because of reworks, now on P0.31 (18)
+#define SX126X_RESET (17)
+// #define SX126X_ANT_SW (32 + 10)
+#define SX126X_RXEN (22)
+#define SX126X_TXEN (24)
+#define SX126X_E22  // Indicates this SX1262 is inside of an ebyte E22 module and special config should be done for that
 
 // ERC12864-10 LCD
 #define ERC12864_CS (32 + 4)

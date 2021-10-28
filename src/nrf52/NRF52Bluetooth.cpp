@@ -1,6 +1,6 @@
+#include "configuration.h"
 #include "NRF52Bluetooth.h"
 #include "BluetoothCommon.h"
-#include "configuration.h"
 #include "main.h"
 #include "mesh/PhoneAPI.h"
 #include "mesh/mesh-pb-constants.h"
@@ -21,6 +21,8 @@ static BLEDfu bledfu; // DFU software update helper service
 static uint8_t fromRadioBytes[FromRadio_size];
 static uint8_t toRadioBytes[ToRadio_size];
 
+static bool bleConnected;
+
 class BluetoothPhoneAPI : public PhoneAPI
 {
     /**
@@ -32,6 +34,11 @@ class BluetoothPhoneAPI : public PhoneAPI
 
         DEBUG_MSG("BLE notify fromNum\n");
         fromNum.notify32(fromRadioNum);
+    }
+
+    /// Check the current underlying physical link to see if the client is currently connected
+    virtual bool checkIsConnected() {
+        return bleConnected;
     }
 };
 
@@ -46,6 +53,7 @@ void connect_callback(uint16_t conn_handle)
     connection->getPeerName(central_name, sizeof(central_name));
 
     DEBUG_MSG("BLE Connected to %s\n", central_name);
+    bleConnected = true;
 }
 
 /**
@@ -55,7 +63,8 @@ void connect_callback(uint16_t conn_handle)
  */
 void disconnect_callback(uint16_t conn_handle, uint8_t reason)
 {
-    (void)conn_handle;
+    // FIXME - we currently assume only one active connection
+    bleConnected = false;
 
     DEBUG_MSG("BLE Disconnected, reason = 0x%x\n", reason);
 }

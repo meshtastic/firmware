@@ -12,7 +12,7 @@ PB_BIND(LegacyRadioConfig, LegacyRadioConfig, AUTO)
 PB_BIND(LegacyRadioConfig_LegacyPreferences, LegacyRadioConfig_LegacyPreferences, AUTO)
 
 
-PB_BIND(DeviceState, DeviceState, 2)
+PB_BIND(DeviceState, DeviceState, 4)
 
 
 PB_BIND(ChannelFile, ChannelFile, 2)

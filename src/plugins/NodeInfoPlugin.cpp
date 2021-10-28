@@ -1,14 +1,14 @@
+#include "configuration.h"
 #include "NodeInfoPlugin.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
 #include "Router.h"
-#include "configuration.h"
 #include "main.h"
 
 NodeInfoPlugin *nodeInfoPlugin;
 
-bool NodeInfoPlugin::handleReceivedProtobuf(const MeshPacket &mp, const User *pptr)
+bool NodeInfoPlugin::handleReceivedProtobuf(const MeshPacket &mp, User *pptr)
 {
     auto p = *pptr;
 

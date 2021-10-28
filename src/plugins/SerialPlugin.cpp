@@ -1,9 +1,9 @@
+#include "configuration.h"
 #include "SerialPlugin.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
 #include "Router.h"
-#include "configuration.h"
 #include <Arduino.h>
 
 #include <assert.h>
@@ -157,7 +157,7 @@ void SerialPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
     service.sendToMesh(p);
 }
 
-bool SerialPluginRadio::handleReceived(const MeshPacket &mp)
+ProcessMessage SerialPluginRadio::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
 
@@ -207,5 +207,5 @@ bool SerialPluginRadio::handleReceived(const MeshPacket &mp)
 
 #endif
 
-    return true; // Let others look at this message also if they want
+    return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }

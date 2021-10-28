@@ -1,3 +1,4 @@
+#include "configuration.h"
 #include "power.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -42,6 +43,7 @@ Power *power;
 
 using namespace meshtastic;
 
+#ifndef AREF_VOLTAGE
 #if defined(NRF52_SERIES)
 /*
  * Internal Reference is +/-0.6V, with an adjustable gain of 1/6, 1/5, 1/4,
@@ -55,6 +57,7 @@ using namespace meshtastic;
 #define AREF_VOLTAGE 3.6
 #else
 #define AREF_VOLTAGE 3.3
+#endif
 #endif
 
 /**
@@ -79,10 +82,13 @@ class AnalogBatteryLevel : public HasBatteryLevel
         if (v < noBatVolt)
             return -1; // If voltage is super low assume no battery installed
 
+#ifndef NRF52_SERIES
+        // This does not work on a RAK4631 with battery connected
         if (v > chargingVolt)
             return 0; // While charging we can't report % full on the battery
+#endif
 
-        return 100 * (v - emptyVolt) / (fullVolt - emptyVolt);
+        return clamp((int)(100 * (v - emptyVolt) / (fullVolt - emptyVolt)), 0, 100);
     }
 
     /**
@@ -101,8 +107,13 @@ class AnalogBatteryLevel : public HasBatteryLevel
         if (millis() - last_read_time_ms > min_read_interval) {
             last_read_time_ms = millis();
             uint32_t raw = analogRead(BATTERY_PIN);
-            float scaled = 1000.0 * ADC_MULTIPLIER * (AREF_VOLTAGE / 1024.0) * raw;
-            // DEBUG_MSG("raw val=%u scaled=%u\n", raw, (uint32_t)(scaled));
+            float scaled;
+            #ifndef VBAT_RAW_TO_SCALED
+            scaled = 1000.0 * ADC_MULTIPLIER * (AREF_VOLTAGE / 1024.0) * raw;
+            #else
+            scaled = VBAT_RAW_TO_SCALED(raw); //defined in variant.h
+            #endif
+            // DEBUG_MSG("battery gpio %d raw val=%u scaled=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled));
             last_read_value = scaled;
             return scaled;
         } else {
@@ -120,7 +131,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
     /// in power
-    virtual bool isVBUSPlug() { return getBattVoltage() > 1000 * chargingVolt; }
+    virtual bool isVBUSPlug() { return getBattVoltage() > chargingVolt; }
 
     /// Assume charging if we have a battery and external power is connected.
     /// we can't be smart enough to say 'full'?
@@ -129,17 +140,21 @@ class AnalogBatteryLevel : public HasBatteryLevel
   private:
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
     /// in power
-    const float fullVolt = 4200, emptyVolt = 3270, chargingVolt = 4210, noBatVolt = 2100;
+
+    /// For heltecs with no battery connected, the measured voltage is 2204, so raising to 2230 from 2100
+    const float fullVolt = 4200, emptyVolt = 3270, chargingVolt = 4210, noBatVolt = 2230;
     float last_read_value = 0.0;
     uint32_t last_read_time_ms = 0;
-} analogLevel;
+};
+
+AnalogBatteryLevel analogLevel;
 
 Power::Power() : OSThread("Power") {}
 
 bool Power::analogInit()
 {
 #ifdef BATTERY_PIN
-    DEBUG_MSG("Using analog input for battery level\n");
+    DEBUG_MSG("Using analog input %d for battery level\n", BATTERY_PIN);
 
     // disable any internal pullups
     pinMode(BATTERY_PIN, INPUT);
@@ -149,11 +164,19 @@ bool Power::analogInit()
     adcAttachPin(BATTERY_PIN);
 #endif
 #ifdef NRF52_SERIES
+#ifdef VBAT_AR_INTERNAL
+     analogReference(VBAT_AR_INTERNAL);
+#else
     analogReference(AR_INTERNAL); // 3.6V
 #endif
+#endif
 
+#ifndef BATTERY_SENSE_RESOLUTION_BITS
+#define BATTERY_SENSE_RESOLUTION_BITS 10
+#endif
+    
     // adcStart(BATTERY_PIN);
-    analogReadResolution(10); // Default of 12 is not very linear. Recommended to use 10 or 11 depending on needed resolution.
+    analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS); // Default of 12 is not very linear. Recommended to use 10 or 11 depending on needed resolution.
     batteryLevel = &analogLevel;
     return true;
 #else
@@ -169,6 +192,7 @@ bool Power::setup()
         found = analogInit();
     }
     enabled = found;
+    low_voltage_counter = 0;
 
     return found;
 }
@@ -215,9 +239,24 @@ void Power::readPowerStatus()
                   powerStatus.getIsCharging(), powerStatus.getBatteryVoltageMv(), powerStatus.getBatteryChargePercent());
         newStatus.notifyObservers(&powerStatus);
 
+
+        // If we have a battery at all and it is less than 10% full, force deep sleep if we have more than 3 low readings in a row
+        // Supect fluctuating voltage on the RAK4631 to force it to deep sleep even if battery is at 85% after only a few days
+        #ifdef NRF52_SERIES
+        if (powerStatus.getHasBattery() && !powerStatus.getHasUSB()){
+            if (batteryLevel->getBattVoltage() < MIN_BAT_MILLIVOLTS){
+                low_voltage_counter++;
+                if (low_voltage_counter>3)
+                    powerFSM.trigger(EVENT_LOW_BATTERY);
+            } else {
+                low_voltage_counter = 0;
+            }
+        }
+        #else
         // If we have a battery at all and it is less than 10% full, force deep sleep
         if (powerStatus.getHasBattery() && !powerStatus.getHasUSB() && batteryLevel->getBattVoltage() < MIN_BAT_MILLIVOLTS)
             powerFSM.trigger(EVENT_LOW_BATTERY);
+        #endif
     } else {
         // No power sensing on this board - tell everyone else we have no idea what is happening
         const PowerStatus powerStatus = PowerStatus(OptUnknown, OptUnknown, OptUnknown, -1, -1);

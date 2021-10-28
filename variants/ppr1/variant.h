@@ -152,18 +152,19 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_WIRE_SCL (32)
 
 // CUSTOM GPIOs the SX1262
-#define SX1262_CS (0 + 10) // FIXME - we really should define LORA_CS instead
-#define SX1262_DIO1 (0 + 20)
+#define USE_SX1262
+#define SX126X_CS (0 + 10) // FIXME - we really should define LORA_CS instead
+#define SX126X_DIO1 (0 + 20)
 #define SX1262_DIO2 (0 + 26)
-#define SX1262_BUSY (0 + 19)
-#define SX1262_RESET (0 + 17)
-#define SX1262_TXEN (0 + 24)
-#define SX1262_RXEN (0 + 22)
-#define SX1262_E22 // Not really an E22 but this board clones using DIO3 for tcxo control
+#define SX126X_BUSY (0 + 19)
+#define SX126X_RESET (0 + 17)
+#define SX126X_TXEN (0 + 24)
+#define SX126X_RXEN (0 + 22)
+#define SX126X_E22 // Not really an E22 but this board clones using DIO3 for tcxo control
 
 // FIXME, to prevent burning out parts I've set the power level super low, because I don't have
 // an antenna wired up
-#define SX1262_MAX_POWER 1
+#define SX126X_MAX_POWER 1
 
 #define LORA_DISABLE_SENDING // Define this to disable transmission for testing (power testing etc...)
 

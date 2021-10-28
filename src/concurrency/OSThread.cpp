@@ -1,5 +1,5 @@
-#include "OSThread.h"
 #include "configuration.h"
+#include "OSThread.h"
 #include <assert.h>
 
 namespace concurrency

@@ -1,7 +1,7 @@
+#include "configuration.h"
 #include "ReliableRouter.h"
 #include "MeshPlugin.h"
 #include "MeshTypes.h"
-#include "configuration.h"
 #include "mesh-pb-constants.h"
 
 // ReliableRouter::ReliableRouter() {}
@@ -48,6 +48,9 @@ bool ReliableRouter::shouldFilterReceived(const MeshPacket *p)
             sendAckNak(Routing_Error_NONE, getFrom(p), p->id, old->packet->channel);
 
             stopRetransmission(key);
+        }
+        else {
+            DEBUG_MSG("didn't find pending packet\n");
         }
     }
 
