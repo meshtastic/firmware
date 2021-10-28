@@ -1,3 +1,4 @@
+#include "configuration.h"
 #include "MeshPlugin.h"
 #include "Channels.h"
 #include "MeshService.h"
@@ -65,7 +66,7 @@ MeshPacket *MeshPlugin::allocErrorResponse(Routing_Error err, const MeshPacket *
     return r;
 }
 
-void MeshPlugin::callPlugins(const MeshPacket &mp)
+void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
 {
     // DEBUG_MSG("In call plugins\n");
     bool pluginFound = false;
@@ -78,6 +79,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
     // Was this message directed to us specifically?  Will be false if we are sniffing someone elses packets
     auto ourNodeNum = nodeDB.getNodeNum();
     bool toUs = mp.to == NODENUM_BROADCAST || mp.to == ourNodeNum;
+
     for (auto i = plugins->begin(); i != plugins->end(); ++i) {
         auto &pi = **i;
 
@@ -86,10 +88,16 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
         /// We only call plugins that are interested in the packet (and the message is destined to us or we are promiscious)
         bool wantsPacket = (isDecoded || pi.encryptedOk) && (pi.isPromiscuous || toUs) && pi.wantPacket(&mp);
 
-        DEBUG_MSG("Plugin %s wantsPacket=%d\n", pi.name, wantsPacket);
+        if ((src == RX_SRC_LOCAL) && !(pi.loopbackOk)) {
+            // new case, monitor separately for now, then FIXME merge above
+            wantsPacket = false;
+        }
+
         assert(!pi.myReply); // If it is !null it means we have a bug, because it should have been sent the previous time
 
         if (wantsPacket) {
+            DEBUG_MSG("Plugin %s wantsPacket=%d\n", pi.name, wantsPacket);
+
             pluginFound = true;
 
             /// received channel (or NULL if not decoded)
@@ -97,20 +105,24 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
 
             /// Is the channel this packet arrived on acceptable? (security check)
             /// Note: we can't know channel names for encrypted packets, so those are NEVER sent to boundChannel plugins
-            bool rxChannelOk = !pi.boundChannel || (ch && ((mp.from == 0) || (strcmp(ch->settings.name, pi.boundChannel) == 0)));
+
+            /// Also: if a packet comes in on the local PC interface, we don't check for bound channels, because it is TRUSTED and it needs to
+            /// to be able to fetch the initial admin packets without yet knowing any channels.
+
+            bool rxChannelOk = !pi.boundChannel || (mp.from == 0) || (ch && (strcmp(ch->settings.name, pi.boundChannel) == 0));
 
             if (!rxChannelOk) {
                 // no one should have already replied!
                 assert(!currentReply);
 
                 if (mp.decoded.want_response) {
-                    DEBUG_MSG("packet on wrong channel, returning error\n");
+                    printPacket("packet on wrong channel, returning error", &mp);
                     currentReply = pi.allocErrorResponse(Routing_Error_NOT_AUTHORIZED, &mp);
                 } else
-                    DEBUG_MSG("packet on wrong channel, but client didn't want response\n");
+                    printPacket("packet on wrong channel, but can't respond", &mp);
             } else {
 
-                bool handled = pi.handleReceived(mp);
+                ProcessMessage handled = pi.handleReceived(mp);
 
                 // Possibly send replies (but only if the message was directed to us specifically, i.e. not for promiscious
                 // sniffing) also: we only let the one plugin send a reply, once that happens, remaining plugins are not
@@ -134,7 +146,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
                     pi.myReply = NULL;
                 }
 
-                if (handled) {
+                if (handled == ProcessMessage::STOP) {
                     DEBUG_MSG("Plugin %s handled and skipped other processing\n", pi.name);
                     break;
                 }
@@ -149,7 +161,9 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
             printPacket("Sending response", currentReply);
             service.sendToMesh(currentReply);
             currentReply = NULL;
-        } else {
+        } else if(mp.from != ourNodeNum) {
+            // Note: if the message started with the local node we don't want to send a no response reply
+
             // No one wanted to reply to this requst, tell the requster that happened
             DEBUG_MSG("No one responded, send a nak\n");
 
@@ -161,7 +175,9 @@ void MeshPlugin::callPlugins(const MeshPacket &mp)
     }
 
     if (!pluginFound)
-        DEBUG_MSG("No plugins interested in portnum=%d\n", mp.decoded.portnum);
+        DEBUG_MSG("No plugins interested in portnum=%d, src=%s\n",
+                    mp.decoded.portnum, 
+                    (src == RX_SRC_LOCAL) ? "LOCAL":"REMOTE");
 }
 
 MeshPacket *MeshPlugin::allocReply()

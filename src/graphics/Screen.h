@@ -22,6 +22,8 @@ class Screen
 
 #include <OLEDDisplayUi.h>
 
+#include "../configuration.h"
+
 #ifdef USE_SH1106
 #include <SH1106Wire.h>
 #elif defined(USE_ST7567)
@@ -30,7 +32,7 @@ class Screen
 #include <SSD1306Wire.h>
 #endif
 
-#include "EInkDisplay.h"
+#include "EInkDisplay2.h"
 #include "TFTDisplay.h"
 #include "TypedQueue.h"
 #include "commands.h"

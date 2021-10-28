@@ -25,8 +25,9 @@ class SerialConsole : public StreamAPI, public RedirectablePrint
     }
 
   protected:
-    /// Hookable to find out when connection changes
-    virtual void onConnectionChanged(bool connected);
+
+    /// Check the current underlying physical link to see if the client is currently connected
+    virtual bool checkIsConnected();    
 };
 
 // A simple wrapper to allow non class aware code write to the console

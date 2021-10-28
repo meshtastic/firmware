@@ -9,14 +9,14 @@
 #include <WiFi.h>
 #endif
 
-void initWifi(bool forceSoftAP);
+/// @return true if wifi is now in use
+bool initWifi(bool forceSoftAP);
+
 void deinitWifi();
 
 bool isWifiAvailable();
 
 void handleDNSResponse();
-
-void reconnectWiFi();
 
 bool isSoftAPForced();
 

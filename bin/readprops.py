@@ -12,6 +12,8 @@ def readProps(prefsLoc):
     config = configparser.RawConfigParser()
     config.read(prefsLoc)
     version = dict(config.items('VERSION'))
+    verObj = dict(short = "{}.{}.{}".format(version["major"], version["minor"], version["build"]),
+        long = "unset")
 
     # Try to find current build SHA if if the workspace is clean.  This could fail if git is not installed
     try:
@@ -23,14 +25,13 @@ def readProps(prefsLoc):
         if isDirty:
             # short for 'dirty', we want to keep our verstrings source for protobuf reasons
             suffix = sha + "-d"
-        verStr = "{}.{}.{}.{}".format(
+        verObj['long'] = "{}.{}.{}.{}".format(
             version["major"], version["minor"], version["build"], suffix)
     except:
         # print("Unexpected error:", sys.exc_info()[0])
         # traceback.print_exc()
-        verStr = "{}.{}.{}".format(
-            version["major"], version["minor"], version["build"])
+        verObj['long'] = verObj['short']
 
     # print("firmare version " + verStr)
-    return verStr
+    return verObj
 # print("path is" + ','.join(sys.path))

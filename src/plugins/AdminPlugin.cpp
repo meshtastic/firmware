@@ -1,9 +1,9 @@
+#include "configuration.h"
 #include "AdminPlugin.h"
 #include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Router.h"
-#include "configuration.h"
 #include "main.h"
 
 #ifdef PORTDUINO
@@ -11,6 +11,24 @@
 #endif
 
 AdminPlugin *adminPlugin;
+
+/// A special reserved string to indicate strings we can not share with external nodes.  We will use this 'reserved' word instead.
+/// Also, to make setting work correctly, if someone tries to set a string to this reserved value we assume they don't really want a change.
+static const char *secretReserved = "sekrit";
+
+/// If buf is !empty, change it to secret
+static void hideSecret(char *buf) {
+    if(*buf) {
+        strcpy(buf, secretReserved);
+    }
+}
+
+/// If buf is the reserved secret word, replace the buffer with currentVal
+static void writeSecret(char *buf, const char *currentVal) {
+    if(strcmp(buf, secretReserved) == 0) {
+        strcpy(buf, currentVal);
+    }
+}
 
 void AdminPlugin::handleGetChannel(const MeshPacket &req, uint32_t channelIndex)
 {
@@ -30,17 +48,20 @@ void AdminPlugin::handleGetRadio(const MeshPacket &req)
         AdminMessage r = AdminMessage_init_default;
         r.get_radio_response = radioConfig;
 
-        // NOTE: The phone app needs to know the ls_secs value so it can properly expect sleep behavior.
+        // NOTE: The phone app needs to know the ls_secs & phone_timeout value so it can properly expect sleep behavior.
         // So even if we internally use 0 to represent 'use default' we still need to send the value we are
         // using to the app (so that even old phone apps work with new device loads).
         r.get_radio_response.preferences.ls_secs = getPref_ls_secs();
+        r.get_radio_response.preferences.phone_timeout_secs = getPref_phone_timeout_secs();
+        // hideSecret(r.get_radio_response.preferences.wifi_ssid); // hmm - leave public for now, because only minimally private and useful for users to know current provisioning)
+        hideSecret(r.get_radio_response.preferences.wifi_password);
 
         r.which_variant = AdminMessage_get_radio_response_tag;
         myReply = allocDataProtobuf(r);
     }
 }
 
-bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, const AdminMessage *r)
+bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
 {
     assert(r);
     switch (r->which_variant) {
@@ -138,8 +159,9 @@ void AdminPlugin::handleSetChannel(const Channel &cc)
     }
 }
 
-void AdminPlugin::handleSetRadio(const RadioConfig &r)
+void AdminPlugin::handleSetRadio(RadioConfig &r)
 {
+    writeSecret(r.preferences.wifi_password, radioConfig.preferences.wifi_password);
     radioConfig = r;
 
     service.reloadConfig();

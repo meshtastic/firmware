@@ -9,6 +9,18 @@
 #include <OLEDDisplayUi.h>
 #endif
 
+/** handleReceived return enumeration
+ * 
+ * Use ProcessMessage::CONTINUE to allows other modules to process a message.
+ * 
+ * Use ProcessMessage::STOP to stop further message processing.
+ */
+enum class ProcessMessage
+{
+  CONTINUE = 0,
+  STOP = 1,
+};
+
 /** A baseclass for any mesh "plugin".
  *
  * A plugin allows you to add new features to meshtastic device code, without needing to know messaging details.
@@ -33,7 +45,7 @@ class MeshPlugin
 
     /** For use only by MeshService
      */
-    static void callPlugins(const MeshPacket &mp);
+    static void callPlugins(const MeshPacket &mp, RxSource src = RX_SRC_RADIO);
 
     static std::vector<MeshPlugin *> GetMeshPluginsWithUIFrames();
 #ifndef NO_SCREEN
@@ -47,6 +59,10 @@ class MeshPlugin
     plugins can set this to true and their handleReceived() will be called for every packet.
     */
     bool isPromiscuous = false;
+
+    /** Also receive a copy of LOCALLY GENERATED messages - most plugins should leave
+     *  this setting disabled - see issue #877 */
+    bool loopbackOk = false;
 
     /** Most plugins only understand decrypted packets.  For plugins that also want to see encrypted packets, they should set this
      * flag */
@@ -87,9 +103,9 @@ class MeshPlugin
 
     /** Called to handle a particular incoming message
 
-    @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
+    @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
-    virtual bool handleReceived(const MeshPacket &mp) { return false; }
+    virtual ProcessMessage handleReceived(const MeshPacket &mp) { return ProcessMessage::CONTINUE; }
 
     /** Messages can be received that have the want_response bit set.  If set, this callback will be invoked
      * so that subclasses can (optionally) send a response back to the original sender.

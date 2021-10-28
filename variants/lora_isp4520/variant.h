@@ -57,10 +57,11 @@
 #define WIRE_INTERFACES_COUNT 0
 
 // GPIOs the SX1262 is connected
-#define SX1262_CS 1    // aka SPI_NSS
-#define SX1262_DIO1 (4)
-#define SX1262_BUSY (5) 
-#define SX1262_RESET (6)
+#define USE_SX1262
+#define SX126X_CS 1    // aka SPI_NSS
+#define SX126X_DIO1 (4)
+#define SX126X_BUSY (5) 
+#define SX126X_RESET (6)
 
 /*
  * Serial interfaces
@@ -91,7 +92,7 @@
 #define BATTERY_PIN 3
 #define ADC_MULTIPLIER 1.436
 
-#define SX1262_E22 // Not really an E22 but this board clones using DIO3 for tcxo control
+#define SX126X_E22 // Not really an E22 but this board clones using DIO3 for tcxo control
 
 #define NO_WIRE
 #define NO_GPS

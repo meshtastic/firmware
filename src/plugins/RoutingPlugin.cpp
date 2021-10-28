@@ -1,13 +1,13 @@
+#include "configuration.h"
 #include "RoutingPlugin.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Router.h"
-#include "configuration.h"
 #include "main.h"
 
 RoutingPlugin *routingPlugin;
 
-bool RoutingPlugin::handleReceivedProtobuf(const MeshPacket &mp, const Routing *r)
+bool RoutingPlugin::handleReceivedProtobuf(const MeshPacket &mp, Routing *r)
 {
     printPacket("Routing sniffing", &mp);
     router->sniffReceived(&mp, r);
