@@ -237,7 +237,7 @@ bool RangeTestPluginRadio::appendFile(const MeshPacket &mp)
 
         // Print the CSV header
         if (fileToWrite.println(
-                "time,from,sender name,sender lat,sender long,rx lat,rx long,rx snr,rx elevation,distance,payload")) {
+                "time,from,sender name,sender lat,sender long,rx lat,rx long,rx elevation,rx snr,distance,payload")) {
             DEBUG_MSG("File was written\n");
         } else {
             DEBUG_MSG("File write failed\n");
