@@ -457,10 +457,19 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p, RxSource src)
                 p.pos_timestamp, p.time, p.latitude_i, p.longitude_i);
         info->position = p;
 
+    } else if ((p.time > 0) && !p.latitude_i && !p.longitude_i && !p.pos_timestamp && 
+                !p.location_source) {
+        // FIXME SPECIAL TIME SETTING PACKET FROM EUD TO RADIO
+        // (stop-gap fix for issue #900)
+        DEBUG_MSG("updatePosition SPECIAL time setting time=%u\n", p.time);
+        info->position.time = p.time;
+
     } else {
         // Be careful to only update fields that have been set by the REMOTE sender
         // A lot of position reports don't have time populated.  In that case, be careful to not blow away the time we
         // recorded based on the packet rxTime
+        //
+        // FIXME perhaps handle RX_SRC_USER separately?
         DEBUG_MSG("updatePosition REMOTE node=0x%x time=%u, latI=%d, lonI=%d\n", 
                 nodeId, p.time, p.latitude_i, p.longitude_i);
 
