@@ -113,6 +113,8 @@ typedef struct _RadioConfig_UserPreferences {
     char mqtt_server[32];
     bool mqtt_disabled;
     GpsCoordinateFormat gps_format;
+    bool gps_accept_2d;
+    uint32_t gps_max_dop;
     bool factory_reset;
     bool debug_log_enabled;
     pb_size_t ignore_incoming_count;
@@ -177,8 +179,8 @@ typedef struct _RadioConfig {
 #define _PositionFlags_ARRAYSIZE ((PositionFlags)(PositionFlags_POS_TIMESTAMP+1))
 
 #define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11
-#define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MAX RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11
-#define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_ARRAYSIZE ((RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType)(RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11+1))
+#define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MAX RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DS18B20
+#define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_ARRAYSIZE ((RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType)(RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DS18B20+1))
 
 
 #ifdef __cplusplus
@@ -187,9 +189,9 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default}
-#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0, 0}
+#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0, 0}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero}
-#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0, 0}
+#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define RadioConfig_UserPreferences_position_broadcast_secs_tag 1
@@ -219,6 +221,8 @@ extern "C" {
 #define RadioConfig_UserPreferences_mqtt_server_tag 42
 #define RadioConfig_UserPreferences_mqtt_disabled_tag 43
 #define RadioConfig_UserPreferences_gps_format_tag 44
+#define RadioConfig_UserPreferences_gps_accept_2d_tag 45
+#define RadioConfig_UserPreferences_gps_max_dop_tag 46
 #define RadioConfig_UserPreferences_factory_reset_tag 100
 #define RadioConfig_UserPreferences_debug_log_enabled_tag 101
 #define RadioConfig_UserPreferences_ignore_incoming_tag 103
@@ -285,6 +289,8 @@ X(a, STATIC,   SINGULAR, FLOAT,    frequency_offset,  41) \
 X(a, STATIC,   SINGULAR, STRING,   mqtt_server,      42) \
 X(a, STATIC,   SINGULAR, BOOL,     mqtt_disabled,    43) \
 X(a, STATIC,   SINGULAR, UENUM,    gps_format,       44) \
+X(a, STATIC,   SINGULAR, BOOL,     gps_accept_2d,    45) \
+X(a, STATIC,   SINGULAR, UINT32,   gps_max_dop,      46) \
 X(a, STATIC,   SINGULAR, BOOL,     factory_reset,   100) \
 X(a, STATIC,   SINGULAR, BOOL,     debug_log_enabled, 101) \
 X(a, STATIC,   REPEATED, UINT32,   ignore_incoming, 103) \
@@ -325,8 +331,8 @@ extern const pb_msgdesc_t RadioConfig_UserPreferences_msg;
 #define RadioConfig_UserPreferences_fields &RadioConfig_UserPreferences_msg
 
 /* Maximum encoded size of messages (where known) */
-#define RadioConfig_size                         404
-#define RadioConfig_UserPreferences_size         401
+#define RadioConfig_size                         414
+#define RadioConfig_UserPreferences_size         411
 
 #ifdef __cplusplus
 } /* extern "C" */
