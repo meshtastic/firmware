@@ -225,6 +225,10 @@ bool UBloxGPS::lookForLocation()
     int32_t tmp_lon = ublox.getLongitude(0);
     int32_t tmp_alt_msl = ublox.getAltitudeMSL(0);
     int32_t tmp_alt_hae = ublox.getAltitude(0);
+    int32_t max_dop = PDOP_INVALID;
+    if (radioConfig.preferences.gps_max_dop)
+        max_dop = radioConfig.preferences.gps_max_dop * 100;  // scaling
+
     // Note: heading is only currently implmented in the ublox for the 8m chipset - therefore
     // don't read it here - it will generate an ignored getPVT command on the 6ms
     // heading = ublox.getHeading(0);
@@ -248,16 +252,25 @@ bool UBloxGPS::lookForLocation()
     // FIXME - NULL ISLAND is a real location on Earth!
     foundLocation = (tmp_lat != 0) && (tmp_lon != 0) && 
                     (tmp_lat <= 900000000) && (tmp_lat >= -900000000) &&
-                    (tmp_dop < PDOP_INVALID);
+                    (tmp_dop < max_dop);
 
     // only if entire dataset is valid, update globals from temp vars
     if (foundLocation) {
         p.location_source = Position_LocSource_LOCSRC_GPS_INTERNAL;
         p.longitude_i = tmp_lon;
         p.latitude_i = tmp_lat;
-        p.altitude = tmp_alt_msl / 1000;
-        p.altitude_hae = tmp_alt_hae / 1000;
-        p.alt_geoid_sep = (tmp_alt_hae - tmp_alt_msl) / 1000;
+        if (fixType > 2) {
+            // if fix is 2d, ignore altitude data
+            p.altitude = tmp_alt_msl / 1000;
+            p.altitude_hae = tmp_alt_hae / 1000;
+            p.alt_geoid_sep = (tmp_alt_hae - tmp_alt_msl) / 1000;
+        } else {
+#ifdef GPS_EXTRAVERBOSE
+            DEBUG_MSG("no altitude data (fixType=%d)\n", fixType);
+#endif
+            // clean up old values in case it's a 3d-2d fix transition
+            p.altitude = p.altitude_hae = p.alt_geoid_sep = 0;
+        }
         p.pos_timestamp = tmp_ts;
         p.PDOP = tmp_dop;
         p.fix_type = fixType;
@@ -277,7 +290,10 @@ bool UBloxGPS::lookForLocation()
 
 bool UBloxGPS::hasLock()
 {
-    return (fixType >= 3 && fixType <= 4);
+    if (radioConfig.preferences.gps_accept_2d)
+        return (fixType >= 2 && fixType <= 4);
+    else
+        return (fixType >= 3 && fixType <= 4);
 }
 
 bool UBloxGPS::whileIdle()
