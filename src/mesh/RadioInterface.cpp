@@ -307,6 +307,8 @@ void RadioInterface::applyModemConfig()
 
         if (bw == 31) // This parameter is not an integer
             bw = 31.25;
+        if (bw == 62) // Fix for 62.5Khz bandwidth
+            bw = 62.5;
     }
 
     power = channelSettings.tx_power;
