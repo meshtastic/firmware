@@ -145,7 +145,7 @@ typedef struct _RadioConfig_UserPreferences {
     uint32_t environmental_measurement_plugin_sensor_pin;
     bool store_forward_plugin_enabled;
     uint32_t position_flags;
-    bool always_powered;
+    bool is_always_powered;
 } RadioConfig_UserPreferences;
 
 typedef struct _RadioConfig {
@@ -253,7 +253,7 @@ extern "C" {
 #define RadioConfig_UserPreferences_environmental_measurement_plugin_sensor_pin_tag 147
 #define RadioConfig_UserPreferences_store_forward_plugin_enabled_tag 148
 #define RadioConfig_UserPreferences_position_flags_tag 150
-#define RadioConfig_UserPreferences_always_powered_tag 151
+#define RadioConfig_UserPreferences_is_always_powered_tag 151
 #define RadioConfig_preferences_tag              1
 
 /* Struct field encoding specification for nanopb */
@@ -322,7 +322,7 @@ X(a, STATIC,   SINGULAR, UENUM,    environmental_measurement_plugin_sensor_type,
 X(a, STATIC,   SINGULAR, UINT32,   environmental_measurement_plugin_sensor_pin, 147) \
 X(a, STATIC,   SINGULAR, BOOL,     store_forward_plugin_enabled, 148) \
 X(a, STATIC,   SINGULAR, UINT32,   position_flags,  150) \
-X(a, STATIC,   SINGULAR, BOOL,     always_powered,  151)
+X(a, STATIC,   SINGULAR, BOOL,     is_always_powered, 151)
 #define RadioConfig_UserPreferences_CALLBACK NULL
 #define RadioConfig_UserPreferences_DEFAULT NULL
 
