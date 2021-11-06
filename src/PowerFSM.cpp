@@ -11,6 +11,11 @@
 /// Should we behave as if we have AC power now?
 static bool isPowered()
 {
+    // Completely circumvents the battery / power sensing logic and assumes constant power source
+    if (radioConfig.preferences.always_powered) {
+        return true;
+    }
+    
     bool isRouter = radioConfig.preferences.is_router;
 
     // If we are not a router and we already have AC power go to POWER state after init, otherwise go to ON
