@@ -12,7 +12,7 @@
 static bool isPowered()
 {
     // Completely circumvents the battery / power sensing logic and assumes constant power source
-    if (radioConfig.preferences.always_powered) {
+    if (radioConfig.preferences.is_always_powered) {
         return true;
     }
     
