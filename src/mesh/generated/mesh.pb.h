@@ -33,6 +33,24 @@ typedef enum _HardwareModel {
     HardwareModel_DIY_V1 = 39
 } HardwareModel;
 
+typedef enum _Team {
+    Team_CLEAR = 0,
+    Team_CYAN = 1,
+    Team_WHITE = 2,
+    Team_YELLOW = 3,
+    Team_ORANGE = 4,
+    Team_MAGENTA = 5,
+    Team_RED = 6,
+    Team_MAROON = 7,
+    Team_PURPLE = 8,
+    Team_DARK_BLUE = 9,
+    Team_BLUE = 10,
+    Team_TEAL = 11,
+    Team_GREEN = 12,
+    Team_DARK_GREEN = 13,
+    Team_BROWN = 14
+} Team;
+
 typedef enum _Constants {
     Constants_Unused = 0,
     Constants_DATA_PAYLOAD_LEN = 237
@@ -158,11 +176,6 @@ typedef struct _Position {
     uint32_t fix_type;
     uint32_t sats_in_view;
     uint32_t sensor_id;
-    uint32_t heading;
-    int32_t roll;
-    int32_t pitch;
-    uint32_t air_speed;
-    uint32_t ground_distance_cm;
     uint32_t pos_next_update;
     uint32_t pos_seq_number;
 } Position;
@@ -184,6 +197,7 @@ typedef struct _User {
     pb_byte_t macaddr[6];
     HardwareModel hw_model;
     bool is_licensed;
+    Team team;
 } User;
 
 typedef PB_BYTES_ARRAY_T(256) MeshPacket_encrypted_t;
@@ -253,6 +267,10 @@ typedef struct _ToRadio {
 #define _HardwareModel_MAX HardwareModel_DIY_V1
 #define _HardwareModel_ARRAYSIZE ((HardwareModel)(HardwareModel_DIY_V1+1))
 
+#define _Team_MIN Team_CLEAR
+#define _Team_MAX Team_BROWN
+#define _Team_ARRAYSIZE ((Team)(Team_BROWN+1))
+
 #define _Constants_MIN Constants_Unused
 #define _Constants_MAX Constants_DATA_PAYLOAD_LEN
 #define _Constants_ARRAYSIZE ((Constants)(Constants_DATA_PAYLOAD_LEN+1))
@@ -287,8 +305,8 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define Position_init_default                    {0, 0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define User_init_default                        {"", "", "", {0}, _HardwareModel_MIN, 0}
+#define Position_init_default                    {0, 0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define User_init_default                        {"", "", "", {0}, _HardwareModel_MIN, 0, _Team_MIN}
 #define RouteDiscovery_init_default              {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_default                     {0, {RouteDiscovery_init_default}}
 #define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0}
@@ -299,8 +317,8 @@ extern "C" {
 #define FromRadio_init_default                   {0, 0, {MyNodeInfo_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
 #define ToRadio_PeerInfo_init_default            {0, 0}
-#define Position_init_zero                       {0, 0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define User_init_zero                           {"", "", "", {0}, _HardwareModel_MIN, 0}
+#define Position_init_zero                       {0, 0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define User_init_zero                           {"", "", "", {0}, _HardwareModel_MIN, 0, _Team_MIN}
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_zero                        {0, {RouteDiscovery_init_zero}}
 #define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0}
@@ -357,11 +375,6 @@ extern "C" {
 #define Position_fix_type_tag                    23
 #define Position_sats_in_view_tag                24
 #define Position_sensor_id_tag                   25
-#define Position_heading_tag                     30
-#define Position_roll_tag                        31
-#define Position_pitch_tag                       32
-#define Position_air_speed_tag                   33
-#define Position_ground_distance_cm_tag          34
 #define Position_pos_next_update_tag             40
 #define Position_pos_seq_number_tag              41
 #define RouteDiscovery_route_tag                 2
@@ -373,6 +386,7 @@ extern "C" {
 #define User_macaddr_tag                         4
 #define User_hw_model_tag                        6
 #define User_is_licensed_tag                     7
+#define User_team_tag                            8
 #define MeshPacket_from_tag                      1
 #define MeshPacket_to_tag                        2
 #define MeshPacket_channel_tag                   3
@@ -428,11 +442,6 @@ X(a, STATIC,   SINGULAR, UINT32,   fix_quality,      22) \
 X(a, STATIC,   SINGULAR, UINT32,   fix_type,         23) \
 X(a, STATIC,   SINGULAR, UINT32,   sats_in_view,     24) \
 X(a, STATIC,   SINGULAR, UINT32,   sensor_id,        25) \
-X(a, STATIC,   SINGULAR, UINT32,   heading,          30) \
-X(a, STATIC,   SINGULAR, SINT32,   roll,             31) \
-X(a, STATIC,   SINGULAR, SINT32,   pitch,            32) \
-X(a, STATIC,   SINGULAR, UINT32,   air_speed,        33) \
-X(a, STATIC,   SINGULAR, UINT32,   ground_distance_cm,  34) \
 X(a, STATIC,   SINGULAR, UINT32,   pos_next_update,  40) \
 X(a, STATIC,   SINGULAR, UINT32,   pos_seq_number,   41)
 #define Position_CALLBACK NULL
@@ -444,7 +453,8 @@ X(a, STATIC,   SINGULAR, STRING,   long_name,         2) \
 X(a, STATIC,   SINGULAR, STRING,   short_name,        3) \
 X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, macaddr,           4) \
 X(a, STATIC,   SINGULAR, UENUM,    hw_model,          6) \
-X(a, STATIC,   SINGULAR, BOOL,     is_licensed,       7)
+X(a, STATIC,   SINGULAR, BOOL,     is_licensed,       7) \
+X(a, STATIC,   SINGULAR, UENUM,    team,              8)
 #define User_CALLBACK NULL
 #define User_DEFAULT NULL
 
@@ -584,13 +594,13 @@ extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 #define ToRadio_PeerInfo_fields &ToRadio_PeerInfo_msg
 
 /* Maximum encoded size of messages (where known) */
-#define Position_size                            188
-#define User_size                                76
+#define Position_size                            153
+#define User_size                                78
 #define RouteDiscovery_size                      40
 #define Routing_size                             42
 #define Data_size                                260
 #define MeshPacket_size                          309
-#define NodeInfo_size                            285
+#define NodeInfo_size                            252
 #define MyNodeInfo_size                          101
 #define LogRecord_size                           81
 #define FromRadio_size                           318

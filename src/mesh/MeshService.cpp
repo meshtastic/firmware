@@ -112,7 +112,11 @@ bool MeshService::reloadConfig()
 /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
 void MeshService::reloadOwner()
 {
+    // DEBUG_MSG("reloadOwner()\n");
+    // update our local data directly
+    nodeDB.updateUser(nodeDB.getNodeNum(), owner);
     assert(nodeInfoPlugin);
+    // update everyone else
     if (nodeInfoPlugin)
         nodeInfoPlugin->sendOurNodeInfo();
     nodeDB.saveToDisk();
