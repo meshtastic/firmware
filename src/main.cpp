@@ -40,6 +40,7 @@
 #include "RF95Interface.h"
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
+#include "LLCC68Interface.h"
 
 #ifdef NRF52_SERIES
 #include "variant.h"
@@ -535,6 +536,19 @@ void setup()
             rIf = NULL;
         } else {
             DEBUG_MSG("SX1268 Radio init succeeded, using SX1268 radio\n");
+        }
+    }
+#endif
+
+#if defined(USE_LLCC68)
+    if (!rIf) {
+        rIf = new LLCC68Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
+        if (!rIf->init()) {
+            DEBUG_MSG("Warning: Failed to find LLCC68 radio\n");
+            delete rIf;
+            rIf = NULL;
+        } else {
+            DEBUG_MSG("LLCC68 Radio init succeeded, using LLCC68 radio\n");
         }
     }
 #endif
