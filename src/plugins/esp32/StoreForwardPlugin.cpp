@@ -22,7 +22,6 @@
 
 */
 
-
 StoreForwardPlugin *storeForwardPlugin;
 
 int32_t StoreForwardPlugin::runOnce()
@@ -119,37 +118,39 @@ void StoreForwardPlugin::historySend(uint32_t msAgo, uint32_t to)
     for (int i = 0; i < this->packetHistoryCurrent; i++) {
         if (this->packetHistory[i].time) {
 
-
             /*
                 Stored packet was sent to a broadcast address
             */
             if ((this->packetHistory[i].to & 0xffffffff) == 0xffffffff) {
-                DEBUG_MSG("Request: to-0x%08x, Stored: time-%u to-0x%08x\n", to & 0xffffffff, this->packetHistory[i].time, this->packetHistory[i].to & 0xffffffff);
-                
-                //bool pb_decode_from_bytes(const uint8_t *srcbuf, size_t srcbufsize, const pb_msgdesc_t *fields, void *dest_struct);
+                DEBUG_MSG("Request: to-0x%08x, Stored: time-%u to-0x%08x\n", to & 0xffffffff, this->packetHistory[i].time,
+                          this->packetHistory[i].to & 0xffffffff);
+
+                // bool pb_decode_from_bytes(const uint8_t *srcbuf, size_t srcbufsize, const pb_msgdesc_t *fields, void
+                // *dest_struct);
                 pb_decode_from_bytes(this->packetHistory[i].bytes, this->packetHistory[i].bytes_size, ToRadio_fields, &mp);
 
                 /*
                     Take saved packet
                     Decode it
                     Read something form the decoded packet.
-                */   
-                DEBUG_MSG(">>>>> %s\n", mp.decoded.payload.bytes); 
-               
+                */
+                DEBUG_MSG(">>>>> %s\n", mp.decoded.payload.bytes);
+
                 storeForwardPlugin->sendPayload(to, true);
             }
 
             /*
                 Stored packet was intended to a named address
 
-                TODO: TEST ME! I don't know if this works. 
+                TODO: TEST ME! I don't know if this works.
             */
             if ((this->packetHistory[i].to & 0xffffffff) == to) {
-                DEBUG_MSG("Request: to-0x%08x, Stored: time-%u to-0x%08x\n", to & 0xffffffff, this->packetHistory[i].time, this->packetHistory[i].to & 0xffffffff);
+                DEBUG_MSG("Request: to-0x%08x, Stored: time-%u to-0x%08x\n", to & 0xffffffff, this->packetHistory[i].time,
+                          this->packetHistory[i].to & 0xffffffff);
                 storeForwardPlugin->sendPayload(to, true);
             }
 
-            //break;
+            // break;
         }
     }
 }
@@ -162,7 +163,7 @@ void StoreForwardPlugin::historyAdd(const MeshPacket *mp)
     size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), Data_fields, &p->decoded);
     assert(numbytes <= MAX_RHPACKETLEN);
 
-    //DEBUG_MSG("MP numbytes %u\n", numbytes);
+    // DEBUG_MSG("MP numbytes %u\n", numbytes);
 
     // destination, source, bytes
     // memcpy(p->encrypted.bytes, bytes, numbytes);
@@ -171,7 +172,6 @@ void StoreForwardPlugin::historyAdd(const MeshPacket *mp)
     this->packetHistory[this->packetHistoryCurrent].to = mp->to;
     this->packetHistory[this->packetHistoryCurrent].bytes_size = sizeof(bytes);
     this->packetHistoryCurrent++;
-    
 }
 
 MeshPacket *StoreForwardPlugin::allocReply()
@@ -197,7 +197,6 @@ void StoreForwardPlugin::sendPayload(NodeNum dest, bool wantReplies)
 
     service.sendToMesh(p);
 }
-
 
 ProcessMessage StoreForwardPlugin::handleReceived(const MeshPacket &mp)
 {
@@ -243,10 +242,9 @@ ProcessMessage StoreForwardPlugin::handleReceived(const MeshPacket &mp)
 StoreForwardPlugin::StoreForwardPlugin()
     : SinglePortPlugin("StoreForwardPlugin", PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("StoreForwardPlugin")
 {
-//StoreForwardPlugin::StoreForwardPlugin()
-//    : SinglePortPlugin("StoreForwardPlugin", PortNum_STORE_FORWARD_APP), concurrency::OSThread("StoreForwardPlugin")
-//{
-
+    // StoreForwardPlugin::StoreForwardPlugin()
+    //     : SinglePortPlugin("StoreForwardPlugin", PortNum_STORE_FORWARD_APP), concurrency::OSThread("StoreForwardPlugin")
+    //{
 
 #ifndef NO_ESP32
 
