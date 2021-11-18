@@ -12,6 +12,16 @@
 #define STOREFORWARD_MAX_PACKETS 0
 #define STOREFORWARD_SEND_HISTORY_PERIOD 10 * 60
 #define STOREFORWARD_SEND_HISTORY_MAX 0
+#define STOREFORWARD_HOP_MAX 0 // How many hops should we allow the packet to be forwarded?
+
+/*
+    Jm's TODO:
+        - Be able to identify if you're within range of a router.
+        - Be able to specify the HOP MAX to reduce airtime.
+        - Restrict operation of S&F on the slow channel configurations.
+
+*/
+
 
 StoreForwardPlugin *storeForwardPlugin;
 
@@ -51,6 +61,9 @@ int32_t StoreForwardPlugin::runOnce()
     return (INT32_MAX);
 }
 
+/*
+    Create our data structure in the PSRAM.
+*/
 void StoreForwardPlugin::populatePSRAM()
 {
     /*
@@ -81,24 +94,11 @@ void StoreForwardPlugin::populatePSRAM()
     DEBUG_MSG("  numberOfPackets - %u\n", numberOfPackets);
 }
 
-// We saw a node.
-void StoreForwardPlugin::sawNode(uint32_t whoWeSaw, uint32_t sawSecAgo)
-{
-    if (radioConfig.preferences.is_router) {
-
-        // If node has been away for more than 10 minutes, send the node the last 10 minutes of
-        //   messages
-        if (sawSecAgo > STOREFORWARD_SEND_HISTORY_PERIOD) {
-            // Node has been away for a while.
-            storeForwardPlugin->historySend(STOREFORWARD_SEND_HISTORY_PERIOD, whoWeSaw);
-        }
-    }
-}
-
 void StoreForwardPlugin::historyReport()
 {
     DEBUG_MSG("Iterating through the message history...\n");
     DEBUG_MSG("Message history contains %u records\n", this->packetHistoryCurrent);
+    /*
     uint32_t startTimer = millis();
     for (int i = 0; i < this->packetHistoryCurrent; i++) {
         if (this->packetHistory[i].time) {
@@ -106,6 +106,7 @@ void StoreForwardPlugin::historyReport()
         }
     }
     DEBUG_MSG("StoreForwardPlugin::historyReport runtime - %u ms\n", millis() - startTimer);
+    */
 }
 
 /*
@@ -113,12 +114,42 @@ void StoreForwardPlugin::historyReport()
  */
 void StoreForwardPlugin::historySend(uint32_t msAgo, uint32_t to)
 {
-    // Send "Welcome back"
-    this->sendPayloadWelcome(to, false);
 
+    MeshPacket mp;
     for (int i = 0; i < this->packetHistoryCurrent; i++) {
         if (this->packetHistory[i].time) {
-            // DEBUG_MSG("... time-%u to-0x%08x\n", this->packetHistory[i].time, this->packetHistory[i].to & 0xffffffff);
+
+
+            /*
+                Stored packet was sent to a broadcast address
+            */
+            if ((this->packetHistory[i].to & 0xffffffff) == 0xffffffff) {
+                DEBUG_MSG("Request: to-0x%08x, Stored: time-%u to-0x%08x\n", to & 0xffffffff, this->packetHistory[i].time, this->packetHistory[i].to & 0xffffffff);
+                
+                //bool pb_decode_from_bytes(const uint8_t *srcbuf, size_t srcbufsize, const pb_msgdesc_t *fields, void *dest_struct);
+                pb_decode_from_bytes(this->packetHistory[i].bytes, this->packetHistory[i].bytes_size, ToRadio_fields, &mp);
+
+                /*
+                    Take saved packet
+                    Decode it
+                    Read something form the decoded packet.
+                */   
+                DEBUG_MSG(">>>>> %s\n", mp.decoded.payload.bytes); 
+               
+                storeForwardPlugin->sendPayload(to, true);
+            }
+
+            /*
+                Stored packet was intended to a named address
+
+                TODO: TEST ME! I don't know if this works. 
+            */
+            if ((this->packetHistory[i].to & 0xffffffff) == to) {
+                DEBUG_MSG("Request: to-0x%08x, Stored: time-%u to-0x%08x\n", to & 0xffffffff, this->packetHistory[i].time, this->packetHistory[i].to & 0xffffffff);
+                storeForwardPlugin->sendPayload(to, true);
+            }
+
+            //break;
         }
     }
 }
@@ -131,14 +162,16 @@ void StoreForwardPlugin::historyAdd(const MeshPacket *mp)
     size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), Data_fields, &p->decoded);
     assert(numbytes <= MAX_RHPACKETLEN);
 
-    DEBUG_MSG("MP numbytes %u\n", numbytes);
+    //DEBUG_MSG("MP numbytes %u\n", numbytes);
 
     // destination, source, bytes
     // memcpy(p->encrypted.bytes, bytes, numbytes);
     memcpy(this->packetHistory[this->packetHistoryCurrent].bytes, bytes, MAX_RHPACKETLEN);
     this->packetHistory[this->packetHistoryCurrent].time = millis();
     this->packetHistory[this->packetHistoryCurrent].to = mp->to;
+    this->packetHistory[this->packetHistoryCurrent].bytes_size = sizeof(bytes);
     this->packetHistoryCurrent++;
+    
 }
 
 MeshPacket *StoreForwardPlugin::allocReply()
@@ -157,54 +190,41 @@ void StoreForwardPlugin::sendPayload(NodeNum dest, bool wantReplies)
     p->want_ack = true;
 
     static char heartbeatString[20];
-    snprintf(heartbeatString, sizeof(heartbeatString), "1");
+    snprintf(heartbeatString, sizeof(heartbeatString), "From SF");
 
     p->decoded.payload.size = strlen(heartbeatString); // You must specify how many bytes are in the reply
-    memcpy(p->decoded.payload.bytes, "1", 1);
+    memcpy(p->decoded.payload.bytes, "From SF", 7);
 
     service.sendToMesh(p);
 }
 
-void StoreForwardPlugin::sendPayloadWelcome(NodeNum dest, bool wantReplies)
-{
-    DEBUG_MSG("*********************************\n");
-    DEBUG_MSG("*********************************\n");
-    DEBUG_MSG("*********************************\n");
-    DEBUG_MSG("Sending S&F Welcome Message\n");
-    DEBUG_MSG("*********************************\n");
-    DEBUG_MSG("*********************************\n");
-    DEBUG_MSG("*********************************\n");
-    MeshPacket *p = allocReply();
-    p->to = dest;
-    p->decoded.want_response = wantReplies;
-
-    p->want_ack = true;
-
-    p->decoded.portnum = PortNum_TEXT_MESSAGE_APP;
-
-    static char heartbeatString[80];
-    snprintf(heartbeatString, sizeof(heartbeatString), "Welcome back to the mesh. We have not seen you in x minutes!");
-
-    p->decoded.payload.size = strlen(heartbeatString); // You must specify how many bytes are in the reply
-    memcpy(p->decoded.payload.bytes, heartbeatString, p->decoded.payload.size);
-
-    service.sendToMesh(p);
-}
 
 ProcessMessage StoreForwardPlugin::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
     if (radioConfig.preferences.store_forward_plugin_enabled) {
 
+        DEBUG_MSG("--- S&F Received something\n");
+
+        auto &p = mp.decoded;
+
+        // The router node should not be sending messages as a client.
         if (getFrom(&mp) != nodeDB.getNodeNum()) {
             printPacket("PACKET FROM RADIO", &mp);
-            // uint32_t sawTime = storeForwardPlugin->sawNode(getFrom(&mp) & 0xffffffff);
             // DEBUG_MSG("We last saw this node (%u), %u sec ago\n", mp.from & 0xffffffff, (millis() - sawTime) / 1000);
             // DEBUG_MSG("    --------------   ");
             if (mp.decoded.portnum == PortNum_TEXT_MESSAGE_APP) {
                 DEBUG_MSG("Packet came from - PortNum_TEXT_MESSAGE_APP\n");
 
-                storeForwardPlugin->historyAdd(&mp);
+                DEBUG_MSG("--- --- --- %s \n", p.payload.bytes);
+
+                if ((p.payload.bytes[0] == 'S') && (p.payload.bytes[1] == 'F')) {
+                    DEBUG_MSG("--- --- --- Request to send\n");
+
+                    storeForwardPlugin->historySend(5 * 1000 * 60, getFrom(&mp));
+                } else {
+                    storeForwardPlugin->historyAdd(&mp);
+                }
 
             } else {
                 DEBUG_MSG("Packet came from an unknown port %u\n", mp.decoded.portnum);
@@ -221,21 +241,26 @@ ProcessMessage StoreForwardPlugin::handleReceived(const MeshPacket &mp)
 }
 
 StoreForwardPlugin::StoreForwardPlugin()
-    : SinglePortPlugin("StoreForwardPlugin", PortNum_STORE_FORWARD_APP), concurrency::OSThread("StoreForwardPlugin")
+    : SinglePortPlugin("StoreForwardPlugin", PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("StoreForwardPlugin")
 {
+//StoreForwardPlugin::StoreForwardPlugin()
+//    : SinglePortPlugin("StoreForwardPlugin", PortNum_STORE_FORWARD_APP), concurrency::OSThread("StoreForwardPlugin")
+//{
+
 
 #ifndef NO_ESP32
 
     isPromiscuous = true; // Brown chicken brown cow
 
-    /*
-        Uncomment the preferences below if you want to use the plugin
-        without having to configure it from the PythonAPI or WebUI.
-    */
-
     if (StoreForward_Dev) {
+        /*
+            Uncomment the preferences below if you want to use the plugin
+            without having to configure it from the PythonAPI or WebUI.
+        */
+
         radioConfig.preferences.store_forward_plugin_enabled = 1;
         radioConfig.preferences.is_router = 1;
+        radioConfig.preferences.is_always_powered = 1;
     }
 
     if (radioConfig.preferences.store_forward_plugin_enabled) {
