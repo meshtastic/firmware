@@ -22,7 +22,11 @@ class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThrea
     uint32_t receivedRecord[50][2] = {{0}};
 
     PacketHistoryStruct *packetHistory;
+    PacketHistoryStruct *packetHistoryTXQueue;
     uint32_t packetHistoryCurrent = 0;
+
+    uint32_t packetTimeMax = 0;
+
 
   public:
     StoreForwardPlugin();
@@ -34,17 +38,17 @@ class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThrea
     void historyAdd(const MeshPacket &mp);
     void historyReport();
     void historySend(uint32_t msAgo, uint32_t to);
-    void populatePSRAM();
 
     /**
      * Send our payload into the mesh
      */
     void sendPayload(NodeNum dest = NODENUM_BROADCAST, uint32_t packetHistory_index = 0);
+    void sendMessage(NodeNum dest, char *str);
     virtual MeshPacket *allocReply();
     virtual bool wantPortnum(PortNum p) { return true; };
 
   private:
-  // Nothing here.
+    void populatePSRAM();
 
   protected:
     virtual int32_t runOnce();

@@ -2,6 +2,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
+#include "RadioLibInterface.h"
 #include "Router.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
@@ -10,22 +11,10 @@
 #include <map>
 
 //#define STOREFORWARD_MAX_PACKETS 0
-#define STOREFORWARD_SEND_HISTORY_PERIOD 10 * 60
-#define STOREFORWARD_SEND_HISTORY_MAX 0
-#define STOREFORWARD_HOP_MAX 0 // How many hops should we allow the packet to be forwarded?
-
-/*
-    TODO:
-        - Be able to identify if you're within range of a router.
-        - Be able to specify the HOP MAX to reduce airtime.
-        - Restrict operation of S&F on the slow channel configurations.
-        - Build in rate limiting -- Don't allow a user to repeatedly request the history.
-
-    DONE:
-        Allow max history to be defined by radioConfig.preferences.store_forward_plugin_records
+//#define STOREFORWARD_SEND_HISTORY_PERIOD 10 * 60
+//#define STOREFORWARD_HOP_MAX 0 // How many hops should we allow the packet to be forwarded?
 
 
-*/
 
 StoreForwardPlugin *storeForwardPlugin;
 
@@ -34,25 +23,23 @@ int32_t StoreForwardPlugin::runOnce()
 
 #ifndef NO_ESP32
 
+    /* 
+        Calculate the time it takes for the maximum payload to be transmitted. Considering
+        most messages will be much shorter than this length, this will make us a good radio
+        neighbor and hopefully we won't use all the airtime.
+    */
+    //uint32_t packetTimeMax = 500;
+
     if (radioConfig.preferences.store_forward_plugin_enabled) {
 
         if (radioConfig.preferences.is_router) {
-            // Maybe some cleanup functions?
-            this->historyReport();
-            return (60 * 1000);
+            DEBUG_MSG("Store & Forward Plugin - packetTimeMax %d\n", this->packetTimeMax);
+            
+            return (500);
         } else {
-            /*
-             * If the plugin is turned on and is_router is not enabled, then we'll send a heartbeat every
-             * few minutes.
-             *
-             * This behavior is expected to change. It's only here until we come up with something better.
-             */
+            DEBUG_MSG("Store & Forward Plugin - Disabled (is_router = false)\n");
 
-            // DEBUG_MSG("Store & Forward Plugin - Sending heartbeat\n");
-
-            // storeForwardPlugin->sendPayload();
-
-            return (4 * 60 * 1000);
+            return (INT32_MAX);
         }
 
     } else {
@@ -75,6 +62,8 @@ void StoreForwardPlugin::populatePSRAM()
         https://learn.upesy.com/en/programmation/psram.html#psram-tab
     */
 
+   uint32_t store_forward_plugin_replay_max_records = 250;
+
     DEBUG_MSG("Before PSRAM initilization:\n");
 
     DEBUG_MSG("  Total heap: %d\n", ESP.getHeapSize());
@@ -87,8 +76,8 @@ void StoreForwardPlugin::populatePSRAM()
         (radioConfig.preferences.store_forward_plugin_records ? radioConfig.preferences.store_forward_plugin_records
                                                               : (((ESP.getFreePsram() / 3) * 2) / sizeof(PacketHistoryStruct)));
 
-    // this->packetHistory = (PacketHistoryStruct *)ps_calloc(numberOfPackets, sizeof(PacketHistoryStruct));
     this->packetHistory = static_cast<PacketHistoryStruct *>(ps_calloc(numberOfPackets, sizeof(PacketHistoryStruct)));
+    this->packetHistoryTXQueue = static_cast<PacketHistoryStruct *>(ps_calloc(store_forward_plugin_replay_max_records, sizeof(PacketHistoryStruct)));
     DEBUG_MSG("After PSRAM initilization:\n");
 
     DEBUG_MSG("  Total heap: %d\n", ESP.getHeapSize());
@@ -111,6 +100,12 @@ void StoreForwardPlugin::historyReport()
 void StoreForwardPlugin::historySend(uint32_t msAgo, uint32_t to)
 {
 
+    uint32_t packetsSent = 0;
+    char routerMessage[80];
+
+    strcpy(routerMessage, "** S&F - Sending history");
+    storeForwardPlugin->sendMessage(to, routerMessage);
+
     // MeshPacket mp;
     for (int i = 0; i < this->packetHistoryCurrent; i++) {
         if (this->packetHistory[i].time) {
@@ -125,20 +120,31 @@ void StoreForwardPlugin::historySend(uint32_t msAgo, uint32_t to)
                 DEBUG_MSG(">>>>> %s\n", this->packetHistory[i].payload);
 
                 storeForwardPlugin->sendPayload(to, i);
+
+                packetsSent++;
             }
 
             /*
                 Stored packet was intended to a named address
 
-                TODO: TEST ME! I don't know if this works.
+                TODO: 
+                  - TEST ME! I don't know if this works.
+                  - If this works, merge it into the "if" statement above.
+                      
             */
             if ((this->packetHistory[i].to & 0xffffffff) == to) {
                 DEBUG_MSG("Request: to-0x%08x, Stored: time-%u to-0x%08x\n", to & 0xffffffff, this->packetHistory[i].time,
                           this->packetHistory[i].to & 0xffffffff);
                 storeForwardPlugin->sendPayload(to, i);
+
+                packetsSent++;
             }
         }
     }
+
+    snprintf(routerMessage, 80, "** S&F - Sent %d message(s) - Done", packetsSent);
+    //strcpy(routerMessage, "** S&F - Sent x message(s)");
+    storeForwardPlugin->sendMessage(to, routerMessage);
 }
 
 void StoreForwardPlugin::historyAdd(const MeshPacket &mp)
@@ -176,6 +182,23 @@ void StoreForwardPlugin::sendPayload(NodeNum dest, uint32_t packetHistory_index)
         this->packetHistory[packetHistory_index].payload_size; // You must specify how many bytes are in the reply
     memcpy(p->decoded.payload.bytes, this->packetHistory[packetHistory_index].payload,
            this->packetHistory[packetHistory_index].payload_size);
+
+    service.sendToMesh(p);
+}
+
+void StoreForwardPlugin::sendMessage(NodeNum dest, char *str)
+{
+    MeshPacket *p = allocReply();
+
+    p->to = dest;
+
+    // Let's assume that if the router received the S&F request that the client is in range.
+    //   TODO: Make this configurable.
+    p->want_ack = false;
+
+    p->decoded.payload.size = strlen(str); // You must specify how many bytes are in the reply
+    memcpy(p->decoded.payload.bytes, str, strlen(str));
+
 
     service.sendToMesh(p);
 }
@@ -251,7 +274,14 @@ StoreForwardPlugin::StoreForwardPlugin()
 
                     // Do the startup here
 
+                    // Popupate PSRAM with our data structures.
                     this->populatePSRAM();
+
+                    // Calculate the packet time.
+                    //this->packetTimeMax = RadioLibInterface::instance->getPacketTime(Constants_DATA_PAYLOAD_LEN);
+                    //RadioLibInterface::instance->getPacketTime(Constants_DATA_PAYLOAD_LEN);
+                    RadioLibInterface::instance->getPacketTime(200);
+
                 } else {
                     DEBUG_MSG("Device has less than 1M of PSRAM free. Aborting startup.\n");
                     DEBUG_MSG("Store & Forward Plugin - Aborting Startup.\n");
