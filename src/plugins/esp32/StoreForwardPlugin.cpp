@@ -9,16 +9,21 @@
 #include <Arduino.h>
 #include <map>
 
-#define STOREFORWARD_MAX_PACKETS 0
+//#define STOREFORWARD_MAX_PACKETS 0
 #define STOREFORWARD_SEND_HISTORY_PERIOD 10 * 60
 #define STOREFORWARD_SEND_HISTORY_MAX 0
 #define STOREFORWARD_HOP_MAX 0 // How many hops should we allow the packet to be forwarded?
 
 /*
-    Jm's TODO:
+    TODO:
         - Be able to identify if you're within range of a router.
         - Be able to specify the HOP MAX to reduce airtime.
         - Restrict operation of S&F on the slow channel configurations.
+        - Build in rate limiting -- Don't allow a user to repeatedly request the history.
+
+    DONE:
+        Allow max history to be defined by radioConfig.preferences.store_forward_plugin_records
+
 
 */
 
@@ -43,9 +48,9 @@ int32_t StoreForwardPlugin::runOnce()
              * This behavior is expected to change. It's only here until we come up with something better.
              */
 
-            DEBUG_MSG("Store & Forward Plugin - Sending heartbeat\n");
+            //DEBUG_MSG("Store & Forward Plugin - Sending heartbeat\n");
 
-            storeForwardPlugin->sendPayload();
+            //storeForwardPlugin->sendPayload();
 
             return (4 * 60 * 1000);
         }
@@ -77,9 +82,9 @@ void StoreForwardPlugin::populatePSRAM()
     DEBUG_MSG("  Total PSRAM: %d\n", ESP.getPsramSize());
     DEBUG_MSG("  Free PSRAM: %d\n", ESP.getFreePsram());
 
-    // Use a maximum of half the available PSRAM unless otherwise specified.
-    uint32_t numberOfPackets =
-        STOREFORWARD_MAX_PACKETS ? STOREFORWARD_MAX_PACKETS : ((ESP.getPsramSize() / 2) / sizeof(PacketHistoryStruct));
+    // Use a maximum of 2/3 the available PSRAM unless otherwise specified.
+    uint32_t numberOfPackets =( radioConfig.preferences.store_forward_plugin_records ? radioConfig.preferences.store_forward_plugin_records :
+        ( ( (ESP.getFreePsram() / 3) * 2 )/ sizeof(PacketHistoryStruct)) );
 
     // this->packetHistory = (PacketHistoryStruct *)ps_calloc(numberOfPackets, sizeof(PacketHistoryStruct));
     this->packetHistory = static_cast<PacketHistoryStruct *>(ps_calloc(numberOfPackets, sizeof(PacketHistoryStruct)));
@@ -114,7 +119,7 @@ void StoreForwardPlugin::historyReport()
 void StoreForwardPlugin::historySend(uint32_t msAgo, uint32_t to)
 {
 
-    MeshPacket mp;
+    //MeshPacket mp;
     for (int i = 0; i < this->packetHistoryCurrent; i++) {
         if (this->packetHistory[i].time) {
 
@@ -125,18 +130,9 @@ void StoreForwardPlugin::historySend(uint32_t msAgo, uint32_t to)
                 DEBUG_MSG("Request: to-0x%08x, Stored: time-%u to-0x%08x\n", to & 0xffffffff, this->packetHistory[i].time,
                           this->packetHistory[i].to & 0xffffffff);
 
-                // bool pb_decode_from_bytes(const uint8_t *srcbuf, size_t srcbufsize, const pb_msgdesc_t *fields, void
-                // *dest_struct);
-                pb_decode_from_bytes(this->packetHistory[i].bytes, this->packetHistory[i].bytes_size, ToRadio_fields, &mp);
+                DEBUG_MSG(">>>>> %s\n", this->packetHistory[i].payload);
 
-                /*
-                    Take saved packet
-                    Decode it
-                    Read something form the decoded packet.
-                */
-                DEBUG_MSG(">>>>> %s\n", mp.decoded.payload.bytes);
-
-                storeForwardPlugin->sendPayload(to, true);
+                storeForwardPlugin->sendPayload(to, i);
             }
 
             /*
@@ -147,7 +143,7 @@ void StoreForwardPlugin::historySend(uint32_t msAgo, uint32_t to)
             if ((this->packetHistory[i].to & 0xffffffff) == to) {
                 DEBUG_MSG("Request: to-0x%08x, Stored: time-%u to-0x%08x\n", to & 0xffffffff, this->packetHistory[i].time,
                           this->packetHistory[i].to & 0xffffffff);
-                storeForwardPlugin->sendPayload(to, true);
+                storeForwardPlugin->sendPayload(to, i);
             }
 
             // break;
@@ -155,22 +151,19 @@ void StoreForwardPlugin::historySend(uint32_t msAgo, uint32_t to)
     }
 }
 
-void StoreForwardPlugin::historyAdd(const MeshPacket *mp)
+void StoreForwardPlugin::historyAdd(const MeshPacket &mp)
 {
-    auto &p = mp;
+    //auto &p = *mp.decoded;
+    auto &p = mp.decoded;
 
-    static uint8_t bytes[MAX_RHPACKETLEN];
-    size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), Data_fields, &p->decoded);
-    assert(numbytes <= MAX_RHPACKETLEN);
+    //uint16_t payloadSize = p.payload.size;
 
-    // DEBUG_MSG("MP numbytes %u\n", numbytes);
-
-    // destination, source, bytes
-    // memcpy(p->encrypted.bytes, bytes, numbytes);
-    memcpy(this->packetHistory[this->packetHistoryCurrent].bytes, bytes, MAX_RHPACKETLEN);
     this->packetHistory[this->packetHistoryCurrent].time = millis();
-    this->packetHistory[this->packetHistoryCurrent].to = mp->to;
-    this->packetHistory[this->packetHistoryCurrent].bytes_size = sizeof(bytes);
+    this->packetHistory[this->packetHistoryCurrent].to = mp.to;
+    this->packetHistory[this->packetHistoryCurrent].from = mp.from;
+    this->packetHistory[this->packetHistoryCurrent].payload_size = p.payload.size;
+    memcpy(this->packetHistory[this->packetHistoryCurrent].payload, p.payload.bytes, Constants_DATA_PAYLOAD_LEN);
+
     this->packetHistoryCurrent++;
 }
 
@@ -180,20 +173,23 @@ MeshPacket *StoreForwardPlugin::allocReply()
     return reply;
 }
 
-void StoreForwardPlugin::sendPayload(NodeNum dest, bool wantReplies)
+void StoreForwardPlugin::sendPayload(NodeNum dest, uint32_t packetHistory_index)
 {
     DEBUG_MSG("Sending S&F Payload\n");
     MeshPacket *p = allocReply();
+
     p->to = dest;
-    p->decoded.want_response = wantReplies;
+    p->from = this->packetHistory[packetHistory_index].from;
+    
+    // Let's assume that if the router received the S&F request that the client is in range.
+    //   TODO: Make this configurable.
+    p->want_ack = false; 
 
-    p->want_ack = true;
+    //static char heartbeatString[20];
+    //snprintf(heartbeatString, sizeof(heartbeatString), "From SF");
 
-    static char heartbeatString[20];
-    snprintf(heartbeatString, sizeof(heartbeatString), "From SF");
-
-    p->decoded.payload.size = strlen(heartbeatString); // You must specify how many bytes are in the reply
-    memcpy(p->decoded.payload.bytes, "From SF", 7);
+    p->decoded.payload.size = this->packetHistory[packetHistory_index].payload_size; // You must specify how many bytes are in the reply
+    memcpy(p->decoded.payload.bytes, this->packetHistory[packetHistory_index].payload, this->packetHistory[packetHistory_index].payload_size);
 
     service.sendToMesh(p);
 }
@@ -220,9 +216,10 @@ ProcessMessage StoreForwardPlugin::handleReceived(const MeshPacket &mp)
                 if ((p.payload.bytes[0] == 'S') && (p.payload.bytes[1] == 'F')) {
                     DEBUG_MSG("--- --- --- Request to send\n");
 
+                    // Send the last 5 minutes of messages.
                     storeForwardPlugin->historySend(5 * 1000 * 60, getFrom(&mp));
                 } else {
-                    storeForwardPlugin->historyAdd(&mp);
+                    storeForwardPlugin->historyAdd(mp);
                 }
 
             } else {
@@ -259,6 +256,7 @@ StoreForwardPlugin::StoreForwardPlugin()
         radioConfig.preferences.store_forward_plugin_enabled = 1;
         radioConfig.preferences.is_router = 1;
         radioConfig.preferences.is_always_powered = 1;
+        
     }
 
     if (radioConfig.preferences.store_forward_plugin_enabled) {

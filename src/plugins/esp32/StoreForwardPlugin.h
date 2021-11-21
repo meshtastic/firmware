@@ -9,9 +9,12 @@
 struct PacketHistoryStruct {
     uint32_t time;
     uint32_t to;
+    uint32_t from;
     bool ack;
-    uint8_t bytes[MAX_RHPACKETLEN];
-    uint8_t bytes_size;
+    uint8_t payload[Constants_DATA_PAYLOAD_LEN];
+    pb_size_t payload_size;
+    //uint8_t bytes[MAX_RHPACKETLEN];
+    //uint8_t bytes_size;
 };
 
 class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThread
@@ -30,7 +33,7 @@ class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThrea
      Update our local reference of when we last saw that node.
      @return 0 if we have never seen that node before otherwise return the last time we saw the node.
      */
-    void historyAdd(const MeshPacket *mp);
+    void historyAdd(const MeshPacket &mp);
     void historyReport();
     void historySend(uint32_t msAgo, uint32_t to);
     void populatePSRAM();
@@ -38,12 +41,12 @@ class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThrea
     /**
      * Send our payload into the mesh
      */
-    void sendPayload(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
+    void sendPayload(NodeNum dest = NODENUM_BROADCAST, uint32_t packetHistory_index = 0);
     virtual MeshPacket *allocReply();
     virtual bool wantPortnum(PortNum p) { return true; };
 
   private:
-    // Nothing here
+  // Nothing here.
 
   protected:
     virtual int32_t runOnce();
