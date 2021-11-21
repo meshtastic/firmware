@@ -13,8 +13,6 @@ struct PacketHistoryStruct {
     bool ack;
     uint8_t payload[Constants_DATA_PAYLOAD_LEN];
     pb_size_t payload_size;
-    //uint8_t bytes[MAX_RHPACKETLEN];
-    //uint8_t bytes_size;
 };
 
 class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThread
@@ -60,26 +58,3 @@ class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThrea
 };
 
 extern StoreForwardPlugin *storeForwardPlugin;
-
-/*
- * Radio interface for StoreForwardPlugin
- *
- */
-
-/*
-class StoreForwardPluginRadio : public SinglePortPlugin
-{
-    // uint32_t lastRxID;
-
-  public:
-    StoreForwardPluginRadio() : SinglePortPlugin("StoreForwardPluginRadio", PortNum_STORE_FORWARD_APP) {}
-    // StoreForwardPluginRadio() : SinglePortPlugin("StoreForwardPluginRadio", PortNum_TEXT_MESSAGE_APP) {}
-
-    void sendPayloadHeartbeat(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
-
-  protected:
-    virtual MeshPacket *allocReply2();
-};
-
-extern StoreForwardPluginRadio *storeForwardPluginRadio;
-*/

@@ -102,15 +102,6 @@ void StoreForwardPlugin::historyReport()
 {
     DEBUG_MSG("Iterating through the message history...\n");
     DEBUG_MSG("Message history contains %u records\n", this->packetHistoryCurrent);
-    /*
-    uint32_t startTimer = millis();
-    for (int i = 0; i < this->packetHistoryCurrent; i++) {
-        if (this->packetHistory[i].time) {
-            // DEBUG_MSG("... time-%u to-0x%08x\n", this->packetHistory[i].time, this->packetHistory[i].to & 0xffffffff);
-        }
-    }
-    DEBUG_MSG("StoreForwardPlugin::historyReport runtime - %u ms\n", millis() - startTimer);
-    */
 }
 
 /*
@@ -145,18 +136,13 @@ void StoreForwardPlugin::historySend(uint32_t msAgo, uint32_t to)
                           this->packetHistory[i].to & 0xffffffff);
                 storeForwardPlugin->sendPayload(to, i);
             }
-
-            // break;
         }
     }
 }
 
 void StoreForwardPlugin::historyAdd(const MeshPacket &mp)
 {
-    //auto &p = *mp.decoded;
     auto &p = mp.decoded;
-
-    //uint16_t payloadSize = p.payload.size;
 
     this->packetHistory[this->packetHistoryCurrent].time = millis();
     this->packetHistory[this->packetHistoryCurrent].to = mp.to;
@@ -184,9 +170,6 @@ void StoreForwardPlugin::sendPayload(NodeNum dest, uint32_t packetHistory_index)
     // Let's assume that if the router received the S&F request that the client is in range.
     //   TODO: Make this configurable.
     p->want_ack = false; 
-
-    //static char heartbeatString[20];
-    //snprintf(heartbeatString, sizeof(heartbeatString), "From SF");
 
     p->decoded.payload.size = this->packetHistory[packetHistory_index].payload_size; // You must specify how many bytes are in the reply
     memcpy(p->decoded.payload.bytes, this->packetHistory[packetHistory_index].payload, this->packetHistory[packetHistory_index].payload_size);
@@ -239,9 +222,6 @@ ProcessMessage StoreForwardPlugin::handleReceived(const MeshPacket &mp)
 StoreForwardPlugin::StoreForwardPlugin()
     : SinglePortPlugin("StoreForwardPlugin", PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("StoreForwardPlugin")
 {
-    // StoreForwardPlugin::StoreForwardPlugin()
-    //     : SinglePortPlugin("StoreForwardPlugin", PortNum_STORE_FORWARD_APP), concurrency::OSThread("StoreForwardPlugin")
-    //{
 
 #ifndef NO_ESP32
 
