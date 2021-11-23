@@ -5,12 +5,11 @@
 #include "plugins/RemoteHardwarePlugin.h"
 #include "plugins/ReplyPlugin.h"
 #include "plugins/TextMessagePlugin.h" 
-#include "plugins/SerialPlugin.h"
 #include "plugins/TextMessagePlugin.h"
 #include "plugins/RoutingPlugin.h"
 #include "plugins/AdminPlugin.h"
 #ifndef NO_ESP32
-#include "plugins/SerialPlugin.h"
+#include "plugins/esp32/SerialPlugin.h"
 #include "plugins/esp32/EnvironmentalMeasurementPlugin.h"
 #include "plugins/esp32/RangeTestPlugin.h"
 #include "plugins/esp32/StoreForwardPlugin.h"
