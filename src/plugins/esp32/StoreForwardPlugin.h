@@ -17,14 +17,20 @@ struct PacketHistoryStruct {
 
 class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThread
 {
-    bool firstTime = 1;
+    //bool firstTime = 1;
+    bool busy = 0;
+    uint32_t busyTo;
+    char routerMessage[80];
 
     uint32_t receivedRecord[50][2] = {{0}};
 
     PacketHistoryStruct *packetHistory;
-    PacketHistoryStruct *packetHistoryTXQueue;
     uint32_t packetHistoryCurrent = 0;
 
+    PacketHistoryStruct *packetHistoryTXQueue;
+    uint32_t packetHistoryTXQueue_size;
+    uint32_t packetHistoryTXQueue_index = 0;
+    
     uint32_t packetTimeMax = 0;
 
 
@@ -38,6 +44,8 @@ class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThrea
     void historyAdd(const MeshPacket &mp);
     void historyReport();
     void historySend(uint32_t msAgo, uint32_t to);
+
+    uint32_t historyQueueCreate(uint32_t msAgo, uint32_t to);
 
     /**
      * Send our payload into the mesh
