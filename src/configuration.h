@@ -256,6 +256,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // supported modules list
 #define USE_SX1262
 #define USE_SX1268
+#define USE_LLCC68
 
 // common pinouts for SX126X modules
 #define SX126X_CS 18 // NSS for SX126X
