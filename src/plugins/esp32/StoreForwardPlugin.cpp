@@ -2,18 +2,13 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
-#include "RadioLibInterface.h"
 #include "Router.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "plugins/PluginDev.h"
 #include <Arduino.h>
 #include <map>
-
-//#define STOREFORWARD_MAX_PACKETS 0
-//#define STOREFORWARD_SEND_HISTORY_PERIOD 10 * 60
-//#define STOREFORWARD_HOP_MAX 0 // How many hops should we allow the packet to be forwarded?
-
+#include <iterator>
 
 
 StoreForwardPlugin *storeForwardPlugin;
@@ -23,19 +18,30 @@ int32_t StoreForwardPlugin::runOnce()
 
 #ifndef NO_ESP32
 
-    /* 
-        Calculate the time it takes for the maximum payload to be transmitted. Considering
-        most messages will be much shorter than this length, this will make us a good radio
-        neighbor and hopefully we won't use all the airtime.
-    */
-    //uint32_t packetTimeMax = 500;
-
     if (radioConfig.preferences.store_forward_plugin_enabled) {
 
         if (radioConfig.preferences.is_router) {
-            DEBUG_MSG("Store & Forward Plugin - packetTimeMax %d\n", this->packetTimeMax);
-            
-            return (500);
+
+            if (this->busy) {
+                // Send out the message queue.
+
+                //DEBUG_MSG("--- --- --- In busy loop 1 %d\n", this->packetHistoryTXQueue_index);
+                storeForwardPlugin->sendPayload(this->busyTo, this->packetHistoryTXQueue_index);
+                
+                if (this->packetHistoryTXQueue_index == packetHistoryTXQueue_size) {
+                    strcpy(this->routerMessage, "** S&F - Done");
+                    storeForwardPlugin->sendMessage(this->busyTo, this->routerMessage);
+                    //DEBUG_MSG("--- --- --- In busy loop - Done \n");
+                    this->packetHistoryTXQueue_index = 0;
+                    this->busy = false;
+                } else {
+                    this->packetHistoryTXQueue_index++;
+                }
+
+            }
+
+            // TODO: Dynamicly adjust the time this returns in the loop based on the size of the packets being actually transmitted.
+            return (this->packetTimeMax);
         } else {
             DEBUG_MSG("Store & Forward Plugin - Disabled (is_router = false)\n");
 
@@ -62,7 +68,7 @@ void StoreForwardPlugin::populatePSRAM()
         https://learn.upesy.com/en/programmation/psram.html#psram-tab
     */
 
-   uint32_t store_forward_plugin_replay_max_records = 250;
+    uint32_t store_forward_plugin_replay_max_records = 250;
 
     DEBUG_MSG("Before PSRAM initilization:\n");
 
@@ -85,7 +91,7 @@ void StoreForwardPlugin::populatePSRAM()
     DEBUG_MSG("  Total PSRAM: %d\n", ESP.getPsramSize());
     DEBUG_MSG("  Free PSRAM: %d\n", ESP.getFreePsram());
     DEBUG_MSG("Store and Forward Stats:\n");
-    DEBUG_MSG("  numberOfPackets - %u\n", numberOfPackets);
+    DEBUG_MSG("  numberOfPackets for packetHistory - %u\n", numberOfPackets);
 }
 
 void StoreForwardPlugin::historyReport()
@@ -101,50 +107,66 @@ void StoreForwardPlugin::historySend(uint32_t msAgo, uint32_t to)
 {
 
     uint32_t packetsSent = 0;
-    char routerMessage[80];
+    
 
-    strcpy(routerMessage, "** S&F - Sending history");
-    storeForwardPlugin->sendMessage(to, routerMessage);
+    uint32_t queueSize = storeForwardPlugin->historyQueueCreate(msAgo, to);
 
-    // MeshPacket mp;
+    if (queueSize) {
+        snprintf(this->routerMessage, 80, "** S&F - Sending %d message(s)", queueSize);
+        storeForwardPlugin->sendMessage(to, this->routerMessage);
+
+        this->busy = true; // runOnce() will pickup the next steps once busy = true.
+        this->busyTo = to;
+
+    } else {
+        strcpy(this->routerMessage, "** S&F - No history to send");
+        storeForwardPlugin->sendMessage(to, this->routerMessage);
+    }
+}
+
+uint32_t StoreForwardPlugin::historyQueueCreate(uint32_t msAgo, uint32_t to) {
+    
+    //uint32_t packetHistoryTXQueueIndex = 0;
+
+    this->packetHistoryTXQueue_size = 0;
+
     for (int i = 0; i < this->packetHistoryCurrent; i++) {
-        if (this->packetHistory[i].time) {
-
+        /*
+            DEBUG_MSG("SF historyQueueCreate\n");
+            DEBUG_MSG("SF historyQueueCreate - time %d\n", this->packetHistory[i].time);
+            DEBUG_MSG("SF historyQueueCreate - millis %d\n", millis());
+            DEBUG_MSG("SF historyQueueCreate - math %d\n", (millis() - msAgo));
+        */
+        if (this->packetHistory[i].time && (this->packetHistory[i].time < (millis() - msAgo))) {
+            DEBUG_MSG("SF historyQueueCreate - Time matches - ok\n");
             /*
-                Stored packet was sent to a broadcast address
+                Copy the messages that were received by the router in the last msAgo
+                to the packetHistoryTXQueue structure.
+
+                TODO: The condition (this->packetHistory[i].to & 0xffffffff) == to) is not tested since
+                I don't have an easy way to target a specific user. Will need to do this soon.
             */
-            if ((this->packetHistory[i].to & 0xffffffff) == 0xffffffff) {
-                DEBUG_MSG("Request: to-0x%08x, Stored: time-%u to-0x%08x\n", to & 0xffffffff, this->packetHistory[i].time,
-                          this->packetHistory[i].to & 0xffffffff);
+            if ((this->packetHistory[i].to & 0xffffffff) == 0xffffffff
+                ||
+                ((this->packetHistory[i].to & 0xffffffff) == to)
+                ) {
+                this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].time = this->packetHistory[i].time;
+                this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].to = this->packetHistory[i].to;
+                this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].from = this->packetHistory[i].from;
+                this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].payload_size = this->packetHistory[i].payload_size;
+                memcpy(this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].payload, this->packetHistory[i].payload, Constants_DATA_PAYLOAD_LEN);
+                this->packetHistoryTXQueue_size++;
 
-                DEBUG_MSG(">>>>> %s\n", this->packetHistory[i].payload);
+                DEBUG_MSG("PacketHistoryStruct time=%d\n", this->packetHistory[i].time);
+                DEBUG_MSG("PacketHistoryStruct msg=%.*s\n", this->packetHistory[i].payload);
+                //DEBUG_MSG("PacketHistoryStruct msg=%.*s\n", this->packetHistoryTXQueue[packetHistoryTXQueueIndex].payload);
 
-                storeForwardPlugin->sendPayload(to, i);
 
-                packetsSent++;
             }
 
-            /*
-                Stored packet was intended to a named address
-
-                TODO: 
-                  - TEST ME! I don't know if this works.
-                  - If this works, merge it into the "if" statement above.
-                      
-            */
-            if ((this->packetHistory[i].to & 0xffffffff) == to) {
-                DEBUG_MSG("Request: to-0x%08x, Stored: time-%u to-0x%08x\n", to & 0xffffffff, this->packetHistory[i].time,
-                          this->packetHistory[i].to & 0xffffffff);
-                storeForwardPlugin->sendPayload(to, i);
-
-                packetsSent++;
-            }
         }
     }
-
-    snprintf(routerMessage, 80, "** S&F - Sent %d message(s) - Done", packetsSent);
-    //strcpy(routerMessage, "** S&F - Sent x message(s)");
-    storeForwardPlugin->sendMessage(to, routerMessage);
+    return this->packetHistoryTXQueue_size;
 }
 
 void StoreForwardPlugin::historyAdd(const MeshPacket &mp)
@@ -172,16 +194,16 @@ void StoreForwardPlugin::sendPayload(NodeNum dest, uint32_t packetHistory_index)
     MeshPacket *p = allocReply();
 
     p->to = dest;
-    p->from = this->packetHistory[packetHistory_index].from;
+    p->from = this->packetHistoryTXQueue[packetHistory_index].from;
 
     // Let's assume that if the router received the S&F request that the client is in range.
     //   TODO: Make this configurable.
     p->want_ack = false;
 
     p->decoded.payload.size =
-        this->packetHistory[packetHistory_index].payload_size; // You must specify how many bytes are in the reply
-    memcpy(p->decoded.payload.bytes, this->packetHistory[packetHistory_index].payload,
-           this->packetHistory[packetHistory_index].payload_size);
+        this->packetHistoryTXQueue[packetHistory_index].payload_size; // You must specify how many bytes are in the reply
+    memcpy(p->decoded.payload.bytes, this->packetHistoryTXQueue[packetHistory_index].payload,
+           this->packetHistoryTXQueue[packetHistory_index].payload_size);
 
     service.sendToMesh(p);
 }
@@ -214,19 +236,24 @@ ProcessMessage StoreForwardPlugin::handleReceived(const MeshPacket &mp)
 
         // The router node should not be sending messages as a client.
         if (getFrom(&mp) != nodeDB.getNodeNum()) {
-            printPacket("PACKET FROM RADIO", &mp);
-            // DEBUG_MSG("We last saw this node (%u), %u sec ago\n", mp.from & 0xffffffff, (millis() - sawTime) / 1000);
-            // DEBUG_MSG("    --------------   ");
+
             if (mp.decoded.portnum == PortNum_TEXT_MESSAGE_APP) {
                 DEBUG_MSG("Packet came from - PortNum_TEXT_MESSAGE_APP\n");
 
-                DEBUG_MSG("--- --- --- %s \n", p.payload.bytes);
-
-                if ((p.payload.bytes[0] == 'S') && (p.payload.bytes[1] == 'F')) {
+                if ((p.payload.bytes[0] == 'S') && (p.payload.bytes[1] == 'F') && (p.payload.bytes[2] == 0x00)) {
                     DEBUG_MSG("--- --- --- Request to send\n");
 
-                    // Send the last 5 minutes of messages.
-                    storeForwardPlugin->historySend(5 * 1000 * 60, getFrom(&mp));
+                    // Send the last 60 minutes of messages.
+                    if (this->busy) {
+                        strcpy(this->routerMessage, "** S&F - Busy. Try again shortly.");
+                        storeForwardPlugin->sendMessage(getFrom(&mp), this->routerMessage);
+                    } else {
+                        storeForwardPlugin->historySend(1000 * 60, getFrom(&mp));
+                    }
+                } else if ((p.payload.bytes[0] == 'S') && (p.payload.bytes[1] == 'F') && (p.payload.bytes[2] == 'm') && (p.payload.bytes[3] == 0x00)) {
+                    strcpy(this->routerMessage, "012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456");
+                    storeForwardPlugin->sendMessage(getFrom(&mp), this->routerMessage);
+
                 } else {
                     storeForwardPlugin->historyAdd(mp);
                 }
@@ -259,9 +286,9 @@ StoreForwardPlugin::StoreForwardPlugin()
             without having to configure it from the PythonAPI or WebUI.
         */
 
-        radioConfig.preferences.store_forward_plugin_enabled = 1;
-        radioConfig.preferences.is_router = 1;
-        radioConfig.preferences.is_always_powered = 1;
+        // radioConfig.preferences.store_forward_plugin_enabled = 1;
+        // radioConfig.preferences.is_router = 1;
+        // radioConfig.preferences.is_always_powered = 1;
     }
 
     if (radioConfig.preferences.store_forward_plugin_enabled) {
@@ -278,9 +305,12 @@ StoreForwardPlugin::StoreForwardPlugin()
                     this->populatePSRAM();
 
                     // Calculate the packet time.
-                    //this->packetTimeMax = RadioLibInterface::instance->getPacketTime(Constants_DATA_PAYLOAD_LEN);
+                    // this->packetTimeMax = RadioLibInterface::instance->getPacketTime(Constants_DATA_PAYLOAD_LEN);
                     //RadioLibInterface::instance->getPacketTime(Constants_DATA_PAYLOAD_LEN);
-                    RadioLibInterface::instance->getPacketTime(200);
+                    //RadioLibInterface::instance->getPacketTime(Constants_DATA_PAYLOAD_LEN);
+                    //RadioInterface::getPacketTime(500)l
+
+                    this->packetTimeMax = 2000;
 
                 } else {
                     DEBUG_MSG("Device has less than 1M of PSRAM free. Aborting startup.\n");
