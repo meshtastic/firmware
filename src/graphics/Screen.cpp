@@ -226,6 +226,13 @@ static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->drawString(0 + x, FONT_HEIGHT_MEDIUM + y, "For help, please post on\nmeshtastic.discourse.group");
 }
 
+// Ignore messages orginating from phone (from the current node 0x0) unless range test or store and forward plugin are enabled
+static bool shouldDrawMessage(const MeshPacket *packet) {
+    return packet->from != 0 &&
+        !radioConfig.preferences.range_test_plugin_enabled &&
+        !radioConfig.preferences.store_forward_plugin_enabled;
+}
+
 /// Draw the last text message we received
 static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -925,8 +932,8 @@ void Screen::setFrames()
     if (myNodeInfo.error_code)
         normalFrames[numframes++] = drawCriticalFaultFrame;
 
-    // If we have a text message - show it next
-    if (devicestate.has_rx_text_message)
+    // If we have a text message - show it next, unless it's a phone message and we aren't using any special plugins
+    if (devicestate.has_rx_text_message && shouldDrawMessage(&devicestate.rx_text_message))
         normalFrames[numframes++] = drawTextMessageFrame;
 
     // then all the nodes
@@ -1357,8 +1364,7 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
     return 0;
 }
 
-int Screen::handleTextMessage(const MeshPacket *arg)
-{
+int Screen::handleTextMessage(const MeshPacket *packet) {
     if (showingNormalScreen) {
         setFrames(); // Regen the list of screens (will show new text message)
     }
