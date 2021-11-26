@@ -220,6 +220,9 @@ class Screen : public concurrency::OSThread
     /// Used to force (super slow) eink displays to draw critical frames
     void forceDisplay();
 
+    /// Draws our SSL cert screen during boot (called from WebServer)
+    void setSSLFrames();
+
   protected:
     /// Updates the UI.
     //
