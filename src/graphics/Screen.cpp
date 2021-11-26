@@ -210,6 +210,16 @@ static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, i
     // display->drawString(64 + x, 26 + y, btPIN);
 }
 
+static void drawFrameSSL(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->setFont(FONT_SMALL);
+    display->drawString(64 + x, y, "Creating SSL Cert");
+
+    display->setFont(FONT_SMALL);
+    display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait...");
+}
+
 /// Draw the last text message we received
 static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -896,6 +906,16 @@ void Screen::drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiStat
 {
     Screen *screen = reinterpret_cast<Screen *>(state->userData);
     screen->debugInfo.drawFrameWiFi(display, state, x, y);
+}
+
+/* show a message that the SSL cert is being built
+ * it is expected that this will be used during the boot phase */
+void Screen::setSSLFrames()
+{
+    DEBUG_MSG("showing SSL frames\n");
+    static FrameCallback sslFrames[] = {drawFrameSSL};
+    ui.setFrames(sslFrames, 1);
+    ui.update();
 }
 
 // restore our regular frame list
