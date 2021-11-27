@@ -198,6 +198,9 @@ typedef struct _User {
     HardwareModel hw_model;
     bool is_licensed;
     Team team;
+    uint32_t tx_power_dbm;
+    uint32_t ant_gain_dbi;
+    uint32_t ant_azimuth;
 } User;
 
 typedef PB_BYTES_ARRAY_T(256) MeshPacket_encrypted_t;
@@ -306,7 +309,7 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define Position_init_default                    {0, 0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define User_init_default                        {"", "", "", {0}, _HardwareModel_MIN, 0, _Team_MIN}
+#define User_init_default                        {"", "", "", {0}, _HardwareModel_MIN, 0, _Team_MIN, 0, 0, 0}
 #define RouteDiscovery_init_default              {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_default                     {0, {RouteDiscovery_init_default}}
 #define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0}
@@ -318,7 +321,7 @@ extern "C" {
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
 #define ToRadio_PeerInfo_init_default            {0, 0}
 #define Position_init_zero                       {0, 0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define User_init_zero                           {"", "", "", {0}, _HardwareModel_MIN, 0, _Team_MIN}
+#define User_init_zero                           {"", "", "", {0}, _HardwareModel_MIN, 0, _Team_MIN, 0, 0, 0}
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_zero                        {0, {RouteDiscovery_init_zero}}
 #define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0}
@@ -387,6 +390,9 @@ extern "C" {
 #define User_hw_model_tag                        6
 #define User_is_licensed_tag                     7
 #define User_team_tag                            8
+#define User_tx_power_dbm_tag                    10
+#define User_ant_gain_dbi_tag                    11
+#define User_ant_azimuth_tag                     12
 #define MeshPacket_from_tag                      1
 #define MeshPacket_to_tag                        2
 #define MeshPacket_channel_tag                   3
@@ -454,7 +460,10 @@ X(a, STATIC,   SINGULAR, STRING,   short_name,        3) \
 X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, macaddr,           4) \
 X(a, STATIC,   SINGULAR, UENUM,    hw_model,          6) \
 X(a, STATIC,   SINGULAR, BOOL,     is_licensed,       7) \
-X(a, STATIC,   SINGULAR, UENUM,    team,              8)
+X(a, STATIC,   SINGULAR, UENUM,    team,              8) \
+X(a, STATIC,   SINGULAR, UINT32,   tx_power_dbm,     10) \
+X(a, STATIC,   SINGULAR, UINT32,   ant_gain_dbi,     11) \
+X(a, STATIC,   SINGULAR, UINT32,   ant_azimuth,      12)
 #define User_CALLBACK NULL
 #define User_DEFAULT NULL
 
@@ -595,12 +604,12 @@ extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define Position_size                            153
-#define User_size                                78
+#define User_size                                96
 #define RouteDiscovery_size                      40
 #define Routing_size                             42
 #define Data_size                                260
 #define MeshPacket_size                          309
-#define NodeInfo_size                            252
+#define NodeInfo_size                            270
 #define MyNodeInfo_size                          101
 #define LogRecord_size                           81
 #define FromRadio_size                           318
