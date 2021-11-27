@@ -101,7 +101,6 @@ typedef struct _RadioConfig_UserPreferences {
     bool wifi_ap_mode;
     RegionCode region;
     ChargeCurrent charge_current;
-    bool position_broadcast_smart;
     LocationSharing location_share;
     GpsOperation gps_operation;
     uint32_t gps_update_interval;
@@ -147,6 +146,7 @@ typedef struct _RadioConfig_UserPreferences {
     bool store_forward_plugin_enabled;
     uint32_t position_flags;
     bool is_always_powered;
+    uint32_t auto_screen_carousel_secs;
 } RadioConfig_UserPreferences;
 
 typedef struct _RadioConfig {
@@ -191,9 +191,9 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default}
-#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0, 0, 0}
+#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0, 0, 0, 0}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero}
-#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0, 0, 0}
+#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0, 0, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define RadioConfig_UserPreferences_position_broadcast_secs_tag 1
@@ -211,7 +211,6 @@ extern "C" {
 #define RadioConfig_UserPreferences_wifi_ap_mode_tag 14
 #define RadioConfig_UserPreferences_region_tag   15
 #define RadioConfig_UserPreferences_charge_current_tag 16
-#define RadioConfig_UserPreferences_position_broadcast_smart_tag 17
 #define RadioConfig_UserPreferences_location_share_tag 32
 #define RadioConfig_UserPreferences_gps_operation_tag 33
 #define RadioConfig_UserPreferences_gps_update_interval_tag 34
@@ -256,6 +255,7 @@ extern "C" {
 #define RadioConfig_UserPreferences_store_forward_plugin_enabled_tag 148
 #define RadioConfig_UserPreferences_position_flags_tag 150
 #define RadioConfig_UserPreferences_is_always_powered_tag 151
+#define RadioConfig_UserPreferences_auto_screen_carousel_secs_tag 152
 #define RadioConfig_preferences_tag              1
 
 /* Struct field encoding specification for nanopb */
@@ -281,7 +281,6 @@ X(a, STATIC,   SINGULAR, STRING,   wifi_password,    13) \
 X(a, STATIC,   SINGULAR, BOOL,     wifi_ap_mode,     14) \
 X(a, STATIC,   SINGULAR, UENUM,    region,           15) \
 X(a, STATIC,   SINGULAR, UENUM,    charge_current,   16) \
-X(a, STATIC,   SINGULAR, BOOL,     position_broadcast_smart,  17) \
 X(a, STATIC,   SINGULAR, UENUM,    location_share,   32) \
 X(a, STATIC,   SINGULAR, UENUM,    gps_operation,    33) \
 X(a, STATIC,   SINGULAR, UINT32,   gps_update_interval,  34) \
@@ -325,7 +324,8 @@ X(a, STATIC,   SINGULAR, UENUM,    environmental_measurement_plugin_sensor_type,
 X(a, STATIC,   SINGULAR, UINT32,   environmental_measurement_plugin_sensor_pin, 147) \
 X(a, STATIC,   SINGULAR, BOOL,     store_forward_plugin_enabled, 148) \
 X(a, STATIC,   SINGULAR, UINT32,   position_flags,  150) \
-X(a, STATIC,   SINGULAR, BOOL,     is_always_powered, 151)
+X(a, STATIC,   SINGULAR, BOOL,     is_always_powered, 151) \
+X(a, STATIC,   SINGULAR, UINT32,   auto_screen_carousel_secs, 152)
 #define RadioConfig_UserPreferences_CALLBACK NULL
 #define RadioConfig_UserPreferences_DEFAULT NULL
 
@@ -337,8 +337,8 @@ extern const pb_msgdesc_t RadioConfig_UserPreferences_msg;
 #define RadioConfig_UserPreferences_fields &RadioConfig_UserPreferences_msg
 
 /* Maximum encoded size of messages (where known) */
-#define RadioConfig_size                         420
-#define RadioConfig_UserPreferences_size         417
+#define RadioConfig_size                         424
+#define RadioConfig_UserPreferences_size         421
 
 #ifdef __cplusplus
 } /* extern "C" */
