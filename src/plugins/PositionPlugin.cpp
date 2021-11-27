@@ -4,6 +4,8 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include "Router.h"
+#include "gps/GeoCoord.h"
+
 
 PositionPlugin *positionPlugin;
 
@@ -144,6 +146,9 @@ int32_t PositionPlugin::runOnce()
 
         lastGpsSend = now;
 
+        lastGpsLatitude = node->position.latitude_i;
+        lastGpsLongitude = node->position.longitude_i;
+
         // If we changed channels, ask everyone else for their latest info
         bool requestReplies = currentGeneration != radioGeneration;
         currentGeneration = radioGeneration;
@@ -151,6 +156,33 @@ int32_t PositionPlugin::runOnce()
         DEBUG_MSG("Sending pos@%x:6 to mesh (wantReplies=%d)\n", 
                     node->position.pos_timestamp, requestReplies);
         sendOurPosition(NODENUM_BROADCAST, requestReplies);
+    } else if (radioConfig.preferences.position_broadcast_smart == true) {
+        // radioConfig.preferences.position_broadcast_smart
+        //NodeInfo *node = service.refreshMyNodeInfo(); // should guarantee there is now a position
+        
+        if (node->has_position && (node->position.latitude_i != 0 || node->position.longitude_i != 0) ) {
+            float distance = GeoCoord::latLongToMeter(lastGpsLatitude * 1e-7, lastGpsLongitude * 1e-7,
+                                node->position.latitude_i * 1e-7, node->position.longitude_i * 1e-7);
+
+            // Please don't change this value. This accomodates for possible poor positioning
+            //   in the event the GPS has a poor satelite lock.
+            const uint8_t distanceTravel = 100; 
+
+            // Minimum time between position updates.
+            const uint8_t timeTravel = 60; 
+
+            // If the distance traveled since the last update is greater than 100 meters
+            //   and it's been at least 60 seconds since the last update
+            if ((abs(distance) >= distanceTravel) && (lastGpsSend == 0 || now - timeTravel >= getPref_position_broadcast_secs() * 1000)) {
+                bool requestReplies = currentGeneration != radioGeneration;
+                currentGeneration = radioGeneration;
+
+                DEBUG_MSG("Sending pos@%x:6 to mesh (wantReplies=%d)\n", 
+                            node->position.pos_timestamp, requestReplies);
+                sendOurPosition(NODENUM_BROADCAST, requestReplies);
+
+            }
+        }
     }
 
     return 5000; // to save power only wake for our callback occasionally
