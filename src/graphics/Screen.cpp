@@ -794,6 +794,8 @@ void Screen::forceDisplay()
 #endif
 }
 
+static uint32_t lastScreenTransition;
+
 int32_t Screen::runOnce()
 {
     // If we don't have a screen, don't ever spend any CPU for us.
@@ -870,8 +872,13 @@ int32_t Screen::runOnce()
     // standard screen switching is stopped.
     if (showingNormalScreen) {
         // standard screen loop handling here
+        if (radioConfig.preferences.auto_screen_carousel_secs > 0 && 
+            (millis() - lastScreenTransition) > (radioConfig.preferences.auto_screen_carousel_secs * 1000)) {
+            DEBUG_MSG("LastScreenTransition exceeded %ums transitioning to next frame\n", (millis() - lastScreenTransition));
+            handleOnPress();
+        }
     }
-
+    
     // DEBUG_MSG("want fps %d, fixed=%d\n", targetFramerate,
     // ui.getUiState()->frameState); If we are scrolling we need to be called
     // soon, otherwise just 1 fps (to save CPU) We also ask to be called twice
@@ -933,8 +940,9 @@ void Screen::setFrames()
         normalFrames[numframes++] = drawCriticalFaultFrame;
 
     // If we have a text message - show it next, unless it's a phone message and we aren't using any special plugins
-    if (devicestate.has_rx_text_message && shouldDrawMessage(&devicestate.rx_text_message))
+    if (devicestate.has_rx_text_message && shouldDrawMessage(&devicestate.rx_text_message)) {
         normalFrames[numframes++] = drawTextMessageFrame;
+    }
 
     // then all the nodes
     // We only show a few nodes in our scrolling list - because meshes with many nodes would have too many screens
@@ -1025,11 +1033,13 @@ void Screen::handlePrint(const char *text)
 
 void Screen::handleOnPress()
 {
+    DEBUG_MSG("handleOnPress");   
     // If screen was off, just wake it, otherwise advance to next frame
     // If we are in a transition, the press must have bounced, drop it.
     if (ui.getUiState()->frameState == FIXED) {
         ui.nextFrame();
-
+        DEBUG_MSG("Setting LastScreenTransition\n");
+        lastScreenTransition = millis();
         setFastFramerate();
     }
 }
