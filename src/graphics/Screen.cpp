@@ -1032,8 +1032,7 @@ void Screen::handlePrint(const char *text)
 }
 
 void Screen::handleOnPress()
-{
-    DEBUG_MSG("handleOnPress");   
+{  
     // If screen was off, just wake it, otherwise advance to next frame
     // If we are in a transition, the press must have bounced, drop it.
     if (ui.getUiState()->frameState == FIXED) {
