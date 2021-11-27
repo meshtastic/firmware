@@ -139,6 +139,8 @@ void PositionPlugin::sendOurPosition(NodeNum dest, bool wantReplies)
 int32_t PositionPlugin::runOnce()
 {
     NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
+    
+    // radioConfig.preferences.position_broadcast_smart = true;
 
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();
@@ -157,18 +159,19 @@ int32_t PositionPlugin::runOnce()
                     node->position.pos_timestamp, requestReplies);
         sendOurPosition(NODENUM_BROADCAST, requestReplies);
     } else if (radioConfig.preferences.position_broadcast_smart == true) {
-        // radioConfig.preferences.position_broadcast_smart
         //NodeInfo *node = service.refreshMyNodeInfo(); // should guarantee there is now a position
-        
+
         if (node->has_position && (node->position.latitude_i != 0 || node->position.longitude_i != 0) ) {
             float distance = GeoCoord::latLongToMeter(lastGpsLatitude * 1e-7, lastGpsLongitude * 1e-7,
                                 node->position.latitude_i * 1e-7, node->position.longitude_i * 1e-7);
 
             // Please don't change this value. This accomodates for possible poor positioning
             //   in the event the GPS has a poor satelite lock.
-            const uint8_t distanceTravel = 100; 
+            const uint8_t distanceTravel = 150; 
 
-            // Minimum time between position updates.
+            /* Minimum time between position updates.
+               Note: At an average walking speed of 3.5mph, it takes 90 seconds to travel 150 meters.
+            */
             const uint8_t timeTravel = 60; 
 
             // If the distance traveled since the last update is greater than 100 meters
@@ -177,7 +180,7 @@ int32_t PositionPlugin::runOnce()
                 bool requestReplies = currentGeneration != radioGeneration;
                 currentGeneration = radioGeneration;
 
-                DEBUG_MSG("Sending pos@%x:6 to mesh (wantReplies=%d)\n", 
+                DEBUG_MSG("Sending smart pos@%x:6 to mesh (wantReplies=%d)\n", 
                             node->position.pos_timestamp, requestReplies);
                 sendOurPosition(NODENUM_BROADCAST, requestReplies);
 
