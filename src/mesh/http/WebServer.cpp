@@ -1,3 +1,4 @@
+#include "main.h"
 #include "mesh/http/WebServer.h"
 #include "NodeDB.h"
 #include "mesh/http/WiFiAPClient.h"
@@ -77,7 +78,7 @@ static void taskCreateCert(void *parameter)
 {
     prefs.begin("MeshtasticHTTPS", false);
 
-    // Delete the saved certs
+    // Delete the saved certs (used in debugging)
     if (0) {
         DEBUG_MSG("Deleting any saved SSL keys ...\n");
         // prefs.clear();
@@ -166,11 +167,16 @@ void createSSLCert()
                     NULL);          /* Task handle. */
 
         DEBUG_MSG("Waiting for SSL Cert to be generated.\n");
+        int seconds = 0;
         while (!isCertReady) {
             DEBUG_MSG(".");
             delay(1000);
             yield();
             esp_task_wdt_reset();
+            seconds++;
+            if ((seconds == 3) && screen) {
+                screen->setSSLFrames();
+            }
         }
         DEBUG_MSG("SSL Cert Ready!\n");
     }
