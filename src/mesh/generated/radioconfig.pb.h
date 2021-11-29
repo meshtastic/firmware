@@ -136,6 +136,8 @@ typedef struct _RadioConfig_UserPreferences {
     uint32_t range_test_plugin_sender;
     bool range_test_plugin_save;
     uint32_t store_forward_plugin_records;
+    uint32_t store_forward_plugin_history_return_max;
+    uint32_t store_forward_plugin_history_return_window;
     bool environmental_measurement_plugin_measurement_enabled;
     bool environmental_measurement_plugin_screen_enabled;
     uint32_t environmental_measurement_plugin_read_error_count_threshold;
@@ -145,6 +147,7 @@ typedef struct _RadioConfig_UserPreferences {
     RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType environmental_measurement_plugin_sensor_type;
     uint32_t environmental_measurement_plugin_sensor_pin;
     bool store_forward_plugin_enabled;
+    bool store_forward_plugin_heartbeat;
     uint32_t position_flags;
     bool is_always_powered;
 } RadioConfig_UserPreferences;
@@ -191,9 +194,9 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default}
-#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0, 0, 0}
+#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0, 0, 0, 0}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero}
-#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0, 0, 0}
+#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0, 0, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define RadioConfig_UserPreferences_position_broadcast_secs_tag 1
@@ -245,6 +248,8 @@ extern "C" {
 #define RadioConfig_UserPreferences_range_test_plugin_sender_tag 133
 #define RadioConfig_UserPreferences_range_test_plugin_save_tag 134
 #define RadioConfig_UserPreferences_store_forward_plugin_records_tag 137
+#define RadioConfig_UserPreferences_store_forward_plugin_history_return_max_tag 138
+#define RadioConfig_UserPreferences_store_forward_plugin_history_return_window_tag 139
 #define RadioConfig_UserPreferences_environmental_measurement_plugin_measurement_enabled_tag 140
 #define RadioConfig_UserPreferences_environmental_measurement_plugin_screen_enabled_tag 141
 #define RadioConfig_UserPreferences_environmental_measurement_plugin_read_error_count_threshold_tag 142
@@ -254,6 +259,7 @@ extern "C" {
 #define RadioConfig_UserPreferences_environmental_measurement_plugin_sensor_type_tag 146
 #define RadioConfig_UserPreferences_environmental_measurement_plugin_sensor_pin_tag 147
 #define RadioConfig_UserPreferences_store_forward_plugin_enabled_tag 148
+#define RadioConfig_UserPreferences_store_forward_plugin_heartbeat_tag 149
 #define RadioConfig_UserPreferences_position_flags_tag 150
 #define RadioConfig_UserPreferences_is_always_powered_tag 151
 #define RadioConfig_preferences_tag              1
@@ -315,6 +321,8 @@ X(a, STATIC,   SINGULAR, BOOL,     range_test_plugin_enabled, 132) \
 X(a, STATIC,   SINGULAR, UINT32,   range_test_plugin_sender, 133) \
 X(a, STATIC,   SINGULAR, BOOL,     range_test_plugin_save, 134) \
 X(a, STATIC,   SINGULAR, UINT32,   store_forward_plugin_records, 137) \
+X(a, STATIC,   SINGULAR, UINT32,   store_forward_plugin_history_return_max, 138) \
+X(a, STATIC,   SINGULAR, UINT32,   store_forward_plugin_history_return_window, 139) \
 X(a, STATIC,   SINGULAR, BOOL,     environmental_measurement_plugin_measurement_enabled, 140) \
 X(a, STATIC,   SINGULAR, BOOL,     environmental_measurement_plugin_screen_enabled, 141) \
 X(a, STATIC,   SINGULAR, UINT32,   environmental_measurement_plugin_read_error_count_threshold, 142) \
@@ -324,6 +332,7 @@ X(a, STATIC,   SINGULAR, BOOL,     environmental_measurement_plugin_display_fare
 X(a, STATIC,   SINGULAR, UENUM,    environmental_measurement_plugin_sensor_type, 146) \
 X(a, STATIC,   SINGULAR, UINT32,   environmental_measurement_plugin_sensor_pin, 147) \
 X(a, STATIC,   SINGULAR, BOOL,     store_forward_plugin_enabled, 148) \
+X(a, STATIC,   SINGULAR, BOOL,     store_forward_plugin_heartbeat, 149) \
 X(a, STATIC,   SINGULAR, UINT32,   position_flags,  150) \
 X(a, STATIC,   SINGULAR, BOOL,     is_always_powered, 151)
 #define RadioConfig_UserPreferences_CALLBACK NULL
@@ -337,8 +346,8 @@ extern const pb_msgdesc_t RadioConfig_UserPreferences_msg;
 #define RadioConfig_UserPreferences_fields &RadioConfig_UserPreferences_msg
 
 /* Maximum encoded size of messages (where known) */
-#define RadioConfig_size                         420
-#define RadioConfig_UserPreferences_size         417
+#define RadioConfig_size                         437
+#define RadioConfig_UserPreferences_size         434
 
 #ifdef __cplusplus
 } /* extern "C" */
