@@ -57,7 +57,7 @@ static int32_t reconnectWiFi()
         if (*wifiName) {
             needReconnect = false;
 
-            DEBUG_MSG("... Reconnecting to WiFi access point");
+            DEBUG_MSG("... Reconnecting to WiFi access point\n");
             WiFi.mode(WIFI_MODE_STA);
             WiFi.begin(wifiName, wifiPsw);
         }
