@@ -13,6 +13,10 @@ class PositionPlugin : public ProtobufPlugin<Position>, private concurrency::OST
     /// We limit our GPS broadcasts to a max rate
     uint32_t lastGpsSend = 0;
 
+    // Store the latest good lat / long
+    uint32_t lastGpsLatitude = 0;
+    uint32_t lastGpsLongitude = 0;
+
     /// We force a rebroadcast if the radio settings change
     uint32_t currentGeneration = 0;
 
