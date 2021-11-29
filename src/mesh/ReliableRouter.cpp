@@ -26,7 +26,7 @@ ErrorCode ReliableRouter::send(MeshPacket *p)
     return FloodingRouter::send(p);
 }
 
-bool ReliableRouter::shouldFilterReceived(const MeshPacket *p)
+bool ReliableRouter::shouldFilterReceived(MeshPacket *p)
 {
     // Note: do not use getFrom() here, because we want to ignore messages sent from phone
     if (p->to == NODENUM_BROADCAST && p->from == getNodeNum()) {
@@ -51,6 +51,17 @@ bool ReliableRouter::shouldFilterReceived(const MeshPacket *p)
         }
         else {
             DEBUG_MSG("didn't find pending packet\n");
+        }
+    }
+
+    /* send acks for repeated packets that want acks and are destined for us
+     * this way if an ACK is dropped and a packet is resent we'll ACK the resent packet
+     * make sure wasSeenRecently _doesn't_ update
+     * finding the channel requires decoding the packet. */
+    if (p->want_ack && (p->to == getNodeNum()) && wasSeenRecently(p, false)) {
+        if (perhapsDecode(p)) {
+            sendAckNak(Routing_Error_NONE, getFrom(p), p->id, p->channel);
+            DEBUG_MSG("acking a repeated want_ack packet\n");
         }
     }
 
