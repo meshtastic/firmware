@@ -5,6 +5,7 @@
 #include "Router.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
+#include "mesh/generated/storeforward.pb.h"
 #include "plugins/PluginDev.h"
 #include <Arduino.h>
 #include <map>
@@ -223,6 +224,8 @@ void StoreForwardPlugin::sendMessage(NodeNum dest, char *str)
 
 
     service.sendToMesh(p);
+    
+    //HardwareMessage_init_default
 }
 
 ProcessMessage StoreForwardPlugin::handleReceived(const MeshPacket &mp)
@@ -231,6 +234,14 @@ ProcessMessage StoreForwardPlugin::handleReceived(const MeshPacket &mp)
     if (radioConfig.preferences.store_forward_plugin_enabled) {
 
         DEBUG_MSG("--- S&F Received something\n");
+
+        StoreAndForwardMessage sfm = StoreAndForwardMessage_init_default;
+
+        switch(sfm.rr) {
+            
+
+        }
+
 
         auto &p = mp.decoded;
 
@@ -257,6 +268,8 @@ ProcessMessage StoreForwardPlugin::handleReceived(const MeshPacket &mp)
                 } else {
                     storeForwardPlugin->historyAdd(mp);
                 }
+
+            } else if (mp.decoded.portnum == PortNum_STORE_FORWARD_APP) {
 
             } else {
                 DEBUG_MSG("Packet came from an unknown port %u\n", mp.decoded.portnum);

@@ -2,6 +2,8 @@
 
 #include "SinglePortPlugin.h"
 #include "concurrency/OSThread.h"
+#include "mesh/generated/storeforward.pb.h"
+
 #include "configuration.h"
 #include <Arduino.h>
 #include <functional>
@@ -53,7 +55,10 @@ class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThrea
     void sendPayload(NodeNum dest = NODENUM_BROADCAST, uint32_t packetHistory_index = 0);
     void sendMessage(NodeNum dest, char *str);
     virtual MeshPacket *allocReply();
-    virtual bool wantPortnum(PortNum p) { return true; };
+    /*
+      Override the wantPortnum method.
+      */
+    virtual bool wantPortnum(PortNum p) { return true; }; 
 
   private:
     void populatePSRAM();
