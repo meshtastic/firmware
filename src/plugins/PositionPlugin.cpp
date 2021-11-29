@@ -1,9 +1,10 @@
-#include "configuration.h"
 #include "PositionPlugin.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
 #include "Router.h"
+#include "configuration.h"
+#include "gps/GeoCoord.h"
 
 PositionPlugin *positionPlugin;
 
@@ -30,23 +31,11 @@ bool PositionPlugin::handleReceivedProtobuf(const MeshPacket &mp, Position *pptr
     }
 
     // Log packet size and list of fields
-    DEBUG_MSG("POSITION node=%08x l=%d %s%s%s%s%s%s%s%s%s%s%s%s%s%s\n", 
-                getFrom(&mp),
-            	mp.decoded.payload.size,
-                p.latitude_i ? "LAT ":"",
-                p.longitude_i ? "LON ":"",
-                p.altitude ? "MSL ":"",
-                p.altitude_hae ? "HAE ":"",
-                p.alt_geoid_sep ? "GEO ":"",
-                p.PDOP ? "PDOP ":"",
-                p.HDOP ? "HDOP ":"",
-                p.VDOP ? "VDOP ":"",
-                p.sats_in_view ? "SIV ":"",
-                p.fix_quality ? "FXQ ":"",
-                p.fix_type ? "FXT ":"",
-                p.pos_timestamp ? "PTS ":"",
-                p.time ? "TIME ":"",
-                p.battery_level ? "BAT ":"");
+    DEBUG_MSG("POSITION node=%08x l=%d %s%s%s%s%s%s%s%s%s%s%s%s%s%s\n", getFrom(&mp), mp.decoded.payload.size,
+              p.latitude_i ? "LAT " : "", p.longitude_i ? "LON " : "", p.altitude ? "MSL " : "", p.altitude_hae ? "HAE " : "",
+              p.alt_geoid_sep ? "GEO " : "", p.PDOP ? "PDOP " : "", p.HDOP ? "HDOP " : "", p.VDOP ? "VDOP " : "",
+              p.sats_in_view ? "SIV " : "", p.fix_quality ? "FXQ " : "", p.fix_type ? "FXT " : "", p.pos_timestamp ? "PTS " : "",
+              p.time ? "TIME " : "", p.battery_level ? "BAT " : "");
 
     if (p.time) {
         struct timeval tv;
@@ -73,7 +62,7 @@ MeshPacket *PositionPlugin::allocReply()
     uint32_t pos_flags = radioConfig.preferences.position_flags;
 
     // Populate a Position struct with ONLY the requested fields
-    Position p = Position_init_default;  //   Start with an empty structure
+    Position p = Position_init_default; //   Start with an empty structure
 
     // lat/lon are unconditionally included - IF AVAILABLE!
     p.latitude_i = node->position.latitude_i;
@@ -138,19 +127,51 @@ int32_t PositionPlugin::runOnce()
 {
     NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
 
+    // radioConfig.preferences.position_broadcast_smart = true;
+
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();
     if (lastGpsSend == 0 || now - lastGpsSend >= getPref_position_broadcast_secs() * 1000) {
 
         lastGpsSend = now;
 
+        lastGpsLatitude = node->position.latitude_i;
+        lastGpsLongitude = node->position.longitude_i;
+
         // If we changed channels, ask everyone else for their latest info
         bool requestReplies = currentGeneration != radioGeneration;
         currentGeneration = radioGeneration;
 
-        DEBUG_MSG("Sending pos@%x:6 to mesh (wantReplies=%d)\n", 
-                    node->position.pos_timestamp, requestReplies);
+        DEBUG_MSG("Sending pos@%x:6 to mesh (wantReplies=%d)\n", node->position.pos_timestamp, requestReplies);
         sendOurPosition(NODENUM_BROADCAST, requestReplies);
+    } else if (radioConfig.preferences.position_broadcast_smart == true) {
+        // NodeInfo *node = service.refreshMyNodeInfo(); // should guarantee there is now a position
+
+        if (node->has_position && (node->position.latitude_i != 0 || node->position.longitude_i != 0)) {
+            float distance = GeoCoord::latLongToMeter(lastGpsLatitude * 1e-7, lastGpsLongitude * 1e-7,
+                                                      node->position.latitude_i * 1e-7, node->position.longitude_i * 1e-7);
+
+            /* Please don't change these values. This accomodates for possible poor positioning
+               in the event the GPS has a poor satelite lock.
+               */
+            const uint8_t distanceTravel = 150;
+
+            /* Minimum time between position updates.
+               Note: At an average walking speed of 3.5mph, it takes 90 seconds to travel 150 meters.
+            */
+            const uint8_t timeTravel = 60;
+
+            // If the distance traveled since the last update is greater than 100 meters
+            //   and it's been at least 60 seconds since the last update
+            if ((abs(distance) >= distanceTravel) &&
+                (lastGpsSend == 0 || now - timeTravel >= getPref_position_broadcast_secs() * 1000)) {
+                bool requestReplies = currentGeneration != radioGeneration;
+                currentGeneration = radioGeneration;
+
+                DEBUG_MSG("Sending smart pos@%x:6 to mesh (wantReplies=%d)\n", node->position.pos_timestamp, requestReplies);
+                sendOurPosition(NODENUM_BROADCAST, requestReplies);
+            }
+        }
     }
 
     return 5000; // to save power only wake for our callback occasionally

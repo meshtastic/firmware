@@ -557,7 +557,7 @@ void setBluetoothEnable(bool on)
 
         bluetoothOn = on;
         if (on) {
-            if (!initWifi(0)) // if we are using wifi, don't turn on bluetooth also
+            if (!initWifi(isSoftAPForced())) // if we are using wifi, don't turn on bluetooth also
             {
                 Serial.printf("Pre BT: %u heap size\n", ESP.getFreeHeap());
                 // ESP_ERROR_CHECK( heap_trace_start(HEAP_TRACE_LEAKS) );

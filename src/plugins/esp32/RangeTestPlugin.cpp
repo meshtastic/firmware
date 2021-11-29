@@ -151,6 +151,7 @@ ProcessMessage RangeTestPluginRadio::handleReceived(const MeshPacket &mp)
                 appendFile(mp);
             }
 
+            /*
             DEBUG_MSG("-----------------------------------------\n");
             DEBUG_MSG("p.payload.bytes  \"%s\"\n", p.payload.bytes);
             DEBUG_MSG("p.payload.size   %d\n", p.payload.size);
@@ -174,6 +175,7 @@ ProcessMessage RangeTestPluginRadio::handleReceived(const MeshPacket &mp)
             DEBUG_MSG("gpsStatus->getHasLock()      %d\n", gpsStatus->getHasLock());
             DEBUG_MSG("gpsStatus->getDOP()          %d\n", gpsStatus->getDOP());
             DEBUG_MSG("-----------------------------------------\n");
+            */
         }
 
     } else {
