@@ -19,7 +19,7 @@ struct PacketHistoryStruct {
 
 class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThread
 {
-    //bool firstTime = 1;
+    // bool firstTime = 1;
     bool busy = 0;
     uint32_t busyTo;
     char routerMessage[80];
@@ -32,9 +32,8 @@ class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThrea
     PacketHistoryStruct *packetHistoryTXQueue;
     uint32_t packetHistoryTXQueue_size;
     uint32_t packetHistoryTXQueue_index = 0;
-    
-    uint32_t packetTimeMax = 0;
 
+    uint32_t packetTimeMax = 0;
 
   public:
     StoreForwardPlugin();
@@ -58,7 +57,7 @@ class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThrea
     /*
       Override the wantPortnum method.
       */
-    virtual bool wantPortnum(PortNum p) { return true; }; 
+    virtual bool wantPortnum(PortNum p) { return true; };
 
   private:
     void populatePSRAM();
