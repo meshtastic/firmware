@@ -17,7 +17,7 @@ ErrorCode FloodingRouter::send(MeshPacket *p)
     return Router::send(p);
 }
 
-bool FloodingRouter::shouldFilterReceived(const MeshPacket *p)
+bool FloodingRouter::shouldFilterReceived(MeshPacket *p)
 {
     if (wasSeenRecently(p)) { // Note: this will also add a recent packet record
         printPacket("Ignoring incoming msg, because we've already seen it", p);
