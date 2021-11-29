@@ -147,6 +147,17 @@ static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     drawIconScreen(region, display, state, x, y);
 }
 
+// Used on boot when a certificate is being created
+static void drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->setFont(FONT_SMALL);
+    display->drawString(64 + x, y, "Creating SSL certificate");
+
+    display->setFont(FONT_SMALL);
+    display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait...");
+}
+
 #ifdef HAS_EINK
 /// Used on eink displays while in deep sleep
 static void drawSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -896,6 +907,16 @@ void Screen::drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiStat
 {
     Screen *screen = reinterpret_cast<Screen *>(state->userData);
     screen->debugInfo.drawFrameWiFi(display, state, x, y);
+}
+
+/* show a message that the SSL cert is being built
+ * it is expected that this will be used during the boot phase */
+void Screen::setSSLFrames()
+{
+    DEBUG_MSG("showing SSL frames\n");
+    static FrameCallback sslFrames[] = {drawSSLScreen};
+    ui.setFrames(sslFrames, 1);
+    ui.update();
 }
 
 // restore our regular frame list
