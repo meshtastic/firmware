@@ -2,6 +2,8 @@
 
 #include "SinglePortPlugin.h"
 #include "concurrency/OSThread.h"
+#include "mesh/generated/storeforward.pb.h"
+
 #include "configuration.h"
 #include <Arduino.h>
 #include <functional>
@@ -17,7 +19,7 @@ struct PacketHistoryStruct {
 
 class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThread
 {
-    //bool firstTime = 1;
+    // bool firstTime = 1;
     bool busy = 0;
     uint32_t busyTo;
     char routerMessage[80];
@@ -30,9 +32,8 @@ class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThrea
     PacketHistoryStruct *packetHistoryTXQueue;
     uint32_t packetHistoryTXQueue_size;
     uint32_t packetHistoryTXQueue_index = 0;
-    
-    uint32_t packetTimeMax = 0;
 
+    uint32_t packetTimeMax = 0;
 
   public:
     StoreForwardPlugin();
@@ -53,6 +54,9 @@ class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThrea
     void sendPayload(NodeNum dest = NODENUM_BROADCAST, uint32_t packetHistory_index = 0);
     void sendMessage(NodeNum dest, char *str);
     virtual MeshPacket *allocReply();
+    /*
+      Override the wantPortnum method.
+      */
     virtual bool wantPortnum(PortNum p) { return true; };
 
   private:
