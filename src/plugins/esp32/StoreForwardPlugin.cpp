@@ -5,11 +5,11 @@
 #include "Router.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
+#include "mesh/generated/storeforward.pb.h"
 #include "plugins/PluginDev.h"
 #include <Arduino.h>
-#include <map>
 #include <iterator>
-
+#include <map>
 
 StoreForwardPlugin *storeForwardPlugin;
 
@@ -25,22 +25,22 @@ int32_t StoreForwardPlugin::runOnce()
             if (this->busy) {
                 // Send out the message queue.
 
-                //DEBUG_MSG("--- --- --- In busy loop 1 %d\n", this->packetHistoryTXQueue_index);
+                // DEBUG_MSG("--- --- --- In busy loop 1 %d\n", this->packetHistoryTXQueue_index);
                 storeForwardPlugin->sendPayload(this->busyTo, this->packetHistoryTXQueue_index);
-                
+
                 if (this->packetHistoryTXQueue_index == packetHistoryTXQueue_size) {
                     strcpy(this->routerMessage, "** S&F - Done");
                     storeForwardPlugin->sendMessage(this->busyTo, this->routerMessage);
-                    //DEBUG_MSG("--- --- --- In busy loop - Done \n");
+                    // DEBUG_MSG("--- --- --- In busy loop - Done \n");
                     this->packetHistoryTXQueue_index = 0;
                     this->busy = false;
                 } else {
                     this->packetHistoryTXQueue_index++;
                 }
-
             }
 
-            // TODO: Dynamicly adjust the time this returns in the loop based on the size of the packets being actually transmitted.
+            // TODO: Dynamicly adjust the time this returns in the loop based on the size of the packets being actually
+            // transmitted.
             return (this->packetTimeMax);
         } else {
             DEBUG_MSG("Store & Forward Plugin - Disabled (is_router = false)\n");
@@ -83,7 +83,8 @@ void StoreForwardPlugin::populatePSRAM()
                                                               : (((ESP.getFreePsram() / 3) * 2) / sizeof(PacketHistoryStruct)));
 
     this->packetHistory = static_cast<PacketHistoryStruct *>(ps_calloc(numberOfPackets, sizeof(PacketHistoryStruct)));
-    this->packetHistoryTXQueue = static_cast<PacketHistoryStruct *>(ps_calloc(store_forward_plugin_replay_max_records, sizeof(PacketHistoryStruct)));
+    this->packetHistoryTXQueue =
+        static_cast<PacketHistoryStruct *>(ps_calloc(store_forward_plugin_replay_max_records, sizeof(PacketHistoryStruct)));
     DEBUG_MSG("After PSRAM initilization:\n");
 
     DEBUG_MSG("  Total heap: %d\n", ESP.getHeapSize());
@@ -107,7 +108,6 @@ void StoreForwardPlugin::historySend(uint32_t msAgo, uint32_t to)
 {
 
     uint32_t packetsSent = 0;
-    
 
     uint32_t queueSize = storeForwardPlugin->historyQueueCreate(msAgo, to);
 
@@ -124,9 +124,10 @@ void StoreForwardPlugin::historySend(uint32_t msAgo, uint32_t to)
     }
 }
 
-uint32_t StoreForwardPlugin::historyQueueCreate(uint32_t msAgo, uint32_t to) {
-    
-    //uint32_t packetHistoryTXQueueIndex = 0;
+uint32_t StoreForwardPlugin::historyQueueCreate(uint32_t msAgo, uint32_t to)
+{
+
+    // uint32_t packetHistoryTXQueueIndex = 0;
 
     this->packetHistoryTXQueue_size = 0;
 
@@ -146,24 +147,19 @@ uint32_t StoreForwardPlugin::historyQueueCreate(uint32_t msAgo, uint32_t to) {
                 TODO: The condition (this->packetHistory[i].to & 0xffffffff) == to) is not tested since
                 I don't have an easy way to target a specific user. Will need to do this soon.
             */
-            if ((this->packetHistory[i].to & 0xffffffff) == 0xffffffff
-                ||
-                ((this->packetHistory[i].to & 0xffffffff) == to)
-                ) {
+            if ((this->packetHistory[i].to & 0xffffffff) == 0xffffffff || ((this->packetHistory[i].to & 0xffffffff) == to)) {
                 this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].time = this->packetHistory[i].time;
                 this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].to = this->packetHistory[i].to;
                 this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].from = this->packetHistory[i].from;
                 this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].payload_size = this->packetHistory[i].payload_size;
-                memcpy(this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].payload, this->packetHistory[i].payload, Constants_DATA_PAYLOAD_LEN);
+                memcpy(this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].payload, this->packetHistory[i].payload,
+                       Constants_DATA_PAYLOAD_LEN);
                 this->packetHistoryTXQueue_size++;
 
                 DEBUG_MSG("PacketHistoryStruct time=%d\n", this->packetHistory[i].time);
                 DEBUG_MSG("PacketHistoryStruct msg=%.*s\n", this->packetHistory[i].payload);
-                //DEBUG_MSG("PacketHistoryStruct msg=%.*s\n", this->packetHistoryTXQueue[packetHistoryTXQueueIndex].payload);
-
-
+                // DEBUG_MSG("PacketHistoryStruct msg=%.*s\n", this->packetHistoryTXQueue[packetHistoryTXQueueIndex].payload);
             }
-
         }
     }
     return this->packetHistoryTXQueue_size;
@@ -221,8 +217,9 @@ void StoreForwardPlugin::sendMessage(NodeNum dest, char *str)
     p->decoded.payload.size = strlen(str); // You must specify how many bytes are in the reply
     memcpy(p->decoded.payload.bytes, str, strlen(str));
 
-
     service.sendToMesh(p);
+
+    // HardwareMessage_init_default
 }
 
 ProcessMessage StoreForwardPlugin::handleReceived(const MeshPacket &mp)
@@ -231,6 +228,11 @@ ProcessMessage StoreForwardPlugin::handleReceived(const MeshPacket &mp)
     if (radioConfig.preferences.store_forward_plugin_enabled) {
 
         DEBUG_MSG("--- S&F Received something\n");
+
+        StoreAndForwardMessage sfm = StoreAndForwardMessage_init_default;
+
+        switch (sfm.rr) {
+        }
 
         auto &p = mp.decoded;
 
@@ -250,13 +252,18 @@ ProcessMessage StoreForwardPlugin::handleReceived(const MeshPacket &mp)
                     } else {
                         storeForwardPlugin->historySend(1000 * 60, getFrom(&mp));
                     }
-                } else if ((p.payload.bytes[0] == 'S') && (p.payload.bytes[1] == 'F') && (p.payload.bytes[2] == 'm') && (p.payload.bytes[3] == 0x00)) {
-                    strcpy(this->routerMessage, "012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456");
+                } else if ((p.payload.bytes[0] == 'S') && (p.payload.bytes[1] == 'F') && (p.payload.bytes[2] == 'm') &&
+                           (p.payload.bytes[3] == 0x00)) {
+                    strcpy(this->routerMessage, "01234567890123456789012345678901234567890123456789012345678901234567890123456789"
+                                                "01234567890123456789012345678901234567890123456789012345678901234567890123456789"
+                                                "01234567890123456789012345678901234567890123456789012345678901234567890123456");
                     storeForwardPlugin->sendMessage(getFrom(&mp), this->routerMessage);
 
                 } else {
                     storeForwardPlugin->historyAdd(mp);
                 }
+
+            } else if (mp.decoded.portnum == PortNum_STORE_FORWARD_APP) {
 
             } else {
                 DEBUG_MSG("Packet came from an unknown port %u\n", mp.decoded.portnum);
@@ -306,9 +313,9 @@ StoreForwardPlugin::StoreForwardPlugin()
 
                     // Calculate the packet time.
                     // this->packetTimeMax = RadioLibInterface::instance->getPacketTime(Constants_DATA_PAYLOAD_LEN);
-                    //RadioLibInterface::instance->getPacketTime(Constants_DATA_PAYLOAD_LEN);
-                    //RadioLibInterface::instance->getPacketTime(Constants_DATA_PAYLOAD_LEN);
-                    //RadioInterface::getPacketTime(500)l
+                    // RadioLibInterface::instance->getPacketTime(Constants_DATA_PAYLOAD_LEN);
+                    // RadioLibInterface::instance->getPacketTime(Constants_DATA_PAYLOAD_LEN);
+                    // RadioInterface::getPacketTime(500)l
 
                     this->packetTimeMax = 2000;
 
