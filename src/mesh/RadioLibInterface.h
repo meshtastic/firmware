@@ -87,8 +87,12 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * for a long time.
      */
     const uint8_t syncWord = 0x2b;
-
-    float currentLimit = 100;     // FIXME
+    
+    #ifdef USE_SX1262
+    float currentLimit = 140; //SX1262 higher limit - this should allow for extra current used by the PA at +22dBm.
+    #else
+    float currentLimit = 100;   // 100mA OCP - Should be acceptable for RFM95/SX127x chipset. 
+    #endif
 
     LockingModule module; // The HW interface to the radio
 
