@@ -4,8 +4,8 @@
 #ifndef PB_DEVICEONLY_PB_H_INCLUDED
 #define PB_DEVICEONLY_PB_H_INCLUDED
 #include <pb.h>
-#include "mesh.pb.h"
 #include "channel.pb.h"
+#include "mesh.pb.h"
 #include "radioconfig.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
