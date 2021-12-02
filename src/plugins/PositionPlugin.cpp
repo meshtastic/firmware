@@ -170,6 +170,11 @@ int32_t PositionPlugin::runOnce()
 
                 DEBUG_MSG("Sending smart pos@%x:6 to mesh (wantReplies=%d)\n", node->position.pos_timestamp, requestReplies);
                 sendOurPosition(NODENUM_BROADCAST, requestReplies);
+
+                /* Update lastGpsSend to now. This means if the device is stationary, then
+                   getPref_position_broadcast_secs will still apply.
+                */
+                lastGpsSend = now;
             }
         }
     }
