@@ -71,6 +71,8 @@ class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThrea
     it
     */
     virtual ProcessMessage handleReceived(const MeshPacket &mp);
+    virtual ProcessMessage handleReceivedProtobuf(const MeshPacket &mp, StoreAndForward *p);
+
 };
 
 extern StoreForwardPlugin *storeForwardPlugin;

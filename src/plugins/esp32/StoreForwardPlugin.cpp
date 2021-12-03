@@ -229,11 +229,12 @@ ProcessMessage StoreForwardPlugin::handleReceived(const MeshPacket &mp)
 
         DEBUG_MSG("--- S&F Received something\n");
 
+        /*
         StoreAndForwardMessage sfm = StoreAndForwardMessage_init_default;
 
         switch (sfm.rr) {
         }
-
+*/
         auto &p = mp.decoded;
 
         // The router node should not be sending messages as a client.
@@ -279,6 +280,66 @@ ProcessMessage StoreForwardPlugin::handleReceived(const MeshPacket &mp)
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }
 
+ProcessMessage StoreForwardPlugin::handleReceivedProtobuf(const MeshPacket &mp, StoreAndForward *p)
+{
+    if (!radioConfig.preferences.store_forward_plugin_enabled) {
+        // If this plugin is not enabled in any capacity, don't handle the packet, and allow other plugins to consume
+        return ProcessMessage::CONTINUE;
+    }
+
+    //auto sfp = *p;
+    //auto p = *p;
+
+   // Advance states as needed
+    switch (p->rr) {
+    case StoreAndForward_RequestResponse_CLIENT_ERROR:
+        // Do nothing
+        break;
+
+    case StoreAndForward_RequestResponse_CLIENT_HISTORY:
+        // Do nothing
+        break;
+
+    case StoreAndForward_RequestResponse_CLIENT_PING:
+        // Do nothing
+        break;
+
+    case StoreAndForward_RequestResponse_CLIENT_PONG:
+        // Do nothing
+        break;
+
+    case StoreAndForward_RequestResponse_CLIENT_STATS:
+        // Do nothing
+        break;
+
+    case StoreAndForward_RequestResponse_ROUTER_BUSY:
+        // Do nothing
+        break;
+
+    case StoreAndForward_RequestResponse_ROUTER_ERROR:
+        // Do nothing
+        break;
+
+    case StoreAndForward_RequestResponse_ROUTER_HEARTBEAT:
+        // Do nothing
+        break;
+
+    case StoreAndForward_RequestResponse_ROUTER_PING:
+        // Do nothing
+        break;
+
+    case StoreAndForward_RequestResponse_ROUTER_PONG:
+        // Do nothing
+        break;
+
+
+    default:
+        assert(0); // unexpected state - FIXME, make an error code and reboot
+    }
+
+    return ProcessMessage::CONTINUE; // Let others look at this message also if they want
+}
+
 StoreForwardPlugin::StoreForwardPlugin()
     : SinglePortPlugin("StoreForwardPlugin", PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("StoreForwardPlugin")
 {
@@ -310,12 +371,6 @@ StoreForwardPlugin::StoreForwardPlugin()
 
                     // Popupate PSRAM with our data structures.
                     this->populatePSRAM();
-
-                    // Calculate the packet time.
-                    // this->packetTimeMax = RadioLibInterface::instance->getPacketTime(Constants_DATA_PAYLOAD_LEN);
-                    // RadioLibInterface::instance->getPacketTime(Constants_DATA_PAYLOAD_LEN);
-                    // RadioLibInterface::instance->getPacketTime(Constants_DATA_PAYLOAD_LEN);
-                    // RadioInterface::getPacketTime(500)l
 
                     this->packetTimeMax = 2000;
 
