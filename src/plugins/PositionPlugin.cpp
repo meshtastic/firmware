@@ -145,7 +145,7 @@ int32_t PositionPlugin::runOnce()
         DEBUG_MSG("Sending pos@%x:6 to mesh (wantReplies=%d)\n", node->position.pos_timestamp, requestReplies);
         sendOurPosition(NODENUM_BROADCAST, requestReplies);
     } else if (radioConfig.preferences.position_broadcast_smart == true) {
-        // NodeInfo *node = service.refreshMyNodeInfo(); // should guarantee there is now a position
+        NodeInfo *node = service.refreshMyNodeInfo(); // should guarantee there is now a position
 
         if (node->has_position && (node->position.latitude_i != 0 || node->position.longitude_i != 0)) {
             float distance = GeoCoord::latLongToMeter(lastGpsLatitude * 1e-7, lastGpsLongitude * 1e-7,
@@ -170,6 +170,11 @@ int32_t PositionPlugin::runOnce()
 
                 DEBUG_MSG("Sending smart pos@%x:6 to mesh (wantReplies=%d)\n", node->position.pos_timestamp, requestReplies);
                 sendOurPosition(NODENUM_BROADCAST, requestReplies);
+
+                /* Update lastGpsSend to now. This means if the device is stationary, then
+                   getPref_position_broadcast_secs will still apply.
+                */
+                lastGpsSend = now;
             }
         }
     }
