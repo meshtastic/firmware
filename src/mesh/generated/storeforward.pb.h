@@ -10,28 +10,27 @@
 #endif
 
 /* Enum definitions */
-typedef enum _StoreAndForwardMessage_RequestResponse {
-    StoreAndForwardMessage_RequestResponse_UNSET = 0,
-    StoreAndForwardMessage_RequestResponse_ROUTER_ERROR = 1,
-    StoreAndForwardMessage_RequestResponse_ROUTER_HEARTBEAT = 2,
-    StoreAndForwardMessage_RequestResponse_ROUTER_PING = 3,
-    StoreAndForwardMessage_RequestResponse_ROUTER_PONG = 4,
-    StoreAndForwardMessage_RequestResponse_ROUTER_BUSY = 5,
-    StoreAndForwardMessage_RequestResponse_CLIENT_ERROR = 101,
-    StoreAndForwardMessage_RequestResponse_CLIENT_HISTORY = 102,
-    StoreAndForwardMessage_RequestResponse_CLIENT_STATS = 103,
-    StoreAndForwardMessage_RequestResponse_CLIENT_PING = 104,
-    StoreAndForwardMessage_RequestResponse_CLIENT_PONG = 105,
-    StoreAndForwardMessage_RequestResponse_MAX = 255
-} StoreAndForwardMessage_RequestResponse;
+typedef enum _StoreAndForward_RequestResponse {
+    StoreAndForward_RequestResponse_UNSET = 0,
+    StoreAndForward_RequestResponse_ROUTER_ERROR = 1,
+    StoreAndForward_RequestResponse_ROUTER_HEARTBEAT = 2,
+    StoreAndForward_RequestResponse_ROUTER_PING = 3,
+    StoreAndForward_RequestResponse_ROUTER_PONG = 4,
+    StoreAndForward_RequestResponse_ROUTER_BUSY = 5,
+    StoreAndForward_RequestResponse_CLIENT_ERROR = 101,
+    StoreAndForward_RequestResponse_CLIENT_HISTORY = 102,
+    StoreAndForward_RequestResponse_CLIENT_STATS = 103,
+    StoreAndForward_RequestResponse_CLIENT_PING = 104,
+    StoreAndForward_RequestResponse_CLIENT_PONG = 105
+} StoreAndForward_RequestResponse;
 
 /* Struct definitions */
-typedef struct _StoreAndForwardMessage_History {
+typedef struct _StoreAndForward_History {
     uint32_t HistoryMessages;
     uint32_t Window;
-} StoreAndForwardMessage_History;
+} StoreAndForward_History;
 
-typedef struct _StoreAndForwardMessage_Statistics {
+typedef struct _StoreAndForward_Statistics {
     uint32_t MessagesTotal;
     uint32_t MessagesSaved;
     uint32_t MessagesMax;
@@ -41,21 +40,21 @@ typedef struct _StoreAndForwardMessage_Statistics {
     bool Heartbeat;
     uint32_t ReturnMax;
     uint32_t ReturnWindow;
-} StoreAndForwardMessage_Statistics;
+} StoreAndForward_Statistics;
 
-typedef struct _StoreAndForwardMessage {
-    StoreAndForwardMessage_RequestResponse rr;
+typedef struct _StoreAndForward {
+    StoreAndForward_RequestResponse rr;
     bool has_stats;
-    StoreAndForwardMessage_Statistics stats;
+    StoreAndForward_Statistics stats;
     bool has_history;
-    StoreAndForwardMessage_History history;
-} StoreAndForwardMessage;
+    StoreAndForward_History history;
+} StoreAndForward;
 
 
 /* Helper constants for enums */
-#define _StoreAndForwardMessage_RequestResponse_MIN StoreAndForwardMessage_RequestResponse_UNSET
-#define _StoreAndForwardMessage_RequestResponse_MAX StoreAndForwardMessage_RequestResponse_MAX
-#define _StoreAndForwardMessage_RequestResponse_ARRAYSIZE ((StoreAndForwardMessage_RequestResponse)(StoreAndForwardMessage_RequestResponse_MAX+1))
+#define _StoreAndForward_RequestResponse_MIN StoreAndForward_RequestResponse_UNSET
+#define _StoreAndForward_RequestResponse_MAX StoreAndForward_RequestResponse_CLIENT_PONG
+#define _StoreAndForward_RequestResponse_ARRAYSIZE ((StoreAndForward_RequestResponse)(StoreAndForward_RequestResponse_CLIENT_PONG+1))
 
 
 #ifdef __cplusplus
@@ -63,40 +62,40 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define StoreAndForwardMessage_init_default      {_StoreAndForwardMessage_RequestResponse_MIN, false, StoreAndForwardMessage_Statistics_init_default, false, StoreAndForwardMessage_History_init_default}
-#define StoreAndForwardMessage_Statistics_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define StoreAndForwardMessage_History_init_default {0, 0}
-#define StoreAndForwardMessage_init_zero         {_StoreAndForwardMessage_RequestResponse_MIN, false, StoreAndForwardMessage_Statistics_init_zero, false, StoreAndForwardMessage_History_init_zero}
-#define StoreAndForwardMessage_Statistics_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define StoreAndForwardMessage_History_init_zero {0, 0}
+#define StoreAndForward_init_default             {_StoreAndForward_RequestResponse_MIN, false, StoreAndForward_Statistics_init_default, false, StoreAndForward_History_init_default}
+#define StoreAndForward_Statistics_init_default  {0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define StoreAndForward_History_init_default     {0, 0}
+#define StoreAndForward_init_zero                {_StoreAndForward_RequestResponse_MIN, false, StoreAndForward_Statistics_init_zero, false, StoreAndForward_History_init_zero}
+#define StoreAndForward_Statistics_init_zero     {0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define StoreAndForward_History_init_zero        {0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define StoreAndForwardMessage_History_HistoryMessages_tag 1
-#define StoreAndForwardMessage_History_Window_tag 2
-#define StoreAndForwardMessage_Statistics_MessagesTotal_tag 1
-#define StoreAndForwardMessage_Statistics_MessagesSaved_tag 2
-#define StoreAndForwardMessage_Statistics_MessagesMax_tag 3
-#define StoreAndForwardMessage_Statistics_UpTime_tag 4
-#define StoreAndForwardMessage_Statistics_Requests_tag 5
-#define StoreAndForwardMessage_Statistics_RequestsHistory_tag 6
-#define StoreAndForwardMessage_Statistics_Heartbeat_tag 7
-#define StoreAndForwardMessage_Statistics_ReturnMax_tag 8
-#define StoreAndForwardMessage_Statistics_ReturnWindow_tag 9
-#define StoreAndForwardMessage_rr_tag            1
-#define StoreAndForwardMessage_stats_tag         2
-#define StoreAndForwardMessage_history_tag       3
+#define StoreAndForward_History_HistoryMessages_tag 1
+#define StoreAndForward_History_Window_tag       2
+#define StoreAndForward_Statistics_MessagesTotal_tag 1
+#define StoreAndForward_Statistics_MessagesSaved_tag 2
+#define StoreAndForward_Statistics_MessagesMax_tag 3
+#define StoreAndForward_Statistics_UpTime_tag    4
+#define StoreAndForward_Statistics_Requests_tag  5
+#define StoreAndForward_Statistics_RequestsHistory_tag 6
+#define StoreAndForward_Statistics_Heartbeat_tag 7
+#define StoreAndForward_Statistics_ReturnMax_tag 8
+#define StoreAndForward_Statistics_ReturnWindow_tag 9
+#define StoreAndForward_rr_tag                   1
+#define StoreAndForward_stats_tag                2
+#define StoreAndForward_history_tag              3
 
 /* Struct field encoding specification for nanopb */
-#define StoreAndForwardMessage_FIELDLIST(X, a) \
+#define StoreAndForward_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    rr,                1) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  stats,             2) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  history,           3)
-#define StoreAndForwardMessage_CALLBACK NULL
-#define StoreAndForwardMessage_DEFAULT NULL
-#define StoreAndForwardMessage_stats_MSGTYPE StoreAndForwardMessage_Statistics
-#define StoreAndForwardMessage_history_MSGTYPE StoreAndForwardMessage_History
+#define StoreAndForward_CALLBACK NULL
+#define StoreAndForward_DEFAULT NULL
+#define StoreAndForward_stats_MSGTYPE StoreAndForward_Statistics
+#define StoreAndForward_history_MSGTYPE StoreAndForward_History
 
-#define StoreAndForwardMessage_Statistics_FIELDLIST(X, a) \
+#define StoreAndForward_Statistics_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   MessagesTotal,     1) \
 X(a, STATIC,   SINGULAR, UINT32,   MessagesSaved,     2) \
 X(a, STATIC,   SINGULAR, UINT32,   MessagesMax,       3) \
@@ -106,28 +105,28 @@ X(a, STATIC,   SINGULAR, UINT32,   RequestsHistory,   6) \
 X(a, STATIC,   SINGULAR, BOOL,     Heartbeat,         7) \
 X(a, STATIC,   SINGULAR, UINT32,   ReturnMax,         8) \
 X(a, STATIC,   SINGULAR, UINT32,   ReturnWindow,      9)
-#define StoreAndForwardMessage_Statistics_CALLBACK NULL
-#define StoreAndForwardMessage_Statistics_DEFAULT NULL
+#define StoreAndForward_Statistics_CALLBACK NULL
+#define StoreAndForward_Statistics_DEFAULT NULL
 
-#define StoreAndForwardMessage_History_FIELDLIST(X, a) \
+#define StoreAndForward_History_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   HistoryMessages,   1) \
 X(a, STATIC,   SINGULAR, UINT32,   Window,            2)
-#define StoreAndForwardMessage_History_CALLBACK NULL
-#define StoreAndForwardMessage_History_DEFAULT NULL
+#define StoreAndForward_History_CALLBACK NULL
+#define StoreAndForward_History_DEFAULT NULL
 
-extern const pb_msgdesc_t StoreAndForwardMessage_msg;
-extern const pb_msgdesc_t StoreAndForwardMessage_Statistics_msg;
-extern const pb_msgdesc_t StoreAndForwardMessage_History_msg;
+extern const pb_msgdesc_t StoreAndForward_msg;
+extern const pb_msgdesc_t StoreAndForward_Statistics_msg;
+extern const pb_msgdesc_t StoreAndForward_History_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
-#define StoreAndForwardMessage_fields &StoreAndForwardMessage_msg
-#define StoreAndForwardMessage_Statistics_fields &StoreAndForwardMessage_Statistics_msg
-#define StoreAndForwardMessage_History_fields &StoreAndForwardMessage_History_msg
+#define StoreAndForward_fields &StoreAndForward_msg
+#define StoreAndForward_Statistics_fields &StoreAndForward_Statistics_msg
+#define StoreAndForward_History_fields &StoreAndForward_History_msg
 
 /* Maximum encoded size of messages (where known) */
-#define StoreAndForwardMessage_size              69
-#define StoreAndForwardMessage_Statistics_size   50
-#define StoreAndForwardMessage_History_size      12
+#define StoreAndForward_size                     68
+#define StoreAndForward_Statistics_size          50
+#define StoreAndForward_History_size             12
 
 #ifdef __cplusplus
 } /* extern "C" */
