@@ -9,7 +9,7 @@ main/credentials.h
 !.vscode/extensions.json
 *.code-workspace
 
-.idea/workspace.xml
+.idea
 
 .DS_Store
 Thumbs.db
