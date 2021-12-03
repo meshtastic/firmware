@@ -6,13 +6,13 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
-PB_BIND(StoreAndForwardMessage, StoreAndForwardMessage, AUTO)
+PB_BIND(StoreAndForward, StoreAndForward, AUTO)
 
 
-PB_BIND(StoreAndForwardMessage_Statistics, StoreAndForwardMessage_Statistics, AUTO)
+PB_BIND(StoreAndForward_Statistics, StoreAndForward_Statistics, AUTO)
 
 
-PB_BIND(StoreAndForwardMessage_History, StoreAndForwardMessage_History, AUTO)
+PB_BIND(StoreAndForward_History, StoreAndForward_History, AUTO)
 
 
 
