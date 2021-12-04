@@ -62,6 +62,12 @@ class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThrea
   private:
     void populatePSRAM();
 
+    // S&F Defaults
+    uint32_t historyReturnMax = 250; // 250 records
+    uint32_t historyReturnWindow = 240; // 4 hours
+    uint32_t records = 0; // Calculated
+    bool heartbeat = false; // No heartbeat.
+
   protected:
     virtual int32_t runOnce();
 
