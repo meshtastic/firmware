@@ -29,6 +29,8 @@ class SX126xInterface : public RadioLibInterface
 
   protected:
 
+    float currentLimit = 140; // Higher OCP limit for SX126x PA
+
     /**
      * Specific module instance 
      */
