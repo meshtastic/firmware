@@ -127,7 +127,7 @@ int32_t PositionPlugin::runOnce()
 {
     NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
 
-    // radioConfig.preferences.position_broadcast_smart = true;
+    radioConfig.preferences.position_broadcast_smart = true;
 
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();
@@ -164,7 +164,8 @@ int32_t PositionPlugin::runOnce()
             // If the distance traveled since the last update is greater than 100 meters
             //   and it's been at least 60 seconds since the last update
             if ((abs(distance) >= distanceTravel) &&
-                (lastGpsSend == 0 || now - timeTravel >= getPref_position_broadcast_secs() * 1000)) {
+                (now - lastGpsSend >= timeTravel * 1000)
+                ) {
                 bool requestReplies = currentGeneration != radioGeneration;
                 currentGeneration = radioGeneration;
 
