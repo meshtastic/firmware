@@ -271,7 +271,7 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case SYSTEM_EVENT_AP_START:
         DEBUG_MSG("WiFi access point started\n");
-        Serial.println(WiFi.softAPIP());
+        //Serial.println(WiFi.softAPIP());
         onNetworkConnected();
         break;
     case SYSTEM_EVENT_AP_STOP:

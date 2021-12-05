@@ -68,8 +68,6 @@ void StoreForwardPlugin::populatePSRAM()
         https://learn.upesy.com/en/programmation/psram.html#psram-tab
     */
 
-    uint32_t store_forward_plugin_replay_max_records = 250;
-
     DEBUG_MSG("Before PSRAM initilization:\n");
 
     DEBUG_MSG("  Total heap: %d\n", ESP.getHeapSize());
@@ -77,14 +75,17 @@ void StoreForwardPlugin::populatePSRAM()
     DEBUG_MSG("  Total PSRAM: %d\n", ESP.getPsramSize());
     DEBUG_MSG("  Free PSRAM: %d\n", ESP.getFreePsram());
 
-    // Use a maximum of 2/3 the available PSRAM unless otherwise specified.
+    this->packetHistoryTXQueue =
+        static_cast<PacketHistoryStruct *>(ps_calloc(this->historyReturnMax, sizeof(PacketHistoryStruct)));
+
+    /* Use a maximum of 2/3 the available PSRAM unless otherwise specified.
+        Note: This needs to be done after every thing that would use PSRAM
+    */
     uint32_t numberOfPackets =
-        (radioConfig.preferences.store_forward_plugin_records ? radioConfig.preferences.store_forward_plugin_records
-                                                              : (((ESP.getFreePsram() / 3) * 2) / sizeof(PacketHistoryStruct)));
+        (this->records ? this->records : (((ESP.getFreePsram() / 3) * 2) / sizeof(PacketHistoryStruct)));
 
     this->packetHistory = static_cast<PacketHistoryStruct *>(ps_calloc(numberOfPackets, sizeof(PacketHistoryStruct)));
-    this->packetHistoryTXQueue =
-        static_cast<PacketHistoryStruct *>(ps_calloc(store_forward_plugin_replay_max_records, sizeof(PacketHistoryStruct)));
+
     DEBUG_MSG("After PSRAM initilization:\n");
 
     DEBUG_MSG("  Total heap: %d\n", ESP.getHeapSize());
@@ -107,7 +108,7 @@ void StoreForwardPlugin::historyReport()
 void StoreForwardPlugin::historySend(uint32_t msAgo, uint32_t to)
 {
 
-    uint32_t packetsSent = 0;
+    //uint32_t packetsSent = 0;
 
     uint32_t queueSize = storeForwardPlugin->historyQueueCreate(msAgo, to);
 
@@ -229,12 +230,6 @@ ProcessMessage StoreForwardPlugin::handleReceived(const MeshPacket &mp)
 
         DEBUG_MSG("--- S&F Received something\n");
 
-        /*
-        StoreAndForwardMessage sfm = StoreAndForwardMessage_init_default;
-
-        switch (sfm.rr) {
-        }
-*/
         auto &p = mp.decoded;
 
         // The router node should not be sending messages as a client.
@@ -287,49 +282,74 @@ ProcessMessage StoreForwardPlugin::handleReceivedProtobuf(const MeshPacket &mp, 
         return ProcessMessage::CONTINUE;
     }
 
-    //auto sfp = *p;
-    //auto p = *p;
+    if (mp.decoded.portnum == PortNum_TEXT_MESSAGE_APP) {
+        DEBUG_MSG("Packet came from an PortNum_TEXT_MESSAGE_APP port %u\n", mp.decoded.portnum);
+        return ProcessMessage::CONTINUE;
+    } else if (mp.decoded.portnum == PortNum_STORE_FORWARD_APP) {
+        DEBUG_MSG("Packet came from an PortNum_STORE_FORWARD_APP port %u\n", mp.decoded.portnum);
 
-   // Advance states as needed
+    } else {
+        DEBUG_MSG("Packet came from an UNKNOWN port %u\n", mp.decoded.portnum);
+        return ProcessMessage::CONTINUE;
+    }
+
     switch (p->rr) {
     case StoreAndForward_RequestResponse_CLIENT_ERROR:
         // Do nothing
+        DEBUG_MSG("StoreAndForward_RequestResponse_CLIENT_ERROR\n");
         break;
 
     case StoreAndForward_RequestResponse_CLIENT_HISTORY:
-        // Do nothing
+        DEBUG_MSG("StoreAndForward_RequestResponse_CLIENT_HISTORY\n");
+
+        // Send the last 60 minutes of messages.
+        if (this->busy) {
+            strcpy(this->routerMessage, "** S&F - Busy. Try again shortly.");
+            storeForwardPlugin->sendMessage(getFrom(&mp), this->routerMessage);
+        } else {
+            storeForwardPlugin->historySend(1000 * 60, getFrom(&mp));
+        }
+
         break;
 
     case StoreAndForward_RequestResponse_CLIENT_PING:
         // Do nothing
+        DEBUG_MSG("StoreAndForward_RequestResponse_CLIENT_PING\n");
         break;
 
     case StoreAndForward_RequestResponse_CLIENT_PONG:
         // Do nothing
+        DEBUG_MSG("StoreAndForward_RequestResponse_CLIENT_PONG\n");
         break;
 
     case StoreAndForward_RequestResponse_CLIENT_STATS:
         // Do nothing
+        DEBUG_MSG("StoreAndForward_RequestResponse_CLIENT_STATS\n");
         break;
 
     case StoreAndForward_RequestResponse_ROUTER_BUSY:
         // Do nothing
+        DEBUG_MSG("StoreAndForward_RequestResponse_ROUTER_BUSY\n");
         break;
 
     case StoreAndForward_RequestResponse_ROUTER_ERROR:
         // Do nothing
+        DEBUG_MSG("StoreAndForward_RequestResponse_ROUTER_ERROR\n");
         break;
 
     case StoreAndForward_RequestResponse_ROUTER_HEARTBEAT:
         // Do nothing
+        DEBUG_MSG("StoreAndForward_RequestResponse_ROUTER_HEARTBEAT\n");
         break;
 
     case StoreAndForward_RequestResponse_ROUTER_PING:
         // Do nothing
+        DEBUG_MSG("StoreAndForward_RequestResponse_ROUTER_PING\n");
         break;
 
     case StoreAndForward_RequestResponse_ROUTER_PONG:
         // Do nothing
+        DEBUG_MSG("StoreAndForward_RequestResponse_ROUTER_PONG\n");
         break;
 
 
@@ -337,7 +357,7 @@ ProcessMessage StoreForwardPlugin::handleReceivedProtobuf(const MeshPacket &mp, 
         assert(0); // unexpected state - FIXME, make an error code and reboot
     }
 
-    return ProcessMessage::CONTINUE; // Let others look at this message also if they want
+    return ProcessMessage::STOP; // There's no need for others to look at this message.
 }
 
 StoreForwardPlugin::StoreForwardPlugin()
@@ -354,9 +374,9 @@ StoreForwardPlugin::StoreForwardPlugin()
             without having to configure it from the PythonAPI or WebUI.
         */
 
-        // radioConfig.preferences.store_forward_plugin_enabled = 1;
-        // radioConfig.preferences.is_router = 1;
-        // radioConfig.preferences.is_always_powered = 1;
+        radioConfig.preferences.store_forward_plugin_enabled = 1;
+        radioConfig.preferences.is_router = 1;
+        radioConfig.preferences.is_always_powered = 1;
     }
 
     if (radioConfig.preferences.store_forward_plugin_enabled) {
@@ -369,8 +389,30 @@ StoreForwardPlugin::StoreForwardPlugin()
 
                     // Do the startup here
 
+                    // Maximum number of records to return.
+                    if (radioConfig.preferences.store_forward_plugin_history_return_max)
+                        this->historyReturnMax = radioConfig.preferences.store_forward_plugin_history_return_max;
+
+                    // Maximum time window for records to return (in minutes)
+                    if (radioConfig.preferences.store_forward_plugin_history_return_window)
+                        this->historyReturnWindow = radioConfig.preferences.store_forward_plugin_history_return_window;
+
+                    // Maximum number of records to store in memory
+                    if (radioConfig.preferences.store_forward_plugin_records)
+                        this->records = radioConfig.preferences.store_forward_plugin_records;
+
+                    // Maximum number of records to store in memory
+                    if (radioConfig.preferences.store_forward_plugin_heartbeat)
+                        this->heartbeat = radioConfig.preferences.store_forward_plugin_heartbeat;
+
                     // Popupate PSRAM with our data structures.
                     this->populatePSRAM();
+
+                    // Calculate the packet time.
+                    // this->packetTimeMax = RadioLibInterface::instance->getPacketTime(Constants_DATA_PAYLOAD_LEN);
+                    // RadioLibInterface::instance->getPacketTime(Constants_DATA_PAYLOAD_LEN);
+                    // RadioLibInterface::instance->getPacketTime(Constants_DATA_PAYLOAD_LEN);
+                    // RadioInterface::getPacketTime(500)l
 
                     this->packetTimeMax = 2000;
 
