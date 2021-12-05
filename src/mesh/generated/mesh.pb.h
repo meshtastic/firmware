@@ -149,6 +149,7 @@ typedef struct _MyNodeInfo {
     uint32_t error_address;
     uint32_t error_count;
     uint32_t reboot_count;
+    float bitrate;
     uint32_t message_timeout_msec;
     uint32_t min_app_version;
     uint32_t max_channels;
@@ -315,7 +316,7 @@ extern "C" {
 #define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0}
 #define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0}
 #define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0}
-#define MyNodeInfo_init_default                  {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0}
+#define MyNodeInfo_init_default                  {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0}
 #define LogRecord_init_default                   {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_default                   {0, 0, {MyNodeInfo_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
@@ -327,7 +328,7 @@ extern "C" {
 #define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0}
 #define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0}
 #define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0}
-#define MyNodeInfo_init_zero                     {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0}
+#define MyNodeInfo_init_zero                     {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0}
 #define LogRecord_init_zero                      {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_zero                      {0, 0, {MyNodeInfo_init_zero}}
 #define ToRadio_init_zero                        {0, {MeshPacket_init_zero}}
@@ -354,6 +355,7 @@ extern "C" {
 #define MyNodeInfo_error_address_tag             8
 #define MyNodeInfo_error_count_tag               9
 #define MyNodeInfo_reboot_count_tag              10
+#define MyNodeInfo_bitrate_tag                   11
 #define MyNodeInfo_message_timeout_msec_tag      13
 #define MyNodeInfo_min_app_version_tag           14
 #define MyNodeInfo_max_channels_tag              15
@@ -530,6 +532,7 @@ X(a, STATIC,   SINGULAR, UENUM,    error_code,        7) \
 X(a, STATIC,   SINGULAR, UINT32,   error_address,     8) \
 X(a, STATIC,   SINGULAR, UINT32,   error_count,       9) \
 X(a, STATIC,   SINGULAR, UINT32,   reboot_count,     10) \
+X(a, STATIC,   SINGULAR, FLOAT,    bitrate,          11) \
 X(a, STATIC,   SINGULAR, UINT32,   message_timeout_msec,  13) \
 X(a, STATIC,   SINGULAR, UINT32,   min_app_version,  14) \
 X(a, STATIC,   SINGULAR, UINT32,   max_channels,     15)
@@ -610,7 +613,7 @@ extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 #define Data_size                                260
 #define MeshPacket_size                          309
 #define NodeInfo_size                            270
-#define MyNodeInfo_size                          101
+#define MyNodeInfo_size                          106
 #define LogRecord_size                           81
 #define FromRadio_size                           318
 #define ToRadio_size                             312
