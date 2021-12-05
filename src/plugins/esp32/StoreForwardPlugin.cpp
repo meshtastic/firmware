@@ -300,8 +300,16 @@ ProcessMessage StoreForwardPlugin::handleReceivedProtobuf(const MeshPacket &mp, 
         break;
 
     case StoreAndForward_RequestResponse_CLIENT_HISTORY:
-        // Do nothing
         DEBUG_MSG("StoreAndForward_RequestResponse_CLIENT_HISTORY\n");
+
+        // Send the last 60 minutes of messages.
+        if (this->busy) {
+            strcpy(this->routerMessage, "** S&F - Busy. Try again shortly.");
+            storeForwardPlugin->sendMessage(getFrom(&mp), this->routerMessage);
+        } else {
+            storeForwardPlugin->historySend(1000 * 60, getFrom(&mp));
+        }
+
         break;
 
     case StoreAndForward_RequestResponse_CLIENT_PING:
@@ -366,9 +374,9 @@ StoreForwardPlugin::StoreForwardPlugin()
             without having to configure it from the PythonAPI or WebUI.
         */
 
-        //radioConfig.preferences.store_forward_plugin_enabled = 1;
-        //radioConfig.preferences.is_router = 1;
-        //radioConfig.preferences.is_always_powered = 1;
+        radioConfig.preferences.store_forward_plugin_enabled = 1;
+        radioConfig.preferences.is_router = 1;
+        radioConfig.preferences.is_always_powered = 1;
     }
 
     if (radioConfig.preferences.store_forward_plugin_enabled) {
