@@ -297,6 +297,16 @@ void RadioInterface::applyModemConfig()
             cr = 8;
             sf = 12;
             break;
+        case ChannelSettings_ModemConfig_Bw250Cr46Sf2048:
+            bw = 250;
+            cr = 6;
+            sf = 11;
+            break;
+        case ChannelSettings_ModemConfig_Bw250Cr47Sf1024:
+            bw = 250;
+            cr = 7;
+            sf = 10;
+            break;
         default:
             assert(0); // Unknown enum
         }
