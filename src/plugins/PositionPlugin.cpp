@@ -151,15 +151,11 @@ int32_t PositionPlugin::runOnce()
             float distance = GeoCoord::latLongToMeter(lastGpsLatitude * 1e-7, lastGpsLongitude * 1e-7,
                                                       node->position.latitude_i * 1e-7, node->position.longitude_i * 1e-7);
 
-            /* Please don't change these values. This accomodates for possible poor positioning
-               in the event the GPS has a poor satelite lock.
-               */
-            const uint8_t distanceTravel = 150;
+            // 2500 is a magic number. 50 is the minumum distance we want to travel before sending another position packet.
+            uint32_t distanceTravel = ((2500 / myNodeInfo.bitrate) >= 50) ? (2500 / myNodeInfo.bitrate) : 50;
 
-            /* Minimum time between position updates.
-               Note: At an average walking speed of 3.5mph, it takes 90 seconds to travel 150 meters.
-            */
-            const uint8_t timeTravel = 60;
+            // 1500 is a magic number. 30 is the minumum interval between position packets
+            uint32_t timeTravel = ((1500 / myNodeInfo.bitrate) >= 30) ? (1500 / myNodeInfo.bitrate) : 30;
 
             // If the distance traveled since the last update is greater than 100 meters
             //   and it's been at least 60 seconds since the last update
@@ -169,7 +165,7 @@ int32_t PositionPlugin::runOnce()
                 bool requestReplies = currentGeneration != radioGeneration;
                 currentGeneration = radioGeneration;
 
-                DEBUG_MSG("Sending smart pos@%x:6 to mesh (wantReplies=%d)\n", node->position.pos_timestamp, requestReplies);
+                DEBUG_MSG("Sending smart pos@%x:6 to mesh (wantReplies=%d, dt=%d, tt=%d)\n", node->position.pos_timestamp, requestReplies, distanceTravel, timeTravel);
                 sendOurPosition(NODENUM_BROADCAST, requestReplies);
 
                 /* Update lastGpsSend to now. This means if the device is stationary, then
