@@ -134,6 +134,8 @@ static int32_t ledBlinker()
     return powerStatus->getIsCharging() ? 1000 : (ledOn ? 1 : 1000);
 }
 
+uint32_t timeLastPowered = 0;
+
 /// Wrapper to convert our powerFSM stuff into a 'thread'
 class PowerFSMThread : public OSThread
 {
@@ -151,6 +153,13 @@ class PowerFSMThread : public OSThread
         auto state = powerFSM.getState();
         canSleep = (state != &statePOWER) && (state != &stateSERIAL);
 
+        if (powerStatus->getHasUSB()) {
+            timeLastPowered = millis();
+        } else if (radioConfig.preferences.on_battery_shutdown_after_secs > 0 && 
+                    millis() > timeLastPowered + (1000 * radioConfig.preferences.on_battery_shutdown_after_secs)) { //shutdown after 30 minutes unpowered
+            powerFSM.trigger(EVENT_SHUTDOWN);
+        }
+        
         return 10;
     }
 };
