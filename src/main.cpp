@@ -134,6 +134,8 @@ static int32_t ledBlinker()
     return powerStatus->getIsCharging() ? 1000 : (ledOn ? 1 : 1000);
 }
 
+uint32_t timeLastPowered = 0;
+
 /// Wrapper to convert our powerFSM stuff into a 'thread'
 class PowerFSMThread : public OSThread
 {
@@ -151,6 +153,13 @@ class PowerFSMThread : public OSThread
         auto state = powerFSM.getState();
         canSleep = (state != &statePOWER) && (state != &stateSERIAL);
 
+        if (powerStatus->getHasUSB()) {
+            timeLastPowered = millis();
+        } else if (radioConfig.preferences.on_battery_shutdown_after_secs > 0 && 
+                    millis() > timeLastPowered + (1000 * radioConfig.preferences.on_battery_shutdown_after_secs)) { //shutdown after 30 minutes unpowered
+            powerFSM.trigger(EVENT_SHUTDOWN);
+        }
+        
         return 10;
     }
 };
@@ -589,6 +598,13 @@ void setup()
         RECORD_CRITICALERROR(CriticalErrorCode_NoRadio);
     else
         router->addInterface(rIf);
+
+    // Calculate and save the bit rate to myNodeInfo
+    // TODO: This needs to be added what ever method changes the channel from the phone.
+    myNodeInfo.bitrate = (float(Constants_DATA_PAYLOAD_LEN) / 
+                    (float(rIf->getPacketTime(Constants_DATA_PAYLOAD_LEN)))
+                    ) * 1000;
+    DEBUG_MSG("myNodeInfo.bitrate = %f bytes / sec\n", myNodeInfo.bitrate);
 
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
