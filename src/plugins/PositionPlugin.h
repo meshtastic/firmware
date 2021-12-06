@@ -14,8 +14,8 @@ class PositionPlugin : public ProtobufPlugin<Position>, private concurrency::OST
     uint32_t lastGpsSend = 0;
 
     // Store the latest good lat / long
-    uint32_t lastGpsLatitude = 0;
-    uint32_t lastGpsLongitude = 0;
+    int32_t lastGpsLatitude = 0;
+    int32_t lastGpsLongitude = 0;
 
     /// We force a rebroadcast if the radio settings change
     uint32_t currentGeneration = 0;
