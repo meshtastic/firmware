@@ -217,16 +217,22 @@ const char *Channels::getName(size_t chIndex)
         else
             switch (channelSettings.modem_config) {
             case ChannelSettings_ModemConfig_Bw125Cr45Sf128:
-                channelName = "Medium";
+                channelName = "ShortSlow";
                 break;
             case ChannelSettings_ModemConfig_Bw500Cr45Sf128:
                 channelName = "ShortFast";
                 break;
             case ChannelSettings_ModemConfig_Bw31_25Cr48Sf512:
-                channelName = "LongAlt";
+                channelName = "LongFast";
                 break;
             case ChannelSettings_ModemConfig_Bw125Cr48Sf4096:
                 channelName = "LongSlow";
+                break;
+            case ChannelSettings_ModemConfig_Bw250Cr46Sf2048:
+                channelName = "MediumSlow";
+                break;
+            case ChannelSettings_ModemConfig_Bw250Cr47Sf1024:
+                channelName = "MediumFast";
                 break;
             default:
                 channelName = "Invalid";
