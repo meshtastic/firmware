@@ -14,7 +14,9 @@ typedef enum _ChannelSettings_ModemConfig {
     ChannelSettings_ModemConfig_Bw125Cr45Sf128 = 0,
     ChannelSettings_ModemConfig_Bw500Cr45Sf128 = 1,
     ChannelSettings_ModemConfig_Bw31_25Cr48Sf512 = 2,
-    ChannelSettings_ModemConfig_Bw125Cr48Sf4096 = 3
+    ChannelSettings_ModemConfig_Bw125Cr48Sf4096 = 3,
+    ChannelSettings_ModemConfig_Bw250Cr46Sf2048 = 4,
+    ChannelSettings_ModemConfig_Bw250Cr47Sf1024 = 5
 } ChannelSettings_ModemConfig;
 
 typedef enum _Channel_Role {
@@ -49,8 +51,8 @@ typedef struct _Channel {
 
 /* Helper constants for enums */
 #define _ChannelSettings_ModemConfig_MIN ChannelSettings_ModemConfig_Bw125Cr45Sf128
-#define _ChannelSettings_ModemConfig_MAX ChannelSettings_ModemConfig_Bw125Cr48Sf4096
-#define _ChannelSettings_ModemConfig_ARRAYSIZE ((ChannelSettings_ModemConfig)(ChannelSettings_ModemConfig_Bw125Cr48Sf4096+1))
+#define _ChannelSettings_ModemConfig_MAX ChannelSettings_ModemConfig_Bw250Cr47Sf1024
+#define _ChannelSettings_ModemConfig_ARRAYSIZE ((ChannelSettings_ModemConfig)(ChannelSettings_ModemConfig_Bw250Cr47Sf1024+1))
 
 #define _Channel_Role_MIN Channel_Role_DISABLED
 #define _Channel_Role_MAX Channel_Role_SECONDARY
