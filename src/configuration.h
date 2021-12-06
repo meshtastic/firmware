@@ -200,7 +200,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Leave undefined to disable our PMU IRQ handler.  DO NOT ENABLE THIS because the pmuirq can cause sperious interrupts
 // and waking from light sleep
 // #define PMU_IRQ 35
-// #define AXP192_SLAVE_ADDRESS 0x34
+#define AXP192_SLAVE_ADDRESS 0x34
 
 #elif defined(TBEAM_V07)
 // This string must exactly match the case used in release file names or the android updater won't work
