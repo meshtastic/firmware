@@ -37,6 +37,14 @@ static void sdsEnter()
     doDeepSleep(getPref_sds_secs() * 1000LL);
 }
 
+extern Power *power;
+
+static void shutdownEnter()
+{
+    DEBUG_MSG("Enter state: SHUTDOWN\n");
+    power->shutdown();
+}
+
 #include "error.h"
 
 static uint32_t secsSlept;
@@ -217,6 +225,7 @@ static void bootEnter() {
     DEBUG_MSG("Enter state: BOOT\n");
 }
 
+State stateSHUTDOWN(shutdownEnter, NULL, NULL, "SHUTDOWN");
 State stateSDS(sdsEnter, NULL, NULL, "SDS");
 State stateLS(lsEnter, lsIdle, lsExit, "LS");
 State stateNB(nbEnter, NULL, NULL, "NB");
@@ -259,6 +268,14 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateDARK, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
     powerFSM.add_transition(&stateON, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
     powerFSM.add_transition(&stateSERIAL, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
+
+    // Handle being told to power off
+    powerFSM.add_transition(&stateBOOT, &stateSHUTDOWN, EVENT_SHUTDOWN, NULL, "Shutdown");
+    powerFSM.add_transition(&stateLS, &stateSHUTDOWN, EVENT_SHUTDOWN, NULL, "Shutdown");
+    powerFSM.add_transition(&stateNB, &stateSHUTDOWN, EVENT_SHUTDOWN, NULL, "Shutdown");
+    powerFSM.add_transition(&stateDARK, &stateSHUTDOWN, EVENT_SHUTDOWN, NULL, "Shutdown");
+    powerFSM.add_transition(&stateON, &stateSHUTDOWN, EVENT_SHUTDOWN, NULL, "Shutdown");
+    powerFSM.add_transition(&stateSERIAL, &stateSHUTDOWN, EVENT_SHUTDOWN, NULL, "Shutdown");
 
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_BLUETOOTH_PAIR, NULL, "Bluetooth pairing");
     powerFSM.add_transition(&stateON, &stateON, EVENT_BLUETOOTH_PAIR, NULL, "Bluetooth pairing");
