@@ -19,6 +19,7 @@
 #define EVENT_POWER_CONNECTED 13
 #define EVENT_POWER_DISCONNECTED 14
 #define EVENT_FIRMWARE_UPDATE 15 // We just received a new firmware update packet from the phone
+#define EVENT_SHUTDOWN 16 //force a full shutdown now (not just sleep)
 
 extern Fsm powerFSM;
 extern State statePOWER, stateSERIAL;
