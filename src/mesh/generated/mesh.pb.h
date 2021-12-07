@@ -155,7 +155,7 @@ typedef struct _MyNodeInfo {
     uint32_t max_channels;
     pb_callback_t air_period_tx;
     pb_callback_t air_period_rx;
-    pb_callback_t air_period_tx_all;
+    pb_callback_t air_period_rx_all;
 } MyNodeInfo;
 
 typedef struct _Position {
@@ -364,7 +364,7 @@ extern "C" {
 #define MyNodeInfo_max_channels_tag              15
 #define MyNodeInfo_air_period_tx_tag             16
 #define MyNodeInfo_air_period_rx_tag             17
-#define MyNodeInfo_air_period_tx_all_tag         18
+#define MyNodeInfo_air_period_rx_all_tag         18
 #define Position_latitude_i_tag                  1
 #define Position_longitude_i_tag                 2
 #define Position_altitude_tag                    3
@@ -544,7 +544,7 @@ X(a, STATIC,   SINGULAR, UINT32,   min_app_version,  14) \
 X(a, STATIC,   SINGULAR, UINT32,   max_channels,     15) \
 X(a, CALLBACK, REPEATED, UINT32,   air_period_tx,    16) \
 X(a, CALLBACK, REPEATED, UINT32,   air_period_rx,    17) \
-X(a, CALLBACK, REPEATED, UINT32,   air_period_tx_all,  18)
+X(a, CALLBACK, REPEATED, UINT32,   air_period_rx_all,  18)
 #define MyNodeInfo_CALLBACK pb_default_field_callback
 #define MyNodeInfo_DEFAULT NULL
 
