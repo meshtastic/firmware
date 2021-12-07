@@ -1,7 +1,8 @@
 #include "configuration.h"
 #include "airtime.h"
+#include "NodeDB.h"
 
-#define periodsToLog 48
+#define periodsToLog 24
 
 AirTime *airTime;
 
@@ -24,9 +25,11 @@ void AirTime::logAirtime(reportTypes reportType, uint32_t airtime_ms)
     if (reportType == TX_LOG) {
         DEBUG_MSG("AirTime - Packet transmitted : %ums\n", airtime_ms);
         airtimes.periodTX[0] = airtimes.periodTX[0] + airtime_ms;
+        myNodeInfo.air_period_tx[0] = myNodeInfo.air_period_tx[0] + airtime_ms;
     } else if (reportType == RX_LOG) {
         DEBUG_MSG("AirTime - Packet received : %ums\n", airtime_ms);
         airtimes.periodRX[0] = airtimes.periodRX[0] + airtime_ms;
+        myNodeInfo.air_period_rx[0] = myNodeInfo.air_period_rx[0] + airtime_ms;
     } else if (reportType == RX_ALL_LOG) {
         DEBUG_MSG("AirTime - Packet received (noise?) : %ums\n", airtime_ms);
         airtimes.periodRX_ALL[0] = airtimes.periodRX_ALL[0] + airtime_ms;
@@ -50,10 +53,17 @@ void airtimeRotatePeriod()
             airtimes.periodTX[i + 1] = airtimes.periodTX[i];
             airtimes.periodRX[i + 1] = airtimes.periodRX[i];
             airtimes.periodRX_ALL[i + 1] = airtimes.periodRX_ALL[i];
+
+            myNodeInfo.air_period_tx[i + 1] = myNodeInfo.air_period_tx[i];
+            myNodeInfo.air_period_rx[i + 1] = myNodeInfo.air_period_rx[i];
         }
         airtimes.periodTX[0] = 0;
         airtimes.periodRX[0] = 0;
         airtimes.periodRX_ALL[0] = 0;
+
+        myNodeInfo.air_period_tx[0] = 0;
+        myNodeInfo.air_period_rx[0] = 0;
+
 
         airtimes.lastPeriodIndex = currentPeriodIndex();
     }
