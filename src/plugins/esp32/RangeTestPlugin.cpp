@@ -229,7 +229,7 @@ bool RangeTestPluginRadio::appendFile(const MeshPacket &mp)
 
         // Print the CSV header
         if (fileToWrite.println(
-                "time,from,sender name,sender lat,sender long,rx lat,rx long,rx elevation,rx snr,distance,payload")) {
+                "time,from,sender name,sender lat,sender long,rx lat,rx long,rx elevation,rx snr,distance,hop limit,payload")) {
             DEBUG_MSG("File was written\n");
         } else {
             DEBUG_MSG("File write failed\n");
@@ -278,6 +278,8 @@ bool RangeTestPluginRadio::appendFile(const MeshPacket &mp)
     } else {
         fileToAppend.printf("0,");
     }
+
+    fileToAppend.printf("%d,", mp.hop_limit); // Packet Hop Limit
 
     // TODO: If quotes are found in the payload, it has to be escaped.
     fileToAppend.printf("\"%s\"\n", p.payload.bytes);
