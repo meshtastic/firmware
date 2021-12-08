@@ -171,7 +171,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define I2C_SCL 22
 
 #define BUTTON_PIN 38     // The middle button GPIO on the T-Beam
-#define BUTTON_PIN_ALT 13 // Alternate GPIO for an external button if needed
+//#define BUTTON_PIN_ALT 13 // Alternate GPIO for an external button if needed. Does anyone use this? It is not documented anywhere.
+#define EXT_NOTIFY_PIN 13 // Default pin to use for Ext Notify Plugin.
 
 #define LED_INVERTED 1
 #define LED_PIN 4 // Newer tbeams (1.1) have an extra led on GPIO4
@@ -213,6 +214,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define BUTTON_PIN 39
 #define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+#define EXT_NOTIFY_PIN 13 // Default pin to use for Ext Notify Plugin.
 
 #define USE_RF95
 #define LORA_DIO0 26 // a No connect on the SX1262 module
@@ -316,6 +318,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HW_VENDOR HardwareModel_HELTEC_V2_1
 
 #define BATTERY_PIN 37 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+#define EXT_NOTIFY_PIN 13 // Default pin to use for Ext Notify Plugin.
 
 #endif
 
@@ -338,6 +341,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LED_PIN 2     // If defined we will blink this LED
 #define BUTTON_PIN 0  // If defined, this will be used for user button presses
 #define BUTTON_NEED_PULLUP
+#define EXT_NOTIFY_PIN 13 // Default pin to use for Ext Notify Plugin.
 
 #define USE_RF95
 #define LORA_DIO0 26 // a No connect on the SX1262 module
