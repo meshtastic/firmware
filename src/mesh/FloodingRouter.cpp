@@ -35,7 +35,13 @@ void FloodingRouter::sniffReceived(const MeshPacket *p, const Routing *c)
         if (p->id != 0) {
             MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
 
-            tosend->hop_limit--; // bump down the hop count
+            if (radioConfig.preferences.is_immutable_hop_limit) {
+                // do not decrease the `hop_limit` value when forwarding messages
+                tosend->hop_limit;
+            }
+            else {
+                tosend->hop_limit--; // bump down the hop count
+            }
 
             printPacket("Rebroadcasting received floodmsg to neighbors", p);
             // Note: we are careful to resend using the original senders node id
