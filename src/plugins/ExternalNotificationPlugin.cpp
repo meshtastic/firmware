@@ -44,7 +44,7 @@
 */
 
 // Default configurations
-#define EXT_NOTIFICATION_PLUGIN_OUTPUT EXT_NOTIFY_PIN
+#define EXT_NOTIFICATION_PLUGIN_OUTPUT EXT_NOTIFY_OUT
 #define EXT_NOTIFICATION_PLUGIN_OUTPUT_MS 1000
 
 #define ASCII_BELL 0x07
@@ -84,7 +84,7 @@ int32_t ExternalNotificationPlugin::runOnce()
 
 void ExternalNotificationPlugin::setExternalOn()
 {
-    #ifdef EXT_NOTIFY_PIN
+    #ifdef EXT_NOTIFY_OUT
     externalCurrentState = 1;
     externalTurnedOn = millis();
 
@@ -96,7 +96,7 @@ void ExternalNotificationPlugin::setExternalOn()
 
 void ExternalNotificationPlugin::setExternalOff()
 {
-    #ifdef EXT_NOTIFY_PIN
+    #ifdef EXT_NOTIFY_OUT
     externalCurrentState = 0;
 
     digitalWrite((radioConfig.preferences.ext_notification_plugin_output ? radioConfig.preferences.ext_notification_plugin_output
@@ -115,7 +115,7 @@ ExternalNotificationPlugin::ExternalNotificationPlugin()
     boundChannel = Channels::gpioChannel;
 
 #ifndef NO_ESP32
-    #ifdef EXT_NOTIFY_PIN
+    #ifdef EXT_NOTIFY_OUT
 
     /*
         Uncomment the preferences below if you want to use the plugin
@@ -152,7 +152,7 @@ ExternalNotificationPlugin::ExternalNotificationPlugin()
 ProcessMessage ExternalNotificationPlugin::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
-    #ifdef EXT_NOTIFY_PIN
+    #ifdef EXT_NOTIFY_OUT
 
     if (radioConfig.preferences.ext_notification_plugin_enabled) {
 
