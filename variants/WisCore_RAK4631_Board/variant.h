@@ -58,7 +58,9 @@ extern "C" {
 /*
  * Buttons
  */
-#define PIN_BUTTON1 11
+#ifdef RAK_BASE_5005
+#define PIN_BUTTON1 5 // This will default to normal button pin 
+#endif
 #define PIN_BUTTON2 12
 #define PIN_BUTTON3 24
 #define PIN_BUTTON4 25
@@ -169,8 +171,11 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // #define PIN_GPS_RESET (34)
 #define PIN_GPS_EN (34)
 #define PIN_GPS_PPS (17) // Pulse per second input from the GPS
+
+#ifdef RAK_BASE_5005
 #define GPS_RX_PIN PIN_SERIAL1_RX
 #define GPS_TX_PIN PIN_SERIAL1_TX
+#endif
 
 // Battery
 // The battery sense is hooked to pin A0 (5)
