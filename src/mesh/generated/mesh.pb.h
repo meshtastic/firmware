@@ -153,6 +153,10 @@ typedef struct _MyNodeInfo {
     uint32_t message_timeout_msec;
     uint32_t min_app_version;
     uint32_t max_channels;
+    pb_size_t air_period_tx_count;
+    uint32_t air_period_tx[24];
+    pb_size_t air_period_rx_count;
+    uint32_t air_period_rx[24];
 } MyNodeInfo;
 
 typedef struct _Position {
@@ -316,7 +320,7 @@ extern "C" {
 #define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0}
 #define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0}
 #define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0}
-#define MyNodeInfo_init_default                  {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0}
+#define MyNodeInfo_init_default                  {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
 #define LogRecord_init_default                   {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_default                   {0, 0, {MyNodeInfo_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
@@ -328,7 +332,7 @@ extern "C" {
 #define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0}
 #define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0}
 #define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0}
-#define MyNodeInfo_init_zero                     {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0}
+#define MyNodeInfo_init_zero                     {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
 #define LogRecord_init_zero                      {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_zero                      {0, 0, {MyNodeInfo_init_zero}}
 #define ToRadio_init_zero                        {0, {MeshPacket_init_zero}}
@@ -359,6 +363,8 @@ extern "C" {
 #define MyNodeInfo_message_timeout_msec_tag      13
 #define MyNodeInfo_min_app_version_tag           14
 #define MyNodeInfo_max_channels_tag              15
+#define MyNodeInfo_air_period_tx_tag             16
+#define MyNodeInfo_air_period_rx_tag             17
 #define Position_latitude_i_tag                  1
 #define Position_longitude_i_tag                 2
 #define Position_altitude_tag                    3
@@ -535,7 +541,9 @@ X(a, STATIC,   SINGULAR, UINT32,   reboot_count,     10) \
 X(a, STATIC,   SINGULAR, FLOAT,    bitrate,          11) \
 X(a, STATIC,   SINGULAR, UINT32,   message_timeout_msec,  13) \
 X(a, STATIC,   SINGULAR, UINT32,   min_app_version,  14) \
-X(a, STATIC,   SINGULAR, UINT32,   max_channels,     15)
+X(a, STATIC,   SINGULAR, UINT32,   max_channels,     15) \
+X(a, STATIC,   REPEATED, UINT32,   air_period_tx,    16) \
+X(a, STATIC,   REPEATED, UINT32,   air_period_rx,    17)
 #define MyNodeInfo_CALLBACK NULL
 #define MyNodeInfo_DEFAULT NULL
 
@@ -613,9 +621,9 @@ extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 #define Data_size                                260
 #define MeshPacket_size                          309
 #define NodeInfo_size                            270
-#define MyNodeInfo_size                          106
+#define MyNodeInfo_size                          442
 #define LogRecord_size                           81
-#define FromRadio_size                           318
+#define FromRadio_size                           451
 #define ToRadio_size                             312
 #define ToRadio_PeerInfo_size                    8
 
