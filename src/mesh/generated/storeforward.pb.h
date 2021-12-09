@@ -17,17 +17,24 @@ typedef enum _StoreAndForward_RequestResponse {
     StoreAndForward_RequestResponse_ROUTER_PING = 3,
     StoreAndForward_RequestResponse_ROUTER_PONG = 4,
     StoreAndForward_RequestResponse_ROUTER_BUSY = 5,
+    StoreAndForward_RequestResponse_ROUTER_HISTORY = 6,
     StoreAndForward_RequestResponse_CLIENT_ERROR = 101,
     StoreAndForward_RequestResponse_CLIENT_HISTORY = 102,
     StoreAndForward_RequestResponse_CLIENT_STATS = 103,
     StoreAndForward_RequestResponse_CLIENT_PING = 104,
-    StoreAndForward_RequestResponse_CLIENT_PONG = 105
+    StoreAndForward_RequestResponse_CLIENT_PONG = 105,
+    StoreAndForward_RequestResponse_CLIENT_ABORT = 106
 } StoreAndForward_RequestResponse;
 
 /* Struct definitions */
+typedef struct _StoreAndForward_Heartbeat {
+    uint32_t heartbeatPeriod;
+} StoreAndForward_Heartbeat;
+
 typedef struct _StoreAndForward_History {
     uint32_t HistoryMessages;
     uint32_t Window;
+    uint32_t LastRequest;
 } StoreAndForward_History;
 
 typedef struct _StoreAndForward_Statistics {
@@ -48,13 +55,15 @@ typedef struct _StoreAndForward {
     StoreAndForward_Statistics stats;
     bool has_history;
     StoreAndForward_History history;
+    bool has_heartbeat;
+    StoreAndForward_Heartbeat heartbeat;
 } StoreAndForward;
 
 
 /* Helper constants for enums */
 #define _StoreAndForward_RequestResponse_MIN StoreAndForward_RequestResponse_UNSET
-#define _StoreAndForward_RequestResponse_MAX StoreAndForward_RequestResponse_CLIENT_PONG
-#define _StoreAndForward_RequestResponse_ARRAYSIZE ((StoreAndForward_RequestResponse)(StoreAndForward_RequestResponse_CLIENT_PONG+1))
+#define _StoreAndForward_RequestResponse_MAX StoreAndForward_RequestResponse_CLIENT_ABORT
+#define _StoreAndForward_RequestResponse_ARRAYSIZE ((StoreAndForward_RequestResponse)(StoreAndForward_RequestResponse_CLIENT_ABORT+1))
 
 
 #ifdef __cplusplus
@@ -62,16 +71,20 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define StoreAndForward_init_default             {_StoreAndForward_RequestResponse_MIN, false, StoreAndForward_Statistics_init_default, false, StoreAndForward_History_init_default}
+#define StoreAndForward_init_default             {_StoreAndForward_RequestResponse_MIN, false, StoreAndForward_Statistics_init_default, false, StoreAndForward_History_init_default, false, StoreAndForward_Heartbeat_init_default}
 #define StoreAndForward_Statistics_init_default  {0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define StoreAndForward_History_init_default     {0, 0}
-#define StoreAndForward_init_zero                {_StoreAndForward_RequestResponse_MIN, false, StoreAndForward_Statistics_init_zero, false, StoreAndForward_History_init_zero}
+#define StoreAndForward_History_init_default     {0, 0, 0}
+#define StoreAndForward_Heartbeat_init_default   {0}
+#define StoreAndForward_init_zero                {_StoreAndForward_RequestResponse_MIN, false, StoreAndForward_Statistics_init_zero, false, StoreAndForward_History_init_zero, false, StoreAndForward_Heartbeat_init_zero}
 #define StoreAndForward_Statistics_init_zero     {0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define StoreAndForward_History_init_zero        {0, 0}
+#define StoreAndForward_History_init_zero        {0, 0, 0}
+#define StoreAndForward_Heartbeat_init_zero      {0}
 
 /* Field tags (for use in manual encoding/decoding) */
+#define StoreAndForward_Heartbeat_heartbeatPeriod_tag 1
 #define StoreAndForward_History_HistoryMessages_tag 1
 #define StoreAndForward_History_Window_tag       2
+#define StoreAndForward_History_LastRequest_tag  3
 #define StoreAndForward_Statistics_MessagesTotal_tag 1
 #define StoreAndForward_Statistics_MessagesSaved_tag 2
 #define StoreAndForward_Statistics_MessagesMax_tag 3
@@ -84,16 +97,19 @@ extern "C" {
 #define StoreAndForward_rr_tag                   1
 #define StoreAndForward_stats_tag                2
 #define StoreAndForward_history_tag              3
+#define StoreAndForward_heartbeat_tag            4
 
 /* Struct field encoding specification for nanopb */
 #define StoreAndForward_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    rr,                1) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  stats,             2) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  history,           3)
+X(a, STATIC,   OPTIONAL, MESSAGE,  history,           3) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  heartbeat,         4)
 #define StoreAndForward_CALLBACK NULL
 #define StoreAndForward_DEFAULT NULL
 #define StoreAndForward_stats_MSGTYPE StoreAndForward_Statistics
 #define StoreAndForward_history_MSGTYPE StoreAndForward_History
+#define StoreAndForward_heartbeat_MSGTYPE StoreAndForward_Heartbeat
 
 #define StoreAndForward_Statistics_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   MessagesTotal,     1) \
@@ -110,23 +126,32 @@ X(a, STATIC,   SINGULAR, UINT32,   ReturnWindow,      9)
 
 #define StoreAndForward_History_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   HistoryMessages,   1) \
-X(a, STATIC,   SINGULAR, UINT32,   Window,            2)
+X(a, STATIC,   SINGULAR, UINT32,   Window,            2) \
+X(a, STATIC,   SINGULAR, UINT32,   LastRequest,       3)
 #define StoreAndForward_History_CALLBACK NULL
 #define StoreAndForward_History_DEFAULT NULL
+
+#define StoreAndForward_Heartbeat_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   heartbeatPeriod,   1)
+#define StoreAndForward_Heartbeat_CALLBACK NULL
+#define StoreAndForward_Heartbeat_DEFAULT NULL
 
 extern const pb_msgdesc_t StoreAndForward_msg;
 extern const pb_msgdesc_t StoreAndForward_Statistics_msg;
 extern const pb_msgdesc_t StoreAndForward_History_msg;
+extern const pb_msgdesc_t StoreAndForward_Heartbeat_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define StoreAndForward_fields &StoreAndForward_msg
 #define StoreAndForward_Statistics_fields &StoreAndForward_Statistics_msg
 #define StoreAndForward_History_fields &StoreAndForward_History_msg
+#define StoreAndForward_Heartbeat_fields &StoreAndForward_Heartbeat_msg
 
 /* Maximum encoded size of messages (where known) */
-#define StoreAndForward_size                     68
+#define StoreAndForward_size                     82
 #define StoreAndForward_Statistics_size          50
-#define StoreAndForward_History_size             12
+#define StoreAndForward_History_size             18
+#define StoreAndForward_Heartbeat_size           6
 
 #ifdef __cplusplus
 } /* extern "C" */
