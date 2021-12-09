@@ -28,25 +28,26 @@ typedef enum _StoreAndForward_RequestResponse {
 
 /* Struct definitions */
 typedef struct _StoreAndForward_Heartbeat {
-    uint32_t heartbeatPeriod;
+    uint32_t period;
+    uint32_t secondary;
 } StoreAndForward_Heartbeat;
 
 typedef struct _StoreAndForward_History {
-    uint32_t HistoryMessages;
-    uint32_t Window;
-    uint32_t LastRequest;
+    uint32_t history_messages;
+    uint32_t window;
+    uint32_t last_request;
 } StoreAndForward_History;
 
 typedef struct _StoreAndForward_Statistics {
-    uint32_t MessagesTotal;
-    uint32_t MessagesSaved;
-    uint32_t MessagesMax;
-    uint32_t UpTime;
-    uint32_t Requests;
-    uint32_t RequestsHistory;
-    bool Heartbeat;
-    uint32_t ReturnMax;
-    uint32_t ReturnWindow;
+    uint32_t messages_total;
+    uint32_t messages_saved;
+    uint32_t messages_max;
+    uint32_t up_time;
+    uint32_t requests;
+    uint32_t requests_history;
+    bool heartbeat;
+    uint32_t return_max;
+    uint32_t return_window;
 } StoreAndForward_Statistics;
 
 typedef struct _StoreAndForward {
@@ -74,26 +75,27 @@ extern "C" {
 #define StoreAndForward_init_default             {_StoreAndForward_RequestResponse_MIN, false, StoreAndForward_Statistics_init_default, false, StoreAndForward_History_init_default, false, StoreAndForward_Heartbeat_init_default}
 #define StoreAndForward_Statistics_init_default  {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define StoreAndForward_History_init_default     {0, 0, 0}
-#define StoreAndForward_Heartbeat_init_default   {0}
+#define StoreAndForward_Heartbeat_init_default   {0, 0}
 #define StoreAndForward_init_zero                {_StoreAndForward_RequestResponse_MIN, false, StoreAndForward_Statistics_init_zero, false, StoreAndForward_History_init_zero, false, StoreAndForward_Heartbeat_init_zero}
 #define StoreAndForward_Statistics_init_zero     {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define StoreAndForward_History_init_zero        {0, 0, 0}
-#define StoreAndForward_Heartbeat_init_zero      {0}
+#define StoreAndForward_Heartbeat_init_zero      {0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define StoreAndForward_Heartbeat_heartbeatPeriod_tag 1
-#define StoreAndForward_History_HistoryMessages_tag 1
-#define StoreAndForward_History_Window_tag       2
-#define StoreAndForward_History_LastRequest_tag  3
-#define StoreAndForward_Statistics_MessagesTotal_tag 1
-#define StoreAndForward_Statistics_MessagesSaved_tag 2
-#define StoreAndForward_Statistics_MessagesMax_tag 3
-#define StoreAndForward_Statistics_UpTime_tag    4
-#define StoreAndForward_Statistics_Requests_tag  5
-#define StoreAndForward_Statistics_RequestsHistory_tag 6
-#define StoreAndForward_Statistics_Heartbeat_tag 7
-#define StoreAndForward_Statistics_ReturnMax_tag 8
-#define StoreAndForward_Statistics_ReturnWindow_tag 9
+#define StoreAndForward_Heartbeat_period_tag     1
+#define StoreAndForward_Heartbeat_secondary_tag  2
+#define StoreAndForward_History_history_messages_tag 1
+#define StoreAndForward_History_window_tag       2
+#define StoreAndForward_History_last_request_tag 3
+#define StoreAndForward_Statistics_messages_total_tag 1
+#define StoreAndForward_Statistics_messages_saved_tag 2
+#define StoreAndForward_Statistics_messages_max_tag 3
+#define StoreAndForward_Statistics_up_time_tag   4
+#define StoreAndForward_Statistics_requests_tag  5
+#define StoreAndForward_Statistics_requests_history_tag 6
+#define StoreAndForward_Statistics_heartbeat_tag 7
+#define StoreAndForward_Statistics_return_max_tag 8
+#define StoreAndForward_Statistics_return_window_tag 9
 #define StoreAndForward_rr_tag                   1
 #define StoreAndForward_stats_tag                2
 #define StoreAndForward_history_tag              3
@@ -112,27 +114,28 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  heartbeat,         4)
 #define StoreAndForward_heartbeat_MSGTYPE StoreAndForward_Heartbeat
 
 #define StoreAndForward_Statistics_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UINT32,   MessagesTotal,     1) \
-X(a, STATIC,   SINGULAR, UINT32,   MessagesSaved,     2) \
-X(a, STATIC,   SINGULAR, UINT32,   MessagesMax,       3) \
-X(a, STATIC,   SINGULAR, UINT32,   UpTime,            4) \
-X(a, STATIC,   SINGULAR, UINT32,   Requests,          5) \
-X(a, STATIC,   SINGULAR, UINT32,   RequestsHistory,   6) \
-X(a, STATIC,   SINGULAR, BOOL,     Heartbeat,         7) \
-X(a, STATIC,   SINGULAR, UINT32,   ReturnMax,         8) \
-X(a, STATIC,   SINGULAR, UINT32,   ReturnWindow,      9)
+X(a, STATIC,   SINGULAR, UINT32,   messages_total,    1) \
+X(a, STATIC,   SINGULAR, UINT32,   messages_saved,    2) \
+X(a, STATIC,   SINGULAR, UINT32,   messages_max,      3) \
+X(a, STATIC,   SINGULAR, UINT32,   up_time,           4) \
+X(a, STATIC,   SINGULAR, UINT32,   requests,          5) \
+X(a, STATIC,   SINGULAR, UINT32,   requests_history,   6) \
+X(a, STATIC,   SINGULAR, BOOL,     heartbeat,         7) \
+X(a, STATIC,   SINGULAR, UINT32,   return_max,        8) \
+X(a, STATIC,   SINGULAR, UINT32,   return_window,     9)
 #define StoreAndForward_Statistics_CALLBACK NULL
 #define StoreAndForward_Statistics_DEFAULT NULL
 
 #define StoreAndForward_History_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UINT32,   HistoryMessages,   1) \
-X(a, STATIC,   SINGULAR, UINT32,   Window,            2) \
-X(a, STATIC,   SINGULAR, UINT32,   LastRequest,       3)
+X(a, STATIC,   SINGULAR, UINT32,   history_messages,   1) \
+X(a, STATIC,   SINGULAR, UINT32,   window,            2) \
+X(a, STATIC,   SINGULAR, UINT32,   last_request,      3)
 #define StoreAndForward_History_CALLBACK NULL
 #define StoreAndForward_History_DEFAULT NULL
 
 #define StoreAndForward_Heartbeat_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UINT32,   heartbeatPeriod,   1)
+X(a, STATIC,   SINGULAR, UINT32,   period,            1) \
+X(a, STATIC,   SINGULAR, UINT32,   secondary,         2)
 #define StoreAndForward_Heartbeat_CALLBACK NULL
 #define StoreAndForward_Heartbeat_DEFAULT NULL
 
@@ -148,10 +151,10 @@ extern const pb_msgdesc_t StoreAndForward_Heartbeat_msg;
 #define StoreAndForward_Heartbeat_fields &StoreAndForward_Heartbeat_msg
 
 /* Maximum encoded size of messages (where known) */
-#define StoreAndForward_size                     82
+#define StoreAndForward_size                     88
 #define StoreAndForward_Statistics_size          50
 #define StoreAndForward_History_size             18
-#define StoreAndForward_Heartbeat_size           6
+#define StoreAndForward_Heartbeat_size           12
 
 #ifdef __cplusplus
 } /* extern "C" */
