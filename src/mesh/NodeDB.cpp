@@ -245,6 +245,10 @@ void NodeDB::init()
     preferences.end();
     DEBUG_MSG("Number of Device Reboots: %d\n", myNodeInfo.reboot_count);
 
+    /* The ESP32 has a wifi radio. This will need to be modified at some point so
+    *    the test isn't so simplistic.
+    */
+    myNodeInfo.has_wifi = true;
 #endif
 
     resetRadioConfig(); // If bogus settings got saved, then fix them
