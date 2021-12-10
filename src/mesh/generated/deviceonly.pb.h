@@ -125,7 +125,7 @@ extern const pb_msgdesc_t ChannelFile_msg;
 /* Maximum encoded size of messages (where known) */
 #define LegacyRadioConfig_size                   4
 #define LegacyRadioConfig_LegacyPreferences_size 2
-#define DeviceState_size                         9936
+#define DeviceState_size                         9939
 #define ChannelFile_size                         832
 
 #ifdef __cplusplus

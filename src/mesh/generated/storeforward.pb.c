@@ -15,5 +15,8 @@ PB_BIND(StoreAndForward_Statistics, StoreAndForward_Statistics, AUTO)
 PB_BIND(StoreAndForward_History, StoreAndForward_History, AUTO)
 
 
+PB_BIND(StoreAndForward_Heartbeat, StoreAndForward_Heartbeat, AUTO)
+
+
 
 
