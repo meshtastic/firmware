@@ -58,12 +58,15 @@ extern "C" {
 /*
  * Buttons
  */
+
 #ifdef RAK_BASE_5005
-#define PIN_BUTTON1 5 // This will default to normal button pin 
+#define PIN_BUTTON1 9 // Pin for button on E-ink button module or IO expansion
+#define BUTTON_NEED_PULLUP
 #endif
 #define PIN_BUTTON2 12
 #define PIN_BUTTON3 24
 #define PIN_BUTTON4 25
+
 
 /*
  * Analog pins
@@ -149,7 +152,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
    SW1       <->  P0.01 (Arduino GPIO number 1)
    A0        <->  P0.04/AIN2 (Arduino Analog A2
    A1        <->  P0.31/AIN7 (Arduino Analog A7
-   SPI_CS    <->  P0.26 (Arduino GPIO number 26)
+   SPI_CS    <->  P0.26 (Arduino GPIO number 26) 
  */
 
 // RAK4630 LoRa module
