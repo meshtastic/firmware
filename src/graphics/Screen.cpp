@@ -36,6 +36,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "target_specific.h"
 #include "utils.h"
 #include "gps/GeoCoord.h"
+#include "sleep.h"
 
 #ifndef NO_ESP32
 #include "mesh/http/WiFiAPClient.h"
@@ -875,6 +876,9 @@ int32_t Screen::runOnce()
         // oldFrameState = ui.getUiState()->frameState;
         DEBUG_MSG("Setting idle framerate\n");
         targetFramerate = IDLE_FRAMERATE;
+
+        setCPUFast(false); // Turn down the CPU now that the framerate has been reduced
+
         ui.setTargetFPS(targetFramerate);
         forceDisplay();
     }
@@ -1074,6 +1078,9 @@ void Screen::setFastFramerate()
 
     // We are about to start a transition so speed up fps
     targetFramerate = SCREEN_TRANSITION_FRAMERATE;
+
+    setCPUFast(true); // Turn up the CPU to improve screen animations
+
     ui.setTargetFPS(targetFramerate);
     setInterval(0); // redraw ASAP
     runASAP = true;
