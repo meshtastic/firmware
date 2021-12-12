@@ -877,7 +877,9 @@ int32_t Screen::runOnce()
         DEBUG_MSG("Setting idle framerate\n");
         targetFramerate = IDLE_FRAMERATE;
 
-        setCPUFast(false); // Turn down the CPU now that the framerate has been reduced
+#ifndef NO_ESP32
+        setCPUFast(false); // Turn up the CPU to improve screen animations
+#endif
 
         ui.setTargetFPS(targetFramerate);
         forceDisplay();
@@ -1079,7 +1081,9 @@ void Screen::setFastFramerate()
     // We are about to start a transition so speed up fps
     targetFramerate = SCREEN_TRANSITION_FRAMERATE;
 
+#ifndef NO_ESP32
     setCPUFast(true); // Turn up the CPU to improve screen animations
+#endif
 
     ui.setTargetFPS(targetFramerate);
     setInterval(0); // redraw ASAP
