@@ -1310,7 +1310,24 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
         display->drawString(x, y, String("USB"));
     }
 
-    auto mode = "Mode " + String(channels.getPrimary().modem_config);
+    auto mode = "";
+
+    if (channels.getPrimary().modem_config == 0) {
+        mode = "ShrtSlow";
+    } else if (channels.getPrimary().modem_config == 1) {
+        mode = "ShrtFast";
+    } else if (channels.getPrimary().modem_config == 2) {
+        mode = "LngFast";
+    } else if (channels.getPrimary().modem_config == 3) {
+        mode = "LngSlow";
+    } else if (channels.getPrimary().modem_config == 4) {
+        mode = "MedSlow";
+    } else if (channels.getPrimary().modem_config == 5) {
+        mode = "MedFast";
+    } else {
+        mode = "Custom";
+    }
+
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(mode), y, mode);
 
     // Line 2
