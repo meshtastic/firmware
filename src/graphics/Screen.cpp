@@ -1313,9 +1313,9 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     auto mode = "";
 
     if (channels.getPrimary().modem_config == 0) {
-        mode = "ShSlow";
+        mode = "ShrtSlow";
     } else if (channels.getPrimary().modem_config == 1) {
-        mode = "ShFast";
+        mode = "ShrtFast";
     } else if (channels.getPrimary().modem_config == 2) {
         mode = "LngFast";
     } else if (channels.getPrimary().modem_config == 3) {
