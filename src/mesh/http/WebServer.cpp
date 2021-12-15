@@ -5,6 +5,7 @@
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>
 #include <HTTPURLEncodedBodyParser.hpp>
+#include "sleep.h"
 
 #include <WebServer.h>
 #include <WiFi.h>
@@ -79,12 +80,14 @@ static void taskCreateCert(void *parameter)
     prefs.begin("MeshtasticHTTPS", false);
 
     // Delete the saved certs (used in debugging)
-    if (0) {
+
+#if 0
         DEBUG_MSG("Deleting any saved SSL keys ...\n");
         // prefs.clear();
         prefs.remove("PK");
         prefs.remove("cert");
-    }
+#endif
+
 
     DEBUG_MSG("Checking if we have a previously saved SSL Certificate.\n");
 
@@ -103,16 +106,12 @@ static void taskCreateCert(void *parameter)
         cert = new SSLCert(certBuffer, certLen, pkBuffer, pkLen);
 
         DEBUG_MSG("Retrieved Private Key: %d Bytes\n", cert->getPKLength());
-        // DEBUG_MSG("Retrieved Private Key: " + String(cert->getPKLength()) + " Bytes");
-        // for (int i = 0; i < cert->getPKLength(); i++)
-        //  Serial.print(cert->getPKData()[i], HEX);
-        // Serial.println();
-
         DEBUG_MSG("Retrieved Certificate: %d Bytes\n", cert->getCertLength());
-        // for (int i = 0; i < cert->getCertLength(); i++)
-        //  Serial.print(cert->getCertData()[i], HEX);
-        // Serial.println();
+
     } else {
+
+        setCPUFast(true);
+
         DEBUG_MSG("Creating the certificate. This may take a while. Please wait...\n");
         yield();
         cert = new SSLCert();
@@ -144,6 +143,9 @@ static void taskCreateCert(void *parameter)
             prefs.putBytes("PK", (uint8_t *)cert->getPKData(), cert->getPKLength());
             prefs.putBytes("cert", (uint8_t *)cert->getCertData(), cert->getCertLength());
         }
+
+        setCPUFast(false);
+
     }
 
     isCertReady = true;
