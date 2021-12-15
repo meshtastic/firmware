@@ -156,7 +156,11 @@ static void drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     display->drawString(64 + x, y, "Creating SSL certificate");
 
     display->setFont(FONT_SMALL);
-    display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait...");
+    if ((millis() / 1000) % 2) {
+        display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . . .");
+    } else {
+        display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . .  ");
+    }
 }
 
 #ifdef HAS_EINK
@@ -216,7 +220,11 @@ static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, i
     display->drawString(64 + x, y, "Updating");
 
     display->setFont(FONT_SMALL);
-    display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait...");
+    if ((millis() / 1000) % 2) {
+        display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . . .");
+    } else {
+        display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . .  ");
+    }
 
     // display->setFont(FONT_LARGE);
     // display->drawString(64 + x, 26 + y, btPIN);
