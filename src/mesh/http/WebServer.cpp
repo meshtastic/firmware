@@ -179,8 +179,9 @@ void createSSLCert()
                     yield();
                     esp_task_wdt_reset();
 
-                    if ((millis() / 1000 >= 3) && screen) {                        
-                        screen->setSSLFrames();
+                    if ((millis() / 1000 >= 3) && screen) {       
+                        if (screen)
+                            screen->setSSLFrames();
                     }
                 }
                 runLoop = false;
