@@ -16,8 +16,13 @@ ErrorCode ReliableRouter::send(MeshPacket *p)
         // If someone asks for acks on broadcast, we need the hop limit to be at least one, so that first node that receives our
         // message will rebroadcast.  But asking for hop_limit 0 in that context means the client app has no preference on hop counts
         // and we want this message to get through the whole mesh, so use the default.
-        if (p->to == NODENUM_BROADCAST && p->hop_limit == 0)
-            p->hop_limit = HOP_RELIABLE;
+        if (p->to == NODENUM_BROADCAST && p->hop_limit == 0) {
+            if (radioConfig.preferences.hop_limit && radioConfig.preferences.hop_limit <= HOP_MAX) {
+                p->hop_limit = (radioConfig.preferences.hop_limit >= HOP_MAX) ? HOP_MAX : radioConfig.preferences.hop_limit;
+            } else {
+                p->hop_limit = HOP_RELIABLE;
+            }
+        }
 
         auto copy = packetPool.allocCopy(*p);
         startRetransmission(copy);
