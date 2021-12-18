@@ -243,6 +243,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //#define GPS_TX_PIN 12 // not connected
 
 #define BUTTON_PIN 39 // The middle button GPIO on the T-Beam
+#define EXT_NOTIFY_OUT 12 // Overridden default pin to use for Ext Notify Plugin (#975).
 
 #define LORA_DIO0 26  // a No connect on the SX1262/SX1268 module
 #define LORA_RESET 23 // RST for SX1276, and for SX1262/SX1268
@@ -329,8 +330,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #undef GPS_TX_PIN
 #define GPS_RX_PIN 36
 #define GPS_TX_PIN 37
-
-#define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 
 #define I2C_SDA 4 // I2C pins for this board
 #define I2C_SCL 15
