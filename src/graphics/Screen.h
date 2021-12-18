@@ -97,6 +97,8 @@ class Screen : public concurrency::OSThread
     Screen(const Screen &) = delete;
     Screen &operator=(const Screen &) = delete;
 
+    uint8_t address_found;
+
     /// Initializes the UI, turns on the display, starts showing boot screen.
     //
     // Not thread safe - must be called before any other methods are called.
