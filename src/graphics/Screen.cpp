@@ -428,7 +428,10 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
     auto gpsFormat = radioConfig.preferences.gps_format;
     String displayLine = "";
 
-    if (!gps->getIsConnected() && !radioConfig.preferences.fixed_position) {
+    if (radioConfig.preferences.fixed_position) {
+        displayLine = "Fixed GPS";
+        display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
+    } else if (!gps->getIsConnected() && !radioConfig.preferences.fixed_position) {
         displayLine = "No GPS Module";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else if (!gps->getHasLock() && !radioConfig.preferences.fixed_position) {
