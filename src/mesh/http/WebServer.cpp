@@ -6,6 +6,8 @@
 #include <HTTPMultipartBodyParser.hpp>
 #include <HTTPURLEncodedBodyParser.hpp>
 #include "sleep.h"
+#include "graphics/Screen.h"
+
 
 #include <WebServer.h>
 #include <WiFi.h>
@@ -179,9 +181,8 @@ void createSSLCert()
                     yield();
                     esp_task_wdt_reset();
 
-                    if ((millis() / 1000 >= 3) && screen) {       
-                        if (screen)
-                            screen->setSSLFrames();
+                    if (millis() / 1000 >= 3) {       
+                        screen->setSSLFrames();                            
                     }
                 }
                 runLoop = false;

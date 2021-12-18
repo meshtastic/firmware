@@ -703,6 +703,7 @@ void _screen_header()
 
 Screen::Screen(uint8_t address, int sda, int scl) : OSThread("Screen"), cmdQueue(32), dispdev(address, sda, scl), ui(&dispdev)
 {
+    address_found = address;
     cmdQueue.setReader(this);
 }
 
@@ -940,10 +941,12 @@ void Screen::drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiStat
  * it is expected that this will be used during the boot phase */
 void Screen::setSSLFrames()
 {
-    // DEBUG_MSG("showing SSL frames\n");
-    static FrameCallback sslFrames[] = {drawSSLScreen};
-    ui.setFrames(sslFrames, 1);
-    ui.update();
+    if (address_found) {
+        // DEBUG_MSG("showing SSL frames\n");
+        static FrameCallback sslFrames[] = {drawSSLScreen};
+        ui.setFrames(sslFrames, 1);
+        ui.update();
+    }
 }
 
 // restore our regular frame list
