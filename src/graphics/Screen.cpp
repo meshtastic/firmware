@@ -40,6 +40,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #ifndef NO_ESP32
 #include "mesh/http/WiFiAPClient.h"
+#include "esp_task_wdt.h"
 #endif
 
 using namespace meshtastic; /** @todo remove */
@@ -154,6 +155,11 @@ static void drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(FONT_SMALL);
     display->drawString(64 + x, y, "Creating SSL certificate");
+
+#ifndef NO_ESP32
+    yield();
+    esp_task_wdt_reset();
+#endif
 
     display->setFont(FONT_SMALL);
     if ((millis() / 1000) % 2) {
@@ -697,6 +703,7 @@ void _screen_header()
 
 Screen::Screen(uint8_t address, int sda, int scl) : OSThread("Screen"), cmdQueue(32), dispdev(address, sda, scl), ui(&dispdev)
 {
+    address_found = address;
     cmdQueue.setReader(this);
 }
 
@@ -934,10 +941,12 @@ void Screen::drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiStat
  * it is expected that this will be used during the boot phase */
 void Screen::setSSLFrames()
 {
-    DEBUG_MSG("showing SSL frames\n");
-    static FrameCallback sslFrames[] = {drawSSLScreen};
-    ui.setFrames(sslFrames, 1);
-    ui.update();
+    if (address_found) {
+        // DEBUG_MSG("showing SSL frames\n");
+        static FrameCallback sslFrames[] = {drawSSLScreen};
+        ui.setFrames(sslFrames, 1);
+        ui.update();
+    }
 }
 
 // restore our regular frame list
