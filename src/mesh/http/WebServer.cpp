@@ -6,6 +6,8 @@
 #include <HTTPMultipartBodyParser.hpp>
 #include <HTTPURLEncodedBodyParser.hpp>
 #include "sleep.h"
+#include "graphics/Screen.h"
+
 
 #include <WebServer.h>
 #include <WiFi.h>
@@ -79,13 +81,13 @@ static void taskCreateCert(void *parameter)
 {
     prefs.begin("MeshtasticHTTPS", false);
 
-    // Delete the saved certs (used in debugging)
 
 #if 0
-        DEBUG_MSG("Deleting any saved SSL keys ...\n");
-        // prefs.clear();
-        prefs.remove("PK");
-        prefs.remove("cert");
+    // Delete the saved certs (used in debugging)
+    DEBUG_MSG("Deleting any saved SSL keys ...\n");
+    // prefs.clear();
+    prefs.remove("PK");
+    prefs.remove("cert");
 #endif
 
 
@@ -156,6 +158,7 @@ static void taskCreateCert(void *parameter)
 
 void createSSLCert()
 {
+    bool runLoop = false;
     if (isWifiAvailable() && !isCertReady) {
 
         // Create a new process just to handle creating the cert.
@@ -163,21 +166,28 @@ void createSSLCert()
         //  jm@casler.org (Oct 2020)
         xTaskCreate(taskCreateCert, /* Task function. */
                     "createCert",   /* String with name of task. */
-                    16384,          /* Stack size in bytes. */
+                    //16384,          /* Stack size in bytes. */
+                    8192,          /* Stack size in bytes. */
                     NULL,           /* Parameter passed as input of the task */
                     16,             /* Priority of the task. */
                     NULL);          /* Task handle. */
 
         DEBUG_MSG("Waiting for SSL Cert to be generated.\n");
-        int seconds = 0;
         while (!isCertReady) {
-            DEBUG_MSG(".");
-            delay(1000);
-            yield();
-            esp_task_wdt_reset();
-            seconds++;
-            if ((seconds == 3) && screen) {
-                screen->setSSLFrames();
+            if ((millis() / 500) % 2) {
+                if (runLoop) {
+                    DEBUG_MSG(".");
+
+                    yield();
+                    esp_task_wdt_reset();
+
+                    if (millis() / 1000 >= 3) {       
+                        screen->setSSLFrames();                            
+                    }
+                }
+                runLoop = false;
+            } else {
+                runLoop = true;
             }
         }
         DEBUG_MSG("SSL Cert Ready!\n");
@@ -200,40 +210,6 @@ int32_t WebServerThread::runOnce()
 void initWebServer()
 {
     DEBUG_MSG("Initializing Web Server ...\n");
-
-#if 0
-// this seems to be a copypaste dup of taskCreateCert
-    prefs.begin("MeshtasticHTTPS", false);
-
-    size_t pkLen = prefs.getBytesLength("PK");
-    size_t certLen = prefs.getBytesLength("cert");
-
-    DEBUG_MSG("Checking if we have a previously saved SSL Certificate.\n");
-
-    if (pkLen && certLen) {
-
-        uint8_t *pkBuffer = new uint8_t[pkLen];
-        prefs.getBytes("PK", pkBuffer, pkLen);
-
-        uint8_t *certBuffer = new uint8_t[certLen];
-        prefs.getBytes("cert", certBuffer, certLen);
-
-        cert = new SSLCert(certBuffer, certLen, pkBuffer, pkLen);
-
-        DEBUG_MSG("Retrieved Private Key: %d Bytes\n", cert->getPKLength());
-        // DEBUG_MSG("Retrieved Private Key: " + String(cert->getPKLength()) + " Bytes");
-        // for (int i = 0; i < cert->getPKLength(); i++)
-        //  Serial.print(cert->getPKData()[i], HEX);
-        // Serial.println();
-
-        DEBUG_MSG("Retrieved Certificate: %d Bytes\n", cert->getCertLength());
-        // for (int i = 0; i < cert->getCertLength(); i++)
-        //  Serial.print(cert->getCertData()[i], HEX);
-        // Serial.println();
-    } else {
-        DEBUG_MSG("Web Server started without SSL keys! How did this happen?\n");
-    }
-#endif
 
     // We can now use the new certificate to setup our server as usual.
     secureServer = new HTTPSServer(cert);
