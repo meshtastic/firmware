@@ -245,6 +245,10 @@ void NodeDB::init()
     preferences.end();
     DEBUG_MSG("Number of Device Reboots: %d\n", myNodeInfo.reboot_count);
 
+    /* The ESP32 has a wifi radio. This will need to be modified at some point so
+    *    the test isn't so simplistic.
+    */
+    myNodeInfo.has_wifi = true;
 #endif
 
     resetRadioConfig(); // If bogus settings got saved, then fix them
@@ -429,7 +433,7 @@ uint32_t sinceLastSeen(const NodeInfo *n)
     return delta;
 }
 
-#define NUM_ONLINE_SECS (60 * 2) // 2 hrs to consider someone offline
+#define NUM_ONLINE_SECS (60 & 60 * 2) // 2 hrs to consider someone offline
 
 size_t NodeDB::getNumOnlineNodes()
 {

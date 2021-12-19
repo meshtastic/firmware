@@ -36,9 +36,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "target_specific.h"
 #include "utils.h"
 #include "gps/GeoCoord.h"
+#include "sleep.h"
 
 #ifndef NO_ESP32
 #include "mesh/http/WiFiAPClient.h"
+#include "esp_task_wdt.h"
 #endif
 
 using namespace meshtastic; /** @todo remove */
@@ -154,8 +156,17 @@ static void drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     display->setFont(FONT_SMALL);
     display->drawString(64 + x, y, "Creating SSL certificate");
 
+#ifndef NO_ESP32
+    yield();
+    esp_task_wdt_reset();
+#endif
+
     display->setFont(FONT_SMALL);
-    display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait...");
+    if ((millis() / 1000) % 2) {
+        display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . . .");
+    } else {
+        display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . .  ");
+    }
 }
 
 #ifdef HAS_EINK
@@ -215,7 +226,11 @@ static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, i
     display->drawString(64 + x, y, "Updating");
 
     display->setFont(FONT_SMALL);
-    display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait...");
+    if ((millis() / 1000) % 2) {
+        display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . . .");
+    } else {
+        display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . .  ");
+    }
 
     // display->setFont(FONT_LARGE);
     // display->drawString(64 + x, 26 + y, btPIN);
@@ -413,7 +428,10 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
     auto gpsFormat = radioConfig.preferences.gps_format;
     String displayLine = "";
 
-    if (!gps->getIsConnected() && !radioConfig.preferences.fixed_position) {
+    if (radioConfig.preferences.fixed_position) {
+        displayLine = "Fixed GPS";
+        display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
+    } else if (!gps->getIsConnected() && !radioConfig.preferences.fixed_position) {
         displayLine = "No GPS Module";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else if (!gps->getHasLock() && !radioConfig.preferences.fixed_position) {
@@ -688,6 +706,7 @@ void _screen_header()
 
 Screen::Screen(uint8_t address, int sda, int scl) : OSThread("Screen"), cmdQueue(32), dispdev(address, sda, scl), ui(&dispdev)
 {
+    address_found = address;
     cmdQueue.setReader(this);
 }
 
@@ -875,6 +894,11 @@ int32_t Screen::runOnce()
         // oldFrameState = ui.getUiState()->frameState;
         DEBUG_MSG("Setting idle framerate\n");
         targetFramerate = IDLE_FRAMERATE;
+
+#ifndef NO_ESP32
+        setCPUFast(false); // Turn up the CPU to improve screen animations
+#endif
+
         ui.setTargetFPS(targetFramerate);
         forceDisplay();
     }
@@ -920,10 +944,12 @@ void Screen::drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiStat
  * it is expected that this will be used during the boot phase */
 void Screen::setSSLFrames()
 {
-    DEBUG_MSG("showing SSL frames\n");
-    static FrameCallback sslFrames[] = {drawSSLScreen};
-    ui.setFrames(sslFrames, 1);
-    ui.update();
+    if (address_found) {
+        // DEBUG_MSG("showing SSL frames\n");
+        static FrameCallback sslFrames[] = {drawSSLScreen};
+        ui.setFrames(sslFrames, 1);
+        ui.update();
+    }
 }
 
 // restore our regular frame list
@@ -1074,6 +1100,11 @@ void Screen::setFastFramerate()
 
     // We are about to start a transition so speed up fps
     targetFramerate = SCREEN_TRANSITION_FRAMERATE;
+
+#ifndef NO_ESP32
+    setCPUFast(true); // Turn up the CPU to improve screen animations
+#endif
+
     ui.setTargetFPS(targetFramerate);
     setInterval(0); // redraw ASAP
     runASAP = true;
@@ -1299,7 +1330,24 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
         display->drawString(x, y, String("USB"));
     }
 
-    auto mode = "Mode " + String(channels.getPrimary().modem_config);
+    auto mode = "";
+
+    if (channels.getPrimary().modem_config == 0) {
+        mode = "ShrtSlow";
+    } else if (channels.getPrimary().modem_config == 1) {
+        mode = "ShrtFast";
+    } else if (channels.getPrimary().modem_config == 2) {
+        mode = "LngFast";
+    } else if (channels.getPrimary().modem_config == 3) {
+        mode = "LngSlow";
+    } else if (channels.getPrimary().modem_config == 4) {
+        mode = "MedSlow";
+    } else if (channels.getPrimary().modem_config == 5) {
+        mode = "MedFast";
+    } else {
+        mode = "Custom";
+    }
+
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(mode), y, mode);
 
     // Line 2
