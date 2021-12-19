@@ -33,7 +33,7 @@ class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThrea
     uint32_t packetHistoryTXQueue_size;
     uint32_t packetHistoryTXQueue_index = 0;
 
-    uint32_t packetTimeMax = 0;
+    uint32_t packetTimeMax = 2000;
 
   public:
     StoreForwardPlugin();
