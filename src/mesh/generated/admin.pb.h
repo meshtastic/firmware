@@ -5,8 +5,8 @@
 #define PB_ADMIN_PB_H_INCLUDED
 #include <pb.h>
 #include "channel.pb.h"
-#include "mesh.pb.h"
 #include "radioconfig.pb.h"
+#include "mesh.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
@@ -23,6 +23,8 @@ typedef struct _AdminMessage {
         RadioConfig get_radio_response;
         uint32_t get_channel_request;
         Channel get_channel_response;
+        bool get_owner_request;
+        User get_owner_response;
         bool confirm_set_channel;
         bool confirm_set_radio;
         bool exit_simulator;
@@ -47,6 +49,8 @@ extern "C" {
 #define AdminMessage_get_radio_response_tag      5
 #define AdminMessage_get_channel_request_tag     6
 #define AdminMessage_get_channel_response_tag    7
+#define AdminMessage_get_owner_request_tag       8
+#define AdminMessage_get_owner_response_tag      9
 #define AdminMessage_confirm_set_channel_tag     32
 #define AdminMessage_confirm_set_radio_tag       33
 #define AdminMessage_exit_simulator_tag          34
@@ -61,6 +65,8 @@ X(a, STATIC,   ONEOF,    BOOL,     (variant,get_radio_request,get_radio_request)
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_radio_response,get_radio_response),   5) \
 X(a, STATIC,   ONEOF,    UINT32,   (variant,get_channel_request,get_channel_request),   6) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_channel_response,get_channel_response),   7) \
+X(a, STATIC,   ONEOF,    BOOL,     (variant,get_owner_request,get_owner_request),   8) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_owner_response,get_owner_response),   9) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_channel,confirm_set_channel),  32) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_radio,confirm_set_radio),  33) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,exit_simulator,exit_simulator),  34) \
@@ -72,6 +78,7 @@ X(a, STATIC,   ONEOF,    INT32,    (variant,reboot_seconds,reboot_seconds),  35)
 #define AdminMessage_variant_set_channel_MSGTYPE Channel
 #define AdminMessage_variant_get_radio_response_MSGTYPE RadioConfig
 #define AdminMessage_variant_get_channel_response_MSGTYPE Channel
+#define AdminMessage_variant_get_owner_response_MSGTYPE User
 
 extern const pb_msgdesc_t AdminMessage_msg;
 
