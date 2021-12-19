@@ -460,9 +460,9 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
             // If fixed position, display text "Fixed GPS" alternating with the coordinates.
             if (radioConfig.preferences.fixed_position) {
                 if ((millis() / 10000) % 2) {
-                    display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
+                    display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
                 } else {
-                    displayLine = "Fixed GPS";
+                    display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth("Fixed GPS"))) / 2, y, "Fixed GPS");
                 }
             } else {
                 display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
