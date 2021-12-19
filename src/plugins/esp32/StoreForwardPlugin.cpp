@@ -144,10 +144,10 @@ uint32_t StoreForwardPlugin::historyQueueCreate(uint32_t msAgo, uint32_t to)
                 Copy the messages that were received by the router in the last msAgo
                 to the packetHistoryTXQueue structure.
 
-                TODO: The condition (this->packetHistory[i].to & 0xffffffff) == to) is not tested since
+                TODO: The condition (this->packetHistory[i].to & NODENUM_BROADCAST) == to) is not tested since
                 I don't have an easy way to target a specific user. Will need to do this soon.
             */
-            if ((this->packetHistory[i].to & 0xffffffff) == 0xffffffff || ((this->packetHistory[i].to & 0xffffffff) == to)) {
+            if ((this->packetHistory[i].to & NODENUM_BROADCAST) == NODENUM_BROADCAST || ((this->packetHistory[i].to & NODENUM_BROADCAST) == to)) {
                 this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].time = this->packetHistory[i].time;
                 this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].to = this->packetHistory[i].to;
                 this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].from = this->packetHistory[i].from;
