@@ -42,11 +42,20 @@ void NodeInfoPlugin::sendOurNodeInfo(NodeNum dest, bool wantReplies)
     service.sendToMesh(p);
 }
 
+void printBytes(const uint8_t *bytes, int len)
+{
+    for (int i = 0; i < len; i++) {
+        DEBUG_MSG("%02x", bytes[i]);
+    }
+    DEBUG_MSG("\n");
+}
+
 MeshPacket *NodeInfoPlugin::allocReply()
 {
     User &u = owner;
 
-    DEBUG_MSG("sending owner %s/%s/%s\n", u.id, u.long_name, u.short_name);
+    DEBUG_MSG("sending owner %s/%s/%s/", u.id, u.long_name, u.short_name);
+    printBytes(u.public_key, 32);
     return allocDataProtobuf(u);
 }
 

@@ -7,6 +7,7 @@
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "plugins/RoutingPlugin.h"
+#include "base64.h"
 
 #if defined(HAS_WIFI) || defined(PORTDUINO)
 #include "mqtt/MQTT.h"
@@ -242,6 +243,11 @@ void Router::sniffReceived(const MeshPacket *p, const Routing *c)
     // FIXME, update nodedb here for any packet that passes through us
 }
 
+bool isDirectMessage(const MeshPacket *p)
+{
+    return p->to == nodeDB.getNodeNum() && (p->decoded.portnum == PortNum_ROUTING_APP) ? false : p->want_ack;
+}
+
 bool perhapsDecode(MeshPacket *p)
 {
     if (p->which_payloadVariant == MeshPacket_decoded_tag)
@@ -261,8 +267,6 @@ bool perhapsDecode(MeshPacket *p)
                    rawSize); // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf
             crypto->decrypt(p->from, p->id, rawSize, bytes);
 
-            // printBytes("plaintext", bytes, p->encrypted.size);
-
             // Take those raw bytes and convert them back into a well structured protobuf we can understand
             memset(&p->decoded, 0, sizeof(p->decoded));
             if (!pb_decode_from_bytes(bytes, rawSize, Data_fields, &p->decoded)) {
@@ -271,6 +275,8 @@ bool perhapsDecode(MeshPacket *p)
                 DEBUG_MSG("Invalid portnum (bad psk?)!\n");
             } else {
                 // parsing was successful
+                if (isDirectMessage(p)) // This is a direct message to us so decrypt the payload
+                    crypto->decryptCurve25519_Blake2b(p->from, p->id, p->decoded.payload.size, p->decoded.payload.bytes);
                 p->which_payloadVariant = MeshPacket_decoded_tag; // change type to decoded
                 p->channel = chIndex;                             // change to store the index instead of the hash
                 printPacket("decoded message", p);
@@ -283,12 +289,16 @@ bool perhapsDecode(MeshPacket *p)
     return false;
 }
 
-/** Return 0 for success or a Routing_Errror code for failure
+/** Return 0 for success or a Routing_Error code for failure
  */
 Routing_Error perhapsEncode(MeshPacket *p)
 {
     // If the packet is not yet encrypted, do so now
     if (p->which_payloadVariant == MeshPacket_decoded_tag) {
+        bool isDirectMessage = p->to != -1 && (p->decoded.portnum == PortNum_ROUTING_APP) ? false : p->want_ack;
+        if (isDirectMessage) // Encrypt the payload for the recipient node seperately from the rest of the packet
+            crypto->encryptCurve25519_Blake2b(p->to, getFrom(p), p->id, p->decoded.payload.size, p->decoded.payload.bytes);
+
         static uint8_t bytes[MAX_RHPACKETLEN]; // we have to use a scratch buffer because a union
 
         // printPacket("pre encrypt", p); // portnum valid here
