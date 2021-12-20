@@ -109,6 +109,16 @@ static uint16_t displayWidth, displayHeight;
 #define SCREEN_TRANSITION_MSECS 300
 #endif
 
+static void drawSelfDestructScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->setFont(FONT_MEDIUM);
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->setColor(WHITE);
+    display->drawString(SCREEN_WIDTH / 2, SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, "Self Destruct");
+    display->drawXbm(x + (SCREEN_WIDTH - dead_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - dead_height) / 2, dead_width, dead_height, (const uint8_t *)dead_bits);
+    screen->forceDisplay();
+}
+
 /**
  * Draw the icon with extra info printed around the corners
  */
@@ -832,6 +842,15 @@ void Screen::forceDisplay()
 #endif
 }
 
+void Screen::handleSelfDestruct()
+{
+    DEBUG_MSG("IN HANDLE SELF DESTRUCT\n");
+    static FrameCallback sdFrames[] = {drawSelfDestructScreen};
+    ui.disableAllIndicators();
+    ui.setFrames(sdFrames, 1);
+    ui.update();
+}
+
 static uint32_t lastScreenTransition;
 
 int32_t Screen::runOnce()
@@ -856,6 +875,7 @@ int32_t Screen::runOnce()
         if (!cmdQueue.dequeue(&cmd, 0)) {
             break;
         }
+        DEBUG_MSG("Got command %x\n", cmd.cmd);
         switch (cmd.cmd) {
         case Cmd::SET_ON:
             handleSetOn(true);
@@ -879,6 +899,10 @@ int32_t Screen::runOnce()
         case Cmd::PRINT:
             handlePrint(cmd.print_text);
             free(cmd.print_text);
+            break;
+        case Cmd::SELF_DESTRUCT:
+            DEBUG_MSG("GOING TO CALL HANDLE SELF DESTRUCT\n");
+            handleSelfDestruct();
             break;
         default:
             DEBUG_MSG("BUG: invalid cmd\n");

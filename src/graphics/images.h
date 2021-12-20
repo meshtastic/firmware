@@ -15,6 +15,7 @@ const uint8_t imgPositionSolid[] PROGMEM = { 0x20, 0x30, 0x38, 0x3C, 0x7E, 0xFF 
 const uint8_t imgInfo[] PROGMEM =          { 0xFF, 0x81, 0x81, 0xB5, 0xB5, 0x81, 0x81, 0xFF }; 
 
 #include "img/icon.xbm"
+#include "img/dead.xbm"
 
 // We now programmatically draw our compass
 #if 0

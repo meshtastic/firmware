@@ -24,6 +24,7 @@
 #include <OneButton.h>
 #include <Wire.h>
 // #include <driver/rtc_io.h>
+#include <EEPROM.h>
 
 #include "mesh/http/WiFiAPClient.h"
 
@@ -205,6 +206,7 @@ class ButtonThread : public OSThread
         userButton.attachClick(userButtonPressed);
         userButton.attachDuringLongPress(userButtonPressedLong);
         userButton.attachDoubleClick(userButtonDoublePressed);
+        userButton.attachMultiClick(userButtonMultiPressed);
         userButton.attachLongPressStart(userButtonPressedLongStart);
         userButton.attachLongPressStop(userButtonPressedLongStop);
         wakeOnIrq(BUTTON_PIN, FALLING);
@@ -276,6 +278,11 @@ class ButtonThread : public OSThread
         } else {
             // DEBUG_MSG("Long press %u\n", (millis() - longPressTime));
         }
+    }
+
+    static void userButtonMultiPressed()
+    {
+        powerFSM.trigger(EVENT_MULTI_PRESS);
     }
 
     static void userButtonDoublePressed()
@@ -655,6 +662,42 @@ void rebootCheck()
 // This will supress the current delay and instead try to run ASAP.
 bool runASAP;
 
+bool selfDestructTriggered = false;
+void selfDestruct()
+{
+    DEBUG_MSG("====================================================================\n");
+    DEBUG_MSG("===================== SELF DESTRUCT ACTIVATED! =====================\n");
+    DEBUG_MSG("====================================================================\n");
+
+    DEBUG_MSG("Erasing stored files...\n");
+    fsPurge();
+
+    DEBUG_MSG("Explicitly clear public/private keys...\n");
+    crypto->clearKeys();
+
+    DEBUG_MSG("Erasing EEPROM...\n");
+    for (int i = 0; i < 512; i++) {
+        EEPROM.write(i, 0);
+    }
+    EEPROM.commit();
+
+    /**
+     * More could be done here. You can make life harder on an attacker with hardware design.
+     * pot the board in epoxy, glue the chip down, short reset to Vcc, etc.
+     * You could pot the chip, but provide the 6-hole outline of an ISP connector,
+     * just begging someone to use it - except it's reset is instead wired to the interrupt
+     * that jumps to the self-destruct code, and the data lines aren't connected
+     * (at least not to what they "should" be).
+     * 
+     * Once the code is stable we could also set the lock bits to prevent the chip from
+     * being reprogrammed or the code from being easily read.
+     */
+    
+    // Delay for a bit to show the self destruct message and then shut down.
+    delay(10000);
+    power->shutdown();
+}
+
 void loop()
 {
     runASAP = false;
@@ -681,6 +724,8 @@ void loop()
         meshtastic::printThreadInfo("main");
     }
 #endif
+
+    if (selfDestructTriggered) selfDestruct();
 
     // TODO: This should go into a thread handled by FreeRTOS.
     // handleWebResponse();

@@ -20,6 +20,12 @@ void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey)
     memcpy(privKey, private_key, sizeof(private_key));
 }
 
+void CryptoEngine::clearKeys()
+{
+    memset(public_key, 0, sizeof(public_key));
+    memset(private_key, 0, sizeof(private_key));
+}
+
 /**
  * Encrypt a packet's payload using a key generated with Curve25519 and Blake2b
  * for a specific node.

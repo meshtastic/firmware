@@ -27,3 +27,4 @@ using namespace Adafruit_LittleFS_Namespace;
 #endif
 
 void fsInit();
+void fsPurge();

@@ -221,6 +221,15 @@ static void screenPress()
     screen->onPress();
 }
 
+static void selfDestruct()
+{
+    #if defined(HAS_WIFI) || defined(PORTDUINO)
+        selfDestructTriggered = true;
+        screen->drawSelfDestruct();
+        delay(2000); 
+    #endif
+}
+
 static void bootEnter() {
     DEBUG_MSG("Enter state: BOOT\n");
 }
@@ -260,6 +269,14 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateON, &stateON, EVENT_PRESS, screenPress, "Press"); // reenter On to restart our timers
     powerFSM.add_transition(&stateSERIAL, &stateSERIAL, EVENT_PRESS, screenPress,
                             "Press"); // Allow button to work while in serial API
+
+    // Handle multi press events
+    powerFSM.add_transition(&stateLS, &stateON, EVENT_MULTI_PRESS, selfDestruct, "Multi press");
+    powerFSM.add_transition(&stateNB, &stateON, EVENT_MULTI_PRESS, selfDestruct, "Multi press");
+    powerFSM.add_transition(&stateDARK, &stateON, EVENT_MULTI_PRESS, selfDestruct, "Multi press");
+    powerFSM.add_transition(&statePOWER, &statePOWER, EVENT_MULTI_PRESS, selfDestruct, "Multi press");
+    powerFSM.add_transition(&stateON, &stateON, EVENT_MULTI_PRESS, selfDestruct, "Multi press"); // reenter On to restart our timers
+    powerFSM.add_transition(&stateSERIAL, &stateSERIAL, EVENT_MULTI_PRESS, selfDestruct, "Multi press");
 
     // Handle critically low power battery by forcing deep sleep
     powerFSM.add_transition(&stateBOOT, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");

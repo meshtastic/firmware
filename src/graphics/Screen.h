@@ -125,6 +125,8 @@ class Screen : public concurrency::OSThread
     /// Handles a button press.
     void onPress() { enqueueCmd(ScreenCmd{.cmd = Cmd::ON_PRESS}); }
 
+    void drawSelfDestruct() { enqueueCmd(ScreenCmd{.cmd = Cmd::SELF_DESTRUCT}); }
+
     // Implementation to Adjust Brightness
     void adjustBrightness();
     uint8_t brightness = BRIGHTNESS_DEFAULT;
@@ -258,6 +260,7 @@ class Screen : public concurrency::OSThread
     void handleStartBluetoothPinScreen(uint32_t pin);
     void handlePrint(const char *text);
     void handleStartFirmwareUpdateScreen();
+    void handleSelfDestruct();
 
     /// Rebuilds our list of frames (screens) to default ones.
     void setFrames();

@@ -34,6 +34,7 @@ class CryptoEngine
     virtual ~CryptoEngine() {}
 
     virtual void generateKeyPair(uint8_t *pubKey, uint8_t *privKey);
+    virtual void clearKeys();
     virtual void encryptCurve25519_Blake2b(uint32_t toNode, uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes);
     virtual void decryptCurve25519_Blake2b(uint32_t fromNode,  uint64_t packetNum, size_t numBytes, uint8_t *bytes);
     virtual void setDHKey(uint32_t nodeNum);
