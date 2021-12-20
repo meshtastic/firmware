@@ -282,6 +282,8 @@ class ButtonThread : public OSThread
     {
 #ifndef NO_ESP32
         disablePin();
+#elif defined(HAS_EINK)
+        digitalWrite(PIN_EINK_EN,digitalRead(PIN_EINK_EN) == LOW);
 #endif
     }
 
