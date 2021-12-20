@@ -11,7 +11,6 @@
 #include "host/ble_uuid.h"
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
-#include <Arduino.h>
 
 #ifdef __cplusplus
 extern "C" {

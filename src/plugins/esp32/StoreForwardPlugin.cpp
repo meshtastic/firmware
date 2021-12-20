@@ -38,9 +38,8 @@ int32_t StoreForwardPlugin::runOnce()
                     this->packetHistoryTXQueue_index++;
                 }
             }
+            DEBUG_MSG("SF myNodeInfo.bitrate = %f bytes / sec\n", myNodeInfo.bitrate);
 
-            // TODO: Dynamicly adjust the time this returns in the loop based on the size of the packets being actually
-            // transmitted.
             return (this->packetTimeMax);
         } else {
             DEBUG_MSG("Store & Forward Plugin - Disabled (is_router = false)\n");
@@ -408,13 +407,9 @@ StoreForwardPlugin::StoreForwardPlugin()
                     // Popupate PSRAM with our data structures.
                     this->populatePSRAM();
 
-                    // Calculate the packet time.
-                    // this->packetTimeMax = RadioLibInterface::instance->getPacketTime(Constants_DATA_PAYLOAD_LEN);
-                    // RadioLibInterface::instance->getPacketTime(Constants_DATA_PAYLOAD_LEN);
-                    // RadioLibInterface::instance->getPacketTime(Constants_DATA_PAYLOAD_LEN);
-                    // RadioInterface::getPacketTime(500)l
-
-                    this->packetTimeMax = 2000;
+                    
+                    //this->packetTimeMax = 2000;
+                    //DEBUG_MSG("SF Time to Transmit maxPacketSize (%d bytes) %d ms\n", maxPacketSize, this->packetTimeMax);
 
                 } else {
                     DEBUG_MSG("Device has less than 1M of PSRAM free. Aborting startup.\n");

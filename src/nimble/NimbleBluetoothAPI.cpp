@@ -3,7 +3,6 @@
 #include "configuration.h"
 #include "nimble/BluetoothUtil.h"
 #include "nimble/NimbleDefs.h"
-#include <Arduino.h>
 
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in
 // proccess at once
