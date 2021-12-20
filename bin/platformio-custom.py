@@ -1,16 +1,20 @@
 
+
+import subprocess
+import configparser
+import traceback
+import sys
+from readprops import readProps
+
 Import("projenv")
 
-import configparser
 prefsLoc = projenv["PROJECT_DIR"] + "/version.properties"
-config = configparser.RawConfigParser()
-config.read(prefsLoc)
-version = dict(config.items('VERSION'))
-verStr = "{}.{}.{}".format(version["major"], version["minor"], version["build"])
-
-print("Using meshtastic platform-custom.py, firmare version " + verStr)
+verObj = readProps(prefsLoc)
+print("Using meshtastic platform-custom.py, firmare version " + verObj['long'])
+# print("path is" + ','.join(sys.path))
 
 # General options that are passed to the C and C++ compilers
 projenv.Append(CCFLAGS=[
-    "-DAPP_VERSION=" + verStr
-    ])
+    "-DAPP_VERSION=" + verObj['long'],
+    "-DAPP_VERSION_SHORT=" + verObj['short']    
+])

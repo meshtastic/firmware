@@ -9,13 +9,17 @@ main/credentials.h
 !.vscode/extensions.json
 *.code-workspace
 
+.idea
+
 .DS_Store
 Thumbs.db
 .autotools
 .built
 .context
 .cproject
-.idea/*
 .vagrant
 nanopb*
 flash.uf2
+cmake-build*
+__pycache__
+

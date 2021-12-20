@@ -1,13 +1,12 @@
-
+#include "configuration.h"
 #include "GPS.h"
 #include "NodeDB.h"
 #include "RTC.h"
-#include "configuration.h"
 #include "sleep.h"
 #include <assert.h>
 
 // If we have a serial GPS port it will not be null
-#ifdef GPS_RX_PIN
+#ifdef GPS_SERIAL_NUM
 HardwareSerial _serial_gps_real(GPS_SERIAL_NUM);
 HardwareSerial *GPS::_serial_gps = &_serial_gps_real;
 #elif defined(NRF52840_XXAA) || defined(NRF52833_XXAA)
@@ -25,7 +24,7 @@ uint8_t GPS::i2cAddress = 0;
 
 GPS *gps;
 
-/// Multiple GPS instances might use the same serial port (in sequence), but we can 
+/// Multiple GPS instances might use the same serial port (in sequence), but we can
 /// only init that port once.
 static bool didSerialInit;
 
@@ -33,8 +32,9 @@ bool GPS::setupGPS()
 {
     if (_serial_gps && !didSerialInit) {
         didSerialInit = true;
-        
-#ifdef GPS_RX_PIN
+
+// ESP32 has a special set of parameters vs other arduino ports
+#if defined(GPS_RX_PIN) && !defined(NO_ESP32)
         _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
 #else
         _serial_gps->begin(GPS_BAUDRATE);
@@ -73,6 +73,15 @@ bool GPS::setup()
     return ok;
 }
 
+GPS::~GPS()
+{
+    // we really should unregister our sleep observer
+    notifySleepObserver.unobserve();
+    notifyDeepSleepObserver.unobserve();
+}
+
+bool GPS::hasLock() { return hasValidLocation; }
+
 // Allow defining the polarity of the WAKE output.  default is active high
 #ifndef GPS_WAKE_ACTIVE
 #define GPS_WAKE_ACTIVE 1
@@ -86,8 +95,8 @@ void GPS::wake()
 #endif
 }
 
-
-void GPS::sleep() {
+void GPS::sleep()
+{
 #ifdef PIN_GPS_WAKE
     digitalWrite(PIN_GPS_WAKE, GPS_WAKE_ACTIVE ? 0 : 1);
     pinMode(PIN_GPS_WAKE, OUTPUT);
@@ -158,7 +167,8 @@ uint32_t GPS::getWakeTime() const
         return t; // already maxint
 
     if (t == 0)
-        t = radioConfig.preferences.is_router ? 5 * 60 : 15 * 60; // Allow up to 15 mins for each attempt (probably will be much less if we can find sats) or less if a router
+        t = radioConfig.preferences.is_router ? 5 * 60 : 15 * 60; // Allow up to 15 mins for each attempt (probably will be much
+                                                                  // less if we can find sats) or less if a router
 
     t *= 1000; // msecs
 
@@ -179,8 +189,8 @@ uint32_t GPS::getSleepTime() const
     if (t == UINT32_MAX)
         return t; // already maxint
 
-    if (t == 0) // default - unset in preferences
-        t = radioConfig.preferences.is_router  ? 24 * 60 * 60 : 2 * 60; // 2 mins or once per day for routers
+    if (t == 0)                                                        // default - unset in preferences
+        t = radioConfig.preferences.is_router ? 24 * 60 * 60 : 2 * 60; // 2 mins or once per day for routers
 
     t *= 1000;
 
@@ -192,11 +202,13 @@ void GPS::publishUpdate()
     if (shouldPublish) {
         shouldPublish = false;
 
-        DEBUG_MSG("publishing GPS lock=%d\n", hasLock());
+        // In debug logs, identify position by @timestamp:stage (stage 2 = publish)
+        DEBUG_MSG("publishing pos@%x:2, hasVal=%d, GPSlock=%d\n", 
+                    p.pos_timestamp, hasValidLocation, hasLock());
 
         // Notify any status instances that are observing us
         const meshtastic::GPSStatus status =
-            meshtastic::GPSStatus(hasLock(), isConnected(), latitude, longitude, altitude, dop, heading, numSatellites);
+            meshtastic::GPSStatus(hasValidLocation, isConnected(), p);
         newStatus.notifyObservers(&status);
     }
 }
@@ -234,11 +246,13 @@ int32_t GPS::runOnce()
 
         bool gotLoc = lookForLocation();
         if (gotLoc && !hasValidLocation) { // declare that we have location ASAP
+            DEBUG_MSG("hasValidLocation RISING EDGE\n");
             hasValidLocation = true;
             shouldPublish = true;
         }
 
         // We've been awake too long - force sleep
+        now = millis();
         auto wakeTime = getWakeTime();
         bool tooLong = wakeTime != UINT32_MAX && (now - lastWakeStartMsec) > wakeTime;
 
@@ -249,6 +263,10 @@ int32_t GPS::runOnce()
 
             if (tooLong) {
                 // we didn't get a location during this ack window, therefore declare loss of lock
+                if (hasValidLocation) {
+                    DEBUG_MSG("hasValidLocation FALLING EDGE (last read: %d)\n", gotLoc);
+                }
+                p = Position_init_default;
                 hasValidLocation = false;
             }
 
@@ -298,4 +316,55 @@ int GPS::prepareDeepSleep(void *unused)
     setAwake(false);
 
     return 0;
+}
+
+#ifdef GPS_TX_PIN
+#include "UBloxGPS.h"
+#endif
+
+#ifdef HAS_AIR530_GPS
+#include "Air530GPS.h"
+#elif !defined(NO_GPS)
+#include "NMEAGPS.h"
+#endif
+
+GPS *createGps()
+{
+
+#ifdef NO_GPS
+    return nullptr;
+#else
+#ifdef GPS_ALTITUDE_HAE
+    DEBUG_MSG("Using HAE altitude model\n");
+#else
+    DEBUG_MSG("Using MSL altitude model\n");
+#endif
+// If we don't have bidirectional comms, we can't even try talking to UBLOX
+#ifdef GPS_TX_PIN
+    // Init GPS - first try ublox
+    UBloxGPS *ublox = new UBloxGPS();
+
+    if (!ublox->setup()) {
+        DEBUG_MSG("ERROR: No UBLOX GPS found\n");
+        delete ublox;
+        ublox = NULL;
+    } else {
+        return ublox;
+    }
+#endif
+
+    if (GPS::_serial_gps) {
+        // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
+        // assume NMEA at 9600 baud.
+        DEBUG_MSG("Hoping that NMEA might work\n");
+#ifdef HAS_AIR530_GPS
+        GPS *new_gps = new Air530GPS();
+#else
+        GPS *new_gps = new NMEAGPS();
+#endif
+        new_gps->setup();
+        return new_gps;
+    }
+    return nullptr;
+#endif
 }

@@ -3,7 +3,6 @@
 #include "configuration.h"
 #include "nimble/BluetoothUtil.h"
 #include "nimble/NimbleDefs.h"
-#include <Arduino.h>
 
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in
 // proccess at once
@@ -29,6 +28,10 @@ void BluetoothPhoneAPI::onNowHasData(uint32_t fromRadioNum)
     } else {
         DEBUG_MSG("No BLE notify\n");
     }
+}
+
+bool BluetoothPhoneAPI::checkIsConnected() {
+    return curConnectionHandle >= 0;
 }
 
 int toradio_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)

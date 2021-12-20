@@ -1,8 +1,8 @@
+#include "configuration.h"
 #include "RF95Interface.h"
 #include "MeshRadio.h" // kinda yucky, but we need to know which region we are in
 #include "RadioLibRF95.h"
 #include "error.h"
-#include <configuration.h>
 
 #define MAX_POWER 20
 // if we use 20 we are limited to 1% duty cycle or hw might overheat.  For continuous operation set a limit of 17
@@ -12,7 +12,7 @@
 #define POWER_DEFAULT 17 // How much power to use if the user hasn't set a power level
 
 RF95Interface::RF95Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, SPIClass &spi)
-    : RadioLibInterface(cs, irq, rst, 0, spi)
+    : RadioLibInterface(cs, irq, rst, RADIOLIB_NC, spi)
 {
     // FIXME - we assume devices never get destroyed
 }
@@ -35,8 +35,6 @@ void RF95Interface::setTransmitEnable(bool txon)
 bool RF95Interface::init()
 {
     RadioLibInterface::init();
-
-    applyModemConfig();
 
     if (power == 0)
         power = POWER_DEFAULT;
@@ -69,8 +67,14 @@ bool RF95Interface::init()
 #endif
     setTransmitEnable(false);
 
-    int res = lora->begin(freq, bw, sf, cr, syncWord, power, currentLimit, preambleLength);
+    int res = lora->begin(getFreq(), bw, sf, cr, syncWord, power, currentLimit, preambleLength);
     DEBUG_MSG("RF95 init result %d\n", res);
+
+    // current limit was removed from module' ctor
+    // override default value (60 mA)
+    res = lora->setCurrentLimit(currentLimit);
+    DEBUG_MSG("Current limit set to %f\n", currentLimit);
+    DEBUG_MSG("Current limit set result %d\n", res);
 
     if (res == ERR_NONE)
         res = lora->setCRC(SX126X_LORA_CRC_ON);
@@ -86,24 +90,25 @@ void INTERRUPT_ATTR RF95Interface::disableInterrupt()
     lora->clearDio0Action();
 }
 
-
-
 bool RF95Interface::reconfigure()
 {
-    applyModemConfig();
+    RadioLibInterface::reconfigure();
 
     // set mode to standby
     setStandby();
 
     // configure publicly accessible settings
     int err = lora->setSpreadingFactor(sf);
-    if(err != ERR_NONE) recordCriticalError(CriticalErrorCode_InvalidRadioSetting);
+    if (err != ERR_NONE)
+        RECORD_CRITICALERROR(CriticalErrorCode_InvalidRadioSetting);
 
     err = lora->setBandwidth(bw);
-    if(err != ERR_NONE) recordCriticalError(CriticalErrorCode_InvalidRadioSetting);
+    if (err != ERR_NONE)
+        RECORD_CRITICALERROR(CriticalErrorCode_InvalidRadioSetting);
 
     err = lora->setCodingRate(cr);
-    if(err != ERR_NONE) recordCriticalError(CriticalErrorCode_InvalidRadioSetting);
+    if (err != ERR_NONE)
+        RECORD_CRITICALERROR(CriticalErrorCode_InvalidRadioSetting);
 
     err = lora->setSyncWord(syncWord);
     assert(err == ERR_NONE);
@@ -114,13 +119,15 @@ bool RF95Interface::reconfigure()
     err = lora->setPreambleLength(preambleLength);
     assert(err == ERR_NONE);
 
-    err = lora->setFrequency(freq);
-    if(err != ERR_NONE) recordCriticalError(CriticalErrorCode_InvalidRadioSetting);
+    err = lora->setFrequency(getFreq());
+    if (err != ERR_NONE)
+        RECORD_CRITICALERROR(CriticalErrorCode_InvalidRadioSetting);
 
     if (power > MAX_POWER) // This chip has lower power limits than some
         power = MAX_POWER;
     err = lora->setOutputPower(power);
-    if(err != ERR_NONE) recordCriticalError(CriticalErrorCode_InvalidRadioSetting);
+    if (err != ERR_NONE)
+        RECORD_CRITICALERROR(CriticalErrorCode_InvalidRadioSetting);
 
     startReceive(); // restart receiving
 

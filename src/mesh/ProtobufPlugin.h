@@ -8,7 +8,7 @@
  * If you are using protobufs to encode your packets (recommended) you can use this as a baseclass for your plugin
  * and avoid a bunch of boilerplate code.
  */
-template <class T> class ProtobufPlugin : private SinglePortPlugin
+template <class T> class ProtobufPlugin : protected SinglePortPlugin
 {
     const pb_msgdesc_t *fields;
 
@@ -22,11 +22,13 @@ template <class T> class ProtobufPlugin : private SinglePortPlugin
     }
 
   protected:
-
     /**
      * Handle a received message, the data field in the message is already decoded and is provided
+     *
+     * In general decoded will always be !NULL.  But in some special applications (where you have handling packets
+     * for multiple port numbers, decoding will ONLY be attempted for packets where the portnum matches our expected ourPortNum.
      */
-    virtual bool handleReceivedProtobuf(const MeshPacket &mp, const T &decoded) = 0;
+    virtual bool handleReceivedProtobuf(const MeshPacket &mp, T *decoded) = 0;
 
     /**
      * Return a mesh packet which has been preinited with a particular protobuf data payload and port number.
@@ -38,8 +40,8 @@ template <class T> class ProtobufPlugin : private SinglePortPlugin
         // Update our local node info with our position (even if we don't decide to update anyone else)
         MeshPacket *p = allocDataPacket();
 
-        p->decoded.data.payload.size =
-            pb_encode_to_bytes(p->decoded.data.payload.bytes, sizeof(p->decoded.data.payload.bytes), fields, &payload);
+        p->decoded.payload.size =
+            pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), fields, &payload);
         // DEBUG_MSG("did encode\n");
         return p;
     }
@@ -47,20 +49,27 @@ template <class T> class ProtobufPlugin : private SinglePortPlugin
   private:
     /** Called to handle a particular incoming message
 
-    @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
+    @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
-    virtual bool handleReceived(const MeshPacket &mp)
+    virtual ProcessMessage handleReceived(const MeshPacket &mp)
     {
         // FIXME - we currently update position data in the DB only if the message was a broadcast or destined to us
         // it would be better to update even if the message was destined to others.
 
-        auto &p = mp.decoded.data;
-        DEBUG_MSG("Received %s from=0x%0x, id=0x%x, payloadlen=%d\n", name, mp.from, mp.id, p.payload.size);
+        auto &p = mp.decoded;
+        DEBUG_MSG("Received %s from=0x%0x, id=0x%x, portnum=%d, payloadlen=%d\n", name, mp.from, mp.id, p.portnum,
+                  p.payload.size);
 
         T scratch;
-        if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, fields, &scratch))
-            return handleReceivedProtobuf(mp, scratch);
+        T *decoded = NULL;
+        if (mp.which_payloadVariant == MeshPacket_decoded_tag && mp.decoded.portnum == ourPortNum) {
+            memset(&scratch, 0, sizeof(scratch));
+            if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, fields, &scratch))
+                decoded = &scratch;
+            else
+                DEBUG_MSG("Error decoding protobuf plugin!\n");
+        }
 
-        return false; // Let others look at this message also if they want
+        return handleReceivedProtobuf(mp, decoded) ? ProcessMessage::STOP : ProcessMessage::CONTINUE;
     }
 };

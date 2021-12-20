@@ -4,3 +4,6 @@
 [submodule "sdk-nrfxlib"]
 	path = sdk-nrfxlib
 	url = https://github.com/nrfconnect/sdk-nrfxlib.git
+[submodule "design"]
+	path = design
+	url = https://github.com/meshtastic/meshtastic-design.git

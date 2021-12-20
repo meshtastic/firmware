@@ -1,6 +1,12 @@
+#include "configuration.h"
 #include "NMEAGPS.h"
 #include "RTC.h"
-#include "configuration.h"
+
+#include <TinyGPS++.h>
+
+// GPS solutions older than this will be rejected - see TinyGPSDatum::age()
+#define GPS_SOL_EXPIRY_MS 300   // in millis
+#define NMEA_MSG_GXGSA "GNGSA"  // GSA message (GPGSA, GNGSA etc)
 
 static int32_t toDegInt(RawDegrees d)
 {
@@ -19,6 +25,17 @@ bool NMEAGPS::setupGPS()
     // pulse per second
     // FIXME - move into shared GPS code
     pinMode(PIN_GPS_PPS, INPUT);
+#endif
+
+// Currently disabled per issue #525 (TinyGPS++ crash bug)
+// when fixed upstream, can be un-disabled to enable 3D FixType and PDOP
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+    // see NMEAGPS.h
+    gsafixtype.begin(reader, NMEA_MSG_GXGSA, 2);
+    gsapdop.begin(reader, NMEA_MSG_GXGSA, 15);
+    DEBUG_MSG("Using " NMEA_MSG_GXGSA " for 3DFIX and PDOP\n");
+#else
+    DEBUG_MSG("GxGSA NOT available\n");
 #endif
 
     return true;
@@ -47,6 +64,8 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         t.tm_mon = d.month() - 1;
         t.tm_year = d.year() - 1900;
         t.tm_isdst = false;
+        DEBUG_MSG("NMEA GPS time %d\n", t.tm_sec);
+
         perhapsSetRTC(RTCQualityGPS, t);
 
         return true;
@@ -62,40 +81,139 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
  */
 bool NMEAGPS::lookForLocation()
 {
-    bool foundLocation = false;
+    // By default, TinyGPS++ does not parse GPGSA lines, which give us 
+    //   the 2D/3D fixType (see NMEAGPS.h)
+    // At a minimum, use the fixQuality indicator in GPGGA (FIXME?)
+    fixQual = reader.fixQuality();
 
-    // uint8_t fixtype = reader.fixQuality();
-    // hasValidLocation = ((fixtype >= 1) && (fixtype <= 5));
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+    fixType = atoi(gsafixtype.value());  // will set to zero if no data
+    DEBUG_MSG("FIX QUAL=%d, TYPE=%d\n", fixQual, fixType);
+#endif
 
+    // check if GPS has an acceptable lock
+    if (! hasLock())
+        return false;
+
+#ifdef GPS_EXTRAVERBOSE
+    DEBUG_MSG("AGE: LOC=%d FIX=%d DATE=%d TIME=%d\n", 
+                reader.location.age(), 
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+                gsafixtype.age(),
+#else
+                0,
+#endif
+                reader.date.age(), reader.time.age());
+#endif  // GPS_EXTRAVERBOSE
+
+    // check if a complete GPS solution set is available for reading
+    //   tinyGPSDatum::age() also includes isValid() test
+    // FIXME
+    if (! ((reader.location.age() < GPS_SOL_EXPIRY_MS) &&
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+            (gsafixtype.age() < GPS_SOL_EXPIRY_MS) &&
+#endif
+            (reader.time.age() < GPS_SOL_EXPIRY_MS) &&
+            (reader.date.age() < GPS_SOL_EXPIRY_MS)))
+    {
+        DEBUG_MSG("SOME data is TOO OLD\n");
+        return false;
+    }
+
+    // Is this a new point or are we re-reading the previous one?
+    if (! reader.location.isUpdated())
+        return false;
+
+    // We know the solution is fresh and valid, so just read the data
+    auto loc = reader.location.value();
+
+    // Some GPSes (Air530) seem to send a zero longitude when the current fix is bogus
+    // Bail out EARLY to avoid overwriting previous good data (like #857)
+    if(toDegInt(loc.lat) == 0) {
+        DEBUG_MSG("Ignoring bogus NMEA position\n");
+        return false;
+    }
+
+    p.location_source = Position_LocSource_LOCSRC_GPS_INTERNAL;
+
+    // Dilution of precision (an accuracy metric) is reported in 10^2 units, so we need to scale down when we use it
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+    p.HDOP = reader.hdop.value();
+    p.PDOP = TinyGPSPlus::parseDecimal(gsapdop.value());
+    DEBUG_MSG("PDOP=%d, HDOP=%d\n", dop, reader.hdop.value());
+#else
+    // FIXME! naive PDOP emulation (assumes VDOP==HDOP)
+    // correct formula is PDOP = SQRT(HDOP^2 + VDOP^2)
+    p.HDOP = reader.hdop.value();
+    p.PDOP = 1.41 * reader.hdop.value();
+#endif
+
+    // Discard incomplete or erroneous readings
+    if (reader.hdop.value() == 0)
+        return false;
+
+    p.latitude_i = toDegInt(loc.lat);
+    p.longitude_i = toDegInt(loc.lng);
+
+    p.alt_geoid_sep = reader.geoidHeight.meters();
+    p.altitude_hae = reader.altitude.meters() + p.alt_geoid_sep;
+    p.altitude = reader.altitude.meters();
+
+    p.fix_quality = fixQual;
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+    p.fix_type = fixType;
+#endif
+
+    // positional timestamp
+    struct tm t;
+    t.tm_sec = reader.time.second();
+    t.tm_min = reader.time.minute();
+    t.tm_hour = reader.time.hour();
+    t.tm_mday = reader.date.day();
+    t.tm_mon = reader.date.month() - 1;
+    t.tm_year = reader.date.year() - 1900;
+    t.tm_isdst = false;
+    p.pos_timestamp = mktime(&t);
+
+    // Nice to have, if available
     if (reader.satellites.isUpdated()) {
-        setNumSatellites(reader.satellites.value());
+        p.sats_in_view = reader.satellites.value();
     }
 
-    // Diminution of precision (an accuracy metric) is reported in 10^2 units, so we need to scale down when we use it
-    if (reader.hdop.isUpdated()) {
-        dop = reader.hdop.value();
-    }
-    if (reader.course.isUpdated()) {
-        heading = reader.course.value() * 1e3; // Scale the heading (in degrees * 10^-2) to match the expected degrees * 10^-5
-    }
-
-    if (reader.altitude.isUpdated())
-        altitude = reader.altitude.meters();
-
-    if (reader.location.isUpdated()) {
-
-        auto loc = reader.location.value();
-        latitude = toDegInt(loc.lat);
-        longitude = toDegInt(loc.lng);
-        foundLocation = true;
-
-        // expect gps pos lat=37.520825, lon=-122.309162, alt=158
-        DEBUG_MSG("new NMEA GPS pos lat=%f, lon=%f, alt=%d, hdop=%g, heading=%f\n", latitude * 1e-7, longitude * 1e-7, altitude,
-                  dop * 1e-2, heading * 1e-5);
+    if (reader.course.isUpdated() && reader.course.isValid()) {
+        if (reader.course.value() < 36000) {  // sanity check
+            p.ground_track = reader.course.value() * 1e3; // Scale the heading (in degrees * 10^-2) to match the expected degrees * 10^-5
+        } else {
+            DEBUG_MSG("BOGUS course.value() REJECTED: %d\n",
+                        reader.course.value());
+        }
     }
 
-    return foundLocation;
+/*
+    // REDUNDANT?
+    // expect gps pos lat=37.520825, lon=-122.309162, alt=158
+    DEBUG_MSG("new NMEA GPS pos lat=%f, lon=%f, alt=%d, dop=%g, heading=%f\n",
+              latitude * 1e-7, longitude * 1e-7, altitude, dop * 1e-2,
+              heading * 1e-5);
+*/
+    return true;
 }
+
+
+bool NMEAGPS::hasLock()
+{
+    // Using GPGGA fix quality indicator
+    if (fixQual >= 1 && fixQual <= 5) {
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+        // Use GPGSA fix type 2D/3D (better) if available
+        if (fixType == 3 || fixType == 0)  // zero means "no data received"
+#endif
+            return true;
+    }
+
+    return false;
+}
+
 
 bool NMEAGPS::whileIdle()
 {

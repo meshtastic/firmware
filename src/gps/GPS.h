@@ -17,6 +17,10 @@ class GPS : private concurrency::OSThread
   private:
     uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0, lastWhileActiveMsec = 0;
 
+    /**
+     * hasValidLocation - indicates that the position variables contain a complete
+     *   GPS location, valid and fresh (< gps_update_interval + gps_attempt_time)
+     */
     bool hasValidLocation = false; // default to false, until we complete our first read
 
     bool isAwake = false; // true if we want a location right now
@@ -39,15 +43,11 @@ class GPS : private concurrency::OSThread
     /** If !0 we will attempt to connect to the GPS over I2C */
     static uint8_t i2cAddress;
 
-    int32_t latitude = 0, longitude = 0; // as an int mult by 1e-7 to get value as double
-    int32_t altitude = 0;
-    uint32_t dop = 0;     // Diminution of position; PDOP where possible (UBlox), HDOP otherwise (TinyGPS) in 10^2 units (needs
-                          // scaling before use)
-    uint32_t heading = 0; // Heading of motion, in degrees * 10^-5
+    Position p = Position_init_default;
 
     GPS() : concurrency::OSThread("GPS") {}
 
-    virtual ~GPS() {} // FIXME, we really should unregister our sleep observer
+    virtual ~GPS();
 
     /** We will notify this observable anytime GPS state has changed meaningfully */
     Observable<const meshtastic::GPSStatus *> newStatus;
@@ -57,8 +57,8 @@ class GPS : private concurrency::OSThread
      */
     virtual bool setup();
 
-    /// Returns ture if we have acquired GPS lock.
-    bool hasLock() const { return hasValidLocation; }
+    /// Returns true if we have acquired GPS lock.
+    virtual bool hasLock();
 
     /// Return true if we are connected to a GPS
     bool isConnected() const { return hasGPS; }
@@ -70,6 +70,9 @@ class GPS : private concurrency::OSThread
      * Or set to false, to disallow any sort of waking
      * */
     void forceWake(bool on);
+
+    // Some GPS modules (ublock) require factory reset
+    virtual bool factoryReset() { return true; }
 
   protected:
     /// Do gps chipset specific init, return true for success
@@ -144,5 +147,9 @@ class GPS : private concurrency::OSThread
 
     virtual int32_t runOnce();
 };
+
+// Creates an instance of the GPS class. 
+// Returns the new instance or null if the GPS is not present.
+GPS* createGps();
 
 extern GPS *gps;

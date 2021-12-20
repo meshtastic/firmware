@@ -163,7 +163,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #if defined(TBEAM_V10)
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "tbeam"
+#define HW_VENDOR HardwareModel_TBEAM
 
 // #define BUTTON_NEED_PULLUP // if set we need to turn on the internal CPU pullup during sleep
 
@@ -171,7 +171,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define I2C_SCL 22
 
 #define BUTTON_PIN 38     // The middle button GPIO on the T-Beam
-#define BUTTON_PIN_ALT 13 // Alternate GPIO for an external button if needed
+//#define BUTTON_PIN_ALT 13 // Alternate GPIO for an external button if needed. Does anyone use this? It is not documented anywhere.
+#define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Plugin.
 
 #define LED_INVERTED 1
 #define LED_PIN 4 // Newer tbeams (1.1) have an extra led on GPIO4
@@ -188,11 +189,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LORA_DIO3    // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TXCO is enabled
 
 #ifdef USE_SX1262
-#define SX1262_CS RF95_NSS // FIXME - we really should define LORA_CS instead
-#define SX1262_DIO1 LORA_DIO1
-#define SX1262_BUSY LORA_DIO2
-#define SX1262_RESET LORA_RESET
-#define SX1262_E22 // Not really an E22 but TTGO seems to be trying to clone that
+#define SX126X_CS RF95_NSS // FIXME - we really should define LORA_CS instead
+#define SX126X_DIO1 LORA_DIO1
+#define SX126X_BUSY LORA_DIO2
+#define SX126X_RESET LORA_RESET
+#define SX126X_E22 // Not really an E22 but TTGO seems to be trying to clone that
 // Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
 // code)
 #endif
@@ -204,7 +205,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #elif defined(TBEAM_V07)
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "tbeam0.7"
+#define HW_VENDOR HardwareModel_TBEAM0p7
 
 // #define BUTTON_NEED_PULLUP // if set we need to turn on the internal CPU pullup during sleep
 
@@ -213,6 +214,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define BUTTON_PIN 39
 #define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+#define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Plugin.
 
 #define USE_RF95
 #define LORA_DIO0 26 // a No connect on the SX1262 module
@@ -226,9 +228,54 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define GPS_RX_PIN 12
 #define GPS_TX_PIN 15
 
-#elif defined(ARDUINO_HELTEC_WIFI_LORA_32_V2)
+#elif defined(DIY_V1)
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "heltec"
+#define HW_VENDOR HardwareModel_DIY_V1
+
+// For OLED LCD
+#define I2C_SDA 21
+#define I2C_SCL 22
+
+// GPS
+#undef GPS_RX_PIN
+#define GPS_RX_PIN 15
+//#undef GPS_TX_PIN
+//#define GPS_TX_PIN 12 // not connected
+
+#define BUTTON_PIN 39 // The middle button GPIO on the T-Beam
+#define EXT_NOTIFY_OUT 12 // Overridden default pin to use for Ext Notify Plugin (#975).
+
+#define LORA_DIO0 26  // a No connect on the SX1262/SX1268 module
+#define LORA_RESET 23 // RST for SX1276, and for SX1262/SX1268
+#define LORA_DIO1 33  // IRQ for SX1262/SX1268
+#define LORA_DIO2 32  // BUSY for SX1262/SX1268
+#define LORA_DIO3     // Not connected on PCB, but internally on the TTGO SX1262/SX1268, if DIO3 is high the TXCO is enabled
+
+#define RF95_SCK 5
+#define RF95_MISO 19
+#define RF95_MOSI 27
+#define RF95_NSS 18
+
+// supported modules list
+#define USE_SX1262
+#define USE_SX1268
+#define USE_LLCC68
+
+// common pinouts for SX126X modules
+#define SX126X_CS 18 // NSS for SX126X
+#define SX126X_DIO1 LORA_DIO1
+#define SX126X_BUSY LORA_DIO2
+#define SX126X_RESET LORA_RESET
+#define SX126X_RXEN 14
+#define SX126X_TXEN 13
+
+#ifdef EBYTE_E22
+// Internally the TTGO module hooks the SX126x-DIO2 in to control the TX/RX switch
+// (which is the default for the sx1262interface code)
+#define SX126X_E22
+#endif
+
+#elif defined(ARDUINO_HELTEC_WIFI_LORA_32_V2)
 
 // the default ESP32 Pin of 15 is the Oled SCL, set to 36 and 37 and works fine.
 // Tested on Neo6m module.
@@ -256,9 +303,29 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LORA_DIO1 35 // Not really used
 #define LORA_DIO2 34 // Not really used
 
+// ratio of voltage divider = 3.20 (R1=100k, R2=220k)
+#define ADC_MULTIPLIER 3.2
+
+#ifdef HELTEC_V2_0
+// This string must exactly match the case used in release file names or the android updater won't work
+#define HW_VENDOR HardwareModel_HELTEC_V2_0
+
+#define BATTERY_PIN 13 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+
+#endif
+
+#ifdef HELTEC_V2_1
+// This string must exactly match the case used in release file names or the android updater won't work
+#define HW_VENDOR HardwareModel_HELTEC_V2_1
+
+#define BATTERY_PIN 37 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+#define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Plugin.
+
+#endif
+
 #elif defined(TLORA_V1)
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "tlora-v1"
+#define HW_VENDOR HardwareModel_TLORA_V1
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 #define GPS_RX_PIN 36
@@ -273,6 +340,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LED_PIN 2     // If defined we will blink this LED
 #define BUTTON_PIN 0  // If defined, this will be used for user button presses
 #define BUTTON_NEED_PULLUP
+#define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Plugin.
 
 #define USE_RF95
 #define LORA_DIO0 26 // a No connect on the SX1262 module
@@ -282,7 +350,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #elif defined(TLORA_V2)
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "tlora-v2"
+#define HW_VENDOR HardwareModel_TLORA_V2
 
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
@@ -309,14 +377,41 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LORA_DIO1 35 // Not really used
 #define LORA_DIO2 34 // Not really used
 
-#elif defined(TLORA_V2_1_16)
+#elif defined(TLORA_V1_3)
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "tlora-v2-1-1.6"
+#define HW_VENDOR HardwareModel_TLORA_V1_1p3
 
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 #define GPS_RX_PIN 36
-#define GPS_TX_PIN 39
+#define GPS_TX_PIN 13 // per @eugene
+
+#define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+
+#define I2C_SDA 4 // I2C pins for this board
+#define I2C_SCL 15
+
+#define RESET_OLED 16 // If defined, this pin will be used to reset the display controller
+
+#define VEXT_ENABLE 21 // active low, powers the oled display and the lora antenna boost
+#define LED_PIN 25     // If defined we will blink this LED
+#define BUTTON_PIN 36
+#define BUTTON_NEED_PULLUP
+
+#define USE_RF95
+#define LORA_DIO0 26 // a No connect on the SX1262 module
+#define LORA_RESET 14
+#define LORA_DIO1 35 // Not really used
+#define LORA_DIO2 34 // Not really used
+
+#elif defined(TLORA_V2_1_16)
+// This string must exactly match the case used in release file names or the android updater won't work
+#define HW_VENDOR HardwareModel_TLORA_V2_1_1p6
+
+#undef GPS_RX_PIN
+#undef GPS_TX_PIN
+#define GPS_RX_PIN 15 // per @der_bear on the forum, 36 is incorrect for this board type and 15 is a better pick
+#define GPS_TX_PIN 13
 
 #define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 
@@ -327,9 +422,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define VEXT_ENABLE 21 // active low, powers the oled display and the lora antenna boost
 #define LED_PIN 25     // If defined we will blink this LED
-#define BUTTON_PIN                                                                                                               \
-    12 // If defined, this will be used for user button presses, if your board doesn't have a physical switch, you can wire one
-       // between this pin and ground
+#define BUTTON_PIN 12  // If defined, this will be used for user button presses,
+
 #define BUTTON_NEED_PULLUP
 
 #define USE_RF95
@@ -338,12 +432,42 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LORA_DIO1 35 // Not really used
 #define LORA_DIO2 34 // Not really used
 
+#elif defined(GENIEBLOCKS)
+// This string must exactly match the case used in release file names or the android updater won't work
+#define HW_VENDOR HardwareModel_GENIEBLOCKS
+#undef GPS_RX_PIN
+#undef GPS_TX_PIN
+#define GPS_RX_PIN 5
+#define GPS_TX_PIN 18
+#define GPS_RESET_N 10
+#define GPS_EXTINT 23 // On MAX-M8 module pin name is EXTINT. On L70 module pin name is STANDBY.
+
+#define BATTERY_PIN 39    // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+#define BATTERY_EN_PIN 14 // Voltage voltage divider enable pin connected to mosfet
+
+#define I2C_SDA 4 // I2C pins for this board
+#define I2C_SCL 2
+
+#define LED_PIN 12 // If defined we will blink this LED
+//#define BUTTON_PIN 36  // If defined, this will be used for user button presses (ToDo problem on that line on debug screen -->
+// Long press start!) #define BUTTON_NEED_PULLUP //GPIOs 34 to 39 are GPIs – input only pins. These pins don’t have internal
+// pull-ups or pull-down resistors.
+
+#define USE_RF95
+#define LORA_DIO0 38 // a No connect on the SX1262 module
+#define LORA_RESET 9
+
+#define RF95_SCK 22
+#define RF95_MISO 19
+#define RF95_MOSI 13
+#define RF95_NSS 21
+
 #endif
 
 #ifdef ARDUINO_NRF52840_PCA10056
 
 // This string must exactly match the case used in release file names or the android updater won't work
-#define HW_VENDOR "nrf52dk"
+#define HW_VENDOR HardwareModel_NRF52840DK
 
 // This board uses 0 to be mean LED on
 #undef LED_INVERTED
@@ -351,29 +475,50 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #elif defined(ARDUINO_NRF52840_PPR)
 
-#define HW_VENDOR "ppr"
+#define HW_VENDOR HardwareModel_PPR
+
+#elif defined(RAK4630)
+
+#define HW_VENDOR HardwareModel_RAK4631
+
+#elif defined(TTGO_T_ECHO)
+
+#define HW_VENDOR HardwareModel_T_ECHO
 
 #elif NRF52_SERIES
 
-#define HW_VENDOR "nrf52unknown" // FIXME - unknown nrf52 board
+#define HW_VENDOR HardwareModel_NRF52_UNKNOWN
 
 #elif PORTDUINO
 
-#define HW_VENDOR "portduino"
+#define HW_VENDOR HardwareModel_PORTDUINO
 
 #define USE_SIM_RADIO
 
-#define USE_RF95
-#define LORA_DIO0 26 // a No connect on the SX1262 module
-#define LORA_RESET 23
-#define LORA_DIO1 33 // Not really used
-#define LORA_DIO2 32 // Not really used
+// Pine64 uses a common pinout for their SX1262 vs RF95 modules - both can be enabled and we will probe at runtime for RF95 and if
+// not found then probe for SX1262.  Currently the RF95 code is disabled because I think the RF95 module won't need to ship.
+// #define USE_RF95
+#define USE_SX1262
 
 // Fake SPI device selections
 #define RF95_SCK 5
 #define RF95_MISO 19
 #define RF95_MOSI 27
-#define RF95_NSS 18
+#define RF95_NSS RADIOLIB_NC // the ch341f spi controller does CS for us
+
+#define LORA_DIO0 26 // a No connect on the SX1262 module
+#define LORA_RESET 14
+#define LORA_DIO1 33 // SX1262 IRQ, called DIO0 on pinelora schematic, pin 7 on ch341f "ack" - FIXME, enable hwints in linux
+#define LORA_DIO2 32 // SX1262 BUSY, actually connected to "DIO5" on pinelora schematic, pin 8 on ch341f "slct" 
+#define LORA_DIO3    // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TXCO is enabled
+
+#ifdef USE_SX1262
+#define SX126X_CS 20 // CS0 on pinelora schematic, hooked to gpio D0 on ch341f
+#define SX126X_DIO1 LORA_DIO1
+#define SX126X_BUSY LORA_DIO2
+#define SX126X_RESET LORA_RESET
+// HOPE RFM90 does not have a TCXO therefore not SX126X_E22 
+#endif
 
 #endif
 
@@ -401,7 +546,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "SerialConsole.h"
 
-#define DEBUG_PORT console // Serial debug port
+#define DEBUG_PORT (*console) // Serial debug port
 
 // What platforms should use SEGGER?
 #ifdef NRF52_SERIES

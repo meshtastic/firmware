@@ -1,5 +1,5 @@
-#include "OSThread.h"
 #include "configuration.h"
+#include "OSThread.h"
 #include <assert.h>
 
 namespace concurrency
@@ -28,10 +28,14 @@ void OSThread::setup()
 OSThread::OSThread(const char *_name, uint32_t period, ThreadController *_controller)
     : Thread(NULL, period), controller(_controller)
 {
+    assertIsSetup();
+
     ThreadName = _name;
 
-    if (controller)
-        controller->add(this);
+    if (controller) {
+        bool added = controller->add(this);
+        assert(added);
+    }
 }
 
 OSThread::~OSThread()
@@ -79,6 +83,38 @@ void OSThread::run()
         setInterval(newDelay);
 
     currentThread = NULL;
+}
+
+/**
+ * This flag is set **only** when setup() starts, to provide a way for us to check for sloppy static constructor calls.
+ * Call assertIsSetup() to force a crash if someone tries to create an instance too early.
+ *
+ * it is super important to never allocate those object statically.  instead, you should explicitly
+ *  new them at a point where you are guaranteed that other objects that this instance
+ * depends on have already been created.
+ *
+ * in particular, for OSThread that means "all instances must be declared via new() in setup() or later" -
+ * this makes it guaranteed that the global mainController is fully constructed first.
+ */
+bool hasBeenSetup;
+
+void assertIsSetup()
+{
+
+    /**
+     * Dear developer comrade - If this assert fails() that means you need to fix the following:
+     *
+     * This flag is set **only** when setup() starts, to provide a way for us to check for sloppy static constructor calls.
+     * Call assertIsSetup() to force a crash if someone tries to create an instance too early.
+     *
+     * it is super important to never allocate those object statically.  instead, you should explicitly
+     *  new them at a point where you are guaranteed that other objects that this instance
+     * depends on have already been created.
+     *
+     * in particular, for OSThread that means "all instances must be declared via new() in setup() or later" -
+     * this makes it guaranteed that the global mainController is fully constructed first.
+     */
+    assert(hasBeenSetup);
 }
 
 } // namespace concurrency

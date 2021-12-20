@@ -7,9 +7,10 @@
 #include "sleep.h"
 #include "target_specific.h"
 #include "utils.h"
+#include <Preferences.h>
+#include <driver/rtc_io.h>
 #include <nvs.h>
 #include <nvs_flash.h>
-#include <driver/rtc_io.h>
 
 void getMacAddr(uint8_t *dmac)
 {
@@ -45,11 +46,24 @@ void esp32Setup()
     DEBUG_MSG("NVS: UsedEntries %d, FreeEntries %d, AllEntries %d\n", nvs_stats.used_entries, nvs_stats.free_entries,
               nvs_stats.total_entries);
 
+    DEBUG_MSG("Setup Preferences in Flash Storage\n");
+
+    // Create object to store our persistant data
+    Preferences preferences;
+    preferences.begin("meshtastic", false);
+
+    uint32_t rebootCounter = preferences.getUInt("rebootCounter", 0);
+    rebootCounter++;
+    preferences.putUInt("rebootCounter", rebootCounter);
+    preferences.end();
+    DEBUG_MSG("Number of Device Reboots: %d\n", rebootCounter);
+
     // enableModemSleep();
 
 // Since we are turning on watchdogs rather late in the release schedule, we really don't want to catch any
 // false positives.  The wait-to-sleep timeout for shutting down radios is 30 secs, so pick 45 for now.
-#define APP_WATCHDOG_SECS 45
+// #define APP_WATCHDOG_SECS 45
+#define APP_WATCHDOG_SECS 90
 
     res = esp_task_wdt_init(APP_WATCHDOG_SECS, true);
     assert(res == ESP_OK);
@@ -83,7 +97,6 @@ void esp32Loop()
 {
     esp_task_wdt_reset(); // service our app level watchdog
     loopBLE();
-    bluetoothRebootCheck();
 
     // for debug printing
     // radio.radioIf.canSleep();

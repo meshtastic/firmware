@@ -1,3 +1,4 @@
+#include "configuration.h"
 #include "SPILock.h"
 #include <Arduino.h>
 #include <assert.h>

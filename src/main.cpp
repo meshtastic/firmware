@@ -1,12 +1,11 @@
-
-#include "Air530GPS.h"
+#include "configuration.h"
+#include "GPS.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
-#include "UBloxGPS.h"
 #include "airtime.h"
-#include "configuration.h"
+#include "buzz.h"
 #include "error.h"
 #include "power.h"
 // #include "rom/rtc.h"
@@ -19,20 +18,29 @@
 #include "concurrency/Periodic.h"
 #include "graphics/Screen.h"
 #include "main.h"
-#include "meshwifi/meshhttp.h"
-#include "meshwifi/meshwifi.h"
+#include "plugins/Plugins.h"
 #include "sleep.h"
 #include "target_specific.h"
 #include <OneButton.h>
 #include <Wire.h>
 // #include <driver/rtc_io.h>
 
+#include "mesh/http/WiFiAPClient.h"
+
 #ifndef NO_ESP32
+#include "mesh/http/WebServer.h"
 #include "nimble/BluetoothUtil.h"
+#endif
+
+#if defined(HAS_WIFI) || defined(PORTDUINO)
+#include "mesh/wifi/WiFiServerAPI.h"
+#include "mqtt/MQTT.h"
 #endif
 
 #include "RF95Interface.h"
 #include "SX1262Interface.h"
+#include "SX1268Interface.h"
+#include "LLCC68Interface.h"
 
 #ifdef NRF52_SERIES
 #include "variant.h"
@@ -62,7 +70,7 @@ Router *router = NULL; // Users of router don't care what sort of subclass imple
 // -----------------------------------------------------------------------------
 // Application
 // -----------------------------------------------------------------------------
-
+#ifndef NO_WIRE
 void scanI2Cdevice(void)
 {
     byte err, addr;
@@ -99,6 +107,9 @@ void scanI2Cdevice(void)
     else
         DEBUG_MSG("done\n");
 }
+#else
+void scanI2Cdevice(void) {}
+#endif
 
 const char *getDeviceName()
 {
@@ -123,6 +134,8 @@ static int32_t ledBlinker()
     return powerStatus->getIsCharging() ? 1000 : (ledOn ? 1 : 1000);
 }
 
+uint32_t timeLastPowered = 0;
+
 /// Wrapper to convert our powerFSM stuff into a 'thread'
 class PowerFSMThread : public OSThread
 {
@@ -140,6 +153,13 @@ class PowerFSMThread : public OSThread
         auto state = powerFSM.getState();
         canSleep = (state != &statePOWER) && (state != &stateSERIAL);
 
+        if (powerStatus->getHasUSB()) {
+            timeLastPowered = millis();
+        } else if (radioConfig.preferences.on_battery_shutdown_after_secs > 0 && 
+                    millis() > timeLastPowered + (1000 * radioConfig.preferences.on_battery_shutdown_after_secs)) { //shutdown after 30 minutes unpowered
+            powerFSM.trigger(EVENT_SHUTDOWN);
+        }
+        
         return 10;
     }
 };
@@ -168,6 +188,7 @@ class ButtonThread : public OSThread
 #ifdef BUTTON_PIN_ALT
     OneButton userButtonAlt;
 #endif
+    static bool shutdown_on_long_stop;
 
   public:
     static uint32_t longPressTime;
@@ -234,12 +255,22 @@ class ButtonThread : public OSThread
         // DEBUG_MSG("Long press!\n");
         screen->adjustBrightness();
 
-        // If user button is held down for 10 seconds, shutdown the device.
-        if (millis() - longPressTime > 10 * 1000) {
+        // If user button is held down for 5 seconds, shutdown the device.
+        if (millis() - longPressTime > 5 * 1000) {
 #ifdef TBEAM_V10
             if (axp192_found == true) {
                 setLed(false);
                 power->shutdown();
+            }
+#elif NRF52_SERIES
+            // Do actual shutdown when button released, otherwise the button release
+            // may wake the board immediatedly.
+            if (!shutdown_on_long_stop) {
+                DEBUG_MSG("Shutdown from long press");
+                playBeep();
+                ledOff(PIN_LED1);
+                ledOff(PIN_LED2);
+                shutdown_on_long_stop = true;
             }
 #endif
         } else {
@@ -251,6 +282,8 @@ class ButtonThread : public OSThread
     {
 #ifndef NO_ESP32
         disablePin();
+#elif defined(HAS_EINK)
+        digitalWrite(PIN_EINK_EN,digitalRead(PIN_EINK_EN) == LOW);
 #endif
     }
 
@@ -264,8 +297,14 @@ class ButtonThread : public OSThread
     {
         DEBUG_MSG("Long press stop!\n");
         longPressTime = 0;
+        if (shutdown_on_long_stop) {
+            playShutdownMelody();
+            power->shutdown();
+        }
     }
 };
+
+bool ButtonThread::shutdown_on_long_stop = false;
 
 static Periodic *ledPeriodic;
 static OSThread *powerFSMthread, *buttonThread;
@@ -273,19 +312,31 @@ uint32_t ButtonThread::longPressTime = 0;
 
 RadioInterface *rIf = NULL;
 
+/**
+ * Some platforms (nrf52) might provide an alterate version that supresses calling delay from sleep.
+ */
+__attribute__ ((weak, noinline)) bool loopCanSleep() {
+    return true;
+}
+
 void setup()
 {
+    concurrency::hasBeenSetup = true;
+
 #ifdef SEGGER_STDOUT_CH
-    SEGGER_RTT_ConfigUpBuffer(SEGGER_STDOUT_CH, NULL, NULL, 1024, SEGGER_RTT_MODE_NO_BLOCK_TRIM);
+    auto mode = false ? SEGGER_RTT_MODE_BLOCK_IF_FIFO_FULL : SEGGER_RTT_MODE_NO_BLOCK_TRIM;
+#ifdef NRF52840_XXAA
+    auto buflen = 4096; // this board has a fair amount of ram
+#else
+    auto buflen = 256; // this board has a fair amount of ram
+#endif
+    SEGGER_RTT_ConfigUpBuffer(SEGGER_STDOUT_CH, NULL, NULL, buflen, mode);
 #endif
 
-#ifdef USE_SEGGER
-    SEGGER_RTT_ConfigUpBuffer(0, NULL, NULL, 0, SEGGER_RTT_MODE_NO_BLOCK_TRIM);
-#endif
-
-// Debug
 #ifdef DEBUG_PORT
-    DEBUG_PORT.init(); // Set serial baud rate and init our mesh console
+    if (!radioConfig.preferences.serial_disabled) {
+        consoleInit(); // Set serial baud rate and init our mesh console
+    }
 #endif
 
     initDeepSleep();
@@ -300,17 +351,24 @@ void setup()
     digitalWrite(RESET_OLED, 1);
 #endif
 
-    // If BUTTON_PIN is held down during the startup process,
-    //   force the device to go into a SoftAP mode.
     bool forceSoftAP = 0;
+
 #ifdef BUTTON_PIN
 #ifndef NO_ESP32
+
+    // If the button is connected to GPIO 12, don't enable the ability to use
+    // meshtasticAdmin on the device.
     pinMode(BUTTON_PIN, INPUT);
+
+#ifdef BUTTON_NEED_PULLUP
+    gpio_pullup_en((gpio_num_t)BUTTON_PIN);
+    delay(10);
+#endif
 
     // BUTTON_PIN is pulled high by a 12k resistor.
     if (!digitalRead(BUTTON_PIN)) {
         forceSoftAP = 1;
-        DEBUG_MSG("-------------------- Setting forceSoftAP = 1\n");
+        DEBUG_MSG("Setting forceSoftAP = 1\n");
     }
 
 #endif
@@ -326,7 +384,7 @@ void setup()
 
 #ifdef I2C_SDA
     Wire.begin(I2C_SDA, I2C_SCL);
-#else
+#elif !defined(NO_WIRE)
     Wire.begin();
 #endif
 
@@ -350,7 +408,7 @@ void setup()
 #endif
 
     // Hello
-    DEBUG_MSG("Meshtastic swver=%s, hwver=%s\n", optstr(APP_VERSION), optstr(HW_VERSION));
+    DEBUG_MSG("Meshtastic hwvendor=%d, swver=%s, hwver=%s\n", HW_VENDOR, optstr(APP_VERSION), optstr(HW_VERSION));
 
 #ifndef NO_ESP32
     // Don't init display if we don't have one or we are waking headless due to a timer event
@@ -363,7 +421,7 @@ void setup()
 #ifdef NRF52_SERIES
     nrf52Setup();
 #endif
-
+    playStartMelody();
     // We do this as early as possible because this loads preferences from flash
     // but we need to do this after main cpu iniot (esp32setup), because we need the random seed set
     nodeDB.init();
@@ -389,33 +447,23 @@ void setup()
 
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 
-    // If we don't have bidirectional comms, we can't even try talking to UBLOX
-    UBloxGPS *ublox = NULL;
-#ifdef GPS_TX_PIN
-    // Init GPS - first try ublox
-    ublox = new UBloxGPS();
-    gps = ublox;
-    if (!gps->setup()) {
-        DEBUG_MSG("ERROR: No UBLOX GPS found\n");
+#ifdef GENIEBLOCKS
+    Im intentionally breaking your build so you see this note.Feel free to revert if not correct.I think you can
+            remove this GPS_RESET_N code by instead defining PIN_GPS_RESET and
+        use the shared code in GPS.cpp instead.- geeksville
 
-        delete ublox;
-        gps = ublox = NULL;
-    }
+                                                     // gps setup
+                                                     pinMode(GPS_RESET_N, OUTPUT);
+    pinMode(GPS_EXTINT, OUTPUT);
+    digitalWrite(GPS_RESET_N, HIGH);
+    digitalWrite(GPS_EXTINT, LOW);
+    // battery setup
+    // If we want to read battery level, we need to set BATTERY_EN_PIN pin to low.
+    // ToDo: For low power consumption after read battery level, set that pin to high.
+    pinMode(BATTERY_EN_PIN, OUTPUT);
+    digitalWrite(BATTERY_EN_PIN, LOW);
 #endif
-
-    if (!gps && GPS::_serial_gps) {
-        // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
-        // assume NMEA at 9600 baud.
-        // dumb NMEA access only work for serial GPSes)
-        DEBUG_MSG("Hoping that NMEA might work\n");
-
-#ifdef HAS_AIR530_GPS
-        gps = new Air530GPS();
-#else
-        gps = new NMEAGPS();
-#endif
-        gps->setup();
-    }
+    gps = createGps();
 
     if (gps)
         gpsStatus->observe(&gps->newStatus);
@@ -426,14 +474,17 @@ void setup()
 
     service.init();
 
+    // Now that the mesh service is created, create any plugins
+    setupPlugins();
+
     // Do this after service.init (because that clears error_code)
 #ifdef AXP192_SLAVE_ADDRESS
-    if(!axp192_found)
-        recordCriticalError(CriticalErrorCode_NoAXP192); // Record a hardware fault for missing hardware
-#endif    
+    if (!axp192_found)
+        RECORD_CRITICALERROR(CriticalErrorCode_NoAXP192); // Record a hardware fault for missing hardware
+#endif
 
-    // Don't call screen setup until after nodedb is setup (because we need
-    // the current region name)
+        // Don't call screen setup until after nodedb is setup (because we need
+        // the current region name)
 #if defined(ST7735_CS) || defined(HAS_EINK)
     screen->setup();
 #else
@@ -446,17 +497,17 @@ void setup()
     // We have now loaded our saved preferences from flash
 
     // ONCE we will factory reset the GPS for bug #327
-    if (ublox && !devicestate.did_gps_reset) {
-        if (ublox->factoryReset()) { // If we don't succeed try again next time
+    if (gps && !devicestate.did_gps_reset) {
+        if (gps->factoryReset()) { // If we don't succeed try again next time
             devicestate.did_gps_reset = true;
             nodeDB.saveToDisk();
         }
     }
 
-#ifdef SX1262_ANT_SW
-    // make analog PA vs not PA switch on SX1262 eval board work properly
-    pinMode(SX1262_ANT_SW, OUTPUT);
-    digitalWrite(SX1262_ANT_SW, 1);
+#ifdef SX126X_ANT_SW
+    // make analog PA vs not PA switch on SX126x eval board work properly
+    pinMode(SX126X_ANT_SW, OUTPUT);
+    digitalWrite(SX126X_ANT_SW, 1);
 #endif
 
     // radio init MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
@@ -468,17 +519,47 @@ void setup()
             DEBUG_MSG("Warning: Failed to find RF95 radio\n");
             delete rIf;
             rIf = NULL;
+        } else {
+            DEBUG_MSG("RF95 Radio init succeeded, using RF95 radio\n");
         }
     }
 #endif
 
-#if defined(SX1262_CS)
+#if defined(USE_SX1262)
     if (!rIf) {
-        rIf = new SX1262Interface(SX1262_CS, SX1262_DIO1, SX1262_RESET, SX1262_BUSY, SPI);
+        rIf = new SX1262Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
         if (!rIf->init()) {
             DEBUG_MSG("Warning: Failed to find SX1262 radio\n");
             delete rIf;
             rIf = NULL;
+        } else {
+            DEBUG_MSG("SX1262 Radio init succeeded, using SX1262 radio\n");
+        }
+    }
+#endif
+
+#if defined(USE_SX1268)
+    if (!rIf) {
+        rIf = new SX1268Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
+        if (!rIf->init()) {
+            DEBUG_MSG("Warning: Failed to find SX1268 radio\n");
+            delete rIf;
+            rIf = NULL;
+        } else {
+            DEBUG_MSG("SX1268 Radio init succeeded, using SX1268 radio\n");
+        }
+    }
+#endif
+
+#if defined(USE_LLCC68)
+    if (!rIf) {
+        rIf = new LLCC68Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
+        if (!rIf->init()) {
+            DEBUG_MSG("Warning: Failed to find LLCC68 radio\n");
+            delete rIf;
+            rIf = NULL;
+        } else {
+            DEBUG_MSG("LLCC68 Radio init succeeded, using LLCC68 radio\n");
         }
     }
 #endif
@@ -490,17 +571,42 @@ void setup()
             DEBUG_MSG("Warning: Failed to find simulated radio\n");
             delete rIf;
             rIf = NULL;
+        } else {
+            DEBUG_MSG("Using SIMULATED radio!\n");
         }
     }
+#endif
+
+#if defined(PORTDUINO) || defined(HAS_WIFI)
+    mqttInit();
 #endif
 
     // Initialize Wifi
     initWifi(forceSoftAP);
 
+#ifndef NO_ESP32
+    // Start web server thread.
+    webServerThread = new WebServerThread();
+#endif
+
+#ifdef PORTDUINO
+    initApiServer();
+#endif
+
+    // Start airtime logger thread.
+    airTime = new AirTime();
+
     if (!rIf)
-        recordCriticalError(CriticalErrorCode_NoRadio);
+        RECORD_CRITICALERROR(CriticalErrorCode_NoRadio);
     else
         router->addInterface(rIf);
+
+    // Calculate and save the bit rate to myNodeInfo
+    // TODO: This needs to be added what ever method changes the channel from the phone.
+    myNodeInfo.bitrate = (float(Constants_DATA_PAYLOAD_LEN) / 
+                    (float(rIf->getPacketTime(Constants_DATA_PAYLOAD_LEN)))
+                    ) * 1000;
+    DEBUG_MSG("myNodeInfo.bitrate = %f bytes / sec\n", myNodeInfo.bitrate);
 
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
@@ -531,19 +637,39 @@ Periodic axpDebugOutput(axpDebugRead);
 axpDebugOutput.setup();
 #endif
 
+uint32_t rebootAtMsec; // If not zero we will reboot at this time (used to reboot shortly after the update completes)
+
+void rebootCheck()
+{
+    if (rebootAtMsec && millis() > rebootAtMsec) {
+#ifndef NO_ESP32
+        DEBUG_MSG("Rebooting for update\n");
+        ESP.restart();
+#else
+        DEBUG_MSG("FIXME implement reboot for this platform");
+#endif
+    }
+}
+
+// If a thread does something that might need for it to be rescheduled ASAP it can set this flag
+// This will supress the current delay and instead try to run ASAP.
+bool runASAP;
+
 void loop()
 {
-    // axpDebugOutput.loop();
+    runASAP = false;
 
-#ifdef DEBUG_PORT
-    DEBUG_PORT.loop(); // Send/receive protobufs over the serial port
-#endif
+    // axpDebugOutput.loop();
 
     // heap_caps_check_integrity_all(true); // FIXME - disable this expensive check
 
 #ifndef NO_ESP32
     esp32Loop();
 #endif
+#ifdef NRF52_SERIES
+    nrf52Loop();
+#endif
+    rebootCheck();
 
     // For debugging
     // if (rIf) ((RadioLibInterface *)rIf)->isActivelyReceiving();
@@ -557,7 +683,7 @@ void loop()
 #endif
 
     // TODO: This should go into a thread handled by FreeRTOS.
-    handleWebResponse();
+    // handleWebResponse();
 
     service.loop();
 
@@ -568,9 +694,9 @@ void loop()
                   mainController.nextThread->tillRun(millis())); */
 
     // We want to sleep as long as possible here - because it saves power
-    mainDelay.delay(delayMsec);
+    if (!runASAP && loopCanSleep()) {
+        // if(delayMsec > 100) DEBUG_MSG("sleeping %ld\n", delayMsec);
+        mainDelay.delay(delayMsec);
+    }
     // if (didWake) DEBUG_MSG("wake!\n");
-
-    // Handles cleanup for the airtime calculator.
-    airtimeCalculator();
 }

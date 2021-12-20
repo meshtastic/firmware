@@ -15,7 +15,7 @@ struct GlobalPacketId {
 
     GlobalPacketId(const MeshPacket *p)
     {
-        node = p->from;
+        node = getFrom(p);
         id = p->id;
     }
 
@@ -51,7 +51,7 @@ struct PendingPacket {
 class GlobalPacketIdHashFunction
 {
   public:
-    size_t operator()(const GlobalPacketId &p) const { return (hash<NodeNum>()(p.node)) ^ (hash<PacketId>()(p.id)); }
+    size_t operator()(const GlobalPacketId &p) const { return (std::hash<NodeNum>()(p.node)) ^ (std::hash<PacketId>()(p.id)); }
 };
 
 /**
@@ -60,7 +60,7 @@ class GlobalPacketIdHashFunction
 class ReliableRouter : public FloodingRouter
 {
   private:
-    unordered_map<GlobalPacketId, PendingPacket, GlobalPacketIdHashFunction> pending;
+    std::unordered_map<GlobalPacketId, PendingPacket, GlobalPacketIdHashFunction> pending;
 
   public:
     /**
@@ -79,9 +79,10 @@ class ReliableRouter : public FloodingRouter
     /** Do our retransmission handling */
     virtual int32_t runOnce()
     {
-        auto d = FloodingRouter::runOnce();
+        // Note: We must doRetransmissions FIRST, because it might queue up work for the base class runOnce implementation
+        auto d = doRetransmissions();
 
-        int32_t r = doRetransmissions();
+        int32_t r = FloodingRouter::runOnce();
 
         return min(d, r);
     }
@@ -90,7 +91,7 @@ class ReliableRouter : public FloodingRouter
     /**
      * Look for acks/naks or someone retransmitting us
      */
-    virtual void sniffReceived(const MeshPacket *p);
+    virtual void sniffReceived(const MeshPacket *p, const Routing *c);
 
     /**
      * Try to find the pending packet record for this ID (or NULL if not found)
@@ -101,7 +102,7 @@ class ReliableRouter : public FloodingRouter
     /**
      * We hook this method so we can see packets before FloodingRouter says they should be discarded
      */
-    virtual bool shouldFilterReceived(const MeshPacket *p);
+    virtual bool shouldFilterReceived(MeshPacket *p);
 
     /**
      * Add p to the list of packets to retransmit occasionally.  We will free it once we stop retransmitting.
@@ -109,11 +110,6 @@ class ReliableRouter : public FloodingRouter
     PendingPacket *startRetransmission(MeshPacket *p);
 
   private:
-    /**
-     * Send an ack or a nak packet back towards whoever sent idFrom
-     */
-    void sendAckNak(bool isAck, NodeNum to, PacketId idFrom);
-
     /**
      * Stop any retransmissions we are doing of the specified node/packet ID pair
      *
@@ -129,7 +125,5 @@ class ReliableRouter : public FloodingRouter
      */
     int32_t doRetransmissions();
 
-    void setNextTx(PendingPacket *pending) {  
-      assert(iface);
-      pending->nextTxMsec = millis() + iface->getRetransmissionMsec(pending->packet); }
+    void setNextTx(PendingPacket *pending);
 };

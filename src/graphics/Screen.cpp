@@ -19,22 +19,29 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
-
+#include "configuration.h"
 #include <OLEDDisplay.h>
 
 #include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Screen.h"
-#include "configuration.h"
+#include "fonts.h"
+#include "gps/RTC.h"
 #include "graphics/images.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
-#include "meshwifi/meshwifi.h"
+#include "mesh/Channels.h"
 #include "plugins/TextMessagePlugin.h"
 #include "target_specific.h"
 #include "utils.h"
-#include "fonts.h"
+#include "gps/GeoCoord.h"
+#include "sleep.h"
+
+#ifndef NO_ESP32
+#include "mesh/http/WiFiAPClient.h"
+#include "esp_task_wdt.h"
+#endif
 
 using namespace meshtastic; /** @todo remove */
 
@@ -42,7 +49,7 @@ namespace graphics
 {
 
 // This means the *visible* area (sh1106 can address 132, but shows 128 for example)
-#define IDLE_FRAMERATE 1        // in fps
+#define IDLE_FRAMERATE 1 // in fps
 #define COMPASS_DIAM 44
 
 // DEBUG
@@ -61,8 +68,15 @@ uint8_t imgBattery[16] = {0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 
 // Threshold values for the GPS lock accuracy bar display
 uint32_t dopThresholds[5] = {2000, 1000, 500, 200, 100};
 
+// At some point, we're going to ask all of the plugins if they would like to display a screen frame
+// we'll need to hold onto pointers for the plugins that can draw a frame.
+std::vector<MeshPlugin *> pluginFrames;
+
 // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
 static char ourId[5];
+
+// GeoCoord object for the screen
+GeoCoord geoCoord;
 
 #ifdef SHOW_REDRAWS
 static bool heartbeat = false;
@@ -121,7 +135,7 @@ static void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDispl
     // Draw version in upper right
     char buf[16];
     snprintf(buf, sizeof(buf), "%s",
-             xstr(APP_VERSION)); // Note: we don't bother printing region or now, it makes the string too long
+             xstr(APP_VERSION_SHORT)); // Note: we don't bother printing region or now, it makes the string too long
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(buf), y + 0, buf);
     screen->forceDisplay();
 
@@ -135,10 +149,54 @@ static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     drawIconScreen(region, display, state, x, y);
 }
 
+// Used on boot when a certificate is being created
+static void drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->setFont(FONT_SMALL);
+    display->drawString(64 + x, y, "Creating SSL certificate");
+
+#ifndef NO_ESP32
+    yield();
+    esp_task_wdt_reset();
+#endif
+
+    display->setFont(FONT_SMALL);
+    if ((millis() / 1000) % 2) {
+        display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . . .");
+    } else {
+        display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . .  ");
+    }
+}
+
+#ifdef HAS_EINK
 /// Used on eink displays while in deep sleep
 static void drawSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     drawIconScreen("Sleeping...", display, state, x, y);
+}
+#endif
+
+static void drawPluginFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    uint8_t plugin_frame;
+    // there's a little but in the UI transition code
+    // where it invokes the function at the correct offset
+    // in the array of "drawScreen" functions; however,
+    // the passed-state doesn't quite reflect the "current"
+    // screen, so we have to detect it.
+    if (state->frameState == IN_TRANSITION && state->transitionFrameRelationship == INCOMING) {
+        // if we're transitioning from the end of the frame list back around to the first
+        // frame, then we want this to be `0`
+        plugin_frame = state->transitionFrameTarget;
+    } else {
+        // otherwise, just display the plugin frame that's aligned with the current frame
+        plugin_frame = state->currentFrame;
+        // DEBUG_MSG("Screen is not in transition.  Frame: %d\n\n", plugin_frame);
+    }
+    // DEBUG_MSG("Drawing Plugin Frame %d\n\n", plugin_frame);
+    MeshPlugin &pi = *pluginFrames.at(plugin_frame);
+    pi.drawFrame(display, state, x, y);
 }
 
 static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -161,6 +219,23 @@ static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, 
     display->drawString(64 + x, 48 + y, buf);
 }
 
+static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->setFont(FONT_MEDIUM);
+    display->drawString(64 + x, y, "Updating");
+
+    display->setFont(FONT_SMALL);
+    if ((millis() / 1000) % 2) {
+        display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . . .");
+    } else {
+        display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . .  ");
+    }
+
+    // display->setFont(FONT_LARGE);
+    // display->drawString(64 + x, 26 + y, btPIN);
+}
+
 /// Draw the last text message we received
 static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -177,6 +252,12 @@ static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->drawString(0 + x, FONT_HEIGHT_MEDIUM + y, "For help, please post on\nmeshtastic.discourse.group");
 }
 
+// Ignore messages orginating from phone (from the current node 0x0) unless range test or store and forward plugin are enabled
+static bool shouldDrawMessage(const MeshPacket *packet) {
+    return packet->from != 0 &&
+        !radioConfig.preferences.range_test_plugin_enabled &&
+        !radioConfig.preferences.store_forward_plugin_enabled;
+}
 
 /// Draw the last text message we received
 static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -184,7 +265,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     displayedNodeNum = 0; // Not currently showing a node pane
 
     MeshPacket &mp = devicestate.rx_text_message;
-    NodeInfo *node = nodeDB.getNode(mp.from);
+    NodeInfo *node = nodeDB.getNode(getFrom(&mp));
     // DEBUG_MSG("drawing text message from 0x%x: %s\n", mp.from,
     // mp.decoded.variant.data.decoded.bytes);
 
@@ -199,8 +280,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
 
     // the max length of this buffer is much longer than we can possibly print
     static char tempBuf[96];
-    assert(mp.decoded.which_payload == SubPacket_data_tag);
-    snprintf(tempBuf, sizeof(tempBuf), "         %s", mp.decoded.data.payload.bytes);
+    snprintf(tempBuf, sizeof(tempBuf), "         %s", mp.decoded.payload.bytes);
 
     display->drawStringMaxWidth(4 + x, 10 + y, SCREEN_WIDTH - (6 + x), tempBuf);
 }
@@ -290,6 +370,11 @@ static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, NodeStatus *no
 // Draw GPS status summary
 static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
+    if (radioConfig.preferences.fixed_position) {
+        // GPS coordinates are currently fixed
+        display->drawString(x - 1, y - 2, "Fixed GPS");
+        return;
+    }
     if (!gps->getIsConnected()) {
         display->drawString(x, y - 2, "No GPS");
         return;
@@ -316,7 +401,7 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
         display->drawFastImage(x + 24, y, 8, 8, imgSatellite);
 
         // Draw the number of satellites
-        sprintf(satsString, "%lu", gps->getNumSatellites());
+        sprintf(satsString, "%u", gps->getNumSatellites());
         display->drawString(x + 34, y - 2, satsString);
     }
 }
@@ -324,15 +409,15 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
 static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
     String displayLine = "";
-    if (!gps->getIsConnected()) {
+    if (!gps->getIsConnected() && !radioConfig.preferences.fixed_position) {
         // displayLine = "No GPS Module";
         // display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
-    } else if (!gps->getHasLock()) {
+    } else if (!gps->getHasLock() && !radioConfig.preferences.fixed_position) {
         // displayLine = "No GPS Lock";
         // display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
-
-        displayLine = "Altitude: " + String(gps->getAltitude()) + "m";
+        geoCoord.updateCoords(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()), int32_t(gps->getAltitude()));
+        displayLine = "Altitude: " + String(geoCoord.getAltitude()) + "m";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     }
 }
@@ -340,74 +425,60 @@ static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GP
 // Draw GPS status coordinates
 static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
+    auto gpsFormat = radioConfig.preferences.gps_format;
     String displayLine = "";
-    if (!gps->getIsConnected()) {
+
+    if (!gps->getIsConnected() && !radioConfig.preferences.fixed_position) {
         displayLine = "No GPS Module";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
-    } else if (!gps->getHasLock()) {
+    } else if (!gps->getHasLock() && !radioConfig.preferences.fixed_position) {
         displayLine = "No GPS Lock";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
-        char coordinateLine[22];
-        sprintf(coordinateLine, "%f %f", gps->getLatitude() * 1e-7, gps->getLongitude() * 1e-7);
-        display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
+
+        if (gpsFormat != GpsCoordinateFormat_GpsFormatDMS) {
+            char coordinateLine[22];
+            geoCoord.updateCoords(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()), int32_t(gps->getAltitude()));
+            if (gpsFormat == GpsCoordinateFormat_GpsFormatDec) { // Decimal Degrees
+                sprintf(coordinateLine, "%f %f", geoCoord.getLatitude() * 1e-7, geoCoord.getLongitude() * 1e-7);
+            } else if (gpsFormat == GpsCoordinateFormat_GpsFormatUTM) { // Universal Transverse Mercator
+                sprintf(coordinateLine, "%2i%1c %06i %07i", geoCoord.getUTMZone(), geoCoord.getUTMBand(),
+                        geoCoord.getUTMEasting(), geoCoord.getUTMNorthing());
+            } else if (gpsFormat == GpsCoordinateFormat_GpsFormatMGRS) { // Military Grid Reference System
+                sprintf(coordinateLine, "%2i%1c %1c%1c %05i %05i", geoCoord.getMGRSZone(), geoCoord.getMGRSBand(), geoCoord.getMGRSEast100k(),
+                        geoCoord.getMGRSNorth100k(), geoCoord.getMGRSEasting(), geoCoord.getMGRSNorthing());
+            } else if (gpsFormat == GpsCoordinateFormat_GpsFormatOLC) { // Open Location Code
+                geoCoord.getOLCCode(coordinateLine);
+            } else if (gpsFormat == GpsCoordinateFormat_GpsFormatOSGR) { // Ordnance Survey Grid Reference
+                if (geoCoord.getOSGRE100k() == 'I' || geoCoord.getOSGRN100k() == 'I') // OSGR is only valid around the UK region
+                    sprintf(coordinateLine, "%s", "Out of Boundary");
+                else
+                    sprintf(coordinateLine, "%1c%1c %05i %05i", geoCoord.getOSGRE100k(),geoCoord.getOSGRN100k(), 
+                            geoCoord.getOSGREasting(), geoCoord.getOSGRNorthing());
+            }
+            
+            // If fixed position, display text "Fixed GPS" alternating with the coordinates.
+            if (radioConfig.preferences.fixed_position) {
+                if ((millis() / 10000) % 2) {
+                    display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
+                } else {
+                    display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth("Fixed GPS"))) / 2, y, "Fixed GPS");
+                }
+            } else {
+                display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
+            }
+
+        } else {
+            char latLine[22];
+            char lonLine[22];
+            sprintf(latLine, "%2i° %2i' %2.4f\" %1c", geoCoord.getDMSLatDeg(), geoCoord.getDMSLatMin(), geoCoord.getDMSLatSec(),
+                    geoCoord.getDMSLatCP());
+            sprintf(lonLine, "%3i° %2i' %2.4f\" %1c", geoCoord.getDMSLonDeg(), geoCoord.getDMSLonMin(), geoCoord.getDMSLonSec(), 
+                    geoCoord.getDMSLonCP());
+            display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(latLine))) / 2, y - FONT_HEIGHT_SMALL * 1, latLine);
+            display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(lonLine))) / 2, y, lonLine);
+        }
     }
-}
-
-/// Ported from my old java code, returns distance in meters along the globe
-/// surface (by magic?)
-static float latLongToMeter(double lat_a, double lng_a, double lat_b, double lng_b)
-{
-    double pk = (180 / 3.14169);
-    double a1 = lat_a / pk;
-    double a2 = lng_a / pk;
-    double b1 = lat_b / pk;
-    double b2 = lng_b / pk;
-    double cos_b1 = cos(b1);
-    double cos_a1 = cos(a1);
-    double t1 = cos_a1 * cos(a2) * cos_b1 * cos(b2);
-    double t2 = cos_a1 * sin(a2) * cos_b1 * sin(b2);
-    double t3 = sin(a1) * sin(b1);
-    double tt = acos(t1 + t2 + t3);
-    if (isnan(tt))
-        tt = 0.0; // Must have been the same point?
-
-    return (float)(6366000 * tt);
-}
-
-static inline double toRadians(double deg)
-{
-    return deg * PI / 180;
-}
-
-static inline double toDegrees(double r)
-{
-    return r * 180 / PI;
-}
-
-/**
- * Computes the bearing in degrees between two points on Earth.  Ported from my
- * old Gaggle android app.
- *
- * @param lat1
- * Latitude of the first point
- * @param lon1
- * Longitude of the first point
- * @param lat2
- * Latitude of the second point
- * @param lon2
- * Longitude of the second point
- * @return Bearing between the two points in radians. A value of 0 means due
- * north.
- */
-static float bearing(double lat1, double lon1, double lat2, double lon2)
-{
-    double lat1Rad = toRadians(lat1);
-    double lat2Rad = toRadians(lat2);
-    double deltaLonRad = toRadians(lon2 - lon1);
-    double y = sin(deltaLonRad) * cos(lat2Rad);
-    double x = cos(lat1Rad) * sin(lat2Rad) - (sin(lat1Rad) * cos(lat2Rad) * cos(deltaLonRad));
-    return atan2(y, x);
 }
 
 namespace
@@ -470,11 +541,11 @@ static float estimatedHeading(double lat, double lon)
         return b;
     }
 
-    float d = latLongToMeter(oldLat, oldLon, lat, lon);
+    float d = GeoCoord::latLongToMeter(oldLat, oldLon, lat, lon);
     if (d < 10) // haven't moved enough, just keep current bearing
         return b;
 
-    b = bearing(oldLat, oldLon, lat, lon);
+    b = GeoCoord::bearing(oldLat, oldLon, lat, lon);
     oldLat = lat;
     oldLon = lon;
 
@@ -569,11 +640,11 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     uint32_t agoSecs = sinceLastSeen(node);
     static char lastStr[20];
     if (agoSecs < 120) // last 2 mins?
-        snprintf(lastStr, sizeof(lastStr), "%lu seconds ago", agoSecs);
+        snprintf(lastStr, sizeof(lastStr), "%u seconds ago", agoSecs);
     else if (agoSecs < 120 * 60) // last 2 hrs
-        snprintf(lastStr, sizeof(lastStr), "%lu minutes ago", agoSecs / 60);
+        snprintf(lastStr, sizeof(lastStr), "%u minutes ago", agoSecs / 60);
     else
-        snprintf(lastStr, sizeof(lastStr), "%lu hours ago", agoSecs / 60 / 60);
+        snprintf(lastStr, sizeof(lastStr), "%u hours ago", agoSecs / 60 / 60);
 
     static char distStr[20];
     strcpy(distStr, "? km"); // might not have location data
@@ -594,7 +665,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             // display direction toward node
             hasNodeHeading = true;
             Position &p = node->position;
-            float d = latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
+            float d = GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
             if (d < 2000)
                 snprintf(distStr, sizeof(distStr), "%.0f m", d);
             else
@@ -602,7 +673,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 
             // FIXME, also keep the guess at the operators heading and add/substract
             // it.  currently we don't do this and instead draw north up only.
-            float bearingToOther = bearing(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
+            float bearingToOther = GeoCoord::bearing(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
             headingRadian = bearingToOther - myHeading;
             drawNodeHeading(display, compassX, compassY, headingRadian);
         }
@@ -643,6 +714,7 @@ void _screen_header()
 
 Screen::Screen(uint8_t address, int sda, int scl) : OSThread("Screen"), cmdQueue(32), dispdev(address, sda, scl), ui(&dispdev)
 {
+    address_found = address;
     cmdQueue.setReader(this);
 }
 
@@ -673,6 +745,7 @@ void Screen::handleSetOn(bool on)
             dispdev.displayOn();
             enabled = true;
             setInterval(0); // Draw ASAP
+            runASAP = true;
         } else {
             DEBUG_MSG("Turning off screen\n");
             dispdev.displayOff();
@@ -747,7 +820,8 @@ void Screen::setup()
     powerStatusObserver.observe(&powerStatus->onNewStatus);
     gpsStatusObserver.observe(&gpsStatus->onNewStatus);
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
-    textMessageObserver.observe(&textMessagePlugin);
+    if (textMessagePlugin)
+        textMessageObserver.observe(textMessagePlugin);
 }
 
 void Screen::forceDisplay()
@@ -757,6 +831,8 @@ void Screen::forceDisplay()
     dispdev.forceDisplay();
 #endif
 }
+
+static uint32_t lastScreenTransition;
 
 int32_t Screen::runOnce()
 {
@@ -773,9 +849,6 @@ int32_t Screen::runOnce()
         stopBootScreen();
         showingBootScreen = false;
     }
-
-    // Update the screen last, after we've figured out what to show.
-    debug_info()->setChannelNameStatus(getChannelName());
 
     // Process incoming commands.
     for (;;) {
@@ -796,6 +869,9 @@ int32_t Screen::runOnce()
         case Cmd::START_BLUETOOTH_PIN_SCREEN:
             handleStartBluetoothPinScreen(cmd.bluetooth_pin);
             break;
+        case Cmd::START_FIRMWARE_UPDATE_SCREEN:
+            handleStartFirmwareUpdateScreen();
+            break;
         case Cmd::STOP_BLUETOOTH_PIN_SCREEN:
         case Cmd::STOP_BOOT_SCREEN:
             setFrames();
@@ -805,7 +881,7 @@ int32_t Screen::runOnce()
             free(cmd.print_text);
             break;
         default:
-            DEBUG_MSG("BUG: invalid cmd");
+            DEBUG_MSG("BUG: invalid cmd\n");
         }
     }
 
@@ -826,6 +902,11 @@ int32_t Screen::runOnce()
         // oldFrameState = ui.getUiState()->frameState;
         DEBUG_MSG("Setting idle framerate\n");
         targetFramerate = IDLE_FRAMERATE;
+
+#ifndef NO_ESP32
+        setCPUFast(false); // Turn up the CPU to improve screen animations
+#endif
+
         ui.setTargetFPS(targetFramerate);
         forceDisplay();
     }
@@ -834,8 +915,13 @@ int32_t Screen::runOnce()
     // standard screen switching is stopped.
     if (showingNormalScreen) {
         // standard screen loop handling here
+        if (radioConfig.preferences.auto_screen_carousel_secs > 0 && 
+            (millis() - lastScreenTransition) > (radioConfig.preferences.auto_screen_carousel_secs * 1000)) {
+            DEBUG_MSG("LastScreenTransition exceeded %ums transitioning to next frame\n", (millis() - lastScreenTransition));
+            handleOnPress();
+        }
     }
-
+    
     // DEBUG_MSG("want fps %d, fixed=%d\n", targetFramerate,
     // ui.getUiState()->frameState); If we are scrolling we need to be called
     // soon, otherwise just 1 fps (to save CPU) We also ask to be called twice
@@ -862,11 +948,28 @@ void Screen::drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiStat
     screen->debugInfo.drawFrameWiFi(display, state, x, y);
 }
 
+/* show a message that the SSL cert is being built
+ * it is expected that this will be used during the boot phase */
+void Screen::setSSLFrames()
+{
+    if (address_found) {
+        // DEBUG_MSG("showing SSL frames\n");
+        static FrameCallback sslFrames[] = {drawSSLScreen};
+        ui.setFrames(sslFrames, 1);
+        ui.update();
+    }
+}
+
 // restore our regular frame list
 void Screen::setFrames()
 {
     DEBUG_MSG("showing standard frames\n");
     showingNormalScreen = true;
+
+    pluginFrames = MeshPlugin::GetMeshPluginsWithUIFrames();
+    DEBUG_MSG("Showing %d plugin frames\n", pluginFrames.size());
+    int totalFrameCount = MAX_NUM_NODES + NUM_EXTRA_FRAMES + pluginFrames.size();
+    DEBUG_MSG("Total frame count: %d\n", totalFrameCount);
 
     // We don't show the node info our our node (if we have it yet - we should)
     size_t numnodes = nodeStatus->getNumTotal();
@@ -875,16 +978,31 @@ void Screen::setFrames()
 
     size_t numframes = 0;
 
+    // put all of the plugin frames first.
+    // this is a little bit of a dirty hack; since we're going to call
+    // the same drawPluginFrame handler here for all of these plugin frames
+    // and then we'll just assume that the state->currentFrame value
+    // is the same offset into the pluginFrames vector
+    // so that we can invoke the plugin's callback
+    for (auto i = pluginFrames.begin(); i != pluginFrames.end(); ++i) {
+        normalFrames[numframes++] = drawPluginFrame;
+    }
+
+    DEBUG_MSG("Added plugins.  numframes: %d\n", numframes);
+
     // If we have a critical fault, show it first
     if (myNodeInfo.error_code)
         normalFrames[numframes++] = drawCriticalFaultFrame;
 
-    // If we have a text message - show it next
-    if (devicestate.has_rx_text_message)
+    // If we have a text message - show it next, unless it's a phone message and we aren't using any special plugins
+    if (devicestate.has_rx_text_message && shouldDrawMessage(&devicestate.rx_text_message)) {
         normalFrames[numframes++] = drawTextMessageFrame;
+    }
 
     // then all the nodes
-    for (size_t i = 0; i < numnodes; i++)
+    // We only show a few nodes in our scrolling list - because meshes with many nodes would have too many screens
+    size_t numToShow = min(numnodes, 4U);
+    for (size_t i = 0; i < numToShow; i++)
         normalFrames[numframes++] = drawNodeInfo;
 
     // then the debug info
@@ -896,10 +1014,14 @@ void Screen::setFrames()
     // call a method on debugInfoScreen object (for more details)
     normalFrames[numframes++] = &Screen::drawDebugInfoSettingsTrampoline;
 
+#ifndef NO_ESP32
     if (isWifiAvailable()) {
         // call a method on debugInfoScreen object (for more details)
         normalFrames[numframes++] = &Screen::drawDebugInfoWiFiTrampoline;
     }
+#endif
+
+    DEBUG_MSG("Finished building frames. numframes: %d\n", numframes);
 
     ui.setFrames(normalFrames, numframes);
     ui.enableAllIndicators();
@@ -924,20 +1046,33 @@ void Screen::handleStartBluetoothPinScreen(uint32_t pin)
     setFastFramerate();
 }
 
-void Screen::blink() {
+void Screen::handleStartFirmwareUpdateScreen()
+{
+    DEBUG_MSG("showing firmware screen\n");
+    showingNormalScreen = false;
+
+    static FrameCallback btFrames[] = {drawFrameFirmware};
+
+    ui.disableAllIndicators();
+    ui.setFrames(btFrames, 1);
+    setFastFramerate();
+}
+
+void Screen::blink()
+{
     setFastFramerate();
     uint8_t count = 10;
     dispdev.setBrightness(254);
-    while(count>0) {
+    while (count > 0) {
         dispdev.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
         dispdev.display();
         delay(50);
         dispdev.clear();
         dispdev.display();
         delay(50);
-        count = count -1;
+        count = count - 1;
     }
-     dispdev.setBrightness(brightness);
+    dispdev.setBrightness(brightness);
 }
 
 void Screen::handlePrint(const char *text)
@@ -952,12 +1087,13 @@ void Screen::handlePrint(const char *text)
 }
 
 void Screen::handleOnPress()
-{
+{  
     // If screen was off, just wake it, otherwise advance to next frame
     // If we are in a transition, the press must have bounced, drop it.
     if (ui.getUiState()->frameState == FIXED) {
         ui.nextFrame();
-
+        DEBUG_MSG("Setting LastScreenTransition\n");
+        lastScreenTransition = millis();
         setFastFramerate();
     }
 }
@@ -972,8 +1108,14 @@ void Screen::setFastFramerate()
 
     // We are about to start a transition so speed up fps
     targetFramerate = SCREEN_TRANSITION_FRAMERATE;
+
+#ifndef NO_ESP32
+    setCPUFast(true); // Turn up the CPU to improve screen animations
+#endif
+
     ui.setTargetFPS(targetFramerate);
     setInterval(0); // redraw ASAP
+    runASAP = true;
 }
 
 void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -988,7 +1130,8 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     char channelStr[20];
     {
         concurrency::LockGuard guard(&lock);
-        snprintf(channelStr, sizeof(channelStr), "%s", channelName.c_str());
+        auto chName = channels.getPrimaryName();
+        snprintf(channelStr, sizeof(channelStr), "%s", chName);
     }
 
     // Display power status
@@ -1060,11 +1203,13 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
     if (WiFi.status() == WL_CONNECTED || isSoftAPForced() || radioConfig.preferences.wifi_ap_mode) {
         if (radioConfig.preferences.wifi_ap_mode || isSoftAPForced()) {
             display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IP: " + String(WiFi.softAPIP().toString().c_str()));
+
+            // Number of connections to the AP. Default mmax for the esp32 is 4
+            display->drawString(x + SCREEN_WIDTH - display->getStringWidth("(" + String(WiFi.softAPgetStationNum()) + "/4)"),
+                                y + FONT_HEIGHT_SMALL * 1, "(" + String(WiFi.softAPgetStationNum()) + "/4)");
         } else {
             display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IP: " + String(WiFi.localIP().toString().c_str()));
         }
-        display->drawString(x + SCREEN_WIDTH - display->getStringWidth("(" + String(WiFi.softAPgetStationNum()) + "/4)"),
-                            y + FONT_HEIGHT_SMALL * 1, "(" + String(WiFi.softAPgetStationNum()) + "/4)");
 
     } else if (WiFi.status() == WL_NO_SSID_AVAIL) {
         display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "SSID Not Found");
@@ -1193,8 +1338,25 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
         display->drawString(x, y, String("USB"));
     }
 
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth("Mode " + String(channelSettings.modem_config)), y,
-                        "Mode " + String(channelSettings.modem_config));
+    auto mode = "";
+
+    if (channels.getPrimary().modem_config == 0) {
+        mode = "ShrtSlow";
+    } else if (channels.getPrimary().modem_config == 1) {
+        mode = "ShrtFast";
+    } else if (channels.getPrimary().modem_config == 2) {
+        mode = "LngFast";
+    } else if (channels.getPrimary().modem_config == 3) {
+        mode = "LngSlow";
+    } else if (channels.getPrimary().modem_config == 4) {
+        mode = "MedSlow";
+    } else if (channels.getPrimary().modem_config == 5) {
+        mode = "MedFast";
+    } else {
+        mode = "Custom";
+    }
+
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(mode), y, mode);
 
     // Line 2
     uint32_t currentMillis = millis();
@@ -1202,14 +1364,41 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     uint32_t minutes = seconds / 60;
     uint32_t hours = minutes / 60;
     uint32_t days = hours / 24;
-    currentMillis %= 1000;
-    seconds %= 60;
-    minutes %= 60;
-    hours %= 24;
+    // currentMillis %= 1000;
+    // seconds %= 60;
+    // minutes %= 60;
+    // hours %= 24;
 
-    display->drawString(x, y + FONT_HEIGHT_SMALL * 1,
-                        String(days) + "d " + (hours < 10 ? "0" : "") + String(hours) + ":" + (minutes < 10 ? "0" : "") +
-                            String(minutes) + ":" + (seconds < 10 ? "0" : "") + String(seconds));
+    // Show uptime as days, hours, minutes OR seconds
+    String uptime;
+    if (days >= 2)
+        uptime += String(days) + "d ";
+    else if (hours >= 2)
+        uptime += String(hours) + "h ";
+    else if (minutes >= 1)
+        uptime += String(minutes) + "m ";
+    else
+        uptime += String(seconds) + "s ";
+
+    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityFromNet);
+    if (rtc_sec > 0) {
+        long hms = rtc_sec % SEC_PER_DAY;
+        // hms += tz.tz_dsttime * SEC_PER_HOUR;
+        // hms -= tz.tz_minuteswest * SEC_PER_MIN;
+        // mod `hms` to ensure in positive range of [0...SEC_PER_DAY)
+        hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
+
+        // Tear apart hms into h:m:s
+        int hour = hms / SEC_PER_HOUR;
+        int min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
+        int sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
+
+        char timebuf[9];
+        snprintf(timebuf, sizeof(timebuf), "%02d:%02d:%02d", hour, min, sec);
+        uptime += timebuf;
+    }
+
+    display->drawString(x, y + FONT_HEIGHT_SMALL * 1, uptime);
 
 #ifndef NO_ESP32
     // Show CPU Frequency.
@@ -1218,7 +1407,8 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 #endif
 
     // Line 3
-    drawGPSAltitude(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
+    if (radioConfig.preferences.gps_format != GpsCoordinateFormat_GpsFormatDMS) // if DMS then don't draw altitude
+        drawGPSAltitude(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
 
     // Line 4
     drawGPScoordinates(display, x, y + FONT_HEIGHT_SMALL * 3, gpsStatus);
@@ -1260,8 +1450,7 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
     return 0;
 }
 
-int Screen::handleTextMessage(const MeshPacket *arg)
-{
+int Screen::handleTextMessage(const MeshPacket *packet) {
     if (showingNormalScreen) {
         setFrames(); // Regen the list of screens (will show new text message)
     }

@@ -36,24 +36,34 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
 
     bool shouldSet;
     if (q > currentQuality) {
+        currentQuality = q;
         shouldSet = true;
         DEBUG_MSG("Upgrading time to RTC %ld secs (quality %d)\n", tv->tv_sec, q);
-    } else if(q == RTCQualityGPS && (now - lastSetMsec) > (12 * 60 * 60 * 1000L)) {
+    } else if(q == RTCQualityGPS && (now - lastSetMsec) > (12 * 60 * 60 * 1000UL)) {
         // Every 12 hrs we will slam in a new GPS time, to correct for local RTC clock drift
         shouldSet = true;
-        DEBUG_MSG("Reapplying GPS time to correct clock drift %ld secs\n", tv->tv_sec);
+        DEBUG_MSG("Reapplying external time to correct clock drift %ld secs\n", tv->tv_sec);
     }
     else
         shouldSet = false;
 
     if (shouldSet) {
         lastSetMsec = now;
+
+        // This delta value works on all platforms
+        timeStartMsec = now;
+        zeroOffsetSecs = tv->tv_sec;
+
+        // If this platform has a setable RTC, set it
 #ifndef NO_ESP32
         settimeofday(tv, NULL);
-#else
-        DEBUG_MSG("ERROR TIME SETTING NOT IMPLEMENTED!\n");
 #endif
+
+        // nrf52 doesn't have a readable RTC (yet - software not written)
+#if defined(PORTDUINO) || !defined(NO_ESP32)
         readFromRTC();
+#endif
+
         return true;
     } else {
         return false;
@@ -82,7 +92,7 @@ bool perhapsSetRTC(RTCQuality q, struct tm &t)
 
 uint32_t getTime()
 {
-    return ((millis() - timeStartMsec) / 1000) + zeroOffsetSecs;
+    return (((uint32_t) millis() - timeStartMsec) / 1000) + zeroOffsetSecs;
 }
 
 uint32_t getValidTime(RTCQuality minQuality)

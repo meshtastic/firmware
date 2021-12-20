@@ -20,10 +20,11 @@ class PhoneAPI
     : public Observer<uint32_t> // FIXME, we shouldn't be inheriting from Observer, instead use CallbackObserver as a member
 {
     enum State {
-        STATE_LEGACY,       // (no longer used) old default state - until Android apps are all updated, uses the old BLE API
+        STATE_UNUSED,       // (no longer used) old default state - until Android apps are all updated, uses the old BLE API
         STATE_SEND_NOTHING, // (Eventual) Initial state, don't send anything until the client starts asking for config
+                            // (disconnected)
         STATE_SEND_MY_INFO, // send our my info record
-        STATE_SEND_RADIO,
+        // STATE_SEND_RADIO, // in 1.2 we now send this as a regular mesh packet
         // STATE_SEND_OWNER, no need to send Owner specially, it is just part of the nodedb
         STATE_SEND_NODEINFO, // states progress in this order as the device sends to to the client
         STATE_SEND_COMPLETE_ID,
@@ -49,23 +50,21 @@ class PhoneAPI
     /// Use to ensure that clients don't get confused about old messages from the radio
     uint32_t config_nonce = 0;
 
-    /** the last msec we heard from the client on the other side of this link */
-    uint32_t lastContactMsec = 0;
-
   public:
     PhoneAPI();
 
-    /// Do late init that can't happen at constructor time
-    virtual void init();
+    /// Destructor - calls close()
+    virtual ~PhoneAPI();
 
     // Call this when the client drops the connection, resets the state to STATE_SEND_NOTHING
-    // Unregisters our observer
-    void close();
+    // Unregisters our observer.  A closed connection **can** be reopened by calling init again.
+    virtual void close();
 
     /**
      * Handle a ToRadio protobuf
+     * @return true true if a packet was queued for sending (so that caller can yield)
      */
-    virtual void handleToRadio(const uint8_t *buf, size_t len);
+    virtual bool handleToRadio(const uint8_t *buf, size_t len);
 
     /**
      * Get the next packet we want to send to the phone
@@ -80,36 +79,48 @@ class PhoneAPI
      */
     bool available();
 
-    //
-    // The following routines are only public for now - until the rev1 bluetooth API is removed
-    //
+    bool isConnected() { return state != STATE_SEND_NOTHING; }
 
-    void handleSetOwner(const User &o);
-    void handleSetRadio(const RadioConfig &r);
+    /// emit a debugging log character, FIXME - implement
+    void debugOut(char c) { }
 
   protected:
-    /// Are we currently connected to a client?
-    bool isConnected = false;
-
     /// Our fromradio packet while it is being assembled
     FromRadio fromRadioScratch;
 
+    /** the last msec we heard from the client on the other side of this link */
+    uint32_t lastContactMsec = 0;
+    
     /// Hookable to find out when connection changes
     virtual void onConnectionChanged(bool connected) {}
 
-  /// If we haven't heard from the other side in a while then say not connected
+    /// If we haven't heard from the other side in a while then say not connected
     void checkConnectionTimeout();
+
+    /// Check the current underlying physical link to see if the client is currently connected
+    virtual bool checkIsConnected() = 0;
 
     /**
      * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
      */
     virtual void onNowHasData(uint32_t fromRadioNum) {}
 
-  private:
     /**
-     * Handle a packet that the phone wants us to send.  It is our responsibility to free the packet to the pool
+     * Subclasses can use this to find out when a client drops the link
      */
-    void handleToRadioPacket(MeshPacket *p);
+    virtual void handleDisconnect();
+
+  private:
+    void releasePhonePacket();
+
+    /// begin a new connection
+    void handleStartConfig();
+
+    /**
+     * Handle a packet that the phone wants us to send.  We can write to it but can not keep a reference to it
+     * @return true true if a packet was queued for sending
+     */
+    bool handleToRadioPacket(MeshPacket &p);
 
     /// If the mesh service tells us fromNum has changed, tell the phone
     virtual int onNotify(uint32_t newValue);

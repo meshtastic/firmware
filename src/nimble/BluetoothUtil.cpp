@@ -7,15 +7,20 @@
 #include "esp_bt.h"
 #include "host/util/util.h"
 #include "main.h"
-#include "meshwifi/meshwifi.h"
 #include "nimble/NimbleDefs.h"
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
-#include <Arduino.h>
+#include "sleep.h"
 #include <WiFi.h>
+
+#ifndef NO_ESP32
+#include "mesh/http/WiFiAPClient.h"
+#endif
 
 static bool pinShowing;
 static uint32_t doublepressed;
+
+static bool bluetoothActive;
 
 static void startCb(uint32_t pin)
 {
@@ -48,23 +53,27 @@ void updateBatteryLevel(uint8_t level)
 
 void deinitBLE()
 {
-    // DEBUG_MSG("Shutting down bluetooth\n");
-    // ble_gatts_show_local();
+    if (bluetoothActive) {
+        bluetoothActive = false;
 
-    // FIXME - do we need to dealloc things? - what needs to stay alive across light sleep?
-    auto ret = nimble_port_stop();
-    assert(ret == ESP_OK);
+        // DEBUG_MSG("Shutting down bluetooth\n");
+        // ble_gatts_show_local();
 
-    nimble_port_deinit(); // teardown nimble datastructures
+        // FIXME - do we need to dealloc things? - what needs to stay alive across light sleep?
+        auto ret = nimble_port_stop();
+        assert(ret == ESP_OK);
 
-    // DEBUG_MSG("BLE port_deinit done\n");
+        nimble_port_deinit(); // teardown nimble datastructures
 
-    ret = esp_nimble_hci_and_controller_deinit();
-    assert(ret == ESP_OK);
+        // DEBUG_MSG("BLE port_deinit done\n");
 
-    // DEBUG_MSG("BLE task exiting\n");
+        ret = esp_nimble_hci_and_controller_deinit();
+        assert(ret == ESP_OK);
 
-    DEBUG_MSG("Done shutting down bluetooth\n");
+        // DEBUG_MSG("BLE task exiting\n");
+
+        DEBUG_MSG("Done shutting down bluetooth\n");
+    }
 }
 
 void loopBLE()
@@ -223,16 +232,14 @@ static int gap_event(struct ble_gap_event *event, void *arg)
 
         if (event->passkey.params.action == BLE_SM_IOACT_DISP) {
             pkey.action = event->passkey.params.action;
-            DEBUG_MSG("dp: %d now:%d\n",doublepressed, now);
-            if (doublepressed > 0 && (doublepressed + (30*1000)) > now) 
-            {
+            DEBUG_MSG("dp: %d now:%d\n", doublepressed, now);
+            if (doublepressed > 0 && (doublepressed + (30 * 1000)) > now) {
                 DEBUG_MSG("User has overridden passkey or no display available\n");
-                pkey.passkey = defaultBLEPin;  
-            }
-            else {
+                pkey.passkey = defaultBLEPin;
+            } else {
                 DEBUG_MSG("Using random passkey\n");
                 pkey.passkey = random(
-                    100000, 999999); // This is the passkey to be entered on peer - we pick a number >100,000 to ensure 6 digits    
+                    100000, 999999); // This is the passkey to be entered on peer - we pick a number >100,000 to ensure 6 digits
             }
             DEBUG_MSG("*** Enter passkey %d on the peer side ***\n", pkey.passkey);
 
@@ -392,7 +399,6 @@ void gatt_svr_register_cb(struct ble_gatt_register_ctxt *ctxt, void *arg)
     }
 }
 
-
 /**
  * A helper function that implements simple read and write handling for a uint32_t
  *
@@ -446,8 +452,7 @@ int chr_readwrite8(uint8_t *v, size_t vlen, struct ble_gatt_access_ctxt *ctxt)
         if (len < vlen) {
             DEBUG_MSG("Error: wrongsized write\n");
             return BLE_ATT_ERR_UNLIKELY;
-        }
-        else {
+        } else {
             DEBUG_MSG("BLE writing bytes\n");
         }
     } else {
@@ -462,8 +467,24 @@ void disablePin()
 {
     DEBUG_MSG("User Override, disabling bluetooth pin requirement\n");
     // keep track of when it was pressed, so we know it was within X seconds
-    doublepressed = millis();  
+
+    // Flash the LED
+    setLed(true);
+    delay(100);
+    setLed(false);
+    delay(100);
+    setLed(true);
+    delay(100);
+    setLed(false);
+    delay(100);
+    setLed(true);
+    delay(100);
+    setLed(false);
+
+    doublepressed = millis();
 }
+
+
 
 // This routine is called multiple times, once each time we come back from sleep
 void reinitBluetooth()
@@ -473,7 +494,6 @@ void reinitBluetooth()
     DEBUG_MSG("Starting bluetooth\n");
     if (isFirstTime) {
         bluetoothPhoneAPI = new BluetoothPhoneAPI();
-        bluetoothPhoneAPI->init();
     }
 
     // FIXME - if waking from light sleep, only esp_nimble_hci_init?
@@ -523,10 +543,10 @@ void reinitBluetooth()
     ble_store_config_init();
 
     nimble_port_freertos_init(ble_host_task);
+    bluetoothActive = true;
 }
 
 bool bluetoothOn;
-bool firstTime = 1;
 
 // Enable/disable bluetooth.
 void setBluetoothEnable(bool on)
@@ -536,26 +556,13 @@ void setBluetoothEnable(bool on)
 
         bluetoothOn = on;
         if (on) {
-            Serial.printf("Pre BT: %u heap size\n", ESP.getFreeHeap());
-            // ESP_ERROR_CHECK( heap_trace_start(HEAP_TRACE_LEAKS) );
-            reinitBluetooth();
-
-            // Don't try to reconnect wifi before bluetooth is configured.
-            //   WiFi is initialized from main.cpp in setup() .
-            if (firstTime) {
-                firstTime = 0;
-            } else {
-                initWifi(0);
+            if (!initWifi(isSoftAPForced())) // if we are using wifi, don't turn on bluetooth also
+            {
+                Serial.printf("Pre BT: %u heap size\n", ESP.getFreeHeap());
+                // ESP_ERROR_CHECK( heap_trace_start(HEAP_TRACE_LEAKS) );
+                reinitBluetooth();
             }
         } else {
-
-            /*
-            // If WiFi is in use, disable shutting down the radio.
-            if (isWifiAvailable()) {
-                return;
-            }
-            */
-
             // shutdown wifi
             deinitWifi();
 

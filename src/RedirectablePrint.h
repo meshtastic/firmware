@@ -19,6 +19,8 @@ class RedirectablePrint : public Print
     /// Used to allow multiple logDebug messages to appear on a single log line
     bool isContinuationMessage = false;
 
+    volatile bool inDebugPrint = false;
+
   public:
     RedirectablePrint(Print *_dest) : dest(_dest) {}
 

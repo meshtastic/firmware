@@ -101,25 +101,30 @@ template <class T> class MemoryPool : public Allocator<T>
     /// Return a buffer for use by others
     virtual void release(T *p)
     {
-        assert(dead.enqueue(p, 0));
         assert(p >= buf &&
                (size_t)(p - buf) <
                    maxElements); // sanity check to make sure a programmer didn't free something that didn't come from this pool
+        assert(dead.enqueue(p, 0));
     }
 
 #ifdef HAS_FREE_RTOS
     /// Return a buffer from an ISR, if higherPriWoken is set to true you have some work to do ;-)
     void releaseFromISR(T *p, BaseType_t *higherPriWoken)
     {
-        assert(dead.enqueueFromISR(p, higherPriWoken));
         assert(p >= buf &&
                (size_t)(p - buf) <
                    maxElements); // sanity check to make sure a programmer didn't free something that didn't come from this pool
+        assert(dead.enqueueFromISR(p, higherPriWoken));
     }
 #endif
 
   protected:
     /// Return a queable object which has been prefilled with zeros - allow timeout to wait for available buffers (you
     /// probably don't want this version).
-    virtual T *alloc(TickType_t maxWait) { return dead.dequeuePtr(maxWait); }
+    virtual T *alloc(TickType_t maxWait)
+    {
+        T *p = dead.dequeuePtr(maxWait);
+        assert(p);
+        return p;
+    }
 };

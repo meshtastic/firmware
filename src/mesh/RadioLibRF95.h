@@ -35,9 +35,6 @@ class RadioLibRF95: public SX1278 {
 
       \param power Transmission output power in dBm. Allowed values range from 2 to 17 dBm.
 
-      \param currentLimit Trim value for OCP (over current protection) in mA. Can be set to multiplies of 5 in range 45 to 120 mA and to multiples of 10 in range 120 to 240 mA.
-      Set to 0 to disable OCP (not recommended).
-
       \param preambleLength Length of %LoRa transmission preamble in symbols. The actual preamble length is 4.25 symbols longer than the set number.
       Allowed values range from 6 to 65535.
 
@@ -46,7 +43,7 @@ class RadioLibRF95: public SX1278 {
 
       \returns \ref status_codes
     */
-    int16_t begin(float freq = 915.0, float bw = 125.0, uint8_t sf = 9, uint8_t cr = 7, uint8_t syncWord = SX127X_SYNC_WORD, int8_t power = 17, uint8_t currentLimit = 100, uint16_t preambleLength = 8, uint8_t gain = 0);
+    int16_t begin(float freq = 915.0, float bw = 125.0, uint8_t sf = 9, uint8_t cr = 7, uint8_t syncWord = SX127X_SYNC_WORD, int8_t power = 17, uint16_t preambleLength = 8, uint8_t gain = 0);
 
     // configuration methods
 
@@ -64,6 +61,11 @@ class RadioLibRF95: public SX1278 {
 
     /// For debugging
     uint8_t readReg(uint8_t addr); 
+
+  protected:
+    // since default current limit for SX126x/127x in updated RadioLib is 60mA
+    // use the previous value
+    float currentLimit = 100;
 
 #ifndef RADIOLIB_GODMODE
   private:
