@@ -11,7 +11,6 @@
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
 #include "sleep.h"
-#include <Arduino.h>
 #include <WiFi.h>
 
 #ifndef NO_ESP32

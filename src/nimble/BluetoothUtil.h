@@ -1,6 +1,5 @@
 #pragma once
 
-#include <Arduino.h>
 #include <functional>
 
 /// We only allow one BLE connection at a time
