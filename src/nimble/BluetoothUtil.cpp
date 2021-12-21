@@ -12,6 +12,7 @@
 #include "services/gatt/ble_svc_gatt.h"
 #include "sleep.h"
 #include <WiFi.h>
+#include "NodeDB.h"
 
 #ifndef NO_ESP32
 #include "mesh/http/WiFiAPClient.h"
@@ -35,6 +36,7 @@ static void stopCb()
         pinShowing = false;
         screen->stopBluetoothPinScreen();
     }
+    nodeDB.setBluetoothPaired();
 };
 
 static uint8_t own_addr_type;
@@ -228,6 +230,10 @@ static int gap_event(struct ble_gap_event *event, void *arg)
 
     case BLE_GAP_EVENT_PASSKEY_ACTION:
         DEBUG_MSG("PASSKEY_ACTION_EVENT started \n");
+        if (nodeDB.getMyNodeInfo()->bluetooth_paired) {
+            DEBUG_MSG("Device already paired, ignoring passkey action \n");
+            return 1;
+        }
         struct ble_sm_io pkey = {0};
 
         if (event->passkey.params.action == BLE_SM_IOACT_DISP) {

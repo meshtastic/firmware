@@ -205,7 +205,7 @@ class ButtonThread : public OSThread
 #endif
         userButton.attachClick(userButtonPressed);
         userButton.attachDuringLongPress(userButtonPressedLong);
-        userButton.attachDoubleClick(userButtonDoublePressed);
+        // userButton.attachDoubleClick(userButtonDoublePressed);
         userButton.attachMultiClick(userButtonMultiPressed);
         userButton.attachLongPressStart(userButtonPressedLongStart);
         userButton.attachLongPressStop(userButtonPressedLongStop);
@@ -219,7 +219,7 @@ class ButtonThread : public OSThread
 #endif
         userButtonAlt.attachClick(userButtonPressed);
         userButtonAlt.attachDuringLongPress(userButtonPressedLong);
-        userButtonAlt.attachDoubleClick(userButtonDoublePressed);
+        // userButtonAlt.attachDoubleClick(userButtonDoublePressed);
         userButtonAlt.attachLongPressStart(userButtonPressedLongStart);
         userButtonAlt.attachLongPressStop(userButtonPressedLongStop);
         wakeOnIrq(BUTTON_PIN_ALT, FALLING);
@@ -668,6 +668,9 @@ void selfDestruct()
     DEBUG_MSG("====================================================================\n");
     DEBUG_MSG("===================== SELF DESTRUCT ACTIVATED! =====================\n");
     DEBUG_MSG("====================================================================\n");
+
+    DEBUG_MSG("Resetting radio owner...\n");
+    nodeDB.resetOwnerName();
 
     DEBUG_MSG("Erasing stored files...\n");
     fsPurge();

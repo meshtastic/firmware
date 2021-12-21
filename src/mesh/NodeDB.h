@@ -99,6 +99,11 @@ class NodeDB
         return &nodes[x];
     }
 
+    MyNodeInfo *getMyNodeInfo() { return &myNodeInfo; }
+
+    void setBluetoothPaired() { myNodeInfo.bluetooth_paired = true; }
+    void resetOwnerName();
+
     /// Return the number of nodes we've heard from recently (within the last 2 hrs?)
     size_t getNumOnlineNodes();
 

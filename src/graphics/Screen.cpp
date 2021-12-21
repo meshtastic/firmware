@@ -844,7 +844,6 @@ void Screen::forceDisplay()
 
 void Screen::handleSelfDestruct()
 {
-    DEBUG_MSG("IN HANDLE SELF DESTRUCT\n");
     static FrameCallback sdFrames[] = {drawSelfDestructScreen};
     ui.disableAllIndicators();
     ui.setFrames(sdFrames, 1);
@@ -901,7 +900,6 @@ int32_t Screen::runOnce()
             free(cmd.print_text);
             break;
         case Cmd::SELF_DESTRUCT:
-            DEBUG_MSG("GOING TO CALL HANDLE SELF DESTRUCT\n");
             handleSelfDestruct();
             break;
         default:

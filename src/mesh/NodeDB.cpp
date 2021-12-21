@@ -116,7 +116,6 @@ bool NodeDB::resetRadioConfig()
 
     // Update the global myRegion
     initRegion();
-
     return didFactoryReset;
 }
 
@@ -575,6 +574,12 @@ NodeInfo *NodeDB::getOrCreateNode(NodeNum n)
     }
 
     return info;
+}
+
+void NodeDB::resetOwnerName()
+{
+    sprintf(owner.long_name, "Unknown %02x%02x", ourMacAddr[4], ourMacAddr[5]);
+    sprintf(owner.short_name, "?%02X", (unsigned)(myNodeInfo.my_node_num & 0xff));
 }
 
 /// Record an error that should be reported via analytics
