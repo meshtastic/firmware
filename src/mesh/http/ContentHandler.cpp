@@ -53,19 +53,6 @@ char contentTypes[][2][32] = {{".txt", "text/plain"},     {".html", "text/html"}
 // Our API to handle messages to and from the radio.
 HttpAPI webAPI;
 
-uint32_t numberOfRequests = 0;
-uint32_t timeSpeedUp = 0;
-
-uint32_t getTimeSpeedUp()
-{
-    return timeSpeedUp;
-}
-
-void setTimeSpeedUp()
-{
-    timeSpeedUp = millis();
-}
-
 void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
 {
 
@@ -563,7 +550,6 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 
     res->println("\"wifi\": {");
 
-    res->printf("\"web_request_count\": %d,\n", numberOfRequests);
     res->println("\"rssi\": " + String(WiFi.RSSI()) + ",");
 
     if (radioConfig.preferences.wifi_ap_mode || isSoftAPForced()) {
