@@ -18,10 +18,6 @@ void handleReport(HTTPRequest *req, HTTPResponse *res);
 void middlewareSpeedUp240(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
 void middlewareSpeedUp160(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
 
-uint32_t getTimeSpeedUp();
-void setTimeSpeedUp();
-
-
 // Interface to the PhoneAPI to access the protobufs with messages
 class HttpAPI : public PhoneAPI
 {
