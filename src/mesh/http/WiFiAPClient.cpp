@@ -181,23 +181,22 @@ bool initWifi(bool forceSoftAP)
 
                 WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
                 DEBUG_MSG("MY IP AP ADDRESS: %s\n", WiFi.softAPIP().toString().c_str());
+
+                // This is needed to improve performance.
                 esp_wifi_set_ps(WIFI_PS_NONE); // Disable radio power saving
 
                 dnsServer.start(53, "*", apIP);
-
-                // Things are going too fast. Give AP time to settle for testing
-                //delay(20 * 1000);
 
             } else {
                 uint8_t dmac[6];
                 getMacAddr(dmac);
                 sprintf(ourHost, "Meshtastic-%02x%02x", dmac[4], dmac[5]);
 
-                //Serial.println(ourHost);
-
                 WiFi.mode(WIFI_MODE_STA);
                 WiFi.setHostname(ourHost);
                 WiFi.onEvent(WiFiEvent);
+
+                // This is needed to improve performance.
                 esp_wifi_set_ps(WIFI_PS_NONE); // Disable radio power saving
 
                 WiFi.onEvent(
@@ -279,7 +278,7 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case SYSTEM_EVENT_AP_START:
         DEBUG_MSG("WiFi access point started\n");
-        //Serial.println(WiFi.softAPIP());
+
         onNetworkConnected();
         break;
     case SYSTEM_EVENT_AP_STOP:
