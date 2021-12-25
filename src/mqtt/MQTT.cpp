@@ -68,9 +68,22 @@ void MQTT::reconnect()
     if (wantsLink()) {
         const char *serverAddr = "mqtt.meshtastic.org"; // default hostname
         int serverPort = 1883;                          // default server port
+        const char *mqttUsername = "meshdev";
+        const char *mqttPassword = "large4cats";
 
-        if (*radioConfig.preferences.mqtt_server)
+        if (*radioConfig.preferences.mqtt_server) {
             serverAddr = radioConfig.preferences.mqtt_server; // Override the default
+            mqttUsername = radioConfig.preferences.mqtt_username; //do not use the hardcoded credentials for a custom mqtt server
+            mqttPassword = radioConfig.preferences.mqtt_password;
+        } else {
+            //we are using the default server.  Use the hardcoded credentials by default, but allow overriding
+            if (*radioConfig.preferences.mqtt_username && radioConfig.preferences.mqtt_username[0] != '\0') {
+                mqttUsername = radioConfig.preferences.mqtt_username;
+            }
+            if (*radioConfig.preferences.mqtt_password && radioConfig.preferences.mqtt_password[0] != '\0') {
+                mqttPassword = radioConfig.preferences.mqtt_password;
+            }
+        }
 
         String server = String(serverAddr);
         int delimIndex = server.indexOf(':');
@@ -82,9 +95,9 @@ void MQTT::reconnect()
         }
         pubSub.setServer(serverAddr, serverPort);
 
-        DEBUG_MSG("Connecting to MQTT server %s, port: %d\n", serverAddr, serverPort);
+        DEBUG_MSG("Connecting to MQTT server %s, port: %d, username: %s, password %s\n", serverAddr, serverPort, mqttUsername, mqttPassword);
         auto myStatus = (statusTopic + owner.id);
-        bool connected = pubSub.connect(owner.id, "meshdev", "large4cats", myStatus.c_str(), 1, true, "offline");
+        bool connected = pubSub.connect(owner.id, mqttUsername, mqttPassword, myStatus.c_str(), 1, true, "offline");
         if (connected) {
             DEBUG_MSG("MQTT connected\n");
             enabled = true; // Start running background process again
