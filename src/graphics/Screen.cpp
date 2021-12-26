@@ -27,20 +27,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "NodeDB.h"
 #include "Screen.h"
 #include "fonts.h"
+#include "gps/GeoCoord.h"
 #include "gps/RTC.h"
 #include "graphics/images.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "mesh/Channels.h"
 #include "plugins/TextMessagePlugin.h"
+#include "sleep.h"
 #include "target_specific.h"
 #include "utils.h"
-#include "gps/GeoCoord.h"
-#include "sleep.h"
 
 #ifndef NO_ESP32
-#include "mesh/http/WiFiAPClient.h"
 #include "esp_task_wdt.h"
+#include "mesh/http/WiFiAPClient.h"
 #endif
 
 using namespace meshtastic; /** @todo remove */
@@ -253,10 +253,10 @@ static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
 }
 
 // Ignore messages orginating from phone (from the current node 0x0) unless range test or store and forward plugin are enabled
-static bool shouldDrawMessage(const MeshPacket *packet) {
-    return packet->from != 0 &&
-        !radioConfig.preferences.range_test_plugin_enabled &&
-        !radioConfig.preferences.store_forward_plugin_enabled;
+static bool shouldDrawMessage(const MeshPacket *packet)
+{
+    return packet->from != 0 && !radioConfig.preferences.range_test_plugin_enabled &&
+           !radioConfig.preferences.store_forward_plugin_enabled;
 }
 
 /// Draw the last text message we received
@@ -445,18 +445,19 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
                 sprintf(coordinateLine, "%2i%1c %06i %07i", geoCoord.getUTMZone(), geoCoord.getUTMBand(),
                         geoCoord.getUTMEasting(), geoCoord.getUTMNorthing());
             } else if (gpsFormat == GpsCoordinateFormat_GpsFormatMGRS) { // Military Grid Reference System
-                sprintf(coordinateLine, "%2i%1c %1c%1c %05i %05i", geoCoord.getMGRSZone(), geoCoord.getMGRSBand(), geoCoord.getMGRSEast100k(),
-                        geoCoord.getMGRSNorth100k(), geoCoord.getMGRSEasting(), geoCoord.getMGRSNorthing());
+                sprintf(coordinateLine, "%2i%1c %1c%1c %05i %05i", geoCoord.getMGRSZone(), geoCoord.getMGRSBand(),
+                        geoCoord.getMGRSEast100k(), geoCoord.getMGRSNorth100k(), geoCoord.getMGRSEasting(),
+                        geoCoord.getMGRSNorthing());
             } else if (gpsFormat == GpsCoordinateFormat_GpsFormatOLC) { // Open Location Code
                 geoCoord.getOLCCode(coordinateLine);
-            } else if (gpsFormat == GpsCoordinateFormat_GpsFormatOSGR) { // Ordnance Survey Grid Reference
+            } else if (gpsFormat == GpsCoordinateFormat_GpsFormatOSGR) {              // Ordnance Survey Grid Reference
                 if (geoCoord.getOSGRE100k() == 'I' || geoCoord.getOSGRN100k() == 'I') // OSGR is only valid around the UK region
                     sprintf(coordinateLine, "%s", "Out of Boundary");
                 else
-                    sprintf(coordinateLine, "%1c%1c %05i %05i", geoCoord.getOSGRE100k(),geoCoord.getOSGRN100k(), 
+                    sprintf(coordinateLine, "%1c%1c %05i %05i", geoCoord.getOSGRE100k(), geoCoord.getOSGRN100k(),
                             geoCoord.getOSGREasting(), geoCoord.getOSGRNorthing());
             }
-            
+
             // If fixed position, display text "Fixed GPS" alternating with the coordinates.
             if (radioConfig.preferences.fixed_position) {
                 if ((millis() / 10000) % 2) {
@@ -473,7 +474,7 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
             char lonLine[22];
             sprintf(latLine, "%2i° %2i' %2.4f\" %1c", geoCoord.getDMSLatDeg(), geoCoord.getDMSLatMin(), geoCoord.getDMSLatSec(),
                     geoCoord.getDMSLatCP());
-            sprintf(lonLine, "%3i° %2i' %2.4f\" %1c", geoCoord.getDMSLonDeg(), geoCoord.getDMSLonMin(), geoCoord.getDMSLonSec(), 
+            sprintf(lonLine, "%3i° %2i' %2.4f\" %1c", geoCoord.getDMSLonDeg(), geoCoord.getDMSLonMin(), geoCoord.getDMSLonSec(),
                     geoCoord.getDMSLonCP());
             display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(latLine))) / 2, y - FONT_HEIGHT_SMALL * 1, latLine);
             display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(lonLine))) / 2, y, lonLine);
@@ -665,7 +666,8 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             // display direction toward node
             hasNodeHeading = true;
             Position &p = node->position;
-            float d = GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
+            float d =
+                GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
             if (d < 2000)
                 snprintf(distStr, sizeof(distStr), "%.0f m", d);
             else
@@ -673,7 +675,8 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 
             // FIXME, also keep the guess at the operators heading and add/substract
             // it.  currently we don't do this and instead draw north up only.
-            float bearingToOther = GeoCoord::bearing(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
+            float bearingToOther =
+                GeoCoord::bearing(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
             headingRadian = bearingToOther - myHeading;
             drawNodeHeading(display, compassX, compassY, headingRadian);
         }
@@ -915,13 +918,13 @@ int32_t Screen::runOnce()
     // standard screen switching is stopped.
     if (showingNormalScreen) {
         // standard screen loop handling here
-        if (radioConfig.preferences.auto_screen_carousel_secs > 0 && 
+        if (radioConfig.preferences.auto_screen_carousel_secs > 0 &&
             (millis() - lastScreenTransition) > (radioConfig.preferences.auto_screen_carousel_secs * 1000)) {
             DEBUG_MSG("LastScreenTransition exceeded %ums transitioning to next frame\n", (millis() - lastScreenTransition));
             handleOnPress();
         }
     }
-    
+
     // DEBUG_MSG("want fps %d, fixed=%d\n", targetFramerate,
     // ui.getUiState()->frameState); If we are scrolling we need to be called
     // soon, otherwise just 1 fps (to save CPU) We also ask to be called twice
@@ -1087,7 +1090,7 @@ void Screen::handlePrint(const char *text)
 }
 
 void Screen::handleOnPress()
-{  
+{
     // If screen was off, just wake it, otherwise advance to next frame
     // If we are in a transition, the press must have bounced, drop it.
     if (ui.getUiState()->frameState == FIXED) {
@@ -1450,7 +1453,8 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
     return 0;
 }
 
-int Screen::handleTextMessage(const MeshPacket *packet) {
+int Screen::handleTextMessage(const MeshPacket *packet)
+{
     if (showingNormalScreen) {
         setFrames(); // Regen the list of screens (will show new text message)
     }
