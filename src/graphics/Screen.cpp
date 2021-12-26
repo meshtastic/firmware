@@ -428,16 +428,14 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
     auto gpsFormat = radioConfig.preferences.gps_format;
     String displayLine = "";
 
-    if (radioConfig.preferences.fixed_position) {
-        displayLine = "Fixed GPS";
-        display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
-    } else if (!gps->getIsConnected() && !radioConfig.preferences.fixed_position) {
+    if (!gps->getIsConnected() && !radioConfig.preferences.fixed_position) {
         displayLine = "No GPS Module";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else if (!gps->getHasLock() && !radioConfig.preferences.fixed_position) {
         displayLine = "No GPS Lock";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
+
         if (gpsFormat != GpsCoordinateFormat_GpsFormatDMS) {
             char coordinateLine[22];
             geoCoord.updateCoords(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()), int32_t(gps->getAltitude()));
@@ -459,7 +457,17 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
                             geoCoord.getOSGREasting(), geoCoord.getOSGRNorthing());
             }
             
-            display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
+            // If fixed position, display text "Fixed GPS" alternating with the coordinates.
+            if (radioConfig.preferences.fixed_position) {
+                if ((millis() / 10000) % 2) {
+                    display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
+                } else {
+                    display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth("Fixed GPS"))) / 2, y, "Fixed GPS");
+                }
+            } else {
+                display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
+            }
+
         } else {
             char latLine[22];
             char lonLine[22];
@@ -1196,7 +1204,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         if (radioConfig.preferences.wifi_ap_mode || isSoftAPForced()) {
             display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IP: " + String(WiFi.softAPIP().toString().c_str()));
 
-            // Number of connections to the AP. Default mmax for the esp32 is 4
+            // Number of connections to the AP. Default max for the esp32 is 4
             display->drawString(x + SCREEN_WIDTH - display->getStringWidth("(" + String(WiFi.softAPgetStationNum()) + "/4)"),
                                 y + FONT_HEIGHT_SMALL * 1, "(" + String(WiFi.softAPgetStationNum()) + "/4)");
         } else {
