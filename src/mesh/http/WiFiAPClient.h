@@ -21,4 +21,3 @@ void handleDNSResponse();
 bool isSoftAPForced();
 
 uint8_t getWifiDisconnectReason();
-
