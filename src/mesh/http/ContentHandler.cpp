@@ -74,7 +74,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeJsonReport = new ResourceNode("/json/report", "GET", &handleReport);
     ResourceNode *nodeJsonSpiffsBrowseStatic = new ResourceNode("/json/spiffs/browse/static", "GET", &handleSpiffsBrowseStatic);
     ResourceNode *nodeJsonDelete = new ResourceNode("/json/spiffs/delete/static", "DELETE", &handleSpiffsDeleteStatic);
-    
+
     ResourceNode *nodeRoot = new ResourceNode("/*", "GET", &handleStatic);
 
     // Secure nodes
@@ -106,7 +106,6 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     insecureServer->registerNode(nodeJsonDelete);
     insecureServer->registerNode(nodeJsonReport);
     insecureServer->registerNode(nodeRoot);
-
 }
 
 void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
@@ -175,7 +174,6 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "PUT, OPTIONS");
     res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/Meshtastic-protobufs/master/mesh.proto");
-
 
     if (req->getMethod() == "OPTIONS") {
         res->setStatusCode(204); // Success with no content
@@ -284,7 +282,6 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
 
         std::string filename = "/static/" + parameter1;
         std::string filenameGzip = "/static/" + parameter1 + ".gz";
-
 
         // Try to open the file from SPIFFS
         File file;
