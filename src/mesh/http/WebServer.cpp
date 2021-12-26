@@ -63,16 +63,7 @@ static void handleWebResponse()
             if(secureServer)
                 secureServer->loop();
             insecureServer->loop();
-        }
 
-        /*
-            Slow down the CPU if we have not received a request within the last few
-            seconds.
-        */
-
-        if (millis() - getTimeSpeedUp() >= (25 * 1000)) {
-            setCpuFrequencyMhz(80);
-            setTimeSpeedUp();
         }
     }
 }
@@ -112,8 +103,6 @@ static void taskCreateCert(void *parameter)
 
     } else {
 
-        setCPUFast(true);
-
         DEBUG_MSG("Creating the certificate. This may take a while. Please wait...\n");
         yield();
         cert = new SSLCert();
@@ -145,9 +134,6 @@ static void taskCreateCert(void *parameter)
             prefs.putBytes("PK", (uint8_t *)cert->getPKData(), cert->getPKLength());
             prefs.putBytes("cert", (uint8_t *)cert->getCertData(), cert->getCertLength());
         }
-
-        setCPUFast(false);
-
     }
 
     isCertReady = true;
