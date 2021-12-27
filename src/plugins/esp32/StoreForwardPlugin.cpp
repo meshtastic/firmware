@@ -214,6 +214,10 @@ void StoreForwardPlugin::sendMessage(NodeNum dest, char *str)
 
     p->to = dest;
 
+    // FIXME - Determine if the delayed packet is broadcast or delayed. For now, assume
+    //  everything is broadcast.
+    p->delayed = MeshPacket_Delayed_DELAYED_BROADCAST;
+
     // Let's assume that if the router received the S&F request that the client is in range.
     //   TODO: Make this configurable.
     p->want_ack = false;
