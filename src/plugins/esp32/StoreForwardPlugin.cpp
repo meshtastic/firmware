@@ -80,8 +80,7 @@ void StoreForwardPlugin::populatePSRAM()
     /* Use a maximum of 2/3 the available PSRAM unless otherwise specified.
         Note: This needs to be done after every thing that would use PSRAM
     */
-    uint32_t numberOfPackets =
-        (this->records ? this->records : (((ESP.getFreePsram() / 3) * 2) / sizeof(PacketHistoryStruct)));
+    uint32_t numberOfPackets = (this->records ? this->records : (((ESP.getFreePsram() / 3) * 2) / sizeof(PacketHistoryStruct)));
 
     this->packetHistory = static_cast<PacketHistoryStruct *>(ps_calloc(numberOfPackets, sizeof(PacketHistoryStruct)));
 
@@ -107,7 +106,7 @@ void StoreForwardPlugin::historyReport()
 void StoreForwardPlugin::historySend(uint32_t msAgo, uint32_t to)
 {
 
-    //uint32_t packetsSent = 0;
+    // uint32_t packetsSent = 0;
 
     uint32_t queueSize = storeForwardPlugin->historyQueueCreate(msAgo, to);
 
@@ -144,13 +143,16 @@ uint32_t StoreForwardPlugin::historyQueueCreate(uint32_t msAgo, uint32_t to)
                 Copy the messages that were received by the router in the last msAgo
                 to the packetHistoryTXQueue structure.
 
-                TODO: The condition (this->packetHistory[i].to & 0xffffffff) == to) is not tested since
+                TODO: The condition (this->packetHistory[i].to & NODENUM_BROADCAST) == to) is not tested since
                 I don't have an easy way to target a specific user. Will need to do this soon.
             */
-            if ((this->packetHistory[i].to & 0xffffffff) == 0xffffffff || ((this->packetHistory[i].to & 0xffffffff) == to)) {
+            if ((this->packetHistory[i].to & NODENUM_BROADCAST) == NODENUM_BROADCAST ||
+                ((this->packetHistory[i].to & NODENUM_BROADCAST) == to)) {
+                this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].time = this->packetHistory[i].time;
                 this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].time = this->packetHistory[i].time;
                 this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].to = this->packetHistory[i].to;
                 this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].from = this->packetHistory[i].from;
+                this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].channel = this->packetHistory[i].channel;
                 this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].payload_size = this->packetHistory[i].payload_size;
                 memcpy(this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].payload, this->packetHistory[i].payload,
                        Constants_DATA_PAYLOAD_LEN);
@@ -171,6 +173,7 @@ void StoreForwardPlugin::historyAdd(const MeshPacket &mp)
 
     this->packetHistory[this->packetHistoryCurrent].time = millis();
     this->packetHistory[this->packetHistoryCurrent].to = mp.to;
+    this->packetHistory[this->packetHistoryCurrent].channel = mp.channel;
     this->packetHistory[this->packetHistoryCurrent].from = mp.from;
     this->packetHistory[this->packetHistoryCurrent].payload_size = p.payload.size;
     memcpy(this->packetHistory[this->packetHistoryCurrent].payload, p.payload.bytes, Constants_DATA_PAYLOAD_LEN);
@@ -191,6 +194,7 @@ void StoreForwardPlugin::sendPayload(NodeNum dest, uint32_t packetHistory_index)
 
     p->to = dest;
     p->from = this->packetHistoryTXQueue[packetHistory_index].from;
+    p->channel = this->packetHistoryTXQueue[packetHistory_index].channel;
 
     // Let's assume that if the router received the S&F request that the client is in range.
     //   TODO: Make this configurable.
@@ -351,7 +355,6 @@ ProcessMessage StoreForwardPlugin::handleReceivedProtobuf(const MeshPacket &mp, 
         DEBUG_MSG("StoreAndForward_RequestResponse_ROUTER_PONG\n");
         break;
 
-
     default:
         assert(0); // unexpected state - FIXME, make an error code and reboot
     }
@@ -407,9 +410,8 @@ StoreForwardPlugin::StoreForwardPlugin()
                     // Popupate PSRAM with our data structures.
                     this->populatePSRAM();
 
-                    
-                    //this->packetTimeMax = 2000;
-                    //DEBUG_MSG("SF Time to Transmit maxPacketSize (%d bytes) %d ms\n", maxPacketSize, this->packetTimeMax);
+                    // this->packetTimeMax = 2000;
+                    // DEBUG_MSG("SF Time to Transmit maxPacketSize (%d bytes) %d ms\n", maxPacketSize, this->packetTimeMax);
 
                 } else {
                     DEBUG_MSG("Device has less than 1M of PSRAM free. Aborting startup.\n");
