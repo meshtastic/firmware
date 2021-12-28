@@ -23,7 +23,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <OLEDDisplay.h>
 
 #include "GPS.h"
-#include "MeshService.h"
 #include "NodeDB.h"
 #include "Screen.h"
 #include "fonts.h"
@@ -619,11 +618,6 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             n = nodeDB.getNodeByIndex(nodeIndex);
         }
         displayedNodeNum = n->num;
-
-        // We just changed to a new node screen, ask that node for updated state if it's older than 2 minutes
-        if (sinceLastSeen(n) > 120) {
-            service.sendNetworkPing(displayedNodeNum, true);
-        }
     }
 
     NodeInfo *node = nodeDB.getNodeByIndex(nodeIndex);
