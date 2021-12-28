@@ -23,6 +23,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <OLEDDisplay.h>
 
 #include "GPS.h"
+#include "MeshService.h"
 #include "NodeDB.h"
 #include "Screen.h"
 #include "fonts.h"
