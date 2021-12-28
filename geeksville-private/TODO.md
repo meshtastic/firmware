@@ -325,7 +325,7 @@ Items after the first final candidate release.
 - add "store and forward" support for messages, or move to the DB sync model. This would allow messages to be eventually delivered even if nodes are out of contact at the moment.
 - use variable length Strings in protobufs (instead of current fixed buffers). This would save lots of RAM
 - use BLEDevice::setPower to lower our BLE transmit power - extra range doesn't help us, it costs amps and it increases snoopability
-- make a HAM build: just a new frequency list, a bool to say 'never do encryption' and use hte callsign as that node's unique id. -from Girts
+- make a Ham build: just a new frequency list, a bool to say 'never do encryption' and use the callsign as that node's unique id. -from Girts
 - don't forward redundant pings or ping responses to the phone, it just wastes phone battery
 - don't send location packets if we haven't moved significantly
 - scrub default radio config settings for bandwidth/range/speed
