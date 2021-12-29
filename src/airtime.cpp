@@ -133,7 +133,10 @@ int32_t AirTime::runOnce()
             this->channelUtilization[utilPeriod] = 0;
         }
 
-        DEBUG_MSG("Channel Utilization percent %3.1f\n", airTime->channelUtilizationPercent());
+        // Update channel_utilization every second.
+        myNodeInfo.channel_utilization = airTime->channelUtilizationPercent();
+
+        //DEBUG_MSG("Channel Utilization percent %3.1f\n", airTime->channelUtilizationPercent());
     }
 
     return (1000 * 1);
