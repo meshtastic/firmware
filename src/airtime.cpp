@@ -2,15 +2,15 @@
 #include "NodeDB.h"
 #include "configuration.h"
 
-#define periodsToLog 24
+#define PERIODS_TO_LOG 24
 
 AirTime *airTime;
 
 // Don't read out of this directly. Use the helper functions.
 struct airtimeStruct {
-    uint32_t periodTX[periodsToLog];     // AirTime transmitted
-    uint32_t periodRX[periodsToLog];     // AirTime received and repeated (Only valid mesh packets)
-    uint32_t periodRX_ALL[periodsToLog]; // AirTime received regardless of valid mesh packet. Could include noise.
+    uint32_t periodTX[PERIODS_TO_LOG];     // AirTime transmitted
+    uint32_t periodRX[PERIODS_TO_LOG];     // AirTime received and repeated (Only valid mesh packets)
+    uint32_t periodRX_ALL[PERIODS_TO_LOG]; // AirTime received regardless of valid mesh packet. Could include noise.
     uint8_t lastPeriodIndex;
 } airtimes;
 
@@ -37,7 +37,7 @@ void AirTime::logAirtime(reportTypes reportType, uint32_t airtime_ms)
 
 uint8_t AirTime::currentPeriodIndex()
 {
-    return ((getSecondsSinceBoot() / SECONDS_PER_PERIOD) % periodsToLog);
+    return ((getSecondsSinceBoot() / SECONDS_PER_PERIOD) % PERIODS_TO_LOG);
 }
 
 void AirTime::airtimeRotatePeriod()
@@ -46,7 +46,7 @@ void AirTime::airtimeRotatePeriod()
     if (airtimes.lastPeriodIndex != currentPeriodIndex()) {
         DEBUG_MSG("Rotating airtimes to a new period = %u\n", currentPeriodIndex());
 
-        for (int i = periodsToLog - 2; i >= 0; --i) {
+        for (int i = PERIODS_TO_LOG - 2; i >= 0; --i) {
             airtimes.periodTX[i + 1] = airtimes.periodTX[i];
             airtimes.periodRX[i + 1] = airtimes.periodRX[i];
             airtimes.periodRX_ALL[i + 1] = airtimes.periodRX_ALL[i];
@@ -80,7 +80,7 @@ uint32_t *airtimeReport(reportTypes reportType)
 
 uint8_t AirTime::getPeriodsToLog()
 {
-    return periodsToLog;
+    return PERIODS_TO_LOG;
 }
 
 uint32_t AirTime::getSecondsPerPeriod()
@@ -113,8 +113,6 @@ int32_t AirTime::runOnce()
     uint8_t utilPeriod = (getSecondsSinceBoot() / 10) % CHANNEL_UTILIZATION_PERIODS;
 
     if (firstTime) {
-        // DEBUG_MSG("AirTime::runOnce()\n");
-
         airtimeRotatePeriod();
 
         for (uint32_t i = 0; i < CHANNEL_UTILIZATION_PERIODS; i++) {
@@ -135,8 +133,6 @@ int32_t AirTime::runOnce()
 
         // Update channel_utilization every second.
         myNodeInfo.channel_utilization = airTime->channelUtilizationPercent();
-
-        //DEBUG_MSG("Channel Utilization percent %3.1f\n", airTime->channelUtilizationPercent());
     }
 
     return (1000 * 1);
