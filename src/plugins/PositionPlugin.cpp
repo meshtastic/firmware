@@ -127,7 +127,7 @@ int32_t PositionPlugin::runOnce()
 {
     NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
 
-    radioConfig.preferences.position_broadcast_smart = true;
+    //radioConfig.preferences.position_broadcast_smart = true;
 
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();
