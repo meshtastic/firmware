@@ -23,20 +23,15 @@
 
   RX_ALL_LOG - RX_LOG = Other lora radios on our frequency channel.
 */
+
+#define CHANNEL_UTILIZATION_PERIODS 6
+#define SECONDS_PER_PERIOD 3600
+
 enum reportTypes { TX_LOG, RX_LOG, RX_ALL_LOG };
 
 void logAirtime(reportTypes reportType, uint32_t airtime_ms);
 
-void airtimeRotatePeriod();
-
-uint8_t currentPeriodIndex();
-uint8_t getPeriodsToLog();
-
-uint32_t getSecondsSinceBoot();
-
 uint32_t *airtimeReport(reportTypes reportType);
-
-uint32_t getSecondsPerPeriod();
 
 class AirTime : private concurrency::OSThread
 {
@@ -45,6 +40,19 @@ class AirTime : private concurrency::OSThread
     AirTime();
 
     void logAirtime(reportTypes reportType, uint32_t airtime_ms);
+    float channelUtilizationPercent();
+    uint32_t channelUtilization[CHANNEL_UTILIZATION_PERIODS];
+
+    uint8_t currentPeriodIndex();
+    void airtimeRotatePeriod();
+    uint8_t getPeriodsToLog();
+    uint32_t getSecondsPerPeriod();
+    uint32_t getSecondsSinceBoot();
+
+  private:
+    bool firstTime = true;
+    uint8_t lastUtilPeriod = 0;
+    uint32_t secSinceBoot = 0;
 
   protected:
     virtual int32_t runOnce() override;

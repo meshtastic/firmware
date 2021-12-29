@@ -1,16 +1,10 @@
-#include "configuration.h"
 #include "airtime.h"
 #include "NodeDB.h"
+#include "configuration.h"
 
 #define periodsToLog 24
 
 AirTime *airTime;
-
-uint32_t secondsPerPeriod = 3600;
-uint32_t lastMillis = 0;
-uint32_t secSinceBoot = 0;
-
-// AirTime at;
 
 // Don't read out of this directly. Use the helper functions.
 struct airtimeStruct {
@@ -36,14 +30,17 @@ void AirTime::logAirtime(reportTypes reportType, uint32_t airtime_ms)
     } else {
         DEBUG_MSG("AirTime - Unknown report time. This should never happen!!\n");
     }
+
+    uint8_t channelUtilPeriod = (getSecondsSinceBoot() / 10) % CHANNEL_UTILIZATION_PERIODS;
+    this->channelUtilization[channelUtilPeriod] = channelUtilization[channelUtilPeriod] + airtime_ms;
 }
 
-uint8_t currentPeriodIndex()
+uint8_t AirTime::currentPeriodIndex()
 {
-    return ((getSecondsSinceBoot() / secondsPerPeriod) % periodsToLog);
+    return ((getSecondsSinceBoot() / SECONDS_PER_PERIOD) % periodsToLog);
 }
 
-void airtimeRotatePeriod()
+void AirTime::airtimeRotatePeriod()
 {
 
     if (airtimes.lastPeriodIndex != currentPeriodIndex()) {
@@ -64,7 +61,6 @@ void airtimeRotatePeriod()
         myNodeInfo.air_period_tx[0] = 0;
         myNodeInfo.air_period_rx[0] = 0;
 
-
         airtimes.lastPeriodIndex = currentPeriodIndex();
     }
 }
@@ -82,36 +78,63 @@ uint32_t *airtimeReport(reportTypes reportType)
     return 0;
 }
 
-uint8_t getPeriodsToLog()
+uint8_t AirTime::getPeriodsToLog()
 {
     return periodsToLog;
 }
 
-uint32_t getSecondsPerPeriod()
+uint32_t AirTime::getSecondsPerPeriod()
 {
-    return secondsPerPeriod;
+    return SECONDS_PER_PERIOD;
 }
 
-uint32_t getSecondsSinceBoot()
+uint32_t AirTime::getSecondsSinceBoot()
 {
-    return secSinceBoot;
+    return this->secSinceBoot;
+}
+
+float AirTime::channelUtilizationPercent()
+{
+    uint32_t sum = 0;
+    for (uint32_t i = 0; i < CHANNEL_UTILIZATION_PERIODS; i++) {
+        sum += this->channelUtilization[i];
+        // DEBUG_MSG("ChanUtilArray %u %u\n", i, this->channelUtilization[i]);
+    }
+
+    return (float(sum) / float(CHANNEL_UTILIZATION_PERIODS * 10 * 1000)) * 100;
 }
 
 AirTime::AirTime() : concurrency::OSThread("AirTime") {}
 
 int32_t AirTime::runOnce()
 {
-    //DEBUG_MSG("AirTime::runOnce()\n");
-
-    airtimeRotatePeriod();
     secSinceBoot++;
 
-    /*
-        This actually doesn't need to be run once per second but we currently use it for the
-        secSinceBoot counter.
+    uint8_t utilPeriod = (getSecondsSinceBoot() / 10) % CHANNEL_UTILIZATION_PERIODS;
 
-        If we have a better counter of how long the device has been online (and not millis())
-        then we can change this to something less frequent. Maybe once ever 5 seconds?
-    */
+    if (firstTime) {
+        // DEBUG_MSG("AirTime::runOnce()\n");
+
+        airtimeRotatePeriod();
+
+        for (uint32_t i = 0; i < CHANNEL_UTILIZATION_PERIODS; i++) {
+            this->channelUtilization[i] = 0;
+        }
+
+        firstTime = false;
+        lastUtilPeriod = utilPeriod;
+
+    } else {
+
+        // Reset the channelUtilization window when we roll over
+        if (lastUtilPeriod != utilPeriod) {
+            lastUtilPeriod = utilPeriod;
+
+            this->channelUtilization[utilPeriod] = 0;
+        }
+
+        DEBUG_MSG("Channel Utilization percent %3.1f\n", airTime->channelUtilizationPercent());
+    }
+
     return (1000 * 1);
 }
