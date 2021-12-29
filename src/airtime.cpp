@@ -27,8 +27,6 @@ void AirTime::logAirtime(reportTypes reportType, uint32_t airtime_ms)
     } else if (reportType == RX_ALL_LOG) {
         DEBUG_MSG("AirTime - Packet received (noise?) : %ums\n", airtime_ms);
         airtimes.periodRX_ALL[0] = airtimes.periodRX_ALL[0] + airtime_ms;
-    } else {
-        DEBUG_MSG("AirTime - Unknown report time. This should never happen!!\n");
     }
 
     uint8_t channelUtilPeriod = (getSecondsSinceBoot() / 10) % CHANNEL_UTILIZATION_PERIODS;
