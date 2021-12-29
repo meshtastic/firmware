@@ -38,18 +38,13 @@ void __attribute__((noreturn)) __assert_func(const char *file, int line, const c
 
 void getMacAddr(uint8_t *dmac)
 {
-    ble_gap_addr_t addr;
-    if (sd_ble_gap_addr_get(&addr) == NRF_SUCCESS) {
-        memcpy(dmac, addr.addr, 6);
-    } else { 
-        const uint8_t *src = (const uint8_t *)NRF_FICR->DEVICEADDR;
-        dmac[5] = src[0];
-        dmac[4] = src[1];
-        dmac[3] = src[2];
-        dmac[2] = src[3];
-        dmac[1] = src[4];
-        dmac[0] = src[5] | 0xc0; // MSB high two bits get set elsewhere in the bluetooth stack
-    }
+    const uint8_t *src = (const uint8_t *)NRF_FICR->DEVICEADDR;
+    dmac[5] = src[0];
+    dmac[4] = src[1];
+    dmac[3] = src[2];
+    dmac[2] = src[3];
+    dmac[1] = src[4];
+    dmac[0] = src[5] | 0xc0; // MSB high two bits get set elsewhere in the bluetooth stack
 }
 
 static void initBrownout()

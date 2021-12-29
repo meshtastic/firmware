@@ -46,10 +46,10 @@ shift "$((OPTIND-1))"
 
 if [ -f "${FILENAME}" ]; then
 	echo "Trying to flash ${FILENAME}, but first erasing and writing system information"
-	$PYTHON -m esptool --baud 921600 erase_flash
-	$PYTHON -m esptool --baud 921600 write_flash 0x1000 system-info.bin
-	$PYTHON -m esptool --baud 921600 write_flash 0x00390000 spiffs-*.bin
-	$PYTHON -m esptool --baud 921600 write_flash 0x10000 ${FILENAME}
+	$PYTHON -m esptool  erase_flash
+	$PYTHON -m esptool  write_flash 0x1000 system-info.bin
+	$PYTHON -m esptool  write_flash 0x00390000 spiffs-*.bin
+	$PYTHON -m esptool  write_flash 0x10000 ${FILENAME}
 else
 	echo "Invalid file: ${FILENAME}"
 	show_help

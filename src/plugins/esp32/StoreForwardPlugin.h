@@ -12,6 +12,7 @@ struct PacketHistoryStruct {
     uint32_t time;
     uint32_t to;
     uint32_t from;
+    uint8_t channel;
     bool ack;
     uint8_t payload[Constants_DATA_PAYLOAD_LEN];
     pb_size_t payload_size;
