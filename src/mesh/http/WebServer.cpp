@@ -1,13 +1,12 @@
-#include "main.h"
 #include "mesh/http/WebServer.h"
 #include "NodeDB.h"
+#include "graphics/Screen.h"
+#include "main.h"
 #include "mesh/http/WiFiAPClient.h"
+#include "sleep.h"
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>
 #include <HTTPURLEncodedBodyParser.hpp>
-#include "sleep.h"
-#include "graphics/Screen.h"
-
 
 #include <WebServer.h>
 #include <WiFi.h>
@@ -60,10 +59,9 @@ static void handleWebResponse()
             // will be ignored by the NRF boards.
             handleDNSResponse();
 
-            if(secureServer)
+            if (secureServer)
                 secureServer->loop();
             insecureServer->loop();
-
         }
     }
 }
@@ -72,7 +70,6 @@ static void taskCreateCert(void *parameter)
 {
     prefs.begin("MeshtasticHTTPS", false);
 
-
 #if 0
     // Delete the saved certs (used in debugging)
     DEBUG_MSG("Deleting any saved SSL keys ...\n");
@@ -80,7 +77,6 @@ static void taskCreateCert(void *parameter)
     prefs.remove("PK");
     prefs.remove("cert");
 #endif
-
 
     DEBUG_MSG("Checking if we have a previously saved SSL Certificate.\n");
 
@@ -142,11 +138,11 @@ void createSSLCert()
         //  jm@casler.org (Oct 2020)
         xTaskCreate(taskCreateCert, /* Task function. */
                     "createCert",   /* String with name of task. */
-                    //16384,          /* Stack size in bytes. */
-                    8192,          /* Stack size in bytes. */
-                    NULL,           /* Parameter passed as input of the task */
-                    16,             /* Priority of the task. */
-                    NULL);          /* Task handle. */
+                    // 16384,          /* Stack size in bytes. */
+                    8192,  /* Stack size in bytes. */
+                    NULL,  /* Parameter passed as input of the task */
+                    16,    /* Priority of the task. */
+                    NULL); /* Task handle. */
 
         DEBUG_MSG("Waiting for SSL Cert to be generated.\n");
         while (!isCertReady) {
@@ -157,8 +153,8 @@ void createSSLCert()
                     yield();
                     esp_task_wdt_reset();
 
-                    if (millis() / 1000 >= 3) {       
-                        screen->setSSLFrames();                            
+                    if (millis() / 1000 >= 3) {
+                        screen->setSSLFrames();
                     }
                 }
                 runLoop = false;
@@ -193,11 +189,11 @@ void initWebServer()
 
     registerHandlers(insecureServer, secureServer);
 
-    if(secureServer) {
+    if (secureServer) {
         DEBUG_MSG("Starting Secure Web Server...\n");
         secureServer->start();
     }
-    DEBUG_MSG("Starting Insecure Web Server...\n");    
+    DEBUG_MSG("Starting Insecure Web Server...\n");
     insecureServer->start();
     if (insecureServer->isRunning()) {
         DEBUG_MSG("Web Servers Ready! :-) \n");
