@@ -2,31 +2,28 @@
 #include "NodeDB.h"
 #include "configuration.h"
 
-#define PERIODS_TO_LOG 24
 
 AirTime *airTime;
 
 // Don't read out of this directly. Use the helper functions.
-struct airtimeStruct {
-    uint32_t periodTX[PERIODS_TO_LOG];     // AirTime transmitted
-    uint32_t periodRX[PERIODS_TO_LOG];     // AirTime received and repeated (Only valid mesh packets)
-    uint32_t periodRX_ALL[PERIODS_TO_LOG]; // AirTime received regardless of valid mesh packet. Could include noise.
-    uint8_t lastPeriodIndex;
-} airtimes;
+
 
 void AirTime::logAirtime(reportTypes reportType, uint32_t airtime_ms)
 {
+
+    // TODO: Is the airtimes array still necessary? It's now in myNodeInfo anyway
+
     if (reportType == TX_LOG) {
         DEBUG_MSG("AirTime - Packet transmitted : %ums\n", airtime_ms);
-        airtimes.periodTX[0] = airtimes.periodTX[0] + airtime_ms;
+        this->airtimes.periodTX[0] = this->airtimes.periodTX[0] + airtime_ms;
         myNodeInfo.air_period_tx[0] = myNodeInfo.air_period_tx[0] + airtime_ms;
     } else if (reportType == RX_LOG) {
         DEBUG_MSG("AirTime - Packet received : %ums\n", airtime_ms);
-        airtimes.periodRX[0] = airtimes.periodRX[0] + airtime_ms;
+        this->airtimes.periodRX[0] = this->airtimes.periodRX[0] + airtime_ms;
         myNodeInfo.air_period_rx[0] = myNodeInfo.air_period_rx[0] + airtime_ms;
     } else if (reportType == RX_ALL_LOG) {
         DEBUG_MSG("AirTime - Packet received (noise?) : %ums\n", airtime_ms);
-        airtimes.periodRX_ALL[0] = airtimes.periodRX_ALL[0] + airtime_ms;
+        this->airtimes.periodRX_ALL[0] = this->airtimes.periodRX_ALL[0] + airtime_ms;
     }
 
     uint8_t channelUtilPeriod = (getSecondsSinceBoot() / 10) % CHANNEL_UTILIZATION_PERIODS;
@@ -41,37 +38,38 @@ uint8_t AirTime::currentPeriodIndex()
 void AirTime::airtimeRotatePeriod()
 {
 
-    if (airtimes.lastPeriodIndex != currentPeriodIndex()) {
+    if (this->airtimes.lastPeriodIndex != currentPeriodIndex()) {
         DEBUG_MSG("Rotating airtimes to a new period = %u\n", currentPeriodIndex());
 
         for (int i = PERIODS_TO_LOG - 2; i >= 0; --i) {
-            airtimes.periodTX[i + 1] = airtimes.periodTX[i];
-            airtimes.periodRX[i + 1] = airtimes.periodRX[i];
-            airtimes.periodRX_ALL[i + 1] = airtimes.periodRX_ALL[i];
+            this->airtimes.periodTX[i + 1] = this->airtimes.periodTX[i];
+            this->airtimes.periodRX[i + 1] = this->airtimes.periodRX[i];
+            this->airtimes.periodRX_ALL[i + 1] = this->airtimes.periodRX_ALL[i];
 
             myNodeInfo.air_period_tx[i + 1] = myNodeInfo.air_period_tx[i];
             myNodeInfo.air_period_rx[i + 1] = myNodeInfo.air_period_rx[i];
         }
-        airtimes.periodTX[0] = 0;
-        airtimes.periodRX[0] = 0;
-        airtimes.periodRX_ALL[0] = 0;
+        
+        this->airtimes.periodTX[0] = 0;
+        this->airtimes.periodRX[0] = 0;
+        this->airtimes.periodRX_ALL[0] = 0;
 
         myNodeInfo.air_period_tx[0] = 0;
         myNodeInfo.air_period_rx[0] = 0;
 
-        airtimes.lastPeriodIndex = currentPeriodIndex();
+        this->airtimes.lastPeriodIndex = currentPeriodIndex();
     }
 }
 
-uint32_t *airtimeReport(reportTypes reportType)
+uint32_t *AirTime::airtimeReport(reportTypes reportType)
 {
 
     if (reportType == TX_LOG) {
-        return airtimes.periodTX;
+        return this->airtimes.periodTX;
     } else if (reportType == RX_LOG) {
-        return airtimes.periodRX;
+        return this->airtimes.periodRX;
     } else if (reportType == RX_ALL_LOG) {
-        return airtimes.periodRX_ALL;
+        return this->airtimes.periodRX_ALL;
     }
     return 0;
 }
