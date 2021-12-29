@@ -502,7 +502,7 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 
     res->print("\"tx_log\": [");
 
-    logArray = airtimeReport(TX_LOG);
+    logArray = airTime->airtimeReport(TX_LOG);
     for (int i = 0; i < airTime->getPeriodsToLog(); i++) {
         uint32_t tmp;
         tmp = *(logArray + i);
@@ -515,7 +515,7 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     res->println("],");
     res->print("\"rx_log\": [");
 
-    logArray = airtimeReport(RX_LOG);
+    logArray = airTime->airtimeReport(RX_LOG);
     for (int i = 0; i < airTime->getPeriodsToLog(); i++) {
         uint32_t tmp;
         tmp = *(logArray + i);
@@ -528,7 +528,7 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     res->println("],");
     res->print("\"rx_all_log\": [");
 
-    logArray = airtimeReport(RX_ALL_LOG);
+    logArray = airTime->airtimeReport(RX_ALL_LOG);
     for (int i = 0; i < airTime->getPeriodsToLog(); i++) {
         uint32_t tmp;
         tmp = *(logArray + i);
