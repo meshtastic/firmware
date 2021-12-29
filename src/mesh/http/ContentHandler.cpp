@@ -503,11 +503,11 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     res->print("\"tx_log\": [");
 
     logArray = airtimeReport(TX_LOG);
-    for (int i = 0; i < getPeriodsToLog(); i++) {
+    for (int i = 0; i < airTime->getPeriodsToLog(); i++) {
         uint32_t tmp;
         tmp = *(logArray + i);
         res->printf("%d", tmp);
-        if (i != getPeriodsToLog() - 1) {
+        if (i != airTime->getPeriodsToLog() - 1) {
             res->print(", ");
         }
     }
@@ -516,11 +516,11 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     res->print("\"rx_log\": [");
 
     logArray = airtimeReport(RX_LOG);
-    for (int i = 0; i < getPeriodsToLog(); i++) {
+    for (int i = 0; i < airTime->getPeriodsToLog(); i++) {
         uint32_t tmp;
         tmp = *(logArray + i);
         res->printf("%d", tmp);
-        if (i != getPeriodsToLog() - 1) {
+        if (i != airTime->getPeriodsToLog() - 1) {
             res->print(", ");
         }
     }
@@ -529,19 +529,19 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     res->print("\"rx_all_log\": [");
 
     logArray = airtimeReport(RX_ALL_LOG);
-    for (int i = 0; i < getPeriodsToLog(); i++) {
+    for (int i = 0; i < airTime->getPeriodsToLog(); i++) {
         uint32_t tmp;
         tmp = *(logArray + i);
         res->printf("%d", tmp);
-        if (i != getPeriodsToLog() - 1) {
+        if (i != airTime->getPeriodsToLog() - 1) {
             res->print(", ");
         }
     }
 
     res->println("],");
-    res->printf("\"seconds_since_boot\": %u,\n", getSecondsSinceBoot());
-    res->printf("\"seconds_per_period\": %u,\n", getSecondsPerPeriod());
-    res->printf("\"periods_to_log\": %u\n", getPeriodsToLog());
+    res->printf("\"seconds_since_boot\": %u,\n", airTime->getSecondsSinceBoot());
+    res->printf("\"seconds_per_period\": %u,\n", airTime->getSecondsPerPeriod());
+    res->printf("\"periods_to_log\": %u\n", airTime->getPeriodsToLog());
 
     res->println("},");
 
