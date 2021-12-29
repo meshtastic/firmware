@@ -110,22 +110,12 @@ static void taskCreateCert(void *parameter)
         if (createCertResult != 0) {
             DEBUG_MSG("Creating the certificate failed\n");
 
-            // Serial.printf("Creating the certificate failed. Error Code = 0x%02X, check SSLCert.hpp for details",
-            //              createCertResult);
-            // while (true)
-            //    delay(500);
         } else {
             DEBUG_MSG("Creating the certificate was successful\n");
 
             DEBUG_MSG("Created Private Key: %d Bytes\n", cert->getPKLength());
-            // for (int i = 0; i < cert->getPKLength(); i++)
-            //  Serial.print(cert->getPKData()[i], HEX);
-            // Serial.println();
 
             DEBUG_MSG("Created Certificate: %d Bytes\n", cert->getCertLength());
-            // for (int i = 0; i < cert->getCertLength(); i++)
-            //  Serial.print(cert->getCertData()[i], HEX);
-            // Serial.println();
 
             prefs.putBytes("PK", (uint8_t *)cert->getPKData(), cert->getPKLength());
             prefs.putBytes("cert", (uint8_t *)cert->getCertData(), cert->getCertLength());
