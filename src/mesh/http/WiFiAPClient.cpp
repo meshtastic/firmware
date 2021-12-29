@@ -3,13 +3,15 @@
 #include "concurrency/Periodic.h"
 #include "configuration.h"
 #include "main.h"
-#include "mqtt/MQTT.h"
 #include "mesh/http/WebServer.h"
 #include "mesh/wifi/WiFiServerAPI.h"
+#include "mqtt/MQTT.h"
 #include "target_specific.h"
 #include <DNSServer.h>
 #include <ESPmDNS.h>
 #include <WiFi.h>
+#include <WiFiUdp.h>
+#include <NTPClient.h>
 
 using namespace concurrency;
 
@@ -17,6 +19,10 @@ static void WiFiEvent(WiFiEvent_t event);
 
 // DNS Server for the Captive Portal
 DNSServer dnsServer;
+
+// NTP
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "0.pool.ntp.org");
 
 uint8_t wifiDisconnectReason = 0;
 
@@ -46,10 +52,11 @@ static WifiSleepObserver wifiSleepObserver;
 
 static int32_t reconnectWiFi()
 {
+    const char *wifiName = radioConfig.preferences.wifi_ssid;
+    const char *wifiPsw = radioConfig.preferences.wifi_password;
+
     if (radioConfig.has_preferences && needReconnect) {
 
-        const char *wifiName = radioConfig.preferences.wifi_ssid;
-        const char *wifiPsw = radioConfig.preferences.wifi_password;
 
         if (!*wifiPsw) // Treat empty password as no password
             wifiPsw = NULL;
@@ -60,7 +67,19 @@ static int32_t reconnectWiFi()
             DEBUG_MSG("... Reconnecting to WiFi access point\n");
             WiFi.mode(WIFI_MODE_STA);
             WiFi.begin(wifiName, wifiPsw);
+
+            // Starting timeClient;
+
+
         }
+    }
+
+    if (*wifiName) {
+        DEBUG_MSG("Updating NTP time\n");
+        timeClient.update();
+
+        Serial.println(timeClient.getFormattedTime());
+        Serial.println(timeClient.getEpochTime());
     }
 
     return 30 * 1000; // every 30 seconds
@@ -128,14 +147,17 @@ static void onNetworkConnected()
             MDNS.addService("https", "tcp", 443);
         }
 
+        DEBUG_MSG("Starting NTP time client\n");
+        timeClient.begin();
+
         initWebServer();
         initApiServer();
 
         APStartupComplete = true;
-    } 
+    }
 
     // FIXME this is kinda yucky, instead we should just have an observable for 'wifireconnected'
-    if(mqtt)
+    if (mqtt)
         mqtt->reconnect();
 }
 
@@ -176,7 +198,6 @@ bool initWifi(bool forceSoftAP)
 
                 } else {
                     DEBUG_MSG("Starting WIFI AP: ssid=%s, ok=%d\n", wifiName, WiFi.softAP(wifiName, wifiPsw));
-
                 }
 
                 WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
