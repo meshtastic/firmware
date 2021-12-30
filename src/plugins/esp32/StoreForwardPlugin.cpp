@@ -45,7 +45,7 @@ int32_t StoreForwardPlugin::runOnce()
                     }
                     
                 } else {
-                    DEBUG_MSG("Channel utilization is too high. Skipping this oppurtunity to send and will retry later.\n");
+                    DEBUG_MSG("Channel utilization is too high. Skipping this opportunity to send and will retry later.\n");
                 }
             }
             DEBUG_MSG("SF myNodeInfo.bitrate = %f bytes / sec\n", myNodeInfo.bitrate);
