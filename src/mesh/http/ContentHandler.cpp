@@ -53,19 +53,6 @@ char contentTypes[][2][32] = {{".txt", "text/plain"},     {".html", "text/html"}
 // Our API to handle messages to and from the radio.
 HttpAPI webAPI;
 
-uint32_t numberOfRequests = 0;
-uint32_t timeSpeedUp = 0;
-
-uint32_t getTimeSpeedUp()
-{
-    return timeSpeedUp;
-}
-
-void setTimeSpeedUp()
-{
-    timeSpeedUp = millis();
-}
-
 void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
 {
 
@@ -87,7 +74,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeJsonReport = new ResourceNode("/json/report", "GET", &handleReport);
     ResourceNode *nodeJsonSpiffsBrowseStatic = new ResourceNode("/json/spiffs/browse/static", "GET", &handleSpiffsBrowseStatic);
     ResourceNode *nodeJsonDelete = new ResourceNode("/json/spiffs/delete/static", "DELETE", &handleSpiffsDeleteStatic);
-    
+
     ResourceNode *nodeRoot = new ResourceNode("/*", "GET", &handleStatic);
 
     // Secure nodes
@@ -105,8 +92,6 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     secureServer->registerNode(nodeJsonReport);
     secureServer->registerNode(nodeRoot);
 
-    secureServer->addMiddleware(&middlewareSpeedUp240);
-
     // Insecure nodes
     insecureServer->registerNode(nodeAPIv1ToRadioOptions);
     insecureServer->registerNode(nodeAPIv1ToRadio);
@@ -121,43 +106,6 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     insecureServer->registerNode(nodeJsonDelete);
     insecureServer->registerNode(nodeJsonReport);
     insecureServer->registerNode(nodeRoot);
-
-    insecureServer->addMiddleware(&middlewareSpeedUp160);
-}
-
-void middlewareSpeedUp240(HTTPRequest *req, HTTPResponse *res, std::function<void()> next)
-{
-    // We want to print the response status, so we need to call next() first.
-    next();
-
-    // Phone (or other device) has contacted us over WiFi. Keep the radio turned on.
-    //   TODO: This should go into its own middleware layer separate from the speedup.
-    powerFSM.trigger(EVENT_CONTACT_FROM_PHONE);
-
-    setCpuFrequencyMhz(240);
-    setTimeSpeedUp();
-
-    numberOfRequests++;
-}
-
-void middlewareSpeedUp160(HTTPRequest *req, HTTPResponse *res, std::function<void()> next)
-{
-    // We want to print the response status, so we need to call next() first.
-    next();
-
-    // Phone (or other device) has contacted us over WiFi. Keep the radio turned on.
-    //   TODO: This should go into its own middleware layer separate from the speedup.
-    powerFSM.trigger(EVENT_CONTACT_FROM_PHONE);
-
-    // If the frequency is 240mhz, we have recently gotten a HTTPS request.
-    //   In that case, leave the frequency where it is and just update the
-    //   countdown timer (timeSpeedUp).
-    if (getCpuFrequencyMhz() != 240) {
-        setCpuFrequencyMhz(160);
-    }
-    setTimeSpeedUp();
-
-    numberOfRequests++;
 }
 
 void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
@@ -226,7 +174,6 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "PUT, OPTIONS");
     res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/Meshtastic-protobufs/master/mesh.proto");
-
 
     if (req->getMethod() == "OPTIONS") {
         res->setStatusCode(204); // Success with no content
@@ -336,7 +283,6 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
         std::string filename = "/static/" + parameter1;
         std::string filenameGzip = "/static/" + parameter1 + ".gz";
 
-
         // Try to open the file from SPIFFS
         File file;
 
@@ -402,10 +348,6 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
 
     DEBUG_MSG("Form Upload - Disabling keep-alive\n");
     res->setHeader("Connection", "close");
-
-    DEBUG_MSG("Form Upload - Set frequency to 240mhz\n");
-    // The upload process is very CPU intensive. Let's speed things up a bit.
-    setCpuFrequencyMhz(240);
 
     // First, we need to check the encoding of the form that we have received.
     // The browser will set the Content-Type request header, so we can use it for that purpose.
@@ -560,12 +502,12 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 
     res->print("\"tx_log\": [");
 
-    logArray = airtimeReport(TX_LOG);
-    for (int i = 0; i < getPeriodsToLog(); i++) {
+    logArray = airTime->airtimeReport(TX_LOG);
+    for (int i = 0; i < airTime->getPeriodsToLog(); i++) {
         uint32_t tmp;
         tmp = *(logArray + i);
         res->printf("%d", tmp);
-        if (i != getPeriodsToLog() - 1) {
+        if (i != airTime->getPeriodsToLog() - 1) {
             res->print(", ");
         }
     }
@@ -573,12 +515,12 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     res->println("],");
     res->print("\"rx_log\": [");
 
-    logArray = airtimeReport(RX_LOG);
-    for (int i = 0; i < getPeriodsToLog(); i++) {
+    logArray = airTime->airtimeReport(RX_LOG);
+    for (int i = 0; i < airTime->getPeriodsToLog(); i++) {
         uint32_t tmp;
         tmp = *(logArray + i);
         res->printf("%d", tmp);
-        if (i != getPeriodsToLog() - 1) {
+        if (i != airTime->getPeriodsToLog() - 1) {
             res->print(", ");
         }
     }
@@ -586,26 +528,25 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     res->println("],");
     res->print("\"rx_all_log\": [");
 
-    logArray = airtimeReport(RX_ALL_LOG);
-    for (int i = 0; i < getPeriodsToLog(); i++) {
+    logArray = airTime->airtimeReport(RX_ALL_LOG);
+    for (int i = 0; i < airTime->getPeriodsToLog(); i++) {
         uint32_t tmp;
         tmp = *(logArray + i);
         res->printf("%d", tmp);
-        if (i != getPeriodsToLog() - 1) {
+        if (i != airTime->getPeriodsToLog() - 1) {
             res->print(", ");
         }
     }
 
     res->println("],");
-    res->printf("\"seconds_since_boot\": %u,\n", getSecondsSinceBoot());
-    res->printf("\"seconds_per_period\": %u,\n", getSecondsPerPeriod());
-    res->printf("\"periods_to_log\": %u\n", getPeriodsToLog());
+    res->printf("\"seconds_since_boot\": %u,\n", airTime->getSecondsSinceBoot());
+    res->printf("\"seconds_per_period\": %u,\n", airTime->getSecondsPerPeriod());
+    res->printf("\"periods_to_log\": %u\n", airTime->getPeriodsToLog());
 
     res->println("},");
 
     res->println("\"wifi\": {");
 
-    res->printf("\"web_request_count\": %d,\n", numberOfRequests);
     res->println("\"rssi\": " + String(WiFi.RSSI()) + ",");
 
     if (radioConfig.preferences.wifi_ap_mode || isSoftAPForced()) {
@@ -736,15 +677,11 @@ void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
         for (int i = 0; i < n; ++i) {
             char ssidArray[50];
             String ssidString = String(WiFi.SSID(i));
-            // String ssidString = String(WiFi.SSID(i)).toCharArray(ssidArray, WiFi.SSID(i).length());
             ssidString.replace("\"", "\\\"");
             ssidString.toCharArray(ssidArray, 50);
 
             if (WiFi.encryptionType(i) != WIFI_AUTH_OPEN) {
-                // res->println("{\"ssid\": \"%s\",\"rssi\": -75}, ", String(WiFi.SSID(i).c_str() );
-
                 res->printf("{\"ssid\": \"%s\",\"rssi\": %d}", ssidArray, WiFi.RSSI(i));
-                // WiFi.RSSI(i)
                 if (i != n - 1) {
                     res->printf(",");
                 }
