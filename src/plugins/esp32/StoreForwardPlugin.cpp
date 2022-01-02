@@ -27,8 +27,8 @@ int32_t StoreForwardPlugin::runOnce()
             if (this->busy) {
                 
 
-                // Only send packets if the channel is less than 50% utilized.
-                if (airTime->channelUtilizationPercent() < 50) {
+                // Only send packets if the channel is less than 25% utilized.
+                if (airTime->channelUtilizationPercent() < 25) {
 
                     // DEBUG_MSG("--- --- --- In busy loop 1 %d\n", this->packetHistoryTXQueue_index);
                     storeForwardPlugin->sendPayload(this->busyTo, this->packetHistoryTXQueue_index);
@@ -423,9 +423,6 @@ StoreForwardPlugin::StoreForwardPlugin()
 
                     // Popupate PSRAM with our data structures.
                     this->populatePSRAM();
-
-                    // this->packetTimeMax = 2000;
-                    // DEBUG_MSG("SF Time to Transmit maxPacketSize (%d bytes) %d ms\n", maxPacketSize, this->packetTimeMax);
 
                 } else {
                     DEBUG_MSG("Device has less than 1M of PSRAM free. Aborting startup.\n");
