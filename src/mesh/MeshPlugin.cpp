@@ -96,7 +96,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
         assert(!pi.myReply); // If it is !null it means we have a bug, because it should have been sent the previous time
 
         if (wantsPacket) {
-            DEBUG_MSG("Plugin %s wantsPacket=%d\n", pi.name, wantsPacket);
+            DEBUG_MSG("Plugin '%s' wantsPacket=%d\n", pi.name, wantsPacket);
 
             pluginFound = true;
 
@@ -109,7 +109,10 @@ void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
             /// Also: if a packet comes in on the local PC interface, we don't check for bound channels, because it is TRUSTED and it needs to
             /// to be able to fetch the initial admin packets without yet knowing any channels.
 
-            bool rxChannelOk = !pi.boundChannel || (mp.from == 0) || (ch && (strcmp(ch->settings.name, pi.boundChannel) == 0));
+            bool rxChannelOk = !pi.boundChannel || (mp.from == 0) ||
+                !ch ||
+                strlen(ch->settings.name) > 0 ||
+                strcmp(ch->settings.name, pi.boundChannel);
 
             if (!rxChannelOk) {
                 // no one should have already replied!
@@ -134,9 +137,9 @@ void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
                 // any other node.
                 if (mp.decoded.want_response && toUs && (getFrom(&mp) != ourNodeNum || mp.to == ourNodeNum) && !currentReply) {
                     pi.sendResponse(mp);
-                    DEBUG_MSG("Plugin %s sent a response\n", pi.name);
+                    DEBUG_MSG("Plugin '%s' sent a response\n", pi.name);
                 } else {
-                    DEBUG_MSG("Plugin %s considered\n", pi.name);
+                    DEBUG_MSG("Plugin '%s' considered\n", pi.name);
                 }
 
                 // If the requester didn't ask for a response we might need to discard unused replies to prevent memory leaks
@@ -147,7 +150,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
                 }
 
                 if (handled == ProcessMessage::STOP) {
-                    DEBUG_MSG("Plugin %s handled and skipped other processing\n", pi.name);
+                    DEBUG_MSG("Plugin '%s' handled and skipped other processing\n", pi.name);
                     break;
                 }
             }
