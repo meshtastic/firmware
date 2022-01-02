@@ -297,14 +297,21 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
             file = SPIFFS.open(filenameGzip.c_str());
             res->setHeader("Content-Encoding", "gzip");
             if (!file.available()) {
-                DEBUG_MSG("File not available\n");
+                DEBUG_MSG("File not available - %s\n", filenameGzip.c_str());
             }
         } else {
             has_set_content_type = true;
             filenameGzip = "/static/index.html.gz";
             file = SPIFFS.open(filenameGzip.c_str());
-            res->setHeader("Content-Encoding", "gzip");
             res->setHeader("Content-Type", "text/html");
+            if (!file.available()) {
+                DEBUG_MSG("File not available - %s\n", filenameGzip.c_str());
+                res->println("Web server is running.<br><br>The content you are looking for can't be found. Please see: <a "
+                             "href=https://meshtastic.org/docs/getting-started/faq#wifi--web-browser>FAQ</a>.<br><br><a "
+                             "href=/json/report>stats</a>");
+            } else {
+                res->setHeader("Content-Encoding", "gzip");
+            }
         }
 
         res->setHeader("Content-Length", httpsserver::intToString(file.size()));
@@ -576,6 +583,7 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     res->println("},");
 
     res->println("\"device\": {");
+    res->printf("\"channel_utilization\": %3.2f%,\n", airTime->channelUtilizationPercent());
     res->printf("\"reboot_counter\": %d\n", myNodeInfo.reboot_count);
     res->println("},");
 

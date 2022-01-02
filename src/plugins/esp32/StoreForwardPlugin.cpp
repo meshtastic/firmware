@@ -3,6 +3,7 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include "Router.h"
+#include "airtime.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "mesh/generated/storeforward.pb.h"
@@ -22,20 +23,29 @@ int32_t StoreForwardPlugin::runOnce()
 
         if (radioConfig.preferences.is_router) {
 
+            // Send out the message queue.
             if (this->busy) {
-                // Send out the message queue.
+                
 
-                // DEBUG_MSG("--- --- --- In busy loop 1 %d\n", this->packetHistoryTXQueue_index);
-                storeForwardPlugin->sendPayload(this->busyTo, this->packetHistoryTXQueue_index);
+                // Only send packets if the channel is less than 25% utilized.
+                if (airTime->channelUtilizationPercent() < 25) {
 
-                if (this->packetHistoryTXQueue_index == packetHistoryTXQueue_size) {
-                    strcpy(this->routerMessage, "** S&F - Done");
-                    storeForwardPlugin->sendMessage(this->busyTo, this->routerMessage);
-                    // DEBUG_MSG("--- --- --- In busy loop - Done \n");
-                    this->packetHistoryTXQueue_index = 0;
-                    this->busy = false;
+                    // DEBUG_MSG("--- --- --- In busy loop 1 %d\n", this->packetHistoryTXQueue_index);
+                    storeForwardPlugin->sendPayload(this->busyTo, this->packetHistoryTXQueue_index);
+
+                    if (this->packetHistoryTXQueue_index == packetHistoryTXQueue_size) {
+                        strcpy(this->routerMessage, "** S&F - Done");
+                        storeForwardPlugin->sendMessage(this->busyTo, this->routerMessage);
+
+                        // DEBUG_MSG("--- --- --- In busy loop - Done \n");
+                        this->packetHistoryTXQueue_index = 0;
+                        this->busy = false;
+                    } else {
+                        this->packetHistoryTXQueue_index++;
+                    }
+                    
                 } else {
-                    this->packetHistoryTXQueue_index++;
+                    DEBUG_MSG("Channel utilization is too high. Skipping this opportunity to send and will retry later.\n");
                 }
             }
             DEBUG_MSG("SF myNodeInfo.bitrate = %f bytes / sec\n", myNodeInfo.bitrate);
@@ -413,9 +423,6 @@ StoreForwardPlugin::StoreForwardPlugin()
 
                     // Popupate PSRAM with our data structures.
                     this->populatePSRAM();
-
-                    // this->packetTimeMax = 2000;
-                    // DEBUG_MSG("SF Time to Transmit maxPacketSize (%d bytes) %d ms\n", maxPacketSize, this->packetTimeMax);
 
                 } else {
                     DEBUG_MSG("Device has less than 1M of PSRAM free. Aborting startup.\n");
