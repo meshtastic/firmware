@@ -172,7 +172,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
 void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
 {
 
-    DEBUG_MSG("+++++++++++++++ webAPI handleAPIv1FromRadio\n");
+    DEBUG_MSG("webAPI handleAPIv1FromRadio\n");
 
     /*
         For documentation, see:
@@ -217,12 +217,12 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
         res->write(txBuf, len);
     }
 
-    DEBUG_MSG("--------------- webAPI handleAPIv1FromRadio, len %d\n", len);
+    DEBUG_MSG("webAPI handleAPIv1FromRadio, len %d\n", len);
 }
 
 void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
 {
-    DEBUG_MSG("+++++++++++++++ webAPI handleAPIv1ToRadio\n");
+    DEBUG_MSG("webAPI handleAPIv1ToRadio\n");
 
     /*
         For documentation, see:
@@ -249,7 +249,7 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
     webAPI.handleToRadio(buffer, s);
 
     res->write(buffer, s);
-    DEBUG_MSG("--------------- webAPI handleAPIv1ToRadio\n");
+    DEBUG_MSG("webAPI handleAPIv1ToRadio\n");
 }
 
 void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
