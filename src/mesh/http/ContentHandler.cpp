@@ -41,6 +41,13 @@ using namespace httpsserver;
 
 #include "mesh/http/ContentHandler.h"
 
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+HTTPClient http;
+
+#define DEST_FS_USES_SPIFFS
+#include <ESP32-targz.h>
+
 // We need to specify some content-type mapping, so the resources get delivered with the
 // right content type and are displayed correctly in the browser
 char contentTypes[][2][32] = {{".txt", "text/plain"},     {".html", "text/html"},
@@ -50,8 +57,58 @@ char contentTypes[][2][32] = {{".txt", "text/plain"},     {".html", "text/html"}
                               {".css", "text/css"},       {".ico", "image/vnd.microsoft.icon"},
                               {".svg", "image/svg+xml"},  {"", ""}};
 
+//const char *tarURL = "https://www.casler.org/temp/meshtastic-web.tar";
+const char *tarURL = "https://api-production-871d.up.railway.app/mirror/webui";
+const char *certificate = NULL; // change this as needed, leave as is for no TLS check (yolo security)
+
 // Our API to handle messages to and from the radio.
 HttpAPI webAPI;
+
+WiFiClient *getTarHTTPClientPtr(WiFiClientSecure *client, const char *url, const char *cert = NULL)
+{
+    if (cert == NULL) {
+        // New versions don't have setInsecure
+        // client->setInsecure();
+    } else {
+        client->setCACert(cert);
+    }
+    const char *UserAgent = "ESP32-HTTP-GzUpdater-Client";
+    http.setReuse(true); // handle 301 redirects gracefully
+    http.setUserAgent(UserAgent);
+    http.setConnectTimeout(10000); // 10s timeout = 10000
+    if (!http.begin(*client, url)) {
+        log_e("Can't open url %s", url);
+        return nullptr;
+    }
+    const char *headerKeys[] = {"location", "redirect", "Content-Type", "Content-Length", "Content-Disposition"};
+    const size_t numberOfHeaders = 5;
+    http.collectHeaders(headerKeys, numberOfHeaders);
+    int httpCode = http.GET();
+    // file found at server
+    if (httpCode == HTTP_CODE_FOUND || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
+        String newlocation = "";
+        String headerLocation = http.header("location");
+        String headerRedirect = http.header("redirect");
+        if (headerLocation != "") {
+            newlocation = headerLocation;
+            Serial.printf("302 (location): %s => %s\n", url, headerLocation.c_str());
+        } else if (headerRedirect != "") {
+            Serial.printf("301 (redirect): %s => %s\n", url, headerLocation.c_str());
+            newlocation = headerRedirect;
+        }
+        http.end();
+        if (newlocation != "") {
+            log_w("Found 302/301 location header: %s", newlocation.c_str());
+            return getTarHTTPClientPtr(client, newlocation.c_str(), cert);
+        } else {
+            log_e("Empty redirect !!");
+            return nullptr;
+        }
+    }
+    if (httpCode != 200)
+        return nullptr;
+    return http.getStreamPtr();
+}
 
 void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
 {
@@ -65,6 +122,8 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
 
     ResourceNode *nodeHotspotApple = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
     ResourceNode *nodeHotspotAndroid = new ResourceNode("/generate_204", "GET", &handleHotspot);
+
+    ResourceNode *nodeUpdateSPIFFS = new ResourceNode("/update", "GET", &handleUpdateSPIFFS);
 
     ResourceNode *nodeRestart = new ResourceNode("/restart", "POST", &handleRestart);
     ResourceNode *nodeFormUpload = new ResourceNode("/upload", "POST", &handleFormUpload);
@@ -90,7 +149,8 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     secureServer->registerNode(nodeJsonSpiffsBrowseStatic);
     secureServer->registerNode(nodeJsonDelete);
     secureServer->registerNode(nodeJsonReport);
-    secureServer->registerNode(nodeRoot);
+    secureServer->registerNode(nodeUpdateSPIFFS);
+    secureServer->registerNode(nodeRoot); // This has to be last
 
     // Insecure nodes
     insecureServer->registerNode(nodeAPIv1ToRadioOptions);
@@ -105,13 +165,14 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     insecureServer->registerNode(nodeJsonSpiffsBrowseStatic);
     insecureServer->registerNode(nodeJsonDelete);
     insecureServer->registerNode(nodeJsonReport);
-    insecureServer->registerNode(nodeRoot);
+    insecureServer->registerNode(nodeUpdateSPIFFS);
+    insecureServer->registerNode(nodeRoot); // This has to be last
 }
 
 void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
 {
 
-    DEBUG_MSG("+++++++++++++++ webAPI handleAPIv1FromRadio\n");
+    DEBUG_MSG("webAPI handleAPIv1FromRadio\n");
 
     /*
         For documentation, see:
@@ -156,12 +217,12 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
         res->write(txBuf, len);
     }
 
-    DEBUG_MSG("--------------- webAPI handleAPIv1FromRadio, len %d\n", len);
+    DEBUG_MSG("webAPI handleAPIv1FromRadio, len %d\n", len);
 }
 
 void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
 {
-    DEBUG_MSG("+++++++++++++++ webAPI handleAPIv1ToRadio\n");
+    DEBUG_MSG("webAPI handleAPIv1ToRadio\n");
 
     /*
         For documentation, see:
@@ -188,7 +249,7 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
     webAPI.handleToRadio(buffer, s);
 
     res->write(buffer, s);
-    DEBUG_MSG("--------------- webAPI handleAPIv1ToRadio\n");
+    DEBUG_MSG("webAPI handleAPIv1ToRadio\n");
 }
 
 void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
@@ -308,7 +369,7 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
                 DEBUG_MSG("File not available - %s\n", filenameGzip.c_str());
                 res->println("Web server is running.<br><br>The content you are looking for can't be found. Please see: <a "
                              "href=https://meshtastic.org/docs/getting-started/faq#wifi--web-browser>FAQ</a>.<br><br><a "
-                             "href=/json/report>stats</a>");
+                             "href=/json/report>stats</a><br><br><a href=/update>Experemntal Web Content OTA Update</a>");
             } else {
                 res->setHeader("Content-Encoding", "gzip");
             }
@@ -618,6 +679,75 @@ void handleHotspot(HTTPRequest *req, HTTPResponse *res)
 
     // res->println("<!DOCTYPE html>");
     res->println("<meta http-equiv=\"refresh\" content=\"0;url=/\" />\n");
+}
+
+void handleUpdateSPIFFS(HTTPRequest *req, HTTPResponse *res)
+{
+    res->setHeader("Content-Type", "text/html");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "GET");
+
+    res->println("Downloading Meshtastic Web Content...");
+
+    File root = SPIFFS.open("/");
+    File file = root.openNextFile();
+
+    DEBUG_MSG("Deleting files from /static\n");
+
+    while (file) {
+        String filePath = String(file.name());
+        if (filePath.indexOf("/static") == 0) {
+            DEBUG_MSG("%s\n", file.name());
+            SPIFFS.remove(file.name());
+        }
+        file = root.openNextFile();
+    }
+
+    // return;
+
+    WiFiClientSecure *client = new WiFiClientSecure;
+    Stream *streamptr = getTarHTTPClientPtr(client, tarURL, certificate);
+
+    if (streamptr != nullptr) {
+
+        TarUnpacker *TARUnpacker = new TarUnpacker();
+        TARUnpacker->haltOnError(false);  // stop on fail (manual restart/reset required)
+        TARUnpacker->setTarVerify(false); // true = enables health checks but slows down the overall process
+        TARUnpacker->setupFSCallbacks(targzTotalBytesFn, targzFreeBytesFn); // prevent the partition from exploding, recommended
+        TARUnpacker->setLoggerCallback(BaseUnpacker::targzPrintLoggerCallback); // gz log verbosity
+        TARUnpacker->setTarProgressCallback(
+            BaseUnpacker::defaultProgressCallback); // prints the untarring progress for each individual file
+        TARUnpacker->setTarStatusProgressCallback(
+            BaseUnpacker::defaultTarStatusProgressCallback);                        // print the filenames as they're expanded
+        TARUnpacker->setTarMessageCallback(BaseUnpacker::targzPrintLoggerCallback); // tar log verbosity
+
+        String contentLengthStr = http.header("Content-Length");
+        contentLengthStr.trim();
+        int64_t streamSize = -1;
+        if (contentLengthStr != "") {
+            streamSize = atoi(contentLengthStr.c_str());
+            Serial.printf("Stream size %d\n", streamSize);
+            res->printf("Stream size %d\n", streamSize);
+        }
+
+        if (!TARUnpacker->tarStreamExpander(streamptr, streamSize, SPIFFS, "/static")) {
+            Serial.printf("tarStreamExpander failed with return code #%d\n", TARUnpacker->tarGzGetError());
+        } else {
+            // print leftover bytes if any (probably zero-fill from the server)
+            while (http.connected()) {
+                size_t streamSize = streamptr->available();
+                if (streamSize) {
+                    Serial.printf("%02x ", streamptr->read());
+                } else
+                    break;
+            }
+        }
+
+    } else {
+        Serial.println("Failed to establish http connection");
+    }
+
+    res->println("<a href=/>Done</a>");
 }
 
 void handleRestart(HTTPRequest *req, HTTPResponse *res)
