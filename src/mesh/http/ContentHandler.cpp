@@ -57,8 +57,8 @@ char contentTypes[][2][32] = {{".txt", "text/plain"},     {".html", "text/html"}
                               {".css", "text/css"},       {".ico", "image/vnd.microsoft.icon"},
                               {".svg", "image/svg+xml"},  {"", ""}};
 
-//const char *tarURL = "https://github.com/meshtastic/meshtastic-web/releases/download/latest/build.tar";
-const char *tarURL = "https://www.casler.org/temp/meshtastic-web.tar";
+//const char *tarURL = "https://www.casler.org/temp/meshtastic-web.tar";
+const char *tarURL = "https://api-production-871d.up.railway.app/mirror/webui";
 const char *certificate = NULL; // change this as needed, leave as is for no TLS check (yolo security)
 
 // Our API to handle messages to and from the radio.
@@ -687,9 +687,7 @@ void handleUpdateSPIFFS(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
 
-    res->println("Updating. Don't leave this page!");
-
-    DEBUG_MSG("hi!\n");
+    res->println("Downloading Meshtastic Web Content...");
 
     File root = SPIFFS.open("/");
     File file = root.openNextFile();
@@ -713,8 +711,8 @@ void handleUpdateSPIFFS(HTTPRequest *req, HTTPResponse *res)
     if (streamptr != nullptr) {
 
         TarUnpacker *TARUnpacker = new TarUnpacker();
-        TARUnpacker->haltOnError(true);  // stop on fail (manual restart/reset required)
-        TARUnpacker->setTarVerify(true); // true = enables health checks but slows down the overall process
+        TARUnpacker->haltOnError(false);  // stop on fail (manual restart/reset required)
+        TARUnpacker->setTarVerify(false); // true = enables health checks but slows down the overall process
         TARUnpacker->setupFSCallbacks(targzTotalBytesFn, targzFreeBytesFn); // prevent the partition from exploding, recommended
         TARUnpacker->setLoggerCallback(BaseUnpacker::targzPrintLoggerCallback); // gz log verbosity
         TARUnpacker->setTarProgressCallback(
