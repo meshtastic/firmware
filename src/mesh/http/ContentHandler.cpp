@@ -57,7 +57,8 @@ char contentTypes[][2][32] = {{".txt", "text/plain"},     {".html", "text/html"}
                               {".css", "text/css"},       {".ico", "image/vnd.microsoft.icon"},
                               {".svg", "image/svg+xml"},  {"", ""}};
 
-const char *tarURL = "https://github.com/meshtastic/meshtastic-web/releases/download/latest/build.tar";
+//const char *tarURL = "https://github.com/meshtastic/meshtastic-web/releases/download/latest/build.tar";
+const char *tarURL = "https://www.casler.org/temp/meshtastic-web.tar";
 const char *certificate = NULL; // change this as needed, leave as is for no TLS check (yolo security)
 
 // Our API to handle messages to and from the radio.
