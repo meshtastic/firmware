@@ -57,7 +57,7 @@ char contentTypes[][2][32] = {{".txt", "text/plain"},     {".html", "text/html"}
                               {".css", "text/css"},       {".ico", "image/vnd.microsoft.icon"},
                               {".svg", "image/svg+xml"},  {"", ""}};
 
-const char *tarURL = "https://www.casler.org/temp/meshtastic-web.tar";
+const char *tarURL = "https://github.com/meshtastic/meshtastic-web/releases/download/latest/build.tar";
 const char *certificate = NULL; // change this as needed, leave as is for no TLS check (yolo security)
 
 // Our API to handle messages to and from the radio.
@@ -368,7 +368,7 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
                 DEBUG_MSG("File not available - %s\n", filenameGzip.c_str());
                 res->println("Web server is running.<br><br>The content you are looking for can't be found. Please see: <a "
                              "href=https://meshtastic.org/docs/getting-started/faq#wifi--web-browser>FAQ</a>.<br><br><a "
-                             "href=/json/report>stats</a>");
+                             "href=/json/report>stats</a><br><br><a href=/update>Experemntal Web Content OTA Update</a>");
             } else {
                 res->setHeader("Content-Encoding", "gzip");
             }
@@ -742,8 +742,6 @@ void handleUpdateSPIFFS(HTTPRequest *req, HTTPResponse *res)
                 } else
                     break;
             }
-
-            res->println("<a href=/>Done</a>");
         }
 
     } else {
