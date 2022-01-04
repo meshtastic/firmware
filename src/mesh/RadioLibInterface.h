@@ -8,6 +8,7 @@
 #define RADIOLIB_SOFTWARE_SERIAL_UNSUPPORTED
 #endif
 
+#define RADIOLIB_EXCLUDE_HTTP
 #include <RadioLib.h>
 
 // ESP32 has special rules about ISR code

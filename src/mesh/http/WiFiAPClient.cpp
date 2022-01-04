@@ -1,15 +1,18 @@
 #include "mesh/http/WiFiAPClient.h"
 #include "NodeDB.h"
+#include "RTC.h"
 #include "concurrency/Periodic.h"
 #include "configuration.h"
 #include "main.h"
-#include "mqtt/MQTT.h"
 #include "mesh/http/WebServer.h"
 #include "mesh/wifi/WiFiServerAPI.h"
+#include "mqtt/MQTT.h"
 #include "target_specific.h"
 #include <DNSServer.h>
 #include <ESPmDNS.h>
+#include <NTPClient.h>
 #include <WiFi.h>
+#include <WiFiUdp.h>
 
 using namespace concurrency;
 
@@ -17,6 +20,10 @@ static void WiFiEvent(WiFiEvent_t event);
 
 // DNS Server for the Captive Portal
 DNSServer dnsServer;
+
+// NTP
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "0.pool.ntp.org");
 
 uint8_t wifiDisconnectReason = 0;
 
@@ -46,10 +53,10 @@ static WifiSleepObserver wifiSleepObserver;
 
 static int32_t reconnectWiFi()
 {
-    if (radioConfig.has_preferences && needReconnect) {
+    const char *wifiName = radioConfig.preferences.wifi_ssid;
+    const char *wifiPsw = radioConfig.preferences.wifi_password;
 
-        const char *wifiName = radioConfig.preferences.wifi_ssid;
-        const char *wifiPsw = radioConfig.preferences.wifi_password;
+    if (radioConfig.has_preferences && needReconnect && !WiFi.isConnected()) {
 
         if (!*wifiPsw) // Treat empty password as no password
             wifiPsw = NULL;
@@ -60,6 +67,26 @@ static int32_t reconnectWiFi()
             DEBUG_MSG("... Reconnecting to WiFi access point\n");
             WiFi.mode(WIFI_MODE_STA);
             WiFi.begin(wifiName, wifiPsw);
+            
+
+            // Starting timeClient;
+        }
+    }
+
+    //if (*wifiName) {
+    if (WiFi.isConnected()) {
+        DEBUG_MSG("Updating NTP time\n");
+        if (timeClient.update()) {
+            DEBUG_MSG("NTP Request Success - Setting RTCQualityNTP if needed\n");
+
+            struct timeval tv;
+            tv.tv_sec = timeClient.getEpochTime();
+            tv.tv_usec = 0;
+
+            perhapsSetRTC(RTCQualityNTP, &tv);
+
+        } else {
+            DEBUG_MSG("NTP Update failed\n");
         }
     }
 
@@ -128,33 +155,37 @@ static void onNetworkConnected()
             MDNS.addService("https", "tcp", 443);
         }
 
+        DEBUG_MSG("Starting NTP time client\n");
+        timeClient.begin();
+        timeClient.setUpdateInterval(60*60); // Update once an hour
+
         initWebServer();
         initApiServer();
 
         APStartupComplete = true;
-    } 
+    }
 
     // FIXME this is kinda yucky, instead we should just have an observable for 'wifireconnected'
-    if(mqtt)
+    if (mqtt)
         mqtt->reconnect();
 }
 
 // Startup WiFi
 bool initWifi(bool forceSoftAP)
 {
-    if (forceSoftAP) {
-        DEBUG_MSG("WiFi ... Forced AP Mode\n");
-    } else if (radioConfig.preferences.wifi_ap_mode) {
-        DEBUG_MSG("WiFi ... AP Mode\n");
-    } else {
-        DEBUG_MSG("WiFi ... Client Mode\n");
-    }
-
     forcedSoftAP = forceSoftAP;
 
     if ((radioConfig.has_preferences && radioConfig.preferences.wifi_ssid[0]) || forceSoftAP) {
         const char *wifiName = radioConfig.preferences.wifi_ssid;
         const char *wifiPsw = radioConfig.preferences.wifi_password;
+
+        if (forceSoftAP) {
+            DEBUG_MSG("WiFi ... Forced AP Mode\n");
+        } else if (radioConfig.preferences.wifi_ap_mode) {
+            DEBUG_MSG("WiFi ... AP Mode\n");
+        } else {
+            DEBUG_MSG("WiFi ... Client Mode\n");
+        }
 
         createSSLCert();
 
@@ -176,7 +207,6 @@ bool initWifi(bool forceSoftAP)
 
                 } else {
                     DEBUG_MSG("Starting WIFI AP: ssid=%s, ok=%d\n", wifiName, WiFi.softAP(wifiName, wifiPsw));
-
                 }
 
                 WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
