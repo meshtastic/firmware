@@ -70,7 +70,7 @@ int32_t CannedMessagePlugin::runOnce()
     {
         this->currentMessageIndex = 0;
         DEBUG_MSG("First touch. Current message:%s\n",
-            this->getCurrentSelection());
+            this->getCurrentMessage());
     }
     else if (this->action == ACTION_PRESSED)
     {
@@ -81,41 +81,23 @@ int32_t CannedMessagePlugin::runOnce()
     }
     else if (this->action == ACTION_UP)
     {
-        if (this->currentMessageIndex <= 0)
-        {
-            this->currentMessageIndex =
-             sizeof(cannedMessagePluginMessages) / CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_LEN - 1;
-        }
-        else
-        {
-            this->currentMessageIndex -= 1;
-        }
+        this->currentMessageIndex = getPrevIndex();
         DEBUG_MSG("MOVE UP. Current message:%s\n",
-            this->getCurrentSelection());
+            this->getCurrentMessage());
     }
     else if (this->action == ACTION_DOWN)
     {
-        if (this->currentMessageIndex >=
-            (sizeof(cannedMessagePluginMessages) / CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_LEN) - 1)
-        {
-            this->currentMessageIndex = 0;
-        }
-        else
-        {
-            this->currentMessageIndex += 1;
-        }
+        this->currentMessageIndex = this->getNextIndex();
         DEBUG_MSG("MOVE DOWN. Current message:%s\n",
-            this->getCurrentSelection());
+            this->getCurrentMessage());
     }
     if (this->action != ACTION_NONE)
     {
         this->action = ACTION_NONE;
         this->notifyObservers(NULL);
     }
-    DEBUG_MSG("Current selection index:%d\n",
-        this->currentMessageIndex);
 
-    return 3000;
+    return 30000;
 }
 
 void CannedMessagePlugin::select()
