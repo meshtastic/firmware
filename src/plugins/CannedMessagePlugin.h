@@ -1,7 +1,7 @@
 #pragma once
 #include "SinglePortPlugin.h"
 
-enum cannedMessagePluginRotatyStateType
+enum cannedMessagePluginRotaryStateType
 {
     EVENT_OCCURRED,
     EVENT_CLEARED
@@ -15,13 +15,44 @@ enum cannedMessagePluginActionType
     ACTION_DOWN
 };
 
-class CannedMessagePlugin : public SinglePortPlugin, private concurrency::OSThread
+#define CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_LEN 50
+
+static char cannedMessagePluginMessages[][CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_LEN] =
+{
+    "I need a helping hand",
+    "I need help with saw",
+    "I need an alpinist",
+    "I need ambulance",
+    "I'm fine",
+    "I'm already waiting",
+    "I will be late",
+    "I couldn't join",
+    "We have got company"
+};
+
+typedef struct _CannedMessagePluginStatus
+{
+    int dummy;
+} CannedMessagePluginStatus;
+
+class CannedMessagePlugin :
+    public SinglePortPlugin,
+    public Observable<const meshtastic::Status *>,
+    private concurrency::OSThread
 {
   public:
     CannedMessagePlugin();
     void select();
     void directionA();
     void directionB();
+    String getCurrentSelection()
+    {
+        return cannedMessagePluginMessages[this->currentMessageIndex];
+    }
+    bool shouldDraw()
+    {
+        return currentMessageIndex != -1;
+    }
 
   protected:
 
@@ -29,18 +60,20 @@ class CannedMessagePlugin : public SinglePortPlugin, private concurrency::OSThre
 
     MeshPacket *preparePacket();
 
-    void sendText(NodeNum dest, bool wantReplies);
+    void sendText(
+        NodeNum dest,
+        const char* message,
+        bool wantReplies);
 
     // TODO: make this configurable
     volatile cannedMessagePluginActionType cwRotationMeaning = ACTION_UP;
 
-    bool needSend = false;
     volatile cannedMessagePluginActionType action = ACTION_NONE;
-    volatile cannedMessagePluginRotatyStateType rotaryStateCW = EVENT_CLEARED;
-    volatile cannedMessagePluginRotatyStateType rotaryStateCCW = EVENT_CLEARED;
+    volatile cannedMessagePluginRotaryStateType rotaryStateCW = EVENT_CLEARED;
+    volatile cannedMessagePluginRotaryStateType rotaryStateCCW = EVENT_CLEARED;
     volatile int rotaryLevelA = LOW;
     volatile int rotaryLevelB = LOW;
-//    volatile bool enableEvent = true;
+    int currentMessageIndex = -1;
 };
 
 extern CannedMessagePlugin *cannedMessagePlugin;

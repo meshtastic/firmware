@@ -45,7 +45,9 @@ CannedMessagePlugin::CannedMessagePlugin()
 #endif
 }
 
-void CannedMessagePlugin::sendText(NodeNum dest, bool wantReplies)
+void CannedMessagePlugin::sendText(NodeNum dest,
+      const char* message,
+      bool wantReplies)
 {
     MeshPacket *p = allocDataPacket();
     p->to = dest;
@@ -63,28 +65,57 @@ void CannedMessagePlugin::sendText(NodeNum dest, bool wantReplies)
 
 int32_t CannedMessagePlugin::runOnce()
 {
-    /*
-    if (this->action == ACTION_PRESSED)
+    if ((this->action != ACTION_NONE)
+        && (this->currentMessageIndex == -1))
     {
-        sendText(NODENUM_BROADCAST, true);
-        needSend = false;
+        this->currentMessageIndex = 0;
+        DEBUG_MSG("First touch. Current message:%s\n",
+            this->getCurrentSelection());
     }
-    */
-    if (this->action == ACTION_PRESSED)
+    else if (this->action == ACTION_PRESSED)
     {
-        DEBUG_MSG("SELECTED\n");
+        sendText(
+            NODENUM_BROADCAST,
+            cannedMessagePluginMessages[this->currentMessageIndex],
+            true);
     }
     else if (this->action == ACTION_UP)
     {
-        DEBUG_MSG("MOVE UP\n");
+        if (this->currentMessageIndex <= 0)
+        {
+            this->currentMessageIndex =
+             sizeof(cannedMessagePluginMessages) / CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_LEN - 1;
+        }
+        else
+        {
+            this->currentMessageIndex -= 1;
+        }
+        DEBUG_MSG("MOVE UP. Current message:%s\n",
+            this->getCurrentSelection());
     }
     else if (this->action == ACTION_DOWN)
     {
-        DEBUG_MSG("MOVE_DOWN\n");
+        if (this->currentMessageIndex >=
+            (sizeof(cannedMessagePluginMessages) / CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_LEN) - 1)
+        {
+            this->currentMessageIndex = 0;
+        }
+        else
+        {
+            this->currentMessageIndex += 1;
+        }
+        DEBUG_MSG("MOVE DOWN. Current message:%s\n",
+            this->getCurrentSelection());
     }
-    this->action = ACTION_NONE;
-    
-    return UINT32_MAX;
+    if (this->action != ACTION_NONE)
+    {
+        this->action = ACTION_NONE;
+        this->notifyObservers(NULL);
+    }
+    DEBUG_MSG("Current selection index:%d\n",
+        this->currentMessageIndex);
+
+    return 3000;
 }
 
 void CannedMessagePlugin::select()
