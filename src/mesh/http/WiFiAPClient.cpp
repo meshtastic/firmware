@@ -1,5 +1,6 @@
 #include "mesh/http/WiFiAPClient.h"
 #include "NodeDB.h"
+#include "RTC.h"
 #include "concurrency/Periodic.h"
 #include "configuration.h"
 #include "main.h"
@@ -9,9 +10,9 @@
 #include "target_specific.h"
 #include <DNSServer.h>
 #include <ESPmDNS.h>
+#include <NTPClient.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
-#include <NTPClient.h>
 
 using namespace concurrency;
 
@@ -55,8 +56,7 @@ static int32_t reconnectWiFi()
     const char *wifiName = radioConfig.preferences.wifi_ssid;
     const char *wifiPsw = radioConfig.preferences.wifi_password;
 
-    if (radioConfig.has_preferences && needReconnect) {
-
+    if (radioConfig.has_preferences && needReconnect && !WiFi.isConnected()) {
 
         if (!*wifiPsw) // Treat empty password as no password
             wifiPsw = NULL;
@@ -67,19 +67,27 @@ static int32_t reconnectWiFi()
             DEBUG_MSG("... Reconnecting to WiFi access point\n");
             WiFi.mode(WIFI_MODE_STA);
             WiFi.begin(wifiName, wifiPsw);
+            
 
             // Starting timeClient;
-
-
         }
     }
 
-    if (*wifiName) {
+    //if (*wifiName) {
+    if (WiFi.isConnected()) {
         DEBUG_MSG("Updating NTP time\n");
-        timeClient.update();
+        if (timeClient.update()) {
+            DEBUG_MSG("NTP Request Success - Setting RTCQualityNTP if needed\n");
 
-        Serial.println(timeClient.getFormattedTime());
-        Serial.println(timeClient.getEpochTime());
+            struct timeval tv;
+            tv.tv_sec = timeClient.getEpochTime();
+            tv.tv_usec = 0;
+
+            perhapsSetRTC(RTCQualityNTP, &tv);
+
+        } else {
+            DEBUG_MSG("NTP Update failed\n");
+        }
     }
 
     return 30 * 1000; // every 30 seconds
@@ -149,6 +157,7 @@ static void onNetworkConnected()
 
         DEBUG_MSG("Starting NTP time client\n");
         timeClient.begin();
+        timeClient.setUpdateInterval(60*60); // Update once an hour
 
         initWebServer();
         initApiServer();
