@@ -23,6 +23,7 @@ typedef enum _HardwareModel {
     HardwareModel_TLORA_V1_1p3 = 8,
     HardwareModel_RAK4631 = 9,
     HardwareModel_HELTEC_V2_1 = 10,
+    HardwareModel_HELTEC_V1 = 11,
     HardwareModel_LORA_RELAY_V1 = 32,
     HardwareModel_NRF52840DK = 33,
     HardwareModel_PPR = 34,

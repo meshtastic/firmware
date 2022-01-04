@@ -101,7 +101,6 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
     // Sometimes when testing it is useful to be able to never turn on the xmitter
 #ifndef LORA_DISABLE_SENDING
     printPacket("enqueuing for send", p);
-    uint32_t xmitMsec = getPacketTime(p);
 
     DEBUG_MSG("txGood=%d,rxGood=%d,rxBad=%d\n", txGood, rxGood, rxBad);
     ErrorCode res = txQueue.enqueue(p) ? ERRNO_OK : ERRNO_UNKNOWN;
@@ -110,10 +109,6 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
         packetPool.release(p);
         return res;
     }
-
-    // Count the packet toward our TX airtime utilization.
-    //   We only count it if it can be added to the TX queue.
-    airTime->logAirtime(TX_LOG, xmitMsec);
 
     // We want all sending/receiving to be done by our daemon thread, We use a delay here because this packet might have been sent
     // in response to a packet we just received.  So we want to make sure the other side has had a chance to reconfigure its radio
@@ -188,6 +183,10 @@ void RadioLibInterface::onNotify(uint32_t notification)
                 MeshPacket *txp = txQueue.dequeue();
                 assert(txp);
                 startSend(txp);
+
+                // Packet has been sent, count it toward our TX airtime utilization.
+                uint32_t xmitMsec = getPacketTime(txp);
+                airTime->logAirtime(TX_LOG, xmitMsec);
             }
         } else {
             // DEBUG_MSG("done with txqueue\n");
