@@ -34,6 +34,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "mesh-pb-constants.h"
 #include "mesh/Channels.h"
 #include "plugins/TextMessagePlugin.h"
+#include "plugins/CannedMessagePlugin.h"
 #include "sleep.h"
 #include "target_specific.h"
 #include "utils.h"
@@ -283,6 +284,21 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     snprintf(tempBuf, sizeof(tempBuf), "         %s", mp.decoded.payload.bytes);
 
     display->drawStringMaxWidth(4 + x, 10 + y, SCREEN_WIDTH - (6 + x), tempBuf);
+}
+
+static void drawCannedMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    displayedNodeNum = 0; // Not currently showing a node pane
+
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_MEDIUM);
+    display->drawString(0 + x, 0 + y, cannedMessagePlugin->getCurrentSelection());
+
+    // the max length of this buffer is much longer than we can possibly print
+//    static char tempBuf[96];
+//    snprintf(tempBuf, sizeof(tempBuf), "         %s", mp.decoded.payload.bytes);
+
+//    display->drawStringMaxWidth(4 + x, 10 + y, SCREEN_WIDTH - (6 + x), tempBuf);
 }
 
 /// Draw a series of fields in a column, wrapping to multiple colums if needed
@@ -820,6 +836,8 @@ void Screen::setup()
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
     if (textMessagePlugin)
         textMessageObserver.observe(textMessagePlugin);
+    if (cannedMessagePlugin)
+        cannedMessageObserver.observe(cannedMessagePlugin);
 }
 
 void Screen::forceDisplay()
@@ -995,6 +1013,9 @@ void Screen::setFrames()
     // If we have a text message - show it next, unless it's a phone message and we aren't using any special plugins
     if (devicestate.has_rx_text_message && shouldDrawMessage(&devicestate.rx_text_message)) {
         normalFrames[numframes++] = drawTextMessageFrame;
+    }
+    if (cannedMessagePlugin->shouldDraw()) {
+        normalFrames[numframes++] = drawCannedMessageFrame;
     }
 
     // then all the nodes
@@ -1453,6 +1474,16 @@ int Screen::handleTextMessage(const MeshPacket *packet)
     if (showingNormalScreen) {
         setFrames(); // Regen the list of screens (will show new text message)
     }
+
+    return 0;
+}
+
+int Screen::handleCannedMessage(const meshtastic::Status *packet)
+{
+    if (showingNormalScreen) {
+        setFrames(); // Regen the list of screens (will show new text message)
+    }
+    ui.switchToFrame(1);
 
     return 0;
 }

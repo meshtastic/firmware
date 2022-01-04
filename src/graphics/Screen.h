@@ -90,6 +90,8 @@ class Screen : public concurrency::OSThread
         CallbackObserver<Screen, const meshtastic::Status *>(this, &Screen::handleStatusUpdate);
     CallbackObserver<Screen, const MeshPacket *> textMessageObserver =
         CallbackObserver<Screen, const MeshPacket *>(this, &Screen::handleTextMessage);
+    CallbackObserver<Screen, const meshtastic::Status *> cannedMessageObserver =
+        CallbackObserver<Screen, const meshtastic::Status *>(this, &Screen::handleCannedMessage);
 
   public:
     Screen(uint8_t address, int sda = -1, int scl = -1);
@@ -218,6 +220,7 @@ class Screen : public concurrency::OSThread
 
     int handleStatusUpdate(const meshtastic::Status *arg);
     int handleTextMessage(const MeshPacket *arg);
+    int handleCannedMessage(const meshtastic::Status *arg);
 
     /// Used to force (super slow) eink displays to draw critical frames
     void forceDisplay();
