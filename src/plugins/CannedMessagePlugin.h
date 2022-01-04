@@ -15,25 +15,26 @@ enum cannedMessagePluginActionType
     ACTION_DOWN
 };
 
+enum cannedMessagePluginSendigState
+{
+    SENDING_STATE_NONE,
+    SENDING_STATE_ACTIVE
+};
+
 #define CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_LEN 50
 
 static char cannedMessagePluginMessages[][CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_LEN] =
 {
-    "I need a helping hand",
-    "I need help with saw",
+    "Need helping hand",
+    "Help me with saw",
     "I need an alpinist",
     "I need ambulance",
     "I'm fine",
     "I'm already waiting",
     "I will be late",
     "I couldn't join",
-    "We have got company"
+    "We have company"
 };
-
-typedef struct _CannedMessagePluginStatus
-{
-    int dummy;
-} CannedMessagePluginStatus;
 
 class CannedMessagePlugin :
     public SinglePortPlugin,
@@ -59,7 +60,11 @@ class CannedMessagePlugin :
     }
     bool shouldDraw()
     {
-        return currentMessageIndex != -1;
+        return (currentMessageIndex != -1) || (this->sendingState != SENDING_STATE_NONE);
+    }
+    cannedMessagePluginSendigState getSendingState()
+    {
+        return this->sendingState;
     }
 
   protected:
@@ -106,6 +111,7 @@ class CannedMessagePlugin :
     volatile int rotaryLevelA = LOW;
     volatile int rotaryLevelB = LOW;
     int currentMessageIndex = -1;
+    cannedMessagePluginSendigState sendingState = SENDING_STATE_NONE;
 };
 
 extern CannedMessagePlugin *cannedMessagePlugin;

@@ -290,19 +290,22 @@ static void drawCannedMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
 {
     displayedNodeNum = 0; // Not currently showing a node pane
 
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->setFont(FONT_SMALL);
-    display->drawString(0 + x, 0 + y, cannedMessagePlugin->getPrevMessage());
-    display->setFont(FONT_MEDIUM);
-    display->drawString(0 + x, 0 + y + 8, cannedMessagePlugin->getCurrentMessage());
-    display->setFont(FONT_SMALL);
-    display->drawString(0 + x, 0 + y + 24, cannedMessagePlugin->getNextMessage());
-
-    // the max length of this buffer is much longer than we can possibly print
-//    static char tempBuf[96];
-//    snprintf(tempBuf, sizeof(tempBuf), "         %s", mp.decoded.payload.bytes);
-
-//    display->drawStringMaxWidth(4 + x, 10 + y, SCREEN_WIDTH - (6 + x), tempBuf);
+    if (cannedMessagePlugin->getSendingState() == SENDING_STATE_NONE)
+    {
+        display->setTextAlignment(TEXT_ALIGN_LEFT);
+        display->setFont(FONT_SMALL);
+        display->drawString(0 + x, 0 + y, cannedMessagePlugin->getPrevMessage());
+        display->setFont(FONT_MEDIUM);
+        display->drawString(0 + x, 0 + y + 8, cannedMessagePlugin->getCurrentMessage());
+        display->setFont(FONT_SMALL);
+        display->drawString(0 + x, 0 + y + 24, cannedMessagePlugin->getNextMessage());
+    }
+    else
+    {
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->setFont(FONT_MEDIUM);
+        display->drawString(display->getWidth()/2 + x, 0 + y + 12, "Sending...");
+    }
 }
 
 /// Draw a series of fields in a column, wrapping to multiple colums if needed

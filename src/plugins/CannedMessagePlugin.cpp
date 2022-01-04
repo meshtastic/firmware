@@ -51,9 +51,8 @@ void CannedMessagePlugin::sendText(NodeNum dest,
 {
     MeshPacket *p = allocDataPacket();
     p->to = dest;
-    const char *replyStr = "This is a canned message";
-    p->decoded.payload.size = strlen(replyStr); // You must specify how many bytes are in the reply
-    memcpy(p->decoded.payload.bytes, replyStr, p->decoded.payload.size);
+    p->decoded.payload.size = strlen(message);
+    memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
 
 //    PacketId prevPacketId = p->id; // In case we need it later.
 
@@ -65,7 +64,13 @@ void CannedMessagePlugin::sendText(NodeNum dest,
 
 int32_t CannedMessagePlugin::runOnce()
 {
-    if ((this->action != ACTION_NONE)
+    if (this->sendingState == SENDING_STATE_ACTIVE)
+    {
+        // TODO: might have some feedback of sendig state
+        this->sendingState = SENDING_STATE_NONE;
+        this->notifyObservers(NULL);
+    }
+    else if ((this->action != ACTION_NONE)
         && (this->currentMessageIndex == -1))
     {
         this->currentMessageIndex = 0;
@@ -78,6 +83,9 @@ int32_t CannedMessagePlugin::runOnce()
             NODENUM_BROADCAST,
             cannedMessagePluginMessages[this->currentMessageIndex],
             true);
+        this->sendingState = SENDING_STATE_ACTIVE;
+        this->currentMessageIndex = -1;
+        return 2000;
     }
     else if (this->action == ACTION_UP)
     {
