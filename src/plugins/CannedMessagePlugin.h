@@ -45,9 +45,17 @@ class CannedMessagePlugin :
     void select();
     void directionA();
     void directionB();
-    String getCurrentSelection()
+    String getCurrentMessage()
     {
         return cannedMessagePluginMessages[this->currentMessageIndex];
+    }
+    String getPrevMessage()
+    {
+        return cannedMessagePluginMessages[this->getPrevIndex()];
+    }
+    String getNextMessage()
+    {
+        return cannedMessagePluginMessages[this->getNextIndex()];
     }
     bool shouldDraw()
     {
@@ -58,12 +66,36 @@ class CannedMessagePlugin :
 
     virtual int32_t runOnce();  
 
-    MeshPacket *preparePacket();
-
     void sendText(
         NodeNum dest,
         const char* message,
         bool wantReplies);
+
+    int getNextIndex()
+    {
+        if (this->currentMessageIndex >=
+            (sizeof(cannedMessagePluginMessages) / CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_LEN) - 1)
+        {
+            return 0;
+        }
+        else
+        {
+            return this->currentMessageIndex + 1;
+        }
+    }
+
+    int getPrevIndex()
+    {
+        if (this->currentMessageIndex <= 0)
+        {
+            return
+             sizeof(cannedMessagePluginMessages) / CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_LEN - 1;
+        }
+        else
+        {
+            return this->currentMessageIndex - 1;
+        }
+    }
 
     // TODO: make this configurable
     volatile cannedMessagePluginActionType cwRotationMeaning = ACTION_UP;
