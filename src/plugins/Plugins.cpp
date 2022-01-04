@@ -8,6 +8,7 @@
 #include "plugins/TextMessagePlugin.h"
 #include "plugins/RoutingPlugin.h"
 #include "plugins/AdminPlugin.h"
+#include "plugins/CannedMessagePlugin.h"
 #ifndef NO_ESP32
 #include "plugins/esp32/SerialPlugin.h"
 #include "plugins/esp32/EnvironmentalMeasurementPlugin.h"
@@ -30,6 +31,7 @@ void setupPlugins()
 
     new RemoteHardwarePlugin();
     new ReplyPlugin();
+    cannedMessagePlugin = new CannedMessagePlugin();
 
 #ifndef NO_ESP32
     // Only run on an esp32 based device.
