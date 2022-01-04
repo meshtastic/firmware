@@ -65,7 +65,11 @@ void setCPUFast(bool on)
         return;
     }
 
-    setCpuFrequencyMhz(on ? 240 : 80);
+    // The Heltec LORA32 V1 runs at 26 MHz base frequency and doesn't react well to switching to 80 MHz...
+    #ifndef ARDUINO_HELTEC_WIFI_LORA_32
+        setCpuFrequencyMhz(on ? 240 : 80);
+    #endif
+    
 #endif
 }
 

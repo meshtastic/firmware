@@ -164,19 +164,19 @@ static void onNetworkConnected()
 // Startup WiFi
 bool initWifi(bool forceSoftAP)
 {
-    if (forceSoftAP) {
-        DEBUG_MSG("WiFi ... Forced AP Mode\n");
-    } else if (radioConfig.preferences.wifi_ap_mode) {
-        DEBUG_MSG("WiFi ... AP Mode\n");
-    } else {
-        DEBUG_MSG("WiFi ... Client Mode\n");
-    }
-
     forcedSoftAP = forceSoftAP;
 
     if ((radioConfig.has_preferences && radioConfig.preferences.wifi_ssid[0]) || forceSoftAP) {
         const char *wifiName = radioConfig.preferences.wifi_ssid;
         const char *wifiPsw = radioConfig.preferences.wifi_password;
+
+        if (forceSoftAP) {
+            DEBUG_MSG("WiFi ... Forced AP Mode\n");
+        } else if (radioConfig.preferences.wifi_ap_mode) {
+            DEBUG_MSG("WiFi ... AP Mode\n");
+        } else {
+            DEBUG_MSG("WiFi ... Client Mode\n");
+        }
 
         createSSLCert();
 

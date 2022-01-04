@@ -1398,11 +1398,11 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 
     display->drawString(x, y + FONT_HEIGHT_SMALL * 1, uptime);
 
-#ifndef NO_ESP32
-    // Show CPU Frequency.
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth("CPU " + String(getCpuFrequencyMhz()) + "MHz"),
-                        y + FONT_HEIGHT_SMALL * 1, "CPU " + String(getCpuFrequencyMhz()) + "MHz");
-#endif
+    // Display Channel Utilization
+    char chUtil[13];
+    sprintf(chUtil, "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil),
+                        y + FONT_HEIGHT_SMALL * 1, chUtil);
 
     // Line 3
     if (radioConfig.preferences.gps_format != GpsCoordinateFormat_GpsFormatDMS) // if DMS then don't draw altitude

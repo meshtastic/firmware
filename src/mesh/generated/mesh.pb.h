@@ -23,6 +23,7 @@ typedef enum _HardwareModel {
     HardwareModel_TLORA_V1_1p3 = 8,
     HardwareModel_RAK4631 = 9,
     HardwareModel_HELTEC_V2_1 = 10,
+    HardwareModel_HELTEC_V1 = 11,
     HardwareModel_LORA_RELAY_V1 = 32,
     HardwareModel_NRF52840DK = 33,
     HardwareModel_PPR = 34,
@@ -164,6 +165,7 @@ typedef struct _MyNodeInfo {
     pb_size_t air_period_rx_count;
     uint32_t air_period_rx[24];
     bool has_wifi;
+    float channel_utilization;
 } MyNodeInfo;
 
 typedef struct _Position {
@@ -233,6 +235,8 @@ typedef struct _MeshPacket {
     MeshPacket_Priority priority;
     int32_t rx_rssi;
     MeshPacket_Delayed delayed;
+    uint32_t reply_id;
+    bool is_tapback;
 } MeshPacket;
 
 typedef struct _NodeInfo {
@@ -330,9 +334,9 @@ extern "C" {
 #define RouteDiscovery_init_default              {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_default                     {0, {RouteDiscovery_init_default}}
 #define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0}
-#define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
+#define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN, 0, 0}
 #define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0}
-#define MyNodeInfo_init_default                  {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0}
+#define MyNodeInfo_init_default                  {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, 0}
 #define LogRecord_init_default                   {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_default                   {0, 0, {MyNodeInfo_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
@@ -342,9 +346,9 @@ extern "C" {
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_zero                        {0, {RouteDiscovery_init_zero}}
 #define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0}
-#define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
+#define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN, 0, 0}
 #define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0}
-#define MyNodeInfo_init_zero                     {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0}
+#define MyNodeInfo_init_zero                     {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, 0}
 #define LogRecord_init_zero                      {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_zero                      {0, 0, {MyNodeInfo_init_zero}}
 #define ToRadio_init_zero                        {0, {MeshPacket_init_zero}}
@@ -378,6 +382,7 @@ extern "C" {
 #define MyNodeInfo_air_period_tx_tag             16
 #define MyNodeInfo_air_period_rx_tag             17
 #define MyNodeInfo_has_wifi_tag                  18
+#define MyNodeInfo_channel_utilization_tag       19
 #define Position_latitude_i_tag                  1
 #define Position_longitude_i_tag                 2
 #define Position_altitude_tag                    3
@@ -427,6 +432,8 @@ extern "C" {
 #define MeshPacket_priority_tag                  12
 #define MeshPacket_rx_rssi_tag                   13
 #define MeshPacket_delayed_tag                   15
+#define MeshPacket_reply_id_tag                  16
+#define MeshPacket_is_tapback_tag                17
 #define NodeInfo_num_tag                         1
 #define NodeInfo_user_tag                        2
 #define NodeInfo_position_tag                    3
@@ -526,7 +533,9 @@ X(a, STATIC,   SINGULAR, UINT32,   hop_limit,        10) \
 X(a, STATIC,   SINGULAR, BOOL,     want_ack,         11) \
 X(a, STATIC,   SINGULAR, UENUM,    priority,         12) \
 X(a, STATIC,   SINGULAR, INT32,    rx_rssi,          13) \
-X(a, STATIC,   SINGULAR, UENUM,    delayed,          15)
+X(a, STATIC,   SINGULAR, UENUM,    delayed,          15) \
+X(a, STATIC,   SINGULAR, FIXED32,  reply_id,         16) \
+X(a, STATIC,   SINGULAR, BOOL,     is_tapback,       17)
 #define MeshPacket_CALLBACK NULL
 #define MeshPacket_DEFAULT NULL
 #define MeshPacket_payloadVariant_decoded_MSGTYPE Data
@@ -559,7 +568,8 @@ X(a, STATIC,   SINGULAR, UINT32,   min_app_version,  14) \
 X(a, STATIC,   SINGULAR, UINT32,   max_channels,     15) \
 X(a, STATIC,   REPEATED, UINT32,   air_period_tx,    16) \
 X(a, STATIC,   REPEATED, UINT32,   air_period_rx,    17) \
-X(a, STATIC,   SINGULAR, BOOL,     has_wifi,         18)
+X(a, STATIC,   SINGULAR, BOOL,     has_wifi,         18) \
+X(a, STATIC,   SINGULAR, FLOAT,    channel_utilization,  19)
 #define MyNodeInfo_CALLBACK NULL
 #define MyNodeInfo_DEFAULT NULL
 
@@ -635,12 +645,12 @@ extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 #define RouteDiscovery_size                      40
 #define Routing_size                             42
 #define Data_size                                260
-#define MeshPacket_size                          311
+#define MeshPacket_size                          320
 #define NodeInfo_size                            270
-#define MyNodeInfo_size                          445
+#define MyNodeInfo_size                          451
 #define LogRecord_size                           81
-#define FromRadio_size                           454
-#define ToRadio_size                             314
+#define FromRadio_size                           460
+#define ToRadio_size                             323
 #define ToRadio_PeerInfo_size                    8
 
 #ifdef __cplusplus
