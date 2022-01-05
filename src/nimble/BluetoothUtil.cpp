@@ -516,7 +516,7 @@ void reinitBluetooth()
 
     ble_hs_cfg.sm_io_cap = BLE_SM_IO_CAP_DISP_ONLY;
     ble_hs_cfg.sm_bonding = 1;
-    ble_hs_cfg.sm_mitm = 1;
+    ble_hs_cfg.sm_mitm = 0;
     ble_hs_cfg.sm_sc = 1;
     // per https://github.com/espressif/esp-idf/issues/5530#issuecomment-652933685
     ble_hs_cfg.sm_our_key_dist = BLE_SM_PAIR_KEY_DIST_ID | BLE_SM_PAIR_KEY_DIST_ENC;
