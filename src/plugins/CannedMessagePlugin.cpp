@@ -74,8 +74,7 @@ int32_t CannedMessagePlugin::runOnce()
         && (this->currentMessageIndex == -1))
     {
         this->currentMessageIndex = 0;
-        DEBUG_MSG("First touch. Current message:%s\n",
-            this->getCurrentMessage());
+        DEBUG_MSG("First touch.\n");
     }
     else if (this->action == ACTION_PRESSED)
     {
@@ -90,14 +89,14 @@ int32_t CannedMessagePlugin::runOnce()
     else if (this->action == ACTION_UP)
     {
         this->currentMessageIndex = getPrevIndex();
-        DEBUG_MSG("MOVE UP. Current message:%s\n",
-            this->getCurrentMessage());
+        DEBUG_MSG("MOVE UP. Current message:%ld\n",
+            millis());
     }
     else if (this->action == ACTION_DOWN)
     {
         this->currentMessageIndex = this->getNextIndex();
-        DEBUG_MSG("MOVE DOWN. Current message:%s\n",
-            this->getCurrentMessage());
+        DEBUG_MSG("MOVE DOWN. Current message:%ld\n",
+            millis());
     }
     if (this->action != ACTION_NONE)
     {
@@ -111,6 +110,7 @@ int32_t CannedMessagePlugin::runOnce()
 void CannedMessagePlugin::select()
 {
     this->action = ACTION_PRESSED;
+    runned(millis());
     setInterval(20);
 }
 
@@ -152,7 +152,8 @@ void CannedMessagePlugin::directionA()
         this->rotaryStateCCW = EVENT_CLEARED;
     }
 #endif
-    setInterval(30);
+    runned(millis());
+    setInterval(50);
 }
 
 void CannedMessagePlugin::directionB()
@@ -184,5 +185,6 @@ void CannedMessagePlugin::directionB()
         this->rotaryStateCW = EVENT_CLEARED;
     }
 #endif
-    setInterval(30);
+    runned(millis());
+    setInterval(50);
 }
