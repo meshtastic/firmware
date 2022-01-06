@@ -124,6 +124,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeHotspotApple = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
     ResourceNode *nodeHotspotAndroid = new ResourceNode("/generate_204", "GET", &handleHotspot);
 
+    ResourceNode *nodeSPIFFS = new ResourceNode("/spiffs", "GET", &handleSPIFFS);
     ResourceNode *nodeUpdateSPIFFS = new ResourceNode("/spiffs/update", "POST", &handleUpdateSPIFFS);
     ResourceNode *nodeDeleteSPIFFS = new ResourceNode("/spiffs/delete", "GET", &handleDeleteSPIFFSContent);
 
@@ -153,6 +154,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     secureServer->registerNode(nodeJsonReport);
     secureServer->registerNode(nodeUpdateSPIFFS);
     secureServer->registerNode(nodeDeleteSPIFFS);
+    secureServer->registerNode(nodeSPIFFS);
     secureServer->registerNode(nodeRoot); // This has to be last
 
     // Insecure nodes
@@ -170,6 +172,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     insecureServer->registerNode(nodeJsonReport);
     insecureServer->registerNode(nodeUpdateSPIFFS);
     insecureServer->registerNode(nodeDeleteSPIFFS);
+    insecureServer->registerNode(nodeSPIFFS);
     insecureServer->registerNode(nodeRoot); // This has to be last
 }
 
@@ -371,11 +374,12 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
             res->setHeader("Content-Type", "text/html");
             if (!file.available()) {
                 DEBUG_MSG("File not available - %s\n", filenameGzip.c_str());
-                res->println("Web server is running.<br><br>The content you are looking for can't be found. Please see: <a "
-                             "href=https://meshtastic.org/docs/getting-started/faq#wifi--web-browser>FAQ</a>.<br><br>Experimental "
-                             "Web Content OTA Update</a> -- Click "
-                             "this just once and wait. Be patient!<form action=/spiffs/update "
-                             "method=post><input type=submit value=UPDATE></form>");
+                res->println(
+                    "Web server is running.<br><br>The content you are looking for can't be found. Please see: <a "
+                    "href=https://meshtastic.org/docs/getting-started/faq#wifi--web-browser>FAQ</a>.<br><br>Experimental "
+                    "Web Content OTA Update</a> -- Click "
+                    "this just once and wait. Be patient!<form action=/spiffs/update "
+                    "method=post><input type=submit value=UPDATE></form>");
             } else {
                 res->setHeader("Content-Encoding", "gzip");
             }
@@ -794,7 +798,16 @@ void handleDeleteSPIFFSContent(HTTPRequest *req, HTTPResponse *res)
         }
         file = root.openNextFile();
     }
+}
 
+void handleSPIFFS(HTTPRequest *req, HTTPResponse *res)
+{
+    res->setHeader("Content-Type", "text/html");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "GET");
+
+    res->println("<a href=/spiffs/delete>Delete Web Content</a><p><form action=/spiffs/update "
+                 "method=post><input type=submit value=UPDATE_WEB_CONTENT></form>Be patient!");
 }
 
 void handleRestart(HTTPRequest *req, HTTPResponse *res)
