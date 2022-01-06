@@ -301,7 +301,7 @@ void RadioLibInterface::handleReceiveInterrupt()
 void RadioLibInterface::startSend(MeshPacket *txp)
 {
     printPacket("Starting low level send", txp);
-    if (disabled) {
+    if (disabled || radioConfig.preferences.is_lora_tx_disabled) {
         DEBUG_MSG("startSend is dropping tx packet because we are disabled\n");
         packetPool.release(txp);
     } else {
