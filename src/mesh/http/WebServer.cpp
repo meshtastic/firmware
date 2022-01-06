@@ -175,6 +175,10 @@ int32_t WebServerThread::runOnce()
     // DEBUG_MSG("WebServerThread::runOnce()\n");
     handleWebResponse();
 
+    if (requestRestart && (millis() / 1000) > requestRestart) {
+        ESP.restart();
+    }
+
     // Loop every 5ms.
     return (5);
 }
