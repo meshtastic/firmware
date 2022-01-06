@@ -43,7 +43,7 @@ using namespace httpsserver;
 
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
-HTTPClient http;
+HTTPClient httpClient;
 
 #define DEST_FS_USES_SPIFFS
 #include <ESP32-targz.h>
@@ -73,22 +73,22 @@ WiFiClient *getTarHTTPClientPtr(WiFiClientSecure *client, const char *url, const
         client->setCACert(cert);
     }
     const char *UserAgent = "ESP32-HTTP-GzUpdater-Client";
-    http.setReuse(true); // handle 301 redirects gracefully
-    http.setUserAgent(UserAgent);
-    http.setConnectTimeout(10000); // 10s timeout = 10000
-    if (!http.begin(*client, url)) {
+    httpClient.setReuse(true); // handle 301 redirects gracefully
+    httpClient.setUserAgent(UserAgent);
+    httpClient.setConnectTimeout(10000); // 10s timeout = 10000
+    if (!httpClient.begin(*client, url)) {
         log_e("Can't open url %s", url);
         return nullptr;
     }
     const char *headerKeys[] = {"location", "redirect", "Content-Type", "Content-Length", "Content-Disposition"};
     const size_t numberOfHeaders = 5;
-    http.collectHeaders(headerKeys, numberOfHeaders);
-    int httpCode = http.GET();
+    httpClient.collectHeaders(headerKeys, numberOfHeaders);
+    int httpCode = httpClient.GET();
     // file found at server
     if (httpCode == HTTP_CODE_FOUND || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
         String newlocation = "";
-        String headerLocation = http.header("location");
-        String headerRedirect = http.header("redirect");
+        String headerLocation = httpClient.header("location");
+        String headerRedirect = httpClient.header("redirect");
         if (headerLocation != "") {
             newlocation = headerLocation;
             Serial.printf("302 (location): %s => %s\n", url, headerLocation.c_str());
@@ -96,7 +96,7 @@ WiFiClient *getTarHTTPClientPtr(WiFiClientSecure *client, const char *url, const
             Serial.printf("301 (redirect): %s => %s\n", url, headerLocation.c_str());
             newlocation = headerRedirect;
         }
-        http.end();
+        httpClient.end();
         if (newlocation != "") {
             log_w("Found 302/301 location header: %s", newlocation.c_str());
             return getTarHTTPClientPtr(client, newlocation.c_str(), cert);
@@ -107,7 +107,7 @@ WiFiClient *getTarHTTPClientPtr(WiFiClientSecure *client, const char *url, const
     }
     if (httpCode != 200)
         return nullptr;
-    return http.getStreamPtr();
+    return httpClient.getStreamPtr();
 }
 
 void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
@@ -700,12 +700,12 @@ void handleUpdateSPIFFS(HTTPRequest *req, HTTPResponse *res)
         File root = SPIFFS.open("/");
         File file = root.openNextFile();
 
-        DEBUG_MSG("Deleting files from /static\n");
+        DEBUG_MSG("Deleting files from /static : \n");
 
         while (file) {
             String filePath = String(file.name());
             if (filePath.indexOf("/static") == 0) {
-                DEBUG_MSG("%s\n", file.name());
+                DEBUG_MSG("    %s\n", file.name());
                 SPIFFS.remove(file.name());
             }
             file = root.openNextFile();
@@ -724,7 +724,7 @@ void handleUpdateSPIFFS(HTTPRequest *req, HTTPResponse *res)
             BaseUnpacker::defaultTarStatusProgressCallback);                        // print the filenames as they're expanded
         TARUnpacker->setTarMessageCallback(BaseUnpacker::targzPrintLoggerCallback); // tar log verbosity
 
-        String contentLengthStr = http.header("Content-Length");
+        String contentLengthStr = httpClient.header("Content-Length");
         contentLengthStr.trim();
         int64_t streamSize = -1;
         if (contentLengthStr != "") {
@@ -739,14 +739,16 @@ void handleUpdateSPIFFS(HTTPRequest *req, HTTPResponse *res)
 
             return;
         } else {
+            /*
             // print leftover bytes if any (probably zero-fill from the server)
-            while (http.connected()) {
+            while (httpClient.connected()) {
                 size_t streamSize = streamptr->available();
                 if (streamSize) {
                     Serial.printf("%02x ", streamptr->read());
                 } else
                     break;
             }
+            */
         }
 
     } else {
