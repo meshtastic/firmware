@@ -57,7 +57,7 @@ char contentTypes[][2][32] = {{".txt", "text/plain"},     {".html", "text/html"}
                               {".css", "text/css"},       {".ico", "image/vnd.microsoft.icon"},
                               {".svg", "image/svg+xml"},  {"", ""}};
 
-//const char *tarURL = "https://www.casler.org/temp/meshtastic-web.tar";
+// const char *tarURL = "https://www.casler.org/temp/meshtastic-web.tar";
 const char *tarURL = "https://api-production-871d.up.railway.app/mirror/webui";
 const char *certificate = NULL; // change this as needed, leave as is for no TLS check (yolo security)
 
@@ -689,26 +689,29 @@ void handleUpdateSPIFFS(HTTPRequest *req, HTTPResponse *res)
 
     res->println("Downloading Meshtastic Web Content...");
 
-    File root = SPIFFS.open("/");
-    File file = root.openNextFile();
-
-    DEBUG_MSG("Deleting files from /static\n");
-
-    while (file) {
-        String filePath = String(file.name());
-        if (filePath.indexOf("/static") == 0) {
-            DEBUG_MSG("%s\n", file.name());
-            SPIFFS.remove(file.name());
-        }
-        file = root.openNextFile();
-    }
-
-    // return;
-
     WiFiClientSecure *client = new WiFiClientSecure;
     Stream *streamptr = getTarHTTPClientPtr(client, tarURL, certificate);
 
+    delay(5); // Let other network operations run
+
     if (streamptr != nullptr) {
+        DEBUG_MSG("Connection to content server ... success!\n");
+
+        File root = SPIFFS.open("/");
+        File file = root.openNextFile();
+
+        DEBUG_MSG("Deleting files from /static\n");
+
+        while (file) {
+            String filePath = String(file.name());
+            if (filePath.indexOf("/static") == 0) {
+                DEBUG_MSG("%s\n", file.name());
+                SPIFFS.remove(file.name());
+            }
+            file = root.openNextFile();
+        }
+
+        delay(5); // Let other network operations run
 
         TarUnpacker *TARUnpacker = new TarUnpacker();
         TARUnpacker->haltOnError(false);  // stop on fail (manual restart/reset required)
@@ -731,7 +734,10 @@ void handleUpdateSPIFFS(HTTPRequest *req, HTTPResponse *res)
         }
 
         if (!TARUnpacker->tarStreamExpander(streamptr, streamSize, SPIFFS, "/static")) {
+            res->printf("tarStreamExpander failed with return code #%d\n", TARUnpacker->tarGzGetError());
             Serial.printf("tarStreamExpander failed with return code #%d\n", TARUnpacker->tarGzGetError());
+
+            return;
         } else {
             // print leftover bytes if any (probably zero-fill from the server)
             while (http.connected()) {
@@ -744,7 +750,9 @@ void handleUpdateSPIFFS(HTTPRequest *req, HTTPResponse *res)
         }
 
     } else {
+        res->printf("Failed to establish http connection\n");
         Serial.println("Failed to establish http connection");
+        return;
     }
 
     res->println("<a href=/>Done</a>");
