@@ -93,7 +93,8 @@ bool RadioLibInterface::canSendImmediately()
 /// bluetooth comms code.  If the txmit queue is empty it might return an error
 ErrorCode RadioLibInterface::send(MeshPacket *p)
 {
-    if (disabled) {
+    if (disabled || radioConfig.preferences.is_lora_tx_disabled) {
+        DEBUG_MSG("send - lora_tx_disabled\n");
         packetPool.release(p);
         return ERRNO_DISABLED;
     }
