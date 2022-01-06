@@ -4,6 +4,7 @@
 #include "airtime.h"
 #include "main.h"
 #include "mesh/http/ContentHelper.h"
+#include "mesh/http/WebServer.h"
 #include "mesh/http/WiFiAPClient.h"
 #include "power.h"
 #include "sleep.h"
@@ -123,7 +124,8 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeHotspotApple = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
     ResourceNode *nodeHotspotAndroid = new ResourceNode("/generate_204", "GET", &handleHotspot);
 
-    ResourceNode *nodeUpdateSPIFFS = new ResourceNode("/update", "GET", &handleUpdateSPIFFS);
+    ResourceNode *nodeUpdateSPIFFS = new ResourceNode("/spiffs/update", "POST", &handleUpdateSPIFFS);
+    ResourceNode *nodeDeleteSPIFFS = new ResourceNode("/spiffs/delete", "GET", &handleDeleteSPIFFSContent);
 
     ResourceNode *nodeRestart = new ResourceNode("/restart", "POST", &handleRestart);
     ResourceNode *nodeFormUpload = new ResourceNode("/upload", "POST", &handleFormUpload);
@@ -150,6 +152,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     secureServer->registerNode(nodeJsonDelete);
     secureServer->registerNode(nodeJsonReport);
     secureServer->registerNode(nodeUpdateSPIFFS);
+    secureServer->registerNode(nodeDeleteSPIFFS);
     secureServer->registerNode(nodeRoot); // This has to be last
 
     // Insecure nodes
@@ -166,6 +169,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     insecureServer->registerNode(nodeJsonDelete);
     insecureServer->registerNode(nodeJsonReport);
     insecureServer->registerNode(nodeUpdateSPIFFS);
+    insecureServer->registerNode(nodeDeleteSPIFFS);
     insecureServer->registerNode(nodeRoot); // This has to be last
 }
 
@@ -368,8 +372,10 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
             if (!file.available()) {
                 DEBUG_MSG("File not available - %s\n", filenameGzip.c_str());
                 res->println("Web server is running.<br><br>The content you are looking for can't be found. Please see: <a "
-                             "href=https://meshtastic.org/docs/getting-started/faq#wifi--web-browser>FAQ</a>.<br><br><a "
-                             "href=/json/report>stats</a><br><br><a href=/update>Experemntal Web Content OTA Update</a>");
+                             "href=https://meshtastic.org/docs/getting-started/faq#wifi--web-browser>FAQ</a>.<br><br>Experimental "
+                             "Web Content OTA Update</a> -- Click "
+                             "this just once and wait. Be patient!<form action=/spiffs/update "
+                             "method=post><input type=submit value=UPDATE></form>");
             } else {
                 res->setHeader("Content-Encoding", "gzip");
             }
@@ -685,7 +691,7 @@ void handleUpdateSPIFFS(HTTPRequest *req, HTTPResponse *res)
 {
     res->setHeader("Content-Type", "text/html");
     res->setHeader("Access-Control-Allow-Origin", "*");
-    res->setHeader("Access-Control-Allow-Methods", "GET");
+    // res->setHeader("Access-Control-Allow-Methods", "POST");
 
     res->println("Downloading Meshtastic Web Content...");
 
@@ -730,7 +736,7 @@ void handleUpdateSPIFFS(HTTPRequest *req, HTTPResponse *res)
         if (contentLengthStr != "") {
             streamSize = atoi(contentLengthStr.c_str());
             Serial.printf("Stream size %d\n", streamSize);
-            res->printf("Stream size %d\n", streamSize);
+            res->printf("Stream size %d<br><br>\n", streamSize);
         }
 
         if (!TARUnpacker->tarStreamExpander(streamptr, streamSize, SPIFFS, "/static")) {
@@ -757,7 +763,38 @@ void handleUpdateSPIFFS(HTTPRequest *req, HTTPResponse *res)
         return;
     }
 
-    res->println("<a href=/>Done</a>");
+    res->println("Done! Restarting the device. <a href=/>Click this in 10 seconds</a>");
+
+    /*
+     * This is a work around for a bug where we run out of memory.
+     *   TODO: Fixme!
+     */
+    // ESP.restart();
+    webServerThread->requestRestart = (millis() / 1000) + 5;
+}
+
+void handleDeleteSPIFFSContent(HTTPRequest *req, HTTPResponse *res)
+{
+    res->setHeader("Content-Type", "text/html");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "GET");
+
+    res->println("Deleting SPIFFS Content in /static/*");
+
+    File root = SPIFFS.open("/");
+    File file = root.openNextFile();
+
+    DEBUG_MSG("Deleting files from /static : \n");
+
+    while (file) {
+        String filePath = String(file.name());
+        if (filePath.indexOf("/static") == 0) {
+            DEBUG_MSG("    %s\n", file.name());
+            SPIFFS.remove(file.name());
+        }
+        file = root.openNextFile();
+    }
+
 }
 
 void handleRestart(HTTPRequest *req, HTTPResponse *res)
@@ -769,7 +806,7 @@ void handleRestart(HTTPRequest *req, HTTPResponse *res)
     DEBUG_MSG("***** Restarted on HTTP(s) Request *****\n");
     res->println("Restarting");
 
-    ESP.restart();
+    webServerThread->requestRestart = (millis() / 1000) + 5;
 }
 
 void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
