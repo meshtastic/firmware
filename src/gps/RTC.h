@@ -11,8 +11,11 @@ enum RTCQuality {
     /// Some other node gave us a time we can use
     RTCQualityFromNet = 1,
 
+    /// Our time is based on NTP
+    RTCQualityNTP= 2,
+
     /// Our time is based on our own GPS
-    RTCQualityGPS = 2
+    RTCQualityGPS = 3
 };
 
 RTCQuality getRTCQuality();
