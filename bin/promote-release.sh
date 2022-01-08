@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 set -e 
 
 echo "This script is only for developers who are publishing new builds on github.  Most users don't need it"
