@@ -124,9 +124,12 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeHotspotApple = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
     ResourceNode *nodeHotspotAndroid = new ResourceNode("/generate_204", "GET", &handleHotspot);
 
-    ResourceNode *nodeSPIFFS = new ResourceNode("/spiffs", "GET", &handleSPIFFS);
-    ResourceNode *nodeUpdateSPIFFS = new ResourceNode("/spiffs/update", "POST", &handleUpdateSPIFFS);
-    ResourceNode *nodeDeleteSPIFFS = new ResourceNode("/spiffs/delete", "GET", &handleDeleteSPIFFSContent);
+
+    ResourceNode *nodeAdmin = new ResourceNode("/admin", "GET", &handleAdmin);
+    // ResourceNode *nodeAdminSettings = new ResourceNode("/admin", "GET", &handleAdminSettings);
+    ResourceNode *nodeSPIFFS = new ResourceNode("/admin/spiffs", "GET", &handleSPIFFS);
+    ResourceNode *nodeUpdateSPIFFS = new ResourceNode("/admin/spiffs/update", "POST", &handleUpdateSPIFFS);
+    ResourceNode *nodeDeleteSPIFFS = new ResourceNode("/admin/spiffs/delete", "GET", &handleDeleteSPIFFSContent);
 
     ResourceNode *nodeRestart = new ResourceNode("/restart", "POST", &handleRestart);
     ResourceNode *nodeFormUpload = new ResourceNode("/upload", "POST", &handleFormUpload);
@@ -155,6 +158,8 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     secureServer->registerNode(nodeUpdateSPIFFS);
     secureServer->registerNode(nodeDeleteSPIFFS);
     secureServer->registerNode(nodeSPIFFS);
+    secureServer->registerNode(nodeAdmin);
+    secureServer->registerNode(nodeAdminSettings);
     secureServer->registerNode(nodeRoot); // This has to be last
 
     // Insecure nodes
@@ -173,6 +178,8 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     insecureServer->registerNode(nodeUpdateSPIFFS);
     insecureServer->registerNode(nodeDeleteSPIFFS);
     insecureServer->registerNode(nodeSPIFFS);
+    insecureServer->registerNode(nodeAdmin);
+    insecureServer->registerNode(nodeAdminSettings);
     insecureServer->registerNode(nodeRoot); // This has to be last
 }
 
@@ -376,10 +383,7 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
                 DEBUG_MSG("File not available - %s\n", filenameGzip.c_str());
                 res->println(
                     "Web server is running.<br><br>The content you are looking for can't be found. Please see: <a "
-                    "href=https://meshtastic.org/docs/getting-started/faq#wifi--web-browser>FAQ</a>.<br><br>Experimental "
-                    "Web Content OTA Update</a> -- Click "
-                    "this just once and wait. Be patient!<form action=/spiffs/update "
-                    "method=post><input type=submit value=UPDATE></form>");
+                    "href=https://meshtastic.org/docs/getting-started/faq#wifi--web-browser>FAQ</a>.<br><br><a href=/admin>admin</a>");
             } else {
                 res->setHeader("Content-Encoding", "gzip");
             }
@@ -800,13 +804,24 @@ void handleDeleteSPIFFSContent(HTTPRequest *req, HTTPResponse *res)
     }
 }
 
+void handleAdmin(HTTPRequest *req, HTTPResponse *res)
+{
+    res->setHeader("Content-Type", "text/html");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "GET");
+
+    res->println("<a href=/admin/spiffs>Manage Web Content</a><br>\n");
+    res->println("<a href=/json/report>Device Report</a><br>\n");
+}
+
+
 void handleSPIFFS(HTTPRequest *req, HTTPResponse *res)
 {
     res->setHeader("Content-Type", "text/html");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
 
-    res->println("<a href=/spiffs/delete>Delete Web Content</a><p><form action=/spiffs/update "
+    res->println("<a href=/admin/spiffs/delete>Delete Web Content</a><p><form action=/admin/spiffs/update "
                  "method=post><input type=submit value=UPDATE_WEB_CONTENT></form>Be patient!");
 }
 
