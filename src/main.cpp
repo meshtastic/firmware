@@ -208,6 +208,7 @@ class ButtonThread : public OSThread
         userButton.attachClick(userButtonPressed);
         userButton.attachDuringLongPress(userButtonPressedLong);
         userButton.attachDoubleClick(userButtonDoublePressed);
+        userButton.attachMultiClick(userButtonMultiPressed);
         userButton.attachLongPressStart(userButtonPressedLongStart);
         userButton.attachLongPressStop(userButtonPressedLongStop);
         wakeOnIrq(BUTTON_PIN, FALLING);
@@ -335,6 +336,14 @@ class ButtonThread : public OSThread
         digitalWrite(PIN_EINK_EN,digitalRead(PIN_EINK_EN) == LOW);
 #endif
     }
+
+    static void userButtonMultiPressed()
+    {
+#ifndef NO_ESP32
+        clearNVS();
+#endif
+    }
+
 
     static void userButtonPressedLongStart()
     {

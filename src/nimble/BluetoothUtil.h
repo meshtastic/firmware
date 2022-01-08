@@ -15,6 +15,7 @@ void deinitBLE();
 void loopBLE();
 void reinitBluetooth();
 void disablePin();
+void clearNVS();
 
 /**
  * A helper function that implements simple read and write handling for a uint32_t
