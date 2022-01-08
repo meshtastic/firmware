@@ -126,7 +126,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
 
     ResourceNode *nodeAdmin = new ResourceNode("/admin", "GET", &handleAdmin);
     ResourceNode *nodeAdminSettings = new ResourceNode("/admin/settings", "GET", &handleAdminSettings);
-    ResourceNode *nodeAdminSettingsApply = new ResourceNode("/admin/settings/apply", "GET", &handleAdminSettingsApply);
+    ResourceNode *nodeAdminSettingsApply = new ResourceNode("/admin/settings/apply", "POST", &handleAdminSettingsApply);
     ResourceNode *nodeAdminSPIFFS = new ResourceNode("/admin/spiffs", "GET", &handleSPIFFS);
     ResourceNode *nodeUpdateSPIFFS = new ResourceNode("/admin/spiffs/update", "POST", &handleUpdateSPIFFS);
     ResourceNode *nodeDeleteSPIFFS = new ResourceNode("/admin/spiffs/delete", "GET", &handleDeleteSPIFFSContent);
@@ -704,6 +704,7 @@ void handleUpdateSPIFFS(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Origin", "*");
     // res->setHeader("Access-Control-Allow-Methods", "POST");
 
+    res->println("<h1>Meshtastic</h1>\n");
     res->println("Downloading Meshtastic Web Content...");
 
     WiFiClientSecure *client = new WiFiClientSecure;
@@ -790,6 +791,7 @@ void handleDeleteSPIFFSContent(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
 
+    res->println("<h1>Meshtastic</h1>\n");
     res->println("Deleting SPIFFS Content in /static/*");
 
     File root = SPIFFS.open("/");
@@ -805,6 +807,7 @@ void handleDeleteSPIFFSContent(HTTPRequest *req, HTTPResponse *res)
         }
         file = root.openNextFile();
     }
+    res->println("<p><hr><p><a href=/admin>Back to admin</a>\n");
 }
 
 void handleAdmin(HTTPRequest *req, HTTPResponse *res)
@@ -813,6 +816,7 @@ void handleAdmin(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
 
+    res->println("<h1>Meshtastic</h1>\n");
     res->println("<a href=/admin/settings>Settings</a><br>\n");
     res->println("<a href=/admin/spiffs>Manage Web Content</a><br>\n");
     res->println("<a href=/json/report>Device Report</a><br>\n");
@@ -824,16 +828,20 @@ void handleAdminSettings(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
 
-    res->println("<a href=/admin/spiffs/delete>Delete Web Content</a><p><form action=/admin/spiffs/update "
-                 "method=post><input type=submit value=UPDATE_WEB_CONTENT></form>Be patient!");
-
+    res->println("<h1>Meshtastic</h1>\n");
     res->println("<form action=/admin/settings/apply method=post>\n");
-    res->println("<table>\n");
+    res->println("<table border=1>\n");
     res->println("<tr><td>Set?</td><td>Setting</td><td>current value</td><td>new value</td></tr>\n");
+    res->println("<tr><td><input type=checkbox></td><td>is_always_powered</td><td>false</td><td><input type=radio></td></tr>\n");
+    res->println("<tr><td><input type=checkbox></td><td>is_always_powered</td><td>false</td><td><input type=radio></td></tr>\n");
+    res->println("<tr><td><input type=checkbox></td><td>is_always_powered</td><td>false</td><td><input type=radio></td></tr>\n");
+    res->println("<tr><td><input type=checkbox></td><td>is_always_powered</td><td>false</td><td><input type=radio></td></tr>\n");
+    res->println("<tr><td><input type=checkbox></td><td>is_always_powered</td><td>false</td><td><input type=radio></td></tr>\n");
     res->println("</table>\n");
     res->println("<table>\n");
     res->println("<input type=submit value=Apply New Settings>\n");
     res->println("<form>\n");
+    res->println("<p><hr><p><a href=/admin>Back to admin</a>\n");
 }
 
 void handleAdminSettingsApply(HTTPRequest *req, HTTPResponse *res)
@@ -841,6 +849,7 @@ void handleAdminSettingsApply(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Content-Type", "text/html");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "POST");
+    res->println("<h1>Meshtastic</h1>\n");
     res->println(
         "<html><head><meta http-equiv=\"refresh\" content=\"1;url=/admin/settings\" /><title>Settings Applied. </title>");
 
@@ -854,8 +863,10 @@ void handleSPIFFS(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
 
+    res->println("<h1>Meshtastic</h1>\n");
     res->println("<a href=/admin/spiffs/delete>Delete Web Content</a><p><form action=/admin/spiffs/update "
                  "method=post><input type=submit value=UPDATE_WEB_CONTENT></form>Be patient!");
+    res->println("<p><hr><p><a href=/admin>Back to admin</a>\n");
 }
 
 void handleRestart(HTTPRequest *req, HTTPResponse *res)
@@ -864,9 +875,10 @@ void handleRestart(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
 
-    DEBUG_MSG("***** Restarted on HTTP(s) Request *****\n");
+    res->println("<h1>Meshtastic</h1>\n");
     res->println("Restarting");
 
+    DEBUG_MSG("***** Restarted on HTTP(s) Request *****\n");
     webServerThread->requestRestart = (millis() / 1000) + 5;
 }
 
