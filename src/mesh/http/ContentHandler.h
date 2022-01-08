@@ -19,6 +19,8 @@ void handleUpdateSPIFFS(HTTPRequest *req, HTTPResponse *res);
 void handleDeleteSPIFFSContent(HTTPRequest *req, HTTPResponse *res);
 void handleSPIFFS(HTTPRequest *req, HTTPResponse *res);
 void handleAdmin(HTTPRequest *req, HTTPResponse *res);
+void handleAdminSettings(HTTPRequest *req, HTTPResponse *res);
+void handleAdminSettingsApply(HTTPRequest *req, HTTPResponse *res);
 
 
 // Interface to the PhoneAPI to access the protobufs with messages
