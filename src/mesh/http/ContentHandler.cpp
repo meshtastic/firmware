@@ -126,7 +126,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
 
 
     ResourceNode *nodeAdmin = new ResourceNode("/admin", "GET", &handleAdmin);
-    // ResourceNode *nodeAdminSettings = new ResourceNode("/admin", "GET", &handleAdminSettings);
+    ResourceNode *nodeAdminSettings = new ResourceNode("/admin", "GET", &handleAdminSettings);
     ResourceNode *nodeSPIFFS = new ResourceNode("/admin/spiffs", "GET", &handleSPIFFS);
     ResourceNode *nodeUpdateSPIFFS = new ResourceNode("/admin/spiffs/update", "POST", &handleUpdateSPIFFS);
     ResourceNode *nodeDeleteSPIFFS = new ResourceNode("/admin/spiffs/delete", "GET", &handleDeleteSPIFFSContent);
@@ -810,8 +810,18 @@ void handleAdmin(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
 
+    res->println("<a href=/admin/settings>Settings</a><br>\n");
     res->println("<a href=/admin/spiffs>Manage Web Content</a><br>\n");
     res->println("<a href=/json/report>Device Report</a><br>\n");
+}
+
+void handleAdminSettings(HTTPRequest *req, HTTPResponse *res)
+{
+    res->setHeader("Content-Type", "text/html");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "GET");
+
+    res->println("WIP\n");
 }
 
 
