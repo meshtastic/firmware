@@ -124,9 +124,12 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeHotspotApple = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
     ResourceNode *nodeHotspotAndroid = new ResourceNode("/generate_204", "GET", &handleHotspot);
 
-    ResourceNode *nodeSPIFFS = new ResourceNode("/spiffs", "GET", &handleSPIFFS);
-    ResourceNode *nodeUpdateSPIFFS = new ResourceNode("/spiffs/update", "POST", &handleUpdateSPIFFS);
-    ResourceNode *nodeDeleteSPIFFS = new ResourceNode("/spiffs/delete", "GET", &handleDeleteSPIFFSContent);
+    ResourceNode *nodeAdmin = new ResourceNode("/admin", "GET", &handleAdmin);
+    ResourceNode *nodeAdminSettings = new ResourceNode("/admin/settings", "GET", &handleAdminSettings);
+    ResourceNode *nodeAdminSettingsApply = new ResourceNode("/admin/settings/apply", "POST", &handleAdminSettingsApply);
+    ResourceNode *nodeAdminSPIFFS = new ResourceNode("/admin/spiffs", "GET", &handleSPIFFS);
+    ResourceNode *nodeUpdateSPIFFS = new ResourceNode("/admin/spiffs/update", "POST", &handleUpdateSPIFFS);
+    ResourceNode *nodeDeleteSPIFFS = new ResourceNode("/admin/spiffs/delete", "GET", &handleDeleteSPIFFSContent);
 
     ResourceNode *nodeRestart = new ResourceNode("/restart", "POST", &handleRestart);
     ResourceNode *nodeFormUpload = new ResourceNode("/upload", "POST", &handleFormUpload);
@@ -136,6 +139,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeJsonReport = new ResourceNode("/json/report", "GET", &handleReport);
     ResourceNode *nodeJsonSpiffsBrowseStatic = new ResourceNode("/json/spiffs/browse/static", "GET", &handleSpiffsBrowseStatic);
     ResourceNode *nodeJsonDelete = new ResourceNode("/json/spiffs/delete/static", "DELETE", &handleSpiffsDeleteStatic);
+
 
     ResourceNode *nodeRoot = new ResourceNode("/*", "GET", &handleStatic);
 
@@ -154,7 +158,10 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     secureServer->registerNode(nodeJsonReport);
     secureServer->registerNode(nodeUpdateSPIFFS);
     secureServer->registerNode(nodeDeleteSPIFFS);
-    secureServer->registerNode(nodeSPIFFS);
+    secureServer->registerNode(nodeAdmin);
+    secureServer->registerNode(nodeAdminSPIFFS);
+    secureServer->registerNode(nodeAdminSettings);
+    secureServer->registerNode(nodeAdminSettingsApply);
     secureServer->registerNode(nodeRoot); // This has to be last
 
     // Insecure nodes
@@ -172,7 +179,10 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     insecureServer->registerNode(nodeJsonReport);
     insecureServer->registerNode(nodeUpdateSPIFFS);
     insecureServer->registerNode(nodeDeleteSPIFFS);
-    insecureServer->registerNode(nodeSPIFFS);
+    insecureServer->registerNode(nodeAdmin);
+    insecureServer->registerNode(nodeAdminSPIFFS);
+    insecureServer->registerNode(nodeAdminSettings);
+    insecureServer->registerNode(nodeAdminSettingsApply);
     insecureServer->registerNode(nodeRoot); // This has to be last
 }
 
@@ -374,12 +384,9 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
             res->setHeader("Content-Type", "text/html");
             if (!file.available()) {
                 DEBUG_MSG("File not available - %s\n", filenameGzip.c_str());
-                res->println(
-                    "Web server is running.<br><br>The content you are looking for can't be found. Please see: <a "
-                    "href=https://meshtastic.org/docs/getting-started/faq#wifi--web-browser>FAQ</a>.<br><br>Experimental "
-                    "Web Content OTA Update</a> -- Click "
-                    "this just once and wait. Be patient!<form action=/spiffs/update "
-                    "method=post><input type=submit value=UPDATE></form>");
+                res->println("Web server is running.<br><br>The content you are looking for can't be found. Please see: <a "
+                             "href=https://meshtastic.org/docs/getting-started/faq#wifi--web-browser>FAQ</a>.<br><br><a "
+                             "href=/admin>admin</a>");
             } else {
                 res->setHeader("Content-Encoding", "gzip");
             }
@@ -697,6 +704,7 @@ void handleUpdateSPIFFS(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Origin", "*");
     // res->setHeader("Access-Control-Allow-Methods", "POST");
 
+    res->println("<h1>Meshtastic</h1>\n");
     res->println("Downloading Meshtastic Web Content...");
 
     WiFiClientSecure *client = new WiFiClientSecure;
@@ -783,6 +791,7 @@ void handleDeleteSPIFFSContent(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
 
+    res->println("<h1>Meshtastic</h1>\n");
     res->println("Deleting SPIFFS Content in /static/*");
 
     File root = SPIFFS.open("/");
@@ -798,7 +807,56 @@ void handleDeleteSPIFFSContent(HTTPRequest *req, HTTPResponse *res)
         }
         file = root.openNextFile();
     }
+    res->println("<p><hr><p><a href=/admin>Back to admin</a>\n");
 }
+
+void handleAdmin(HTTPRequest *req, HTTPResponse *res)
+{
+    res->setHeader("Content-Type", "text/html");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "GET");
+
+    res->println("<h1>Meshtastic</h1>\n");
+    res->println("<a href=/admin/settings>Settings</a><br>\n");
+    res->println("<a href=/admin/spiffs>Manage Web Content</a><br>\n");
+    res->println("<a href=/json/report>Device Report</a><br>\n");
+}
+
+void handleAdminSettings(HTTPRequest *req, HTTPResponse *res)
+{
+    res->setHeader("Content-Type", "text/html");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "GET");
+
+    res->println("<h1>Meshtastic</h1>\n");
+    res->println("This isn't done.\n");
+    res->println("<form action=/admin/settings/apply method=post>\n");
+    res->println("<table border=1>\n");
+    res->println("<tr><td>Set?</td><td>Setting</td><td>current value</td><td>new value</td></tr>\n");
+    res->println("<tr><td><input type=checkbox></td><td>WiFi SSID</td><td>false</td><td><input type=radio></td></tr>\n");
+    res->println("<tr><td><input type=checkbox></td><td>WiFi Password</td><td>false</td><td><input type=radio></td></tr>\n");
+    res->println("<tr><td><input type=checkbox></td><td>Smart Position Update</td><td>false</td><td><input type=radio></td></tr>\n");
+    res->println("<tr><td><input type=checkbox></td><td>is_always_powered</td><td>false</td><td><input type=radio></td></tr>\n");
+    res->println("<tr><td><input type=checkbox></td><td>is_always_powered</td><td>false</td><td><input type=radio></td></tr>\n");
+    res->println("</table>\n");
+    res->println("<table>\n");
+    res->println("<input type=submit value=Apply New Settings>\n");
+    res->println("<form>\n");
+    res->println("<p><hr><p><a href=/admin>Back to admin</a>\n");
+}
+
+void handleAdminSettingsApply(HTTPRequest *req, HTTPResponse *res)
+{
+    res->setHeader("Content-Type", "text/html");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "POST");
+    res->println("<h1>Meshtastic</h1>\n");
+    res->println(
+        "<html><head><meta http-equiv=\"refresh\" content=\"1;url=/admin/settings\" /><title>Settings Applied. </title>");
+
+    res->println("Settings Applied. Please wait.\n");
+}
+
 
 void handleSPIFFS(HTTPRequest *req, HTTPResponse *res)
 {
@@ -806,8 +864,10 @@ void handleSPIFFS(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
 
-    res->println("<a href=/spiffs/delete>Delete Web Content</a><p><form action=/spiffs/update "
+    res->println("<h1>Meshtastic</h1>\n");
+    res->println("<a href=/admin/spiffs/delete>Delete Web Content</a><p><form action=/admin/spiffs/update "
                  "method=post><input type=submit value=UPDATE_WEB_CONTENT></form>Be patient!");
+    res->println("<p><hr><p><a href=/admin>Back to admin</a>\n");
 }
 
 void handleRestart(HTTPRequest *req, HTTPResponse *res)
@@ -816,9 +876,10 @@ void handleRestart(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
 
-    DEBUG_MSG("***** Restarted on HTTP(s) Request *****\n");
+    res->println("<h1>Meshtastic</h1>\n");
     res->println("Restarting");
 
+    DEBUG_MSG("***** Restarted on HTTP(s) Request *****\n");
     webServerThread->requestRestart = (millis() / 1000) + 5;
 }
 
