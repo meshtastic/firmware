@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 set -e
 
 echo "Converting to uf2 for NRF52 Adafruit bootloader"

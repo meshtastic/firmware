@@ -84,6 +84,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BUTTON_PIN_ALT PIN_BUTTON2
 #endif
 
+#ifdef PIN_BUTTON_TOUCH
+#define BUTTON_PIN_TOUCH PIN_BUTTON_TOUCH
+#endif
+
 // FIXME, use variant.h defs for all of this!!! (even on the ESP32 targets)
 #elif defined(CubeCell_BoardPlus)
 
