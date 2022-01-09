@@ -9,6 +9,7 @@
 #include "plugins/RoutingPlugin.h"
 #include "plugins/AdminPlugin.h"
 #include "plugins/CannedMessagePlugin.h"
+#include "plugins/input/RotaryEncoderInterruptImpl1.h"
 #ifndef NO_ESP32
 #include "plugins/esp32/SerialPlugin.h"
 #include "plugins/esp32/EnvironmentalMeasurementPlugin.h"
@@ -31,7 +32,11 @@ void setupPlugins()
 
     new RemoteHardwarePlugin();
     new ReplyPlugin();
-    cannedMessagePlugin = new CannedMessagePlugin();
+    rotaryEncoderInterruptImpl1 =
+        new RotaryEncoderInterruptImpl1(
+            22, 23, 21,
+            INPUT_EVENT_UP, INPUT_EVENT_DOWN, INPUT_EVENT_SELECT);
+    cannedMessagePlugin = new CannedMessagePlugin(rotaryEncoderInterruptImpl1);
 
 #ifndef NO_ESP32
     // Only run on an esp32 based device.
