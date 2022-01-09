@@ -20,16 +20,19 @@ int CannedMessagePlugin::handleInputEvent(const InputEvent *event)
     bool validEvent = false;
     if (event->inputEvent == INPUT_EVENT_UP)
     {
+        DEBUG_MSG("Canned message event UP\n");
         this->action = CANNED_MESSAGE_ACTION_UP;
         validEvent = true;
     }
     if (event->inputEvent == INPUT_EVENT_DOWN)
     {
+        DEBUG_MSG("Canned message event DOWN\n");
         this->action = CANNED_MESSAGE_ACTION_DOWN;
         validEvent = true;
     }
     if (event->inputEvent == INPUT_EVENT_SELECT)
     {
+        DEBUG_MSG("Canned message event Select\n");
         this->action = CANNED_MESSAGE_ACTION_SELECT;
         validEvent = true;
     }
@@ -63,6 +66,7 @@ void CannedMessagePlugin::sendText(NodeNum dest,
 
 int32_t CannedMessagePlugin::runOnce()
 {
+    DEBUG_MSG("Check status\n");
     if (this->sendingState == SENDING_STATE_ACTIVE)
     {
         // TODO: might have some feedback of sendig state

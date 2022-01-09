@@ -30,6 +30,8 @@ RotaryEncoderInterruptBase::RotaryEncoderInterruptBase(
     attachInterrupt(this->_pinB, onIntB, CHANGE);
     this->rotaryLevelA = digitalRead(this->_pinA);
     this->rotaryLevelB = digitalRead(this->_pinB);
+    DEBUG_MSG("Rotary initialized (%d, %d, %d)\n",
+        this->_pinA, this->_pinB, pinPress);
 }
 
 int32_t RotaryEncoderInterruptBase::runOnce()
@@ -42,12 +44,14 @@ int32_t RotaryEncoderInterruptBase::runOnce()
     }
     else if (this->action == ROTARY_ACTION_CW)
     {
+        DEBUG_MSG("Rotary event CW\n");
         InputEvent e;
         e.inputEvent = this->_eventCw;
         this->notifyObservers(&e);
     }
     else if (this->action == ROTARY_ACTION_CCW)
     {
+        DEBUG_MSG("Rotary event CW\n");
         InputEvent e;
         e.inputEvent = this->_eventCcw;
         this->notifyObservers(&e);
@@ -90,9 +94,10 @@ void RotaryEncoderInterruptBase::intAHandler()
         {
             this->rotaryStateCCW = ROTARY_EVENT_OCCURRED;
             if ((this->action == ROTARY_ACTION_NONE)
-                || (this->action == ROTARY_ACTION_CCW))
+                || (this->action == ROTARY_ACTION_CW))
             {
-                this->action = ROTARY_ACTION_CW;
+                this->action = ROTARY_ACTION_CCW;
+                DEBUG_MSG("Rotary action CCW\n");
             }
         }
     }
@@ -124,6 +129,7 @@ void RotaryEncoderInterruptBase::intBHandler()
                 || (this->action == ROTARY_ACTION_CCW))
             {
                 this->action = ROTARY_ACTION_CW;
+                DEBUG_MSG("Rotary action CW\n");
             }
         }
     }

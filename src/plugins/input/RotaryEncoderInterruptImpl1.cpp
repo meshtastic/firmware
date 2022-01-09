@@ -13,18 +13,17 @@ RotaryEncoderInterruptImpl1::RotaryEncoderInterruptImpl1(
         RotaryEncoderInterruptImpl1::handleIntB,
         RotaryEncoderInterruptImpl1::handleIntPressed)
 {
-
 }
 
 void RotaryEncoderInterruptImpl1::handleIntA()
 {
-
+    rotaryEncoderInterruptImpl1->intAHandler();
 }
 void RotaryEncoderInterruptImpl1::handleIntB()
 {
-
+    rotaryEncoderInterruptImpl1->intBHandler();
 }
 void RotaryEncoderInterruptImpl1::handleIntPressed()
 {
-
+    rotaryEncoderInterruptImpl1->intPressHandler();
 }
