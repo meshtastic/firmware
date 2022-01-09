@@ -5,44 +5,43 @@
 
 #include <assert.h>
 
-#define PIN_PUSH 21
-#define PIN_A    22
-#define PIN_B    23
-
-// TODO: add UP-DOWN mode
-#define ROTARY_MODE
-
 CannedMessagePlugin *cannedMessagePlugin;
 
-void IRAM_ATTR EXT_INT_PUSH()
+CannedMessagePlugin::CannedMessagePlugin(
+    Observable<const InputEvent *> *input)
+    : SinglePortPlugin("canned", PortNum_TEXT_MESSAGE_APP),
+    concurrency::OSThread("CannedMessagePlugin")
 {
-  cannedMessagePlugin->select();
+    this->inputObserver.observe(input);
 }
 
-void IRAM_ATTR EXT_INT_DIRECTION_A()
+int CannedMessagePlugin::handleInputEvent(const InputEvent *event)
 {
-  cannedMessagePlugin->directionA();
-}
+    bool validEvent = false;
+    if (event->inputEvent == INPUT_EVENT_UP)
+    {
+        this->action = CANNED_MESSAGE_ACTION_UP;
+        validEvent = true;
+    }
+    if (event->inputEvent == INPUT_EVENT_DOWN)
+    {
+        this->action = CANNED_MESSAGE_ACTION_DOWN;
+        validEvent = true;
+    }
+    if (event->inputEvent == INPUT_EVENT_SELECT)
+    {
+        this->action = CANNED_MESSAGE_ACTION_SELECT;
+        validEvent = true;
+    }
 
-void IRAM_ATTR EXT_INT_DIRECTION_B()
-{
-  cannedMessagePlugin->directionB();
-}
+    if (validEvent)
+    {
+        // Let runOnce to be called immediately.
+        runned(millis());
+        setInterval(0);
+    }
 
-CannedMessagePlugin::CannedMessagePlugin()
-    : SinglePortPlugin("canned", PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("CannedMessagePlugin")
-{
-    // TODO: make pins configurable
-    pinMode(PIN_PUSH, INPUT_PULLUP);
-    pinMode(PIN_A, INPUT_PULLUP);
-    pinMode(PIN_B, INPUT_PULLUP);
-    attachInterrupt(PIN_PUSH, EXT_INT_PUSH, RISING);
-#ifdef ROTARY_MODE
-    attachInterrupt(PIN_A, EXT_INT_DIRECTION_A, CHANGE);
-    attachInterrupt(PIN_B, EXT_INT_DIRECTION_B, CHANGE);
-    this->rotaryLevelA = digitalRead(PIN_A);
-    this->rotaryLevelB = digitalRead(PIN_B);
-#endif
+    return 0;
 }
 
 void CannedMessagePlugin::sendText(NodeNum dest,
@@ -70,13 +69,13 @@ int32_t CannedMessagePlugin::runOnce()
         this->sendingState = SENDING_STATE_NONE;
         this->notifyObservers(NULL);
     }
-    else if ((this->action != ACTION_NONE)
+    else if ((this->action != CANNED_MESSAGE_ACTION_NONE)
         && (this->currentMessageIndex == -1))
     {
         this->currentMessageIndex = 0;
         DEBUG_MSG("First touch.\n");
     }
-    else if (this->action == ACTION_PRESSED)
+    else if (this->action == CANNED_MESSAGE_ACTION_SELECT)
     {
         sendText(
             NODENUM_BROADCAST,
@@ -86,105 +85,70 @@ int32_t CannedMessagePlugin::runOnce()
         this->currentMessageIndex = -1;
         return 2000;
     }
-    else if (this->action == ACTION_UP)
+    else if (this->action == CANNED_MESSAGE_ACTION_UP)
     {
         this->currentMessageIndex = getPrevIndex();
         DEBUG_MSG("MOVE UP. Current message:%ld\n",
             millis());
     }
-    else if (this->action == ACTION_DOWN)
+    else if (this->action == CANNED_MESSAGE_ACTION_DOWN)
     {
         this->currentMessageIndex = this->getNextIndex();
         DEBUG_MSG("MOVE DOWN. Current message:%ld\n",
             millis());
     }
-    if (this->action != ACTION_NONE)
+    if (this->action != CANNED_MESSAGE_ACTION_NONE)
     {
-        this->action = ACTION_NONE;
+        this->action = CANNED_MESSAGE_ACTION_NONE;
         this->notifyObservers(NULL);
     }
 
     return 30000;
 }
 
-void CannedMessagePlugin::select()
+String CannedMessagePlugin::getCurrentMessage()
 {
-    this->action = ACTION_PRESSED;
-    runned(millis());
-    setInterval(20);
+    return cannedMessagePluginMessages[this->currentMessageIndex];
+}
+String CannedMessagePlugin::getPrevMessage()
+{
+    return cannedMessagePluginMessages[this->getPrevIndex()];
+}
+String CannedMessagePlugin::getNextMessage()
+{
+    return cannedMessagePluginMessages[this->getNextIndex()];
+}
+bool CannedMessagePlugin::shouldDraw()
+{
+    return (currentMessageIndex != -1) || (this->sendingState != SENDING_STATE_NONE);
+}
+cannedMessagePluginSendigState CannedMessagePlugin::getSendingState()
+{
+    return this->sendingState;
 }
 
-/**
- * @brief Rotary action implementation.
- *   We assume, the following pin setup:
- *    A   --||
- *    GND --||]======== 
- *    B   --||
- * 
- * @return The new level of the actual pin (that is actualPinCurrentLevel).
- */
-void CannedMessagePlugin::directionA()
+int CannedMessagePlugin::getNextIndex()
 {
-#ifdef ROTARY_MODE
-    // CW rotation (at least on most common rotary encoders)
-    int currentLevelA = digitalRead(PIN_A);
-    if (this->rotaryLevelA == currentLevelA)
+    if (this->currentMessageIndex >=
+        (sizeof(cannedMessagePluginMessages) / CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_LEN) - 1)
     {
-        return;
+        return 0;
     }
-    this->rotaryLevelA = currentLevelA;
-    bool pinARaising = currentLevelA == HIGH;
-    if (pinARaising && (this->rotaryLevelB == LOW))
+    else
     {
-        if (this->rotaryStateCCW == EVENT_CLEARED)
-        {
-            this->rotaryStateCCW = EVENT_OCCURRED;
-            if ((this->action == ACTION_NONE)
-                || (this->action == (cwRotationMeaning == ACTION_UP ? ACTION_UP : ACTION_DOWN)))
-            {
-                this->action = cwRotationMeaning == ACTION_UP ? ACTION_DOWN : ACTION_UP;
-            }
-        }
+        return this->currentMessageIndex + 1;
     }
-    else if (!pinARaising && (this->rotaryLevelB == HIGH))
-    {
-        // Logic to prevent bouncing.
-        this->rotaryStateCCW = EVENT_CLEARED;
-    }
-#endif
-    runned(millis());
-    setInterval(50);
 }
 
-void CannedMessagePlugin::directionB()
+int CannedMessagePlugin::getPrevIndex()
 {
-#ifdef ROTARY_MODE
-    // CW rotation (at least on most common rotary encoders)
-    int currentLevelB = digitalRead(PIN_B);
-    if (this->rotaryLevelB == currentLevelB)
+    if (this->currentMessageIndex <= 0)
     {
-        return;
+        return
+            sizeof(cannedMessagePluginMessages) / CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_LEN - 1;
     }
-    this->rotaryLevelB = currentLevelB;
-    bool pinBRaising = currentLevelB == HIGH;
-    if (pinBRaising && (this->rotaryLevelA == LOW))
+    else
     {
-        if (this->rotaryStateCW == EVENT_CLEARED)
-        {
-            this->rotaryStateCW = EVENT_OCCURRED;
-            if ((this->action == ACTION_NONE)
-                || (this->action == (cwRotationMeaning == ACTION_UP ? ACTION_DOWN : ACTION_UP)))
-            {
-                this->action = cwRotationMeaning == ACTION_UP ? ACTION_UP : ACTION_DOWN;
-            }
-        }
+        return this->currentMessageIndex - 1;
     }
-    else if (!pinBRaising && (this->rotaryLevelA == HIGH))
-    {
-        // Logic to prevent bouncing.
-        this->rotaryStateCW = EVENT_CLEARED;
-    }
-#endif
-    runned(millis());
-    setInterval(50);
 }

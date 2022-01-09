@@ -6,32 +6,13 @@
 #define PIN_B    23
 */
 
-/*
-RotaryEncoderInterruptBase *cannedMessagePlugin;
-
-void IRAM_ATTR EXT_INT_PUSH()
-{
-  cannedMessagePlugin->pressed();
-}
-
-void IRAM_ATTR EXT_INT_DIRECTION_A()
-{
-  cannedMessagePlugin->directionA();
-}
-
-void IRAM_ATTR EXT_INT_DIRECTION_B()
-{
-  cannedMessagePlugin->directionB();
-}
-*/
-
 RotaryEncoderInterruptBase::RotaryEncoderInterruptBase(
+    const char *name,
     uint8_t pinA, uint8_t pinB, uint8_t pinPress,
     char eventCw, char eventCcw, char eventPressed,
 //        std::function<void(void)> onIntA, std::function<void(void)> onIntB, std::function<void(void)> onIntPress) :
         void (*onIntA)(), void (*onIntB)(), void (*onIntPress)()) :
-    SinglePortPlugin("rotaryi", PortNum_TEXT_MESSAGE_APP),
-    concurrency::OSThread("RotaryEncoderInterruptBase")
+    concurrency::OSThread(name)
 {
     this->_pinA = pinA;
     this->_pinB = pinB;
@@ -53,19 +34,33 @@ RotaryEncoderInterruptBase::RotaryEncoderInterruptBase(
 
 int32_t RotaryEncoderInterruptBase::runOnce()
 {
-    if (this->action == ACTION_PRESSED)
+    if (this->action == ROTARY_ACTION_PRESSED)
     {
         InputEvent e;
-        e.inputEvent = INPUT_EVENT_SELECT;
+        e.inputEvent = this->_eventPressed;
         this->notifyObservers(&e);
     }
+    else if (this->action == ROTARY_ACTION_CW)
+    {
+        InputEvent e;
+        e.inputEvent = this->_eventCw;
+        this->notifyObservers(&e);
+    }
+    else if (this->action == ROTARY_ACTION_CCW)
+    {
+        InputEvent e;
+        e.inputEvent = this->_eventCcw;
+        this->notifyObservers(&e);
+    }
+    this->action = ROTARY_ACTION_NONE;
+
     return 30000;
 }
 
 
 void RotaryEncoderInterruptBase::intPressHandler()
 {
-    this->action = ACTION_PRESSED;
+    this->action = ROTARY_ACTION_PRESSED;
     runned(millis());
     setInterval(20);
 }
@@ -91,20 +86,20 @@ void RotaryEncoderInterruptBase::intAHandler()
     bool pinARaising = currentLevelA == HIGH;
     if (pinARaising && (this->rotaryLevelB == LOW))
     {
-        if (this->rotaryStateCCW == EVENT_CLEARED)
+        if (this->rotaryStateCCW == ROTARY_EVENT_CLEARED)
         {
-            this->rotaryStateCCW = EVENT_OCCURRED;
-            if ((this->action == ACTION_NONE)
-                || (this->action == ACTION_CCW))
+            this->rotaryStateCCW = ROTARY_EVENT_OCCURRED;
+            if ((this->action == ROTARY_ACTION_NONE)
+                || (this->action == ROTARY_ACTION_CCW))
             {
-                this->action = ACTION_CW;
+                this->action = ROTARY_ACTION_CW;
             }
         }
     }
     else if (!pinARaising && (this->rotaryLevelB == HIGH))
     {
         // Logic to prevent bouncing.
-        this->rotaryStateCCW = EVENT_CLEARED;
+        this->rotaryStateCCW = ROTARY_EVENT_CLEARED;
     }
     runned(millis());
     setInterval(50);
@@ -122,20 +117,20 @@ void RotaryEncoderInterruptBase::intBHandler()
     bool pinBRaising = currentLevelB == HIGH;
     if (pinBRaising && (this->rotaryLevelA == LOW))
     {
-        if (this->rotaryStateCW == EVENT_CLEARED)
+        if (this->rotaryStateCW == ROTARY_EVENT_CLEARED)
         {
-            this->rotaryStateCW = EVENT_OCCURRED;
-            if ((this->action == ACTION_NONE)
-                || (this->action == ACTION_CCW))
+            this->rotaryStateCW = ROTARY_EVENT_OCCURRED;
+            if ((this->action == ROTARY_ACTION_NONE)
+                || (this->action == ROTARY_ACTION_CCW))
             {
-                this->action = ACTION_CW;
+                this->action = ROTARY_ACTION_CW;
             }
         }
     }
     else if (!pinBRaising && (this->rotaryLevelA == HIGH))
     {
         // Logic to prevent bouncing.
-        this->rotaryStateCW = EVENT_CLEARED;
+        this->rotaryStateCW = ROTARY_EVENT_CLEARED;
     }
     runned(millis());
     setInterval(50);

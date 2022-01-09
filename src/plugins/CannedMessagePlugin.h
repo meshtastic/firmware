@@ -1,18 +1,13 @@
 #pragma once
 #include "SinglePortPlugin.h"
-
-enum cannedMessagePluginRotaryStateType
-{
-    EVENT_OCCURRED,
-    EVENT_CLEARED
-};
+#include "input/HardwareInput.h"
 
 enum cannedMessagePluginActionType
 {
-    ACTION_NONE,
-    ACTION_PRESSED,
-    ACTION_UP,
-    ACTION_DOWN
+    CANNED_MESSAGE_ACTION_NONE,
+    CANNED_MESSAGE_ACTION_SELECT,
+    CANNED_MESSAGE_ACTION_UP,
+    CANNED_MESSAGE_ACTION_DOWN
 };
 
 enum cannedMessagePluginSendigState
@@ -41,31 +36,20 @@ class CannedMessagePlugin :
     public Observable<const meshtastic::Status *>,
     private concurrency::OSThread
 {
+    CallbackObserver<CannedMessagePlugin, const InputEvent *> inputObserver =
+        CallbackObserver<CannedMessagePlugin, const InputEvent *>(
+            this, &CannedMessagePlugin::handleInputEvent);
   public:
-    CannedMessagePlugin();
-    void select();
-    void directionA();
-    void directionB();
-    String getCurrentMessage()
-    {
-        return cannedMessagePluginMessages[this->currentMessageIndex];
-    }
-    String getPrevMessage()
-    {
-        return cannedMessagePluginMessages[this->getPrevIndex()];
-    }
-    String getNextMessage()
-    {
-        return cannedMessagePluginMessages[this->getNextIndex()];
-    }
-    bool shouldDraw()
-    {
-        return (currentMessageIndex != -1) || (this->sendingState != SENDING_STATE_NONE);
-    }
-    cannedMessagePluginSendigState getSendingState()
-    {
-        return this->sendingState;
-    }
+    CannedMessagePlugin(
+        Observable<const InputEvent *> *input);
+    String getCurrentMessage();
+    String getPrevMessage();
+    String getNextMessage();
+    bool shouldDraw();
+    cannedMessagePluginSendigState getSendingState();
+    void eventUp();
+    void eventDown();
+    void eventSelect();
 
   protected:
 
@@ -76,40 +60,12 @@ class CannedMessagePlugin :
         const char* message,
         bool wantReplies);
 
-    int getNextIndex()
-    {
-        if (this->currentMessageIndex >=
-            (sizeof(cannedMessagePluginMessages) / CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_LEN) - 1)
-        {
-            return 0;
-        }
-        else
-        {
-            return this->currentMessageIndex + 1;
-        }
-    }
+    int getNextIndex();
+    int getPrevIndex();
 
-    int getPrevIndex()
-    {
-        if (this->currentMessageIndex <= 0)
-        {
-            return
-             sizeof(cannedMessagePluginMessages) / CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_LEN - 1;
-        }
-        else
-        {
-            return this->currentMessageIndex - 1;
-        }
-    }
+    int handleInputEvent(const InputEvent *event);
 
-    // TODO: make this configurable
-    volatile cannedMessagePluginActionType cwRotationMeaning = ACTION_UP;
-
-    volatile cannedMessagePluginActionType action = ACTION_NONE;
-    volatile cannedMessagePluginRotaryStateType rotaryStateCW = EVENT_CLEARED;
-    volatile cannedMessagePluginRotaryStateType rotaryStateCCW = EVENT_CLEARED;
-    volatile int rotaryLevelA = LOW;
-    volatile int rotaryLevelB = LOW;
+    volatile cannedMessagePluginActionType action = CANNED_MESSAGE_ACTION_NONE;
     int currentMessageIndex = -1;
     cannedMessagePluginSendigState sendingState = SENDING_STATE_NONE;
 };
