@@ -397,6 +397,8 @@ void setup()
     }
 #endif
 
+    DEBUG_MSG("\n\n//\\ E S H T A /\\ S T / C\n\n");
+
     initDeepSleep();
 
 #ifdef VEXT_ENABLE
