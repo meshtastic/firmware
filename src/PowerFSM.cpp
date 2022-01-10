@@ -1,8 +1,8 @@
-#include "configuration.h"
 #include "PowerFSM.h"
 #include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "configuration.h"
 #include "graphics/Screen.h"
 #include "main.h"
 #include "sleep.h"
@@ -15,7 +15,7 @@ static bool isPowered()
     if (radioConfig.preferences.is_always_powered) {
         return true;
     }
-    
+
     bool isRouter = radioConfig.preferences.is_router;
 
     // If we are not a router and we already have AC power go to POWER state after init, otherwise go to ON
@@ -221,7 +221,8 @@ static void screenPress()
     screen->onPress();
 }
 
-static void bootEnter() {
+static void bootEnter()
+{
     DEBUG_MSG("Enter state: BOOT\n");
 }
 
@@ -248,8 +249,10 @@ void PowerFSM_setup()
     // if we are a router node, we go to NB (no need for bluetooth) otherwise we go to DARK (so we can send message to phone)
     powerFSM.add_transition(&stateLS, isRouter ? &stateNB : &stateDARK, EVENT_WAKE_TIMER, NULL, "Wake timer");
 
-    // We need this transition, because we might not transition if we were waiting to enter light-sleep, because when we wake from light sleep we _always_ transition to NB or dark and
-    powerFSM.add_transition(&stateLS, isRouter ? &stateNB : &stateDARK, EVENT_PACKET_FOR_PHONE, NULL, "Received packet, exiting light sleep");
+    // We need this transition, because we might not transition if we were waiting to enter light-sleep, because when we wake from
+    // light sleep we _always_ transition to NB or dark and
+    powerFSM.add_transition(&stateLS, isRouter ? &stateNB : &stateDARK, EVENT_PACKET_FOR_PHONE, NULL,
+                            "Received packet, exiting light sleep");
     powerFSM.add_transition(&stateNB, &stateNB, EVENT_PACKET_FOR_PHONE, NULL, "Received packet, resetting win wake");
 
     // Handle press events - note: we ignore button presses when in API mode
@@ -334,15 +337,23 @@ void PowerFSM_setup()
 #ifndef NRF52_SERIES
     // We never enter light-sleep or NB states on NRF52 (because the CPU uses so little power normally)
 
-    // I don't think this transition is correct, turning off for now - @geeksville
-    // powerFSM.add_timed_transition(&stateDARK, &stateNB, getPref_phone_timeout_secs() * 1000, NULL, "Phone timeout");
+    // See: https://github.com/meshtastic/Meshtastic-device/issues/1071
+    if (radioConfig.preferences.is_power_saving) {
 
-    powerFSM.add_timed_transition(&stateNB, &stateLS, getPref_min_wake_secs() * 1000, NULL, "Min wake timeout");
-    powerFSM.add_timed_transition(&stateDARK, &stateLS, getPref_wait_bluetooth_secs() * 1000, NULL, "Bluetooth timeout");
-    meshSds = getPref_mesh_sds_timeout_secs();
+        // I don't think this transition is correct, turning off for now - @geeksville
+        // powerFSM.add_timed_transition(&stateDARK, &stateNB, getPref_phone_timeout_secs() * 1000, NULL, "Phone timeout");
+        powerFSM.add_timed_transition(&stateNB, &stateLS, getPref_min_wake_secs() * 1000, NULL, "Min wake timeout");
+        powerFSM.add_timed_transition(&stateDARK, &stateLS, getPref_wait_bluetooth_secs() * 1000, NULL, "Bluetooth timeout");
+        meshSds = getPref_mesh_sds_timeout_secs();
+
+    } else {
+
+        meshSds = UINT32_MAX;
+    }
+
 #else
     lowPowerState = &stateDARK;
-    meshSds = UINT32_MAX; //Workaround for now: Don't go into deep sleep on the RAK4631
+    meshSds = UINT32_MAX; // Workaround for now: Don't go into deep sleep on the RAK4631
 #endif
 
     if (meshSds != UINT32_MAX)
