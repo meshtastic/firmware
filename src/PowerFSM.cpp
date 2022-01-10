@@ -337,9 +337,14 @@ void PowerFSM_setup()
     // I don't think this transition is correct, turning off for now - @geeksville
     // powerFSM.add_timed_transition(&stateDARK, &stateNB, getPref_phone_timeout_secs() * 1000, NULL, "Phone timeout");
 
+    /*
+    *
+    * Disabling Light Sleep
     powerFSM.add_timed_transition(&stateNB, &stateLS, getPref_min_wake_secs() * 1000, NULL, "Min wake timeout");
     powerFSM.add_timed_transition(&stateDARK, &stateLS, getPref_wait_bluetooth_secs() * 1000, NULL, "Bluetooth timeout");
     meshSds = getPref_mesh_sds_timeout_secs();
+    */
+
 #else
     lowPowerState = &stateDARK;
     meshSds = UINT32_MAX; //Workaround for now: Don't go into deep sleep on the RAK4631
