@@ -397,7 +397,7 @@ void setup()
     }
 #endif
 
-    DEBUG_MSG("\n\n//\\ E S H T A /\\ S T / C\n\n");
+    DEBUG_MSG("\n\n//\\ E S H T /\\ S T / C\n\n");
 
     initDeepSleep();
 
