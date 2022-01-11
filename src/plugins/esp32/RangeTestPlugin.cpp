@@ -36,9 +36,9 @@ int32_t RangeTestPlugin::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    // radioConfig.preferences.range_test_plugin_enabled = 1;
-    // radioConfig.preferences.range_test_plugin_sender = 45;
-    // radioConfig.preferences.range_test_plugin_save = 1;
+    radioConfig.preferences.range_test_plugin_enabled = 1;
+    // radioConfig.preferences.range_test_plugin_sender = 60;
+    radioConfig.preferences.range_test_plugin_save = 0;
 
     // Fixed position is useful when testing indoors.
     // radioConfig.preferences.fixed_position = 1;
@@ -157,7 +157,7 @@ ProcessMessage RangeTestPluginRadio::handleReceived(const MeshPacket &mp)
             DEBUG_MSG("n->user.macaddr           %X\n", n->user.macaddr);
             DEBUG_MSG("n->has_position           %d\n", n->has_position);
             DEBUG_MSG("n->position.latitude_i    %d\n", n->position.latitude_i);
-            DEBUG_MSG("n->position.longitude_i   %d\n", n->position.longitude_i);
+            DEBUG_MSG("n->position.longitude_i   %d\n", n->positiÎon.longitude_i);
             DEBUG_MSG("n->position.battery_level %d\n", n->position.battery_level);
             DEBUG_MSG("---- Current device location information:\n");
             DEBUG_MSG("gpsStatus->getLatitude()     %d\n", gpsStatus->getLatitude());
@@ -166,6 +166,23 @@ ProcessMessage RangeTestPluginRadio::handleReceived(const MeshPacket &mp)
             DEBUG_MSG("gpsStatus->getDOP()          %d\n", gpsStatus->getDOP());
             DEBUG_MSG("-----------------------------------------\n");
             */
+            DEBUG_MSG("\n\n\n");
+            if (mp.is_tapback) {
+                DEBUG_MSG("Got is_tapback from Mesh\n");
+            }
+            if (mp.reply_id) {
+                DEBUG_MSG("Got reply_id from Mesh\n");
+            }
+            DEBUG_MSG("\n\n\n");
+        } else {
+            DEBUG_MSG("\n\n\n");
+            if (mp.is_tapback) {
+                DEBUG_MSG("Got is_tapback from Phone\n");
+            }
+            if (mp.reply_id) {
+                DEBUG_MSG("Got reply_id from Phone\n");
+            }
+            DEBUG_MSG("\n\n\n");
         }
 
     } else {
@@ -273,7 +290,7 @@ bool RangeTestPluginRadio::appendFile(const MeshPacket &mp)
 
     if (n->position.latitude_i && n->position.longitude_i && gpsStatus->getLatitude() && gpsStatus->getLongitude()) {
         float distance = GeoCoord::latLongToMeter(n->position.latitude_i * 1e-7, n->position.longitude_i * 1e-7,
-                                        gpsStatus->getLatitude() * 1e-7, gpsStatus->getLongitude() * 1e-7);
+                                                  gpsStatus->getLatitude() * 1e-7, gpsStatus->getLongitude() * 1e-7);
         fileToAppend.printf("%f,", distance); // Distance in meters
     } else {
         fileToAppend.printf("0,");
