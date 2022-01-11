@@ -167,19 +167,19 @@ ProcessMessage RangeTestPluginRadio::handleReceived(const MeshPacket &mp)
             DEBUG_MSG("-----------------------------------------\n");
             */
             DEBUG_MSG("\n\n\n");
-            if (mp.is_tapback) {
+            if (mp.decoded.is_tapback) {  
                 DEBUG_MSG("Got is_tapback from Mesh\n");
             }
-            if (mp.reply_id) {
+            if (mp.decoded.reply_id) {
                 DEBUG_MSG("Got reply_id from Mesh\n");
             }
             DEBUG_MSG("\n\n\n");
         } else {
             DEBUG_MSG("\n\n\n");
-            if (mp.is_tapback) {
+            if (mp.decoded.is_tapback) {
                 DEBUG_MSG("Got is_tapback from Phone\n");
             }
-            if (mp.reply_id) {
+            if (mp.decoded.reply_id) {
                 DEBUG_MSG("Got reply_id from Phone\n");
             }
             DEBUG_MSG("\n\n\n");
