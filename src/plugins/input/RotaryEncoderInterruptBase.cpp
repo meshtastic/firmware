@@ -10,7 +10,7 @@ RotaryEncoderInterruptBase::RotaryEncoderInterruptBase(
     const char *name) :
     concurrency::OSThread(name)
 {
-
+    this->_originName = name;
 }
 
 void RotaryEncoderInterruptBase::init(
@@ -43,26 +43,31 @@ void RotaryEncoderInterruptBase::init(
 
 int32_t RotaryEncoderInterruptBase::runOnce()
 {
+    InputEvent e;
+    e.inputEvent = INPUT_EVENT_NULL;
+    e.origin = this->_originName;
+
     if (this->action == ROTARY_ACTION_PRESSED)
     {
-        InputEvent e;
+        DEBUG_MSG("Rotary event Press\n");
         e.inputEvent = this->_eventPressed;
-        this->notifyObservers(&e);
     }
     else if (this->action == ROTARY_ACTION_CW)
     {
         DEBUG_MSG("Rotary event CW\n");
-        InputEvent e;
         e.inputEvent = this->_eventCw;
-        this->notifyObservers(&e);
     }
     else if (this->action == ROTARY_ACTION_CCW)
     {
         DEBUG_MSG("Rotary event CW\n");
-        InputEvent e;
         e.inputEvent = this->_eventCcw;
+    }
+
+    if (e.inputEvent != INPUT_EVENT_NULL)
+    {
         this->notifyObservers(&e);
     }
+
     this->action = ROTARY_ACTION_NONE;
 
     return 30000;
