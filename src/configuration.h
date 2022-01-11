@@ -453,8 +453,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define GPS_RX_PIN 15 // per @der_bear on the forum, 36 is incorrect for this board type and 15 is a better pick
 #define GPS_TX_PIN 13
 
-// Updated to pin 36 per https://resource.heltec.cn/download/WiFi_LoRa_32/V2.1/WIFI_LoRa_32_V2.1(868-915).PDF
-#define BATTERY_PIN 36 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+#define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 
 #define I2C_SDA 21 // I2C pins for this board
 #define I2C_SCL 22
