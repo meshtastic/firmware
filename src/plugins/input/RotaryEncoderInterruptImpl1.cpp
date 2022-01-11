@@ -2,17 +2,22 @@
 
 RotaryEncoderInterruptImpl1 *rotaryEncoderInterruptImpl1;
 
-RotaryEncoderInterruptImpl1::RotaryEncoderInterruptImpl1(
-    uint8_t pinA, uint8_t pinB, uint8_t pinPress,
-    char eventCw, char eventCcw, char eventPressed) :
+RotaryEncoderInterruptImpl1::RotaryEncoderInterruptImpl1() :
     RotaryEncoderInterruptBase(
-        "rotEnc1",
+        "rotEnc1")
+{
+}
+
+void RotaryEncoderInterruptImpl1::init(
+    uint8_t pinA, uint8_t pinB, uint8_t pinPress,
+    char eventCw, char eventCcw, char eventPressed)
+{
+    RotaryEncoderInterruptBase::init(
         pinA, pinB, pinPress,
         eventCw, eventCcw, eventPressed,
         RotaryEncoderInterruptImpl1::handleIntA,
         RotaryEncoderInterruptImpl1::handleIntB,
-        RotaryEncoderInterruptImpl1::handleIntPressed)
-{
+        RotaryEncoderInterruptImpl1::handleIntPressed);
 }
 
 void RotaryEncoderInterruptImpl1::handleIntA()

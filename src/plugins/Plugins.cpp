@@ -33,7 +33,8 @@ void setupPlugins()
     new RemoteHardwarePlugin();
     new ReplyPlugin();
     rotaryEncoderInterruptImpl1 =
-        new RotaryEncoderInterruptImpl1(
+        new RotaryEncoderInterruptImpl1();
+    rotaryEncoderInterruptImpl1->init(
             22, 23, 21,
             INPUT_EVENT_UP, INPUT_EVENT_DOWN, INPUT_EVENT_SELECT);
     cannedMessagePlugin = new CannedMessagePlugin(rotaryEncoderInterruptImpl1);

@@ -7,12 +7,17 @@
 */
 
 RotaryEncoderInterruptBase::RotaryEncoderInterruptBase(
-    const char *name,
+    const char *name) :
+    concurrency::OSThread(name)
+{
+
+}
+
+void RotaryEncoderInterruptBase::init(
     uint8_t pinA, uint8_t pinB, uint8_t pinPress,
     char eventCw, char eventCcw, char eventPressed,
-//        std::function<void(void)> onIntA, std::function<void(void)> onIntB, std::function<void(void)> onIntPress) :
-        void (*onIntA)(), void (*onIntB)(), void (*onIntPress)()) :
-    concurrency::OSThread(name)
+//    std::function<void(void)> onIntA, std::function<void(void)> onIntB, std::function<void(void)> onIntPress) :
+    void (*onIntA)(), void (*onIntB)(), void (*onIntPress)())
 {
     this->_pinA = pinA;
     this->_pinB = pinB;
@@ -20,19 +25,21 @@ RotaryEncoderInterruptBase::RotaryEncoderInterruptBase(
     this->_eventCcw = eventCcw;
     this->_eventPressed = eventPressed;
 
-    // TODO: make pins configurable
     pinMode(pinPress, INPUT_PULLUP);
     pinMode(this->_pinA, INPUT_PULLUP);
     pinMode(this->_pinB, INPUT_PULLUP);
+
 //    attachInterrupt(pinPress, onIntPress, RISING);
     attachInterrupt(pinPress, onIntPress, RISING);
     attachInterrupt(this->_pinA, onIntA, CHANGE);
     attachInterrupt(this->_pinB, onIntB, CHANGE);
+
     this->rotaryLevelA = digitalRead(this->_pinA);
     this->rotaryLevelB = digitalRead(this->_pinB);
     DEBUG_MSG("Rotary initialized (%d, %d, %d)\n",
         this->_pinA, this->_pinB, pinPress);
 }
+
 
 int32_t RotaryEncoderInterruptBase::runOnce()
 {
