@@ -9,6 +9,7 @@
 #include "plugins/RoutingPlugin.h"
 #include "plugins/AdminPlugin.h"
 #include "plugins/CannedMessagePlugin.h"
+#include "plugins/input/InputBroker.h"
 #include "plugins/input/RotaryEncoderInterruptImpl1.h"
 #ifndef NO_ESP32
 #include "plugins/esp32/SerialPlugin.h"
@@ -22,6 +23,7 @@
  */
 void setupPlugins()
 {
+    inputBroker = new InputBroker();
     adminPlugin = new AdminPlugin();
     nodeInfoPlugin = new NodeInfoPlugin();
     positionPlugin = new PositionPlugin();
@@ -37,7 +39,7 @@ void setupPlugins()
     rotaryEncoderInterruptImpl1->init(
             22, 23, 21,
             INPUT_EVENT_UP, INPUT_EVENT_DOWN, INPUT_EVENT_SELECT);
-    cannedMessagePlugin = new CannedMessagePlugin(rotaryEncoderInterruptImpl1);
+    cannedMessagePlugin = new CannedMessagePlugin();
 
 #ifndef NO_ESP32
     // Only run on an esp32 based device.

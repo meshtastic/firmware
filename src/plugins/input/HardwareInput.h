@@ -1,5 +1,6 @@
 #pragma once
 
+#define INPUT_EVENT_NULL 0
 #define INPUT_EVENT_UP   17
 #define INPUT_EVENT_DOWN 18
 #define INPUT_EVENT_LEFT 19
@@ -9,5 +10,6 @@
 #define INPUT_EVENT_CANCEL 24
 
 typedef struct _InputEvent {
+    const char* origin;
     char inputEvent;
 } InputEvent;

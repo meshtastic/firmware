@@ -1,4 +1,5 @@
 #include "RotaryEncoderInterruptImpl1.h"
+#include "InputBroker.h"
 
 RotaryEncoderInterruptImpl1 *rotaryEncoderInterruptImpl1;
 
@@ -18,6 +19,7 @@ void RotaryEncoderInterruptImpl1::init(
         RotaryEncoderInterruptImpl1::handleIntA,
         RotaryEncoderInterruptImpl1::handleIntB,
         RotaryEncoderInterruptImpl1::handleIntPressed);
+    inputBroker->registerOrigin(this);
 }
 
 void RotaryEncoderInterruptImpl1::handleIntA()

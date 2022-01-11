@@ -40,8 +40,7 @@ class CannedMessagePlugin :
         CallbackObserver<CannedMessagePlugin, const InputEvent *>(
             this, &CannedMessagePlugin::handleInputEvent);
   public:
-    CannedMessagePlugin(
-        Observable<const InputEvent *> *input);
+    CannedMessagePlugin();
     String getCurrentMessage();
     String getPrevMessage();
     String getNextMessage();

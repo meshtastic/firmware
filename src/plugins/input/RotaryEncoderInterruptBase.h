@@ -1,7 +1,6 @@
 #pragma once
-//#include <Arduino.h>
-//#include "Observer.h"
-#include "SinglePortPlugin.h"
+
+#include "SinglePortPlugin.h" // TODO: what header file to include?
 #include "HardwareInput.h"
 
 enum RotaryEncoderInterruptBaseStateType
@@ -48,4 +47,5 @@ class RotaryEncoderInterruptBase :
     char _eventCw;
     char _eventCcw;
     char _eventPressed;
+    const char *_originName;
 };

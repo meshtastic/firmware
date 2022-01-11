@@ -1,22 +1,28 @@
 #include "configuration.h"
 #include "CannedMessagePlugin.h"
 #include "MeshService.h"
-#include "main.h"
+#include "input/InputBroker.h"
 
 #include <assert.h>
 
 CannedMessagePlugin *cannedMessagePlugin;
 
-CannedMessagePlugin::CannedMessagePlugin(
-    Observable<const InputEvent *> *input)
+CannedMessagePlugin::CannedMessagePlugin()
     : SinglePortPlugin("canned", PortNum_TEXT_MESSAGE_APP),
     concurrency::OSThread("CannedMessagePlugin")
 {
-    this->inputObserver.observe(input);
+    if (true) // if module enabled
+    {
+        this->inputObserver.observe(inputBroker);
+    }
 }
 
 int CannedMessagePlugin::handleInputEvent(const InputEvent *event)
 {
+    if (false) // test event->origin
+    {
+        return 0;
+    }
     bool validEvent = false;
     if (event->inputEvent == INPUT_EVENT_UP)
     {
