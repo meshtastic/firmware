@@ -338,7 +338,7 @@ void PowerFSM_setup()
     // We never enter light-sleep or NB states on NRF52 (because the CPU uses so little power normally)
 
     // See: https://github.com/meshtastic/Meshtastic-device/issues/1071
-    if (radioConfig.preferences.is_power_saving) {
+    if (isRouter || radioConfig.preferences.is_power_saving) {
 
         // I don't think this transition is correct, turning off for now - @geeksville
         // powerFSM.add_timed_transition(&stateDARK, &stateNB, getPref_phone_timeout_secs() * 1000, NULL, "Phone timeout");
