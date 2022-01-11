@@ -24,9 +24,10 @@ class RotaryEncoderInterruptBase :
 {
   public:
     RotaryEncoderInterruptBase(
-        const char *name,
-        uint8_t pinA, uint8_t pinB, uint8_t pinPress,
-        char eventCw, char eventCcw, char eventPressed,
+        const char *name);
+    void init(
+      uint8_t pinA, uint8_t pinB, uint8_t pinPress,
+      char eventCw, char eventCcw, char eventPressed,
 //        std::function<void(void)> onIntA, std::function<void(void)> onIntB, std::function<void(void)> onIntPress);
         void (*onIntA)(), void (*onIntB)(), void (*onIntPress)());
     void intPressHandler();
