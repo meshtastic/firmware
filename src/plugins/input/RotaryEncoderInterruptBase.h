@@ -35,6 +35,12 @@ class RotaryEncoderInterruptBase :
 
   protected:
     virtual int32_t runOnce();
+    RotaryEncoderInterruptBaseStateType intHandler(
+        bool actualPinRaising,
+        int otherPinLevel,
+        RotaryEncoderInterruptBaseActionType action,
+        RotaryEncoderInterruptBaseStateType state);
+
     volatile RotaryEncoderInterruptBaseStateType rotaryStateCW = ROTARY_EVENT_CLEARED;
     volatile RotaryEncoderInterruptBaseStateType rotaryStateCCW = ROTARY_EVENT_CLEARED;
     volatile int rotaryLevelA = LOW;

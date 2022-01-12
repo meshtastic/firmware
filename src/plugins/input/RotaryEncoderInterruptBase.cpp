@@ -76,15 +76,6 @@ void RotaryEncoderInterruptBase::intPressHandler()
     setInterval(20);
 }
 
-/**
- * @brief Rotary action implementation.
- *   We assume, the following pin setup:
- *    A   --||
- *    GND --||]======== 
- *    B   --||
- * 
- * @return The new level of the actual pin (that is actualPinCurrentLevel).
- */
 void RotaryEncoderInterruptBase::intAHandler()
 {
     // CW rotation (at least on most common rotary encoders)
@@ -94,27 +85,11 @@ void RotaryEncoderInterruptBase::intAHandler()
         return;
     }
     this->rotaryLevelA = currentLevelA;
-    bool pinARaising = currentLevelA == HIGH;
-    if (pinARaising && (this->rotaryLevelB == LOW))
-    {
-        if (this->rotaryStateCCW == ROTARY_EVENT_CLEARED)
-        {
-            this->rotaryStateCCW = ROTARY_EVENT_OCCURRED;
-            if ((this->action == ROTARY_ACTION_NONE)
-                || (this->action == ROTARY_ACTION_CW))
-            {
-                this->action = ROTARY_ACTION_CCW;
-                DEBUG_MSG("Rotary action CCW\n");
-            }
-        }
-    }
-    else if (!pinARaising && (this->rotaryLevelB == HIGH))
-    {
-        // Logic to prevent bouncing.
-        this->rotaryStateCCW = ROTARY_EVENT_CLEARED;
-    }
-    runned(millis());
-    setInterval(50);
+    intHandler(
+        currentLevelA == HIGH,
+        this->rotaryLevelB,
+        ROTARY_ACTION_CCW,
+        this->rotaryStateCCW);
 }
 
 void RotaryEncoderInterruptBase::intBHandler()
@@ -126,25 +101,50 @@ void RotaryEncoderInterruptBase::intBHandler()
         return;
     }
     this->rotaryLevelB = currentLevelB;
-    bool pinBRaising = currentLevelB == HIGH;
-    if (pinBRaising && (this->rotaryLevelA == LOW))
+    this->rotaryStateCW = intHandler(
+        currentLevelB == HIGH,
+        this->rotaryLevelA,
+        ROTARY_ACTION_CW,
+        this->rotaryStateCW);
+}
+
+/**
+ * @brief Rotary action implementation.
+ *   We assume, the following pin setup:
+ *    A   --||
+ *    GND --||]======== 
+ *    B   --||
+ * 
+ * @return The new state for rotary pin.
+ */
+RotaryEncoderInterruptBaseStateType RotaryEncoderInterruptBase::intHandler(
+    bool actualPinRaising,
+    int otherPinLevel,
+    RotaryEncoderInterruptBaseActionType action,
+    RotaryEncoderInterruptBaseStateType state)
+{
+    RotaryEncoderInterruptBaseStateType newState =
+        state;
+    if (actualPinRaising && (otherPinLevel == LOW))
     {
-        if (this->rotaryStateCW == ROTARY_EVENT_CLEARED)
+        if (state == ROTARY_EVENT_CLEARED)
         {
-            this->rotaryStateCW = ROTARY_EVENT_OCCURRED;
-            if ((this->action == ROTARY_ACTION_NONE)
-                || (this->action == ROTARY_ACTION_CCW))
+            newState = ROTARY_EVENT_OCCURRED;
+            if ((this->action != ROTARY_ACTION_PRESSED)
+                && (this->action != action))
             {
-                this->action = ROTARY_ACTION_CW;
-                DEBUG_MSG("Rotary action CW\n");
+                this->action = action;
+                DEBUG_MSG("Rotary action\n");
             }
         }
     }
-    else if (!pinBRaising && (this->rotaryLevelA == HIGH))
+    else if (!actualPinRaising && (otherPinLevel == HIGH))
     {
         // Logic to prevent bouncing.
-        this->rotaryStateCW = ROTARY_EVENT_CLEARED;
+        newState = ROTARY_EVENT_CLEARED;
     }
     runned(millis());
     setInterval(50);
+
+    return newState;
 }
