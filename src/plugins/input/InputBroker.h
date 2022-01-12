@@ -1,7 +1,10 @@
 #pragma once
 #include "Observer.h"
-#include "HardwareInput.h"
 
+typedef struct _InputEvent {
+    const char* origin;
+    char inputEvent;
+} InputEvent;
 class InputBroker :
     public Observable<const InputEvent *>
 {

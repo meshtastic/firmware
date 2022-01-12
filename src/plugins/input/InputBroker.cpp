@@ -14,4 +14,5 @@ void InputBroker::registerOrigin(Observable<const InputEvent *> *origin)
 int InputBroker::handleInputEvent(const InputEvent *event)
 {
   this->notifyObservers(event);
+  return 0;
 }

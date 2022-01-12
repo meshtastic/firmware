@@ -9,10 +9,25 @@ RotaryEncoderInterruptImpl1::RotaryEncoderInterruptImpl1() :
 {
 }
 
-void RotaryEncoderInterruptImpl1::init(
-    uint8_t pinA, uint8_t pinB, uint8_t pinPress,
-    char eventCw, char eventCcw, char eventPressed)
+void RotaryEncoderInterruptImpl1::init()
 {
+    if (!radioConfig.preferences.rotary1_enabled)
+    {
+        // Input device is disabled.
+        return;
+    }
+
+    uint8_t pinA = radioConfig.preferences.rotary1_pin_a;
+    uint8_t pinB = radioConfig.preferences.rotary1_pin_b;
+    uint8_t pinPress = radioConfig.preferences.rotary1_pin_press;
+    char eventCw =
+        static_cast<char>(radioConfig.preferences.rotary1_event_cw);
+    char eventCcw =
+        static_cast<char>(radioConfig.preferences.rotary1_event_ccw);
+    char eventPressed =
+        static_cast<char>(radioConfig.preferences.rotary1_event_press);
+
+    //radioConfig.preferences.ext_notification_plugin_output
     RotaryEncoderInterruptBase::init(
         pinA, pinB, pinPress,
         eventCw, eventCcw, eventPressed,
