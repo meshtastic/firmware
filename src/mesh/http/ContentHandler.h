@@ -1,5 +1,6 @@
 #pragma once
 
+
 void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer);
 
 // Declare some handler functions for the various URLs on the server
@@ -14,9 +15,13 @@ void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res);
 void handleSpiffsDeleteStatic(HTTPRequest *req, HTTPResponse *res);
 void handleBlinkLED(HTTPRequest *req, HTTPResponse *res);
 void handleReport(HTTPRequest *req, HTTPResponse *res);
+void handleUpdateSPIFFS(HTTPRequest *req, HTTPResponse *res);
+void handleDeleteSPIFFSContent(HTTPRequest *req, HTTPResponse *res);
+void handleSPIFFS(HTTPRequest *req, HTTPResponse *res);
+void handleAdmin(HTTPRequest *req, HTTPResponse *res);
+void handleAdminSettings(HTTPRequest *req, HTTPResponse *res);
+void handleAdminSettingsApply(HTTPRequest *req, HTTPResponse *res);
 
-void middlewareSpeedUp240(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
-void middlewareSpeedUp160(HTTPRequest *req, HTTPResponse *res, std::function<void()> next);
 
 // Interface to the PhoneAPI to access the protobufs with messages
 class HttpAPI : public PhoneAPI

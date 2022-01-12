@@ -188,6 +188,9 @@ class ButtonThread : public OSThread
 #ifdef BUTTON_PIN_ALT
     OneButton userButtonAlt;
 #endif
+#ifdef BUTTON_PIN_TOUCH
+    OneButton userButtonTouch;
+#endif
     static bool shutdown_on_long_stop;
 
   public:
@@ -205,6 +208,7 @@ class ButtonThread : public OSThread
         userButton.attachClick(userButtonPressed);
         userButton.attachDuringLongPress(userButtonPressedLong);
         userButton.attachDoubleClick(userButtonDoublePressed);
+        userButton.attachMultiClick(userButtonMultiPressed);
         userButton.attachLongPressStart(userButtonPressedLongStart);
         userButton.attachLongPressStop(userButtonPressedLongStop);
         wakeOnIrq(BUTTON_PIN, FALLING);
@@ -222,6 +226,21 @@ class ButtonThread : public OSThread
         userButtonAlt.attachLongPressStop(userButtonPressedLongStop);
         wakeOnIrq(BUTTON_PIN_ALT, FALLING);
 #endif
+
+#ifdef BUTTON_PIN_TOUCH
+        userButtonTouch = OneButton(BUTTON_PIN_TOUCH, true, true);
+#ifdef INPUT_PULLUP_SENSE
+        // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
+        pinMode(BUTTON_PIN_TOUCH, INPUT_PULLUP_SENSE);
+#endif
+        userButtonTouch.attachClick(touchPressed);
+        userButtonTouch.attachDuringLongPress(touchPressedLong);
+        userButtonTouch.attachDoubleClick(touchDoublePressed);
+        userButtonTouch.attachLongPressStart(touchPressedLongStart);
+        userButtonTouch.attachLongPressStop(touchPressedLongStop);
+        wakeOnIrq(BUTTON_PIN_TOUCH, FALLING);
+#endif
+
     }
 
   protected:
@@ -238,6 +257,10 @@ class ButtonThread : public OSThread
         userButtonAlt.tick();
         canSleep &= userButtonAlt.isIdle();
 #endif
+#ifdef BUTTON_PIN_TOUCH
+        userButtonTouch.tick();
+        canSleep &= userButtonTouch.isIdle();
+#endif
         // if (!canSleep) DEBUG_MSG("Supressing sleep!\n");
         // else DEBUG_MSG("sleep ok\n");
 
@@ -245,6 +268,33 @@ class ButtonThread : public OSThread
     }
 
   private:
+    static void touchPressed()
+    {        
+        screen->forceDisplay();
+        DEBUG_MSG("touch press!\n");       
+    }
+    static void touchDoublePressed()
+    {
+        DEBUG_MSG("touch double press!\n");       
+    }
+    static void touchPressedLong()
+    {
+        DEBUG_MSG("touch press long!\n");       
+    }
+    static void touchDoublePressedLong()
+    {
+        DEBUG_MSG("touch double pressed!\n");       
+    }
+    static void touchPressedLongStart()
+    {        
+        DEBUG_MSG("touch long press start!\n");       
+    }
+    static void touchPressedLongStop()
+    {       
+        DEBUG_MSG("touch long press stop!\n");       
+    }
+
+
     static void userButtonPressed()
     {
         // DEBUG_MSG("press!\n");
@@ -286,6 +336,14 @@ class ButtonThread : public OSThread
         digitalWrite(PIN_EINK_EN,digitalRead(PIN_EINK_EN) == LOW);
 #endif
     }
+
+    static void userButtonMultiPressed()
+    {
+#ifndef NO_ESP32
+        clearNVS();
+#endif
+    }
+
 
     static void userButtonPressedLongStart()
     {
@@ -338,6 +396,8 @@ void setup()
         consoleInit(); // Set serial baud rate and init our mesh console
     }
 #endif
+
+    DEBUG_MSG("\n\n//\\ E S H T /\\ S T / C\n\n");
 
     initDeepSleep();
 

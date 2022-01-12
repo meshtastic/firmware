@@ -43,8 +43,8 @@ void esp32Setup()
     nvs_stats_t nvs_stats;
     auto res = nvs_get_stats(NULL, &nvs_stats);
     assert(res == ESP_OK);
-    DEBUG_MSG("NVS: UsedEntries %d, FreeEntries %d, AllEntries %d\n", nvs_stats.used_entries, nvs_stats.free_entries,
-              nvs_stats.total_entries);
+    DEBUG_MSG("NVS: UsedEntries %d, FreeEntries %d, AllEntries %d, NameSpaces %d\n", nvs_stats.used_entries, nvs_stats.free_entries,
+              nvs_stats.total_entries, nvs_stats.namespace_count);
 
     DEBUG_MSG("Setup Preferences in Flash Storage\n");
 

@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 # You probably don't want to use this script, it programs a custom bootloader build onto a nrf52 board
 
 set -e 

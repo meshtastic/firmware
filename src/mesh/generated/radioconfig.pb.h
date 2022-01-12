@@ -155,6 +155,8 @@ typedef struct _RadioConfig_UserPreferences {
     uint32_t hop_limit;
     char mqtt_username[32];
     char mqtt_password[32];
+    bool is_lora_tx_disabled;
+    bool is_power_saving;
 } RadioConfig_UserPreferences;
 
 typedef struct _RadioConfig {
@@ -199,9 +201,9 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default}
-#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", ""}
+#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero}
-#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", ""}
+#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define RadioConfig_UserPreferences_position_broadcast_secs_tag 1
@@ -272,6 +274,8 @@ extern "C" {
 #define RadioConfig_UserPreferences_hop_limit_tag 154
 #define RadioConfig_UserPreferences_mqtt_username_tag 155
 #define RadioConfig_UserPreferences_mqtt_password_tag 156
+#define RadioConfig_UserPreferences_is_lora_tx_disabled_tag 157
+#define RadioConfig_UserPreferences_is_power_saving_tag 158
 #define RadioConfig_preferences_tag              1
 
 /* Struct field encoding specification for nanopb */
@@ -349,7 +353,9 @@ X(a, STATIC,   SINGULAR, UINT32,   auto_screen_carousel_secs, 152) \
 X(a, STATIC,   SINGULAR, UINT32,   on_battery_shutdown_after_secs, 153) \
 X(a, STATIC,   SINGULAR, UINT32,   hop_limit,       154) \
 X(a, STATIC,   SINGULAR, STRING,   mqtt_username,   155) \
-X(a, STATIC,   SINGULAR, STRING,   mqtt_password,   156)
+X(a, STATIC,   SINGULAR, STRING,   mqtt_password,   156) \
+X(a, STATIC,   SINGULAR, BOOL,     is_lora_tx_disabled, 157) \
+X(a, STATIC,   SINGULAR, BOOL,     is_power_saving, 158)
 #define RadioConfig_UserPreferences_CALLBACK NULL
 #define RadioConfig_UserPreferences_DEFAULT NULL
 
@@ -361,8 +367,8 @@ extern const pb_msgdesc_t RadioConfig_UserPreferences_msg;
 #define RadioConfig_UserPreferences_fields &RadioConfig_UserPreferences_msg
 
 /* Maximum encoded size of messages (where known) */
-#define RadioConfig_size                         526
-#define RadioConfig_UserPreferences_size         523
+#define RadioConfig_size                         532
+#define RadioConfig_UserPreferences_size         529
 
 #ifdef __cplusplus
 } /* extern "C" */

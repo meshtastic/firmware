@@ -5,8 +5,8 @@
 #define PB_ADMIN_PB_H_INCLUDED
 #include <pb.h>
 #include "channel.pb.h"
-#include "radioconfig.pb.h"
 #include "mesh.pb.h"
+#include "radioconfig.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
@@ -86,7 +86,7 @@ extern const pb_msgdesc_t AdminMessage_msg;
 #define AdminMessage_fields &AdminMessage_msg
 
 /* Maximum encoded size of messages (where known) */
-#define AdminMessage_size                        529
+#define AdminMessage_size                        535
 
 #ifdef __cplusplus
 } /* extern "C" */

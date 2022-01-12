@@ -13,6 +13,7 @@ class WebServerThread : private concurrency::OSThread
 
   public:
     WebServerThread();
+    uint32_t requestRestart = 0;
 
   protected:
     virtual int32_t runOnce();

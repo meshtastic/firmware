@@ -4,6 +4,7 @@
 #include "airtime.h"
 #include "main.h"
 #include "mesh/http/ContentHelper.h"
+#include "mesh/http/WebServer.h"
 #include "mesh/http/WiFiAPClient.h"
 #include "power.h"
 #include "sleep.h"
@@ -41,6 +42,13 @@ using namespace httpsserver;
 
 #include "mesh/http/ContentHandler.h"
 
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+HTTPClient httpClient;
+
+#define DEST_FS_USES_SPIFFS
+#include <ESP32-targz.h>
+
 // We need to specify some content-type mapping, so the resources get delivered with the
 // right content type and are displayed correctly in the browser
 char contentTypes[][2][32] = {{".txt", "text/plain"},     {".html", "text/html"},
@@ -50,8 +58,58 @@ char contentTypes[][2][32] = {{".txt", "text/plain"},     {".html", "text/html"}
                               {".css", "text/css"},       {".ico", "image/vnd.microsoft.icon"},
                               {".svg", "image/svg+xml"},  {"", ""}};
 
+// const char *tarURL = "https://www.casler.org/temp/meshtastic-web.tar";
+const char *tarURL = "https://api-production-871d.up.railway.app/mirror/webui";
+const char *certificate = NULL; // change this as needed, leave as is for no TLS check (yolo security)
+
 // Our API to handle messages to and from the radio.
 HttpAPI webAPI;
+
+WiFiClient *getTarHTTPClientPtr(WiFiClientSecure *client, const char *url, const char *cert = NULL)
+{
+    if (cert == NULL) {
+        // New versions don't have setInsecure
+        // client->setInsecure();
+    } else {
+        client->setCACert(cert);
+    }
+    const char *UserAgent = "ESP32-HTTP-GzUpdater-Client";
+    httpClient.setReuse(true); // handle 301 redirects gracefully
+    httpClient.setUserAgent(UserAgent);
+    httpClient.setConnectTimeout(10000); // 10s timeout = 10000
+    if (!httpClient.begin(*client, url)) {
+        log_e("Can't open url %s", url);
+        return nullptr;
+    }
+    const char *headerKeys[] = {"location", "redirect", "Content-Type", "Content-Length", "Content-Disposition"};
+    const size_t numberOfHeaders = 5;
+    httpClient.collectHeaders(headerKeys, numberOfHeaders);
+    int httpCode = httpClient.GET();
+    // file found at server
+    if (httpCode == HTTP_CODE_FOUND || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
+        String newlocation = "";
+        String headerLocation = httpClient.header("location");
+        String headerRedirect = httpClient.header("redirect");
+        if (headerLocation != "") {
+            newlocation = headerLocation;
+            Serial.printf("302 (location): %s => %s\n", url, headerLocation.c_str());
+        } else if (headerRedirect != "") {
+            Serial.printf("301 (redirect): %s => %s\n", url, headerLocation.c_str());
+            newlocation = headerRedirect;
+        }
+        httpClient.end();
+        if (newlocation != "") {
+            log_w("Found 302/301 location header: %s", newlocation.c_str());
+            return getTarHTTPClientPtr(client, newlocation.c_str(), cert);
+        } else {
+            log_e("Empty redirect !!");
+            return nullptr;
+        }
+    }
+    if (httpCode != 200)
+        return nullptr;
+    return httpClient.getStreamPtr();
+}
 
 void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
 {
@@ -66,6 +124,13 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeHotspotApple = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
     ResourceNode *nodeHotspotAndroid = new ResourceNode("/generate_204", "GET", &handleHotspot);
 
+    ResourceNode *nodeAdmin = new ResourceNode("/admin", "GET", &handleAdmin);
+    ResourceNode *nodeAdminSettings = new ResourceNode("/admin/settings", "GET", &handleAdminSettings);
+    ResourceNode *nodeAdminSettingsApply = new ResourceNode("/admin/settings/apply", "POST", &handleAdminSettingsApply);
+    ResourceNode *nodeAdminSPIFFS = new ResourceNode("/admin/spiffs", "GET", &handleSPIFFS);
+    ResourceNode *nodeUpdateSPIFFS = new ResourceNode("/admin/spiffs/update", "POST", &handleUpdateSPIFFS);
+    ResourceNode *nodeDeleteSPIFFS = new ResourceNode("/admin/spiffs/delete", "GET", &handleDeleteSPIFFSContent);
+
     ResourceNode *nodeRestart = new ResourceNode("/restart", "POST", &handleRestart);
     ResourceNode *nodeFormUpload = new ResourceNode("/upload", "POST", &handleFormUpload);
 
@@ -74,6 +139,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeJsonReport = new ResourceNode("/json/report", "GET", &handleReport);
     ResourceNode *nodeJsonSpiffsBrowseStatic = new ResourceNode("/json/spiffs/browse/static", "GET", &handleSpiffsBrowseStatic);
     ResourceNode *nodeJsonDelete = new ResourceNode("/json/spiffs/delete/static", "DELETE", &handleSpiffsDeleteStatic);
+
 
     ResourceNode *nodeRoot = new ResourceNode("/*", "GET", &handleStatic);
 
@@ -90,7 +156,13 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     secureServer->registerNode(nodeJsonSpiffsBrowseStatic);
     secureServer->registerNode(nodeJsonDelete);
     secureServer->registerNode(nodeJsonReport);
-    secureServer->registerNode(nodeRoot);
+    secureServer->registerNode(nodeUpdateSPIFFS);
+    secureServer->registerNode(nodeDeleteSPIFFS);
+    secureServer->registerNode(nodeAdmin);
+    secureServer->registerNode(nodeAdminSPIFFS);
+    secureServer->registerNode(nodeAdminSettings);
+    secureServer->registerNode(nodeAdminSettingsApply);
+    secureServer->registerNode(nodeRoot); // This has to be last
 
     // Insecure nodes
     insecureServer->registerNode(nodeAPIv1ToRadioOptions);
@@ -105,13 +177,19 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     insecureServer->registerNode(nodeJsonSpiffsBrowseStatic);
     insecureServer->registerNode(nodeJsonDelete);
     insecureServer->registerNode(nodeJsonReport);
-    insecureServer->registerNode(nodeRoot);
+    insecureServer->registerNode(nodeUpdateSPIFFS);
+    insecureServer->registerNode(nodeDeleteSPIFFS);
+    insecureServer->registerNode(nodeAdmin);
+    insecureServer->registerNode(nodeAdminSPIFFS);
+    insecureServer->registerNode(nodeAdminSettings);
+    insecureServer->registerNode(nodeAdminSettingsApply);
+    insecureServer->registerNode(nodeRoot); // This has to be last
 }
 
 void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
 {
 
-    DEBUG_MSG("+++++++++++++++ webAPI handleAPIv1FromRadio\n");
+    DEBUG_MSG("webAPI handleAPIv1FromRadio\n");
 
     /*
         For documentation, see:
@@ -156,12 +234,12 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
         res->write(txBuf, len);
     }
 
-    DEBUG_MSG("--------------- webAPI handleAPIv1FromRadio, len %d\n", len);
+    DEBUG_MSG("webAPI handleAPIv1FromRadio, len %d\n", len);
 }
 
 void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
 {
-    DEBUG_MSG("+++++++++++++++ webAPI handleAPIv1ToRadio\n");
+    DEBUG_MSG("webAPI handleAPIv1ToRadio\n");
 
     /*
         For documentation, see:
@@ -188,7 +266,7 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
     webAPI.handleToRadio(buffer, s);
 
     res->write(buffer, s);
-    DEBUG_MSG("--------------- webAPI handleAPIv1ToRadio\n");
+    DEBUG_MSG("webAPI handleAPIv1ToRadio\n");
 }
 
 void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
@@ -297,14 +375,21 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
             file = SPIFFS.open(filenameGzip.c_str());
             res->setHeader("Content-Encoding", "gzip");
             if (!file.available()) {
-                DEBUG_MSG("File not available\n");
+                DEBUG_MSG("File not available - %s\n", filenameGzip.c_str());
             }
         } else {
             has_set_content_type = true;
             filenameGzip = "/static/index.html.gz";
             file = SPIFFS.open(filenameGzip.c_str());
-            res->setHeader("Content-Encoding", "gzip");
             res->setHeader("Content-Type", "text/html");
+            if (!file.available()) {
+                DEBUG_MSG("File not available - %s\n", filenameGzip.c_str());
+                res->println("Web server is running.<br><br>The content you are looking for can't be found. Please see: <a "
+                             "href=https://meshtastic.org/docs/getting-started/faq#wifi--web-browser>FAQ</a>.<br><br><a "
+                             "href=/admin>admin</a>");
+            } else {
+                res->setHeader("Content-Encoding", "gzip");
+            }
         }
 
         res->setHeader("Content-Length", httpsserver::intToString(file.size()));
@@ -576,6 +661,7 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     res->println("},");
 
     res->println("\"device\": {");
+    res->printf("\"channel_utilization\": %3.2f%,\n", airTime->channelUtilizationPercent());
     res->printf("\"reboot_counter\": %d\n", myNodeInfo.reboot_count);
     res->println("},");
 
@@ -612,16 +698,189 @@ void handleHotspot(HTTPRequest *req, HTTPResponse *res)
     res->println("<meta http-equiv=\"refresh\" content=\"0;url=/\" />\n");
 }
 
+void handleUpdateSPIFFS(HTTPRequest *req, HTTPResponse *res)
+{
+    res->setHeader("Content-Type", "text/html");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    // res->setHeader("Access-Control-Allow-Methods", "POST");
+
+    res->println("<h1>Meshtastic</h1>\n");
+    res->println("Downloading Meshtastic Web Content...");
+
+    WiFiClientSecure *client = new WiFiClientSecure;
+    Stream *streamptr = getTarHTTPClientPtr(client, tarURL, certificate);
+
+    delay(5); // Let other network operations run
+
+    if (streamptr != nullptr) {
+        DEBUG_MSG("Connection to content server ... success!\n");
+
+        File root = SPIFFS.open("/");
+        File file = root.openNextFile();
+
+        DEBUG_MSG("Deleting files from /static : \n");
+
+        while (file) {
+            String filePath = String(file.name());
+            if (filePath.indexOf("/static") == 0) {
+                DEBUG_MSG("    %s\n", file.name());
+                SPIFFS.remove(file.name());
+            }
+            file = root.openNextFile();
+        }
+
+        delay(5); // Let other network operations run
+
+        TarUnpacker *TARUnpacker = new TarUnpacker();
+        TARUnpacker->haltOnError(false);  // stop on fail (manual restart/reset required)
+        TARUnpacker->setTarVerify(false); // true = enables health checks but slows down the overall process
+        TARUnpacker->setupFSCallbacks(targzTotalBytesFn, targzFreeBytesFn); // prevent the partition from exploding, recommended
+        TARUnpacker->setLoggerCallback(BaseUnpacker::targzPrintLoggerCallback); // gz log verbosity
+        TARUnpacker->setTarProgressCallback(
+            BaseUnpacker::defaultProgressCallback); // prints the untarring progress for each individual file
+        TARUnpacker->setTarStatusProgressCallback(
+            BaseUnpacker::defaultTarStatusProgressCallback);                        // print the filenames as they're expanded
+        TARUnpacker->setTarMessageCallback(BaseUnpacker::targzPrintLoggerCallback); // tar log verbosity
+
+        String contentLengthStr = httpClient.header("Content-Length");
+        contentLengthStr.trim();
+        int64_t streamSize = -1;
+        if (contentLengthStr != "") {
+            streamSize = atoi(contentLengthStr.c_str());
+            Serial.printf("Stream size %d\n", streamSize);
+            res->printf("Stream size %d<br><br>\n", streamSize);
+        }
+
+        if (!TARUnpacker->tarStreamExpander(streamptr, streamSize, SPIFFS, "/static")) {
+            res->printf("tarStreamExpander failed with return code #%d\n", TARUnpacker->tarGzGetError());
+            Serial.printf("tarStreamExpander failed with return code #%d\n", TARUnpacker->tarGzGetError());
+
+            return;
+        } else {
+            /*
+            // print leftover bytes if any (probably zero-fill from the server)
+            while (httpClient.connected()) {
+                size_t streamSize = streamptr->available();
+                if (streamSize) {
+                    Serial.printf("%02x ", streamptr->read());
+                } else
+                    break;
+            }
+            */
+        }
+
+    } else {
+        res->printf("Failed to establish http connection\n");
+        Serial.println("Failed to establish http connection");
+        return;
+    }
+
+    res->println("Done! Restarting the device. <a href=/>Click this in 10 seconds</a>");
+
+    /*
+     * This is a work around for a bug where we run out of memory.
+     *   TODO: Fixme!
+     */
+    // ESP.restart();
+    webServerThread->requestRestart = (millis() / 1000) + 5;
+}
+
+void handleDeleteSPIFFSContent(HTTPRequest *req, HTTPResponse *res)
+{
+    res->setHeader("Content-Type", "text/html");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "GET");
+
+    res->println("<h1>Meshtastic</h1>\n");
+    res->println("Deleting SPIFFS Content in /static/*");
+
+    File root = SPIFFS.open("/");
+    File file = root.openNextFile();
+
+    DEBUG_MSG("Deleting files from /static : \n");
+
+    while (file) {
+        String filePath = String(file.name());
+        if (filePath.indexOf("/static") == 0) {
+            DEBUG_MSG("    %s\n", file.name());
+            SPIFFS.remove(file.name());
+        }
+        file = root.openNextFile();
+    }
+    res->println("<p><hr><p><a href=/admin>Back to admin</a>\n");
+}
+
+void handleAdmin(HTTPRequest *req, HTTPResponse *res)
+{
+    res->setHeader("Content-Type", "text/html");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "GET");
+
+    res->println("<h1>Meshtastic</h1>\n");
+    res->println("<a href=/admin/settings>Settings</a><br>\n");
+    res->println("<a href=/admin/spiffs>Manage Web Content</a><br>\n");
+    res->println("<a href=/json/report>Device Report</a><br>\n");
+}
+
+void handleAdminSettings(HTTPRequest *req, HTTPResponse *res)
+{
+    res->setHeader("Content-Type", "text/html");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "GET");
+
+    res->println("<h1>Meshtastic</h1>\n");
+    res->println("This isn't done.\n");
+    res->println("<form action=/admin/settings/apply method=post>\n");
+    res->println("<table border=1>\n");
+    res->println("<tr><td>Set?</td><td>Setting</td><td>current value</td><td>new value</td></tr>\n");
+    res->println("<tr><td><input type=checkbox></td><td>WiFi SSID</td><td>false</td><td><input type=radio></td></tr>\n");
+    res->println("<tr><td><input type=checkbox></td><td>WiFi Password</td><td>false</td><td><input type=radio></td></tr>\n");
+    res->println("<tr><td><input type=checkbox></td><td>Smart Position Update</td><td>false</td><td><input type=radio></td></tr>\n");
+    res->println("<tr><td><input type=checkbox></td><td>is_always_powered</td><td>false</td><td><input type=radio></td></tr>\n");
+    res->println("<tr><td><input type=checkbox></td><td>is_always_powered</td><td>false</td><td><input type=radio></td></tr>\n");
+    res->println("</table>\n");
+    res->println("<table>\n");
+    res->println("<input type=submit value=Apply New Settings>\n");
+    res->println("<form>\n");
+    res->println("<p><hr><p><a href=/admin>Back to admin</a>\n");
+}
+
+void handleAdminSettingsApply(HTTPRequest *req, HTTPResponse *res)
+{
+    res->setHeader("Content-Type", "text/html");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "POST");
+    res->println("<h1>Meshtastic</h1>\n");
+    res->println(
+        "<html><head><meta http-equiv=\"refresh\" content=\"1;url=/admin/settings\" /><title>Settings Applied. </title>");
+
+    res->println("Settings Applied. Please wait.\n");
+}
+
+
+void handleSPIFFS(HTTPRequest *req, HTTPResponse *res)
+{
+    res->setHeader("Content-Type", "text/html");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "GET");
+
+    res->println("<h1>Meshtastic</h1>\n");
+    res->println("<a href=/admin/spiffs/delete>Delete Web Content</a><p><form action=/admin/spiffs/update "
+                 "method=post><input type=submit value=UPDATE_WEB_CONTENT></form>Be patient!");
+    res->println("<p><hr><p><a href=/admin>Back to admin</a>\n");
+}
+
 void handleRestart(HTTPRequest *req, HTTPResponse *res)
 {
     res->setHeader("Content-Type", "text/html");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
 
-    DEBUG_MSG("***** Restarted on HTTP(s) Request *****\n");
+    res->println("<h1>Meshtastic</h1>\n");
     res->println("Restarting");
 
-    ESP.restart();
+    DEBUG_MSG("***** Restarted on HTTP(s) Request *****\n");
+    webServerThread->requestRestart = (millis() / 1000) + 5;
 }
 
 void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)

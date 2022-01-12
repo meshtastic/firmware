@@ -1,11 +1,11 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -e
 
 VERSION=`bin/buildinfo.py long`
 SHORT_VERSION=`bin/buildinfo.py short`
 
-BOARDS_ESP32="tlora-v2 tlora-v1 tlora_v1_3 tlora-v2-1-1.6 tbeam heltec-v2.0 heltec-v2.1 tbeam0.7 meshtastic-diy-v1"
+BOARDS_ESP32="tlora-v2 tlora-v1 tlora_v1_3 tlora-v2-1-1.6 tbeam heltec-v1 heltec-v2.0 heltec-v2.1 tbeam0.7 meshtastic-diy-v1"
 #BOARDS_ESP32=tbeam
 
 # FIXME note nrf52840dk build is for some reason only generating a BIN file but not a HEX file nrf52840dk-geeksville is fine
