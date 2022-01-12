@@ -1,7 +1,7 @@
 #pragma once
 
 #include "SinglePortPlugin.h" // TODO: what header file to include?
-#include "HardwareInput.h"
+#include "InputBroker.h"
 
 enum RotaryEncoderInterruptBaseStateType
 {

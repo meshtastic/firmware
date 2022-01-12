@@ -36,9 +36,7 @@ void setupPlugins()
     new ReplyPlugin();
     rotaryEncoderInterruptImpl1 =
         new RotaryEncoderInterruptImpl1();
-    rotaryEncoderInterruptImpl1->init(
-            22, 23, 21,
-            INPUT_EVENT_UP, INPUT_EVENT_DOWN, INPUT_EVENT_SELECT);
+    rotaryEncoderInterruptImpl1->init();
     cannedMessagePlugin = new CannedMessagePlugin();
 
 #ifndef NO_ESP32

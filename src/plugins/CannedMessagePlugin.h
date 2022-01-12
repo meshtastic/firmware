@@ -1,6 +1,6 @@
 #pragma once
 #include "SinglePortPlugin.h"
-#include "input/HardwareInput.h"
+#include "input/InputBroker.h"
 
 enum cannedMessagePluginActionType
 {
@@ -16,20 +16,7 @@ enum cannedMessagePluginSendigState
     SENDING_STATE_ACTIVE
 };
 
-#define CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_LEN 50
-
-static char cannedMessagePluginMessages[][CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_LEN] =
-{
-    "Need helping hand",
-    "Help me with saw",
-    "I need an alpinist",
-    "I need ambulance",
-    "I'm fine",
-    "I'm already waiting",
-    "I will be late",
-    "I couldn't join",
-    "We have company"
-};
+#define CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_COUNT 50
 
 class CannedMessagePlugin :
     public SinglePortPlugin,
@@ -59,6 +46,7 @@ class CannedMessagePlugin :
         const char* message,
         bool wantReplies);
 
+    int splitConfiguredMessages();
     int getNextIndex();
     int getPrevIndex();
 
@@ -67,6 +55,9 @@ class CannedMessagePlugin :
     volatile cannedMessagePluginActionType action = CANNED_MESSAGE_ACTION_NONE;
     int currentMessageIndex = -1;
     cannedMessagePluginSendigState sendingState = SENDING_STATE_NONE;
+
+    char *messages[CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_COUNT];
+    int messagesCount = 0;
 };
 
 extern CannedMessagePlugin *cannedMessagePlugin;

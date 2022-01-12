@@ -13,9 +13,7 @@ class RotaryEncoderInterruptImpl1 :
 {
   public:
     RotaryEncoderInterruptImpl1();
-    void init(
-        uint8_t pinA, uint8_t pinB, uint8_t pinPress,
-        char eventCw, char eventCcw, char eventPressed);
+    void init();
     static void handleIntA();
     static void handleIntB();
     static void handleIntPressed();

@@ -1,11 +1,6 @@
 #include "configuration.h"
 #include "RotaryEncoderInterruptBase.h"
 
-/*#define PIN_PUSH 21
-#define PIN_A    22
-#define PIN_B    23
-*/
-
 RotaryEncoderInterruptBase::RotaryEncoderInterruptBase(
     const char *name) :
     concurrency::OSThread(name)
@@ -44,7 +39,7 @@ void RotaryEncoderInterruptBase::init(
 int32_t RotaryEncoderInterruptBase::runOnce()
 {
     InputEvent e;
-    e.inputEvent = INPUT_EVENT_NULL;
+    e.inputEvent = InputEventChar_NULL;
     e.origin = this->_originName;
 
     if (this->action == ROTARY_ACTION_PRESSED)
@@ -63,7 +58,7 @@ int32_t RotaryEncoderInterruptBase::runOnce()
         e.inputEvent = this->_eventCcw;
     }
 
-    if (e.inputEvent != INPUT_EVENT_NULL)
+    if (e.inputEvent != InputEventChar_NULL)
     {
         this->notifyObservers(&e);
     }

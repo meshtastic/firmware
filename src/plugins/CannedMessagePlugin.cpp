@@ -1,7 +1,6 @@
 #include "configuration.h"
 #include "CannedMessagePlugin.h"
 #include "MeshService.h"
-#include "input/InputBroker.h"
 
 #include <assert.h>
 
@@ -11,32 +10,89 @@ CannedMessagePlugin::CannedMessagePlugin()
     : SinglePortPlugin("canned", PortNum_TEXT_MESSAGE_APP),
     concurrency::OSThread("CannedMessagePlugin")
 {
-    if (true) // if module enabled
+    if (radioConfig.preferences.canned_message_plugin_enabled)
     {
+        if(this->splitConfiguredMessages() <= 0)
+        {
+            radioConfig.preferences.canned_message_plugin_enabled = false;
+            DEBUG_MSG("CannedMessagePlugin: No messages are configured. Plugin is disabled\n");
+            return;
+        }
         this->inputObserver.observe(inputBroker);
     }
 }
 
+/**
+ * @brief Items in array this->messages will be set to be pointing on the right
+ *     starting points of the string radioConfig.preferences.canned_message_plugin_messages
+ * 
+ * @return int Returns the number of messages found.
+ */
+int CannedMessagePlugin::splitConfiguredMessages()
+{
+    int messageIndex = 0;
+    int i = 0;
+    this->messages[messageIndex++] = radioConfig.preferences.canned_message_plugin_messages;
+    int upTo = strlen(radioConfig.preferences.canned_message_plugin_messages) - 1;
+
+    while (i < upTo)
+    {
+        if (radioConfig.preferences.canned_message_plugin_messages[i] == '|')
+        {
+            // Message ending found, replace it with string-end character.
+            radioConfig.preferences.canned_message_plugin_messages[i] = '\0';
+            DEBUG_MSG("CannedMessage %d is: '%s'\n", messageIndex-1, this->messages[messageIndex-1]);
+
+            if (messageIndex >= CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_COUNT)
+            {
+                this->messagesCount = messageIndex;
+                return this->messagesCount;
+            }
+
+            // Next message starts after pipe (|) just found.
+            this->messages[messageIndex++] =
+                (radioConfig.preferences.canned_message_plugin_messages + i + 1);
+        }
+        i += 1;
+    }
+    if (strlen(this->messages[messageIndex-1]) > 0)
+    {
+        DEBUG_MSG("CannedMessage %d is: '%s'\n", messageIndex-1, this->messages[messageIndex-1]);
+        this->messagesCount = messageIndex;
+    }
+    else
+    {
+        this->messagesCount = messageIndex-1;
+    }
+
+    return this->messagesCount;
+}
+
 int CannedMessagePlugin::handleInputEvent(const InputEvent *event)
 {
-    if (false) // test event->origin
+    if (
+        (strlen(radioConfig.preferences.canned_message_plugin_allow_input_origin) > 0) &&
+        (strcmp(radioConfig.preferences.canned_message_plugin_allow_input_origin, event->origin) != 0) &&
+        (strcmp(radioConfig.preferences.canned_message_plugin_allow_input_origin, "_any") != 0))
     {
+        // Event origin is not accepted.
         return 0;
     }
+
     bool validEvent = false;
-    if (event->inputEvent == INPUT_EVENT_UP)
+    if (event->inputEvent == static_cast<char>(InputEventChar_UP))
     {
         DEBUG_MSG("Canned message event UP\n");
         this->action = CANNED_MESSAGE_ACTION_UP;
         validEvent = true;
     }
-    if (event->inputEvent == INPUT_EVENT_DOWN)
+    if (event->inputEvent == static_cast<char>(InputEventChar_DOWN))
     {
         DEBUG_MSG("Canned message event DOWN\n");
         this->action = CANNED_MESSAGE_ACTION_DOWN;
         validEvent = true;
     }
-    if (event->inputEvent == INPUT_EVENT_SELECT)
+    if (event->inputEvent == static_cast<char>(InputEventChar_SELECT))
     {
         DEBUG_MSG("Canned message event Select\n");
         this->action = CANNED_MESSAGE_ACTION_SELECT;
@@ -61,6 +117,13 @@ void CannedMessagePlugin::sendText(NodeNum dest,
     p->to = dest;
     p->decoded.payload.size = strlen(message);
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
+    if (radioConfig.preferences.canned_message_plugin_send_bell)
+    {
+        p->decoded.payload.bytes[p->decoded.payload.size-1] = 7; // Bell character
+        p->decoded.payload.bytes[p->decoded.payload.size] = '\0'; // Bell character
+        p->decoded.payload.size++;
+    }
+
 
 //    PacketId prevPacketId = p->id; // In case we need it later.
 
@@ -72,6 +135,10 @@ void CannedMessagePlugin::sendText(NodeNum dest,
 
 int32_t CannedMessagePlugin::runOnce()
 {
+    if (!radioConfig.preferences.canned_message_plugin_enabled)
+    {
+        return 30000; // TODO: should return MAX_VAL
+    }
     DEBUG_MSG("Check status\n");
     if (this->sendingState == SENDING_STATE_ACTIVE)
     {
@@ -89,7 +156,7 @@ int32_t CannedMessagePlugin::runOnce()
     {
         sendText(
             NODENUM_BROADCAST,
-            cannedMessagePluginMessages[this->currentMessageIndex],
+            this->messages[this->currentMessageIndex],
             true);
         this->sendingState = SENDING_STATE_ACTIVE;
         this->currentMessageIndex = -1;
@@ -98,14 +165,12 @@ int32_t CannedMessagePlugin::runOnce()
     else if (this->action == CANNED_MESSAGE_ACTION_UP)
     {
         this->currentMessageIndex = getPrevIndex();
-        DEBUG_MSG("MOVE UP. Current message:%ld\n",
-            millis());
+        DEBUG_MSG("MOVE UP");
     }
     else if (this->action == CANNED_MESSAGE_ACTION_DOWN)
     {
         this->currentMessageIndex = this->getNextIndex();
-        DEBUG_MSG("MOVE DOWN. Current message:%ld\n",
-            millis());
+        DEBUG_MSG("MOVE DOWN");
     }
     if (this->action != CANNED_MESSAGE_ACTION_NONE)
     {
@@ -113,20 +178,20 @@ int32_t CannedMessagePlugin::runOnce()
         this->notifyObservers(NULL);
     }
 
-    return 30000;
+    return 30000; // TODO: should return MAX_VAL
 }
 
 String CannedMessagePlugin::getCurrentMessage()
 {
-    return cannedMessagePluginMessages[this->currentMessageIndex];
+    return this->messages[this->currentMessageIndex];
 }
 String CannedMessagePlugin::getPrevMessage()
 {
-    return cannedMessagePluginMessages[this->getPrevIndex()];
+    return this->messages[this->getPrevIndex()];
 }
 String CannedMessagePlugin::getNextMessage()
 {
-    return cannedMessagePluginMessages[this->getNextIndex()];
+    return this->messages[this->getNextIndex()];
 }
 bool CannedMessagePlugin::shouldDraw()
 {
@@ -139,8 +204,7 @@ cannedMessagePluginSendigState CannedMessagePlugin::getSendingState()
 
 int CannedMessagePlugin::getNextIndex()
 {
-    if (this->currentMessageIndex >=
-        (sizeof(cannedMessagePluginMessages) / CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_LEN) - 1)
+    if (this->currentMessageIndex >= (this->messagesCount -1))
     {
         return 0;
     }
@@ -154,8 +218,7 @@ int CannedMessagePlugin::getPrevIndex()
 {
     if (this->currentMessageIndex <= 0)
     {
-        return
-            sizeof(cannedMessagePluginMessages) / CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_LEN - 1;
+        return this->messagesCount - 1;
     }
     else
     {
