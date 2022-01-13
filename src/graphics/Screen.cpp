@@ -34,7 +34,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "mesh-pb-constants.h"
 #include "mesh/Channels.h"
 #include "plugins/TextMessagePlugin.h"
-#include "plugins/CannedMessagePlugin.h"
 #include "sleep.h"
 #include "target_specific.h"
 #include "utils.h"
@@ -821,9 +820,9 @@ void Screen::setup()
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
     if (textMessagePlugin)
         textMessageObserver.observe(textMessagePlugin);
-    // TODO: find a nicer way to notify screen about refresh
-    if (cannedMessagePlugin)
-        cannedMessageObserver.observe(cannedMessagePlugin);
+
+    // Plugins can notify screen about refresh
+    MeshPlugin::observeUIEvents(&uiFrameEventObserver);
 }
 
 void Screen::forceDisplay()
@@ -1461,14 +1460,21 @@ int Screen::handleTextMessage(const MeshPacket *packet)
     return 0;
 }
 
-int Screen::handleCannedMessage(const meshtastic::Status *packet)
+int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 {
     if (showingNormalScreen) {
-        setFrames(); // Regen the list of screens (will show new text message)
+        if (event->frameChanged)
+        {
+            setFrames(); // Regen the list of screens (will show new text message)
+        }
+        else if (event->needRedraw)
+        {
+            setFastFramerate();
+            // TODO: We might also want switch to corresponding frame,
+            //       but we don't know the exact frame number.
+            //ui.switchToFrame(0);
+        }
     }
-    // TODO: We might also want switch to corresponding frame,
-    //       but we don't know the exact frame number.
-    //ui.switchToFrame(0);
 
     return 0;
 }
