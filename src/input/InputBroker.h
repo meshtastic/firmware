@@ -2,7 +2,7 @@
 #include "Observer.h"
 
 typedef struct _InputEvent {
-    const char* origin;
+    const char* source;
     char inputEvent;
 } InputEvent;
 class InputBroker :
@@ -13,7 +13,7 @@ class InputBroker :
 
   public:
     InputBroker();
-    void registerOrigin(Observable<const InputEvent *> *origin);
+    void registerSource(Observable<const InputEvent *> *source);
 
   protected:
     int handleInputEvent(const InputEvent *event);

@@ -6,9 +6,9 @@ InputBroker::InputBroker()
 {
 };
 
-void InputBroker::registerOrigin(Observable<const InputEvent *> *origin)
+void InputBroker::registerSource(Observable<const InputEvent *> *source)
 {
-    this->inputEventObserver.observe(origin);
+    this->inputEventObserver.observe(source);
 }
 
 int InputBroker::handleInputEvent(const InputEvent *event)
