@@ -146,17 +146,19 @@ int32_t CannedMessagePlugin::runOnce()
         return 30000; // TODO: should return MAX_VAL
     }
     DEBUG_MSG("Check status\n");
+    UIFrameEvent e = {false, true};
     if (this->sendingState == SENDING_STATE_ACTIVE)
     {
         // TODO: might have some feedback of sendig state
         this->sendingState = SENDING_STATE_NONE;
-        this->notifyObservers(NULL);
+        this->notifyObservers(&e);
     }
     else if ((this->action != CANNED_MESSAGE_ACTION_NONE)
         && (this->currentMessageIndex == -1))
     {
         this->currentMessageIndex = 0;
         DEBUG_MSG("First touch.\n");
+        e.frameChanged = true;
     }
     else if (this->action == CANNED_MESSAGE_ACTION_SELECT)
     {
@@ -166,7 +168,7 @@ int32_t CannedMessagePlugin::runOnce()
             true);
         this->sendingState = SENDING_STATE_ACTIVE;
         this->currentMessageIndex = -1;
-        this->notifyObservers(NULL);
+        this->notifyObservers(&e);
         return 2000;
     }
     else if (this->action == CANNED_MESSAGE_ACTION_UP)
@@ -182,7 +184,7 @@ int32_t CannedMessagePlugin::runOnce()
     if (this->action != CANNED_MESSAGE_ACTION_NONE)
     {
         this->action = CANNED_MESSAGE_ACTION_NONE;
-        this->notifyObservers(NULL);
+        this->notifyObservers(&e);
     }
 
     return 30000; // TODO: should return MAX_VAL

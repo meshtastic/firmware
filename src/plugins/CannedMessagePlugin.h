@@ -17,11 +17,12 @@ enum cannedMessagePluginSendigState
     SENDING_STATE_ACTIVE
 };
 
+
 #define CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_COUNT 50
 
 class CannedMessagePlugin :
     public SinglePortPlugin,
-    public Observable<const meshtastic::Status *>,
+    public Observable<const UIFrameEvent *>,
     private concurrency::OSThread
 {
     CallbackObserver<CannedMessagePlugin, const InputEvent *> inputObserver =
@@ -53,6 +54,7 @@ class CannedMessagePlugin :
 
     int handleInputEvent(const InputEvent *event);
     virtual bool wantUIFrame() { return this->shouldDraw(); }
+    virtual Observable<const UIFrameEvent *>* getUIFrameObservable() { return this; }
     virtual void drawFrame(
         OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 

@@ -65,7 +65,7 @@ int32_t RotaryEncoderInterruptBase::runOnce()
 
     this->action = ROTARY_ACTION_NONE;
 
-    return 30000;
+    return 30000; // TODO: technically this can be MAX_INT
 }
 
 
@@ -73,7 +73,7 @@ void RotaryEncoderInterruptBase::intPressHandler()
 {
     this->action = ROTARY_ACTION_PRESSED;
     runned(millis());
-    setInterval(20);
+    setInterval(20); // TODO: this modifies a non-volatile variable!
 }
 
 void RotaryEncoderInterruptBase::intAHandler()
@@ -144,7 +144,7 @@ RotaryEncoderInterruptBaseStateType RotaryEncoderInterruptBase::intHandler(
         newState = ROTARY_EVENT_CLEARED;
     }
     runned(millis());
-    setInterval(50);
+    setInterval(50); // TODO: this modifies a non-volatile variable!
 
     return newState;
 }
