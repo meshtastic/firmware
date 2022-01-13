@@ -40,7 +40,7 @@ int32_t RotaryEncoderInterruptBase::runOnce()
 {
     InputEvent e;
     e.inputEvent = InputEventChar_NULL;
-    e.origin = this->_originName;
+    e.source = this->_originName;
 
     if (this->action == ROTARY_ACTION_PRESSED)
     {

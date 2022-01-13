@@ -82,10 +82,10 @@ int CannedMessagePlugin::handleInputEvent(const InputEvent *event)
 {
     if (
         (strlen(radioConfig.preferences.canned_message_plugin_allow_input_origin) > 0) &&
-        (strcmp(radioConfig.preferences.canned_message_plugin_allow_input_origin, event->origin) != 0) &&
+        (strcmp(radioConfig.preferences.canned_message_plugin_allow_input_origin, event->source) != 0) &&
         (strcmp(radioConfig.preferences.canned_message_plugin_allow_input_origin, "_any") != 0))
     {
-        // Event origin is not accepted.
+        // Event source is not accepted.
         return 0;
     }
 

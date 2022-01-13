@@ -1,4 +1,6 @@
 #include "configuration.h"
+#include "input/InputBroker.h"
+#include "input/RotaryEncoderInterruptImpl1.h"
 #include "plugins/ExternalNotificationPlugin.h"
 #include "plugins/NodeInfoPlugin.h"
 #include "plugins/PositionPlugin.h"
@@ -9,8 +11,6 @@
 #include "plugins/RoutingPlugin.h"
 #include "plugins/AdminPlugin.h"
 #include "plugins/CannedMessagePlugin.h"
-#include "plugins/input/InputBroker.h"
-#include "plugins/input/RotaryEncoderInterruptImpl1.h"
 #ifndef NO_ESP32
 #include "plugins/esp32/SerialPlugin.h"
 #include "plugins/esp32/EnvironmentalMeasurementPlugin.h"
