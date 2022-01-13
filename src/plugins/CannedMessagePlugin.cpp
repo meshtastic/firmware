@@ -2,13 +2,13 @@
 #include "CannedMessagePlugin.h"
 #include "MeshService.h"
 
-#include <assert.h>
-
 // TODO: reuse defined from Screen.cpp
 #define FONT_SMALL ArialMT_Plain_10
 #define FONT_MEDIUM ArialMT_Plain_16
 #define FONT_LARGE ArialMT_Plain_24
 
+// Remove Canned message screen if no action is taken for some milliseconds
+#define INACTIVATE_AFTER_MS 20000
 
 CannedMessagePlugin *cannedMessagePlugin;
 
@@ -38,8 +38,10 @@ int CannedMessagePlugin::splitConfiguredMessages()
 {
     int messageIndex = 0;
     int i = 0;
-    this->messages[messageIndex++] = radioConfig.preferences.canned_message_plugin_messages;
-    int upTo = strlen(radioConfig.preferences.canned_message_plugin_messages) - 1;
+    this->messages[messageIndex++] =
+        radioConfig.preferences.canned_message_plugin_messages;
+    int upTo =
+        strlen(radioConfig.preferences.canned_message_plugin_messages) - 1;
 
     while (i < upTo)
     {
@@ -47,7 +49,8 @@ int CannedMessagePlugin::splitConfiguredMessages()
         {
             // Message ending found, replace it with string-end character.
             radioConfig.preferences.canned_message_plugin_messages[i] = '\0';
-            DEBUG_MSG("CannedMessage %d is: '%s'\n", messageIndex-1, this->messages[messageIndex-1]);
+            DEBUG_MSG("CannedMessage %d is: '%s'\n",
+                messageIndex-1, this->messages[messageIndex-1]);
 
             if (messageIndex >= CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_COUNT)
             {
@@ -63,7 +66,8 @@ int CannedMessagePlugin::splitConfiguredMessages()
     }
     if (strlen(this->messages[messageIndex-1]) > 0)
     {
-        DEBUG_MSG("CannedMessage %d is: '%s'\n", messageIndex-1, this->messages[messageIndex-1]);
+        DEBUG_MSG("CannedMessage %d is: '%s'\n",
+            messageIndex-1, this->messages[messageIndex-1]);
         this->messagesCount = messageIndex;
     }
     else
@@ -108,8 +112,7 @@ int CannedMessagePlugin::handleInputEvent(const InputEvent *event)
     if (validEvent)
     {
         // Let runOnce to be called immediately.
-        runned(millis());
-        setInterval(0);
+        setIntervalFromNow(0);
     }
 
     return 0;
@@ -121,6 +124,7 @@ void CannedMessagePlugin::sendText(NodeNum dest,
 {
     MeshPacket *p = allocDataPacket();
     p->to = dest;
+    p->want_ack = true;
     p->decoded.payload.size = strlen(message);
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
     if (radioConfig.preferences.canned_message_plugin_send_bell)
@@ -151,6 +155,7 @@ int32_t CannedMessagePlugin::runOnce()
     {
         // TODO: might have some feedback of sendig state
         this->sendingState = SENDING_STATE_NONE;
+        e.frameChanged = true;
         this->notifyObservers(&e);
     }
     else if ((this->action != CANNED_MESSAGE_ACTION_NONE)
@@ -183,7 +188,18 @@ int32_t CannedMessagePlugin::runOnce()
     }
     if (this->action != CANNED_MESSAGE_ACTION_NONE)
     {
+        this->lastTouchMillis = millis();
         this->action = CANNED_MESSAGE_ACTION_NONE;
+        this->notifyObservers(&e);
+        return INACTIVATE_AFTER_MS;
+    }
+    if ((millis() - this->lastTouchMillis) > INACTIVATE_AFTER_MS)
+    {
+        // Reset plugin
+        DEBUG_MSG("Reset due the lack of activity.\n");
+        e.frameChanged = true;
+        this->currentMessageIndex = -1;
+        this->sendingState = SENDING_STATE_NONE;
         this->notifyObservers(&e);
     }
 

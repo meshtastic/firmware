@@ -1,5 +1,4 @@
 #pragma once
-#include <OLEDDisplay.h>
 #include "SinglePortPlugin.h"
 #include "input/InputBroker.h"
 
@@ -41,7 +40,7 @@ class CannedMessagePlugin :
 
   protected:
 
-    virtual int32_t runOnce();  
+    virtual int32_t runOnce();
 
     void sendText(
         NodeNum dest,
@@ -64,6 +63,7 @@ class CannedMessagePlugin :
 
     char *messages[CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_COUNT];
     int messagesCount = 0;
+    unsigned long lastTouchMillis = 0;
 };
 
 extern CannedMessagePlugin *cannedMessagePlugin;
