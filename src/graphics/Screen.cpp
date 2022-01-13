@@ -286,28 +286,6 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     display->drawStringMaxWidth(4 + x, 10 + y, SCREEN_WIDTH - (6 + x), tempBuf);
 }
 
-static void drawCannedMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    displayedNodeNum = 0; // Not currently showing a node pane
-
-    if (cannedMessagePlugin->getSendingState() == SENDING_STATE_NONE)
-    {
-        display->setTextAlignment(TEXT_ALIGN_LEFT);
-        display->setFont(FONT_SMALL);
-        display->drawString(0 + x, 0 + y, cannedMessagePlugin->getPrevMessage());
-        display->setFont(FONT_MEDIUM);
-        display->drawString(0 + x, 0 + y + 8, cannedMessagePlugin->getCurrentMessage());
-        display->setFont(FONT_SMALL);
-        display->drawString(0 + x, 0 + y + 24, cannedMessagePlugin->getNextMessage());
-    }
-    else
-    {
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->setFont(FONT_MEDIUM);
-        display->drawString(display->getWidth()/2 + x, 0 + y + 12, "Sending...");
-    }
-}
-
 /// Draw a series of fields in a column, wrapping to multiple colums if needed
 static void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields)
 {
@@ -843,6 +821,7 @@ void Screen::setup()
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
     if (textMessagePlugin)
         textMessageObserver.observe(textMessagePlugin);
+    // TODO: find a nicer way to notify screen about refresh
     if (cannedMessagePlugin)
         cannedMessageObserver.observe(cannedMessagePlugin);
 }
@@ -1020,9 +999,6 @@ void Screen::setFrames()
     // If we have a text message - show it next, unless it's a phone message and we aren't using any special plugins
     if (devicestate.has_rx_text_message && shouldDrawMessage(&devicestate.rx_text_message)) {
         normalFrames[numframes++] = drawTextMessageFrame;
-    }
-    if (cannedMessagePlugin->shouldDraw()) {
-        normalFrames[numframes++] = drawCannedMessageFrame;
     }
 
     // then all the nodes
@@ -1490,7 +1466,9 @@ int Screen::handleCannedMessage(const meshtastic::Status *packet)
     if (showingNormalScreen) {
         setFrames(); // Regen the list of screens (will show new text message)
     }
-    ui.switchToFrame(1);
+    // TODO: We might also want switch to corresponding frame,
+    //       but we don't know the exact frame number.
+    //ui.switchToFrame(0);
 
     return 0;
 }

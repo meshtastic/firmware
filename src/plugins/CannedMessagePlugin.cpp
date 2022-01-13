@@ -4,6 +4,12 @@
 
 #include <assert.h>
 
+// TODO: reuse defined from Screen.cpp
+#define FONT_SMALL ArialMT_Plain_10
+#define FONT_MEDIUM ArialMT_Plain_16
+#define FONT_LARGE ArialMT_Plain_24
+
+
 CannedMessagePlugin *cannedMessagePlugin;
 
 CannedMessagePlugin::CannedMessagePlugin()
@@ -160,6 +166,7 @@ int32_t CannedMessagePlugin::runOnce()
             true);
         this->sendingState = SENDING_STATE_ACTIVE;
         this->currentMessageIndex = -1;
+        this->notifyObservers(NULL);
         return 2000;
     }
     else if (this->action == CANNED_MESSAGE_ACTION_UP)
@@ -195,6 +202,10 @@ String CannedMessagePlugin::getNextMessage()
 }
 bool CannedMessagePlugin::shouldDraw()
 {
+    if (!radioConfig.preferences.canned_message_plugin_enabled)
+    {
+        return false;
+    }
     return (currentMessageIndex != -1) || (this->sendingState != SENDING_STATE_NONE);
 }
 cannedMessagePluginSendigState CannedMessagePlugin::getSendingState()
@@ -225,3 +236,27 @@ int CannedMessagePlugin::getPrevIndex()
         return this->currentMessageIndex - 1;
     }
 }
+
+void CannedMessagePlugin::drawFrame(
+    OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    displayedNodeNum = 0; // Not currently showing a node pane
+
+    if (cannedMessagePlugin->getSendingState() == SENDING_STATE_NONE)
+    {
+        display->setTextAlignment(TEXT_ALIGN_LEFT);
+        display->setFont(FONT_SMALL);
+        display->drawString(0 + x, 0 + y, cannedMessagePlugin->getPrevMessage());
+        display->setFont(FONT_MEDIUM);
+        display->drawString(0 + x, 0 + y + 8, cannedMessagePlugin->getCurrentMessage());
+        display->setFont(FONT_SMALL);
+        display->drawString(0 + x, 0 + y + 24, cannedMessagePlugin->getNextMessage());
+    }
+    else
+    {
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->setFont(FONT_MEDIUM);
+        display->drawString(display->getWidth()/2 + x, 0 + y + 12, "Sending...");
+    }
+}
+

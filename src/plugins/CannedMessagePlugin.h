@@ -1,4 +1,5 @@
 #pragma once
+#include <OLEDDisplay.h>
 #include "SinglePortPlugin.h"
 #include "input/InputBroker.h"
 
@@ -51,6 +52,9 @@ class CannedMessagePlugin :
     int getPrevIndex();
 
     int handleInputEvent(const InputEvent *event);
+    virtual bool wantUIFrame() { return this->shouldDraw(); }
+    virtual void drawFrame(
+        OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
     volatile cannedMessagePluginActionType action = CANNED_MESSAGE_ACTION_NONE;
     int currentMessageIndex = -1;
