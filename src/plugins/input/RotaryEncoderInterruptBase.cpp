@@ -72,8 +72,7 @@ int32_t RotaryEncoderInterruptBase::runOnce()
 void RotaryEncoderInterruptBase::intPressHandler()
 {
     this->action = ROTARY_ACTION_PRESSED;
-    runned(millis());
-    setInterval(20); // TODO: this modifies a non-volatile variable!
+    setIntervalFromNow(20); // TODO: this modifies a non-volatile variable!
 }
 
 void RotaryEncoderInterruptBase::intAHandler()
@@ -143,8 +142,7 @@ RotaryEncoderInterruptBaseStateType RotaryEncoderInterruptBase::intHandler(
         // Logic to prevent bouncing.
         newState = ROTARY_EVENT_CLEARED;
     }
-    runned(millis());
-    setInterval(50); // TODO: this modifies a non-volatile variable!
+    setIntervalFromNow(50); // TODO: this modifies a non-volatile variable!
 
     return newState;
 }
