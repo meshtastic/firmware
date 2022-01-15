@@ -46,8 +46,8 @@ void AirTime::airtimeRotatePeriod()
             this->airtimes.periodRX[i + 1] = this->airtimes.periodRX[i];
             this->airtimes.periodRX_ALL[i + 1] = this->airtimes.periodRX_ALL[i];
 
-            myNodeInfo.air_period_tx[i + 1] = myNodeInfo.air_period_tx[i];
-            myNodeInfo.air_period_rx[i + 1] = myNodeInfo.air_period_rx[i];
+            myNodeInfo.air_period_tx[i + 1] = this->airtimes.periodTX[i];
+            myNodeInfo.air_period_rx[i + 1] = this->airtimes.periodRX[i];
         }
         
         this->airtimes.periodTX[0] = 0;
@@ -111,8 +111,19 @@ int32_t AirTime::runOnce()
     if (firstTime) {
         airtimeRotatePeriod();
 
+        // Init channelUtilization window to all 0
         for (uint32_t i = 0; i < CHANNEL_UTILIZATION_PERIODS; i++) {
             this->channelUtilization[i] = 0;
+        }
+
+        // Init airtime windows to all 0
+        for (int i = 0; i < PERIODS_TO_LOG; i++) {
+            this->airtimes.periodTX[i] = 0;
+            this->airtimes.periodRX[i] = 0;
+            this->airtimes.periodRX_ALL[i] = 0;
+
+            //myNodeInfo.air_period_tx[i] = 0;
+            //myNodeInfo.air_period_rx[i] = 0;
         }
 
         firstTime = false;
