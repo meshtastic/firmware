@@ -21,6 +21,14 @@ enum class ProcessMessage
   STOP = 1,
 };
 
+/*
+ * This struct is used by Screen to figure out whether screen frame should be updated.
+ */
+typedef struct _UIFrameEvent {
+    bool frameChanged;
+    bool needRedraw;
+} UIFrameEvent;
+
 /** A baseclass for any mesh "plugin".
  *
  * A plugin allows you to add new features to meshtastic device code, without needing to know messaging details.
@@ -48,6 +56,7 @@ class MeshPlugin
     static void callPlugins(const MeshPacket &mp, RxSource src = RX_SRC_RADIO);
 
     static std::vector<MeshPlugin *> GetMeshPluginsWithUIFrames();
+    static void observeUIEvents(Observer<const UIFrameEvent *> *observer);
 #ifndef NO_SCREEN
     virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) { return; }
 #endif
@@ -119,6 +128,7 @@ class MeshPlugin
      * @return true if you want to be alloced a UI screen frame
      */
     virtual bool wantUIFrame() { return false; }
+    virtual Observable<const UIFrameEvent *>* getUIFrameObservable() { return NULL; }
 
     MeshPacket *allocAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex);
 
