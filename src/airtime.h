@@ -69,6 +69,9 @@ class AirTime : private concurrency::OSThread
         uint8_t lastPeriodIndex;
     } airtimes;
 
+    uint8_t getPeriodUtilMinute();
+    uint8_t getPeriodUtilHour();
+
   protected:
     virtual int32_t runOnce() override;
 };
