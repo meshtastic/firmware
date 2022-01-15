@@ -52,7 +52,6 @@ class AirTime : private concurrency::OSThread
     uint32_t channelUtilization[CHANNEL_UTILIZATION_PERIODS];
     uint32_t utilizationTX[MINUTES_IN_HOUR];
 
-    uint8_t currentPeriodIndex();
     void airtimeRotatePeriod();
     uint8_t getPeriodsToLog();
     uint32_t getSecondsPerPeriod();
@@ -74,6 +73,7 @@ class AirTime : private concurrency::OSThread
 
     uint8_t getPeriodUtilMinute();
     uint8_t getPeriodUtilHour();
+    uint8_t currentPeriodIndex();
 
   protected:
     virtual int32_t runOnce() override;

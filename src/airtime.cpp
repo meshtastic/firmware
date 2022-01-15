@@ -45,8 +45,8 @@ uint8_t AirTime::getPeriodUtilHour() {
 void AirTime::airtimeRotatePeriod()
 {
 
-    if (this->airtimes.lastPeriodIndex != currentPeriodIndex()) {
-        // DEBUG_MSG("Rotating airtimes to a new period = %u\n", currentPeriodIndex());
+    if (this->airtimes.lastPeriodIndex != this->currentPeriodIndex()) {
+        DEBUG_MSG("Rotating airtimes to a new period = %u\n", this->currentPeriodIndex());
 
         for (int i = PERIODS_TO_LOG - 2; i >= 0; --i) {
             this->airtimes.periodTX[i + 1] = this->airtimes.periodTX[i];
@@ -64,7 +64,7 @@ void AirTime::airtimeRotatePeriod()
         myNodeInfo.air_period_tx[0] = 0;
         myNodeInfo.air_period_rx[0] = 0;
 
-        this->airtimes.lastPeriodIndex = currentPeriodIndex();
+        this->airtimes.lastPeriodIndex = this->currentPeriodIndex();
     }
 }
 
@@ -127,7 +127,6 @@ int32_t AirTime::runOnce()
     uint8_t utilPeriodTX = this->getPeriodUtilHour();
 
     if (firstTime) {
-        airtimeRotatePeriod();
 
         // Init utilizationTX window to all 0
         for (uint32_t i = 0; i < MINUTES_IN_HOUR; i++) {
@@ -153,6 +152,7 @@ int32_t AirTime::runOnce()
         lastUtilPeriod = utilPeriod;
 
     } else {
+        this->airtimeRotatePeriod();
 
         // Reset the channelUtilization window when we roll over
         if (lastUtilPeriod != utilPeriod) {
