@@ -27,7 +27,7 @@
 #define CHANNEL_UTILIZATION_PERIODS 6
 #define SECONDS_PER_PERIOD 3600
 #define PERIODS_TO_LOG 24
-
+#define MINUTES_IN_HOUR 60
 
 enum reportTypes { TX_LOG, RX_LOG, RX_ALL_LOG };
 
@@ -43,7 +43,11 @@ class AirTime : private concurrency::OSThread
 
     void logAirtime(reportTypes reportType, uint32_t airtime_ms);
     float channelUtilizationPercent();
+    float utilizationTXPercent();
+
+    float UtilizationPercentTX();
     uint32_t channelUtilization[CHANNEL_UTILIZATION_PERIODS];
+    uint32_t utilizationTX[MINUTES_IN_HOUR];
 
     uint8_t currentPeriodIndex();
     void airtimeRotatePeriod();
@@ -55,6 +59,7 @@ class AirTime : private concurrency::OSThread
   private:
     bool firstTime = true;
     uint8_t lastUtilPeriod = 0;
+    uint8_t lastUtilPeriodTX = 0;
     uint32_t secSinceBoot = 0;
 
     struct airtimeStruct {
