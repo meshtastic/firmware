@@ -252,7 +252,7 @@ bool PhoneAPI::handleToRadioPacket(MeshPacket &p)
 {
     printPacket("PACKET FROM PHONE", &p);
     service.handleToRadio(p);
-
+    printPacket("     PhoneAPI::handleToRadioPacket", &p); 
     return true;
 }
 

@@ -103,7 +103,12 @@ void ReliableRouter::sniffReceived(const MeshPacket *p, const Routing *c)
 
         // A nak is a routing packt that has an  error code
         PacketId nakId = (c && c->error_reason != Routing_Error_NONE) ? p->decoded.request_id : 0;
-
+    if (p->decoded.is_tapback) {
+        DEBUG_MSG("\n\n\n\n ReliableRouter::sniffReceivedsend - is_tapback\n\n\n\n");
+    }
+    if (p->decoded.reply_id) {
+        DEBUG_MSG("\n\n\n\n ReliableRouter::sniffReceived - reply_id\n\n\n\n");
+    }
         // We intentionally don't check wasSeenRecently, because it is harmless to delete non existent retransmission records
         if (ackId || nakId) {
             if (ackId) {

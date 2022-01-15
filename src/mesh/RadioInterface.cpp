@@ -157,6 +157,12 @@ void printPacket(const char *prefix, const MeshPacket *p)
         if (s.request_id)
             DEBUG_MSG(" requestId=%0x", s.request_id);
 
+        if (s.is_tapback)
+            DEBUG_MSG(" is_tapback=true");
+
+        if (s.reply_id)
+            DEBUG_MSG(" requestId=%0x", s.reply_id);
+
         /* now inside Data and therefore kinda opaque
         if (s.which_ackVariant == SubPacket_success_id_tag)
             DEBUG_MSG(" successId=%08x", s.ackVariant.success_id);

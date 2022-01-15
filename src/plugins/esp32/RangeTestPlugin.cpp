@@ -133,6 +133,8 @@ ProcessMessage RangeTestPluginRadio::handleReceived(const MeshPacket &mp)
                   nodeDB.getNodeNum(), mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
         */
 
+       auto &p = mp.decoded;
+
         if (getFrom(&mp) != nodeDB.getNodeNum()) {
 
             if (radioConfig.preferences.range_test_plugin_save) {
@@ -166,21 +168,22 @@ ProcessMessage RangeTestPluginRadio::handleReceived(const MeshPacket &mp)
             DEBUG_MSG("gpsStatus->getDOP()          %d\n", gpsStatus->getDOP());
             DEBUG_MSG("-----------------------------------------\n");
             */
-            DEBUG_MSG("\n\n\n");
+            DEBUG_MSG("\n\n\nFrom Mesh\n");
             if (mp.decoded.is_tapback) {  
-                DEBUG_MSG("Got is_tapback from Mesh\n");
+                //p.payload
+                DEBUG_MSG("  Got is_tapback\n");
             }
             if (mp.decoded.reply_id) {
-                DEBUG_MSG("Got reply_id from Mesh\n");
+                DEBUG_MSG("  Got reply_id\n");
             }
             DEBUG_MSG("\n\n\n");
         } else {
-            DEBUG_MSG("\n\n\n");
+            DEBUG_MSG("\n\n\nFrom Phone");
             if (mp.decoded.is_tapback) {
-                DEBUG_MSG("Got is_tapback from Phone\n");
+                DEBUG_MSG("  Got is_tapback\n");
             }
             if (mp.decoded.reply_id) {
-                DEBUG_MSG("Got reply_id from Phone\n");
+                DEBUG_MSG("  Got reply_id\n");
             }
             DEBUG_MSG("\n\n\n");
         }

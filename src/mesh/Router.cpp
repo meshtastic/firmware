@@ -151,6 +151,14 @@ void Router::setReceivedMessage()
 
 ErrorCode Router::sendLocal(MeshPacket *p, RxSource src)
 {
+    //auto &p = p.decoded;
+    if (p->decoded.is_tapback) {
+        printPacket("Router::sendLocal", p);
+    }
+    if (p->decoded.reply_id) {
+        DEBUG_MSG("\n\n\n\nRouter::sendLocal - reply_id\n\n\n\n");
+    }
+        printPacket("Router::sendLocal", p);
     // No need to deliver externally if the destination is the local node
     if (p->to == nodeDB.getNodeNum()) {
         printPacket("Enqueued local", p);
@@ -205,7 +213,13 @@ ErrorCode Router::send(MeshPacket *p)
 
     assert(p->which_payloadVariant == MeshPacket_encrypted_tag ||
            p->which_payloadVariant == MeshPacket_decoded_tag); // I _think_ all packets should have a payload by now
-
+    // Also, we should set the time from the ISR and it should have msec level resolution
+    if (p->decoded.is_tapback) {
+        DEBUG_MSG("\n\n\n\n Router::send - is_tapback\n\n\n\n");
+    }
+    if (p->decoded.reply_id) {
+        DEBUG_MSG("\n\n\n\n Router::send - reply_id\n\n\n\n");
+    }
     // If the packet is not yet encrypted, do so now
     if (p->which_payloadVariant == MeshPacket_decoded_tag) {
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
@@ -332,7 +346,12 @@ void Router::handleReceived(MeshPacket *p, RxSource src)
 {
     // Also, we should set the time from the ISR and it should have msec level resolution
     p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
-
+    if (p->decoded.is_tapback) {
+        DEBUG_MSG("\n\n\n\nRouter::handleReceived - is_tapback\n\n\n\n");
+    }
+    if (p->decoded.reply_id) {
+        DEBUG_MSG("\n\n\n\nRouter::handleReceived - reply_id\n\n\n\n");
+    }
     // Take those raw bytes and convert them back into a well structured protobuf we can understand
     bool decoded = perhapsDecode(p);
     if (decoded) {
