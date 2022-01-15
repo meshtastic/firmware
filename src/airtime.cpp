@@ -11,12 +11,16 @@ AirTime *airTime;
 void AirTime::logAirtime(reportTypes reportType, uint32_t airtime_ms)
 {
 
-    // TODO: Is the airtimes array still necessary? It's now in myNodeInfo anyway
+    uint8_t channelUtilPeriod = (getSecondsSinceBoot() / 10) % CHANNEL_UTILIZATION_PERIODS;
+    uint8_t channelUtilTXPeriod = (getSecondsSinceBoot() / 10) % CHANNEL_UTILIZATION_PERIODS;
 
     if (reportType == TX_LOG) {
         DEBUG_MSG("AirTime - Packet transmitted : %ums\n", airtime_ms);
         this->airtimes.periodTX[0] = this->airtimes.periodTX[0] + airtime_ms;
         myNodeInfo.air_period_tx[0] = myNodeInfo.air_period_tx[0] + airtime_ms;
+
+        this->utilizationTX[channelUtilTXPeriod] = channelUtilization[channelUtilTXPeriod] + airtime_ms;
+
     } else if (reportType == RX_LOG) {
         DEBUG_MSG("AirTime - Packet received : %ums\n", airtime_ms);
         this->airtimes.periodRX[0] = this->airtimes.periodRX[0] + airtime_ms;
@@ -26,8 +30,9 @@ void AirTime::logAirtime(reportTypes reportType, uint32_t airtime_ms)
         this->airtimes.periodRX_ALL[0] = this->airtimes.periodRX_ALL[0] + airtime_ms;
     }
 
-    uint8_t channelUtilPeriod = (getSecondsSinceBoot() / 10) % CHANNEL_UTILIZATION_PERIODS;
+    // Log all airtime type for channel utilization
     this->channelUtilization[channelUtilPeriod] = channelUtilization[channelUtilPeriod] + airtime_ms;
+
 }
 
 uint8_t AirTime::currentPeriodIndex()
@@ -100,6 +105,16 @@ float AirTime::channelUtilizationPercent()
     return (float(sum) / float(CHANNEL_UTILIZATION_PERIODS * 10 * 1000)) * 100;
 }
 
+float AirTime::utilizationTXPercent()
+{
+    uint32_t sum = 0;
+    for (uint32_t i = 0; i < MINUTES_IN_HOUR; i++) {
+        sum += this->utilizationTX[i];
+    }
+
+    return (float(sum) / float(MINUTES_IN_HOUR * 10 * 1000)) * 100;
+}
+
 AirTime::AirTime() : concurrency::OSThread("AirTime") {}
 
 int32_t AirTime::runOnce()
@@ -107,9 +122,16 @@ int32_t AirTime::runOnce()
     secSinceBoot++;
 
     uint8_t utilPeriod = (getSecondsSinceBoot() / 10) % CHANNEL_UTILIZATION_PERIODS;
+    uint8_t utilPeriodTX = (getSecondsSinceBoot() / 60) % MINUTES_IN_HOUR;
 
     if (firstTime) {
         airtimeRotatePeriod();
+
+
+        // Init utilizationTX window to all 0
+        for (uint32_t i = 0; i < MINUTES_IN_HOUR; i++) {
+            this->utilizationTX[i] = 0;
+        }
 
         // Init channelUtilization window to all 0
         for (uint32_t i = 0; i < CHANNEL_UTILIZATION_PERIODS; i++) {
@@ -138,9 +160,21 @@ int32_t AirTime::runOnce()
             this->channelUtilization[utilPeriod] = 0;
         }
 
+        if (lastUtilPeriodTX != utilPeriodTX) {
+            lastUtilPeriodTX = utilPeriodTX;
+
+            this->utilizationTX[utilPeriodTX] = 0;
+        }
+
         // Update channel_utilization every second.
         myNodeInfo.channel_utilization = airTime->channelUtilizationPercent();
+
+        // Update channel_utilization every second.
+        myNodeInfo.air_util_tx = airTime->utilizationTXPercent();
+
     }
+
+    DEBUG_MSG("Minutes %d TX Airtime %3.2f%\n", utilPeriodTX, airTime->utilizationTXPercent());
 
     return (1000 * 1);
 }

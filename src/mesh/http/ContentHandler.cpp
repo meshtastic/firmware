@@ -624,6 +624,8 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     }
 
     res->println("],");
+    res->printf("\"channel_utilization\": %3.2f%,\n", airTime->channelUtilizationPercent());
+    res->printf("\"utilization_tx\": %3.2f%,\n", airTime->utilizationTXPercent());
     res->printf("\"seconds_since_boot\": %u,\n", airTime->getSecondsSinceBoot());
     res->printf("\"seconds_per_period\": %u,\n", airTime->getSecondsPerPeriod());
     res->printf("\"periods_to_log\": %u\n", airTime->getPeriodsToLog());
@@ -661,7 +663,6 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     res->println("},");
 
     res->println("\"device\": {");
-    res->printf("\"channel_utilization\": %3.2f%,\n", airTime->channelUtilizationPercent());
     res->printf("\"reboot_counter\": %d\n", myNodeInfo.reboot_count);
     res->println("},");
 
