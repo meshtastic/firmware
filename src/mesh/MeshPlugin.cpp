@@ -235,3 +235,18 @@ std::vector<MeshPlugin *> MeshPlugin::GetMeshPluginsWithUIFrames()
     }
     return pluginsWithUIFrames;
 }
+
+void MeshPlugin::observeUIEvents(
+    Observer<const UIFrameEvent *> *observer)
+{
+    std::vector<MeshPlugin *> pluginsWithUIFrames;
+    for (auto i = plugins->begin(); i != plugins->end(); ++i) {
+        auto &pi = **i;
+        Observable<const UIFrameEvent *> *observable =
+            pi.getUIFrameObservable();
+        if (observable != NULL) {
+            DEBUG_MSG("Plugin wants a UI Frame\n");
+            observer->observe(observable);
+        }
+    }
+}
