@@ -820,6 +820,9 @@ void Screen::setup()
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
     if (textMessagePlugin)
         textMessageObserver.observe(textMessagePlugin);
+
+    // Plugins can notify screen about refresh
+    MeshPlugin::observeUIEvents(&uiFrameEventObserver);
 }
 
 void Screen::forceDisplay()
@@ -1452,6 +1455,25 @@ int Screen::handleTextMessage(const MeshPacket *packet)
 {
     if (showingNormalScreen) {
         setFrames(); // Regen the list of screens (will show new text message)
+    }
+
+    return 0;
+}
+
+int Screen::handleUIFrameEvent(const UIFrameEvent *event)
+{
+    if (showingNormalScreen) {
+        if (event->frameChanged)
+        {
+            setFrames(); // Regen the list of screens (will show new text message)
+        }
+        else if (event->needRedraw)
+        {
+            setFastFramerate();
+            // TODO: We might also want switch to corresponding frame,
+            //       but we don't know the exact frame number.
+            //ui.switchToFrame(0);
+        }
     }
 
     return 0;

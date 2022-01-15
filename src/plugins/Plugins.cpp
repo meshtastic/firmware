@@ -1,4 +1,6 @@
 #include "configuration.h"
+#include "input/InputBroker.h"
+#include "input/RotaryEncoderInterruptImpl1.h"
 #include "plugins/ExternalNotificationPlugin.h"
 #include "plugins/NodeInfoPlugin.h"
 #include "plugins/PositionPlugin.h"
@@ -8,6 +10,7 @@
 #include "plugins/TextMessagePlugin.h"
 #include "plugins/RoutingPlugin.h"
 #include "plugins/AdminPlugin.h"
+#include "plugins/CannedMessagePlugin.h"
 #ifndef NO_ESP32
 #include "plugins/esp32/SerialPlugin.h"
 #include "plugins/esp32/EnvironmentalMeasurementPlugin.h"
@@ -20,6 +23,7 @@
  */
 void setupPlugins()
 {
+    inputBroker = new InputBroker();
     adminPlugin = new AdminPlugin();
     nodeInfoPlugin = new NodeInfoPlugin();
     positionPlugin = new PositionPlugin();
@@ -30,6 +34,10 @@ void setupPlugins()
 
     new RemoteHardwarePlugin();
     new ReplyPlugin();
+    rotaryEncoderInterruptImpl1 =
+        new RotaryEncoderInterruptImpl1();
+    rotaryEncoderInterruptImpl1->init();
+    cannedMessagePlugin = new CannedMessagePlugin();
 
 #ifndef NO_ESP32
     // Only run on an esp32 based device.
