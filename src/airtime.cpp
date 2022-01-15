@@ -44,7 +44,7 @@ void AirTime::airtimeRotatePeriod()
 {
 
     if (this->airtimes.lastPeriodIndex != currentPeriodIndex()) {
-        DEBUG_MSG("Rotating airtimes to a new period = %u\n", currentPeriodIndex());
+        //DEBUG_MSG("Rotating airtimes to a new period = %u\n", currentPeriodIndex());
 
         for (int i = PERIODS_TO_LOG - 2; i >= 0; --i) {
             this->airtimes.periodTX[i + 1] = this->airtimes.periodTX[i];
@@ -174,7 +174,7 @@ int32_t AirTime::runOnce()
 
     }
 
-    DEBUG_MSG("Minutes %d TX Airtime %3.2f%\n", utilPeriodTX, airTime->utilizationTXPercent());
+    //DEBUG_MSG("Minutes %d TX Airtime %3.2f%\n", utilPeriodTX, airTime->utilizationTXPercent());
 
     return (1000 * 1);
 }
