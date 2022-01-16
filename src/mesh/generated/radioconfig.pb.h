@@ -176,7 +176,7 @@ typedef struct _RadioConfig_UserPreferences {
     InputEventChar rotary1_event_ccw;
     InputEventChar rotary1_event_press;
     bool canned_message_plugin_enabled;
-    char canned_message_plugin_allow_input_origin[16];
+    char canned_message_plugin_allow_input_source[16];
     char canned_message_plugin_messages[1024];
     bool canned_message_plugin_send_bell;
 } RadioConfig_UserPreferences;
@@ -310,7 +310,7 @@ extern "C" {
 #define RadioConfig_UserPreferences_rotary1_event_ccw_tag 165
 #define RadioConfig_UserPreferences_rotary1_event_press_tag 166
 #define RadioConfig_UserPreferences_canned_message_plugin_enabled_tag 170
-#define RadioConfig_UserPreferences_canned_message_plugin_allow_input_origin_tag 171
+#define RadioConfig_UserPreferences_canned_message_plugin_allow_input_source_tag 171
 #define RadioConfig_UserPreferences_canned_message_plugin_messages_tag 172
 #define RadioConfig_UserPreferences_canned_message_plugin_send_bell_tag 173
 #define RadioConfig_preferences_tag              1
@@ -401,7 +401,7 @@ X(a, STATIC,   SINGULAR, UENUM,    rotary1_event_cw, 164) \
 X(a, STATIC,   SINGULAR, UENUM,    rotary1_event_ccw, 165) \
 X(a, STATIC,   SINGULAR, UENUM,    rotary1_event_press, 166) \
 X(a, STATIC,   SINGULAR, BOOL,     canned_message_plugin_enabled, 170) \
-X(a, STATIC,   SINGULAR, STRING,   canned_message_plugin_allow_input_origin, 171) \
+X(a, STATIC,   SINGULAR, STRING,   canned_message_plugin_allow_input_source, 171) \
 X(a, STATIC,   SINGULAR, STRING,   canned_message_plugin_messages, 172) \
 X(a, STATIC,   SINGULAR, BOOL,     canned_message_plugin_send_bell, 173)
 #define RadioConfig_UserPreferences_CALLBACK NULL
