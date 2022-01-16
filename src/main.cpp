@@ -1,4 +1,5 @@
 #include "configuration.h"
+#include "DebugConfiguration.h"
 #include "GPS.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
@@ -42,9 +43,8 @@
 #include "SX1268Interface.h"
 #include "LLCC68Interface.h"
 
-#ifdef NRF52_SERIES
 #include "variant.h"
-#endif
+#include "RadioConfiguration.h"
 
 using namespace concurrency;
 
