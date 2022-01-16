@@ -70,6 +70,7 @@ int32_t EnvironmentalMeasurementPlugin::runOnce()
             // it's possible to have this plugin enabled, only for displaying values on the screen.
             // therefore, we should only enable the sensor loop if measurement is also enabled
             switch (radioConfig.preferences.environmental_measurement_plugin_sensor_type) {
+
             case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11:
             case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT12:
                 dht = new DHT(radioConfig.preferences.environmental_measurement_plugin_sensor_pin, DHT11);
