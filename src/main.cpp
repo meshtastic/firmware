@@ -43,7 +43,10 @@
 #include "SX1268Interface.h"
 #include "LLCC68Interface.h"
 
+#ifndef PORTDUINO
 #include "variant.h"
+#endif
+
 #include "RadioConfiguration.h"
 
 using namespace concurrency;
