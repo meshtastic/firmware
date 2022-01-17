@@ -1,4 +1,6 @@
 #include "configuration.h"
+#include "variant.h"
+#include "RF95Configuration.h"
 #include "GPS.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
@@ -36,12 +38,6 @@
 #include "mesh/wifi/WiFiServerAPI.h"
 #include "mqtt/MQTT.h"
 #endif
-
-#ifndef PORTDUINO
-#include "variant.h"
-#endif
-
-#include "RF95Configuration.h"
 
 #include "RF95Interface.h"
 #include "SX1262Interface.h"
