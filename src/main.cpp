@@ -38,16 +38,17 @@
 #include "mqtt/MQTT.h"
 #endif
 
+#ifndef PORTDUINO
+#include "variant.h"
+#endif
+
+#include "RF95Configuration.h"
+
 #include "RF95Interface.h"
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
 #include "LLCC68Interface.h"
 
-#ifndef PORTDUINO
-#include "variant.h"
-#endif
-
-#include "RadioConfiguration.h"
 
 using namespace concurrency;
 
