@@ -81,9 +81,9 @@ int CannedMessagePlugin::splitConfiguredMessages()
 int CannedMessagePlugin::handleInputEvent(const InputEvent *event)
 {
     if (
-        (strlen(radioConfig.preferences.canned_message_plugin_allow_input_origin) > 0) &&
-        (strcmp(radioConfig.preferences.canned_message_plugin_allow_input_origin, event->source) != 0) &&
-        (strcmp(radioConfig.preferences.canned_message_plugin_allow_input_origin, "_any") != 0))
+        (strlen(radioConfig.preferences.canned_message_plugin_allow_input_source) > 0) &&
+        (strcmp(radioConfig.preferences.canned_message_plugin_allow_input_source, event->source) != 0) &&
+        (strcmp(radioConfig.preferences.canned_message_plugin_allow_input_source, "_any") != 0))
     {
         // Event source is not accepted.
         return 0;
