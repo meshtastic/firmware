@@ -44,9 +44,6 @@ shift "$((OPTIND-1))"
     shift
 }
 
-# check that esptool is installed
-"$PYTHON" -m esptool -h >/dev/null 2>&1 || echo "Error: esptool was not found."; exit 1
-
 if [ -f "${FILENAME}" ]; then
 	echo "Trying to flash ${FILENAME}, but first erasing and writing system information"
 	"$PYTHON" -m esptool  erase_flash
