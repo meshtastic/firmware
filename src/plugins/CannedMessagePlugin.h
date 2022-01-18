@@ -18,6 +18,11 @@ enum cannedMessagePluginSendigState
 
 
 #define CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_COUNT 50
+/**
+ * Due to config-packet size restrictions we cannot have user configuration bigger
+ * than Constants_DATA_PAYLOAD_LEN bytes.
+ */
+#define CANNED_MESSAGE_PLUGIN_MESSAGES_SIZE 200
 
 class CannedMessagePlugin :
     public SinglePortPlugin,
@@ -29,9 +34,9 @@ class CannedMessagePlugin :
             this, &CannedMessagePlugin::handleInputEvent);
   public:
     CannedMessagePlugin();
-    String getCurrentMessage();
-    String getPrevMessage();
-    String getNextMessage();
+    const char* getCurrentMessage();
+    const char* getPrevMessage();
+    const char* getNextMessage();
     bool shouldDraw();
     cannedMessagePluginSendigState getSendingState();
     void eventUp();
@@ -61,6 +66,7 @@ class CannedMessagePlugin :
     int currentMessageIndex = -1;
     cannedMessagePluginSendigState sendingState = SENDING_STATE_NONE;
 
+    char messageStore[CANNED_MESSAGE_PLUGIN_MESSAGES_SIZE];
     char *messages[CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_COUNT];
     int messagesCount = 0;
     unsigned long lastTouchMillis = 0;
