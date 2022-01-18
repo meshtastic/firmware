@@ -28,13 +28,12 @@
 #define ADC_MULTIPLIER 3.2
 
 #ifdef HELTEC_V2_0
-// This string must exactly match the case used in release file names or the android updater won't work
+
 #define BATTERY_PIN 13 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 
 #endif
 
 #ifdef HELTEC_V2_1
-// This string must exactly match the case used in release file names or the android updater won't work
 
 #define BATTERY_PIN 37 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Plugin.
