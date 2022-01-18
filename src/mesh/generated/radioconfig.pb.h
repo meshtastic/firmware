@@ -92,7 +92,10 @@ typedef enum _InputEventChar {
 
 typedef enum _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType {
     RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11 = 0,
-    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DS18B20 = 1
+    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DS18B20 = 1,
+    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT12 = 2,
+    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT21 = 3,
+    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT22 = 4
 } RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType;
 
 /* Struct definitions */
@@ -217,8 +220,8 @@ typedef struct _RadioConfig {
 #define _InputEventChar_ARRAYSIZE ((InputEventChar)(InputEventChar_BACK+1))
 
 #define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11
-#define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MAX RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DS18B20
-#define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_ARRAYSIZE ((RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType)(RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DS18B20+1))
+#define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MAX RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT22
+#define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_ARRAYSIZE ((RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType)(RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT22+1))
 
 
 #ifdef __cplusplus
