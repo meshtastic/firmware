@@ -30,7 +30,7 @@ CannedMessagePlugin::CannedMessagePlugin()
 
 /**
  * @brief Items in array this->messages will be set to be pointing on the right
- *     starting points of the string radioConfig.preferences.canned_message_plugin_messages
+ *     starting points of the string this->messageStore
  * 
  * @return int Returns the number of messages found.
  */
@@ -38,17 +38,23 @@ int CannedMessagePlugin::splitConfiguredMessages()
 {
     int messageIndex = 0;
     int i = 0;
+
+    strncpy(
+        this->messageStore,
+        radioConfig.preferences.canned_message_plugin_messages,
+        CANNED_MESSAGE_PLUGIN_MESSAGES_SIZE);
+
     this->messages[messageIndex++] =
-        radioConfig.preferences.canned_message_plugin_messages;
+        this->messageStore;
     int upTo =
-        strlen(radioConfig.preferences.canned_message_plugin_messages) - 1;
+        strlen(this->messageStore) - 1;
 
     while (i < upTo)
     {
-        if (radioConfig.preferences.canned_message_plugin_messages[i] == '|')
+        if (this->messageStore[i] == '|')
         {
             // Message ending found, replace it with string-end character.
-            radioConfig.preferences.canned_message_plugin_messages[i] = '\0';
+            this->messageStore[i] = '\0';
             DEBUG_MSG("CannedMessage %d is: '%s'\n",
                 messageIndex-1, this->messages[messageIndex-1]);
 
@@ -60,7 +66,7 @@ int CannedMessagePlugin::splitConfiguredMessages()
 
             // Next message starts after pipe (|) just found.
             this->messages[messageIndex++] =
-                (radioConfig.preferences.canned_message_plugin_messages + i + 1);
+                (this->messageStore + i + 1);
         }
         i += 1;
     }
@@ -90,19 +96,19 @@ int CannedMessagePlugin::handleInputEvent(const InputEvent *event)
     }
 
     bool validEvent = false;
-    if (event->inputEvent == static_cast<char>(InputEventChar_UP))
+    if (event->inputEvent == static_cast<char>(InputEventChar_KEY_UP))
     {
         DEBUG_MSG("Canned message event UP\n");
         this->action = CANNED_MESSAGE_ACTION_UP;
         validEvent = true;
     }
-    if (event->inputEvent == static_cast<char>(InputEventChar_DOWN))
+    if (event->inputEvent == static_cast<char>(InputEventChar_KEY_DOWN))
     {
         DEBUG_MSG("Canned message event DOWN\n");
         this->action = CANNED_MESSAGE_ACTION_DOWN;
         validEvent = true;
     }
-    if (event->inputEvent == static_cast<char>(InputEventChar_SELECT))
+    if (event->inputEvent == static_cast<char>(InputEventChar_KEY_SELECT))
     {
         DEBUG_MSG("Canned message event Select\n");
         this->action = CANNED_MESSAGE_ACTION_SELECT;
@@ -206,15 +212,15 @@ int32_t CannedMessagePlugin::runOnce()
     return 30000; // TODO: should return MAX_VAL
 }
 
-String CannedMessagePlugin::getCurrentMessage()
+const char* CannedMessagePlugin::getCurrentMessage()
 {
     return this->messages[this->currentMessageIndex];
 }
-String CannedMessagePlugin::getPrevMessage()
+const char* CannedMessagePlugin::getPrevMessage()
 {
     return this->messages[this->getPrevIndex()];
 }
-String CannedMessagePlugin::getNextMessage()
+const char* CannedMessagePlugin::getNextMessage()
 {
     return this->messages[this->getNextIndex()];
 }
