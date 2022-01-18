@@ -70,11 +70,13 @@ int32_t EnvironmentalMeasurementPlugin::runOnce()
             // it's possible to have this plugin enabled, only for displaying values on the screen.
             // therefore, we should only enable the sensor loop if measurement is also enabled
             switch (radioConfig.preferences.environmental_measurement_plugin_sensor_type) {
+
             case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11:
+            case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT12:
                 dht = new DHT(radioConfig.preferences.environmental_measurement_plugin_sensor_pin, DHT11);
                 this->dht->begin();
                 this->dht->read();
-                DEBUG_MSG("EnvironmentalMeasurement: Opened DHT11 on pin: %d\n",
+                DEBUG_MSG("EnvironmentalMeasurement: Opened DHT11/DHT12 on pin: %d\n",
                           radioConfig.preferences.environmental_measurement_plugin_sensor_pin);
                 return (DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
             case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DS18B20:
@@ -86,6 +88,14 @@ int32_t EnvironmentalMeasurementPlugin::runOnce()
                 DEBUG_MSG("EnvironmentalMeasurement: Opened DS18B20 on pin: %d\n",
                           radioConfig.preferences.environmental_measurement_plugin_sensor_pin);
                 return (DS18B20_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
+            case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT21:
+            case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT22:
+                dht = new DHT(radioConfig.preferences.environmental_measurement_plugin_sensor_pin, DHT22);
+                this->dht->begin();
+                this->dht->read();
+                DEBUG_MSG("EnvironmentalMeasurement: Opened DHT21/DHT22 on pin: %d\n",
+                          radioConfig.preferences.environmental_measurement_plugin_sensor_pin);
+                return (DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
             default:
                 DEBUG_MSG("EnvironmentalMeasurement: Invalid sensor type selected; Disabling plugin");
                 return (INT32_MAX);
@@ -129,9 +139,13 @@ int32_t EnvironmentalMeasurementPlugin::runOnce()
 
             switch (radioConfig.preferences.environmental_measurement_plugin_sensor_type) {
             case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11:
+            case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT12:
                 return (DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
             case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DS18B20:
                 return (DS18B20_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
+            case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT21:
+            case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT22:
+                return (DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
             default:
                 return (DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
             }
@@ -245,6 +259,7 @@ bool EnvironmentalMeasurementPlugin::sendOurEnvironmentalMeasurement(NodeNum des
 
     switch (radioConfig.preferences.environmental_measurement_plugin_sensor_type) {
     case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11:
+    case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT12:
         if (!this->dht->read(true)) {
             sensor_read_error_count++;
             DEBUG_MSG("EnvironmentalMeasurement: FAILED TO READ DATA\n");
@@ -264,6 +279,16 @@ bool EnvironmentalMeasurementPlugin::sendOurEnvironmentalMeasurement(NodeNum des
             DEBUG_MSG("EnvironmentalMeasurement: FAILED TO READ DATA\n");
             return false;
         }
+    case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT21:
+    case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT22:
+        if (!this->dht->read(true)) {
+            sensor_read_error_count++;
+            DEBUG_MSG("EnvironmentalMeasurement: FAILED TO READ DATA\n");
+            return false;
+        }
+        m.relative_humidity = this->dht->readHumidity();
+        m.temperature = this->dht->readTemperature();
+        break;
     default:
         DEBUG_MSG("EnvironmentalMeasurement: Invalid sensor type selected; Disabling plugin");
         return false;
