@@ -1,6 +1,4 @@
 #include "configuration.h"
-#include "variant.h"
-#include "RF95Configuration.h"
 #include "GPS.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
