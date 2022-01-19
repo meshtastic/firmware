@@ -45,10 +45,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // If we are using the JTAG port for debugging, some pins must be left free for that (and things like GPS have to be disabled)
 // we don't support jtag on the ttgo - access to gpio 12 is a PITA
-#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V2
-//#define USE_JTAG
-#endif
-
 #define REQUIRE_RADIO true // If true, we will fail to start if the radio is not found
 
 /// Convert a preprocessor name into a quoted string
@@ -87,18 +83,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifdef PIN_BUTTON_TOUCH
 #define BUTTON_PIN_TOUCH PIN_BUTTON_TOUCH
 #endif
-
-// FIXME, use variant.h defs for all of this!!! (even on the ESP32 targets)
-#elif defined(CubeCell_BoardPlus)
-
-//
-// Standard definitions for CubeCell targets
-//
-
-#define NO_ESP32 // Don't use ESP32 libs (mainly bluetooth)
-
-#define LED_PIN -1 // FIXME totally bogus
-#define BUTTON_PIN -1
 
 #else
 
@@ -169,153 +153,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // This string must exactly match the case used in release file names or the android updater won't work
 #define HW_VENDOR HardwareModel_TBEAM
 
-// #define BUTTON_NEED_PULLUP // if set we need to turn on the internal CPU pullup during sleep
-
-#define I2C_SDA 21
-#define I2C_SCL 22
-
-#define BUTTON_PIN 38     // The middle button GPIO on the T-Beam
-//#define BUTTON_PIN_ALT 13 // Alternate GPIO for an external button if needed. Does anyone use this? It is not documented anywhere.
-#define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Plugin.
-
-#define LED_INVERTED 1
-#define LED_PIN 4 // Newer tbeams (1.1) have an extra led on GPIO4
-
-// TTGO uses a common pinout for their SX1262 vs RF95 modules - both can be enabled and we will probe at runtime for RF95 and if
-// not found then probe for SX1262
-#define USE_RF95
-#define USE_SX1262
-
-#define LORA_DIO0 26 // a No connect on the SX1262 module
-#define LORA_RESET 23
-#define LORA_DIO1 33 // SX1262 IRQ
-#define LORA_DIO2 32 // SX1262 BUSY
-#define LORA_DIO3    // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TXCO is enabled
-
-#ifdef USE_SX1262
-#define SX126X_CS RF95_NSS // FIXME - we really should define LORA_CS instead
-#define SX126X_DIO1 LORA_DIO1
-#define SX126X_BUSY LORA_DIO2
-#define SX126X_RESET LORA_RESET
-#define SX126X_E22 // Not really an E22 but TTGO seems to be trying to clone that
-// Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
-// code)
-#endif
-
-// Leave undefined to disable our PMU IRQ handler.  DO NOT ENABLE THIS because the pmuirq can cause sperious interrupts
-// and waking from light sleep
-// #define PMU_IRQ 35
-#define AXP192_SLAVE_ADDRESS 0x34
-
 #elif defined(TBEAM_V07)
 // This string must exactly match the case used in release file names or the android updater won't work
 #define HW_VENDOR HardwareModel_TBEAM0p7
-
-// #define BUTTON_NEED_PULLUP // if set we need to turn on the internal CPU pullup during sleep
-
-#define I2C_SDA 21
-#define I2C_SCL 22
-
-#define BUTTON_PIN 39
-#define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Plugin.
-
-#define USE_RF95
-#define LORA_DIO0 26 // a No connect on the SX1262 module
-#define LORA_RESET 23
-#define LORA_DIO1 33 // Not really used
-#define LORA_DIO2 32 // Not really used
-
-// This board has different GPS pins than all other boards
-#undef GPS_RX_PIN
-#undef GPS_TX_PIN
-#define GPS_RX_PIN 12
-#define GPS_TX_PIN 15
 
 #elif defined(DIY_V1)
 // This string must exactly match the case used in release file names or the android updater won't work
 #define HW_VENDOR HardwareModel_DIY_V1
 
-// For OLED LCD
-#define I2C_SDA 21
-#define I2C_SCL 22
-
-// GPS
-#undef GPS_RX_PIN
-#define GPS_RX_PIN 15
-//#undef GPS_TX_PIN
-//#define GPS_TX_PIN 12 // not connected
-
-#define BUTTON_PIN 39 // The middle button GPIO on the T-Beam
-#define EXT_NOTIFY_OUT 12 // Overridden default pin to use for Ext Notify Plugin (#975).
-#define LED_PIN 2 // add status LED (compatible with core-pcb and DIY targets)
-
-#define LORA_DIO0 26  // a No connect on the SX1262/SX1268 module
-#define LORA_RESET 23 // RST for SX1276, and for SX1262/SX1268
-#define LORA_DIO1 33  // IRQ for SX1262/SX1268
-#define LORA_DIO2 32  // BUSY for SX1262/SX1268
-#define LORA_DIO3     // Not connected on PCB, but internally on the TTGO SX1262/SX1268, if DIO3 is high the TXCO is enabled
-
-#define RF95_SCK 5
-#define RF95_MISO 19
-#define RF95_MOSI 27
-#define RF95_NSS 18
-
-// supported modules list
-#define USE_SX1262
-#define USE_SX1268
-#define USE_LLCC68
-
-// common pinouts for SX126X modules
-#define SX126X_CS 18 // NSS for SX126X
-#define SX126X_DIO1 LORA_DIO1
-#define SX126X_BUSY LORA_DIO2
-#define SX126X_RESET LORA_RESET
-#define SX126X_RXEN 14
-#define SX126X_TXEN 13
-
-#ifdef EBYTE_E22
-// Internally the TTGO module hooks the SX126x-DIO2 in to control the TX/RX switch
-// (which is the default for the sx1262interface code)
-#define SX126X_E22
-#endif
-
 #elif defined(ARDUINO_HELTEC_WIFI_LORA_32_V2)
-
-// the default ESP32 Pin of 15 is the Oled SCL, set to 36 and 37 and works fine.
-// Tested on Neo6m module.
-#undef GPS_RX_PIN
-#undef GPS_TX_PIN
-#define GPS_RX_PIN 36
-#define GPS_TX_PIN 37
-
-#ifndef USE_JTAG  // gpio15 is TDO for JTAG, so no I2C on this board while doing jtag
-#define I2C_SDA 4 // I2C pins for this board
-#define I2C_SCL 15
-#endif
-
-#define RESET_OLED 16 // If defined, this pin will be used to reset the display controller
-
-#define VEXT_ENABLE 21 // active low, powers the oled display and the lora antenna boost
-#define LED_PIN 25     // If defined we will blink this LED
-#define BUTTON_PIN 0   // If defined, this will be used for user button presses
-
-#define USE_RF95
-#define LORA_DIO0 26 // a No connect on the SX1262 module
-#ifndef USE_JTAG
-#define LORA_RESET 14
-#endif
-#define LORA_DIO1 35 // Not really used
-#define LORA_DIO2 34 // Not really used
-
-// ratio of voltage divider = 3.20 (R1=100k, R2=220k)
-#define ADC_MULTIPLIER 3.2
 
 #ifdef HELTEC_V2_0
 // This string must exactly match the case used in release file names or the android updater won't work
 #define HW_VENDOR HardwareModel_HELTEC_V2_0
-
-#define BATTERY_PIN 13 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 
 #endif
 
@@ -323,184 +173,31 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // This string must exactly match the case used in release file names or the android updater won't work
 #define HW_VENDOR HardwareModel_HELTEC_V2_1
 
-#define BATTERY_PIN 37 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Plugin.
-
 #endif
 
 #elif defined(ARDUINO_HELTEC_WIFI_LORA_32)
 
-// the default ESP32 Pin of 15 is the Oled SCL, set to 36 and 37 and works fine.
-// Tested on Neo6m module.
-#undef GPS_RX_PIN
-#undef GPS_TX_PIN
-#define GPS_RX_PIN 36
-#define GPS_TX_PIN 37
-
-#ifndef USE_JTAG  // gpio15 is TDO for JTAG, so no I2C on this board while doing jtag
-#define I2C_SDA 4 // I2C pins for this board
-#define I2C_SCL 15
-#endif
-
-#define RESET_OLED 16 // If defined, this pin will be used to reset the display controller
-
-#define LED_PIN 25     // If defined we will blink this LED
-#define BUTTON_PIN 0   // If defined, this will be used for user button presses
-
-#define USE_RF95
-#define LORA_DIO0 26 // a No connect on the SX1262 module
-#ifndef USE_JTAG
-#define LORA_RESET 14
-#endif
-#define LORA_DIO1 33 // Not really used
-#define LORA_DIO2 32 // Not really used
-
-// ratio of voltage divider = 3.20 (R1=100k, R2=220k)
-#define ADC_MULTIPLIER 3.2
-
-// This string must exactly match the case used in release file names or the android updater won't work
 #define HW_VENDOR HardwareModel_HELTEC_V1
 
-#define BATTERY_PIN 13 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-
 #elif defined(TLORA_V1)
-// This string must exactly match the case used in release file names or the android updater won't work
+
 #define HW_VENDOR HardwareModel_TLORA_V1
-#undef GPS_RX_PIN
-#undef GPS_TX_PIN
-#define GPS_RX_PIN 36
-#define GPS_TX_PIN 37
-
-#define I2C_SDA 4 // I2C pins for this board
-#define I2C_SCL 15
-
-#define RESET_OLED 16 // If defined, this pin will be used to reset the display controller
-
-// #define VEXT_ENABLE 21 // active low, powers the oled display and the lora antenna boost
-#define LED_PIN 2     // If defined we will blink this LED
-#define BUTTON_PIN 0  // If defined, this will be used for user button presses
-#define BUTTON_NEED_PULLUP
-#define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Plugin.
-
-#define USE_RF95
-#define LORA_DIO0 26 // a No connect on the SX1262 module
-#define LORA_RESET 14
-#define LORA_DIO1 35 // Not really used
-#define LORA_DIO2 34 // Not really used
 
 #elif defined(TLORA_V2)
 // This string must exactly match the case used in release file names or the android updater won't work
 #define HW_VENDOR HardwareModel_TLORA_V2
 
-#undef GPS_RX_PIN
-#undef GPS_TX_PIN
-#define GPS_RX_PIN 36
-#define GPS_TX_PIN 13 // per @eugene
-
-#define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-
-#define I2C_SDA 21 // I2C pins for this board
-#define I2C_SCL 22
-
-#define RESET_OLED 16 // If defined, this pin will be used to reset the display controller
-
-#define VEXT_ENABLE 21 // active low, powers the oled display and the lora antenna boost
-#define LED_PIN 25     // If defined we will blink this LED
-#define BUTTON_PIN                                                                                                               \
-    0 // If defined, this will be used for user button presses, if your board doesn't have a physical switch, you can wire one
-      // between this pin and ground
-#define BUTTON_NEED_PULLUP
-
-#define USE_RF95
-#define LORA_DIO0 26 // a No connect on the SX1262 module
-#define LORA_RESET 14
-#define LORA_DIO1 35 // Not really used
-#define LORA_DIO2 34 // Not really used
-
 #elif defined(TLORA_V1_3)
 // This string must exactly match the case used in release file names or the android updater won't work
 #define HW_VENDOR HardwareModel_TLORA_V1_1p3
-
-#undef GPS_RX_PIN
-#undef GPS_TX_PIN
-#define GPS_RX_PIN 36
-#define GPS_TX_PIN 13 // per @eugene
-
-#define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-
-#define I2C_SDA 21 // I2C pins for this board
-#define I2C_SCL 22
-
-#define RESET_OLED 16 // If defined, this pin will be used to reset the display controller
-
-#define VEXT_ENABLE 21 // active low, powers the oled display and the lora antenna boost
-#define LED_PIN 25     // If defined we will blink this LED
-#define BUTTON_PIN 36
-#define BUTTON_NEED_PULLUP
-
-#define USE_RF95
-#define LORA_DIO0 26 // a No connect on the SX1262 module
-#define LORA_RESET 14
-#define LORA_DIO1 35 // Not really used
-#define LORA_DIO2 34 // Not really used
 
 #elif defined(TLORA_V2_1_16)
 // This string must exactly match the case used in release file names or the android updater won't work
 #define HW_VENDOR HardwareModel_TLORA_V2_1_1p6
 
-#undef GPS_RX_PIN
-#undef GPS_TX_PIN
-#define GPS_RX_PIN 15 // per @der_bear on the forum, 36 is incorrect for this board type and 15 is a better pick
-#define GPS_TX_PIN 13
-
-#define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-
-#define I2C_SDA 21 // I2C pins for this board
-#define I2C_SCL 22
-
-#define RESET_OLED 16 // If defined, this pin will be used to reset the display controller
-
-#define VEXT_ENABLE 21 // active low, powers the oled display and the lora antenna boost
-#define LED_PIN 25     // If defined we will blink this LED
-#define BUTTON_PIN 12  // If defined, this will be used for user button presses,
-
-#define BUTTON_NEED_PULLUP
-
-#define USE_RF95
-#define LORA_DIO0 26 // a No connect on the SX1262 module
-#define LORA_RESET 14
-#define LORA_DIO1 35 // Not really used
-#define LORA_DIO2 34 // Not really used
-
 #elif defined(GENIEBLOCKS)
 // This string must exactly match the case used in release file names or the android updater won't work
 #define HW_VENDOR HardwareModel_GENIEBLOCKS
-#undef GPS_RX_PIN
-#undef GPS_TX_PIN
-#define GPS_RX_PIN 5
-#define GPS_TX_PIN 18
-#define GPS_RESET_N 10
-#define GPS_EXTINT 23 // On MAX-M8 module pin name is EXTINT. On L70 module pin name is STANDBY.
-
-#define BATTERY_PIN 39    // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define BATTERY_EN_PIN 14 // Voltage voltage divider enable pin connected to mosfet
-
-#define I2C_SDA 4 // I2C pins for this board
-#define I2C_SCL 2
-
-#define LED_PIN 12 // If defined we will blink this LED
-//#define BUTTON_PIN 36  // If defined, this will be used for user button presses (ToDo problem on that line on debug screen -->
-// Long press start!) #define BUTTON_NEED_PULLUP //GPIOs 34 to 39 are GPIs – input only pins. These pins don’t have internal
-// pull-ups or pull-down resistors.
-
-#define USE_RF95
-#define LORA_DIO0 38 // a No connect on the SX1262 module
-#define LORA_RESET 9
-
-#define RF95_SCK 22
-#define RF95_MISO 19
-#define RF95_MOSI 13
-#define RF95_NSS 21
 
 #endif
 
@@ -533,100 +230,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define HW_VENDOR HardwareModel_PORTDUINO
 
-#define USE_SIM_RADIO
-
-// Pine64 uses a common pinout for their SX1262 vs RF95 modules - both can be enabled and we will probe at runtime for RF95 and if
-// not found then probe for SX1262.  Currently the RF95 code is disabled because I think the RF95 module won't need to ship.
-// #define USE_RF95
-#define USE_SX1262
-
-// Fake SPI device selections
-#define RF95_SCK 5
-#define RF95_MISO 19
-#define RF95_MOSI 27
-#define RF95_NSS RADIOLIB_NC // the ch341f spi controller does CS for us
-
-#define LORA_DIO0 26 // a No connect on the SX1262 module
-#define LORA_RESET 14
-#define LORA_DIO1 33 // SX1262 IRQ, called DIO0 on pinelora schematic, pin 7 on ch341f "ack" - FIXME, enable hwints in linux
-#define LORA_DIO2 32 // SX1262 BUSY, actually connected to "DIO5" on pinelora schematic, pin 8 on ch341f "slct" 
-#define LORA_DIO3    // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TXCO is enabled
-
-#ifdef USE_SX1262
-#define SX126X_CS 20 // CS0 on pinelora schematic, hooked to gpio D0 on ch341f
-#define SX126X_DIO1 LORA_DIO1
-#define SX126X_BUSY LORA_DIO2
-#define SX126X_RESET LORA_RESET
-// HOPE RFM90 does not have a TCXO therefore not SX126X_E22 
 #endif
 
-#endif
-
-// DEBUG LED
-#ifndef LED_INVERTED
-#define LED_INVERTED 0 // define as 1 if LED is active low (on)
-#endif
-
-#ifdef USE_RF95
-#define RF95_RESET LORA_RESET
-#define RF95_IRQ LORA_DIO0  // on SX1262 version this is a no connect DIO0
-#define RF95_DIO1 LORA_DIO1 // Note: not really used for RF95
-#define RF95_DIO2 LORA_DIO2 // Note: not really used for RF95
-#endif
-
-// -----------------------------------------------------------------------------
-// DEBUG
-// -----------------------------------------------------------------------------
-
-#ifdef CONSOLE_MAX_BAUD
-#define SERIAL_BAUD CONSOLE_MAX_BAUD
-#else
-#define SERIAL_BAUD 921600 // Serial debug baud rate
-#endif
-
-#include "SerialConsole.h"
-
-#define DEBUG_PORT (*console) // Serial debug port
-
-// What platforms should use SEGGER?
-#ifdef NRF52_SERIES
-
-// Always include the SEGGER code on NRF52 - because useful for debugging
-#include "SEGGER_RTT.h"
-
-// The channel we send stdout data to
-#define SEGGER_STDOUT_CH 0
-
-// Debug printing to segger console
-#define SEGGER_MSG(...) SEGGER_RTT_printf(SEGGER_STDOUT_CH, __VA_ARGS__)
-
-// If we are not on a NRF52840 (which has built in USB-ACM serial support) and we don't have serial pins hooked up, then we MUST
-// use SEGGER for debug output
-#if !defined(PIN_SERIAL_RX) && !defined(NRF52840_XXAA)
-// No serial ports on this board - ONLY use segger in memory console
-#define USE_SEGGER
-#endif
-
-#else
-#define SERIAL0_RX_GPIO 3 // Always GPIO3 on ESP32
-#endif
-
-#ifdef USE_SEGGER
-#define DEBUG_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
-#else
-#ifdef DEBUG_PORT
-#define DEBUG_MSG(...) DEBUG_PORT.logDebug(__VA_ARGS__)
-#else
-#define DEBUG_MSG(...)
-#endif
-#endif
-
-// -----------------------------------------------------------------------------
-// AXP192 (Rev1-specific options)
-// -----------------------------------------------------------------------------
-
-#define GPS_POWER_CTRL_CH 3
-#define LORA_POWER_CTRL_CH 2
-
-// Default Bluetooth PIN
-#define defaultBLEPin 123456
+#include "variant.h"
+#include "RF95Configuration.h"
+#include "DebugConfiguration.h"
