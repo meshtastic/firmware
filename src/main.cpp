@@ -42,9 +42,6 @@
 #include "SX1268Interface.h"
 #include "LLCC68Interface.h"
 
-#ifdef NRF52_SERIES
-#include "variant.h"
-#endif
 
 using namespace concurrency;
 
