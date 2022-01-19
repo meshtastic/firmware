@@ -67,6 +67,7 @@ void AdminPlugin::handleGetCannedMessagePluginPart1(const MeshPacket &req)
         // We create the reply here
         AdminMessage r = AdminMessage_init_default;
         r.get_canned_message_plugin_part1_response = radioConfig;
+	strcpy(radioConfig.canned_message_plugin_message_part1.text, canned_message_plugin_message_part1.c_str());
         r.which_variant = AdminMessage_get_canned_message_plugin_part1_response_tag;
         myReply = allocDataProtobuf(r);
     }
@@ -78,6 +79,7 @@ void AdminPlugin::handleGetCannedMessagePluginPart2(const MeshPacket &req)
         // We create the reply here
         AdminMessage r = AdminMessage_init_default;
         r.get_canned_message_plugin_part2_response = radioConfig;
+	strcpy(radioConfig.canned_message_plugin_message_part2.text, canned_message_plugin_message_part2.c_str());
         r.which_variant = AdminMessage_get_canned_message_plugin_part2_response_tag;
         myReply = allocDataProtobuf(r);
     }
@@ -89,6 +91,7 @@ void AdminPlugin::handleGetCannedMessagePluginPart3(const MeshPacket &req)
         // We create the reply here
         AdminMessage r = AdminMessage_init_default;
         r.get_canned_message_plugin_part3_response = radioConfig;
+	strcpy(radioConfig.canned_message_plugin_message_part3.text, canned_message_plugin_message_part3.c_str());
         r.which_variant = AdminMessage_get_canned_message_plugin_part3_response_tag;
         myReply = allocDataProtobuf(r);
     }
@@ -100,6 +103,7 @@ void AdminPlugin::handleGetCannedMessagePluginPart4(const MeshPacket &req)
         // We create the reply here
         AdminMessage r = AdminMessage_init_default;
         r.get_canned_message_plugin_part4_response = radioConfig;
+	strcpy(radioConfig.canned_message_plugin_message_part4.text, canned_message_plugin_message_part4.c_str());
         r.which_variant = AdminMessage_get_canned_message_plugin_part4_response_tag;
         myReply = allocDataProtobuf(r);
     }
@@ -111,6 +115,7 @@ void AdminPlugin::handleGetCannedMessagePluginPart5(const MeshPacket &req)
         // We create the reply here
         AdminMessage r = AdminMessage_init_default;
         r.get_canned_message_plugin_part5_response = radioConfig;
+	strcpy(radioConfig.canned_message_plugin_message_part5.text, canned_message_plugin_message_part5.c_str());
         r.which_variant = AdminMessage_get_canned_message_plugin_part5_response_tag;
         myReply = allocDataProtobuf(r);
     }
