@@ -99,6 +99,26 @@ typedef enum _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType {
 } RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType;
 
 /* Struct definitions */
+typedef struct _RadioConfig_CannedMessagePluginMessagePart1 {
+    char text[200];
+} RadioConfig_CannedMessagePluginMessagePart1;
+
+typedef struct _RadioConfig_CannedMessagePluginMessagePart2 {
+    char text[200];
+} RadioConfig_CannedMessagePluginMessagePart2;
+
+typedef struct _RadioConfig_CannedMessagePluginMessagePart3 {
+    char text[200];
+} RadioConfig_CannedMessagePluginMessagePart3;
+
+typedef struct _RadioConfig_CannedMessagePluginMessagePart4 {
+    char text[200];
+} RadioConfig_CannedMessagePluginMessagePart4;
+
+typedef struct _RadioConfig_CannedMessagePluginMessagePart5 {
+    char text[200];
+} RadioConfig_CannedMessagePluginMessagePart5;
+
 typedef struct _RadioConfig_UserPreferences {
     uint32_t position_broadcast_secs;
     uint32_t send_owner_interval;
@@ -180,13 +200,22 @@ typedef struct _RadioConfig_UserPreferences {
     InputEventChar rotary1_event_press;
     bool canned_message_plugin_enabled;
     char canned_message_plugin_allow_input_source[16];
-    char canned_message_plugin_messages[1024];
     bool canned_message_plugin_send_bell;
 } RadioConfig_UserPreferences;
 
 typedef struct _RadioConfig {
     bool has_preferences;
     RadioConfig_UserPreferences preferences;
+    bool has_canned_message_plugin_message_part1;
+    RadioConfig_CannedMessagePluginMessagePart1 canned_message_plugin_message_part1;
+    bool has_canned_message_plugin_message_part2;
+    RadioConfig_CannedMessagePluginMessagePart2 canned_message_plugin_message_part2;
+    bool has_canned_message_plugin_message_part3;
+    RadioConfig_CannedMessagePluginMessagePart3 canned_message_plugin_message_part3;
+    bool has_canned_message_plugin_message_part4;
+    RadioConfig_CannedMessagePluginMessagePart4 canned_message_plugin_message_part4;
+    bool has_canned_message_plugin_message_part5;
+    RadioConfig_CannedMessagePluginMessagePart5 canned_message_plugin_message_part5;
 } RadioConfig;
 
 
@@ -229,12 +258,27 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default}
-#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, "", "", 0}
-#define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero}
-#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, "", "", 0}
+#define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default, false, RadioConfig_CannedMessagePluginMessagePart1_init_default, false, RadioConfig_CannedMessagePluginMessagePart2_init_default, false, RadioConfig_CannedMessagePluginMessagePart3_init_default, false, RadioConfig_CannedMessagePluginMessagePart4_init_default, false, RadioConfig_CannedMessagePluginMessagePart5_init_default}
+#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, "", 0}
+#define RadioConfig_CannedMessagePluginMessagePart1_init_default {""}
+#define RadioConfig_CannedMessagePluginMessagePart2_init_default {""}
+#define RadioConfig_CannedMessagePluginMessagePart3_init_default {""}
+#define RadioConfig_CannedMessagePluginMessagePart4_init_default {""}
+#define RadioConfig_CannedMessagePluginMessagePart5_init_default {""}
+#define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero, false, RadioConfig_CannedMessagePluginMessagePart1_init_zero, false, RadioConfig_CannedMessagePluginMessagePart2_init_zero, false, RadioConfig_CannedMessagePluginMessagePart3_init_zero, false, RadioConfig_CannedMessagePluginMessagePart4_init_zero, false, RadioConfig_CannedMessagePluginMessagePart5_init_zero}
+#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, "", 0}
+#define RadioConfig_CannedMessagePluginMessagePart1_init_zero {""}
+#define RadioConfig_CannedMessagePluginMessagePart2_init_zero {""}
+#define RadioConfig_CannedMessagePluginMessagePart3_init_zero {""}
+#define RadioConfig_CannedMessagePluginMessagePart4_init_zero {""}
+#define RadioConfig_CannedMessagePluginMessagePart5_init_zero {""}
 
 /* Field tags (for use in manual encoding/decoding) */
+#define RadioConfig_CannedMessagePluginMessagePart1_text_tag 1
+#define RadioConfig_CannedMessagePluginMessagePart2_text_tag 1
+#define RadioConfig_CannedMessagePluginMessagePart3_text_tag 1
+#define RadioConfig_CannedMessagePluginMessagePart4_text_tag 1
+#define RadioConfig_CannedMessagePluginMessagePart5_text_tag 1
 #define RadioConfig_UserPreferences_position_broadcast_secs_tag 1
 #define RadioConfig_UserPreferences_send_owner_interval_tag 2
 #define RadioConfig_UserPreferences_wait_bluetooth_secs_tag 4
@@ -314,16 +358,30 @@ extern "C" {
 #define RadioConfig_UserPreferences_rotary1_event_press_tag 166
 #define RadioConfig_UserPreferences_canned_message_plugin_enabled_tag 170
 #define RadioConfig_UserPreferences_canned_message_plugin_allow_input_source_tag 171
-#define RadioConfig_UserPreferences_canned_message_plugin_messages_tag 172
 #define RadioConfig_UserPreferences_canned_message_plugin_send_bell_tag 173
 #define RadioConfig_preferences_tag              1
+#define RadioConfig_canned_message_plugin_message_part1_tag 2
+#define RadioConfig_canned_message_plugin_message_part2_tag 3
+#define RadioConfig_canned_message_plugin_message_part3_tag 4
+#define RadioConfig_canned_message_plugin_message_part4_tag 5
+#define RadioConfig_canned_message_plugin_message_part5_tag 6
 
 /* Struct field encoding specification for nanopb */
 #define RadioConfig_FIELDLIST(X, a) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  preferences,       1)
+X(a, STATIC,   OPTIONAL, MESSAGE,  preferences,       1) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  canned_message_plugin_message_part1,   2) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  canned_message_plugin_message_part2,   3) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  canned_message_plugin_message_part3,   4) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  canned_message_plugin_message_part4,   5) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  canned_message_plugin_message_part5,   6)
 #define RadioConfig_CALLBACK NULL
 #define RadioConfig_DEFAULT NULL
 #define RadioConfig_preferences_MSGTYPE RadioConfig_UserPreferences
+#define RadioConfig_canned_message_plugin_message_part1_MSGTYPE RadioConfig_CannedMessagePluginMessagePart1
+#define RadioConfig_canned_message_plugin_message_part2_MSGTYPE RadioConfig_CannedMessagePluginMessagePart2
+#define RadioConfig_canned_message_plugin_message_part3_MSGTYPE RadioConfig_CannedMessagePluginMessagePart3
+#define RadioConfig_canned_message_plugin_message_part4_MSGTYPE RadioConfig_CannedMessagePluginMessagePart4
+#define RadioConfig_canned_message_plugin_message_part5_MSGTYPE RadioConfig_CannedMessagePluginMessagePart5
 
 #define RadioConfig_UserPreferences_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   position_broadcast_secs,   1) \
@@ -405,21 +463,60 @@ X(a, STATIC,   SINGULAR, UENUM,    rotary1_event_ccw, 165) \
 X(a, STATIC,   SINGULAR, UENUM,    rotary1_event_press, 166) \
 X(a, STATIC,   SINGULAR, BOOL,     canned_message_plugin_enabled, 170) \
 X(a, STATIC,   SINGULAR, STRING,   canned_message_plugin_allow_input_source, 171) \
-X(a, STATIC,   SINGULAR, STRING,   canned_message_plugin_messages, 172) \
 X(a, STATIC,   SINGULAR, BOOL,     canned_message_plugin_send_bell, 173)
 #define RadioConfig_UserPreferences_CALLBACK NULL
 #define RadioConfig_UserPreferences_DEFAULT NULL
 
+#define RadioConfig_CannedMessagePluginMessagePart1_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, STRING,   text,              1)
+#define RadioConfig_CannedMessagePluginMessagePart1_CALLBACK NULL
+#define RadioConfig_CannedMessagePluginMessagePart1_DEFAULT NULL
+
+#define RadioConfig_CannedMessagePluginMessagePart2_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, STRING,   text,              1)
+#define RadioConfig_CannedMessagePluginMessagePart2_CALLBACK NULL
+#define RadioConfig_CannedMessagePluginMessagePart2_DEFAULT NULL
+
+#define RadioConfig_CannedMessagePluginMessagePart3_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, STRING,   text,              1)
+#define RadioConfig_CannedMessagePluginMessagePart3_CALLBACK NULL
+#define RadioConfig_CannedMessagePluginMessagePart3_DEFAULT NULL
+
+#define RadioConfig_CannedMessagePluginMessagePart4_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, STRING,   text,              1)
+#define RadioConfig_CannedMessagePluginMessagePart4_CALLBACK NULL
+#define RadioConfig_CannedMessagePluginMessagePart4_DEFAULT NULL
+
+#define RadioConfig_CannedMessagePluginMessagePart5_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, STRING,   text,              1)
+#define RadioConfig_CannedMessagePluginMessagePart5_CALLBACK NULL
+#define RadioConfig_CannedMessagePluginMessagePart5_DEFAULT NULL
+
 extern const pb_msgdesc_t RadioConfig_msg;
 extern const pb_msgdesc_t RadioConfig_UserPreferences_msg;
+extern const pb_msgdesc_t RadioConfig_CannedMessagePluginMessagePart1_msg;
+extern const pb_msgdesc_t RadioConfig_CannedMessagePluginMessagePart2_msg;
+extern const pb_msgdesc_t RadioConfig_CannedMessagePluginMessagePart3_msg;
+extern const pb_msgdesc_t RadioConfig_CannedMessagePluginMessagePart4_msg;
+extern const pb_msgdesc_t RadioConfig_CannedMessagePluginMessagePart5_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define RadioConfig_fields &RadioConfig_msg
 #define RadioConfig_UserPreferences_fields &RadioConfig_UserPreferences_msg
+#define RadioConfig_CannedMessagePluginMessagePart1_fields &RadioConfig_CannedMessagePluginMessagePart1_msg
+#define RadioConfig_CannedMessagePluginMessagePart2_fields &RadioConfig_CannedMessagePluginMessagePart2_msg
+#define RadioConfig_CannedMessagePluginMessagePart3_fields &RadioConfig_CannedMessagePluginMessagePart3_msg
+#define RadioConfig_CannedMessagePluginMessagePart4_fields &RadioConfig_CannedMessagePluginMessagePart4_msg
+#define RadioConfig_CannedMessagePluginMessagePart5_fields &RadioConfig_CannedMessagePluginMessagePart5_msg
 
 /* Maximum encoded size of messages (where known) */
-#define RadioConfig_size                         1616
-#define RadioConfig_UserPreferences_size         1613
+#define RadioConfig_size                         1614
+#define RadioConfig_UserPreferences_size         586
+#define RadioConfig_CannedMessagePluginMessagePart1_size 202
+#define RadioConfig_CannedMessagePluginMessagePart2_size 202
+#define RadioConfig_CannedMessagePluginMessagePart3_size 202
+#define RadioConfig_CannedMessagePluginMessagePart4_size 202
+#define RadioConfig_CannedMessagePluginMessagePart5_size 202
 
 #ifdef __cplusplus
 } /* extern "C" */

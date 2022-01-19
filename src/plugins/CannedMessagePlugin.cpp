@@ -31,27 +31,36 @@ CannedMessagePlugin::CannedMessagePlugin()
 /**
  * @brief Items in array this->messages will be set to be pointing on the right
  *     starting points of the string radioConfig.preferences.canned_message_plugin_messages
- * 
+ *
  * @return int Returns the number of messages found.
  */
 int CannedMessagePlugin::splitConfiguredMessages()
 {
     int messageIndex = 0;
     int i = 0;
-    this->messages[messageIndex++] =
-        radioConfig.preferences.canned_message_plugin_messages;
-    int upTo =
-        strlen(radioConfig.preferences.canned_message_plugin_messages) - 1;
+    char all[1001];
+
+    // get all of the message parts
+    strcpy(all, radioConfig.canned_message_plugin_message_part1.text);
+    strcat(all, radioConfig.canned_message_plugin_message_part2.text);
+    strcat(all, radioConfig.canned_message_plugin_message_part3.text);
+    strcat(all, radioConfig.canned_message_plugin_message_part4.text);
+    strcat(all, radioConfig.canned_message_plugin_message_part5.text);
+
+    this->messages[messageIndex++] = all;
+    int upTo = strlen(all) - 1;
 
     while (i < upTo)
     {
-        if (radioConfig.preferences.canned_message_plugin_messages[i] == '|')
+	// look for delimiter
+        if (all[i] == '|')
         {
             // Message ending found, replace it with string-end character.
-            radioConfig.preferences.canned_message_plugin_messages[i] = '\0';
+            all[i] = '\0';
             DEBUG_MSG("CannedMessage %d is: '%s'\n",
                 messageIndex-1, this->messages[messageIndex-1]);
 
+	    // hit our max messages, bail
             if (messageIndex >= CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_COUNT)
             {
                 this->messagesCount = messageIndex;
@@ -59,8 +68,7 @@ int CannedMessagePlugin::splitConfiguredMessages()
             }
 
             // Next message starts after pipe (|) just found.
-            this->messages[messageIndex++] =
-                (radioConfig.preferences.canned_message_plugin_messages + i + 1);
+            this->messages[messageIndex++] = (all + i + 1);
         }
         i += 1;
     }

@@ -61,6 +61,61 @@ void AdminPlugin::handleGetRadio(const MeshPacket &req)
     }
 }
 
+void AdminPlugin::handleGetCannedMessagePluginPart1(const MeshPacket &req)
+{
+    if (req.decoded.want_response) {
+        // We create the reply here
+        AdminMessage r = AdminMessage_init_default;
+        r.get_canned_message_plugin_part1_response = radioConfig;
+        r.which_variant = AdminMessage_get_canned_message_plugin_part1_response_tag;
+        myReply = allocDataProtobuf(r);
+    }
+}
+
+void AdminPlugin::handleGetCannedMessagePluginPart2(const MeshPacket &req)
+{
+    if (req.decoded.want_response) {
+        // We create the reply here
+        AdminMessage r = AdminMessage_init_default;
+        r.get_canned_message_plugin_part2_response = radioConfig;
+        r.which_variant = AdminMessage_get_canned_message_plugin_part2_response_tag;
+        myReply = allocDataProtobuf(r);
+    }
+}
+
+void AdminPlugin::handleGetCannedMessagePluginPart3(const MeshPacket &req)
+{
+    if (req.decoded.want_response) {
+        // We create the reply here
+        AdminMessage r = AdminMessage_init_default;
+        r.get_canned_message_plugin_part3_response = radioConfig;
+        r.which_variant = AdminMessage_get_canned_message_plugin_part3_response_tag;
+        myReply = allocDataProtobuf(r);
+    }
+}
+
+void AdminPlugin::handleGetCannedMessagePluginPart4(const MeshPacket &req)
+{
+    if (req.decoded.want_response) {
+        // We create the reply here
+        AdminMessage r = AdminMessage_init_default;
+        r.get_canned_message_plugin_part4_response = radioConfig;
+        r.which_variant = AdminMessage_get_canned_message_plugin_part4_response_tag;
+        myReply = allocDataProtobuf(r);
+    }
+}
+
+void AdminPlugin::handleGetCannedMessagePluginPart5(const MeshPacket &req)
+{
+    if (req.decoded.want_response) {
+        // We create the reply here
+        AdminMessage r = AdminMessage_init_default;
+        r.get_canned_message_plugin_part5_response = radioConfig;
+        r.which_variant = AdminMessage_get_canned_message_plugin_part5_response_tag;
+        myReply = allocDataProtobuf(r);
+    }
+}
+
 bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
 {
     assert(r);
@@ -96,6 +151,56 @@ bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
     case AdminMessage_get_radio_request_tag:
         DEBUG_MSG("Client is getting radio\n");
         handleGetRadio(mp);
+        break;
+
+    case AdminMessage_get_canned_message_plugin_part1_request_tag:
+        DEBUG_MSG("Client is getting radio canned message part1\n");
+        handleGetCannedMessagePluginPart1(mp);
+        break;
+
+    case AdminMessage_get_canned_message_plugin_part2_request_tag:
+        DEBUG_MSG("Client is getting radio canned message part2\n");
+        handleGetCannedMessagePluginPart2(mp);
+        break;
+
+    case AdminMessage_get_canned_message_plugin_part3_request_tag:
+        DEBUG_MSG("Client is getting radio canned message part3\n");
+        handleGetCannedMessagePluginPart3(mp);
+        break;
+
+    case AdminMessage_get_canned_message_plugin_part4_request_tag:
+        DEBUG_MSG("Client is getting radio canned message part4\n");
+        handleGetCannedMessagePluginPart4(mp);
+        break;
+
+    case AdminMessage_get_canned_message_plugin_part5_request_tag:
+        DEBUG_MSG("Client is getting radio canned message part5\n");
+        handleGetCannedMessagePluginPart5(mp);
+        break;
+
+    case AdminMessage_set_canned_message_plugin_part1_tag:
+        DEBUG_MSG("Client is setting radio canned message part 1\n");
+        handleSetCannedMessagePluginPart1(r->set_canned_message_plugin_part1);
+        break;
+
+    case AdminMessage_set_canned_message_plugin_part2_tag:
+        DEBUG_MSG("Client is setting radio canned message part 2\n");
+        handleSetCannedMessagePluginPart2(r->set_canned_message_plugin_part2);
+        break;
+
+    case AdminMessage_set_canned_message_plugin_part3_tag:
+        DEBUG_MSG("Client is setting radio canned message part 3\n");
+        handleSetCannedMessagePluginPart3(r->set_canned_message_plugin_part3);
+        break;
+
+    case AdminMessage_set_canned_message_plugin_part4_tag:
+        DEBUG_MSG("Client is setting radio canned message part 4\n");
+        handleSetCannedMessagePluginPart4(r->set_canned_message_plugin_part4);
+        break;
+
+    case AdminMessage_set_canned_message_plugin_part5_tag:
+        DEBUG_MSG("Client is setting radio canned message part 5\n");
+        handleSetCannedMessagePluginPart5(r->set_canned_message_plugin_part5);
         break;
 
     case AdminMessage_reboot_seconds_tag: {
@@ -148,6 +253,81 @@ void AdminPlugin::handleSetOwner(const User &o)
 
     if (changed) // If nothing really changed, don't broadcast on the network or write to flash
         service.reloadOwner();
+}
+
+void AdminPlugin::handleSetCannedMessagePluginPart1(const std::string &from_msg)
+{
+    int changed = 0;
+
+    if (from_msg != "") {
+        if (canned_message_plugin_message_part1 != from_msg) {
+            changed = 1;
+	    canned_message_plugin_message_part1 = from_msg;
+	}
+    }
+
+    if (changed) // If nothing really changed, don't broadcast on the network or write to flash
+    	service.reloadConfig(); // TODO: does this make sense?
+}
+
+void AdminPlugin::handleSetCannedMessagePluginPart2(const std::string &from_msg)
+{
+    int changed = 0;
+
+    if (from_msg != "") {
+        if (canned_message_plugin_message_part2 != from_msg) {
+            changed = 1;
+            canned_message_plugin_message_part2 = from_msg;
+	}
+    }
+
+    if (changed) // If nothing really changed, don't broadcast on the network or write to flash
+    	service.reloadConfig(); // TODO: does this make sense?
+}
+
+void AdminPlugin::handleSetCannedMessagePluginPart3(const std::string &from_msg)
+{
+    int changed = 0;
+
+    if (from_msg != "") {
+        if (canned_message_plugin_message_part3 != from_msg) {
+            changed = 1;
+            canned_message_plugin_message_part3 = from_msg;
+	}
+    }
+
+    if (changed) // If nothing really changed, don't broadcast on the network or write to flash
+    	service.reloadConfig(); // TODO: does this make sense?
+}
+
+void AdminPlugin::handleSetCannedMessagePluginPart4(const std::string &from_msg)
+{
+    int changed = 0;
+
+    if (from_msg != "") {
+        if (canned_message_plugin_message_part4 != from_msg) {
+            changed = 1;
+            canned_message_plugin_message_part4 = from_msg;
+	}
+    }
+
+    if (changed) // If nothing really changed, don't broadcast on the network or write to flash
+    	service.reloadConfig(); // TODO: does this make sense?
+}
+
+void AdminPlugin::handleSetCannedMessagePluginPart5(const std::string &from_msg)
+{
+    int changed = 0;
+
+    if (from_msg != "") {
+        if (canned_message_plugin_message_part5 != from_msg) {
+            changed = 1;
+            canned_message_plugin_message_part5 = from_msg;
+	}
+    }
+
+    if (changed) // If nothing really changed, don't broadcast on the network or write to flash
+    	service.reloadConfig(); // TODO: does this make sense?
 }
 
 void AdminPlugin::handleSetChannel(const Channel &cc)

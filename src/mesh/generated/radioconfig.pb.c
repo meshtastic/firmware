@@ -12,6 +12,21 @@ PB_BIND(RadioConfig, RadioConfig, 2)
 PB_BIND(RadioConfig_UserPreferences, RadioConfig_UserPreferences, 2)
 
 
+PB_BIND(RadioConfig_CannedMessagePluginMessagePart1, RadioConfig_CannedMessagePluginMessagePart1, AUTO)
+
+
+PB_BIND(RadioConfig_CannedMessagePluginMessagePart2, RadioConfig_CannedMessagePluginMessagePart2, AUTO)
+
+
+PB_BIND(RadioConfig_CannedMessagePluginMessagePart3, RadioConfig_CannedMessagePluginMessagePart3, AUTO)
+
+
+PB_BIND(RadioConfig_CannedMessagePluginMessagePart4, RadioConfig_CannedMessagePluginMessagePart4, AUTO)
+
+
+PB_BIND(RadioConfig_CannedMessagePluginMessagePart5, RadioConfig_CannedMessagePluginMessagePart5, AUTO)
+
+
 
 
 

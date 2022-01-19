@@ -1,6 +1,9 @@
 #pragma once
 #include "ProtobufPlugin.h"
 
+#include <string>
+#include <cstring>
+
 /**
  * Routing plugin for router control messages
  */
@@ -26,6 +29,18 @@ class AdminPlugin : public ProtobufPlugin<AdminMessage>
 
     void handleGetChannel(const MeshPacket &req, uint32_t channelIndex);
     void handleGetRadio(const MeshPacket &req);
+
+    void handleGetCannedMessagePluginPart1(const MeshPacket &req);
+    void handleGetCannedMessagePluginPart2(const MeshPacket &req);
+    void handleGetCannedMessagePluginPart3(const MeshPacket &req);
+    void handleGetCannedMessagePluginPart4(const MeshPacket &req);
+    void handleGetCannedMessagePluginPart5(const MeshPacket &req);
+
+    void handleSetCannedMessagePluginPart1(const std::string &from_msg);
+    void handleSetCannedMessagePluginPart2(const std::string &from_msg);
+    void handleSetCannedMessagePluginPart3(const std::string &from_msg);
+    void handleSetCannedMessagePluginPart4(const std::string &from_msg);
+    void handleSetCannedMessagePluginPart5(const std::string &from_msg);
 };
 
 extern AdminPlugin *adminPlugin;
