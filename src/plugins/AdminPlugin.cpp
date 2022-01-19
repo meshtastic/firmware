@@ -63,12 +63,12 @@ void AdminPlugin::handleGetRadio(const MeshPacket &req)
 
 void AdminPlugin::handleGetCannedMessagePluginPart1(const MeshPacket &req)
 {
+    DEBUG_MSG("*** handleGetCannedMessagePluginPart1\n");
     if (req.decoded.want_response) {
         // We create the reply here
         AdminMessage r = AdminMessage_init_default;
-        r.get_canned_message_plugin_part1_response = radioConfig;
-        // TODO: strcpy(radioConfig.canned_message_plugin_message_part1.text, canned_message_plugin_message_part1.c_str());
-        strcpy(radioConfig.canned_message_plugin_message_part1.text, "mike");
+        r.get_canned_message_plugin_part1_response = cannedMessagePluginMessagePart1;
+	DEBUG_MSG("*** cannedMessagePluginMessagePart1.text:%s\n", cannedMessagePluginMessagePart1.text);
         r.which_variant = AdminMessage_get_canned_message_plugin_part1_response_tag;
         myReply = allocDataProtobuf(r);
     }
@@ -79,8 +79,7 @@ void AdminPlugin::handleGetCannedMessagePluginPart2(const MeshPacket &req)
     if (req.decoded.want_response) {
         // We create the reply here
         AdminMessage r = AdminMessage_init_default;
-        r.get_canned_message_plugin_part2_response = radioConfig;
-        // TODO strcpy(radioConfig.get_canned_message_plugin_part2_response.text, canned_message_plugin_message_part2.c_str());
+        r.get_canned_message_plugin_part2_response = cannedMessagePluginMessagePart2;
         r.which_variant = AdminMessage_get_canned_message_plugin_part2_response_tag;
         myReply = allocDataProtobuf(r);
     }
@@ -91,8 +90,7 @@ void AdminPlugin::handleGetCannedMessagePluginPart3(const MeshPacket &req)
     if (req.decoded.want_response) {
         // We create the reply here
         AdminMessage r = AdminMessage_init_default;
-        r.get_canned_message_plugin_part3_response = radioConfig;
-        // TODO strcpy(radioConfig.get_canned_message_plugin_part3_response.text, canned_message_plugin_message_part3.c_str());
+        r.get_canned_message_plugin_part3_response = cannedMessagePluginMessagePart3;
         r.which_variant = AdminMessage_get_canned_message_plugin_part3_response_tag;
         myReply = allocDataProtobuf(r);
     }
@@ -103,8 +101,7 @@ void AdminPlugin::handleGetCannedMessagePluginPart4(const MeshPacket &req)
     if (req.decoded.want_response) {
         // We create the reply here
         AdminMessage r = AdminMessage_init_default;
-        r.get_canned_message_plugin_part4_response = radioConfig;
-        // TODO strcpy(radioConfig.get_canned_message_plugin_part4_response.text, canned_message_plugin_message_part4.c_str());
+        r.get_canned_message_plugin_part4_response = cannedMessagePluginMessagePart4;
         r.which_variant = AdminMessage_get_canned_message_plugin_part4_response_tag;
         myReply = allocDataProtobuf(r);
     }
@@ -115,8 +112,7 @@ void AdminPlugin::handleGetCannedMessagePluginPart5(const MeshPacket &req)
     if (req.decoded.want_response) {
         // We create the reply here
         AdminMessage r = AdminMessage_init_default;
-        r.get_canned_message_plugin_part5_response = radioConfig;
-        // TODO: strcpy(radioConfig.get_canned_message_plugin_part5_response.text, canned_message_plugin_message_part5.c_str());
+        r.get_canned_message_plugin_part5_response = cannedMessagePluginMessagePart5;
         r.which_variant = AdminMessage_get_canned_message_plugin_part5_response_tag;
         myReply = allocDataProtobuf(r);
     }
@@ -261,75 +257,66 @@ void AdminPlugin::handleSetOwner(const User &o)
         service.reloadOwner();
 }
 
-void AdminPlugin::handleSetCannedMessagePluginPart1(const std::string &from_msg)
+void AdminPlugin::handleSetCannedMessagePluginPart1(const CannedMessagePluginMessagePart1 &from_msg)
 {
     int changed = 0;
 
-    if (from_msg != "") {
-        if (canned_message_plugin_message_part1 != from_msg) {
-            changed = 1;
-            canned_message_plugin_message_part1 = from_msg;
-        }
+    if (*from_msg.text) {
+        changed |= strcmp(cannedMessagePluginMessagePart1.text, from_msg.text);
+        strcpy(cannedMessagePluginMessagePart1.text, from_msg.text);
+	DEBUG_MSG("*** from_msg.text:%s\n", from_msg.text);
     }
 
     if (changed) // If nothing really changed, don't broadcast on the network or write to flash
         service.reloadConfig(); // TODO: does this make sense?
 }
 
-void AdminPlugin::handleSetCannedMessagePluginPart2(const std::string &from_msg)
+void AdminPlugin::handleSetCannedMessagePluginPart2(const CannedMessagePluginMessagePart2 &from_msg)
 {
     int changed = 0;
 
-    if (from_msg != "") {
-        if (canned_message_plugin_message_part2 != from_msg) {
-            changed = 1;
-            canned_message_plugin_message_part2 = from_msg;
-        }
+    if (*from_msg.text) {
+        changed |= strcmp(cannedMessagePluginMessagePart2.text, from_msg.text);
+        strcpy(cannedMessagePluginMessagePart2.text, from_msg.text);
     }
 
     if (changed) // If nothing really changed, don't broadcast on the network or write to flash
         service.reloadConfig(); // TODO: does this make sense?
 }
 
-void AdminPlugin::handleSetCannedMessagePluginPart3(const std::string &from_msg)
+void AdminPlugin::handleSetCannedMessagePluginPart3(const CannedMessagePluginMessagePart3 &from_msg)
 {
     int changed = 0;
 
-    if (from_msg != "") {
-        if (canned_message_plugin_message_part3 != from_msg) {
-            changed = 1;
-            canned_message_plugin_message_part3 = from_msg;
-        }
+    if (*from_msg.text) {
+        changed |= strcmp(cannedMessagePluginMessagePart3.text, from_msg.text);
+        strcpy(cannedMessagePluginMessagePart3.text, from_msg.text);
     }
 
     if (changed) // If nothing really changed, don't broadcast on the network or write to flash
         service.reloadConfig(); // TODO: does this make sense?
 }
 
-void AdminPlugin::handleSetCannedMessagePluginPart4(const std::string &from_msg)
+void AdminPlugin::handleSetCannedMessagePluginPart4(const CannedMessagePluginMessagePart4 &from_msg)
 {
     int changed = 0;
 
-    if (from_msg != "") {
-        if (canned_message_plugin_message_part4 != from_msg) {
-            changed = 1;
-            canned_message_plugin_message_part4 = from_msg;
-        }
+    if (*from_msg.text) {
+        changed |= strcmp(cannedMessagePluginMessagePart4.text, from_msg.text);
+        strcpy(cannedMessagePluginMessagePart4.text, from_msg.text);
     }
 
     if (changed) // If nothing really changed, don't broadcast on the network or write to flash
         service.reloadConfig(); // TODO: does this make sense?
 }
 
-void AdminPlugin::handleSetCannedMessagePluginPart5(const std::string &from_msg)
+void AdminPlugin::handleSetCannedMessagePluginPart5(const CannedMessagePluginMessagePart5 &from_msg)
 {
     int changed = 0;
 
-    if (from_msg != "") {
-        if (canned_message_plugin_message_part5 != from_msg) {
-            changed = 1;
-            canned_message_plugin_message_part5 = from_msg;
-        }
+    if (*from_msg.text) {
+        changed |= strcmp(cannedMessagePluginMessagePart5.text, from_msg.text);
+        strcpy(cannedMessagePluginMessagePart5.text, from_msg.text);
     }
 
     if (changed) // If nothing really changed, don't broadcast on the network or write to flash

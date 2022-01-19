@@ -7,6 +7,7 @@
 #include "channel.pb.h"
 #include "mesh.pb.h"
 #include "radioconfig.pb.h"
+#include "cannedmessages.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
@@ -30,20 +31,20 @@ typedef struct _AdminMessage {
         bool exit_simulator;
         int32_t reboot_seconds;
         bool get_canned_message_plugin_part1_request;
-        RadioConfig get_canned_message_plugin_part1_response;
+        CannedMessagePluginMessagePart1 get_canned_message_plugin_part1_response;
         bool get_canned_message_plugin_part2_request;
-        RadioConfig get_canned_message_plugin_part2_response;
+        CannedMessagePluginMessagePart2 get_canned_message_plugin_part2_response;
         bool get_canned_message_plugin_part3_request;
-        RadioConfig get_canned_message_plugin_part3_response;
+        CannedMessagePluginMessagePart3 get_canned_message_plugin_part3_response;
         bool get_canned_message_plugin_part4_request;
-        RadioConfig get_canned_message_plugin_part4_response;
+        CannedMessagePluginMessagePart4 get_canned_message_plugin_part4_response;
         bool get_canned_message_plugin_part5_request;
-        RadioConfig get_canned_message_plugin_part5_response;
-        char set_canned_message_plugin_part1[200];
-        char set_canned_message_plugin_part2[200];
-        char set_canned_message_plugin_part3[200];
-        char set_canned_message_plugin_part4[200];
-        char set_canned_message_plugin_part5[200];
+        CannedMessagePluginMessagePart5 get_canned_message_plugin_part5_response;
+        CannedMessagePluginMessagePart1 set_canned_message_plugin_part1;
+        CannedMessagePluginMessagePart2 set_canned_message_plugin_part2;
+        CannedMessagePluginMessagePart3 set_canned_message_plugin_part3;
+        CannedMessagePluginMessagePart4 set_canned_message_plugin_part4;
+        CannedMessagePluginMessagePart5 set_canned_message_plugin_part5;
     };
 } AdminMessage;
 
@@ -111,11 +112,11 @@ X(a, STATIC,   ONEOF,    BOOL,     (variant,get_canned_message_plugin_part4_requ
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_canned_message_plugin_part4_response,get_canned_message_plugin_part4_response),  43) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,get_canned_message_plugin_part5_request,get_canned_message_plugin_part5_request),  44) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_canned_message_plugin_part5_response,get_canned_message_plugin_part5_response),  45) \
-X(a, STATIC,   ONEOF,    STRING,   (variant,set_canned_message_plugin_part1,set_canned_message_plugin_part1),  46) \
-X(a, STATIC,   ONEOF,    STRING,   (variant,set_canned_message_plugin_part2,set_canned_message_plugin_part2),  47) \
-X(a, STATIC,   ONEOF,    STRING,   (variant,set_canned_message_plugin_part3,set_canned_message_plugin_part3),  48) \
-X(a, STATIC,   ONEOF,    STRING,   (variant,set_canned_message_plugin_part4,set_canned_message_plugin_part4),  49) \
-X(a, STATIC,   ONEOF,    STRING,   (variant,set_canned_message_plugin_part5,set_canned_message_plugin_part5),  50)
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_canned_message_plugin_part1,set_canned_message_plugin_part1),  46) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_canned_message_plugin_part2,set_canned_message_plugin_part2),  47) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_canned_message_plugin_part3,set_canned_message_plugin_part3),  48) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_canned_message_plugin_part4,set_canned_message_plugin_part4),  49) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_canned_message_plugin_part5,set_canned_message_plugin_part5),  50)
 #define AdminMessage_CALLBACK NULL
 #define AdminMessage_DEFAULT NULL
 #define AdminMessage_variant_set_radio_MSGTYPE RadioConfig
@@ -124,11 +125,16 @@ X(a, STATIC,   ONEOF,    STRING,   (variant,set_canned_message_plugin_part5,set_
 #define AdminMessage_variant_get_radio_response_MSGTYPE RadioConfig
 #define AdminMessage_variant_get_channel_response_MSGTYPE Channel
 #define AdminMessage_variant_get_owner_response_MSGTYPE User
-#define AdminMessage_variant_get_canned_message_plugin_part1_response_MSGTYPE RadioConfig
-#define AdminMessage_variant_get_canned_message_plugin_part2_response_MSGTYPE RadioConfig
-#define AdminMessage_variant_get_canned_message_plugin_part3_response_MSGTYPE RadioConfig
-#define AdminMessage_variant_get_canned_message_plugin_part4_response_MSGTYPE RadioConfig
-#define AdminMessage_variant_get_canned_message_plugin_part5_response_MSGTYPE RadioConfig
+#define AdminMessage_variant_get_canned_message_plugin_part1_response_MSGTYPE CannedMessagePluginMessagePart1
+#define AdminMessage_variant_get_canned_message_plugin_part2_response_MSGTYPE CannedMessagePluginMessagePart2
+#define AdminMessage_variant_get_canned_message_plugin_part3_response_MSGTYPE CannedMessagePluginMessagePart3
+#define AdminMessage_variant_get_canned_message_plugin_part4_response_MSGTYPE CannedMessagePluginMessagePart4
+#define AdminMessage_variant_get_canned_message_plugin_part5_response_MSGTYPE CannedMessagePluginMessagePart5
+#define AdminMessage_variant_set_canned_message_plugin_part1_MSGTYPE CannedMessagePluginMessagePart1
+#define AdminMessage_variant_set_canned_message_plugin_part2_MSGTYPE CannedMessagePluginMessagePart2
+#define AdminMessage_variant_set_canned_message_plugin_part3_MSGTYPE CannedMessagePluginMessagePart3
+#define AdminMessage_variant_set_canned_message_plugin_part4_MSGTYPE CannedMessagePluginMessagePart4
+#define AdminMessage_variant_set_canned_message_plugin_part5_MSGTYPE CannedMessagePluginMessagePart5
 
 extern const pb_msgdesc_t AdminMessage_msg;
 
@@ -136,7 +142,7 @@ extern const pb_msgdesc_t AdminMessage_msg;
 #define AdminMessage_fields &AdminMessage_msg
 
 /* Maximum encoded size of messages (where known) */
-#define AdminMessage_size                        1618
+#define AdminMessage_size                        1617
 
 #ifdef __cplusplus
 } /* extern "C" */

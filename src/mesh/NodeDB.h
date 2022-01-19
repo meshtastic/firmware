@@ -4,9 +4,6 @@
 #include <Arduino.h>
 #include <assert.h>
 
-#include <string>
-#include <cstring>
-
 #include "MeshTypes.h"
 #include "NodeStatus.h"
 #include "mesh-pb-constants.h"
@@ -17,11 +14,11 @@ extern MyNodeInfo &myNodeInfo;
 extern RadioConfig radioConfig;
 extern User &owner;
 
-extern std::string canned_message_plugin_message_part1;
-extern std::string canned_message_plugin_message_part2;
-extern std::string canned_message_plugin_message_part3;
-extern std::string canned_message_plugin_message_part4;
-extern std::string canned_message_plugin_message_part5;
+extern CannedMessagePluginMessagePart1 cannedMessagePluginMessagePart1;
+extern CannedMessagePluginMessagePart2 cannedMessagePluginMessagePart2;
+extern CannedMessagePluginMessagePart3 cannedMessagePluginMessagePart3;
+extern CannedMessagePluginMessagePart4 cannedMessagePluginMessagePart4;
+extern CannedMessagePluginMessagePart5 cannedMessagePluginMessagePart5;
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const NodeInfo *n);
@@ -128,6 +125,13 @@ class NodeDB
 
     /// Reinit device state from scratch (not loading from disk)
     void installDefaultDeviceState(), installDefaultRadioConfig(), installDefaultChannels();
+
+    void installDefaultCannedMessagePluginPart1();
+    void installDefaultCannedMessagePluginPart2();
+    void installDefaultCannedMessagePluginPart3();
+    void installDefaultCannedMessagePluginPart4();
+    void installDefaultCannedMessagePluginPart5();
+
 };
 
 /**
