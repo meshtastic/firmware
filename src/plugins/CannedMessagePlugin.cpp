@@ -99,19 +99,19 @@ int CannedMessagePlugin::handleInputEvent(const InputEvent *event)
     if (event->inputEvent == static_cast<char>(InputEventChar_KEY_UP))
     {
         DEBUG_MSG("Canned message event UP\n");
-        this->action = CANNED_MESSAGE_ACTION_UP;
+        this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_UP;
         validEvent = true;
     }
     if (event->inputEvent == static_cast<char>(InputEventChar_KEY_DOWN))
     {
         DEBUG_MSG("Canned message event DOWN\n");
-        this->action = CANNED_MESSAGE_ACTION_DOWN;
+        this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_DOWN;
         validEvent = true;
     }
     if (event->inputEvent == static_cast<char>(InputEventChar_KEY_SELECT))
     {
         DEBUG_MSG("Canned message event Select\n");
-        this->action = CANNED_MESSAGE_ACTION_SELECT;
+        this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
         validEvent = true;
     }
 
@@ -151,62 +151,68 @@ void CannedMessagePlugin::sendText(NodeNum dest,
 
 int32_t CannedMessagePlugin::runOnce()
 {
-    if (!radioConfig.preferences.canned_message_plugin_enabled)
+    if ((!radioConfig.preferences.canned_message_plugin_enabled)
+        || (this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE))
     {
         return 30000; // TODO: should return MAX_VAL
     }
     DEBUG_MSG("Check status\n");
     UIFrameEvent e = {false, true};
-    if (this->sendingState == SENDING_STATE_ACTIVE)
+    if (this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE)
     {
         // TODO: might have some feedback of sendig state
-        this->sendingState = SENDING_STATE_NONE;
+        this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         e.frameChanged = true;
-        this->notifyObservers(&e);
-    }
-    else if ((this->action != CANNED_MESSAGE_ACTION_NONE)
-        && (this->currentMessageIndex == -1))
-    {
-        this->currentMessageIndex = 0;
-        DEBUG_MSG("First touch.\n");
-        e.frameChanged = true;
-    }
-    else if (this->action == CANNED_MESSAGE_ACTION_SELECT)
-    {
-        sendText(
-            NODENUM_BROADCAST,
-            this->messages[this->currentMessageIndex],
-            true);
-        this->sendingState = SENDING_STATE_ACTIVE;
         this->currentMessageIndex = -1;
         this->notifyObservers(&e);
-        return 2000;
     }
-    else if (this->action == CANNED_MESSAGE_ACTION_UP)
-    {
-        this->currentMessageIndex = getPrevIndex();
-        DEBUG_MSG("MOVE UP");
-    }
-    else if (this->action == CANNED_MESSAGE_ACTION_DOWN)
-    {
-        this->currentMessageIndex = this->getNextIndex();
-        DEBUG_MSG("MOVE DOWN");
-    }
-    if (this->action != CANNED_MESSAGE_ACTION_NONE)
-    {
-        this->lastTouchMillis = millis();
-        this->action = CANNED_MESSAGE_ACTION_NONE;
-        this->notifyObservers(&e);
-        return INACTIVATE_AFTER_MS;
-    }
-    if ((millis() - this->lastTouchMillis) > INACTIVATE_AFTER_MS)
+    else if (
+        (this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE)
+         && (millis() - this->lastTouchMillis) > INACTIVATE_AFTER_MS)
     {
         // Reset plugin
         DEBUG_MSG("Reset due the lack of activity.\n");
         e.frameChanged = true;
         this->currentMessageIndex = -1;
-        this->sendingState = SENDING_STATE_NONE;
+        this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         this->notifyObservers(&e);
+    }
+    else if (this->currentMessageIndex == -1)
+    {
+        this->currentMessageIndex = 0;
+        DEBUG_MSG("First touch.\n");
+        e.frameChanged = true;
+        this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
+    }
+    else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT)
+    {
+        sendText(
+            NODENUM_BROADCAST,
+            this->messages[this->currentMessageIndex],
+            true);
+        this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
+        this->currentMessageIndex = -1;
+        this->notifyObservers(&e);
+        return 2000;
+    }
+    else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_UP)
+    {
+        this->currentMessageIndex = getPrevIndex();
+        this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
+        DEBUG_MSG("MOVE UP\n");
+    }
+    else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_DOWN)
+    {
+        this->currentMessageIndex = this->getNextIndex();
+        this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
+        DEBUG_MSG("MOVE DOWN\n");
+    }
+
+    if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE)
+    {
+        this->lastTouchMillis = millis();
+        this->notifyObservers(&e);
+        return INACTIVATE_AFTER_MS;
     }
 
     return 30000; // TODO: should return MAX_VAL
@@ -230,11 +236,7 @@ bool CannedMessagePlugin::shouldDraw()
     {
         return false;
     }
-    return (currentMessageIndex != -1) || (this->sendingState != SENDING_STATE_NONE);
-}
-cannedMessagePluginSendigState CannedMessagePlugin::getSendingState()
-{
-    return this->sendingState;
+    return (currentMessageIndex != -1) || (this->runState != CANNED_MESSAGE_RUN_STATE_INACTIVE);
 }
 
 int CannedMessagePlugin::getNextIndex()
@@ -266,7 +268,13 @@ void CannedMessagePlugin::drawFrame(
 {
     displayedNodeNum = 0; // Not currently showing a node pane
 
-    if (cannedMessagePlugin->getSendingState() == SENDING_STATE_NONE)
+    if (cannedMessagePlugin->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE)
+    {
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->setFont(FONT_MEDIUM);
+        display->drawString(display->getWidth()/2 + x, 0 + y + 12, "Sending...");
+    }
+    else
     {
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_SMALL);
@@ -275,12 +283,6 @@ void CannedMessagePlugin::drawFrame(
         display->drawString(0 + x, 0 + y + 8, cannedMessagePlugin->getCurrentMessage());
         display->setFont(FONT_SMALL);
         display->drawString(0 + x, 0 + y + 24, cannedMessagePlugin->getNextMessage());
-    }
-    else
-    {
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->setFont(FONT_MEDIUM);
-        display->drawString(display->getWidth()/2 + x, 0 + y + 12, "Sending...");
     }
 }
 
