@@ -67,7 +67,8 @@ void AdminPlugin::handleGetCannedMessagePluginPart1(const MeshPacket &req)
         // We create the reply here
         AdminMessage r = AdminMessage_init_default;
         r.get_canned_message_plugin_part1_response = radioConfig;
-	strcpy(radioConfig.canned_message_plugin_message_part1.text, canned_message_plugin_message_part1.c_str());
+        // TODO: strcpy(radioConfig.canned_message_plugin_message_part1.text, canned_message_plugin_message_part1.c_str());
+        strcpy(radioConfig.canned_message_plugin_message_part1.text, "mike");
         r.which_variant = AdminMessage_get_canned_message_plugin_part1_response_tag;
         myReply = allocDataProtobuf(r);
     }
@@ -79,7 +80,7 @@ void AdminPlugin::handleGetCannedMessagePluginPart2(const MeshPacket &req)
         // We create the reply here
         AdminMessage r = AdminMessage_init_default;
         r.get_canned_message_plugin_part2_response = radioConfig;
-	strcpy(radioConfig.canned_message_plugin_message_part2.text, canned_message_plugin_message_part2.c_str());
+        // TODO strcpy(radioConfig.get_canned_message_plugin_part2_response.text, canned_message_plugin_message_part2.c_str());
         r.which_variant = AdminMessage_get_canned_message_plugin_part2_response_tag;
         myReply = allocDataProtobuf(r);
     }
@@ -91,7 +92,7 @@ void AdminPlugin::handleGetCannedMessagePluginPart3(const MeshPacket &req)
         // We create the reply here
         AdminMessage r = AdminMessage_init_default;
         r.get_canned_message_plugin_part3_response = radioConfig;
-	strcpy(radioConfig.canned_message_plugin_message_part3.text, canned_message_plugin_message_part3.c_str());
+        // TODO strcpy(radioConfig.get_canned_message_plugin_part3_response.text, canned_message_plugin_message_part3.c_str());
         r.which_variant = AdminMessage_get_canned_message_plugin_part3_response_tag;
         myReply = allocDataProtobuf(r);
     }
@@ -103,7 +104,7 @@ void AdminPlugin::handleGetCannedMessagePluginPart4(const MeshPacket &req)
         // We create the reply here
         AdminMessage r = AdminMessage_init_default;
         r.get_canned_message_plugin_part4_response = radioConfig;
-	strcpy(radioConfig.canned_message_plugin_message_part4.text, canned_message_plugin_message_part4.c_str());
+        // TODO strcpy(radioConfig.get_canned_message_plugin_part4_response.text, canned_message_plugin_message_part4.c_str());
         r.which_variant = AdminMessage_get_canned_message_plugin_part4_response_tag;
         myReply = allocDataProtobuf(r);
     }
@@ -115,7 +116,7 @@ void AdminPlugin::handleGetCannedMessagePluginPart5(const MeshPacket &req)
         // We create the reply here
         AdminMessage r = AdminMessage_init_default;
         r.get_canned_message_plugin_part5_response = radioConfig;
-	strcpy(radioConfig.canned_message_plugin_message_part5.text, canned_message_plugin_message_part5.c_str());
+        // TODO: strcpy(radioConfig.get_canned_message_plugin_part5_response.text, canned_message_plugin_message_part5.c_str());
         r.which_variant = AdminMessage_get_canned_message_plugin_part5_response_tag;
         myReply = allocDataProtobuf(r);
     }
@@ -267,12 +268,12 @@ void AdminPlugin::handleSetCannedMessagePluginPart1(const std::string &from_msg)
     if (from_msg != "") {
         if (canned_message_plugin_message_part1 != from_msg) {
             changed = 1;
-	    canned_message_plugin_message_part1 = from_msg;
-	}
+            canned_message_plugin_message_part1 = from_msg;
+        }
     }
 
     if (changed) // If nothing really changed, don't broadcast on the network or write to flash
-    	service.reloadConfig(); // TODO: does this make sense?
+        service.reloadConfig(); // TODO: does this make sense?
 }
 
 void AdminPlugin::handleSetCannedMessagePluginPart2(const std::string &from_msg)
@@ -283,11 +284,11 @@ void AdminPlugin::handleSetCannedMessagePluginPart2(const std::string &from_msg)
         if (canned_message_plugin_message_part2 != from_msg) {
             changed = 1;
             canned_message_plugin_message_part2 = from_msg;
-	}
+        }
     }
 
     if (changed) // If nothing really changed, don't broadcast on the network or write to flash
-    	service.reloadConfig(); // TODO: does this make sense?
+        service.reloadConfig(); // TODO: does this make sense?
 }
 
 void AdminPlugin::handleSetCannedMessagePluginPart3(const std::string &from_msg)
@@ -298,11 +299,11 @@ void AdminPlugin::handleSetCannedMessagePluginPart3(const std::string &from_msg)
         if (canned_message_plugin_message_part3 != from_msg) {
             changed = 1;
             canned_message_plugin_message_part3 = from_msg;
-	}
+        }
     }
 
     if (changed) // If nothing really changed, don't broadcast on the network or write to flash
-    	service.reloadConfig(); // TODO: does this make sense?
+        service.reloadConfig(); // TODO: does this make sense?
 }
 
 void AdminPlugin::handleSetCannedMessagePluginPart4(const std::string &from_msg)
@@ -313,11 +314,11 @@ void AdminPlugin::handleSetCannedMessagePluginPart4(const std::string &from_msg)
         if (canned_message_plugin_message_part4 != from_msg) {
             changed = 1;
             canned_message_plugin_message_part4 = from_msg;
-	}
+        }
     }
 
     if (changed) // If nothing really changed, don't broadcast on the network or write to flash
-    	service.reloadConfig(); // TODO: does this make sense?
+        service.reloadConfig(); // TODO: does this make sense?
 }
 
 void AdminPlugin::handleSetCannedMessagePluginPart5(const std::string &from_msg)
@@ -328,11 +329,11 @@ void AdminPlugin::handleSetCannedMessagePluginPart5(const std::string &from_msg)
         if (canned_message_plugin_message_part5 != from_msg) {
             changed = 1;
             canned_message_plugin_message_part5 = from_msg;
-	}
+        }
     }
 
     if (changed) // If nothing really changed, don't broadcast on the network or write to flash
-    	service.reloadConfig(); // TODO: does this make sense?
+        service.reloadConfig(); // TODO: does this make sense?
 }
 
 void AdminPlugin::handleSetChannel(const Channel &cc)
