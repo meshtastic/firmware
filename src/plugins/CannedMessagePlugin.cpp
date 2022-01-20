@@ -40,11 +40,11 @@ int CannedMessagePlugin::splitConfiguredMessages()
     char all[1001];
 
     // get all of the message parts
-    strcpy(all, radioConfig.canned_message_plugin_message_part1.text);
-    strcat(all, radioConfig.canned_message_plugin_message_part2.text);
-    strcat(all, radioConfig.canned_message_plugin_message_part3.text);
-    strcat(all, radioConfig.canned_message_plugin_message_part4.text);
-    strcat(all, radioConfig.canned_message_plugin_message_part5.text);
+    strcpy(all, cannedMessagePluginMessagePart1.text);
+    strcat(all, cannedMessagePluginMessagePart2.text);
+    strcat(all, cannedMessagePluginMessagePart3.text);
+    strcat(all, cannedMessagePluginMessagePart4.text);
+    strcat(all, cannedMessagePluginMessagePart5.text);
 
     this->messages[messageIndex++] = all;
     int upTo = strlen(all) - 1;
