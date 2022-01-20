@@ -39,7 +39,7 @@ void RotaryEncoderInterruptBase::init(
 int32_t RotaryEncoderInterruptBase::runOnce()
 {
     InputEvent e;
-    e.inputEvent = InputEventChar_NULL;
+    e.inputEvent = InputEventChar_KEY_NONE;
     e.source = this->_originName;
 
     if (this->action == ROTARY_ACTION_PRESSED)
@@ -58,7 +58,7 @@ int32_t RotaryEncoderInterruptBase::runOnce()
         e.inputEvent = this->_eventCcw;
     }
 
-    if (e.inputEvent != InputEventChar_NULL)
+    if (e.inputEvent != InputEventChar_KEY_NONE)
     {
         this->notifyObservers(&e);
     }
