@@ -1,5 +1,7 @@
 # Meshtastic-device
 [![Open in Visual Studio Code](https://open.vscode.dev/badges/open-in-vscode.svg)](https://open.vscode.dev/meshtastic/Meshtastic-device)
+[![Continuous Integration](https://github.com/meshtastic/Meshtastic-device/actions/workflows/main.yml/badge.svg)](https://github.com/meshtastic/Meshtastic-device/actions/workflows/main.yml)
+
 ## This repository contains the device firmware used in the [Meshtastic](https://meshtastic.org) project.
 
 Update Instructions
