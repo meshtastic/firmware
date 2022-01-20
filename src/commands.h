@@ -13,4 +13,5 @@ enum class Cmd {
         STOP_BLUETOOTH_PIN_SCREEN,
         STOP_BOOT_SCREEN,
         PRINT,
+        START_SHUTDOWN_SCREEN,
 };
