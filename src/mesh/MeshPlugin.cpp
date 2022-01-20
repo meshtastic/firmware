@@ -250,3 +250,43 @@ void MeshPlugin::observeUIEvents(
         }
     }
 }
+
+void MeshPlugin::loadProtoForAllPlugins()
+{
+    std::vector<MeshPlugin *> pluginsWithUIFrames;
+    for (auto i = plugins->begin(); i != plugins->end(); ++i) {
+        auto &pi = **i;
+        pi.loadProtoForPlugin();
+    }
+}
+
+bool MeshPlugin::saveProtoForAllPlugins()
+{
+    bool okay = true;
+    std::vector<MeshPlugin *> pluginsWithUIFrames;
+    for (auto i = plugins->begin(); i != plugins->end(); ++i) {
+        auto &pi = **i;
+        okay &= pi.saveProtoForPlugin();
+    }
+    return okay;
+}
+
+void MeshPlugin::installProtoDefaultsForAllPlugins()
+{
+    std::vector<MeshPlugin *> pluginsWithUIFrames;
+    for (auto i = plugins->begin(); i != plugins->end(); ++i) {
+        auto &pi = **i;
+        pi.installProtoDefaultsForPlugin();
+    }
+}
+
+bool MeshPlugin::handleAdminMessageForAllPlugins(const MeshPacket &mp, AdminMessage *r)
+{
+    bool handled = true;
+    std::vector<MeshPlugin *> pluginsWithUIFrames;
+    for (auto i = plugins->begin(); i != plugins->end(); ++i) {
+        auto &pi = **i;
+        handled &= pi.handleAdminMessageForPlugin(mp, r);
+    }
+    return handled;
+}

@@ -34,12 +34,6 @@ MyNodeInfo &myNodeInfo = devicestate.my_node;
 RadioConfig radioConfig;
 ChannelFile channelFile;
 
-CannedMessagePluginMessagePart1 cannedMessagePluginMessagePart1;
-CannedMessagePluginMessagePart2 cannedMessagePluginMessagePart2;
-CannedMessagePluginMessagePart3 cannedMessagePluginMessagePart3;
-CannedMessagePluginMessagePart4 cannedMessagePluginMessagePart4;
-CannedMessagePluginMessagePart5 cannedMessagePluginMessagePart5;
-
 /** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings
  * might have changed is incremented.  Allows others to detect they might now be on a new channel.
  */
@@ -143,31 +137,6 @@ void NodeDB::installDefaultRadioConfig()
 
 }
 
-void NodeDB::installDefaultCannedMessagePluginPart1()
-{
-    memset(cannedMessagePluginMessagePart1.text, 0, sizeof(cannedMessagePluginMessagePart1.text));
-}
-
-void NodeDB::installDefaultCannedMessagePluginPart2()
-{
-    memset(cannedMessagePluginMessagePart2.text, 0, sizeof(cannedMessagePluginMessagePart2.text));
-}
-
-void NodeDB::installDefaultCannedMessagePluginPart3()
-{
-    memset(cannedMessagePluginMessagePart3.text, 0, sizeof(cannedMessagePluginMessagePart3.text));
-}
-
-void NodeDB::installDefaultCannedMessagePluginPart4()
-{
-    memset(cannedMessagePluginMessagePart4.text, 0, sizeof(cannedMessagePluginMessagePart4.text));
-}
-
-void NodeDB::installDefaultCannedMessagePluginPart5()
-{
-    memset(cannedMessagePluginMessagePart5.text, 0, sizeof(cannedMessagePluginMessagePart5.text));
-}
-
 void NodeDB::installDefaultChannels()
 {
     memset(&channelFile, 0, sizeof(channelFile));
@@ -215,11 +184,7 @@ void NodeDB::installDefaultDeviceState()
     installDefaultChannels();
     installDefaultRadioConfig();
 
-    installDefaultCannedMessagePluginPart1();
-    installDefaultCannedMessagePluginPart2();
-    installDefaultCannedMessagePluginPart3();
-    installDefaultCannedMessagePluginPart4();
-    installDefaultCannedMessagePluginPart5();
+    MeshPlugin::installProtoDefaultsForAllPlugins();
 }
 
 void NodeDB::init()
@@ -329,11 +294,6 @@ static const char *preffileOld = "/db.proto";
 static const char *preffile = "/prefs/db.proto";
 static const char *radiofile = "/prefs/radio.proto";
 static const char *channelfile = "/prefs/channels.proto";
-static const char *cannedMessagesPart1file = "/prefs/cannedmessagespart1.proto";
-static const char *cannedMessagesPart2file = "/prefs/cannedmessagespart2.proto";
-static const char *cannedMessagesPart3file = "/prefs/cannedmessagespart3.proto";
-static const char *cannedMessagesPart4file = "/prefs/cannedmessagespart4.proto";
-static const char *cannedMessagesPart5file = "/prefs/cannedmessagespart5.proto";
 // const char *preftmp = "/db.proto.tmp";
 
 /** Load a protobuf from a file, return true for success */
@@ -397,21 +357,7 @@ void NodeDB::loadFromDisk()
         installDefaultChannels(); // Our in RAM copy might now be corrupt
     }
 
-    if (!loadProto(cannedMessagesPart1file, CannedMessagePluginMessagePart1_size, sizeof(cannedMessagesPart1file), CannedMessagePluginMessagePart1_fields, &cannedMessagePluginMessagePart1)) {
-        installDefaultCannedMessagePluginPart1();
-    }
-    if (!loadProto(cannedMessagesPart2file, CannedMessagePluginMessagePart2_size, sizeof(cannedMessagesPart2file), CannedMessagePluginMessagePart2_fields, &cannedMessagePluginMessagePart2)) {
-        installDefaultCannedMessagePluginPart2();
-    }
-    if (!loadProto(cannedMessagesPart3file, CannedMessagePluginMessagePart3_size, sizeof(cannedMessagesPart3file), CannedMessagePluginMessagePart3_fields, &cannedMessagePluginMessagePart3)) {
-        installDefaultCannedMessagePluginPart3();
-    }
-    if (!loadProto(cannedMessagesPart4file, CannedMessagePluginMessagePart4_size, sizeof(cannedMessagesPart4file), CannedMessagePluginMessagePart4_fields, &cannedMessagePluginMessagePart4)) {
-        installDefaultCannedMessagePluginPart4();
-    }
-    if (!loadProto(cannedMessagesPart5file, CannedMessagePluginMessagePart5_size, sizeof(cannedMessagesPart5file), CannedMessagePluginMessagePart5_fields, &cannedMessagePluginMessagePart5)) {
-        installDefaultCannedMessagePluginPart5();
-    }
+    MeshPlugin::loadProtoForAllPlugins();
 }
 
 /** Save a protobuf from a file, return true for success */
@@ -468,11 +414,7 @@ void NodeDB::saveToDisk()
         bool okay = saveProto(preffile, DeviceState_size, sizeof(devicestate), DeviceState_fields, &devicestate);
         okay &= saveProto(radiofile, RadioConfig_size, sizeof(RadioConfig), RadioConfig_fields, &radioConfig);
 
-        okay &= saveProto(cannedMessagesPart1file, CannedMessagePluginMessagePart1_size, sizeof(CannedMessagePluginMessagePart1), CannedMessagePluginMessagePart1_fields, &cannedMessagePluginMessagePart1);
-        okay &= saveProto(cannedMessagesPart2file, CannedMessagePluginMessagePart2_size, sizeof(CannedMessagePluginMessagePart2), CannedMessagePluginMessagePart2_fields, &cannedMessagePluginMessagePart2);
-        okay &= saveProto(cannedMessagesPart3file, CannedMessagePluginMessagePart3_size, sizeof(CannedMessagePluginMessagePart3), CannedMessagePluginMessagePart3_fields, &cannedMessagePluginMessagePart3);
-        okay &= saveProto(cannedMessagesPart4file, CannedMessagePluginMessagePart4_size, sizeof(CannedMessagePluginMessagePart4), CannedMessagePluginMessagePart4_fields, &cannedMessagePluginMessagePart4);
-        okay &= saveProto(cannedMessagesPart5file, CannedMessagePluginMessagePart5_size, sizeof(CannedMessagePluginMessagePart5), CannedMessagePluginMessagePart5_fields, &cannedMessagePluginMessagePart5);
+        okay &= MeshPlugin::saveProtoForAllPlugins();
 
         saveChannelsToDisk();
 

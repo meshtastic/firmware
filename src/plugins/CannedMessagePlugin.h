@@ -1,5 +1,5 @@
 #pragma once
-#include "SinglePortPlugin.h"
+#include "ProtobufPlugin.h"
 #include "input/InputBroker.h"
 
 enum cannedMessagePluginRunState
@@ -21,7 +21,7 @@ enum cannedMessagePluginRunState
 #define CANNED_MESSAGE_PLUGIN_MESSAGES_SIZE 200
 
 class CannedMessagePlugin :
-    public SinglePortPlugin,
+    public ProtobufPlugin<AdminMessage>,
     public Observable<const UIFrameEvent *>,
     private concurrency::OSThread
 {
@@ -56,6 +56,27 @@ class CannedMessagePlugin :
     virtual Observable<const UIFrameEvent *>* getUIFrameObservable() { return this; }
     virtual void drawFrame(
         OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+    virtual void loadProtoForPlugin();
+    virtual bool saveProtoForPlugin();
+    virtual void installProtoDefaultsForPlugin();
+    virtual bool handleAdminMessageForPlugin(const MeshPacket &mp, AdminMessage *r);
+    virtual bool handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *p)
+    {
+        // TODO: this method might be used instead of handleAdminMessageForPlugin() 
+        return false;
+    };
+
+    void handleGetCannedMessagePluginPart1(const MeshPacket &req);
+    void handleGetCannedMessagePluginPart2(const MeshPacket &req);
+    void handleGetCannedMessagePluginPart3(const MeshPacket &req);
+    void handleGetCannedMessagePluginPart4(const MeshPacket &req);
+    void handleGetCannedMessagePluginPart5(const MeshPacket &req);
+
+    void handleSetCannedMessagePluginPart1(const CannedMessagePluginMessagePart1 &from_msg);
+    void handleSetCannedMessagePluginPart2(const CannedMessagePluginMessagePart2 &from_msg);
+    void handleSetCannedMessagePluginPart3(const CannedMessagePluginMessagePart3 &from_msg);
+    void handleSetCannedMessagePluginPart4(const CannedMessagePluginMessagePart4 &from_msg);
+    void handleSetCannedMessagePluginPart5(const CannedMessagePluginMessagePart5 &from_msg);
 
     int currentMessageIndex = -1;
     cannedMessagePluginRunState runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;

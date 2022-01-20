@@ -26,18 +26,6 @@ class AdminPlugin : public ProtobufPlugin<AdminMessage>
 
     void handleGetChannel(const MeshPacket &req, uint32_t channelIndex);
     void handleGetRadio(const MeshPacket &req);
-
-    void handleGetCannedMessagePluginPart1(const MeshPacket &req);
-    void handleGetCannedMessagePluginPart2(const MeshPacket &req);
-    void handleGetCannedMessagePluginPart3(const MeshPacket &req);
-    void handleGetCannedMessagePluginPart4(const MeshPacket &req);
-    void handleGetCannedMessagePluginPart5(const MeshPacket &req);
-
-    void handleSetCannedMessagePluginPart1(const CannedMessagePluginMessagePart1 &from_msg);
-    void handleSetCannedMessagePluginPart2(const CannedMessagePluginMessagePart2 &from_msg);
-    void handleSetCannedMessagePluginPart3(const CannedMessagePluginMessagePart3 &from_msg);
-    void handleSetCannedMessagePluginPart4(const CannedMessagePluginMessagePart4 &from_msg);
-    void handleSetCannedMessagePluginPart5(const CannedMessagePluginMessagePart5 &from_msg);
 };
 
 extern AdminPlugin *adminPlugin;

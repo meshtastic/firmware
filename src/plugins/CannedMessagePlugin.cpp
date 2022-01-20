@@ -10,10 +10,26 @@
 // Remove Canned message screen if no action is taken for some milliseconds
 #define INACTIVATE_AFTER_MS 20000
 
+static const char *cannedMessagesPart1file = "/prefs/cannedmessagespart1.proto";
+static const char *cannedMessagesPart2file = "/prefs/cannedmessagespart2.proto";
+static const char *cannedMessagesPart3file = "/prefs/cannedmessagespart3.proto";
+static const char *cannedMessagesPart4file = "/prefs/cannedmessagespart4.proto";
+static const char *cannedMessagesPart5file = "/prefs/cannedmessagespart5.proto";
+
+CannedMessagePluginMessagePart1 cannedMessagePluginMessagePart1;
+CannedMessagePluginMessagePart2 cannedMessagePluginMessagePart2;
+CannedMessagePluginMessagePart3 cannedMessagePluginMessagePart3;
+CannedMessagePluginMessagePart4 cannedMessagePluginMessagePart4;
+CannedMessagePluginMessagePart5 cannedMessagePluginMessagePart5;
+
 CannedMessagePlugin *cannedMessagePlugin;
 
+// TODO: move it into NodeDB.h!
+extern bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, void *dest_struct);
+extern bool saveProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, const void *dest_struct);
+
 CannedMessagePlugin::CannedMessagePlugin()
-    : SinglePortPlugin("canned", PortNum_TEXT_MESSAGE_APP),
+    : ProtobufPlugin("canned", PortNum_TEXT_MESSAGE_APP, AdminMessage_fields),
     concurrency::OSThread("CannedMessagePlugin")
 {
     if (radioConfig.preferences.canned_message_plugin_enabled)
@@ -287,3 +303,239 @@ void CannedMessagePlugin::drawFrame(
     }
 }
 
+void CannedMessagePlugin::loadProtoForPlugin()
+{
+    if (!loadProto(cannedMessagesPart1file, CannedMessagePluginMessagePart1_size, sizeof(cannedMessagesPart1file), CannedMessagePluginMessagePart1_fields, &cannedMessagePluginMessagePart1)) {
+        memset(cannedMessagePluginMessagePart1.text, 0, sizeof(cannedMessagePluginMessagePart1.text));
+    }
+    if (!loadProto(cannedMessagesPart2file, CannedMessagePluginMessagePart2_size, sizeof(cannedMessagesPart2file), CannedMessagePluginMessagePart2_fields, &cannedMessagePluginMessagePart2)) {
+        memset(cannedMessagePluginMessagePart2.text, 0, sizeof(cannedMessagePluginMessagePart2.text));
+    }
+    if (!loadProto(cannedMessagesPart3file, CannedMessagePluginMessagePart3_size, sizeof(cannedMessagesPart3file), CannedMessagePluginMessagePart3_fields, &cannedMessagePluginMessagePart3)) {
+        memset(cannedMessagePluginMessagePart3.text, 0, sizeof(cannedMessagePluginMessagePart3.text));
+    }
+    if (!loadProto(cannedMessagesPart4file, CannedMessagePluginMessagePart4_size, sizeof(cannedMessagesPart4file), CannedMessagePluginMessagePart4_fields, &cannedMessagePluginMessagePart4)) {
+        memset(cannedMessagePluginMessagePart4.text, 0, sizeof(cannedMessagePluginMessagePart4.text));
+    }
+    if (!loadProto(cannedMessagesPart5file, CannedMessagePluginMessagePart5_size, sizeof(cannedMessagesPart5file), CannedMessagePluginMessagePart5_fields, &cannedMessagePluginMessagePart5)) {
+        memset(cannedMessagePluginMessagePart5.text, 0, sizeof(cannedMessagePluginMessagePart5.text));
+    }
+}
+
+bool CannedMessagePlugin::saveProtoForPlugin()
+{
+    bool okay = true;
+
+    okay &= saveProto(cannedMessagesPart1file, CannedMessagePluginMessagePart1_size, sizeof(CannedMessagePluginMessagePart1), CannedMessagePluginMessagePart1_fields, &cannedMessagePluginMessagePart1);
+    okay &= saveProto(cannedMessagesPart2file, CannedMessagePluginMessagePart2_size, sizeof(CannedMessagePluginMessagePart2), CannedMessagePluginMessagePart2_fields, &cannedMessagePluginMessagePart2);
+    okay &= saveProto(cannedMessagesPart3file, CannedMessagePluginMessagePart3_size, sizeof(CannedMessagePluginMessagePart3), CannedMessagePluginMessagePart3_fields, &cannedMessagePluginMessagePart3);
+    okay &= saveProto(cannedMessagesPart4file, CannedMessagePluginMessagePart4_size, sizeof(CannedMessagePluginMessagePart4), CannedMessagePluginMessagePart4_fields, &cannedMessagePluginMessagePart4);
+    okay &= saveProto(cannedMessagesPart5file, CannedMessagePluginMessagePart5_size, sizeof(CannedMessagePluginMessagePart5), CannedMessagePluginMessagePart5_fields, &cannedMessagePluginMessagePart5);
+
+    return okay;
+}
+
+void CannedMessagePlugin::installProtoDefaultsForPlugin()
+{
+    // TODO: resolve code duplication!
+    memset(cannedMessagePluginMessagePart1.text, 0, sizeof(cannedMessagePluginMessagePart1.text));
+    memset(cannedMessagePluginMessagePart2.text, 0, sizeof(cannedMessagePluginMessagePart2.text));
+    memset(cannedMessagePluginMessagePart3.text, 0, sizeof(cannedMessagePluginMessagePart3.text));
+    memset(cannedMessagePluginMessagePart4.text, 0, sizeof(cannedMessagePluginMessagePart4.text));
+    memset(cannedMessagePluginMessagePart5.text, 0, sizeof(cannedMessagePluginMessagePart5.text));
+}
+
+bool CannedMessagePlugin::handleAdminMessageForPlugin(const MeshPacket &mp, AdminMessage *r)
+{
+    bool handled = false;
+    switch (r->which_variant)
+    {
+    case AdminMessage_get_canned_message_plugin_part1_request_tag:
+        DEBUG_MSG("Client is getting radio canned message part1\n");
+        handleGetCannedMessagePluginPart1(mp);
+        handled = true;
+        break;
+
+    case AdminMessage_get_canned_message_plugin_part2_request_tag:
+        DEBUG_MSG("Client is getting radio canned message part2\n");
+        handleGetCannedMessagePluginPart2(mp);
+        handled = true;
+        break;
+
+    case AdminMessage_get_canned_message_plugin_part3_request_tag:
+        DEBUG_MSG("Client is getting radio canned message part3\n");
+        handleGetCannedMessagePluginPart3(mp);
+        handled = true;
+        break;
+
+    case AdminMessage_get_canned_message_plugin_part4_request_tag:
+        DEBUG_MSG("Client is getting radio canned message part4\n");
+        handleGetCannedMessagePluginPart4(mp);
+        handled = true;
+        break;
+
+    case AdminMessage_get_canned_message_plugin_part5_request_tag:
+        DEBUG_MSG("Client is getting radio canned message part5\n");
+        handleGetCannedMessagePluginPart5(mp);
+        handled = true;
+        break;
+
+    case AdminMessage_set_canned_message_plugin_part1_tag:
+        DEBUG_MSG("Client is setting radio canned message part 1\n");
+        handleSetCannedMessagePluginPart1(r->set_canned_message_plugin_part1);
+        handled = true;
+        break;
+
+    case AdminMessage_set_canned_message_plugin_part2_tag:
+        DEBUG_MSG("Client is setting radio canned message part 2\n");
+        handleSetCannedMessagePluginPart2(r->set_canned_message_plugin_part2);
+        handled = true;
+        break;
+
+    case AdminMessage_set_canned_message_plugin_part3_tag:
+        DEBUG_MSG("Client is setting radio canned message part 3\n");
+        handleSetCannedMessagePluginPart3(r->set_canned_message_plugin_part3);
+        handled = true;
+        break;
+
+    case AdminMessage_set_canned_message_plugin_part4_tag:
+        DEBUG_MSG("Client is setting radio canned message part 4\n");
+        handleSetCannedMessagePluginPart4(r->set_canned_message_plugin_part4);
+        handled = true;
+        break;
+
+    case AdminMessage_set_canned_message_plugin_part5_tag:
+        DEBUG_MSG("Client is setting radio canned message part 5\n");
+        handleSetCannedMessagePluginPart5(r->set_canned_message_plugin_part5);
+        handled = true;
+        break;
+    
+    default:
+        break;
+    }
+
+    return handled;
+}
+
+void CannedMessagePlugin::handleGetCannedMessagePluginPart1(const MeshPacket &req)
+{
+    DEBUG_MSG("*** handleGetCannedMessagePluginPart1\n");
+    if (req.decoded.want_response) {
+        // We create the reply here
+        AdminMessage r = AdminMessage_init_default;
+        r.get_canned_message_plugin_part1_response = cannedMessagePluginMessagePart1;
+	DEBUG_MSG("*** cannedMessagePluginMessagePart1.text:%s\n", cannedMessagePluginMessagePart1.text);
+        r.which_variant = AdminMessage_get_canned_message_plugin_part1_response_tag;
+        myReply = allocDataProtobuf(r);
+    }
+}
+
+void CannedMessagePlugin::handleGetCannedMessagePluginPart2(const MeshPacket &req)
+{
+    if (req.decoded.want_response) {
+        // We create the reply here
+        AdminMessage r = AdminMessage_init_default;
+        r.get_canned_message_plugin_part2_response = cannedMessagePluginMessagePart2;
+        r.which_variant = AdminMessage_get_canned_message_plugin_part2_response_tag;
+        myReply = allocDataProtobuf(r);
+    }
+}
+
+void CannedMessagePlugin::handleGetCannedMessagePluginPart3(const MeshPacket &req)
+{
+    if (req.decoded.want_response) {
+        // We create the reply here
+        AdminMessage r = AdminMessage_init_default;
+        r.get_canned_message_plugin_part3_response = cannedMessagePluginMessagePart3;
+        r.which_variant = AdminMessage_get_canned_message_plugin_part3_response_tag;
+        myReply = allocDataProtobuf(r);
+    }
+}
+
+void CannedMessagePlugin::handleGetCannedMessagePluginPart4(const MeshPacket &req)
+{
+    if (req.decoded.want_response) {
+        // We create the reply here
+        AdminMessage r = AdminMessage_init_default;
+        r.get_canned_message_plugin_part4_response = cannedMessagePluginMessagePart4;
+        r.which_variant = AdminMessage_get_canned_message_plugin_part4_response_tag;
+        myReply = allocDataProtobuf(r);
+    }
+}
+
+void CannedMessagePlugin::handleGetCannedMessagePluginPart5(const MeshPacket &req)
+{
+    if (req.decoded.want_response) {
+        // We create the reply here
+        AdminMessage r = AdminMessage_init_default;
+        r.get_canned_message_plugin_part5_response = cannedMessagePluginMessagePart5;
+        r.which_variant = AdminMessage_get_canned_message_plugin_part5_response_tag;
+        myReply = allocDataProtobuf(r);
+    }
+}
+
+void CannedMessagePlugin::handleSetCannedMessagePluginPart1(const CannedMessagePluginMessagePart1 &from_msg)
+{
+    int changed = 0;
+
+    if (*from_msg.text) {
+        changed |= strcmp(cannedMessagePluginMessagePart1.text, from_msg.text);
+        strcpy(cannedMessagePluginMessagePart1.text, from_msg.text);
+	DEBUG_MSG("*** from_msg.text:%s\n", from_msg.text);
+    }
+
+    if (changed) // If nothing really changed, don't broadcast on the network or write to flash
+        service.reloadConfig(); // TODO: does this make sense?
+}
+
+void CannedMessagePlugin::handleSetCannedMessagePluginPart2(const CannedMessagePluginMessagePart2 &from_msg)
+{
+    int changed = 0;
+
+    if (*from_msg.text) {
+        changed |= strcmp(cannedMessagePluginMessagePart2.text, from_msg.text);
+        strcpy(cannedMessagePluginMessagePart2.text, from_msg.text);
+    }
+
+    if (changed) // If nothing really changed, don't broadcast on the network or write to flash
+        service.reloadConfig(); // TODO: does this make sense?
+}
+
+void CannedMessagePlugin::handleSetCannedMessagePluginPart3(const CannedMessagePluginMessagePart3 &from_msg)
+{
+    int changed = 0;
+
+    if (*from_msg.text) {
+        changed |= strcmp(cannedMessagePluginMessagePart3.text, from_msg.text);
+        strcpy(cannedMessagePluginMessagePart3.text, from_msg.text);
+    }
+
+    if (changed) // If nothing really changed, don't broadcast on the network or write to flash
+        service.reloadConfig(); // TODO: does this make sense?
+}
+
+void CannedMessagePlugin::handleSetCannedMessagePluginPart4(const CannedMessagePluginMessagePart4 &from_msg)
+{
+    int changed = 0;
+
+    if (*from_msg.text) {
+        changed |= strcmp(cannedMessagePluginMessagePart4.text, from_msg.text);
+        strcpy(cannedMessagePluginMessagePart4.text, from_msg.text);
+    }
+
+    if (changed) // If nothing really changed, don't broadcast on the network or write to flash
+        service.reloadConfig(); // TODO: does this make sense?
+}
+
+void CannedMessagePlugin::handleSetCannedMessagePluginPart5(const CannedMessagePluginMessagePart5 &from_msg)
+{
+    int changed = 0;
+
+    if (*from_msg.text) {
+        changed |= strcmp(cannedMessagePluginMessagePart5.text, from_msg.text);
+        strcpy(cannedMessagePluginMessagePart5.text, from_msg.text);
+    }
+
+    if (changed) // If nothing really changed, don't broadcast on the network or write to flash
+        service.reloadConfig(); // TODO: does this make sense?
+}
