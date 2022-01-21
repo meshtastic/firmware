@@ -104,6 +104,12 @@ bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
         rebootAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
         break;
     }
+    case AdminMessage_shutdown_seconds_tag: {
+        int32_t s = r->shutdown_seconds;
+        DEBUG_MSG("Shutdown in %d seconds\n", s);
+        shutdownAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
+        break;
+    }
 
 #ifdef PORTDUINO
     case AdminMessage_exit_simulator_tag:
