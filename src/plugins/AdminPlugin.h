@@ -1,5 +1,6 @@
 #pragma once
 #include "ProtobufPlugin.h"
+#include "CannedMessagePlugin.h"
 
 /**
  * Routing plugin for router control messages

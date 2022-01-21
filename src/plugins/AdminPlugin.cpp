@@ -11,6 +11,7 @@
 #endif
 
 AdminPlugin *adminPlugin;
+extern CannedMessagePlugin *cannedMessagePlugin;
 
 /// A special reserved string to indicate strings we can not share with external nodes.  We will use this 'reserved' word instead.
 /// Also, to make setting work correctly, if someone tries to set a string to this reserved value we assume they don't really want a change.
@@ -63,6 +64,9 @@ void AdminPlugin::handleGetRadio(const MeshPacket &req)
 
 bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
 {
+    // if handled == false, then let others look at this message also if they want
+    bool handled = false;
+
     assert(r);
     switch (r->which_variant) {
     case AdminMessage_set_owner_tag:
@@ -111,6 +115,67 @@ bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
         break;
     }
 
+    case AdminMessage_get_canned_message_plugin_part1_request_tag:
+        DEBUG_MSG("Client is getting radio canned message part1\n");
+        cannedMessagePlugin->handleGetCannedMessagePluginPart1(mp);
+        handled = true;
+        break;
+
+    case AdminMessage_get_canned_message_plugin_part2_request_tag:
+        DEBUG_MSG("Client is getting radio canned message part2\n");
+        cannedMessagePlugin->handleGetCannedMessagePluginPart2(mp);
+        handled = true;
+        break;
+
+    case AdminMessage_get_canned_message_plugin_part3_request_tag:
+        DEBUG_MSG("Client is getting radio canned message part3\n");
+        cannedMessagePlugin->handleGetCannedMessagePluginPart3(mp);
+        handled = true;
+        break;
+
+    case AdminMessage_get_canned_message_plugin_part4_request_tag:
+        DEBUG_MSG("Client is getting radio canned message part4\n");
+        cannedMessagePlugin->handleGetCannedMessagePluginPart4(mp);
+        handled = true;
+        break;
+
+    case AdminMessage_get_canned_message_plugin_part5_request_tag:
+        DEBUG_MSG("Client is getting radio canned message part5\n");
+        cannedMessagePlugin->handleGetCannedMessagePluginPart5(mp);
+        handled = true;
+        break;
+
+    case AdminMessage_set_canned_message_plugin_part1_tag:
+        DEBUG_MSG("Client is setting radio canned message part 1\n");
+        cannedMessagePlugin->handleSetCannedMessagePluginPart1(r->set_canned_message_plugin_part1);
+        handled = true;
+        break;
+
+    case AdminMessage_set_canned_message_plugin_part2_tag:
+        DEBUG_MSG("Client is setting radio canned message part 2\n");
+        cannedMessagePlugin->handleSetCannedMessagePluginPart2(r->set_canned_message_plugin_part2);
+        handled = true;
+        break;
+
+    case AdminMessage_set_canned_message_plugin_part3_tag:
+        DEBUG_MSG("Client is setting radio canned message part 3\n");
+        cannedMessagePlugin->handleSetCannedMessagePluginPart3(r->set_canned_message_plugin_part3);
+        handled = true;
+        break;
+
+    case AdminMessage_set_canned_message_plugin_part4_tag:
+        DEBUG_MSG("Client is setting radio canned message part 4\n");
+        cannedMessagePlugin->handleSetCannedMessagePluginPart4(r->set_canned_message_plugin_part4);
+        handled = true;
+        break;
+
+    case AdminMessage_set_canned_message_plugin_part5_tag:
+        DEBUG_MSG("Client is setting radio canned message part 5\n");
+        cannedMessagePlugin->handleSetCannedMessagePluginPart5(r->set_canned_message_plugin_part5);
+        handled = true;
+        break;
+
+
 #ifdef PORTDUINO
     case AdminMessage_exit_simulator_tag:
         DEBUG_MSG("Exiting simulator\n");
@@ -126,7 +191,7 @@ bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
         }
         break;
     }
-    return false; // Let others look at this message also if they want
+    return handled;
 }
 
 void AdminPlugin::handleSetOwner(const User &o)

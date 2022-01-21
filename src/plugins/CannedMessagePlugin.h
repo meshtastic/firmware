@@ -38,6 +38,18 @@ class CannedMessagePlugin :
     void eventDown();
     void eventSelect();
 
+    void handleGetCannedMessagePluginPart1(const MeshPacket &req);
+    void handleGetCannedMessagePluginPart2(const MeshPacket &req);
+    void handleGetCannedMessagePluginPart3(const MeshPacket &req);
+    void handleGetCannedMessagePluginPart4(const MeshPacket &req);
+    void handleGetCannedMessagePluginPart5(const MeshPacket &req);
+
+    void handleSetCannedMessagePluginPart1(const CannedMessagePluginMessagePart1 &from_msg);
+    void handleSetCannedMessagePluginPart2(const CannedMessagePluginMessagePart2 &from_msg);
+    void handleSetCannedMessagePluginPart3(const CannedMessagePluginMessagePart3 &from_msg);
+    void handleSetCannedMessagePluginPart4(const CannedMessagePluginMessagePart4 &from_msg);
+    void handleSetCannedMessagePluginPart5(const CannedMessagePluginMessagePart5 &from_msg);
+
   protected:
 
     virtual int32_t runOnce();
@@ -56,28 +68,19 @@ class CannedMessagePlugin :
     virtual Observable<const UIFrameEvent *>* getUIFrameObservable() { return this; }
     virtual void drawFrame(
         OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-    virtual bool handleAdminMessageForPlugin(const MeshPacket &mp, AdminMessage *r);
+    virtual bool handleAdminMessageForPlugin(const MeshPacket &mp, AdminMessage *r)
+    {
+        return false;
+    };
     virtual bool handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *p)
     {
-        // TODO: this method might be used instead of handleAdminMessageForPlugin() 
+        // The get/set is an AdminPlugin message
         return false;
     };
 
     void loadProtoForPlugin();
     bool saveProtoForPlugin();
     void installProtoDefaultsForPlugin();
-
-    void handleGetCannedMessagePluginPart1(const MeshPacket &req);
-    void handleGetCannedMessagePluginPart2(const MeshPacket &req);
-    void handleGetCannedMessagePluginPart3(const MeshPacket &req);
-    void handleGetCannedMessagePluginPart4(const MeshPacket &req);
-    void handleGetCannedMessagePluginPart5(const MeshPacket &req);
-
-    void handleSetCannedMessagePluginPart1(const CannedMessagePluginMessagePart1 &from_msg);
-    void handleSetCannedMessagePluginPart2(const CannedMessagePluginMessagePart2 &from_msg);
-    void handleSetCannedMessagePluginPart3(const CannedMessagePluginMessagePart3 &from_msg);
-    void handleSetCannedMessagePluginPart4(const CannedMessagePluginMessagePart4 &from_msg);
-    void handleSetCannedMessagePluginPart5(const CannedMessagePluginMessagePart5 &from_msg);
 
     void installDefaultCannedMessagePluginPart1();
     void installDefaultCannedMessagePluginPart2();

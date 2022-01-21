@@ -93,9 +93,8 @@ void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
             // new case, monitor separately for now, then FIXME merge above
             wantsPacket = false;
         }
-        DEBUG_MSG("  wantsPacket:'%d'\n", wantsPacket);
 
-        // TODO: had to comment out this next line so it would not crash
+        // TODO: not sure why I have to comment this out
         //assert(!pi.myReply); // If it is !null it means we have a bug, because it should have been sent the previous time
 
         if (wantsPacket) {
