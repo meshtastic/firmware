@@ -57,9 +57,6 @@ class MeshPlugin
 
     static std::vector<MeshPlugin *> GetMeshPluginsWithUIFrames();
     static void observeUIEvents(Observer<const UIFrameEvent *> *observer);
-    static void loadProtoForAllPlugins();
-    static bool saveProtoForAllPlugins();
-    static void installProtoDefaultsForAllPlugins();
     static bool handleAdminMessageForAllPlugins(const MeshPacket &mp, AdminMessage *r);
 #ifndef NO_SCREEN
     virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) { return; }
@@ -139,9 +136,6 @@ class MeshPlugin
     /// Send an error response for the specified packet.
     MeshPacket *allocErrorResponse(Routing_Error err, const MeshPacket *p);
 
-    virtual void loadProtoForPlugin() { };
-    virtual void installProtoDefaultsForPlugin() { };
-    virtual bool saveProtoForPlugin() { return true; };
     virtual bool handleAdminMessageForPlugin(const MeshPacket &mp, AdminMessage *r) { return true; };
 
   private:

@@ -411,8 +411,6 @@ void NodeDB::saveToDisk()
         bool okay = saveProto(preffile, DeviceState_size, sizeof(devicestate), DeviceState_fields, &devicestate);
         okay &= saveProto(radiofile, RadioConfig_size, sizeof(RadioConfig), RadioConfig_fields, &radioConfig);
 
-        okay &= MeshPlugin::saveProtoForAllPlugins();
-
         saveChannelsToDisk();
 
         // remove any pre 1.2 pref files, turn on after 1.2 is in beta

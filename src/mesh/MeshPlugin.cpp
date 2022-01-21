@@ -23,7 +23,7 @@ MeshPlugin::MeshPlugin(const char *_name) : name(_name)
     if (!plugins)
         plugins = new std::vector<MeshPlugin *>();
     plugins->push_back(this);
-    DEBUG_MSG("added to plugins");
+    DEBUG_MSG("added to plugins\n");
 }
 
 void MeshPlugin::setup() {}
@@ -255,44 +255,6 @@ void MeshPlugin::observeUIEvents(
             }
         }
     }
-}
-
-void MeshPlugin::loadProtoForAllPlugins()
-{
-    DEBUG_MSG("top of loadProtoForAllPlugins\n");
-    if (plugins) {
-        for (auto i = plugins->begin(); i != plugins->end(); ++i) {
-            auto &pi = **i;
-            pi.loadProtoForPlugin();
-        }
-    }
-    DEBUG_MSG("bottom of loadProtoForAllPlugins\n");
-}
-
-bool MeshPlugin::saveProtoForAllPlugins()
-{
-    DEBUG_MSG("top of saveProtoForAllPlugins\n");
-    bool okay = true;
-    if (plugins) {
-        for (auto i = plugins->begin(); i != plugins->end(); ++i) {
-            auto &pi = **i;
-            okay &= pi.saveProtoForPlugin();
-        }
-    }
-    DEBUG_MSG("bottom of saveProtoForAllPlugins\n");
-    return okay;
-}
-
-void MeshPlugin::installProtoDefaultsForAllPlugins()
-{
-    DEBUG_MSG("top of installProtoDefaultsForAllPlugins\n");
-    if (plugins) {
-        for (auto i = plugins->begin(); i != plugins->end(); ++i) {
-            auto &pi = **i;
-            pi.installProtoDefaultsForPlugin();
-        }
-    }
-    DEBUG_MSG("bottom of installProtoDefaultsForAllPlugins\n");
 }
 
 bool MeshPlugin::handleAdminMessageForAllPlugins(const MeshPacket &mp, AdminMessage *r)

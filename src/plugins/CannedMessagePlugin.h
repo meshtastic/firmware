@@ -18,7 +18,7 @@ enum cannedMessagePluginRunState
  * Due to config-packet size restrictions we cannot have user configuration bigger
  * than Constants_DATA_PAYLOAD_LEN bytes.
  */
-#define CANNED_MESSAGE_PLUGIN_MESSAGES_SIZE 200
+#define CANNED_MESSAGE_PLUGIN_MESSAGES_SIZE 1002
 
 class CannedMessagePlugin :
     public ProtobufPlugin<AdminMessage>,
@@ -56,15 +56,16 @@ class CannedMessagePlugin :
     virtual Observable<const UIFrameEvent *>* getUIFrameObservable() { return this; }
     virtual void drawFrame(
         OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-    virtual void loadProtoForPlugin();
-    virtual bool saveProtoForPlugin();
-    virtual void installProtoDefaultsForPlugin();
     virtual bool handleAdminMessageForPlugin(const MeshPacket &mp, AdminMessage *r);
     virtual bool handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *p)
     {
         // TODO: this method might be used instead of handleAdminMessageForPlugin() 
         return false;
     };
+
+    void loadProtoForPlugin();
+    bool saveProtoForPlugin();
+    void installProtoDefaultsForPlugin();
 
     void handleGetCannedMessagePluginPart1(const MeshPacket &req);
     void handleGetCannedMessagePluginPart2(const MeshPacket &req);
@@ -77,6 +78,12 @@ class CannedMessagePlugin :
     void handleSetCannedMessagePluginPart3(const CannedMessagePluginMessagePart3 &from_msg);
     void handleSetCannedMessagePluginPart4(const CannedMessagePluginMessagePart4 &from_msg);
     void handleSetCannedMessagePluginPart5(const CannedMessagePluginMessagePart5 &from_msg);
+
+    void installDefaultCannedMessagePluginPart1();
+    void installDefaultCannedMessagePluginPart2();
+    void installDefaultCannedMessagePluginPart3();
+    void installDefaultCannedMessagePluginPart4();
+    void installDefaultCannedMessagePluginPart5();
 
     int currentMessageIndex = -1;
     cannedMessagePluginRunState runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
