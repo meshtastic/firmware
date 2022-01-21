@@ -699,7 +699,7 @@ axpDebugOutput.setup();
 #endif
 
 uint32_t rebootAtMsec; // If not zero we will reboot at this time (used to reboot shortly after the update completes)
-uint32_t shutdownAtMsec; // If not zero we will shutdown at this time (used to reboot shortly after the update completes)
+uint32_t shutdownAtMsec; // If not zero we will shutdown at this time (used to shutdown from python or mobile client)
 
 void powerCommandsCheck()
 {
