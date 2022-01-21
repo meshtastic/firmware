@@ -699,8 +699,9 @@ axpDebugOutput.setup();
 #endif
 
 uint32_t rebootAtMsec; // If not zero we will reboot at this time (used to reboot shortly after the update completes)
+uint32_t shutdownAtMsec; // If not zero we will shutdown at this time (used to reboot shortly after the update completes)
 
-void rebootCheck()
+void powerCommandsCheck()
 {
     if (rebootAtMsec && millis() > rebootAtMsec) {
 #ifndef NO_ESP32
@@ -708,6 +709,30 @@ void rebootCheck()
         ESP.restart();
 #else
         DEBUG_MSG("FIXME implement reboot for this platform");
+#endif
+    }
+
+#if NRF52_SERIES
+    if (shutdownAtMsec) {
+        screen->startShutdownScreen();
+        playBeep();
+        ledOff(PIN_LED1);
+        ledOff(PIN_LED2);
+    }
+#endif
+
+    if (shutdownAtMsec && millis() > shutdownAtMsec) {
+        DEBUG_MSG("Shutting down from admin command\n");
+#ifdef TBEAM_V10
+        if (axp192_found == true) {
+            setLed(false);
+            power->shutdown();
+        }
+#elif NRF52_SERIES
+        playShutdownMelody();
+        power->shutdown();
+#else
+        DEBUG_MSG("FIXME implement shutdown for this platform");
 #endif
     }
 }
@@ -730,7 +755,7 @@ void loop()
 #ifdef NRF52_SERIES
     nrf52Loop();
 #endif
-    rebootCheck();
+    powerCommandsCheck();
 
     // For debugging
     // if (rIf) ((RadioLibInterface *)rIf)->isActivelyReceiving();
