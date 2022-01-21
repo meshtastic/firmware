@@ -45,6 +45,7 @@ typedef struct _AdminMessage {
         CannedMessagePluginMessagePart3 set_canned_message_plugin_part3;
         CannedMessagePluginMessagePart4 set_canned_message_plugin_part4;
         CannedMessagePluginMessagePart5 set_canned_message_plugin_part5;
+        int32_t shutdown_seconds;
     };
 } AdminMessage;
 
@@ -86,6 +87,7 @@ extern "C" {
 #define AdminMessage_set_canned_message_plugin_part3_tag 48
 #define AdminMessage_set_canned_message_plugin_part4_tag 49
 #define AdminMessage_set_canned_message_plugin_part5_tag 50
+#define AdminMessage_shutdown_seconds_tag        51
 
 /* Struct field encoding specification for nanopb */
 #define AdminMessage_FIELDLIST(X, a) \
@@ -116,7 +118,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_canned_message_plugin_part1,set_
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_canned_message_plugin_part2,set_canned_message_plugin_part2),  47) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_canned_message_plugin_part3,set_canned_message_plugin_part3),  48) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_canned_message_plugin_part4,set_canned_message_plugin_part4),  49) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_canned_message_plugin_part5,set_canned_message_plugin_part5),  50)
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_canned_message_plugin_part5,set_canned_message_plugin_part5),  50) \
+X(a, STATIC,   ONEOF,    INT32,    (variant,shutdown_seconds,shutdown_seconds),  51)
 #define AdminMessage_CALLBACK NULL
 #define AdminMessage_DEFAULT NULL
 #define AdminMessage_variant_set_radio_MSGTYPE RadioConfig
