@@ -537,6 +537,12 @@ void setup()
     // Now that the mesh service is created, create any plugins
     setupPlugins();
 
+    // now that we have plugins, load default values
+    MeshPlugin::installProtoDefaultsForAllPlugins();
+
+    // now load values that were saved to disk
+    MeshPlugin::loadProtoForAllPlugins();
+
     // Do this after service.init (because that clears error_code)
 #ifdef AXP192_SLAVE_ADDRESS
     if (!axp192_found)

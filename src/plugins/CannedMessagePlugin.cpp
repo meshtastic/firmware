@@ -67,7 +67,7 @@ int CannedMessagePlugin::splitConfiguredMessages()
 
     while (i < upTo)
     {
-	// look for delimiter
+         // look for delimiter
         if (all[i] == '|')
         {
             // Message ending found, replace it with string-end character.
@@ -75,7 +75,7 @@ int CannedMessagePlugin::splitConfiguredMessages()
             DEBUG_MSG("CannedMessage %d is: '%s'\n",
                 messageIndex-1, this->messages[messageIndex-1]);
 
-	    // hit our max messages, bail
+            // hit our max messages, bail
             if (messageIndex >= CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_COUNT)
             {
                 this->messagesCount = messageIndex;
@@ -409,7 +409,7 @@ bool CannedMessagePlugin::handleAdminMessageForPlugin(const MeshPacket &mp, Admi
         handleSetCannedMessagePluginPart5(r->set_canned_message_plugin_part5);
         handled = true;
         break;
-    
+
     default:
         break;
     }
@@ -424,7 +424,7 @@ void CannedMessagePlugin::handleGetCannedMessagePluginPart1(const MeshPacket &re
         // We create the reply here
         AdminMessage r = AdminMessage_init_default;
         r.get_canned_message_plugin_part1_response = cannedMessagePluginMessagePart1;
-	DEBUG_MSG("*** cannedMessagePluginMessagePart1.text:%s\n", cannedMessagePluginMessagePart1.text);
+        DEBUG_MSG("*** cannedMessagePluginMessagePart1.text:%s\n", cannedMessagePluginMessagePart1.text);
         r.which_variant = AdminMessage_get_canned_message_plugin_part1_response_tag;
         myReply = allocDataProtobuf(r);
     }
@@ -481,7 +481,7 @@ void CannedMessagePlugin::handleSetCannedMessagePluginPart1(const CannedMessageP
     if (*from_msg.text) {
         changed |= strcmp(cannedMessagePluginMessagePart1.text, from_msg.text);
         strcpy(cannedMessagePluginMessagePart1.text, from_msg.text);
-	DEBUG_MSG("*** from_msg.text:%s\n", from_msg.text);
+        DEBUG_MSG("*** from_msg.text:%s\n", from_msg.text);
     }
 
     if (changed) // If nothing really changed, don't broadcast on the network or write to flash

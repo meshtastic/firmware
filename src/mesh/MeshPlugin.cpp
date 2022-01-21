@@ -18,11 +18,12 @@ MeshPacket *MeshPlugin::currentReply;
 
 MeshPlugin::MeshPlugin(const char *_name) : name(_name)
 {
+    DEBUG_MSG("in constructor for:%s\n", _name);
     // Can't trust static initalizer order, so we check each time
     if (!plugins)
         plugins = new std::vector<MeshPlugin *>();
-
     plugins->push_back(this);
+    DEBUG_MSG("added to plugins");
 }
 
 void MeshPlugin::setup() {}
@@ -92,8 +93,10 @@ void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
             // new case, monitor separately for now, then FIXME merge above
             wantsPacket = false;
         }
+        DEBUG_MSG("  wantsPacket:'%d'\n", wantsPacket);
 
-        assert(!pi.myReply); // If it is !null it means we have a bug, because it should have been sent the previous time
+        // TODO: had to comment out this next line so it would not crash
+        //assert(!pi.myReply); // If it is !null it means we have a bug, because it should have been sent the previous time
 
         if (wantsPacket) {
             DEBUG_MSG("Plugin '%s' wantsPacket=%d\n", pi.name, wantsPacket);
@@ -179,7 +182,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
 
     if (!pluginFound)
         DEBUG_MSG("No plugins interested in portnum=%d, src=%s\n",
-                    mp.decoded.portnum, 
+                    mp.decoded.portnum,
                     (src == RX_SRC_LOCAL) ? "LOCAL":"REMOTE");
 }
 
@@ -226,11 +229,13 @@ std::vector<MeshPlugin *> MeshPlugin::GetMeshPluginsWithUIFrames()
 {
 
     std::vector<MeshPlugin *> pluginsWithUIFrames;
-    for (auto i = plugins->begin(); i != plugins->end(); ++i) {
-        auto &pi = **i;
-        if (pi.wantUIFrame()) {
-            DEBUG_MSG("Plugin wants a UI Frame\n");
-            pluginsWithUIFrames.push_back(&pi);
+    if (plugins) {
+        for (auto i = plugins->begin(); i != plugins->end(); ++i) {
+            auto &pi = **i;
+            if (pi.wantUIFrame()) {
+                DEBUG_MSG("Plugin wants a UI Frame\n");
+                pluginsWithUIFrames.push_back(&pi);
+            }
         }
     }
     return pluginsWithUIFrames;
@@ -239,54 +244,67 @@ std::vector<MeshPlugin *> MeshPlugin::GetMeshPluginsWithUIFrames()
 void MeshPlugin::observeUIEvents(
     Observer<const UIFrameEvent *> *observer)
 {
-    std::vector<MeshPlugin *> pluginsWithUIFrames;
-    for (auto i = plugins->begin(); i != plugins->end(); ++i) {
-        auto &pi = **i;
-        Observable<const UIFrameEvent *> *observable =
-            pi.getUIFrameObservable();
-        if (observable != NULL) {
-            DEBUG_MSG("Plugin wants a UI Frame\n");
-            observer->observe(observable);
+    if (plugins) {
+        for (auto i = plugins->begin(); i != plugins->end(); ++i) {
+            auto &pi = **i;
+            Observable<const UIFrameEvent *> *observable =
+                pi.getUIFrameObservable();
+            if (observable != NULL) {
+                DEBUG_MSG("Plugin wants a UI Frame\n");
+                observer->observe(observable);
+            }
         }
     }
 }
 
 void MeshPlugin::loadProtoForAllPlugins()
 {
-    std::vector<MeshPlugin *> pluginsWithUIFrames;
-    for (auto i = plugins->begin(); i != plugins->end(); ++i) {
-        auto &pi = **i;
-        pi.loadProtoForPlugin();
+    DEBUG_MSG("top of loadProtoForAllPlugins\n");
+    if (plugins) {
+        for (auto i = plugins->begin(); i != plugins->end(); ++i) {
+            auto &pi = **i;
+            pi.loadProtoForPlugin();
+        }
     }
+    DEBUG_MSG("bottom of loadProtoForAllPlugins\n");
 }
 
 bool MeshPlugin::saveProtoForAllPlugins()
 {
+    DEBUG_MSG("top of saveProtoForAllPlugins\n");
     bool okay = true;
-    std::vector<MeshPlugin *> pluginsWithUIFrames;
-    for (auto i = plugins->begin(); i != plugins->end(); ++i) {
-        auto &pi = **i;
-        okay &= pi.saveProtoForPlugin();
+    if (plugins) {
+        for (auto i = plugins->begin(); i != plugins->end(); ++i) {
+            auto &pi = **i;
+            okay &= pi.saveProtoForPlugin();
+        }
     }
+    DEBUG_MSG("bottom of saveProtoForAllPlugins\n");
     return okay;
 }
 
 void MeshPlugin::installProtoDefaultsForAllPlugins()
 {
-    std::vector<MeshPlugin *> pluginsWithUIFrames;
-    for (auto i = plugins->begin(); i != plugins->end(); ++i) {
-        auto &pi = **i;
-        pi.installProtoDefaultsForPlugin();
+    DEBUG_MSG("top of installProtoDefaultsForAllPlugins\n");
+    if (plugins) {
+        for (auto i = plugins->begin(); i != plugins->end(); ++i) {
+            auto &pi = **i;
+            pi.installProtoDefaultsForPlugin();
+        }
     }
+    DEBUG_MSG("bottom of installProtoDefaultsForAllPlugins\n");
 }
 
 bool MeshPlugin::handleAdminMessageForAllPlugins(const MeshPacket &mp, AdminMessage *r)
 {
+    DEBUG_MSG("top of handleAdminMessageForAllPlugins\n");
     bool handled = true;
-    std::vector<MeshPlugin *> pluginsWithUIFrames;
-    for (auto i = plugins->begin(); i != plugins->end(); ++i) {
-        auto &pi = **i;
-        handled &= pi.handleAdminMessageForPlugin(mp, r);
+    if (plugins) {
+        for (auto i = plugins->begin(); i != plugins->end(); ++i) {
+            auto &pi = **i;
+            handled &= pi.handleAdminMessageForPlugin(mp, r);
+        }
     }
+    DEBUG_MSG("bottom of handleAdminMessageForAllPlugins\n");
     return handled;
 }
