@@ -24,6 +24,7 @@
 #define RF95_NSS 18
 
 // supported modules list
+#define USE_RF95 // RFM95/SX127x
 #define USE_SX1262
 #define USE_SX1268
 #define USE_LLCC68
@@ -35,6 +36,10 @@
 #define SX126X_RESET LORA_RESET
 #define SX126X_RXEN 14
 #define SX126X_TXEN 13
+
+// RX/TX for RFM95/SX127x
+#define RF95_RXEN 14
+#define RF95_TXEN 13
 
 #ifdef EBYTE_E22
 // Internally the TTGO module hooks the SX126x-DIO2 in to control the TX/RX switch
