@@ -6,6 +6,8 @@
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 #include <OneWire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
 
 class EnvironmentalMeasurementPlugin : private concurrency::OSThread, public ProtobufPlugin<EnvironmentalMeasurement>
 {
@@ -36,6 +38,7 @@ class EnvironmentalMeasurementPlugin : private concurrency::OSThread, public Pro
     DHT *dht;
     OneWire *oneWire;
     DS18B20 *ds18b20;
+    Adafruit_BME280 bme;
     const MeshPacket *lastMeasurementPacket;
     uint32_t sensor_read_error_count = 0;
 };
