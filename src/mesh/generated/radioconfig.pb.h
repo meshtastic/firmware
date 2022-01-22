@@ -80,14 +80,14 @@ typedef enum _PositionFlags {
 } PositionFlags;
 
 typedef enum _InputEventChar {
-    InputEventChar_NULL = 0,
-    InputEventChar_UP = 17,
-    InputEventChar_DOWN = 18,
-    InputEventChar_LEFT = 19,
-    InputEventChar_RIGHT = 20,
-    InputEventChar_SELECT = 10,
-    InputEventChar_BACK = 27,
-    InputEventChar_CANCEL = 24
+    InputEventChar_KEY_NONE = 0,
+    InputEventChar_KEY_UP = 17,
+    InputEventChar_KEY_DOWN = 18,
+    InputEventChar_KEY_LEFT = 19,
+    InputEventChar_KEY_RIGHT = 20,
+    InputEventChar_KEY_SELECT = 10,
+    InputEventChar_KEY_BACK = 27,
+    InputEventChar_KEY_CANCEL = 24
 } InputEventChar;
 
 typedef enum _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType {
@@ -95,7 +95,9 @@ typedef enum _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType {
     RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DS18B20 = 1,
     RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT12 = 2,
     RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT21 = 3,
-    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT22 = 4
+    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT22 = 4,
+    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME280 = 5,
+    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME680 = 6
 } RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType;
 
 /* Struct definitions */
@@ -180,7 +182,7 @@ typedef struct _RadioConfig_UserPreferences {
     InputEventChar rotary1_event_press;
     bool canned_message_plugin_enabled;
     char canned_message_plugin_allow_input_source[16];
-    char canned_message_plugin_messages[1024];
+    char canned_message_plugin_messages[200];
     bool canned_message_plugin_send_bell;
 } RadioConfig_UserPreferences;
 
@@ -215,13 +217,13 @@ typedef struct _RadioConfig {
 #define _PositionFlags_MAX PositionFlags_POS_TIMESTAMP
 #define _PositionFlags_ARRAYSIZE ((PositionFlags)(PositionFlags_POS_TIMESTAMP+1))
 
-#define _InputEventChar_MIN InputEventChar_NULL
-#define _InputEventChar_MAX InputEventChar_BACK
-#define _InputEventChar_ARRAYSIZE ((InputEventChar)(InputEventChar_BACK+1))
+#define _InputEventChar_MIN InputEventChar_KEY_NONE
+#define _InputEventChar_MAX InputEventChar_KEY_BACK
+#define _InputEventChar_ARRAYSIZE ((InputEventChar)(InputEventChar_KEY_BACK+1))
 
 #define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11
-#define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MAX RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT22
-#define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_ARRAYSIZE ((RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType)(RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT22+1))
+#define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MAX RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME680
+#define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_ARRAYSIZE ((RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType)(RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME680+1))
 
 
 #ifdef __cplusplus
@@ -418,8 +420,8 @@ extern const pb_msgdesc_t RadioConfig_UserPreferences_msg;
 #define RadioConfig_UserPreferences_fields &RadioConfig_UserPreferences_msg
 
 /* Maximum encoded size of messages (where known) */
-#define RadioConfig_size                         1616
-#define RadioConfig_UserPreferences_size         1613
+#define RadioConfig_size                         792
+#define RadioConfig_UserPreferences_size         789
 
 #ifdef __cplusplus
 } /* extern "C" */

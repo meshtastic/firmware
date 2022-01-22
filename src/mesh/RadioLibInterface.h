@@ -4,10 +4,6 @@
 #include "RadioInterface.h"
 #include "MeshPacketQueue.h"
 
-#ifdef CubeCell_BoardPlus
-#define RADIOLIB_SOFTWARE_SERIAL_UNSUPPORTED
-#endif
-
 #define RADIOLIB_EXCLUDE_HTTP
 #include <RadioLib.h>
 
