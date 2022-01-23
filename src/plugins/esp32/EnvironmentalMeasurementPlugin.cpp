@@ -11,10 +11,13 @@
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 #include <OneWire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
 
 #define DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS 1000
 #define DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS 1000
 #define DS18B20_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS 1000
+#define BME280_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS 1000
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
@@ -50,11 +53,12 @@ int32_t EnvironmentalMeasurementPlugin::runOnce()
     radioConfig.preferences.environmental_measurement_plugin_recovery_interval = 60;
     radioConfig.preferences.environmental_measurement_plugin_display_farenheit = false;
     radioConfig.preferences.environmental_measurement_plugin_sensor_pin = 13;
+
     radioConfig.preferences.environmental_measurement_plugin_sensor_type =
         RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType::
-            RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DS18B20;
+            RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME280;
     */
-
+   
     if (!(radioConfig.preferences.environmental_measurement_plugin_measurement_enabled ||
           radioConfig.preferences.environmental_measurement_plugin_screen_enabled)) {
         // If this plugin is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
@@ -96,6 +100,17 @@ int32_t EnvironmentalMeasurementPlugin::runOnce()
                 DEBUG_MSG("EnvironmentalMeasurement: Opened DHT21/DHT22 on pin: %d\n",
                           radioConfig.preferences.environmental_measurement_plugin_sensor_pin);
                 return (DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
+            case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME280:
+                unsigned bmeStatus;
+                // Default i2c address for BME280
+                bmeStatus = bme.begin(0x76); 
+                if (!bmeStatus) {
+                    DEBUG_MSG("Could not find a valid BME280 sensor, check wiring, address, sensor ID!");
+                    // TODO more verbose diagnostics
+                } else {
+                    DEBUG_MSG("EnvironmentalMeasurement: Opened BME280 on default i2c bus");
+                }
+                return (BME280_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
             default:
                 DEBUG_MSG("EnvironmentalMeasurement: Invalid sensor type selected; Disabling plugin");
                 return (INT32_MAX);
@@ -146,6 +161,8 @@ int32_t EnvironmentalMeasurementPlugin::runOnce()
             case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT21:
             case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT22:
                 return (DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
+            case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME280:
+                return (BME280_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
             default:
                 return (DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
             }
@@ -223,10 +240,10 @@ void EnvironmentalMeasurementPlugin::drawFrame(OLEDDisplay *display, OLEDDisplay
         last_temp = String(CelsiusToFarenheit(lastMeasurement.temperature), 0) + "°F";
         ;
     }
-
-    display->drawString(x, y += fontHeight(FONT_MEDIUM),
-                        lastSender + ": " + last_temp + "/" + String(lastMeasurement.relative_humidity, 0) + "%(" +
-                            String(agoSecs) + "s)");
+    display->drawString(x, y += fontHeight(FONT_MEDIUM) - 2, "From: " + lastSender + "(" + String(agoSecs) + "s)");
+    display->drawString(x, y += fontHeight(FONT_SMALL) - 2,"Temp/Hum: " + last_temp + " / " + String(lastMeasurement.relative_humidity, 0) + "%");
+    if (lastMeasurement.barometric_pressure != 0) 
+        display->drawString(x, y += fontHeight(FONT_SMALL),"Press: " + String(lastMeasurement.barometric_pressure, 0) + "hPA");
 }
 
 bool EnvironmentalMeasurementPlugin::handleReceivedProtobuf(const MeshPacket &mp, EnvironmentalMeasurement *p)
@@ -242,6 +259,7 @@ bool EnvironmentalMeasurementPlugin::handleReceivedProtobuf(const MeshPacket &mp
     DEBUG_MSG("EnvironmentalMeasurement: Received data from %s\n", sender);
     DEBUG_MSG("EnvironmentalMeasurement->relative_humidity: %f\n", p->relative_humidity);
     DEBUG_MSG("EnvironmentalMeasurement->temperature: %f\n", p->temperature);
+    DEBUG_MSG("EnvironmentalMeasurement->barometric_pressure: %f\n", p->barometric_pressure);
 
     lastMeasurementPacket = packetPool.allocCopy(mp);
 
@@ -289,6 +307,12 @@ bool EnvironmentalMeasurementPlugin::sendOurEnvironmentalMeasurement(NodeNum des
         m.relative_humidity = this->dht->readHumidity();
         m.temperature = this->dht->readTemperature();
         break;
+     case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME280:
+        m.temperature = bme.readTemperature();
+        m.relative_humidity = bme.readHumidity();
+        // TODO Work out standard units for pressure. This is in hPa from the Adafruit example
+        m.barometric_pressure = bme.readPressure() / 100.0F;
+        break;
     default:
         DEBUG_MSG("EnvironmentalMeasurement: Invalid sensor type selected; Disabling plugin");
         return false;
@@ -296,6 +320,7 @@ bool EnvironmentalMeasurementPlugin::sendOurEnvironmentalMeasurement(NodeNum des
 
     DEBUG_MSG("EnvironmentalMeasurement->relative_humidity: %f\n", m.relative_humidity);
     DEBUG_MSG("EnvironmentalMeasurement->temperature: %f\n", m.temperature);
+    DEBUG_MSG("EnvironmentalMeasurement->barometric_pressure: %f\n", m.barometric_pressure);
 
     sensor_read_error_count = 0;
 
@@ -303,6 +328,8 @@ bool EnvironmentalMeasurementPlugin::sendOurEnvironmentalMeasurement(NodeNum des
     p->to = dest;
     p->decoded.want_response = wantReplies;
 
+    lastMeasurementPacket = packetPool.allocCopy(*p);
+    DEBUG_MSG("EnvironmentalMeasurement: Sending packet to mesh");
     service.sendToMesh(p);
     return true;
 }
