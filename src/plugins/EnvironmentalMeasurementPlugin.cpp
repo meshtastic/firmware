@@ -39,8 +39,7 @@
 
 int32_t EnvironmentalMeasurementPlugin::runOnce()
 {
-#ifndef NO_ESP32 // this only works on ESP32 devices
-
+#ifndef PORTDUINO
     /*
         Uncomment the preferences below if you want to use the plugin
         without having to configure it from the PythonAPI or WebUI.
