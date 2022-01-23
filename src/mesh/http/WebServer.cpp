@@ -1,7 +1,9 @@
-#include "main.h"
 #include "mesh/http/WebServer.h"
 #include "NodeDB.h"
+#include "graphics/Screen.h"
+#include "main.h"
 #include "mesh/http/WiFiAPClient.h"
+#include "sleep.h"
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>
 #include <HTTPURLEncodedBodyParser.hpp>
@@ -57,19 +59,9 @@ static void handleWebResponse()
             // will be ignored by the NRF boards.
             handleDNSResponse();
 
-            if(secureServer)
+            if (secureServer)
                 secureServer->loop();
             insecureServer->loop();
-        }
-
-        /*
-            Slow down the CPU if we have not received a request within the last few
-            seconds.
-        */
-
-        if (millis() - getTimeSpeedUp() >= (25 * 1000)) {
-            setCpuFrequencyMhz(80);
-            setTimeSpeedUp();
         }
     }
 }
@@ -78,13 +70,13 @@ static void taskCreateCert(void *parameter)
 {
     prefs.begin("MeshtasticHTTPS", false);
 
+#if 0
     // Delete the saved certs (used in debugging)
-    if (0) {
-        DEBUG_MSG("Deleting any saved SSL keys ...\n");
-        // prefs.clear();
-        prefs.remove("PK");
-        prefs.remove("cert");
-    }
+    DEBUG_MSG("Deleting any saved SSL keys ...\n");
+    // prefs.clear();
+    prefs.remove("PK");
+    prefs.remove("cert");
+#endif
 
     DEBUG_MSG("Checking if we have a previously saved SSL Certificate.\n");
 
@@ -103,16 +95,10 @@ static void taskCreateCert(void *parameter)
         cert = new SSLCert(certBuffer, certLen, pkBuffer, pkLen);
 
         DEBUG_MSG("Retrieved Private Key: %d Bytes\n", cert->getPKLength());
-        // DEBUG_MSG("Retrieved Private Key: " + String(cert->getPKLength()) + " Bytes");
-        // for (int i = 0; i < cert->getPKLength(); i++)
-        //  Serial.print(cert->getPKData()[i], HEX);
-        // Serial.println();
-
         DEBUG_MSG("Retrieved Certificate: %d Bytes\n", cert->getCertLength());
-        // for (int i = 0; i < cert->getCertLength(); i++)
-        //  Serial.print(cert->getCertData()[i], HEX);
-        // Serial.println();
+
     } else {
+
         DEBUG_MSG("Creating the certificate. This may take a while. Please wait...\n");
         yield();
         cert = new SSLCert();
@@ -124,22 +110,12 @@ static void taskCreateCert(void *parameter)
         if (createCertResult != 0) {
             DEBUG_MSG("Creating the certificate failed\n");
 
-            // Serial.printf("Creating the certificate failed. Error Code = 0x%02X, check SSLCert.hpp for details",
-            //              createCertResult);
-            // while (true)
-            //    delay(500);
         } else {
             DEBUG_MSG("Creating the certificate was successful\n");
 
             DEBUG_MSG("Created Private Key: %d Bytes\n", cert->getPKLength());
-            // for (int i = 0; i < cert->getPKLength(); i++)
-            //  Serial.print(cert->getPKData()[i], HEX);
-            // Serial.println();
 
             DEBUG_MSG("Created Certificate: %d Bytes\n", cert->getCertLength());
-            // for (int i = 0; i < cert->getCertLength(); i++)
-            //  Serial.print(cert->getCertData()[i], HEX);
-            // Serial.println();
 
             prefs.putBytes("PK", (uint8_t *)cert->getPKData(), cert->getPKLength());
             prefs.putBytes("cert", (uint8_t *)cert->getCertData(), cert->getCertLength());
@@ -154,6 +130,7 @@ static void taskCreateCert(void *parameter)
 
 void createSSLCert()
 {
+    bool runLoop = false;
     if (isWifiAvailable() && !isCertReady) {
 
         // Create a new process just to handle creating the cert.
@@ -161,21 +138,28 @@ void createSSLCert()
         //  jm@casler.org (Oct 2020)
         xTaskCreate(taskCreateCert, /* Task function. */
                     "createCert",   /* String with name of task. */
-                    16384,          /* Stack size in bytes. */
-                    NULL,           /* Parameter passed as input of the task */
-                    16,             /* Priority of the task. */
-                    NULL);          /* Task handle. */
+                    // 16384,          /* Stack size in bytes. */
+                    8192,  /* Stack size in bytes. */
+                    NULL,  /* Parameter passed as input of the task */
+                    16,    /* Priority of the task. */
+                    NULL); /* Task handle. */
 
         DEBUG_MSG("Waiting for SSL Cert to be generated.\n");
-        int seconds = 0;
         while (!isCertReady) {
-            DEBUG_MSG(".");
-            delay(1000);
-            yield();
-            esp_task_wdt_reset();
-            seconds++;
-            if ((seconds == 3) && screen) {
-                screen->setSSLFrames();
+            if ((millis() / 500) % 2) {
+                if (runLoop) {
+                    DEBUG_MSG(".");
+
+                    yield();
+                    esp_task_wdt_reset();
+
+                    if (millis() / 1000 >= 3) {
+                        screen->setSSLFrames();
+                    }
+                }
+                runLoop = false;
+            } else {
+                runLoop = true;
             }
         }
         DEBUG_MSG("SSL Cert Ready!\n");
@@ -191,6 +175,10 @@ int32_t WebServerThread::runOnce()
     // DEBUG_MSG("WebServerThread::runOnce()\n");
     handleWebResponse();
 
+    if (requestRestart && (millis() / 1000) > requestRestart) {
+        ESP.restart();
+    }
+
     // Loop every 5ms.
     return (5);
 }
@@ -199,51 +187,17 @@ void initWebServer()
 {
     DEBUG_MSG("Initializing Web Server ...\n");
 
-#if 0
-// this seems to be a copypaste dup of taskCreateCert
-    prefs.begin("MeshtasticHTTPS", false);
-
-    size_t pkLen = prefs.getBytesLength("PK");
-    size_t certLen = prefs.getBytesLength("cert");
-
-    DEBUG_MSG("Checking if we have a previously saved SSL Certificate.\n");
-
-    if (pkLen && certLen) {
-
-        uint8_t *pkBuffer = new uint8_t[pkLen];
-        prefs.getBytes("PK", pkBuffer, pkLen);
-
-        uint8_t *certBuffer = new uint8_t[certLen];
-        prefs.getBytes("cert", certBuffer, certLen);
-
-        cert = new SSLCert(certBuffer, certLen, pkBuffer, pkLen);
-
-        DEBUG_MSG("Retrieved Private Key: %d Bytes\n", cert->getPKLength());
-        // DEBUG_MSG("Retrieved Private Key: " + String(cert->getPKLength()) + " Bytes");
-        // for (int i = 0; i < cert->getPKLength(); i++)
-        //  Serial.print(cert->getPKData()[i], HEX);
-        // Serial.println();
-
-        DEBUG_MSG("Retrieved Certificate: %d Bytes\n", cert->getCertLength());
-        // for (int i = 0; i < cert->getCertLength(); i++)
-        //  Serial.print(cert->getCertData()[i], HEX);
-        // Serial.println();
-    } else {
-        DEBUG_MSG("Web Server started without SSL keys! How did this happen?\n");
-    }
-#endif
-
     // We can now use the new certificate to setup our server as usual.
     secureServer = new HTTPSServer(cert);
     insecureServer = new HTTPServer();
 
     registerHandlers(insecureServer, secureServer);
 
-    if(secureServer) {
+    if (secureServer) {
         DEBUG_MSG("Starting Secure Web Server...\n");
         secureServer->start();
     }
-    DEBUG_MSG("Starting Insecure Web Server...\n");    
+    DEBUG_MSG("Starting Insecure Web Server...\n");
     insecureServer->start();
     if (insecureServer->isRunning()) {
         DEBUG_MSG("Web Servers Ready! :-) \n");

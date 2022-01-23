@@ -11,11 +11,11 @@
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
 #include "sleep.h"
-#include <Arduino.h>
 #include <WiFi.h>
 
 #ifndef NO_ESP32
 #include "mesh/http/WiFiAPClient.h"
+#include <nvs_flash.h>
 #endif
 
 static bool pinShowing;
@@ -485,7 +485,24 @@ void disablePin()
     doublepressed = millis();
 }
 
+// This should go somewhere else.
+void clearNVS()
+{
+#ifndef NO_ESP32
 
+    // As soon as the LED flashing from double click is done, immediately do a tripple click to
+    // erase nvs memory.
+    if (doublepressed > (millis() - 2000)) {
+        DEBUG_MSG("Clearing NVS memory\n");
+
+        // This will erase ble pairings, ssl key and persistent preferences.
+        nvs_flash_erase();
+
+        DEBUG_MSG("Restarting...\n");
+        ESP.restart();
+    }
+#endif
+}
 
 // This routine is called multiple times, once each time we come back from sleep
 void reinitBluetooth()
@@ -557,8 +574,7 @@ void setBluetoothEnable(bool on)
 
         bluetoothOn = on;
         if (on) {
-            if (!initWifi(isSoftAPForced())) // if we are using wifi, don't turn on bluetooth also
-            {
+            if (!isWifiAvailable()) {
                 Serial.printf("Pre BT: %u heap size\n", ESP.getFreeHeap());
                 // ESP_ERROR_CHECK( heap_trace_start(HEAP_TRACE_LEAKS) );
                 reinitBluetooth();

@@ -1,15 +1,18 @@
 #include "mesh/http/WiFiAPClient.h"
 #include "NodeDB.h"
+#include "RTC.h"
 #include "concurrency/Periodic.h"
 #include "configuration.h"
 #include "main.h"
-#include "mqtt/MQTT.h"
 #include "mesh/http/WebServer.h"
 #include "mesh/wifi/WiFiServerAPI.h"
+#include "mqtt/MQTT.h"
 #include "target_specific.h"
 #include <DNSServer.h>
 #include <ESPmDNS.h>
+#include <NTPClient.h>
 #include <WiFi.h>
+#include <WiFiUdp.h>
 
 using namespace concurrency;
 
@@ -17,6 +20,10 @@ static void WiFiEvent(WiFiEvent_t event);
 
 // DNS Server for the Captive Portal
 DNSServer dnsServer;
+
+// NTP
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "0.pool.ntp.org");
 
 uint8_t wifiDisconnectReason = 0;
 
@@ -46,10 +53,10 @@ static WifiSleepObserver wifiSleepObserver;
 
 static int32_t reconnectWiFi()
 {
-    if (radioConfig.has_preferences && needReconnect) {
+    const char *wifiName = radioConfig.preferences.wifi_ssid;
+    const char *wifiPsw = radioConfig.preferences.wifi_password;
 
-        const char *wifiName = radioConfig.preferences.wifi_ssid;
-        const char *wifiPsw = radioConfig.preferences.wifi_password;
+    if (radioConfig.has_preferences && needReconnect && !WiFi.isConnected()) {
 
         if (!*wifiPsw) // Treat empty password as no password
             wifiPsw = NULL;
@@ -60,6 +67,26 @@ static int32_t reconnectWiFi()
             DEBUG_MSG("... Reconnecting to WiFi access point\n");
             WiFi.mode(WIFI_MODE_STA);
             WiFi.begin(wifiName, wifiPsw);
+            
+
+            // Starting timeClient;
+        }
+    }
+
+    //if (*wifiName) {
+    if (WiFi.isConnected()) {
+        DEBUG_MSG("Updating NTP time\n");
+        if (timeClient.update()) {
+            DEBUG_MSG("NTP Request Success - Setting RTCQualityNTP if needed\n");
+
+            struct timeval tv;
+            tv.tv_sec = timeClient.getEpochTime();
+            tv.tv_usec = 0;
+
+            perhapsSetRTC(RTCQualityNTP, &tv);
+
+        } else {
+            DEBUG_MSG("NTP Update failed\n");
         }
     }
 
@@ -103,6 +130,8 @@ void deinitWifi()
         saving on the 2.4g transceiver.
     */
 
+    DEBUG_MSG("WiFi deinit\n");
+
     if (isWifiAvailable()) {
         WiFi.mode(WIFI_MODE_NULL);
         DEBUG_MSG("WiFi Turned Off\n");
@@ -126,14 +155,18 @@ static void onNetworkConnected()
             MDNS.addService("https", "tcp", 443);
         }
 
+        DEBUG_MSG("Starting NTP time client\n");
+        timeClient.begin();
+        timeClient.setUpdateInterval(60*60); // Update once an hour
+
         initWebServer();
         initApiServer();
 
         APStartupComplete = true;
-    } 
+    }
 
     // FIXME this is kinda yucky, instead we should just have an observable for 'wifireconnected'
-    if(mqtt)
+    if (mqtt)
         mqtt->reconnect();
 }
 
@@ -146,36 +179,41 @@ bool initWifi(bool forceSoftAP)
         const char *wifiName = radioConfig.preferences.wifi_ssid;
         const char *wifiPsw = radioConfig.preferences.wifi_password;
 
+        if (forceSoftAP) {
+            DEBUG_MSG("WiFi ... Forced AP Mode\n");
+        } else if (radioConfig.preferences.wifi_ap_mode) {
+            DEBUG_MSG("WiFi ... AP Mode\n");
+        } else {
+            DEBUG_MSG("WiFi ... Client Mode\n");
+        }
+
         createSSLCert();
 
         if (!*wifiPsw) // Treat empty password as no password
             wifiPsw = NULL;
 
         if (*wifiName || forceSoftAP) {
-            if (forceSoftAP) {
-
-                DEBUG_MSG("Forcing SoftAP\n");
-
-                const char *softAPssid = "meshtasticAdmin";
-                const char *softAPpasswd = "12345678";
+            if (radioConfig.preferences.wifi_ap_mode || forceSoftAP) {
 
                 IPAddress apIP(192, 168, 42, 1);
                 WiFi.onEvent(WiFiEvent);
+                WiFi.mode(WIFI_AP);
+
+                if (forcedSoftAP) {
+                    const char *softAPssid = "meshtasticAdmin";
+                    const char *softAPpasswd = "12345678";
+
+                    DEBUG_MSG("Starting (Forced) WIFI AP: ssid=%s, ok=%d\n", softAPssid, WiFi.softAP(softAPssid, softAPpasswd));
+
+                } else {
+                    DEBUG_MSG("Starting WIFI AP: ssid=%s, ok=%d\n", wifiName, WiFi.softAP(wifiName, wifiPsw));
+                }
 
                 WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
-                DEBUG_MSG("STARTING WIFI AP: ssid=%s, ok=%d\n", softAPssid, WiFi.softAP(softAPssid, softAPpasswd));
-                DEBUG_MSG("MY IP ADDRESS: %s\n", WiFi.softAPIP().toString().c_str());
+                DEBUG_MSG("MY IP AP ADDRESS: %s\n", WiFi.softAPIP().toString().c_str());
 
-                dnsServer.start(53, "*", apIP);
-
-            } else if (radioConfig.preferences.wifi_ap_mode) {
-
-                IPAddress apIP(192, 168, 42, 1);
-                WiFi.onEvent(WiFiEvent);
-
-                WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
-                DEBUG_MSG("STARTING WIFI AP: ssid=%s, ok=%d\n", wifiName, WiFi.softAP(wifiName, wifiPsw));
-                DEBUG_MSG("MY IP ADDRESS: %s\n", WiFi.softAPIP().toString().c_str());
+                // This is needed to improve performance.
+                esp_wifi_set_ps(WIFI_PS_NONE); // Disable radio power saving
 
                 dnsServer.start(53, "*", apIP);
 
@@ -184,14 +222,13 @@ bool initWifi(bool forceSoftAP)
                 getMacAddr(dmac);
                 sprintf(ourHost, "Meshtastic-%02x%02x", dmac[4], dmac[5]);
 
-                Serial.println(ourHost);
-
                 WiFi.mode(WIFI_MODE_STA);
                 WiFi.setHostname(ourHost);
                 WiFi.onEvent(WiFiEvent);
-                // esp_wifi_set_ps(WIFI_PS_NONE); // Disable power saving
 
-                // WiFiEventId_t eventID = WiFi.onEvent(
+                // This is needed to improve performance.
+                esp_wifi_set_ps(WIFI_PS_NONE); // Disable radio power saving
+
                 WiFi.onEvent(
                     [](WiFiEvent_t event, WiFiEventInfo_t info) {
                         Serial.print("\nWiFi lost connection. Reason: ");
@@ -250,7 +287,7 @@ static void WiFiEvent(WiFiEvent_t event)
         DEBUG_MSG("Authentication mode of access point has changed\n");
         break;
     case SYSTEM_EVENT_STA_GOT_IP:
-        DEBUG_MSG("Obtained IP address: \n");
+        DEBUG_MSG("Obtained IP address: ");
         Serial.println(WiFi.localIP());
         onNetworkConnected();
         break;
@@ -271,7 +308,7 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case SYSTEM_EVENT_AP_START:
         DEBUG_MSG("WiFi access point started\n");
-        //Serial.println(WiFi.softAPIP());
+
         onNetworkConnected();
         break;
     case SYSTEM_EVENT_AP_STOP:
@@ -305,7 +342,7 @@ static void WiFiEvent(WiFiEvent_t event)
         DEBUG_MSG("Ethernet disconnected\n");
         break;
     case SYSTEM_EVENT_ETH_GOT_IP:
-        DEBUG_MSG("Obtained IP address\n");
+        DEBUG_MSG("Obtained IP address (SYSTEM_EVENT_ETH_GOT_IP)\n");
         break;
     default:
         break;
@@ -314,7 +351,7 @@ static void WiFiEvent(WiFiEvent_t event)
 
 void handleDNSResponse()
 {
-    if (radioConfig.preferences.wifi_ap_mode) {
+    if (radioConfig.preferences.wifi_ap_mode || isSoftAPForced()) {
         dnsServer.processNextRequest();
     }
 }

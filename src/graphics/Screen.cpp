@@ -26,19 +26,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Screen.h"
-#include "fonts.h"
+#include "gps/GeoCoord.h"
 #include "gps/RTC.h"
 #include "graphics/images.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "mesh/Channels.h"
 #include "plugins/TextMessagePlugin.h"
+#include "sleep.h"
 #include "target_specific.h"
 #include "utils.h"
-#include "gps/GeoCoord.h"
-#include "sleep.h"
 
 #ifndef NO_ESP32
+#include "esp_task_wdt.h"
 #include "mesh/http/WiFiAPClient.h"
 #endif
 
@@ -155,8 +155,17 @@ static void drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     display->setFont(FONT_SMALL);
     display->drawString(64 + x, y, "Creating SSL certificate");
 
+#ifndef NO_ESP32
+    yield();
+    esp_task_wdt_reset();
+#endif
+
     display->setFont(FONT_SMALL);
-    display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait...");
+    if ((millis() / 1000) % 2) {
+        display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . . .");
+    } else {
+        display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . .  ");
+    }
 }
 
 #ifdef HAS_EINK
@@ -209,6 +218,14 @@ static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, 
     display->drawString(64 + x, 48 + y, buf);
 }
 
+static void drawFrameShutdown(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+
+    display->setFont(FONT_MEDIUM);
+    display->drawString(64 + x, 26 + y, "Shutting down...");
+}
+
 static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->setTextAlignment(TEXT_ALIGN_CENTER);
@@ -216,7 +233,11 @@ static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, i
     display->drawString(64 + x, y, "Updating");
 
     display->setFont(FONT_SMALL);
-    display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait...");
+    if ((millis() / 1000) % 2) {
+        display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . . .");
+    } else {
+        display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . .  ");
+    }
 
     // display->setFont(FONT_LARGE);
     // display->drawString(64 + x, 26 + y, btPIN);
@@ -239,10 +260,10 @@ static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
 }
 
 // Ignore messages orginating from phone (from the current node 0x0) unless range test or store and forward plugin are enabled
-static bool shouldDrawMessage(const MeshPacket *packet) {
-    return packet->from != 0 &&
-        !radioConfig.preferences.range_test_plugin_enabled &&
-        !radioConfig.preferences.store_forward_plugin_enabled;
+static bool shouldDrawMessage(const MeshPacket *packet)
+{
+    return packet->from != 0 && !radioConfig.preferences.range_test_plugin_enabled &&
+           !radioConfig.preferences.store_forward_plugin_enabled;
 }
 
 /// Draw the last text message we received
@@ -421,6 +442,7 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
         displayLine = "No GPS Lock";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
+
         if (gpsFormat != GpsCoordinateFormat_GpsFormatDMS) {
             char coordinateLine[22];
             geoCoord.updateCoords(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()), int32_t(gps->getAltitude()));
@@ -430,25 +452,36 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
                 sprintf(coordinateLine, "%2i%1c %06i %07i", geoCoord.getUTMZone(), geoCoord.getUTMBand(),
                         geoCoord.getUTMEasting(), geoCoord.getUTMNorthing());
             } else if (gpsFormat == GpsCoordinateFormat_GpsFormatMGRS) { // Military Grid Reference System
-                sprintf(coordinateLine, "%2i%1c %1c%1c %05i %05i", geoCoord.getMGRSZone(), geoCoord.getMGRSBand(), geoCoord.getMGRSEast100k(),
-                        geoCoord.getMGRSNorth100k(), geoCoord.getMGRSEasting(), geoCoord.getMGRSNorthing());
+                sprintf(coordinateLine, "%2i%1c %1c%1c %05i %05i", geoCoord.getMGRSZone(), geoCoord.getMGRSBand(),
+                        geoCoord.getMGRSEast100k(), geoCoord.getMGRSNorth100k(), geoCoord.getMGRSEasting(),
+                        geoCoord.getMGRSNorthing());
             } else if (gpsFormat == GpsCoordinateFormat_GpsFormatOLC) { // Open Location Code
                 geoCoord.getOLCCode(coordinateLine);
-            } else if (gpsFormat == GpsCoordinateFormat_GpsFormatOSGR) { // Ordnance Survey Grid Reference
+            } else if (gpsFormat == GpsCoordinateFormat_GpsFormatOSGR) {              // Ordnance Survey Grid Reference
                 if (geoCoord.getOSGRE100k() == 'I' || geoCoord.getOSGRN100k() == 'I') // OSGR is only valid around the UK region
                     sprintf(coordinateLine, "%s", "Out of Boundary");
                 else
-                    sprintf(coordinateLine, "%1c%1c %05i %05i", geoCoord.getOSGRE100k(),geoCoord.getOSGRN100k(), 
+                    sprintf(coordinateLine, "%1c%1c %05i %05i", geoCoord.getOSGRE100k(), geoCoord.getOSGRN100k(),
                             geoCoord.getOSGREasting(), geoCoord.getOSGRNorthing());
             }
-            
-            display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
+
+            // If fixed position, display text "Fixed GPS" alternating with the coordinates.
+            if (radioConfig.preferences.fixed_position) {
+                if ((millis() / 10000) % 2) {
+                    display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
+                } else {
+                    display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth("Fixed GPS"))) / 2, y, "Fixed GPS");
+                }
+            } else {
+                display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
+            }
+
         } else {
             char latLine[22];
             char lonLine[22];
             sprintf(latLine, "%2i° %2i' %2.4f\" %1c", geoCoord.getDMSLatDeg(), geoCoord.getDMSLatMin(), geoCoord.getDMSLatSec(),
                     geoCoord.getDMSLatCP());
-            sprintf(lonLine, "%3i° %2i' %2.4f\" %1c", geoCoord.getDMSLonDeg(), geoCoord.getDMSLonMin(), geoCoord.getDMSLonSec(), 
+            sprintf(lonLine, "%3i° %2i' %2.4f\" %1c", geoCoord.getDMSLonDeg(), geoCoord.getDMSLonMin(), geoCoord.getDMSLonSec(),
                     geoCoord.getDMSLonCP());
             display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(latLine))) / 2, y - FONT_HEIGHT_SMALL * 1, latLine);
             display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(lonLine))) / 2, y, lonLine);
@@ -593,11 +626,6 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             n = nodeDB.getNodeByIndex(nodeIndex);
         }
         displayedNodeNum = n->num;
-
-        // We just changed to a new node screen, ask that node for updated state if it's older than 2 minutes
-        if (sinceLastSeen(n) > 120) {
-            service.sendNetworkPing(displayedNodeNum, true);
-        }
     }
 
     NodeInfo *node = nodeDB.getNodeByIndex(nodeIndex);
@@ -640,7 +668,8 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             // display direction toward node
             hasNodeHeading = true;
             Position &p = node->position;
-            float d = GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
+            float d =
+                GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
             if (d < 2000)
                 snprintf(distStr, sizeof(distStr), "%.0f m", d);
             else
@@ -648,7 +677,8 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 
             // FIXME, also keep the guess at the operators heading and add/substract
             // it.  currently we don't do this and instead draw north up only.
-            float bearingToOther = GeoCoord::bearing(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
+            float bearingToOther =
+                GeoCoord::bearing(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
             headingRadian = bearingToOther - myHeading;
             drawNodeHeading(display, compassX, compassY, headingRadian);
         }
@@ -689,6 +719,7 @@ void _screen_header()
 
 Screen::Screen(uint8_t address, int sda, int scl) : OSThread("Screen"), cmdQueue(32), dispdev(address, sda, scl), ui(&dispdev)
 {
+    address_found = address;
     cmdQueue.setReader(this);
 }
 
@@ -796,6 +827,9 @@ void Screen::setup()
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
     if (textMessagePlugin)
         textMessageObserver.observe(textMessagePlugin);
+
+    // Plugins can notify screen about refresh
+    MeshPlugin::observeUIEvents(&uiFrameEventObserver);
 }
 
 void Screen::forceDisplay()
@@ -854,6 +888,9 @@ int32_t Screen::runOnce()
             handlePrint(cmd.print_text);
             free(cmd.print_text);
             break;
+        case Cmd::START_SHUTDOWN_SCREEN:
+            handleShutdownScreen();
+            break;
         default:
             DEBUG_MSG("BUG: invalid cmd\n");
         }
@@ -889,13 +926,13 @@ int32_t Screen::runOnce()
     // standard screen switching is stopped.
     if (showingNormalScreen) {
         // standard screen loop handling here
-        if (radioConfig.preferences.auto_screen_carousel_secs > 0 && 
+        if (radioConfig.preferences.auto_screen_carousel_secs > 0 &&
             (millis() - lastScreenTransition) > (radioConfig.preferences.auto_screen_carousel_secs * 1000)) {
             DEBUG_MSG("LastScreenTransition exceeded %ums transitioning to next frame\n", (millis() - lastScreenTransition));
             handleOnPress();
         }
     }
-    
+
     // DEBUG_MSG("want fps %d, fixed=%d\n", targetFramerate,
     // ui.getUiState()->frameState); If we are scrolling we need to be called
     // soon, otherwise just 1 fps (to save CPU) We also ask to be called twice
@@ -926,10 +963,12 @@ void Screen::drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiStat
  * it is expected that this will be used during the boot phase */
 void Screen::setSSLFrames()
 {
-    DEBUG_MSG("showing SSL frames\n");
-    static FrameCallback sslFrames[] = {drawSSLScreen};
-    ui.setFrames(sslFrames, 1);
-    ui.update();
+    if (address_found) {
+        // DEBUG_MSG("showing SSL frames\n");
+        static FrameCallback sslFrames[] = {drawSSLScreen};
+        ui.setFrames(sslFrames, 1);
+        ui.update();
+    }
 }
 
 // restore our regular frame list
@@ -1018,6 +1057,18 @@ void Screen::handleStartBluetoothPinScreen(uint32_t pin)
     setFastFramerate();
 }
 
+void Screen::handleShutdownScreen()
+{
+    DEBUG_MSG("showing shutdown screen\n");
+    showingNormalScreen = false;
+
+    static FrameCallback shutdownFrames[] = {drawFrameShutdown};
+
+    ui.disableAllIndicators();
+    ui.setFrames(shutdownFrames, 1);
+    setFastFramerate();
+}
+
 void Screen::handleStartFirmwareUpdateScreen()
 {
     DEBUG_MSG("showing firmware screen\n");
@@ -1059,7 +1110,7 @@ void Screen::handlePrint(const char *text)
 }
 
 void Screen::handleOnPress()
-{  
+{
     // If screen was off, just wake it, otherwise advance to next frame
     // If we are in a transition, the press must have bounced, drop it.
     if (ui.getUiState()->frameState == FIXED) {
@@ -1176,7 +1227,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         if (radioConfig.preferences.wifi_ap_mode || isSoftAPForced()) {
             display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IP: " + String(WiFi.softAPIP().toString().c_str()));
 
-            // Number of connections to the AP. Default mmax for the esp32 is 4
+            // Number of connections to the AP. Default max for the esp32 is 4
             display->drawString(x + SCREEN_WIDTH - display->getStringWidth("(" + String(WiFi.softAPgetStationNum()) + "/4)"),
                                 y + FONT_HEIGHT_SMALL * 1, "(" + String(WiFi.softAPgetStationNum()) + "/4)");
         } else {
@@ -1372,11 +1423,11 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 
     display->drawString(x, y + FONT_HEIGHT_SMALL * 1, uptime);
 
-#ifndef NO_ESP32
-    // Show CPU Frequency.
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth("CPU " + String(getCpuFrequencyMhz()) + "MHz"),
-                        y + FONT_HEIGHT_SMALL * 1, "CPU " + String(getCpuFrequencyMhz()) + "MHz");
-#endif
+    // Display Channel Utilization
+    char chUtil[13];
+    sprintf(chUtil, "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil),
+                        y + FONT_HEIGHT_SMALL * 1, chUtil);
 
     // Line 3
     if (radioConfig.preferences.gps_format != GpsCoordinateFormat_GpsFormatDMS) // if DMS then don't draw altitude
@@ -1422,9 +1473,29 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
     return 0;
 }
 
-int Screen::handleTextMessage(const MeshPacket *packet) {
+int Screen::handleTextMessage(const MeshPacket *packet)
+{
     if (showingNormalScreen) {
         setFrames(); // Regen the list of screens (will show new text message)
+    }
+
+    return 0;
+}
+
+int Screen::handleUIFrameEvent(const UIFrameEvent *event)
+{
+    if (showingNormalScreen) {
+        if (event->frameChanged)
+        {
+            setFrames(); // Regen the list of screens (will show new text message)
+        }
+        else if (event->needRedraw)
+        {
+            setFastFramerate();
+            // TODO: We might also want switch to corresponding frame,
+            //       but we don't know the exact frame number.
+            //ui.switchToFrame(0);
+        }
     }
 
     return 0;

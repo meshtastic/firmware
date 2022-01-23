@@ -50,7 +50,8 @@
         "cassert": "cpp",
         "iterator": "cpp",
         "shared_mutex": "cpp",
-        "iostream": "cpp"
+        "iostream": "cpp",
+        "esp_nimble_hci.h": "c"
     },
     "cSpell.words": [
         "Blox",

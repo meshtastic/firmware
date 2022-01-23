@@ -40,6 +40,7 @@ class Screen
 #include "concurrency/OSThread.h"
 #include "power.h"
 #include <string>
+#include "mesh/MeshPlugin.h"
 
 // 0 to 255, though particular variants might define different defaults
 #ifndef BRIGHTNESS_DEFAULT
@@ -90,12 +91,16 @@ class Screen : public concurrency::OSThread
         CallbackObserver<Screen, const meshtastic::Status *>(this, &Screen::handleStatusUpdate);
     CallbackObserver<Screen, const MeshPacket *> textMessageObserver =
         CallbackObserver<Screen, const MeshPacket *>(this, &Screen::handleTextMessage);
+    CallbackObserver<Screen, const UIFrameEvent *> uiFrameEventObserver =
+        CallbackObserver<Screen, const UIFrameEvent *>(this, &Screen::handleUIFrameEvent);
 
   public:
     Screen(uint8_t address, int sda = -1, int scl = -1);
 
     Screen(const Screen &) = delete;
     Screen &operator=(const Screen &) = delete;
+
+    uint8_t address_found;
 
     /// Initializes the UI, turns on the display, starts showing boot screen.
     //
@@ -146,6 +151,12 @@ class Screen : public concurrency::OSThread
         enqueueCmd(cmd);
     }
 
+    void startShutdownScreen()
+    {
+        ScreenCmd cmd;
+        cmd.cmd = Cmd::START_SHUTDOWN_SCREEN;
+        enqueueCmd(cmd);
+    }
 
     /// Stops showing the bluetooth PIN screen.
     void stopBluetoothPinScreen() { enqueueCmd(ScreenCmd{.cmd = Cmd::STOP_BLUETOOTH_PIN_SCREEN}); }
@@ -216,6 +227,7 @@ class Screen : public concurrency::OSThread
 
     int handleStatusUpdate(const meshtastic::Status *arg);
     int handleTextMessage(const MeshPacket *arg);
+    int handleUIFrameEvent(const UIFrameEvent *arg);
 
     /// Used to force (super slow) eink displays to draw critical frames
     void forceDisplay();
@@ -256,7 +268,7 @@ class Screen : public concurrency::OSThread
     void handleStartBluetoothPinScreen(uint32_t pin);
     void handlePrint(const char *text);
     void handleStartFirmwareUpdateScreen();
-
+    void handleShutdownScreen();
     /// Rebuilds our list of frames (screens) to default ones.
     void setFrames();
 

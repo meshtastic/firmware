@@ -12,6 +12,7 @@ struct PacketHistoryStruct {
     uint32_t time;
     uint32_t to;
     uint32_t from;
+    uint8_t channel;
     bool ack;
     uint8_t payload[Constants_DATA_PAYLOAD_LEN];
     pb_size_t payload_size;
@@ -22,7 +23,7 @@ class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThrea
     // bool firstTime = 1;
     bool busy = 0;
     uint32_t busyTo;
-    char routerMessage[80];
+    char routerMessage[Constants_DATA_PAYLOAD_LEN];
 
     uint32_t receivedRecord[50][2] = {{0}};
 
@@ -33,7 +34,7 @@ class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThrea
     uint32_t packetHistoryTXQueue_size;
     uint32_t packetHistoryTXQueue_index = 0;
 
-    uint32_t packetTimeMax = 0;
+    uint32_t packetTimeMax = 2000;
 
   public:
     StoreForwardPlugin();

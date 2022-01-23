@@ -23,6 +23,7 @@
 #include "mesh/http/WiFiAPClient.h"
 #include "plugins/esp32/StoreForwardPlugin.h"
 #include <Preferences.h>
+#include <nvs_flash.h>
 #endif
 
 NodeDB nodeDB;
@@ -86,6 +87,10 @@ bool NodeDB::resetRadioConfig()
     if (radioConfig.preferences.factory_reset) {
         DEBUG_MSG("Performing factory reset!\n");
         installDefaultDeviceState();
+#ifndef NO_ESP32
+        // This will erase what's in NVS including ssl keys, persistant variables and ble pairing
+        nvs_flash_erase();
+#endif
         didFactoryReset = true;
     }
 

@@ -127,7 +127,7 @@ int32_t PositionPlugin::runOnce()
 {
     NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
 
-    radioConfig.preferences.position_broadcast_smart = true;
+    //radioConfig.preferences.position_broadcast_smart = true;
 
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();
@@ -148,14 +148,22 @@ int32_t PositionPlugin::runOnce()
         NodeInfo *node = service.refreshMyNodeInfo(); // should guarantee there is now a position
 
         if (node->has_position && (node->position.latitude_i != 0 || node->position.longitude_i != 0)) {
+            // The minimum distance to travel before we are able to send a new position packet.
+            const uint32_t distanceTravelMinimum = 30;
+
+            // The minimum time that would pass before we are able to send a new position packet.
+            const uint32_t timeTravelMinimum = 30;
+
+            // Determine the distance in meters between two points on the globe
             float distance = GeoCoord::latLongToMeter(lastGpsLatitude * 1e-7, lastGpsLongitude * 1e-7,
                                                       node->position.latitude_i * 1e-7, node->position.longitude_i * 1e-7);
 
-            // 2500 is a magic number. 50 is the minumum distance we want to travel before sending another position packet.
-            uint32_t distanceTravel = ((2500 / myNodeInfo.bitrate) >= 50) ? (2500 / myNodeInfo.bitrate) : 50;
+            // Yes, this has a bunch of magic numbers. Sorry. This is to make the scale non-linear.
+            const float distanceTravelMath = 1203 / (sqrt( pow(myNodeInfo.bitrate, 1.5) / 1.1 ) ) ;
+            uint32_t distanceTravel = (distanceTravelMath >= distanceTravelMinimum) ? distanceTravelMath : distanceTravelMinimum;
 
-            // 1500 is a magic number. 30 is the minumum interval between position packets
-            uint32_t timeTravel = ((1500 / myNodeInfo.bitrate) >= 30) ? (1500 / myNodeInfo.bitrate) : 30;
+            // Yes, this has a bunch of magic numbers. Sorry.
+            uint32_t timeTravel = ((1500 / myNodeInfo.bitrate) >= timeTravelMinimum) ? (1500 / myNodeInfo.bitrate) : timeTravelMinimum;
 
             // If the distance traveled since the last update is greater than 100 meters
             //   and it's been at least 60 seconds since the last update
