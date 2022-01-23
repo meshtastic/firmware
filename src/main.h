@@ -21,6 +21,7 @@ extern graphics::Screen *screen;
 const char *getDeviceName();
 
 extern uint32_t rebootAtMsec;
+extern uint32_t shutdownAtMsec;
 
 // If a thread does something that might need for it to be rescheduled ASAP it can set this flag
 // This will supress the current delay and instead try to run ASAP.
