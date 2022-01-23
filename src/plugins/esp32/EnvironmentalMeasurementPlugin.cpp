@@ -328,6 +328,7 @@ bool EnvironmentalMeasurementPlugin::sendOurEnvironmentalMeasurement(NodeNum des
     p->to = dest;
     p->decoded.want_response = wantReplies;
 
+    lastMeasurementPacket = packetPool.allocCopy(*p);
     DEBUG_MSG("EnvironmentalMeasurement: Sending packet to mesh");
     service.sendToMesh(p);
     return true;
