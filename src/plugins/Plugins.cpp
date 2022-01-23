@@ -11,9 +11,9 @@
 #include "plugins/RoutingPlugin.h"
 #include "plugins/AdminPlugin.h"
 #include "plugins/CannedMessagePlugin.h"
+#include "plugins/EnvironmentalMeasurementPlugin.h"
 #ifndef NO_ESP32
 #include "plugins/esp32/SerialPlugin.h"
-#include "plugins/esp32/EnvironmentalMeasurementPlugin.h"
 #include "plugins/esp32/RangeTestPlugin.h"
 #include "plugins/esp32/StoreForwardPlugin.h"
 #endif
@@ -38,6 +38,7 @@ void setupPlugins()
         new RotaryEncoderInterruptImpl1();
     rotaryEncoderInterruptImpl1->init();
     cannedMessagePlugin = new CannedMessagePlugin();
+    new EnvironmentalMeasurementPlugin();
 
 #ifndef NO_ESP32
     // Only run on an esp32 based device.
@@ -53,7 +54,6 @@ void setupPlugins()
 
     new RangeTestPlugin();
     // new StoreForwardPlugin();
-    new EnvironmentalMeasurementPlugin();
 #endif
 
     // NOTE! This plugin must be added LAST because it likes to check for replies from other plugins and avoid sending extra acks

@@ -39,7 +39,6 @@
 
 int32_t EnvironmentalMeasurementPlugin::runOnce()
 {
-#ifndef NO_ESP32 // this only works on ESP32 devices
 
     /*
         Uncomment the preferences below if you want to use the plugin
@@ -172,7 +171,6 @@ int32_t EnvironmentalMeasurementPlugin::runOnce()
     // miliseconds until the function should be called again by the
     // OSThread library.  Multiply the preference value by 1000 to convert seconds to miliseconds
     return (radioConfig.preferences.environmental_measurement_plugin_update_interval * 1000);
-#endif
 }
 
 bool EnvironmentalMeasurementPlugin::wantUIFrame()
