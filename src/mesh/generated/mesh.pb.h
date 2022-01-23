@@ -136,6 +136,8 @@ typedef struct _Data {
     uint32_t dest;
     uint32_t source;
     uint32_t request_id;
+    uint32_t reply_id;
+    bool is_tapback;
 } Data;
 
 typedef struct _LogRecord {
@@ -236,8 +238,6 @@ typedef struct _MeshPacket {
     MeshPacket_Priority priority;
     int32_t rx_rssi;
     MeshPacket_Delayed delayed;
-    uint32_t reply_id;
-    bool is_tapback;
 } MeshPacket;
 
 typedef struct _NodeInfo {
@@ -334,8 +334,8 @@ extern "C" {
 #define User_init_default                        {"", "", "", {0}, _HardwareModel_MIN, 0, _Team_MIN, 0, 0, 0}
 #define RouteDiscovery_init_default              {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_default                     {0, {RouteDiscovery_init_default}}
-#define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0}
-#define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN, 0, 0}
+#define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
+#define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
 #define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0}
 #define MyNodeInfo_init_default                  {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
 #define LogRecord_init_default                   {"", 0, "", _LogRecord_Level_MIN}
@@ -346,8 +346,8 @@ extern "C" {
 #define User_init_zero                           {"", "", "", {0}, _HardwareModel_MIN, 0, _Team_MIN, 0, 0, 0}
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_zero                        {0, {RouteDiscovery_init_zero}}
-#define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0}
-#define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN, 0, 0}
+#define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
+#define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
 #define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0}
 #define MyNodeInfo_init_zero                     {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
 #define LogRecord_init_zero                      {"", 0, "", _LogRecord_Level_MIN}
@@ -362,6 +362,8 @@ extern "C" {
 #define Data_dest_tag                            4
 #define Data_source_tag                          5
 #define Data_request_id_tag                      6
+#define Data_reply_id_tag                        7
+#define Data_is_tapback_tag                      8
 #define LogRecord_message_tag                    1
 #define LogRecord_time_tag                       2
 #define LogRecord_source_tag                     3
@@ -434,8 +436,6 @@ extern "C" {
 #define MeshPacket_priority_tag                  12
 #define MeshPacket_rx_rssi_tag                   13
 #define MeshPacket_delayed_tag                   15
-#define MeshPacket_reply_id_tag                  16
-#define MeshPacket_is_tapback_tag                17
 #define NodeInfo_num_tag                         1
 #define NodeInfo_user_tag                        2
 #define NodeInfo_position_tag                    3
@@ -518,7 +518,9 @@ X(a, STATIC,   SINGULAR, BYTES,    payload,           2) \
 X(a, STATIC,   SINGULAR, BOOL,     want_response,     3) \
 X(a, STATIC,   SINGULAR, FIXED32,  dest,              4) \
 X(a, STATIC,   SINGULAR, FIXED32,  source,            5) \
-X(a, STATIC,   SINGULAR, FIXED32,  request_id,        6)
+X(a, STATIC,   SINGULAR, FIXED32,  request_id,        6) \
+X(a, STATIC,   SINGULAR, FIXED32,  reply_id,          7) \
+X(a, STATIC,   SINGULAR, BOOL,     is_tapback,        8)
 #define Data_CALLBACK NULL
 #define Data_DEFAULT NULL
 
@@ -535,9 +537,7 @@ X(a, STATIC,   SINGULAR, UINT32,   hop_limit,        10) \
 X(a, STATIC,   SINGULAR, BOOL,     want_ack,         11) \
 X(a, STATIC,   SINGULAR, UENUM,    priority,         12) \
 X(a, STATIC,   SINGULAR, INT32,    rx_rssi,          13) \
-X(a, STATIC,   SINGULAR, UENUM,    delayed,          15) \
-X(a, STATIC,   SINGULAR, FIXED32,  reply_id,         16) \
-X(a, STATIC,   SINGULAR, BOOL,     is_tapback,       17)
+X(a, STATIC,   SINGULAR, UENUM,    delayed,          15)
 #define MeshPacket_CALLBACK NULL
 #define MeshPacket_DEFAULT NULL
 #define MeshPacket_payloadVariant_decoded_MSGTYPE Data
@@ -647,13 +647,13 @@ extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 #define User_size                                96
 #define RouteDiscovery_size                      40
 #define Routing_size                             42
-#define Data_size                                260
-#define MeshPacket_size                          320
+#define Data_size                                267
+#define MeshPacket_size                          318
 #define NodeInfo_size                            270
 #define MyNodeInfo_size                          457
 #define LogRecord_size                           81
 #define FromRadio_size                           466
-#define ToRadio_size                             323
+#define ToRadio_size                             321
 #define ToRadio_PeerInfo_size                    8
 
 #ifdef __cplusplus
