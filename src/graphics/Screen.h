@@ -151,6 +151,12 @@ class Screen : public concurrency::OSThread
         enqueueCmd(cmd);
     }
 
+    void startShutdownScreen()
+    {
+        ScreenCmd cmd;
+        cmd.cmd = Cmd::START_SHUTDOWN_SCREEN;
+        enqueueCmd(cmd);
+    }
 
     /// Stops showing the bluetooth PIN screen.
     void stopBluetoothPinScreen() { enqueueCmd(ScreenCmd{.cmd = Cmd::STOP_BLUETOOTH_PIN_SCREEN}); }
@@ -262,7 +268,7 @@ class Screen : public concurrency::OSThread
     void handleStartBluetoothPinScreen(uint32_t pin);
     void handlePrint(const char *text);
     void handleStartFirmwareUpdateScreen();
-
+    void handleShutdownScreen();
     /// Rebuilds our list of frames (screens) to default ones.
     void setFrames();
 
