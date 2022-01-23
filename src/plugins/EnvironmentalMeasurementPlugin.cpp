@@ -39,7 +39,7 @@
 
 int32_t EnvironmentalMeasurementPlugin::runOnce()
 {
-
+#ifndef PORTDUINO
     /*
         Uncomment the preferences below if you want to use the plugin
         without having to configure it from the PythonAPI or WebUI.
@@ -171,6 +171,7 @@ int32_t EnvironmentalMeasurementPlugin::runOnce()
     // miliseconds until the function should be called again by the
     // OSThread library.  Multiply the preference value by 1000 to convert seconds to miliseconds
     return (radioConfig.preferences.environmental_measurement_plugin_update_interval * 1000);
+#endif
 }
 
 bool EnvironmentalMeasurementPlugin::wantUIFrame()

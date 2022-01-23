@@ -11,7 +11,9 @@
 #include "plugins/RoutingPlugin.h"
 #include "plugins/AdminPlugin.h"
 #include "plugins/CannedMessagePlugin.h"
+#ifndef PORTDUINO
 #include "plugins/EnvironmentalMeasurementPlugin.h"
+#endif
 #ifndef NO_ESP32
 #include "plugins/esp32/SerialPlugin.h"
 #include "plugins/esp32/RangeTestPlugin.h"
@@ -38,8 +40,9 @@ void setupPlugins()
         new RotaryEncoderInterruptImpl1();
     rotaryEncoderInterruptImpl1->init();
     cannedMessagePlugin = new CannedMessagePlugin();
+#ifndef PORTDUINO
     new EnvironmentalMeasurementPlugin();
-
+#endif
 #ifndef NO_ESP32
     // Only run on an esp32 based device.
 
