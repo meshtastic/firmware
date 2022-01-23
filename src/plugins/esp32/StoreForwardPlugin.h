@@ -23,7 +23,7 @@ class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThrea
     // bool firstTime = 1;
     bool busy = 0;
     uint32_t busyTo;
-    char routerMessage[80];
+    char routerMessage[Constants_DATA_PAYLOAD_LEN];
 
     uint32_t receivedRecord[50][2] = {{0}};
 
