@@ -141,7 +141,7 @@ class PowerFSMThread : public OSThread
     PowerFSMThread() : OSThread("PowerFSM") {}
 
   protected:
-    int32_t runOnce()
+    int32_t runOnce() override
     {
         powerFSM.run_machine();
 
@@ -242,7 +242,7 @@ class ButtonThread : public OSThread
 
   protected:
     /// If the button is pressed we suppress CPU sleep until release
-    int32_t runOnce()
+    int32_t runOnce() override
     {
         canSleep = true; // Assume we should not keep the board awake
 

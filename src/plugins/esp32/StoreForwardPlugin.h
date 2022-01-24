@@ -54,7 +54,7 @@ class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThrea
      */
     void sendPayload(NodeNum dest = NODENUM_BROADCAST, uint32_t packetHistory_index = 0);
     void sendMessage(NodeNum dest, char *str);
-    virtual MeshPacket *allocReply();
+    virtual MeshPacket *allocReply() override;
     /*
       Override the wantPortnum method.
       */
@@ -70,14 +70,14 @@ class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThrea
     bool heartbeat = false; // No heartbeat.
 
   protected:
-    virtual int32_t runOnce();
+    virtual int32_t runOnce() override;
 
     /** Called to handle a particular incoming message
 
     @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for
     it
     */
-    virtual ProcessMessage handleReceived(const MeshPacket &mp);
+    virtual ProcessMessage handleReceived(const MeshPacket &mp) override;
     virtual ProcessMessage handleReceivedProtobuf(const MeshPacket &mp, StoreAndForward *p);
 
 };

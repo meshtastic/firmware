@@ -33,10 +33,10 @@ struct PendingPacket {
     MeshPacket *packet;
 
     /** The next time we should try to retransmit this packet */
-    uint32_t nextTxMsec;
+    uint32_t nextTxMsec = 0;
 
     /** Starts at NUM_RETRANSMISSIONS -1(normally 3) and counts down.  Once zero it will be removed from the list */
-    uint8_t numRetransmissions;
+    uint8_t numRetransmissions = 0;
 
     /** True if we have started trying to find a route - for DSR usage
      * While trying to find a route we don't actually send the data packet.  We just leave it here pending until
@@ -74,10 +74,10 @@ class ReliableRouter : public FloodingRouter
      * later free() the packet to pool.  This routine is not allowed to stall.
      * If the txmit queue is full it might return an error
      */
-    virtual ErrorCode send(MeshPacket *p);
+    virtual ErrorCode send(MeshPacket *p) override;
 
     /** Do our retransmission handling */
-    virtual int32_t runOnce()
+    virtual int32_t runOnce() override
     {
         // Note: We must doRetransmissions FIRST, because it might queue up work for the base class runOnce implementation
         auto d = doRetransmissions();
@@ -91,7 +91,7 @@ class ReliableRouter : public FloodingRouter
     /**
      * Look for acks/naks or someone retransmitting us
      */
-    virtual void sniffReceived(const MeshPacket *p, const Routing *c);
+    virtual void sniffReceived(const MeshPacket *p, const Routing *c) override;
 
     /**
      * Try to find the pending packet record for this ID (or NULL if not found)
@@ -102,7 +102,7 @@ class ReliableRouter : public FloodingRouter
     /**
      * We hook this method so we can see packets before FloodingRouter says they should be discarded
      */
-    virtual bool shouldFilterReceived(MeshPacket *p);
+    virtual bool shouldFilterReceived(MeshPacket *p) override;
 
     /**
      * Add p to the list of packets to retransmit occasionally.  We will free it once we stop retransmitting.

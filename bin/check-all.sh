@@ -11,7 +11,8 @@ export APP_VERSION=$VERSION
 
 # only check high and medium in our source
 # TODO: only doing tbeam (to start; add all/more later)
-pio check --flags "-DAPP_VERSION=${APP_VERSION} --suppressions-list=suppressions.txt" -e tbeam --skip-packages --severity=medium --severity=high --pattern="src/"
+#pio check --flags "-DAPP_VERSION=${APP_VERSION} --suppressions-list=suppressions.txt" -e tbeam --skip-packages --severity=medium --severity=high --pattern="src/"
+pio check --flags "-DAPP_VERSION=${APP_VERSION} --suppressions-list=suppressions.txt" -e tbeam --skip-packages --pattern="src/"
 return_code=$?
 
 # TODO: not sure why return_code is 0

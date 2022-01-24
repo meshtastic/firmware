@@ -123,5 +123,5 @@ class PhoneAPI
     bool handleToRadioPacket(MeshPacket &p);
 
     /// If the mesh service tells us fromNum has changed, tell the phone
-    virtual int onNotify(uint32_t newValue);
+    virtual int onNotify(uint32_t newValue) override;
 };

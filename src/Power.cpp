@@ -75,7 +75,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
      *
      * FIXME - use a lipo lookup table, the current % full is super wrong
      */
-    virtual int getBattPercentage()
+    virtual int getBattPercentage() override
     {
         float v = getBattVoltage();
 
@@ -94,7 +94,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /**
      * The raw voltage of the batteryin millivolts or NAN if unknown
      */
-    virtual float getBattVoltage()
+    virtual float getBattVoltage() override
     {
 
 #ifndef ADC_MULTIPLIER
@@ -127,15 +127,15 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /**
      * return true if there is a battery installed in this unit
      */
-    virtual bool isBatteryConnect() { return getBattPercentage() != -1; }
+    virtual bool isBatteryConnect() override { return getBattPercentage() != -1; }
 
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
     /// in power
-    virtual bool isVBUSPlug() { return getBattVoltage() > chargingVolt; }
+    virtual bool isVBUSPlug() override { return getBattVoltage() > chargingVolt; }
 
     /// Assume charging if we have a battery and external power is connected.
     /// we can't be smart enough to say 'full'?
-    virtual bool isChargeing() { return isBatteryConnect() && isVBUSPlug(); }
+    virtual bool isChargeing() override { return isBatteryConnect() && isVBUSPlug(); }
 
   private:
     /// If we see a battery voltage higher than physics allows - assume charger is pumping

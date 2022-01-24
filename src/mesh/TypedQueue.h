@@ -19,7 +19,7 @@ template <class T> class TypedQueue
     concurrency::OSThread *reader = NULL;
 
   public:
-    TypedQueue(int maxElements)
+    explicit TypedQueue(int maxElements)
     {
         h = xQueueCreate(maxElements, sizeof(T));
         assert(h);

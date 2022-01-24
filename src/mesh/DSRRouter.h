@@ -8,14 +8,14 @@ class DSRRouter : public ReliableRouter
      * Every (non duplicate) packet this node receives will be passed through this method.  This allows subclasses to
      * update routing tables etc... based on what we overhear (even for messages not destined to our node)
      */
-    virtual void sniffReceived(const MeshPacket *p, const Routing *c);
+    virtual void sniffReceived(const MeshPacket *p, const Routing *c) override;
 
     /**
      * Send a packet on a suitable interface.  This routine will
      * later free() the packet to pool.  This routine is not allowed to stall.
      * If the txmit queue is full it might return an error
      */
-    virtual ErrorCode send(MeshPacket *p);
+    virtual ErrorCode send(MeshPacket *p) override;
 
   private:
     /**

@@ -48,7 +48,7 @@ class StreamAPI : public PhoneAPI, protected concurrency::OSThread
      * Currently we require frequent invocation from loop() to check for arrived serial packets and to send new packets to the
      * phone.
      */
-    virtual int32_t runOnce();
+    virtual int32_t runOnce() override;
 
   private:
     /**
@@ -67,10 +67,10 @@ class StreamAPI : public PhoneAPI, protected concurrency::OSThread
      */
     void emitRebooted();
 
-    virtual void onConnectionChanged(bool connected);
+    virtual void onConnectionChanged(bool connected) override;
 
     /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() = 0;
+    virtual bool checkIsConnected() override = 0;
 
     /**
      * Send the current txBuffer over our stream

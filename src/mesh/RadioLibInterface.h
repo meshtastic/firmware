@@ -54,7 +54,7 @@ class LockingModule : public Module
 
     \param numBytes Number of bytes to transfer.
     */
-    virtual void SPItransfer(uint8_t cmd, uint8_t reg, uint8_t *dataOut, uint8_t *dataIn, uint8_t numBytes);
+    virtual void SPItransfer(uint8_t cmd, uint8_t reg, uint8_t *dataOut, uint8_t *dataIn, uint8_t numBytes) override;
 };
 
 class RadioLibInterface : public RadioInterface, protected concurrency::NotifiedWorkerThread
@@ -116,14 +116,14 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy, SPIClass &spi,
                       PhysicalLayer *iface = NULL);
 
-    virtual ErrorCode send(MeshPacket *p);
+    virtual ErrorCode send(MeshPacket *p) override;
 
     /**
      * Return true if we think the board can go to sleep (i.e. our tx queue is empty, we are not sending or receiving)
      *
      * This method must be used before putting the CPU into deep or light sleep.
      */
-    virtual bool canSleep();
+    virtual bool canSleep() override;
 
     /**
      * Start waiting to receive a message
@@ -138,7 +138,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     virtual bool isActivelyReceiving() = 0;
 
     /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
-    virtual bool cancelSending(NodeNum from, PacketId id);
+    virtual bool cancelSending(NodeNum from, PacketId id) override;
 
   private:
     /** if we have something waiting to send, start a short random timer so we can come check for collision before actually doing
@@ -153,7 +153,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     static void timerCallback(void *p1, uint32_t p2);
 
-    virtual void onNotify(uint32_t notification);
+    virtual void onNotify(uint32_t notification) override;
 
     /** start an immediate transmit
      *  This method is virtual so subclasses can hook as needed, subclasses should not call directly

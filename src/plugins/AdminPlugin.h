@@ -17,7 +17,7 @@ class AdminPlugin : public ProtobufPlugin<AdminMessage>
 
     @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
-    virtual bool handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *p);
+    virtual bool handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *p) override;
 
   private:
     void handleSetOwner(const User &o);
