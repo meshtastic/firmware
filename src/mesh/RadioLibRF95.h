@@ -16,7 +16,7 @@ class RadioLibRF95: public SX1278 {
 
       \param mod Instance of Module that will be used to communicate with the %LoRa chip.
     */
-    RadioLibRF95(Module* mod);
+    explicit RadioLibRF95(Module* mod);
 
     // basic methods
 

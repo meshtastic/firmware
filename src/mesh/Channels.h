@@ -26,9 +26,12 @@ class Channels
     ChannelIndex activeChannelIndex = 0;
 
     /// the precomputed hashes for each of our channels, or -1 for invalid
-    int16_t hashes[MAX_NUM_CHANNELS];
+    int16_t hashes[MAX_NUM_CHANNELS] = {};
 
   public:
+
+    Channels() {}
+
     /// Well known channel names
     static const char *adminChannel, *gpioChannel, *serialChannel;
 

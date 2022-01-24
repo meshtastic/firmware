@@ -50,9 +50,9 @@ class CrossPlatformCryptoEngine : public CryptoEngine
     virtual void encrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes) override
     {
         if (key.length > 0) {
-            uint8_t stream_block[16];
+            //uint8_t stream_block[16];
             static uint8_t scratch[MAX_BLOCKSIZE];
-            size_t nc_off = 0;
+            //size_t nc_off = 0;
 
             // DEBUG_MSG("ESP32 encrypt!\n");
             initNonce(fromNode, packetNum);

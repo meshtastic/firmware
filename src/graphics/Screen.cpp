@@ -651,7 +651,6 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 
     static char distStr[20];
     strcpy(distStr, "? km"); // might not have location data
-    float headingRadian;
     NodeInfo *ourNode = nodeDB.getNode(nodeDB.getNodeNum());
     const char *fields[] = {username, distStr, signalStr, lastStr, NULL};
 
@@ -679,7 +678,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             // it.  currently we don't do this and instead draw north up only.
             float bearingToOther =
                 GeoCoord::bearing(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
-            headingRadian = bearingToOther - myHeading;
+            float headingRadian = bearingToOther - myHeading;
             drawNodeHeading(display, compassX, compassY, headingRadian);
         }
     }
@@ -943,20 +942,20 @@ int32_t Screen::runOnce()
 
 void Screen::drawDebugInfoTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    Screen *screen = reinterpret_cast<Screen *>(state->userData);
-    screen->debugInfo.drawFrame(display, state, x, y);
+    Screen *screen2 = reinterpret_cast<Screen *>(state->userData);
+    screen2->debugInfo.drawFrame(display, state, x, y);
 }
 
 void Screen::drawDebugInfoSettingsTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    Screen *screen = reinterpret_cast<Screen *>(state->userData);
-    screen->debugInfo.drawFrameSettings(display, state, x, y);
+    Screen *screen2 = reinterpret_cast<Screen *>(state->userData);
+    screen2->debugInfo.drawFrameSettings(display, state, x, y);
 }
 
 void Screen::drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    Screen *screen = reinterpret_cast<Screen *>(state->userData);
-    screen->debugInfo.drawFrameWiFi(display, state, x, y);
+    Screen *screen2 = reinterpret_cast<Screen *>(state->userData);
+    screen2->debugInfo.drawFrameWiFi(display, state, x, y);
 }
 
 /* show a message that the SSL cert is being built

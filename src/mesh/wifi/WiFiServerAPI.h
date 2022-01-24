@@ -13,7 +13,7 @@ class WiFiServerAPI : public StreamAPI
     WiFiClient client;
 
   public:
-    WiFiServerAPI(WiFiClient &_client);
+    explicit WiFiServerAPI(WiFiClient &_client);
 
     virtual ~WiFiServerAPI();
 

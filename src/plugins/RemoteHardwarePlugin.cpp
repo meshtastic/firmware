@@ -79,9 +79,9 @@ bool RemoteHardwarePlugin::handleReceivedProtobuf(const MeshPacket &req, Hardwar
         HardwareMessage r = HardwareMessage_init_default;
         r.typ = HardwareMessage_Type_READ_GPIOS_REPLY;
         r.gpio_value = res;
-        MeshPacket *p = allocDataProtobuf(r);
-        setReplyTo(p, req);
-        myReply = p;
+        MeshPacket *p2 = allocDataProtobuf(r);
+        setReplyTo(p2, req);
+        myReply = p2;
         break;
     }
 

@@ -179,7 +179,7 @@ uint32_t StoreForwardPlugin::historyQueueCreate(uint32_t msAgo, uint32_t to)
 
 void StoreForwardPlugin::historyAdd(const MeshPacket &mp)
 {
-    auto &p = mp.decoded;
+    const auto &p = mp.decoded;
 
     this->packetHistory[this->packetHistoryCurrent].time = millis();
     this->packetHistory[this->packetHistoryCurrent].to = mp.to;
@@ -247,13 +247,13 @@ ProcessMessage StoreForwardPlugin::handleReceived(const MeshPacket &mp)
 
         DEBUG_MSG("--- S&F Received something\n");
 
-        auto &p = mp.decoded;
-
         // The router node should not be sending messages as a client.
         if (getFrom(&mp) != nodeDB.getNodeNum()) {
 
             if (mp.decoded.portnum == PortNum_TEXT_MESSAGE_APP) {
                 DEBUG_MSG("Packet came from - PortNum_TEXT_MESSAGE_APP\n");
+
+                auto &p = mp.decoded;
 
                 if ((p.payload.bytes[0] == 'S') && (p.payload.bytes[1] == 'F') && (p.payload.bytes[2] == 0x00)) {
                     DEBUG_MSG("--- --- --- Request to send\n");
