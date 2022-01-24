@@ -121,7 +121,7 @@ void StoreForwardPlugin::historySend(uint32_t msAgo, uint32_t to)
     uint32_t queueSize = storeForwardPlugin->historyQueueCreate(msAgo, to);
 
     if (queueSize) {
-        snprintf(this->routerMessage, 80, "** S&F - Sending %d message(s)", queueSize);
+        snprintf(this->routerMessage, 80, "** S&F - Sending %u message(s)", queueSize);
         storeForwardPlugin->sendMessage(to, this->routerMessage);
 
         this->busy = true; // runOnce() will pickup the next steps once busy = true.

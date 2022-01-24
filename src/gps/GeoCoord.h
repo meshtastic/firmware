@@ -86,11 +86,11 @@ class GeoCoord {
         int32_t _longitude = 0;
         int32_t _altitude = 0;
 
-        DMS _dms;
-        UTM _utm;
-        MGRS _mgrs;
-        OSGR _osgr;
-        OLC _olc;
+        DMS _dms = {};
+        UTM _utm = {};
+        MGRS _mgrs = {};
+        OSGR _osgr = {};
+        OLC _olc = {};
 
         bool _dirty = true;
 

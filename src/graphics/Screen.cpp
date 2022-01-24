@@ -449,10 +449,10 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
             if (gpsFormat == GpsCoordinateFormat_GpsFormatDec) { // Decimal Degrees
                 sprintf(coordinateLine, "%f %f", geoCoord.getLatitude() * 1e-7, geoCoord.getLongitude() * 1e-7);
             } else if (gpsFormat == GpsCoordinateFormat_GpsFormatUTM) { // Universal Transverse Mercator
-                sprintf(coordinateLine, "%2i%1c %06i %07i", geoCoord.getUTMZone(), geoCoord.getUTMBand(),
+                sprintf(coordinateLine, "%2i%1c %06u %07u", geoCoord.getUTMZone(), geoCoord.getUTMBand(),
                         geoCoord.getUTMEasting(), geoCoord.getUTMNorthing());
             } else if (gpsFormat == GpsCoordinateFormat_GpsFormatMGRS) { // Military Grid Reference System
-                sprintf(coordinateLine, "%2i%1c %1c%1c %05i %05i", geoCoord.getMGRSZone(), geoCoord.getMGRSBand(),
+                sprintf(coordinateLine, "%2i%1c %1c%1c %05u %05u", geoCoord.getMGRSZone(), geoCoord.getMGRSBand(),
                         geoCoord.getMGRSEast100k(), geoCoord.getMGRSNorth100k(), geoCoord.getMGRSEasting(),
                         geoCoord.getMGRSNorthing());
             } else if (gpsFormat == GpsCoordinateFormat_GpsFormatOLC) { // Open Location Code
@@ -461,7 +461,7 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
                 if (geoCoord.getOSGRE100k() == 'I' || geoCoord.getOSGRN100k() == 'I') // OSGR is only valid around the UK region
                     sprintf(coordinateLine, "%s", "Out of Boundary");
                 else
-                    sprintf(coordinateLine, "%1c%1c %05i %05i", geoCoord.getOSGRE100k(), geoCoord.getOSGRN100k(),
+                    sprintf(coordinateLine, "%1c%1c %05u %05u", geoCoord.getOSGRE100k(), geoCoord.getOSGRN100k(),
                             geoCoord.getOSGREasting(), geoCoord.getOSGRNorthing());
             }
 
@@ -479,9 +479,9 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
         } else {
             char latLine[22];
             char lonLine[22];
-            sprintf(latLine, "%2i° %2i' %2.4f\" %1c", geoCoord.getDMSLatDeg(), geoCoord.getDMSLatMin(), geoCoord.getDMSLatSec(),
+            sprintf(latLine, "%2i° %2i' %2u\" %1c", geoCoord.getDMSLatDeg(), geoCoord.getDMSLatMin(), geoCoord.getDMSLatSec(),
                     geoCoord.getDMSLatCP());
-            sprintf(lonLine, "%3i° %2i' %2.4f\" %1c", geoCoord.getDMSLonDeg(), geoCoord.getDMSLonMin(), geoCoord.getDMSLonSec(),
+            sprintf(lonLine, "%3i° %2i' %2u\" %1c", geoCoord.getDMSLonDeg(), geoCoord.getDMSLonMin(), geoCoord.getDMSLonSec(),
                     geoCoord.getDMSLonCP());
             display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(latLine))) / 2, y - FONT_HEIGHT_SMALL * 1, latLine);
             display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(lonLine))) / 2, y, lonLine);
@@ -1050,7 +1050,7 @@ void Screen::handleStartBluetoothPinScreen(uint32_t pin)
 
     static FrameCallback btFrames[] = {drawFrameBluetooth};
 
-    snprintf(btPIN, sizeof(btPIN), "%06lu", pin);
+    snprintf(btPIN, sizeof(btPIN), "%06u", pin);
 
     ui.disableAllIndicators();
     ui.setFrames(btFrames, 1);

@@ -149,7 +149,10 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
 AnalogBatteryLevel analogLevel;
 
-Power::Power() : OSThread("Power") {}
+Power::Power() : OSThread("Power") {
+    statusHandler = {};
+    low_voltage_counter = 0;
+}
 
 bool Power::analogInit()
 {

@@ -25,7 +25,7 @@ extern SerialPlugin *serialPlugin;
  */
 class SerialPluginRadio : public SinglePortPlugin
 {
-    uint32_t lastRxID;
+    uint32_t lastRxID = 0;
 
   public:
     /*

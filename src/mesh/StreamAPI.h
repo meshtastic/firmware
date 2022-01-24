@@ -35,7 +35,7 @@ class StreamAPI : public PhoneAPI, protected concurrency::OSThread
      */
     Stream *stream;
 
-    uint8_t rxBuf[MAX_STREAM_BUF_SIZE];
+    uint8_t rxBuf[MAX_STREAM_BUF_SIZE] = {0};
     size_t rxPtr = 0;
 
     /// time of last rx, used, to slow down our polling if we haven't heard from anyone
@@ -81,5 +81,5 @@ class StreamAPI : public PhoneAPI, protected concurrency::OSThread
     bool canWrite = true;
 
     /// Subclasses can use this scratch buffer if they wish
-    uint8_t txBuf[MAX_STREAM_BUF_SIZE];
+    uint8_t txBuf[MAX_STREAM_BUF_SIZE] = {0};
 };
