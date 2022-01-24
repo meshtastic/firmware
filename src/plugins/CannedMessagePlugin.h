@@ -67,7 +67,7 @@ class CannedMessagePlugin :
     virtual void drawFrame(
         OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
     virtual AdminMessageHandleResult handleAdminMessageForPlugin(
-        const MeshPacket &mp, AdminMessage *request, AdminMessage *response);
+        const MeshPacket &mp, AdminMessage *request, AdminMessage *response) override;
 
     void loadProtoForPlugin();
     bool saveProtoForPlugin();
