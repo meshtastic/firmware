@@ -75,7 +75,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
      *
      * FIXME - use a lipo lookup table, the current % full is super wrong
      */
-    virtual int getBattPercentage()
+    virtual int getBattPercentage() override
     {
         float v = getBattVoltage();
 
@@ -94,7 +94,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /**
      * The raw voltage of the batteryin millivolts or NAN if unknown
      */
-    virtual float getBattVoltage()
+    virtual float getBattVoltage() override
     {
 
 #ifndef ADC_MULTIPLIER
@@ -127,15 +127,15 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /**
      * return true if there is a battery installed in this unit
      */
-    virtual bool isBatteryConnect() { return getBattPercentage() != -1; }
+    virtual bool isBatteryConnect() override { return getBattPercentage() != -1; }
 
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
     /// in power
-    virtual bool isVBUSPlug() { return getBattVoltage() > chargingVolt; }
+    virtual bool isVBUSPlug() override { return getBattVoltage() > chargingVolt; }
 
     /// Assume charging if we have a battery and external power is connected.
     /// we can't be smart enough to say 'full'?
-    virtual bool isChargeing() { return isBatteryConnect() && isVBUSPlug(); }
+    virtual bool isChargeing() override { return isBatteryConnect() && isVBUSPlug(); }
 
   private:
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
@@ -149,7 +149,10 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
 AnalogBatteryLevel analogLevel;
 
-Power::Power() : OSThread("Power") {}
+Power::Power() : OSThread("Power") {
+    statusHandler = {};
+    low_voltage_counter = 0;
+}
 
 bool Power::analogInit()
 {
@@ -232,18 +235,18 @@ void Power::readPowerStatus()
         }
 
         // Notify any status instances that are observing us
-        const PowerStatus powerStatus =
+        const PowerStatus powerStatus2 =
             PowerStatus(hasBattery ? OptTrue : OptFalse, batteryLevel->isVBUSPlug() ? OptTrue : OptFalse,
                         batteryLevel->isChargeing() ? OptTrue : OptFalse, batteryVoltageMv, batteryChargePercent);
-        DEBUG_MSG("Battery: usbPower=%d, isCharging=%d, batMv=%d, batPct=%d\n", powerStatus.getHasUSB(),
-                  powerStatus.getIsCharging(), powerStatus.getBatteryVoltageMv(), powerStatus.getBatteryChargePercent());
-        newStatus.notifyObservers(&powerStatus);
+        DEBUG_MSG("Battery: usbPower=%d, isCharging=%d, batMv=%d, batPct=%d\n", powerStatus2.getHasUSB(),
+                  powerStatus2.getIsCharging(), powerStatus2.getBatteryVoltageMv(), powerStatus2.getBatteryChargePercent());
+        newStatus.notifyObservers(&powerStatus2);
 
 
         // If we have a battery at all and it is less than 10% full, force deep sleep if we have more than 3 low readings in a row
         // Supect fluctuating voltage on the RAK4631 to force it to deep sleep even if battery is at 85% after only a few days
         #ifdef NRF52_SERIES
-        if (powerStatus.getHasBattery() && !powerStatus.getHasUSB()){
+        if (powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()){
             if (batteryLevel->getBattVoltage() < MIN_BAT_MILLIVOLTS){
                 low_voltage_counter++;
                 if (low_voltage_counter>3)
@@ -254,13 +257,13 @@ void Power::readPowerStatus()
         }
         #else
         // If we have a battery at all and it is less than 10% full, force deep sleep
-        if (powerStatus.getHasBattery() && !powerStatus.getHasUSB() && batteryLevel->getBattVoltage() < MIN_BAT_MILLIVOLTS)
+        if (powerStatus2.getHasBattery() && !powerStatus2.getHasUSB() && batteryLevel->getBattVoltage() < MIN_BAT_MILLIVOLTS)
             powerFSM.trigger(EVENT_LOW_BATTERY);
         #endif
     } else {
         // No power sensing on this board - tell everyone else we have no idea what is happening
-        const PowerStatus powerStatus = PowerStatus(OptUnknown, OptUnknown, OptUnknown, -1, -1);
-        newStatus.notifyObservers(&powerStatus);
+        const PowerStatus powerStatus3 = PowerStatus(OptUnknown, OptUnknown, OptUnknown, -1, -1);
+        newStatus.notifyObservers(&powerStatus3);
     }
 }
 

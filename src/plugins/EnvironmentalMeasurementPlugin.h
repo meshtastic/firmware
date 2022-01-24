@@ -18,15 +18,15 @@ class EnvironmentalMeasurementPlugin : private concurrency::OSThread, public Pro
     {
         lastMeasurementPacket = nullptr;
     }
-    virtual bool wantUIFrame();
-    virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+    virtual bool wantUIFrame() override;
+    virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
 
   protected:
     /** Called to handle a particular incoming message
     @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
-    virtual bool handleReceivedProtobuf(const MeshPacket &mp, EnvironmentalMeasurement *p);
-    virtual int32_t runOnce();
+    virtual bool handleReceivedProtobuf(const MeshPacket &mp, EnvironmentalMeasurement *p) override;
+    virtual int32_t runOnce() override;
     /**
      * Send our EnvironmentalMeasurement into the mesh
      */
@@ -35,9 +35,9 @@ class EnvironmentalMeasurementPlugin : private concurrency::OSThread, public Pro
   private:
     float CelsiusToFarenheit(float c);
     bool firstTime = 1;
-    DHT *dht;
-    OneWire *oneWire;
-    DS18B20 *ds18b20;
+    DHT *dht = NULL;
+    OneWire *oneWire = NULL;
+    DS18B20 *ds18b20 = NULL;
     Adafruit_BME280 bme;
     const MeshPacket *lastMeasurementPacket;
     uint32_t sensor_read_error_count = 0;

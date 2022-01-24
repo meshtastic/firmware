@@ -87,8 +87,8 @@ int32_t RangeTestPlugin::runOnce()
         DEBUG_MSG("Range Test Plugin - Disabled\n");
     }
 
-    return (INT32_MAX);
 #endif
+    return (INT32_MAX);
 }
 
 MeshPacket *RangeTestPluginRadio::allocReply()

@@ -7,9 +7,8 @@
 namespace concurrency
 {
 
-BinarySemaphoreFreeRTOS::BinarySemaphoreFreeRTOS()
+BinarySemaphoreFreeRTOS::BinarySemaphoreFreeRTOS() : semaphore(xSemaphoreCreateBinary())
 {
-    semaphore = xSemaphoreCreateBinary();
     assert(semaphore);
 }
 

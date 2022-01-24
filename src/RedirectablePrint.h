@@ -22,7 +22,7 @@ class RedirectablePrint : public Print
     volatile bool inDebugPrint = false;
 
   public:
-    RedirectablePrint(Print *_dest) : dest(_dest) {}
+    explicit RedirectablePrint(Print *_dest) : dest(_dest) {}
 
     /**
      * Set a new destination

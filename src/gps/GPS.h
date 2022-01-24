@@ -145,7 +145,7 @@ class GPS : private concurrency::OSThread
      */
     void publishUpdate();
 
-    virtual int32_t runOnce();
+    virtual int32_t runOnce() override;
 };
 
 // Creates an instance of the GPS class. 

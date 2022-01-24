@@ -8,7 +8,7 @@
 template <class T> class PointerQueue : public TypedQueue<T *>
 {
   public:
-    PointerQueue(int maxElements) : TypedQueue<T *>(maxElements) {}
+    explicit PointerQueue(int maxElements) : TypedQueue<T *>(maxElements) {}
 
     // returns a ptr or null if the queue was empty
     T *dequeuePtr(TickType_t maxWait = portMAX_DELAY)

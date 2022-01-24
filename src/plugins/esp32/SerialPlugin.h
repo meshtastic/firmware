@@ -14,7 +14,7 @@ class SerialPlugin : private concurrency::OSThread
     SerialPlugin();
 
   protected:
-    virtual int32_t runOnce();
+    virtual int32_t runOnce() override;
 };
 
 extern SerialPlugin *serialPlugin;
@@ -25,7 +25,7 @@ extern SerialPlugin *serialPlugin;
  */
 class SerialPluginRadio : public SinglePortPlugin
 {
-    uint32_t lastRxID;
+    uint32_t lastRxID = 0;
 
   public:
     /*
@@ -41,13 +41,13 @@ class SerialPluginRadio : public SinglePortPlugin
     void sendPayload(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
 
   protected:
-    virtual MeshPacket *allocReply();
+    virtual MeshPacket *allocReply() override;
 
     /** Called to handle a particular incoming message
 
     @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
-    virtual ProcessMessage handleReceived(const MeshPacket &mp);
+    virtual ProcessMessage handleReceived(const MeshPacket &mp) override;
 };
 
 extern SerialPluginRadio *serialPluginRadio;

@@ -20,9 +20,9 @@ class CryptoEngine
 {
   protected:
     /** Our per packet nonce */
-    uint8_t nonce[16];
+    uint8_t nonce[16] = {0};
 
-    CryptoKey key;
+    CryptoKey key = {};
 
   public:
     virtual ~CryptoEngine() {}
