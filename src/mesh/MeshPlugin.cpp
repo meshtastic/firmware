@@ -94,8 +94,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
             wantsPacket = false;
         }
 
-        // TODO: not sure why I have to comment this out
-        //assert(!pi.myReply); // If it is !null it means we have a bug, because it should have been sent the previous time
+        assert(!pi.myReply); // If it is !null it means we have a bug, because it should have been sent the previous time
 
         if (wantsPacket) {
             DEBUG_MSG("Plugin '%s' wantsPacket=%d\n", pi.name, wantsPacket);
