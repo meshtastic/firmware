@@ -17,6 +17,4 @@ else
 fi
 
 #echo "BOARDS:${BOARDS}"
-pio check --flags "-DAPP_VERSION=${APP_VERSION} --suppressions-list=suppressions.txt" $BOARDS --skip-packages --pattern="src/"
-#return_code=$?
-# TODO: not sure why return_code is 0
+pio check --flags "-DAPP_VERSION=${APP_VERSION} --suppressions-list=suppressions.txt" $BOARDS --skip-packages --pattern="src/" --fail-on-defect=low --fail-on-defect=medium --fail-on-defect=high
