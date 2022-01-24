@@ -63,7 +63,6 @@ static void lsIdle()
     // DEBUG_MSG("lsIdle begin ls_secs=%u\n", getPref_ls_secs());
 
 #ifndef NO_ESP32
-    esp_sleep_source_t wakeCause2 = ESP_SLEEP_WAKEUP_UNDEFINED;
 
     // Do we have more sleeping to do?
     if (secsSlept < getPref_ls_secs()) {
@@ -73,7 +72,7 @@ static void lsIdle()
         // If some other service would stall sleep, don't let sleep happen yet
         if (doPreflightSleep()) {
             setLed(false); // Never leave led on while in light sleep
-            wakeCause2 = doLightSleep(sleepTime * 1000LL);
+            esp_sleep_source_t wakeCause2 = doLightSleep(sleepTime * 1000LL);
 
             switch (wakeCause2) {
             case ESP_SLEEP_WAKEUP_TIMER:

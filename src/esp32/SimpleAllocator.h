@@ -37,6 +37,6 @@ void *operator new(size_t size, SimpleAllocator &p);
  */
 class AllocatorScope {
 public:
-    AllocatorScope(SimpleAllocator &a);
+    explicit AllocatorScope(SimpleAllocator &a);
     ~AllocatorScope();
 };
