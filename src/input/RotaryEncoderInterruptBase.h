@@ -34,7 +34,7 @@ class RotaryEncoderInterruptBase :
     void intBHandler();
 
   protected:
-    virtual int32_t runOnce();
+    virtual int32_t runOnce() override;
     RotaryEncoderInterruptBaseStateType intHandler(
         bool actualPinRaising,
         int otherPinLevel,

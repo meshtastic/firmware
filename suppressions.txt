@@ -4,6 +4,10 @@ assertWithSideEffect
 // TODO: need to come back to these
 duplInheritedMember
 
+// no real downside/harm in these
+unusedFunction
+unusedPrivateFunction
+
 // most likely due to a cppcheck configuration issue (like missing an include)
 syntaxError
 

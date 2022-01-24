@@ -18,15 +18,15 @@ class EnvironmentalMeasurementPlugin : private concurrency::OSThread, public Pro
     {
         lastMeasurementPacket = nullptr;
     }
-    virtual bool wantUIFrame();
-    virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+    virtual bool wantUIFrame() override;
+    virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
 
   protected:
     /** Called to handle a particular incoming message
     @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
-    virtual bool handleReceivedProtobuf(const MeshPacket &mp, EnvironmentalMeasurement *p);
-    virtual int32_t runOnce();
+    virtual bool handleReceivedProtobuf(const MeshPacket &mp, EnvironmentalMeasurement *p) override;
+    virtual int32_t runOnce() override;
     /**
      * Send our EnvironmentalMeasurement into the mesh
      */

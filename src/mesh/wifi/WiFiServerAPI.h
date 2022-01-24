@@ -18,17 +18,17 @@ class WiFiServerAPI : public StreamAPI
     virtual ~WiFiServerAPI();
 
     /// override close to also shutdown the TCP link
-    virtual void close();
+    virtual void close() override;
 
   protected:
     /// We override this method to prevent publishing EVENT_SERIAL_CONNECTED/DISCONNECTED for wifi links (we want the board to
     /// stay in the POWERED state to prevent disabling wifi)
-    virtual void onConnectionChanged(bool connected) {}
+    virtual void onConnectionChanged(bool connected) override {}
 
-    virtual int32_t runOnce(); // Check for dropped client connections
+    virtual int32_t runOnce() override; // Check for dropped client connections
 
     /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected();
+    virtual bool checkIsConnected() override;
 };
 
 /**
@@ -52,7 +52,7 @@ class WiFiServerPort : public WiFiServer, private concurrency::OSThread
     static void debugOut(char c);
     
   protected:
-    int32_t runOnce();
+    int32_t runOnce() override;
 };
 
 void initApiServer();

@@ -58,7 +58,7 @@ template <class T> class MemoryDynamic : public Allocator<T>
 {
   public:
     /// Return a buffer for use by others
-    virtual void release(T *p)
+    virtual void release(T *p) override
     {
         assert(p);
         free(p);
@@ -66,7 +66,7 @@ template <class T> class MemoryDynamic : public Allocator<T>
 
   protected:
     // Alloc some storage
-    virtual T *alloc(TickType_t maxWait)
+    virtual T *alloc(TickType_t maxWait) override
     {
         T *p = (T *)malloc(sizeof(T));
         assert(p);
@@ -87,7 +87,7 @@ template <class T> class MemoryPool : public Allocator<T>
     size_t maxElements;
 
   public:
-    MemoryPool(size_t _maxElements) : dead(_maxElements), maxElements(_maxElements)
+    explicit MemoryPool(size_t _maxElements) : dead(_maxElements), maxElements(_maxElements)
     {
         buf = new T[maxElements];
 
