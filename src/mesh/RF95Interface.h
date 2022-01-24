@@ -9,7 +9,7 @@
  */
 class RF95Interface : public RadioLibInterface
 {
-    RadioLibRF95 *lora; // Either a RFM95 or RFM96 depending on what was stuffed on this board
+    RadioLibRF95 *lora = NULL; // Either a RFM95 or RFM96 depending on what was stuffed on this board
 
   public:
     RF95Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, SPIClass &spi);

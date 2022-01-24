@@ -1,0 +1,12 @@
+// cppcheck suppressions
+assertWithSideEffect
+
+// TODO: need to come back to these
+duplInheritedMember
+
+// most likely due to a cppcheck configuration issue (like missing an include)
+syntaxError
+
+// ignore stuff that is not ours
+*:.pio/*
+*:*/libdeps/*

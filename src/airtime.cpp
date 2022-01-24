@@ -2,7 +2,7 @@
 #include "NodeDB.h"
 #include "configuration.h"
 
-AirTime *airTime;
+AirTime *airTime = NULL;
 
 // Don't read out of this directly. Use the helper functions.
 
@@ -117,7 +117,9 @@ float AirTime::utilizationTXPercent()
     return (float(sum) / float(MS_IN_HOUR)) * 100;
 }
 
-AirTime::AirTime() : concurrency::OSThread("AirTime") {}
+AirTime::AirTime() : concurrency::OSThread("AirTime") {
+    airtimes = {};
+}
 
 int32_t AirTime::runOnce()
 {

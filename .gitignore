@@ -26,3 +26,5 @@ __pycache__
 *.swp
 *.swo
 *~
+
+venv/

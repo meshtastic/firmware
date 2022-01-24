@@ -25,7 +25,7 @@ extern RangeTestPlugin *rangeTestPlugin;
  */
 class RangeTestPluginRadio : public SinglePortPlugin
 {
-    uint32_t lastRxID;
+    uint32_t lastRxID = 0;
 
   public:
     RangeTestPluginRadio() : SinglePortPlugin("RangeTestPluginRadio", PortNum_TEXT_MESSAGE_APP) {}

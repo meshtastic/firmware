@@ -48,10 +48,10 @@ class RotaryEncoderInterruptBase :
     volatile RotaryEncoderInterruptBaseActionType action = ROTARY_ACTION_NONE;
 
   private:
-    uint8_t _pinA;
-    uint8_t _pinB;
-    char _eventCw;
-    char _eventCcw;
-    char _eventPressed;
+    uint8_t _pinA = 0;
+    uint8_t _pinB = 0;
+    char _eventCw = InputEventChar_KEY_NONE;
+    char _eventCcw = InputEventChar_KEY_NONE;
+    char _eventPressed = InputEventChar_KEY_NONE;
     const char *_originName;
 };

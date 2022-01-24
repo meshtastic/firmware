@@ -45,7 +45,7 @@ class PhoneAPI
     /// We temporarily keep the nodeInfo here between the call to available and getFromRadio
     const NodeInfo *nodeInfoForPhone = NULL;
 
-    ToRadio toRadioScratch; // this is a static scratch object, any data must be copied elsewhere before returning
+    ToRadio toRadioScratch = {0}; // this is a static scratch object, any data must be copied elsewhere before returning
 
     /// Use to ensure that clients don't get confused about old messages from the radio
     uint32_t config_nonce = 0;
@@ -86,7 +86,7 @@ class PhoneAPI
 
   protected:
     /// Our fromradio packet while it is being assembled
-    FromRadio fromRadioScratch;
+    FromRadio fromRadioScratch = {};
 
     /** the last msec we heard from the client on the other side of this link */
     uint32_t lastContactMsec = 0;
