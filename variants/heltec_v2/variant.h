@@ -24,20 +24,7 @@
 #define LORA_DIO1 35 // Not really used
 #define LORA_DIO2 34 // Not really used
 
-
-#ifdef HELTEC_V2_0
-
-// ratio of voltage divider = 3.20 (R1=100k, R2=220k)
+// ratio of voltage divider = 3.20 (R12=100k, R10=220k)
 #define ADC_MULTIPLIER 3.2
 #define BATTERY_PIN 13 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 
-#endif
-
-#ifdef HELTEC_V2_1
-
-// multiplier can differentiate between 3.5 to 3.75
-#define ADC_MULTIPLIER 3.6 // arbitrary value that will be ok for most devices
-#define BATTERY_PIN 37 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Plugin.
-
-#endif
