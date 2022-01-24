@@ -18,7 +18,7 @@ class MeshPacketQueue
     bool replaceLowerPriorityPacket(MeshPacket *mp);
 
   public:
-    MeshPacketQueue(size_t _maxLen);
+    explicit MeshPacketQueue(size_t _maxLen);
 
     /** enqueue a packet, return false if full */
     bool enqueue(MeshPacket *p);

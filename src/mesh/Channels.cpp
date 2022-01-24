@@ -102,7 +102,7 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
 CryptoKey Channels::getKey(ChannelIndex chIndex)
 {
     Channel &ch = getByIndex(chIndex);
-    ChannelSettings &channelSettings = ch.settings;
+    const ChannelSettings &channelSettings = ch.settings;
     assert(ch.has_settings);
 
     CryptoKey k;
@@ -206,7 +206,7 @@ void Channels::setChannel(const Channel &c)
 const char *Channels::getName(size_t chIndex)
 {
     // Convert the short "" representation for Default into a usable string
-    ChannelSettings &channelSettings = getByIndex(chIndex).settings;
+    const ChannelSettings &channelSettings = getByIndex(chIndex).settings;
     const char *channelName = channelSettings.name;
     if (!*channelName) { // emptystring
         // Per mesh.proto spec, if bandwidth is specified we must ignore modemConfig enum, we assume that in that case

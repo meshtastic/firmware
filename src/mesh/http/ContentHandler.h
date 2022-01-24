@@ -36,7 +36,7 @@ class HttpAPI : public PhoneAPI
   protected:
   
     /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() { return true; } // FIXME, be smarter about this
+    virtual bool checkIsConnected() override { return true; } // FIXME, be smarter about this
 };
 
 

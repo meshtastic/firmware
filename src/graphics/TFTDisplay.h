@@ -21,15 +21,15 @@ class TFTDisplay : public OLEDDisplay
     TFTDisplay(uint8_t address, int sda, int scl);
 
     // Write the buffer to the display memory
-    virtual void display(void);
+    virtual void display(void) override;
 
   protected:
     // the header size of the buffer used, e.g. for the SPI command header
-    virtual int getBufferOffset(void) { return 0; }
+    virtual int getBufferOffset(void) override { return 0; }
 
     // Send a command to the display (low level function)
-    virtual void sendCommand(uint8_t com);
+    virtual void sendCommand(uint8_t com) override;
 
     // Connect to the display
-    virtual bool connect();
+    virtual bool connect() override;
 };

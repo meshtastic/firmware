@@ -247,7 +247,7 @@ static int mem_test(uint32_t *_start, size_t len, bool doRead = true, bool doWri
 {
     volatile uint32_t *addr;
     volatile uint32_t *start = (volatile uint32_t *)_start;
-    volatile uint32_t *end = start + len / sizeof(uint32_t);
+    const volatile uint32_t *end = start + len / sizeof(uint32_t);
     uint32_t pattern = 0;
     uint32_t val;
     uint32_t readback;

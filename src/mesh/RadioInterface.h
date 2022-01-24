@@ -205,7 +205,7 @@ class RadioInterface
 class SimRadio : public RadioInterface
 {
   public:
-    virtual ErrorCode send(MeshPacket *p);
+    virtual ErrorCode send(MeshPacket *p) override;
 };
 
 /// Debug printing for packets

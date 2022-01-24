@@ -14,9 +14,9 @@
  */
 class SimpleAllocator
 {
-    uint8_t bytes[POOL_SIZE];
+    uint8_t bytes[POOL_SIZE] = {};
 
-    uint32_t nextFree;
+    uint32_t nextFree = 0;
 
 public:
     SimpleAllocator();
@@ -37,6 +37,6 @@ void *operator new(size_t size, SimpleAllocator &p);
  */
 class AllocatorScope {
 public:
-    AllocatorScope(SimpleAllocator &a);
+    explicit AllocatorScope(SimpleAllocator &a);
     ~AllocatorScope();
 };

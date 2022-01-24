@@ -156,13 +156,12 @@ ProcessMessage ExternalNotificationPlugin::handleReceived(const MeshPacket &mp)
 
     if (radioConfig.preferences.ext_notification_plugin_enabled) {
 
-        auto &p = mp.decoded;
-
         if (getFrom(&mp) != nodeDB.getNodeNum()) {
 
             // TODO: This may be a problem if messages are sent in unicide, but I'm not sure if it will.
             //   Need to know if and how this could be a problem.
             if (radioConfig.preferences.ext_notification_plugin_alert_bell) {
+                auto &p = mp.decoded;
                 DEBUG_MSG("externalNotificationPlugin - Notification Bell\n");
                 for (int i = 0; i < p.payload.size; i++) {
                     if (p.payload.bytes[i] == ASCII_BELL) {

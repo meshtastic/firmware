@@ -17,7 +17,7 @@ class NRF52CryptoEngine : public CryptoEngine
      *
      * @param bytes is updated in place
      */
-    virtual void encrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes)
+    virtual void encrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes) override
     {
         // DEBUG_MSG("NRF52 encrypt!\n");
 
@@ -31,7 +31,7 @@ class NRF52CryptoEngine : public CryptoEngine
         }
     }
 
-    virtual void decrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes)
+    virtual void decrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes) override
     {
         // DEBUG_MSG("NRF52 decrypt!\n");
 

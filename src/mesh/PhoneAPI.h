@@ -45,7 +45,7 @@ class PhoneAPI
     /// We temporarily keep the nodeInfo here between the call to available and getFromRadio
     const NodeInfo *nodeInfoForPhone = NULL;
 
-    ToRadio toRadioScratch; // this is a static scratch object, any data must be copied elsewhere before returning
+    ToRadio toRadioScratch = {0}; // this is a static scratch object, any data must be copied elsewhere before returning
 
     /// Use to ensure that clients don't get confused about old messages from the radio
     uint32_t config_nonce = 0;
@@ -58,7 +58,7 @@ class PhoneAPI
 
     // Call this when the client drops the connection, resets the state to STATE_SEND_NOTHING
     // Unregisters our observer.  A closed connection **can** be reopened by calling init again.
-    virtual void close();
+    void close();
 
     /**
      * Handle a ToRadio protobuf
@@ -86,7 +86,7 @@ class PhoneAPI
 
   protected:
     /// Our fromradio packet while it is being assembled
-    FromRadio fromRadioScratch;
+    FromRadio fromRadioScratch = {};
 
     /** the last msec we heard from the client on the other side of this link */
     uint32_t lastContactMsec = 0;
@@ -123,5 +123,5 @@ class PhoneAPI
     bool handleToRadioPacket(MeshPacket &p);
 
     /// If the mesh service tells us fromNum has changed, tell the phone
-    virtual int onNotify(uint32_t newValue);
+    virtual int onNotify(uint32_t newValue) override;
 };

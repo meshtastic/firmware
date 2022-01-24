@@ -22,22 +22,22 @@ class UBloxGPS : public GPS
      *
      * @return true for success
      */
-    bool factoryReset();
+    bool factoryReset() override;
 
   protected:
     /**
      * Returns true if we succeeded
      */
-    virtual bool setupGPS();
+    virtual bool setupGPS() override;
 
     /** Subclasses should look for serial rx characters here and feed it to their GPS parser
      *
      * Return true if we received a valid message from the GPS
      */
-    virtual bool whileIdle();
+    virtual bool whileIdle() override;
 
     /** Idle processing while GPS is looking for lock */
-    virtual void whileActive();
+    virtual void whileActive() override;
 
     /**
      * Perform any processing that should be done only while the GPS is awake and looking for a fix.
@@ -45,7 +45,7 @@ class UBloxGPS : public GPS
      *
      * @return true if we've acquired a time
      */
-    virtual bool lookForTime();
+    virtual bool lookForTime() override;
 
     /**
      * Perform any processing that should be done only while the GPS is awake and looking for a fix.
@@ -53,12 +53,12 @@ class UBloxGPS : public GPS
      *
      * @return true if we've acquired a new location
      */
-    virtual bool lookForLocation();
-    virtual bool hasLock();
+    virtual bool lookForLocation() override;
+    virtual bool hasLock() override;
 
     /// If possible force the GPS into sleep/low power mode
-    virtual void sleep();
-    virtual void wake();
+    virtual void sleep() override;
+    virtual void wake() override;
 
   private:
     /// Attempt to connect to our GPS, returns false if no gps is present

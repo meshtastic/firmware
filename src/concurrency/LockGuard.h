@@ -10,7 +10,7 @@ namespace concurrency {
 class LockGuard
 {
   public:
-    LockGuard(Lock *lock);
+    explicit LockGuard(Lock *lock);
     ~LockGuard();
 
     LockGuard(const LockGuard &) = delete;

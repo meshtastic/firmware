@@ -171,7 +171,7 @@ void GeoCoord::latLongToMGRS(const double lat, const double lon, MGRS &mgrs) {
  * Based on: https://www.movable-type.co.uk/scripts/latlong-os-gridref.html
  */
 void GeoCoord::latLongToOSGR(const double lat, const double lon, OSGR &osgr) {
-    char letter[] = "ABCDEFGHJKLMNOPQRSTUVWXYZ"; // No 'I' in OSGR
+    const char letter[] = "ABCDEFGHJKLMNOPQRSTUVWXYZ"; // No 'I' in OSGR
     double a = 6377563.396; // Airy 1830 semi-major axis
     double b = 6356256.909; // Airy 1830 semi-minor axis
     double f0 = 0.9996012717; // National Grid point scale factor on the central meridian
@@ -419,12 +419,12 @@ float GeoCoord::rangeRadiansToMeters(double range_radians) {
 }
 
 // Find distance from point to passed in point
-int32_t GeoCoord::distanceTo(GeoCoord pointB) {
+int32_t GeoCoord::distanceTo(const GeoCoord& pointB) {
     return latLongToMeter(this->getLatitude() * 1e-7, this->getLongitude() * 1e-7, pointB.getLatitude() * 1e-7, pointB.getLongitude() * 1e-7);
 }
 
 // Find bearing from point to passed in point
-int32_t GeoCoord::bearingTo(GeoCoord pointB) {
+int32_t GeoCoord::bearingTo(const GeoCoord& pointB) {
     return bearing(this->getLatitude() * 1e-7, this->getLongitude() * 1e-7, pointB.getLatitude() * 1e-7, pointB.getLongitude() * 1e-7);
 }
 

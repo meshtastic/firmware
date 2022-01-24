@@ -21,7 +21,7 @@ class SinglePortPlugin : public MeshPlugin
     /**
      * @return true if you want to receive the specified portnum
      */
-    virtual bool wantPacket(const MeshPacket *p) { return p->decoded.portnum == ourPortNum; }
+    virtual bool wantPacket(const MeshPacket *p) override { return p->decoded.portnum == ourPortNum; }
 
     /**
      * Return a mesh packet which has been preinited as a data packet with a particular port number.

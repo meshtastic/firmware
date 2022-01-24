@@ -42,7 +42,7 @@ class GPSStatus : public Status
     }
 
     // preferred method
-    GPSStatus(bool hasLock, bool isConnected, Position pos)
+    GPSStatus(bool hasLock, bool isConnected, const Position& pos)
         : Status()
     {
         this->hasLock = hasLock;

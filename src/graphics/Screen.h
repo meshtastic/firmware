@@ -95,7 +95,7 @@ class Screen : public concurrency::OSThread
         CallbackObserver<Screen, const UIFrameEvent *>(this, &Screen::handleUIFrameEvent);
 
   public:
-    Screen(uint8_t address, int sda = -1, int scl = -1);
+    explicit Screen(uint8_t address, int sda = -1, int scl = -1);
 
     Screen(const Screen &) = delete;
     Screen &operator=(const Screen &) = delete;

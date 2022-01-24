@@ -18,5 +18,5 @@ class ReplyPlugin : public SinglePortPlugin
     /** For reply plugin we do all of our processing in the (normally optional)
      * want_replies handling
     */
-    virtual MeshPacket *allocReply();
+    virtual MeshPacket *allocReply() override;
 };

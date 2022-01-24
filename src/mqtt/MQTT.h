@@ -40,7 +40,7 @@ class MQTT : private concurrency::OSThread
     void reconnect();
     
   protected:
-    virtual int32_t runOnce();
+    virtual int32_t runOnce() override;
 
   private:
     /** return true if we have a channel that wants uplink/downlink
