@@ -21,7 +21,7 @@ enum cannedMessagePluginRunState
 #define CANNED_MESSAGE_PLUGIN_MESSAGES_SIZE 1002
 
 class CannedMessagePlugin :
-    public ProtobufPlugin<AdminMessage>,
+    public SinglePortPlugin,
     public Observable<const UIFrameEvent *>,
     private concurrency::OSThread
 {
@@ -38,11 +38,13 @@ class CannedMessagePlugin :
     void eventDown();
     void eventSelect();
 
-    void handleGetCannedMessagePluginPart1(const MeshPacket &req);
-    void handleGetCannedMessagePluginPart2(const MeshPacket &req);
-    void handleGetCannedMessagePluginPart3(const MeshPacket &req);
-    void handleGetCannedMessagePluginPart4(const MeshPacket &req);
-    void handleGetCannedMessagePluginPart5(const MeshPacket &req);
+    CannedMessagePluginMessagePart1* getCannedMessagesPart1();
+
+    void handleGetCannedMessagePluginPart1(const MeshPacket &req, AdminMessage *response);
+    void handleGetCannedMessagePluginPart2(const MeshPacket &req, AdminMessage *response);
+    void handleGetCannedMessagePluginPart3(const MeshPacket &req, AdminMessage *response);
+    void handleGetCannedMessagePluginPart4(const MeshPacket &req, AdminMessage *response);
+    void handleGetCannedMessagePluginPart5(const MeshPacket &req, AdminMessage *response);
 
     void handleSetCannedMessagePluginPart1(const CannedMessagePluginMessagePart1 &from_msg);
     void handleSetCannedMessagePluginPart2(const CannedMessagePluginMessagePart2 &from_msg);
@@ -68,15 +70,8 @@ class CannedMessagePlugin :
     virtual Observable<const UIFrameEvent *>* getUIFrameObservable() { return this; }
     virtual void drawFrame(
         OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-    virtual bool handleAdminMessageForPlugin(const MeshPacket &mp, AdminMessage *r)
-    {
-        return false;
-    };
-    virtual bool handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *p)
-    {
-        // The get/set is an AdminPlugin message
-        return false;
-    };
+    virtual AdminMessageHandleResult handleAdminMessageForPlugin(
+        const MeshPacket &mp, AdminMessage *request, AdminMessage *response);
 
     void loadProtoForPlugin();
     bool saveProtoForPlugin();

@@ -30,7 +30,7 @@ extern bool loadProto(const char *filename, size_t protoSize, size_t objSize, co
 extern bool saveProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, const void *dest_struct);
 
 CannedMessagePlugin::CannedMessagePlugin()
-    : ProtobufPlugin("canned", PortNum_TEXT_MESSAGE_APP, AdminMessage_fields),
+    : SinglePortPlugin("canned", PortNum_TEXT_MESSAGE_APP),
     concurrency::OSThread("CannedMessagePlugin")
 {
     if (radioConfig.preferences.canned_message_plugin_enabled)
@@ -374,61 +374,141 @@ void CannedMessagePlugin::installDefaultCannedMessagePluginPart5()
     memset(cannedMessagePluginMessagePart5.text, 0, sizeof(cannedMessagePluginMessagePart5.text));
 }
 
-void CannedMessagePlugin::handleGetCannedMessagePluginPart1(const MeshPacket &req)
+AdminMessageHandleResult CannedMessagePlugin::handleAdminMessageForPlugin(
+        const MeshPacket &mp, AdminMessage *request, AdminMessage *response)
+{
+    AdminMessageHandleResult result;
+
+    switch (request->which_variant) {
+    case AdminMessage_get_canned_message_plugin_part1_request_tag:
+        DEBUG_MSG("Client is getting radio canned message part1\n");
+        this->handleGetCannedMessagePluginPart1(mp, response);
+        result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
+        break;
+
+    case AdminMessage_get_canned_message_plugin_part2_request_tag:
+        DEBUG_MSG("Client is getting radio canned message part2\n");
+        this->handleGetCannedMessagePluginPart2(mp, response);
+        result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
+        break;
+
+    case AdminMessage_get_canned_message_plugin_part3_request_tag:
+        DEBUG_MSG("Client is getting radio canned message part3\n");
+        this->handleGetCannedMessagePluginPart3(mp, response);
+        result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
+        break;
+
+    case AdminMessage_get_canned_message_plugin_part4_request_tag:
+        DEBUG_MSG("Client is getting radio canned message part4\n");
+        this->handleGetCannedMessagePluginPart4(mp, response);
+        result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
+        break;
+
+    case AdminMessage_get_canned_message_plugin_part5_request_tag:
+        DEBUG_MSG("Client is getting radio canned message part5\n");
+        this->handleGetCannedMessagePluginPart5(mp, response);
+        result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
+        break;
+
+    case AdminMessage_set_canned_message_plugin_part1_tag:
+        DEBUG_MSG("Client is setting radio canned message part 1\n");
+        this->handleSetCannedMessagePluginPart1(
+            request->set_canned_message_plugin_part1);
+        result = AdminMessageHandleResult::HANDLED;
+        break;
+
+    case AdminMessage_set_canned_message_plugin_part2_tag:
+        DEBUG_MSG("Client is setting radio canned message part 2\n");
+        this->handleSetCannedMessagePluginPart2(
+            request->set_canned_message_plugin_part2);
+        result = AdminMessageHandleResult::HANDLED;
+        break;
+
+    case AdminMessage_set_canned_message_plugin_part3_tag:
+        DEBUG_MSG("Client is setting radio canned message part 3\n");
+        this->handleSetCannedMessagePluginPart3(
+            request->set_canned_message_plugin_part3);
+        result = AdminMessageHandleResult::HANDLED;
+        break;
+
+    case AdminMessage_set_canned_message_plugin_part4_tag:
+        DEBUG_MSG("Client is setting radio canned message part 4\n");
+        this->handleSetCannedMessagePluginPart4(
+            request->set_canned_message_plugin_part4);
+        result = AdminMessageHandleResult::HANDLED;
+        break;
+
+    case AdminMessage_set_canned_message_plugin_part5_tag:
+        DEBUG_MSG("Client is setting radio canned message part 5\n");
+        this->handleSetCannedMessagePluginPart5(
+            request->set_canned_message_plugin_part5);
+        result = AdminMessageHandleResult::HANDLED;
+        break;
+    default:
+        result = AdminMessageHandleResult::NOT_HANDLED;
+    }
+
+    return result;
+}
+
+void CannedMessagePlugin::handleGetCannedMessagePluginPart1(
+    const MeshPacket &req, AdminMessage *response)
 {
     DEBUG_MSG("*** handleGetCannedMessagePluginPart1\n");
-    if (req.decoded.want_response) {
-        // We create the reply here
-        AdminMessage r = AdminMessage_init_default;
-        r.get_canned_message_plugin_part1_response = cannedMessagePluginMessagePart1;
-        DEBUG_MSG("*** MIKE *** cannedMessagePluginMessagePart1.text:%s\n", cannedMessagePluginMessagePart1.text);
-        r.which_variant = AdminMessage_get_canned_message_plugin_part1_response_tag;
-        myReply = allocDataProtobuf(r);
-    }
+    assert(req.decoded.want_response);
+
+    response->which_variant = AdminMessage_get_canned_message_plugin_part1_response_tag;
+    strcpy(
+        response->get_canned_message_plugin_part1_response.text,
+        cannedMessagePluginMessagePart1.text);
 }
 
-void CannedMessagePlugin::handleGetCannedMessagePluginPart2(const MeshPacket &req)
+void CannedMessagePlugin::handleGetCannedMessagePluginPart2(
+    const MeshPacket &req, AdminMessage *response)
 {
-    if (req.decoded.want_response) {
-        // We create the reply here
-        AdminMessage r = AdminMessage_init_default;
-        r.get_canned_message_plugin_part2_response = cannedMessagePluginMessagePart2;
-        r.which_variant = AdminMessage_get_canned_message_plugin_part2_response_tag;
-        myReply = allocDataProtobuf(r);
-    }
+    DEBUG_MSG("*** handleGetCannedMessagePluginPart2\n");
+    assert(req.decoded.want_response);
+
+    response->which_variant = AdminMessage_get_canned_message_plugin_part2_response_tag;
+    strcpy(
+        response->get_canned_message_plugin_part2_response.text,
+        cannedMessagePluginMessagePart2.text);
 }
 
-void CannedMessagePlugin::handleGetCannedMessagePluginPart3(const MeshPacket &req)
+void CannedMessagePlugin::handleGetCannedMessagePluginPart3(
+    const MeshPacket &req, AdminMessage *response)
 {
-    if (req.decoded.want_response) {
-        // We create the reply here
-        AdminMessage r = AdminMessage_init_default;
-        r.get_canned_message_plugin_part3_response = cannedMessagePluginMessagePart3;
-        r.which_variant = AdminMessage_get_canned_message_plugin_part3_response_tag;
-        myReply = allocDataProtobuf(r);
-    }
+    DEBUG_MSG("*** handleGetCannedMessagePluginPart3\n");
+    assert(req.decoded.want_response);
+
+    response->which_variant = AdminMessage_get_canned_message_plugin_part3_response_tag;
+    strcpy(
+        response->get_canned_message_plugin_part3_response.text,
+        cannedMessagePluginMessagePart3.text);
 }
 
-void CannedMessagePlugin::handleGetCannedMessagePluginPart4(const MeshPacket &req)
+void CannedMessagePlugin::handleGetCannedMessagePluginPart4(
+    const MeshPacket &req, AdminMessage *response)
 {
-    if (req.decoded.want_response) {
-        // We create the reply here
-        AdminMessage r = AdminMessage_init_default;
-        r.get_canned_message_plugin_part4_response = cannedMessagePluginMessagePart4;
-        r.which_variant = AdminMessage_get_canned_message_plugin_part4_response_tag;
-        myReply = allocDataProtobuf(r);
-    }
+    DEBUG_MSG("*** handleGetCannedMessagePluginPart4\n");
+    assert(req.decoded.want_response);
+
+    response->which_variant = AdminMessage_get_canned_message_plugin_part4_response_tag;
+    strcpy(
+        response->get_canned_message_plugin_part4_response.text,
+        cannedMessagePluginMessagePart4.text);
 }
 
-void CannedMessagePlugin::handleGetCannedMessagePluginPart5(const MeshPacket &req)
+void CannedMessagePlugin::handleGetCannedMessagePluginPart5(
+    const MeshPacket &req, AdminMessage *response)
 {
-    if (req.decoded.want_response) {
-        // We create the reply here
-        AdminMessage r = AdminMessage_init_default;
-        r.get_canned_message_plugin_part5_response = cannedMessagePluginMessagePart5;
-        r.which_variant = AdminMessage_get_canned_message_plugin_part5_response_tag;
-        myReply = allocDataProtobuf(r);
-    }
+    DEBUG_MSG("*** handleGetCannedMessagePluginPart5\n");
+    assert(req.decoded.want_response);
+
+    response->which_variant = AdminMessage_get_canned_message_plugin_part5_response_tag;
+    strcpy(
+        response->get_canned_message_plugin_part5_response.text,
+        cannedMessagePluginMessagePart5.text);
 }
 
 void CannedMessagePlugin::handleSetCannedMessagePluginPart1(const CannedMessagePluginMessagePart1 &from_msg)

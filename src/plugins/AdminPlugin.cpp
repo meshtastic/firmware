@@ -115,66 +115,6 @@ bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
         break;
     }
 
-    case AdminMessage_get_canned_message_plugin_part1_request_tag:
-        DEBUG_MSG("Client is getting radio canned message part1\n");
-        cannedMessagePlugin->handleGetCannedMessagePluginPart1(mp);
-        handled = true;
-        break;
-
-    case AdminMessage_get_canned_message_plugin_part2_request_tag:
-        DEBUG_MSG("Client is getting radio canned message part2\n");
-        cannedMessagePlugin->handleGetCannedMessagePluginPart2(mp);
-        handled = true;
-        break;
-
-    case AdminMessage_get_canned_message_plugin_part3_request_tag:
-        DEBUG_MSG("Client is getting radio canned message part3\n");
-        cannedMessagePlugin->handleGetCannedMessagePluginPart3(mp);
-        handled = true;
-        break;
-
-    case AdminMessage_get_canned_message_plugin_part4_request_tag:
-        DEBUG_MSG("Client is getting radio canned message part4\n");
-        cannedMessagePlugin->handleGetCannedMessagePluginPart4(mp);
-        handled = true;
-        break;
-
-    case AdminMessage_get_canned_message_plugin_part5_request_tag:
-        DEBUG_MSG("Client is getting radio canned message part5\n");
-        cannedMessagePlugin->handleGetCannedMessagePluginPart5(mp);
-        handled = true;
-        break;
-
-    case AdminMessage_set_canned_message_plugin_part1_tag:
-        DEBUG_MSG("Client is setting radio canned message part 1\n");
-        cannedMessagePlugin->handleSetCannedMessagePluginPart1(r->set_canned_message_plugin_part1);
-        handled = true;
-        break;
-
-    case AdminMessage_set_canned_message_plugin_part2_tag:
-        DEBUG_MSG("Client is setting radio canned message part 2\n");
-        cannedMessagePlugin->handleSetCannedMessagePluginPart2(r->set_canned_message_plugin_part2);
-        handled = true;
-        break;
-
-    case AdminMessage_set_canned_message_plugin_part3_tag:
-        DEBUG_MSG("Client is setting radio canned message part 3\n");
-        cannedMessagePlugin->handleSetCannedMessagePluginPart3(r->set_canned_message_plugin_part3);
-        handled = true;
-        break;
-
-    case AdminMessage_set_canned_message_plugin_part4_tag:
-        DEBUG_MSG("Client is setting radio canned message part 4\n");
-        cannedMessagePlugin->handleSetCannedMessagePluginPart4(r->set_canned_message_plugin_part4);
-        handled = true;
-        break;
-
-    case AdminMessage_set_canned_message_plugin_part5_tag:
-        DEBUG_MSG("Client is setting radio canned message part 5\n");
-        cannedMessagePlugin->handleSetCannedMessagePluginPart5(r->set_canned_message_plugin_part5);
-        handled = true;
-        break;
-
 
 #ifdef PORTDUINO
     case AdminMessage_exit_simulator_tag:
@@ -184,7 +124,18 @@ bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
 #endif
 
     default:
-        if (!MeshPlugin::handleAdminMessageForAllPlugins(mp, r))
+        AdminMessage response = AdminMessage_init_default;
+        AdminMessageHandleResult handleResult = MeshPlugin::handleAdminMessageForAllPlugins(mp, r, &response);
+
+        if (handleResult == AdminMessageHandleResult::HANDLED_WITH_RESPONSE)
+        {
+            myReply = allocDataProtobuf(response);
+        }
+        else if (mp.decoded.want_response)
+        {
+            DEBUG_MSG("We did not responded to a request that wanted a respond. req.variant=%d\n", r->which_variant);
+        }
+        else if (handleResult != AdminMessageHandleResult::HANDLED)
         {
             // Probably a message sent by us or sent to our local node.  FIXME, we should avoid scanning these messages
             DEBUG_MSG("Ignoring nonrelevant admin %d\n", r->which_variant);

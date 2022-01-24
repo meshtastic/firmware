@@ -256,14 +256,29 @@ void MeshPlugin::observeUIEvents(
     }
 }
 
-bool MeshPlugin::handleAdminMessageForAllPlugins(const MeshPacket &mp, AdminMessage *r)
+AdminMessageHandleResult MeshPlugin::handleAdminMessageForAllPlugins(const MeshPacket &mp, AdminMessage *request, AdminMessage *response)
 {
     DEBUG_MSG("top of handleAdminMessageForAllPlugins\n");
-    bool handled = true;
+    AdminMessageHandleResult handled = AdminMessageHandleResult::NOT_HANDLED;
     if (plugins) {
         for (auto i = plugins->begin(); i != plugins->end(); ++i) {
             auto &pi = **i;
-            handled &= pi.handleAdminMessageForPlugin(mp, r);
+            AdminMessageHandleResult h = pi.handleAdminMessageForPlugin(mp, request, response);
+            if (h == AdminMessageHandleResult::HANDLED_WITH_RESPONSE)
+            {
+                // In case we have a response it always has priority.
+                DEBUG_MSG("Reply prepared by plugin '%s' of variant: %d\n",
+                    pi.name,
+                    response->which_variant);
+                handled = h;
+            }
+            else if ((handled != AdminMessageHandleResult::HANDLED_WITH_RESPONSE) &&
+                (h == AdminMessageHandleResult::HANDLED))
+            {
+                // In case the message is handled it should be populated, but will not overwrite
+                //   a result with response.
+                handled = h;
+            }
         }
     }
     DEBUG_MSG("bottom of handleAdminMessageForAllPlugins\n");
