@@ -49,8 +49,8 @@ class AirTime : private concurrency::OSThread
     float utilizationTXPercent();
 
     float UtilizationPercentTX();
-    uint32_t channelUtilization[CHANNEL_UTILIZATION_PERIODS];
-    uint32_t utilizationTX[MINUTES_IN_HOUR];
+    uint32_t channelUtilization[CHANNEL_UTILIZATION_PERIODS] = {0};
+    uint32_t utilizationTX[MINUTES_IN_HOUR] = {0};
 
     void airtimeRotatePeriod();
     uint8_t getPeriodsToLog();

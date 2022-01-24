@@ -63,7 +63,6 @@ static void lsIdle()
     // DEBUG_MSG("lsIdle begin ls_secs=%u\n", getPref_ls_secs());
 
 #ifndef NO_ESP32
-    esp_sleep_source_t wakeCause = ESP_SLEEP_WAKEUP_UNDEFINED;
 
     // Do we have more sleeping to do?
     if (secsSlept < getPref_ls_secs()) {
@@ -73,14 +72,14 @@ static void lsIdle()
         // If some other service would stall sleep, don't let sleep happen yet
         if (doPreflightSleep()) {
             setLed(false); // Never leave led on while in light sleep
-            wakeCause = doLightSleep(sleepTime * 1000LL);
+            esp_sleep_source_t wakeCause2 = doLightSleep(sleepTime * 1000LL);
 
-            switch (wakeCause) {
+            switch (wakeCause2) {
             case ESP_SLEEP_WAKEUP_TIMER:
                 // Normal case: timer expired, we should just go back to sleep ASAP
 
                 setLed(true);                // briefly turn on led
-                wakeCause = doLightSleep(1); // leave led on for 1ms
+                wakeCause2 = doLightSleep(1); // leave led on for 1ms
 
                 secsSlept += sleepTime;
                 // DEBUG_MSG("sleeping, flash led!\n");
@@ -94,7 +93,7 @@ static void lsIdle()
             default:
                 // We woke for some other reason (button press, device interrupt)
                 // uint64_t status = esp_sleep_get_ext1_wakeup_status();
-                DEBUG_MSG("wakeCause %d\n", wakeCause);
+                DEBUG_MSG("wakeCause2 %d\n", wakeCause2);
 
 #ifdef BUTTON_PIN
                 bool pressed = !digitalRead(BUTTON_PIN);

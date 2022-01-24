@@ -37,7 +37,7 @@ class Router : protected concurrency::OSThread
      * do idle processing
      * Mostly looking in our incoming rxPacket queue and calling handleReceived.
      */
-    virtual int32_t runOnce();
+    virtual int32_t runOnce() override;
 
     /**
      * Works like send, but if we are sending to the local node, we directly put the message in the receive queue.

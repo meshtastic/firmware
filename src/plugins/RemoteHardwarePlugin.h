@@ -27,7 +27,7 @@ class RemoteHardwarePlugin : public ProtobufPlugin<HardwareMessage>, private con
 
     @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
-    virtual bool handleReceivedProtobuf(const MeshPacket &mp, HardwareMessage *p);
+    virtual bool handleReceivedProtobuf(const MeshPacket &mp, HardwareMessage *p) override;
 
     /**
      * Periodically read the gpios we have been asked to WATCH, if they have changed,
@@ -37,7 +37,7 @@ class RemoteHardwarePlugin : public ProtobufPlugin<HardwareMessage>, private con
      *
      * Returns desired period for next invocation (or RUN_SAME for no change)
      */
-    virtual int32_t runOnce();
+    virtual int32_t runOnce() override;
 };
 
 extern RemoteHardwarePlugin remoteHardwarePlugin;

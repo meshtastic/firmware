@@ -50,7 +50,7 @@ class CannedMessagePlugin :
 
   protected:
 
-    virtual int32_t runOnce();
+    virtual int32_t runOnce() override;
 
     void sendText(
         NodeNum dest,
@@ -62,10 +62,10 @@ class CannedMessagePlugin :
     int getPrevIndex();
 
     int handleInputEvent(const InputEvent *event);
-    virtual bool wantUIFrame() { return this->shouldDraw(); }
-    virtual Observable<const UIFrameEvent *>* getUIFrameObservable() { return this; }
+    virtual bool wantUIFrame() override { return this->shouldDraw(); }
+    virtual Observable<const UIFrameEvent *>* getUIFrameObservable() override { return this; }
     virtual void drawFrame(
-        OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+        OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
     virtual AdminMessageHandleResult handleAdminMessageForPlugin(
         const MeshPacket &mp, AdminMessage *request, AdminMessage *response);
 

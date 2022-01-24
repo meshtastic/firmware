@@ -408,9 +408,8 @@ void NodeDB::saveToDisk()
 #ifdef FS
         FS.mkdir("/prefs");
 #endif
-        bool okay = saveProto(preffile, DeviceState_size, sizeof(devicestate), DeviceState_fields, &devicestate);
-        okay &= saveProto(radiofile, RadioConfig_size, sizeof(RadioConfig), RadioConfig_fields, &radioConfig);
-
+        saveProto(preffile, DeviceState_size, sizeof(devicestate), DeviceState_fields, &devicestate);
+        saveProto(radiofile, RadioConfig_size, sizeof(RadioConfig), RadioConfig_fields, &radioConfig);
         saveChannelsToDisk();
 
         // remove any pre 1.2 pref files, turn on after 1.2 is in beta

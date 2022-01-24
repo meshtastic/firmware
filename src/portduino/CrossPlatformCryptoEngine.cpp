@@ -24,7 +24,7 @@ class CrossPlatformCryptoEngine : public CryptoEngine
      * @param bytes a _static_ buffer that will remain valid for the life of this crypto instance (i.e. this class will cache the
      * provided pointer)
      */
-    virtual void setKey(const CryptoKey &k)
+    virtual void setKey(const CryptoKey &k) override
     {
         CryptoEngine::setKey(k);
         DEBUG_MSG("Installing AES%d key!\n", key.length * 8);
@@ -47,12 +47,12 @@ class CrossPlatformCryptoEngine : public CryptoEngine
      *
      * @param bytes is updated in place
      */
-    virtual void encrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes)
+    virtual void encrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes) override
     {
         if (key.length > 0) {
-            uint8_t stream_block[16];
+            //uint8_t stream_block[16];
             static uint8_t scratch[MAX_BLOCKSIZE];
-            size_t nc_off = 0;
+            //size_t nc_off = 0;
 
             // DEBUG_MSG("ESP32 encrypt!\n");
             initNonce(fromNode, packetNum);
@@ -67,7 +67,7 @@ class CrossPlatformCryptoEngine : public CryptoEngine
         }
     }
 
-    virtual void decrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes)
+    virtual void decrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes) override
     {
         // For CTR, the implementation is the same
         encrypt(fromNode, packetNum, numBytes, bytes);

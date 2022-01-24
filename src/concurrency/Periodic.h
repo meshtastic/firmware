@@ -18,7 +18,7 @@ class Periodic : public OSThread
     Periodic(const char *name, int32_t (*_callback)()) : OSThread(name), callback(_callback) {}
 
   protected:
-    int32_t runOnce() { return callback(); }
+    int32_t runOnce() override { return callback(); }
 };
 
 } // namespace concurrency

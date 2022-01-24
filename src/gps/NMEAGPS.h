@@ -23,14 +23,14 @@ class NMEAGPS : public GPS
 #endif
 
   public:
-    virtual bool setupGPS();
+    virtual bool setupGPS() override;
 
   protected:
     /** Subclasses should look for serial rx characters here and feed it to their GPS parser
      * 
      * Return true if we received a valid message from the GPS
     */
-    virtual bool whileIdle();
+    virtual bool whileIdle() override;
 
     /**
      * Perform any processing that should be done only while the GPS is awake and looking for a fix.
@@ -38,7 +38,7 @@ class NMEAGPS : public GPS
      *
      * @return true if we've acquired a time
      */
-    virtual bool lookForTime();
+    virtual bool lookForTime() override;
 
     /**
      * Perform any processing that should be done only while the GPS is awake and looking for a fix.
@@ -46,7 +46,7 @@ class NMEAGPS : public GPS
      *
      * @return true if we've acquired a new location
      */
-    virtual bool lookForLocation();
+    virtual bool lookForLocation() override;
 
-    virtual bool hasLock();
+    virtual bool hasLock() override;
 };

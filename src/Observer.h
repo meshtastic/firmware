@@ -47,7 +47,7 @@ template <class Callback, class T> class CallbackObserver : public Observer<T>
     CallbackObserver(Callback *_objPtr, ObserverCallback _method) : objPtr(_objPtr), method(_method) {}
 
   protected:
-    virtual int onNotify(T arg) { return (objPtr->*method)(arg); }
+    virtual int onNotify(T arg) override { return (objPtr->*method)(arg); }
 };
 
 /**

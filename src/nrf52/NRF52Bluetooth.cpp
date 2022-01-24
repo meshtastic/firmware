@@ -28,7 +28,7 @@ class BluetoothPhoneAPI : public PhoneAPI
     /**
      * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
      */
-    virtual void onNowHasData(uint32_t fromRadioNum)
+    virtual void onNowHasData(uint32_t fromRadioNum) override
     {
         PhoneAPI::onNowHasData(fromRadioNum);
 
@@ -37,7 +37,7 @@ class BluetoothPhoneAPI : public PhoneAPI
     }
 
     /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() {
+    virtual bool checkIsConnected() override {
         return bleConnected;
     }
 };

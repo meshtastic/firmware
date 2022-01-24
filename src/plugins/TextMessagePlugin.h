@@ -19,7 +19,7 @@ class TextMessagePlugin : public SinglePortPlugin, public Observable<const MeshP
 
     @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
-    virtual ProcessMessage handleReceived(const MeshPacket &mp);
+    virtual ProcessMessage handleReceived(const MeshPacket &mp) override;
 };
 
 extern TextMessagePlugin *textMessagePlugin;

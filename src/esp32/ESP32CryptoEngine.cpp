@@ -32,7 +32,7 @@ class ESP32CryptoEngine : public CryptoEngine
      * @param bytes a _static_ buffer that will remain valid for the life of this crypto instance (i.e. this class will cache the
      * provided pointer)
      */
-    virtual void setKey(const CryptoKey &k)
+    virtual void setKey(const CryptoKey &k) override
     {
         CryptoEngine::setKey(k);
 
@@ -47,7 +47,7 @@ class ESP32CryptoEngine : public CryptoEngine
      *
      * @param bytes is updated in place
      */
-    virtual void encrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes)
+    virtual void encrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes) override
     {
         if (key.length > 0) {
             uint8_t stream_block[16];
@@ -66,7 +66,7 @@ class ESP32CryptoEngine : public CryptoEngine
         }
     }
 
-    virtual void decrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes)
+    virtual void decrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes) override
     {
         // DEBUG_MSG("ESP32 decrypt!\n");
 
