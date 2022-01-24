@@ -38,19 +38,15 @@ class CannedMessagePlugin :
     void eventDown();
     void eventSelect();
 
-    CannedMessagePluginMessagePart1* getCannedMessagesPart1();
-
     void handleGetCannedMessagePluginPart1(const MeshPacket &req, AdminMessage *response);
     void handleGetCannedMessagePluginPart2(const MeshPacket &req, AdminMessage *response);
     void handleGetCannedMessagePluginPart3(const MeshPacket &req, AdminMessage *response);
     void handleGetCannedMessagePluginPart4(const MeshPacket &req, AdminMessage *response);
-    void handleGetCannedMessagePluginPart5(const MeshPacket &req, AdminMessage *response);
 
-    void handleSetCannedMessagePluginPart1(const CannedMessagePluginMessagePart1 &from_msg);
-    void handleSetCannedMessagePluginPart2(const CannedMessagePluginMessagePart2 &from_msg);
-    void handleSetCannedMessagePluginPart3(const CannedMessagePluginMessagePart3 &from_msg);
-    void handleSetCannedMessagePluginPart4(const CannedMessagePluginMessagePart4 &from_msg);
-    void handleSetCannedMessagePluginPart5(const CannedMessagePluginMessagePart5 &from_msg);
+    void handleSetCannedMessagePluginPart1(const char *from_msg);
+    void handleSetCannedMessagePluginPart2(const char *from_msg);
+    void handleSetCannedMessagePluginPart3(const char *from_msg);
+    void handleSetCannedMessagePluginPart4(const char *from_msg);
 
   protected:
 
@@ -75,13 +71,8 @@ class CannedMessagePlugin :
 
     void loadProtoForPlugin();
     bool saveProtoForPlugin();
-    void installProtoDefaultsForPlugin();
 
-    void installDefaultCannedMessagePluginPart1();
-    void installDefaultCannedMessagePluginPart2();
-    void installDefaultCannedMessagePluginPart3();
-    void installDefaultCannedMessagePluginPart4();
-    void installDefaultCannedMessagePluginPart5();
+    void installDefaultCannedMessagePluginConfig();
 
     int currentMessageIndex = -1;
     cannedMessagePluginRunState runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;

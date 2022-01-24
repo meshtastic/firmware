@@ -11,17 +11,9 @@
 // Remove Canned message screen if no action is taken for some milliseconds
 #define INACTIVATE_AFTER_MS 20000
 
-static const char *cannedMessagesPart1file = "/prefs/canned1.proto";
-static const char *cannedMessagesPart2file = "/prefs/canned2.proto";
-static const char *cannedMessagesPart3file = "/prefs/canned3.proto";
-static const char *cannedMessagesPart4file = "/prefs/canned4.proto";
-static const char *cannedMessagesPart5file = "/prefs/canned5.proto";
+static const char *cannedMessagesConfigFile = "/prefs/cannedConf.proto";
 
-CannedMessagePluginMessagePart1 cannedMessagePluginMessagePart1;
-CannedMessagePluginMessagePart2 cannedMessagePluginMessagePart2;
-CannedMessagePluginMessagePart3 cannedMessagePluginMessagePart3;
-CannedMessagePluginMessagePart4 cannedMessagePluginMessagePart4;
-CannedMessagePluginMessagePart5 cannedMessagePluginMessagePart5;
+CannedMessagePluginConfig cannedMessagePluginConfig;
 
 CannedMessagePlugin *cannedMessagePlugin;
 
@@ -58,11 +50,10 @@ int CannedMessagePlugin::splitConfiguredMessages()
     int i = 0;
 
     // get all of the message parts
-    strcpy(this->messageStore, cannedMessagePluginMessagePart1.text);
-    strcat(this->messageStore, cannedMessagePluginMessagePart2.text);
-    strcat(this->messageStore, cannedMessagePluginMessagePart3.text);
-    strcat(this->messageStore, cannedMessagePluginMessagePart4.text);
-    strcat(this->messageStore, cannedMessagePluginMessagePart5.text);
+    strcpy(this->messageStore, cannedMessagePluginConfig.messagesPart1);
+    strcat(this->messageStore, cannedMessagePluginConfig.messagesPart2);
+    strcat(this->messageStore, cannedMessagePluginConfig.messagesPart3);
+    strcat(this->messageStore, cannedMessagePluginConfig.messagesPart4);
 
     this->messages[messageIndex++] = this->messageStore;
     int upTo = strlen(this->messageStore) - 1;
@@ -306,20 +297,8 @@ void CannedMessagePlugin::drawFrame(
 
 void CannedMessagePlugin::loadProtoForPlugin()
 {
-    if (!loadProto(cannedMessagesPart1file, CannedMessagePluginMessagePart1_size, sizeof(cannedMessagesPart1file), CannedMessagePluginMessagePart1_fields, &cannedMessagePluginMessagePart1)) {
-        installDefaultCannedMessagePluginPart1();
-    }
-    if (!loadProto(cannedMessagesPart2file, CannedMessagePluginMessagePart2_size, sizeof(cannedMessagesPart2file), CannedMessagePluginMessagePart2_fields, &cannedMessagePluginMessagePart2)) {
-        installDefaultCannedMessagePluginPart2();
-    }
-    if (!loadProto(cannedMessagesPart3file, CannedMessagePluginMessagePart3_size, sizeof(cannedMessagesPart3file), CannedMessagePluginMessagePart3_fields, &cannedMessagePluginMessagePart3)) {
-        installDefaultCannedMessagePluginPart3();
-    }
-    if (!loadProto(cannedMessagesPart4file, CannedMessagePluginMessagePart4_size, sizeof(cannedMessagesPart4file), CannedMessagePluginMessagePart4_fields, &cannedMessagePluginMessagePart4)) {
-        installDefaultCannedMessagePluginPart4();
-    }
-    if (!loadProto(cannedMessagesPart5file, CannedMessagePluginMessagePart5_size, sizeof(cannedMessagesPart5file), CannedMessagePluginMessagePart5_fields, &cannedMessagePluginMessagePart5)) {
-        installDefaultCannedMessagePluginPart5();
+    if (!loadProto(cannedMessagesConfigFile, CannedMessagePluginConfig_size, sizeof(cannedMessagesConfigFile), CannedMessagePluginConfig_fields, &cannedMessagePluginConfig)) {
+        installDefaultCannedMessagePluginConfig();
     }
 }
 
@@ -331,47 +310,17 @@ bool CannedMessagePlugin::saveProtoForPlugin()
     FS.mkdir("/prefs");
 #endif
 
-    okay &= saveProto(cannedMessagesPart1file, CannedMessagePluginMessagePart1_size, sizeof(CannedMessagePluginMessagePart1), CannedMessagePluginMessagePart1_fields, &cannedMessagePluginMessagePart1);
-    okay &= saveProto(cannedMessagesPart2file, CannedMessagePluginMessagePart2_size, sizeof(CannedMessagePluginMessagePart2), CannedMessagePluginMessagePart2_fields, &cannedMessagePluginMessagePart2);
-    okay &= saveProto(cannedMessagesPart3file, CannedMessagePluginMessagePart3_size, sizeof(CannedMessagePluginMessagePart3), CannedMessagePluginMessagePart3_fields, &cannedMessagePluginMessagePart3);
-    okay &= saveProto(cannedMessagesPart4file, CannedMessagePluginMessagePart4_size, sizeof(CannedMessagePluginMessagePart4), CannedMessagePluginMessagePart4_fields, &cannedMessagePluginMessagePart4);
-    okay &= saveProto(cannedMessagesPart5file, CannedMessagePluginMessagePart5_size, sizeof(CannedMessagePluginMessagePart5), CannedMessagePluginMessagePart5_fields, &cannedMessagePluginMessagePart5);
+    okay &= saveProto(cannedMessagesConfigFile, CannedMessagePluginConfig_size, sizeof(CannedMessagePluginConfig), CannedMessagePluginConfig_fields, &cannedMessagePluginConfig);
 
     return okay;
 }
 
-void CannedMessagePlugin::installProtoDefaultsForPlugin()
+void CannedMessagePlugin::installDefaultCannedMessagePluginConfig()
 {
-    installDefaultCannedMessagePluginPart1();
-    installDefaultCannedMessagePluginPart2();
-    installDefaultCannedMessagePluginPart3();
-    installDefaultCannedMessagePluginPart4();
-    installDefaultCannedMessagePluginPart5();
-}
-
-void CannedMessagePlugin::installDefaultCannedMessagePluginPart1()
-{
-    memset(cannedMessagePluginMessagePart1.text, 0, sizeof(cannedMessagePluginMessagePart1.text));
-}
-
-void CannedMessagePlugin::installDefaultCannedMessagePluginPart2()
-{
-    memset(cannedMessagePluginMessagePart2.text, 0, sizeof(cannedMessagePluginMessagePart2.text));
-}
-
-void CannedMessagePlugin::installDefaultCannedMessagePluginPart3()
-{
-    memset(cannedMessagePluginMessagePart3.text, 0, sizeof(cannedMessagePluginMessagePart3.text));
-}
-
-void CannedMessagePlugin::installDefaultCannedMessagePluginPart4()
-{
-    memset(cannedMessagePluginMessagePart4.text, 0, sizeof(cannedMessagePluginMessagePart4.text));
-}
-
-void CannedMessagePlugin::installDefaultCannedMessagePluginPart5()
-{
-    memset(cannedMessagePluginMessagePart5.text, 0, sizeof(cannedMessagePluginMessagePart5.text));
+    memset(cannedMessagePluginConfig.messagesPart1, 0, sizeof(cannedMessagePluginConfig.messagesPart1));
+    memset(cannedMessagePluginConfig.messagesPart2, 0, sizeof(cannedMessagePluginConfig.messagesPart2));
+    memset(cannedMessagePluginConfig.messagesPart3, 0, sizeof(cannedMessagePluginConfig.messagesPart3));
+    memset(cannedMessagePluginConfig.messagesPart4, 0, sizeof(cannedMessagePluginConfig.messagesPart4));
 }
 
 AdminMessageHandleResult CannedMessagePlugin::handleAdminMessageForPlugin(
@@ -404,12 +353,6 @@ AdminMessageHandleResult CannedMessagePlugin::handleAdminMessageForPlugin(
         result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
         break;
 
-    case AdminMessage_get_canned_message_plugin_part5_request_tag:
-        DEBUG_MSG("Client is getting radio canned message part5\n");
-        this->handleGetCannedMessagePluginPart5(mp, response);
-        result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
-        break;
-
     case AdminMessage_set_canned_message_plugin_part1_tag:
         DEBUG_MSG("Client is setting radio canned message part 1\n");
         this->handleSetCannedMessagePluginPart1(
@@ -438,12 +381,6 @@ AdminMessageHandleResult CannedMessagePlugin::handleAdminMessageForPlugin(
         result = AdminMessageHandleResult::HANDLED;
         break;
 
-    case AdminMessage_set_canned_message_plugin_part5_tag:
-        DEBUG_MSG("Client is setting radio canned message part 5\n");
-        this->handleSetCannedMessagePluginPart5(
-            request->set_canned_message_plugin_part5);
-        result = AdminMessageHandleResult::HANDLED;
-        break;
     default:
         result = AdminMessageHandleResult::NOT_HANDLED;
     }
@@ -459,8 +396,8 @@ void CannedMessagePlugin::handleGetCannedMessagePluginPart1(
 
     response->which_variant = AdminMessage_get_canned_message_plugin_part1_response_tag;
     strcpy(
-        response->get_canned_message_plugin_part1_response.text,
-        cannedMessagePluginMessagePart1.text);
+        response->get_canned_message_plugin_part1_response,
+        cannedMessagePluginConfig.messagesPart1);
 }
 
 void CannedMessagePlugin::handleGetCannedMessagePluginPart2(
@@ -471,8 +408,8 @@ void CannedMessagePlugin::handleGetCannedMessagePluginPart2(
 
     response->which_variant = AdminMessage_get_canned_message_plugin_part2_response_tag;
     strcpy(
-        response->get_canned_message_plugin_part2_response.text,
-        cannedMessagePluginMessagePart2.text);
+        response->get_canned_message_plugin_part2_response,
+        cannedMessagePluginConfig.messagesPart2);
 }
 
 void CannedMessagePlugin::handleGetCannedMessagePluginPart3(
@@ -483,8 +420,8 @@ void CannedMessagePlugin::handleGetCannedMessagePluginPart3(
 
     response->which_variant = AdminMessage_get_canned_message_plugin_part3_response_tag;
     strcpy(
-        response->get_canned_message_plugin_part3_response.text,
-        cannedMessagePluginMessagePart3.text);
+        response->get_canned_message_plugin_part3_response,
+        cannedMessagePluginConfig.messagesPart3);
 }
 
 void CannedMessagePlugin::handleGetCannedMessagePluginPart4(
@@ -495,30 +432,18 @@ void CannedMessagePlugin::handleGetCannedMessagePluginPart4(
 
     response->which_variant = AdminMessage_get_canned_message_plugin_part4_response_tag;
     strcpy(
-        response->get_canned_message_plugin_part4_response.text,
-        cannedMessagePluginMessagePart4.text);
+        response->get_canned_message_plugin_part4_response,
+        cannedMessagePluginConfig.messagesPart4);
 }
 
-void CannedMessagePlugin::handleGetCannedMessagePluginPart5(
-    const MeshPacket &req, AdminMessage *response)
-{
-    DEBUG_MSG("*** handleGetCannedMessagePluginPart5\n");
-    assert(req.decoded.want_response);
-
-    response->which_variant = AdminMessage_get_canned_message_plugin_part5_response_tag;
-    strcpy(
-        response->get_canned_message_plugin_part5_response.text,
-        cannedMessagePluginMessagePart5.text);
-}
-
-void CannedMessagePlugin::handleSetCannedMessagePluginPart1(const CannedMessagePluginMessagePart1 &from_msg)
+void CannedMessagePlugin::handleSetCannedMessagePluginPart1(const char *from_msg)
 {
     int changed = 0;
 
-    if (*from_msg.text) {
-        changed |= strcmp(cannedMessagePluginMessagePart1.text, from_msg.text);
-        strcpy(cannedMessagePluginMessagePart1.text, from_msg.text);
-        DEBUG_MSG("*** from_msg.text:%s\n", from_msg.text);
+    if (*from_msg) {
+        changed |= strcmp(cannedMessagePluginConfig.messagesPart1, from_msg);
+        strcpy(cannedMessagePluginConfig.messagesPart1, from_msg);
+        DEBUG_MSG("*** from_msg.text:%s\n", from_msg);
     }
 
     if (changed)
@@ -527,13 +452,13 @@ void CannedMessagePlugin::handleSetCannedMessagePluginPart1(const CannedMessageP
     }
 }
 
-void CannedMessagePlugin::handleSetCannedMessagePluginPart2(const CannedMessagePluginMessagePart2 &from_msg)
+void CannedMessagePlugin::handleSetCannedMessagePluginPart2(const char *from_msg)
 {
     int changed = 0;
 
-    if (*from_msg.text) {
-        changed |= strcmp(cannedMessagePluginMessagePart2.text, from_msg.text);
-        strcpy(cannedMessagePluginMessagePart2.text, from_msg.text);
+    if (*from_msg) {
+        changed |= strcmp(cannedMessagePluginConfig.messagesPart2, from_msg);
+        strcpy(cannedMessagePluginConfig.messagesPart2, from_msg);
     }
 
     if (changed)
@@ -542,13 +467,13 @@ void CannedMessagePlugin::handleSetCannedMessagePluginPart2(const CannedMessageP
     }
 }
 
-void CannedMessagePlugin::handleSetCannedMessagePluginPart3(const CannedMessagePluginMessagePart3 &from_msg)
+void CannedMessagePlugin::handleSetCannedMessagePluginPart3(const char *from_msg)
 {
     int changed = 0;
 
-    if (*from_msg.text) {
-        changed |= strcmp(cannedMessagePluginMessagePart3.text, from_msg.text);
-        strcpy(cannedMessagePluginMessagePart3.text, from_msg.text);
+    if (*from_msg) {
+        changed |= strcmp(cannedMessagePluginConfig.messagesPart3, from_msg);
+        strcpy(cannedMessagePluginConfig.messagesPart3, from_msg);
     }
 
     if (changed)
@@ -557,28 +482,13 @@ void CannedMessagePlugin::handleSetCannedMessagePluginPart3(const CannedMessageP
     }
 }
 
-void CannedMessagePlugin::handleSetCannedMessagePluginPart4(const CannedMessagePluginMessagePart4 &from_msg)
+void CannedMessagePlugin::handleSetCannedMessagePluginPart4(const char *from_msg)
 {
     int changed = 0;
 
-    if (*from_msg.text) {
-        changed |= strcmp(cannedMessagePluginMessagePart4.text, from_msg.text);
-        strcpy(cannedMessagePluginMessagePart4.text, from_msg.text);
-    }
-
-    if (changed)
-    {
-        this->saveProtoForPlugin();
-    }
-}
-
-void CannedMessagePlugin::handleSetCannedMessagePluginPart5(const CannedMessagePluginMessagePart5 &from_msg)
-{
-    int changed = 0;
-
-    if (*from_msg.text) {
-        changed |= strcmp(cannedMessagePluginMessagePart5.text, from_msg.text);
-        strcpy(cannedMessagePluginMessagePart5.text, from_msg.text);
+    if (*from_msg) {
+        changed |= strcmp(cannedMessagePluginConfig.messagesPart4, from_msg);
+        strcpy(cannedMessagePluginConfig.messagesPart4, from_msg);
     }
 
     if (changed)
