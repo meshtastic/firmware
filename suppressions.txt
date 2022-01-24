@@ -12,12 +12,26 @@ duplInheritedMember
 // in src/mesh/MemoryPool.h
 memsetClassFloat
 
+knownConditionTrueFalse
+
 // no real downside/harm in these
 unusedFunction
 unusedPrivateFunction
 
 // most likely due to a cppcheck configuration issue (like missing an include)
 syntaxError
+
+// try to quiet a few
+//useInitializationList:src/main.cpp
+useInitializationList
+
+//unreadVariable:src/graphics/Screen.cpp
+unreadVariable
+
+redundantInitialization
+
+//cstyleCast:src/mesh/MemoryPool.h:71
+cstyleCast
 
 // ignore stuff that is not ours
 *:.pio/*

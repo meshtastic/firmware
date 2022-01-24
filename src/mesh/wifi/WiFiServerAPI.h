@@ -18,7 +18,7 @@ class WiFiServerAPI : public StreamAPI
     virtual ~WiFiServerAPI();
 
     /// override close to also shutdown the TCP link
-    virtual void close() override;
+    virtual void close();
 
   protected:
     /// We override this method to prevent publishing EVENT_SERIAL_CONNECTED/DISCONNECTED for wifi links (we want the board to

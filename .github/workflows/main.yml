@@ -24,6 +24,10 @@ jobs:
       with:
         submodules: 'recursive'
 
+    - name: Install cppcheck
+      run: |
+        apt-get install -y cppcheck
+
     - name: Setup Python
       uses: actions/setup-python@v2
       with:
@@ -87,6 +91,9 @@ jobs:
     #   run: platformio run -e heltec
     # - name: Build for wisblock RAK4631
     #   run: platformio run -e rak4631
+
+    - name: Check everything
+      run: bin/check-all.sh
 
     - name: Build everything
       run: bin/build-all.sh

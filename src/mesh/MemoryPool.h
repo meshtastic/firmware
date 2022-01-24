@@ -99,7 +99,7 @@ template <class T> class MemoryPool : public Allocator<T>
     ~MemoryPool() { delete[] buf; }
 
     /// Return a buffer for use by others
-    virtual void release(T *p)
+    void release(T *p)
     {
         assert(p >= buf &&
                (size_t)(p - buf) <
