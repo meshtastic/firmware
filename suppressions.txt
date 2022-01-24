@@ -4,6 +4,14 @@ assertWithSideEffect
 // TODO: need to come back to these
 duplInheritedMember
 
+// TODO:
+// "Using memset() on struct which contains a floating point number."
+// tried:
+//   if (std::is_floating_point<T>::value) {
+//     p = 0;
+// in src/mesh/MemoryPool.h
+memsetClassFloat
+
 // no real downside/harm in these
 unusedFunction
 unusedPrivateFunction

@@ -130,8 +130,8 @@ static void taskCreateCert(void *parameter)
 
 void createSSLCert()
 {
-    bool runLoop = false;
     if (isWifiAvailable() && !isCertReady) {
+        bool runLoop = false;
 
         // Create a new process just to handle creating the cert.
         //   This is a workaround for Bug: https://github.com/fhessel/esp32_https_server/issues/48

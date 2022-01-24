@@ -22,7 +22,7 @@ class RotaryEncoderInterruptBase :
     private concurrency::OSThread
 {
   public:
-    RotaryEncoderInterruptBase(
+    explicit RotaryEncoderInterruptBase(
         const char *name);
     void init(
       uint8_t pinA, uint8_t pinB, uint8_t pinPress,

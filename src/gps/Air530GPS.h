@@ -11,10 +11,10 @@ class Air530GPS : public NMEAGPS
 {
   protected:
     /// If possible force the GPS into sleep/low power mode
-    virtual void sleep();
+    virtual void sleep() override;
 
     /// wake the GPS into normal operation mode
-    virtual void wake();
+    virtual void wake() override;
 
   private:
     /// Send a NMEA cmd with checksum

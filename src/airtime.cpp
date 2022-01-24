@@ -117,8 +117,7 @@ float AirTime::utilizationTXPercent()
     return (float(sum) / float(MS_IN_HOUR)) * 100;
 }
 
-AirTime::AirTime() : concurrency::OSThread("AirTime") {
-    airtimes = {};
+AirTime::AirTime() : concurrency::OSThread("AirTime"),airtimes({}) {
 }
 
 int32_t AirTime::runOnce()

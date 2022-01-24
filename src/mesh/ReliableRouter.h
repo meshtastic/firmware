@@ -13,7 +13,7 @@ struct GlobalPacketId {
 
     bool operator==(const GlobalPacketId &p) const { return node == p.node && id == p.id; }
 
-    GlobalPacketId(const MeshPacket *p)
+    explicit GlobalPacketId(const MeshPacket *p)
     {
         node = getFrom(p);
         id = p->id;
@@ -45,7 +45,7 @@ struct PendingPacket {
     bool wantRoute = false;
 
     PendingPacket() {}
-    PendingPacket(MeshPacket *p);
+    explicit PendingPacket(MeshPacket *p);
 };
 
 class GlobalPacketIdHashFunction

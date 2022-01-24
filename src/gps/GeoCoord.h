@@ -119,8 +119,8 @@ class GeoCoord {
         static float rangeMetersToRadians(double range_meters);
 
         // Point to point conversions
-        int32_t distanceTo(GeoCoord pointB);
-        int32_t bearingTo(GeoCoord pointB);
+        int32_t distanceTo(const GeoCoord& pointB);
+        int32_t bearingTo(const GeoCoord& pointB);
         std::shared_ptr<GeoCoord> pointAtDistance(double bearing, double range);
 
         // Lat lon alt getters
