@@ -8,6 +8,7 @@
 #include <OneWire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
+#include <Adafruit_BME680.h>
 
 class EnvironmentalMeasurementPlugin : private concurrency::OSThread, public ProtobufPlugin<EnvironmentalMeasurement>
 {
@@ -38,7 +39,8 @@ class EnvironmentalMeasurementPlugin : private concurrency::OSThread, public Pro
     DHT *dht = NULL;
     OneWire *oneWire = NULL;
     DS18B20 *ds18b20 = NULL;
-    Adafruit_BME280 bme;
+    Adafruit_BME280 bme280;
+    Adafruit_BME680 bme680;
     const MeshPacket *lastMeasurementPacket;
     uint32_t sensor_read_error_count = 0;
 };
