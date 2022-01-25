@@ -13,11 +13,12 @@
 #include <OneWire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
+#include <Adafruit_BME680.h>
 
 #define DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS 1000
 #define DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS 1000
 #define DS18B20_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS 1000
-#define BME280_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS 1000
+#define BME_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS 1000
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
@@ -100,16 +101,33 @@ int32_t EnvironmentalMeasurementPlugin::runOnce()
                           radioConfig.preferences.environmental_measurement_plugin_sensor_pin);
                 return (DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
             case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME280:
-                unsigned bmeStatus;
+                unsigned bme280Status;
                 // Default i2c address for BME280
-                bmeStatus = bme.begin(0x76); 
-                if (!bmeStatus) {
+                bme280Status = bme280.begin(0x76); 
+                if (!bme280Status) {
                     DEBUG_MSG("Could not find a valid BME280 sensor, check wiring, address, sensor ID!");
                     // TODO more verbose diagnostics
                 } else {
                     DEBUG_MSG("EnvironmentalMeasurement: Opened BME280 on default i2c bus");
                 }
-                return (BME280_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
+                return (BME_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
+            case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME680:
+                unsigned bme680Status;
+                // Default i2c address for BME280
+                bme680Status = bme680.begin(0x76); 
+                if (!bme680Status) {
+                    DEBUG_MSG("Could not find a valid BME680 sensor, check wiring, address, sensor ID!");
+                    // TODO more verbose diagnostics
+                } else {
+                    DEBUG_MSG("EnvironmentalMeasurement: Opened BME680 on default i2c bus");
+                    // Set up oversampling and filter initialization
+                    bme680.setTemperatureOversampling(BME680_OS_8X);
+                    bme680.setHumidityOversampling(BME680_OS_2X);
+                    bme680.setPressureOversampling(BME680_OS_4X);
+                    bme680.setIIRFilterSize(BME680_FILTER_SIZE_3);
+                    bme680.setGasHeater(320, 150); // 320*C for 150 ms
+                }
+                return (BME_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
             default:
                 DEBUG_MSG("EnvironmentalMeasurement: Invalid sensor type selected; Disabling plugin");
                 return (INT32_MAX);
@@ -161,7 +179,8 @@ int32_t EnvironmentalMeasurementPlugin::runOnce()
             case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT22:
                 return (DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
             case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME280:
-                return (BME280_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
+            case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME680:
+                return (BME_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
             default:
                 return (DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
             }
@@ -307,10 +326,14 @@ bool EnvironmentalMeasurementPlugin::sendOurEnvironmentalMeasurement(NodeNum des
         m.temperature = this->dht->readTemperature();
         break;
      case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME280:
-        m.temperature = bme.readTemperature();
-        m.relative_humidity = bme.readHumidity();
-        // TODO Work out standard units for pressure. This is in hPa from the Adafruit example
-        m.barometric_pressure = bme.readPressure() / 100.0F;
+        m.temperature = bme280.readTemperature();
+        m.relative_humidity = bme280.readHumidity();
+        m.barometric_pressure = bme280.readPressure() / 100.0F;
+        break;
+    case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME680:
+        m.temperature = bme680.readTemperature();
+        m.relative_humidity = bme680.readHumidity();
+        m.barometric_pressure = bme680.readPressure() / 100.0F;
         break;
     default:
         DEBUG_MSG("EnvironmentalMeasurement: Invalid sensor type selected; Disabling plugin");
