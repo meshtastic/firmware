@@ -14,7 +14,7 @@ jobs:
       - name: Update Submodule
         run: |
           git pull --recurse-submodules
-          git submodule update --remote --recursive
+          git submodule update --remote proto
           
       - name: Download nanopb
         run: |
