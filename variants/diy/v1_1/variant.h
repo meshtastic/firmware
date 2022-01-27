@@ -25,9 +25,9 @@
 #undef RF95_SCK
 #define RF95_SCK 18
 #undef RF95_MISO
-#define RF95_MISO 23
+#define RF95_MISO 19
 #undef RF95_MOSI
-#define RF95_MOSI 19
+#define RF95_MOSI 23
 #undef RF95_NSS
 #define RF95_NSS 5
 
