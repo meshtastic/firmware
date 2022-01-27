@@ -11,10 +11,16 @@ export APP_VERSION=$VERSION
 
 if [[ $# -gt 0 ]]; then
     # can override which environment by passing arg
-    BOARDS="-e $1"
+    BOARDS="-e $@"
 else
-    BOARDS="-e tlora-v2 -e tlora-v1 -e tlora_v1_3 -e tlora-v2-1-1.6 -e tbeam -e heltec-v1 -e heltec-v2.0 -e heltec-v2.1 -e tbeam0.7 -e meshtastic-diy-v1 -e rak4631_5005 -e rak4631_19003 -e t-echo"
+    BOARDS="tlora-v2 tlora-v1 tlora_v1_3 tlora-v2-1-1.6 tbeam heltec-v1 heltec-v2.0 heltec-v2.1 tbeam0.7 meshtastic-diy-v1 rak4631_5005 rak4631_19003 t-echo"
 fi
 
 #echo "BOARDS:${BOARDS}"
-pio check --flags "-DAPP_VERSION=${APP_VERSION} --suppressions-list=suppressions.txt" $BOARDS --skip-packages --pattern="src/" --fail-on-defect=low --fail-on-defect=medium --fail-on-defect=high
+
+CHECK=""
+for BOARD in $BOARDS; do
+     CHECK="${CHECK} -e ${BOARD}"
+done
+
+pio check --flags "-DAPP_VERSION=${APP_VERSION} --suppressions-list=suppressions.txt" $CHECK --skip-packages --pattern="src/" --fail-on-defect=low --fail-on-defect=medium --fail-on-defect=high
