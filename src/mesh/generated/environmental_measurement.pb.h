@@ -14,6 +14,9 @@ typedef struct _EnvironmentalMeasurement {
     float temperature;
     float relative_humidity;
     float barometric_pressure;
+    float gas_resistance;
+    float voltage;
+    float current;
 } EnvironmentalMeasurement;
 
 
@@ -22,19 +25,25 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define EnvironmentalMeasurement_init_default    {0, 0, 0}
-#define EnvironmentalMeasurement_init_zero       {0, 0, 0}
+#define EnvironmentalMeasurement_init_default    {0, 0, 0, 0, 0, 0}
+#define EnvironmentalMeasurement_init_zero       {0, 0, 0, 0, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define EnvironmentalMeasurement_temperature_tag 1
 #define EnvironmentalMeasurement_relative_humidity_tag 2
 #define EnvironmentalMeasurement_barometric_pressure_tag 3
+#define EnvironmentalMeasurement_gas_resistance_tag 4
+#define EnvironmentalMeasurement_voltage_tag     5
+#define EnvironmentalMeasurement_current_tag     6
 
 /* Struct field encoding specification for nanopb */
 #define EnvironmentalMeasurement_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, FLOAT,    temperature,       1) \
 X(a, STATIC,   SINGULAR, FLOAT,    relative_humidity,   2) \
-X(a, STATIC,   SINGULAR, FLOAT,    barometric_pressure,   3)
+X(a, STATIC,   SINGULAR, FLOAT,    barometric_pressure,   3) \
+X(a, STATIC,   SINGULAR, FLOAT,    gas_resistance,    4) \
+X(a, STATIC,   SINGULAR, FLOAT,    voltage,           5) \
+X(a, STATIC,   SINGULAR, FLOAT,    current,           6)
 #define EnvironmentalMeasurement_CALLBACK NULL
 #define EnvironmentalMeasurement_DEFAULT NULL
 
@@ -44,7 +53,7 @@ extern const pb_msgdesc_t EnvironmentalMeasurement_msg;
 #define EnvironmentalMeasurement_fields &EnvironmentalMeasurement_msg
 
 /* Maximum encoded size of messages (where known) */
-#define EnvironmentalMeasurement_size            15
+#define EnvironmentalMeasurement_size            30
 
 #ifdef __cplusplus
 } /* extern "C" */
