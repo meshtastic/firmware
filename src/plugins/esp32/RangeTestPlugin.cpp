@@ -4,6 +4,7 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
+#include "airtime.h"
 #include "configuration.h"
 #include "gps/GeoCoord.h"
 #include <Arduino.h>
@@ -73,7 +74,13 @@ int32_t RangeTestPlugin::runOnce()
                 DEBUG_MSG("gpsStatus->getHasLock()      %d\n", gpsStatus->getHasLock());
                 DEBUG_MSG("pref.fixed_position()        %d\n", radioConfig.preferences.fixed_position);
 
-                rangeTestPluginRadio->sendPayload();
+                // Only send packets if the channel is less than 25% utilized.
+                if (airTime->channelUtilizationPercent() < 25) {
+                    rangeTestPluginRadio->sendPayload();
+                } else {
+                    DEBUG_MSG("rangeTest - Channel utilization is too high. Skipping this opportunity to send and will retry later.\n");
+                }
+
                 return (senderHeartbeat);
             } else {
                 // Otherwise, we're a receiver.
@@ -273,7 +280,7 @@ bool RangeTestPluginRadio::appendFile(const MeshPacket &mp)
 
     if (n->position.latitude_i && n->position.longitude_i && gpsStatus->getLatitude() && gpsStatus->getLongitude()) {
         float distance = GeoCoord::latLongToMeter(n->position.latitude_i * 1e-7, n->position.longitude_i * 1e-7,
-                                        gpsStatus->getLatitude() * 1e-7, gpsStatus->getLongitude() * 1e-7);
+                                                  gpsStatus->getLatitude() * 1e-7, gpsStatus->getLongitude() * 1e-7);
         fileToAppend.printf("%f,", distance); // Distance in meters
     } else {
         fileToAppend.printf("0,");
