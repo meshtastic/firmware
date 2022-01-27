@@ -31,7 +31,8 @@ typedef enum _HardwareModel {
     HardwareModel_NRF52_UNKNOWN = 36,
     HardwareModel_PORTDUINO = 37,
     HardwareModel_ANDROID_SIM = 38,
-    HardwareModel_DIY_V1 = 39
+    HardwareModel_DIY_V1 = 39,
+    HardwareModel_RAK11200 = 40
 } HardwareModel;
 
 typedef enum _Team {
@@ -285,8 +286,8 @@ typedef struct _ToRadio {
 
 /* Helper constants for enums */
 #define _HardwareModel_MIN HardwareModel_UNSET
-#define _HardwareModel_MAX HardwareModel_DIY_V1
-#define _HardwareModel_ARRAYSIZE ((HardwareModel)(HardwareModel_DIY_V1+1))
+#define _HardwareModel_MAX HardwareModel_RAK11200
+#define _HardwareModel_ARRAYSIZE ((HardwareModel)(HardwareModel_RAK11200+1))
 
 #define _Team_MIN Team_CLEAR
 #define _Team_MAX Team_BROWN

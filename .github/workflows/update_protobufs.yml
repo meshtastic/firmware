@@ -1,4 +1,4 @@
-name: "Update protobufs"
+name: "Update protobufs and regenerate classes"
 on: workflow_dispatch
 
 jobs:
@@ -11,14 +11,23 @@ jobs:
         with:
           submodules: true
 
-      - name: Update Submodule
+      - name: Update submodule
         run: |
-          git pull --recurse-submodules
-          git submodule update --remote --recursive
-      - name: Commit update
+          git submodule update --remote proto
+          
+      - name: Download nanopb
         run: |
-          git config --global user.name 'github-actions'
-          git config --global user.email 'bot@noreply.github.com'
-          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
-          git add proto
-          git commit -m "Update protobuf submodule" && git push || echo "No changes to commit"
+          wget https://jpa.kapsi.fi/nanopb/download/nanopb-0.4.4-linux-x86.tar.gz
+          tar xvzf nanopb-0.4.4-linux-x86.tar.gz
+          mv nanopb-0.4.4-linux-x86 nanopb-0.4.4
+          
+      - name: Re-generate protocol buffers
+        run: |
+          ./bin/regen-protos.sh  
+          
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v3
+        with:
+          add-paths: |
+            proto
+            src/mesh

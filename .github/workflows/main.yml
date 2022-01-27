@@ -3,9 +3,14 @@ on:
   # Triggers the workflow on push or pull request events but only for the master branch
   push:
     branches: [ master ]
+    paths-ignore:
+      - '**.md'
+      - '**.yml'
   pull_request:
     branches: [ master ]
-
+    paths-ignore:
+      - '**.md'
+      - '**.yml'
 jobs:
 
   ci-check:
