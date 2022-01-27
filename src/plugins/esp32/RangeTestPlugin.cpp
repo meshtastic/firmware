@@ -78,7 +78,7 @@ int32_t RangeTestPlugin::runOnce()
                 if (airTime->channelUtilizationPercent() < 25) {
                     rangeTestPluginRadio->sendPayload();
                 } else {
-                    DEBUG_MSG("rangeTest - Channel utilization is too high. Skipping this opportunity to send and will retry later.\n");
+                    DEBUG_MSG("rangeTest - Channel utilization is >25 percent. Skipping this opportunity to send.\n");
                 }
 
                 return (senderHeartbeat);
