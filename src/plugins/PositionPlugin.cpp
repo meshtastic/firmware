@@ -3,6 +3,7 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include "Router.h"
+#include "airtime.h"
 #include "configuration.h"
 #include "gps/GeoCoord.h"
 
@@ -127,60 +128,77 @@ int32_t PositionPlugin::runOnce()
 {
     NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
 
-    //radioConfig.preferences.position_broadcast_smart = true;
+    // radioConfig.preferences.position_broadcast_smart = true;
 
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();
     if (lastGpsSend == 0 || now - lastGpsSend >= getPref_position_broadcast_secs() * 1000) {
 
-        lastGpsSend = now;
+        // Only send packets if the channel is less than 40% utilized.
+        if (airTime->channelUtilizationPercent() < 40) {
 
-        lastGpsLatitude = node->position.latitude_i;
-        lastGpsLongitude = node->position.longitude_i;
+            lastGpsSend = now;
 
-        // If we changed channels, ask everyone else for their latest info
-        bool requestReplies = currentGeneration != radioGeneration;
-        currentGeneration = radioGeneration;
+            lastGpsLatitude = node->position.latitude_i;
+            lastGpsLongitude = node->position.longitude_i;
 
-        DEBUG_MSG("Sending pos@%x:6 to mesh (wantReplies=%d)\n", node->position.pos_timestamp, requestReplies);
-        sendOurPosition(NODENUM_BROADCAST, requestReplies);
+            // If we changed channels, ask everyone else for their latest info
+            bool requestReplies = currentGeneration != radioGeneration;
+            currentGeneration = radioGeneration;
+
+            DEBUG_MSG("Sending pos@%x:6 to mesh (wantReplies=%d)\n", node->position.pos_timestamp, requestReplies);
+
+            sendOurPosition(NODENUM_BROADCAST, requestReplies);
+
+        } else {
+            DEBUG_MSG("Channel utilization is >50 percent. Skipping this opportunity to send.\n");
+        }
+
     } else if (radioConfig.preferences.position_broadcast_smart == true) {
-        NodeInfo *node2 = service.refreshMyNodeInfo(); // should guarantee there is now a position
 
-        if (node2->has_position && (node2->position.latitude_i != 0 || node2->position.longitude_i != 0)) {
-            // The minimum distance to travel before we are able to send a new position packet.
-            const uint32_t distanceTravelMinimum = 30;
+        // Only send packets if the channel is less than 40% utilized.
+        if (airTime->channelUtilizationPercent() < 40) {
 
-            // The minimum time that would pass before we are able to send a new position packet.
-            const uint32_t timeTravelMinimum = 30;
+            NodeInfo *node2 = service.refreshMyNodeInfo(); // should guarantee there is now a position
 
-            // Determine the distance in meters between two points on the globe
-            float distance = GeoCoord::latLongToMeter(lastGpsLatitude * 1e-7, lastGpsLongitude * 1e-7,
-                                                      node->position.latitude_i * 1e-7, node->position.longitude_i * 1e-7);
+            if (node2->has_position && (node2->position.latitude_i != 0 || node2->position.longitude_i != 0)) {
+                // The minimum distance to travel before we are able to send a new position packet.
+                const uint32_t distanceTravelMinimum = 30;
 
-            // Yes, this has a bunch of magic numbers. Sorry. This is to make the scale non-linear.
-            const float distanceTravelMath = 1203 / (sqrt( pow(myNodeInfo.bitrate, 1.5) / 1.1 ) ) ;
-            uint32_t distanceTravel = (distanceTravelMath >= distanceTravelMinimum) ? distanceTravelMath : distanceTravelMinimum;
+                // The minimum time that would pass before we are able to send a new position packet.
+                const uint32_t timeTravelMinimum = 30;
 
-            // Yes, this has a bunch of magic numbers. Sorry.
-            uint32_t timeTravel = ((1500 / myNodeInfo.bitrate) >= timeTravelMinimum) ? (1500 / myNodeInfo.bitrate) : timeTravelMinimum;
+                // Determine the distance in meters between two points on the globe
+                float distance = GeoCoord::latLongToMeter(lastGpsLatitude * 1e-7, lastGpsLongitude * 1e-7,
+                                                          node->position.latitude_i * 1e-7, node->position.longitude_i * 1e-7);
 
-            // If the distance traveled since the last update is greater than 100 meters
-            //   and it's been at least 60 seconds since the last update
-            if ((abs(distance) >= distanceTravel) &&
-                (now - lastGpsSend >= timeTravel * 1000)
-                ) {
-                bool requestReplies = currentGeneration != radioGeneration;
-                currentGeneration = radioGeneration;
+                // Yes, this has a bunch of magic numbers. Sorry. This is to make the scale non-linear.
+                const float distanceTravelMath = 1203 / (sqrt(pow(myNodeInfo.bitrate, 1.5) / 1.1));
+                uint32_t distanceTravel =
+                    (distanceTravelMath >= distanceTravelMinimum) ? distanceTravelMath : distanceTravelMinimum;
 
-                DEBUG_MSG("Sending smart pos@%x:6 to mesh (wantReplies=%d, dt=%d, tt=%d)\n", node2->position.pos_timestamp, requestReplies, distanceTravel, timeTravel);
-                sendOurPosition(NODENUM_BROADCAST, requestReplies);
+                // Yes, this has a bunch of magic numbers. Sorry.
+                uint32_t timeTravel =
+                    ((1500 / myNodeInfo.bitrate) >= timeTravelMinimum) ? (1500 / myNodeInfo.bitrate) : timeTravelMinimum;
 
-                /* Update lastGpsSend to now. This means if the device is stationary, then
-                   getPref_position_broadcast_secs will still apply.
-                */
-                lastGpsSend = now;
+                // If the distance traveled since the last update is greater than 100 meters
+                //   and it's been at least 60 seconds since the last update
+                if ((abs(distance) >= distanceTravel) && (now - lastGpsSend >= timeTravel * 1000)) {
+                    bool requestReplies = currentGeneration != radioGeneration;
+                    currentGeneration = radioGeneration;
+
+                    DEBUG_MSG("Sending smart pos@%x:6 to mesh (wantReplies=%d, dt=%d, tt=%d)\n", node2->position.pos_timestamp,
+                              requestReplies, distanceTravel, timeTravel);
+                    sendOurPosition(NODENUM_BROADCAST, requestReplies);
+
+                    /* Update lastGpsSend to now. This means if the device is stationary, then
+                       getPref_position_broadcast_secs will still apply.
+                    */
+                    lastGpsSend = now;
+                }
             }
+        } else {
+            DEBUG_MSG("Channel utilization is >40 percent. Skipping this opportunity to send.\n");
         }
     }
 
