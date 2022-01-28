@@ -222,7 +222,7 @@ ErrorCode Router::send(MeshPacket *p)
          *        set                        0              0
          *        set                        1              1
          * 
-         * => so we only encrypt mqtt if they have a custom mqtt server AND mqtt_encryption_enabled is FALSE
+         * => so we only decrypt mqtt if they have a custom mqtt server AND mqtt_encryption_enabled is FALSE
          */ 
 
         bool shouldActuallyEncrypt = true;
