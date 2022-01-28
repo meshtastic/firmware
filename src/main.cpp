@@ -658,16 +658,16 @@ void setup()
 
     if (!rIf)
         RECORD_CRITICALERROR(CriticalErrorCode_NoRadio);
-    else
+    else{
         router->addInterface(rIf);
 
-    // Calculate and save the bit rate to myNodeInfo
-    // TODO: This needs to be added what ever method changes the channel from the phone.
-    myNodeInfo.bitrate = (float(Constants_DATA_PAYLOAD_LEN) / 
-                    (float(rIf->getPacketTime(Constants_DATA_PAYLOAD_LEN)))
-                    ) * 1000;
-    DEBUG_MSG("myNodeInfo.bitrate = %f bytes / sec\n", myNodeInfo.bitrate);
-
+        // Calculate and save the bit rate to myNodeInfo
+        // TODO: This needs to be added what ever method changes the channel from the phone.
+        myNodeInfo.bitrate = (float(Constants_DATA_PAYLOAD_LEN) /
+                        (float(rIf->getPacketTime(Constants_DATA_PAYLOAD_LEN)))
+                        ) * 1000;
+        DEBUG_MSG("myNodeInfo.bitrate = %f bytes / sec\n", myNodeInfo.bitrate);
+    }
 
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
