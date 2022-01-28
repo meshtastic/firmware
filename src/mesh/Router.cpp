@@ -210,6 +210,33 @@ ErrorCode Router::send(MeshPacket *p)
     if (p->which_payloadVariant == MeshPacket_decoded_tag) {
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
 
+
+
+#if defined(HAS_WIFI) || defined(PORTDUINO)
+        //check if we should send decrypted packets to mqtt
+
+        //truth table:
+        /* mqtt_server  mqtt_encryption_enabled should_encrypt
+         *    not set                        0              1
+         *    not set                        1              1
+         *        set                        0              0
+         *        set                        1              1
+         * 
+         * => so we only encrypt mqtt if they have a custom mqtt server AND mqtt_encryption_enabled is FALSE
+         */ 
+
+        bool shouldActuallyEncrypt = true;
+        if (*radioConfig.preferences.mqtt_server && !radioConfig.preferences.mqtt_encryption_enabled) {
+            shouldActuallyEncrypt = false;
+        }
+        
+        DEBUG_MSG("Should encrypt MQTT?: %d\n", shouldActuallyEncrypt);
+
+        //do not decrypt packets if the user hasn't set a custom mqtt server
+        if (mqtt && !shouldActuallyEncrypt)
+            mqtt->onSend(*p, chIndex);
+#endif
+
         auto encodeResult = perhapsEncode(p);
         if (encodeResult != Routing_Error_NONE) {
             abortSendAndNak(encodeResult, p);
@@ -217,7 +244,8 @@ ErrorCode Router::send(MeshPacket *p)
         }
 
 #if defined(HAS_WIFI) || defined(PORTDUINO)
-        if (mqtt)
+        //check if we should send encrypted packets to mqtt
+        if (mqtt && shouldActuallyEncrypt)
             mqtt->onSend(*p, chIndex);
 #endif
     }
