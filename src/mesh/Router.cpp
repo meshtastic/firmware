@@ -232,7 +232,7 @@ ErrorCode Router::send(MeshPacket *p)
         
         DEBUG_MSG("Should encrypt MQTT?: %d\n", shouldActuallyEncrypt);
 
-        //do not decrypt packets if the user hasn't set a custom mqtt server
+        //the packet is currently in a decrypted state.  send it now if they want decrypted packets
         if (mqtt && !shouldActuallyEncrypt)
             mqtt->onSend(*p, chIndex);
 #endif
@@ -244,6 +244,7 @@ ErrorCode Router::send(MeshPacket *p)
         }
 
 #if defined(HAS_WIFI) || defined(PORTDUINO)
+        //the packet is now encrypted.
         //check if we should send encrypted packets to mqtt
         if (mqtt && shouldActuallyEncrypt)
             mqtt->onSend(*p, chIndex);
