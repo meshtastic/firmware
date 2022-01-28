@@ -17,7 +17,7 @@
 /// Set pin modes for every set bit in a mask
 static void pinModes(uint64_t mask, uint8_t mode)
 {
-    for (uint8_t i = 0; i < NUM_GPIOS; i++) {
+    for (uint64_t i = 0; i < NUM_GPIOS; i++) {
         if (mask & (1 << i)) {
             pinMode(i, mode);
         }
@@ -29,13 +29,17 @@ static uint64_t digitalReads(uint64_t mask)
 {
     uint64_t res = 0;
 
-    pinModes(mask, INPUT_PULLUP);
+    // The Arduino docs show to run pinMode(). But, when testing, found it is best not to.
+    // If the line below is uncommented, read will flip the pin to the default of the second
+    // argument in pinModes(), which will make the read turn the PIN "on".
+    //pinModes(mask, INPUT_PULLUP);
 
-    for (uint8_t i = 0; i < NUM_GPIOS; i++) {
+    for (uint64_t i = 0; i < NUM_GPIOS; i++) {
         uint64_t m = 1 << i;
         if (mask & m) {
-            if (digitalRead(i))
+            if (digitalRead(i)) {
                 res |= m;
+            }
         }
     }
 
@@ -79,6 +83,7 @@ bool RemoteHardwarePlugin::handleReceivedProtobuf(const MeshPacket &req, Hardwar
         HardwareMessage r = HardwareMessage_init_default;
         r.typ = HardwareMessage_Type_READ_GPIOS_REPLY;
         r.gpio_value = res;
+        r.gpio_mask = p.gpio_mask;
         MeshPacket *p2 = allocDataProtobuf(r);
         setReplyTo(p2, req);
         myReply = p2;
