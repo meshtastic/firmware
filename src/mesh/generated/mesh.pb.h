@@ -32,7 +32,8 @@ typedef enum _HardwareModel {
     HardwareModel_PORTDUINO = 37,
     HardwareModel_ANDROID_SIM = 38,
     HardwareModel_DIY_V1 = 39,
-    HardwareModel_RAK11200 = 40
+    HardwareModel_RAK11200 = 40,
+    HardwareModel_PRIVATE_HW = 255
 } HardwareModel;
 
 typedef enum _Team {
@@ -286,8 +287,8 @@ typedef struct _ToRadio {
 
 /* Helper constants for enums */
 #define _HardwareModel_MIN HardwareModel_UNSET
-#define _HardwareModel_MAX HardwareModel_RAK11200
-#define _HardwareModel_ARRAYSIZE ((HardwareModel)(HardwareModel_RAK11200+1))
+#define _HardwareModel_MAX HardwareModel_PRIVATE_HW
+#define _HardwareModel_ARRAYSIZE ((HardwareModel)(HardwareModel_PRIVATE_HW+1))
 
 #define _Team_MIN Team_CLEAR
 #define _Team_MAX Team_BROWN
@@ -645,12 +646,12 @@ extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define Position_size                            153
-#define User_size                                96
+#define User_size                                97
 #define RouteDiscovery_size                      40
 #define Routing_size                             42
 #define Data_size                                267
 #define MeshPacket_size                          318
-#define NodeInfo_size                            270
+#define NodeInfo_size                            271
 #define MyNodeInfo_size                          457
 #define LogRecord_size                           81
 #define FromRadio_size                           466
