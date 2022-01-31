@@ -1,14 +1,8 @@
 #pragma once
 #include "../mesh/generated/environmental_measurement.pb.h"
 #include "ProtobufPlugin.h"
-#include <DHT.h>
-#include <DS18B20.h>
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
-#include <OneWire.h>
-#include <Adafruit_Sensor.h>
-#include <Adafruit_BME280.h>
-#include <Adafruit_BME680.h>
 
 class EnvironmentalMeasurementPlugin : private concurrency::OSThread, public ProtobufPlugin<EnvironmentalMeasurement>
 {
