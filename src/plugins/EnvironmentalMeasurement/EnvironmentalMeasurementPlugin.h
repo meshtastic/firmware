@@ -36,11 +36,6 @@ class EnvironmentalMeasurementPlugin : private concurrency::OSThread, public Pro
   private:
     float CelsiusToFarenheit(float c);
     bool firstTime = 1;
-    DHT *dht = NULL;
-    OneWire *oneWire = NULL;
-    DS18B20 *ds18b20 = NULL;
-    Adafruit_BME280 bme280;
-    Adafruit_BME680 bme680;
     const MeshPacket *lastMeasurementPacket;
     uint32_t sensor_read_error_count = 0;
 };
