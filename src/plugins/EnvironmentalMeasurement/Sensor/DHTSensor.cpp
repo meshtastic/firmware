@@ -32,4 +32,5 @@ bool DHTSensor::getMeasurement(EnvironmentalMeasurement *measurement) {
     }
     measurement->relative_humidity = dht->readHumidity();
     measurement->temperature = dht->readTemperature();
+    return true;
 }    
