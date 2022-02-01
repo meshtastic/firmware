@@ -75,7 +75,7 @@ void setBluetoothEnable(bool on)
                 else {
                     nrf52Bluetooth = new NRF52Bluetooth();
                     nrf52Bluetooth->setup();
-
+                    
                     // We delay brownout init until after BLE because BLE starts soft device
                     initBrownout();
                 }
@@ -185,4 +185,12 @@ void cpuDeepSleep(uint64_t msecToWake)
         delay(5000);
         DEBUG_MSG(".");
     }
+}
+
+void clearBonds() {
+    if (!nrf52Bluetooth) {
+        nrf52Bluetooth = new NRF52Bluetooth();
+        nrf52Bluetooth->setup();
+    }
+    nrf52Bluetooth->clearBonds();
 }

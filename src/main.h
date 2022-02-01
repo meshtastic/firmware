@@ -27,4 +27,4 @@ extern uint32_t shutdownAtMsec;
 // This will supress the current delay and instead try to run ASAP.
 extern bool runASAP;
 
-void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop();
+void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop(), clearBonds();
