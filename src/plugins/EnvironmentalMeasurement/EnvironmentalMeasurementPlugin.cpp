@@ -6,19 +6,20 @@
 #include "Router.h"
 #include "configuration.h"
 #include "main.h"
-#include <DHT.h>
-#include <DS18B20.h>
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
-#include <OneWire.h>
-#include <Adafruit_Sensor.h>
-#include <Adafruit_BME280.h>
-#include <Adafruit_BME680.h>
 
-#define DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS 1000
-#define DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS 1000
-#define DS18B20_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS 1000
-#define BME_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS 1000
+// Sensors
+#include "Sensor/BME280Sensor.h"
+#include "Sensor/BME680Sensor.h"
+#include "Sensor/DHTSensor.h"
+#include "Sensor/DallasSensor.h"
+
+BME280Sensor bme280Sensor;
+BME680Sensor bme680Sensor;
+DHTSensor dhtSensor;
+DallasSensor dallasSensor;
+
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
@@ -38,6 +39,7 @@
 #define FONT_HEIGHT_SMALL fontHeight(FONT_SMALL)
 #define FONT_HEIGHT_MEDIUM fontHeight(FONT_MEDIUM)
 
+
 int32_t EnvironmentalMeasurementPlugin::runOnce()
 {
 #ifndef PORTDUINO
@@ -45,8 +47,8 @@ int32_t EnvironmentalMeasurementPlugin::runOnce()
         Uncomment the preferences below if you want to use the plugin
         without having to configure it from the PythonAPI or WebUI.
     */
-
-    /*radioConfig.preferences.environmental_measurement_plugin_measurement_enabled = 1;
+    /*
+    radioConfig.preferences.environmental_measurement_plugin_measurement_enabled = 1;
     radioConfig.preferences.environmental_measurement_plugin_screen_enabled = 1;
     radioConfig.preferences.environmental_measurement_plugin_read_error_count_threshold = 5;
     radioConfig.preferences.environmental_measurement_plugin_update_interval = 600;
@@ -75,72 +77,28 @@ int32_t EnvironmentalMeasurementPlugin::runOnce()
             // therefore, we should only enable the sensor loop if measurement is also enabled
             switch (radioConfig.preferences.environmental_measurement_plugin_sensor_type) {
 
-            case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11:
-            case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT12:
-                dht = new DHT(radioConfig.preferences.environmental_measurement_plugin_sensor_pin, DHT11);
-                this->dht->begin();
-                this->dht->read();
-                DEBUG_MSG("EnvironmentalMeasurement: Opened DHT11/DHT12 on pin: %d\n",
-                          radioConfig.preferences.environmental_measurement_plugin_sensor_pin);
-                return (DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
-            case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DS18B20:
-                oneWire = new OneWire(radioConfig.preferences.environmental_measurement_plugin_sensor_pin);
-                ds18b20 = new DS18B20(oneWire);
-                this->ds18b20->begin();
-                this->ds18b20->setResolution(12);
-                this->ds18b20->requestTemperatures();
-                DEBUG_MSG("EnvironmentalMeasurement: Opened DS18B20 on pin: %d\n",
-                          radioConfig.preferences.environmental_measurement_plugin_sensor_pin);
-                return (DS18B20_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
-            case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT21:
-            case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT22:
-                dht = new DHT(radioConfig.preferences.environmental_measurement_plugin_sensor_pin, DHT22);
-                this->dht->begin();
-                this->dht->read();
-                DEBUG_MSG("EnvironmentalMeasurement: Opened DHT21/DHT22 on pin: %d\n",
-                          radioConfig.preferences.environmental_measurement_plugin_sensor_pin);
-                return (DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
-            case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME280:
-                unsigned bme280Status;
-                // Default i2c address for BME280
-                bme280Status = bme280.begin(0x76); 
-                if (!bme280Status) {
-                    DEBUG_MSG("Could not find a valid BME280 sensor, check wiring, address, sensor ID!");
-                    // TODO more verbose diagnostics
-                } else {
-                    DEBUG_MSG("EnvironmentalMeasurement: Opened BME280 on default i2c bus");
-                }
-                return (BME_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
-            case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME680:
-                unsigned bme680Status;
-                // Default i2c address for BME280
-                bme680Status = bme680.begin(0x76); 
-                if (!bme680Status) {
-                    DEBUG_MSG("Could not find a valid BME680 sensor, check wiring, address, sensor ID!");
-                    // TODO more verbose diagnostics
-                } else {
-                    DEBUG_MSG("EnvironmentalMeasurement: Opened BME680 on default i2c bus");
-                    // Set up oversampling and filter initialization
-                    bme680.setTemperatureOversampling(BME680_OS_8X);
-                    bme680.setHumidityOversampling(BME680_OS_2X);
-                    bme680.setPressureOversampling(BME680_OS_4X);
-                    bme680.setIIRFilterSize(BME680_FILTER_SIZE_3);
-                    bme680.setGasHeater(320, 150); // 320*C for 150 ms
-                }
-                return (BME_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
-            default:
-                DEBUG_MSG("EnvironmentalMeasurement: Invalid sensor type selected; Disabling plugin");
-                return (INT32_MAX);
-                break;
+                case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11:
+                case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT12:
+                case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT21:
+                case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT22:
+                    return dhtSensor.runOnce();
+                case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DS18B20:
+                    return dallasSensor.runOnce();
+                case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME280:
+                    return bme280Sensor.runOnce();
+                case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME680:
+                    return bme680Sensor.runOnce();
+                default:
+                    DEBUG_MSG("EnvironmentalMeasurement: Invalid sensor type selected; Disabling plugin");
+                    return (INT32_MAX);
+                    break;
             }
         }
         return (INT32_MAX);
     } else {
-        if (!radioConfig.preferences.environmental_measurement_plugin_measurement_enabled) {
-            // if we somehow got to a second run of this plugin with measurement disabled, then just wait forever
-            // I can't imagine we'd ever get here though.
+        // if we somehow got to a second run of this plugin with measurement disabled, then just wait forever
+        if (!radioConfig.preferences.environmental_measurement_plugin_measurement_enabled)  
             return (INT32_MAX);
-        }
         // this is not the first time OSThread library has called this function
         // so just do what we intend to do on the interval
         if (sensor_read_error_count > radioConfig.preferences.environmental_measurement_plugin_read_error_count_threshold) {
@@ -167,22 +125,20 @@ int32_t EnvironmentalMeasurementPlugin::runOnce()
         if (!sendOurEnvironmentalMeasurement()) {
             // if we failed to read the sensor, then try again
             // as soon as we can according to the maximum polling frequency
-            // return (DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
 
             switch (radioConfig.preferences.environmental_measurement_plugin_sensor_type) {
-            case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11:
-            case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT12:
-                return (DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
-            case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DS18B20:
-                return (DS18B20_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
-            case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT21:
-            case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT22:
-                return (DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
-            case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME280:
-            case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME680:
-                return (BME_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
-            default:
-                return (DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
+                case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11:
+                case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT12:
+                case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT21:
+                case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT22:
+                    return (DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
+                case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DS18B20:
+                    return (DS18B20_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
+                case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME280:
+                case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME680:
+                    return (BME_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
+                default:
+                    return (DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
             }
         }
     }
@@ -256,7 +212,6 @@ void EnvironmentalMeasurementPlugin::drawFrame(OLEDDisplay *display, OLEDDisplay
     String last_temp = String(lastMeasurement.temperature, 0) + "°C";
     if (radioConfig.preferences.environmental_measurement_plugin_display_farenheit) {
         last_temp = String(CelsiusToFarenheit(lastMeasurement.temperature), 0) + "°F";
-        ;
     }
     display->drawString(x, y += fontHeight(FONT_MEDIUM) - 2, "From: " + lastSender + "(" + String(agoSecs) + "s)");
     display->drawString(x, y += fontHeight(FONT_SMALL) - 2,"Temp/Hum: " + last_temp + " / " + String(lastMeasurement.relative_humidity, 0) + "%");
@@ -278,6 +233,7 @@ bool EnvironmentalMeasurementPlugin::handleReceivedProtobuf(const MeshPacket &mp
     DEBUG_MSG("EnvironmentalMeasurement->relative_humidity: %f\n", p->relative_humidity);
     DEBUG_MSG("EnvironmentalMeasurement->temperature: %f\n", p->temperature);
     DEBUG_MSG("EnvironmentalMeasurement->barometric_pressure: %f\n", p->barometric_pressure);
+    DEBUG_MSG("EnvironmentalMeasurement->gas_resistance: %f\n", p->gas_resistance);
 
     lastMeasurementPacket = packetPool.allocCopy(mp);
 
@@ -287,62 +243,39 @@ bool EnvironmentalMeasurementPlugin::handleReceivedProtobuf(const MeshPacket &mp
 bool EnvironmentalMeasurementPlugin::sendOurEnvironmentalMeasurement(NodeNum dest, bool wantReplies)
 {
     EnvironmentalMeasurement m;
-
-    m.barometric_pressure = 0; // TODO: Add support for barometric sensors
+    m.barometric_pressure = 0;
+    m.gas_resistance = 0;
     DEBUG_MSG("-----------------------------------------\n");
 
     DEBUG_MSG("EnvironmentalMeasurement: Read data\n");
 
     switch (radioConfig.preferences.environmental_measurement_plugin_sensor_type) {
-    case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11:
-    case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT12:
-        if (!this->dht->read(true)) {
-            sensor_read_error_count++;
-            DEBUG_MSG("EnvironmentalMeasurement: FAILED TO READ DATA\n");
-            return false;
-        }
-        m.relative_humidity = this->dht->readHumidity();
-        m.temperature = this->dht->readTemperature();
-        break;
-    case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DS18B20:
-        if (this->ds18b20->isConversionComplete()) {
-            m.temperature = this->ds18b20->getTempC();
-            m.relative_humidity = 0; // This sensor is temperature only
-            this->ds18b20->requestTemperatures();
+        case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DS18B20:
+            if (!dallasSensor.getMeasurement(&m))
+                sensor_read_error_count++;
             break;
-        } else {
-            sensor_read_error_count++;
-            DEBUG_MSG("EnvironmentalMeasurement: FAILED TO READ DATA\n");
+        case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11:
+        case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT12:
+        case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT21:
+        case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT22:
+            if (!dhtSensor.getMeasurement(&m))
+                sensor_read_error_count++;
+            break;
+        case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME280:
+            bme280Sensor.getMeasurement(&m);
+            break;
+        case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME680:
+            bme680Sensor.getMeasurement(&m);
+            break;
+        default:
+            DEBUG_MSG("EnvironmentalMeasurement: Invalid sensor type selected; Disabling plugin");
             return false;
-        }
-    case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT21:
-    case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT22:
-        if (!this->dht->read(true)) {
-            sensor_read_error_count++;
-            DEBUG_MSG("EnvironmentalMeasurement: FAILED TO READ DATA\n");
-            return false;
-        }
-        m.relative_humidity = this->dht->readHumidity();
-        m.temperature = this->dht->readTemperature();
-        break;
-     case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME280:
-        m.temperature = bme280.readTemperature();
-        m.relative_humidity = bme280.readHumidity();
-        m.barometric_pressure = bme280.readPressure() / 100.0F;
-        break;
-    case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME680:
-        m.temperature = bme680.readTemperature();
-        m.relative_humidity = bme680.readHumidity();
-        m.barometric_pressure = bme680.readPressure() / 100.0F;
-        break;
-    default:
-        DEBUG_MSG("EnvironmentalMeasurement: Invalid sensor type selected; Disabling plugin");
-        return false;
     }
 
     DEBUG_MSG("EnvironmentalMeasurement->relative_humidity: %f\n", m.relative_humidity);
     DEBUG_MSG("EnvironmentalMeasurement->temperature: %f\n", m.temperature);
     DEBUG_MSG("EnvironmentalMeasurement->barometric_pressure: %f\n", m.barometric_pressure);
+    DEBUG_MSG("EnvironmentalMeasurement->gas_resistance: %f\n", m.gas_resistance);
 
     sensor_read_error_count = 0;
 
