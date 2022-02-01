@@ -31,9 +31,6 @@
 #include "mesh/http/WebServer.h"
 #include "nimble/BluetoothUtil.h"
 #endif
-#ifdef NRF52_FAMILY
-
-#endif
 
 #if defined(HAS_WIFI) || defined(PORTDUINO)
 #include "mesh/wifi/WiFiServerAPI.h"
