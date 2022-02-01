@@ -199,6 +199,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // This string must exactly match the case used in release file names or the android updater won't work
 #define HW_VENDOR HardwareModel_GENIEBLOCKS
 
+#elif defined(PRIVATE_HW)
+// This string must exactly match the case used in release file names or the android updater won't work
+#define HW_VENDOR HardwareModel_PRIVATE_HW
+
 #endif
 
 #ifdef ARDUINO_NRF52840_PCA10056
