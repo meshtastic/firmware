@@ -14,11 +14,13 @@
 #include "Sensor/BME680Sensor.h"
 #include "Sensor/DHTSensor.h"
 #include "Sensor/DallasSensor.h"
+#include "Sensor/MCP9808Sensor.h"
 
 BME280Sensor bme280Sensor;
 BME680Sensor bme680Sensor;
 DHTSensor dhtSensor;
 DallasSensor dallasSensor;
+MCP9808Sensor mcp9808Sensor;
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
@@ -88,6 +90,8 @@ int32_t EnvironmentalMeasurementPlugin::runOnce()
                     return bme280Sensor.runOnce();
                 case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME680:
                     return bme680Sensor.runOnce();
+                case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MCP9808:
+                    return mcp9808Sensor.runOnce();
                 default:
                     DEBUG_MSG("EnvironmentalMeasurement: Invalid sensor type selected; Disabling plugin");
                     return (INT32_MAX);
@@ -137,6 +141,8 @@ int32_t EnvironmentalMeasurementPlugin::runOnce()
                 case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME280:
                 case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME680:
                     return (BME_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
+                case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MCP9808:
+                    return (MCP_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
                 default:
                     return (DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
             }
@@ -266,6 +272,9 @@ bool EnvironmentalMeasurementPlugin::sendOurEnvironmentalMeasurement(NodeNum des
             break;
         case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME680:
             bme680Sensor.getMeasurement(&m);
+            break;
+        case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MCP9808:
+            mcp9808Sensor.getMeasurement(&m);
             break;
         default:
             DEBUG_MSG("EnvironmentalMeasurement: Invalid sensor type selected; Disabling plugin");
