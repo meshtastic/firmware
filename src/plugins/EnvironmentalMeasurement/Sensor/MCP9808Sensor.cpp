@@ -15,7 +15,7 @@ int32_t MCP9808Sensor::runOnce() {
         DEBUG_MSG("Could not find a valid MCP9808 sensor, check wiring, address, sensor ID!");
     } else {
         DEBUG_MSG("EnvironmentalMeasurement: Opened MCP9808 on default i2c bus");
-        // Reduce resolution from 0.0625 degrees (precision) to 0.125 degrees (high).
+        // Reduce resolution from 0.0625 degrees (precision) to 0.125 degrees (high). 
         mcp9808.setResolution(2);
     }
     return (MCP_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
