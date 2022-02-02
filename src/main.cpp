@@ -341,6 +341,9 @@ class ButtonThread : public OSThread
 #ifndef NO_ESP32
         clearNVS();
 #endif
+#ifdef NRF52_SERIES
+        clearBonds();
+#endif
     }
 
 
