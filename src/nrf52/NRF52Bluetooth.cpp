@@ -5,6 +5,7 @@
 #include "mesh/PhoneAPI.h"
 #include "mesh/mesh-pb-constants.h"
 #include <bluefruit.h>
+#include <utility/bonding.h>
 
 static BLEService meshBleService = BLEService(BLEUuid(MESH_SERVICE_UUID_16));
 static BLECharacteristic fromNum = BLECharacteristic(BLEUuid(FROMNUM_UUID_16));
@@ -265,4 +266,14 @@ void NRF52Bluetooth::setup()
 void updateBatteryLevel(uint8_t level)
 {
     blebas.write(level);
+}
+
+void NRF52Bluetooth::clearBonds()
+{
+    DEBUG_MSG("Clearing bluetooth bonds!\n");
+    bond_print_list(BLE_GAP_ROLE_PERIPH);
+    bond_print_list(BLE_GAP_ROLE_CENTRAL);
+
+    Bluefruit.Periph.clearBonds();
+    Bluefruit.Central.clearBonds();
 }
