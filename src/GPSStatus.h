@@ -63,7 +63,9 @@ class GPSStatus : public Status
 
     int32_t getLatitude() const {
         if (radioConfig.preferences.fixed_position){
+#if GPS_EXTRAVERBOSE
             DEBUG_MSG("WARNING: Using fixed latitude\n");
+#endif
             NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
             return node->position.latitude_i;
         } else {
@@ -73,7 +75,9 @@ class GPSStatus : public Status
 
     int32_t getLongitude() const {
         if (radioConfig.preferences.fixed_position){
+#if GPS_EXTRAVERBOSE
             DEBUG_MSG("WARNING: Using fixed longitude\n");
+#endif
             NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
             return node->position.longitude_i;
         } else {
@@ -83,7 +87,9 @@ class GPSStatus : public Status
 
     int32_t getAltitude() const {
         if (radioConfig.preferences.fixed_position){
+#if GPS_EXTRAVERBOSE
             DEBUG_MSG("WARNING: Using fixed altitude\n");
+#endif
             NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
             return node->position.altitude;
         } else {
