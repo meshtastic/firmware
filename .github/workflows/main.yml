@@ -114,22 +114,19 @@ jobs:
         echo "Simulator started, launching python test..."
         python3 -c 'from meshtastic.test import testSimulator; testSimulator()'
 
-    # - name: Build for tbeam
-    #   run: platformio run -e tbeam
-    # - name: Build for heltec
-    #   run: platformio run -e heltec
-    # - name: Build for wisblock RAK4631
-    #   run: platformio run -e rak4631
-
     - name: Build everything
       run: bin/build-all.sh
+
+    - name: Get release version string
+      run: echo "::set-output name=version::$(./bin/buildinfo.py long)"
+      id: version
 
     - name: Store binaries as an artifact
       uses: actions/upload-artifact@v2
       with:
-        name: built
-        path: release/archive/firmware-*.zip
-        retention-days: 30
+        name: firmware-${{ steps.version.outputs.version }}.zip
+        path: release/archive/firmware-${{ steps.version.outputs.version }}.zip
+        retention-days: 90
 
     - name: Store debugging elf files as an artifact
       uses: actions/upload-artifact@v2
@@ -137,3 +134,17 @@ jobs:
         name: debug-elfs
         path: release/archive/elfs-*.zip
         retention-days: 7
+
+    - name: Download firmware.zip
+      uses: actions/download-artifact@master
+      with:
+        name: firmware-${{ steps.version.outputs.version }}.zip
+        path: ./
+
+    - name: Pull request artifacts
+      if: ${{ github.event_name == 'pull_request' }}
+      uses: gavv/pull-request-artifacts@v1.0.0
+      with:
+        commit: ${{ github.event.pull_request.head.sha }}
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        artifacts: ./firmware-${{ steps.version.outputs.version }}.zip
