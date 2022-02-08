@@ -6,7 +6,7 @@ on:
     paths-ignore:
       - '**.md'
       - '**.yml'
-  pull_request:
+  pull_request_target:
     branches: [ master ]
     paths-ignore:
       - '**.md'
@@ -142,10 +142,10 @@ jobs:
         path: ./
 
     - name: Pull request artifacts
-      if: ${{ github.event_name == 'pull_request' }}
+      if: ${{ github.event_name == 'pull_request_target' || github.event_name == 'pull_request' }}
       uses: gavv/pull-request-artifacts@v1.0.0
       with:
-        commit: ${{ github.event.pull_request.head.sha }}
+        commit: ${{ (github.event.pull_request_target || github.event.pull_request).head.sha }}
         repo-token: ${{ secrets.GITHUB_TOKEN }}
         artifacts-branch: artifacts
         artifacts: ./firmware-${{ steps.version.outputs.version }}.zip
