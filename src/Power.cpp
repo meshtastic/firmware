@@ -100,6 +100,10 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #ifndef ADC_MULTIPLIER
 #define ADC_MULTIPLIER 2.0
 #endif 
+    // Override variant or default ADC_MULTIPLIER if we have the override pref
+    float operativeAdcMultiplier = radioConfig.preferences.adc_multiplier_override > 0 ?
+        radioConfig.preferences.adc_multiplier_override :
+        ADC_MULTIPLIER;
 
 #ifdef BATTERY_PIN
         // Do not call analogRead() often. 
@@ -109,7 +113,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
             uint32_t raw = analogRead(BATTERY_PIN);
             float scaled;
             #ifndef VBAT_RAW_TO_SCALED
-            scaled = 1000.0 * ADC_MULTIPLIER * (AREF_VOLTAGE / 1024.0) * raw;
+            scaled = 1000.0 * operativeAdcMultiplier * (AREF_VOLTAGE / 1024.0) * raw;
             #else
             scaled = VBAT_RAW_TO_SCALED(raw); //defined in variant.h
             #endif

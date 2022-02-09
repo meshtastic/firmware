@@ -24,8 +24,7 @@
 #define LORA_DIO1 35 // Not really used
 #define LORA_DIO2 34 // Not really used
 
-// ratio of voltage divider = 3.20 (schematic R12=100k, R10=220k)
-// device to device variations, the actual ratio can be between 3.2 and 4
-#define ADC_MULTIPLIER 3.6 // best fit
+#define ADC_MULTIPLIER 3.8
+
 #define BATTERY_PIN 37 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Plugin.
