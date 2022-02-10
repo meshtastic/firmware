@@ -474,6 +474,9 @@ size_t NodeDB::getNumOnlineNodes()
 void NodeDB::updatePosition(uint32_t nodeId, const Position &p, RxSource src)
 {
     NodeInfo *info = getOrCreateNode(nodeId);
+    if (!info) {
+        return;
+    }
 
     if (src == RX_SRC_LOCAL) {
         // Local packet, fully authoritative
@@ -517,6 +520,9 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p, RxSource src)
 void NodeDB::updateUser(uint32_t nodeId, const User &p)
 {
     NodeInfo *info = getOrCreateNode(nodeId);
+    if (!info) {
+        return;
+    }
 
     DEBUG_MSG("old user %s/%s/%s\n", info->user.id, info->user.long_name, info->user.short_name);
 
@@ -546,6 +552,9 @@ void NodeDB::updateFrom(const MeshPacket &mp)
         DEBUG_MSG("Update DB node 0x%x, rx_time=%u\n", mp.from, mp.rx_time);
 
         NodeInfo *info = getOrCreateNode(getFrom(&mp));
+        if (!info) {
+            return;
+        }
 
         if (mp.rx_time) // if the packet has a valid timestamp use it to update our last_heard
             info->last_heard = mp.rx_time;
@@ -572,8 +581,12 @@ NodeInfo *NodeDB::getOrCreateNode(NodeNum n)
     NodeInfo *info = getNode(n);
 
     if (!info) {
+        if (*numNodes >= MAX_NUM_NODES) {
+            screen->print("error: node_db full!\n");
+            DEBUG_MSG("ERROR! could not create new node, node_db is full! (%d nodes)", *numNodes);
+            return NULL;
+        }
         // add the node
-        assert(*numNodes < MAX_NUM_NODES);
         info = &nodes[(*numNodes)++];
 
         // everything is missing except the nodenum
