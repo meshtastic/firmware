@@ -42,14 +42,16 @@ static const uint8_t SS = 32;
 static const uint8_t MOSI = 25;
 static const uint8_t MISO = 35;
 static const uint8_t SCK = 33;
+#endif /* Pins_Arduino_h */
 
 /* -------- Meshtastic pins -------- */
-
 #define I2C_SDA SDA
 #define I2C_SCL SCL
 
-#define GPS_RX_PIN RX
-#define GPS_RX_PIN TX
+#undef GPS_RX_PIN
+#define GPS_RX_PIN (RX)
+#undef GPS_TX_PIN
+#define GPS_TX_PIN (TX)
 
 #define LED_PIN LED_BLUE
 
@@ -63,18 +65,20 @@ static const uint8_t SCK = 33;
 #define LORA_DIO2 WB_IO5  // BUSY for SX1262/SX1268
 #define LORA_DIO3     // Not connected on PCB, but internally on the TTGO SX1262/SX1268, if DIO3 is high the TXCO is enabled
 
-// This is a hack for the radio pin run-around with ESP32 variants
+#undef RF95_SCK
 #define RF95_SCK SCK
+#undef RF95_MISO
 #define RF95_MISO MISO
+#undef RF95_MOSI
 #define RF95_MOSI MOSI
+#undef RF95_NSS
 #define RF95_NSS SS
 
 #define USE_SX1262
-#define SX126X_CS (RF95_NSS)// NSS for SX126X
+#define SX126X_CS (SS)// NSS for SX126X
 #define SX126X_DIO1 (LORA_DIO1)
 #define SX126X_BUSY (LORA_DIO2)
 #define SX126X_RESET (LORA_RESET)
 #define SX126X_TXEN (-1)
 #define SX126X_RXEN (WB_IO3)
 #define SX126X_E22 // DIO2 controlls an antenna switch and the TCXO voltage is controlled by DIO3
-#endif /* Pins_Arduino_h */
