@@ -12,6 +12,9 @@ BOARDS_ESP32="rak11200 tlora-v2 tlora-v1 tlora_v1_3 tlora-v2-1-1.6 tbeam heltec-
 BOARDS_NRF52="rak4631_5005 rak4631_19003 t-echo"
 #BOARDS_NRF52=""
 
+echo "BOARDS_ESP32:${BOARDS_ESP32}"
+echo "BOARDS_NRF52:${BOARDS_NRF52}"
+
 OUTDIR=release/latest
 
 # We keep all old builds (and their map files in the archive dir)
