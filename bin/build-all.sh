@@ -3,7 +3,7 @@
 set -e
 
 
-rm -rf ~/.platformio/.cache
+rm -rf .pio
 
 VERSION=`bin/buildinfo.py long`
 SHORT_VERSION=`bin/buildinfo.py short`
