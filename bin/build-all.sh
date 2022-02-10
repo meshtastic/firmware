@@ -12,6 +12,9 @@ BOARDS_ESP32="tlora-v2 tlora-v1 tlora_v1_3 tlora-v2-1-1.6 tbeam heltec-v1 heltec
 BOARDS_NRF52="rak4631_5005 rak4631_19003 t-echo"
 #BOARDS_NRF52=""
 
+echo "BOARDS_ESP32:${BOARDS_ESP32}"
+echo "BOARDS_NRF52:${BOARDS_NRF52}"
+
 OUTDIR=release/latest
 
 # We keep all old builds (and their map files in the archive dir)
@@ -28,7 +31,7 @@ function do_build() {
 	BOARD=$1
 	isNrf=$3
 	
-    echo "Building for $BOARD with $PLATFORMIO_BUILD_FLAGS"
+    echo "Building for $BOARD ($isNrf) with $PLATFORMIO_BUILD_FLAGS"
     rm -f .pio/build/$BOARD/firmware.*
 
     # The shell vars the build tool expects to find
@@ -38,7 +41,7 @@ function do_build() {
     export HW_VERSION="1.0"
     basename=universal/firmware-$BOARD-$VERSION
 
-    pio run --environment $BOARD # -v
+    pio run -v --environment $BOARD # -v
     SRCELF=.pio/build/$BOARD/firmware.elf
     cp $SRCELF $OUTDIR/elfs/$basename.elf
 
@@ -59,6 +62,7 @@ function do_boards() {
 	declare isNrf=$2
 	for board in $boards; do
 		# Build universal
+        echo "about to build $board $isNrf"
 		do_build $board "" "$isNrf" 
 	done
 }

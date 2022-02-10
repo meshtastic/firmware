@@ -114,6 +114,10 @@ jobs:
         echo "Simulator started, launching python test..."
         python3 -c 'from meshtastic.test import testSimulator; testSimulator()'
 
+    - name: Cat bin/build-all.sh
+      run: |
+        cat bin/build-all.sh
+
     - name: Build everything
       run: bin/build-all.sh
 
