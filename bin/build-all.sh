@@ -2,9 +2,6 @@
 
 set -e
 
-
-rm -rf .pio
-
 VERSION=`bin/buildinfo.py long`
 SHORT_VERSION=`bin/buildinfo.py short`
 
@@ -14,9 +11,6 @@ BOARDS_ESP32="rak11200 tlora-v2 tlora-v1 tlora_v1_3 tlora-v2-1-1.6 tbeam heltec-
 # FIXME note nrf52840dk build is for some reason only generating a BIN file but not a HEX file nrf52840dk-geeksville is fine
 BOARDS_NRF52="rak4631_5005 rak4631_19003 t-echo"
 #BOARDS_NRF52=""
-
-echo "BOARDS_ESP32:${BOARDS_ESP32}"
-echo "BOARDS_NRF52:${BOARDS_NRF52}"
 
 OUTDIR=release/latest
 
@@ -44,7 +38,7 @@ function do_build() {
     export HW_VERSION="1.0"
     basename=universal/firmware-$BOARD-$VERSION
 
-    pio run -v --environment $BOARD # -v
+    pio run --environment $BOARD # -v
     SRCELF=.pio/build/$BOARD/firmware.elf
     cp $SRCELF $OUTDIR/elfs/$basename.elf
 
