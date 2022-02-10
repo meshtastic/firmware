@@ -1,7 +1,7 @@
 name: Make Release
 on:
   # Can optionally take parameters from the github UI, more info here https://github.blog/changelog/2020-07-06-github-actions-manual-triggers-with-workflow_dispatch/#:~:text=You%20can%20now%20create%20workflows,the%20workflow%20is%20run%20on.
-  # workflow_dispatch:
+  workflow_dispatch:
   #  inputs:
 
   # Only want to run if version.properties is bumped in master
