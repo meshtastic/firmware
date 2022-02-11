@@ -49,9 +49,9 @@ static const uint8_t SCK = 33;
 #define I2C_SCL SCL
 
 #undef GPS_RX_PIN
-#define GPS_RX_PIN (RX)
+#define GPS_RX_PIN (RX1)
 #undef GPS_TX_PIN
-#define GPS_TX_PIN (TX)
+#define GPS_TX_PIN (TX1)
 
 #define LED_PIN LED_BLUE
 
