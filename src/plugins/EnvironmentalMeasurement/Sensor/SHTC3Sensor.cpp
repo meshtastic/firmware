@@ -9,8 +9,8 @@ SHTC3Sensor::SHTC3Sensor() : EnvironmentalMeasurementSensor {} {
 
 int32_t SHTC3Sensor::runOnce() {
 
-    // default I2C address is 0x70, per Ada Fruit
-    g_shtc3.begin(0x70);
+    // TODO: do I need to send "shtc3 init"?
+    g_shtc3.begin();
 
     if (g_shtc3.passIDcrc) {
         DEBUG_MSG("SHTC3 ID Passed Checkshum.");
