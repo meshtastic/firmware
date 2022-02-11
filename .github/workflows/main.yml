@@ -6,6 +6,7 @@ on:
     paths-ignore:
       - '**.md'
       - '**.yml'
+      - 'version.properties'
       
   # Note: This is different from "pull_request". Need to specify ref when doing checkouts.
   pull_request_target:
