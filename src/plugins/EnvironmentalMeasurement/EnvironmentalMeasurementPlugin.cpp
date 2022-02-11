@@ -15,12 +15,14 @@
 #include "Sensor/DHTSensor.h"
 #include "Sensor/DallasSensor.h"
 #include "Sensor/MCP9808Sensor.h"
+#include "Sensor/SHTC3Sensor.h"
 
 BME280Sensor bme280Sensor;
 BME680Sensor bme680Sensor;
 DHTSensor dhtSensor;
 DallasSensor dallasSensor;
 MCP9808Sensor mcp9808Sensor;
+SHTC3Sensor shtc3Sensor;
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
@@ -49,20 +51,20 @@ int32_t EnvironmentalMeasurementPlugin::runOnce()
         Uncomment the preferences below if you want to use the plugin
         without having to configure it from the PythonAPI or WebUI.
     */
-    /*
     radioConfig.preferences.environmental_measurement_plugin_measurement_enabled = 1;
     radioConfig.preferences.environmental_measurement_plugin_screen_enabled = 1;
     radioConfig.preferences.environmental_measurement_plugin_read_error_count_threshold = 5;
-    radioConfig.preferences.environmental_measurement_plugin_update_interval = 600;
-    radioConfig.preferences.environmental_measurement_plugin_recovery_interval = 60;
+    radioConfig.preferences.environmental_measurement_plugin_update_interval = 60;
+    radioConfig.preferences.environmental_measurement_plugin_recovery_interval = 20;
     radioConfig.preferences.environmental_measurement_plugin_display_farenheit = false;
+    /*
     radioConfig.preferences.environmental_measurement_plugin_sensor_pin = 13;
-
+*/
     radioConfig.preferences.environmental_measurement_plugin_sensor_type =
         RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType::
-            RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME280;
-    */
-   
+            RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_SHTC3;
+
+
     if (!(radioConfig.preferences.environmental_measurement_plugin_measurement_enabled ||
           radioConfig.preferences.environmental_measurement_plugin_screen_enabled)) {
         // If this plugin is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
@@ -92,6 +94,8 @@ int32_t EnvironmentalMeasurementPlugin::runOnce()
                     return bme680Sensor.runOnce();
                 case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MCP9808:
                     return mcp9808Sensor.runOnce();
+                case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_SHTC3:
+                    return shtc3Sensor.runOnce();
                 default:
                     DEBUG_MSG("EnvironmentalMeasurement: Invalid sensor type selected; Disabling plugin");
                     return (INT32_MAX);
@@ -142,6 +146,8 @@ int32_t EnvironmentalMeasurementPlugin::runOnce()
                 case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME680:
                     return (BME_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
                 case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MCP9808:
+                    return (MCP_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
+                case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_SHTC3:
                     return (MCP_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
                 default:
                     return (DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
@@ -275,6 +281,9 @@ bool EnvironmentalMeasurementPlugin::sendOurEnvironmentalMeasurement(NodeNum des
             break;
         case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MCP9808:
             mcp9808Sensor.getMeasurement(&m);
+            break;
+        case RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_SHTC3:
+            shtc3Sensor.getMeasurement(&m);
             break;
         default:
             DEBUG_MSG("EnvironmentalMeasurement: Invalid sensor type selected; Disabling plugin");
