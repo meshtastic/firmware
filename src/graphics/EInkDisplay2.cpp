@@ -22,7 +22,7 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl)
     #if defined(TTGO_T_ECHO)
     setGeometry(GEOMETRY_RAWMODE, TECHO_DISPLAY_MODEL::WIDTH, TECHO_DISPLAY_MODEL::HEIGHT);
     #elif defined(RAK4630)
-    setGeometry(GEOMETRY_RAWMODE, 250, 128);
+    setGeometry(GEOMETRY_RAWMODE, 250, 122);
     #endif
     // setGeometry(GEOMETRY_RAWMODE, 128, 64); // old resolution
     // setGeometry(GEOMETRY_128_64); // We originally used this because I wasn't sure if rawmode worked - it does
