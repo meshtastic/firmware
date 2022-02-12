@@ -39,9 +39,9 @@ echo "Generating NRF52 uf2 file"
 SRCHEX=.pio/build/$1/firmware.hex
 bin/uf2conv.py $SRCHEX -c -o $OUTDIR/bins/$basename.uf2 -f 0xADA52840
 
-echo Generating $ARCHIVEDIR/firmware-$VERSION.zip
-rm -f $ARCHIVEDIR/firmware-$VERSION.zip
-zip --junk-paths $ARCHIVEDIR/firmware-$VERSION.zip $ARCHIVEDIR/spiffs-$VERSION.bin $OUTDIR/bins/universal/firmware-*-$VERSION.* $OUTDIR/bins/universal/meshtasticd* images/system-info.bin bin/device-install.* bin/device-update.*
-echo Generating $ARCHIVEDIR/elfs-$VERSION.zip
-rm -f $ARCHIVEDIR/elfs-$VERSION.zip
-zip --junk-paths $ARCHIVEDIR/elfs-$VERSION.zip $OUTDIR/elfs/universal/firmware-*-$VERSION.* 
+# echo Generating $ARCHIVEDIR/firmware-$VERSION.zip
+# rm -f $ARCHIVEDIR/firmware-$VERSION.zip
+# zip --junk-paths $ARCHIVEDIR/firmware-$VERSION.zip $ARCHIVEDIR/spiffs-$VERSION.bin $OUTDIR/bins/universal/firmware-*-$VERSION.* $OUTDIR/bins/universal/meshtasticd* images/system-info.bin bin/device-install.* bin/device-update.*
+# echo Generating $ARCHIVEDIR/elfs-$VERSION.zip
+# rm -f $ARCHIVEDIR/elfs-$VERSION.zip
+# zip --junk-paths $ARCHIVEDIR/elfs-$VERSION.zip $OUTDIR/elfs/universal/firmware-*-$VERSION.* 
