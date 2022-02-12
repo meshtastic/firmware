@@ -1,0 +1,241 @@
+name: Continuous Integration
+on:
+  # Triggers the workflow on push or pull request events but only for the master branch
+  push:
+    branches: [ master ]
+    paths-ignore:
+      - '**.md'
+      - '**.yml'
+      - 'version.properties'
+      
+  # Note: This is different from "pull_request". Need to specify ref when doing checkouts.
+  pull_request_target:
+    branches: [ master ]
+    paths-ignore:
+      - '**.md'
+      - '**.yml'
+
+jobs:
+
+  ci-check:
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Checkout code
+      uses: actions/checkout@v2
+      with:
+        submodules: 'recursive'
+        ref: ${{github.event.pull_request.head.ref}}
+        repository: ${{github.event.pull_request.head.repo.full_name}}
+
+    - name: Install cppcheck
+      run: |
+        sudo apt-get install -y cppcheck
+
+    - name: Setup Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.x
+
+    - name: Cache python libs
+      uses: actions/cache@v1
+      id: cache-pip # needed in if test
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip
+
+    - name: Upgrade python tools and install platformio
+      run: |
+        python -m pip install --upgrade pip
+        pip install -U platformio
+
+    - name: Upgrade platformio
+      run: |
+        pio upgrade
+
+    - name: Check everything
+      run: bin/check-all.sh
+
+  ci-build-esp32:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [rak11200, tlora-v2, tlora-v1, tlora_v1_3, tlora-v2-1-1.6, tbeam, heltec-v1, heltec-v2.0, heltec-v2.1, tbeam0.7, meshtastic-diy-v1]
+    
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Checkout code
+      uses: actions/checkout@v2
+      with:
+        submodules: 'recursive'
+        ref: ${{github.event.pull_request.head.ref}}
+        repository: ${{github.event.pull_request.head.repo.full_name}}
+
+    - name: Setup Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.x
+
+    - name: Cache python libs
+      uses: actions/cache@v1
+      id: cache-pip # needed in if test
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip
+
+    - name: Upgrade python tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install -U platformio meshtastic adafruit-nrfutil
+
+    - name: Upgrade platformio
+      run: |
+        pio upgrade
+
+    - name: Pull web ui
+      uses: dsaltares/fetch-gh-release-asset@master
+      with:
+        repo: "meshtastic/meshtastic-web"
+        file: "build.tar"
+        target: "build.tar"
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Unpack web ui
+      run: |
+        tar -xf build.tar -C data/static
+        rm build.tar
+
+    # We now run integration test before other build steps (to quickly see runtime failures)
+    - name: Build for native
+      run: platformio run -e native
+    - name: Integration test
+      run: |
+        .pio/build/native/program &
+        sleep 20 # 5 seconds was not enough
+        echo "Simulator started, launching python test..."
+        python3 -c 'from meshtastic.test import testSimulator; testSimulator()'
+
+    - name: Cat bin/build-esp32.sh
+      run: |
+        cat bin/build-esp32.sh ${{ matrix.board }}
+
+    - name: Build ESP32
+      run: bin/build-esp32.sh ${{ matrix.board }}
+
+    - name: Get release version string
+      run: echo "::set-output name=version::$(./bin/buildinfo.py long)"
+      id: version
+
+    - name: Store binaries as an artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: firmware-${{ steps.version.outputs.version }}.zip
+        path: release/archive/firmware-${{ steps.version.outputs.version }}.zip
+        retention-days: 90
+
+    - name: Store debugging elf files as an artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: debug-elfs
+        path: release/archive/elfs-*.zip
+        retention-days: 7
+
+  ci-build-nrf52:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [rak4631_5005, rak4631_19003, t-echo]
+    
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Checkout code
+      uses: actions/checkout@v2
+      with:
+        submodules: 'recursive'
+        ref: ${{github.event.pull_request.head.ref}}
+        repository: ${{github.event.pull_request.head.repo.full_name}}
+
+    - name: Setup Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.x
+
+    - name: Cache python libs
+      uses: actions/cache@v1
+      id: cache-pip # needed in if test
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip
+
+    - name: Upgrade python tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install -U platformio meshtastic adafruit-nrfutil
+
+    - name: Upgrade platformio
+      run: |
+        pio upgrade
+
+    - name: Pull web ui
+      uses: dsaltares/fetch-gh-release-asset@master
+      with:
+        repo: "meshtastic/meshtastic-web"
+        file: "build.tar"
+        target: "build.tar"
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Unpack web ui
+      run: |
+        tar -xf build.tar -C data/static
+        rm build.tar
+
+    # We now run integration test before other build steps (to quickly see runtime failures)
+    - name: Build for native
+      run: platformio run -e native
+    - name: Integration test
+      run: |
+        .pio/build/native/program &
+        sleep 20 # 5 seconds was not enough
+        echo "Simulator started, launching python test..."
+        python3 -c 'from meshtastic.test import testSimulator; testSimulator()'
+
+    - name: Cat bin/build-nrf52.sh
+      run: |
+        cat bin/build-nrf52.sh ${{ matrix.board }}
+
+    - name: Build NRF52
+      run: bin/build-nrf52.sh ${{ matrix.board }}
+
+    - name: Get release version string
+      run: echo "::set-output name=version::$(./bin/buildinfo.py long)"
+      id: version
+
+    - name: Store binaries as an artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: firmware-${{ steps.version.outputs.version }}.zip
+        path: release/archive/firmware-${{ steps.version.outputs.version }}.zip
+        retention-days: 90
+
+    - name: Store debugging elf files as an artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: debug-elfs
+        path: release/archive/elfs-*.zip
+        retention-days: 7
+    # - name: Download firmware.zip
+    #   uses: actions/download-artifact@master
+    #   with:
+    #     name: firmware-${{ steps.version.outputs.version }}.zip
+    #     path: ./
+
+    # - name: Pull request artifacts
+    #   if: ${{ github.event_name == 'pull_request_target' || github.event_name == 'pull_request' }}
+    #   uses: gavv/pull-request-artifacts@v1.0.0
+    #   with:
+    #     commit: ${{ (github.event.pull_request_target || github.event.pull_request).head.sha }}
+    #     repo-token: ${{ secrets.GITHUB_TOKEN }}
+    #     artifacts-branch: artifacts
+    #     artifacts: ./firmware-${{ steps.version.outputs.version }}.zip
