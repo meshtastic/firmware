@@ -137,14 +137,14 @@ jobs:
     - name: Store binaries as an artifact
       uses: actions/upload-artifact@v2
       with:
-        name: firmware-${{ steps.version.outputs.version }}.zip
+        name: ${{ matrix.board }}-firmware-${{ steps.version.outputs.version }}.zip
         path: release/archive/firmware-${{ steps.version.outputs.version }}.zip
         retention-days: 90
 
     - name: Store debugging elf files as an artifact
       uses: actions/upload-artifact@v2
       with:
-        name: debug-elfs
+        name: ${{ matrix.board }}-debug-elfs
         path: release/archive/elfs-*.zip
         retention-days: 7
 
@@ -198,16 +198,17 @@ jobs:
     - name: Store binaries as an artifact
       uses: actions/upload-artifact@v2
       with:
-        name: firmware-${{ steps.version.outputs.version }}.zip
+        name: ${{ matrix.board }}-firmware-${{ steps.version.outputs.version }}.zip
         path: release/archive/firmware-${{ steps.version.outputs.version }}.zip
         retention-days: 90
 
     - name: Store debugging elf files as an artifact
       uses: actions/upload-artifact@v2
       with:
-        name: debug-elfs
+        name: ${{ matrix.board }}-debug-elfs
         path: release/archive/elfs-*.zip
         retention-days: 7
+
     # - name: Download firmware.zip
     #   uses: actions/download-artifact@master
     #   with:
