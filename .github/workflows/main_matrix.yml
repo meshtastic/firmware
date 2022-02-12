@@ -60,7 +60,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        boards: [rak11200, tlora-v2, tlora-v1, tlora_v1_3, tlora-v2-1-1.6, tbeam, heltec-v1, heltec-v2.0, heltec-v2.1, tbeam0.7, meshtastic-diy-v1]
+        include:
+          - board: rak11200
+          - board: tlora-v2
+          - board: tlora-v1
+          - board: tlora_v1_3
+          - board: tlora-v2-1-1.6
+          - board: tbeam
+          - board: heltec-v1
+          - board: heltec-v2.0
+          - board: heltec-v2.1
+          - board: tbeam0.7
+          - board: meshtastic-diy-v1
     
     runs-on: ubuntu-latest
     steps:
@@ -116,10 +127,6 @@ jobs:
         echo "Simulator started, launching python test..."
         python3 -c 'from meshtastic.test import testSimulator; testSimulator()'
 
-    - name: Cat bin/build-esp32.sh
-      run: |
-        cat bin/build-esp32.sh ${{ matrix.board }}
-
     - name: Build ESP32
       run: bin/build-esp32.sh ${{ matrix.board }}
 
@@ -145,7 +152,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        boards: [rak4631_5005, rak4631_19003, t-echo]
+        include: 
+          - board: rak4631_5005
+          - board: rak4631_19003
+          - board: t-echo
     
     runs-on: ubuntu-latest
     steps:
@@ -177,10 +187,6 @@ jobs:
     - name: Upgrade platformio
       run: |
         pio upgrade
-
-    - name: Cat bin/build-nrf52.sh
-      run: |
-        cat bin/build-nrf52.sh ${{ matrix.board }}
 
     - name: Build NRF52
       run: bin/build-nrf52.sh ${{ matrix.board }}
