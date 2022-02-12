@@ -1,12 +1,12 @@
 name: Continuous Integration
 on:
   # # Triggers the workflow on push or pull request events but only for the master branch
-  # push:
-  #   branches: [ master ]
-  #   paths-ignore:
-  #     - '**.md'
-  #     - '**.yml'
-  #     - 'version.properties'
+  push:
+    branches: [ master ]
+    paths-ignore:
+      - '**.md'
+      - '**.yml'
+      - 'version.properties'
       
   # Note: This is different from "pull_request". Need to specify ref when doing checkouts.
   pull_request_target:
