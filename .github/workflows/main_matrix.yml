@@ -1,12 +1,12 @@
 name: Continuous Integration
 on:
-  # Triggers the workflow on push or pull request events but only for the master branch
-  push:
-    branches: [ master ]
-    paths-ignore:
-      - '**.md'
-      - '**.yml'
-      - 'version.properties'
+  # # Triggers the workflow on push or pull request events but only for the master branch
+  # push:
+  #   branches: [ master ]
+  #   paths-ignore:
+  #     - '**.md'
+  #     - '**.yml'
+  #     - 'version.properties'
       
   # Note: This is different from "pull_request". Need to specify ref when doing checkouts.
   pull_request_target:
@@ -177,29 +177,6 @@ jobs:
     - name: Upgrade platformio
       run: |
         pio upgrade
-
-    - name: Pull web ui
-      uses: dsaltares/fetch-gh-release-asset@master
-      with:
-        repo: "meshtastic/meshtastic-web"
-        file: "build.tar"
-        target: "build.tar"
-        token: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Unpack web ui
-      run: |
-        tar -xf build.tar -C data/static
-        rm build.tar
-
-    # We now run integration test before other build steps (to quickly see runtime failures)
-    - name: Build for native
-      run: platformio run -e native
-    - name: Integration test
-      run: |
-        .pio/build/native/program &
-        sleep 20 # 5 seconds was not enough
-        echo "Simulator started, launching python test..."
-        python3 -c 'from meshtastic.test import testSimulator; testSimulator()'
 
     - name: Cat bin/build-nrf52.sh
       run: |
