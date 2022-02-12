@@ -209,6 +209,62 @@ jobs:
         path: release/archive/elfs-*.zip
         retention-days: 7
 
+ ci-build-native:
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Checkout code
+      uses: actions/checkout@v2
+      with:
+        submodules: 'recursive'
+        ref: ${{github.event.pull_request.head.ref}}
+        repository: ${{github.event.pull_request.head.repo.full_name}}
+
+    - name: Setup Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.x
+
+    - name: Cache python libs
+      uses: actions/cache@v1
+      id: cache-pip # needed in if test
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip
+
+    - name: Upgrade python tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install -U platformio meshtastic adafruit-nrfutil
+
+    - name: Upgrade platformio
+      run: |
+        pio upgrade
+
+    - name: Build Native
+      run: bin/build-native.sh
+
+    - name: Get release version string
+      run: echo "::set-output name=version::$(./bin/buildinfo.py long)"
+      id: version
+
+    - name: Store binaries as an artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: ${{ matrix.board }}-firmware-${{ steps.version.outputs.version }}.zip
+        path: release/archive/firmware-${{ steps.version.outputs.version }}.zip
+        retention-days: 90
+
+  gather-artifacts:
+    needs: [ci-build-esp32, ci-build-nrf52, ci-build-native]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          submodules: 'recursive'
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
+
     # - name: Download firmware.zip
     #   uses: actions/download-artifact@master
     #   with:
