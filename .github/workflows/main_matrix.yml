@@ -209,7 +209,7 @@ jobs:
         path: release/archive/elfs-*.zip
         retention-days: 7
 
- ci-build-native:
+  ci-build-native:
     runs-on: ubuntu-latest
     steps:
 
