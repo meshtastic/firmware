@@ -257,13 +257,15 @@ jobs:
     needs: [build-esp32, build-nrf52, build-native]
     steps:
       - uses: actions/download-artifact@v2
-
-      - name: Unzip all firmware zips
-        run: unzip *.zip --j
+        with:
+          path: ./
 
       # For diagnostics
       - name: Show artifacts 
         run: ls -lR
+
+      - name: Unzip all firmware zips
+        run: unzip *.zip --j
 
       - name: Repackage in single firmware zip
         uses: actions/upload-artifact@v2
