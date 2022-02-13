@@ -298,7 +298,7 @@ jobs:
       - name: Repackage in single firmware zip
         uses: actions/upload-artifact@v2
         with:
-          name: ./firmware-${{ steps.version.outputs.version }}.zip
+          name: firmware-${{ steps.version.outputs.version }}.zip
           path: | 
             ./*.bin
             ./*.uf2
