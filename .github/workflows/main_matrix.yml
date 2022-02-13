@@ -139,7 +139,7 @@ jobs:
     - name: Store binaries as an artifact
       uses: actions/upload-artifact@v2
       with:
-        name: ${{ matrix.board }}-firmware-${{ steps.version.outputs.version }}.zip
+        name: firmware-${{ matrix.board }}-${{ steps.version.outputs.version }}.zip
         path: |
           release/**/*.bin
           release/**/*.elf
@@ -195,7 +195,7 @@ jobs:
     - name: Store binaries as an artifact
       uses: actions/upload-artifact@v2
       with:
-        name: ${{ matrix.board }}-firmware-${{ steps.version.outputs.version }}.zip
+        name: firmware-${{ matrix.board }}-${{ steps.version.outputs.version }}.zip
         path: |
           release/**/*.uf2
           release/**/*.elf
@@ -243,7 +243,7 @@ jobs:
     - name: Store binaries as an artifact
       uses: actions/upload-artifact@v2
       with:
-        name: native-firmware-${{ steps.version.outputs.version }}.zip
+        name: firmware-native-${{ steps.version.outputs.version }}.zip
         path: | 
           release/**/*firmware*
           release/**/*.sh
