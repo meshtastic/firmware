@@ -20,6 +20,25 @@ on:
 jobs:
 
   check:
+    strategy:
+        fail-fast: false
+        matrix:
+          include:
+            - board: rak11200
+            - board: tlora-v2
+            - board: tlora-v1
+            - board: tlora_v1_3
+            - board: tlora-v2-1-1.6
+            - board: tbeam
+            - board: heltec-v1
+            - board: heltec-v2.0
+            - board: heltec-v2.1
+            - board: tbeam0.7
+            - board: meshtastic-diy-v1
+            - board: rak4631_5005
+            - board: rak4631_19003
+            - board: t-echo
+    
     runs-on: ubuntu-latest
     steps:
 
@@ -56,7 +75,7 @@ jobs:
         pio upgrade
 
     - name: Check everything
-      run: bin/check-all.sh
+      run: bin/check-all.sh ${{ matrix.board }}
 
   build-esp32:
     strategy:
