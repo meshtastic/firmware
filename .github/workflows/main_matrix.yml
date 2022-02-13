@@ -286,7 +286,7 @@ jobs:
         id: version
 
       - name: Move files up
-        run: mv -b -t ./ ./**/*.bin ./**/*.uf2 ./**/*.elf ./**/meshtasticd_linux_amd64 ./**/*device-*.sh ./**/*device-*.bat
+        run: mv -b -t ./ ./*tbeam-*/spiffs*.bin ./*tbeam-*/system-info.bin ./**/firware*.bin ./**/*.uf2 ./**/*.elf ./**/meshtasticd_linux_amd64 ./*native/*device-*.sh ./*native/*device-*.bat
 
       - name: Repackage in single firmware zip
         uses: actions/upload-artifact@v2
