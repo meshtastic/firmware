@@ -140,9 +140,9 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: ${{ matrix.board }}-firmware-${{ steps.version.outputs.version }}.zip
-        path: 
-          - release/**/*.bin
-          - release/**/*.elf
+        path: |
+          release/**/*.bin
+          release/**/*.elf
         retention-days: 90
 
   build-nrf52:
@@ -196,9 +196,9 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: ${{ matrix.board }}-firmware-${{ steps.version.outputs.version }}.zip
-        path: 
-          - release/**/*.uf2
-          - release/**/*.elf
+        path: |
+          release/**/*.uf2
+          release/**/*.elf
         retention-days: 90
 
   build-native:
@@ -244,10 +244,10 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: native-firmware-${{ steps.version.outputs.version }}.zip
-        path: 
-          - release/**/*firmware*
-          - release/**/*.sh
-          - release/**/*.bat
+        path: | 
+          release/**/*firmware*
+          release/**/*.sh
+          release/**/*.bat
         retention-days: 90
 
   gather-artifacts:
