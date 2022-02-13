@@ -141,8 +141,8 @@ jobs:
       with:
         name: firmware-${{ matrix.board }}-${{ steps.version.outputs.version }}.zip
         path: |
-          release/**/*.bin
-          release/**/*.elf
+          release/latest/bins/universal/*.bin
+          release/latest/elfs/universal/*.elf
         retention-days: 90
 
   build-nrf52:
@@ -261,18 +261,14 @@ jobs:
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
 
-      - uses: actions/download-artifact@v2
-    # - name: Download firmware.zip
-    #   uses: actions/download-artifact@master
-    #   with:
-    #     name: firmware-${{ steps.version.outputs.version }}.zip
-    #     path: ./
+      - name: Unzip all firmware
+        run: for z in *.zip; do unzip "$z"; done
 
-    # - name: Pull request artifacts
-    #   if: ${{ github.event_name == 'pull_request_target' || github.event_name == 'pull_request' }}
-    #   uses: gavv/pull-request-artifacts@v1.0.0
-    #   with:
-    #     commit: ${{ (github.event.pull_request_target || github.event.pull_request).head.sha }}
-    #     repo-token: ${{ secrets.GITHUB_TOKEN }}
-    #     artifacts-branch: artifacts
-    #     artifacts: ./firmware-${{ steps.version.outputs.version }}.zip
+      - name: Create request artifacts
+        if: ${{ github.event_name == 'pull_request_target' || github.event_name == 'pull_request' }}
+        uses: gavv/pull-request-artifacts@v1.0.0
+        with:
+          commit: ${{ (github.event.pull_request_target || github.event.pull_request).head.sha }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          artifacts-branch: artifacts
+          artifacts: ./firmware-${{ steps.version.outputs.version }}.zip
