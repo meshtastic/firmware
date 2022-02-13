@@ -74,7 +74,7 @@ jobs:
       run: |
         pio upgrade
 
-    - name: Check everything
+    - name: Check ${{ matrix.board }}
       run: bin/check-all.sh ${{ matrix.board }}
 
   build-esp32:
@@ -281,23 +281,30 @@ jobs:
       - name: Show artifacts 
         run: ls -lR
 
+      - name: Get release version string
+        run: echo "::set-output name=version::$(./bin/buildinfo.py long)"
+        id: version
+
+      - name: Move files up
+        run: mv -t ./ ./**/*.bin ./**/*.uf2 ./**/*.elf ./**/meshtasticd_linux_amd64 ./**/*device-*.sh ./**/*device-*.bat
+
       - name: Repackage in single firmware zip
         uses: actions/upload-artifact@v2
         with:
           name: firmware-${{ steps.version.outputs.version }}.zip
           path: | 
-            ./**/*.bin
-            ./**/*.uf2
-            ./**/meshtasticd_linux_amd64
-            ./**/device-*.sh
-            ./**/device-*.bat
+            ./*.bin
+            ./*.uf2
+            ./meshtasticd_linux_amd64
+            ./device-*.sh
+            ./device-*.bat
           retention-days: 90
 
       - name: Repackage in single elfs zip
         uses: actions/upload-artifact@v2
         with:
           name: debug-elfs-${{ steps.version.outputs.version }}.zip
-          path: ./**/*.elf
+          path: ./*.elf
           retention-days: 90
 
       - name: Create request artifacts
