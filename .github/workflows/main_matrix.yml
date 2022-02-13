@@ -298,7 +298,7 @@ jobs:
       - name: Repackage in single firmware zip
         uses: actions/upload-artifact@v2
         with:
-          name: firmware-${{ steps.version.outputs.version }}.zip
+          name: firmware-${{ steps.version.outputs.version }}
           path: | 
             ./*.bin
             ./*.uf2
@@ -309,9 +309,12 @@ jobs:
 
       - uses: actions/download-artifact@v2
         with:
-          name: firmware-${{ steps.version.outputs.version }}.zip
+          name: firmware-${{ steps.version.outputs.version }}
           path: ./output
-          
+      
+      - name: Move files up
+        run: zip -r firmware-${{ steps.version.outputs.version }}.zip ./output/firmware-${{ steps.version.outputs.version }}
+        
       - name: Repackage in single elfs zip
         uses: actions/upload-artifact@v2
         with:
