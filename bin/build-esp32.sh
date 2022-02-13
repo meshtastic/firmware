@@ -37,6 +37,7 @@ cp $SRCBIN $OUTDIR/$basename.bin
 echo "Building SPIFFS for ESP32 targets"
 pio run --environment tbeam -t buildfs
 cp .pio/build/tbeam/spiffs.bin $OUTDIR/spiffs-$VERSION.bin
+cp images/system-info.bin $OUTDIR/system-info.bin
 
 cp bin/device-install.* $OUTDIR
 cp bin/device-update.* $OUTDIR

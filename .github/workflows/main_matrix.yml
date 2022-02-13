@@ -246,10 +246,8 @@ jobs:
         name: firmware-native-${{ steps.version.outputs.version }}.zip
         path: | 
           release/meshtasticd_linux_amd64
-          release/device-install.sh
-          release/device-install.bat
-          release/device-update.sh
-          release/device-update.bat
+          release/device-*.sh
+          release/device-*.bat
         retention-days: 90
 
   gather-artifacts:
@@ -264,28 +262,23 @@ jobs:
       - name: Show artifacts 
         run: ls -lR
 
-      - name: Unzip all firmware zips
-        run: unzip *.zip --j
-
       - name: Repackage in single firmware zip
         uses: actions/upload-artifact@v2
         with:
           name: firmware-${{ steps.version.outputs.version }}.zip
           path: | 
-            ./*.bin
-            ./*.uf2
-            meshtasticd_linux_amd64
-            device-install.sh
-            device-install.bat
-            device-update.sh
-            device-update.bat
+            ./**/*.bin
+            ./**/*.uf2
+            ./**/meshtasticd_linux_amd64
+            ./**/device-*.sh
+            ./**/device-*.bat
           retention-days: 90
 
       - name: Repackage in single elfs zip
         uses: actions/upload-artifact@v2
         with:
           name: debug-elfs-${{ steps.version.outputs.version }}.zip
-          path: ./*.elf
+          path: ./**/*.elf
           retention-days: 90
 
       - name: Create request artifacts
