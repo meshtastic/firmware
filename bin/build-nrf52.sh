@@ -5,13 +5,10 @@ set -e
 VERSION=`bin/buildinfo.py long`
 SHORT_VERSION=`bin/buildinfo.py short`
 
-OUTDIR=release/latest
+OUTDIR=release/
 
 rm -f $OUTDIR/firmware*
-
-mkdir -p $OUTDIR/bins
-rm -r $OUTDIR/bins/* || true
-mkdir -p $OUTDIR/bins/universal $OUTDIR/elfs/universal
+rm -r $OUTDIR/* || true
 
 # Make sure our submodules are current
 git submodule update 
@@ -31,8 +28,11 @@ basename=universal/firmware-$1-$VERSION
 
 pio run --environment $1 # -v
 SRCELF=.pio/build/$1/firmware.elf
-cp $SRCELF $OUTDIR/elfs/$basename.elf
+cp $SRCELF $OUTDIR/$basename.elf
 
 echo "Generating NRF52 uf2 file"
 SRCHEX=.pio/build/$1/firmware.hex
-bin/uf2conv.py $SRCHEX -c -o $OUTDIR/bins/$basename.uf2 -f 0xADA52840
+bin/uf2conv.py $SRCHEX -c -o $OUTDIR/$basename.uf2 -f 0xADA52840
+
+cp bin/device-install.* $OUTDIR
+cp bin/device-update.* $OUTDIR

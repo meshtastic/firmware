@@ -119,16 +119,6 @@ jobs:
         tar -xf build.tar -C data/static
         rm build.tar
 
-    # We now run integration test before other build steps (to quickly see runtime failures)
-    - name: Build for native
-      run: platformio run -e native
-    - name: Integration test
-      run: |
-        .pio/build/native/program &
-        sleep 20 # 5 seconds was not enough
-        echo "Simulator started, launching python test..."
-        python3 -c 'from meshtastic.test import testSimulator; testSimulator()'
-
     - name: Build ESP32
       run: bin/build-esp32.sh ${{ matrix.board }}
 
@@ -233,6 +223,16 @@ jobs:
       run: |
         pio upgrade
 
+    # We now run integration test before other build steps (to quickly see runtime failures)
+    - name: Build for native
+      run: platformio run -e native
+    - name: Integration test
+      run: |
+        .pio/build/native/program &
+        sleep 20 # 5 seconds was not enough
+        echo "Simulator started, launching python test..."
+        python3 -c 'from meshtastic.test import testSimulator; testSimulator()'
+
     - name: Build Native
       run: bin/build-native.sh
 
@@ -260,9 +260,9 @@ jobs:
           submodules: 'recursive'
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
-
+      - uses: actions/download-artifact@v2
       - name: Unzip all firmware
-        run: for z in *.zip; do unzip "$z"; done
+        run: for z in *.zip; do unzip "$z" -j; done
 
       - name: Create request artifacts
         if: ${{ github.event_name == 'pull_request_target' || github.event_name == 'pull_request' }}

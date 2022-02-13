@@ -5,13 +5,10 @@ set -e
 VERSION=`bin/buildinfo.py long`
 SHORT_VERSION=`bin/buildinfo.py short`
 
-OUTDIR=release/latest
+OUTDIR=release/
 
 rm -f $OUTDIR/firmware*
-
-mkdir -p $OUTDIR/bins
-rm -r $OUTDIR/bins/* || true
-mkdir -p $OUTDIR/bins/universal $OUTDIR/elfs/universal
+rm -r $OUTDIR/* || true
 
 # Make sure our submodules are current
 git submodule update 
@@ -31,12 +28,15 @@ basename=universal/firmware-$1-$VERSION
 
 pio run --environment $1 # -v
 SRCELF=.pio/build/$1/firmware.elf
-cp $SRCELF $OUTDIR/elfs/$basename.elf
+cp $SRCELF $OUTDIR/$basename.elf
 
 echo "Copying ESP32 bin file"
 SRCBIN=.pio/build/$1/firmware.bin
-cp $SRCBIN $OUTDIR/bins/$basename.bin
+cp $SRCBIN $OUTDIR/$basename.bin
 
 echo "Building SPIFFS for ESP32 targets"
 pio run --environment tbeam -t buildfs
-cp .pio/build/tbeam/spiffs.bin $OUTDIR/bins/universal/spiffs-$VERSION.bin
+cp .pio/build/tbeam/spiffs.bin $OUTDIR/spiffs-$VERSION.bin
+
+cp bin/device-install.* $OUTDIR
+cp bin/device-update.* $OUTDIR
