@@ -187,8 +187,8 @@ jobs:
       with:
         name: firmware-${{ matrix.board }}-${{ steps.version.outputs.version }}.zip
         path: |
-          release/**/*.uf2
-          release/**/*.elf
+          release/*.uf2
+          release/*.elf
         retention-days: 90
 
   build-native:
@@ -248,6 +248,8 @@ jobs:
           release/meshtasticd_linux_amd64
           release/device-install.sh
           release/device-install.bat
+          release/device-update.sh
+          release/device-update.bat
         retention-days: 90
 
   gather-artifacts:
@@ -263,8 +265,26 @@ jobs:
       - name: Show artifacts 
         run: ls -lR
 
-      - name: Repackage in single zip
-        run: zip firmware-${{ steps.version.outputs.version }}.zip firmware* -r -k
+      - name: Repackage in single firmware zip
+        uses: actions/upload-artifact@v2
+        with:
+          name: firmware-${{ steps.version.outputs.version }}.zip
+          path: | 
+            ./*.bin
+            ./*.uf2
+            meshtasticd_linux_amd64
+            device-install.sh
+            device-install.bat
+            device-update.sh
+            device-update.bat
+          retention-days: 90
+
+      - name: Repackage in single elfs zip
+        uses: actions/upload-artifact@v2
+        with:
+          name: debug-elfs-${{ steps.version.outputs.version }}.zip
+          path: ./*.elf
+          retention-days: 90
 
       - name: Create request artifacts
         if: ${{ github.event_name == 'pull_request_target' || github.event_name == 'pull_request' }}
