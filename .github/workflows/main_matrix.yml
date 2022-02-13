@@ -313,7 +313,7 @@ jobs:
         run: ls -lR
 
       - name: Zip firmware
-        run: zip -r ./firmware-${{ steps.version.outputs.version }}.zip ./output
+        run: zip -j -r ./firmware-${{ steps.version.outputs.version }}.zip ./output
 
       - name: Repackage in single elfs zip
         uses: actions/upload-artifact@v2
