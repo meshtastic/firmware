@@ -131,8 +131,8 @@ jobs:
       with:
         name: firmware-${{ matrix.board }}-${{ steps.version.outputs.version }}.zip
         path: |
-          release/latest/bins/universal/*.bin
-          release/latest/elfs/universal/*.elf
+          release/*.bin
+          release/*.elf
         retention-days: 90
 
   build-nrf52:

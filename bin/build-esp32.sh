@@ -24,7 +24,7 @@ export APP_VERSION=$VERSION
 
 # Are we building a universal/regionless rom?
 export HW_VERSION="1.0"
-basename=universal/firmware-$1-$VERSION
+basename=firmware-$1-$VERSION
 
 pio run --environment $1 # -v
 SRCELF=.pio/build/$1/firmware.elf
