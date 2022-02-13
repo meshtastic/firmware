@@ -307,6 +307,11 @@ jobs:
             ./device-*.bat
           retention-days: 90
 
+      - uses: actions/download-artifact@v2
+        with:
+          name: firmware-${{ steps.version.outputs.version }}.zip
+          path: ./
+          
       - name: Repackage in single elfs zip
         uses: actions/upload-artifact@v2
         with:
