@@ -310,11 +310,11 @@ jobs:
       - uses: actions/download-artifact@v2
         with:
           name: firmware-${{ steps.version.outputs.version }}
-          path: ./output
+          path: /output
       
-      - name: Move files up
-        run: zip -r firmware-${{ steps.version.outputs.version }}.zip ./output/firmware-${{ steps.version.outputs.version }}
-        
+      - name: Zip firmware
+        run: zip -r firmware-${{ steps.version.outputs.version }}.zip /output/firmware-${{ steps.version.outputs.version }}
+
       - name: Repackage in single elfs zip
         uses: actions/upload-artifact@v2
         with:
@@ -329,4 +329,4 @@ jobs:
           commit: ${{ (github.event.pull_request_target || github.event.pull_request).head.sha }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           artifacts-branch: artifacts
-          artifacts: ./output/firmware-${{ steps.version.outputs.version }}.zip
+          artifacts: /output/firmware-${{ steps.version.outputs.version }}.zip
