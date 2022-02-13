@@ -1,6 +1,6 @@
 name: Continuous Integration
 on:
-  # # Triggers the workflow on push or pull request events but only for the master branch
+  # # Triggers the workflow on push but only for the master branch
   push:
     branches: [ master ]
     paths-ignore:
@@ -245,9 +245,9 @@ jobs:
       with:
         name: firmware-native-${{ steps.version.outputs.version }}.zip
         path: | 
-          release/**/*firmware*
-          release/**/*.sh
-          release/**/*.bat
+          release/meshtasticd_linux_amd64
+          release/device-install.sh
+          release/device-install.bat
         retention-days: 90
 
   gather-artifacts:
@@ -256,10 +256,14 @@ jobs:
     steps:
       - uses: actions/download-artifact@v2
 
-      - name: Unzip all firmware
-        run: for z in *.zip; do unzip "$z" -j; done
+      - name: Unzip all firmware zips
+        run: unzip *.zip --j
 
-      - name: Unzip all firmware
+      # For diagnostics
+      - name: Show artifacts 
+        run: ls -lR
+
+      - name: Repackage in single zip
         run: zip firmware-${{ steps.version.outputs.version }}.zip firmware* -r -k
 
       - name: Create request artifacts
