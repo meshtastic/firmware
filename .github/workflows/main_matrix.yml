@@ -310,7 +310,7 @@ jobs:
       - uses: actions/download-artifact@v2
         with:
           name: firmware-${{ steps.version.outputs.version }}.zip
-          path: ./
+          path: ./output
           
       - name: Repackage in single elfs zip
         uses: actions/upload-artifact@v2
@@ -326,4 +326,4 @@ jobs:
           commit: ${{ (github.event.pull_request_target || github.event.pull_request).head.sha }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           artifacts-branch: artifacts
-          artifacts: ./firmware-${{ steps.version.outputs.version }}.zip
+          artifacts: ./output/firmware-${{ steps.version.outputs.version }}.zip
