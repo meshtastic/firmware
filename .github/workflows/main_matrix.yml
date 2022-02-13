@@ -284,10 +284,6 @@ jobs:
         with:
           path: ./
 
-      # For diagnostics
-      - name: Show artifacts 
-        run: ls -lR
-
       - name: Get release version string
         run: echo "::set-output name=version::$(./bin/buildinfo.py long)"
         id: version
@@ -311,7 +307,11 @@ jobs:
         with:
           name: firmware-${{ steps.version.outputs.version }}
           path: /output
-      
+
+      # For diagnostics
+      - name: Show artifacts 
+        run: ls -lR
+
       - name: Zip firmware
         run: zip -r firmware-${{ steps.version.outputs.version }}.zip /output/firmware-${{ steps.version.outputs.version }}
 
