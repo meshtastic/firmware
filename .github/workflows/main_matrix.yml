@@ -140,15 +140,10 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: ${{ matrix.board }}-firmware-${{ steps.version.outputs.version }}.zip
-        path: release/archive/
+        path: 
+          - release/**/*.bin
+          - release/**/*.elf
         retention-days: 90
-
-    - name: Store debugging elf files as an artifact
-      uses: actions/upload-artifact@v2
-      with:
-        name: ${{ matrix.board }}-debug-elfs.zip
-        path: release/archive/elfs-*.zip
-        retention-days: 7
 
   build-nrf52:
     strategy:
@@ -201,15 +196,10 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: ${{ matrix.board }}-firmware-${{ steps.version.outputs.version }}.zip
-        path: release/archive/
+        path: 
+          - release/**/*.uf2
+          - release/**/*.elf
         retention-days: 90
-
-    - name: Store debugging elf files as an artifact
-      uses: actions/upload-artifact@v2
-      with:
-        name: ${{ matrix.board }}-debug-elfs.zip
-        path: release/archive/elfs-*.zip
-        retention-days: 7
 
   build-native:
     runs-on: ubuntu-latest
@@ -254,7 +244,10 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: native-firmware-${{ steps.version.outputs.version }}.zip
-        path: release/archive/
+        path: 
+          - release/**/*firmware*
+          - release/**/*.sh
+          - release/**/*.bat
         retention-days: 90
 
   gather-artifacts:

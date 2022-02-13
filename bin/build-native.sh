@@ -7,12 +7,9 @@ SHORT_VERSION=`bin/buildinfo.py short`
 
 OUTDIR=release/latest
 
-# We keep all old builds (and their map files in the archive dir)
-ARCHIVEDIR=release/archive 
-
 rm -f $OUTDIR/firmware*
 
-mkdir -p $OUTDIR/bins $ARCHIVEDIR
+mkdir -p $OUTDIR/bins
 rm -r $OUTDIR/bins/* || true
 mkdir -p $OUTDIR/bins/universal $OUTDIR/elfs/universal
 
@@ -25,7 +22,6 @@ platformio lib update
 pio run --environment native
 cp .pio/build/native/program $OUTDIR/bins/universal/meshtasticd_linux_amd64
 
-# echo Generating $ARCHIVEDIR/firmware-$VERSION.zip
-# rm -f $ARCHIVEDIR/firmware-$VERSION.zip
-# zip --junk-paths $ARCHIVEDIR/firmware-$VERSION.zip $ARCHIVEDIR/spiffs-$VERSION.bin $OUTDIR/bins/universal/firmware-*-$VERSION.* $OUTDIR/bins/universal/meshtasticd* images/system-info.bin bin/device-install.* bin/device-update.*
+cp bin/device-install.* $OUTDIR
+cp bin/device-update.* $OUTDIR
 
