@@ -6,6 +6,9 @@ import traceback
 import sys
 from readprops import readProps
 
+Import("env")
+env.Replace( MKSPIFFSTOOL=env.get("PROJECT_DIR") + '/bin/mklittlefs.py' )
+
 Import("projenv")
 
 prefsLoc = projenv["PROJECT_DIR"] + "/version.properties"

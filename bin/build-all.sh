@@ -76,12 +76,12 @@ do_boards "$BOARDS_NRF52" "true"
 pio run --environment native
 cp .pio/build/native/program $OUTDIR/bins/universal/meshtasticd_linux_amd64
 
-echo "Building SPIFFS for ESP32 targets"
+echo "Building Filesystem for ESP32 targets"
 pio run --environment tbeam -t buildfs
-cp .pio/build/tbeam/spiffs.bin $OUTDIR/bins/universal/spiffs-$VERSION.bin
+cp .pio/build/tbeam/spiffs.bin $OUTDIR/bins/universal/littlefs-$VERSION.bin
 
 # keep the bins in archive also
-cp $OUTDIR/bins/universal/spiffs* $OUTDIR/bins/universal/firmware* $OUTDIR/elfs/universal/firmware* $ARCHIVEDIR
+cp $OUTDIR/bins/universal/littlefs* $OUTDIR/bins/universal/firmware* $OUTDIR/elfs/universal/firmware* $ARCHIVEDIR
 
 echo Updating android bins $OUTDIR/forandroid
 rm -rf $OUTDIR/forandroid
@@ -103,9 +103,9 @@ XML
 
 echo Generating $ARCHIVEDIR/firmware-$VERSION.zip
 rm -f $ARCHIVEDIR/firmware-$VERSION.zip
-zip --junk-paths $ARCHIVEDIR/firmware-$VERSION.zip $ARCHIVEDIR/spiffs-$VERSION.bin $OUTDIR/bins/universal/firmware-*-$VERSION.* $OUTDIR/bins/universal/meshtasticd* images/system-info.bin bin/device-install.* bin/device-update.*
+zip --junk-paths $ARCHIVEDIR/firmware-$VERSION.zip $ARCHIVEDIR/littlefs-$VERSION.bin $OUTDIR/bins/universal/firmware-*-$VERSION.* $OUTDIR/bins/universal/meshtasticd* images/system-info.bin bin/device-install.* bin/device-update.*
 echo Generating $ARCHIVEDIR/elfs-$VERSION.zip
 rm -f $ARCHIVEDIR/elfs-$VERSION.zip
-zip --junk-paths $ARCHIVEDIR/elfs-$VERSION.zip $OUTDIR/elfs/universal/firmware-*-$VERSION.* 
+zip --junk-paths $ARCHIVEDIR/elfs-$VERSION.zip $OUTDIR/elfs/universal/firmware-*-$VERSION.*
 
 echo BUILT ALL
