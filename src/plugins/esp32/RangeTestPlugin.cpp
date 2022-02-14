@@ -8,13 +8,12 @@
 #include "configuration.h"
 #include "gps/GeoCoord.h"
 #include <Arduino.h>
-#include <SPIFFS.h>
+#include <FSCommon.h>
 //#include <assert.h>
 
 /*
     As a sender, I can send packets every n-seonds. These packets include an incramented PacketID.
-
-    As a receiver, I can receive packets from multiple senders. These packets can be saved to the spiffs.
+    As a receiver, I can receive packets from multiple senders. These packets can be saved to the Filesystem.
 */
 
 RangeTestPlugin *rangeTestPlugin;
@@ -214,20 +213,20 @@ bool RangeTestPluginRadio::appendFile(const MeshPacket &mp)
         DEBUG_MSG("gpsStatus->getDOP()          %d\n", gpsStatus->getDOP());
         DEBUG_MSG("-----------------------------------------\n");
     */
-    if (!SPIFFS.begin(true)) {
-        DEBUG_MSG("An Error has occurred while mounting SPIFFS\n");
+    if (!FSBegin()) {
+        DEBUG_MSG("An Error has occurred while mounting the filesystem\n");
         return 0;
     }
 
-    if (SPIFFS.totalBytes() - SPIFFS.usedBytes() < 51200) {
-        DEBUG_MSG("SPIFFS doesn't have enough free space. Abourting write.\n");
+    if (FSCom.totalBytes() - FSCom.usedBytes() < 51200) {
+        DEBUG_MSG("Filesystem doesn't have enough free space. Aborting write.\n");
         return 0;
     }
 
     // If the file doesn't exist, write the header.
-    if (!SPIFFS.exists("/static/rangetest.csv")) {
+    if (!FSCom.exists("/static/rangetest.csv")) {
         //--------- Write to file
-        File fileToWrite = SPIFFS.open("/static/rangetest.csv", FILE_WRITE);
+        File fileToWrite = FSCom.open("/static/rangetest.csv", FILE_WRITE);
 
         if (!fileToWrite) {
             DEBUG_MSG("There was an error opening the file for writing\n");
@@ -245,8 +244,8 @@ bool RangeTestPluginRadio::appendFile(const MeshPacket &mp)
         fileToWrite.close();
     }
 
-    //--------- Apend content to file
-    File fileToAppend = SPIFFS.open("/static/rangetest.csv", FILE_APPEND);
+    //--------- Append content to file
+    File fileToAppend = FSCom.open("/static/rangetest.csv", FILE_APPEND);
 
     if (!fileToAppend) {
         DEBUG_MSG("There was an error opening the file for appending\n");
