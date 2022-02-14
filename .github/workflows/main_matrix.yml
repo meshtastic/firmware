@@ -22,7 +22,6 @@ jobs:
   check:
     strategy:
       fail-fast: false
-      max-parallel: 2
       matrix:
         include:
           - board: rak11200
@@ -69,8 +68,8 @@ jobs:
     - name: Upgrade python tools and install platformio
       run: |
         python -m pip install --upgrade pip
-        pip install -U platformio
-
+        pip install -U platformio 
+        
     - name: Upgrade platformio
       run: |
         pio upgrade
@@ -270,6 +269,16 @@ jobs:
           release/device-*.sh
           release/device-*.bat
         retention-days: 90
+        
+  after-checks:
+    runs-on: ubuntu-latest
+    needs: [check]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
 
   gather-artifacts:
     runs-on: ubuntu-latest

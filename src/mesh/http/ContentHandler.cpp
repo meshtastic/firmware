@@ -11,7 +11,7 @@
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>
 #include <HTTPURLEncodedBodyParser.hpp>
-#include <SPIFFS.h>
+#include <FSCommon.h>
 
 #ifndef NO_ESP32
 #include "esp_task_wdt.h"
@@ -46,7 +46,10 @@ using namespace httpsserver;
 #include <WiFiClientSecure.h>
 HTTPClient httpClient;
 
-#define DEST_FS_USES_SPIFFS
+// needed for ESP32-targz
+#define DEST_FS_USES_LITTLEFS
+#define ESP_ARDUINO_VERSION_VAL(major, minor, patch) ((major << 16) | (minor << 8) | (patch))
+#define ESP_ARDUINO_VERSION ESP_ARDUINO_VERSION_VAL(1, 0, 4)
 #include <ESP32-targz.h>
 
 // We need to specify some content-type mapping, so the resources get delivered with the
@@ -127,9 +130,9 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeAdmin = new ResourceNode("/admin", "GET", &handleAdmin);
     ResourceNode *nodeAdminSettings = new ResourceNode("/admin/settings", "GET", &handleAdminSettings);
     ResourceNode *nodeAdminSettingsApply = new ResourceNode("/admin/settings/apply", "POST", &handleAdminSettingsApply);
-    ResourceNode *nodeAdminSPIFFS = new ResourceNode("/admin/spiffs", "GET", &handleSPIFFS);
-    ResourceNode *nodeUpdateSPIFFS = new ResourceNode("/admin/spiffs/update", "POST", &handleUpdateSPIFFS);
-    ResourceNode *nodeDeleteSPIFFS = new ResourceNode("/admin/spiffs/delete", "GET", &handleDeleteSPIFFSContent);
+    ResourceNode *nodeAdminFs = new ResourceNode("/admin/fs", "GET", &handleFs);
+    ResourceNode *nodeUpdateFs = new ResourceNode("/admin/fs/update", "POST", &handleUpdateFs);
+    ResourceNode *nodeDeleteFs = new ResourceNode("/admin/fs/delete", "GET", &handleDeleteFsContent);
 
     ResourceNode *nodeRestart = new ResourceNode("/restart", "POST", &handleRestart);
     ResourceNode *nodeFormUpload = new ResourceNode("/upload", "POST", &handleFormUpload);
@@ -137,8 +140,8 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeJsonScanNetworks = new ResourceNode("/json/scanNetworks", "GET", &handleScanNetworks);
     ResourceNode *nodeJsonBlinkLED = new ResourceNode("/json/blink", "POST", &handleBlinkLED);
     ResourceNode *nodeJsonReport = new ResourceNode("/json/report", "GET", &handleReport);
-    ResourceNode *nodeJsonSpiffsBrowseStatic = new ResourceNode("/json/spiffs/browse/static", "GET", &handleSpiffsBrowseStatic);
-    ResourceNode *nodeJsonDelete = new ResourceNode("/json/spiffs/delete/static", "DELETE", &handleSpiffsDeleteStatic);
+    ResourceNode *nodeJsonFsBrowseStatic = new ResourceNode("/json/fs/browse/static", "GET", &handleFsBrowseStatic);
+    ResourceNode *nodeJsonDelete = new ResourceNode("/json/fs/delete/static", "DELETE", &handleFsDeleteStatic);
 
 
     ResourceNode *nodeRoot = new ResourceNode("/*", "GET", &handleStatic);
@@ -153,13 +156,13 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     secureServer->registerNode(nodeFormUpload);
     secureServer->registerNode(nodeJsonScanNetworks);
     secureServer->registerNode(nodeJsonBlinkLED);
-    secureServer->registerNode(nodeJsonSpiffsBrowseStatic);
+    secureServer->registerNode(nodeJsonFsBrowseStatic);
     secureServer->registerNode(nodeJsonDelete);
     secureServer->registerNode(nodeJsonReport);
-    secureServer->registerNode(nodeUpdateSPIFFS);
-    secureServer->registerNode(nodeDeleteSPIFFS);
+    secureServer->registerNode(nodeUpdateFs);
+    secureServer->registerNode(nodeDeleteFs);
     secureServer->registerNode(nodeAdmin);
-    secureServer->registerNode(nodeAdminSPIFFS);
+    secureServer->registerNode(nodeAdminFs);
     secureServer->registerNode(nodeAdminSettings);
     secureServer->registerNode(nodeAdminSettingsApply);
     secureServer->registerNode(nodeRoot); // This has to be last
@@ -174,13 +177,13 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     insecureServer->registerNode(nodeFormUpload);
     insecureServer->registerNode(nodeJsonScanNetworks);
     insecureServer->registerNode(nodeJsonBlinkLED);
-    insecureServer->registerNode(nodeJsonSpiffsBrowseStatic);
+    insecureServer->registerNode(nodeJsonFsBrowseStatic);
     insecureServer->registerNode(nodeJsonDelete);
     insecureServer->registerNode(nodeJsonReport);
-    insecureServer->registerNode(nodeUpdateSPIFFS);
-    insecureServer->registerNode(nodeDeleteSPIFFS);
+    insecureServer->registerNode(nodeUpdateFs);
+    insecureServer->registerNode(nodeDeleteFs);
     insecureServer->registerNode(nodeAdmin);
-    insecureServer->registerNode(nodeAdminSPIFFS);
+    insecureServer->registerNode(nodeAdminFs);
     insecureServer->registerNode(nodeAdminSettings);
     insecureServer->registerNode(nodeAdminSettingsApply);
     insecureServer->registerNode(nodeRoot); // This has to be last
@@ -269,14 +272,14 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
     DEBUG_MSG("webAPI handleAPIv1ToRadio\n");
 }
 
-void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
+void handleFsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
 {
 
     res->setHeader("Content-Type", "application/json");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
 
-    File root = SPIFFS.open("/");
+    File root = FSCom.open("/");
 
     if (root.isDirectory()) {
         res->println("{");
@@ -313,9 +316,9 @@ void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
         }
         res->print("],");
         res->print("\"filesystem\" : {");
-        res->print("\"total\" : " + String(SPIFFS.totalBytes()) + ",");
-        res->print("\"used\" : " + String(SPIFFS.usedBytes()) + ",");
-        res->print("\"free\" : " + String(SPIFFS.totalBytes() - SPIFFS.usedBytes()));
+        res->print("\"total\" : " + String(FSCom.totalBytes()) + ",");
+        res->print("\"used\" : " + String(FSCom.usedBytes()) + ",");
+        res->print("\"free\" : " + String(FSCom.totalBytes() - FSCom.usedBytes()));
         res->println("}");
         res->println("},");
         res->println("\"status\": \"ok\"");
@@ -323,7 +326,7 @@ void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
     }
 }
 
-void handleSpiffsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
+void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
 {
     ResourceParameters *params = req->getParams();
     std::string paramValDelete;
@@ -333,7 +336,7 @@ void handleSpiffsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Methods", "DELETE");
     if (params->getQueryParameter("delete", paramValDelete)) {
         std::string pathDelete = "/" + paramValDelete;
-        if (SPIFFS.remove(pathDelete.c_str())) {
+        if (FSCom.remove(pathDelete.c_str())) {
             Serial.println(pathDelete.c_str());
             res->println("{");
             res->println("\"status\": \"ok\"");
@@ -361,18 +364,18 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
         std::string filename = "/static/" + parameter1;
         std::string filenameGzip = "/static/" + parameter1 + ".gz";
 
-        // Try to open the file from SPIFFS
+        // Try to open the file
         File file;
 
         bool has_set_content_type = false;
 
-        if (SPIFFS.exists(filename.c_str())) {
-            file = SPIFFS.open(filename.c_str());
+        if (FSCom.exists(filename.c_str())) {
+            file = FSCom.open(filename.c_str());
             if (!file.available()) {
                 DEBUG_MSG("File not available - %s\n", filename.c_str());
             }
-        } else if (SPIFFS.exists(filenameGzip.c_str())) {
-            file = SPIFFS.open(filenameGzip.c_str());
+        } else if (FSCom.exists(filenameGzip.c_str())) {
+            file = FSCom.open(filenameGzip.c_str());
             res->setHeader("Content-Encoding", "gzip");
             if (!file.available()) {
                 DEBUG_MSG("File not available - %s\n", filenameGzip.c_str());
@@ -380,7 +383,7 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
         } else {
             has_set_content_type = true;
             filenameGzip = "/static/index.html.gz";
-            file = SPIFFS.open(filenameGzip.c_str());
+            file = FSCom.open(filenameGzip.c_str());
             res->setHeader("Content-Type", "text/html");
             if (!file.available()) {
                 DEBUG_MSG("File not available - %s\n", filenameGzip.c_str());
@@ -410,7 +413,7 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
             res->setHeader("Content-Type", "application/octet-stream");
         }
 
-        // Read the file from SPIFFS and write it to the HTTP response body
+        // Read the file and write it to the HTTP response body
         size_t length = 0;
         do {
             char buffer[256];
@@ -502,20 +505,12 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
             return;
         }
 
-        // SPIFFS limits the total lenth of a path + file to 31 characters.
-        if (filename.length() + 8 > 31) {
-            DEBUG_MSG("Uploaded filename too long!\n");
-            res->println("<p>Uploaded filename too long! Limit of 23 characters.</p>");
-            delete parser;
-            return;
-        }
-
         // You should check file name validity and all that, but we skip that to make the core
         // concepts of the body parser functionality easier to understand.
         std::string pathname = "/static/" + filename;
 
-        // Create a new file on spiffs to stream the data into
-        File file = SPIFFS.open(pathname.c_str(), "w");
+        // Create a new file to stream the data into
+        File file = FSCom.open(pathname.c_str(), "w");
         size_t fileLength = 0;
         didwrite = true;
 
@@ -529,7 +524,7 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
             // DEBUG_MSG("\n\nreadLength - %i\n", readLength);
 
             // Abort the transfer if there is less than 50k space left on the filesystem.
-            if (SPIFFS.totalBytes() - SPIFFS.usedBytes() < 51200) {
+            if (FSCom.totalBytes() - FSCom.usedBytes() < 51200) {
                 file.close();
                 res->println("<p>Write aborted! Reserving 50k on filesystem.</p>");
 
@@ -649,9 +644,9 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     res->printf("\"heap_free\": %d,\n", ESP.getFreeHeap());
     res->printf("\"psram_total\": %d,\n", ESP.getPsramSize());
     res->printf("\"psram_free\": %d,\n", ESP.getFreePsram());
-    res->println("\"spiffs_total\" : " + String(SPIFFS.totalBytes()) + ",");
-    res->println("\"spiffs_used\" : " + String(SPIFFS.usedBytes()) + ",");
-    res->println("\"spiffs_free\" : " + String(SPIFFS.totalBytes() - SPIFFS.usedBytes()));
+    res->println("\"fs_total\" : " + String(FSCom.totalBytes()) + ",");
+    res->println("\"fs_used\" : " + String(FSCom.usedBytes()) + ",");
+    res->println("\"fs_free\" : " + String(FSCom.totalBytes() - FSCom.usedBytes()));
     res->println("},");
 
     res->println("\"power\": {");
@@ -699,7 +694,7 @@ void handleHotspot(HTTPRequest *req, HTTPResponse *res)
     res->println("<meta http-equiv=\"refresh\" content=\"0;url=/\" />\n");
 }
 
-void handleUpdateSPIFFS(HTTPRequest *req, HTTPResponse *res)
+void handleUpdateFs(HTTPRequest *req, HTTPResponse *res)
 {
     res->setHeader("Content-Type", "text/html");
     res->setHeader("Access-Control-Allow-Origin", "*");
@@ -716,7 +711,7 @@ void handleUpdateSPIFFS(HTTPRequest *req, HTTPResponse *res)
     if (streamptr != nullptr) {
         DEBUG_MSG("Connection to content server ... success!\n");
 
-        File root = SPIFFS.open("/");
+        File root = FSCom.open("/");
         File file = root.openNextFile();
 
         DEBUG_MSG("Deleting files from /static : \n");
@@ -725,7 +720,7 @@ void handleUpdateSPIFFS(HTTPRequest *req, HTTPResponse *res)
             String filePath = String(file.name());
             if (filePath.indexOf("/static") == 0) {
                 DEBUG_MSG("    %s\n", file.name());
-                SPIFFS.remove(file.name());
+                FSCom.remove(file.name());
             }
             file = root.openNextFile();
         }
@@ -752,7 +747,7 @@ void handleUpdateSPIFFS(HTTPRequest *req, HTTPResponse *res)
             res->printf("Stream size %d<br><br>\n", streamSize);
         }
 
-        if (!TARUnpacker->tarStreamExpander(streamptr, streamSize, SPIFFS, "/static")) {
+        if (!TARUnpacker->tarStreamExpander(streamptr, streamSize, FSCom, "/static")) {
             res->printf("tarStreamExpander failed with return code #%d\n", TARUnpacker->tarGzGetError());
             Serial.printf("tarStreamExpander failed with return code #%d\n", TARUnpacker->tarGzGetError());
 
@@ -786,16 +781,16 @@ void handleUpdateSPIFFS(HTTPRequest *req, HTTPResponse *res)
     webServerThread->requestRestart = (millis() / 1000) + 5;
 }
 
-void handleDeleteSPIFFSContent(HTTPRequest *req, HTTPResponse *res)
+void handleDeleteFsContent(HTTPRequest *req, HTTPResponse *res)
 {
     res->setHeader("Content-Type", "text/html");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
 
     res->println("<h1>Meshtastic</h1>\n");
-    res->println("Deleting SPIFFS Content in /static/*");
+    res->println("Deleting Content in /static/*");
 
-    File root = SPIFFS.open("/");
+    File root = FSCom.open("/");
     File file = root.openNextFile();
 
     DEBUG_MSG("Deleting files from /static : \n");
@@ -804,7 +799,7 @@ void handleDeleteSPIFFSContent(HTTPRequest *req, HTTPResponse *res)
         String filePath = String(file.name());
         if (filePath.indexOf("/static") == 0) {
             DEBUG_MSG("    %s\n", file.name());
-            SPIFFS.remove(file.name());
+            FSCom.remove(file.name());
         }
         file = root.openNextFile();
     }
@@ -819,7 +814,7 @@ void handleAdmin(HTTPRequest *req, HTTPResponse *res)
 
     res->println("<h1>Meshtastic</h1>\n");
     res->println("<a href=/admin/settings>Settings</a><br>\n");
-    res->println("<a href=/admin/spiffs>Manage Web Content</a><br>\n");
+    res->println("<a href=/admin/fs>Manage Web Content</a><br>\n");
     res->println("<a href=/json/report>Device Report</a><br>\n");
 }
 
@@ -859,14 +854,14 @@ void handleAdminSettingsApply(HTTPRequest *req, HTTPResponse *res)
 }
 
 
-void handleSPIFFS(HTTPRequest *req, HTTPResponse *res)
+void handleFs(HTTPRequest *req, HTTPResponse *res)
 {
     res->setHeader("Content-Type", "text/html");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
 
     res->println("<h1>Meshtastic</h1>\n");
-    res->println("<a href=/admin/spiffs/delete>Delete Web Content</a><p><form action=/admin/spiffs/update "
+    res->println("<a href=/admin/fs/delete>Delete Web Content</a><p><form action=/admin/fs/update "
                  "method=post><input type=submit value=UPDATE_WEB_CONTENT></form>Be patient!");
     res->println("<p><hr><p><a href=/admin>Back to admin</a>\n");
 }

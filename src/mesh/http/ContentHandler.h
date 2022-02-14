@@ -11,13 +11,13 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res);
 void handleRestart(HTTPRequest *req, HTTPResponse *res);
 void handleFormUpload(HTTPRequest *req, HTTPResponse *res);
 void handleScanNetworks(HTTPRequest *req, HTTPResponse *res);
-void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res);
-void handleSpiffsDeleteStatic(HTTPRequest *req, HTTPResponse *res);
+void handleFsBrowseStatic(HTTPRequest *req, HTTPResponse *res);
+void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res);
 void handleBlinkLED(HTTPRequest *req, HTTPResponse *res);
 void handleReport(HTTPRequest *req, HTTPResponse *res);
-void handleUpdateSPIFFS(HTTPRequest *req, HTTPResponse *res);
-void handleDeleteSPIFFSContent(HTTPRequest *req, HTTPResponse *res);
-void handleSPIFFS(HTTPRequest *req, HTTPResponse *res);
+void handleUpdateFs(HTTPRequest *req, HTTPResponse *res);
+void handleDeleteFsContent(HTTPRequest *req, HTTPResponse *res);
+void handleFs(HTTPRequest *req, HTTPResponse *res);
 void handleAdmin(HTTPRequest *req, HTTPResponse *res);
 void handleAdminSettings(HTTPRequest *req, HTTPResponse *res);
 void handleAdminSettingsApply(HTTPRequest *req, HTTPResponse *res);
@@ -34,9 +34,7 @@ class HttpAPI : public PhoneAPI
     // Nothing here yet
 
   protected:
-  
+
     /// Check the current underlying physical link to see if the client is currently connected
     virtual bool checkIsConnected() override { return true; } // FIXME, be smarter about this
 };
-
-
