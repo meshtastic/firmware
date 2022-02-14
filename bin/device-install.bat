@@ -30,7 +30,7 @@ IF EXIST %FILENAME% (
     echo Trying to flash update %FILENAME%, but first erasing and writing system information"
 	%PYTHON% -m esptool --baud 921600 erase_flash
 	%PYTHON% -m esptool --baud 921600 write_flash 0x1000 system-info.bin
-    for %%f in (spiffs-*.bin) do (
+    for %%f in (littlefs-*.bin) do (
         %PYTHON% -m esptool --baud 921600 write_flash 0x00390000 %%f
     )
 	%PYTHON% -m esptool --baud 921600 write_flash 0x10000 %FILENAME%

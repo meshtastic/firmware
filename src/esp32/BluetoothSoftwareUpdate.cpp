@@ -104,8 +104,8 @@ int update_crc32_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble
     } else {
         if (Update.end()) {
             if (update_region == U_SPIFFS) {
-                DEBUG_MSG("SPIFFS updated!\n");
-                nodeDB.saveToDisk(); // Since we just wiped spiffs, we need to save our current state
+                DEBUG_MSG("Filesystem updated!\n");
+                nodeDB.saveToDisk(); // Since we just wiped the filesystem, we need to save our current state
             } else {
                 DEBUG_MSG("Appload updated, rebooting in 5 seconds!\n");
                 rebootAtMsec = millis() + 5000;
