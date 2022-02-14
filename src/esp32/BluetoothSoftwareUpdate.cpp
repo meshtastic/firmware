@@ -1,3 +1,5 @@
+#ifndef USE_NEW_ESP32_BLUETOOTH
+
 #include <Arduino.h>
 
 #include "../concurrency/LockGuard.h"
@@ -154,3 +156,5 @@ void reinitUpdateService()
     res = ble_gatts_add_svcs(gatt_update_svcs);
     assert(res == 0);
 }
+
+#endif //#ifndef USE_NEW_ESP32_BLUETOOTH

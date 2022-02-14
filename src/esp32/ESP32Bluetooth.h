@@ -1,8 +1,6 @@
-#ifndef USE_NEW_ESP32_BLUETOOTH
+#ifdef USE_NEW_ESP32_BLUETOOTH
 
 #pragma once
-
-#include "PhoneAPI.h"
 
 extern uint16_t fromNumValHandle;
 
@@ -20,4 +18,16 @@ protected:
 
 extern PhoneAPI *bluetoothPhoneAPI;
 
-#endif //#ifndef USE_NEW_ESP32_BLUETOOTH
+class ESP32Bluetooth
+{
+  public:
+    void setup();
+    void shutdown();
+    void clearBonds();
+};
+
+void setBluetoothEnable(bool on);
+void clearNVS();
+void disablePin();
+
+#endif

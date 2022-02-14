@@ -1,3 +1,5 @@
+#ifndef USE_NEW_ESP32_BLUETOOTH
+
 #include "NimbleBluetoothAPI.h"
 #include "PhoneAPI.h"
 #include "configuration.h"
@@ -69,3 +71,5 @@ int fromnum_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt
 {
     return chr_readwrite32le(&fromNum, ctxt);
 }
+
+#endif //#ifndef USE_NEW_ESP32_BLUETOOTH

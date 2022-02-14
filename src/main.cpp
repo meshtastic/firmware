@@ -28,8 +28,14 @@
 #include "mesh/http/WiFiAPClient.h"
 
 #ifndef NO_ESP32
-#include "mesh/http/WebServer.h"
-#include "nimble/BluetoothUtil.h"
+    #include "mesh/http/WebServer.h"
+
+    #ifdef USE_NEW_ESP32_BLUETOOTH
+        #include "esp32/ESP32Bluetooth.h"
+    #else
+        #include "nimble/BluetoothUtil.h"
+    #endif
+
 #endif
 
 #if defined(HAS_WIFI) || defined(PORTDUINO)
