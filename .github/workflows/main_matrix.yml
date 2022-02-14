@@ -22,6 +22,7 @@ jobs:
   check:
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         include:
           - board: rak11200
@@ -157,6 +158,7 @@ jobs:
   build-nrf52:
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         include: 
           - board: rak4631_5005
