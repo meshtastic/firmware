@@ -36,7 +36,7 @@ class RangeTestPluginRadio : public SinglePortPlugin
     void sendPayload(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
 
     /**
-     * Append range test data to the file on the spiffs
+     * Append range test data to the file on the Filesystem
      */
     bool appendFile(const MeshPacket &mp);
 
