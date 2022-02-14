@@ -22,6 +22,7 @@ jobs:
   check:
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         include:
           - board: rak11200
@@ -157,6 +158,7 @@ jobs:
   build-nrf52:
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         include: 
           - board: rak4631_5005
@@ -289,7 +291,7 @@ jobs:
         id: version
 
       - name: Move files up
-        run: mv -b -t ./ ./*tbeam-*/spiffs*.bin ./*tbeam-*/system-info.bin ./**/firmware*.bin ./**/*.uf2 ./**/*.elf ./**/meshtasticd_linux_amd64 ./*native*/*device-*.sh ./*native*/*device-*.bat
+        run: mv -b -t ./ ./*tbeam-*/littlefs*.bin ./*tbeam-*/system-info.bin ./**/firmware*.bin ./**/*.uf2 ./**/*.elf ./**/meshtasticd_linux_amd64 ./*native*/*device-*.sh ./*native*/*device-*.bat
 
       - name: Repackage in single firmware zip
         uses: actions/upload-artifact@v2
