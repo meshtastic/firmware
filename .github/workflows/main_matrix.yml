@@ -65,10 +65,10 @@ jobs:
         path: ~/.cache/pip
         key: ${{ runner.os }}-pip
 
-    - name: Upgrade python tools and install platformio
+    - name: Upgrade python tools and install platformio with build dependancies
       run: |
         python -m pip install --upgrade pip
-        pip install -U platformio
+        pip install -U platformio littlefs-python
 
     - name: Upgrade platformio
       run: |
