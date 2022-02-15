@@ -84,7 +84,7 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
     Channel &ch = getByIndex(chIndex);
     ChannelSettings &channelSettings = ch.settings;
 
-    channelSettings.modem_config = ChannelSettings_ModemConfig_LongSlow; // Default to Long Range & Fast
+    channelSettings.modem_config = ChannelSettings_ModemConfig_LongFast; // Default to Long Range & Fast
 
     channelSettings.tx_power = 0; // default
     uint8_t defaultpskIndex = 1;
