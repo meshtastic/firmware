@@ -32,6 +32,8 @@ const RegionInfo regions[] = {
         https://www.thethingsnetwork.org/docs/lorawan/duty-cycle/
         https://www.thethingsnetwork.org/docs/lorawan/regional-parameters/
         https://www.legislation.gov.uk/uksi/1999/930/schedule/6/part/III/made/data.xht?view=snippet&wrap=true
+
+        audio_permitted = false per regulation
      */
     RDEF(EU868, 869.4f, 869.65f, 10, 0, 16, false, false),
 
