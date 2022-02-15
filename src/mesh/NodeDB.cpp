@@ -227,17 +227,6 @@ void NodeDB::init()
     info->user = owner;
     info->has_user = true;
 
-    // Check for the old style of region code strings, if found, convert to the new enum.
-    // Those strings will look like "1.0-EU433"
-    if (radioConfig.preferences.region == RegionCode_Unset && strncmp(myNodeInfo.region, "1.0-", 4) == 0) {
-        const char *regionStr = myNodeInfo.region + 4; // EU433 or whatever
-        for (const RegionInfo *r = regions; r->code != RegionCode_Unset; r++)
-            if (strcmp(r->name, regionStr) == 0) {
-                radioConfig.preferences.region = r->code;
-                break;
-            }
-    }
-
     strncpy(myNodeInfo.firmware_version, optstr(APP_VERSION), sizeof(myNodeInfo.firmware_version));
 
     // hw_model is no longer stored in myNodeInfo (as of 1.2.11) - we now store it as an enum in nodeinfo
