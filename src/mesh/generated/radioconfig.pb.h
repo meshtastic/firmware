@@ -14,13 +14,15 @@ typedef enum _RegionCode {
     RegionCode_Unset = 0,
     RegionCode_US = 1,
     RegionCode_EU433 = 2,
-    RegionCode_EU865 = 3,
+    RegionCode_EU868 = 3,
     RegionCode_CN = 4,
     RegionCode_JP = 5,
     RegionCode_ANZ = 6,
     RegionCode_KR = 7,
     RegionCode_TW = 8,
-    RegionCode_RU = 9
+    RegionCode_RU = 9,
+    RegionCode_IN = 10,
+    RegionCode_TH = 11
 } RegionCode;
 
 typedef enum _ChargeCurrent {
@@ -98,7 +100,8 @@ typedef enum _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType {
     RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT22 = 4,
     RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME280 = 5,
     RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME680 = 6,
-    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MCP9808 = 7
+    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MCP9808 = 7,
+    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_SHTC3 = 8
 } RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType;
 
 /* Struct definitions */
@@ -197,8 +200,8 @@ typedef struct _RadioConfig {
 
 /* Helper constants for enums */
 #define _RegionCode_MIN RegionCode_Unset
-#define _RegionCode_MAX RegionCode_RU
-#define _RegionCode_ARRAYSIZE ((RegionCode)(RegionCode_RU+1))
+#define _RegionCode_MAX RegionCode_TH
+#define _RegionCode_ARRAYSIZE ((RegionCode)(RegionCode_TH+1))
 
 #define _ChargeCurrent_MIN ChargeCurrent_MAUnset
 #define _ChargeCurrent_MAX ChargeCurrent_MA1320
@@ -225,8 +228,8 @@ typedef struct _RadioConfig {
 #define _InputEventChar_ARRAYSIZE ((InputEventChar)(InputEventChar_KEY_BACK+1))
 
 #define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11
-#define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MAX RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MCP9808
-#define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_ARRAYSIZE ((RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType)(RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MCP9808+1))
+#define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MAX RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_SHTC3
+#define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_ARRAYSIZE ((RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType)(RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_SHTC3+1))
 
 
 #ifdef __cplusplus
