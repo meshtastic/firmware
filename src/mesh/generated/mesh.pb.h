@@ -152,7 +152,6 @@ typedef struct _LogRecord {
 typedef struct _MyNodeInfo {
     uint32_t my_node_num;
     bool has_gps;
-    uint32_t num_bands;
     char region[12];
     char hw_model_deprecated[16];
     char firmware_version[18];
@@ -339,7 +338,7 @@ extern "C" {
 #define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
 #define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
 #define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0}
-#define MyNodeInfo_init_default                  {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
+#define MyNodeInfo_init_default                  {0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
 #define LogRecord_init_default                   {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_default                   {0, 0, {MyNodeInfo_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
@@ -351,7 +350,7 @@ extern "C" {
 #define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
 #define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
 #define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0}
-#define MyNodeInfo_init_zero                     {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
+#define MyNodeInfo_init_zero                     {0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
 #define LogRecord_init_zero                      {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_zero                      {0, 0, {MyNodeInfo_init_zero}}
 #define ToRadio_init_zero                        {0, {MeshPacket_init_zero}}
@@ -372,7 +371,6 @@ extern "C" {
 #define LogRecord_level_tag                      4
 #define MyNodeInfo_my_node_num_tag               1
 #define MyNodeInfo_has_gps_tag                   2
-#define MyNodeInfo_num_bands_tag                 3
 #define MyNodeInfo_region_tag                    4
 #define MyNodeInfo_hw_model_deprecated_tag       5
 #define MyNodeInfo_firmware_version_tag          6
@@ -558,7 +556,6 @@ X(a, STATIC,   SINGULAR, FLOAT,    snr,               7)
 #define MyNodeInfo_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   my_node_num,       1) \
 X(a, STATIC,   SINGULAR, BOOL,     has_gps,           2) \
-X(a, STATIC,   SINGULAR, UINT32,   num_bands,         3) \
 X(a, STATIC,   SINGULAR, STRING,   region,            4) \
 X(a, STATIC,   SINGULAR, STRING,   hw_model_deprecated,   5) \
 X(a, STATIC,   SINGULAR, STRING,   firmware_version,   6) \
@@ -652,9 +649,9 @@ extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 #define Data_size                                267
 #define MeshPacket_size                          318
 #define NodeInfo_size                            271
-#define MyNodeInfo_size                          457
+#define MyNodeInfo_size                          451
 #define LogRecord_size                           81
-#define FromRadio_size                           466
+#define FromRadio_size                           460
 #define ToRadio_size                             321
 #define ToRadio_PeerInfo_size                    8
 

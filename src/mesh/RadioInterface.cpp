@@ -94,9 +94,6 @@ void initRegion()
         ;
     myRegion = r;
     DEBUG_MSG("Wanted region %d, using %s\n", radioConfig.preferences.region, r->name);
-
-    // myNodeInfo.num_bands = myRegion->numChannels; // Tell our android app how many channels we have
-    myNodeInfo.num_bands = 666; // JM Fixme!
 }
 
 /**
