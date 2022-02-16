@@ -334,12 +334,12 @@ void RadioInterface::applyModemConfig()
             cr = 8;
             sf = 10;
             break;
-        case ChannelSettings_ModemConfig_LongSlow:
+        case ChannelSettings_ModemConfig_LongFast:
             bw = 250;
             cr = 8;
             sf = 11;
             break;
-        case ChannelSettings_ModemConfig_LongFast:
+        case ChannelSettings_ModemConfig_LongSlow:
             bw = 125;
             cr = 8;
             sf = 12;
@@ -364,23 +364,23 @@ void RadioInterface::applyModemConfig()
     }
 
     power = channelSettings.tx_power;
-
     shortPacketMsec = getPacketTime(sizeof(PacketHeader));
-
     assert(myRegion); // Should have been found in init
 
     // Calculate the number of channels
-    uint32_t numChannels = floor((myRegion->freqEnd - myRegion->freqStart)/(myRegion->spacing + bw));
+    uint32_t numChannels = floor((myRegion->freqEnd - myRegion->freqStart) / (myRegion->spacing + (bw / 1000)));
 
     // If user has manually specified a channel num, then use that, otherwise generate one by hashing the name
     const char *channelName = channels.getName(channels.getPrimaryIndex());
     int channel_num = channelSettings.channel_num ? channelSettings.channel_num - 1 : hash(channelName) % numChannels;
-    float freq = myRegion->freqStart+(((myRegion->freqEnd - myRegion->freqStart/numChannels)/2)*1);
+    float freq = myRegion->freqStart + ((((myRegion->freqEnd - myRegion->freqStart) / numChannels) / 2) * channel_num);
+
     saveChannelNum(channel_num);
     saveFreq(freq);
 
     DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, power=%d\n", channelName, channelSettings.modem_config, channel_num, power);
-    DEBUG_MSG("Radio myRegion->freqStart / myRegion->freqEnd: %f / %f\n", myRegion->freqStart, myRegion->freqEnd);
+    DEBUG_MSG("Radio myRegion->freqStart / myRegion->freqEnd: %f -> %f (%f mhz)\n", myRegion->freqStart, myRegion->freqEnd,
+              myRegion->freqEnd - myRegion->freqStart);
     DEBUG_MSG("Radio myRegion->numChannels: %d\n", numChannels);
     DEBUG_MSG("Radio channel_num: %d\n", channel_num);
     DEBUG_MSG("Radio frequency: %f\n", getFreq());
