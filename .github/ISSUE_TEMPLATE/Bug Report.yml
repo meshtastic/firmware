@@ -1,0 +1,76 @@
+name: Bug Report
+description: File a bug report
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      description: How would you catagorize this issue?
+      multiple: true
+      options:
+        - Hardware Compatibility
+        - BLE
+        - Serial
+        - WiFi
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: hardware
+    attributes:
+      label: Hardware
+      description: What hardware are you encountering this issue on?
+      multiple: true
+      options:
+        - Not Applicable
+        - T-Beam
+        - T-Beam 0.7
+        - T-Lora v1
+        - T-Lora v1.3
+        - T-Lora v2 1.6
+        - T-Echo
+        - Rak4631
+        - Rak11200
+        - Heltec v1
+        - Heltec v2
+        - Heltec v2.1
+        - Relay v1
+        - Relay v2
+        - DIY
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Firmware Version
+      description: This can be found on the device's screen or via one of the apps.
+      placeholder: x.x.x.yyyyyyy
+    validations:
+      required: true
+
+  - type: textarea
+    id: body
+    attributes:
+      label: Description
+      description: Please provide details on what steps you performed for this to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: If you have any log output to help in diagnosing your bug, please provide it here.
+      render: Shell
+    validations:
+      required: false
