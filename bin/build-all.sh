@@ -9,7 +9,7 @@ BOARDS_ESP32="rak11200 tlora-v2 tlora-v1 tlora_v1_3 tlora-v2-1-1.6 tbeam heltec-
 #BOARDS_ESP32=tbeam
 
 # FIXME note nrf52840dk build is for some reason only generating a BIN file but not a HEX file nrf52840dk-geeksville is fine
-BOARDS_NRF52="rak4631_5005 rak4631_5005_rak14000 rak4631_19003 t-echo"
+BOARDS_NRF52="rak4631_5005 rak4631_5005_eink rak4631_19003 t-echo"
 #BOARDS_NRF52=""
 
 OUTDIR=release/latest
