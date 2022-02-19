@@ -9,14 +9,21 @@
 #define COLORED GxEPD_BLACK
 #define UNCOLORED GxEPD_WHITE
 
-
+#if defined(TTGO_T_ECHO)
 #define TECHO_DISPLAY_MODEL GxEPD2_154_D67
+#elif defined(RAK4630)
+#define TECHO_DISPLAY_MODEL GxEPD2_213_B74
+#endif
 
 GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT> *adafruitDisplay;
 
 EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl)
 {
+    #if defined(TTGO_T_ECHO)
     setGeometry(GEOMETRY_RAWMODE, TECHO_DISPLAY_MODEL::WIDTH, TECHO_DISPLAY_MODEL::HEIGHT);
+    #elif defined(RAK4630)
+    setGeometry(GEOMETRY_RAWMODE, 250, 122);
+    #endif
     // setGeometry(GEOMETRY_RAWMODE, 128, 64); // old resolution
     // setGeometry(GEOMETRY_128_64); // We originally used this because I wasn't sure if rawmode worked - it does
 }
@@ -50,7 +57,12 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
             }
         }
 
-        DEBUG_MSG("Updating eink... ");
+        #if defined(TTGO_T_ECHO)
+        DEBUG_MSG("Updating T-ECHO E-Paper... ");
+        #elif defined(RAK4630)
+        DEBUG_MSG("Updating RAK4361_5005 E-Paper... ");
+        #endif
+        
         // ePaper.Reset(); // wake the screen from sleep
         adafruitDisplay->display(false); // FIXME, use partial update mode
         // Put screen to sleep to save power (possibly not necessary because we already did poweroff inside of display)
