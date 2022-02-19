@@ -60,7 +60,7 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
         #if defined(TTGO_T_ECHO)
         DEBUG_MSG("Updating T-ECHO E-Paper... ");
         #elif defined(RAK4630)
-        DEBUG_MSG("Updating RAK4361_5005 RAK14000 E-Paper... ");
+        DEBUG_MSG("Updating RAK4361_5005 E-Paper... ");
         #endif
         
         // ePaper.Reset(); // wake the screen from sleep
