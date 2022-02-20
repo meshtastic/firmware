@@ -6,7 +6,7 @@
 /**
  * Position plugin for sending/receiving positions into the mesh
  */
-class GroupPlugin : private concurrency::OSThread, public ProtobufPlugin<GroupInfo>
+class GroupPlugin : public ProtobufPlugin<GroupInfo>, private concurrency::OSThread
 {
   public:
     GroupPlugin();
