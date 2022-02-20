@@ -275,6 +275,7 @@ typedef struct _FromRadio {
         uint32_t config_complete_id;
         bool rebooted;
         MeshPacket packet;
+        GroupInfo groups;
     };
 } FromRadio;
 
@@ -459,6 +460,7 @@ extern "C" {
 #define FromRadio_config_complete_id_tag         8
 #define FromRadio_rebooted_tag                   9
 #define FromRadio_packet_tag                     11
+#define FromRadio_groups_tag                     12
 #define ToRadio_packet_tag                       2
 #define ToRadio_peer_info_tag                    3
 #define ToRadio_want_config_id_tag               100
@@ -603,13 +605,15 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,node_info,node_info),   4) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,log_record,log_record),   7) \
 X(a, STATIC,   ONEOF,    UINT32,   (payloadVariant,config_complete_id,config_complete_id),   8) \
 X(a, STATIC,   ONEOF,    BOOL,     (payloadVariant,rebooted,rebooted),   9) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,packet,packet),  11)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,packet,packet),  11) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,groups,groups),  12)
 #define FromRadio_CALLBACK NULL
 #define FromRadio_DEFAULT NULL
 #define FromRadio_payloadVariant_my_info_MSGTYPE MyNodeInfo
 #define FromRadio_payloadVariant_node_info_MSGTYPE NodeInfo
 #define FromRadio_payloadVariant_log_record_MSGTYPE LogRecord
 #define FromRadio_payloadVariant_packet_MSGTYPE MeshPacket
+#define FromRadio_payloadVariant_groups_MSGTYPE GroupInfo
 
 #define ToRadio_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,packet,packet),   2) \
