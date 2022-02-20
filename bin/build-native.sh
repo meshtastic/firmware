@@ -21,6 +21,9 @@ platformio lib update
 pio run --environment native
 cp .pio/build/native/program $OUTDIR/meshtasticd_linux_amd64
 
+pio run --environment linux_arm
+cp .pio/build/arm/program $OUTDIR/meshtasticd_linux_amd64
+
 cp bin/device-install.* $OUTDIR
 cp bin/device-update.* $OUTDIR
 
