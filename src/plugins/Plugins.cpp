@@ -1,22 +1,22 @@
 #include "configuration.h"
 #include "input/InputBroker.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
+#include "plugins/AdminPlugin.h"
+#include "plugins/CannedMessagePlugin.h"
 #include "plugins/ExternalNotificationPlugin.h"
+#include "plugins/GroupPlugin.h"
 #include "plugins/NodeInfoPlugin.h"
 #include "plugins/PositionPlugin.h"
 #include "plugins/RemoteHardwarePlugin.h"
 #include "plugins/ReplyPlugin.h"
-#include "plugins/TextMessagePlugin.h" 
-#include "plugins/TextMessagePlugin.h"
 #include "plugins/RoutingPlugin.h"
-#include "plugins/AdminPlugin.h"
-#include "plugins/CannedMessagePlugin.h"
+#include "plugins/TextMessagePlugin.h"
 #ifndef PORTDUINO
 #include "plugins/EnvironmentalMeasurement/EnvironmentalMeasurementPlugin.h"
 #endif
 #ifndef NO_ESP32
-#include "plugins/esp32/SerialPlugin.h"
 #include "plugins/esp32/RangeTestPlugin.h"
+#include "plugins/esp32/SerialPlugin.h"
 #include "plugins/esp32/StoreForwardPlugin.h"
 #endif
 
@@ -30,14 +30,14 @@ void setupPlugins()
     nodeInfoPlugin = new NodeInfoPlugin();
     positionPlugin = new PositionPlugin();
     textMessagePlugin = new TextMessagePlugin();
+    groupPlugin = new GroupPlugin();
 
     // Note: if the rest of meshtastic doesn't need to explicitly use your plugin, you do not need to assign the instance
     // to a global variable.
 
     new RemoteHardwarePlugin();
     new ReplyPlugin();
-    rotaryEncoderInterruptImpl1 =
-        new RotaryEncoderInterruptImpl1();
+    rotaryEncoderInterruptImpl1 = new RotaryEncoderInterruptImpl1();
     rotaryEncoderInterruptImpl1->init();
     cannedMessagePlugin = new CannedMessagePlugin();
 #ifndef PORTDUINO
