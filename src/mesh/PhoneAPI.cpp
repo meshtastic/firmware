@@ -1,4 +1,3 @@
-#include "configuration.h"
 #include "PhoneAPI.h"
 #include "Channels.h"
 #include "GPS.h"
@@ -6,6 +5,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
+#include "configuration.h"
 #include <assert.h>
 
 #if FromRadio_size > MAX_TO_FROM_RADIO_SIZE
@@ -226,6 +226,9 @@ bool PhoneAPI::available()
         return false;
 
     case STATE_SEND_MY_INFO:
+        return true;
+
+    case STATE_SEND_GROUPS:
         return true;
 
     case STATE_SEND_NODEINFO:
