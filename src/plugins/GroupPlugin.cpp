@@ -37,7 +37,13 @@ int32_t GroupPlugin::runOnce()
     NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
 
     
-    //ourGroupInfo.group[0][1] = "a";
+    //ourGroupInfo.group[0] = "20";
+    //ourGroupInfo.group_count;
+    sprintf(ourGroupInfo.group[0], "Group 0");
+    sprintf(ourGroupInfo.group[1], "Group 1");
+    sprintf(ourGroupInfo.group[2], "Group 2");
+    sprintf(ourGroupInfo.group[3], "Group 3");
+    sprintf(ourGroupInfo.group[4], "Group 4");
 
     return 5000; // to save power only wake for our callback occasionally
 }
