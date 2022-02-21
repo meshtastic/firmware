@@ -82,7 +82,7 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
         // ePaper.Reset(); // wake the screen from sleep
         //adafruitDisplay->display(false); // FIXME, use partial update mode
 
-        adafruitDisplay->nextPage()
+        adafruitDisplay->nextPage();
             
         // Put screen to sleep to save power (possibly not necessary because we already did poweroff inside of display)
         adafruitDisplay->hibernate();
