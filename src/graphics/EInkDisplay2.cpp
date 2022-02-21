@@ -12,7 +12,13 @@
 #if defined(TTGO_T_ECHO)
 #define TECHO_DISPLAY_MODEL GxEPD2_154_D67
 #elif defined(RAK4630)
-#define TECHO_DISPLAY_MODEL GxEPD2_213_B74
+#define TECHO_DISPLAY_MODEL GxEPD2_290_T5D
+
+//#define TECHO_DISPLAY_MODEL GxEPD2_420
+
+//#define TECHO_DISPLAY_MODEL GxEPD2_154_M09
+
+//#define TECHO_DISPLAY_MODEL GxEPD2_213_B74
 #endif
 
 GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT> *adafruitDisplay;
@@ -22,7 +28,17 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl)
     #if defined(TTGO_T_ECHO)
     setGeometry(GEOMETRY_RAWMODE, TECHO_DISPLAY_MODEL::WIDTH, TECHO_DISPLAY_MODEL::HEIGHT);
     #elif defined(RAK4630)
-    setGeometry(GEOMETRY_RAWMODE, 250, 122);
+    //GxEPD2_290_T5D
+    setGeometry(GEOMETRY_RAWMODE, 296, 128);
+
+    //GxEPD2_420
+    //setGeometry(GEOMETRY_RAWMODE, 300, 400);
+    
+    //GxEPD2_154_M09
+    //setGeometry(GEOMETRY_RAWMODE, 200, 200);
+    
+    //GxEPD2_213_B74
+    //setGeometry(GEOMETRY_RAWMODE, 250, 122)
     #endif
     // setGeometry(GEOMETRY_RAWMODE, 128, 64); // old resolution
     // setGeometry(GEOMETRY_128_64); // We originally used this because I wasn't sure if rawmode worked - it does
@@ -47,8 +63,8 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
 
         // FIXME - only draw bits have changed (use backbuf similar to the other displays)
         // tft.drawBitmap(0, 0, buffer, 128, 64, TFT_YELLOW, TFT_BLACK);
-        for (uint8_t y = 0; y < displayHeight; y++) {
-            for (uint8_t x = 0; x < displayWidth; x++) {
+        for (uint64_t y = 0; y < displayHeight; y++) {
+            for (uint64_t x = 0; x < displayWidth; x++) {
 
                 // get src pixel in the page based ordering the OLED lib uses FIXME, super inefficent
                 auto b = buffer[x + (y / 8) * displayWidth];
@@ -64,7 +80,10 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
         #endif
         
         // ePaper.Reset(); // wake the screen from sleep
-        adafruitDisplay->display(false); // FIXME, use partial update mode
+        //adafruitDisplay->display(false); // FIXME, use partial update mode
+
+        adafruitDisplay->nextPage()
+            
         // Put screen to sleep to save power (possibly not necessary because we already did poweroff inside of display)
         adafruitDisplay->hibernate();
         DEBUG_MSG("done\n");
@@ -112,11 +131,16 @@ bool EInkDisplay::connect()
     auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS,
                                                             PIN_EINK_DC,
                                                             PIN_EINK_RES,
-                                                            PIN_EINK_BUSY, SPI1);
+                                                            PIN_EINK_BUSY);
 
     adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
-    adafruitDisplay->init();
+    //adafruitDisplay->init();
+    adafruitDisplay->init(115200, true, 10, false, SPI1, SPISettings(4000000, MSBFIRST, SPI_MODE0));
+    
     adafruitDisplay->setRotation(3);
+    
+    adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
+    
     //adafruitDisplay->setFullWindow();
     //adafruitDisplay->fillScreen(UNCOLORED);
     //adafruitDisplay->drawCircle(100, 100, 20, COLORED);
