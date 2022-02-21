@@ -21,6 +21,19 @@ enum class ProcessMessage
   STOP = 1,
 };
 
+/**
+ * Used by plugins to return the result of the AdminMessage handling.
+ * If request is handled, then plugin should return HANDLED,
+ * If response is also prepared for the request, then HANDLED_WITH_RESPONSE
+ * should be returned.
+ */
+enum class AdminMessageHandleResult
+{
+    NOT_HANDLED = 0,
+    HANDLED = 1,
+    HANDLED_WITH_RESPONSE = 2,
+};
+
 /*
  * This struct is used by Screen to figure out whether screen frame should be updated.
  */
@@ -57,6 +70,8 @@ class MeshPlugin
 
     static std::vector<MeshPlugin *> GetMeshPluginsWithUIFrames();
     static void observeUIEvents(Observer<const UIFrameEvent *> *observer);
+    static AdminMessageHandleResult handleAdminMessageForAllPlugins(
+        const MeshPacket &mp, AdminMessage *request, AdminMessage *response);
 #ifndef NO_SCREEN
     virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) { return; }
 #endif
@@ -134,6 +149,19 @@ class MeshPlugin
 
     /// Send an error response for the specified packet.
     MeshPacket *allocErrorResponse(Routing_Error err, const MeshPacket *p);
+
+  /**
+   * @brief An admin message arrived to AdminPlugin. Plugin was asked whether it want to handle the request.
+   * 
+   * @param mp The mesh packet arrived.
+   * @param request The AdminMessage request extracted from the packet.
+   * @param response The prepared response
+   * @return AdminMessageHandleResult
+   *   HANDLED if message was handled
+   *   HANDLED_WITH_RESPONSE if a response is also prepared and to be sent.
+   */
+    virtual AdminMessageHandleResult handleAdminMessageForPlugin(
+        const MeshPacket &mp, AdminMessage *request, AdminMessage *response) { return AdminMessageHandleResult::NOT_HANDLED; };
 
   private:
     /**
