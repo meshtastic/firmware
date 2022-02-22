@@ -23,6 +23,7 @@ GroupPlugin::GroupPlugin()
     strcpy(ourGroupInfo.group[7], "Honeydew");
     strcpy(ourGroupInfo.group[8], "Jackfruit");
     strcpy(ourGroupInfo.group[9], "Kiwifruit");
+    strcpy(ourGroupInfo.group[10], "TellJmYouSeeThis");
 
 }
 
@@ -57,6 +58,8 @@ int32_t GroupPlugin::runOnce()
     DEBUG_MSG("Group 7=%s\n", ourGroupInfo.group[7]);
     DEBUG_MSG("Group 8=%s\n", ourGroupInfo.group[8]);
     DEBUG_MSG("Group 9=%s\n", ourGroupInfo.group[9]);
+    DEBUG_MSG("Group 10=%s\n", ourGroupInfo.group[10]);
+    DEBUG_MSG("Group 11=%s\n", ourGroupInfo.group[11]);
 
 
 
