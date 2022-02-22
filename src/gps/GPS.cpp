@@ -76,8 +76,8 @@ bool GPS::setup()
 GPS::~GPS()
 {
     // we really should unregister our sleep observer
-    notifySleepObserver.unobserve();
-    notifyDeepSleepObserver.unobserve();
+    notifySleepObserver.unobserve(&notifySleep);
+    notifyDeepSleepObserver.unobserve(&notifyDeepSleep);
 }
 
 bool GPS::hasLock() { return hasValidLocation; }
