@@ -1,6 +1,8 @@
 #include "configuration.h"
 #include "CannedMessagePlugin.h"
 #include "MeshService.h"
+#include "FSCommon.h"
+#include "mesh/generated/cannedmessages.pb.h"
 
 // TODO: reuse defined from Screen.cpp
 #define FONT_SMALL ArialMT_Plain_10
@@ -10,7 +12,15 @@
 // Remove Canned message screen if no action is taken for some milliseconds
 #define INACTIVATE_AFTER_MS 20000
 
+static const char *cannedMessagesConfigFile = "/prefs/cannedConf.proto";
+
+CannedMessagePluginConfig cannedMessagePluginConfig;
+
 CannedMessagePlugin *cannedMessagePlugin;
+
+// TODO: move it into NodeDB.h!
+extern bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, void *dest_struct);
+extern bool saveProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, const void *dest_struct);
 
 CannedMessagePlugin::CannedMessagePlugin()
     : SinglePortPlugin("canned", PortNum_TEXT_MESSAGE_APP),
@@ -18,20 +28,24 @@ CannedMessagePlugin::CannedMessagePlugin()
 {
     if (radioConfig.preferences.canned_message_plugin_enabled)
     {
+        this->loadProtoForPlugin();
         if(this->splitConfiguredMessages() <= 0)
         {
-            radioConfig.preferences.canned_message_plugin_enabled = false;
             DEBUG_MSG("CannedMessagePlugin: No messages are configured. Plugin is disabled\n");
-            return;
+            this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
         }
-        this->inputObserver.observe(inputBroker);
+        else
+        {
+            DEBUG_MSG("CannedMessagePlugin is enabled\n");
+            this->inputObserver.observe(inputBroker);
+        }
     }
 }
 
 /**
  * @brief Items in array this->messages will be set to be pointing on the right
  *     starting points of the string this->messageStore
- * 
+ *
  * @return int Returns the number of messages found.
  */
 int CannedMessagePlugin::splitConfiguredMessages()
@@ -39,11 +53,21 @@ int CannedMessagePlugin::splitConfiguredMessages()
     int messageIndex = 0;
     int i = 0;
 
-    strncpy(
+    // collect all the message parts
+    strcpy(
         this->messageStore,
-        radioConfig.preferences.canned_message_plugin_messages,
-        CANNED_MESSAGE_PLUGIN_MESSAGES_SIZE);
+        cannedMessagePluginConfig.messagesPart1);
+    strcat(
+        this->messageStore,
+        cannedMessagePluginConfig.messagesPart2);
+    strcat(
+        this->messageStore,
+        cannedMessagePluginConfig.messagesPart3);
+    strcat(
+        this->messageStore,
+        cannedMessagePluginConfig.messagesPart4);
 
+    // The first message points to the beginning of the store.
     this->messages[messageIndex++] =
         this->messageStore;
     int upTo =
@@ -51,13 +75,14 @@ int CannedMessagePlugin::splitConfiguredMessages()
 
     while (i < upTo)
     {
-        if (this->messageStore[i] == '|')
+                 if (this->messageStore[i] == '|')
         {
             // Message ending found, replace it with string-end character.
             this->messageStore[i] = '\0';
             DEBUG_MSG("CannedMessage %d is: '%s'\n",
                 messageIndex-1, this->messages[messageIndex-1]);
 
+            // hit our max messages, bail
             if (messageIndex >= CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_COUNT)
             {
                 this->messagesCount = messageIndex;
@@ -72,6 +97,7 @@ int CannedMessagePlugin::splitConfiguredMessages()
     }
     if (strlen(this->messages[messageIndex-1]) > 0)
     {
+        // We have a last message.
         DEBUG_MSG("CannedMessage %d is: '%s'\n",
             messageIndex-1, this->messages[messageIndex-1]);
         this->messagesCount = messageIndex;
@@ -92,6 +118,9 @@ int CannedMessagePlugin::handleInputEvent(const InputEvent *event)
         (strcmp(radioConfig.preferences.canned_message_plugin_allow_input_source, "_any") != 0))
     {
         // Event source is not accepted.
+        // Event only accepted if source matches the configured one, or
+        //   the configured one is "_any" (or if there is no configured
+        //   source at all)
         return 0;
     }
 
@@ -140,9 +169,6 @@ void CannedMessagePlugin::sendText(NodeNum dest,
         p->decoded.payload.size++;
     }
 
-
-//    PacketId prevPacketId = p->id; // In case we need it later.
-
     DEBUG_MSG("Sending message id=%d, msg=%.*s\n",
       p->id, p->decoded.payload.size, p->decoded.payload.bytes);
 
@@ -152,6 +178,7 @@ void CannedMessagePlugin::sendText(NodeNum dest,
 int32_t CannedMessagePlugin::runOnce()
 {
     if ((!radioConfig.preferences.canned_message_plugin_enabled)
+        || (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED)
         || (this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE))
     {
         return 30000; // TODO: should return MAX_VAL
@@ -180,7 +207,7 @@ int32_t CannedMessagePlugin::runOnce()
     else if (this->currentMessageIndex == -1)
     {
         this->currentMessageIndex = 0;
-        DEBUG_MSG("First touch.\n");
+        DEBUG_MSG("First touch (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
         e.frameChanged = true;
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
     }
@@ -199,13 +226,13 @@ int32_t CannedMessagePlugin::runOnce()
     {
         this->currentMessageIndex = getPrevIndex();
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
-        DEBUG_MSG("MOVE UP\n");
+        DEBUG_MSG("MOVE UP (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
     }
     else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_DOWN)
     {
         this->currentMessageIndex = this->getNextIndex();
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
-        DEBUG_MSG("MOVE DOWN\n");
+        DEBUG_MSG("MOVE DOWN (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
     }
 
     if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE)
@@ -286,3 +313,226 @@ void CannedMessagePlugin::drawFrame(
     }
 }
 
+void CannedMessagePlugin::loadProtoForPlugin()
+{
+    if (!loadProto(cannedMessagesConfigFile, CannedMessagePluginConfig_size, sizeof(cannedMessagesConfigFile), CannedMessagePluginConfig_fields, &cannedMessagePluginConfig)) {
+        installDefaultCannedMessagePluginConfig();
+    }
+}
+
+/**
+ * @brief Save the plugin config to file.
+ *
+ * @return true On success.
+ * @return false On error.
+ */
+bool CannedMessagePlugin::saveProtoForPlugin()
+{
+    bool okay = true;
+
+#ifdef FS
+    FS.mkdir("/prefs");
+#endif
+
+    okay &= saveProto(cannedMessagesConfigFile, CannedMessagePluginConfig_size, sizeof(CannedMessagePluginConfig), CannedMessagePluginConfig_fields, &cannedMessagePluginConfig);
+
+    return okay;
+}
+
+/**
+ * @brief Fill configuration with default values.
+ */
+void CannedMessagePlugin::installDefaultCannedMessagePluginConfig()
+{
+    memset(cannedMessagePluginConfig.messagesPart1, 0, sizeof(cannedMessagePluginConfig.messagesPart1));
+    memset(cannedMessagePluginConfig.messagesPart2, 0, sizeof(cannedMessagePluginConfig.messagesPart2));
+    memset(cannedMessagePluginConfig.messagesPart3, 0, sizeof(cannedMessagePluginConfig.messagesPart3));
+    memset(cannedMessagePluginConfig.messagesPart4, 0, sizeof(cannedMessagePluginConfig.messagesPart4));
+}
+
+/**
+ * @brief An admin message arrived to AdminPlugin. We are asked whether we want to handle that.
+ *
+ * @param mp The mesh packet arrived.
+ * @param request The AdminMessage request extracted from the packet.
+ * @param response The prepared response
+ * @return AdminMessageHandleResult HANDLED if message was handled
+ *   HANDLED_WITH_RESULT if a result is also prepared.
+ */
+AdminMessageHandleResult CannedMessagePlugin::handleAdminMessageForPlugin(
+        const MeshPacket &mp, AdminMessage *request, AdminMessage *response)
+{
+    AdminMessageHandleResult result;
+
+    switch (request->which_variant) {
+    case AdminMessage_get_canned_message_plugin_part1_request_tag:
+        DEBUG_MSG("Client is getting radio canned message part1\n");
+        this->handleGetCannedMessagePluginPart1(mp, response);
+        result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
+        break;
+
+    case AdminMessage_get_canned_message_plugin_part2_request_tag:
+        DEBUG_MSG("Client is getting radio canned message part2\n");
+        this->handleGetCannedMessagePluginPart2(mp, response);
+        result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
+        break;
+
+    case AdminMessage_get_canned_message_plugin_part3_request_tag:
+        DEBUG_MSG("Client is getting radio canned message part3\n");
+        this->handleGetCannedMessagePluginPart3(mp, response);
+        result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
+        break;
+
+    case AdminMessage_get_canned_message_plugin_part4_request_tag:
+        DEBUG_MSG("Client is getting radio canned message part4\n");
+        this->handleGetCannedMessagePluginPart4(mp, response);
+        result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
+        break;
+
+    case AdminMessage_set_canned_message_plugin_part1_tag:
+        DEBUG_MSG("Client is setting radio canned message part 1\n");
+        this->handleSetCannedMessagePluginPart1(
+            request->set_canned_message_plugin_part1);
+        result = AdminMessageHandleResult::HANDLED;
+        break;
+
+    case AdminMessage_set_canned_message_plugin_part2_tag:
+        DEBUG_MSG("Client is setting radio canned message part 2\n");
+        this->handleSetCannedMessagePluginPart2(
+            request->set_canned_message_plugin_part2);
+        result = AdminMessageHandleResult::HANDLED;
+        break;
+
+    case AdminMessage_set_canned_message_plugin_part3_tag:
+        DEBUG_MSG("Client is setting radio canned message part 3\n");
+        this->handleSetCannedMessagePluginPart3(
+            request->set_canned_message_plugin_part3);
+        result = AdminMessageHandleResult::HANDLED;
+        break;
+
+    case AdminMessage_set_canned_message_plugin_part4_tag:
+        DEBUG_MSG("Client is setting radio canned message part 4\n");
+        this->handleSetCannedMessagePluginPart4(
+            request->set_canned_message_plugin_part4);
+        result = AdminMessageHandleResult::HANDLED;
+        break;
+
+    default:
+        result = AdminMessageHandleResult::NOT_HANDLED;
+    }
+
+    return result;
+}
+
+void CannedMessagePlugin::handleGetCannedMessagePluginPart1(
+    const MeshPacket &req, AdminMessage *response)
+{
+    DEBUG_MSG("*** handleGetCannedMessagePluginPart1\n");
+    assert(req.decoded.want_response);
+
+    response->which_variant = AdminMessage_get_canned_message_plugin_part1_response_tag;
+    strcpy(
+        response->get_canned_message_plugin_part1_response,
+        cannedMessagePluginConfig.messagesPart1);
+}
+
+void CannedMessagePlugin::handleGetCannedMessagePluginPart2(
+    const MeshPacket &req, AdminMessage *response)
+{
+    DEBUG_MSG("*** handleGetCannedMessagePluginPart2\n");
+    assert(req.decoded.want_response);
+
+    response->which_variant = AdminMessage_get_canned_message_plugin_part2_response_tag;
+    strcpy(
+        response->get_canned_message_plugin_part2_response,
+        cannedMessagePluginConfig.messagesPart2);
+}
+
+void CannedMessagePlugin::handleGetCannedMessagePluginPart3(
+    const MeshPacket &req, AdminMessage *response)
+{
+    DEBUG_MSG("*** handleGetCannedMessagePluginPart3\n");
+    assert(req.decoded.want_response);
+
+    response->which_variant = AdminMessage_get_canned_message_plugin_part3_response_tag;
+    strcpy(
+        response->get_canned_message_plugin_part3_response,
+        cannedMessagePluginConfig.messagesPart3);
+}
+
+void CannedMessagePlugin::handleGetCannedMessagePluginPart4(
+    const MeshPacket &req, AdminMessage *response)
+{
+    DEBUG_MSG("*** handleGetCannedMessagePluginPart4\n");
+    assert(req.decoded.want_response);
+
+    response->which_variant = AdminMessage_get_canned_message_plugin_part4_response_tag;
+    strcpy(
+        response->get_canned_message_plugin_part4_response,
+        cannedMessagePluginConfig.messagesPart4);
+}
+
+void CannedMessagePlugin::handleSetCannedMessagePluginPart1(const char *from_msg)
+{
+    int changed = 0;
+
+    if (*from_msg)
+    {
+        changed |= strcmp(cannedMessagePluginConfig.messagesPart1, from_msg);
+        strcpy(cannedMessagePluginConfig.messagesPart1, from_msg);
+        DEBUG_MSG("*** from_msg.text:%s\n", from_msg);
+    }
+
+    if (changed)
+    {
+        this->saveProtoForPlugin();
+    }
+}
+
+void CannedMessagePlugin::handleSetCannedMessagePluginPart2(const char *from_msg)
+{
+    int changed = 0;
+
+    if (*from_msg)
+    {
+        changed |= strcmp(cannedMessagePluginConfig.messagesPart2, from_msg);
+        strcpy(cannedMessagePluginConfig.messagesPart2, from_msg);
+    }
+
+    if (changed)
+    {
+        this->saveProtoForPlugin();
+    }
+}
+
+void CannedMessagePlugin::handleSetCannedMessagePluginPart3(const char *from_msg)
+{
+    int changed = 0;
+
+    if (*from_msg)
+    {
+        changed |= strcmp(cannedMessagePluginConfig.messagesPart3, from_msg);
+        strcpy(cannedMessagePluginConfig.messagesPart3, from_msg);
+    }
+
+    if (changed)
+    {
+        this->saveProtoForPlugin();
+    }
+}
+
+void CannedMessagePlugin::handleSetCannedMessagePluginPart4(const char *from_msg)
+{
+    int changed = 0;
+
+    if (*from_msg)
+    {
+        changed |= strcmp(cannedMessagePluginConfig.messagesPart4, from_msg);
+        strcpy(cannedMessagePluginConfig.messagesPart4, from_msg);
+    }
+
+    if (changed)
+    {
+        this->saveProtoForPlugin();
+    }
+}
