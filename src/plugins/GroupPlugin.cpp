@@ -23,7 +23,6 @@ GroupPlugin::GroupPlugin()
     strcpy(ourGroupInfo.group[7], "Honeydew");
     strcpy(ourGroupInfo.group[8], "Jackfruit");
     strcpy(ourGroupInfo.group[9], "Kiwifruit");
-    strcpy(ourGroupInfo.group[10], "TellJmYouSeeThis");
 
 }
 
