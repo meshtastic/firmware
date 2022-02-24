@@ -136,10 +136,18 @@ bool EInkDisplay::connect()
     pinMode(PIN_EINK_EN, OUTPUT);
 #endif
 
-    auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS,
-                                                            PIN_EINK_DC,
-                                                            PIN_EINK_RES,
-                                                            PIN_EINK_BUSY);
+    
+#if defined(TTGO_T_ECHO)
+{
+    auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, SPI1);
+
+    adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+    adafruitDisplay->init();
+    adafruitDisplay->setRotation(3);
+}
+#elif defined(RAK4630)
+{
+    auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
 
     adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
     
@@ -148,7 +156,10 @@ bool EInkDisplay::connect()
     adafruitDisplay->setRotation(3);
     //adafruitDisplay->setRotation(1);
 
-    adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
+    adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);       
+}
+#endif
+   
     
     //adafruitDisplay->setFullWindow();
     //adafruitDisplay->fillScreen(UNCOLORED);
