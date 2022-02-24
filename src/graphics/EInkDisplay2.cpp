@@ -146,6 +146,7 @@ bool EInkDisplay::connect()
     adafruitDisplay->init(115200, true, 10, false, SPI1, SPISettings(4000000, MSBFIRST, SPI_MODE0));
 
     adafruitDisplay->setRotation(3);
+    //adafruitDisplay->setRotation(1);
 
     adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
     
