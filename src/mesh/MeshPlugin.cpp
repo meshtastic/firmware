@@ -179,7 +179,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
 
     if (!pluginFound)
         DEBUG_MSG("No plugins interested in portnum=%d, src=%s\n",
-                    mp.decoded.portnum, 
+                    mp.decoded.portnum,
                     (src == RX_SRC_LOCAL) ? "LOCAL":"REMOTE");
 }
 
@@ -226,11 +226,13 @@ std::vector<MeshPlugin *> MeshPlugin::GetMeshPluginsWithUIFrames()
 {
 
     std::vector<MeshPlugin *> pluginsWithUIFrames;
-    for (auto i = plugins->begin(); i != plugins->end(); ++i) {
-        auto &pi = **i;
-        if (pi.wantUIFrame()) {
-            DEBUG_MSG("Plugin wants a UI Frame\n");
-            pluginsWithUIFrames.push_back(&pi);
+    if (plugins) {
+        for (auto i = plugins->begin(); i != plugins->end(); ++i) {
+            auto &pi = **i;
+            if (pi.wantUIFrame()) {
+                DEBUG_MSG("Plugin wants a UI Frame\n");
+                pluginsWithUIFrames.push_back(&pi);
+            }
         }
     }
     return pluginsWithUIFrames;
@@ -239,14 +241,42 @@ std::vector<MeshPlugin *> MeshPlugin::GetMeshPluginsWithUIFrames()
 void MeshPlugin::observeUIEvents(
     Observer<const UIFrameEvent *> *observer)
 {
-    std::vector<MeshPlugin *> pluginsWithUIFrames;
-    for (auto i = plugins->begin(); i != plugins->end(); ++i) {
-        auto &pi = **i;
-        Observable<const UIFrameEvent *> *observable =
-            pi.getUIFrameObservable();
-        if (observable != NULL) {
-            DEBUG_MSG("Plugin wants a UI Frame\n");
-            observer->observe(observable);
+    if (plugins) {
+        for (auto i = plugins->begin(); i != plugins->end(); ++i) {
+            auto &pi = **i;
+            Observable<const UIFrameEvent *> *observable =
+                pi.getUIFrameObservable();
+            if (observable != NULL) {
+                DEBUG_MSG("Plugin wants a UI Frame\n");
+                observer->observe(observable);
+            }
         }
     }
+}
+
+AdminMessageHandleResult MeshPlugin::handleAdminMessageForAllPlugins(const MeshPacket &mp, AdminMessage *request, AdminMessage *response)
+{
+    AdminMessageHandleResult handled = AdminMessageHandleResult::NOT_HANDLED;
+    if (plugins) {
+        for (auto i = plugins->begin(); i != plugins->end(); ++i) {
+            auto &pi = **i;
+            AdminMessageHandleResult h = pi.handleAdminMessageForPlugin(mp, request, response);
+            if (h == AdminMessageHandleResult::HANDLED_WITH_RESPONSE)
+            {
+                // In case we have a response it always has priority.
+                DEBUG_MSG("Reply prepared by plugin '%s' of variant: %d\n",
+                    pi.name,
+                    response->which_variant);
+                handled = h;
+            }
+            else if ((handled != AdminMessageHandleResult::HANDLED_WITH_RESPONSE) &&
+                (h == AdminMessageHandleResult::HANDLED))
+            {
+                // In case the message is handled it should be populated, but will not overwrite
+                //   a result with response.
+                handled = h;
+            }
+        }
+    }
+    return handled;
 }

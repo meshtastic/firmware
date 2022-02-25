@@ -10,25 +10,12 @@
 #endif
 
 /* Struct definitions */
-typedef struct _CannedMessagePluginMessagePart1 {
-    char text[200];
-} CannedMessagePluginMessagePart1;
-
-typedef struct _CannedMessagePluginMessagePart2 {
-    char text[200];
-} CannedMessagePluginMessagePart2;
-
-typedef struct _CannedMessagePluginMessagePart3 {
-    char text[200];
-} CannedMessagePluginMessagePart3;
-
-typedef struct _CannedMessagePluginMessagePart4 {
-    char text[200];
-} CannedMessagePluginMessagePart4;
-
-typedef struct _CannedMessagePluginMessagePart5 {
-    char text[200];
-} CannedMessagePluginMessagePart5;
+typedef struct _CannedMessagePluginConfig {
+    char messagesPart1[201];
+    char messagesPart2[201];
+    char messagesPart3[201];
+    char messagesPart4[201];
+} CannedMessagePluginConfig;
 
 
 #ifdef __cplusplus
@@ -36,69 +23,31 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define CannedMessagePluginMessagePart1_init_default {""}
-#define CannedMessagePluginMessagePart2_init_default {""}
-#define CannedMessagePluginMessagePart3_init_default {""}
-#define CannedMessagePluginMessagePart4_init_default {""}
-#define CannedMessagePluginMessagePart5_init_default {""}
-#define CannedMessagePluginMessagePart1_init_zero {""}
-#define CannedMessagePluginMessagePart2_init_zero {""}
-#define CannedMessagePluginMessagePart3_init_zero {""}
-#define CannedMessagePluginMessagePart4_init_zero {""}
-#define CannedMessagePluginMessagePart5_init_zero {""}
+#define CannedMessagePluginConfig_init_default   {"", "", "", ""}
+#define CannedMessagePluginConfig_init_zero      {"", "", "", ""}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define CannedMessagePluginMessagePart1_text_tag 1
-#define CannedMessagePluginMessagePart2_text_tag 1
-#define CannedMessagePluginMessagePart3_text_tag 1
-#define CannedMessagePluginMessagePart4_text_tag 1
-#define CannedMessagePluginMessagePart5_text_tag 1
+#define CannedMessagePluginConfig_messagesPart1_tag 11
+#define CannedMessagePluginConfig_messagesPart2_tag 12
+#define CannedMessagePluginConfig_messagesPart3_tag 13
+#define CannedMessagePluginConfig_messagesPart4_tag 14
 
 /* Struct field encoding specification for nanopb */
-#define CannedMessagePluginMessagePart1_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, STRING,   text,              1)
-#define CannedMessagePluginMessagePart1_CALLBACK NULL
-#define CannedMessagePluginMessagePart1_DEFAULT NULL
+#define CannedMessagePluginConfig_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, STRING,   messagesPart1,    11) \
+X(a, STATIC,   SINGULAR, STRING,   messagesPart2,    12) \
+X(a, STATIC,   SINGULAR, STRING,   messagesPart3,    13) \
+X(a, STATIC,   SINGULAR, STRING,   messagesPart4,    14)
+#define CannedMessagePluginConfig_CALLBACK NULL
+#define CannedMessagePluginConfig_DEFAULT NULL
 
-#define CannedMessagePluginMessagePart2_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, STRING,   text,              1)
-#define CannedMessagePluginMessagePart2_CALLBACK NULL
-#define CannedMessagePluginMessagePart2_DEFAULT NULL
-
-#define CannedMessagePluginMessagePart3_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, STRING,   text,              1)
-#define CannedMessagePluginMessagePart3_CALLBACK NULL
-#define CannedMessagePluginMessagePart3_DEFAULT NULL
-
-#define CannedMessagePluginMessagePart4_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, STRING,   text,              1)
-#define CannedMessagePluginMessagePart4_CALLBACK NULL
-#define CannedMessagePluginMessagePart4_DEFAULT NULL
-
-#define CannedMessagePluginMessagePart5_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, STRING,   text,              1)
-#define CannedMessagePluginMessagePart5_CALLBACK NULL
-#define CannedMessagePluginMessagePart5_DEFAULT NULL
-
-extern const pb_msgdesc_t CannedMessagePluginMessagePart1_msg;
-extern const pb_msgdesc_t CannedMessagePluginMessagePart2_msg;
-extern const pb_msgdesc_t CannedMessagePluginMessagePart3_msg;
-extern const pb_msgdesc_t CannedMessagePluginMessagePart4_msg;
-extern const pb_msgdesc_t CannedMessagePluginMessagePart5_msg;
+extern const pb_msgdesc_t CannedMessagePluginConfig_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
-#define CannedMessagePluginMessagePart1_fields &CannedMessagePluginMessagePart1_msg
-#define CannedMessagePluginMessagePart2_fields &CannedMessagePluginMessagePart2_msg
-#define CannedMessagePluginMessagePart3_fields &CannedMessagePluginMessagePart3_msg
-#define CannedMessagePluginMessagePart4_fields &CannedMessagePluginMessagePart4_msg
-#define CannedMessagePluginMessagePart5_fields &CannedMessagePluginMessagePart5_msg
+#define CannedMessagePluginConfig_fields &CannedMessagePluginConfig_msg
 
 /* Maximum encoded size of messages (where known) */
-#define CannedMessagePluginMessagePart1_size     202
-#define CannedMessagePluginMessagePart2_size     202
-#define CannedMessagePluginMessagePart3_size     202
-#define CannedMessagePluginMessagePart4_size     202
-#define CannedMessagePluginMessagePart5_size     202
+#define CannedMessagePluginConfig_size           812
 
 #ifdef __cplusplus
 } /* extern "C" */
