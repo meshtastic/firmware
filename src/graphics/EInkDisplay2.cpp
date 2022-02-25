@@ -91,7 +91,16 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
         // ePaper.Reset(); // wake the screen from sleep
         adafruitDisplay->display(false); // FIXME, use partial update mode
         #elif defined(RAK4630)
-        adafruitDisplay->nextPage();
+        
+        //RAK14000 2.13 inch b/w 250x122 does not support partial updates
+        adafruitDisplay->display(false); // FIXME, use partial update mode
+        
+        //Only enable for e-Paper with support for partial updates
+        // 1.54 inch 200x200 - GxEPD2_154_M09
+        // 2.9 inch 296x128 - GxEPD2_290_T5D
+        // 4.2 inch 300x400 - GxEPD2_420_M01
+        //adafruitDisplay->nextPage();
+        
         #endif
         
         // Put screen to sleep to save power (possibly not necessary because we already did poweroff inside of display)
