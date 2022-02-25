@@ -63,6 +63,9 @@ void AdminPlugin::handleGetRadio(const MeshPacket &req)
 
 bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
 {
+    // if handled == false, then let others look at this message also if they want
+    bool handled = false;
+
     assert(r);
     switch (r->which_variant) {
     case AdminMessage_set_owner_tag:
@@ -119,11 +122,25 @@ bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
 #endif
 
     default:
-        // Probably a message sent by us or sent to our local node.  FIXME, we should avoid scanning these messages
-        DEBUG_MSG("Ignoring nonrelevant admin %d\n", r->which_variant);
+        AdminMessage response = AdminMessage_init_default;
+        AdminMessageHandleResult handleResult = MeshPlugin::handleAdminMessageForAllPlugins(mp, r, &response);
+
+        if (handleResult == AdminMessageHandleResult::HANDLED_WITH_RESPONSE)
+        {
+            myReply = allocDataProtobuf(response);
+        }
+        else if (mp.decoded.want_response)
+        {
+            DEBUG_MSG("We did not responded to a request that wanted a respond. req.variant=%d\n", r->which_variant);
+        }
+        else if (handleResult != AdminMessageHandleResult::HANDLED)
+        {
+            // Probably a message sent by us or sent to our local node.  FIXME, we should avoid scanning these messages
+            DEBUG_MSG("Ignoring nonrelevant admin %d\n", r->which_variant);
+        }
         break;
     }
-    return false; // Let others look at this message also if they want
+    return handled;
 }
 
 void AdminPlugin::handleSetOwner(const User &o)
