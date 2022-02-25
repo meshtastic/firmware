@@ -95,7 +95,7 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
         //RAK14000 2.13 inch b/w 250x122 does not support partial updates
         adafruitDisplay->display(false); // FIXME, use partial update mode
         
-        //Only enable for e-Paper with support for partial updates
+        //Only enable for e-Paper with support for partial updates and comment out above adafruitDisplay->display(false); 
         // 1.54 inch 200x200 - GxEPD2_154_M09
         // 2.9 inch 296x128 - GxEPD2_290_T5D
         // 4.2 inch 300x400 - GxEPD2_420_M01
@@ -164,7 +164,9 @@ bool EInkDisplay::connect()
     
     adafruitDisplay->init(115200, true, 10, false, SPI1, SPISettings(4000000, MSBFIRST, SPI_MODE0));
 
+    //For RAK14000 2.18 b/w 
     adafruitDisplay->setRotation(3);
+    //For 1.54, 2.9 and 4.2
     //adafruitDisplay->setRotation(1);
 
     adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);       
