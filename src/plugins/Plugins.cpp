@@ -4,7 +4,6 @@
 #include "plugins/AdminPlugin.h"
 #include "plugins/CannedMessagePlugin.h"
 #include "plugins/ExternalNotificationPlugin.h"
-#include "plugins/GroupPlugin.h"
 #include "plugins/NodeInfoPlugin.h"
 #include "plugins/PositionPlugin.h"
 #include "plugins/RemoteHardwarePlugin.h"
@@ -30,8 +29,7 @@ void setupPlugins()
     nodeInfoPlugin = new NodeInfoPlugin();
     positionPlugin = new PositionPlugin();
     textMessagePlugin = new TextMessagePlugin();
-    groupPlugin = new GroupPlugin();
-
+    
     // Note: if the rest of meshtastic doesn't need to explicitly use your plugin, you do not need to assign the instance
     // to a global variable.
 
