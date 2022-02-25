@@ -71,17 +71,7 @@ int MeshService::handleFromRadio(const MeshPacket *mp)
     printPacket("Forwarding to phone", mp);
     nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
 
-    fromNum++;
-
-    if (toPhoneQueue.numFree() == 0) {
-        DEBUG_MSG("NOTE: tophone queue is full, discarding oldest\n");
-        MeshPacket *d = toPhoneQueue.dequeuePtr(0);
-        if (d)
-            releaseToPool(d);
-    }
-
-    MeshPacket *copied = packetPool.allocCopy(*mp);
-    assert(toPhoneQueue.enqueue(copied, 0)); // FIXME, instead of failing for full queue, delete the oldest mssages
+    sendToPhone((MeshPacket *)mp);
 
     return 0;
 }
@@ -161,12 +151,16 @@ bool MeshService::cancelSending(PacketId id)
     return router->cancelSending(nodeDB.getNodeNum(), id);
 }
 
-void MeshService::sendToMesh(MeshPacket *p, RxSource src)
+void MeshService::sendToMesh(MeshPacket *p, RxSource src, bool ccToPhone)
 {
     nodeDB.updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
 
     // Note: We might return !OK if our fifo was full, at that point the only option we have is to drop it
     router->sendLocal(p, src);
+
+    if (ccToPhone) {
+        sendToPhone(p);
+    }
 }
 
 void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
@@ -211,6 +205,20 @@ NodeInfo *MeshService::refreshMyNodeInfo()
     updateBatteryLevel(position.battery_level);
 
     return node;
+}
+
+void MeshService::sendToPhone(MeshPacket *p) {
+    if (toPhoneQueue.numFree() == 0) {
+        DEBUG_MSG("NOTE: tophone queue is full, discarding oldest\n");
+        MeshPacket *d = toPhoneQueue.dequeuePtr(0);
+        if (d)
+            releaseToPool(d);
+    }
+
+    MeshPacket *copied = packetPool.allocCopy(*p);
+    perhapsDecode(copied);
+    assert(toPhoneQueue.enqueue(copied, 0)); // FIXME, instead of failing for full queue, delete the oldest mssages
+    fromNum++;
 }
 
 int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
