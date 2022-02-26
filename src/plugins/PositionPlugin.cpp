@@ -121,7 +121,9 @@ void PositionPlugin::sendOurPosition(NodeNum dest, bool wantReplies)
     p->priority = MeshPacket_Priority_BACKGROUND;
     prevPacketId = p->id;
 
-    service.sendToMesh(p);
+    
+    //send to the mesh, and the phone
+    service.sendToMesh(p, RX_SRC_LOCAL, true);
 }
 
 int32_t PositionPlugin::runOnce()
