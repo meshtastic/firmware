@@ -1,5 +1,5 @@
 #include "configuration.h"
-#include "AdminPlugin.h"
+#include "AdminModule.h"
 #include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"

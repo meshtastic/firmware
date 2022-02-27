@@ -12,8 +12,8 @@
 #include "RTC.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
-#include "modules/NodeInfoPlugin.h"
-#include "modules/PositionPlugin.h"
+#include "modules/NodeInfoModule.h"
+#include "modules/PositionModule.h"
 #include "power.h"
 
 /*

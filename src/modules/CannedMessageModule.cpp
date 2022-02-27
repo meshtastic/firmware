@@ -1,5 +1,5 @@
 #include "configuration.h"
-#include "CannedMessagePlugin.h"
+#include "CannedMessageModule.h"
 #include "MeshService.h"
 #include "FSCommon.h"
 #include "mesh/generated/cannedmessages.pb.h"

@@ -1,5 +1,5 @@
 #include "configuration.h"
-#include "RemoteHardwarePlugin.h"
+#include "RemoteHardwareModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"

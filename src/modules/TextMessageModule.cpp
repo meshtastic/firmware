@@ -1,5 +1,5 @@
 #include "configuration.h"
-#include "TextMessagePlugin.h"
+#include "TextMessageModule.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 
