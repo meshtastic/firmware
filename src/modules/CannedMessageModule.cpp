@@ -26,7 +26,7 @@ CannedMessagePlugin::CannedMessagePlugin()
     : SinglePortPlugin("canned", PortNum_TEXT_MESSAGE_APP),
     concurrency::OSThread("CannedMessagePlugin")
 {
-    if (radioConfig.preferences.canned_message_plugin_enabled)
+    if (radioConfig.preferences.canned_message_module_enabled)
     {
         this->loadProtoForPlugin();
         if(this->splitConfiguredMessages() <= 0)
@@ -113,9 +113,9 @@ int CannedMessagePlugin::splitConfiguredMessages()
 int CannedMessagePlugin::handleInputEvent(const InputEvent *event)
 {
     if (
-        (strlen(radioConfig.preferences.canned_message_plugin_allow_input_source) > 0) &&
-        (strcmp(radioConfig.preferences.canned_message_plugin_allow_input_source, event->source) != 0) &&
-        (strcmp(radioConfig.preferences.canned_message_plugin_allow_input_source, "_any") != 0))
+        (strlen(radioConfig.preferences.canned_message_module_allow_input_source) > 0) &&
+        (strcmp(radioConfig.preferences.canned_message_module_allow_input_source, event->source) != 0) &&
+        (strcmp(radioConfig.preferences.canned_message_module_allow_input_source, "_any") != 0))
     {
         // Event source is not accepted.
         // Event only accepted if source matches the configured one, or
@@ -162,7 +162,7 @@ void CannedMessagePlugin::sendText(NodeNum dest,
     p->want_ack = true;
     p->decoded.payload.size = strlen(message);
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
-    if (radioConfig.preferences.canned_message_plugin_send_bell)
+    if (radioConfig.preferences.canned_message_module_send_bell)
     {
         p->decoded.payload.bytes[p->decoded.payload.size-1] = 7; // Bell character
         p->decoded.payload.bytes[p->decoded.payload.size] = '\0'; // Bell character
@@ -177,7 +177,7 @@ void CannedMessagePlugin::sendText(NodeNum dest,
 
 int32_t CannedMessagePlugin::runOnce()
 {
-    if ((!radioConfig.preferences.canned_message_plugin_enabled)
+    if ((!radioConfig.preferences.canned_message_module_enabled)
         || (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED)
         || (this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE))
     {
@@ -259,7 +259,7 @@ const char* CannedMessagePlugin::getNextMessage()
 }
 bool CannedMessagePlugin::shouldDraw()
 {
-    if (!radioConfig.preferences.canned_message_plugin_enabled)
+    if (!radioConfig.preferences.canned_message_module_enabled)
     {
         return false;
     }

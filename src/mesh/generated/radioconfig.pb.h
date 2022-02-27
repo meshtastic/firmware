@@ -141,24 +141,24 @@ typedef struct _RadioConfig_UserPreferences {
     bool debug_log_enabled;
     pb_size_t ignore_incoming_count;
     uint32_t ignore_incoming[3];
-    bool serialplugin_enabled;
-    bool serialplugin_echo;
-    uint32_t serialplugin_rxd;
-    uint32_t serialplugin_txd;
-    uint32_t serialplugin_timeout;
-    uint32_t serialplugin_mode;
-    bool ext_notification_plugin_enabled;
-    uint32_t ext_notification_plugin_output_ms;
-    uint32_t ext_notification_plugin_output;
-    bool ext_notification_plugin_active;
-    bool ext_notification_plugin_alert_message;
-    bool ext_notification_plugin_alert_bell;
-    bool range_test_plugin_enabled;
-    uint32_t range_test_plugin_sender;
-    bool range_test_plugin_save;
-    uint32_t store_forward_plugin_records;
-    uint32_t store_forward_plugin_history_return_max;
-    uint32_t store_forward_plugin_history_return_window;
+    bool serialmodule_enabled;
+    bool serialmodule_echo;
+    uint32_t serialmodule_rxd;
+    uint32_t serialmodule_txd;
+    uint32_t serialmodule_timeout;
+    uint32_t serialmodule_mode;
+    bool ext_notification_module_enabled;
+    uint32_t ext_notification_module_output_ms;
+    uint32_t ext_notification_module_output;
+    bool ext_notification_module_active;
+    bool ext_notification_module_alert_message;
+    bool ext_notification_module_alert_bell;
+    bool range_test_module_enabled;
+    uint32_t range_test_module_sender;
+    bool range_test_module_save;
+    uint32_t store_forward_module_records;
+    uint32_t store_forward_module_history_return_max;
+    uint32_t store_forward_module_history_return_window;
     bool telemetry_module_measurement_enabled;
     bool telemetry_module_screen_enabled;
     uint32_t telemetry_module_read_error_count_threshold;
@@ -167,8 +167,8 @@ typedef struct _RadioConfig_UserPreferences {
     bool telemetry_module_display_farenheit;
     RadioConfig_UserPreferences_TelemetrySensorType telemetry_module_sensor_type;
     uint32_t telemetry_module_sensor_pin;
-    bool store_forward_plugin_enabled;
-    bool store_forward_plugin_heartbeat;
+    bool store_forward_module_enabled;
+    bool store_forward_module_heartbeat;
     uint32_t position_flags;
     bool is_always_powered;
     uint32_t auto_screen_carousel_secs;
@@ -185,12 +185,12 @@ typedef struct _RadioConfig_UserPreferences {
     InputEventChar rotary1_event_cw;
     InputEventChar rotary1_event_ccw;
     InputEventChar rotary1_event_press;
-    bool canned_message_plugin_enabled;
-    char canned_message_plugin_allow_input_source[16];
-    bool canned_message_plugin_send_bell;
+    bool canned_message_module_enabled;
+    char canned_message_module_allow_input_source[16];
+    bool canned_message_module_send_bell;
     bool mqtt_encryption_enabled;
     float adc_multiplier_override;
-    uint32_t serialplugin_baud;
+    uint32_t serialmodule_baud;
 } RadioConfig_UserPreferences;
 
 typedef struct _RadioConfig {
@@ -277,24 +277,24 @@ extern "C" {
 #define RadioConfig_UserPreferences_factory_reset_tag 100
 #define RadioConfig_UserPreferences_debug_log_enabled_tag 101
 #define RadioConfig_UserPreferences_ignore_incoming_tag 103
-#define RadioConfig_UserPreferences_serialplugin_enabled_tag 120
-#define RadioConfig_UserPreferences_serialplugin_echo_tag 121
-#define RadioConfig_UserPreferences_serialplugin_rxd_tag 122
-#define RadioConfig_UserPreferences_serialplugin_txd_tag 123
-#define RadioConfig_UserPreferences_serialplugin_timeout_tag 124
-#define RadioConfig_UserPreferences_serialplugin_mode_tag 125
-#define RadioConfig_UserPreferences_ext_notification_plugin_enabled_tag 126
-#define RadioConfig_UserPreferences_ext_notification_plugin_output_ms_tag 127
-#define RadioConfig_UserPreferences_ext_notification_plugin_output_tag 128
-#define RadioConfig_UserPreferences_ext_notification_plugin_active_tag 129
-#define RadioConfig_UserPreferences_ext_notification_plugin_alert_message_tag 130
-#define RadioConfig_UserPreferences_ext_notification_plugin_alert_bell_tag 131
-#define RadioConfig_UserPreferences_range_test_plugin_enabled_tag 132
-#define RadioConfig_UserPreferences_range_test_plugin_sender_tag 133
-#define RadioConfig_UserPreferences_range_test_plugin_save_tag 134
-#define RadioConfig_UserPreferences_store_forward_plugin_records_tag 137
-#define RadioConfig_UserPreferences_store_forward_plugin_history_return_max_tag 138
-#define RadioConfig_UserPreferences_store_forward_plugin_history_return_window_tag 139
+#define RadioConfig_UserPreferences_serialmodule_enabled_tag 120
+#define RadioConfig_UserPreferences_serialmodule_echo_tag 121
+#define RadioConfig_UserPreferences_serialmodule_rxd_tag 122
+#define RadioConfig_UserPreferences_serialmodule_txd_tag 123
+#define RadioConfig_UserPreferences_serialmodule_timeout_tag 124
+#define RadioConfig_UserPreferences_serialmodule_mode_tag 125
+#define RadioConfig_UserPreferences_ext_notification_module_enabled_tag 126
+#define RadioConfig_UserPreferences_ext_notification_module_output_ms_tag 127
+#define RadioConfig_UserPreferences_ext_notification_module_output_tag 128
+#define RadioConfig_UserPreferences_ext_notification_module_active_tag 129
+#define RadioConfig_UserPreferences_ext_notification_module_alert_message_tag 130
+#define RadioConfig_UserPreferences_ext_notification_module_alert_bell_tag 131
+#define RadioConfig_UserPreferences_range_test_module_enabled_tag 132
+#define RadioConfig_UserPreferences_range_test_module_sender_tag 133
+#define RadioConfig_UserPreferences_range_test_module_save_tag 134
+#define RadioConfig_UserPreferences_store_forward_module_records_tag 137
+#define RadioConfig_UserPreferences_store_forward_module_history_return_max_tag 138
+#define RadioConfig_UserPreferences_store_forward_module_history_return_window_tag 139
 #define RadioConfig_UserPreferences_telemetry_module_measurement_enabled_tag 140
 #define RadioConfig_UserPreferences_telemetry_module_screen_enabled_tag 141
 #define RadioConfig_UserPreferences_telemetry_module_read_error_count_threshold_tag 142
@@ -303,8 +303,8 @@ extern "C" {
 #define RadioConfig_UserPreferences_telemetry_module_display_farenheit_tag 145
 #define RadioConfig_UserPreferences_telemetry_module_sensor_type_tag 146
 #define RadioConfig_UserPreferences_telemetry_module_sensor_pin_tag 147
-#define RadioConfig_UserPreferences_store_forward_plugin_enabled_tag 148
-#define RadioConfig_UserPreferences_store_forward_plugin_heartbeat_tag 149
+#define RadioConfig_UserPreferences_store_forward_module_enabled_tag 148
+#define RadioConfig_UserPreferences_store_forward_module_heartbeat_tag 149
 #define RadioConfig_UserPreferences_position_flags_tag 150
 #define RadioConfig_UserPreferences_is_always_powered_tag 151
 #define RadioConfig_UserPreferences_auto_screen_carousel_secs_tag 152
@@ -321,12 +321,12 @@ extern "C" {
 #define RadioConfig_UserPreferences_rotary1_event_cw_tag 164
 #define RadioConfig_UserPreferences_rotary1_event_ccw_tag 165
 #define RadioConfig_UserPreferences_rotary1_event_press_tag 166
-#define RadioConfig_UserPreferences_canned_message_plugin_enabled_tag 170
-#define RadioConfig_UserPreferences_canned_message_plugin_allow_input_source_tag 171
-#define RadioConfig_UserPreferences_canned_message_plugin_send_bell_tag 173
+#define RadioConfig_UserPreferences_canned_message_module_enabled_tag 170
+#define RadioConfig_UserPreferences_canned_message_module_allow_input_source_tag 171
+#define RadioConfig_UserPreferences_canned_message_module_send_bell_tag 173
 #define RadioConfig_UserPreferences_mqtt_encryption_enabled_tag 174
 #define RadioConfig_UserPreferences_adc_multiplier_override_tag 175
-#define RadioConfig_UserPreferences_serialplugin_baud_tag 176
+#define RadioConfig_UserPreferences_serialmodule_baud_tag 176
 #define RadioConfig_preferences_tag              1
 
 /* Struct field encoding specification for nanopb */
@@ -370,24 +370,24 @@ X(a, STATIC,   SINGULAR, UINT32,   gps_max_dop,      46) \
 X(a, STATIC,   SINGULAR, BOOL,     factory_reset,   100) \
 X(a, STATIC,   SINGULAR, BOOL,     debug_log_enabled, 101) \
 X(a, STATIC,   REPEATED, UINT32,   ignore_incoming, 103) \
-X(a, STATIC,   SINGULAR, BOOL,     serialplugin_enabled, 120) \
-X(a, STATIC,   SINGULAR, BOOL,     serialplugin_echo, 121) \
-X(a, STATIC,   SINGULAR, UINT32,   serialplugin_rxd, 122) \
-X(a, STATIC,   SINGULAR, UINT32,   serialplugin_txd, 123) \
-X(a, STATIC,   SINGULAR, UINT32,   serialplugin_timeout, 124) \
-X(a, STATIC,   SINGULAR, UINT32,   serialplugin_mode, 125) \
-X(a, STATIC,   SINGULAR, BOOL,     ext_notification_plugin_enabled, 126) \
-X(a, STATIC,   SINGULAR, UINT32,   ext_notification_plugin_output_ms, 127) \
-X(a, STATIC,   SINGULAR, UINT32,   ext_notification_plugin_output, 128) \
-X(a, STATIC,   SINGULAR, BOOL,     ext_notification_plugin_active, 129) \
-X(a, STATIC,   SINGULAR, BOOL,     ext_notification_plugin_alert_message, 130) \
-X(a, STATIC,   SINGULAR, BOOL,     ext_notification_plugin_alert_bell, 131) \
-X(a, STATIC,   SINGULAR, BOOL,     range_test_plugin_enabled, 132) \
-X(a, STATIC,   SINGULAR, UINT32,   range_test_plugin_sender, 133) \
-X(a, STATIC,   SINGULAR, BOOL,     range_test_plugin_save, 134) \
-X(a, STATIC,   SINGULAR, UINT32,   store_forward_plugin_records, 137) \
-X(a, STATIC,   SINGULAR, UINT32,   store_forward_plugin_history_return_max, 138) \
-X(a, STATIC,   SINGULAR, UINT32,   store_forward_plugin_history_return_window, 139) \
+X(a, STATIC,   SINGULAR, BOOL,     serialmodule_enabled, 120) \
+X(a, STATIC,   SINGULAR, BOOL,     serialmodule_echo, 121) \
+X(a, STATIC,   SINGULAR, UINT32,   serialmodule_rxd, 122) \
+X(a, STATIC,   SINGULAR, UINT32,   serialmodule_txd, 123) \
+X(a, STATIC,   SINGULAR, UINT32,   serialmodule_timeout, 124) \
+X(a, STATIC,   SINGULAR, UINT32,   serialmodule_mode, 125) \
+X(a, STATIC,   SINGULAR, BOOL,     ext_notification_module_enabled, 126) \
+X(a, STATIC,   SINGULAR, UINT32,   ext_notification_module_output_ms, 127) \
+X(a, STATIC,   SINGULAR, UINT32,   ext_notification_module_output, 128) \
+X(a, STATIC,   SINGULAR, BOOL,     ext_notification_module_active, 129) \
+X(a, STATIC,   SINGULAR, BOOL,     ext_notification_module_alert_message, 130) \
+X(a, STATIC,   SINGULAR, BOOL,     ext_notification_module_alert_bell, 131) \
+X(a, STATIC,   SINGULAR, BOOL,     range_test_module_enabled, 132) \
+X(a, STATIC,   SINGULAR, UINT32,   range_test_module_sender, 133) \
+X(a, STATIC,   SINGULAR, BOOL,     range_test_module_save, 134) \
+X(a, STATIC,   SINGULAR, UINT32,   store_forward_module_records, 137) \
+X(a, STATIC,   SINGULAR, UINT32,   store_forward_module_history_return_max, 138) \
+X(a, STATIC,   SINGULAR, UINT32,   store_forward_module_history_return_window, 139) \
 X(a, STATIC,   SINGULAR, BOOL,     telemetry_module_measurement_enabled, 140) \
 X(a, STATIC,   SINGULAR, BOOL,     telemetry_module_screen_enabled, 141) \
 X(a, STATIC,   SINGULAR, UINT32,   telemetry_module_read_error_count_threshold, 142) \
@@ -396,8 +396,8 @@ X(a, STATIC,   SINGULAR, UINT32,   telemetry_module_recovery_interval, 144) \
 X(a, STATIC,   SINGULAR, BOOL,     telemetry_module_display_farenheit, 145) \
 X(a, STATIC,   SINGULAR, UENUM,    telemetry_module_sensor_type, 146) \
 X(a, STATIC,   SINGULAR, UINT32,   telemetry_module_sensor_pin, 147) \
-X(a, STATIC,   SINGULAR, BOOL,     store_forward_plugin_enabled, 148) \
-X(a, STATIC,   SINGULAR, BOOL,     store_forward_plugin_heartbeat, 149) \
+X(a, STATIC,   SINGULAR, BOOL,     store_forward_module_enabled, 148) \
+X(a, STATIC,   SINGULAR, BOOL,     store_forward_module_heartbeat, 149) \
 X(a, STATIC,   SINGULAR, UINT32,   position_flags,  150) \
 X(a, STATIC,   SINGULAR, BOOL,     is_always_powered, 151) \
 X(a, STATIC,   SINGULAR, UINT32,   auto_screen_carousel_secs, 152) \
@@ -414,12 +414,12 @@ X(a, STATIC,   SINGULAR, UINT32,   rotary1_pin_press, 163) \
 X(a, STATIC,   SINGULAR, UENUM,    rotary1_event_cw, 164) \
 X(a, STATIC,   SINGULAR, UENUM,    rotary1_event_ccw, 165) \
 X(a, STATIC,   SINGULAR, UENUM,    rotary1_event_press, 166) \
-X(a, STATIC,   SINGULAR, BOOL,     canned_message_plugin_enabled, 170) \
-X(a, STATIC,   SINGULAR, STRING,   canned_message_plugin_allow_input_source, 171) \
-X(a, STATIC,   SINGULAR, BOOL,     canned_message_plugin_send_bell, 173) \
+X(a, STATIC,   SINGULAR, BOOL,     canned_message_module_enabled, 170) \
+X(a, STATIC,   SINGULAR, STRING,   canned_message_module_allow_input_source, 171) \
+X(a, STATIC,   SINGULAR, BOOL,     canned_message_module_send_bell, 173) \
 X(a, STATIC,   SINGULAR, BOOL,     mqtt_encryption_enabled, 174) \
 X(a, STATIC,   SINGULAR, FLOAT,    adc_multiplier_override, 175) \
-X(a, STATIC,   SINGULAR, UINT32,   serialplugin_baud, 176)
+X(a, STATIC,   SINGULAR, UINT32,   serialmodule_baud, 176)
 #define RadioConfig_UserPreferences_CALLBACK NULL
 #define RadioConfig_UserPreferences_DEFAULT NULL
 
