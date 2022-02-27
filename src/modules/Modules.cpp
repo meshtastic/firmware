@@ -37,7 +37,7 @@ void setupPlugins()
     new ReplyPlugin();
     rotaryEncoderInterruptImpl1 = new RotaryEncoderInterruptImpl1();
     rotaryEncoderInterruptImpl1->init();
-    cannedMessagePlugin = new CannedMessagePlugin();
+    cannedMessageModule = new CannedMessageModule();
 #ifndef PORTDUINO
     new TelemetryPlugin();
 #endif
