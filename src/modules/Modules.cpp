@@ -20,7 +20,7 @@
 #endif
 
 /**
- * Create plugin instances here.  If you are adding a new plugin, you must 'new' it here (or somewhere else)
+ * Create module instances here.  If you are adding a new module, you must 'new' it here (or somewhere else)
  */
 void setupPlugins()
 {
@@ -30,7 +30,7 @@ void setupPlugins()
     positionPlugin = new PositionPlugin();
     textMessagePlugin = new TextMessagePlugin();
     
-    // Note: if the rest of meshtastic doesn't need to explicitly use your plugin, you do not need to assign the instance
+    // Note: if the rest of meshtastic doesn't need to explicitly use your module, you do not need to assign the instance
     // to a global variable.
 
     new RemoteHardwarePlugin();
@@ -57,6 +57,6 @@ void setupPlugins()
     // new StoreForwardPlugin();
 #endif
 
-    // NOTE! This plugin must be added LAST because it likes to check for replies from other plugins and avoid sending extra acks
+    // NOTE! This module must be added LAST because it likes to check for replies from other modules and avoid sending extra acks
     routingPlugin = new RoutingPlugin();
 }

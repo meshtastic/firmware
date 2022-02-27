@@ -32,7 +32,7 @@ int32_t RangeTestPlugin::runOnce()
 #ifndef NO_ESP32
 
     /*
-        Uncomment the preferences below if you want to use the plugin
+        Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
     */
 

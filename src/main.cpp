@@ -537,7 +537,7 @@ void setup()
 
     service.init();
 
-    // Now that the mesh service is created, create any plugins
+    // Now that the mesh service is created, create any modules
     setupPlugins();
 
     // Do this after service.init (because that clears error_code)

@@ -1,6 +1,6 @@
 #pragma once
 
 /**
- * Create plugin instances here.  If you are adding a new plugin, you must 'new' it here (or somewhere else)
+ * Create module instances here.  If you are adding a new module, you must 'new' it here (or somewhere else)
  */
 void setupPlugins();
