@@ -2,7 +2,7 @@
 #include "ProtobufPlugin.h"
 #include "input/InputBroker.h"
 
-enum cannedMessagePluginRunState
+enum cannedMessageModuleRunState
 {
     CANNED_MESSAGE_RUN_STATE_DISABLED,
     CANNED_MESSAGE_RUN_STATE_INACTIVE,
@@ -16,20 +16,20 @@ enum cannedMessagePluginRunState
 
 #define CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_COUNT 50
 /**
- * Sum of CannedMessagePluginConfig part sizes.
+ * Sum of CannedMessageModuleConfig part sizes.
  */
 #define CANNED_MESSAGE_PLUGIN_MESSAGES_SIZE 800
 
-class CannedMessagePlugin :
+class CannedMessageModule :
     public SinglePortPlugin,
     public Observable<const UIFrameEvent *>,
     private concurrency::OSThread
 {
-    CallbackObserver<CannedMessagePlugin, const InputEvent *> inputObserver =
-        CallbackObserver<CannedMessagePlugin, const InputEvent *>(
-            this, &CannedMessagePlugin::handleInputEvent);
+    CallbackObserver<CannedMessageModule, const InputEvent *> inputObserver =
+        CallbackObserver<CannedMessageModule, const InputEvent *>(
+            this, &CannedMessageModule::handleInputEvent);
   public:
-    CannedMessagePlugin();
+    CannedMessageModule();
     const char* getCurrentMessage();
     const char* getPrevMessage();
     const char* getNextMessage();
@@ -38,15 +38,15 @@ class CannedMessagePlugin :
     void eventDown();
     void eventSelect();
 
-    void handleGetCannedMessagePluginPart1(const MeshPacket &req, AdminMessage *response);
-    void handleGetCannedMessagePluginPart2(const MeshPacket &req, AdminMessage *response);
-    void handleGetCannedMessagePluginPart3(const MeshPacket &req, AdminMessage *response);
-    void handleGetCannedMessagePluginPart4(const MeshPacket &req, AdminMessage *response);
+    void handleGetCannedMessageModulePart1(const MeshPacket &req, AdminMessage *response);
+    void handleGetCannedMessageModulePart2(const MeshPacket &req, AdminMessage *response);
+    void handleGetCannedMessageModulePart3(const MeshPacket &req, AdminMessage *response);
+    void handleGetCannedMessageModulePart4(const MeshPacket &req, AdminMessage *response);
 
-    void handleSetCannedMessagePluginPart1(const char *from_msg);
-    void handleSetCannedMessagePluginPart2(const char *from_msg);
-    void handleSetCannedMessagePluginPart3(const char *from_msg);
-    void handleSetCannedMessagePluginPart4(const char *from_msg);
+    void handleSetCannedMessageModulePart1(const char *from_msg);
+    void handleSetCannedMessageModulePart2(const char *from_msg);
+    void handleSetCannedMessageModulePart3(const char *from_msg);
+    void handleSetCannedMessageModulePart4(const char *from_msg);
 
   protected:
 
@@ -72,10 +72,10 @@ class CannedMessagePlugin :
     void loadProtoForPlugin();
     bool saveProtoForPlugin();
 
-    void installDefaultCannedMessagePluginConfig();
+    void installDefaultCannedMessageModuleConfig();
 
     int currentMessageIndex = -1;
-    cannedMessagePluginRunState runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+    cannedMessageModuleRunState runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
 
     char messageStore[CANNED_MESSAGE_PLUGIN_MESSAGES_SIZE+1];
     char *messages[CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_COUNT];
@@ -83,4 +83,4 @@ class CannedMessagePlugin :
     unsigned long lastTouchMillis = 0;
 };
 
-extern CannedMessagePlugin *cannedMessagePlugin;
+extern CannedMessageModule *cannedMessageModule;
