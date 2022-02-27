@@ -6,29 +6,29 @@
 #include <Arduino.h>
 #include <functional>
 
-class RangeTestPlugin : private concurrency::OSThread
+class RangeTestModule : private concurrency::OSThread
 {
     bool firstTime = 1;
 
   public:
-    RangeTestPlugin();
+    RangeTestModule();
 
   protected:
     virtual int32_t runOnce() override;
 };
 
-extern RangeTestPlugin *rangeTestPlugin;
+extern RangeTestModule *rangeTestModule;
 
 /*
- * Radio interface for RangeTestPlugin
+ * Radio interface for RangeTestModule
  *
  */
-class RangeTestPluginRadio : public SinglePortPlugin
+class RangeTestModuleRadio : public SinglePortPlugin
 {
     uint32_t lastRxID = 0;
 
   public:
-    RangeTestPluginRadio() : SinglePortPlugin("RangeTestPluginRadio", PortNum_TEXT_MESSAGE_APP) {}
+    RangeTestModuleRadio() : SinglePortPlugin("RangeTestModuleRadio", PortNum_TEXT_MESSAGE_APP) {}
 
     /**
      * Send our payload into the mesh
@@ -55,4 +55,4 @@ class RangeTestPluginRadio : public SinglePortPlugin
     virtual ProcessMessage handleReceived(const MeshPacket &mp) override;
 };
 
-extern RangeTestPluginRadio *rangeTestPluginRadio;
+extern RangeTestModuleRadio *rangeTestModuleRadio;

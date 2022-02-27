@@ -7,13 +7,13 @@
 #include <functional>
 
 /*
- * Radio interface for ExternalNotificationPlugin
+ * Radio interface for ExternalNotificationModule
  *
  */
-class ExternalNotificationPlugin : public SinglePortPlugin, private concurrency::OSThread
+class ExternalNotificationModule : public SinglePortPlugin, private concurrency::OSThread
 {
   public:
-    ExternalNotificationPlugin();
+    ExternalNotificationModule();
 
     void setExternalOn();
     void setExternalOff();
