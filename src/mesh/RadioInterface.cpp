@@ -78,6 +78,12 @@ const RegionInfo regions[] = {
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
      */
+    RDEF(NZ866, 864.0f, 868.0f, 100, 0, 0, true, false),
+
+    /*
+        https://rrf.rsm.govt.nz/smart-web/smart/page/-smart/domain/licence/LicenceSummary.wdk?id=219752
+        https://iotalliance.org.nz/wp-content/uploads/sites/4/2019/05/IoT-Spectrum-in-NZ-Briefing-Paper.pdf
+     */
     RDEF(TH, 920.0f, 925.0f, 100, 0, 16, true, false),
 
     /*
