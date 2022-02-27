@@ -3,7 +3,7 @@
 #include "Channels.h"
 
 /**
- * Routing plugin for router control messages
+ * Routing module for router control messages
  */
 class RoutingPlugin : public ProtobufPlugin<Routing>
 {

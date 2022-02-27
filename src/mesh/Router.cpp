@@ -376,7 +376,7 @@ void Router::handleReceived(MeshPacket *p, RxSource src)
         printPacket("packet decoding failed (no PSK?)", p);
     }
 
-    // call plugins here
+    // call modules here
     MeshPlugin::callPlugins(*p, src);
 }
 

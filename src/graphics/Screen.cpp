@@ -67,8 +67,8 @@ uint8_t imgBattery[16] = {0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 
 // Threshold values for the GPS lock accuracy bar display
 uint32_t dopThresholds[5] = {2000, 1000, 500, 200, 100};
 
-// At some point, we're going to ask all of the plugins if they would like to display a screen frame
-// we'll need to hold onto pointers for the plugins that can draw a frame.
+// At some point, we're going to ask all of the modules if they would like to display a screen frame
+// we'll need to hold onto pointers for the modules that can draw a frame.
 std::vector<MeshPlugin *> pluginFrames;
 
 // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
@@ -189,7 +189,7 @@ static void drawPluginFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
         // frame, then we want this to be `0`
         plugin_frame = state->transitionFrameTarget;
     } else {
-        // otherwise, just display the plugin frame that's aligned with the current frame
+        // otherwise, just display the module frame that's aligned with the current frame
         plugin_frame = state->currentFrame;
         // DEBUG_MSG("Screen is not in transition.  Frame: %d\n\n", plugin_frame);
     }
@@ -259,7 +259,7 @@ static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->drawString(0 + x, FONT_HEIGHT_MEDIUM + y, "For help, please post on\nmeshtastic.discourse.group");
 }
 
-// Ignore messages orginating from phone (from the current node 0x0) unless range test or store and forward plugin are enabled
+// Ignore messages orginating from phone (from the current node 0x0) unless range test or store and forward module are enabled
 static bool shouldDrawMessage(const MeshPacket *packet)
 {
     return packet->from != 0 && !radioConfig.preferences.range_test_plugin_enabled &&
@@ -827,7 +827,7 @@ void Screen::setup()
     if (textMessagePlugin)
         textMessageObserver.observe(textMessagePlugin);
 
-    // Plugins can notify screen about refresh
+    // Modules can notify screen about refresh
     MeshPlugin::observeUIEvents(&uiFrameEventObserver);
 }
 
@@ -977,7 +977,7 @@ void Screen::setFrames()
     showingNormalScreen = true;
 
     pluginFrames = MeshPlugin::GetMeshPluginsWithUIFrames();
-    DEBUG_MSG("Showing %d plugin frames\n", pluginFrames.size());
+    DEBUG_MSG("Showing %d module frames\n", pluginFrames.size());
     int totalFrameCount = MAX_NUM_NODES + NUM_EXTRA_FRAMES + pluginFrames.size();
     DEBUG_MSG("Total frame count: %d\n", totalFrameCount);
 
@@ -998,13 +998,13 @@ void Screen::setFrames()
         normalFrames[numframes++] = drawPluginFrame;
     }
 
-    DEBUG_MSG("Added plugins.  numframes: %d\n", numframes);
+    DEBUG_MSG("Added modules.  numframes: %d\n", numframes);
 
     // If we have a critical fault, show it first
     if (myNodeInfo.error_code)
         normalFrames[numframes++] = drawCriticalFaultFrame;
 
-    // If we have a text message - show it next, unless it's a phone message and we aren't using any special plugins
+    // If we have a text message - show it next, unless it's a phone message and we aren't using any special modules
     if (devicestate.has_rx_text_message && shouldDrawMessage(&devicestate.rx_text_message)) {
         normalFrames[numframes++] = drawTextMessageFrame;
     }
