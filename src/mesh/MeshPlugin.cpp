@@ -11,7 +11,7 @@ std::vector<MeshPlugin *> *MeshPlugin::plugins;
 const MeshPacket *MeshPlugin::currentRequest;
 
 /**
- * If any of the current chain of plugins has already sent a reply, it will be here.  This is useful to allow
+ * If any of the current chain of modules has already sent a reply, it will be here.  This is useful to allow
  * the RoutingPlugin to avoid sending redundant acks
  */
 MeshPacket *MeshPlugin::currentReply;
@@ -29,7 +29,7 @@ void MeshPlugin::setup() {}
 
 MeshPlugin::~MeshPlugin()
 {
-    assert(0); // FIXME - remove from list of plugins once someone needs this feature
+    assert(0); // FIXME - remove from list of modules once someone needs this feature
 }
 
 MeshPacket *MeshPlugin::allocAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex)
@@ -68,10 +68,10 @@ MeshPacket *MeshPlugin::allocErrorResponse(Routing_Error err, const MeshPacket *
 
 void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
 {
-    // DEBUG_MSG("In call plugins\n");
+    // DEBUG_MSG("In call modules\n");
     bool pluginFound = false;
 
-    // We now allow **encrypted** packets to pass through the plugins
+    // We now allow **encrypted** packets to pass through the modules
     bool isDecoded = mp.which_payloadVariant == MeshPacket_decoded_tag;
 
     currentReply = NULL; // No reply yet
@@ -85,7 +85,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
 
         pi.currentRequest = &mp;
 
-        /// We only call plugins that are interested in the packet (and the message is destined to us or we are promiscious)
+        /// We only call modules that are interested in the packet (and the message is destined to us or we are promiscious)
         bool wantsPacket = (isDecoded || pi.encryptedOk) && (pi.isPromiscuous || toUs) && pi.wantPacket(&mp);
 
         if ((src == RX_SRC_LOCAL) && !(pi.loopbackOk)) {
@@ -104,7 +104,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
             Channel *ch = isDecoded ? &channels.getByIndex(mp.channel) : NULL;
 
             /// Is the channel this packet arrived on acceptable? (security check)
-            /// Note: we can't know channel names for encrypted packets, so those are NEVER sent to boundChannel plugins
+            /// Note: we can't know channel names for encrypted packets, so those are NEVER sent to boundChannel modules
 
             /// Also: if a packet comes in on the local PC interface, we don't check for bound channels, because it is TRUSTED and it needs to
             /// to be able to fetch the initial admin packets without yet knowing any channels.
@@ -128,7 +128,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
                 ProcessMessage handled = pi.handleReceived(mp);
 
                 // Possibly send replies (but only if the message was directed to us specifically, i.e. not for promiscious
-                // sniffing) also: we only let the one plugin send a reply, once that happens, remaining plugins are not
+                // sniffing) also: we only let the one module send a reply, once that happens, remaining modules are not
                 // considered
 
                 // NOTE: we send a reply *even if the (non broadcast) request was from us* which is unfortunate but necessary
@@ -178,7 +178,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
     }
 
     if (!pluginFound)
-        DEBUG_MSG("No plugins interested in portnum=%d, src=%s\n",
+        DEBUG_MSG("No modules interested in portnum=%d, src=%s\n",
                     mp.decoded.portnum,
                     (src == RX_SRC_LOCAL) ? "LOCAL":"REMOTE");
 }
@@ -201,8 +201,8 @@ void MeshPlugin::sendResponse(const MeshPacket &req)
         setReplyTo(r, req);
         currentReply = r;
     } else {
-        // Ignore - this is now expected behavior for routing plugin (because it ignores some replies)
-        // DEBUG_MSG("WARNING: Client requested response but this plugin did not provide\n");
+        // Ignore - this is now expected behavior for routing module (because it ignores some replies)
+        // DEBUG_MSG("WARNING: Client requested response but this module did not provide\n");
     }
 }
 
@@ -264,7 +264,7 @@ AdminMessageHandleResult MeshPlugin::handleAdminMessageForAllPlugins(const MeshP
             if (h == AdminMessageHandleResult::HANDLED_WITH_RESPONSE)
             {
                 // In case we have a response it always has priority.
-                DEBUG_MSG("Reply prepared by plugin '%s' of variant: %d\n",
+                DEBUG_MSG("Reply prepared by module '%s' of variant: %d\n",
                     pi.name,
                     response->which_variant);
                 handled = h;

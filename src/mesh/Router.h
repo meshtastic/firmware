@@ -85,7 +85,7 @@ class Router : protected concurrency::OSThread
     /**
      * Should this incoming filter be dropped?
      *
-     * FIXME, move this into the new RoutingPlugin and do the filtering there using the regular plugin logic
+     * FIXME, move this into the new RoutingPlugin and do the filtering there using the regular module logic
      *
      * Called immedately on receiption, before any further processing.
      * @return true to abandon the packet

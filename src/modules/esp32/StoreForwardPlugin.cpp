@@ -296,7 +296,7 @@ ProcessMessage StoreForwardPlugin::handleReceived(const MeshPacket &mp)
 ProcessMessage StoreForwardPlugin::handleReceivedProtobuf(const MeshPacket &mp, StoreAndForward *p)
 {
     if (!radioConfig.preferences.store_forward_plugin_enabled) {
-        // If this plugin is not enabled in any capacity, don't handle the packet, and allow other plugins to consume
+        // If this module is not enabled in any capacity, don't handle the packet, and allow other modules to consume
         return ProcessMessage::CONTINUE;
     }
 

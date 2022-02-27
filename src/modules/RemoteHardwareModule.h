@@ -4,7 +4,7 @@
 #include "concurrency/OSThread.h"
 
 /**
- * A plugin that provides easy low-level remote access to device hardware.
+ * A module that provides easy low-level remote access to device hardware.
  */
 class RemoteHardwarePlugin : public ProtobufPlugin<HardwareMessage>, private concurrency::OSThread
 {

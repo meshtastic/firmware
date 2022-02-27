@@ -3,7 +3,7 @@
 #include "concurrency/OSThread.h"
 
 /**
- * Position plugin for sending/receiving positions into the mesh
+ * Position module for sending/receiving positions into the mesh
  */
 class PositionPlugin : public ProtobufPlugin<Position>, private concurrency::OSThread
 {

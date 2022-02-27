@@ -2,7 +2,7 @@
 #include "ProtobufPlugin.h"
 
 /**
- * NodeInfo plugin for sending/receiving NodeInfos into the mesh
+ * NodeInfo module for sending/receiving NodeInfos into the mesh
  */
 class NodeInfoPlugin : public ProtobufPlugin<User>, private concurrency::OSThread
 {
