@@ -9,7 +9,7 @@
 #include <assert.h>
 
 /*
-    SerialPlugin
+    SerialModule
         A simple interface to send messages over the mesh network by sending strings
         over a serial port.
 
@@ -20,7 +20,7 @@
 
     Basic Usage:
 
-        1) Enable the module by setting serialplugin_enabled to 1.
+        1) Enable the module by setting serialmodule_enabled to 1.
         2) Set the pins (serialmodule_rxd / serialmodule_rxd) for your preferred RX and TX GPIO pins.
            On tbeam, recommend to use:
                 RXD 35
@@ -54,20 +54,20 @@
 #define SERIALMODULE_BAUD 38400
 #define SERIALMODULE_ACK 1
 
-SerialPlugin *serialPlugin;
-SerialPluginRadio *serialPluginRadio;
+SerialModule *serialModule;
+SerialModuleRadio *serialModuleRadio;
 
-SerialPlugin::SerialPlugin() : concurrency::OSThread("SerialPlugin") {}
+SerialModule::SerialModule() : concurrency::OSThread("SerialModule") {}
 
 char serialStringChar[Constants_DATA_PAYLOAD_LEN];
 
-SerialPluginRadio::SerialPluginRadio() : SinglePortPlugin("SerialPluginRadio", PortNum_SERIAL_APP)
+SerialModuleRadio::SerialModuleRadio() : SinglePortPlugin("SerialModuleRadio", PortNum_SERIAL_APP)
 {
     // restrict to the admin channel for rx
     boundChannel = Channels::serialChannel;
 }
 
-int32_t SerialPlugin::runOnce()
+int32_t SerialModule::runOnce()
 {
 #ifndef NO_ESP32
 
@@ -107,7 +107,7 @@ int32_t SerialPlugin::runOnce()
 
             Serial2.setRxBufferSize(SERIALMODULE_RX_BUFFER);
 
-            serialPluginRadio = new SerialPluginRadio();
+            serialModuleRadio = new SerialModuleRadio();
 
             firstTime = 0;
 
@@ -118,7 +118,7 @@ int32_t SerialPlugin::runOnce()
                 serialString = Serial2.readString();
                 serialString.toCharArray(serialStringChar, Constants_DATA_PAYLOAD_LEN);
 
-                serialPluginRadio->sendPayload();
+                serialModuleRadio->sendPayload();
 
                 DEBUG_MSG("Received: %s\n", serialStringChar);
             }
@@ -126,7 +126,7 @@ int32_t SerialPlugin::runOnce()
 
         return (10);
     } else {
-        DEBUG_MSG("Serial Plugin Disabled\n");
+        DEBUG_MSG("Serial Module Disabled\n");
 
         return (INT32_MAX);
     }
@@ -135,7 +135,7 @@ int32_t SerialPlugin::runOnce()
 #endif
 }
 
-MeshPacket *SerialPluginRadio::allocReply()
+MeshPacket *SerialModuleRadio::allocReply()
 {
 
     auto reply = allocDataPacket(); // Allocate a packet for sending
@@ -143,7 +143,7 @@ MeshPacket *SerialPluginRadio::allocReply()
     return reply;
 }
 
-void SerialPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
+void SerialModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 {
     MeshPacket *p = allocReply();
     p->to = dest;
@@ -157,7 +157,7 @@ void SerialPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
     service.sendToMesh(p);
 }
 
-ProcessMessage SerialPluginRadio::handleReceived(const MeshPacket &mp)
+ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
 
@@ -202,7 +202,7 @@ ProcessMessage SerialPluginRadio::handleReceived(const MeshPacket &mp)
         }
 
     } else {
-        DEBUG_MSG("Serial Plugin Disabled\n");
+        DEBUG_MSG("Serial Module Disabled\n");
     }
 
 #endif

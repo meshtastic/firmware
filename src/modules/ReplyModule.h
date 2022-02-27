@@ -5,13 +5,13 @@
 /**
  * A simple example module that just replies with "Message received" to any message it receives.
  */
-class ReplyPlugin : public SinglePortPlugin
+class ReplyModule : public SinglePortPlugin
 {
   public:
     /** Constructor
      * name is for debugging output
      */
-    ReplyPlugin() : SinglePortPlugin("reply", PortNum_REPLY_APP) {}
+    ReplyModule() : SinglePortPlugin("reply", PortNum_REPLY_APP) {}
 
   protected:
 

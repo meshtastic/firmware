@@ -69,7 +69,7 @@ MeshPacket *MeshPlugin::allocErrorResponse(Routing_Error err, const MeshPacket *
 void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
 {
     // DEBUG_MSG("In call modules\n");
-    bool pluginFound = false;
+    bool moduleFound = false;
 
     // We now allow **encrypted** packets to pass through the modules
     bool isDecoded = mp.which_payloadVariant == MeshPacket_decoded_tag;
@@ -98,7 +98,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
         if (wantsPacket) {
             DEBUG_MSG("Module '%s' wantsPacket=%d\n", pi.name, wantsPacket);
 
-            pluginFound = true;
+            moduleFound = true;
 
             /// received channel (or NULL if not decoded)
             Channel *ch = isDecoded ? &channels.getByIndex(mp.channel) : NULL;
@@ -173,11 +173,11 @@ void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
             // SECURITY NOTE! I considered sending back a different error code if we didn't find the psk (i.e. !isDecoded)
             // but opted NOT TO.  Because it is not a good idea to let remote nodes 'probe' to find out which PSKs were "good" vs
             // bad.
-            routingPlugin->sendAckNak(Routing_Error_NO_RESPONSE, getFrom(&mp), mp.id, mp.channel);
+            routingModule->sendAckNak(Routing_Error_NO_RESPONSE, getFrom(&mp), mp.id, mp.channel);
         }
     }
 
-    if (!pluginFound)
+    if (!moduleFound)
         DEBUG_MSG("No modules interested in portnum=%d, src=%s\n",
                     mp.decoded.portnum,
                     (src == RX_SRC_LOCAL) ? "LOCAL":"REMOTE");
@@ -225,17 +225,17 @@ void setReplyTo(MeshPacket *p, const MeshPacket &to)
 std::vector<MeshPlugin *> MeshPlugin::GetMeshPluginsWithUIFrames()
 {
 
-    std::vector<MeshPlugin *> pluginsWithUIFrames;
+    std::vector<MeshPlugin *> modulesWithUIFrames;
     if (modules) {
         for (auto i = modules->begin(); i != modules->end(); ++i) {
             auto &pi = **i;
             if (pi.wantUIFrame()) {
                 DEBUG_MSG("Module wants a UI Frame\n");
-                pluginsWithUIFrames.push_back(&pi);
+                modulesWithUIFrames.push_back(&pi);
             }
         }
     }
-    return pluginsWithUIFrames;
+    return modulesWithUIFrames;
 }
 
 void MeshPlugin::observeUIEvents(
@@ -260,7 +260,7 @@ AdminMessageHandleResult MeshPlugin::handleAdminMessageForAllPlugins(const MeshP
     if (modules) {
         for (auto i = modules->begin(); i != modules->end(); ++i) {
             auto &pi = **i;
-            AdminMessageHandleResult h = pi.handleAdminMessageForPlugin(mp, request, response);
+            AdminMessageHandleResult h = pi.handleAdminMessageForModule(mp, request, response);
             if (h == AdminMessageHandleResult::HANDLED_WITH_RESPONSE)
             {
                 // In case we have a response it always has priority.

@@ -12,9 +12,9 @@
 #include <iterator>
 #include <map>
 
-StoreForwardPlugin *storeForwardPlugin;
+StoreForwardModule *storeForwardModule;
 
-int32_t StoreForwardPlugin::runOnce()
+int32_t StoreForwardModule::runOnce()
 {
 
 #ifndef NO_ESP32
@@ -31,11 +31,11 @@ int32_t StoreForwardPlugin::runOnce()
                 if (airTime->channelUtilizationPercent() < 25) {
 
                     // DEBUG_MSG("--- --- --- In busy loop 1 %d\n", this->packetHistoryTXQueue_index);
-                    storeForwardPlugin->sendPayload(this->busyTo, this->packetHistoryTXQueue_index);
+                    storeForwardModule->sendPayload(this->busyTo, this->packetHistoryTXQueue_index);
 
                     if (this->packetHistoryTXQueue_index == packetHistoryTXQueue_size) {
                         strcpy(this->routerMessage, "** S&F - Done");
-                        storeForwardPlugin->sendMessage(this->busyTo, this->routerMessage);
+                        storeForwardModule->sendMessage(this->busyTo, this->routerMessage);
 
                         // DEBUG_MSG("--- --- --- In busy loop - Done \n");
                         this->packetHistoryTXQueue_index = 0;
@@ -52,13 +52,13 @@ int32_t StoreForwardPlugin::runOnce()
 
             return (this->packetTimeMax);
         } else {
-            DEBUG_MSG("Store & Forward Plugin - Disabled (is_router = false)\n");
+            DEBUG_MSG("Store & Forward Module - Disabled (is_router = false)\n");
 
             return (INT32_MAX);
         }
 
     } else {
-        DEBUG_MSG("Store & Forward Plugin - Disabled\n");
+        DEBUG_MSG("Store & Forward Module - Disabled\n");
 
         return (INT32_MAX);
     }
@@ -70,7 +70,7 @@ int32_t StoreForwardPlugin::runOnce()
 /*
     Create our data structure in the PSRAM.
 */
-void StoreForwardPlugin::populatePSRAM()
+void StoreForwardModule::populatePSRAM()
 {
     /*
     For PSRAM usage, see:
@@ -104,7 +104,7 @@ void StoreForwardPlugin::populatePSRAM()
     DEBUG_MSG("  numberOfPackets for packetHistory - %u\n", numberOfPackets);
 }
 
-void StoreForwardPlugin::historyReport()
+void StoreForwardModule::historyReport()
 {
     DEBUG_MSG("Iterating through the message history...\n");
     DEBUG_MSG("Message history contains %u records\n", this->packetHistoryCurrent);
@@ -113,27 +113,27 @@ void StoreForwardPlugin::historyReport()
 /*
  *
  */
-void StoreForwardPlugin::historySend(uint32_t msAgo, uint32_t to)
+void StoreForwardModule::historySend(uint32_t msAgo, uint32_t to)
 {
 
     // uint32_t packetsSent = 0;
 
-    uint32_t queueSize = storeForwardPlugin->historyQueueCreate(msAgo, to);
+    uint32_t queueSize = storeForwardModule->historyQueueCreate(msAgo, to);
 
     if (queueSize) {
         snprintf(this->routerMessage, 80, "** S&F - Sending %u message(s)", queueSize);
-        storeForwardPlugin->sendMessage(to, this->routerMessage);
+        storeForwardModule->sendMessage(to, this->routerMessage);
 
         this->busy = true; // runOnce() will pickup the next steps once busy = true.
         this->busyTo = to;
 
     } else {
         strcpy(this->routerMessage, "** S&F - No history to send");
-        storeForwardPlugin->sendMessage(to, this->routerMessage);
+        storeForwardModule->sendMessage(to, this->routerMessage);
     }
 }
 
-uint32_t StoreForwardPlugin::historyQueueCreate(uint32_t msAgo, uint32_t to)
+uint32_t StoreForwardModule::historyQueueCreate(uint32_t msAgo, uint32_t to)
 {
 
     // uint32_t packetHistoryTXQueueIndex = 0;
@@ -177,7 +177,7 @@ uint32_t StoreForwardPlugin::historyQueueCreate(uint32_t msAgo, uint32_t to)
     return this->packetHistoryTXQueue_size;
 }
 
-void StoreForwardPlugin::historyAdd(const MeshPacket &mp)
+void StoreForwardModule::historyAdd(const MeshPacket &mp)
 {
     const auto &p = mp.decoded;
 
@@ -191,13 +191,13 @@ void StoreForwardPlugin::historyAdd(const MeshPacket &mp)
     this->packetHistoryCurrent++;
 }
 
-MeshPacket *StoreForwardPlugin::allocReply()
+MeshPacket *StoreForwardModule::allocReply()
 {
     auto reply = allocDataPacket(); // Allocate a packet for sending
     return reply;
 }
 
-void StoreForwardPlugin::sendPayload(NodeNum dest, uint32_t packetHistory_index)
+void StoreForwardModule::sendPayload(NodeNum dest, uint32_t packetHistory_index)
 {
     DEBUG_MSG("Sending S&F Payload\n");
     MeshPacket *p = allocReply();
@@ -218,7 +218,7 @@ void StoreForwardPlugin::sendPayload(NodeNum dest, uint32_t packetHistory_index)
     service.sendToMesh(p);
 }
 
-void StoreForwardPlugin::sendMessage(NodeNum dest, char *str)
+void StoreForwardModule::sendMessage(NodeNum dest, char *str)
 {
     MeshPacket *p = allocReply();
 
@@ -240,7 +240,7 @@ void StoreForwardPlugin::sendMessage(NodeNum dest, char *str)
     // HardwareMessage_init_default
 }
 
-ProcessMessage StoreForwardPlugin::handleReceived(const MeshPacket &mp)
+ProcessMessage StoreForwardModule::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
     if (radioConfig.preferences.store_forward_module_enabled) {
@@ -261,9 +261,9 @@ ProcessMessage StoreForwardPlugin::handleReceived(const MeshPacket &mp)
                     // Send the last 60 minutes of messages.
                     if (this->busy) {
                         strcpy(this->routerMessage, "** S&F - Busy. Try again shortly.");
-                        storeForwardPlugin->sendMessage(getFrom(&mp), this->routerMessage);
+                        storeForwardModule->sendMessage(getFrom(&mp), this->routerMessage);
                     } else {
-                        storeForwardPlugin->historySend(1000 * 60, getFrom(&mp));
+                        storeForwardModule->historySend(1000 * 60, getFrom(&mp));
                     }
                 } else if ((p.payload.bytes[0] == 'S') && (p.payload.bytes[1] == 'F') && (p.payload.bytes[2] == 'm') &&
                            (p.payload.bytes[3] == 0x00)) {
@@ -271,10 +271,10 @@ ProcessMessage StoreForwardPlugin::handleReceived(const MeshPacket &mp)
                                                  "01234567890123456789012345678901234567890123456789012345678901234567890123456789"
                                                  "01234567890123456789012345678901234567890123456789012345678901234567890123456",
                                                  sizeof(this->routerMessage));
-                    storeForwardPlugin->sendMessage(getFrom(&mp), this->routerMessage);
+                    storeForwardModule->sendMessage(getFrom(&mp), this->routerMessage);
 
                 } else {
-                    storeForwardPlugin->historyAdd(mp);
+                    storeForwardModule->historyAdd(mp);
                 }
 
             } else if (mp.decoded.portnum == PortNum_STORE_FORWARD_APP) {
@@ -285,7 +285,7 @@ ProcessMessage StoreForwardPlugin::handleReceived(const MeshPacket &mp)
         }
 
     } else {
-        DEBUG_MSG("Store & Forward Plugin - Disabled\n");
+        DEBUG_MSG("Store & Forward Module - Disabled\n");
     }
 
 #endif
@@ -293,7 +293,7 @@ ProcessMessage StoreForwardPlugin::handleReceived(const MeshPacket &mp)
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }
 
-ProcessMessage StoreForwardPlugin::handleReceivedProtobuf(const MeshPacket &mp, StoreAndForward *p)
+ProcessMessage StoreForwardModule::handleReceivedProtobuf(const MeshPacket &mp, StoreAndForward *p)
 {
     if (!radioConfig.preferences.store_forward_module_enabled) {
         // If this module is not enabled in any capacity, don't handle the packet, and allow other modules to consume
@@ -323,9 +323,9 @@ ProcessMessage StoreForwardPlugin::handleReceivedProtobuf(const MeshPacket &mp, 
         // Send the last 60 minutes of messages.
         if (this->busy) {
             strcpy(this->routerMessage, "** S&F - Busy. Try again shortly.");
-            storeForwardPlugin->sendMessage(getFrom(&mp), this->routerMessage);
+            storeForwardModule->sendMessage(getFrom(&mp), this->routerMessage);
         } else {
-            storeForwardPlugin->historySend(1000 * 60, getFrom(&mp));
+            storeForwardModule->historySend(1000 * 60, getFrom(&mp));
         }
 
         break;
@@ -377,8 +377,8 @@ ProcessMessage StoreForwardPlugin::handleReceivedProtobuf(const MeshPacket &mp, 
     return ProcessMessage::STOP; // There's no need for others to look at this message.
 }
 
-StoreForwardPlugin::StoreForwardPlugin()
-    : SinglePortPlugin("StoreForwardPlugin", PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("StoreForwardPlugin")
+StoreForwardModule::StoreForwardModule()
+    : SinglePortPlugin("StoreForwardModule", PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("StoreForwardModule")
 {
 
 #ifndef NO_ESP32
@@ -387,7 +387,7 @@ StoreForwardPlugin::StoreForwardPlugin()
 
     if (StoreForward_Dev) {
         /*
-            Uncomment the preferences below if you want to use the plugin
+            Uncomment the preferences below if you want to use the module
             without having to configure it from the PythonAPI or WebUI.
         */
 
@@ -400,7 +400,7 @@ StoreForwardPlugin::StoreForwardPlugin()
 
         // Router
         if (radioConfig.preferences.is_router) {
-            DEBUG_MSG("Initializing Store & Forward Plugin - Enabled as Router\n");
+            DEBUG_MSG("Initializing Store & Forward Module - Enabled as Router\n");
             if (ESP.getPsramSize()) {
                 if (ESP.getFreePsram() >= 1024 * 1024) {
 
@@ -427,17 +427,17 @@ StoreForwardPlugin::StoreForwardPlugin()
 
                 } else {
                     DEBUG_MSG("Device has less than 1M of PSRAM free. Aborting startup.\n");
-                    DEBUG_MSG("Store & Forward Plugin - Aborting Startup.\n");
+                    DEBUG_MSG("Store & Forward Module - Aborting Startup.\n");
                 }
 
             } else {
                 DEBUG_MSG("Device doesn't have PSRAM.\n");
-                DEBUG_MSG("Store & Forward Plugin - Aborting Startup.\n");
+                DEBUG_MSG("Store & Forward Module - Aborting Startup.\n");
             }
 
             // Client
         } else {
-            DEBUG_MSG("Initializing Store & Forward Plugin - Enabled as Client\n");
+            DEBUG_MSG("Initializing Store & Forward Module - Enabled as Client\n");
         }
     }
 #endif

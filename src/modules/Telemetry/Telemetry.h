@@ -4,11 +4,11 @@
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
-class TelemetryPlugin : private concurrency::OSThread, public ProtobufPlugin<Telemetry>
+class TelemetryModule : private concurrency::OSThread, public ProtobufPlugin<Telemetry>
 {
   public:
-    TelemetryPlugin()
-        : concurrency::OSThread("TelemetryPlugin"),
+    TelemetryModule()
+        : concurrency::OSThread("TelemetryModule"),
           ProtobufPlugin("Telemetry", PortNum_TELEMETRY_APP, &Telemetry_msg)
     {
         lastMeasurementPacket = nullptr;

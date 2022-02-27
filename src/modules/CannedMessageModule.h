@@ -66,11 +66,11 @@ class CannedMessageModule :
     virtual Observable<const UIFrameEvent *>* getUIFrameObservable() override { return this; }
     virtual void drawFrame(
         OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
-    virtual AdminMessageHandleResult handleAdminMessageForPlugin(
+    virtual AdminMessageHandleResult handleAdminMessageForModule(
         const MeshPacket &mp, AdminMessage *request, AdminMessage *response) override;
 
-    void loadProtoForPlugin();
-    bool saveProtoForPlugin();
+    void loadProtoForModule();
+    bool saveProtoForModule();
 
     void installDefaultCannedMessageModuleConfig();
 

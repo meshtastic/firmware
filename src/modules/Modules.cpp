@@ -25,21 +25,21 @@
 void setupModules()
 {
     inputBroker = new InputBroker();
-    adminPlugin = new AdminPlugin();
-    nodeInfoPlugin = new NodeInfoPlugin();
-    positionPlugin = new PositionPlugin();
-    textMessagePlugin = new TextMessagePlugin();
+    adminModule = new AdminModule();
+    nodeInfoModule = new NodeInfoModule();
+    positionModule = new PositionModule();
+    textMessageModule = new TextMessageModule();
     
     // Note: if the rest of meshtastic doesn't need to explicitly use your module, you do not need to assign the instance
     // to a global variable.
 
-    new RemoteHardwarePlugin();
-    new ReplyPlugin();
+    new RemoteHardwareModule();
+    new ReplyModule();
     rotaryEncoderInterruptImpl1 = new RotaryEncoderInterruptImpl1();
     rotaryEncoderInterruptImpl1->init();
     cannedMessageModule = new CannedMessageModule();
 #ifndef PORTDUINO
-    new TelemetryPlugin();
+    new TelemetryModule();
 #endif
 #ifndef NO_ESP32
     // Only run on an esp32 based device.
@@ -47,15 +47,14 @@ void setupModules()
     /*
         Maintained by MC Hamster (Jm Casler) jm@casler.org
     */
-    new SerialPlugin();
+    new SerialModule();
     new ExternalNotificationModule();
 
-    storeForwardPlugin = new StoreForwardPlugin();
+    storeForwardModule = new StoreForwardModule();
 
     new RangeTestModule();
-    // new StoreForwardPlugin();
 #endif
 
     // NOTE! This module must be added LAST because it likes to check for replies from other modules and avoid sending extra acks
-    routingPlugin = new RoutingPlugin();
+    routingModule = new RoutingModule();
 }
