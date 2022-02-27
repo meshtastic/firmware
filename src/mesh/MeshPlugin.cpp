@@ -6,7 +6,7 @@
 #include "modules/RoutingModule.h"
 #include <assert.h>
 
-std::vector<MeshPlugin *> *MeshPlugin::plugins;
+std::vector<MeshPlugin *> *MeshPlugin::modules;
 
 const MeshPacket *MeshPlugin::currentRequest;
 
@@ -19,10 +19,10 @@ MeshPacket *MeshPlugin::currentReply;
 MeshPlugin::MeshPlugin(const char *_name) : name(_name)
 {
     // Can't trust static initalizer order, so we check each time
-    if (!plugins)
-        plugins = new std::vector<MeshPlugin *>();
+    if (!modules)
+        modules = new std::vector<MeshPlugin *>();
 
-    plugins->push_back(this);
+    modules->push_back(this);
 }
 
 void MeshPlugin::setup() {}
@@ -80,7 +80,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
     auto ourNodeNum = nodeDB.getNodeNum();
     bool toUs = mp.to == NODENUM_BROADCAST || mp.to == ourNodeNum;
 
-    for (auto i = plugins->begin(); i != plugins->end(); ++i) {
+    for (auto i = modules->begin(); i != modules->end(); ++i) {
         auto &pi = **i;
 
         pi.currentRequest = &mp;
@@ -96,7 +96,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
         assert(!pi.myReply); // If it is !null it means we have a bug, because it should have been sent the previous time
 
         if (wantsPacket) {
-            DEBUG_MSG("Plugin '%s' wantsPacket=%d\n", pi.name, wantsPacket);
+            DEBUG_MSG("Module '%s' wantsPacket=%d\n", pi.name, wantsPacket);
 
             pluginFound = true;
 
@@ -137,9 +137,9 @@ void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
                 // any other node.
                 if (mp.decoded.want_response && toUs && (getFrom(&mp) != ourNodeNum || mp.to == ourNodeNum) && !currentReply) {
                     pi.sendResponse(mp);
-                    DEBUG_MSG("Plugin '%s' sent a response\n", pi.name);
+                    DEBUG_MSG("Module '%s' sent a response\n", pi.name);
                 } else {
-                    DEBUG_MSG("Plugin '%s' considered\n", pi.name);
+                    DEBUG_MSG("Module '%s' considered\n", pi.name);
                 }
 
                 // If the requester didn't ask for a response we might need to discard unused replies to prevent memory leaks
@@ -150,7 +150,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
                 }
 
                 if (handled == ProcessMessage::STOP) {
-                    DEBUG_MSG("Plugin '%s' handled and skipped other processing\n", pi.name);
+                    DEBUG_MSG("Module '%s' handled and skipped other processing\n", pi.name);
                     break;
                 }
             }
@@ -226,11 +226,11 @@ std::vector<MeshPlugin *> MeshPlugin::GetMeshPluginsWithUIFrames()
 {
 
     std::vector<MeshPlugin *> pluginsWithUIFrames;
-    if (plugins) {
-        for (auto i = plugins->begin(); i != plugins->end(); ++i) {
+    if (modules) {
+        for (auto i = modules->begin(); i != modules->end(); ++i) {
             auto &pi = **i;
             if (pi.wantUIFrame()) {
-                DEBUG_MSG("Plugin wants a UI Frame\n");
+                DEBUG_MSG("Module wants a UI Frame\n");
                 pluginsWithUIFrames.push_back(&pi);
             }
         }
@@ -241,13 +241,13 @@ std::vector<MeshPlugin *> MeshPlugin::GetMeshPluginsWithUIFrames()
 void MeshPlugin::observeUIEvents(
     Observer<const UIFrameEvent *> *observer)
 {
-    if (plugins) {
-        for (auto i = plugins->begin(); i != plugins->end(); ++i) {
+    if (modules) {
+        for (auto i = modules->begin(); i != modules->end(); ++i) {
             auto &pi = **i;
             Observable<const UIFrameEvent *> *observable =
                 pi.getUIFrameObservable();
             if (observable != NULL) {
-                DEBUG_MSG("Plugin wants a UI Frame\n");
+                DEBUG_MSG("Module wants a UI Frame\n");
                 observer->observe(observable);
             }
         }
@@ -257,8 +257,8 @@ void MeshPlugin::observeUIEvents(
 AdminMessageHandleResult MeshPlugin::handleAdminMessageForAllPlugins(const MeshPacket &mp, AdminMessage *request, AdminMessage *response)
 {
     AdminMessageHandleResult handled = AdminMessageHandleResult::NOT_HANDLED;
-    if (plugins) {
-        for (auto i = plugins->begin(); i != plugins->end(); ++i) {
+    if (modules) {
+        for (auto i = modules->begin(); i != modules->end(); ++i) {
             auto &pi = **i;
             AdminMessageHandleResult h = pi.handleAdminMessageForPlugin(mp, request, response);
             if (h == AdminMessageHandleResult::HANDLED_WITH_RESPONSE)

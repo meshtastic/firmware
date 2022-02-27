@@ -178,7 +178,7 @@ static void drawSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int
 
 static void drawPluginFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    uint8_t plugin_frame;
+    uint8_t module_frame;
     // there's a little but in the UI transition code
     // where it invokes the function at the correct offset
     // in the array of "drawScreen" functions; however,
@@ -187,14 +187,14 @@ static void drawPluginFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
     if (state->frameState == IN_TRANSITION && state->transitionFrameRelationship == INCOMING) {
         // if we're transitioning from the end of the frame list back around to the first
         // frame, then we want this to be `0`
-        plugin_frame = state->transitionFrameTarget;
+        module_frame = state->transitionFrameTarget;
     } else {
         // otherwise, just display the module frame that's aligned with the current frame
-        plugin_frame = state->currentFrame;
-        // DEBUG_MSG("Screen is not in transition.  Frame: %d\n\n", plugin_frame);
+        module_frame = state->currentFrame;
+        // DEBUG_MSG("Screen is not in transition.  Frame: %d\n\n", module_frame);
     }
-    // DEBUG_MSG("Drawing Plugin Frame %d\n\n", plugin_frame);
-    MeshPlugin &pi = *pluginFrames.at(plugin_frame);
+    // DEBUG_MSG("Drawing Module Frame %d\n\n", module_frame);
+    MeshPlugin &pi = *pluginFrames.at(module_frame);
     pi.drawFrame(display, state, x, y);
 }
 
@@ -988,12 +988,12 @@ void Screen::setFrames()
 
     size_t numframes = 0;
 
-    // put all of the plugin frames first.
+    // put all of the module frames first.
     // this is a little bit of a dirty hack; since we're going to call
-    // the same drawPluginFrame handler here for all of these plugin frames
+    // the same drawModuleFrame handler here for all of these module frames
     // and then we'll just assume that the state->currentFrame value
-    // is the same offset into the pluginFrames vector
-    // so that we can invoke the plugin's callback
+    // is the same offset into the moduleFrames vector
+    // so that we can invoke the module's callback
     for (auto i = pluginFrames.begin(); i != pluginFrames.end(); ++i) {
         normalFrames[numframes++] = drawPluginFrame;
     }

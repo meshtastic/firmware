@@ -54,7 +54,7 @@ typedef struct _UIFrameEvent {
  */
 class MeshPlugin
 {
-    static std::vector<MeshPlugin *> *plugins;
+    static std::vector<MeshPlugin *> *modules;
 
   public:
     /** Constructor
@@ -151,7 +151,7 @@ class MeshPlugin
     MeshPacket *allocErrorResponse(Routing_Error err, const MeshPacket *p);
 
   /**
-   * @brief An admin message arrived to AdminPlugin. Plugin was asked whether it want to handle the request.
+   * @brief An admin message arrived to AdminModule. Module was asked whether it want to handle the request.
    * 
    * @param mp The mesh packet arrived.
    * @param request The AdminMessage request extracted from the packet.
@@ -166,7 +166,7 @@ class MeshPlugin
   private:
     /**
      * If any of the current chain of modules has already sent a reply, it will be here.  This is useful to allow
-     * the RoutingPlugin to avoid sending redundant acks
+     * the RoutingModule to avoid sending redundant acks
      */
     static MeshPacket *currentReply;
 

@@ -48,11 +48,11 @@
 
 #define RXD2 16
 #define TXD2 17
-#define SERIALPLUGIN_RX_BUFFER 128
-#define SERIALPLUGIN_STRING_MAX Constants_DATA_PAYLOAD_LEN
-#define SERIALPLUGIN_TIMEOUT 250
-#define SERIALPLUGIN_BAUD 38400
-#define SERIALPLUGIN_ACK 1
+#define SERIALMODULE_RX_BUFFER 128
+#define SERIALMODULE_STRING_MAX Constants_DATA_PAYLOAD_LEN
+#define SERIALMODULE_TIMEOUT 250
+#define SERIALMODULE_BAUD 38400
+#define SERIALMODULE_ACK 1
 
 SerialPlugin *serialPlugin;
 SerialPluginRadio *serialPluginRadio;
@@ -90,11 +90,11 @@ int32_t SerialPlugin::runOnce()
             DEBUG_MSG("Initializing serial peripheral interface\n");
 
             if (radioConfig.preferences.serialmodule_rxd && radioConfig.preferences.serialmodule_txd) {
-                Serial2.begin(SERIALPLUGIN_BAUD, SERIAL_8N1, radioConfig.preferences.serialmodule_rxd,
+                Serial2.begin(SERIALMODULE_BAUD, SERIAL_8N1, radioConfig.preferences.serialmodule_rxd,
                               radioConfig.preferences.serialmodule_txd);
 
             } else {
-                Serial2.begin(SERIALPLUGIN_BAUD, SERIAL_8N1, RXD2, TXD2);
+                Serial2.begin(SERIALMODULE_BAUD, SERIAL_8N1, RXD2, TXD2);
             }
 
             if (radioConfig.preferences.serialmodule_timeout) {
@@ -102,10 +102,10 @@ int32_t SerialPlugin::runOnce()
                     radioConfig.preferences.serialmodule_timeout); // Number of MS to wait to set the timeout for the string.
 
             } else {
-                Serial2.setTimeout(SERIALPLUGIN_TIMEOUT); // Number of MS to wait to set the timeout for the string.
+                Serial2.setTimeout(SERIALMODULE_TIMEOUT); // Number of MS to wait to set the timeout for the string.
             }
 
-            Serial2.setRxBufferSize(SERIALPLUGIN_RX_BUFFER);
+            Serial2.setRxBufferSize(SERIALMODULE_RX_BUFFER);
 
             serialPluginRadio = new SerialPluginRadio();
 
@@ -149,7 +149,7 @@ void SerialPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
     p->to = dest;
     p->decoded.want_response = wantReplies;
 
-    p->want_ack = SERIALPLUGIN_ACK;
+    p->want_ack = SERIALMODULE_ACK;
 
     p->decoded.payload.size = strlen(serialStringChar); // You must specify how many bytes are in the reply
     memcpy(p->decoded.payload.bytes, serialStringChar, p->decoded.payload.size);

@@ -83,7 +83,7 @@ int CannedMessageModule::splitConfiguredMessages()
                 messageIndex-1, this->messages[messageIndex-1]);
 
             // hit our max messages, bail
-            if (messageIndex >= CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_COUNT)
+            if (messageIndex >= CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT)
             {
                 this->messagesCount = messageIndex;
                 return this->messagesCount;

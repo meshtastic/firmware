@@ -44,15 +44,15 @@
 */
 
 // Default configurations
-#define EXT_NOTIFICATION_PLUGIN_OUTPUT EXT_NOTIFY_OUT
-#define EXT_NOTIFICATION_PLUGIN_OUTPUT_MS 1000
+#define EXT_NOTIFICATION_MODULE_OUTPUT EXT_NOTIFY_OUT
+#define EXT_NOTIFICATION_MODULE_OUTPUT_MS 1000
 
 #define ASCII_BELL 0x07
 
 bool externalCurrentState = 0;
 uint32_t externalTurnedOn = 0;
 
-int32_t ExternalNotificationPlugin::runOnce()
+int32_t ExternalNotificationModule::runOnce()
 {
     /*
         Uncomment the preferences below if you want to use the module
@@ -72,7 +72,7 @@ int32_t ExternalNotificationPlugin::runOnce()
         // If the output is turned on, turn it back off after the given period of time.
         if (externalTurnedOn + (radioConfig.preferences.ext_notification_module_output_ms
                                     ? radioConfig.preferences.ext_notification_module_output_ms
-                                    : EXT_NOTIFICATION_PLUGIN_OUTPUT_MS) <
+                                    : EXT_NOTIFICATION_MODULE_OUTPUT_MS) <
             millis()) {
             DEBUG_MSG("Turning off external notification\n");
             setExternalOff();
@@ -82,34 +82,34 @@ int32_t ExternalNotificationPlugin::runOnce()
     return (25);
 }
 
-void ExternalNotificationPlugin::setExternalOn()
+void ExternalNotificationModule::setExternalOn()
 {
     #ifdef EXT_NOTIFY_OUT
     externalCurrentState = 1;
     externalTurnedOn = millis();
 
     digitalWrite((radioConfig.preferences.ext_notification_module_output ? radioConfig.preferences.ext_notification_module_output
-                                                                         : EXT_NOTIFICATION_PLUGIN_OUTPUT),
+                                                                         : EXT_NOTIFICATION_MODULE_OUTPUT),
                  (radioConfig.preferences.ext_notification_module_active ? true : false));
     #endif
 }
 
-void ExternalNotificationPlugin::setExternalOff()
+void ExternalNotificationModule::setExternalOff()
 {
     #ifdef EXT_NOTIFY_OUT
     externalCurrentState = 0;
 
     digitalWrite((radioConfig.preferences.ext_notification_module_output ? radioConfig.preferences.ext_notification_module_output
-                                                                         : EXT_NOTIFICATION_PLUGIN_OUTPUT),
+                                                                         : EXT_NOTIFICATION_MODULE_OUTPUT),
                  (radioConfig.preferences.ext_notification_module_active ? false : true));
     #endif
 }
 
 // --------
 
-ExternalNotificationPlugin::ExternalNotificationPlugin()
-    : SinglePortPlugin("ExternalNotificationPlugin", PortNum_TEXT_MESSAGE_APP), concurrency::OSThread(
-                                                                                         "ExternalNotificationPlugin")
+ExternalNotificationModule::ExternalNotificationModule()
+    : SinglePortPlugin("ExternalNotificationModule", PortNum_TEXT_MESSAGE_APP), concurrency::OSThread(
+                                                                                         "ExternalNotificationModule")
 {
     // restrict to the admin channel for rx
     boundChannel = Channels::gpioChannel;
@@ -118,7 +118,7 @@ ExternalNotificationPlugin::ExternalNotificationPlugin()
     #ifdef EXT_NOTIFY_OUT
 
     /*
-        Uncomment the preferences below if you want to use the plugin
+        Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
     */
 
@@ -132,24 +132,24 @@ ExternalNotificationPlugin::ExternalNotificationPlugin()
 
     if (radioConfig.preferences.ext_notification_module_enabled) {
 
-        DEBUG_MSG("Initializing External Notification Plugin\n");
+        DEBUG_MSG("Initializing External Notification Module\n");
 
         // Set the direction of a pin
         pinMode((radioConfig.preferences.ext_notification_module_output ? radioConfig.preferences.ext_notification_module_output
-                                                                        : EXT_NOTIFICATION_PLUGIN_OUTPUT),
+                                                                        : EXT_NOTIFICATION_MODULE_OUTPUT),
                 OUTPUT);
 
         // Turn off the pin
         setExternalOff();
     } else {
-        DEBUG_MSG("External Notification Plugin Disabled\n");
+        DEBUG_MSG("External Notification Module Disabled\n");
         enabled = false;
     }
     #endif
 #endif
 }
 
-ProcessMessage ExternalNotificationPlugin::handleReceived(const MeshPacket &mp)
+ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
     #ifdef EXT_NOTIFY_OUT
@@ -162,7 +162,7 @@ ProcessMessage ExternalNotificationPlugin::handleReceived(const MeshPacket &mp)
             //   Need to know if and how this could be a problem.
             if (radioConfig.preferences.ext_notification_module_alert_bell) {
                 auto &p = mp.decoded;
-                DEBUG_MSG("externalNotificationPlugin - Notification Bell\n");
+                DEBUG_MSG("externalNotificationModule - Notification Bell\n");
                 for (int i = 0; i < p.payload.size; i++) {
                     if (p.payload.bytes[i] == ASCII_BELL) {
                         setExternalOn();
@@ -171,13 +171,13 @@ ProcessMessage ExternalNotificationPlugin::handleReceived(const MeshPacket &mp)
             }
 
             if (radioConfig.preferences.ext_notification_module_alert_message) {
-                DEBUG_MSG("externalNotificationPlugin - Notification Plugin\n");
+                DEBUG_MSG("externalNotificationModule - Notification Module\n");
                 setExternalOn();
             }
         }
 
     } else {
-        DEBUG_MSG("External Notification Plugin Disabled\n");
+        DEBUG_MSG("External Notification Module Disabled\n");
     }
     #endif
 
