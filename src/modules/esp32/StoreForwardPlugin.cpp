@@ -7,7 +7,7 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "mesh/generated/storeforward.pb.h"
-#include "plugins/PluginDev.h"
+#include "modules/PluginDev.h"
 #include <Arduino.h>
 #include <iterator>
 #include <map>
