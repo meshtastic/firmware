@@ -3,7 +3,7 @@
 
 
 /**
- * A simple example plugin that just replies with "Message received" to any message it receives.
+ * A simple example module that just replies with "Message received" to any message it receives.
  */
 class ReplyPlugin : public SinglePortPlugin
 {
@@ -15,7 +15,7 @@ class ReplyPlugin : public SinglePortPlugin
 
   protected:
 
-    /** For reply plugin we do all of our processing in the (normally optional)
+    /** For reply module we do all of our processing in the (normally optional)
      * want_replies handling
     */
     virtual MeshPacket *allocReply() override;

@@ -15,12 +15,12 @@
 
         Default is to use RX GPIO 16 and TX GPIO 17.
 
-    Need help with this plugin? Post your question on the Meshtastic Discourse:
+    Need help with this module? Post your question on the Meshtastic Discourse:
        https://meshtastic.discourse.group
 
     Basic Usage:
 
-        1) Enable the plugin by setting serialplugin_enabled to 1.
+        1) Enable the module by setting serialplugin_enabled to 1.
         2) Set the pins (serialplugin_rxd / serialplugin_rxd) for your preferred RX and TX GPIO pins.
            On tbeam, recommend to use:
                 RXD 35
@@ -39,7 +39,7 @@
             - This won't happen any time soon.
 
     KNOWN PROBLEMS
-        * Until the plugin is initilized by the startup sequence, the TX pin is in a floating
+        * Until the module is initilized by the startup sequence, the TX pin is in a floating
           state. Device connected to that pin may see this as "noise".
         * Will not work on NRF and the Linux device targets.
 

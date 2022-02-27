@@ -13,7 +13,7 @@
     Documentation:
         https://github.com/meshtastic/Meshtastic-device/blob/master/docs/software/modules/ExternalNotificationModule.md
 
-    This plugin supports:
+    This module supports:
         https://github.com/meshtastic/Meshtastic-device/issues/654
 
 
@@ -55,7 +55,7 @@ uint32_t externalTurnedOn = 0;
 int32_t ExternalNotificationPlugin::runOnce()
 {
     /*
-        Uncomment the preferences below if you want to use the plugin
+        Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
     */
 

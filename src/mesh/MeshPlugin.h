@@ -22,8 +22,8 @@ enum class ProcessMessage
 };
 
 /**
- * Used by plugins to return the result of the AdminMessage handling.
- * If request is handled, then plugin should return HANDLED,
+ * Used by modules to return the result of the AdminMessage handling.
+ * If request is handled, then module should return HANDLED,
  * If response is also prepared for the request, then HANDLED_WITH_RESPONSE
  * should be returned.
  */
@@ -42,15 +42,15 @@ typedef struct _UIFrameEvent {
     bool needRedraw;
 } UIFrameEvent;
 
-/** A baseclass for any mesh "plugin".
+/** A baseclass for any mesh "module".
  *
- * A plugin allows you to add new features to meshtastic device code, without needing to know messaging details.
+ * A module allows you to add new features to meshtastic device code, without needing to know messaging details.
  *
- * A key concept for this is that your plugin should use a particular "portnum" for each message type you want to receive
+ * A key concept for this is that your module should use a particular "portnum" for each message type you want to receive
  * and handle.
  *
- * Interally we use plugins to implement the core meshtastic text messaging and gps position sharing features.  You
- * can use these classes as examples for how to write your own custom plugin.  See here: (FIXME)
+ * Interally we use modules to implement the core meshtastic text messaging and gps position sharing features.  You
+ * can use these classes as examples for how to write your own custom module.  See here: (FIXME)
  */
 class MeshPlugin
 {
@@ -78,17 +78,17 @@ class MeshPlugin
   protected:
     const char *name;
 
-    /** Most plugins only care about packets that are destined for their node (i.e. broadcasts or has their node as the specific
+    /** Most modules only care about packets that are destined for their node (i.e. broadcasts or has their node as the specific
     recipient) But some plugs might want to 'sniff' packets that are merely being routed (passing through the current node). Those
-    plugins can set this to true and their handleReceived() will be called for every packet.
+    modules can set this to true and their handleReceived() will be called for every packet.
     */
     bool isPromiscuous = false;
 
-    /** Also receive a copy of LOCALLY GENERATED messages - most plugins should leave
+    /** Also receive a copy of LOCALLY GENERATED messages - most modules should leave
      *  this setting disabled - see issue #877 */
     bool loopbackOk = false;
 
-    /** Most plugins only understand decrypted packets.  For plugins that also want to see encrypted packets, they should set this
+    /** Most modules only understand decrypted packets.  For modules that also want to see encrypted packets, they should set this
      * flag */
     bool encryptedOk = false;
 
@@ -101,11 +101,11 @@ class MeshPlugin
     const char *boundChannel = NULL;
 
     /**
-     * If this plugin is currently handling a request currentRequest will be preset
+     * If this module is currently handling a request currentRequest will be preset
      * to the packet with the request.  This is mostly useful for reply handlers.
      *
      * Note: this can be static because we are guaranteed to be processing only one
-     * plugin at a time.
+     * plumodulegin at a time.
      */
     static const MeshPacket *currentRequest;
 
@@ -115,7 +115,7 @@ class MeshPlugin
     MeshPacket *myReply = NULL;
 
     /**
-     * Initialize your plugin.  This setup function is called once after all hardware and mesh protocol layers have
+     * Initialize your module.  This setup function is called once after all hardware and mesh protocol layers have
      * been initialized
      */
     virtual void setup();
@@ -165,7 +165,7 @@ class MeshPlugin
 
   private:
     /**
-     * If any of the current chain of plugins has already sent a reply, it will be here.  This is useful to allow
+     * If any of the current chain of modules has already sent a reply, it will be here.  This is useful to allow
      * the RoutingPlugin to avoid sending redundant acks
      */
     static MeshPacket *currentReply;

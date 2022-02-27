@@ -46,7 +46,7 @@ int32_t TelemetryPlugin::runOnce()
 {
 #ifndef PORTDUINO
     /*
-        Uncomment the preferences below if you want to use the plugin
+        Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
     */
     /*
@@ -65,7 +65,7 @@ int32_t TelemetryPlugin::runOnce()
    
     if (!(radioConfig.preferences.telemetry_module_measurement_enabled ||
           radioConfig.preferences.telemetry_module_screen_enabled)) {
-        // If this plugin is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
+        // If this module is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
         return (INT32_MAX);
     }
 
@@ -75,7 +75,7 @@ int32_t TelemetryPlugin::runOnce()
 
         if (radioConfig.preferences.telemetry_module_measurement_enabled) {
             DEBUG_MSG("Telemetry: Initializing\n");
-            // it's possible to have this plugin enabled, only for displaying values on the screen.
+            // it's possible to have this module enabled, only for displaying values on the screen.
             // therefore, we should only enable the sensor loop if measurement is also enabled
             switch (radioConfig.preferences.telemetry_module_sensor_type) {
 
@@ -93,14 +93,14 @@ int32_t TelemetryPlugin::runOnce()
                 case RadioConfig_UserPreferences_TelemetrySensorType_MCP9808:
                     return mcp9808Sensor.runOnce();
                 default:
-                    DEBUG_MSG("Telemetry: Invalid sensor type selected; Disabling plugin");
+                    DEBUG_MSG("Telemetry: Invalid sensor type selected; Disabling module");
                     return (INT32_MAX);
                     break;
             }
         }
         return (INT32_MAX);
     } else {
-        // if we somehow got to a second run of this plugin with measurement disabled, then just wait forever
+        // if we somehow got to a second run of this module with measurement disabled, then just wait forever
         if (!radioConfig.preferences.telemetry_module_measurement_enabled)  
             return (INT32_MAX);
         // this is not the first time OSThread library has called this function
@@ -229,7 +229,7 @@ bool TelemetryPlugin::handleReceivedProtobuf(const MeshPacket &mp, Telemetry *p)
 {
     if (!(radioConfig.preferences.telemetry_module_measurement_enabled ||
           radioConfig.preferences.telemetry_module_screen_enabled)) {
-        // If this plugin is not enabled in any capacity, don't handle the packet, and allow other plugins to consume
+        // If this module is not enabled in any capacity, don't handle the packet, and allow other modules to consume
         return false;
     }
 
@@ -277,7 +277,7 @@ bool TelemetryPlugin::sendOurTelemetry(NodeNum dest, bool wantReplies)
             mcp9808Sensor.getMeasurement(&m);
             break;
         default:
-            DEBUG_MSG("Telemetry: Invalid sensor type selected; Disabling plugin");
+            DEBUG_MSG("Telemetry: Invalid sensor type selected; Disabling module");
             return false;
     }
 

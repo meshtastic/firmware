@@ -197,7 +197,7 @@ int32_t CannedMessagePlugin::runOnce()
         (this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE)
          && (millis() - this->lastTouchMillis) > INACTIVATE_AFTER_MS)
     {
-        // Reset plugin
+        // Reset module
         DEBUG_MSG("Reset due the lack of activity.\n");
         e.frameChanged = true;
         this->currentMessageIndex = -1;
@@ -321,7 +321,7 @@ void CannedMessagePlugin::loadProtoForPlugin()
 }
 
 /**
- * @brief Save the plugin config to file.
+ * @brief Save the module config to file.
  *
  * @return true On success.
  * @return false On error.
