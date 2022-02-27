@@ -222,7 +222,7 @@ void setReplyTo(MeshPacket *p, const MeshPacket &to)
     p->decoded.request_id = to.id;
 }
 
-std::vector<MeshPlugin *> MeshPlugin::GetMeshPluginsWithUIFrames()
+std::vector<MeshPlugin *> MeshPlugin::GetMeshModulesWithUIFrames()
 {
 
     std::vector<MeshPlugin *> modulesWithUIFrames;
