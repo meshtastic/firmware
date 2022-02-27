@@ -68,7 +68,7 @@ class MeshPlugin
      */
     static void callPlugins(const MeshPacket &mp, RxSource src = RX_SRC_RADIO);
 
-    static std::vector<MeshPlugin *> GetMeshPluginsWithUIFrames();
+    static std::vector<MeshPlugin *> GetMeshModulesWithUIFrames();
     static void observeUIEvents(Observer<const UIFrameEvent *> *observer);
     static AdminMessageHandleResult handleAdminMessageForAllPlugins(
         const MeshPacket &mp, AdminMessage *request, AdminMessage *response);

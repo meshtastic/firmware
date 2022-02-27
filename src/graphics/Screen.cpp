@@ -176,7 +176,7 @@ static void drawSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int
 }
 #endif
 
-static void drawPluginFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     uint8_t module_frame;
     // there's a little but in the UI transition code
@@ -976,7 +976,7 @@ void Screen::setFrames()
     DEBUG_MSG("showing standard frames\n");
     showingNormalScreen = true;
 
-    moduleFrames = MeshPlugin::GetMeshPluginsWithUIFrames();
+    moduleFrames = MeshPlugin::GetMeshModulesWithUIFrames();
     DEBUG_MSG("Showing %d module frames\n", moduleFrames.size());
     int totalFrameCount = MAX_NUM_NODES + NUM_EXTRA_FRAMES + moduleFrames.size();
     DEBUG_MSG("Total frame count: %d\n", totalFrameCount);
@@ -995,7 +995,7 @@ void Screen::setFrames()
     // is the same offset into the moduleFrames vector
     // so that we can invoke the module's callback
     for (auto i = moduleFrames.begin(); i != moduleFrames.end(); ++i) {
-        normalFrames[numframes++] = drawPluginFrame;
+        normalFrames[numframes++] = drawModuleFrame;
     }
 
     DEBUG_MSG("Added modules.  numframes: %d\n", numframes);
