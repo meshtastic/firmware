@@ -27,9 +27,6 @@ PB_BIND(MeshPacket, MeshPacket, 2)
 PB_BIND(NodeInfo, NodeInfo, AUTO)
 
 
-PB_BIND(GroupInfo, GroupInfo, AUTO)
-
-
 PB_BIND(MyNodeInfo, MyNodeInfo, 2)
 
 

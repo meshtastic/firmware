@@ -34,7 +34,6 @@ NodeDB nodeDB;
 // we have plenty of ram so statically alloc this tempbuf (for now)
 EXT_RAM_ATTR DeviceState devicestate;
 MyNodeInfo &myNodeInfo = devicestate.my_node;
-GroupInfo &ourGroupInfo = devicestate.group_info;
 RadioConfig radioConfig;
 ChannelFile channelFile;
 
