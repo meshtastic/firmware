@@ -1,10 +1,10 @@
-#include "../mesh/generated/environmental_measurement.pb.h"
+#include "../mesh/generated/telemetry.pb.h"
 #include "configuration.h"
-#include "EnvironmentalMeasurementSensor.h"
+#include "TelemetrySensor.h"
 #include "BME280Sensor.h"
 #include <Adafruit_BME280.h>
 
-BME280Sensor::BME280Sensor() : EnvironmentalMeasurementSensor {} {
+BME280Sensor::BME280Sensor() : TelemetrySensor {} {
 }
 
 int32_t BME280Sensor::runOnce() {
@@ -15,12 +15,12 @@ int32_t BME280Sensor::runOnce() {
         DEBUG_MSG("Could not find a valid BME280 sensor, check wiring, address, sensor ID!");
         // TODO more verbose diagnostics
     } else {
-        DEBUG_MSG("EnvironmentalMeasurement: Opened BME280 on default i2c bus");
+        DEBUG_MSG("Telemetry: Opened BME280 on default i2c bus");
     }
     return BME_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
 }
 
-bool BME280Sensor::getMeasurement(EnvironmentalMeasurement *measurement) {
+bool BME280Sensor::getMeasurement(Telemetry *measurement) {
     measurement->temperature = bme280.readTemperature();
     measurement->relative_humidity = bme280.readHumidity();
     measurement->barometric_pressure = bme280.readPressure() / 100.0F;
