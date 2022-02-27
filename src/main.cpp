@@ -9,6 +9,7 @@
 #include "error.h"
 #include "power.h"
 // #include "rom/rtc.h"
+#include "DSRRouter.h"
 // #include "debug.h"
 #include "FSCommon.h"
 #include "RTC.h"
@@ -60,6 +61,8 @@ meshtastic::NodeStatus *nodeStatus = new meshtastic::NodeStatus();
 uint8_t screen_found;
 
 bool axp192_found;
+
+Router *router = NULL; // Users of router don't care what sort of subclass implements that API
 
 // -----------------------------------------------------------------------------
 // Application
@@ -440,6 +443,8 @@ void setup()
 
     fsInit();
 
+    router = new DSRRouter();
+
 #ifdef I2C_SDA
     Wire.begin(I2C_SDA, I2C_SCL);
 #elif !defined(NO_WIRE)
@@ -657,6 +662,7 @@ void setup()
     if (!rIf)
         RECORD_CRITICALERROR(CriticalErrorCode_NoRadio);
     else{
+        router->addInterface(rIf);
 
         // Calculate and save the bit rate to myNodeInfo
         // TODO: This needs to be added what ever method changes the channel from the phone.
