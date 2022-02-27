@@ -1,5 +1,5 @@
 #include "configuration.h"
-#include "SerialPlugin.h"
+#include "SerialModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
@@ -27,7 +27,7 @@
                 TXD 15
         3) Set serialmodule_timeout to the amount of time to wait before we consider
            your packet as "done".
-        4) (Optional) In SerialPlugin.h set the port to PortNum_TEXT_MESSAGE_APP if you want to
+        4) (Optional) In SerialModule.h set the port to PortNum_TEXT_MESSAGE_APP if you want to
            send messages to/from the general text message channel.
         5) Connect to your device over the serial interface at 38400 8N1.
         6) Send a packet up to 240 bytes in length. This will get relayed over the mesh network.
