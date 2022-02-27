@@ -6,7 +6,6 @@
 #include <pb.h>
 #include "channel.pb.h"
 #include "mesh.pb.h"
-#include "radioconfig.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
@@ -27,8 +26,6 @@ typedef struct _DeviceState {
     NodeInfo node_db[32];
     pb_size_t receive_queue_count;
     MeshPacket receive_queue[1];
-    bool has_group_info;
-    GroupInfo group_info;
     bool has_rx_text_message;
     MeshPacket rx_text_message;
     uint32_t version;
@@ -42,9 +39,9 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define DeviceState_init_default                 {false, MyNodeInfo_init_default, false, User_init_default, 0, {NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default}, 0, {MeshPacket_init_default}, false, GroupInfo_init_default, false, MeshPacket_init_default, 0, 0, 0}
+#define DeviceState_init_default                 {false, MyNodeInfo_init_default, false, User_init_default, 0, {NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default}, 0, {MeshPacket_init_default}, false, MeshPacket_init_default, 0, 0, 0}
 #define ChannelFile_init_default                 {0, {Channel_init_default, Channel_init_default, Channel_init_default, Channel_init_default, Channel_init_default, Channel_init_default, Channel_init_default, Channel_init_default}}
-#define DeviceState_init_zero                    {false, MyNodeInfo_init_zero, false, User_init_zero, 0, {NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero}, 0, {MeshPacket_init_zero}, false, GroupInfo_init_zero, false, MeshPacket_init_zero, 0, 0, 0}
+#define DeviceState_init_zero                    {false, MyNodeInfo_init_zero, false, User_init_zero, 0, {NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero}, 0, {MeshPacket_init_zero}, false, MeshPacket_init_zero, 0, 0, 0}
 #define ChannelFile_init_zero                    {0, {Channel_init_zero, Channel_init_zero, Channel_init_zero, Channel_init_zero, Channel_init_zero, Channel_init_zero, Channel_init_zero, Channel_init_zero}}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -53,7 +50,6 @@ extern "C" {
 #define DeviceState_owner_tag                    3
 #define DeviceState_node_db_tag                  4
 #define DeviceState_receive_queue_tag            5
-#define DeviceState_group_info_tag               6
 #define DeviceState_rx_text_message_tag          7
 #define DeviceState_version_tag                  8
 #define DeviceState_no_save_tag                  9
@@ -65,7 +61,6 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  my_node,           2) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  owner,             3) \
 X(a, STATIC,   REPEATED, MESSAGE,  node_db,           4) \
 X(a, STATIC,   REPEATED, MESSAGE,  receive_queue,     5) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  group_info,        6) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  rx_text_message,   7) \
 X(a, STATIC,   SINGULAR, UINT32,   version,           8) \
 X(a, STATIC,   SINGULAR, BOOL,     no_save,           9) \
@@ -76,7 +71,6 @@ X(a, STATIC,   SINGULAR, BOOL,     did_gps_reset,    11)
 #define DeviceState_owner_MSGTYPE User
 #define DeviceState_node_db_MSGTYPE NodeInfo
 #define DeviceState_receive_queue_MSGTYPE MeshPacket
-#define DeviceState_group_info_MSGTYPE GroupInfo
 #define DeviceState_rx_text_message_MSGTYPE MeshPacket
 
 #define ChannelFile_FIELDLIST(X, a) \
@@ -93,7 +87,7 @@ extern const pb_msgdesc_t ChannelFile_msg;
 #define ChannelFile_fields &ChannelFile_msg
 
 /* Maximum encoded size of messages (where known) */
-#define DeviceState_size                         10162
+#define DeviceState_size                         9973
 #define ChannelFile_size                         832
 
 #ifdef __cplusplus
