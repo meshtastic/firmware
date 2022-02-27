@@ -10,7 +10,7 @@
 #include "unistd.h"
 #endif
 
-AdminPlugin *adminPlugin;
+AdminModule *adminModule;
 
 /// A special reserved string to indicate strings we can not share with external nodes.  We will use this 'reserved' word instead.
 /// Also, to make setting work correctly, if someone tries to set a string to this reserved value we assume they don't really want a change.
@@ -30,7 +30,7 @@ static void writeSecret(char *buf, const char *currentVal) {
     }
 }
 
-void AdminPlugin::handleGetChannel(const MeshPacket &req, uint32_t channelIndex)
+void AdminModule::handleGetChannel(const MeshPacket &req, uint32_t channelIndex)
 {
     if (req.decoded.want_response) {
         // We create the reply here
@@ -41,7 +41,7 @@ void AdminPlugin::handleGetChannel(const MeshPacket &req, uint32_t channelIndex)
     }
 }
 
-void AdminPlugin::handleGetRadio(const MeshPacket &req)
+void AdminModule::handleGetRadio(const MeshPacket &req)
 {
     if (req.decoded.want_response) {
         // We create the reply here
@@ -61,7 +61,7 @@ void AdminPlugin::handleGetRadio(const MeshPacket &req)
     }
 }
 
-bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
+bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
 {
     // if handled == false, then let others look at this message also if they want
     bool handled = false;
@@ -143,7 +143,7 @@ bool AdminPlugin::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
     return handled;
 }
 
-void AdminPlugin::handleSetOwner(const User &o)
+void AdminModule::handleSetOwner(const User &o)
 {
     int changed = 0;
 
@@ -173,7 +173,7 @@ void AdminPlugin::handleSetOwner(const User &o)
         service.reloadOwner();
 }
 
-void AdminPlugin::handleSetChannel(const Channel &cc)
+void AdminModule::handleSetChannel(const Channel &cc)
 {
     channels.setChannel(cc);
 
@@ -187,7 +187,7 @@ void AdminPlugin::handleSetChannel(const Channel &cc)
     }
 }
 
-void AdminPlugin::handleSetRadio(RadioConfig &r)
+void AdminModule::handleSetRadio(RadioConfig &r)
 {
     writeSecret(r.preferences.wifi_password, radioConfig.preferences.wifi_password);
     radioConfig = r;
@@ -195,7 +195,7 @@ void AdminPlugin::handleSetRadio(RadioConfig &r)
     service.reloadConfig();
 }
 
-AdminPlugin::AdminPlugin() : ProtobufPlugin("Admin", PortNum_ADMIN_APP, AdminMessage_fields)
+AdminModule::AdminModule() : ProtobufPlugin("Admin", PortNum_ADMIN_APP, AdminMessage_fields)
 {
     // restrict to the admin channel for rx
     boundChannel = Channels::adminChannel;

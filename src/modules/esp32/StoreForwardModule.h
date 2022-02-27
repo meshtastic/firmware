@@ -18,7 +18,7 @@ struct PacketHistoryStruct {
     pb_size_t payload_size;
 };
 
-class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThread
+class StoreForwardModule : public SinglePortPlugin, private concurrency::OSThread
 {
     // bool firstTime = 1;
     bool busy = 0;
@@ -37,7 +37,7 @@ class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThrea
     uint32_t packetTimeMax = 2000;
 
   public:
-    StoreForwardPlugin();
+    StoreForwardModule();
 
     /**
      Update our local reference of when we last saw that node.
@@ -82,4 +82,4 @@ class StoreForwardPlugin : public SinglePortPlugin, private concurrency::OSThrea
 
 };
 
-extern StoreForwardPlugin *storeForwardPlugin;
+extern StoreForwardModule *storeForwardModule;

@@ -6,7 +6,7 @@
 /**
  * A module that provides easy low-level remote access to device hardware.
  */
-class RemoteHardwarePlugin : public ProtobufPlugin<HardwareMessage>, private concurrency::OSThread
+class RemoteHardwareModule : public ProtobufPlugin<HardwareMessage>, private concurrency::OSThread
 {
     /// The current set of GPIOs we've been asked to watch for changes
     uint64_t watchGpios = 0; 
@@ -20,7 +20,7 @@ class RemoteHardwarePlugin : public ProtobufPlugin<HardwareMessage>, private con
     /** Constructor
      * name is for debugging output
      */
-    RemoteHardwarePlugin();
+    RemoteHardwareModule();
 
   protected:
     /** Called to handle a particular incoming message
@@ -40,4 +40,4 @@ class RemoteHardwarePlugin : public ProtobufPlugin<HardwareMessage>, private con
     virtual int32_t runOnce() override;
 };
 
-extern RemoteHardwarePlugin remoteHardwarePlugin;
+extern RemoteHardwareModule remoteHardwareModule;

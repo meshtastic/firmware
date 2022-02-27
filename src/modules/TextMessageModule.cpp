@@ -3,9 +3,9 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 
-TextMessagePlugin *textMessagePlugin;
+TextMessageModule *textMessageModule;
 
-ProcessMessage TextMessagePlugin::handleReceived(const MeshPacket &mp)
+ProcessMessage TextMessageModule::handleReceived(const MeshPacket &mp)
 {
     auto &p = mp.decoded;
     DEBUG_MSG("Received text msg from=0x%0x, id=0x%x, msg=%.*s\n", mp.from, mp.id, p.payload.size, p.payload.bytes);

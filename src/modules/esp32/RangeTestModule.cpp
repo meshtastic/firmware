@@ -64,7 +64,7 @@ int32_t RangeTestModule::runOnce()
 
             if (radioConfig.preferences.range_test_module_sender) {
                 // If sender
-                DEBUG_MSG("Range Test Plugin - Sending heartbeat every %d ms\n", (senderHeartbeat));
+                DEBUG_MSG("Range Test Module - Sending heartbeat every %d ms\n", (senderHeartbeat));
 
                 DEBUG_MSG("gpsStatus->getLatitude()     %d\n", gpsStatus->getLatitude());
                 DEBUG_MSG("gpsStatus->getLongitude()    %d\n", gpsStatus->getLongitude());
@@ -90,7 +90,7 @@ int32_t RangeTestModule::runOnce()
         }
 
     } else {
-        DEBUG_MSG("Range Test Plugin - Disabled\n");
+        DEBUG_MSG("Range Test Module - Disabled\n");
     }
 
 #endif
@@ -175,7 +175,7 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const MeshPacket &mp)
         }
 
     } else {
-        DEBUG_MSG("Range Test Plugin Disabled\n");
+        DEBUG_MSG("Range Test Module Disabled\n");
     }
 
 #endif

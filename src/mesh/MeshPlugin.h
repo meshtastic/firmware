@@ -160,7 +160,7 @@ class MeshPlugin
    *   HANDLED if message was handled
    *   HANDLED_WITH_RESPONSE if a response is also prepared and to be sent.
    */
-    virtual AdminMessageHandleResult handleAdminMessageForPlugin(
+    virtual AdminMessageHandleResult handleAdminMessageForModule(
         const MeshPacket &mp, AdminMessage *request, AdminMessage *response) { return AdminMessageHandleResult::NOT_HANDLED; };
 
   private:

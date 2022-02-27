@@ -4,7 +4,7 @@
 /**
  * NodeInfo module for sending/receiving NodeInfos into the mesh
  */
-class NodeInfoPlugin : public ProtobufPlugin<User>, private concurrency::OSThread
+class NodeInfoModule : public ProtobufPlugin<User>, private concurrency::OSThread
 {
     /// The id of the last packet we sent, to allow us to cancel it if we make something fresher
     PacketId prevPacketId = 0;
@@ -14,7 +14,7 @@ class NodeInfoPlugin : public ProtobufPlugin<User>, private concurrency::OSThrea
     /** Constructor
      * name is for debugging output
      */
-    NodeInfoPlugin();
+    NodeInfoModule();
     
     /**
      * Send our NodeInfo into the mesh
@@ -36,4 +36,4 @@ class NodeInfoPlugin : public ProtobufPlugin<User>, private concurrency::OSThrea
     virtual int32_t runOnce() override;
 };
 
-extern NodeInfoPlugin *nodeInfoPlugin;
+extern NodeInfoModule *nodeInfoModule;

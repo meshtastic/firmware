@@ -6,24 +6,24 @@
 #include <Arduino.h>
 #include <functional>
 
-class SerialPlugin : private concurrency::OSThread
+class SerialModule : private concurrency::OSThread
 {
     bool firstTime = 1;
 
   public:
-    SerialPlugin();
+    SerialModule();
 
   protected:
     virtual int32_t runOnce() override;
 };
 
-extern SerialPlugin *serialPlugin;
+extern SerialModule *serialModule;
 
 /*
- * Radio interface for SerialPlugin
+ * Radio interface for SerialModule
  *
  */
-class SerialPluginRadio : public SinglePortPlugin
+class SerialModuleRadio : public SinglePortPlugin
 {
     uint32_t lastRxID = 0;
 
@@ -33,7 +33,7 @@ class SerialPluginRadio : public SinglePortPlugin
               from the main code.
     */
 
-    SerialPluginRadio();
+    SerialModuleRadio();
 
     /**
      * Send our payload into the mesh
@@ -50,4 +50,4 @@ class SerialPluginRadio : public SinglePortPlugin
     virtual ProcessMessage handleReceived(const MeshPacket &mp) override;
 };
 
-extern SerialPluginRadio *serialPluginRadio;
+extern SerialModuleRadio *serialModuleRadio;
