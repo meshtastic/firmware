@@ -16,10 +16,10 @@
     As a receiver, I can receive packets from multiple senders. These packets can be saved to the Filesystem.
 */
 
-RangeTestPlugin *rangeTestPlugin;
-RangeTestPluginRadio *rangeTestPluginRadio;
+RangeTestModule *rangeTestModule;
+RangeTestModuleRadio *rangeTestModuleRadio;
 
-RangeTestPlugin::RangeTestPlugin() : concurrency::OSThread("RangeTestPlugin") {}
+RangeTestModule::RangeTestModule() : concurrency::OSThread("RangeTestModule") {}
 
 uint32_t packetSequence = 0;
 
@@ -27,7 +27,7 @@ uint32_t packetSequence = 0;
 #define SEC_PER_HOUR 3600
 #define SEC_PER_MIN 60
 
-int32_t RangeTestPlugin::runOnce()
+int32_t RangeTestModule::runOnce()
 {
 #ifndef NO_ESP32
 
@@ -48,7 +48,7 @@ int32_t RangeTestPlugin::runOnce()
     if (radioConfig.preferences.range_test_module_enabled) {
 
         if (firstTime) {
-            rangeTestPluginRadio = new RangeTestPluginRadio();
+            rangeTestModuleRadio = new RangeTestModuleRadio();
 
             firstTime = 0;
 
@@ -75,7 +75,7 @@ int32_t RangeTestPlugin::runOnce()
 
                 // Only send packets if the channel is less than 25% utilized.
                 if (airTime->channelUtilizationPercent() < 25) {
-                    rangeTestPluginRadio->sendPayload();
+                    rangeTestModuleRadio->sendPayload();
                 } else {
                     DEBUG_MSG("rangeTest - Channel utilization is >25 percent. Skipping this opportunity to send.\n");
                 }
@@ -97,7 +97,7 @@ int32_t RangeTestPlugin::runOnce()
     return (INT32_MAX);
 }
 
-MeshPacket *RangeTestPluginRadio::allocReply()
+MeshPacket *RangeTestModuleRadio::allocReply()
 {
 
     auto reply = allocDataPacket(); // Allocate a packet for sending
@@ -105,7 +105,7 @@ MeshPacket *RangeTestPluginRadio::allocReply()
     return reply;
 }
 
-void RangeTestPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
+void RangeTestModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 {
     MeshPacket *p = allocReply();
     p->to = dest;
@@ -127,7 +127,7 @@ void RangeTestPluginRadio::sendPayload(NodeNum dest, bool wantReplies)
     powerFSM.trigger(EVENT_CONTACT_FROM_PHONE);
 }
 
-ProcessMessage RangeTestPluginRadio::handleReceived(const MeshPacket &mp)
+ProcessMessage RangeTestModuleRadio::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
 
@@ -183,7 +183,7 @@ ProcessMessage RangeTestPluginRadio::handleReceived(const MeshPacket &mp)
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }
 
-bool RangeTestPluginRadio::appendFile(const MeshPacket &mp)
+bool RangeTestModuleRadio::appendFile(const MeshPacket &mp)
 {
     auto &p = mp.decoded;
 
