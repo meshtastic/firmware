@@ -1,22 +1,22 @@
 #include "configuration.h"
 #include "input/InputBroker.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
-#include "plugins/AdminPlugin.h"
-#include "plugins/CannedMessagePlugin.h"
-#include "plugins/ExternalNotificationPlugin.h"
-#include "plugins/NodeInfoPlugin.h"
-#include "plugins/PositionPlugin.h"
-#include "plugins/RemoteHardwarePlugin.h"
-#include "plugins/ReplyPlugin.h"
-#include "plugins/RoutingPlugin.h"
-#include "plugins/TextMessagePlugin.h"
+#include "modules/AdminModule.h"
+#include "modules/CannedMessageModule.h"
+#include "modules/ExternalNotificationModule.h"
+#include "modules/NodeInfoModule.h"
+#include "modules/PositionModule.h"
+#include "modules/RemoteHardwareModule.h"
+#include "modules/ReplyModule.h"
+#include "modules/RoutingModule.h"
+#include "modules/TextMessageModule.h"
 #ifndef PORTDUINO
-#include "plugins/Telemetry/Telemetry.h"
+#include "modules/Telemetry/Telemetry.h"
 #endif
 #ifndef NO_ESP32
-#include "plugins/esp32/RangeTestPlugin.h"
-#include "plugins/esp32/SerialPlugin.h"
-#include "plugins/esp32/StoreForwardPlugin.h"
+#include "modules/esp32/RangeTestPlugin.h"
+#include "modules/esp32/SerialPlugin.h"
+#include "modules/esp32/StoreForwardPlugin.h"
 #endif
 
 /**
