@@ -19,7 +19,7 @@ int32_t StoreForwardPlugin::runOnce()
 
 #ifndef NO_ESP32
 
-    if (radioConfig.preferences.store_forward_plugin_enabled) {
+    if (radioConfig.preferences.store_forward_module_enabled) {
 
         if (radioConfig.preferences.is_router) {
 
@@ -243,7 +243,7 @@ void StoreForwardPlugin::sendMessage(NodeNum dest, char *str)
 ProcessMessage StoreForwardPlugin::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
-    if (radioConfig.preferences.store_forward_plugin_enabled) {
+    if (radioConfig.preferences.store_forward_module_enabled) {
 
         DEBUG_MSG("--- S&F Received something\n");
 
@@ -295,7 +295,7 @@ ProcessMessage StoreForwardPlugin::handleReceived(const MeshPacket &mp)
 
 ProcessMessage StoreForwardPlugin::handleReceivedProtobuf(const MeshPacket &mp, StoreAndForward *p)
 {
-    if (!radioConfig.preferences.store_forward_plugin_enabled) {
+    if (!radioConfig.preferences.store_forward_module_enabled) {
         // If this module is not enabled in any capacity, don't handle the packet, and allow other modules to consume
         return ProcessMessage::CONTINUE;
     }
@@ -391,12 +391,12 @@ StoreForwardPlugin::StoreForwardPlugin()
             without having to configure it from the PythonAPI or WebUI.
         */
 
-        radioConfig.preferences.store_forward_plugin_enabled = 1;
+        radioConfig.preferences.store_forward_module_enabled = 1;
         radioConfig.preferences.is_router = 1;
         radioConfig.preferences.is_always_powered = 1;
     }
 
-    if (radioConfig.preferences.store_forward_plugin_enabled) {
+    if (radioConfig.preferences.store_forward_module_enabled) {
 
         // Router
         if (radioConfig.preferences.is_router) {
@@ -407,20 +407,20 @@ StoreForwardPlugin::StoreForwardPlugin()
                     // Do the startup here
 
                     // Maximum number of records to return.
-                    if (radioConfig.preferences.store_forward_plugin_history_return_max)
-                        this->historyReturnMax = radioConfig.preferences.store_forward_plugin_history_return_max;
+                    if (radioConfig.preferences.store_forward_module_history_return_max)
+                        this->historyReturnMax = radioConfig.preferences.store_forward_module_history_return_max;
 
                     // Maximum time window for records to return (in minutes)
-                    if (radioConfig.preferences.store_forward_plugin_history_return_window)
-                        this->historyReturnWindow = radioConfig.preferences.store_forward_plugin_history_return_window;
+                    if (radioConfig.preferences.store_forward_module_history_return_window)
+                        this->historyReturnWindow = radioConfig.preferences.store_forward_module_history_return_window;
 
                     // Maximum number of records to store in memory
-                    if (radioConfig.preferences.store_forward_plugin_records)
-                        this->records = radioConfig.preferences.store_forward_plugin_records;
+                    if (radioConfig.preferences.store_forward_module_records)
+                        this->records = radioConfig.preferences.store_forward_module_records;
 
                     // Maximum number of records to store in memory
-                    if (radioConfig.preferences.store_forward_plugin_heartbeat)
-                        this->heartbeat = radioConfig.preferences.store_forward_plugin_heartbeat;
+                    if (radioConfig.preferences.store_forward_module_heartbeat)
+                        this->heartbeat = radioConfig.preferences.store_forward_module_heartbeat;
 
                     // Popupate PSRAM with our data structures.
                     this->populatePSRAM();

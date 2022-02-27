@@ -36,33 +36,33 @@ int32_t RangeTestPlugin::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    // radioConfig.preferences.range_test_plugin_enabled = 1;
-    // radioConfig.preferences.range_test_plugin_sender = 45;
-    // radioConfig.preferences.range_test_plugin_save = 1;
+    // radioConfig.preferences.range_test_module_enabled = 1;
+    // radioConfig.preferences.range_test_module_sender = 45;
+    // radioConfig.preferences.range_test_module_save = 1;
 
     // Fixed position is useful when testing indoors.
     // radioConfig.preferences.fixed_position = 1;
 
-    uint32_t senderHeartbeat = radioConfig.preferences.range_test_plugin_sender * 1000;
+    uint32_t senderHeartbeat = radioConfig.preferences.range_test_module_sender * 1000;
 
-    if (radioConfig.preferences.range_test_plugin_enabled) {
+    if (radioConfig.preferences.range_test_module_enabled) {
 
         if (firstTime) {
             rangeTestPluginRadio = new RangeTestPluginRadio();
 
             firstTime = 0;
 
-            if (radioConfig.preferences.range_test_plugin_sender) {
-                DEBUG_MSG("Initializing Range Test Plugin -- Sender\n");
+            if (radioConfig.preferences.range_test_module_sender) {
+                DEBUG_MSG("Initializing Range Test Module -- Sender\n");
                 return (5000); // Sending first message 5 seconds after initilization.
             } else {
-                DEBUG_MSG("Initializing Range Test Plugin -- Receiver\n");
+                DEBUG_MSG("Initializing Range Test Module -- Receiver\n");
                 return (500);
             }
 
         } else {
 
-            if (radioConfig.preferences.range_test_plugin_sender) {
+            if (radioConfig.preferences.range_test_module_sender) {
                 // If sender
                 DEBUG_MSG("Range Test Plugin - Sending heartbeat every %d ms\n", (senderHeartbeat));
 
@@ -131,7 +131,7 @@ ProcessMessage RangeTestPluginRadio::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
 
-    if (radioConfig.preferences.range_test_plugin_enabled) {
+    if (radioConfig.preferences.range_test_module_enabled) {
 
         /*
             auto &p = mp.decoded;
@@ -141,7 +141,7 @@ ProcessMessage RangeTestPluginRadio::handleReceived(const MeshPacket &mp)
 
         if (getFrom(&mp) != nodeDB.getNodeNum()) {
 
-            if (radioConfig.preferences.range_test_plugin_save) {
+            if (radioConfig.preferences.range_test_module_save) {
                 appendFile(mp);
             }
 
