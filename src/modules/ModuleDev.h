@@ -6,5 +6,5 @@
  *
  */
 
-// Enable development more for StoreForwardPlugin
+// Enable development more for StoreForwardModule
 bool StoreForward_Dev = false;

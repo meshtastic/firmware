@@ -132,7 +132,7 @@ MeshPacket *Router::allocForSending()
  */
 void Router::sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex)
 {
-    routingPlugin->sendAckNak(err, to, idFrom, chIndex);
+    routingModule->sendAckNak(err, to, idFrom, chIndex);
 }
 
 void Router::abortSendAndNak(Routing_Error err, MeshPacket *p)

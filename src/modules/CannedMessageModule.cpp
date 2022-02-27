@@ -28,10 +28,10 @@ CannedMessageModule::CannedMessageModule()
 {
     if (radioConfig.preferences.canned_message_module_enabled)
     {
-        this->loadProtoForPlugin();
+        this->loadProtoForModule();
         if(this->splitConfiguredMessages() <= 0)
         {
-            DEBUG_MSG("CannedMessageModule: No messages are configured. Plugin is disabled\n");
+            DEBUG_MSG("CannedMessageModule: No messages are configured. Module is disabled\n");
             this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
         }
         else
@@ -313,7 +313,7 @@ void CannedMessageModule::drawFrame(
     }
 }
 
-void CannedMessageModule::loadProtoForPlugin()
+void CannedMessageModule::loadProtoForModule()
 {
     if (!loadProto(cannedMessagesConfigFile, CannedMessageModuleConfig_size, sizeof(cannedMessagesConfigFile), CannedMessageModuleConfig_fields, &cannedMessageModuleConfig)) {
         installDefaultCannedMessageModuleConfig();
@@ -326,7 +326,7 @@ void CannedMessageModule::loadProtoForPlugin()
  * @return true On success.
  * @return false On error.
  */
-bool CannedMessageModule::saveProtoForPlugin()
+bool CannedMessageModule::saveProtoForModule()
 {
     bool okay = true;
 
@@ -351,7 +351,7 @@ void CannedMessageModule::installDefaultCannedMessageModuleConfig()
 }
 
 /**
- * @brief An admin message arrived to AdminPlugin. We are asked whether we want to handle that.
+ * @brief An admin message arrived to AdminModule. We are asked whether we want to handle that.
  *
  * @param mp The mesh packet arrived.
  * @param request The AdminMessage request extracted from the packet.
@@ -359,7 +359,7 @@ void CannedMessageModule::installDefaultCannedMessageModuleConfig()
  * @return AdminMessageHandleResult HANDLED if message was handled
  *   HANDLED_WITH_RESULT if a result is also prepared.
  */
-AdminMessageHandleResult CannedMessageModule::handleAdminMessageForPlugin(
+AdminMessageHandleResult CannedMessageModule::handleAdminMessageForModule(
         const MeshPacket &mp, AdminMessage *request, AdminMessage *response)
 {
     AdminMessageHandleResult result;
@@ -485,7 +485,7 @@ void CannedMessageModule::handleSetCannedMessageModulePart1(const char *from_msg
 
     if (changed)
     {
-        this->saveProtoForPlugin();
+        this->saveProtoForModule();
     }
 }
 
@@ -501,7 +501,7 @@ void CannedMessageModule::handleSetCannedMessageModulePart2(const char *from_msg
 
     if (changed)
     {
-        this->saveProtoForPlugin();
+        this->saveProtoForModule();
     }
 }
 
@@ -517,7 +517,7 @@ void CannedMessageModule::handleSetCannedMessageModulePart3(const char *from_msg
 
     if (changed)
     {
-        this->saveProtoForPlugin();
+        this->saveProtoForModule();
     }
 }
 
@@ -533,6 +533,6 @@ void CannedMessageModule::handleSetCannedMessageModulePart4(const char *from_msg
 
     if (changed)
     {
-        this->saveProtoForPlugin();
+        this->saveProtoForModule();
     }
 }

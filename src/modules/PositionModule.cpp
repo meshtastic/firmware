@@ -7,16 +7,16 @@
 #include "configuration.h"
 #include "gps/GeoCoord.h"
 
-PositionPlugin *positionPlugin;
+PositionModule *positionModule;
 
-PositionPlugin::PositionPlugin()
-    : ProtobufPlugin("position", PortNum_POSITION_APP, Position_fields), concurrency::OSThread("PositionPlugin")
+PositionModule::PositionModule()
+    : ProtobufPlugin("position", PortNum_POSITION_APP, Position_fields), concurrency::OSThread("PositionModule")
 {
     isPromiscuous = true;          // We always want to update our nodedb, even if we are sniffing on others
     setIntervalFromNow(60 * 1000); // Send our initial position 60 seconds after we start (to give GPS time to setup)
 }
 
-bool PositionPlugin::handleReceivedProtobuf(const MeshPacket &mp, Position *pptr)
+bool PositionModule::handleReceivedProtobuf(const MeshPacket &mp, Position *pptr)
 {
     auto p = *pptr;
 
@@ -53,7 +53,7 @@ bool PositionPlugin::handleReceivedProtobuf(const MeshPacket &mp, Position *pptr
     return false; // Let others look at this message also if they want
 }
 
-MeshPacket *PositionPlugin::allocReply()
+MeshPacket *PositionModule::allocReply()
 {
     NodeInfo *node = service.refreshMyNodeInfo(); // should guarantee there is now a position
     assert(node->has_position);
@@ -109,7 +109,7 @@ MeshPacket *PositionPlugin::allocReply()
     return allocDataProtobuf(p);
 }
 
-void PositionPlugin::sendOurPosition(NodeNum dest, bool wantReplies)
+void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies)
 {
     // cancel any not yet sent (now stale) position packets
     if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
@@ -124,7 +124,7 @@ void PositionPlugin::sendOurPosition(NodeNum dest, bool wantReplies)
     service.sendToMesh(p);
 }
 
-int32_t PositionPlugin::runOnce()
+int32_t PositionModule::runOnce()
 {
     NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
 
