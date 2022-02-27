@@ -14,9 +14,9 @@
 #include "modules/Telemetry/Telemetry.h"
 #endif
 #ifndef NO_ESP32
-#include "modules/esp32/RangeTestPlugin.h"
-#include "modules/esp32/SerialPlugin.h"
-#include "modules/esp32/StoreForwardPlugin.h"
+#include "modules/esp32/RangeTestModule.h"
+#include "modules/esp32/SerialModule.h"
+#include "modules/esp32/StoreForwardModule.h"
 #endif
 
 /**
