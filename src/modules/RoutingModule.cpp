@@ -1,5 +1,5 @@
 #include "configuration.h"
-#include "RoutingPlugin.h"
+#include "RoutingModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Router.h"

@@ -1,5 +1,5 @@
 #include "configuration.h"
-#include "NodeInfoPlugin.h"
+#include "NodeInfoModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
