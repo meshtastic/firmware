@@ -26,6 +26,12 @@ typedef enum _RegionCode {
     RegionCode_TH = 12
 } RegionCode;
 
+typedef enum _Role {
+    Role_Default = 0,
+    Role_Router = 1,
+    Role_Repeater = 2
+} Role;
+
 typedef enum _ChargeCurrent {
     ChargeCurrent_MAUnset = 0,
     ChargeCurrent_MA100 = 1,
@@ -123,6 +129,7 @@ typedef struct _RadioConfig_UserPreferences {
     RegionCode region;
     ChargeCurrent charge_current;
     bool position_broadcast_smart;
+    Role role;
     LocationSharing location_share;
     GpsOperation gps_operation;
     uint32_t gps_update_interval;
@@ -204,6 +211,10 @@ typedef struct _RadioConfig {
 #define _RegionCode_MAX RegionCode_TH
 #define _RegionCode_ARRAYSIZE ((RegionCode)(RegionCode_TH+1))
 
+#define _Role_MIN Role_Default
+#define _Role_MAX Role_Repeater
+#define _Role_ARRAYSIZE ((Role)(Role_Repeater+1))
+
 #define _ChargeCurrent_MIN ChargeCurrent_MAUnset
 #define _ChargeCurrent_MAX ChargeCurrent_MA1320
 #define _ChargeCurrent_ARRAYSIZE ((ChargeCurrent)(ChargeCurrent_MA1320+1))
@@ -239,9 +250,9 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default}
-#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_TelemetrySensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, "", 0, 0, 0, 0}
+#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _Role_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_TelemetrySensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, "", 0, 0, 0, 0}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero}
-#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_TelemetrySensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, "", 0, 0, 0, 0}
+#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _Role_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_TelemetrySensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, "", 0, 0, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define RadioConfig_UserPreferences_position_broadcast_secs_tag 1
@@ -260,6 +271,7 @@ extern "C" {
 #define RadioConfig_UserPreferences_region_tag   15
 #define RadioConfig_UserPreferences_charge_current_tag 16
 #define RadioConfig_UserPreferences_position_broadcast_smart_tag 17
+#define RadioConfig_UserPreferences_role_tag     18
 #define RadioConfig_UserPreferences_location_share_tag 32
 #define RadioConfig_UserPreferences_gps_operation_tag 33
 #define RadioConfig_UserPreferences_gps_update_interval_tag 34
@@ -353,6 +365,7 @@ X(a, STATIC,   SINGULAR, BOOL,     wifi_ap_mode,     14) \
 X(a, STATIC,   SINGULAR, UENUM,    region,           15) \
 X(a, STATIC,   SINGULAR, UENUM,    charge_current,   16) \
 X(a, STATIC,   SINGULAR, BOOL,     position_broadcast_smart,  17) \
+X(a, STATIC,   SINGULAR, UENUM,    role,             18) \
 X(a, STATIC,   SINGULAR, UENUM,    location_share,   32) \
 X(a, STATIC,   SINGULAR, UENUM,    gps_operation,    33) \
 X(a, STATIC,   SINGULAR, UINT32,   gps_update_interval,  34) \
@@ -431,8 +444,8 @@ extern const pb_msgdesc_t RadioConfig_UserPreferences_msg;
 #define RadioConfig_UserPreferences_fields &RadioConfig_UserPreferences_msg
 
 /* Maximum encoded size of messages (where known) */
-#define RadioConfig_size                         605
-#define RadioConfig_UserPreferences_size         602
+#define RadioConfig_size                         608
+#define RadioConfig_UserPreferences_size         605
 
 #ifdef __cplusplus
 } /* extern "C" */
