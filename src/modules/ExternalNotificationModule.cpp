@@ -1,5 +1,5 @@
 #include "configuration.h"
-#include "ExternalNotificationPlugin.h"
+#include "ExternalNotificationModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
@@ -11,7 +11,7 @@
 /*
 
     Documentation:
-        https://github.com/meshtastic/Meshtastic-device/blob/master/docs/software/modules/ExternalNotificationPlugin.md
+        https://github.com/meshtastic/Meshtastic-device/blob/master/docs/software/modules/ExternalNotificationModule.md
 
     This plugin supports:
         https://github.com/meshtastic/Meshtastic-device/issues/654
