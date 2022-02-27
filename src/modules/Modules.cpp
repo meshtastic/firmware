@@ -22,7 +22,7 @@
 /**
  * Create module instances here.  If you are adding a new module, you must 'new' it here (or somewhere else)
  */
-void setupPlugins()
+void setupModules()
 {
     inputBroker = new InputBroker();
     adminPlugin = new AdminPlugin();
@@ -48,12 +48,11 @@ void setupPlugins()
         Maintained by MC Hamster (Jm Casler) jm@casler.org
     */
     new SerialPlugin();
-    new ExternalNotificationPlugin();
+    new ExternalNotificationModule();
 
-    // rangeTestPlugin = new RangeTestPlugin();
     storeForwardPlugin = new StoreForwardPlugin();
 
-    new RangeTestPlugin();
+    new RangeTestModule();
     // new StoreForwardPlugin();
 #endif
 

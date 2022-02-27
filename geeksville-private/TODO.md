@@ -71,7 +71,7 @@ You probably don't care about this section - skip to the next one.
 * nrf52 should preserve local time across reset
 * cdcacm bug on nrf52: emittx thinks it emitted but client sees nothing.  works again later
 * nrf52: segger logs have errors in formatting that should be impossible (because not going through serial, try stalling on segger)
-* DONE call RouterPlugin for *all* packets - not just Router packets
+* DONE call RouterModule for *all* packets - not just Router packets
 * DONE generate channel hash from the name of the channel+the psk (not just one or the other)
 * DONE send a hint that can be used to select which channel to try and hash against with each message
 * DONE remove deprecated
@@ -188,7 +188,7 @@ For app cleanup:
 * DONE test python side handle new position/user messages
 * DONE make a gpio example. --gpiowrb 4 1, --gpiord 0x444, --gpiowatch 0x3ff
 * DONE fix position sending to use new module
-* DONE Add SinglePortNumPlugin - as the new most useful baseclass
+* DONE Add SinglePortNumModule - as the new most useful baseclass
 * DONE move positions into regular data packets (use new app framework)
 * DONE move user info into regular data packets (use new app framework)
 * DONE test that positions, text messages and user info still work

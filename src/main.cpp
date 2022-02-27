@@ -538,7 +538,7 @@ void setup()
     service.init();
 
     // Now that the mesh service is created, create any modules
-    setupPlugins();
+    setupModules();
 
     // Do this after service.init (because that clears error_code)
 #ifdef AXP192_SLAVE_ADDRESS

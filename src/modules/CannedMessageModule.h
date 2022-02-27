@@ -14,11 +14,11 @@ enum cannedMessageModuleRunState
 };
 
 
-#define CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_COUNT 50
+#define CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT 50
 /**
  * Sum of CannedMessageModuleConfig part sizes.
  */
-#define CANNED_MESSAGE_PLUGIN_MESSAGES_SIZE 800
+#define CANNED_MESSAGE_MODULE_MESSAGES_SIZE 800
 
 class CannedMessageModule :
     public SinglePortPlugin,
@@ -77,8 +77,8 @@ class CannedMessageModule :
     int currentMessageIndex = -1;
     cannedMessageModuleRunState runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
 
-    char messageStore[CANNED_MESSAGE_PLUGIN_MESSAGES_SIZE+1];
-    char *messages[CANNED_MESSAGE_PLUGIN_MESSAGE_MAX_COUNT];
+    char messageStore[CANNED_MESSAGE_MODULE_MESSAGES_SIZE+1];
+    char *messages[CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT];
     int messagesCount = 0;
     unsigned long lastTouchMillis = 0;
 };
