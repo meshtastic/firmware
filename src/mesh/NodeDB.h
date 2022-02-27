@@ -11,7 +11,6 @@
 extern DeviceState devicestate;
 extern ChannelFile channelFile;
 extern MyNodeInfo &myNodeInfo;
-extern GroupInfo &ourGroupInfo;
 extern RadioConfig radioConfig;
 extern User &owner;
 
