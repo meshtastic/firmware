@@ -81,7 +81,6 @@ const RegionInfo regions[] = {
      */
     RDEF(NZ866, 864.0f, 868.0f, 100, 0, 0, true, false),
 
-    
      /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
      */
