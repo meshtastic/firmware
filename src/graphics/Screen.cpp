@@ -32,7 +32,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "mesh/Channels.h"
-#include "plugins/TextMessagePlugin.h"
+#include "modules/TextMessagePlugin.h"
 #include "sleep.h"
 #include "target_specific.h"
 #include "utils.h"

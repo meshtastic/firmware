@@ -19,7 +19,7 @@
 
 #ifndef NO_ESP32
 #include "mesh/http/WiFiAPClient.h"
-#include "plugins/esp32/StoreForwardPlugin.h"
+#include "modules/esp32/StoreForwardPlugin.h"
 #include <Preferences.h>
 #include <nvs_flash.h>
 #endif

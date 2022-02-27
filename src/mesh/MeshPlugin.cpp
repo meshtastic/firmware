@@ -3,7 +3,7 @@
 #include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "plugins/RoutingPlugin.h"
+#include "modules/RoutingPlugin.h"
 #include <assert.h>
 
 std::vector<MeshPlugin *> *MeshPlugin::plugins;

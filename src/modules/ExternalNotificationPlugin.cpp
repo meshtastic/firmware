@@ -11,7 +11,7 @@
 /*
 
     Documentation:
-        https://github.com/meshtastic/Meshtastic-device/blob/master/docs/software/plugins/ExternalNotificationPlugin.md
+        https://github.com/meshtastic/Meshtastic-device/blob/master/docs/software/modules/ExternalNotificationPlugin.md
 
     This plugin supports:
         https://github.com/meshtastic/Meshtastic-device/issues/654

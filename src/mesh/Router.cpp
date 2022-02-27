@@ -6,7 +6,7 @@
 #include "RTC.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
-#include "plugins/RoutingPlugin.h"
+#include "modules/RoutingPlugin.h"
 
 #if defined(HAS_WIFI) || defined(PORTDUINO)
 #include "mqtt/MQTT.h"
