@@ -5,13 +5,13 @@
 /**
  * Routing module for router control messages
  */
-class RoutingPlugin : public ProtobufPlugin<Routing>
+class RoutingModule : public ProtobufPlugin<Routing>
 {
   public:
     /** Constructor
      * name is for debugging output
      */
-    RoutingPlugin();
+    RoutingModule();
 
     void sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex);
 
@@ -32,4 +32,4 @@ class RoutingPlugin : public ProtobufPlugin<Routing>
     virtual bool wantPacket(const MeshPacket *p) override { return true; }
 };
 
-extern RoutingPlugin *routingPlugin;
+extern RoutingModule *routingModule;

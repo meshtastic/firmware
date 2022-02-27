@@ -42,7 +42,7 @@ MCP9808Sensor mcp9808Sensor;
 #define FONT_HEIGHT_MEDIUM fontHeight(FONT_MEDIUM)
 
 
-int32_t TelemetryPlugin::runOnce()
+int32_t TelemetryModule::runOnce()
 {
 #ifndef PORTDUINO
     /*
@@ -155,7 +155,7 @@ int32_t TelemetryPlugin::runOnce()
 #endif
 }
 
-bool TelemetryPlugin::wantUIFrame()
+bool TelemetryModule::wantUIFrame()
 {
     return radioConfig.preferences.telemetry_module_screen_enabled;
 }
@@ -185,12 +185,12 @@ uint32_t GetTimeSinceMeshPacket(const MeshPacket *mp)
     return delta;
 }
 
-float TelemetryPlugin::CelsiusToFarenheit(float c)
+float TelemetryModule::CelsiusToFarenheit(float c)
 {
     return (c * 9) / 5 + 32;
 }
 
-void TelemetryPlugin::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+void TelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_MEDIUM);
@@ -225,7 +225,7 @@ void TelemetryPlugin::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state,
         display->drawString(x, y += fontHeight(FONT_SMALL),"Press: " + String(lastMeasurement.barometric_pressure, 0) + "hPA");
 }
 
-bool TelemetryPlugin::handleReceivedProtobuf(const MeshPacket &mp, Telemetry *p)
+bool TelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Telemetry *p)
 {
     if (!(radioConfig.preferences.telemetry_module_measurement_enabled ||
           radioConfig.preferences.telemetry_module_screen_enabled)) {
@@ -246,7 +246,7 @@ bool TelemetryPlugin::handleReceivedProtobuf(const MeshPacket &mp, Telemetry *p)
     return false; // Let others look at this message also if they want
 }
 
-bool TelemetryPlugin::sendOurTelemetry(NodeNum dest, bool wantReplies)
+bool TelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies)
 {
     Telemetry m;
     m.barometric_pressure = 0;

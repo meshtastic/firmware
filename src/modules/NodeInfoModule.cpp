@@ -6,9 +6,9 @@
 #include "Router.h"
 #include "main.h"
 
-NodeInfoPlugin *nodeInfoPlugin;
+NodeInfoModule *nodeInfoModule;
 
-bool NodeInfoPlugin::handleReceivedProtobuf(const MeshPacket &mp, User *pptr)
+bool NodeInfoModule::handleReceivedProtobuf(const MeshPacket &mp, User *pptr)
 {
     auto p = *pptr;
 
@@ -27,7 +27,7 @@ bool NodeInfoPlugin::handleReceivedProtobuf(const MeshPacket &mp, User *pptr)
     return false; // Let others look at this message also if they want
 }
 
-void NodeInfoPlugin::sendOurNodeInfo(NodeNum dest, bool wantReplies)
+void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies)
 {
     // cancel any not yet sent (now stale) position packets
     if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
@@ -42,7 +42,7 @@ void NodeInfoPlugin::sendOurNodeInfo(NodeNum dest, bool wantReplies)
     service.sendToMesh(p);
 }
 
-MeshPacket *NodeInfoPlugin::allocReply()
+MeshPacket *NodeInfoModule::allocReply()
 {
     User &u = owner;
 
@@ -50,15 +50,15 @@ MeshPacket *NodeInfoPlugin::allocReply()
     return allocDataProtobuf(u);
 }
 
-NodeInfoPlugin::NodeInfoPlugin()
-    : ProtobufPlugin("nodeinfo", PortNum_NODEINFO_APP, User_fields), concurrency::OSThread("NodeInfoPlugin")
+NodeInfoModule::NodeInfoModule()
+    : ProtobufPlugin("nodeinfo", PortNum_NODEINFO_APP, User_fields), concurrency::OSThread("NodeInfoModule")
 {
     isPromiscuous = true; // We always want to update our nodedb, even if we are sniffing on others
     setIntervalFromNow(30 *
                        1000); // Send our initial owner announcement 30 seconds after we start (to give network time to setup)
 }
 
-int32_t NodeInfoPlugin::runOnce()
+int32_t NodeInfoModule::runOnce()
 {
     static uint32_t currentGeneration;
 

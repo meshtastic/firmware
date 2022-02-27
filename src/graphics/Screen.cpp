@@ -69,7 +69,7 @@ uint32_t dopThresholds[5] = {2000, 1000, 500, 200, 100};
 
 // At some point, we're going to ask all of the modules if they would like to display a screen frame
 // we'll need to hold onto pointers for the modules that can draw a frame.
-std::vector<MeshPlugin *> pluginFrames;
+std::vector<MeshPlugin *> moduleFrames;
 
 // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
 static char ourId[5];
@@ -194,7 +194,7 @@ static void drawPluginFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
         // DEBUG_MSG("Screen is not in transition.  Frame: %d\n\n", module_frame);
     }
     // DEBUG_MSG("Drawing Module Frame %d\n\n", module_frame);
-    MeshPlugin &pi = *pluginFrames.at(module_frame);
+    MeshPlugin &pi = *moduleFrames.at(module_frame);
     pi.drawFrame(display, state, x, y);
 }
 
@@ -824,8 +824,8 @@ void Screen::setup()
     powerStatusObserver.observe(&powerStatus->onNewStatus);
     gpsStatusObserver.observe(&gpsStatus->onNewStatus);
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
-    if (textMessagePlugin)
-        textMessageObserver.observe(textMessagePlugin);
+    if (textMessageModule)
+        textMessageObserver.observe(textMessageModule);
 
     // Modules can notify screen about refresh
     MeshPlugin::observeUIEvents(&uiFrameEventObserver);
@@ -976,9 +976,9 @@ void Screen::setFrames()
     DEBUG_MSG("showing standard frames\n");
     showingNormalScreen = true;
 
-    pluginFrames = MeshPlugin::GetMeshPluginsWithUIFrames();
-    DEBUG_MSG("Showing %d module frames\n", pluginFrames.size());
-    int totalFrameCount = MAX_NUM_NODES + NUM_EXTRA_FRAMES + pluginFrames.size();
+    moduleFrames = MeshPlugin::GetMeshPluginsWithUIFrames();
+    DEBUG_MSG("Showing %d module frames\n", moduleFrames.size());
+    int totalFrameCount = MAX_NUM_NODES + NUM_EXTRA_FRAMES + moduleFrames.size();
     DEBUG_MSG("Total frame count: %d\n", totalFrameCount);
 
     // We don't show the node info our our node (if we have it yet - we should)
@@ -994,7 +994,7 @@ void Screen::setFrames()
     // and then we'll just assume that the state->currentFrame value
     // is the same offset into the moduleFrames vector
     // so that we can invoke the module's callback
-    for (auto i = pluginFrames.begin(); i != pluginFrames.end(); ++i) {
+    for (auto i = moduleFrames.begin(); i != moduleFrames.end(); ++i) {
         normalFrames[numframes++] = drawPluginFrame;
     }
 

@@ -5,9 +5,9 @@
 #include "Router.h"
 #include "main.h"
 
-RoutingPlugin *routingPlugin;
+RoutingModule *routingModule;
 
-bool RoutingPlugin::handleReceivedProtobuf(const MeshPacket &mp, Routing *r)
+bool RoutingModule::handleReceivedProtobuf(const MeshPacket &mp, Routing *r)
 {
     printPacket("Routing sniffing", &mp);
     router->sniffReceived(&mp, r);
@@ -22,7 +22,7 @@ bool RoutingPlugin::handleReceivedProtobuf(const MeshPacket &mp, Routing *r)
     return false; // Let others look at this message also if they want
 }
 
-MeshPacket *RoutingPlugin::allocReply()
+MeshPacket *RoutingModule::allocReply()
 {
     assert(currentRequest);
 
@@ -34,14 +34,14 @@ MeshPacket *RoutingPlugin::allocReply()
     return NULL;
 }
 
-void RoutingPlugin::sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex)
+void RoutingModule::sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex)
 {
     auto p = allocAckNak(err, to, idFrom, chIndex);
 
     router->sendLocal(p); // we sometimes send directly to the local node
 }
 
-RoutingPlugin::RoutingPlugin() : ProtobufPlugin("routing", PortNum_ROUTING_APP, Routing_fields)
+RoutingModule::RoutingModule() : ProtobufPlugin("routing", PortNum_ROUTING_APP, Routing_fields)
 {
     isPromiscuous = true;
 }

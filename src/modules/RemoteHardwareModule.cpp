@@ -46,13 +46,13 @@ static uint64_t digitalReads(uint64_t mask)
     return res;
 }
 
-RemoteHardwarePlugin::RemoteHardwarePlugin()
+RemoteHardwareModule::RemoteHardwareModule()
     : ProtobufPlugin("remotehardware", PortNum_REMOTE_HARDWARE_APP, HardwareMessage_fields), concurrency::OSThread(
                                                                                                  "remotehardware")
 {
 }
 
-bool RemoteHardwarePlugin::handleReceivedProtobuf(const MeshPacket &req, HardwareMessage *pptr)
+bool RemoteHardwareModule::handleReceivedProtobuf(const MeshPacket &req, HardwareMessage *pptr)
 {
     auto p = *pptr;
     DEBUG_MSG("Received RemoteHardware typ=%d\n", p.typ);
@@ -111,7 +111,7 @@ bool RemoteHardwarePlugin::handleReceivedProtobuf(const MeshPacket &req, Hardwar
     return false;
 }
 
-int32_t RemoteHardwarePlugin::runOnce()
+int32_t RemoteHardwareModule::runOnce()
 {
     if (watchGpios) {
         uint32_t now = millis();

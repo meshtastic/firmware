@@ -2,15 +2,15 @@
 #include "ProtobufPlugin.h"
 
 /**
- * Routing plugin for router control messages
+ * Routing module for router control messages
  */
-class AdminPlugin : public ProtobufPlugin<AdminMessage>
+class AdminModule : public ProtobufPlugin<AdminMessage>
 {
   public:
     /** Constructor
      * name is for debugging output
      */
-    AdminPlugin();
+    AdminModule();
 
   protected:
     /** Called to handle a particular incoming message
@@ -28,4 +28,4 @@ class AdminPlugin : public ProtobufPlugin<AdminMessage>
     void handleGetRadio(const MeshPacket &req);
 };
 
-extern AdminPlugin *adminPlugin;
+extern AdminModule *adminModule;
