@@ -21,17 +21,17 @@
     Basic Usage:
 
         1) Enable the module by setting serialplugin_enabled to 1.
-        2) Set the pins (serialplugin_rxd / serialplugin_rxd) for your preferred RX and TX GPIO pins.
+        2) Set the pins (serialmodule_rxd / serialmodule_rxd) for your preferred RX and TX GPIO pins.
            On tbeam, recommend to use:
                 RXD 35
                 TXD 15
-        3) Set serialplugin_timeout to the amount of time to wait before we consider
+        3) Set serialmodule_timeout to the amount of time to wait before we consider
            your packet as "done".
         4) (Optional) In SerialPlugin.h set the port to PortNum_TEXT_MESSAGE_APP if you want to
            send messages to/from the general text message channel.
         5) Connect to your device over the serial interface at 38400 8N1.
         6) Send a packet up to 240 bytes in length. This will get relayed over the mesh network.
-        7) (Optional) Set serialplugin_echo to 1 and any message you send out will be echoed back
+        7) (Optional) Set serialmodule_echo to 1 and any message you send out will be echoed back
            to your device.
 
     TODO (in this order):
@@ -72,34 +72,34 @@ int32_t SerialPlugin::runOnce()
 #ifndef NO_ESP32
 
     /*
-        Uncomment the preferences below if you want to use the plugin
+        Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    // radioConfig.preferences.serialplugin_enabled = 1;
-    // radioConfig.preferences.serialplugin_rxd = 35;
-    // radioConfig.preferences.serialplugin_txd = 15;
-    // radioConfig.preferences.serialplugin_timeout = 1000;
-    // radioConfig.preferences.serialplugin_echo = 1;
+    // radioConfig.preferences.serialmodule_enabled = 1;
+    // radioConfig.preferences.serialmodule_rxd = 35;
+    // radioConfig.preferences.serialmodule_txd = 15;
+    // radioConfig.preferences.serialmodule_timeout = 1000;
+    // radioConfig.preferences.serialmodule_echo = 1;
 
-    if (radioConfig.preferences.serialplugin_enabled) {
+    if (radioConfig.preferences.serialmodule_enabled) {
 
         if (firstTime) {
 
             // Interface with the serial peripheral from in here.
             DEBUG_MSG("Initializing serial peripheral interface\n");
 
-            if (radioConfig.preferences.serialplugin_rxd && radioConfig.preferences.serialplugin_txd) {
-                Serial2.begin(SERIALPLUGIN_BAUD, SERIAL_8N1, radioConfig.preferences.serialplugin_rxd,
-                              radioConfig.preferences.serialplugin_txd);
+            if (radioConfig.preferences.serialmodule_rxd && radioConfig.preferences.serialmodule_txd) {
+                Serial2.begin(SERIALPLUGIN_BAUD, SERIAL_8N1, radioConfig.preferences.serialmodule_rxd,
+                              radioConfig.preferences.serialmodule_txd);
 
             } else {
                 Serial2.begin(SERIALPLUGIN_BAUD, SERIAL_8N1, RXD2, TXD2);
             }
 
-            if (radioConfig.preferences.serialplugin_timeout) {
+            if (radioConfig.preferences.serialmodule_timeout) {
                 Serial2.setTimeout(
-                    radioConfig.preferences.serialplugin_timeout); // Number of MS to wait to set the timeout for the string.
+                    radioConfig.preferences.serialmodule_timeout); // Number of MS to wait to set the timeout for the string.
 
             } else {
                 Serial2.setTimeout(SERIALPLUGIN_TIMEOUT); // Number of MS to wait to set the timeout for the string.
@@ -161,7 +161,7 @@ ProcessMessage SerialPluginRadio::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
 
-    if (radioConfig.preferences.serialplugin_enabled) {
+    if (radioConfig.preferences.serialmodule_enabled) {
 
         auto &p = mp.decoded;
         // DEBUG_MSG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s\n",
@@ -170,10 +170,10 @@ ProcessMessage SerialPluginRadio::handleReceived(const MeshPacket &mp)
         if (getFrom(&mp) == nodeDB.getNodeNum()) {
 
             /*
-             * If radioConfig.preferences.serialplugin_echo is true, then echo the packets that are sent out back to the TX
+             * If radioConfig.preferences.serialmodule_echo is true, then echo the packets that are sent out back to the TX
              * of the serial interface.
              */
-            if (radioConfig.preferences.serialplugin_echo) {
+            if (radioConfig.preferences.serialmodule_echo) {
 
                 // For some reason, we get the packet back twice when we send out of the radio.
                 //   TODO: need to find out why.
@@ -187,12 +187,12 @@ ProcessMessage SerialPluginRadio::handleReceived(const MeshPacket &mp)
 
         } else {
 
-            if (radioConfig.preferences.serialplugin_mode == 0 || radioConfig.preferences.serialplugin_mode == 1) {
+            if (radioConfig.preferences.serialmodule_mode == 0 || radioConfig.preferences.serialmodule_mode == 1) {
                 // DEBUG_MSG("* * Message came from the mesh\n");
                 // Serial2.println("* * Message came from the mesh");
                 Serial2.printf("%s", p.payload.bytes);
 
-            } else if (radioConfig.preferences.serialplugin_mode == 10) {
+            } else if (radioConfig.preferences.serialmodule_mode == 10) {
                 /*
                  @jobionekabnoi
                     Add code here to handle what gets sent out to the serial interface.

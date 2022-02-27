@@ -262,8 +262,8 @@ static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
 // Ignore messages orginating from phone (from the current node 0x0) unless range test or store and forward module are enabled
 static bool shouldDrawMessage(const MeshPacket *packet)
 {
-    return packet->from != 0 && !radioConfig.preferences.range_test_plugin_enabled &&
-           !radioConfig.preferences.store_forward_plugin_enabled;
+    return packet->from != 0 && !radioConfig.preferences.range_test_module_enabled &&
+           !radioConfig.preferences.store_forward_module_enabled;
 }
 
 /// Draw the last text message we received
