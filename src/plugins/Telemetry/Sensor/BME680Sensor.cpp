@@ -1,10 +1,10 @@
-#include "../mesh/generated/environmental_measurement.pb.h"
+#include "../mesh/generated/telemetry.pb.h"
 #include "configuration.h"
-#include "EnvironmentalMeasurementSensor.h"
+#include "TelemetrySensor.h"
 #include "BME680Sensor.h"
 #include <Adafruit_BME680.h>
 
-BME680Sensor::BME680Sensor() : EnvironmentalMeasurementSensor {} {
+BME680Sensor::BME680Sensor() : TelemetrySensor {} {
 }
 
 int32_t BME680Sensor::runOnce() {
@@ -13,9 +13,9 @@ int32_t BME680Sensor::runOnce() {
     bme680Status = bme680.begin(0x76); 
     if (!bme680Status) {
         DEBUG_MSG("Could not find a valid BME680 sensor, check wiring, address, sensor ID!");
-        // TODO more verbose diagnosticsEnvironmentalMeasurementSensor
+        // TODO more verbose TelemetrySensor
     } else {
-        DEBUG_MSG("EnvironmentalMeasurement: Opened BME680 on default i2c bus");
+        DEBUG_MSG("Telemetry: Opened BME680 on default i2c bus");
         // Set up oversampling and filter initialization
         bme680.setTemperatureOversampling(BME680_OS_8X);
         bme680.setHumidityOversampling(BME680_OS_2X);
@@ -26,7 +26,7 @@ int32_t BME680Sensor::runOnce() {
     return (BME_680_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
 }
 
-bool BME680Sensor::getMeasurement(EnvironmentalMeasurement *measurement) {
+bool BME680Sensor::getMeasurement(Telemetry *measurement) {
     measurement->temperature = bme680.readTemperature();
     measurement->relative_humidity = bme680.readHumidity();
     measurement->barometric_pressure = bme680.readPressure() / 100.0F;

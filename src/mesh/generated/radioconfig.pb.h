@@ -92,17 +92,17 @@ typedef enum _InputEventChar {
     InputEventChar_KEY_CANCEL = 24
 } InputEventChar;
 
-typedef enum _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType {
-    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11 = 0,
-    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DS18B20 = 1,
-    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT12 = 2,
-    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT21 = 3,
-    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT22 = 4,
-    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME280 = 5,
-    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_BME680 = 6,
-    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MCP9808 = 7,
-    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_SHTC3 = 8
-} RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType;
+typedef enum _RadioConfig_UserPreferences_TelemetrySensorType {
+    RadioConfig_UserPreferences_TelemetrySensorType_DHT11 = 0,
+    RadioConfig_UserPreferences_TelemetrySensorType_DS18B20 = 1,
+    RadioConfig_UserPreferences_TelemetrySensorType_DHT12 = 2,
+    RadioConfig_UserPreferences_TelemetrySensorType_DHT21 = 3,
+    RadioConfig_UserPreferences_TelemetrySensorType_DHT22 = 4,
+    RadioConfig_UserPreferences_TelemetrySensorType_BME280 = 5,
+    RadioConfig_UserPreferences_TelemetrySensorType_BME680 = 6,
+    RadioConfig_UserPreferences_TelemetrySensorType_MCP9808 = 7,
+    RadioConfig_UserPreferences_TelemetrySensorType_SHTC3 = 8
+} RadioConfig_UserPreferences_TelemetrySensorType;
 
 /* Struct definitions */
 typedef struct _RadioConfig_UserPreferences {
@@ -158,14 +158,14 @@ typedef struct _RadioConfig_UserPreferences {
     uint32_t store_forward_plugin_records;
     uint32_t store_forward_plugin_history_return_max;
     uint32_t store_forward_plugin_history_return_window;
-    bool environmental_measurement_plugin_measurement_enabled;
-    bool environmental_measurement_plugin_screen_enabled;
-    uint32_t environmental_measurement_plugin_read_error_count_threshold;
-    uint32_t environmental_measurement_plugin_update_interval;
-    uint32_t environmental_measurement_plugin_recovery_interval;
-    bool environmental_measurement_plugin_display_farenheit;
-    RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType environmental_measurement_plugin_sensor_type;
-    uint32_t environmental_measurement_plugin_sensor_pin;
+    bool telemetry_module_measurement_enabled;
+    bool telemetry_module_screen_enabled;
+    uint32_t telemetry_module_read_error_count_threshold;
+    uint32_t telemetry_module_update_interval;
+    uint32_t telemetry_module_recovery_interval;
+    bool telemetry_module_display_farenheit;
+    RadioConfig_UserPreferences_TelemetrySensorType telemetry_module_sensor_type;
+    uint32_t telemetry_module_sensor_pin;
     bool store_forward_plugin_enabled;
     bool store_forward_plugin_heartbeat;
     uint32_t position_flags;
@@ -189,6 +189,7 @@ typedef struct _RadioConfig_UserPreferences {
     bool canned_message_plugin_send_bell;
     bool mqtt_encryption_enabled;
     float adc_multiplier_override;
+    uint32_t serialplugin_baud;
 } RadioConfig_UserPreferences;
 
 typedef struct _RadioConfig {
@@ -226,9 +227,9 @@ typedef struct _RadioConfig {
 #define _InputEventChar_MAX InputEventChar_KEY_BACK
 #define _InputEventChar_ARRAYSIZE ((InputEventChar)(InputEventChar_KEY_BACK+1))
 
-#define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_DHT11
-#define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MAX RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_SHTC3
-#define _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_ARRAYSIZE ((RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType)(RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_SHTC3+1))
+#define _RadioConfig_UserPreferences_TelemetrySensorType_MIN RadioConfig_UserPreferences_TelemetrySensorType_DHT11
+#define _RadioConfig_UserPreferences_TelemetrySensorType_MAX RadioConfig_UserPreferences_TelemetrySensorType_SHTC3
+#define _RadioConfig_UserPreferences_TelemetrySensorType_ARRAYSIZE ((RadioConfig_UserPreferences_TelemetrySensorType)(RadioConfig_UserPreferences_TelemetrySensorType_SHTC3+1))
 
 
 #ifdef __cplusplus
@@ -237,9 +238,9 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default}
-#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, "", 0, 0, 0}
+#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_TelemetrySensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, "", 0, 0, 0, 0}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero}
-#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_EnvironmentalMeasurementSensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, "", 0, 0, 0}
+#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_TelemetrySensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, "", 0, 0, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define RadioConfig_UserPreferences_position_broadcast_secs_tag 1
@@ -293,14 +294,14 @@ extern "C" {
 #define RadioConfig_UserPreferences_store_forward_plugin_records_tag 137
 #define RadioConfig_UserPreferences_store_forward_plugin_history_return_max_tag 138
 #define RadioConfig_UserPreferences_store_forward_plugin_history_return_window_tag 139
-#define RadioConfig_UserPreferences_environmental_measurement_plugin_measurement_enabled_tag 140
-#define RadioConfig_UserPreferences_environmental_measurement_plugin_screen_enabled_tag 141
-#define RadioConfig_UserPreferences_environmental_measurement_plugin_read_error_count_threshold_tag 142
-#define RadioConfig_UserPreferences_environmental_measurement_plugin_update_interval_tag 143
-#define RadioConfig_UserPreferences_environmental_measurement_plugin_recovery_interval_tag 144
-#define RadioConfig_UserPreferences_environmental_measurement_plugin_display_farenheit_tag 145
-#define RadioConfig_UserPreferences_environmental_measurement_plugin_sensor_type_tag 146
-#define RadioConfig_UserPreferences_environmental_measurement_plugin_sensor_pin_tag 147
+#define RadioConfig_UserPreferences_telemetry_module_measurement_enabled_tag 140
+#define RadioConfig_UserPreferences_telemetry_module_screen_enabled_tag 141
+#define RadioConfig_UserPreferences_telemetry_module_read_error_count_threshold_tag 142
+#define RadioConfig_UserPreferences_telemetry_module_update_interval_tag 143
+#define RadioConfig_UserPreferences_telemetry_module_recovery_interval_tag 144
+#define RadioConfig_UserPreferences_telemetry_module_display_farenheit_tag 145
+#define RadioConfig_UserPreferences_telemetry_module_sensor_type_tag 146
+#define RadioConfig_UserPreferences_telemetry_module_sensor_pin_tag 147
 #define RadioConfig_UserPreferences_store_forward_plugin_enabled_tag 148
 #define RadioConfig_UserPreferences_store_forward_plugin_heartbeat_tag 149
 #define RadioConfig_UserPreferences_position_flags_tag 150
@@ -324,6 +325,7 @@ extern "C" {
 #define RadioConfig_UserPreferences_canned_message_plugin_send_bell_tag 173
 #define RadioConfig_UserPreferences_mqtt_encryption_enabled_tag 174
 #define RadioConfig_UserPreferences_adc_multiplier_override_tag 175
+#define RadioConfig_UserPreferences_serialplugin_baud_tag 176
 #define RadioConfig_preferences_tag              1
 
 /* Struct field encoding specification for nanopb */
@@ -385,14 +387,14 @@ X(a, STATIC,   SINGULAR, BOOL,     range_test_plugin_save, 134) \
 X(a, STATIC,   SINGULAR, UINT32,   store_forward_plugin_records, 137) \
 X(a, STATIC,   SINGULAR, UINT32,   store_forward_plugin_history_return_max, 138) \
 X(a, STATIC,   SINGULAR, UINT32,   store_forward_plugin_history_return_window, 139) \
-X(a, STATIC,   SINGULAR, BOOL,     environmental_measurement_plugin_measurement_enabled, 140) \
-X(a, STATIC,   SINGULAR, BOOL,     environmental_measurement_plugin_screen_enabled, 141) \
-X(a, STATIC,   SINGULAR, UINT32,   environmental_measurement_plugin_read_error_count_threshold, 142) \
-X(a, STATIC,   SINGULAR, UINT32,   environmental_measurement_plugin_update_interval, 143) \
-X(a, STATIC,   SINGULAR, UINT32,   environmental_measurement_plugin_recovery_interval, 144) \
-X(a, STATIC,   SINGULAR, BOOL,     environmental_measurement_plugin_display_farenheit, 145) \
-X(a, STATIC,   SINGULAR, UENUM,    environmental_measurement_plugin_sensor_type, 146) \
-X(a, STATIC,   SINGULAR, UINT32,   environmental_measurement_plugin_sensor_pin, 147) \
+X(a, STATIC,   SINGULAR, BOOL,     telemetry_module_measurement_enabled, 140) \
+X(a, STATIC,   SINGULAR, BOOL,     telemetry_module_screen_enabled, 141) \
+X(a, STATIC,   SINGULAR, UINT32,   telemetry_module_read_error_count_threshold, 142) \
+X(a, STATIC,   SINGULAR, UINT32,   telemetry_module_update_interval, 143) \
+X(a, STATIC,   SINGULAR, UINT32,   telemetry_module_recovery_interval, 144) \
+X(a, STATIC,   SINGULAR, BOOL,     telemetry_module_display_farenheit, 145) \
+X(a, STATIC,   SINGULAR, UENUM,    telemetry_module_sensor_type, 146) \
+X(a, STATIC,   SINGULAR, UINT32,   telemetry_module_sensor_pin, 147) \
 X(a, STATIC,   SINGULAR, BOOL,     store_forward_plugin_enabled, 148) \
 X(a, STATIC,   SINGULAR, BOOL,     store_forward_plugin_heartbeat, 149) \
 X(a, STATIC,   SINGULAR, UINT32,   position_flags,  150) \
@@ -415,7 +417,8 @@ X(a, STATIC,   SINGULAR, BOOL,     canned_message_plugin_enabled, 170) \
 X(a, STATIC,   SINGULAR, STRING,   canned_message_plugin_allow_input_source, 171) \
 X(a, STATIC,   SINGULAR, BOOL,     canned_message_plugin_send_bell, 173) \
 X(a, STATIC,   SINGULAR, BOOL,     mqtt_encryption_enabled, 174) \
-X(a, STATIC,   SINGULAR, FLOAT,    adc_multiplier_override, 175)
+X(a, STATIC,   SINGULAR, FLOAT,    adc_multiplier_override, 175) \
+X(a, STATIC,   SINGULAR, UINT32,   serialplugin_baud, 176)
 #define RadioConfig_UserPreferences_CALLBACK NULL
 #define RadioConfig_UserPreferences_DEFAULT NULL
 
@@ -427,8 +430,8 @@ extern const pb_msgdesc_t RadioConfig_UserPreferences_msg;
 #define RadioConfig_UserPreferences_fields &RadioConfig_UserPreferences_msg
 
 /* Maximum encoded size of messages (where known) */
-#define RadioConfig_size                         598
-#define RadioConfig_UserPreferences_size         595
+#define RadioConfig_size                         605
+#define RadioConfig_UserPreferences_size         602
 
 #ifdef __cplusplus
 } /* extern "C" */
