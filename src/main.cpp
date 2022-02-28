@@ -21,6 +21,8 @@
 #include "modules/Modules.h"
 #include "sleep.h"
 #include "target_specific.h"
+#include "debug/i2cScan.h"
+#include "debug/axpDebug.h"
 #include <Wire.h>
 // #include <driver/rtc_io.h>
 
@@ -63,50 +65,6 @@ uint8_t screen_found;
 bool axp192_found;
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
-
-// -----------------------------------------------------------------------------
-// Application
-// -----------------------------------------------------------------------------
-#ifndef NO_WIRE
-void scanI2Cdevice(void)
-{
-    byte err, addr;
-    int nDevices = 0;
-    for (addr = 1; addr < 127; addr++) {
-        Wire.beginTransmission(addr);
-        err = Wire.endTransmission();
-        if (err == 0) {
-            DEBUG_MSG("I2C device found at address 0x%x\n", addr);
-
-            nDevices++;
-
-            if (addr == SSD1306_ADDRESS) {
-                screen_found = addr;
-                DEBUG_MSG("ssd1306 display found\n");
-            }
-            if (addr == ST7567_ADDRESS) {
-                screen_found = addr;
-                DEBUG_MSG("st7567 display found\n");
-            }
-#ifdef AXP192_SLAVE_ADDRESS
-            if (addr == AXP192_SLAVE_ADDRESS) {
-                axp192_found = true;
-                DEBUG_MSG("axp192 PMU found\n");
-            }
-#endif
-        } else if (err == 4) {
-            DEBUG_MSG("Unknow error at address 0x%x\n", addr);
-        }
-    }
-
-    if (nDevices == 0)
-        DEBUG_MSG("No I2C devices found\n");
-    else
-        DEBUG_MSG("done\n");
-}
-#else
-void scanI2Cdevice(void) {}
-#endif
 
 const char *getDeviceName()
 {
@@ -477,26 +435,6 @@ void setup()
     setCPUFast(false); // 80MHz is fine for our slow peripherals
 }
 
-#if 0
-// Turn off for now
-
-uint32_t axpDebugRead()
-{
-  axp.debugCharging();
-  DEBUG_MSG("vbus current %f\n", axp.getVbusCurrent());
-  DEBUG_MSG("charge current %f\n", axp.getBattChargeCurrent());
-  DEBUG_MSG("bat voltage %f\n", axp.getBattVoltage());
-  DEBUG_MSG("batt pct %d\n", axp.getBattPercentage());
-  DEBUG_MSG("is battery connected %d\n", axp.isBatteryConnect());
-  DEBUG_MSG("is USB connected %d\n", axp.isVBUSPlug());
-  DEBUG_MSG("is charging %d\n", axp.isChargeing());
-
-  return 30 * 1000;
-}
-
-Periodic axpDebugOutput(axpDebugRead);
-axpDebugOutput.setup();
-#endif
 
 uint32_t rebootAtMsec; // If not zero we will reboot at this time (used to reboot shortly after the update completes)
 uint32_t shutdownAtMsec; // If not zero we will shutdown at this time (used to shutdown from python or mobile client)
