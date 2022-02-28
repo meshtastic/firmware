@@ -120,7 +120,6 @@ class PowerFSMThread : public OSThread
     }
 };
 
-
 bool ButtonThread::shutdown_on_long_stop = false;
 
 static Periodic *ledPeriodic;
@@ -266,22 +265,6 @@ void setup()
 
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 
-#ifdef GENIEBLOCKS
-    Im intentionally breaking your build so you see this note.Feel free to revert if not correct.I think you can
-            remove this GPS_RESET_N code by instead defining PIN_GPS_RESET and
-        use the shared code in GPS.cpp instead.- geeksville
-
-                                                     // gps setup
-                                                     pinMode(GPS_RESET_N, OUTPUT);
-    pinMode(GPS_EXTINT, OUTPUT);
-    digitalWrite(GPS_RESET_N, HIGH);
-    digitalWrite(GPS_EXTINT, LOW);
-    // battery setup
-    // If we want to read battery level, we need to set BATTERY_EN_PIN pin to low.
-    // ToDo: For low power consumption after read battery level, set that pin to high.
-    pinMode(BATTERY_EN_PIN, OUTPUT);
-    digitalWrite(BATTERY_EN_PIN, LOW);
-#endif
     gps = createGps();
 
     if (gps)
