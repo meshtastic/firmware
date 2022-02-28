@@ -5,6 +5,7 @@
 #include "PowerStatus.h"
 #include "graphics/Screen.h"
 
+extern uint8_t screen_found;
 extern bool axp192_found;
 extern bool isCharging;
 extern bool isUSBPowered;
