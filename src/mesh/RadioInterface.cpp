@@ -219,6 +219,9 @@ void printPacket(const char *prefix, const MeshPacket *p)
     if (p->rx_snr != 0.0) {
         DEBUG_MSG(" rxSNR=%g", p->rx_snr);
     }
+    if (p->rx_rssi != 0) {
+        DEBUG_MSG(" rxSNR=%g", p->rx_rssi);
+    }
     if (p->priority != 0)
         DEBUG_MSG(" priority=%d", p->priority);
 
