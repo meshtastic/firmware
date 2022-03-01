@@ -48,9 +48,10 @@ const RegionInfo regions[] = {
     RDEF(JP, 920.8f, 927.8f, 100, 0, 16, true, false),
 
     /*
-        ???
+        https://www.iot.org.au/wp/wp-content/uploads/2016/12/IoTSpectrumFactSheet.pdf
+        https://iotalliance.org.nz/wp-content/uploads/sites/4/2019/05/IoT-Spectrum-in-NZ-Briefing-Paper.pdf
      */
-    RDEF(ANZ, 915.0f, 928.0f, 100, 0, 0, true, false),
+    RDEF(ANZ, 915.0f, 928.0f, 100, 0, 30, true, false),
 
     /*
         https://digital.gov.ru/uploaded/files/prilozhenie-12-k-reshenyu-gkrch-18-46-03-1.pdf
