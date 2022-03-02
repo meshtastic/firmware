@@ -14,17 +14,17 @@ jobs:
       - name: Update submodule
         run: |
           git submodule update --remote proto
-          
+
       - name: Download nanopb
         run: |
           wget https://jpa.kapsi.fi/nanopb/download/nanopb-0.4.4-linux-x86.tar.gz
-          tar xvzf nanopb-0.4.4-linux-x86.tar.gz
-          mv nanopb-0.4.4-linux-x86 nanopb-0.4.4
-          
+          tar xvzf nanopb-0.4.5-linux-x86.tar.gz
+          mv nanopb-0.4.5-linux-x86 nanopb-0.4.5
+
       - name: Re-generate protocol buffers
         run: |
-          ./bin/regen-protos.sh  
-          
+          ./bin/regen-protos.sh
+
       - name: Create pull request
         uses: peter-evans/create-pull-request@v3
         with:
