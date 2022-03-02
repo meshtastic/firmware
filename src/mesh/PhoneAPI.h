@@ -58,7 +58,7 @@ class PhoneAPI
 
     // Call this when the client drops the connection, resets the state to STATE_SEND_NOTHING
     // Unregisters our observer.  A closed connection **can** be reopened by calling init again.
-    void close();
+    virtual void close();
 
     /**
      * Handle a ToRadio protobuf
