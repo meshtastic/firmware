@@ -11,7 +11,7 @@ env.Replace( MKSPIFFSTOOL=env.get("PROJECT_DIR") + '/bin/mklittlefs.py' )
 try:
     import littlefs
 except ImportError:
-    env.Execute("$PYTHONEXE -m pip install --user littlefs-python")
+    env.Execute("$PYTHONEXE -m pip install littlefs-python")
 
 Import("projenv")
 
