@@ -1,5 +1,5 @@
-#include "configuration.h"
 #include "FloodingRouter.h"
+#include "configuration.h"
 #include "mesh-pb-constants.h"
 
 FloodingRouter::FloodingRouter() {}
@@ -27,11 +27,41 @@ bool FloodingRouter::shouldFilterReceived(MeshPacket *p)
     return Router::shouldFilterReceived(p);
 }
 
+bool FloodingRouter::inRangeOfRouter()
+{
+
+    uint32_t maximum_router_sec = 300;
+
+    // FIXME : Scale minimum_snr to accomodate different modem configurations.
+    float minimum_snr = 2;
+
+    for (int i = 0; i < myNodeInfo.router_count; i++) {
+        // A router has been seen and the heartbeat was heard within the last 300 seconds
+        if (
+            ((myNodeInfo.router_sec[i] > 0) && (myNodeInfo.router_sec[i] < maximum_router_sec)) &&
+            (myNodeInfo.router_snr[i] > minimum_snr)
+            ) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void FloodingRouter::sniffReceived(const MeshPacket *p, const Routing *c)
 {
-    // If a broadcast, possibly _also_ send copies out into the mesh.
-    // (FIXME, do something smarter than naive flooding here)
-    if (p->to == NODENUM_BROADCAST && p->hop_limit > 0 && getFrom(p) != getNodeNum()) {
+    bool rebroadcastPacket = true;
+
+    if (radioConfig.preferences.role == Role_Repeater || radioConfig.preferences.role == Role_Router) {
+        rebroadcastPacket = true;
+
+    } else if ((radioConfig.preferences.role == Role_Default) && inRangeOfRouter()) {
+        DEBUG_MSG("Role_Default - rx_snr > 13\n");
+
+        rebroadcastPacket = false;
+    }
+
+    if ((p->to == NODENUM_BROADCAST) && (p->hop_limit > 0) && (getFrom(p) != getNodeNum() && rebroadcastPacket)) {
         if (p->id != 0) {
             MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
 
