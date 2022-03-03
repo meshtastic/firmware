@@ -31,7 +31,7 @@ void AirTime::logAirtime(reportTypes reportType, uint32_t airtime_ms)
 
 uint8_t AirTime::currentPeriodIndex()
 {
-    return ((getSecondsSinceBoot() / SECONDS_PER_PERIOD) % myNodeInfo.air_period_rx_count);
+    return ((getSecondsSinceBoot() / SECONDS_PER_PERIOD) % PERIODS_TO_LOG);
 }
 
 uint8_t AirTime::getPeriodUtilMinute() {
@@ -48,7 +48,7 @@ void AirTime::airtimeRotatePeriod()
     if (this->airtimes.lastPeriodIndex != this->currentPeriodIndex()) {
         DEBUG_MSG("Rotating airtimes to a new period = %u\n", this->currentPeriodIndex());
 
-        for (int i = myNodeInfo.air_period_rx_count - 2; i >= 0; --i) {
+        for (int i = PERIODS_TO_LOG - 2; i >= 0; --i) {
             this->airtimes.periodTX[i + 1] = this->airtimes.periodTX[i];
             this->airtimes.periodRX[i + 1] = this->airtimes.periodRX[i];
             this->airtimes.periodRX_ALL[i + 1] = this->airtimes.periodRX_ALL[i];
@@ -83,7 +83,7 @@ uint32_t *AirTime::airtimeReport(reportTypes reportType)
 
 uint8_t AirTime::getPeriodsToLog()
 {
-    return myNodeInfo.air_period_rx_count;
+    return PERIODS_TO_LOG;
 }
 
 uint32_t AirTime::getSecondsPerPeriod()
