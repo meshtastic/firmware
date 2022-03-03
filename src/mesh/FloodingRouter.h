@@ -54,9 +54,11 @@ class FloodingRouter : public Router, protected PacketHistory
 
     /**
      * Are we in range of a router?
+     * 
+     * "range" here may not be the right term. 
      * @return true if we're in range of a router
      */
-    virtual bool rangeOfRouter(const MeshPacket *p);
+    virtual bool inRangeOfRouter();
 
     /**
      * Look for broadcasts we need to rebroadcast
