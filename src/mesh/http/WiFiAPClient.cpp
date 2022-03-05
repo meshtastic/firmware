@@ -175,6 +175,9 @@ bool initWifi(bool forceSoftAP)
 {
     forcedSoftAP = forceSoftAP;
 
+    // strcpy(radioConfig.preferences.wifi_ssid, "meshtastic");
+    // strcpy(radioConfig.preferences.wifi_password, "meshtastic!");
+
     if ((radioConfig.has_preferences && radioConfig.preferences.wifi_ssid[0]) || forceSoftAP) {
         const char *wifiName = radioConfig.preferences.wifi_ssid;
         const char *wifiPsw = radioConfig.preferences.wifi_password;

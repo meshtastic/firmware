@@ -19,7 +19,7 @@
 
 #ifndef NO_ESP32
 #include "mesh/http/WiFiAPClient.h"
-#include "plugins/esp32/StoreForwardPlugin.h"
+#include "modules/esp32/StoreForwardModule.h"
 #include <Preferences.h>
 #include <nvs_flash.h>
 #endif
@@ -227,34 +227,7 @@ void NodeDB::init()
     info->user = owner;
     info->has_user = true;
 
-    // removed from 1.2 (though we do use old values if found)
-    // We set these _after_ loading from disk - because they come from the build and are more trusted than
-    // what is stored in flash
-    // if (xstr(HW_VERSION)[0])
-    //    strncpy(myNodeInfo.region, optstr(HW_VERSION), sizeof(myNodeInfo.region));
-    // else DEBUG_MSG("This build does not specify a HW_VERSION\n"); // Eventually new builds will no longer include this build
-    // flag
-
-    // DEBUG_MSG("legacy region %d\n", devicestate.legacyRadio.preferences.region);
-    if (radioConfig.preferences.region == RegionCode_Unset)
-        radioConfig.preferences.region = devicestate.legacyRadio.preferences.region;
-
-    // Check for the old style of region code strings, if found, convert to the new enum.
-    // Those strings will look like "1.0-EU433"
-    if (radioConfig.preferences.region == RegionCode_Unset && strncmp(myNodeInfo.region, "1.0-", 4) == 0) {
-        const char *regionStr = myNodeInfo.region + 4; // EU433 or whatever
-        for (const RegionInfo *r = regions; r->code != RegionCode_Unset; r++)
-            if (strcmp(r->name, regionStr) == 0) {
-                radioConfig.preferences.region = r->code;
-                break;
-            }
-    }
-
     strncpy(myNodeInfo.firmware_version, optstr(APP_VERSION), sizeof(myNodeInfo.firmware_version));
-
-    // hw_model is no longer stored in myNodeInfo (as of 1.2.11) - we now store it as an enum in nodeinfo
-    myNodeInfo.hw_model_deprecated[0] = '\0';
-    // strncpy(myNodeInfo.hw_model, HW_VENDOR, sizeof(myNodeInfo.hw_model));
 
 #ifndef NO_ESP32
     Preferences preferences;

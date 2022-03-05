@@ -37,6 +37,7 @@ jobs:
           - board: meshtastic-diy-v1
           - board: rak4631_5005
           - board: rak4631_19003
+          - board: rak4631_5005_eink
           - board: t-echo
   
     runs-on: ubuntu-latest
@@ -162,6 +163,7 @@ jobs:
         include: 
           - board: rak4631_5005
           - board: rak4631_19003
+          - board: rak4631_5005_eink
           - board: t-echo
     
     runs-on: ubuntu-latest

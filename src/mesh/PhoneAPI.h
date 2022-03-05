@@ -24,6 +24,7 @@ class PhoneAPI
         STATE_SEND_NOTHING, // (Eventual) Initial state, don't send anything until the client starts asking for config
                             // (disconnected)
         STATE_SEND_MY_INFO, // send our my info record
+        STATE_SEND_GROUPS,
         // STATE_SEND_RADIO, // in 1.2 we now send this as a regular mesh packet
         // STATE_SEND_OWNER, no need to send Owner specially, it is just part of the nodedb
         STATE_SEND_NODEINFO, // states progress in this order as the device sends to to the client
@@ -58,7 +59,7 @@ class PhoneAPI
 
     // Call this when the client drops the connection, resets the state to STATE_SEND_NOTHING
     // Unregisters our observer.  A closed connection **can** be reopened by calling init again.
-    void close();
+    virtual void close();
 
     /**
      * Handle a ToRadio protobuf

@@ -7,8 +7,12 @@
 
 Update Instructions
 
+[Using Meshtastic Flasher](https://meshtastic.org/docs/getting-started/meshtastic-flasher)
+
+Manual Method
+
 [For ESP32 devices click here](https://meshtastic.org/docs/getting-started/flashing-esp32)
 
 [For nRF52 devices click here](https://meshtastic.org/docs/getting-started/flashing-nrf52)
 
-For developer information and specific building instructions, please see the [developer doccumentation](https://meshtastic.org/docs/developers)
+For developer information and specific building instructions, please see the [developer documentation](https://meshtastic.org/docs/developers)
