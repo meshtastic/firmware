@@ -63,7 +63,7 @@ You probably don't care about this section - skip to the next one.
 
 ## Multichannel support
 
-* DONE cleanup the external notification and serial plugins
+* DONE cleanup the external notification and serial modules
 * non ack version of stress test fails sometimes!
 * tx fault test has a bug #734 - * turn off fault 8: https://github.com/meshtastic/Meshtastic-device/issues/734
 * DONE move device types into an enum in nodeinfo
@@ -71,7 +71,7 @@ You probably don't care about this section - skip to the next one.
 * nrf52 should preserve local time across reset
 * cdcacm bug on nrf52: emittx thinks it emitted but client sees nothing.  works again later
 * nrf52: segger logs have errors in formatting that should be impossible (because not going through serial, try stalling on segger)
-* DONE call RouterPlugin for *all* packets - not just Router packets
+* DONE call RouterModule for *all* packets - not just Router packets
 * DONE generate channel hash from the name of the channel+the psk (not just one or the other)
 * DONE send a hint that can be used to select which channel to try and hash against with each message
 * DONE remove deprecated
@@ -79,13 +79,13 @@ You probably don't care about this section - skip to the next one.
 * DONE set mynodeinfo.max_channels
 * DONE set mynodeinfo.num_bands (formerly num_channels)
 * DONE fix sniffing of non Routing packets
-* DONE enable remote setttings access by moving settings operations into a regular plugin (move settings ops out of PhoneAPI)
+* DONE enable remote setttings access by moving settings operations into a regular module (move settings ops out of PhoneAPI)
 * DONE move portnum up?
 * DONE remove region specific builds from the firmware
 * DONE test single channel without python
 * DONE Use "default" for name if name is empty
 * DONE fix python data packet receiving (nothing showing in log?)
-* DONE implement 'get channels' Admin plugin operation
+* DONE implement 'get channels' Admin module operation
 * DONE use get-channels from python
 * DONE use get channels & get settings from android
 * DONE use set-channel from python
@@ -98,7 +98,7 @@ You probably don't care about this section - skip to the next one.
 * DONE fix setch-fast in python tool
 * age out pendingrequests in the python API
 * DONE stress test channel download from python, sometimes it seems like we don't get all replies, bug was due to simultaneous android connection
-* DONE combine acks and responses in a single message if possible (do routing plugin LAST and drop ACK if someone else has already replied)
+* DONE combine acks and responses in a single message if possible (do routing module LAST and drop ACK if someone else has already replied)
 * DONE don't send packets we received from the phone BACK TOWARDS THE PHONE (possibly use fromnode 0 for packets the phone sends?)
 * DONE fix 1.1.50 android debug panel display
 * DONE test android channel setting
@@ -118,7 +118,7 @@ You probably don't care about this section - skip to the next one.
 * use single byte 'well known' channel names for admin, gpio, etc...
 * use presence of gpio channel to enable gpio ops, same for serial etc...
 * DONE restrict gpio & serial & settings operations to the admin channel (unless local to the current node)
-* DONE add channel restrictions for plugins (and restrict routing plugin to the "control" channel)
+* DONE add channel restrictions for modules (and restrict routing module to the "control" channel)
 * stress test multi channel
 * DONE investigate @mc-hamster report of heap corruption
 * DONE use set-user from android
@@ -134,7 +134,7 @@ You probably don't care about this section - skip to the next one.
 * allow chaning packets in single transmission - to increase airtime efficiency and amortize packet overhead
 * DONE move most parts of meshpacket into the Data packet, so that we can chain multiple Data for sending when they all have a common destination and key.
 * when selecting a MeshPacket for transmit, scan the TX queue for any Data packets we can merge together as a WirePayload.  In the low level send/rx code expand that into multiple MeshPackets as needed (thus 'hiding' from MeshPacket that over the wire we send multiple datapackets
-* DONE confirm we are still calling the plugins for messages inbound from the phone (or generated locally)
+* DONE confirm we are still calling the modules for messages inbound from the phone (or generated locally)
 * DONE confirm we are still multi hop routing flood broadcasts
 * DONE confirm we are still doing resends on unicast reliable packets
 * add history to routed packets: https://meshtastic.discourse.group/t/packet-source-tracking/2764/2
@@ -142,7 +142,7 @@ You probably don't care about this section - skip to the next one.
 * DONE move acks into routing
 * DONE make all subpackets different versions of data
 * DONE move routing control into a data packet
-* have phoneapi done via plugin (will allow multiple simultaneous API clients - stop disabling BLE while using phone API)
+* have phoneapi done via module (will allow multiple simultaneous API clients - stop disabling BLE while using phone API)
 * use reference counting and dynamic sizing for meshpackets. - use https://docs.microsoft.com/en-us/cpp/cpp/how-to-create-and-use-shared-ptr-instances?view=msvc-160 (already used in arduino)
 * let multiple PhoneAPI endpoints work at once
 * allow multiple simultaneous bluetooth connections (create the bluetooth phoneapi instance dynamically based on client id)
@@ -182,13 +182,13 @@ For app cleanup:
 * DONE require a recent python api to talk to these new device loads
 * DONE require a recent android app to talk to these new device loads
 * DONE fix handleIncomingPosition
-* DONE move want_replies handling into plugins
+* DONE move want_replies handling into modules
 * DONE on android for received positions handle either old or new positions / user messages
 * DONE on android side send old or new positions as needed / user messages
 * DONE test python side handle new position/user messages
 * DONE make a gpio example. --gpiowrb 4 1, --gpiord 0x444, --gpiowatch 0x3ff
-* DONE fix position sending to use new plugin
-* DONE Add SinglePortNumPlugin - as the new most useful baseclass
+* DONE fix position sending to use new module
+* DONE Add SinglePortNumModule - as the new most useful baseclass
 * DONE move positions into regular data packets (use new app framework)
 * DONE move user info into regular data packets (use new app framework)
 * DONE test that positions, text messages and user info still work

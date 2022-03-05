@@ -10,12 +10,12 @@
 #endif
 
 /* Struct definitions */
-typedef struct _CannedMessagePluginConfig {
+typedef struct _CannedMessageModuleConfig {
     char messagesPart1[201];
     char messagesPart2[201];
     char messagesPart3[201];
     char messagesPart4[201];
-} CannedMessagePluginConfig;
+} CannedMessageModuleConfig;
 
 
 #ifdef __cplusplus
@@ -23,31 +23,31 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define CannedMessagePluginConfig_init_default   {"", "", "", ""}
-#define CannedMessagePluginConfig_init_zero      {"", "", "", ""}
+#define CannedMessageModuleConfig_init_default   {"", "", "", ""}
+#define CannedMessageModuleConfig_init_zero      {"", "", "", ""}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define CannedMessagePluginConfig_messagesPart1_tag 11
-#define CannedMessagePluginConfig_messagesPart2_tag 12
-#define CannedMessagePluginConfig_messagesPart3_tag 13
-#define CannedMessagePluginConfig_messagesPart4_tag 14
+#define CannedMessageModuleConfig_messagesPart1_tag 11
+#define CannedMessageModuleConfig_messagesPart2_tag 12
+#define CannedMessageModuleConfig_messagesPart3_tag 13
+#define CannedMessageModuleConfig_messagesPart4_tag 14
 
 /* Struct field encoding specification for nanopb */
-#define CannedMessagePluginConfig_FIELDLIST(X, a) \
+#define CannedMessageModuleConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   messagesPart1,    11) \
 X(a, STATIC,   SINGULAR, STRING,   messagesPart2,    12) \
 X(a, STATIC,   SINGULAR, STRING,   messagesPart3,    13) \
 X(a, STATIC,   SINGULAR, STRING,   messagesPart4,    14)
-#define CannedMessagePluginConfig_CALLBACK NULL
-#define CannedMessagePluginConfig_DEFAULT NULL
+#define CannedMessageModuleConfig_CALLBACK NULL
+#define CannedMessageModuleConfig_DEFAULT NULL
 
-extern const pb_msgdesc_t CannedMessagePluginConfig_msg;
+extern const pb_msgdesc_t CannedMessageModuleConfig_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
-#define CannedMessagePluginConfig_fields &CannedMessagePluginConfig_msg
+#define CannedMessageModuleConfig_fields &CannedMessageModuleConfig_msg
 
 /* Maximum encoded size of messages (where known) */
-#define CannedMessagePluginConfig_size           812
+#define CannedMessageModuleConfig_size           812
 
 #ifdef __cplusplus
 } /* extern "C" */

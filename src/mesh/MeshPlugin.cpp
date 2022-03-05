@@ -3,15 +3,15 @@
 #include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "plugins/RoutingPlugin.h"
+#include "modules/RoutingModule.h"
 #include <assert.h>
 
-std::vector<MeshPlugin *> *MeshPlugin::plugins;
+std::vector<MeshPlugin *> *MeshPlugin::modules;
 
 const MeshPacket *MeshPlugin::currentRequest;
 
 /**
- * If any of the current chain of plugins has already sent a reply, it will be here.  This is useful to allow
+ * If any of the current chain of modules has already sent a reply, it will be here.  This is useful to allow
  * the RoutingPlugin to avoid sending redundant acks
  */
 MeshPacket *MeshPlugin::currentReply;
@@ -19,17 +19,17 @@ MeshPacket *MeshPlugin::currentReply;
 MeshPlugin::MeshPlugin(const char *_name) : name(_name)
 {
     // Can't trust static initalizer order, so we check each time
-    if (!plugins)
-        plugins = new std::vector<MeshPlugin *>();
+    if (!modules)
+        modules = new std::vector<MeshPlugin *>();
 
-    plugins->push_back(this);
+    modules->push_back(this);
 }
 
 void MeshPlugin::setup() {}
 
 MeshPlugin::~MeshPlugin()
 {
-    assert(0); // FIXME - remove from list of plugins once someone needs this feature
+    assert(0); // FIXME - remove from list of modules once someone needs this feature
 }
 
 MeshPacket *MeshPlugin::allocAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex)
@@ -68,10 +68,10 @@ MeshPacket *MeshPlugin::allocErrorResponse(Routing_Error err, const MeshPacket *
 
 void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
 {
-    // DEBUG_MSG("In call plugins\n");
-    bool pluginFound = false;
+    // DEBUG_MSG("In call modules\n");
+    bool moduleFound = false;
 
-    // We now allow **encrypted** packets to pass through the plugins
+    // We now allow **encrypted** packets to pass through the modules
     bool isDecoded = mp.which_payloadVariant == MeshPacket_decoded_tag;
 
     currentReply = NULL; // No reply yet
@@ -80,12 +80,12 @@ void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
     auto ourNodeNum = nodeDB.getNodeNum();
     bool toUs = mp.to == NODENUM_BROADCAST || mp.to == ourNodeNum;
 
-    for (auto i = plugins->begin(); i != plugins->end(); ++i) {
+    for (auto i = modules->begin(); i != modules->end(); ++i) {
         auto &pi = **i;
 
         pi.currentRequest = &mp;
 
-        /// We only call plugins that are interested in the packet (and the message is destined to us or we are promiscious)
+        /// We only call modules that are interested in the packet (and the message is destined to us or we are promiscious)
         bool wantsPacket = (isDecoded || pi.encryptedOk) && (pi.isPromiscuous || toUs) && pi.wantPacket(&mp);
 
         if ((src == RX_SRC_LOCAL) && !(pi.loopbackOk)) {
@@ -96,15 +96,15 @@ void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
         assert(!pi.myReply); // If it is !null it means we have a bug, because it should have been sent the previous time
 
         if (wantsPacket) {
-            DEBUG_MSG("Plugin '%s' wantsPacket=%d\n", pi.name, wantsPacket);
+            DEBUG_MSG("Module '%s' wantsPacket=%d\n", pi.name, wantsPacket);
 
-            pluginFound = true;
+            moduleFound = true;
 
             /// received channel (or NULL if not decoded)
             Channel *ch = isDecoded ? &channels.getByIndex(mp.channel) : NULL;
 
             /// Is the channel this packet arrived on acceptable? (security check)
-            /// Note: we can't know channel names for encrypted packets, so those are NEVER sent to boundChannel plugins
+            /// Note: we can't know channel names for encrypted packets, so those are NEVER sent to boundChannel modules
 
             /// Also: if a packet comes in on the local PC interface, we don't check for bound channels, because it is TRUSTED and it needs to
             /// to be able to fetch the initial admin packets without yet knowing any channels.
@@ -128,7 +128,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
                 ProcessMessage handled = pi.handleReceived(mp);
 
                 // Possibly send replies (but only if the message was directed to us specifically, i.e. not for promiscious
-                // sniffing) also: we only let the one plugin send a reply, once that happens, remaining plugins are not
+                // sniffing) also: we only let the one module send a reply, once that happens, remaining modules are not
                 // considered
 
                 // NOTE: we send a reply *even if the (non broadcast) request was from us* which is unfortunate but necessary
@@ -137,9 +137,9 @@ void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
                 // any other node.
                 if (mp.decoded.want_response && toUs && (getFrom(&mp) != ourNodeNum || mp.to == ourNodeNum) && !currentReply) {
                     pi.sendResponse(mp);
-                    DEBUG_MSG("Plugin '%s' sent a response\n", pi.name);
+                    DEBUG_MSG("Module '%s' sent a response\n", pi.name);
                 } else {
-                    DEBUG_MSG("Plugin '%s' considered\n", pi.name);
+                    DEBUG_MSG("Module '%s' considered\n", pi.name);
                 }
 
                 // If the requester didn't ask for a response we might need to discard unused replies to prevent memory leaks
@@ -150,7 +150,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
                 }
 
                 if (handled == ProcessMessage::STOP) {
-                    DEBUG_MSG("Plugin '%s' handled and skipped other processing\n", pi.name);
+                    DEBUG_MSG("Module '%s' handled and skipped other processing\n", pi.name);
                     break;
                 }
             }
@@ -173,12 +173,12 @@ void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
             // SECURITY NOTE! I considered sending back a different error code if we didn't find the psk (i.e. !isDecoded)
             // but opted NOT TO.  Because it is not a good idea to let remote nodes 'probe' to find out which PSKs were "good" vs
             // bad.
-            routingPlugin->sendAckNak(Routing_Error_NO_RESPONSE, getFrom(&mp), mp.id, mp.channel);
+            routingModule->sendAckNak(Routing_Error_NO_RESPONSE, getFrom(&mp), mp.id, mp.channel);
         }
     }
 
-    if (!pluginFound)
-        DEBUG_MSG("No plugins interested in portnum=%d, src=%s\n",
+    if (!moduleFound)
+        DEBUG_MSG("No modules interested in portnum=%d, src=%s\n",
                     mp.decoded.portnum,
                     (src == RX_SRC_LOCAL) ? "LOCAL":"REMOTE");
 }
@@ -201,8 +201,8 @@ void MeshPlugin::sendResponse(const MeshPacket &req)
         setReplyTo(r, req);
         currentReply = r;
     } else {
-        // Ignore - this is now expected behavior for routing plugin (because it ignores some replies)
-        // DEBUG_MSG("WARNING: Client requested response but this plugin did not provide\n");
+        // Ignore - this is now expected behavior for routing module (because it ignores some replies)
+        // DEBUG_MSG("WARNING: Client requested response but this module did not provide\n");
     }
 }
 
@@ -222,32 +222,32 @@ void setReplyTo(MeshPacket *p, const MeshPacket &to)
     p->decoded.request_id = to.id;
 }
 
-std::vector<MeshPlugin *> MeshPlugin::GetMeshPluginsWithUIFrames()
+std::vector<MeshPlugin *> MeshPlugin::GetMeshModulesWithUIFrames()
 {
 
-    std::vector<MeshPlugin *> pluginsWithUIFrames;
-    if (plugins) {
-        for (auto i = plugins->begin(); i != plugins->end(); ++i) {
+    std::vector<MeshPlugin *> modulesWithUIFrames;
+    if (modules) {
+        for (auto i = modules->begin(); i != modules->end(); ++i) {
             auto &pi = **i;
             if (pi.wantUIFrame()) {
-                DEBUG_MSG("Plugin wants a UI Frame\n");
-                pluginsWithUIFrames.push_back(&pi);
+                DEBUG_MSG("Module wants a UI Frame\n");
+                modulesWithUIFrames.push_back(&pi);
             }
         }
     }
-    return pluginsWithUIFrames;
+    return modulesWithUIFrames;
 }
 
 void MeshPlugin::observeUIEvents(
     Observer<const UIFrameEvent *> *observer)
 {
-    if (plugins) {
-        for (auto i = plugins->begin(); i != plugins->end(); ++i) {
+    if (modules) {
+        for (auto i = modules->begin(); i != modules->end(); ++i) {
             auto &pi = **i;
             Observable<const UIFrameEvent *> *observable =
                 pi.getUIFrameObservable();
             if (observable != NULL) {
-                DEBUG_MSG("Plugin wants a UI Frame\n");
+                DEBUG_MSG("Module wants a UI Frame\n");
                 observer->observe(observable);
             }
         }
@@ -257,14 +257,14 @@ void MeshPlugin::observeUIEvents(
 AdminMessageHandleResult MeshPlugin::handleAdminMessageForAllPlugins(const MeshPacket &mp, AdminMessage *request, AdminMessage *response)
 {
     AdminMessageHandleResult handled = AdminMessageHandleResult::NOT_HANDLED;
-    if (plugins) {
-        for (auto i = plugins->begin(); i != plugins->end(); ++i) {
+    if (modules) {
+        for (auto i = modules->begin(); i != modules->end(); ++i) {
             auto &pi = **i;
-            AdminMessageHandleResult h = pi.handleAdminMessageForPlugin(mp, request, response);
+            AdminMessageHandleResult h = pi.handleAdminMessageForModule(mp, request, response);
             if (h == AdminMessageHandleResult::HANDLED_WITH_RESPONSE)
             {
                 // In case we have a response it always has priority.
-                DEBUG_MSG("Reply prepared by plugin '%s' of variant: %d\n",
+                DEBUG_MSG("Reply prepared by module '%s' of variant: %d\n",
                     pi.name,
                     response->which_variant);
                 handled = h;

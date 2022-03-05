@@ -19,7 +19,7 @@
 
 #ifndef NO_ESP32
 #include "mesh/http/WiFiAPClient.h"
-#include "plugins/esp32/StoreForwardPlugin.h"
+#include "modules/esp32/StoreForwardModule.h"
 #include <Preferences.h>
 #include <nvs_flash.h>
 #endif
@@ -34,7 +34,6 @@ NodeDB nodeDB;
 // we have plenty of ram so statically alloc this tempbuf (for now)
 EXT_RAM_ATTR DeviceState devicestate;
 MyNodeInfo &myNodeInfo = devicestate.my_node;
-GroupInfo &ourGroupInfo = devicestate.group_info;
 RadioConfig radioConfig;
 ChannelFile channelFile;
 

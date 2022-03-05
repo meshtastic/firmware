@@ -6,7 +6,7 @@
 #include "RTC.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
-#include "plugins/RoutingPlugin.h"
+#include "modules/RoutingModule.h"
 
 #if defined(HAS_WIFI) || defined(PORTDUINO)
 #include "mqtt/MQTT.h"
@@ -132,7 +132,7 @@ MeshPacket *Router::allocForSending()
  */
 void Router::sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex)
 {
-    routingPlugin->sendAckNak(err, to, idFrom, chIndex);
+    routingModule->sendAckNak(err, to, idFrom, chIndex);
 }
 
 void Router::abortSendAndNak(Routing_Error err, MeshPacket *p)
@@ -276,7 +276,7 @@ bool perhapsDecode(MeshPacket *p)
     if (p->which_payloadVariant == MeshPacket_decoded_tag)
         return true; // If packet was already decoded just return
 
-    assert(p->which_payloadVariant == MeshPacket_encrypted_tag);
+    //assert(p->which_payloadVariant == MeshPacket_encrypted_tag);
 
     // Try to find a channel that works with this hash
     for (ChannelIndex chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
@@ -376,7 +376,7 @@ void Router::handleReceived(MeshPacket *p, RxSource src)
         printPacket("packet decoding failed (no PSK?)", p);
     }
 
-    // call plugins here
+    // call modules here
     MeshPlugin::callPlugins(*p, src);
 }
 

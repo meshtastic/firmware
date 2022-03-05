@@ -6,7 +6,7 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
-PB_BIND(CannedMessagePluginConfig, CannedMessagePluginConfig, 2)
+PB_BIND(CannedMessageModuleConfig, CannedMessageModuleConfig, 2)
 
 
 
