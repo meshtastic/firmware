@@ -7,7 +7,7 @@
 
 /// 16 bytes of random PSK for our _public_ default channel that all devices power up on (AES128)
 static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
-                                     0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0xbf};
+                                     0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0x01};
 
 Channels channels;
 
@@ -84,10 +84,7 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
     Channel &ch = getByIndex(chIndex);
     ChannelSettings &channelSettings = ch.settings;
 
-    // radioConfig.modem_config = RadioConfig_ModemConfig_Bw125Cr45Sf128;  // medium range and fast
-    // channelSettings.modem_config = ChannelSettings_ModemConfig_Bw500Cr45Sf128;  // short range and fast, but wide
-    // bandwidth so incompatible radios can talk together
-    channelSettings.modem_config = ChannelSettings_ModemConfig_Bw125Cr48Sf4096; // slow and long range
+    channelSettings.modem_config = ChannelSettings_ModemConfig_LongFast; // Default to Long Range & Fast
 
     channelSettings.tx_power = 0; // default
     uint8_t defaultpskIndex = 1;
@@ -216,23 +213,26 @@ const char *Channels::getName(size_t chIndex)
             channelName = "Unset";
         else
             switch (channelSettings.modem_config) {
-            case ChannelSettings_ModemConfig_Bw125Cr45Sf128:
+            case ChannelSettings_ModemConfig_ShortSlow:
                 channelName = "ShortSlow";
                 break;
-            case ChannelSettings_ModemConfig_Bw500Cr45Sf128:
+            case ChannelSettings_ModemConfig_ShortFast:
                 channelName = "ShortFast";
                 break;
-            case ChannelSettings_ModemConfig_Bw31_25Cr48Sf512:
-                channelName = "LongFast";
-                break;
-            case ChannelSettings_ModemConfig_Bw125Cr48Sf4096:
-                channelName = "LongSlow";
-                break;
-            case ChannelSettings_ModemConfig_Bw250Cr46Sf2048:
+            case ChannelSettings_ModemConfig_MidSlow:
                 channelName = "MediumSlow";
                 break;
-            case ChannelSettings_ModemConfig_Bw250Cr47Sf1024:
+            case ChannelSettings_ModemConfig_MidFast:
                 channelName = "MediumFast";
+                break;
+            case ChannelSettings_ModemConfig_LongFast:
+                channelName = "LongFast";
+                break;
+            case ChannelSettings_ModemConfig_LongSlow:
+                channelName = "LongSlow";
+                break;
+            case ChannelSettings_ModemConfig_VLongSlow:
+                channelName = "VLongSlow";
                 break;
             default:
                 channelName = "Invalid";
