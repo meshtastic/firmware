@@ -3,7 +3,7 @@
 #include "Router.h"
 
 /**
- * Most plugins are only interested in sending/receving one particular portnum.  This baseclass simplifies that common
+ * Most modules are only interested in sending/receving one particular portnum.  This baseclass simplifies that common
  * case.
  */
 class SinglePortPlugin : public MeshPlugin

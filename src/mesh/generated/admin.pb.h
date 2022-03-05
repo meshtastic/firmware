@@ -29,18 +29,18 @@ typedef struct _AdminMessage {
         bool confirm_set_radio;
         bool exit_simulator;
         int32_t reboot_seconds;
-        bool get_canned_message_plugin_part1_request;
-        char get_canned_message_plugin_part1_response[201];
-        bool get_canned_message_plugin_part2_request;
-        char get_canned_message_plugin_part2_response[201];
-        bool get_canned_message_plugin_part3_request;
-        char get_canned_message_plugin_part3_response[201];
-        bool get_canned_message_plugin_part4_request;
-        char get_canned_message_plugin_part4_response[201];
-        char set_canned_message_plugin_part1[201];
-        char set_canned_message_plugin_part2[201];
-        char set_canned_message_plugin_part3[201];
-        char set_canned_message_plugin_part4[201];
+        bool get_canned_message_module_part1_request;
+        char get_canned_message_module_part1_response[201];
+        bool get_canned_message_module_part2_request;
+        char get_canned_message_module_part2_response[201];
+        bool get_canned_message_module_part3_request;
+        char get_canned_message_module_part3_response[201];
+        bool get_canned_message_module_part4_request;
+        char get_canned_message_module_part4_response[201];
+        char set_canned_message_module_part1[201];
+        char set_canned_message_module_part2[201];
+        char set_canned_message_module_part3[201];
+        char set_canned_message_module_part4[201];
         int32_t shutdown_seconds;
     };
 } AdminMessage;
@@ -68,18 +68,18 @@ extern "C" {
 #define AdminMessage_confirm_set_radio_tag       33
 #define AdminMessage_exit_simulator_tag          34
 #define AdminMessage_reboot_seconds_tag          35
-#define AdminMessage_get_canned_message_plugin_part1_request_tag 36
-#define AdminMessage_get_canned_message_plugin_part1_response_tag 37
-#define AdminMessage_get_canned_message_plugin_part2_request_tag 38
-#define AdminMessage_get_canned_message_plugin_part2_response_tag 39
-#define AdminMessage_get_canned_message_plugin_part3_request_tag 40
-#define AdminMessage_get_canned_message_plugin_part3_response_tag 41
-#define AdminMessage_get_canned_message_plugin_part4_request_tag 42
-#define AdminMessage_get_canned_message_plugin_part4_response_tag 43
-#define AdminMessage_set_canned_message_plugin_part1_tag 44
-#define AdminMessage_set_canned_message_plugin_part2_tag 45
-#define AdminMessage_set_canned_message_plugin_part3_tag 46
-#define AdminMessage_set_canned_message_plugin_part4_tag 47
+#define AdminMessage_get_canned_message_module_part1_request_tag 36
+#define AdminMessage_get_canned_message_module_part1_response_tag 37
+#define AdminMessage_get_canned_message_module_part2_request_tag 38
+#define AdminMessage_get_canned_message_module_part2_response_tag 39
+#define AdminMessage_get_canned_message_module_part3_request_tag 40
+#define AdminMessage_get_canned_message_module_part3_response_tag 41
+#define AdminMessage_get_canned_message_module_part4_request_tag 42
+#define AdminMessage_get_canned_message_module_part4_response_tag 43
+#define AdminMessage_set_canned_message_module_part1_tag 44
+#define AdminMessage_set_canned_message_module_part2_tag 45
+#define AdminMessage_set_canned_message_module_part3_tag 46
+#define AdminMessage_set_canned_message_module_part4_tag 47
 #define AdminMessage_shutdown_seconds_tag        51
 
 /* Struct field encoding specification for nanopb */
@@ -97,18 +97,18 @@ X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_channel,confirm_set_chan
 X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_radio,confirm_set_radio),  33) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,exit_simulator,exit_simulator),  34) \
 X(a, STATIC,   ONEOF,    INT32,    (variant,reboot_seconds,reboot_seconds),  35) \
-X(a, STATIC,   ONEOF,    BOOL,     (variant,get_canned_message_plugin_part1_request,get_canned_message_plugin_part1_request),  36) \
-X(a, STATIC,   ONEOF,    STRING,   (variant,get_canned_message_plugin_part1_response,get_canned_message_plugin_part1_response),  37) \
-X(a, STATIC,   ONEOF,    BOOL,     (variant,get_canned_message_plugin_part2_request,get_canned_message_plugin_part2_request),  38) \
-X(a, STATIC,   ONEOF,    STRING,   (variant,get_canned_message_plugin_part2_response,get_canned_message_plugin_part2_response),  39) \
-X(a, STATIC,   ONEOF,    BOOL,     (variant,get_canned_message_plugin_part3_request,get_canned_message_plugin_part3_request),  40) \
-X(a, STATIC,   ONEOF,    STRING,   (variant,get_canned_message_plugin_part3_response,get_canned_message_plugin_part3_response),  41) \
-X(a, STATIC,   ONEOF,    BOOL,     (variant,get_canned_message_plugin_part4_request,get_canned_message_plugin_part4_request),  42) \
-X(a, STATIC,   ONEOF,    STRING,   (variant,get_canned_message_plugin_part4_response,get_canned_message_plugin_part4_response),  43) \
-X(a, STATIC,   ONEOF,    STRING,   (variant,set_canned_message_plugin_part1,set_canned_message_plugin_part1),  44) \
-X(a, STATIC,   ONEOF,    STRING,   (variant,set_canned_message_plugin_part2,set_canned_message_plugin_part2),  45) \
-X(a, STATIC,   ONEOF,    STRING,   (variant,set_canned_message_plugin_part3,set_canned_message_plugin_part3),  46) \
-X(a, STATIC,   ONEOF,    STRING,   (variant,set_canned_message_plugin_part4,set_canned_message_plugin_part4),  47) \
+X(a, STATIC,   ONEOF,    BOOL,     (variant,get_canned_message_module_part1_request,get_canned_message_module_part1_request),  36) \
+X(a, STATIC,   ONEOF,    STRING,   (variant,get_canned_message_module_part1_response,get_canned_message_module_part1_response),  37) \
+X(a, STATIC,   ONEOF,    BOOL,     (variant,get_canned_message_module_part2_request,get_canned_message_module_part2_request),  38) \
+X(a, STATIC,   ONEOF,    STRING,   (variant,get_canned_message_module_part2_response,get_canned_message_module_part2_response),  39) \
+X(a, STATIC,   ONEOF,    BOOL,     (variant,get_canned_message_module_part3_request,get_canned_message_module_part3_request),  40) \
+X(a, STATIC,   ONEOF,    STRING,   (variant,get_canned_message_module_part3_response,get_canned_message_module_part3_response),  41) \
+X(a, STATIC,   ONEOF,    BOOL,     (variant,get_canned_message_module_part4_request,get_canned_message_module_part4_request),  42) \
+X(a, STATIC,   ONEOF,    STRING,   (variant,get_canned_message_module_part4_response,get_canned_message_module_part4_response),  43) \
+X(a, STATIC,   ONEOF,    STRING,   (variant,set_canned_message_module_part1,set_canned_message_module_part1),  44) \
+X(a, STATIC,   ONEOF,    STRING,   (variant,set_canned_message_module_part2,set_canned_message_module_part2),  45) \
+X(a, STATIC,   ONEOF,    STRING,   (variant,set_canned_message_module_part3,set_canned_message_module_part3),  46) \
+X(a, STATIC,   ONEOF,    STRING,   (variant,set_canned_message_module_part4,set_canned_message_module_part4),  47) \
 X(a, STATIC,   ONEOF,    INT32,    (variant,shutdown_seconds,shutdown_seconds),  51)
 #define AdminMessage_CALLBACK NULL
 #define AdminMessage_DEFAULT NULL
@@ -125,7 +125,7 @@ extern const pb_msgdesc_t AdminMessage_msg;
 #define AdminMessage_fields &AdminMessage_msg
 
 /* Maximum encoded size of messages (where known) */
-#define AdminMessage_size                        601
+#define AdminMessage_size                        611
 
 #ifdef __cplusplus
 } /* extern "C" */

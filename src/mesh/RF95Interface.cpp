@@ -140,6 +140,8 @@ bool RF95Interface::reconfigure()
 void RF95Interface::addReceiveMetadata(MeshPacket *mp)
 {
     mp->rx_snr = lora->getSNR();
+    mp->rx_rssi = lround(lora->getRSSI());
+
 }
 
 void RF95Interface::setStandby()
