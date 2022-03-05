@@ -27,7 +27,7 @@ void RotaryEncoderInterruptImpl1::init()
     char eventPressed =
         static_cast<char>(radioConfig.preferences.rotary1_event_press);
 
-    //radioConfig.preferences.ext_notification_plugin_output
+    //radioConfig.preferences.ext_notification_module_output
     RotaryEncoderInterruptBase::init(
         pinA, pinB, pinPress,
         eventCw, eventCcw, eventPressed,

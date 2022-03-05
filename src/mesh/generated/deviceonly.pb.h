@@ -6,7 +6,6 @@
 #include <pb.h>
 #include "channel.pb.h"
 #include "mesh.pb.h"
-#include "radioconfig.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
@@ -32,11 +31,6 @@ typedef struct _DeviceState {
     uint32_t version;
     bool no_save;
     bool did_gps_reset;
-    char canned_message_plugin_message_part1[200];
-    char canned_message_plugin_message_part2[200];
-    char canned_message_plugin_message_part3[200];
-    char canned_message_plugin_message_part4[200];
-    char canned_message_plugin_message_part5[200];
 } DeviceState;
 
 
@@ -45,9 +39,9 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define DeviceState_init_default                 {false, MyNodeInfo_init_default, false, User_init_default, 0, {NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default}, 0, {MeshPacket_init_default}, false, MeshPacket_init_default, 0, 0, 0, "", "", "", "", ""}
+#define DeviceState_init_default                 {false, MyNodeInfo_init_default, false, User_init_default, 0, {NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default}, 0, {MeshPacket_init_default}, false, MeshPacket_init_default, 0, 0, 0}
 #define ChannelFile_init_default                 {0, {Channel_init_default, Channel_init_default, Channel_init_default, Channel_init_default, Channel_init_default, Channel_init_default, Channel_init_default, Channel_init_default}}
-#define DeviceState_init_zero                    {false, MyNodeInfo_init_zero, false, User_init_zero, 0, {NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero}, 0, {MeshPacket_init_zero}, false, MeshPacket_init_zero, 0, 0, 0, "", "", "", "", ""}
+#define DeviceState_init_zero                    {false, MyNodeInfo_init_zero, false, User_init_zero, 0, {NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero}, 0, {MeshPacket_init_zero}, false, MeshPacket_init_zero, 0, 0, 0}
 #define ChannelFile_init_zero                    {0, {Channel_init_zero, Channel_init_zero, Channel_init_zero, Channel_init_zero, Channel_init_zero, Channel_init_zero, Channel_init_zero, Channel_init_zero}}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -60,11 +54,6 @@ extern "C" {
 #define DeviceState_version_tag                  8
 #define DeviceState_no_save_tag                  9
 #define DeviceState_did_gps_reset_tag            11
-#define DeviceState_canned_message_plugin_message_part1_tag 13
-#define DeviceState_canned_message_plugin_message_part2_tag 14
-#define DeviceState_canned_message_plugin_message_part3_tag 15
-#define DeviceState_canned_message_plugin_message_part4_tag 16
-#define DeviceState_canned_message_plugin_message_part5_tag 17
 
 /* Struct field encoding specification for nanopb */
 #define DeviceState_FIELDLIST(X, a) \
@@ -75,12 +64,7 @@ X(a, STATIC,   REPEATED, MESSAGE,  receive_queue,     5) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  rx_text_message,   7) \
 X(a, STATIC,   SINGULAR, UINT32,   version,           8) \
 X(a, STATIC,   SINGULAR, BOOL,     no_save,           9) \
-X(a, STATIC,   SINGULAR, BOOL,     did_gps_reset,    11) \
-X(a, STATIC,   SINGULAR, STRING,   canned_message_plugin_message_part1,  13) \
-X(a, STATIC,   SINGULAR, STRING,   canned_message_plugin_message_part2,  14) \
-X(a, STATIC,   SINGULAR, STRING,   canned_message_plugin_message_part3,  15) \
-X(a, STATIC,   SINGULAR, STRING,   canned_message_plugin_message_part4,  16) \
-X(a, STATIC,   SINGULAR, STRING,   canned_message_plugin_message_part5,  17)
+X(a, STATIC,   SINGULAR, BOOL,     did_gps_reset,    11)
 #define DeviceState_CALLBACK NULL
 #define DeviceState_DEFAULT NULL
 #define DeviceState_my_node_MSGTYPE MyNodeInfo
@@ -103,7 +87,7 @@ extern const pb_msgdesc_t ChannelFile_msg;
 #define ChannelFile_fields &ChannelFile_msg
 
 /* Maximum encoded size of messages (where known) */
-#define DeviceState_size                         10985
+#define DeviceState_size                         9885
 #define ChannelFile_size                         832
 
 #ifdef __cplusplus

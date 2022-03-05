@@ -8,7 +8,7 @@
 
 #define BUTTON_PIN 2 // The middle button GPIO on the T-Beam
 #define BUTTON_NEED_PULLUP
-#define EXT_NOTIFY_OUT 12 // Overridden default pin to use for Ext Notify Plugin (#975).
+#define EXT_NOTIFY_OUT 12 // Overridden default pin to use for Ext Notify Module (#975).
 
 #define LORA_DIO0 26  // a No connect on the SX1262/SX1268 module
 #define LORA_RESET 27 // RST for SX1276, and for SX1262/SX1268

@@ -23,7 +23,7 @@ typedef enum _PortNum {
     PortNum_SERIAL_APP = 64,
     PortNum_STORE_FORWARD_APP = 65,
     PortNum_RANGE_TEST_APP = 66,
-    PortNum_ENVIRONMENTAL_MEASUREMENT_APP = 67,
+    PortNum_TELEMETRY_APP = 67,
     PortNum_ZPS_APP = 68,
     PortNum_PRIVATE_APP = 256,
     PortNum_ATAK_FORWARDER = 257,

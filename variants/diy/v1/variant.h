@@ -9,7 +9,7 @@
 //#define GPS_TX_PIN 12 // not connected
 
 #define BUTTON_PIN 39 // The middle button GPIO on the T-Beam
-#define EXT_NOTIFY_OUT 12 // Overridden default pin to use for Ext Notify Plugin (#975).
+#define EXT_NOTIFY_OUT 12 // Overridden default pin to use for Ext Notify Module (#975).
 #define LED_PIN 2 // add status LED (compatible with core-pcb and DIY targets)
 
 #define LORA_DIO0 26  // a No connect on the SX1262/SX1268 module
