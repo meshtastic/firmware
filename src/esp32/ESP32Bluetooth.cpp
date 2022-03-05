@@ -3,6 +3,8 @@
 #include "configuration.h"
 #include "ESP32Bluetooth.h"
 #include "BluetoothCommon.h"
+#include "PowerFSM.h"
+#include "sleep.h"
 #include "main.h"
 #include "mesh/PhoneAPI.h"
 #include "mesh/mesh-pb-constants.h"
@@ -27,6 +29,9 @@ static bool bleConnected;
 
 NimBLECharacteristic *FromNumCharacteristic;
 NimBLEServer *bleServer;
+
+static bool passkeyShowing;
+static uint32_t doublepressed;
 
 /**
  * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
@@ -59,7 +64,7 @@ PhoneAPI *bluetoothPhoneAPI;
 
 class ESP32BluetoothToRadioCallback : public NimBLECharacteristicCallbacks {
     virtual void onWrite(NimBLECharacteristic *pCharacteristic) {
-        DEBUG_MSG("To Radio onwrite");
+        DEBUG_MSG("To Radio onwrite\n");
         auto valueString = pCharacteristic->getValue();
         
         bluetoothPhoneAPI->handleToRadio(reinterpret_cast<const uint8_t*>(&valueString[0]), pCharacteristic->getDataLength());
@@ -68,7 +73,7 @@ class ESP32BluetoothToRadioCallback : public NimBLECharacteristicCallbacks {
 
 class ESP32BluetoothFromRadioCallback : public NimBLECharacteristicCallbacks {
     virtual void onRead(NimBLECharacteristic *pCharacteristic) {
-        DEBUG_MSG("From Radio onread");
+        DEBUG_MSG("From Radio onread\n");
         size_t numBytes = bluetoothPhoneAPI->getFromRadio(fromRadioBytes);
 
         std::string fromRadioByteString(fromRadioBytes, fromRadioBytes + numBytes);
@@ -77,6 +82,37 @@ class ESP32BluetoothFromRadioCallback : public NimBLECharacteristicCallbacks {
     }
 };
 
+class ESP32BluetoothServerCallback : public NimBLEServerCallbacks {
+    virtual uint32_t onPassKeyRequest() {
+
+        uint32_t passkey = 0;
+
+        if (doublepressed > 0 && (doublepressed + (30 * 1000)) > millis()) {
+            DEBUG_MSG("User has overridden passkey\n");
+            passkey = defaultBLEPin;
+        } else {
+            DEBUG_MSG("Using random passkey\n");
+            passkey = random(
+                100000, 999999); // This is the passkey to be entered on peer - we pick a number >100,000 to ensure 6 digits
+        }
+        DEBUG_MSG("*** Enter passkey %d on the peer side ***\n", passkey);
+
+        powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
+        screen->startBluetoothPinScreen(passkey);
+        passkeyShowing = true;
+
+        return passkey;
+    }
+
+    virtual void onAuthenticationComplete(ble_gap_conn_desc *desc) {
+        DEBUG_MSG("BLE authentication complete\n");
+
+        if (passkeyShowing) {
+            passkeyShowing = false;
+            screen->stopBluetoothPinScreen();
+        }
+    }
+};
 
 
 static ESP32BluetoothToRadioCallback *toRadioCallbacks;
@@ -85,7 +121,7 @@ static ESP32BluetoothFromRadioCallback *fromRadioCallbacks;
 void ESP32Bluetooth::shutdown()
 {
     // Shutdown bluetooth for minimum power draw
-    DEBUG_MSG("Disable NRF52 bluetooth\n");
+    DEBUG_MSG("Disable bluetooth\n");
     //Bluefruit.Advertising.stop();
 }
 
@@ -138,9 +174,12 @@ void ESP32Bluetooth::setup()
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
 
     NimBLEDevice::setSecurityAuth(true, true, true);
-    NimBLEDevice::setSecurityPasskey(123456);
     NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
     bleServer = NimBLEDevice::createServer();
+    
+    ESP32BluetoothServerCallback *serverCallbacks = new ESP32BluetoothServerCallback();
+    bleServer->setCallbacks(serverCallbacks);
+
     NimBLEService *bleService = bleServer->createService(MESH_SERVICE_UUID);
     //NimBLECharacteristic *pNonSecureCharacteristic = bleService->createCharacteristic("1234", NIMBLE_PROPERTY::READ );
     //NimBLECharacteristic *pSecureCharacteristic = bleService->createCharacteristic("1235", NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::READ_AUTHEN);
@@ -192,14 +231,32 @@ void ESP32Bluetooth::clearBonds()
 
     //Bluefruit.Periph.clearBonds();
     //Bluefruit.Central.clearBonds();
+    
 }
 
 void clearNVS() {
-
+    NimBLEDevice::deleteAllBonds();
+    ESP.restart();
 }
 
 void disablePin() {
+    DEBUG_MSG("User Override, disabling bluetooth pin requirement\n");
+    // keep track of when it was pressed, so we know it was within X seconds
 
+    // Flash the LED
+    setLed(true);
+    delay(100);
+    setLed(false);
+    delay(100);
+    setLed(true);
+    delay(100);
+    setLed(false);
+    delay(100);
+    setLed(true);
+    delay(100);
+    setLed(false);
+
+    doublepressed = millis();
 }
 
 #endif
