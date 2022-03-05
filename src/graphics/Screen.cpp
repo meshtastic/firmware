@@ -32,7 +32,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "mesh/Channels.h"
-#include "plugins/TextMessagePlugin.h"
+#include "modules/TextMessageModule.h"
 #include "sleep.h"
 #include "target_specific.h"
 #include "utils.h"
@@ -67,9 +67,9 @@ uint8_t imgBattery[16] = {0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 
 // Threshold values for the GPS lock accuracy bar display
 uint32_t dopThresholds[5] = {2000, 1000, 500, 200, 100};
 
-// At some point, we're going to ask all of the plugins if they would like to display a screen frame
-// we'll need to hold onto pointers for the plugins that can draw a frame.
-std::vector<MeshPlugin *> pluginFrames;
+// At some point, we're going to ask all of the modules if they would like to display a screen frame
+// we'll need to hold onto pointers for the modules that can draw a frame.
+std::vector<MeshPlugin *> moduleFrames;
 
 // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
 static char ourId[5];
@@ -176,9 +176,9 @@ static void drawSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int
 }
 #endif
 
-static void drawPluginFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    uint8_t plugin_frame;
+    uint8_t module_frame;
     // there's a little but in the UI transition code
     // where it invokes the function at the correct offset
     // in the array of "drawScreen" functions; however,
@@ -187,14 +187,14 @@ static void drawPluginFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
     if (state->frameState == IN_TRANSITION && state->transitionFrameRelationship == INCOMING) {
         // if we're transitioning from the end of the frame list back around to the first
         // frame, then we want this to be `0`
-        plugin_frame = state->transitionFrameTarget;
+        module_frame = state->transitionFrameTarget;
     } else {
-        // otherwise, just display the plugin frame that's aligned with the current frame
-        plugin_frame = state->currentFrame;
-        // DEBUG_MSG("Screen is not in transition.  Frame: %d\n\n", plugin_frame);
+        // otherwise, just display the module frame that's aligned with the current frame
+        module_frame = state->currentFrame;
+        // DEBUG_MSG("Screen is not in transition.  Frame: %d\n\n", module_frame);
     }
-    // DEBUG_MSG("Drawing Plugin Frame %d\n\n", plugin_frame);
-    MeshPlugin &pi = *pluginFrames.at(plugin_frame);
+    // DEBUG_MSG("Drawing Module Frame %d\n\n", module_frame);
+    MeshPlugin &pi = *moduleFrames.at(module_frame);
     pi.drawFrame(display, state, x, y);
 }
 
@@ -259,11 +259,11 @@ static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->drawString(0 + x, FONT_HEIGHT_MEDIUM + y, "For help, please post on\nmeshtastic.discourse.group");
 }
 
-// Ignore messages orginating from phone (from the current node 0x0) unless range test or store and forward plugin are enabled
+// Ignore messages orginating from phone (from the current node 0x0) unless range test or store and forward module are enabled
 static bool shouldDrawMessage(const MeshPacket *packet)
 {
-    return packet->from != 0 && !radioConfig.preferences.range_test_plugin_enabled &&
-           !radioConfig.preferences.store_forward_plugin_enabled;
+    return packet->from != 0 && !radioConfig.preferences.range_test_module_enabled &&
+           !radioConfig.preferences.store_forward_module_enabled;
 }
 
 /// Draw the last text message we received
@@ -824,10 +824,10 @@ void Screen::setup()
     powerStatusObserver.observe(&powerStatus->onNewStatus);
     gpsStatusObserver.observe(&gpsStatus->onNewStatus);
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
-    if (textMessagePlugin)
-        textMessageObserver.observe(textMessagePlugin);
+    if (textMessageModule)
+        textMessageObserver.observe(textMessageModule);
 
-    // Plugins can notify screen about refresh
+    // Modules can notify screen about refresh
     MeshPlugin::observeUIEvents(&uiFrameEventObserver);
 }
 
@@ -976,9 +976,9 @@ void Screen::setFrames()
     DEBUG_MSG("showing standard frames\n");
     showingNormalScreen = true;
 
-    pluginFrames = MeshPlugin::GetMeshPluginsWithUIFrames();
-    DEBUG_MSG("Showing %d plugin frames\n", pluginFrames.size());
-    int totalFrameCount = MAX_NUM_NODES + NUM_EXTRA_FRAMES + pluginFrames.size();
+    moduleFrames = MeshPlugin::GetMeshModulesWithUIFrames();
+    DEBUG_MSG("Showing %d module frames\n", moduleFrames.size());
+    int totalFrameCount = MAX_NUM_NODES + NUM_EXTRA_FRAMES + moduleFrames.size();
     DEBUG_MSG("Total frame count: %d\n", totalFrameCount);
 
     // We don't show the node info our our node (if we have it yet - we should)
@@ -988,23 +988,23 @@ void Screen::setFrames()
 
     size_t numframes = 0;
 
-    // put all of the plugin frames first.
+    // put all of the module frames first.
     // this is a little bit of a dirty hack; since we're going to call
-    // the same drawPluginFrame handler here for all of these plugin frames
+    // the same drawModuleFrame handler here for all of these module frames
     // and then we'll just assume that the state->currentFrame value
-    // is the same offset into the pluginFrames vector
-    // so that we can invoke the plugin's callback
-    for (auto i = pluginFrames.begin(); i != pluginFrames.end(); ++i) {
-        normalFrames[numframes++] = drawPluginFrame;
+    // is the same offset into the moduleFrames vector
+    // so that we can invoke the module's callback
+    for (auto i = moduleFrames.begin(); i != moduleFrames.end(); ++i) {
+        normalFrames[numframes++] = drawModuleFrame;
     }
 
-    DEBUG_MSG("Added plugins.  numframes: %d\n", numframes);
+    DEBUG_MSG("Added modules.  numframes: %d\n", numframes);
 
     // If we have a critical fault, show it first
     if (myNodeInfo.error_code)
         normalFrames[numframes++] = drawCriticalFaultFrame;
 
-    // If we have a text message - show it next, unless it's a phone message and we aren't using any special plugins
+    // If we have a text message - show it next, unless it's a phone message and we aren't using any special modules
     if (devicestate.has_rx_text_message && shouldDrawMessage(&devicestate.rx_text_message)) {
         normalFrames[numframes++] = drawTextMessageFrame;
     }

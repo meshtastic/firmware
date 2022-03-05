@@ -1,4 +1,3 @@
-#include "configuration.h"
 #include "PhoneAPI.h"
 #include "Channels.h"
 #include "GPS.h"
@@ -6,6 +5,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
+#include "configuration.h"
 #include <assert.h>
 
 #if FromRadio_size > MAX_TO_FROM_RADIO_SIZE

@@ -91,7 +91,7 @@ class MeshService
     /// Handle a packet that just arrived from the radio.  This method does _ReliableRouternot_ free the provided packet.  If it
     /// needs to keep the packet around it makes a copy
     int handleFromRadio(const MeshPacket *p);
-    friend class RoutingPlugin;
+    friend class RoutingModule;
 };
 
 extern MeshService service;
