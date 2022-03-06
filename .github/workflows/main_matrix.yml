@@ -341,5 +341,8 @@ jobs:
         with:
           commit: ${{ (github.event.pull_request_target || github.event.pull_request).head.sha }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          artifacts-branch: artifacts
+          artifacts-token: ${{ secrets.ARTIFACTS_TOKEN }}
+          artifacts-repo: meshtastic/artifacts
+          artifacts-branch: device
+          artifacts-dir: pr
           artifacts: ./firmware-${{ steps.version.outputs.version }}.zip
