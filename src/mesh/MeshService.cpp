@@ -12,8 +12,8 @@
 #include "RTC.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
-#include "plugins/NodeInfoPlugin.h"
-#include "plugins/PositionPlugin.h"
+#include "modules/NodeInfoModule.h"
+#include "modules/PositionModule.h"
 #include "power.h"
 
 /*
@@ -115,10 +115,10 @@ void MeshService::reloadOwner()
     // DEBUG_MSG("reloadOwner()\n");
     // update our local data directly
     nodeDB.updateUser(nodeDB.getNodeNum(), owner);
-    assert(nodeInfoPlugin);
+    assert(nodeInfoModule);
     // update everyone else
-    if (nodeInfoPlugin)
-        nodeInfoPlugin->sendOurNodeInfo();
+    if (nodeInfoModule)
+        nodeInfoModule->sendOurNodeInfo();
     nodeDB.saveToDisk();
 }
 
@@ -175,14 +175,14 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
     assert(node);
 
     if (node->has_position) {
-        if (positionPlugin) {
+        if (positionModule) {
             DEBUG_MSG("Sending position ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
-            positionPlugin->sendOurPosition(dest, wantReplies);
+            positionModule->sendOurPosition(dest, wantReplies);
         }
     } else {
-        if (nodeInfoPlugin) {
+        if (nodeInfoModule) {
             DEBUG_MSG("Sending nodeinfo ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
-            nodeInfoPlugin->sendOurNodeInfo(dest, wantReplies);
+            nodeInfoModule->sendOurNodeInfo(dest, wantReplies);
         }
     }
 }

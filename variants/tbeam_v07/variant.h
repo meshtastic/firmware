@@ -5,7 +5,7 @@
 
 #define BUTTON_PIN 39
 #define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Plugin.
+#define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Module.
 
 #define USE_RF95
 #define LORA_DIO0 26 // a No connect on the SX1262 module

@@ -2,10 +2,10 @@
 #include "SinglePortPlugin.h"
 
 /**
- * A base class for mesh plugins that assume that they are sending/receiving one particular protobuf based
+ * A base class for mesh modules that assume that they are sending/receiving one particular protobuf based
  * payload.  Using one particular app ID.
  *
- * If you are using protobufs to encode your packets (recommended) you can use this as a baseclass for your plugin
+ * If you are using protobufs to encode your packets (recommended) you can use this as a baseclass for your module
  * and avoid a bunch of boilerplate code.
  */
 template <class T> class ProtobufPlugin : protected SinglePortPlugin
@@ -67,7 +67,7 @@ template <class T> class ProtobufPlugin : protected SinglePortPlugin
             if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, fields, &scratch))
                 decoded = &scratch;
             else
-                DEBUG_MSG("Error decoding protobuf plugin!\n");
+                DEBUG_MSG("Error decoding protobuf module!\n");
         }
 
         return handleReceivedProtobuf(mp, decoded) ? ProcessMessage::STOP : ProcessMessage::CONTINUE;

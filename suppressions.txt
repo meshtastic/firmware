@@ -36,3 +36,7 @@ cstyleCast
 // ignore stuff that is not ours
 *:.pio/*
 *:*/libdeps/*
+
+// these two caused issues
+missingOverride
+virtualCallInConstructor

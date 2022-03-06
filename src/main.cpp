@@ -18,10 +18,12 @@
 #include "concurrency/Periodic.h"
 #include "graphics/Screen.h"
 #include "main.h"
-#include "plugins/Plugins.h"
+#include "modules/Modules.h"
 #include "sleep.h"
+#include "shutdown.h"
 #include "target_specific.h"
-#include <OneButton.h>
+#include "debug/i2cScan.h"
+#include "debug/axpDebug.h"
 #include <Wire.h>
 // #include <driver/rtc_io.h>
 
@@ -42,6 +44,8 @@
 #include "SX1268Interface.h"
 #include "LLCC68Interface.h"
 
+#include "ButtonThread.h"
+#include "PowerFSMThread.h"
 
 using namespace concurrency;
 
@@ -63,50 +67,6 @@ uint8_t screen_found;
 bool axp192_found;
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
-
-// -----------------------------------------------------------------------------
-// Application
-// -----------------------------------------------------------------------------
-#ifndef NO_WIRE
-void scanI2Cdevice(void)
-{
-    byte err, addr;
-    int nDevices = 0;
-    for (addr = 1; addr < 127; addr++) {
-        Wire.beginTransmission(addr);
-        err = Wire.endTransmission();
-        if (err == 0) {
-            DEBUG_MSG("I2C device found at address 0x%x\n", addr);
-
-            nDevices++;
-
-            if (addr == SSD1306_ADDRESS) {
-                screen_found = addr;
-                DEBUG_MSG("ssd1306 display found\n");
-            }
-            if (addr == ST7567_ADDRESS) {
-                screen_found = addr;
-                DEBUG_MSG("st7567 display found\n");
-            }
-#ifdef AXP192_SLAVE_ADDRESS
-            if (addr == AXP192_SLAVE_ADDRESS) {
-                axp192_found = true;
-                DEBUG_MSG("axp192 PMU found\n");
-            }
-#endif
-        } else if (err == 4) {
-            DEBUG_MSG("Unknow error at address 0x%x\n", addr);
-        }
-    }
-
-    if (nDevices == 0)
-        DEBUG_MSG("No I2C devices found\n");
-    else
-        DEBUG_MSG("done\n");
-}
-#else
-void scanI2Cdevice(void) {}
-#endif
 
 const char *getDeviceName()
 {
@@ -132,238 +92,6 @@ static int32_t ledBlinker()
 }
 
 uint32_t timeLastPowered = 0;
-
-/// Wrapper to convert our powerFSM stuff into a 'thread'
-class PowerFSMThread : public OSThread
-{
-  public:
-    // callback returns the period for the next callback invocation (or 0 if we should no longer be called)
-    PowerFSMThread() : OSThread("PowerFSM") {}
-
-  protected:
-    int32_t runOnce() override
-    {
-        powerFSM.run_machine();
-
-        /// If we are in power state we force the CPU to wake every 10ms to check for serial characters (we don't yet wake
-        /// cpu for serial rx - FIXME)
-        auto state = powerFSM.getState();
-        canSleep = (state != &statePOWER) && (state != &stateSERIAL);
-
-        if (powerStatus->getHasUSB()) {
-            timeLastPowered = millis();
-        } else if (radioConfig.preferences.on_battery_shutdown_after_secs > 0 && 
-                    millis() > timeLastPowered + (1000 * radioConfig.preferences.on_battery_shutdown_after_secs)) { //shutdown after 30 minutes unpowered
-            powerFSM.trigger(EVENT_SHUTDOWN);
-        }
-        
-        return 10;
-    }
-};
-
-/**
- * Watch a GPIO and if we get an IRQ, wake the main thread.
- * Use to add wake on button press
- */
-void wakeOnIrq(int irq, int mode)
-{
-    attachInterrupt(
-        irq,
-        [] {
-            BaseType_t higherWake = 0;
-            mainDelay.interruptFromISR(&higherWake);
-        },
-        FALLING);
-}
-
-class ButtonThread : public OSThread
-{
-// Prepare for button presses
-#ifdef BUTTON_PIN
-    OneButton userButton;
-#endif
-#ifdef BUTTON_PIN_ALT
-    OneButton userButtonAlt;
-#endif
-#ifdef BUTTON_PIN_TOUCH
-    OneButton userButtonTouch;
-#endif
-    static bool shutdown_on_long_stop;
-
-  public:
-    static uint32_t longPressTime;
-
-    // callback returns the period for the next callback invocation (or 0 if we should no longer be called)
-    ButtonThread() : OSThread("Button")
-    {
-#ifdef BUTTON_PIN
-        userButton = OneButton(BUTTON_PIN, true, true);
-#ifdef INPUT_PULLUP_SENSE
-        // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
-        pinMode(BUTTON_PIN, INPUT_PULLUP_SENSE);
-#endif
-        userButton.attachClick(userButtonPressed);
-        userButton.attachDuringLongPress(userButtonPressedLong);
-        userButton.attachDoubleClick(userButtonDoublePressed);
-        userButton.attachMultiClick(userButtonMultiPressed);
-        userButton.attachLongPressStart(userButtonPressedLongStart);
-        userButton.attachLongPressStop(userButtonPressedLongStop);
-        wakeOnIrq(BUTTON_PIN, FALLING);
-#endif
-#ifdef BUTTON_PIN_ALT
-        userButtonAlt = OneButton(BUTTON_PIN_ALT, true, true);
-#ifdef INPUT_PULLUP_SENSE
-        // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
-        pinMode(BUTTON_PIN_ALT, INPUT_PULLUP_SENSE);
-#endif
-        userButtonAlt.attachClick(userButtonPressed);
-        userButtonAlt.attachDuringLongPress(userButtonPressedLong);
-        userButtonAlt.attachDoubleClick(userButtonDoublePressed);
-        userButtonAlt.attachLongPressStart(userButtonPressedLongStart);
-        userButtonAlt.attachLongPressStop(userButtonPressedLongStop);
-        wakeOnIrq(BUTTON_PIN_ALT, FALLING);
-#endif
-
-#ifdef BUTTON_PIN_TOUCH
-        userButtonTouch = OneButton(BUTTON_PIN_TOUCH, true, true);
-#ifdef INPUT_PULLUP_SENSE
-        // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
-        pinMode(BUTTON_PIN_TOUCH, INPUT_PULLUP_SENSE);
-#endif
-        userButtonTouch.attachClick(touchPressed);
-        userButtonTouch.attachDuringLongPress(touchPressedLong);
-        userButtonTouch.attachDoubleClick(touchDoublePressed);
-        userButtonTouch.attachLongPressStart(touchPressedLongStart);
-        userButtonTouch.attachLongPressStop(touchPressedLongStop);
-        wakeOnIrq(BUTTON_PIN_TOUCH, FALLING);
-#endif
-
-    }
-
-  protected:
-    /// If the button is pressed we suppress CPU sleep until release
-    int32_t runOnce() override
-    {
-        canSleep = true; // Assume we should not keep the board awake
-
-#ifdef BUTTON_PIN
-        userButton.tick();
-        canSleep &= userButton.isIdle();
-#endif
-#ifdef BUTTON_PIN_ALT
-        userButtonAlt.tick();
-        canSleep &= userButtonAlt.isIdle();
-#endif
-#ifdef BUTTON_PIN_TOUCH
-        userButtonTouch.tick();
-        canSleep &= userButtonTouch.isIdle();
-#endif
-        // if (!canSleep) DEBUG_MSG("Supressing sleep!\n");
-        // else DEBUG_MSG("sleep ok\n");
-
-        return 5;
-    }
-
-  private:
-    static void touchPressed()
-    {        
-        screen->forceDisplay();
-        DEBUG_MSG("touch press!\n");       
-    }
-    static void touchDoublePressed()
-    {
-        DEBUG_MSG("touch double press!\n");       
-    }
-    static void touchPressedLong()
-    {
-        DEBUG_MSG("touch press long!\n");       
-    }
-    static void touchDoublePressedLong()
-    {
-        DEBUG_MSG("touch double pressed!\n");       
-    }
-    static void touchPressedLongStart()
-    {        
-        DEBUG_MSG("touch long press start!\n");       
-    }
-    static void touchPressedLongStop()
-    {       
-        DEBUG_MSG("touch long press stop!\n");       
-    }
-
-
-    static void userButtonPressed()
-    {
-        // DEBUG_MSG("press!\n");
-        powerFSM.trigger(EVENT_PRESS);
-    }
-    static void userButtonPressedLong()
-    {
-        // DEBUG_MSG("Long press!\n");
-#ifndef NRF52_SERIES
-        screen->adjustBrightness();
-#endif
-        // If user button is held down for 5 seconds, shutdown the device.
-        if (millis() - longPressTime > 5 * 1000) {
-#ifdef TBEAM_V10
-            if (axp192_found == true) {
-                setLed(false);
-                power->shutdown();
-            }
-#elif NRF52_SERIES
-            // Do actual shutdown when button released, otherwise the button release
-            // may wake the board immediatedly.
-            if (!shutdown_on_long_stop) {
-                screen->startShutdownScreen();
-                DEBUG_MSG("Shutdown from long press");
-                playBeep();
-                ledOff(PIN_LED1);
-                ledOff(PIN_LED2);
-                shutdown_on_long_stop = true;
-            }
-#endif
-        } else {
-            // DEBUG_MSG("Long press %u\n", (millis() - longPressTime));
-        }
-    }
-
-    static void userButtonDoublePressed()
-    {
-#ifndef NO_ESP32
-        disablePin();
-#elif defined(HAS_EINK)
-        digitalWrite(PIN_EINK_EN,digitalRead(PIN_EINK_EN) == LOW);
-#endif
-    }
-
-    static void userButtonMultiPressed()
-    {
-#ifndef NO_ESP32
-        clearNVS();
-#endif
-#ifdef NRF52_SERIES
-        clearBonds();
-#endif
-    }
-
-
-    static void userButtonPressedLongStart()
-    {
-        DEBUG_MSG("Long press start!\n");
-        longPressTime = millis();
-    }
-
-    static void userButtonPressedLongStop()
-    {
-        DEBUG_MSG("Long press stop!\n");
-        longPressTime = 0;
-        if (shutdown_on_long_stop) {
-            playShutdownMelody();
-            delay(3000);
-            power->shutdown();
-        }
-    }
-};
 
 bool ButtonThread::shutdown_on_long_stop = false;
 
@@ -510,22 +238,6 @@ void setup()
 
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 
-#ifdef GENIEBLOCKS
-    Im intentionally breaking your build so you see this note.Feel free to revert if not correct.I think you can
-            remove this GPS_RESET_N code by instead defining PIN_GPS_RESET and
-        use the shared code in GPS.cpp instead.- geeksville
-
-                                                     // gps setup
-                                                     pinMode(GPS_RESET_N, OUTPUT);
-    pinMode(GPS_EXTINT, OUTPUT);
-    digitalWrite(GPS_RESET_N, HIGH);
-    digitalWrite(GPS_EXTINT, LOW);
-    // battery setup
-    // If we want to read battery level, we need to set BATTERY_EN_PIN pin to low.
-    // ToDo: For low power consumption after read battery level, set that pin to high.
-    pinMode(BATTERY_EN_PIN, OUTPUT);
-    digitalWrite(BATTERY_EN_PIN, LOW);
-#endif
     gps = createGps();
 
     if (gps)
@@ -537,8 +249,8 @@ void setup()
 
     service.init();
 
-    // Now that the mesh service is created, create any plugins
-    setupPlugins();
+    // Now that the mesh service is created, create any modules
+    setupModules();
 
     // Do this after service.init (because that clears error_code)
 #ifdef AXP192_SLAVE_ADDRESS
@@ -680,65 +392,8 @@ void setup()
     setCPUFast(false); // 80MHz is fine for our slow peripherals
 }
 
-#if 0
-// Turn off for now
-
-uint32_t axpDebugRead()
-{
-  axp.debugCharging();
-  DEBUG_MSG("vbus current %f\n", axp.getVbusCurrent());
-  DEBUG_MSG("charge current %f\n", axp.getBattChargeCurrent());
-  DEBUG_MSG("bat voltage %f\n", axp.getBattVoltage());
-  DEBUG_MSG("batt pct %d\n", axp.getBattPercentage());
-  DEBUG_MSG("is battery connected %d\n", axp.isBatteryConnect());
-  DEBUG_MSG("is USB connected %d\n", axp.isVBUSPlug());
-  DEBUG_MSG("is charging %d\n", axp.isChargeing());
-
-  return 30 * 1000;
-}
-
-Periodic axpDebugOutput(axpDebugRead);
-axpDebugOutput.setup();
-#endif
-
 uint32_t rebootAtMsec; // If not zero we will reboot at this time (used to reboot shortly after the update completes)
 uint32_t shutdownAtMsec; // If not zero we will shutdown at this time (used to shutdown from python or mobile client)
-
-void powerCommandsCheck()
-{
-    if (rebootAtMsec && millis() > rebootAtMsec) {
-#ifndef NO_ESP32
-        DEBUG_MSG("Rebooting for update\n");
-        ESP.restart();
-#else
-        DEBUG_MSG("FIXME implement reboot for this platform");
-#endif
-    }
-
-#if NRF52_SERIES
-    if (shutdownAtMsec) {
-        screen->startShutdownScreen();
-        playBeep();
-        ledOff(PIN_LED1);
-        ledOff(PIN_LED2);
-    }
-#endif
-
-    if (shutdownAtMsec && millis() > shutdownAtMsec) {
-        DEBUG_MSG("Shutting down from admin command\n");
-#ifdef TBEAM_V10
-        if (axp192_found == true) {
-            setLed(false);
-            power->shutdown();
-        }
-#elif NRF52_SERIES
-        playShutdownMelody();
-        power->shutdown();
-#else
-        DEBUG_MSG("FIXME implement shutdown for this platform");
-#endif
-    }
-}
 
 // If a thread does something that might need for it to be rescheduled ASAP it can set this flag
 // This will supress the current delay and instead try to run ASAP.

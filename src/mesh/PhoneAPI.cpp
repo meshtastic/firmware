@@ -1,4 +1,3 @@
-#include "configuration.h"
 #include "PhoneAPI.h"
 #include "Channels.h"
 #include "GPS.h"
@@ -6,6 +5,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
+#include "configuration.h"
 #include <assert.h>
 
 #if FromRadio_size > MAX_TO_FROM_RADIO_SIZE
@@ -140,16 +140,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         myNodeInfo.has_gps = gps && gps->isConnected(); // Update with latest GPS connect info
         fromRadioScratch.which_payloadVariant = FromRadio_my_info_tag;
         fromRadioScratch.my_info = myNodeInfo;
-        state = STATE_SEND_GROUPS;
-
-        service.refreshMyNodeInfo(); // Update my NodeInfo because the client will be asking for it soon.
-        break;
-
-    case STATE_SEND_GROUPS:
-        fromRadioScratch.which_payloadVariant = FromRadio_groups_tag;
-        fromRadioScratch.groups = ourGroupInfo;
         state = STATE_SEND_NODEINFO;
 
+        service.refreshMyNodeInfo(); // Update my NodeInfo because the client will be asking for it soon.
         break;
 
     case STATE_SEND_NODEINFO: {
