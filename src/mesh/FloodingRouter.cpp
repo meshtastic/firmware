@@ -75,8 +75,6 @@ void FloodingRouter::sniffReceived(const MeshPacket *p, const Routing *c)
             rebroadcastPacket = false;
 
         }
-
-        rebroadcastPacket = true;
     }
 
     if ((p->to == NODENUM_BROADCAST) && (p->hop_limit > 0) && (getFrom(p) != getNodeNum() && rebroadcastPacket)) {
