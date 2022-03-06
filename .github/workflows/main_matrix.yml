@@ -331,12 +331,15 @@ jobs:
           name: debug-elfs-${{ steps.version.outputs.version }}.zip
           path: ./*.elf
           retention-days: 90
-
+          
       - name: Create request artifacts
         if: ${{ github.event_name == 'pull_request_target' || github.event_name == 'pull_request' }}
         uses: gavv/pull-request-artifacts@v1.0.0
         with:
           commit: ${{ (github.event.pull_request_target || github.event.pull_request).head.sha }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          artifacts-branch: artifacts
+          artifacts-token: ${{ secrets.ARTIFACTS_TOKEN }}
+          artifacts-repo: meshtastic/artifacts
+          artifacts-branch: device
+          artifacts-dir: pr
           artifacts: ./firmware-${{ steps.version.outputs.version }}.zip
