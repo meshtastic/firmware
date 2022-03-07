@@ -48,6 +48,14 @@ bool FloodingRouter::inRangeOfRouter()
     return false;
 }
 
+bool FloodingRouter::isPacketLocal(const MeshPacket *p)
+{
+
+    // TODO: Figure out if a packet is from a local node
+
+    return false;
+}
+
 void FloodingRouter::sniffReceived(const MeshPacket *p, const Routing *c)
 {
     bool rebroadcastPacket = true;
@@ -55,10 +63,18 @@ void FloodingRouter::sniffReceived(const MeshPacket *p, const Routing *c)
     if (radioConfig.preferences.role == Role_Repeater || radioConfig.preferences.role == Role_Router) {
         rebroadcastPacket = true;
 
-    } else if ((radioConfig.preferences.role == Role_Default) && inRangeOfRouter()) {
-        DEBUG_MSG("Role_Default - rx_snr > 13\n");
+    } else if ((radioConfig.preferences.role == Role_Default)) {
 
-        rebroadcastPacket = false;
+
+        if (inRangeOfRouter()) {
+            // In Range of a router
+            rebroadcastPacket = false;
+
+        } else if (!isPacketLocal(p)) {
+            // The packet did not come from a local source
+            rebroadcastPacket = false;
+
+        }
     }
 
     if ((p->to == NODENUM_BROADCAST) && (p->hop_limit > 0) && (getFrom(p) != getNodeNum() && rebroadcastPacket)) {
