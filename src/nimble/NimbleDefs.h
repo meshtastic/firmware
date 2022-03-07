@@ -1,3 +1,5 @@
+#ifndef USE_NEW_ESP32_BLUETOOTH
+
 #pragma once
 
 // Keep nimble #defs from messing up the build
@@ -29,3 +31,5 @@ extern const ble_uuid128_t mesh_service_uuid, fromnum_uuid;
 #ifdef __cplusplus
 };
 #endif
+
+#endif //#ifndef USE_NEW_ESP32_BLUETOOTH
