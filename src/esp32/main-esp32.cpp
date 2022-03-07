@@ -3,7 +3,13 @@
 #include "configuration.h"
 #include "esp_task_wdt.h"
 #include "main.h"
+
+#ifdef USE_NEW_ESP32_BLUETOOTH
+#include "ESP32Bluetooth.h"
+#else
 #include "nimble/BluetoothUtil.h"
+#endif
+
 #include "sleep.h"
 #include "target_specific.h"
 #include "utils.h"
@@ -11,6 +17,10 @@
 #include <driver/rtc_io.h>
 #include <nvs.h>
 #include <nvs_flash.h>
+
+#ifdef USE_NEW_ESP32_BLUETOOTH
+ESP32Bluetooth *esp32Bluetooth;
+#endif
 
 void getMacAddr(uint8_t *dmac)
 {
@@ -28,6 +38,19 @@ static void printBLEinfo() {
     }
 
 } */
+#ifdef USE_NEW_ESP32_BLUETOOTH
+void setBluetoothEnable(bool on) {
+    
+    if (!esp32Bluetooth) {
+        esp32Bluetooth = new ESP32Bluetooth();
+    }
+    if (on) {
+        esp32Bluetooth->setup();
+    } else {
+        esp32Bluetooth->shutdown();
+    }
+}
+#endif
 
 void esp32Setup()
 {
@@ -92,11 +115,12 @@ uint32_t axpDebugRead()
 Periodic axpDebugOutput(axpDebugRead);
 #endif
 
+
 /// loop code specific to ESP32 targets
 void esp32Loop()
 {
     esp_task_wdt_reset(); // service our app level watchdog
-    loopBLE();
+    //loopBLE();
 
     // for debug printing
     // radio.radioIf.canSleep();
