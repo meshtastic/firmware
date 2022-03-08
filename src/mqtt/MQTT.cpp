@@ -13,6 +13,7 @@ MQTT *mqtt;
 
 String statusTopic = "msh/1/stat/";
 String cryptTopic = "msh/1/c/"; // msh/1/c/CHANNELID/NODEID
+String txtTopic = "msh/1/txt/"; // msh/1/txt/CHANNELID/NODEID
 
 void MQTT::mqttCallback(char *topic, byte *payload, unsigned int length)
 {
@@ -193,5 +194,13 @@ void MQTT::onSend(const MeshPacket &mp, ChannelIndex chIndex)
         DEBUG_MSG("publish %s, %u bytes\n", topic.c_str(), numBytes);
 
         pubSub.publish(topic.c_str(), bytes, numBytes, false);
+
+        // publish to txt topic for messages of type TEXT_MESSAGE_APP
+        if (mp.decoded.portnum == PortNum_TEXT_MESSAGE_APP) {
+            String plaintextTopic = txtTopic + channelId + "/" + owner.id;
+            DEBUG_MSG("publish txt %s, %u bytes\n", topic.c_str(), numBytes);
+            auto &p = mp.decoded;
+            pubSub.publish(plaintextTopic.c_str(), p.payload.bytes, p.payload.size, false);
+        }
     }
 }
