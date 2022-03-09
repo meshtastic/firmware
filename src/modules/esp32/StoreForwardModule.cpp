@@ -378,7 +378,7 @@ ProcessMessage StoreForwardModule::handleReceivedProtobuf(const MeshPacket &mp, 
 }
 
 StoreForwardModule::StoreForwardModule()
-    : SinglePortPlugin("StoreForwardModule", PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("StoreForwardModule")
+    : SinglePortModule("StoreForwardModule", PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("StoreForwardModule")
 {
 
 #ifndef NO_ESP32

@@ -40,7 +40,7 @@ class Screen
 #include "concurrency/OSThread.h"
 #include "power.h"
 #include <string>
-#include "mesh/MeshPlugin.h"
+#include "mesh/MeshModule.h"
 
 // 0 to 255, though particular variants might define different defaults
 #ifndef BRIGHTNESS_DEFAULT

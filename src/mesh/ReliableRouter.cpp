@@ -1,6 +1,6 @@
 #include "configuration.h"
 #include "ReliableRouter.h"
-#include "MeshPlugin.h"
+#include "MeshModule.h"
 #include "MeshTypes.h"
 #include "mesh-pb-constants.h"
 
@@ -92,7 +92,7 @@ void ReliableRouter::sniffReceived(const MeshPacket *p, const Routing *c)
     if (p->to == ourNode) { // ignore ack/nak/want_ack packets that are not address to us (we only handle 0 hop reliability
                             // - not DSR routing)
         if (p->want_ack) {
-            if (MeshPlugin::currentReply)
+            if (MeshModule::currentReply)
                 DEBUG_MSG("Someone else has replied to this message, no need for a 2nd ack\n");
             else
                 sendAckNak(Routing_Error_NONE, getFrom(p), p->id, p->channel);

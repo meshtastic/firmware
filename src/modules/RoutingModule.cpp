@@ -41,7 +41,7 @@ void RoutingModule::sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom, C
     router->sendLocal(p); // we sometimes send directly to the local node
 }
 
-RoutingModule::RoutingModule() : ProtobufPlugin("routing", PortNum_ROUTING_APP, Routing_fields)
+RoutingModule::RoutingModule() : ProtobufModule("routing", PortNum_ROUTING_APP, Routing_fields)
 {
     isPromiscuous = true;
 }

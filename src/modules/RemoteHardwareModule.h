@@ -1,12 +1,12 @@
 #pragma once
-#include "ProtobufPlugin.h"
+#include "ProtobufModule.h"
 #include "mesh/generated/remote_hardware.pb.h"
 #include "concurrency/OSThread.h"
 
 /**
  * A module that provides easy low-level remote access to device hardware.
  */
-class RemoteHardwareModule : public ProtobufPlugin<HardwareMessage>, private concurrency::OSThread
+class RemoteHardwareModule : public ProtobufModule<HardwareMessage>, private concurrency::OSThread
 {
     /// The current set of GPIOs we've been asked to watch for changes
     uint64_t watchGpios = 0; 
