@@ -148,12 +148,12 @@ typedef struct _RadioConfig_UserPreferences {
     bool debug_log_enabled;
     pb_size_t ignore_incoming_count;
     uint32_t ignore_incoming[3];
-    bool serialmodule_enabled;
-    bool serialmodule_echo;
-    uint32_t serialmodule_rxd;
-    uint32_t serialmodule_txd;
-    uint32_t serialmodule_timeout;
-    uint32_t serialmodule_mode;
+    bool serial_module_enabled;
+    bool serial_module_echo;
+    uint32_t serial_module_rxd;
+    uint32_t serial_module_txd;
+    uint32_t serial_module_timeout;
+    uint32_t serial_module_mode;
     bool ext_notification_module_enabled;
     uint32_t ext_notification_module_output_ms;
     uint32_t ext_notification_module_output;
@@ -197,7 +197,7 @@ typedef struct _RadioConfig_UserPreferences {
     bool canned_message_module_send_bell;
     bool mqtt_encryption_enabled;
     float adc_multiplier_override;
-    uint32_t serialmodule_baud;
+    uint32_t serial_module_baud;
 } RadioConfig_UserPreferences;
 
 typedef struct _RadioConfig {
@@ -289,12 +289,12 @@ extern "C" {
 #define RadioConfig_UserPreferences_factory_reset_tag 100
 #define RadioConfig_UserPreferences_debug_log_enabled_tag 101
 #define RadioConfig_UserPreferences_ignore_incoming_tag 103
-#define RadioConfig_UserPreferences_serialmodule_enabled_tag 120
-#define RadioConfig_UserPreferences_serialmodule_echo_tag 121
-#define RadioConfig_UserPreferences_serialmodule_rxd_tag 122
-#define RadioConfig_UserPreferences_serialmodule_txd_tag 123
-#define RadioConfig_UserPreferences_serialmodule_timeout_tag 124
-#define RadioConfig_UserPreferences_serialmodule_mode_tag 125
+#define RadioConfig_UserPreferences_serial_module_enabled_tag 120
+#define RadioConfig_UserPreferences_serial_module_echo_tag 121
+#define RadioConfig_UserPreferences_serial_module_rxd_tag 122
+#define RadioConfig_UserPreferences_serial_module_txd_tag 123
+#define RadioConfig_UserPreferences_serial_module_timeout_tag 124
+#define RadioConfig_UserPreferences_serial_module_mode_tag 125
 #define RadioConfig_UserPreferences_ext_notification_module_enabled_tag 126
 #define RadioConfig_UserPreferences_ext_notification_module_output_ms_tag 127
 #define RadioConfig_UserPreferences_ext_notification_module_output_tag 128
@@ -338,7 +338,7 @@ extern "C" {
 #define RadioConfig_UserPreferences_canned_message_module_send_bell_tag 173
 #define RadioConfig_UserPreferences_mqtt_encryption_enabled_tag 174
 #define RadioConfig_UserPreferences_adc_multiplier_override_tag 175
-#define RadioConfig_UserPreferences_serialmodule_baud_tag 176
+#define RadioConfig_UserPreferences_serial_module_baud_tag 176
 #define RadioConfig_preferences_tag              1
 
 /* Struct field encoding specification for nanopb */
@@ -383,12 +383,12 @@ X(a, STATIC,   SINGULAR, UINT32,   gps_max_dop,      46) \
 X(a, STATIC,   SINGULAR, BOOL,     factory_reset,   100) \
 X(a, STATIC,   SINGULAR, BOOL,     debug_log_enabled, 101) \
 X(a, STATIC,   REPEATED, UINT32,   ignore_incoming, 103) \
-X(a, STATIC,   SINGULAR, BOOL,     serialmodule_enabled, 120) \
-X(a, STATIC,   SINGULAR, BOOL,     serialmodule_echo, 121) \
-X(a, STATIC,   SINGULAR, UINT32,   serialmodule_rxd, 122) \
-X(a, STATIC,   SINGULAR, UINT32,   serialmodule_txd, 123) \
-X(a, STATIC,   SINGULAR, UINT32,   serialmodule_timeout, 124) \
-X(a, STATIC,   SINGULAR, UINT32,   serialmodule_mode, 125) \
+X(a, STATIC,   SINGULAR, BOOL,     serial_module_enabled, 120) \
+X(a, STATIC,   SINGULAR, BOOL,     serial_module_echo, 121) \
+X(a, STATIC,   SINGULAR, UINT32,   serial_module_rxd, 122) \
+X(a, STATIC,   SINGULAR, UINT32,   serial_module_txd, 123) \
+X(a, STATIC,   SINGULAR, UINT32,   serial_module_timeout, 124) \
+X(a, STATIC,   SINGULAR, UINT32,   serial_module_mode, 125) \
 X(a, STATIC,   SINGULAR, BOOL,     ext_notification_module_enabled, 126) \
 X(a, STATIC,   SINGULAR, UINT32,   ext_notification_module_output_ms, 127) \
 X(a, STATIC,   SINGULAR, UINT32,   ext_notification_module_output, 128) \
@@ -432,7 +432,7 @@ X(a, STATIC,   SINGULAR, STRING,   canned_message_module_allow_input_source, 171
 X(a, STATIC,   SINGULAR, BOOL,     canned_message_module_send_bell, 173) \
 X(a, STATIC,   SINGULAR, BOOL,     mqtt_encryption_enabled, 174) \
 X(a, STATIC,   SINGULAR, FLOAT,    adc_multiplier_override, 175) \
-X(a, STATIC,   SINGULAR, UINT32,   serialmodule_baud, 176)
+X(a, STATIC,   SINGULAR, UINT32,   serial_module_baud, 176)
 #define RadioConfig_UserPreferences_CALLBACK NULL
 #define RadioConfig_UserPreferences_DEFAULT NULL
 
