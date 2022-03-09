@@ -1,5 +1,5 @@
 #pragma once
-#include "ProtobufPlugin.h"
+#include "ProtobufModule.h"
 #include "input/InputBroker.h"
 
 enum cannedMessageModuleRunState
@@ -21,7 +21,7 @@ enum cannedMessageModuleRunState
 #define CANNED_MESSAGE_MODULE_MESSAGES_SIZE 800
 
 class CannedMessageModule :
-    public SinglePortPlugin,
+    public SinglePortModule,
     public Observable<const UIFrameEvent *>,
     private concurrency::OSThread
 {

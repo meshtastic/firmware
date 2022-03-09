@@ -1,6 +1,6 @@
 #pragma once
 
-#include "SinglePortPlugin.h"
+#include "SinglePortModule.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include <Arduino.h>
@@ -10,7 +10,7 @@
  * Radio interface for ExternalNotificationModule
  *
  */
-class ExternalNotificationModule : public SinglePortPlugin, private concurrency::OSThread
+class ExternalNotificationModule : public SinglePortModule, private concurrency::OSThread
 {
   public:
     ExternalNotificationModule();

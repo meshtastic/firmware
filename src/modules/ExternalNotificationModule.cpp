@@ -108,7 +108,7 @@ void ExternalNotificationModule::setExternalOff()
 // --------
 
 ExternalNotificationModule::ExternalNotificationModule()
-    : SinglePortPlugin("ExternalNotificationModule", PortNum_TEXT_MESSAGE_APP), concurrency::OSThread(
+    : SinglePortModule("ExternalNotificationModule", PortNum_TEXT_MESSAGE_APP), concurrency::OSThread(
                                                                                          "ExternalNotificationModule")
 {
     // restrict to the admin channel for rx

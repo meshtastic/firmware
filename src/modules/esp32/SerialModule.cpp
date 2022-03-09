@@ -61,7 +61,7 @@ SerialModule::SerialModule() : concurrency::OSThread("SerialModule") {}
 
 char serialStringChar[Constants_DATA_PAYLOAD_LEN];
 
-SerialModuleRadio::SerialModuleRadio() : SinglePortPlugin("SerialModuleRadio", PortNum_SERIAL_APP)
+SerialModuleRadio::SerialModuleRadio() : SinglePortModule("SerialModuleRadio", PortNum_SERIAL_APP)
 {
     // restrict to the admin channel for rx
     boundChannel = Channels::serialChannel;

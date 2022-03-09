@@ -123,7 +123,7 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
 
     default:
         AdminMessage response = AdminMessage_init_default;
-        AdminMessageHandleResult handleResult = MeshPlugin::handleAdminMessageForAllPlugins(mp, r, &response);
+        AdminMessageHandleResult handleResult = MeshModule::handleAdminMessageForAllPlugins(mp, r, &response);
 
         if (handleResult == AdminMessageHandleResult::HANDLED_WITH_RESPONSE)
         {
@@ -195,7 +195,7 @@ void AdminModule::handleSetRadio(RadioConfig &r)
     service.reloadConfig();
 }
 
-AdminModule::AdminModule() : ProtobufPlugin("Admin", PortNum_ADMIN_APP, AdminMessage_fields)
+AdminModule::AdminModule() : ProtobufModule("Admin", PortNum_ADMIN_APP, AdminMessage_fields)
 {
     // restrict to the admin channel for rx
     boundChannel = Channels::adminChannel;

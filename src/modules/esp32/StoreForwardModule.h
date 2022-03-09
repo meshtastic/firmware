@@ -1,6 +1,6 @@
 #pragma once
 
-#include "SinglePortPlugin.h"
+#include "SinglePortModule.h"
 #include "concurrency/OSThread.h"
 #include "mesh/generated/storeforward.pb.h"
 
@@ -18,7 +18,7 @@ struct PacketHistoryStruct {
     pb_size_t payload_size;
 };
 
-class StoreForwardModule : public SinglePortPlugin, private concurrency::OSThread
+class StoreForwardModule : public SinglePortModule, private concurrency::OSThread
 {
     // bool firstTime = 1;
     bool busy = 0;

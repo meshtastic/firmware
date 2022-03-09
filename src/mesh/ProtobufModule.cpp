@@ -1,4 +1,4 @@
 #include "configuration.h"
-#include "ProtobufPlugin.h"
+#include "ProtobufModule.h"
 
 

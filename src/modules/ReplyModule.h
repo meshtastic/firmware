@@ -1,17 +1,17 @@
 #pragma once
-#include "SinglePortPlugin.h"
+#include "SinglePortModule.h"
 
 
 /**
  * A simple example module that just replies with "Message received" to any message it receives.
  */
-class ReplyModule : public SinglePortPlugin
+class ReplyModule : public SinglePortModule
 {
   public:
     /** Constructor
      * name is for debugging output
      */
-    ReplyModule() : SinglePortPlugin("reply", PortNum_REPLY_APP) {}
+    ReplyModule() : SinglePortModule("reply", PortNum_REPLY_APP) {}
 
   protected:
 

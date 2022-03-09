@@ -1,10 +1,10 @@
 #pragma once
-#include "ProtobufPlugin.h"
+#include "ProtobufModule.h"
 
 /**
  * NodeInfo module for sending/receiving NodeInfos into the mesh
  */
-class NodeInfoModule : public ProtobufPlugin<User>, private concurrency::OSThread
+class NodeInfoModule : public ProtobufModule<User>, private concurrency::OSThread
 {
     /// The id of the last packet we sent, to allow us to cancel it if we make something fresher
     PacketId prevPacketId = 0;

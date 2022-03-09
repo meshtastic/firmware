@@ -1,6 +1,6 @@
 #pragma once
 
-#include "SinglePortPlugin.h"
+#include "SinglePortModule.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include <Arduino.h>
@@ -23,12 +23,12 @@ extern RangeTestModule *rangeTestModule;
  * Radio interface for RangeTestModule
  *
  */
-class RangeTestModuleRadio : public SinglePortPlugin
+class RangeTestModuleRadio : public SinglePortModule
 {
     uint32_t lastRxID = 0;
 
   public:
-    RangeTestModuleRadio() : SinglePortPlugin("RangeTestModuleRadio", PortNum_TEXT_MESSAGE_APP) {}
+    RangeTestModuleRadio() : SinglePortModule("RangeTestModuleRadio", PortNum_TEXT_MESSAGE_APP) {}
 
     /**
      * Send our payload into the mesh
