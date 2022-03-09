@@ -241,7 +241,7 @@ void MQTT::onSend(const MeshPacket &mp, ChannelIndex chIndex)
         // handle json topic
         using namespace json11;
         auto jsonString = this->downstreamPacketToJson((MeshPacket *)&mp);
-        if (!jsonString.isEmpty()) {
+        if (jsonString.length() != 0) {
             String topicJson = jsonTopic + channelId + "/" + owner.id;
             DEBUG_MSG("publish json message to %s, %u bytes: %s\n", topicJson.c_str(), jsonString.length(), jsonString.c_str());
             pubSub.publish(topicJson.c_str(), jsonString.c_str(), false);
