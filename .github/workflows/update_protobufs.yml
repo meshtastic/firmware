@@ -7,24 +7,24 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           submodules: true
 
       - name: Update submodule
         run: |
           git submodule update --remote proto
-          
+
       - name: Download nanopb
         run: |
           wget https://jpa.kapsi.fi/nanopb/download/nanopb-0.4.4-linux-x86.tar.gz
           tar xvzf nanopb-0.4.4-linux-x86.tar.gz
           mv nanopb-0.4.4-linux-x86 nanopb-0.4.4
-          
+
       - name: Re-generate protocol buffers
         run: |
-          ./bin/regen-protos.sh  
-          
+          ./bin/regen-protos.sh
+
       - name: Create pull request
         uses: peter-evans/create-pull-request@v3
         with:
