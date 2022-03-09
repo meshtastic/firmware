@@ -3,6 +3,7 @@
 #include "PowerFSM.h"
 #include "json11.hpp"
 #include "main.h"
+#include "MeshService.h"
 #include "mesh/Channels.h"
 #include "mesh/Router.h"
 #include "mesh/generated/environmental_measurement.pb.h"
@@ -28,9 +29,42 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
     ServiceEnvelope e = ServiceEnvelope_init_default;
     if (!pb_decode_from_bytes(payload, length, ServiceEnvelope_fields, &e)) {
 
-        // ADD JSON ENVELOPE CHECK HERE
-        
-        DEBUG_MSG("Invalid MQTT service envelope, topic %s, len %u!\n", topic, length);
+        // check if this is a json payload message
+        using namespace json11;
+        char payloadStr[length + 1];
+        memcpy(payloadStr, payload, length);
+        payloadStr[length] = 0; // null terminated string
+        std::string err;
+        auto json = Json::parse(payloadStr, err);
+        if (err.empty()) {
+            DEBUG_MSG("Received json payload on MQTT, parsing..\n");
+            // check if it is a valid envelope
+            if (json.object_items().count("sender") != 0 && json.object_items().count("payload") != 0) {
+                // this is a valid envelope
+                if (json["sender"].string_value().compare(owner.id) != 0) {
+                    std::string jsonPayloadStr = json["payload"].dump();
+                    DEBUG_MSG("Received json payload %s, length %u\n", jsonPayloadStr.c_str(), jsonPayloadStr.length());
+                    // construct protobuf data packet using TEXT_MESSAGE, send it to the mesh
+                    MeshPacket *p = router->allocForSending();
+                    p->decoded.portnum = PortNum_TEXT_MESSAGE_APP;
+                    if (jsonPayloadStr.length() <= sizeof(p->decoded.payload.bytes)) {
+                        memcpy(p->decoded.payload.bytes, jsonPayloadStr.c_str(), jsonPayloadStr.length());
+                        p->decoded.payload.size = jsonPayloadStr.length();
+                        MeshPacket *e = packetPool.allocCopy(*p);
+                        service.sendToMesh(e, RX_SRC_LOCAL, true);
+                    } else {
+                        DEBUG_MSG("Received MQTT json payload too long, dropping\n");
+                    }
+                } else {
+                    DEBUG_MSG("Ignoring downlink message we originally sent.\n");
+                }
+            } else {
+                DEBUG_MSG("Received json payload on MQTT but not a valid envelope\n");
+            }
+        } else {
+            // no json, this is an invalid payload
+            DEBUG_MSG("Invalid MQTT service envelope, topic %s, len %u!\n", topic, length);
+        }
     } else {
         if (strcmp(e.gateway_id, owner.id) == 0)
             DEBUG_MSG("Ignoring downlink message we originally sent.\n");
@@ -204,8 +238,7 @@ void MQTT::onSend(const MeshPacket &mp, ChannelIndex chIndex)
 
         pubSub.publish(topic.c_str(), bytes, numBytes, false);
 
-        // MQTT JSON DEVELOPMENT
-
+        // handle json topic
         using namespace json11;
         auto jsonString = this->downstreamPacketToJson((MeshPacket *)&mp);
         if (!jsonString.isEmpty()) {
@@ -213,21 +246,10 @@ void MQTT::onSend(const MeshPacket &mp, ChannelIndex chIndex)
             DEBUG_MSG("publish json message to %s, %u bytes: %s\n", topicJson.c_str(), jsonString.length(), jsonString.c_str());
             pubSub.publish(topicJson.c_str(), jsonString.c_str(), false);
         }
-
-        // DEV CODE BELOW
-
-
-        const std::string simple_test = "{\"k1\": \"v1\", \"k2\": 42, \"k3\": [\"a\", 123, true, false, null]}";
-
-        std::string err;
-        const auto json = Json::parse(simple_test, err);
-        DEBUG_MSG("err: %s\n", err.c_str());
-        DEBUG_MSG("plain: %s\n", json["k1"].string_value().c_str());
-        DEBUG_MSG("plain: %s\n", json["k3"].dump().c_str());
-     }
+    }
 }
 
-// converts a downstream packet into a JSON message
+// converts a downstream packet into a json message
 String MQTT::downstreamPacketToJson(MeshPacket *mp)
 {
     using namespace json11;
@@ -322,8 +344,13 @@ String MQTT::downstreamPacketToJson(MeshPacket *mp)
     }
 
     // assemble the final jsonObj
-    Json jsonObj = Json::object{{"id", Json((int)mp->id)},     {"timestamp", Json((int)mp->rx_time)}, {"to", Json((int)mp->to)},
-                                {"from", Json((int)mp->from)}, {"channel", Json((int)mp->channel)},   {"type", msgType.c_str()},
+    Json jsonObj = Json::object{{"id", Json((int)mp->id)},
+                                {"timestamp", Json((int)mp->rx_time)},
+                                {"to", Json((int)mp->to)},
+                                {"from", Json((int)mp->from)},
+                                {"channel", Json((int)mp->channel)},
+                                {"type", msgType.c_str()},
+                                {"sender", owner.id},
                                 {"payload", msgPayload}};
 
     // serialize and return it
