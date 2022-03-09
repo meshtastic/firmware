@@ -6,7 +6,7 @@
 #include "MeshService.h"
 #include "mesh/Channels.h"
 #include "mesh/Router.h"
-#include "mesh/generated/environmental_measurement.pb.h"
+#include "mesh/generated/telemetry.pb.h"
 #include "mesh/generated/mqtt.pb.h"
 #include "sleep.h"
 #include <WiFi.h>
@@ -51,7 +51,7 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
                         memcpy(p->decoded.payload.bytes, jsonPayloadStr.c_str(), jsonPayloadStr.length());
                         p->decoded.payload.size = jsonPayloadStr.length();
                         MeshPacket *packet = packetPool.allocCopy(*p);
-                        service.sendToMesh(packet, RX_SRC_LOCAL, true);
+                        service.sendToMesh(packet, RX_SRC_LOCAL);
                     } else {
                         DEBUG_MSG("Received MQTT json payload too long, dropping\n");
                     }
@@ -282,13 +282,13 @@ String MQTT::downstreamPacketToJson(MeshPacket *mp)
         }
         break;
     }
-    case PortNum_ENVIRONMENTAL_MEASUREMENT_APP: {
-        msgType = "environmental";
-        EnvironmentalMeasurement scratch;
-        EnvironmentalMeasurement *decoded = NULL;
+    case PortNum_TELEMETRY_APP: {
+        msgType = "telemetry";
+        Telemetry scratch;
+        Telemetry *decoded = NULL;
         if (mp->which_payloadVariant == MeshPacket_decoded_tag) {
             memset(&scratch, 0, sizeof(scratch));
-            if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &EnvironmentalMeasurement_msg,
+            if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &Telemetry_msg,
                                      &scratch)) {
                 decoded = &scratch;
                 msgPayload = Json::object{
@@ -300,7 +300,7 @@ String MQTT::downstreamPacketToJson(MeshPacket *mp)
                     {"current", decoded->current},
                 };
             } else
-                DEBUG_MSG("Error decoding protobuf for environmental message!\n");
+                DEBUG_MSG("Error decoding protobuf for telemetry message!\n");
         };
         break;
     }
