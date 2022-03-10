@@ -61,6 +61,18 @@ void AdminModule::handleGetRadio(const MeshPacket &req)
     }
 }
 
+void AdminModule::handleGetOwner(const MeshPacket &req)
+{
+    if (req.decoded.want_response) {
+        // We create the reply here
+        AdminMessage r = AdminMessage_init_default;
+        r.get_owner_response = owner;
+
+        r.which_variant = AdminMessage_get_owner_response_tag;
+        myReply = allocDataProtobuf(r);
+    }
+}
+
 bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
 {
     // if handled == false, then let others look at this message also if they want
@@ -99,6 +111,11 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
     case AdminMessage_get_radio_request_tag:
         DEBUG_MSG("Client is getting radio\n");
         handleGetRadio(mp);
+        break;
+
+    case AdminMessage_get_owner_request_tag:
+        DEBUG_MSG("Client is getting owner\n");
+        handleGetOwner(mp);
         break;
 
     case AdminMessage_reboot_seconds_tag: {
