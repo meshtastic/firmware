@@ -755,7 +755,7 @@ void handleUpdateSPIFFS(HTTPRequest *req, HTTPResponse *res)
         if (!TARUnpacker->tarStreamExpander(streamptr, streamSize, SPIFFS, "/static")) {
             res->printf("tarStreamExpander failed with return code #%d\n", TARUnpacker->tarGzGetError());
             Serial.printf("tarStreamExpander failed with return code #%d\n", TARUnpacker->tarGzGetError());
-
+            client->stop();
             return;
         } else {
             /*
@@ -773,6 +773,7 @@ void handleUpdateSPIFFS(HTTPRequest *req, HTTPResponse *res)
     } else {
         res->printf("Failed to establish http connection\n");
         Serial.println("Failed to establish http connection");
+        client->stop();
         return;
     }
 
