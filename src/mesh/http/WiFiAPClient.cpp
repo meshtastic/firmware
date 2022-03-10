@@ -13,6 +13,7 @@
 #include <NTPClient.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
+#include <esp_wifi.h>
 
 using namespace concurrency;
 
@@ -235,7 +236,7 @@ bool initWifi(bool forceSoftAP)
                 WiFi.onEvent(
                     [](WiFiEvent_t event, WiFiEventInfo_t info) {
                         Serial.print("\nWiFi lost connection. Reason: ");
-                        Serial.println(info.disconnected.reason);
+                        Serial.println(info.wifi_sta_disconnected.reason);
 
                         /*
                            If we are disconnected from the AP for some reason,
@@ -244,9 +245,9 @@ bool initWifi(bool forceSoftAP)
                            For a reference to the codes:
                              https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/wifi.html#wi-fi-reason-code
                         */
-                        wifiDisconnectReason = info.disconnected.reason;
+                        wifiDisconnectReason = info.wifi_sta_disconnected.reason;
                     },
-                    WiFiEvent_t::SYSTEM_EVENT_STA_DISCONNECTED);
+                    WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 
                 DEBUG_MSG("JOINING WIFI soon: ssid=%s\n", wifiName);
                 wifiReconnect = new Periodic("WifiConnect", reconnectWiFi);

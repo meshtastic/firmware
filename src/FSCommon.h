@@ -13,8 +13,8 @@
 #define FILE_O_READ "r"
 #elif !defined(NO_ESP32)
 // ESP32 version
-#include "LITTLEFS.h"
-#define FSCom LITTLEFS
+#include <LittleFS.h>
+#define FSCom LittleFS
 #define FSBegin() FSCom.begin(true)
 #define FILE_O_WRITE "w"
 #define FILE_O_READ "r"

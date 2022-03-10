@@ -1,14 +1,5 @@
 #include "CryptoEngine.h"
 #include "configuration.h"
-
-#include "crypto/includes.h"
-
-#include "crypto/common.h"
-
-// #include "esp_system.h"
-
-#include "crypto/aes.h"
-#include "crypto/aes_wrap.h"
 #include "mbedtls/aes.h"
 
 

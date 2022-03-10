@@ -48,8 +48,6 @@ HTTPClient httpClient;
 
 // needed for ESP32-targz
 #define DEST_FS_USES_LITTLEFS
-#define ESP_ARDUINO_VERSION_VAL(major, minor, patch) ((major << 16) | (minor << 8) | (patch))
-#define ESP_ARDUINO_VERSION ESP_ARDUINO_VERSION_VAL(1, 0, 4)
 #include <ESP32-targz.h>
 
 // We need to specify some content-type mapping, so the resources get delivered with the
