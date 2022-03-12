@@ -58,26 +58,8 @@ bool FloodingRouter::isPacketLocal(const MeshPacket *p)
 
 void FloodingRouter::sniffReceived(const MeshPacket *p, const Routing *c)
 {
-    bool rebroadcastPacket = true;
 
-    if (radioConfig.preferences.role == Role_Repeater || radioConfig.preferences.role == Role_Router) {
-        rebroadcastPacket = true;
-
-    } else if ((radioConfig.preferences.role == Role_Default)) {
-
-
-        if (inRangeOfRouter()) {
-            // In Range of a router
-            rebroadcastPacket = false;
-
-        } else if (!isPacketLocal(p)) {
-            // The packet did not come from a local source
-            rebroadcastPacket = false;
-
-        }
-    }
-
-    if ((p->to == NODENUM_BROADCAST) && (p->hop_limit > 0) && (getFrom(p) != getNodeNum() && rebroadcastPacket)) {
+    if ((p->to == NODENUM_BROADCAST) && (p->hop_limit > 0) && (getFrom(p) != getNodeNum())) {
         if (p->id != 0) {
             MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
 
