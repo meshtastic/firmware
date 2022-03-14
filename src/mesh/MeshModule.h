@@ -52,23 +52,23 @@ typedef struct _UIFrameEvent {
  * Interally we use modules to implement the core meshtastic text messaging and gps position sharing features.  You
  * can use these classes as examples for how to write your own custom module.  See here: (FIXME)
  */
-class MeshPlugin
+class MeshModule
 {
-    static std::vector<MeshPlugin *> *modules;
+    static std::vector<MeshModule *> *modules;
 
   public:
     /** Constructor
      * name is for debugging output
      */
-    MeshPlugin(const char *_name);
+    MeshModule(const char *_name);
 
-    virtual ~MeshPlugin();
+    virtual ~MeshModule();
 
     /** For use only by MeshService
      */
     static void callPlugins(const MeshPacket &mp, RxSource src = RX_SRC_RADIO);
 
-    static std::vector<MeshPlugin *> GetMeshModulesWithUIFrames();
+    static std::vector<MeshModule *> GetMeshModulesWithUIFrames();
     static void observeUIEvents(Observer<const UIFrameEvent *> *observer);
     static AdminMessageHandleResult handleAdminMessageForAllPlugins(
         const MeshPacket &mp, AdminMessage *request, AdminMessage *response);

@@ -205,11 +205,12 @@ bool initWifi(bool forceSoftAP)
                 if (forcedSoftAP) {
                     const char *softAPssid = "meshtasticAdmin";
                     const char *softAPpasswd = "12345678";
-
-                    DEBUG_MSG("Starting (Forced) WIFI AP: ssid=%s, ok=%d\n", softAPssid, WiFi.softAP(softAPssid, softAPpasswd));
+                    int ok = WiFi.softAP(softAPssid, softAPpasswd);
+                    DEBUG_MSG("Starting (Forced) WIFI AP: ssid=%s, ok=%d\n", softAPssid, ok);
 
                 } else {
-                    DEBUG_MSG("Starting WIFI AP: ssid=%s, ok=%d\n", wifiName, WiFi.softAP(wifiName, wifiPsw));
+                    int ok = WiFi.softAP(wifiName, wifiPsw);
+                    DEBUG_MSG("Starting WIFI AP: ssid=%s, ok=%d\n", wifiName, ok);
                 }
 
                 WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));

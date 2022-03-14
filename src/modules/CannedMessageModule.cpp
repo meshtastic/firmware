@@ -23,7 +23,7 @@ extern bool loadProto(const char *filename, size_t protoSize, size_t objSize, co
 extern bool saveProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, const void *dest_struct);
 
 CannedMessageModule::CannedMessageModule()
-    : SinglePortPlugin("canned", PortNum_TEXT_MESSAGE_APP),
+    : SinglePortModule("canned", PortNum_TEXT_MESSAGE_APP),
     concurrency::OSThread("CannedMessageModule")
 {
     if (radioConfig.preferences.canned_message_module_enabled)

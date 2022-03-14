@@ -61,6 +61,18 @@ void AdminModule::handleGetRadio(const MeshPacket &req)
     }
 }
 
+void AdminModule::handleGetOwner(const MeshPacket &req)
+{
+    if (req.decoded.want_response) {
+        // We create the reply here
+        AdminMessage r = AdminMessage_init_default;
+        r.get_owner_response = owner;
+
+        r.which_variant = AdminMessage_get_owner_response_tag;
+        myReply = allocDataProtobuf(r);
+    }
+}
+
 bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
 {
     // if handled == false, then let others look at this message also if they want
@@ -101,6 +113,11 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
         handleGetRadio(mp);
         break;
 
+    case AdminMessage_get_owner_request_tag:
+        DEBUG_MSG("Client is getting owner\n");
+        handleGetOwner(mp);
+        break;
+
     case AdminMessage_reboot_seconds_tag: {
         int32_t s = r->reboot_seconds;
         DEBUG_MSG("Rebooting in %d seconds\n", s);
@@ -123,7 +140,7 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
 
     default:
         AdminMessage response = AdminMessage_init_default;
-        AdminMessageHandleResult handleResult = MeshPlugin::handleAdminMessageForAllPlugins(mp, r, &response);
+        AdminMessageHandleResult handleResult = MeshModule::handleAdminMessageForAllPlugins(mp, r, &response);
 
         if (handleResult == AdminMessageHandleResult::HANDLED_WITH_RESPONSE)
         {
@@ -195,7 +212,7 @@ void AdminModule::handleSetRadio(RadioConfig &r)
     service.reloadConfig();
 }
 
-AdminModule::AdminModule() : ProtobufPlugin("Admin", PortNum_ADMIN_APP, AdminMessage_fields)
+AdminModule::AdminModule() : ProtobufModule("Admin", PortNum_ADMIN_APP, AdminMessage_fields)
 {
     // restrict to the admin channel for rx
     boundChannel = Channels::adminChannel;

@@ -1,11 +1,11 @@
 #pragma once
-#include "ProtobufPlugin.h"
+#include "ProtobufModule.h"
 #include "Channels.h"
 
 /**
  * Routing module for router control messages
  */
-class RoutingModule : public ProtobufPlugin<Routing>
+class RoutingModule : public ProtobufModule<Routing>
 {
   public:
     /** Constructor

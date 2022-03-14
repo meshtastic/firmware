@@ -1,3 +1,5 @@
+#ifndef USE_NEW_ESP32_BLUETOOTH
+
 #pragma once
 
 #include <functional>
@@ -29,3 +31,5 @@ int chr_readwrite32le(uint32_t *v, struct ble_gatt_access_ctxt *ctxt);
  * A helper for readwrite access to an array of bytes (with no endian conversion)
  */
 int chr_readwrite8(uint8_t *v, size_t vlen, struct ble_gatt_access_ctxt *ctxt);
+
+#endif //#ifndef USE_NEW_ESP32_BLUETOOTH

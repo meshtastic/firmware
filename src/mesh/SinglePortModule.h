@@ -1,12 +1,12 @@
 #pragma once
-#include "MeshPlugin.h"
+#include "MeshModule.h"
 #include "Router.h"
 
 /**
  * Most modules are only interested in sending/receving one particular portnum.  This baseclass simplifies that common
  * case.
  */
-class SinglePortPlugin : public MeshPlugin
+class SinglePortModule : public MeshModule
 {
   protected:
     PortNum ourPortNum;
@@ -15,7 +15,7 @@ class SinglePortPlugin : public MeshPlugin
     /** Constructor
      * name is for debugging output
      */
-    SinglePortPlugin(const char *_name, PortNum _ourPortNum) : MeshPlugin(_name), ourPortNum(_ourPortNum) {}
+    SinglePortModule(const char *_name, PortNum _ourPortNum) : MeshModule(_name), ourPortNum(_ourPortNum) {}
 
   protected:
     /**

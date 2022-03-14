@@ -69,7 +69,7 @@ uint32_t dopThresholds[5] = {2000, 1000, 500, 200, 100};
 
 // At some point, we're going to ask all of the modules if they would like to display a screen frame
 // we'll need to hold onto pointers for the modules that can draw a frame.
-std::vector<MeshPlugin *> moduleFrames;
+std::vector<MeshModule *> moduleFrames;
 
 // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
 static char ourId[5];
@@ -194,7 +194,7 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
         // DEBUG_MSG("Screen is not in transition.  Frame: %d\n\n", module_frame);
     }
     // DEBUG_MSG("Drawing Module Frame %d\n\n", module_frame);
-    MeshPlugin &pi = *moduleFrames.at(module_frame);
+    MeshModule &pi = *moduleFrames.at(module_frame);
     pi.drawFrame(display, state, x, y);
 }
 
@@ -828,7 +828,7 @@ void Screen::setup()
         textMessageObserver.observe(textMessageModule);
 
     // Modules can notify screen about refresh
-    MeshPlugin::observeUIEvents(&uiFrameEventObserver);
+    MeshModule::observeUIEvents(&uiFrameEventObserver);
 }
 
 void Screen::forceDisplay()
@@ -976,7 +976,7 @@ void Screen::setFrames()
     DEBUG_MSG("showing standard frames\n");
     showingNormalScreen = true;
 
-    moduleFrames = MeshPlugin::GetMeshModulesWithUIFrames();
+    moduleFrames = MeshModule::GetMeshModulesWithUIFrames();
     DEBUG_MSG("Showing %d module frames\n", moduleFrames.size());
     int totalFrameCount = MAX_NUM_NODES + NUM_EXTRA_FRAMES + moduleFrames.size();
     DEBUG_MSG("Total frame count: %d\n", totalFrameCount);

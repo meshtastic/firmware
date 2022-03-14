@@ -1,6 +1,6 @@
 #pragma once
 
-#include "SinglePortPlugin.h"
+#include "SinglePortModule.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include <Arduino.h>
@@ -23,7 +23,7 @@ extern SerialModule *serialModule;
  * Radio interface for SerialModule
  *
  */
-class SerialModuleRadio : public SinglePortPlugin
+class SerialModuleRadio : public SinglePortModule
 {
     uint32_t lastRxID = 0;
 

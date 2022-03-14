@@ -1,15 +1,15 @@
 #pragma once
 #include "../mesh/generated/telemetry.pb.h"
-#include "ProtobufPlugin.h"
+#include "ProtobufModule.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
-class TelemetryModule : private concurrency::OSThread, public ProtobufPlugin<Telemetry>
+class TelemetryModule : private concurrency::OSThread, public ProtobufModule<Telemetry>
 {
   public:
     TelemetryModule()
         : concurrency::OSThread("TelemetryModule"),
-          ProtobufPlugin("Telemetry", PortNum_TELEMETRY_APP, &Telemetry_msg)
+          ProtobufModule("Telemetry", PortNum_TELEMETRY_APP, &Telemetry_msg)
     {
         lastMeasurementPacket = nullptr;
     }

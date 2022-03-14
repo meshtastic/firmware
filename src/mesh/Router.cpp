@@ -377,7 +377,7 @@ void Router::handleReceived(MeshPacket *p, RxSource src)
     }
 
     // call modules here
-    MeshPlugin::callPlugins(*p, src);
+    MeshModule::callPlugins(*p, src);
 }
 
 void Router::perhapsHandleReceived(MeshPacket *p)
