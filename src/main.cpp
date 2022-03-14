@@ -70,6 +70,9 @@ meshtastic::NodeStatus *nodeStatus = new meshtastic::NodeStatus();
 /// The I2C address of our display (if found)
 uint8_t screen_found;
 
+// The I2C address the keyboard (if found)
+uint8_t cardkb_found;
+
 bool axp192_found;
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
@@ -432,6 +435,17 @@ void loop()
     }
 #endif
 
+// TODO: Move to Input broker, this is only a POC
+    if (cardkb_found == CARDKB_ADDR){
+        Wire.requestFrom(CARDKB_ADDR, 1);
+        while(Wire.available()) {
+            char c = Wire.read();
+            if (c == 0x0d) { // enter
+                powerFSM.trigger(EVENT_PRESS);
+            }
+        }
+    }
+    
     // TODO: This should go into a thread handled by FreeRTOS.
     // handleWebResponse();
 

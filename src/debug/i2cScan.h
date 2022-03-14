@@ -19,6 +19,10 @@ void scanI2Cdevice(void)
                 screen_found = addr;
                 DEBUG_MSG("ssd1306 display found\n");
             }
+            if (addr == CARDKB_ADDR) {
+                cardkb_found = addr;
+                DEBUG_MSG("m5 cardKB found\n");
+            }
             if (addr == ST7567_ADDRESS) {
                 screen_found = addr;
                 DEBUG_MSG("st7567 display found\n");
