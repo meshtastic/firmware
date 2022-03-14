@@ -289,6 +289,7 @@ void enableModemSleep()
     config.max_freq_mhz = CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ;
     config.min_freq_mhz = 20; // 10Mhz is minimum recommended
     config.light_sleep_enable = false;
-    DEBUG_MSG("Sleep request result %x\n", esp_pm_configure(&config));
+    int rv = esp_pm_configure(&config);
+    DEBUG_MSG("Sleep request result %x\n", rv);
 }
 #endif
