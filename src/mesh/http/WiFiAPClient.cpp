@@ -209,7 +209,7 @@ bool initWifi(bool forceSoftAP)
                     DEBUG_MSG("Starting (Forced) WIFI AP: ssid=%s, ok=%d\n", softAPssid, ok);
 
                 } else {
-                    int ok = WiFi.softAP(wifiName, wifiPsw)
+                    int ok = WiFi.softAP(wifiName, wifiPsw);
                     DEBUG_MSG("Starting WIFI AP: ssid=%s, ok=%d\n", wifiName, ok);
                 }
 
