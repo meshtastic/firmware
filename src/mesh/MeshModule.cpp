@@ -1,38 +1,38 @@
 #include "configuration.h"
-#include "MeshPlugin.h"
+#include "MeshModule.h"
 #include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "modules/RoutingModule.h"
 #include <assert.h>
 
-std::vector<MeshPlugin *> *MeshPlugin::modules;
+std::vector<MeshModule *> *MeshModule::modules;
 
-const MeshPacket *MeshPlugin::currentRequest;
+const MeshPacket *MeshModule::currentRequest;
 
 /**
  * If any of the current chain of modules has already sent a reply, it will be here.  This is useful to allow
  * the RoutingPlugin to avoid sending redundant acks
  */
-MeshPacket *MeshPlugin::currentReply;
+MeshPacket *MeshModule::currentReply;
 
-MeshPlugin::MeshPlugin(const char *_name) : name(_name)
+MeshModule::MeshModule(const char *_name) : name(_name)
 {
     // Can't trust static initalizer order, so we check each time
     if (!modules)
-        modules = new std::vector<MeshPlugin *>();
+        modules = new std::vector<MeshModule *>();
 
     modules->push_back(this);
 }
 
-void MeshPlugin::setup() {}
+void MeshModule::setup() {}
 
-MeshPlugin::~MeshPlugin()
+MeshModule::~MeshModule()
 {
     assert(0); // FIXME - remove from list of modules once someone needs this feature
 }
 
-MeshPacket *MeshPlugin::allocAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex)
+MeshPacket *MeshModule::allocAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex)
 {
     Routing c = Routing_init_default;
 
@@ -57,7 +57,7 @@ MeshPacket *MeshPlugin::allocAckNak(Routing_Error err, NodeNum to, PacketId idFr
     return p;
 }
 
-MeshPacket *MeshPlugin::allocErrorResponse(Routing_Error err, const MeshPacket *p)
+MeshPacket *MeshModule::allocErrorResponse(Routing_Error err, const MeshPacket *p)
 {
     auto r = allocAckNak(err, getFrom(p), p->id, p->channel);
 
@@ -66,7 +66,7 @@ MeshPacket *MeshPlugin::allocErrorResponse(Routing_Error err, const MeshPacket *
     return r;
 }
 
-void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
+void MeshModule::callPlugins(const MeshPacket &mp, RxSource src)
 {
     // DEBUG_MSG("In call modules\n");
     bool moduleFound = false;
@@ -183,7 +183,7 @@ void MeshPlugin::callPlugins(const MeshPacket &mp, RxSource src)
                     (src == RX_SRC_LOCAL) ? "LOCAL":"REMOTE");
 }
 
-MeshPacket *MeshPlugin::allocReply()
+MeshPacket *MeshModule::allocReply()
 {
     auto r = myReply;
     myReply = NULL; // Only use each reply once
@@ -194,7 +194,7 @@ MeshPacket *MeshPlugin::allocReply()
  * so that subclasses can (optionally) send a response back to the original sender.  Implementing this method
  * is optional
  */
-void MeshPlugin::sendResponse(const MeshPacket &req)
+void MeshModule::sendResponse(const MeshPacket &req)
 {
     auto r = allocReply();
     if (r) {
@@ -222,10 +222,10 @@ void setReplyTo(MeshPacket *p, const MeshPacket &to)
     p->decoded.request_id = to.id;
 }
 
-std::vector<MeshPlugin *> MeshPlugin::GetMeshModulesWithUIFrames()
+std::vector<MeshModule *> MeshModule::GetMeshModulesWithUIFrames()
 {
 
-    std::vector<MeshPlugin *> modulesWithUIFrames;
+    std::vector<MeshModule *> modulesWithUIFrames;
     if (modules) {
         for (auto i = modules->begin(); i != modules->end(); ++i) {
             auto &pi = **i;
@@ -238,7 +238,7 @@ std::vector<MeshPlugin *> MeshPlugin::GetMeshModulesWithUIFrames()
     return modulesWithUIFrames;
 }
 
-void MeshPlugin::observeUIEvents(
+void MeshModule::observeUIEvents(
     Observer<const UIFrameEvent *> *observer)
 {
     if (modules) {
@@ -254,7 +254,7 @@ void MeshPlugin::observeUIEvents(
     }
 }
 
-AdminMessageHandleResult MeshPlugin::handleAdminMessageForAllPlugins(const MeshPacket &mp, AdminMessage *request, AdminMessage *response)
+AdminMessageHandleResult MeshModule::handleAdminMessageForAllPlugins(const MeshPacket &mp, AdminMessage *request, AdminMessage *response)
 {
     AdminMessageHandleResult handled = AdminMessageHandleResult::NOT_HANDLED;
     if (modules) {

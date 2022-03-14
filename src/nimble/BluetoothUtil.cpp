@@ -1,3 +1,5 @@
+#ifndef USE_NEW_ESP32_BLUETOOTH
+
 #include "BluetoothUtil.h"
 #include "BluetoothSoftwareUpdate.h"
 #include "NimbleBluetoothAPI.h"
@@ -23,6 +25,8 @@ static uint32_t doublepressed;
 
 static bool bluetoothActive;
 
+//put the wider device into a bluetooth pairing mode, and show the pin on screen.
+//called in this file only
 static void startCb(uint32_t pin)
 {
     pinShowing = true;
@@ -30,6 +34,8 @@ static void startCb(uint32_t pin)
     screen->startBluetoothPinScreen(pin);
 };
 
+//pairing has ended
+//called in this file only
 static void stopCb()
 {
     if (pinShowing) {
@@ -52,6 +58,8 @@ void updateBatteryLevel(uint8_t level)
     // FIXME
 }
 
+//shutdown the bluetooth and tear down all the data structures.  to prevent memory leaks
+//called here only
 void deinitBLE()
 {
     if (bluetoothActive) {
@@ -85,6 +93,7 @@ void loopBLE()
 extern "C" void ble_store_config_init(void);
 
 /// Print a macaddr - bytes are sometimes stored in reverse order
+//called here only
 static void print_addr(const uint8_t v[], bool isReversed = true)
 {
     const int macaddrlen = 6;
@@ -96,6 +105,7 @@ static void print_addr(const uint8_t v[], bool isReversed = true)
 
 /**
  * Logs information about a connection to the console.
+ * called here only
  */
 static void print_conn_desc(struct ble_gap_conn_desc *desc)
 {
@@ -260,6 +270,8 @@ static int gap_event(struct ble_gap_event *event, void *arg)
  * Enables advertising with the following parameters:
  *     o General discoverable mode.
  *     o Undirected connectable mode.
+ * 
+ * Called here only
  */
 static void advertise(void)
 {
@@ -324,12 +336,16 @@ static void advertise(void)
     }
 }
 
+//callback
+//doesn't do anything
 static void on_reset(int reason)
 {
     // 19 == BLE_HS_ETIMEOUT_HCI
     DEBUG_MSG("Resetting state; reason=%d\n", reason);
 }
 
+//callback
+//
 static void on_sync(void)
 {
     int rc;
@@ -356,6 +372,7 @@ static void on_sync(void)
     advertise();
 }
 
+//do the bluetooth tasks
 static void ble_host_task(void *param)
 {
     DEBUG_MSG("BLE task running\n");
@@ -366,6 +383,7 @@ static void ble_host_task(void *param)
     nimble_port_freertos_deinit(); // delete the task
 }
 
+//saves the stream handles when characteristics are successfully registered
 void gatt_svr_register_cb(struct ble_gatt_register_ctxt *ctxt, void *arg)
 {
     char buf[BLE_UUID_STR_LEN];
@@ -405,6 +423,8 @@ void gatt_svr_register_cb(struct ble_gatt_register_ctxt *ctxt, void *arg)
  *
  * If a read, the provided value will be returned over bluetooth.  If a write, the value from the received packet
  * will be written into the variable.
+ * 
+ * used a few places
  */
 int chr_readwrite32le(uint32_t *v, struct ble_gatt_access_ctxt *ctxt)
 {
@@ -638,3 +658,5 @@ BLEServer *serve = initBLE(, , getDeviceName(), HW_VENDOR, optstr(APP_VERSION),
                            optstr(HW_VERSION)); // FIXME, use a real name based on the macaddr
 
 #endif
+
+#endif //#ifndef USE_NEW_ESP32_BLUETOOTH

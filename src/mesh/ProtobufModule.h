@@ -1,5 +1,5 @@
 #pragma once
-#include "SinglePortPlugin.h"
+#include "SinglePortModule.h"
 
 /**
  * A base class for mesh modules that assume that they are sending/receiving one particular protobuf based
@@ -8,7 +8,7 @@
  * If you are using protobufs to encode your packets (recommended) you can use this as a baseclass for your module
  * and avoid a bunch of boilerplate code.
  */
-template <class T> class ProtobufPlugin : protected SinglePortPlugin
+template <class T> class ProtobufModule : protected SinglePortModule
 {
     const pb_msgdesc_t *fields;
 
@@ -16,8 +16,8 @@ template <class T> class ProtobufPlugin : protected SinglePortPlugin
     /** Constructor
      * name is for debugging output
      */
-    ProtobufPlugin(const char *_name, PortNum _ourPortNum, const pb_msgdesc_t *_fields)
-        : SinglePortPlugin(_name, _ourPortNum), fields(_fields)
+    ProtobufModule(const char *_name, PortNum _ourPortNum, const pb_msgdesc_t *_fields)
+        : SinglePortModule(_name, _ourPortNum), fields(_fields)
     {
     }
 

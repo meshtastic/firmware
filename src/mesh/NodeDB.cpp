@@ -438,7 +438,7 @@ size_t NodeDB::getNumOnlineNodes()
     return numseen;
 }
 
-#include "MeshPlugin.h"
+#include "MeshModule.h"
 
 /** Update position info for this node based on received position data
  */

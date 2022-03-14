@@ -1,10 +1,10 @@
 #pragma once
-#include "ProtobufPlugin.h"
+#include "ProtobufModule.h"
 
 /**
  * Routing module for router control messages
  */
-class AdminModule : public ProtobufPlugin<AdminMessage>
+class AdminModule : public ProtobufModule<AdminMessage>
 {
   public:
     /** Constructor
@@ -26,6 +26,7 @@ class AdminModule : public ProtobufPlugin<AdminMessage>
 
     void handleGetChannel(const MeshPacket &req, uint32_t channelIndex);
     void handleGetRadio(const MeshPacket &req);
+    void handleGetOwner(const MeshPacket &req);
 };
 
 extern AdminModule *adminModule;
