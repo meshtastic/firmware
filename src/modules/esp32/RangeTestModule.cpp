@@ -145,18 +145,18 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const MeshPacket &mp)
                 appendFile(mp);
             }
 
-            /*
+            
             NodeInfo *n = nodeDB.getNode(getFrom(&mp));
 
             DEBUG_MSG("-----------------------------------------\n");
-            DEBUG_MSG("p.payload.bytes  \"%s\"\n", p.payload.bytes);
-            DEBUG_MSG("p.payload.size   %d\n", p.payload.size);
+            // DEBUG_MSG("p.payload.bytes  \"%s\"\n", p.payload.bytes);
+           // DEBUG_MSG("p.payload.size   %d\n", p.payload.size);
             DEBUG_MSG("---- Received Packet:\n");
             DEBUG_MSG("mp.from          %d\n", mp.from);
             DEBUG_MSG("mp.rx_snr        %f\n", mp.rx_snr);
             DEBUG_MSG("mp.hop_limit     %d\n", mp.hop_limit);
-            DEBUG_MSG("mp.decoded.position.latitude_i     %d\n", mp.decoded.position.latitude_i); // Depricated
-            DEBUG_MSG("mp.decoded.position.longitude_i    %d\n", mp.decoded.position.longitude_i); // Depricated
+            // DEBUG_MSG("mp.decoded.position.latitude_i     %d\n", mp.decoded.position.latitude_i); // Depricated
+            // DEBUG_MSG("mp.decoded.position.longitude_i    %d\n", mp.decoded.position.longitude_i); // Depricated
             DEBUG_MSG("---- Node Information of Received Packet (mp.from):\n");
             DEBUG_MSG("n->user.long_name         %s\n", n->user.long_name);
             DEBUG_MSG("n->user.short_name        %s\n", n->user.short_name);
@@ -171,7 +171,7 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const MeshPacket &mp)
             DEBUG_MSG("gpsStatus->getHasLock()      %d\n", gpsStatus->getHasLock());
             DEBUG_MSG("gpsStatus->getDOP()          %d\n", gpsStatus->getDOP());
             DEBUG_MSG("-----------------------------------------\n");
-            */
+            
         }
 
     } else {
