@@ -128,8 +128,6 @@ int32_t PositionModule::runOnce()
 {
     NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
 
-    // radioConfig.preferences.position_broadcast_smart = true;
-
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();
     if (lastGpsSend == 0 || now - lastGpsSend >= getPref_position_broadcast_secs() * 1000) {
@@ -154,10 +152,10 @@ int32_t PositionModule::runOnce()
             DEBUG_MSG("Channel utilization is >50 percent. Skipping this opportunity to send.\n");
         }
 
-    } else if (radioConfig.preferences.position_broadcast_smart == true) {
+    } else if (!radioConfig.preferences.position_broadcast_smart_disabled) {
 
-        // Only send packets if the channel is less than 40% utilized.
-        if (airTime->channelUtilizationPercent() < 40) {
+        // Only send packets if the channel is less than 25% utilized.
+        if (airTime->channelUtilizationPercent() < 25) {
 
             NodeInfo *node2 = service.refreshMyNodeInfo(); // should guarantee there is now a position
 
@@ -198,7 +196,7 @@ int32_t PositionModule::runOnce()
                 }
             }
         } else {
-            DEBUG_MSG("Channel utilization is >40 percent. Skipping this opportunity to send.\n");
+            DEBUG_MSG("Channel utilization is >25 percent. Skipping this opportunity to send.\n");
         }
     }
 

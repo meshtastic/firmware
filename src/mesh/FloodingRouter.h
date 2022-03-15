@@ -53,22 +53,6 @@ class FloodingRouter : public Router, protected PacketHistory
     virtual bool shouldFilterReceived(MeshPacket *p) override;
 
     /**
-     * Are we in range of a router?
-     * 
-     * "range" here may not be the right term. 
-     * @return true if we're in range of a router
-     */
-    virtual bool inRangeOfRouter();
-
-    /**
-     * Is the packet from a device that is physically near this node?
-     * 
-     * Calculated based on the received SNR.
-     * @return true if the received packet is physically close to this node.
-     */
-    virtual bool isPacketLocal(const MeshPacket *p);
-
-    /**
      * Look for broadcasts we need to rebroadcast
      */
     virtual void sniffReceived(const MeshPacket *p, const Routing *c) override;

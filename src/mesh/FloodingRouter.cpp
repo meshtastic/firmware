@@ -27,57 +27,10 @@ bool FloodingRouter::shouldFilterReceived(MeshPacket *p)
     return Router::shouldFilterReceived(p);
 }
 
-bool FloodingRouter::inRangeOfRouter()
-{
-
-    uint32_t maximum_router_sec = 300;
-
-    // FIXME : Scale minimum_snr to accomodate different modem configurations.
-    float minimum_snr = 2;
-
-    for (int i = 0; i < myNodeInfo.router_count; i++) {
-        // A router has been seen and the heartbeat was heard within the last 300 seconds
-        if (
-            ((myNodeInfo.router_sec[i] > 0) && (myNodeInfo.router_sec[i] < maximum_router_sec)) &&
-            (myNodeInfo.router_snr[i] > minimum_snr)
-            ) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-bool FloodingRouter::isPacketLocal(const MeshPacket *p)
-{
-
-    // TODO: Figure out if a packet is from a local node
-
-    return false;
-}
-
 void FloodingRouter::sniffReceived(const MeshPacket *p, const Routing *c)
 {
-    bool rebroadcastPacket = true;
 
-    if (radioConfig.preferences.role == Role_Repeater || radioConfig.preferences.role == Role_Router) {
-        rebroadcastPacket = true;
-
-    } else if ((radioConfig.preferences.role == Role_Default)) {
-
-
-        if (inRangeOfRouter()) {
-            // In Range of a router
-            rebroadcastPacket = false;
-
-        } else if (!isPacketLocal(p)) {
-            // The packet did not come from a local source
-            rebroadcastPacket = false;
-
-        }
-    }
-
-    if ((p->to == NODENUM_BROADCAST) && (p->hop_limit > 0) && (getFrom(p) != getNodeNum() && rebroadcastPacket)) {
+    if ((p->to == NODENUM_BROADCAST) && (p->hop_limit > 0) && (getFrom(p) != getNodeNum())) {
         if (p->id != 0) {
             MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
 
