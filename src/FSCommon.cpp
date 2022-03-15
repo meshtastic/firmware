@@ -1,10 +1,10 @@
 #include "configuration.h"
 #include "FSCommon.h"
 
-void listDir(fs::FS &fs, const char * dirname, uint8_t levels)
+void listDir(const char * dirname, uint8_t levels)
 #ifdef FSCom
 {
-    File root = fs.open(dirname);
+    File root = FSCom.open(dirname);
     if(!root){
         return;
     }
@@ -16,7 +16,7 @@ void listDir(fs::FS &fs, const char * dirname, uint8_t levels)
     while(file){
         if(file.isDirectory()){
             if(levels){
-                listDir(fs, file.name(), levels -1);
+                listDir(file.name(), levels -1);
             }
         } else {
             DEBUG_MSG("  %s (%i Bytes)\n", file.name(), file.size());
@@ -38,6 +38,6 @@ void fsInit()
     }
 
     DEBUG_MSG("Filesystem files:\n");
-    listDir(FSCom, "/", 10);
+    listDir("/", 10);
 #endif
 }
