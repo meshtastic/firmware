@@ -87,7 +87,9 @@ extern const pb_msgdesc_t ChannelFile_msg;
 #define ChannelFile_fields &ChannelFile_msg
 
 /* Maximum encoded size of messages (where known) */
-#define DeviceState_size                         9749
+#if defined(MyNodeInfo_size)
+#define DeviceState_size                         (9190 + MyNodeInfo_size)
+#endif
 #define ChannelFile_size                         832
 
 #ifdef __cplusplus
