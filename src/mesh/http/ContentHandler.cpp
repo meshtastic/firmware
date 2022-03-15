@@ -274,9 +274,9 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
 
 bool firstFile = 1;
 
-void htmlDeleteDir(fs::FS &fs, const char * dirname)
+void htmlDeleteDir(const char * dirname)
 {
-    File root = fs.open(dirname);
+    File root = FSCom.open(dirname);
     if(!root){
         return;
     }
@@ -287,13 +287,13 @@ void htmlDeleteDir(fs::FS &fs, const char * dirname)
     File file = root.openNextFile();
     while(file){
         if(file.isDirectory()){
-            htmlDeleteDir(fs, file.name());
+            htmlDeleteDir(file.name());
             file.close();
         } else {
             String fileName = String(file.name());
             file.close();
             DEBUG_MSG("    %s\n", fileName.c_str());
-            fs.remove(fileName);
+            FSCom.remove(fileName);
 
         }
         file = root.openNextFile();
@@ -301,9 +301,9 @@ void htmlDeleteDir(fs::FS &fs, const char * dirname)
     root.close();
 }
 
-void htmlListDir(fs::FS &fs,  HTTPResponse *res, const char * dirname, uint8_t levels)
+void htmlListDir( HTTPResponse *res, const char * dirname, uint8_t levels)
 {
-    File root = fs.open(dirname);
+    File root = FSCom.open(dirname);
     if(!root){
         return;
     }
@@ -315,7 +315,7 @@ void htmlListDir(fs::FS &fs,  HTTPResponse *res, const char * dirname, uint8_t l
     while(file){
         if(file.isDirectory()){
             if(levels){
-                htmlListDir(fs, res, file.name(), levels -1);
+                htmlListDir(res, file.name(), levels -1);
             }
         } else {
             if (firstFile) {
@@ -350,7 +350,7 @@ void handleFsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
     res->println("{");
     res->println("\"data\": {");
     res->print("\"files\": [");
-    htmlListDir(FSCom, res, "/", 10);
+    htmlListDir(res, "/", 10);
     res->print("],");
     res->print("\"filesystem\" : {");
     res->print("\"total\" : " + String(FSCom.totalBytes()) + ",");
@@ -759,7 +759,7 @@ void handleUpdateFs(HTTPRequest *req, HTTPResponse *res)
 
         DEBUG_MSG("Deleting files from /static : \n");
 
-        htmlDeleteDir(FSCom, "/static");
+        htmlDeleteDir("/static");
 
         delay(5); // Let other network operations run
 
@@ -832,7 +832,7 @@ void handleDeleteFsContent(HTTPRequest *req, HTTPResponse *res)
 
     DEBUG_MSG("Deleting files from /static/* : \n");
 
-    htmlDeleteDir(FSCom, "/static");
+    htmlDeleteDir("/static");
 
     res->println("<p><hr><p><a href=/admin>Back to admin</a>\n");
 }
