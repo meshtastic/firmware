@@ -28,8 +28,7 @@ typedef enum _RegionCode {
 
 typedef enum _Role {
     Role_Default = 0,
-    Role_Router = 1,
-    Role_Repeater = 2
+    Role_Router = 1
 } Role;
 
 typedef enum _ChargeCurrent {
@@ -128,7 +127,7 @@ typedef struct _RadioConfig_UserPreferences {
     bool wifi_ap_mode;
     RegionCode region;
     ChargeCurrent charge_current;
-    bool position_broadcast_smart;
+    bool position_broadcast_smart_disabled;
     Role role;
     LocationSharing location_share;
     GpsOperation gps_operation;
@@ -212,8 +211,8 @@ typedef struct _RadioConfig {
 #define _RegionCode_ARRAYSIZE ((RegionCode)(RegionCode_TH+1))
 
 #define _Role_MIN Role_Default
-#define _Role_MAX Role_Repeater
-#define _Role_ARRAYSIZE ((Role)(Role_Repeater+1))
+#define _Role_MAX Role_Router
+#define _Role_ARRAYSIZE ((Role)(Role_Router+1))
 
 #define _ChargeCurrent_MIN ChargeCurrent_MAUnset
 #define _ChargeCurrent_MAX ChargeCurrent_MA1320
@@ -270,7 +269,7 @@ extern "C" {
 #define RadioConfig_UserPreferences_wifi_ap_mode_tag 14
 #define RadioConfig_UserPreferences_region_tag   15
 #define RadioConfig_UserPreferences_charge_current_tag 16
-#define RadioConfig_UserPreferences_position_broadcast_smart_tag 17
+#define RadioConfig_UserPreferences_position_broadcast_smart_disabled_tag 17
 #define RadioConfig_UserPreferences_role_tag     18
 #define RadioConfig_UserPreferences_location_share_tag 32
 #define RadioConfig_UserPreferences_gps_operation_tag 33
@@ -364,7 +363,7 @@ X(a, STATIC,   SINGULAR, STRING,   wifi_password,    13) \
 X(a, STATIC,   SINGULAR, BOOL,     wifi_ap_mode,     14) \
 X(a, STATIC,   SINGULAR, UENUM,    region,           15) \
 X(a, STATIC,   SINGULAR, UENUM,    charge_current,   16) \
-X(a, STATIC,   SINGULAR, BOOL,     position_broadcast_smart,  17) \
+X(a, STATIC,   SINGULAR, BOOL,     position_broadcast_smart_disabled,  17) \
 X(a, STATIC,   SINGULAR, UENUM,    role,             18) \
 X(a, STATIC,   SINGULAR, UENUM,    location_share,   32) \
 X(a, STATIC,   SINGULAR, UENUM,    gps_operation,    33) \
