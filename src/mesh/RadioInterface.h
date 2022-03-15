@@ -129,6 +129,10 @@ class RadioInterface
     /** The delay to use when we want to send something but the ether is busy */
     uint32_t getTxDelayMsec();
 
+    /** The delay to use when we want to send something but the ether is busy. Use a weighted scale based on SNR */
+    uint32_t getTxDelayMsecWeighted(float snr);
+
+
     /**
      * Calculate airtime per
      * https://www.rs-online.com/designspark/rel-assets/ds-assets/uploads/knowledge-items/application-notes-for-the-internet-of-things/LoRa%20Design%20Guide.pdf
