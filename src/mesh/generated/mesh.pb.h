@@ -169,13 +169,15 @@ typedef struct _MyNodeInfo {
     bool has_wifi;
     float channel_utilization;
     float air_util_tx;
+    pb_callback_t router;
+    pb_callback_t router_snr;
+    pb_callback_t router_sec;
 } MyNodeInfo;
 
 typedef struct _Position {
     int32_t latitude_i;
     int32_t longitude_i;
     int32_t altitude;
-    int32_t battery_level;
     uint32_t time;
     Position_LocSource location_source;
     Position_AltSource altitude_source;
@@ -246,8 +248,8 @@ typedef struct _NodeInfo {
     User user;
     bool has_position;
     Position position;
-    uint32_t last_heard;
     float snr;
+    uint32_t last_heard;
 } NodeInfo;
 
 typedef struct _Routing {
@@ -330,26 +332,26 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define Position_init_default                    {0, 0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define Position_init_default                    {0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define User_init_default                        {"", "", "", {0}, _HardwareModel_MIN, 0, _Team_MIN, 0, 0, 0}
 #define RouteDiscovery_init_default              {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_default                     {0, {RouteDiscovery_init_default}}
 #define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
 #define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
 #define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0}
-#define MyNodeInfo_init_default                  {0, 0, "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
+#define MyNodeInfo_init_default                  {0, 0, "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define LogRecord_init_default                   {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_default                   {0, 0, {MyNodeInfo_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
 #define ToRadio_PeerInfo_init_default            {0, 0}
-#define Position_init_zero                       {0, 0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define Position_init_zero                       {0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define User_init_zero                           {"", "", "", {0}, _HardwareModel_MIN, 0, _Team_MIN, 0, 0, 0}
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_zero                        {0, {RouteDiscovery_init_zero}}
 #define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
 #define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
 #define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0}
-#define MyNodeInfo_init_zero                     {0, 0, "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
+#define MyNodeInfo_init_zero                     {0, 0, "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define LogRecord_init_zero                      {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_zero                      {0, 0, {MyNodeInfo_init_zero}}
 #define ToRadio_init_zero                        {0, {MeshPacket_init_zero}}
@@ -385,10 +387,12 @@ extern "C" {
 #define MyNodeInfo_has_wifi_tag                  18
 #define MyNodeInfo_channel_utilization_tag       19
 #define MyNodeInfo_air_util_tx_tag               20
+#define MyNodeInfo_router_tag                    21
+#define MyNodeInfo_router_snr_tag                22
+#define MyNodeInfo_router_sec_tag                23
 #define Position_latitude_i_tag                  1
 #define Position_longitude_i_tag                 2
 #define Position_altitude_tag                    3
-#define Position_battery_level_tag               4
 #define Position_time_tag                        9
 #define Position_location_source_tag             10
 #define Position_altitude_source_tag             11
@@ -437,8 +441,8 @@ extern "C" {
 #define NodeInfo_num_tag                         1
 #define NodeInfo_user_tag                        2
 #define NodeInfo_position_tag                    3
-#define NodeInfo_last_heard_tag                  4
-#define NodeInfo_snr_tag                         7
+#define NodeInfo_snr_tag                         4
+#define NodeInfo_last_heard_tag                  5
 #define Routing_route_request_tag                1
 #define Routing_route_reply_tag                  2
 #define Routing_error_reason_tag                 3
@@ -459,7 +463,6 @@ extern "C" {
 X(a, STATIC,   SINGULAR, SFIXED32, latitude_i,        1) \
 X(a, STATIC,   SINGULAR, SFIXED32, longitude_i,       2) \
 X(a, STATIC,   SINGULAR, INT32,    altitude,          3) \
-X(a, STATIC,   SINGULAR, INT32,    battery_level,     4) \
 X(a, STATIC,   SINGULAR, FIXED32,  time,              9) \
 X(a, STATIC,   SINGULAR, UENUM,    location_source,  10) \
 X(a, STATIC,   SINGULAR, UENUM,    altitude_source,  11) \
@@ -544,8 +547,8 @@ X(a, STATIC,   SINGULAR, UENUM,    delayed,          15)
 X(a, STATIC,   SINGULAR, UINT32,   num,               1) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  user,              2) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  position,          3) \
-X(a, STATIC,   SINGULAR, FIXED32,  last_heard,        4) \
-X(a, STATIC,   SINGULAR, FLOAT,    snr,               7)
+X(a, STATIC,   SINGULAR, FLOAT,    snr,               4) \
+X(a, STATIC,   SINGULAR, FIXED32,  last_heard,        5)
 #define NodeInfo_CALLBACK NULL
 #define NodeInfo_DEFAULT NULL
 #define NodeInfo_user_MSGTYPE User
@@ -568,8 +571,11 @@ X(a, STATIC,   REPEATED, UINT32,   air_period_tx,    16) \
 X(a, STATIC,   REPEATED, UINT32,   air_period_rx,    17) \
 X(a, STATIC,   SINGULAR, BOOL,     has_wifi,         18) \
 X(a, STATIC,   SINGULAR, FLOAT,    channel_utilization,  19) \
-X(a, STATIC,   SINGULAR, FLOAT,    air_util_tx,      20)
-#define MyNodeInfo_CALLBACK NULL
+X(a, STATIC,   SINGULAR, FLOAT,    air_util_tx,      20) \
+X(a, CALLBACK, REPEATED, UINT32,   router,           21) \
+X(a, CALLBACK, REPEATED, FLOAT,    router_snr,       22) \
+X(a, CALLBACK, REPEATED, UINT32,   router_sec,       23)
+#define MyNodeInfo_CALLBACK pb_default_field_callback
 #define MyNodeInfo_DEFAULT NULL
 
 #define LogRecord_FIELDLIST(X, a) \
@@ -639,16 +645,16 @@ extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 #define ToRadio_PeerInfo_fields &ToRadio_PeerInfo_msg
 
 /* Maximum encoded size of messages (where known) */
-#define Position_size                            153
+#define Position_size                            142
 #define User_size                                97
 #define RouteDiscovery_size                      40
 #define Routing_size                             42
 #define Data_size                                267
 #define MeshPacket_size                          318
-#define NodeInfo_size                            271
-#define MyNodeInfo_size                          210
+#define NodeInfo_size                            260
+/* MyNodeInfo_size depends on runtime parameters */
 #define LogRecord_size                           81
-#define FromRadio_size                           327
+/* FromRadio_size depends on runtime parameters */
 #define ToRadio_size                             321
 #define ToRadio_PeerInfo_size                    8
 
