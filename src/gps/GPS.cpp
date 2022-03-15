@@ -167,7 +167,7 @@ uint32_t GPS::getWakeTime() const
         return t; // already maxint
 
     if (t == 0)
-        t = radioConfig.preferences.is_router ? 5 * 60 : 15 * 60; // Allow up to 15 mins for each attempt (probably will be much
+        t = (radioConfig.preferences.role == Role_Router) ? 5 * 60 : 15 * 60; // Allow up to 15 mins for each attempt (probably will be much
                                                                   // less if we can find sats) or less if a router
 
     t *= 1000; // msecs
@@ -190,7 +190,7 @@ uint32_t GPS::getSleepTime() const
         return t; // already maxint
 
     if (t == 0)                                                        // default - unset in preferences
-        t = radioConfig.preferences.is_router ? 24 * 60 * 60 : 2 * 60; // 2 mins or once per day for routers
+        t = (radioConfig.preferences.role == Role_Router) ? 24 * 60 * 60 : 2 * 60; // 2 mins or once per day for routers
 
     t *= 1000;
 
