@@ -148,6 +148,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * */
     void startTransmitTimer(bool withDelay = true);
 
+    /** if we have something waiting to send, start a short scaled timer based on SNR so we can come check for collision before actually doing
+     * the transmit
+     *
+     * If the timer was already running, we just wait for that one to occur.
+     * */
+    void startTransmitTimerSNR(float snr);
+
     void handleTransmitInterrupt();
     void handleReceiveInterrupt();
 
