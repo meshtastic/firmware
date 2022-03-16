@@ -14,7 +14,7 @@ void listDir(const char * dirname, uint8_t levels)
 
     File file = root.openNextFile();
     while(file){
-        if(file.isDirectory()){
+        if(file.isDirectory() && !String(file.name()).endsWith(".")) {
             if(levels){
                 listDir(file.name(), levels -1);
             }
