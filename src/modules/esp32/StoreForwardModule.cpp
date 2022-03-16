@@ -21,7 +21,7 @@ int32_t StoreForwardModule::runOnce()
 
     if (radioConfig.preferences.store_forward_module_enabled) {
 
-        if (radioConfig.preferences.is_router) {
+        if (radioConfig.preferences.role == Role_Router) {
 
             // Send out the message queue.
             if (this->busy) {
@@ -392,14 +392,13 @@ StoreForwardModule::StoreForwardModule()
         */
 
         radioConfig.preferences.store_forward_module_enabled = 1;
-        radioConfig.preferences.is_router = 1;
         radioConfig.preferences.is_always_powered = 1;
     }
 
     if (radioConfig.preferences.store_forward_module_enabled) {
 
         // Router
-        if (radioConfig.preferences.is_router) {
+        if (radioConfig.preferences.role == Role_Router) {
             DEBUG_MSG("Initializing Store & Forward Module - Enabled as Router\n");
             if (ESP.getPsramSize()) {
                 if (ESP.getFreePsram() >= 1024 * 1024) {

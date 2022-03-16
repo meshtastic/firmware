@@ -157,7 +157,7 @@ extern NodeDB nodeDB;
 // Our delay functions check for this for times that should never expire
 #define NODE_DELAY_FOREVER 0xffffffff
 
-#define IF_ROUTER(routerVal, normalVal) (radioConfig.preferences.is_router ? (routerVal) : (normalVal))
+#define IF_ROUTER(routerVal, normalVal) ((radioConfig.preferences.role == Role_Router) ? (routerVal) : (normalVal))
 
 #define PREF_GET(name, defaultVal)                                                                                               \
     inline uint32_t getPref_##name() { return radioConfig.preferences.name ? radioConfig.preferences.name : (defaultVal); }
