@@ -286,7 +286,7 @@ void htmlDeleteDir(const char * dirname)
 
     File file = root.openNextFile();
     while(file){
-        if(file.isDirectory()){
+        if(file.isDirectory() && !String(file.name()).endsWith(".")) {
             htmlDeleteDir(file.name());
             file.close();
         } else {
@@ -301,7 +301,7 @@ void htmlDeleteDir(const char * dirname)
     root.close();
 }
 
-void htmlListDir( HTTPResponse *res, const char * dirname, uint8_t levels)
+void htmlListDir(HTTPResponse *res, const char * dirname, uint8_t levels)
 {
     File root = FSCom.open(dirname);
     if(!root){
@@ -313,7 +313,7 @@ void htmlListDir( HTTPResponse *res, const char * dirname, uint8_t levels)
 
     File file = root.openNextFile();
     while(file){
-        if(file.isDirectory()){
+        if(file.isDirectory() && !String(file.name()).endsWith(".")) {
             if(levels){
                 htmlListDir(res, file.name(), levels -1);
             }
