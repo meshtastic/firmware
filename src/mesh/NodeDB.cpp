@@ -95,7 +95,7 @@ bool NodeDB::resetRadioConfig()
         nvs_flash_erase();
 #endif
 #ifdef NRF52_SERIES
-        FS.rmdir_r("/prefs");
+        FSCom.rmdir_r("/prefs");
 
         Bluefruit.begin();
 
