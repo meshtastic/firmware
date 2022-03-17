@@ -105,6 +105,13 @@ bool NodeDB::resetRadioConfig()
 
     Bluefruit.Periph.clearBonds();
     Bluefruit.Central.clearBonds();
+
+    installDefaultDeviceState();
+    installDefaultRadioConfig();
+    installDefaultChannels();
+    saveToDisk();
+    saveChannelsToDisk();
+
 #endif
         didFactoryReset = true;
     }
