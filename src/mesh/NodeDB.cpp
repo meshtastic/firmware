@@ -95,14 +95,16 @@ bool NodeDB::resetRadioConfig()
         nvs_flash_erase();
 #endif
 #ifdef NRF52_SERIES
-    Bluefruit.begin();
+        FSCom.rmdir_r("/prefs");
 
-    DEBUG_MSG("Clearing bluetooth bonds!\n");
-    bond_print_list(BLE_GAP_ROLE_PERIPH);
-    bond_print_list(BLE_GAP_ROLE_CENTRAL);
+        Bluefruit.begin();
 
-    Bluefruit.Periph.clearBonds();
-    Bluefruit.Central.clearBonds();
+        DEBUG_MSG("Clearing bluetooth bonds!\n");
+        bond_print_list(BLE_GAP_ROLE_PERIPH);
+        bond_print_list(BLE_GAP_ROLE_CENTRAL);
+
+        Bluefruit.Periph.clearBonds();
+        Bluefruit.Central.clearBonds();
 #endif
         didFactoryReset = true;
     }
