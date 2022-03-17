@@ -97,6 +97,13 @@ bool NodeDB::resetRadioConfig()
         nvs_flash_erase();
 #endif
 #ifdef NRF52_SERIES
+
+    installDefaultDeviceState();
+    installDefaultRadioConfig();
+    installDefaultChannels();
+    saveToDisk();
+    saveChannelsToDisk();
+
     Bluefruit.begin();
 
     DEBUG_MSG("Clearing bluetooth bonds!\n");
@@ -106,11 +113,6 @@ bool NodeDB::resetRadioConfig()
     Bluefruit.Periph.clearBonds();
     Bluefruit.Central.clearBonds();
 
-    installDefaultDeviceState();
-    installDefaultRadioConfig();
-    installDefaultChannels();
-    saveToDisk();
-    saveChannelsToDisk();
 
 #endif
         didFactoryReset = true;
