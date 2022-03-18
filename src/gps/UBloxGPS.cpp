@@ -10,8 +10,6 @@
 
 #define PDOP_INVALID 9999
 
-// #define UBX_MODE_NMEA
-
 extern RadioConfig radioConfig;
 
 UBloxGPS::UBloxGPS() {}
@@ -24,10 +22,6 @@ bool UBloxGPS::tryConnect()
         c = ublox.begin(*_serial_gps);
 
     if (!c && i2cAddress) {
-        extern bool neo6M; // Super skanky - if we are talking to the device i2c we assume it is a neo7 on a RAK815, which
-                           // supports the newer API
-        neo6M = true;
-
         c = ublox.begin(Wire, i2cAddress);
     }
 
@@ -42,7 +36,7 @@ bool UBloxGPS::setupGPS()
     GPS::setupGPS();
 
     // uncomment to see debug info
-    // ublox.enableDebugging(Serial);
+    ublox.enableDebugging(Serial);
 
     // try a second time, the ublox lib serial parsing is buggy?
     // see https://github.com/meshtastic/Meshtastic-device/issues/376
@@ -50,21 +44,12 @@ bool UBloxGPS::setupGPS()
         delay(500);
 
     if (isConnected()) {
-#ifdef UBX_MODE_NMEA
-        DEBUG_MSG("Connected to UBLOX GPS, downgrading to NMEA mode\n");
-        DEBUG_MSG("- GPS errors below are related and safe to ignore\n");
-#else
         DEBUG_MSG("Connected to UBLOX GPS successfully\n");
-#endif
 
         if (!setUBXMode())
             RECORD_CRITICALERROR(CriticalErrorCode_UBloxInitFailed); // Don't halt the boot if saving the config fails, but do report the bug
 
-#ifdef UBX_MODE_NMEA
-        return false;
-#else
         return true;
-#endif
 
     } else {
         return false;
@@ -73,17 +58,6 @@ bool UBloxGPS::setupGPS()
 
 bool UBloxGPS::setUBXMode()
 {
-#ifdef UBX_MODE_NMEA
-    if (_serial_gps) {
-        ublox.setUART1Output(COM_TYPE_NMEA, 1000);
-    }
-    if (i2cAddress) {
-        ublox.setI2COutput(COM_TYPE_NMEA, 1000);
-    }
-
-    return false;  // pretend initialization failed to force NMEA mode
-#endif
-
     if (_serial_gps) {
         if (!ublox.setUART1Output(COM_TYPE_UBX, 1000)) // Use native API
             return false;
@@ -96,18 +70,10 @@ bool UBloxGPS::setUBXMode()
     if (!ublox.setNavigationFrequency(1, 1000)) // Produce 4x/sec to keep the amount of time we stall in getPVT low
         return false;
 
-    // ok = ublox.setAutoPVT(false); // Not implemented on NEO-6M
-    // assert(ok);
-    // ok = ublox.setDynamicModel(DYN_MODEL_BIKE); // probably PEDESTRIAN but just in case assume bike speeds
-    // assert(ok);
-
-    // per https://github.com/meshtastic/Meshtastic-device/issues/376 powerSaveMode might not work with the marginal
-    // TTGO antennas
-    // if (!ublox.powerSaveMode(true, 2000)) // use power save mode, the default timeout (1100ms seems a bit too tight)
-    //     return false;
-
     if (!ublox.saveConfiguration(3000))
         return false;
+
+    ublox.setAutoPVT(true); //Tell the GNSS to "send" each solution
 
     return true;
 }
@@ -141,17 +107,9 @@ bool UBloxGPS::factoryReset()
 /** Idle processing while GPS is looking for lock */
 void UBloxGPS::whileActive()
 {
-    ublox.flushPVT();  // reset ALL freshness flags first
-    ublox.getT(maxWait()); // ask for new time data - hopefully ready when we come back
-
-    // Ask for a new position fix - hopefully it will have results ready by next time
-    // the order here is important, because we only check for has latitude when reading
-
-    //ublox.getSIV(maxWait());  // redundant with getPDOP below
-    ublox.getPDOP(maxWait());  // will trigger getSOL on NEO6, getP on others
-    ublox.getP(maxWait());     // will trigger getPosLLH on NEO6, getP on others
-
-    // the fixType flag will be checked and updated in lookForLocation()
+    //ublox.flushPVT();  // reset ALL freshness flags first
+    // Check for new Position, Velocity, Time data. getPVT returns true if new data is available.
+    //ublox.getPVT();
 }
 
 /**
@@ -162,23 +120,22 @@ void UBloxGPS::whileActive()
  */
 bool UBloxGPS::lookForTime()
 {
-    if (ublox.moduleQueried.gpsSecond) {
-        /* Convert to unix time
-        The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January
-        1, 1970 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
-        */
+    /* Convert to unix time
+    The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January
+    1, 1970 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
+    */
+    if (ublox.getPVT()) {
         struct tm t;
-        t.tm_sec = ublox.getSecond(0);
-        t.tm_min = ublox.getMinute(0);
-        t.tm_hour = ublox.getHour(0);
-        t.tm_mday = ublox.getDay(0);
-        t.tm_mon = ublox.getMonth(0) - 1;
-        t.tm_year = ublox.getYear(0) - 1900;
+        t.tm_sec = ublox.getSecond();
+        t.tm_min = ublox.getMinute();
+        t.tm_hour = ublox.getHour();
+        t.tm_mday = ublox.getDay();
+        t.tm_mon = ublox.getMonth() - 1;
+        t.tm_year = ublox.getYear() - 1900;
         t.tm_isdst = false;
         perhapsSetRTC(RTCQualityGPS, t);
         return true;
     }
-
     return false;
 }
 
@@ -192,31 +149,23 @@ bool UBloxGPS::lookForLocation()
 {
     bool foundLocation = false;
 
-    // check if a complete GPS solution set is available for reading
-    // (some of these, like lat/lon are redundant and can be removed)
-    if ( ! (ublox.moduleQueried.fixType &&
-            ublox.moduleQueried.latitude && 
-            ublox.moduleQueried.longitude &&
-            ublox.moduleQueried.altitude &&
-            ublox.moduleQueried.pDOP &&
-            ublox.moduleQueried.SIV &&
-            ublox.moduleQueried.gpsDay)) 
-    {
-        // Not ready? No problem! We'll try again later.
-        return false;
+    if (! ublox.getPVT()) {
+        return false ;
     }
 
     fixType = ublox.getFixType();
+    if (fixType == 0) {
+        return false ;
+    }
 #ifdef UBLOX_EXTRAVERBOSE
     DEBUG_MSG("FixType=%d\n", fixType);
 #endif
 
-
     // check if GPS has an acceptable lock
-    if (! hasLock()) {
-        ublox.flushPVT();  // reset ALL freshness flags
-        return false;
-    }
+    //if (! hasLock()) {
+        //ublox.flushPVT();  // reset ALL freshness flags
+        //return false;
+    //}
 
     // read lat/lon/alt/dop data into temporary variables to avoid
     // overwriting global variables with potentially invalid data
@@ -235,12 +184,12 @@ bool UBloxGPS::lookForLocation()
 
     // read positional timestamp
     struct tm t;
-    t.tm_sec = ublox.getSecond(0);
-    t.tm_min = ublox.getMinute(0);
-    t.tm_hour = ublox.getHour(0);
-    t.tm_mday = ublox.getDay(0);
-    t.tm_mon = ublox.getMonth(0) - 1;
-    t.tm_year = ublox.getYear(0) - 1900;
+    t.tm_sec = ublox.getSecond();
+    t.tm_min = ublox.getMinute();
+    t.tm_hour = ublox.getHour();
+    t.tm_mday = ublox.getDay();
+    t.tm_mon = ublox.getMonth() - 1;
+    t.tm_year = ublox.getYear() - 1900;
     t.tm_isdst = false;
 
     time_t tmp_ts = mktime(&t);
@@ -250,7 +199,7 @@ bool UBloxGPS::lookForLocation()
     // bogus lat lon is reported as 0 or 0 (can be bogus just for one)
     // Also: apparently when the GPS is initially reporting lock it can output a bogus latitude > 90 deg!
     // FIXME - NULL ISLAND is a real location on Earth!
-    foundLocation = (tmp_lat != 0) && (tmp_lon != 0) && 
+    foundLocation = (tmp_lat != 0) && (tmp_lon != 0) &&
                     (tmp_lat <= 900000000) && (tmp_lat >= -900000000) &&
                     (tmp_dop < max_dop);
 
@@ -308,16 +257,16 @@ void UBloxGPS::sleep()
 {
     if (radioConfig.preferences.gps_update_interval > UBLOX_POWEROFF_THRESHOLD) {
         // Tell GPS to power down until we send it characters on serial port (we leave vcc connected)
-        ublox.powerOff();
+        // TODO ublox.powerOff(radioConfig.preferences.gps_update_interval * 1000);
         // setGPSPower(false);
     }
 }
 
 void UBloxGPS::wake()
 {
-    if (radioConfig.preferences.gps_update_interval > UBLOX_POWEROFF_THRESHOLD) {
-        fixType = 0; // assume we have no fix yet
-    }
+    //if (radioConfig.preferences.gps_update_interval > UBLOX_POWEROFF_THRESHOLD) {
+        //fixType = 0; // assume we have no fix yet
+    //}
 
     // this is idempotent
     setGPSPower(true);

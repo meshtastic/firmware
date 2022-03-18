@@ -234,7 +234,7 @@ int32_t GPS::runOnce()
         // DEBUG_MSG("looking for location\n");
         if ((now - lastWhileActiveMsec) > 5000) {
             lastWhileActiveMsec = now;
-            whileActive();
+            //whileActive();
         }
 
         // If we've already set time from the GPS, no need to ask the GPS

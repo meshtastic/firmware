@@ -2,7 +2,7 @@
 
 #include "GPS.h"
 #include "Observer.h"
-#include "SparkFun_Ublox_Arduino_Library.h"
+#include "SparkFun_u-blox_GNSS_Arduino_Library.h"
 
 /**
  * A gps class that only reads from the GPS periodically (and FIXME - eventually keeps the gps powered down except when reading)
@@ -11,7 +11,7 @@
  */
 class UBloxGPS : public GPS
 {
-    SFE_UBLOX_GPS ublox;
+    SFE_UBLOX_GNSS ublox;
     uint8_t fixType = 0;
 
   public:
