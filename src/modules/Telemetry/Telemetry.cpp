@@ -1,5 +1,6 @@
 #include "Telemetry.h"
 #include "../mesh/generated/telemetry.pb.h"
+#include "PowerFSM.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
@@ -249,8 +250,17 @@ bool TelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Telemetry *p)
 bool TelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies)
 {
     Telemetry m;
+    m.air_util_tx = 0;
     m.barometric_pressure = 0;
+    m.battery_level = 0;
+    m.channel_utilization = 0;
+    m.current = 0;
     m.gas_resistance = 0;
+    m.relative_humidity = 0;
+    m.router_heartbeat = 0;
+    m.temperature = 0;
+    m.voltage = 0;
+
     DEBUG_MSG("-----------------------------------------\n");
 
     DEBUG_MSG("Telemetry: Read data\n");
@@ -277,14 +287,23 @@ bool TelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies)
             mcp9808Sensor.getMeasurement(&m);
             break;
         default:
-            DEBUG_MSG("Telemetry: Invalid sensor type selected; Disabling module");
-            return false;
+            DEBUG_MSG("Telemetry: No external sensor type selected; Only sending internal metrics");
     }
 
-    DEBUG_MSG("Telemetry->relative_humidity: %f\n", m.relative_humidity);
-    DEBUG_MSG("Telemetry->temperature: %f\n", m.temperature);
+    m.air_util_tx = myNodeInfo.air_util_tx;
+    m.channel_utilization = myNodeInfo.channel_utilization;
+    m.battery_level = powerStatus->getBatteryChargePercent();
+
+    DEBUG_MSG("Telemetry->air_util_tx: %f\n", m.air_util_tx);
     DEBUG_MSG("Telemetry->barometric_pressure: %f\n", m.barometric_pressure);
+    DEBUG_MSG("Telemetry->battery_level: %f\n", m.battery_level);
+    DEBUG_MSG("Telemetry->channel_utilization: %f\n", m.channel_utilization);
+    DEBUG_MSG("Telemetry->current: %f\n", m.current);
     DEBUG_MSG("Telemetry->gas_resistance: %f\n", m.gas_resistance);
+    DEBUG_MSG("Telemetry->relative_humidity: %f\n", m.relative_humidity);
+    DEBUG_MSG("Telemetry->router_heartbeat: %f\n", m.router_heartbeat);
+    DEBUG_MSG("Telemetry->temperature: %f\n", m.temperature);
+    DEBUG_MSG("Telemetry->voltage: %f\n", m.voltage);
 
     sensor_read_error_count = 0;
 
