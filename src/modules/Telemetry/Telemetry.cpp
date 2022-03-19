@@ -226,26 +226,26 @@ void TelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state,
         display->drawString(x, y += fontHeight(FONT_SMALL),"Press: " + String(lastMeasurement.barometric_pressure, 0) + "hPA");
 }
 
-bool TelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Telemetry *p)
+bool TelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Telemetry *t)
 {
     String sender = GetSenderName(mp);
 
     DEBUG_MSG("-----------------------------------------\n");
     DEBUG_MSG("Telemetry: Received data from %s\n", sender);
-    DEBUG_MSG("Telemetry->air_util_tx: %f\n", p->air_util_tx);
-    DEBUG_MSG("Telemetry->barometric_pressure: %f\n", p->barometric_pressure);
-    DEBUG_MSG("Telemetry->battery_level: %f\n", p->battery_level);
-    DEBUG_MSG("Telemetry->channel_utilization: %f\n", p->channel_utilization);
-    DEBUG_MSG("Telemetry->current: %f\n", p->current);
-    DEBUG_MSG("Telemetry->gas_resistance: %f\n", p->gas_resistance);
-    DEBUG_MSG("Telemetry->relative_humidity: %f\n", p->relative_humidity);
-    DEBUG_MSG("Telemetry->router_heartbeat: %f\n", p->router_heartbeat);
-    DEBUG_MSG("Telemetry->temperature: %f\n", p->temperature);
-    DEBUG_MSG("Telemetry->voltage: %f\n", p->voltage);
+    DEBUG_MSG("Telemetry->air_util_tx: %f\n", t->air_util_tx);
+    DEBUG_MSG("Telemetry->barometric_pressure: %f\n", t->barometric_pressure);
+    DEBUG_MSG("Telemetry->battery_level: %f\n", t->battery_level);
+    DEBUG_MSG("Telemetry->channel_utilization: %f\n", t->channel_utilization);
+    DEBUG_MSG("Telemetry->current: %f\n", t->current);
+    DEBUG_MSG("Telemetry->gas_resistance: %f\n", t->gas_resistance);
+    DEBUG_MSG("Telemetry->relative_humidity: %f\n", t->relative_humidity);
+    DEBUG_MSG("Telemetry->router_heartbeat: %f\n", t->router_heartbeat);
+    DEBUG_MSG("Telemetry->temperature: %f\n", t->temperature);
+    DEBUG_MSG("Telemetry->voltage: %f\n", t->voltage);
 
     lastMeasurementPacket = packetPool.allocCopy(mp);
 
-    nodeDB.updateTelemetry(getFrom(&mp), p);
+    nodeDB.updateTelemetry(getFrom(&mp), *t, RX_SRC_RADIO);
 
     return false; // Let others look at this message also if they want
 }
@@ -314,6 +314,7 @@ bool TelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies)
     p->to = dest;
     p->decoded.want_response = wantReplies;
 
+    //nodeDB.updateTelemetry(nodeDB.getNodeNum(), m, RX_SRC_USER);
     lastMeasurementPacket = packetPool.allocCopy(*p);
     DEBUG_MSG("Telemetry: Sending packet to mesh");
     service.sendToMesh(p);

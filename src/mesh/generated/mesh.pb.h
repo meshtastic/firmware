@@ -170,9 +170,6 @@ typedef struct _MyNodeInfo {
     bool has_wifi;
     float channel_utilization;
     float air_util_tx;
-    pb_callback_t router;
-    pb_callback_t router_snr;
-    pb_callback_t router_sec;
 } MyNodeInfo;
 
 typedef struct _Position {
@@ -342,7 +339,7 @@ extern "C" {
 #define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
 #define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
 #define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0, false, Telemetry_init_default}
-#define MyNodeInfo_init_default                  {0, 0, "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define MyNodeInfo_init_default                  {0, 0, "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
 #define LogRecord_init_default                   {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_default                   {0, 0, {MyNodeInfo_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
@@ -354,7 +351,7 @@ extern "C" {
 #define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
 #define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
 #define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0, false, Telemetry_init_zero}
-#define MyNodeInfo_init_zero                     {0, 0, "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define MyNodeInfo_init_zero                     {0, 0, "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
 #define LogRecord_init_zero                      {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_zero                      {0, 0, {MyNodeInfo_init_zero}}
 #define ToRadio_init_zero                        {0, {MeshPacket_init_zero}}
@@ -390,9 +387,6 @@ extern "C" {
 #define MyNodeInfo_has_wifi_tag                  18
 #define MyNodeInfo_channel_utilization_tag       19
 #define MyNodeInfo_air_util_tx_tag               20
-#define MyNodeInfo_router_tag                    21
-#define MyNodeInfo_router_snr_tag                22
-#define MyNodeInfo_router_sec_tag                23
 #define Position_latitude_i_tag                  1
 #define Position_longitude_i_tag                 2
 #define Position_altitude_tag                    3
@@ -577,11 +571,8 @@ X(a, STATIC,   REPEATED, UINT32,   air_period_tx,    16) \
 X(a, STATIC,   REPEATED, UINT32,   air_period_rx,    17) \
 X(a, STATIC,   SINGULAR, BOOL,     has_wifi,         18) \
 X(a, STATIC,   SINGULAR, FLOAT,    channel_utilization,  19) \
-X(a, STATIC,   SINGULAR, FLOAT,    air_util_tx,      20) \
-X(a, CALLBACK, REPEATED, UINT32,   router,           21) \
-X(a, CALLBACK, REPEATED, FLOAT,    router_snr,       22) \
-X(a, CALLBACK, REPEATED, UINT32,   router_sec,       23)
-#define MyNodeInfo_CALLBACK pb_default_field_callback
+X(a, STATIC,   SINGULAR, FLOAT,    air_util_tx,      20)
+#define MyNodeInfo_CALLBACK NULL
 #define MyNodeInfo_DEFAULT NULL
 
 #define LogRecord_FIELDLIST(X, a) \
@@ -658,9 +649,9 @@ extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 #define Data_size                                267
 #define MeshPacket_size                          318
 #define NodeInfo_size                            320
-/* MyNodeInfo_size depends on runtime parameters */
+#define MyNodeInfo_size                          210
 #define LogRecord_size                           81
-/* FromRadio_size depends on runtime parameters */
+#define FromRadio_size                           329
 #define ToRadio_size                             321
 #define ToRadio_PeerInfo_size                    8
 
