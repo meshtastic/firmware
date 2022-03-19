@@ -207,8 +207,7 @@ NodeInfo *MeshService::refreshMyNodeInfo()
     // For the time in the position field, only set that if we have a real GPS clock
     position.time = getValidTime(RTCQualityGPS);
 
-    position.battery_level = powerStatus->getBatteryChargePercent();
-    updateBatteryLevel(position.battery_level);
+    updateBatteryLevel(powerStatus->getBatteryChargePercent());
 
     return node;
 }
@@ -238,11 +237,10 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
     // I KNOW this is redundant with refreshMyNodeInfo() above, but these are
     //   inexpensive nonblocking calls and can be refactored in due course
     pos.time = getValidTime(RTCQualityGPS);
-    pos.battery_level = powerStatus->getBatteryChargePercent();
 
     // In debug logs, identify position by @timestamp:stage (stage 4 = nodeDB)
-    DEBUG_MSG("onGPSChanged() pos@%x:4, time=%u, lat=%d, bat=%d\n", 
-                pos.pos_timestamp, pos.time, pos.latitude_i, pos.battery_level);
+    DEBUG_MSG("onGPSChanged() pos@%x:4, time=%u, lat=%d\n", 
+                pos.pos_timestamp, pos.time, pos.latitude_i);
 
     // Update our current position in the local DB
     nodeDB.updatePosition(nodeDB.getNodeNum(), pos, RX_SRC_LOCAL);
