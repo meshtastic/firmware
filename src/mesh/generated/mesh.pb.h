@@ -5,6 +5,7 @@
 #define PB_MESH_PB_H_INCLUDED
 #include <pb.h>
 #include "portnums.pb.h"
+#include "telemetry.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
@@ -250,6 +251,8 @@ typedef struct _NodeInfo {
     Position position;
     float snr;
     uint32_t last_heard;
+    bool has_telemetry;
+    Telemetry telemetry;
 } NodeInfo;
 
 typedef struct _Routing {
@@ -338,7 +341,7 @@ extern "C" {
 #define Routing_init_default                     {0, {RouteDiscovery_init_default}}
 #define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
 #define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
-#define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0}
+#define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0, false, Telemetry_init_default}
 #define MyNodeInfo_init_default                  {0, 0, "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define LogRecord_init_default                   {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_default                   {0, 0, {MyNodeInfo_init_default}}
@@ -350,7 +353,7 @@ extern "C" {
 #define Routing_init_zero                        {0, {RouteDiscovery_init_zero}}
 #define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
 #define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
-#define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0}
+#define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0, false, Telemetry_init_zero}
 #define MyNodeInfo_init_zero                     {0, 0, "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define LogRecord_init_zero                      {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_zero                      {0, 0, {MyNodeInfo_init_zero}}
@@ -443,6 +446,7 @@ extern "C" {
 #define NodeInfo_position_tag                    3
 #define NodeInfo_snr_tag                         4
 #define NodeInfo_last_heard_tag                  5
+#define NodeInfo_telemetry_tag                   6
 #define Routing_route_request_tag                1
 #define Routing_route_reply_tag                  2
 #define Routing_error_reason_tag                 3
@@ -548,11 +552,13 @@ X(a, STATIC,   SINGULAR, UINT32,   num,               1) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  user,              2) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  position,          3) \
 X(a, STATIC,   SINGULAR, FLOAT,    snr,               4) \
-X(a, STATIC,   SINGULAR, FIXED32,  last_heard,        5)
+X(a, STATIC,   SINGULAR, FIXED32,  last_heard,        5) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  telemetry,         6)
 #define NodeInfo_CALLBACK NULL
 #define NodeInfo_DEFAULT NULL
 #define NodeInfo_user_MSGTYPE User
 #define NodeInfo_position_MSGTYPE Position
+#define NodeInfo_telemetry_MSGTYPE Telemetry
 
 #define MyNodeInfo_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   my_node_num,       1) \
@@ -651,7 +657,7 @@ extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 #define Routing_size                             42
 #define Data_size                                267
 #define MeshPacket_size                          318
-#define NodeInfo_size                            260
+#define NodeInfo_size                            320
 /* MyNodeInfo_size depends on runtime parameters */
 #define LogRecord_size                           81
 /* FromRadio_size depends on runtime parameters */

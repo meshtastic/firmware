@@ -61,6 +61,10 @@ class NodeDB
      */
     void updatePosition(uint32_t nodeId, const Position &p, RxSource src = RX_SRC_RADIO);
 
+    /** Update telemetry info for this node based on received metrics
+     */
+    void updateTelemetry(uint32_t nodeId,  const Telemetry &t, RxSource src = RX_SRC_RADIO);
+
     /** Update user info for this node based on received user data
      */
     void updateUser(uint32_t nodeId, const User &p);

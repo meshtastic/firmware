@@ -488,6 +488,28 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p, RxSource src)
     notifyObservers(true); // Force an update whether or not our node counts have changed
 }
 
+
+/** Update telemetry info for this node based on received metrics
+ */
+void NodeDB::updateTelemetry(uint32_t nodeId, const Telemetry &t, RxSource src)
+{
+    NodeInfo *info = getOrCreateNode(nodeId);
+    if (!info) {
+        return;
+    }
+
+    if (src == RX_SRC_LOCAL) {
+        // Local packet, fully authoritative
+        DEBUG_MSG("updateTelemetry LOCAL\n");
+    } else {
+        DEBUG_MSG("updateTelemetry REMOTE node=0x%x \n", nodeId);
+    }
+    info->telemetry = t;
+
+    updateGUIforNode = info;
+    notifyObservers(true); // Force an update whether or not our node counts have changed
+}
+
 /** Update user info for this node based on received user data
  */
 void NodeDB::updateUser(uint32_t nodeId, const User &p)

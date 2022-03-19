@@ -228,21 +228,24 @@ void TelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state,
 
 bool TelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Telemetry *p)
 {
-    if (!(radioConfig.preferences.telemetry_module_measurement_enabled ||
-          radioConfig.preferences.telemetry_module_screen_enabled)) {
-        // If this module is not enabled in any capacity, don't handle the packet, and allow other modules to consume
-        return false;
-    }
-
     String sender = GetSenderName(mp);
 
+    DEBUG_MSG("-----------------------------------------\n");
     DEBUG_MSG("Telemetry: Received data from %s\n", sender);
-    DEBUG_MSG("Telemetry->relative_humidity: %f\n", p->relative_humidity);
-    DEBUG_MSG("Telemetry->temperature: %f\n", p->temperature);
+    DEBUG_MSG("Telemetry->air_util_tx: %f\n", p->air_util_tx);
     DEBUG_MSG("Telemetry->barometric_pressure: %f\n", p->barometric_pressure);
+    DEBUG_MSG("Telemetry->battery_level: %f\n", p->battery_level);
+    DEBUG_MSG("Telemetry->channel_utilization: %f\n", p->channel_utilization);
+    DEBUG_MSG("Telemetry->current: %f\n", p->current);
     DEBUG_MSG("Telemetry->gas_resistance: %f\n", p->gas_resistance);
+    DEBUG_MSG("Telemetry->relative_humidity: %f\n", p->relative_humidity);
+    DEBUG_MSG("Telemetry->router_heartbeat: %f\n", p->router_heartbeat);
+    DEBUG_MSG("Telemetry->temperature: %f\n", p->temperature);
+    DEBUG_MSG("Telemetry->voltage: %f\n", p->voltage);
 
     lastMeasurementPacket = packetPool.allocCopy(mp);
+
+    nodeDB.updateTelemetry(getFrom(&mp), p);
 
     return false; // Let others look at this message also if they want
 }
