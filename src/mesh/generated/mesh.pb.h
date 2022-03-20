@@ -260,7 +260,7 @@ typedef struct _Routing {
 } Routing;
 
 typedef struct _FromRadio {
-    uint32_t num;
+    uint32_t id;
     pb_size_t which_payloadVariant;
     union {
         MyNodeInfo my_info;
@@ -442,7 +442,7 @@ extern "C" {
 #define Routing_route_request_tag                1
 #define Routing_route_reply_tag                  2
 #define Routing_error_reason_tag                 3
-#define FromRadio_num_tag                        1
+#define FromRadio_id_tag                         1
 #define FromRadio_my_info_tag                    3
 #define FromRadio_node_info_tag                  4
 #define FromRadio_log_record_tag                 7
@@ -581,7 +581,7 @@ X(a, STATIC,   SINGULAR, UENUM,    level,             4)
 #define LogRecord_DEFAULT NULL
 
 #define FromRadio_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UINT32,   num,               1) \
+X(a, STATIC,   SINGULAR, UINT32,   id,                1) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,my_info,my_info),   3) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,node_info,node_info),   4) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,log_record,log_record),   7) \

@@ -47,7 +47,7 @@ class CrossPlatformCryptoEngine : public CryptoEngine
      *
      * @param bytes is updated in place
      */
-    virtual void encrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes) override
+    virtual void encrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes) override
     {
         if (key.length > 0) {
             //uint8_t stream_block[16];
@@ -55,7 +55,7 @@ class CrossPlatformCryptoEngine : public CryptoEngine
             //size_t nc_off = 0;
 
             // DEBUG_MSG("ESP32 encrypt!\n");
-            initNonce(fromNode, packetNum);
+            initNonce(fromNode, packetId);
             assert(numBytes <= MAX_BLOCKSIZE);
             memcpy(scratch, bytes, numBytes);
             memset(scratch + numBytes, 0,
@@ -67,10 +67,10 @@ class CrossPlatformCryptoEngine : public CryptoEngine
         }
     }
 
-    virtual void decrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes) override
+    virtual void decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes) override
     {
         // For CTR, the implementation is the same
-        encrypt(fromNode, packetNum, numBytes, bytes);
+        encrypt(fromNode, packetId, numBytes, bytes);
     }
 
   private:
