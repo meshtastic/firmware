@@ -146,16 +146,6 @@ void GPS::setAwake(bool on)
     }
 }
 
-GpsOperation GPS::getGpsOp() const
-{
-    auto op = radioConfig.preferences.gps_operation;
-
-    if (op == GpsOperation_GpsOpUnset)
-        op = (radioConfig.preferences.disable_location_share) ? GpsOperation_GpsOpTimeOnly : GpsOperation_GpsOpMobile;
-
-    return op;
-}
-
 /** Get how long we should stay looking for each aquisition in msecs
  */
 uint32_t GPS::getWakeTime() const
@@ -179,10 +169,9 @@ uint32_t GPS::getWakeTime() const
 uint32_t GPS::getSleepTime() const
 {
     uint32_t t = radioConfig.preferences.gps_update_interval;
+    bool disabled = radioConfig.preferences.gps_disabled;
 
-    auto op = getGpsOp();
-    bool gotTime = (getRTCQuality() >= RTCQualityGPS);
-    if ((gotTime && op == GpsOperation_GpsOpTimeOnly) || (op == GpsOperation_GpsOpDisabled))
+    if (disabled)
         t = UINT32_MAX; // Sleep forever now
 
     if (t == UINT32_MAX)
@@ -256,9 +245,8 @@ int32_t GPS::runOnce()
         bool tooLong = wakeTime != UINT32_MAX && (now - lastWakeStartMsec) > wakeTime;
 
         // Once we get a location we no longer desperately want an update
-        // or if we got a time and we are in GpsOpTimeOnly mode
         // DEBUG_MSG("gotLoc %d, tooLong %d, gotTime %d\n", gotLoc, tooLong, gotTime);
-        if ((gotLoc && gotTime) || tooLong || (gotTime && getGpsOp() == GpsOperation_GpsOpTimeOnly)) {
+        if ((gotLoc && gotTime) || tooLong) {
 
             if (tooLong) {
                 // we didn't get a location during this ack window, therefore declare loss of lock
