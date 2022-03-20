@@ -91,14 +91,14 @@ int32_t TelemetryModule::runOnce()
         // this is not the first time OSThread library has called this function
         // so just do what we intend to do on the interval
         if (sensor_read_error_count > radioConfig.preferences.telemetry_module_read_error_count_threshold) {
-            if (radioConfig.preferences.telemetry_module_recovery_interval > 0) {
+            if (getPref_telemetry_module_update_interval() > 0) {
                 DEBUG_MSG("Telemetry: TEMPORARILY DISABLED; The "
                           "telemetry_module_read_error_count_threshold has been exceed: %d. Will retry reads in "
                           "%d seconds\n",
                           radioConfig.preferences.telemetry_module_read_error_count_threshold,
-                          radioConfig.preferences.telemetry_module_recovery_interval);
+                          getPref_telemetry_module_update_interval());
                 sensor_read_error_count = 0;
-                return (radioConfig.preferences.telemetry_module_recovery_interval * 1000);
+                return (getPref_telemetry_module_update_interval() * 1000);
             }
             DEBUG_MSG("Telemetry: DISABLED; The telemetry_module_read_error_count_threshold has "
                       "been exceed: %d. Reads will not be retried until after device reset\n",
@@ -116,7 +116,7 @@ int32_t TelemetryModule::runOnce()
     // The return of runOnce is an int32 representing the desired number of
     // miliseconds until the function should be called again by the
     // OSThread library.  Multiply the preference value by 1000 to convert seconds to miliseconds
-    return (radioConfig.preferences.telemetry_module_update_interval * 1000);
+    return (getPref_telemetry_module_update_interval() * 1000);
 #endif
 }
 
@@ -198,12 +198,12 @@ bool TelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Telemetry *t)
     DEBUG_MSG("Telemetry: Received data from %s\n", sender);
     DEBUG_MSG("Telemetry->air_util_tx: %f\n", t->air_util_tx);
     DEBUG_MSG("Telemetry->barometric_pressure: %f\n", t->barometric_pressure);
-    DEBUG_MSG("Telemetry->battery_level: %f\n", t->battery_level);
+    DEBUG_MSG("Telemetry->battery_level: %i\n", t->battery_level);
     DEBUG_MSG("Telemetry->channel_utilization: %f\n", t->channel_utilization);
     DEBUG_MSG("Telemetry->current: %f\n", t->current);
     DEBUG_MSG("Telemetry->gas_resistance: %f\n", t->gas_resistance);
     DEBUG_MSG("Telemetry->relative_humidity: %f\n", t->relative_humidity);
-    DEBUG_MSG("Telemetry->router_heartbeat: %f\n", t->router_heartbeat);
+    DEBUG_MSG("Telemetry->router_heartbeat: %i\n", t->router_heartbeat);
     DEBUG_MSG("Telemetry->temperature: %f\n", t->temperature);
     DEBUG_MSG("Telemetry->voltage: %f\n", t->voltage);
 
@@ -263,7 +263,7 @@ bool TelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies)
 
     DEBUG_MSG("Telemetry->air_util_tx: %f\n", m.air_util_tx);
     DEBUG_MSG("Telemetry->barometric_pressure: %f\n", m.barometric_pressure);
-    DEBUG_MSG("Telemetry->battery_level: %f\n", m.battery_level);
+    DEBUG_MSG("Telemetry->battery_level: %i\n", m.battery_level);
     DEBUG_MSG("Telemetry->channel_utilization: %f\n", m.channel_utilization);
     DEBUG_MSG("Telemetry->current: %f\n", m.current);
     DEBUG_MSG("Telemetry->gas_resistance: %f\n", m.gas_resistance);
