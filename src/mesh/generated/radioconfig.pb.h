@@ -115,7 +115,7 @@ typedef struct _RadioConfig_UserPreferences {
     ChargeCurrent charge_current;
     bool position_broadcast_smart_disabled;
     Role role;
-    bool disable_location_share;
+    bool location_share_disabled;
     bool gps_disabled;
     uint32_t gps_update_interval;
     uint32_t gps_attempt_time;
@@ -248,7 +248,7 @@ extern "C" {
 #define RadioConfig_UserPreferences_charge_current_tag 16
 #define RadioConfig_UserPreferences_position_broadcast_smart_disabled_tag 17
 #define RadioConfig_UserPreferences_role_tag     18
-#define RadioConfig_UserPreferences_disable_location_share_tag 32
+#define RadioConfig_UserPreferences_location_share_disabled_tag 32
 #define RadioConfig_UserPreferences_gps_disabled_tag 33
 #define RadioConfig_UserPreferences_gps_update_interval_tag 34
 #define RadioConfig_UserPreferences_gps_attempt_time_tag 36
@@ -341,7 +341,7 @@ X(a, STATIC,   SINGULAR, UENUM,    region,           15) \
 X(a, STATIC,   SINGULAR, UENUM,    charge_current,   16) \
 X(a, STATIC,   SINGULAR, BOOL,     position_broadcast_smart_disabled,  17) \
 X(a, STATIC,   SINGULAR, UENUM,    role,             18) \
-X(a, STATIC,   SINGULAR, BOOL,     disable_location_share,  32) \
+X(a, STATIC,   SINGULAR, BOOL,     location_share_disabled,  32) \
 X(a, STATIC,   SINGULAR, BOOL,     gps_disabled,     33) \
 X(a, STATIC,   SINGULAR, UINT32,   gps_update_interval,  34) \
 X(a, STATIC,   SINGULAR, UINT32,   gps_attempt_time,  36) \
