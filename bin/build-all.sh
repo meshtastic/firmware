@@ -34,8 +34,6 @@ function do_build() {
     # The shell vars the build tool expects to find
     export APP_VERSION=$VERSION
 
-    # Are we building a universal/regionless rom?
-    export HW_VERSION="1.0"
     basename=universal/firmware-$BOARD-$VERSION
 
     pio run --environment $BOARD # -v
