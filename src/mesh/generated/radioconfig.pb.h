@@ -51,14 +51,6 @@ typedef enum _ChargeCurrent {
     ChargeCurrent_MA1320 = 16
 } ChargeCurrent;
 
-typedef enum _GpsOperation {
-    GpsOperation_GpsOpUnset = 0,
-    GpsOperation_GpsOpStationary = 1,
-    GpsOperation_GpsOpMobile = 2,
-    GpsOperation_GpsOpTimeOnly = 3,
-    GpsOperation_GpsOpDisabled = 4
-} GpsOperation;
-
 typedef enum _GpsCoordinateFormat {
     GpsCoordinateFormat_GpsFormatDec = 0,
     GpsCoordinateFormat_GpsFormatDMS = 1,
@@ -124,7 +116,7 @@ typedef struct _RadioConfig_UserPreferences {
     bool position_broadcast_smart_disabled;
     Role role;
     bool disable_location_share;
-    GpsOperation gps_operation;
+    bool gps_disabled;
     uint32_t gps_update_interval;
     uint32_t gps_attempt_time;
     bool is_low_power;
@@ -211,10 +203,6 @@ typedef struct _RadioConfig {
 #define _ChargeCurrent_MAX ChargeCurrent_MA1320
 #define _ChargeCurrent_ARRAYSIZE ((ChargeCurrent)(ChargeCurrent_MA1320+1))
 
-#define _GpsOperation_MIN GpsOperation_GpsOpUnset
-#define _GpsOperation_MAX GpsOperation_GpsOpDisabled
-#define _GpsOperation_ARRAYSIZE ((GpsOperation)(GpsOperation_GpsOpDisabled+1))
-
 #define _GpsCoordinateFormat_MIN GpsCoordinateFormat_GpsFormatDec
 #define _GpsCoordinateFormat_MAX GpsCoordinateFormat_GpsFormatOSGR
 #define _GpsCoordinateFormat_ARRAYSIZE ((GpsCoordinateFormat)(GpsCoordinateFormat_GpsFormatOSGR+1))
@@ -238,9 +226,9 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default}
-#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _Role_MIN, 0, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_TelemetrySensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, "", 0, 0, 0, 0}
+#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _Role_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_TelemetrySensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, "", 0, 0, 0, 0}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero}
-#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _Role_MIN, 0, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_TelemetrySensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, "", 0, 0, 0, 0}
+#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _Role_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_TelemetrySensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, "", 0, 0, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define RadioConfig_UserPreferences_position_broadcast_secs_tag 1
@@ -261,7 +249,7 @@ extern "C" {
 #define RadioConfig_UserPreferences_position_broadcast_smart_disabled_tag 17
 #define RadioConfig_UserPreferences_role_tag     18
 #define RadioConfig_UserPreferences_disable_location_share_tag 32
-#define RadioConfig_UserPreferences_gps_operation_tag 33
+#define RadioConfig_UserPreferences_gps_disabled_tag 33
 #define RadioConfig_UserPreferences_gps_update_interval_tag 34
 #define RadioConfig_UserPreferences_gps_attempt_time_tag 36
 #define RadioConfig_UserPreferences_is_low_power_tag 38
@@ -354,7 +342,7 @@ X(a, STATIC,   SINGULAR, UENUM,    charge_current,   16) \
 X(a, STATIC,   SINGULAR, BOOL,     position_broadcast_smart_disabled,  17) \
 X(a, STATIC,   SINGULAR, UENUM,    role,             18) \
 X(a, STATIC,   SINGULAR, BOOL,     disable_location_share,  32) \
-X(a, STATIC,   SINGULAR, UENUM,    gps_operation,    33) \
+X(a, STATIC,   SINGULAR, BOOL,     gps_disabled,     33) \
 X(a, STATIC,   SINGULAR, UINT32,   gps_update_interval,  34) \
 X(a, STATIC,   SINGULAR, UINT32,   gps_attempt_time,  36) \
 X(a, STATIC,   SINGULAR, BOOL,     is_low_power,     38) \
