@@ -34,9 +34,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #error APP_VERSION must be set by the build environment
 #endif
 
-// If app version is not specified we assume we are not being invoked by the build script
+// FIXME: This is still needed by the Bluetooth Stack and needs to be replaced by something better. Remnant of the old versioning system.
 #ifndef HW_VERSION
-#error HW_VERSION, and HW_VERSION_countryname must be set by the build environment
+#define HW_VERSION "1.0"
 #endif
 
 // -----------------------------------------------------------------------------
