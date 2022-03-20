@@ -151,8 +151,7 @@ GpsOperation GPS::getGpsOp() const
     auto op = radioConfig.preferences.gps_operation;
 
     if (op == GpsOperation_GpsOpUnset)
-        op = (radioConfig.preferences.location_share == LocationSharing_LocDisabled) ? GpsOperation_GpsOpTimeOnly
-                                                                                     : GpsOperation_GpsOpMobile;
+        op = (radioConfig.preferences.disable_location_share) ? GpsOperation_GpsOpTimeOnly : GpsOperation_GpsOpMobile;
 
     return op;
 }
