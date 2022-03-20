@@ -245,7 +245,7 @@ bool TelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies)
             mcp9808Sensor.getMeasurement(&m);
             break;
         default:
-            DEBUG_MSG("Telemetry: No external sensor type selected; Only sending internal metrics");
+            DEBUG_MSG("Telemetry: No external sensor type selected; Only sending internal metrics\n");
     }
 
     m.air_util_tx = myNodeInfo.air_util_tx;
