@@ -85,15 +85,16 @@ typedef enum _InputEventChar {
 } InputEventChar;
 
 typedef enum _RadioConfig_UserPreferences_TelemetrySensorType {
-    RadioConfig_UserPreferences_TelemetrySensorType_DHT11 = 0,
-    RadioConfig_UserPreferences_TelemetrySensorType_DS18B20 = 1,
-    RadioConfig_UserPreferences_TelemetrySensorType_DHT12 = 2,
-    RadioConfig_UserPreferences_TelemetrySensorType_DHT21 = 3,
-    RadioConfig_UserPreferences_TelemetrySensorType_DHT22 = 4,
-    RadioConfig_UserPreferences_TelemetrySensorType_BME280 = 5,
-    RadioConfig_UserPreferences_TelemetrySensorType_BME680 = 6,
-    RadioConfig_UserPreferences_TelemetrySensorType_MCP9808 = 7,
-    RadioConfig_UserPreferences_TelemetrySensorType_SHTC3 = 8
+    RadioConfig_UserPreferences_TelemetrySensorType_None = 0,
+    RadioConfig_UserPreferences_TelemetrySensorType_DHT11 = 1,
+    RadioConfig_UserPreferences_TelemetrySensorType_DS18B20 = 2,
+    RadioConfig_UserPreferences_TelemetrySensorType_DHT12 = 3,
+    RadioConfig_UserPreferences_TelemetrySensorType_DHT21 = 4,
+    RadioConfig_UserPreferences_TelemetrySensorType_DHT22 = 5,
+    RadioConfig_UserPreferences_TelemetrySensorType_BME280 = 6,
+    RadioConfig_UserPreferences_TelemetrySensorType_BME680 = 7,
+    RadioConfig_UserPreferences_TelemetrySensorType_MCP9808 = 8,
+    RadioConfig_UserPreferences_TelemetrySensorType_SHTC3 = 9
 } RadioConfig_UserPreferences_TelemetrySensorType;
 
 /* Struct definitions */
@@ -215,7 +216,7 @@ typedef struct _RadioConfig {
 #define _InputEventChar_MAX InputEventChar_KEY_BACK
 #define _InputEventChar_ARRAYSIZE ((InputEventChar)(InputEventChar_KEY_BACK+1))
 
-#define _RadioConfig_UserPreferences_TelemetrySensorType_MIN RadioConfig_UserPreferences_TelemetrySensorType_DHT11
+#define _RadioConfig_UserPreferences_TelemetrySensorType_MIN RadioConfig_UserPreferences_TelemetrySensorType_None
 #define _RadioConfig_UserPreferences_TelemetrySensorType_MAX RadioConfig_UserPreferences_TelemetrySensorType_SHTC3
 #define _RadioConfig_UserPreferences_TelemetrySensorType_ARRAYSIZE ((RadioConfig_UserPreferences_TelemetrySensorType)(RadioConfig_UserPreferences_TelemetrySensorType_SHTC3+1))
 
