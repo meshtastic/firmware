@@ -169,9 +169,10 @@ uint32_t GPS::getWakeTime() const
 uint32_t GPS::getSleepTime() const
 {
     uint32_t t = radioConfig.preferences.gps_update_interval;
-    bool disabled = radioConfig.preferences.gps_disabled;
+    bool gps_disabled = radioConfig.preferences.gps_disabled;
+    bool loc_share_disabled = radioConfig.preferences.location_share_disabled;
 
-    if (disabled)
+    if (gps_disabled || loc_share_disabled)
         t = UINT32_MAX; // Sleep forever now
 
     if (t == UINT32_MAX)
