@@ -51,7 +51,6 @@ int32_t TelemetryModule::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
     /*
-    radioConfig.preferences.telemetry_module_measurement_enabled = 1;
     radioConfig.preferences.telemetry_module_screen_enabled = 1;
     radioConfig.preferences.telemetry_module_read_error_count_threshold = 5;
     radioConfig.preferences.telemetry_module_update_interval = 600;
@@ -63,47 +62,32 @@ int32_t TelemetryModule::runOnce()
         RadioConfig_UserPreferences_TelemetrySensorType::
             RadioConfig_UserPreferences_TelemetrySensorType_BME280;
     */
-   
-    if (!(radioConfig.preferences.telemetry_module_measurement_enabled ||
-          radioConfig.preferences.telemetry_module_screen_enabled)) {
-        // If this module is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
-        return (INT32_MAX);
-    }
 
     if (firstTime) {
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = 0;
-
-        if (radioConfig.preferences.telemetry_module_measurement_enabled) {
-            DEBUG_MSG("Telemetry: Initializing\n");
-            // it's possible to have this module enabled, only for displaying values on the screen.
-            // therefore, we should only enable the sensor loop if measurement is also enabled
-            switch (radioConfig.preferences.telemetry_module_sensor_type) {
-
-                case RadioConfig_UserPreferences_TelemetrySensorType_DHT11:
-                case RadioConfig_UserPreferences_TelemetrySensorType_DHT12:
-                case RadioConfig_UserPreferences_TelemetrySensorType_DHT21:
-                case RadioConfig_UserPreferences_TelemetrySensorType_DHT22:
-                    return dhtSensor.runOnce();
-                case RadioConfig_UserPreferences_TelemetrySensorType_DS18B20:
-                    return dallasSensor.runOnce();
-                case RadioConfig_UserPreferences_TelemetrySensorType_BME280:
-                    return bme280Sensor.runOnce();
-                case RadioConfig_UserPreferences_TelemetrySensorType_BME680:
-                    return bme680Sensor.runOnce();
-                case RadioConfig_UserPreferences_TelemetrySensorType_MCP9808:
-                    return mcp9808Sensor.runOnce();
-                default:
-                    DEBUG_MSG("Telemetry: Invalid sensor type selected; Disabling module");
-                    return (INT32_MAX);
-                    break;
-            }
+        DEBUG_MSG("Telemetry: Initializing\n");
+        // it's possible to have this module enabled, only for displaying values on the screen.
+        // therefore, we should only enable the sensor loop if measurement is also enabled
+        switch (radioConfig.preferences.telemetry_module_sensor_type) {
+            case RadioConfig_UserPreferences_TelemetrySensorType_DHT11:
+            case RadioConfig_UserPreferences_TelemetrySensorType_DHT12:
+            case RadioConfig_UserPreferences_TelemetrySensorType_DHT21:
+            case RadioConfig_UserPreferences_TelemetrySensorType_DHT22:
+                dhtSensor.runOnce();
+            case RadioConfig_UserPreferences_TelemetrySensorType_DS18B20:
+                dallasSensor.runOnce();
+            case RadioConfig_UserPreferences_TelemetrySensorType_BME280:
+                bme280Sensor.runOnce();
+            case RadioConfig_UserPreferences_TelemetrySensorType_BME680:
+                bme680Sensor.runOnce();
+            case RadioConfig_UserPreferences_TelemetrySensorType_MCP9808:
+                mcp9808Sensor.runOnce();
+            default:
+                DEBUG_MSG("Telemetry: No external sensor types selected;");
+                break;
         }
-        return (INT32_MAX);
     } else {
-        // if we somehow got to a second run of this module with measurement disabled, then just wait forever
-        if (!radioConfig.preferences.telemetry_module_measurement_enabled)  
-            return (INT32_MAX);
         // this is not the first time OSThread library has called this function
         // so just do what we intend to do on the interval
         if (sensor_read_error_count > radioConfig.preferences.telemetry_module_read_error_count_threshold) {
@@ -127,27 +111,7 @@ int32_t TelemetryModule::runOnce()
                       radioConfig.preferences.telemetry_module_read_error_count_threshold -
                           sensor_read_error_count);
         }
-        if (!sendOurTelemetry()) {
-            // if we failed to read the sensor, then try again
-            // as soon as we can according to the maximum polling frequency
-
-            switch (radioConfig.preferences.telemetry_module_sensor_type) {
-                case RadioConfig_UserPreferences_TelemetrySensorType_DHT11:
-                case RadioConfig_UserPreferences_TelemetrySensorType_DHT12:
-                case RadioConfig_UserPreferences_TelemetrySensorType_DHT21:
-                case RadioConfig_UserPreferences_TelemetrySensorType_DHT22:
-                    return (DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
-                case RadioConfig_UserPreferences_TelemetrySensorType_DS18B20:
-                    return (DS18B20_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
-                case RadioConfig_UserPreferences_TelemetrySensorType_BME280:
-                case RadioConfig_UserPreferences_TelemetrySensorType_BME680:
-                    return (BME_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
-                case RadioConfig_UserPreferences_TelemetrySensorType_MCP9808:
-                    return (MCP_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
-                default:
-                    return (DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
-            }
-        }
+        sendOurTelemetry();
     }
     // The return of runOnce is an int32 representing the desired number of
     // miliseconds until the function should be called again by the

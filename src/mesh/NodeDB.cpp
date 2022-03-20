@@ -126,8 +126,6 @@ bool NodeDB::resetRadioConfig()
         radioConfig.preferences.screen_on_secs = 10;
         radioConfig.preferences.wait_bluetooth_secs = 10;
         radioConfig.preferences.position_broadcast_secs = 6 * 60;
-        radioConfig.preferences.telemetry_module_measurement_enabled = true;
-        radioConfig.preferences.telemetry_module_update_interval = 6 * 60;
         radioConfig.preferences.ls_secs = 60;
         radioConfig.preferences.region = RegionCode_TW;
 
