@@ -55,7 +55,7 @@ int32_t TelemetryModule::runOnce()
     radioConfig.preferences.telemetry_module_read_error_count_threshold = 5;
     radioConfig.preferences.telemetry_module_update_interval = 600;
     radioConfig.preferences.telemetry_module_recovery_interval = 60;
-    radioConfig.preferences.telemetry_module_display_farenheit = false;
+    radioConfig.preferences.telemetry_module_display_fahrenheit = false;
     radioConfig.preferences.telemetry_module_sensor_pin = 13;
 
     radioConfig.preferences.telemetry_module_sensor_type =
@@ -185,7 +185,7 @@ uint32_t GetTimeSinceMeshPacket(const MeshPacket *mp)
     return delta;
 }
 
-float TelemetryModule::CelsiusToFarenheit(float c)
+float TelemetryModule::CelsiusToFahrenheit(float c)
 {
     return (c * 9) / 5 + 32;
 }
@@ -216,8 +216,8 @@ void TelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state,
 
     display->setFont(FONT_SMALL);
     String last_temp = String(lastMeasurement.temperature, 0) + "°C";
-    if (radioConfig.preferences.telemetry_module_display_farenheit) {
-        last_temp = String(CelsiusToFarenheit(lastMeasurement.temperature), 0) + "°F";
+    if (radioConfig.preferences.telemetry_module_display_fahrenheit) {
+        last_temp = String(CelsiusToFahrenheit(lastMeasurement.temperature), 0) + "°F";
     }
     display->drawString(x, y += fontHeight(FONT_MEDIUM) - 2, "From: " + lastSender + "(" + String(agoSecs) + "s)");
     display->drawString(x, y += fontHeight(FONT_SMALL) - 2,"Temp/Hum: " + last_temp + " / " + String(lastMeasurement.relative_humidity, 0) + "%");
