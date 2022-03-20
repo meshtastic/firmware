@@ -42,7 +42,6 @@ MCP9808Sensor mcp9808Sensor;
 #define FONT_HEIGHT_SMALL fontHeight(FONT_SMALL)
 #define FONT_HEIGHT_MEDIUM fontHeight(FONT_MEDIUM)
 
-
 int32_t TelemetryModule::runOnce()
 {
 #ifndef PORTDUINO
@@ -55,19 +54,14 @@ int32_t TelemetryModule::runOnce()
     radioConfig.preferences.telemetry_module_read_error_count_threshold = 5;
     radioConfig.preferences.telemetry_module_update_interval = 600;
     radioConfig.preferences.telemetry_module_recovery_interval = 60;
-    radioConfig.preferences.telemetry_module_display_fahrenheit = false;
-    radioConfig.preferences.telemetry_module_sensor_pin = 13;
-
-    radioConfig.preferences.telemetry_module_sensor_type =
-        RadioConfig_UserPreferences_TelemetrySensorType::
-            RadioConfig_UserPreferences_TelemetrySensorType_BME280;
+    radioConfig.preferences.telemetry_module_sensor_pin = 13; // If one-wire
+    radioConfig.preferences.telemetry_module_sensor_type = RadioConfig_UserPreferences_TelemetrySensorType::RadioConfig_UserPreferences_TelemetrySensorType_BME280;
     */
 
     if (firstTime) {
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = 0;
         DEBUG_MSG("Telemetry: Initializing\n");
-        // it's possible to have this module enabled, only for displaying values on the screen.
         // therefore, we should only enable the sensor loop if measurement is also enabled
         switch (radioConfig.preferences.telemetry_module_sensor_type) {
             case RadioConfig_UserPreferences_TelemetrySensorType_DHT11:
@@ -113,8 +107,6 @@ int32_t TelemetryModule::runOnce()
         }
         sendOurTelemetry();
     }
-    // The return of runOnce is an int32 representing the desired number of
-    // miliseconds until the function should be called again by the
     // OSThread library.  Multiply the preference value by 1000 to convert seconds to miliseconds
     return (getPref_telemetry_module_update_interval() * 1000);
 #endif
@@ -229,7 +221,6 @@ bool TelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies)
     m.voltage = 0;
 
     DEBUG_MSG("-----------------------------------------\n");
-
     DEBUG_MSG("Telemetry: Read data\n");
 
     switch (radioConfig.preferences.telemetry_module_sensor_type) {
@@ -278,7 +269,6 @@ bool TelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies)
     p->to = dest;
     p->decoded.want_response = wantReplies;
 
-    //nodeDB.updateTelemetry(nodeDB.getNodeNum(), m, RX_SRC_USER);
     lastMeasurementPacket = packetPool.allocCopy(*p);
     DEBUG_MSG("Telemetry: Sending packet to mesh");
     service.sendToMesh(p);
