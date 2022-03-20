@@ -163,7 +163,7 @@ typedef struct _RadioConfig_UserPreferences {
     uint32_t telemetry_module_read_error_count_threshold;
     uint32_t telemetry_module_update_interval;
     uint32_t telemetry_module_recovery_interval;
-    bool telemetry_module_display_farenheit;
+    bool telemetry_module_display_fahrenheit;
     RadioConfig_UserPreferences_TelemetrySensorType telemetry_module_sensor_type;
     uint32_t telemetry_module_sensor_pin;
     bool store_forward_module_enabled;
@@ -299,7 +299,7 @@ extern "C" {
 #define RadioConfig_UserPreferences_telemetry_module_read_error_count_threshold_tag 142
 #define RadioConfig_UserPreferences_telemetry_module_update_interval_tag 143
 #define RadioConfig_UserPreferences_telemetry_module_recovery_interval_tag 144
-#define RadioConfig_UserPreferences_telemetry_module_display_farenheit_tag 145
+#define RadioConfig_UserPreferences_telemetry_module_display_fahrenheit_tag 145
 #define RadioConfig_UserPreferences_telemetry_module_sensor_type_tag 146
 #define RadioConfig_UserPreferences_telemetry_module_sensor_pin_tag 147
 #define RadioConfig_UserPreferences_store_forward_module_enabled_tag 148
@@ -392,7 +392,7 @@ X(a, STATIC,   SINGULAR, BOOL,     telemetry_module_screen_enabled, 141) \
 X(a, STATIC,   SINGULAR, UINT32,   telemetry_module_read_error_count_threshold, 142) \
 X(a, STATIC,   SINGULAR, UINT32,   telemetry_module_update_interval, 143) \
 X(a, STATIC,   SINGULAR, UINT32,   telemetry_module_recovery_interval, 144) \
-X(a, STATIC,   SINGULAR, BOOL,     telemetry_module_display_farenheit, 145) \
+X(a, STATIC,   SINGULAR, BOOL,     telemetry_module_display_fahrenheit, 145) \
 X(a, STATIC,   SINGULAR, UENUM,    telemetry_module_sensor_type, 146) \
 X(a, STATIC,   SINGULAR, UINT32,   telemetry_module_sensor_pin, 147) \
 X(a, STATIC,   SINGULAR, BOOL,     store_forward_module_enabled, 148) \
