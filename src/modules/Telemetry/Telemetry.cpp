@@ -1,5 +1,6 @@
 #include "Telemetry.h"
 #include "../mesh/generated/telemetry.pb.h"
+#include "PowerFSM.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
@@ -41,7 +42,6 @@ MCP9808Sensor mcp9808Sensor;
 #define FONT_HEIGHT_SMALL fontHeight(FONT_SMALL)
 #define FONT_HEIGHT_MEDIUM fontHeight(FONT_MEDIUM)
 
-
 int32_t TelemetryModule::runOnce()
 {
 #ifndef PORTDUINO
@@ -50,70 +50,49 @@ int32_t TelemetryModule::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
     /*
-    radioConfig.preferences.telemetry_module_measurement_enabled = 1;
     radioConfig.preferences.telemetry_module_screen_enabled = 1;
     radioConfig.preferences.telemetry_module_read_error_count_threshold = 5;
     radioConfig.preferences.telemetry_module_update_interval = 600;
     radioConfig.preferences.telemetry_module_recovery_interval = 60;
-    radioConfig.preferences.telemetry_module_display_fahrenheit = false;
-    radioConfig.preferences.telemetry_module_sensor_pin = 13;
-
-    radioConfig.preferences.telemetry_module_sensor_type =
-        RadioConfig_UserPreferences_TelemetrySensorType::
-            RadioConfig_UserPreferences_TelemetrySensorType_BME280;
+    radioConfig.preferences.telemetry_module_sensor_pin = 13; // If one-wire
+    radioConfig.preferences.telemetry_module_sensor_type = RadioConfig_UserPreferences_TelemetrySensorType::RadioConfig_UserPreferences_TelemetrySensorType_BME280;
     */
-   
-    if (!(radioConfig.preferences.telemetry_module_measurement_enabled ||
-          radioConfig.preferences.telemetry_module_screen_enabled)) {
-        // If this module is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
-        return (INT32_MAX);
-    }
 
     if (firstTime) {
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = 0;
-
-        if (radioConfig.preferences.telemetry_module_measurement_enabled) {
-            DEBUG_MSG("Telemetry: Initializing\n");
-            // it's possible to have this module enabled, only for displaying values on the screen.
-            // therefore, we should only enable the sensor loop if measurement is also enabled
-            switch (radioConfig.preferences.telemetry_module_sensor_type) {
-
-                case RadioConfig_UserPreferences_TelemetrySensorType_DHT11:
-                case RadioConfig_UserPreferences_TelemetrySensorType_DHT12:
-                case RadioConfig_UserPreferences_TelemetrySensorType_DHT21:
-                case RadioConfig_UserPreferences_TelemetrySensorType_DHT22:
-                    return dhtSensor.runOnce();
-                case RadioConfig_UserPreferences_TelemetrySensorType_DS18B20:
-                    return dallasSensor.runOnce();
-                case RadioConfig_UserPreferences_TelemetrySensorType_BME280:
-                    return bme280Sensor.runOnce();
-                case RadioConfig_UserPreferences_TelemetrySensorType_BME680:
-                    return bme680Sensor.runOnce();
-                case RadioConfig_UserPreferences_TelemetrySensorType_MCP9808:
-                    return mcp9808Sensor.runOnce();
-                default:
-                    DEBUG_MSG("Telemetry: Invalid sensor type selected; Disabling module");
-                    return (INT32_MAX);
-                    break;
-            }
+        DEBUG_MSG("Telemetry: Initializing\n");
+        // therefore, we should only enable the sensor loop if measurement is also enabled
+        switch (radioConfig.preferences.telemetry_module_sensor_type) {
+            case RadioConfig_UserPreferences_TelemetrySensorType_DHT11:
+            case RadioConfig_UserPreferences_TelemetrySensorType_DHT12:
+            case RadioConfig_UserPreferences_TelemetrySensorType_DHT21:
+            case RadioConfig_UserPreferences_TelemetrySensorType_DHT22:
+                dhtSensor.runOnce();
+            case RadioConfig_UserPreferences_TelemetrySensorType_DS18B20:
+                dallasSensor.runOnce();
+            case RadioConfig_UserPreferences_TelemetrySensorType_BME280:
+                bme280Sensor.runOnce();
+            case RadioConfig_UserPreferences_TelemetrySensorType_BME680:
+                bme680Sensor.runOnce();
+            case RadioConfig_UserPreferences_TelemetrySensorType_MCP9808:
+                mcp9808Sensor.runOnce();
+            default:
+                DEBUG_MSG("Telemetry: No external sensor types selected;");
+                break;
         }
-        return (INT32_MAX);
     } else {
-        // if we somehow got to a second run of this module with measurement disabled, then just wait forever
-        if (!radioConfig.preferences.telemetry_module_measurement_enabled)  
-            return (INT32_MAX);
         // this is not the first time OSThread library has called this function
         // so just do what we intend to do on the interval
         if (sensor_read_error_count > radioConfig.preferences.telemetry_module_read_error_count_threshold) {
-            if (radioConfig.preferences.telemetry_module_recovery_interval > 0) {
+            if (getPref_telemetry_module_update_interval() > 0) {
                 DEBUG_MSG("Telemetry: TEMPORARILY DISABLED; The "
                           "telemetry_module_read_error_count_threshold has been exceed: %d. Will retry reads in "
                           "%d seconds\n",
                           radioConfig.preferences.telemetry_module_read_error_count_threshold,
-                          radioConfig.preferences.telemetry_module_recovery_interval);
+                          getPref_telemetry_module_update_interval());
                 sensor_read_error_count = 0;
-                return (radioConfig.preferences.telemetry_module_recovery_interval * 1000);
+                return (getPref_telemetry_module_update_interval() * 1000);
             }
             DEBUG_MSG("Telemetry: DISABLED; The telemetry_module_read_error_count_threshold has "
                       "been exceed: %d. Reads will not be retried until after device reset\n",
@@ -126,32 +105,10 @@ int32_t TelemetryModule::runOnce()
                       radioConfig.preferences.telemetry_module_read_error_count_threshold -
                           sensor_read_error_count);
         }
-        if (!sendOurTelemetry()) {
-            // if we failed to read the sensor, then try again
-            // as soon as we can according to the maximum polling frequency
-
-            switch (radioConfig.preferences.telemetry_module_sensor_type) {
-                case RadioConfig_UserPreferences_TelemetrySensorType_DHT11:
-                case RadioConfig_UserPreferences_TelemetrySensorType_DHT12:
-                case RadioConfig_UserPreferences_TelemetrySensorType_DHT21:
-                case RadioConfig_UserPreferences_TelemetrySensorType_DHT22:
-                    return (DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
-                case RadioConfig_UserPreferences_TelemetrySensorType_DS18B20:
-                    return (DS18B20_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
-                case RadioConfig_UserPreferences_TelemetrySensorType_BME280:
-                case RadioConfig_UserPreferences_TelemetrySensorType_BME680:
-                    return (BME_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
-                case RadioConfig_UserPreferences_TelemetrySensorType_MCP9808:
-                    return (MCP_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
-                default:
-                    return (DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
-            }
-        }
+        sendOurTelemetry();
     }
-    // The return of runOnce is an int32 representing the desired number of
-    // miliseconds until the function should be called again by the
     // OSThread library.  Multiply the preference value by 1000 to convert seconds to miliseconds
-    return (radioConfig.preferences.telemetry_module_update_interval * 1000);
+    return (getPref_telemetry_module_update_interval() * 1000);
 #endif
 }
 
@@ -225,23 +182,26 @@ void TelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state,
         display->drawString(x, y += fontHeight(FONT_SMALL),"Press: " + String(lastMeasurement.barometric_pressure, 0) + "hPA");
 }
 
-bool TelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Telemetry *p)
+bool TelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Telemetry *t)
 {
-    if (!(radioConfig.preferences.telemetry_module_measurement_enabled ||
-          radioConfig.preferences.telemetry_module_screen_enabled)) {
-        // If this module is not enabled in any capacity, don't handle the packet, and allow other modules to consume
-        return false;
-    }
-
     String sender = GetSenderName(mp);
 
+    DEBUG_MSG("-----------------------------------------\n");
     DEBUG_MSG("Telemetry: Received data from %s\n", sender);
-    DEBUG_MSG("Telemetry->relative_humidity: %f\n", p->relative_humidity);
-    DEBUG_MSG("Telemetry->temperature: %f\n", p->temperature);
-    DEBUG_MSG("Telemetry->barometric_pressure: %f\n", p->barometric_pressure);
-    DEBUG_MSG("Telemetry->gas_resistance: %f\n", p->gas_resistance);
+    DEBUG_MSG("Telemetry->air_util_tx: %f\n", t->air_util_tx);
+    DEBUG_MSG("Telemetry->barometric_pressure: %f\n", t->barometric_pressure);
+    DEBUG_MSG("Telemetry->battery_level: %i\n", t->battery_level);
+    DEBUG_MSG("Telemetry->channel_utilization: %f\n", t->channel_utilization);
+    DEBUG_MSG("Telemetry->current: %f\n", t->current);
+    DEBUG_MSG("Telemetry->gas_resistance: %f\n", t->gas_resistance);
+    DEBUG_MSG("Telemetry->relative_humidity: %f\n", t->relative_humidity);
+    DEBUG_MSG("Telemetry->router_heartbeat: %i\n", t->router_heartbeat);
+    DEBUG_MSG("Telemetry->temperature: %f\n", t->temperature);
+    DEBUG_MSG("Telemetry->voltage: %f\n", t->voltage);
 
     lastMeasurementPacket = packetPool.allocCopy(mp);
+
+    nodeDB.updateTelemetry(getFrom(&mp), *t, RX_SRC_RADIO);
 
     return false; // Let others look at this message also if they want
 }
@@ -249,10 +209,18 @@ bool TelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Telemetry *p)
 bool TelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies)
 {
     Telemetry m;
+    m.air_util_tx = 0;
     m.barometric_pressure = 0;
+    m.battery_level = 0;
+    m.channel_utilization = 0;
+    m.current = 0;
     m.gas_resistance = 0;
-    DEBUG_MSG("-----------------------------------------\n");
+    m.relative_humidity = 0;
+    m.router_heartbeat = 0;
+    m.temperature = 0;
+    m.voltage = 0;
 
+    DEBUG_MSG("-----------------------------------------\n");
     DEBUG_MSG("Telemetry: Read data\n");
 
     switch (radioConfig.preferences.telemetry_module_sensor_type) {
@@ -277,14 +245,23 @@ bool TelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies)
             mcp9808Sensor.getMeasurement(&m);
             break;
         default:
-            DEBUG_MSG("Telemetry: Invalid sensor type selected; Disabling module");
-            return false;
+            DEBUG_MSG("Telemetry: No external sensor type selected; Only sending internal metrics\n");
     }
 
-    DEBUG_MSG("Telemetry->relative_humidity: %f\n", m.relative_humidity);
-    DEBUG_MSG("Telemetry->temperature: %f\n", m.temperature);
+    m.air_util_tx = myNodeInfo.air_util_tx;
+    m.channel_utilization = myNodeInfo.channel_utilization;
+    m.battery_level = powerStatus->getBatteryChargePercent();
+
+    DEBUG_MSG("Telemetry->air_util_tx: %f\n", m.air_util_tx);
     DEBUG_MSG("Telemetry->barometric_pressure: %f\n", m.barometric_pressure);
+    DEBUG_MSG("Telemetry->battery_level: %i\n", m.battery_level);
+    DEBUG_MSG("Telemetry->channel_utilization: %f\n", m.channel_utilization);
+    DEBUG_MSG("Telemetry->current: %f\n", m.current);
     DEBUG_MSG("Telemetry->gas_resistance: %f\n", m.gas_resistance);
+    DEBUG_MSG("Telemetry->relative_humidity: %f\n", m.relative_humidity);
+    DEBUG_MSG("Telemetry->router_heartbeat: %f\n", m.router_heartbeat);
+    DEBUG_MSG("Telemetry->temperature: %f\n", m.temperature);
+    DEBUG_MSG("Telemetry->voltage: %f\n", m.voltage);
 
     sensor_read_error_count = 0;
 

@@ -32,11 +32,11 @@ bool PositionModule::handleReceivedProtobuf(const MeshPacket &mp, Position *pptr
     }
 
     // Log packet size and list of fields
-    DEBUG_MSG("POSITION node=%08x l=%d %s%s%s%s%s%s%s%s%s%s%s%s%s%s\n", getFrom(&mp), mp.decoded.payload.size,
+    DEBUG_MSG("POSITION node=%08x l=%d %s%s%s%s%s%s%s%s%s%s%s%s%s\n", getFrom(&mp), mp.decoded.payload.size,
               p.latitude_i ? "LAT " : "", p.longitude_i ? "LON " : "", p.altitude ? "MSL " : "", p.altitude_hae ? "HAE " : "",
               p.alt_geoid_sep ? "GEO " : "", p.PDOP ? "PDOP " : "", p.HDOP ? "HDOP " : "", p.VDOP ? "VDOP " : "",
               p.sats_in_view ? "SIV " : "", p.fix_quality ? "FXQ " : "", p.fix_type ? "FXT " : "", p.pos_timestamp ? "PTS " : "",
-              p.time ? "TIME " : "", p.battery_level ? "BAT " : "");
+              p.time ? "TIME " : "");
 
     if (p.time) {
         struct timeval tv;
@@ -69,9 +69,6 @@ MeshPacket *PositionModule::allocReply()
     p.latitude_i = node->position.latitude_i;
     p.longitude_i = node->position.longitude_i;
     p.time = node->position.time;
-
-    if (pos_flags & PositionFlags_POS_BATTERY)
-        p.battery_level = node->position.battery_level;
 
     if (pos_flags & PositionFlags_POS_ALTITUDE) {
         if (pos_flags & PositionFlags_POS_ALT_MSL)

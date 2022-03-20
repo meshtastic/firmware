@@ -164,7 +164,6 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const MeshPacket &mp)
             DEBUG_MSG("n->has_position           %d\n", n->has_position);
             DEBUG_MSG("n->position.latitude_i    %d\n", n->position.latitude_i);
             DEBUG_MSG("n->position.longitude_i   %d\n", n->position.longitude_i);
-            DEBUG_MSG("n->position.battery_level %d\n", n->position.battery_level);
             DEBUG_MSG("---- Current device location information:\n");
             DEBUG_MSG("gpsStatus->getLatitude()     %d\n", gpsStatus->getLatitude());
             DEBUG_MSG("gpsStatus->getLongitude()    %d\n", gpsStatus->getLongitude());
@@ -205,7 +204,6 @@ bool RangeTestModuleRadio::appendFile(const MeshPacket &mp)
         DEBUG_MSG("n->has_position           %d\n", n->has_position);
         DEBUG_MSG("n->position.latitude_i    %d\n", n->position.latitude_i);
         DEBUG_MSG("n->position.longitude_i   %d\n", n->position.longitude_i);
-        DEBUG_MSG("n->position.battery_level %d\n", n->position.battery_level);
         DEBUG_MSG("---- Current device location information:\n");
         DEBUG_MSG("gpsStatus->getLatitude()     %d\n", gpsStatus->getLatitude());
         DEBUG_MSG("gpsStatus->getLongitude()    %d\n", gpsStatus->getLongitude());

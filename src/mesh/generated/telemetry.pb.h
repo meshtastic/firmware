@@ -11,6 +11,11 @@
 
 /* Struct definitions */
 typedef struct _Telemetry {
+    uint32_t time;
+    int32_t battery_level;
+    float channel_utilization;
+    float air_util_tx;
+    bool router_heartbeat;
     float temperature;
     float relative_humidity;
     float barometric_pressure;
@@ -25,25 +30,35 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define Telemetry_init_default                   {0, 0, 0, 0, 0, 0}
-#define Telemetry_init_zero                      {0, 0, 0, 0, 0, 0}
+#define Telemetry_init_default                   {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define Telemetry_init_zero                      {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define Telemetry_temperature_tag                1
-#define Telemetry_relative_humidity_tag          2
-#define Telemetry_barometric_pressure_tag        3
-#define Telemetry_gas_resistance_tag             4
-#define Telemetry_voltage_tag                    5
-#define Telemetry_current_tag                    6
+#define Telemetry_time_tag                       1
+#define Telemetry_battery_level_tag              2
+#define Telemetry_channel_utilization_tag        3
+#define Telemetry_air_util_tx_tag                4
+#define Telemetry_router_heartbeat_tag           5
+#define Telemetry_temperature_tag                6
+#define Telemetry_relative_humidity_tag          7
+#define Telemetry_barometric_pressure_tag        8
+#define Telemetry_gas_resistance_tag             9
+#define Telemetry_voltage_tag                    10
+#define Telemetry_current_tag                    11
 
 /* Struct field encoding specification for nanopb */
 #define Telemetry_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, FLOAT,    temperature,       1) \
-X(a, STATIC,   SINGULAR, FLOAT,    relative_humidity,   2) \
-X(a, STATIC,   SINGULAR, FLOAT,    barometric_pressure,   3) \
-X(a, STATIC,   SINGULAR, FLOAT,    gas_resistance,    4) \
-X(a, STATIC,   SINGULAR, FLOAT,    voltage,           5) \
-X(a, STATIC,   SINGULAR, FLOAT,    current,           6)
+X(a, STATIC,   SINGULAR, FIXED32,  time,              1) \
+X(a, STATIC,   SINGULAR, INT32,    battery_level,     2) \
+X(a, STATIC,   SINGULAR, FLOAT,    channel_utilization,   3) \
+X(a, STATIC,   SINGULAR, FLOAT,    air_util_tx,       4) \
+X(a, STATIC,   SINGULAR, BOOL,     router_heartbeat,   5) \
+X(a, STATIC,   SINGULAR, FLOAT,    temperature,       6) \
+X(a, STATIC,   SINGULAR, FLOAT,    relative_humidity,   7) \
+X(a, STATIC,   SINGULAR, FLOAT,    barometric_pressure,   8) \
+X(a, STATIC,   SINGULAR, FLOAT,    gas_resistance,    9) \
+X(a, STATIC,   SINGULAR, FLOAT,    voltage,          10) \
+X(a, STATIC,   SINGULAR, FLOAT,    current,          11)
 #define Telemetry_CALLBACK NULL
 #define Telemetry_DEFAULT NULL
 
@@ -53,7 +68,7 @@ extern const pb_msgdesc_t Telemetry_msg;
 #define Telemetry_fields &Telemetry_msg
 
 /* Maximum encoded size of messages (where known) */
-#define Telemetry_size                           30
+#define Telemetry_size                           58
 
 #ifdef __cplusplus
 } /* extern "C" */
