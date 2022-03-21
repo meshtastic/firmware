@@ -1,4 +1,5 @@
 #include "InputBroker.h"
+#include "PowerFSM.h" // needed for event trigger
 
 InputBroker *inputBroker;
 
@@ -13,6 +14,7 @@ void InputBroker::registerSource(Observable<const InputEvent *> *source)
 
 int InputBroker::handleInputEvent(const InputEvent *event)
 {
+  powerFSM.trigger(EVENT_INPUT);
   this->notifyObservers(event);
   return 0;
 }
