@@ -54,7 +54,7 @@ int32_t RotaryEncoderInterruptBase::runOnce()
     }
     else if (this->action == ROTARY_ACTION_CCW)
     {
-        DEBUG_MSG("Rotary event CW\n");
+        DEBUG_MSG("Rotary event CCW\n");
         e.inputEvent = this->_eventCcw;
     }
 
@@ -84,7 +84,7 @@ void RotaryEncoderInterruptBase::intAHandler()
         return;
     }
     this->rotaryLevelA = currentLevelA;
-    intHandler(
+    this->rotaryStateCCW = intHandler(
         currentLevelA == HIGH,
         this->rotaryLevelB,
         ROTARY_ACTION_CCW,
