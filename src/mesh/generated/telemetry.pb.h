@@ -12,7 +12,7 @@
 /* Struct definitions */
 typedef struct _Telemetry {
     uint32_t time;
-    int32_t battery_level;
+    uint32_t battery_level;
     float channel_utilization;
     float air_util_tx;
     bool router_heartbeat;
@@ -49,7 +49,7 @@ extern "C" {
 /* Struct field encoding specification for nanopb */
 #define Telemetry_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, FIXED32,  time,              1) \
-X(a, STATIC,   SINGULAR, INT32,    battery_level,     2) \
+X(a, STATIC,   SINGULAR, UINT32,   battery_level,     2) \
 X(a, STATIC,   SINGULAR, FLOAT,    channel_utilization,   3) \
 X(a, STATIC,   SINGULAR, FLOAT,    air_util_tx,       4) \
 X(a, STATIC,   SINGULAR, BOOL,     router_heartbeat,   5) \
@@ -68,7 +68,7 @@ extern const pb_msgdesc_t Telemetry_msg;
 #define Telemetry_fields &Telemetry_msg
 
 /* Maximum encoded size of messages (where known) */
-#define Telemetry_size                           58
+#define Telemetry_size                           53
 
 #ifdef __cplusplus
 } /* extern "C" */
