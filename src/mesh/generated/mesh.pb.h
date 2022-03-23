@@ -651,7 +651,7 @@ extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 #define NodeInfo_size                            315
 #define MyNodeInfo_size                          210
 #define LogRecord_size                           81
-#define FromRadio_size                           327
+#define FromRadio_size                           329
 #define ToRadio_size                             321
 #define ToRadio_PeerInfo_size                    8
 
