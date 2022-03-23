@@ -648,10 +648,10 @@ extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 #define Routing_size                             42
 #define Data_size                                267
 #define MeshPacket_size                          318
-#define NodeInfo_size                            320
+#define NodeInfo_size                            315
 #define MyNodeInfo_size                          210
 #define LogRecord_size                           81
-#define FromRadio_size                           329
+#define FromRadio_size                           327
 #define ToRadio_size                             321
 #define ToRadio_PeerInfo_size                    8
 

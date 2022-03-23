@@ -188,6 +188,7 @@ bool TelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Telemetry *t)
 
     DEBUG_MSG("-----------------------------------------\n");
     DEBUG_MSG("Telemetry: Received data from %s\n", sender);
+    DEBUG_MSG("Telemetry->time: %i\n", t->time);
     DEBUG_MSG("Telemetry->air_util_tx: %f\n", t->air_util_tx);
     DEBUG_MSG("Telemetry->barometric_pressure: %f\n", t->barometric_pressure);
     DEBUG_MSG("Telemetry->battery_level: %i\n", t->battery_level);
@@ -209,17 +210,19 @@ bool TelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Telemetry *t)
 bool TelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies)
 {
     Telemetry m;
-    m.air_util_tx = 0;
+    m.time = getTime();
+    
+    m.air_util_tx = myNodeInfo.air_util_tx;
     m.barometric_pressure = 0;
-    m.battery_level = 0;
-    m.channel_utilization = 0;
+    m.battery_level = powerStatus->getBatteryChargePercent();
+    m.channel_utilization = myNodeInfo.channel_utilization;
     m.current = 0;
     m.gas_resistance = 0;
     m.relative_humidity = 0;
     m.router_heartbeat = 0;
     m.temperature = 0;
     m.voltage = 0;
-
+ 
     DEBUG_MSG("-----------------------------------------\n");
     DEBUG_MSG("Telemetry: Read data\n");
 
@@ -248,10 +251,7 @@ bool TelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies)
             DEBUG_MSG("Telemetry: No external sensor type selected; Only sending internal metrics\n");
     }
 
-    m.air_util_tx = myNodeInfo.air_util_tx;
-    m.channel_utilization = myNodeInfo.channel_utilization;
-    m.battery_level = powerStatus->getBatteryChargePercent();
-
+    DEBUG_MSG("Telemetry->time: %i\n", m.time);
     DEBUG_MSG("Telemetry->air_util_tx: %f\n", m.air_util_tx);
     DEBUG_MSG("Telemetry->barometric_pressure: %f\n", m.barometric_pressure);
     DEBUG_MSG("Telemetry->battery_level: %i\n", m.battery_level);
