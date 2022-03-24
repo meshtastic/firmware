@@ -14,6 +14,7 @@ class Screen
     void print(const char*){}
     void adjustBrightness(){}
     void doDeepSleep() {}
+    void forceDisplay() {}
 };
 }
 
@@ -24,12 +25,11 @@ class Screen
 
 #include "../configuration.h"
 
-#ifdef USE_SH1106
-#include <SH1106Wire.h>
-#elif defined(USE_ST7567)
+#ifdef USE_ST7567
 #include <ST7567Wire.h>
 #else
-#include <SSD1306Wire.h>
+// the SH1106/SSD1306 variant is auto-detected
+#include <AutoOLEDWire.h>
 #endif
 
 #include "EInkDisplay2.h"
@@ -295,18 +295,16 @@ class Screen : public concurrency::OSThread
     /// Holds state for debug information
     DebugInfo debugInfo;
 
-    /// Display device
+   /// Display device
     /** FIXME cleanup display abstraction */
 #ifdef ST7735_CS
     TFTDisplay dispdev;
 #elif defined(HAS_EINK)
     EInkDisplay dispdev;
-#elif defined(USE_SH1106)
-    SH1106Wire dispdev;
 #elif defined(USE_ST7567)
     ST7567Wire dispdev;
 #else
-    SSD1306Wire dispdev;
+    AutoOLEDWire dispdev;
 #endif
     /// UI helper for rendering to frames and switching between them
     OLEDDisplayUi ui;

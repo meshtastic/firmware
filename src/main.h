@@ -6,6 +6,7 @@
 #include "graphics/Screen.h"
 
 extern uint8_t screen_found;
+extern uint8_t screen_model;
 extern bool axp192_found;
 extern bool isCharging;
 extern bool isUSBPowered;
