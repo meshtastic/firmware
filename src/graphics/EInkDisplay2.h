@@ -34,6 +34,12 @@ class EInkDisplay : public OLEDDisplay
      */
     bool forceDisplay(uint32_t msecLimit = 1000);
 
+    /**
+     * shim to make the abstraction happy
+     * 
+     */
+    void setDetected(uint8_t detected);
+
   protected:
     // the header size of the buffer used, e.g. for the SPI command header
     virtual int getBufferOffset(void) override { return 0; }
