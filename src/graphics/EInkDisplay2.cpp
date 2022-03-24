@@ -131,6 +131,11 @@ void EInkDisplay::sendCommand(uint8_t com)
     // Drop all commands to device (we just update the buffer)
 }
 
+void EInkDisplay::setDetected(uint8_t detected)
+{
+    (void)detected;
+}
+
 // Connect to the display
 bool EInkDisplay::connect()
 {
