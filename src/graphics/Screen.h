@@ -28,7 +28,7 @@ class Screen
 #ifdef USE_ST7567
 #include <ST7567Wire.h>
 #else
-// the SH1106/SSD1306 variant is auto detected
+// the SH1106/SSD1306 variant is auto-detected
 #include <AutoOLEDWire.h>
 #endif
 
