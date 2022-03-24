@@ -170,7 +170,7 @@ void ESP32Bluetooth::setup()
 
     //NimBLEDevice::deleteAllBonds();
 
-    NimBLEDevice::init("Meshtastic_1234");
+    NimBLEDevice::init(getDeviceName());
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
 
     NimBLEDevice::setSecurityAuth(true, true, true);
