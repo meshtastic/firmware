@@ -70,6 +70,7 @@ meshtastic::NodeStatus *nodeStatus = new meshtastic::NodeStatus();
 
 /// The I2C address of our display (if found)
 uint8_t screen_found;
+uint8_t screen_model;
 
 bool axp192_found;
 

@@ -765,6 +765,10 @@ void Screen::setup()
     // is never found when probing i2c and therefore we don't call setup and never want to do (invalid) accesses to this device.
     useDisplay = true;
 
+#ifdef AutoOLEDWire_h
+       dispdev.setDetected(screen_model);
+#endif
+
     // I think this is not needed - redundant with ui.init
     // dispdev.resetOrientation();
 
