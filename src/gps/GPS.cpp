@@ -322,36 +322,38 @@ GPS *createGps()
 #ifdef NO_GPS
     return nullptr;
 #else
+    if (!radioConfig.preferences.gps_disabled){
 #ifdef GPS_ALTITUDE_HAE
-    DEBUG_MSG("Using HAE altitude model\n");
+        DEBUG_MSG("Using HAE altitude model\n");
 #else
-    DEBUG_MSG("Using MSL altitude model\n");
+        DEBUG_MSG("Using MSL altitude model\n");
 #endif
 // If we don't have bidirectional comms, we can't even try talking to UBLOX
 #ifdef GPS_TX_PIN
-    // Init GPS - first try ublox
-    UBloxGPS *ublox = new UBloxGPS();
+        // Init GPS - first try ublox
+        UBloxGPS *ublox = new UBloxGPS();
 
-    if (!ublox->setup()) {
-        DEBUG_MSG("ERROR: No UBLOX GPS found\n");
-        delete ublox;
-        ublox = NULL;
-    } else {
-        return ublox;
-    }
+        if (!ublox->setup()) {
+            DEBUG_MSG("ERROR: No UBLOX GPS found\n");
+            delete ublox;
+            ublox = NULL;
+        } else {
+            return ublox;
+        }
 #endif
 
-    if (GPS::_serial_gps) {
-        // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
-        // assume NMEA at 9600 baud.
-        DEBUG_MSG("Hoping that NMEA might work\n");
+        if (GPS::_serial_gps) {
+            // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
+            // assume NMEA at 9600 baud.
+            DEBUG_MSG("Hoping that NMEA might work\n");
 #ifdef HAS_AIR530_GPS
-        GPS *new_gps = new Air530GPS();
+            GPS *new_gps = new Air530GPS();
 #else
-        GPS *new_gps = new NMEAGPS();
+            GPS *new_gps = new NMEAGPS();
 #endif
-        new_gps->setup();
-        return new_gps;
+            new_gps->setup();
+            return new_gps;
+        }
     }
     return nullptr;
 #endif
