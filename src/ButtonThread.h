@@ -147,7 +147,11 @@ class ButtonThread : public concurrency::OSThread
     static void userButtonPressed()
     {
         // DEBUG_MSG("press!\n");
-        powerFSM.trigger(EVENT_PRESS);
+#ifdef BUTTON_PIN
+        if ((BUTTON_PIN != radioConfig.preferences.rotary1_pin_press) || !radioConfig.preferences.canned_message_module_enabled) {
+            powerFSM.trigger(EVENT_PRESS);
+        }
+#endif
     }
     static void userButtonPressedLong()
     {
