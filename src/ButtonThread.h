@@ -148,7 +148,7 @@ class ButtonThread : public concurrency::OSThread
     {
         // DEBUG_MSG("press!\n");
 #ifdef BUTTON_PIN
-        if ((BUTTON_PIN != radioConfig.preferences.rotary1_pin_press) || !radioConfig.preferences.canned_message_module_enabled) {
+        if ((BUTTON_PIN != radioConfig.preferences.inputbroker_pin_press) || !radioConfig.preferences.canned_message_module_enabled) {
             powerFSM.trigger(EVENT_PRESS);
         }
 #endif
