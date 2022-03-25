@@ -43,8 +43,8 @@ class CryptoEngine
      *
      * @param bytes is updated in place
      */
-    virtual void encrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes);
-    virtual void decrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes);
+    virtual void encrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
+    virtual void decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
 
   protected:
     /**
@@ -55,7 +55,7 @@ class CryptoEngine
      * a 32 bit sending node number (stored in little endian order)
      * a 32 bit block counter (starts at zero)
      */
-    void initNonce(uint32_t fromNode, uint64_t packetNum);
+    void initNonce(uint32_t fromNode, uint64_t packetId);
 };
 
 extern CryptoEngine *crypto;

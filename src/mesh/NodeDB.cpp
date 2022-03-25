@@ -95,14 +95,16 @@ bool NodeDB::resetRadioConfig()
         nvs_flash_erase();
 #endif
 #ifdef NRF52_SERIES
-    Bluefruit.begin();
+        FSCom.rmdir_r("/prefs");
 
-    DEBUG_MSG("Clearing bluetooth bonds!\n");
-    bond_print_list(BLE_GAP_ROLE_PERIPH);
-    bond_print_list(BLE_GAP_ROLE_CENTRAL);
+        Bluefruit.begin();
 
-    Bluefruit.Periph.clearBonds();
-    Bluefruit.Central.clearBonds();
+        DEBUG_MSG("Clearing bluetooth bonds!\n");
+        bond_print_list(BLE_GAP_ROLE_PERIPH);
+        bond_print_list(BLE_GAP_ROLE_CENTRAL);
+
+        Bluefruit.Periph.clearBonds();
+        Bluefruit.Central.clearBonds();
 #endif
         didFactoryReset = true;
     }
@@ -482,6 +484,28 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p, RxSource src)
             info->position.time = tmp_time;
     }
     info->has_position = true;
+    updateGUIforNode = info;
+    notifyObservers(true); // Force an update whether or not our node counts have changed
+}
+
+
+/** Update telemetry info for this node based on received metrics
+ */
+void NodeDB::updateTelemetry(uint32_t nodeId, const Telemetry &t, RxSource src)
+{
+    NodeInfo *info = getOrCreateNode(nodeId);
+    if (!info) {
+        return;
+    }
+
+    if (src == RX_SRC_LOCAL) {
+        // Local packet, fully authoritative
+        DEBUG_MSG("updateTelemetry LOCAL\n");
+    } else {
+        DEBUG_MSG("updateTelemetry REMOTE node=0x%x \n", nodeId);
+    }
+    info->telemetry = t;
+    info->has_telemetry = true;
     updateGUIforNode = info;
     notifyObservers(true); // Force an update whether or not our node counts have changed
 }

@@ -9,6 +9,8 @@
 //#define GPS_TX_PIN 12 // not connected
 
 #define BUTTON_PIN 39 // The middle button GPIO on the T-Beam
+#define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+#define ADC_MULTIPLIER 1.85 // (R1 = 470k, R2 = 680k)
 #define EXT_NOTIFY_OUT 12 // Overridden default pin to use for Ext Notify Module (#975).
 #define LED_PIN 2 // add status LED (compatible with core-pcb and DIY targets)
 

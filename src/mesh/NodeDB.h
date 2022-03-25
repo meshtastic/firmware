@@ -61,6 +61,10 @@ class NodeDB
      */
     void updatePosition(uint32_t nodeId, const Position &p, RxSource src = RX_SRC_RADIO);
 
+    /** Update telemetry info for this node based on received metrics
+     */
+    void updateTelemetry(uint32_t nodeId,  const Telemetry &t, RxSource src = RX_SRC_RADIO);
+
     /** Update user info for this node based on received user data
      */
     void updateUser(uint32_t nodeId, const User &p);
@@ -157,13 +161,14 @@ extern NodeDB nodeDB;
 // Our delay functions check for this for times that should never expire
 #define NODE_DELAY_FOREVER 0xffffffff
 
-#define IF_ROUTER(routerVal, normalVal) (radioConfig.preferences.is_router ? (routerVal) : (normalVal))
+#define IF_ROUTER(routerVal, normalVal) ((radioConfig.preferences.role == Role_Router) ? (routerVal) : (normalVal))
 
 #define PREF_GET(name, defaultVal)                                                                                               \
     inline uint32_t getPref_##name() { return radioConfig.preferences.name ? radioConfig.preferences.name : (defaultVal); }
 
 PREF_GET(send_owner_interval, IF_ROUTER(2, 4))
 PREF_GET(position_broadcast_secs, IF_ROUTER(12 * 60 * 60, 15 * 60))
+PREF_GET(telemetry_module_update_interval, 2 * 60)
 
 // Each time we wake into the DARK state allow 1 minute to send and receive BLE packets to the phone
 PREF_GET(wait_bluetooth_secs, IF_ROUTER(1, 60))

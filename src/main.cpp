@@ -9,7 +9,8 @@
 #include "error.h"
 #include "power.h"
 // #include "rom/rtc.h"
-#include "DSRRouter.h"
+//#include "DSRRouter.h"
+#include "ReliableRouter.h"
 // #include "debug.h"
 #include "FSCommon.h"
 #include "RTC.h"
@@ -69,6 +70,7 @@ meshtastic::NodeStatus *nodeStatus = new meshtastic::NodeStatus();
 
 /// The I2C address of our display (if found)
 uint8_t screen_found;
+uint8_t screen_model;
 
 bool axp192_found;
 
@@ -177,7 +179,8 @@ void setup()
 
     fsInit();
 
-    router = new DSRRouter();
+    //router = new DSRRouter();
+    router = new ReliableRouter();
 
 #ifdef I2C_SDA
     Wire.begin(I2C_SDA, I2C_SCL);
@@ -205,7 +208,7 @@ void setup()
 #endif
 
     // Hello
-    DEBUG_MSG("Meshtastic hwvendor=%d, swver=%s, hwver=%s\n", HW_VENDOR, optstr(APP_VERSION), optstr(HW_VERSION));
+    DEBUG_MSG("Meshtastic hwvendor=%d, swver=%s\n", HW_VENDOR, optstr(APP_VERSION));
 
 #ifndef NO_ESP32
     // Don't init display if we don't have one or we are waking headless due to a timer event

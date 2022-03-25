@@ -19,10 +19,6 @@
 #ifndef _VARIANT_LORA_ISP4520_
 #define _VARIANT_LORA_ISP4520_
 
-#define HW_VERSION_US 1
-#undef HW_VERSION
-#define HW_VERSION "1.0"
-
 #define USE_SEGGER
 /*----------------------------------------------------------------------------
  *        Headers

@@ -270,59 +270,96 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
     DEBUG_MSG("webAPI handleAPIv1ToRadio\n");
 }
 
+bool firstFile = 1;
+
+void htmlDeleteDir(const char * dirname)
+{
+    File root = FSCom.open(dirname);
+    if(!root){
+        return;
+    }
+    if(!root.isDirectory()){
+        return;
+    }
+
+    File file = root.openNextFile();
+    while(file){
+        if(file.isDirectory() && !String(file.name()).endsWith(".")) {
+            htmlDeleteDir(file.name());
+            file.close();
+        } else {
+            String fileName = String(file.name());
+            file.close();
+            DEBUG_MSG("    %s\n", fileName.c_str());
+            FSCom.remove(fileName);
+
+        }
+        file = root.openNextFile();
+    }
+    root.close();
+}
+
+void htmlListDir(HTTPResponse *res, const char * dirname, uint8_t levels)
+{
+    File root = FSCom.open(dirname);
+    if(!root){
+        return;
+    }
+    if(!root.isDirectory()){
+        return;
+    }
+
+    File file = root.openNextFile();
+    while(file){
+        if(file.isDirectory() && !String(file.name()).endsWith(".")) {
+            if(levels){
+                htmlListDir(res, file.name(), levels -1);
+            }
+        } else {
+            if (firstFile) {
+                firstFile = 0;
+            } else {
+                res->println(",");
+            }
+            res->println("{");
+            if (String(file.name()).substring(1).endsWith(".gz")) {
+                String modifiedFile = String(file.name()).substring(1);
+                modifiedFile.remove((modifiedFile.length() - 3), 3);
+                res->print("\"nameModified\": \"" + modifiedFile + "\",");
+                res->print("\"name\": \"" + String(file.name()).substring(1) + "\",");
+            } else {
+                res->print("\"name\": \"" + String(file.name()).substring(1) + "\",");
+            }
+            res->print("\"size\": " + String(file.size()));
+            res->print("}");
+        }
+        file.close();
+        file = root.openNextFile();
+    }
+    root.close();
+}
+
 void handleFsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
 {
 
     res->setHeader("Content-Type", "application/json");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
-
-    File root = FSCom.open("/");
-
-    if (root.isDirectory()) {
-        res->println("{");
-        res->println("\"data\": {");
-
-        File file = root.openNextFile();
-        res->print("\"files\": [");
-        bool firstFile = 1;
-        while (file) {
-            String filePath = String(file.name());
-            if (filePath.indexOf("/static") == 0) {
-                if (firstFile) {
-                    firstFile = 0;
-                } else {
-                    res->println(",");
-                }
-
-                res->println("{");
-
-                if (String(file.name()).substring(1).endsWith(".gz")) {
-                    String modifiedFile = String(file.name()).substring(1);
-                    modifiedFile.remove((modifiedFile.length() - 3), 3);
-                    res->print("\"nameModified\": \"" + modifiedFile + "\",");
-                    res->print("\"name\": \"" + String(file.name()).substring(1) + "\",");
-
-                } else {
-                    res->print("\"name\": \"" + String(file.name()).substring(1) + "\",");
-                }
-                res->print("\"size\": " + String(file.size()));
-                res->print("}");
-            }
-
-            file = root.openNextFile();
-        }
-        res->print("],");
-        res->print("\"filesystem\" : {");
-        res->print("\"total\" : " + String(FSCom.totalBytes()) + ",");
-        res->print("\"used\" : " + String(FSCom.usedBytes()) + ",");
-        res->print("\"free\" : " + String(FSCom.totalBytes() - FSCom.usedBytes()));
-        res->println("}");
-        res->println("},");
-        res->println("\"status\": \"ok\"");
-        res->println("}");
-    }
+    res->println("{");
+    res->println("\"data\": {");
+    res->print("\"files\": [");
+    htmlListDir(res, "/", 10);
+    res->print("],");
+    res->print("\"filesystem\" : {");
+    res->print("\"total\" : " + String(FSCom.totalBytes()) + ",");
+    res->print("\"used\" : " + String(FSCom.usedBytes()) + ",");
+    res->print("\"free\" : " + String(FSCom.totalBytes() - FSCom.usedBytes()));
+    res->println("}");
+    res->println("},");
+    res->println("\"status\": \"ok\"");
+    res->println("}");
 }
+
 
 void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
 {
@@ -367,6 +404,11 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
 
         bool has_set_content_type = false;
 
+        if (filename == "/static/") {
+            filename = "/static/index.html";
+            filenameGzip = "/static/index.html.gz";
+        }
+        
         if (FSCom.exists(filename.c_str())) {
             file = FSCom.open(filename.c_str());
             if (!file.available()) {
@@ -713,19 +755,9 @@ void handleUpdateFs(HTTPRequest *req, HTTPResponse *res)
     if (streamptr != nullptr) {
         DEBUG_MSG("Connection to content server ... success!\n");
 
-        File root = FSCom.open("/");
-        File file = root.openNextFile();
-
         DEBUG_MSG("Deleting files from /static : \n");
 
-        while (file) {
-            String filePath = String(file.name());
-            if (filePath.indexOf("/static") == 0) {
-                DEBUG_MSG("    %s\n", file.name());
-                FSCom.remove(file.name());
-            }
-            file = root.openNextFile();
-        }
+        htmlDeleteDir("/static");
 
         delay(5); // Let other network operations run
 
@@ -752,6 +784,8 @@ void handleUpdateFs(HTTPRequest *req, HTTPResponse *res)
         if (!TARUnpacker->tarStreamExpander(streamptr, streamSize, FSCom, "/static")) {
             res->printf("tarStreamExpander failed with return code #%d\n", TARUnpacker->tarGzGetError());
             Serial.printf("tarStreamExpander failed with return code #%d\n", TARUnpacker->tarGzGetError());
+            // Close the connection on error and free up memory
+            client->stop();
 
             return;
         } else {
@@ -771,6 +805,8 @@ void handleUpdateFs(HTTPRequest *req, HTTPResponse *res)
         res->printf("Failed to establish http connection\n");
         Serial.println("Failed to establish http connection");
         return;
+        // Close the connection on error and free up memory
+        client->stop();
     }
 
     res->println("Done! Restarting the device. <a href=/>Click this in 10 seconds</a>");
@@ -792,19 +828,10 @@ void handleDeleteFsContent(HTTPRequest *req, HTTPResponse *res)
     res->println("<h1>Meshtastic</h1>\n");
     res->println("Deleting Content in /static/*");
 
-    File root = FSCom.open("/");
-    File file = root.openNextFile();
+    DEBUG_MSG("Deleting files from /static/* : \n");
 
-    DEBUG_MSG("Deleting files from /static : \n");
+    htmlDeleteDir("/static");
 
-    while (file) {
-        String filePath = String(file.name());
-        if (filePath.indexOf("/static") == 0) {
-            DEBUG_MSG("    %s\n", file.name());
-            FSCom.remove(file.name());
-        }
-        file = root.openNextFile();
-    }
     res->println("<p><hr><p><a href=/admin>Back to admin</a>\n");
 }
 

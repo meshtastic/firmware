@@ -16,7 +16,7 @@ static bool isPowered()
         return true;
     }
 
-    bool isRouter = radioConfig.preferences.is_router;
+    bool isRouter = (radioConfig.preferences.role == Role_Router ? 1 : 0);
 
     // If we are not a router and we already have AC power go to POWER state after init, otherwise go to ON
     // We assume routers might be powered all the time, but from a low current (solar) source
@@ -238,7 +238,7 @@ Fsm powerFSM(&stateBOOT);
 
 void PowerFSM_setup()
 {
-    bool isRouter = radioConfig.preferences.is_router;
+    bool isRouter = (radioConfig.preferences.role == Role_Router ? 1 : 0);
     bool hasPower = isPowered();
 
     DEBUG_MSG("PowerFSM init, USB power=%d\n", hasPower);

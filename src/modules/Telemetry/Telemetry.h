@@ -28,7 +28,7 @@ class TelemetryModule : private concurrency::OSThread, public ProtobufModule<Tel
     bool sendOurTelemetry(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
 
   private:
-    float CelsiusToFarenheit(float c);
+    float CelsiusToFahrenheit(float c);
     bool firstTime = 1;
     const MeshPacket *lastMeasurementPacket;
     uint32_t sensor_read_error_count = 0;

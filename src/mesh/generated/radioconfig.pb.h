@@ -51,14 +51,6 @@ typedef enum _ChargeCurrent {
     ChargeCurrent_MA1320 = 16
 } ChargeCurrent;
 
-typedef enum _GpsOperation {
-    GpsOperation_GpsOpUnset = 0,
-    GpsOperation_GpsOpStationary = 1,
-    GpsOperation_GpsOpMobile = 2,
-    GpsOperation_GpsOpTimeOnly = 3,
-    GpsOperation_GpsOpDisabled = 4
-} GpsOperation;
-
 typedef enum _GpsCoordinateFormat {
     GpsCoordinateFormat_GpsFormatDec = 0,
     GpsCoordinateFormat_GpsFormatDMS = 1,
@@ -67,12 +59,6 @@ typedef enum _GpsCoordinateFormat {
     GpsCoordinateFormat_GpsFormatOLC = 4,
     GpsCoordinateFormat_GpsFormatOSGR = 5
 } GpsCoordinateFormat;
-
-typedef enum _LocationSharing {
-    LocationSharing_LocUnset = 0,
-    LocationSharing_LocEnabled = 1,
-    LocationSharing_LocDisabled = 2
-} LocationSharing;
 
 typedef enum _PositionFlags {
     PositionFlags_POS_UNDEFINED = 0,
@@ -99,15 +85,16 @@ typedef enum _InputEventChar {
 } InputEventChar;
 
 typedef enum _RadioConfig_UserPreferences_TelemetrySensorType {
-    RadioConfig_UserPreferences_TelemetrySensorType_DHT11 = 0,
-    RadioConfig_UserPreferences_TelemetrySensorType_DS18B20 = 1,
-    RadioConfig_UserPreferences_TelemetrySensorType_DHT12 = 2,
-    RadioConfig_UserPreferences_TelemetrySensorType_DHT21 = 3,
-    RadioConfig_UserPreferences_TelemetrySensorType_DHT22 = 4,
-    RadioConfig_UserPreferences_TelemetrySensorType_BME280 = 5,
-    RadioConfig_UserPreferences_TelemetrySensorType_BME680 = 6,
-    RadioConfig_UserPreferences_TelemetrySensorType_MCP9808 = 7,
-    RadioConfig_UserPreferences_TelemetrySensorType_SHTC3 = 8
+    RadioConfig_UserPreferences_TelemetrySensorType_None = 0,
+    RadioConfig_UserPreferences_TelemetrySensorType_DHT11 = 1,
+    RadioConfig_UserPreferences_TelemetrySensorType_DS18B20 = 2,
+    RadioConfig_UserPreferences_TelemetrySensorType_DHT12 = 3,
+    RadioConfig_UserPreferences_TelemetrySensorType_DHT21 = 4,
+    RadioConfig_UserPreferences_TelemetrySensorType_DHT22 = 5,
+    RadioConfig_UserPreferences_TelemetrySensorType_BME280 = 6,
+    RadioConfig_UserPreferences_TelemetrySensorType_BME680 = 7,
+    RadioConfig_UserPreferences_TelemetrySensorType_MCP9808 = 8,
+    RadioConfig_UserPreferences_TelemetrySensorType_SHTC3 = 9
 } RadioConfig_UserPreferences_TelemetrySensorType;
 
 /* Struct definitions */
@@ -129,11 +116,10 @@ typedef struct _RadioConfig_UserPreferences {
     ChargeCurrent charge_current;
     bool position_broadcast_smart_disabled;
     Role role;
-    LocationSharing location_share;
-    GpsOperation gps_operation;
+    bool location_share_disabled;
+    bool gps_disabled;
     uint32_t gps_update_interval;
     uint32_t gps_attempt_time;
-    bool is_router;
     bool is_low_power;
     bool fixed_position;
     bool serial_disabled;
@@ -170,7 +156,7 @@ typedef struct _RadioConfig_UserPreferences {
     uint32_t telemetry_module_read_error_count_threshold;
     uint32_t telemetry_module_update_interval;
     uint32_t telemetry_module_recovery_interval;
-    bool telemetry_module_display_farenheit;
+    bool telemetry_module_display_fahrenheit;
     RadioConfig_UserPreferences_TelemetrySensorType telemetry_module_sensor_type;
     uint32_t telemetry_module_sensor_pin;
     bool store_forward_module_enabled;
@@ -218,17 +204,9 @@ typedef struct _RadioConfig {
 #define _ChargeCurrent_MAX ChargeCurrent_MA1320
 #define _ChargeCurrent_ARRAYSIZE ((ChargeCurrent)(ChargeCurrent_MA1320+1))
 
-#define _GpsOperation_MIN GpsOperation_GpsOpUnset
-#define _GpsOperation_MAX GpsOperation_GpsOpDisabled
-#define _GpsOperation_ARRAYSIZE ((GpsOperation)(GpsOperation_GpsOpDisabled+1))
-
 #define _GpsCoordinateFormat_MIN GpsCoordinateFormat_GpsFormatDec
 #define _GpsCoordinateFormat_MAX GpsCoordinateFormat_GpsFormatOSGR
 #define _GpsCoordinateFormat_ARRAYSIZE ((GpsCoordinateFormat)(GpsCoordinateFormat_GpsFormatOSGR+1))
-
-#define _LocationSharing_MIN LocationSharing_LocUnset
-#define _LocationSharing_MAX LocationSharing_LocDisabled
-#define _LocationSharing_ARRAYSIZE ((LocationSharing)(LocationSharing_LocDisabled+1))
 
 #define _PositionFlags_MIN PositionFlags_POS_UNDEFINED
 #define _PositionFlags_MAX PositionFlags_POS_TIMESTAMP
@@ -238,7 +216,7 @@ typedef struct _RadioConfig {
 #define _InputEventChar_MAX InputEventChar_KEY_BACK
 #define _InputEventChar_ARRAYSIZE ((InputEventChar)(InputEventChar_KEY_BACK+1))
 
-#define _RadioConfig_UserPreferences_TelemetrySensorType_MIN RadioConfig_UserPreferences_TelemetrySensorType_DHT11
+#define _RadioConfig_UserPreferences_TelemetrySensorType_MIN RadioConfig_UserPreferences_TelemetrySensorType_None
 #define _RadioConfig_UserPreferences_TelemetrySensorType_MAX RadioConfig_UserPreferences_TelemetrySensorType_SHTC3
 #define _RadioConfig_UserPreferences_TelemetrySensorType_ARRAYSIZE ((RadioConfig_UserPreferences_TelemetrySensorType)(RadioConfig_UserPreferences_TelemetrySensorType_SHTC3+1))
 
@@ -249,9 +227,9 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default}
-#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _Role_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_TelemetrySensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, "", 0, 0, 0, 0}
+#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _Role_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_TelemetrySensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, "", 0, 0, 0, 0}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero}
-#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _Role_MIN, _LocationSharing_MIN, _GpsOperation_MIN, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_TelemetrySensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, "", 0, 0, 0, 0}
+#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _Role_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_TelemetrySensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, "", 0, 0, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define RadioConfig_UserPreferences_position_broadcast_secs_tag 1
@@ -271,11 +249,10 @@ extern "C" {
 #define RadioConfig_UserPreferences_charge_current_tag 16
 #define RadioConfig_UserPreferences_position_broadcast_smart_disabled_tag 17
 #define RadioConfig_UserPreferences_role_tag     18
-#define RadioConfig_UserPreferences_location_share_tag 32
-#define RadioConfig_UserPreferences_gps_operation_tag 33
+#define RadioConfig_UserPreferences_location_share_disabled_tag 32
+#define RadioConfig_UserPreferences_gps_disabled_tag 33
 #define RadioConfig_UserPreferences_gps_update_interval_tag 34
 #define RadioConfig_UserPreferences_gps_attempt_time_tag 36
-#define RadioConfig_UserPreferences_is_router_tag 37
 #define RadioConfig_UserPreferences_is_low_power_tag 38
 #define RadioConfig_UserPreferences_fixed_position_tag 39
 #define RadioConfig_UserPreferences_serial_disabled_tag 40
@@ -311,7 +288,7 @@ extern "C" {
 #define RadioConfig_UserPreferences_telemetry_module_read_error_count_threshold_tag 142
 #define RadioConfig_UserPreferences_telemetry_module_update_interval_tag 143
 #define RadioConfig_UserPreferences_telemetry_module_recovery_interval_tag 144
-#define RadioConfig_UserPreferences_telemetry_module_display_farenheit_tag 145
+#define RadioConfig_UserPreferences_telemetry_module_display_fahrenheit_tag 145
 #define RadioConfig_UserPreferences_telemetry_module_sensor_type_tag 146
 #define RadioConfig_UserPreferences_telemetry_module_sensor_pin_tag 147
 #define RadioConfig_UserPreferences_store_forward_module_enabled_tag 148
@@ -365,11 +342,10 @@ X(a, STATIC,   SINGULAR, UENUM,    region,           15) \
 X(a, STATIC,   SINGULAR, UENUM,    charge_current,   16) \
 X(a, STATIC,   SINGULAR, BOOL,     position_broadcast_smart_disabled,  17) \
 X(a, STATIC,   SINGULAR, UENUM,    role,             18) \
-X(a, STATIC,   SINGULAR, UENUM,    location_share,   32) \
-X(a, STATIC,   SINGULAR, UENUM,    gps_operation,    33) \
+X(a, STATIC,   SINGULAR, BOOL,     location_share_disabled,  32) \
+X(a, STATIC,   SINGULAR, BOOL,     gps_disabled,     33) \
 X(a, STATIC,   SINGULAR, UINT32,   gps_update_interval,  34) \
 X(a, STATIC,   SINGULAR, UINT32,   gps_attempt_time,  36) \
-X(a, STATIC,   SINGULAR, BOOL,     is_router,        37) \
 X(a, STATIC,   SINGULAR, BOOL,     is_low_power,     38) \
 X(a, STATIC,   SINGULAR, BOOL,     fixed_position,   39) \
 X(a, STATIC,   SINGULAR, BOOL,     serial_disabled,  40) \
@@ -405,7 +381,7 @@ X(a, STATIC,   SINGULAR, BOOL,     telemetry_module_screen_enabled, 141) \
 X(a, STATIC,   SINGULAR, UINT32,   telemetry_module_read_error_count_threshold, 142) \
 X(a, STATIC,   SINGULAR, UINT32,   telemetry_module_update_interval, 143) \
 X(a, STATIC,   SINGULAR, UINT32,   telemetry_module_recovery_interval, 144) \
-X(a, STATIC,   SINGULAR, BOOL,     telemetry_module_display_farenheit, 145) \
+X(a, STATIC,   SINGULAR, BOOL,     telemetry_module_display_fahrenheit, 145) \
 X(a, STATIC,   SINGULAR, UENUM,    telemetry_module_sensor_type, 146) \
 X(a, STATIC,   SINGULAR, UINT32,   telemetry_module_sensor_pin, 147) \
 X(a, STATIC,   SINGULAR, BOOL,     store_forward_module_enabled, 148) \
@@ -443,8 +419,8 @@ extern const pb_msgdesc_t RadioConfig_UserPreferences_msg;
 #define RadioConfig_UserPreferences_fields &RadioConfig_UserPreferences_msg
 
 /* Maximum encoded size of messages (where known) */
-#define RadioConfig_size                         608
-#define RadioConfig_UserPreferences_size         605
+#define RadioConfig_size                         605
+#define RadioConfig_UserPreferences_size         602
 
 #ifdef __cplusplus
 } /* extern "C" */
