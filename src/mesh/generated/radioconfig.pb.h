@@ -171,12 +171,13 @@ typedef struct _RadioConfig_UserPreferences {
     bool is_lora_tx_disabled;
     bool is_power_saving;
     bool rotary1_enabled;
-    uint32_t rotary1_pin_a;
-    uint32_t rotary1_pin_b;
-    uint32_t rotary1_pin_press;
-    InputEventChar rotary1_event_cw;
-    InputEventChar rotary1_event_ccw;
-    InputEventChar rotary1_event_press;
+    uint32_t inputbroker_pin_a;
+    uint32_t inputbroker_pin_b;
+    uint32_t inputbroker_pin_press;
+    InputEventChar inputbroker_event_cw;
+    InputEventChar inputbroker_event_ccw;
+    InputEventChar inputbroker_event_press;
+    bool updown1_enabled;
     bool canned_message_module_enabled;
     char canned_message_module_allow_input_source[16];
     bool canned_message_module_send_bell;
@@ -227,9 +228,9 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default}
-#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _Role_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_TelemetrySensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, "", 0, 0, 0, 0}
+#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _Role_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_TelemetrySensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, 0, "", 0, 0, 0, 0}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero}
-#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _Role_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_TelemetrySensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, "", 0, 0, 0, 0}
+#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _Role_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_TelemetrySensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, 0, "", 0, 0, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define RadioConfig_UserPreferences_position_broadcast_secs_tag 1
@@ -303,12 +304,13 @@ extern "C" {
 #define RadioConfig_UserPreferences_is_lora_tx_disabled_tag 157
 #define RadioConfig_UserPreferences_is_power_saving_tag 158
 #define RadioConfig_UserPreferences_rotary1_enabled_tag 160
-#define RadioConfig_UserPreferences_rotary1_pin_a_tag 161
-#define RadioConfig_UserPreferences_rotary1_pin_b_tag 162
-#define RadioConfig_UserPreferences_rotary1_pin_press_tag 163
-#define RadioConfig_UserPreferences_rotary1_event_cw_tag 164
-#define RadioConfig_UserPreferences_rotary1_event_ccw_tag 165
-#define RadioConfig_UserPreferences_rotary1_event_press_tag 166
+#define RadioConfig_UserPreferences_inputbroker_pin_a_tag 161
+#define RadioConfig_UserPreferences_inputbroker_pin_b_tag 162
+#define RadioConfig_UserPreferences_inputbroker_pin_press_tag 163
+#define RadioConfig_UserPreferences_inputbroker_event_cw_tag 164
+#define RadioConfig_UserPreferences_inputbroker_event_ccw_tag 165
+#define RadioConfig_UserPreferences_inputbroker_event_press_tag 166
+#define RadioConfig_UserPreferences_updown1_enabled_tag 167
 #define RadioConfig_UserPreferences_canned_message_module_enabled_tag 170
 #define RadioConfig_UserPreferences_canned_message_module_allow_input_source_tag 171
 #define RadioConfig_UserPreferences_canned_message_module_send_bell_tag 173
@@ -396,12 +398,13 @@ X(a, STATIC,   SINGULAR, STRING,   mqtt_password,   156) \
 X(a, STATIC,   SINGULAR, BOOL,     is_lora_tx_disabled, 157) \
 X(a, STATIC,   SINGULAR, BOOL,     is_power_saving, 158) \
 X(a, STATIC,   SINGULAR, BOOL,     rotary1_enabled, 160) \
-X(a, STATIC,   SINGULAR, UINT32,   rotary1_pin_a,   161) \
-X(a, STATIC,   SINGULAR, UINT32,   rotary1_pin_b,   162) \
-X(a, STATIC,   SINGULAR, UINT32,   rotary1_pin_press, 163) \
-X(a, STATIC,   SINGULAR, UENUM,    rotary1_event_cw, 164) \
-X(a, STATIC,   SINGULAR, UENUM,    rotary1_event_ccw, 165) \
-X(a, STATIC,   SINGULAR, UENUM,    rotary1_event_press, 166) \
+X(a, STATIC,   SINGULAR, UINT32,   inputbroker_pin_a, 161) \
+X(a, STATIC,   SINGULAR, UINT32,   inputbroker_pin_b, 162) \
+X(a, STATIC,   SINGULAR, UINT32,   inputbroker_pin_press, 163) \
+X(a, STATIC,   SINGULAR, UENUM,    inputbroker_event_cw, 164) \
+X(a, STATIC,   SINGULAR, UENUM,    inputbroker_event_ccw, 165) \
+X(a, STATIC,   SINGULAR, UENUM,    inputbroker_event_press, 166) \
+X(a, STATIC,   SINGULAR, BOOL,     updown1_enabled, 167) \
 X(a, STATIC,   SINGULAR, BOOL,     canned_message_module_enabled, 170) \
 X(a, STATIC,   SINGULAR, STRING,   canned_message_module_allow_input_source, 171) \
 X(a, STATIC,   SINGULAR, BOOL,     canned_message_module_send_bell, 173) \
@@ -419,8 +422,8 @@ extern const pb_msgdesc_t RadioConfig_UserPreferences_msg;
 #define RadioConfig_UserPreferences_fields &RadioConfig_UserPreferences_msg
 
 /* Maximum encoded size of messages (where known) */
-#define RadioConfig_size                         605
-#define RadioConfig_UserPreferences_size         602
+#define RadioConfig_size                         608
+#define RadioConfig_UserPreferences_size         605
 
 #ifdef __cplusplus
 } /* extern "C" */
