@@ -31,7 +31,7 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port)
 #ifdef NRF52_SERIES
     time_t timeout = millis();
     while (!Port) {
-        if ((millis() - timeout) < 2000) {
+        if ((millis() - timeout) < 5000) {
             delay(100);
         } else {
             break;
