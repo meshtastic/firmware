@@ -88,13 +88,54 @@ int32_t SerialModule::runOnce()
 
             // Interface with the serial peripheral from in here.
             DEBUG_MSG("Initializing serial peripheral interface\n");
+            
+            uint32_t baud = 0;
+
+            if (radioConfig.preferences.serial_module_baud == RadioConfig_UserPreferences_Serial_Baud_BAUD_Default) {
+                baud = 38400;
+
+            } else if (radioConfig.preferences.serial_module_baud == RadioConfig_UserPreferences_Serial_Baud_BAUD_2400) {
+                baud = 2400;
+
+            } else if (radioConfig.preferences.serial_module_baud == RadioConfig_UserPreferences_Serial_Baud_BAUD_4800) {
+                baud = 4800;
+
+            } else if (radioConfig.preferences.serial_module_baud == RadioConfig_UserPreferences_Serial_Baud_BAUD_9600) {
+                baud = 9600;
+
+            } else if (radioConfig.preferences.serial_module_baud == RadioConfig_UserPreferences_Serial_Baud_BAUD_19200) {
+                baud = 19200;
+
+            } else if (radioConfig.preferences.serial_module_baud == RadioConfig_UserPreferences_Serial_Baud_BAUD_38400) {
+                baud = 38400;
+
+            } else if (radioConfig.preferences.serial_module_baud == RadioConfig_UserPreferences_Serial_Baud_BAUD_57600) {
+                baud = 57600;
+
+            } else if (radioConfig.preferences.serial_module_baud == RadioConfig_UserPreferences_Serial_Baud_BAUD_115200) {
+                baud = 115200;
+
+            } else if (radioConfig.preferences.serial_module_baud == RadioConfig_UserPreferences_Serial_Baud_BAUD_230400) {
+                baud = 230400;
+
+            } else if (radioConfig.preferences.serial_module_baud == RadioConfig_UserPreferences_Serial_Baud_BAUD_460800) {
+                baud = 460800;
+
+            } else if (radioConfig.preferences.serial_module_baud == RadioConfig_UserPreferences_Serial_Baud_BAUD_576000) {
+                baud = 576000;
+
+            } else if (radioConfig.preferences.serial_module_baud == RadioConfig_UserPreferences_Serial_Baud_BAUD_921600) {
+                baud = 921600;
+
+
+            }
 
             if (radioConfig.preferences.serial_module_rxd && radioConfig.preferences.serial_module_txd) {
-                Serial2.begin(SERIAL_MODULE_BAUD, SERIAL_8N1, radioConfig.preferences.serial_module_rxd,
+                Serial2.begin(baud, SERIAL_8N1, radioConfig.preferences.serial_module_rxd,
                               radioConfig.preferences.serial_module_txd);
 
             } else {
-                Serial2.begin(SERIAL_MODULE_BAUD, SERIAL_8N1, RXD2, TXD2);
+                Serial2.begin(baud, SERIAL_8N1, RXD2, TXD2);
             }
 
             if (radioConfig.preferences.serial_module_timeout) {
@@ -187,17 +228,13 @@ ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
 
         } else {
 
-            if (radioConfig.preferences.serial_module_mode == 0 || radioConfig.preferences.serial_module_mode == 1) {
+            if (radioConfig.preferences.serial_module_mode == RadioConfig_UserPreferences_Serial_Mode_MODE_Default || radioConfig.preferences.serial_module_mode == RadioConfig_UserPreferences_Serial_Mode_MODE_SIMPLE) {
                 // DEBUG_MSG("* * Message came from the mesh\n");
                 // Serial2.println("* * Message came from the mesh");
                 Serial2.printf("%s", p.payload.bytes);
 
-            } else if (radioConfig.preferences.serial_module_mode == 10) {
-                /*
-                 @jobionekabnoi
-                    Add code here to handle what gets sent out to the serial interface.
-                    Format it the way you want.
-                 */
+            } else if (radioConfig.preferences.serial_module_mode == RadioConfig_UserPreferences_Serial_Mode_MODE_PROTO) {
+
             }
         }
 
