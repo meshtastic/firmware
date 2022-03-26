@@ -1365,21 +1365,21 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     }
 
     auto mode = "";
-
-      if (channels.getPrimary().modem_config == 0) {
-        mode = "ShrtSlow";
+    
+    if (channels.getPrimary().modem_config == 0) {
+        mode = "VLongSlow";
     } else if (channels.getPrimary().modem_config == 1) {
-        mode = "ShrtFast";
+        mode = "LongSlow";
     } else if (channels.getPrimary().modem_config == 2) {
-        mode = "MedSlow";
+        mode = "LongFast";
     } else if (channels.getPrimary().modem_config == 3) {
-        mode = "MedFast";
+        mode = "MidSlow";
     } else if (channels.getPrimary().modem_config == 4) {
-        mode = "LngFast";
+        mode = "MidFast";
     } else if (channels.getPrimary().modem_config == 5) {
-        mode = "LngSlow";
+        mode = "ShortSlow";
     } else if (channels.getPrimary().modem_config == 6) {
-        mode = "VngSlow";    
+        mode = "ShortFast";    
     } else {
         mode = "Custom";
     }
