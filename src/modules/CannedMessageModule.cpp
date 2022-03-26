@@ -1,5 +1,6 @@
 #include "configuration.h"
 #include "CannedMessageModule.h"
+#include "PowerFSM.h" // neede for button bypass
 #include "MeshService.h"
 #include "FSCommon.h"
 #include "mesh/generated/cannedmessages.pb.h"
@@ -140,8 +141,13 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     if (event->inputEvent == static_cast<char>(InputEventChar_KEY_SELECT))
     {
         DEBUG_MSG("Canned message event Select\n");
-        this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
-        validEvent = true;
+        // when inactive, call the onebutton shortpress instead. Activate Module only on up/down
+        if ((this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED)) {
+            powerFSM.trigger(EVENT_PRESS);
+        }else{
+            this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
+            validEvent = true;
+        }
     }
 
     if (validEvent)
