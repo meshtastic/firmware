@@ -28,6 +28,16 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port)
                       // setDestination(&noopPrint); for testing, try turning off 'all' debug output and see what leaks
 
     Port.begin(SERIAL_BAUD);
+#ifdef NRF52_SERIES
+    time_t timeout = millis();
+    while (!Port) {
+        if ((millis() - timeout) < 2000) {
+            delay(100);
+        } else {
+            break;
+        }
+    }
+#endif
     emitRebooted();
 }
 
