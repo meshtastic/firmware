@@ -1,6 +1,7 @@
 #include "configuration.h"
 #include "input/InputBroker.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
+#include "input/UpDownInterruptImpl1.h"
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/ExternalNotificationModule.h"
@@ -37,6 +38,8 @@ void setupModules()
     new ReplyModule();
     rotaryEncoderInterruptImpl1 = new RotaryEncoderInterruptImpl1();
     rotaryEncoderInterruptImpl1->init();
+    upDownInterruptImpl1 = new UpDownInterruptImpl1();
+    upDownInterruptImpl1->init();
     cannedMessageModule = new CannedMessageModule();
 #ifndef PORTDUINO
     new TelemetryModule();
