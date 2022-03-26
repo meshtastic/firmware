@@ -17,15 +17,15 @@ void RotaryEncoderInterruptImpl1::init()
         return;
     }
 
-    uint8_t pinA = radioConfig.preferences.rotary1_pin_a;
-    uint8_t pinB = radioConfig.preferences.rotary1_pin_b;
-    uint8_t pinPress = radioConfig.preferences.rotary1_pin_press;
+    uint8_t pinA = radioConfig.preferences.inputbroker_pin_a;
+    uint8_t pinB = radioConfig.preferences.inputbroker_pin_b;
+    uint8_t pinPress = radioConfig.preferences.inputbroker_pin_press;
     char eventCw =
-        static_cast<char>(radioConfig.preferences.rotary1_event_cw);
+        static_cast<char>(radioConfig.preferences.inputbroker_event_cw);
     char eventCcw =
-        static_cast<char>(radioConfig.preferences.rotary1_event_ccw);
+        static_cast<char>(radioConfig.preferences.inputbroker_event_ccw);
     char eventPressed =
-        static_cast<char>(radioConfig.preferences.rotary1_event_press);
+        static_cast<char>(radioConfig.preferences.inputbroker_event_press);
 
     //radioConfig.preferences.ext_notification_module_output
     RotaryEncoderInterruptBase::init(

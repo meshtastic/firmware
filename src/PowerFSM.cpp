@@ -279,6 +279,12 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateON, &stateSHUTDOWN, EVENT_SHUTDOWN, NULL, "Shutdown");
     powerFSM.add_transition(&stateSERIAL, &stateSHUTDOWN, EVENT_SHUTDOWN, NULL, "Shutdown");
 
+    // Inputbroker
+    powerFSM.add_transition(&stateLS, &stateON, EVENT_INPUT, NULL, "Input Device");
+    powerFSM.add_transition(&stateNB, &stateON, EVENT_INPUT, NULL, "Input Device");
+    powerFSM.add_transition(&stateDARK, &stateON, EVENT_INPUT, NULL, "Input Device");
+    powerFSM.add_transition(&stateON, &stateON, EVENT_INPUT, NULL, "Input Device"); // restarts the sleep timer
+
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_BLUETOOTH_PAIR, NULL, "Bluetooth pairing");
     powerFSM.add_transition(&stateON, &stateON, EVENT_BLUETOOTH_PAIR, NULL, "Bluetooth pairing");
 
