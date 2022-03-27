@@ -574,7 +574,7 @@ typedef struct _NodeInfo {
     float snr; 
     /* Set to indicate the last time we received a packet from this node */
     uint32_t last_heard; 
-    /* The latest telemetry data for the node. */
+    /* The latest device telemetry data for the node. */
     bool has_telemetry;
     Telemetry telemetry; 
 } NodeInfo;
@@ -1079,7 +1079,7 @@ extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 #define LogRecord_size                           81
 #define MeshPacket_size                          347
 #define MyNodeInfo_size                          210
-#define NodeInfo_size                            315
+#define NodeInfo_size                            299
 #define Position_size                            142
 #define RouteDiscovery_size                      40
 #define Routing_size                             42
