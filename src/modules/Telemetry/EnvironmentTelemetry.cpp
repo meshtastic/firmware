@@ -50,9 +50,10 @@ int32_t EnvironmentTelemetryModule::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
     /*
+    radioConfig.preferences.telemetry_module_environment_measurement_enabled = 1;
     radioConfig.preferences.telemetry_module_environment_screen_enabled = 1;
     radioConfig.preferences.telemetry_module_environment_read_error_count_threshold = 5;
-    radioConfig.preferences.telemetry_module_device_update_interval = 600;
+    radioConfig.preferences.telemetry_module_environment_update_interval = 600;
     radioConfig.preferences.telemetry_module_environment_recovery_interval = 60;
     radioConfig.preferences.telemetry_module_environment_sensor_pin = 13; // If one-wire
     radioConfig.preferences.telemetry_module_environment_sensor_type = RadioConfig_UserPreferences_TelemetrySensorType::RadioConfig_UserPreferences_TelemetrySensorType_BME280;

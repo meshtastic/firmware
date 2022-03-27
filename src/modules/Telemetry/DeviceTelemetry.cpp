@@ -17,7 +17,6 @@ int32_t DeviceTelemetryModule::runOnce()
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = 0;
         DEBUG_MSG("Device Telemetry: Initializing\n");
-        // therefore, we should only enable the sensor loop if measurement is also enabled
     }
     sendOurTelemetry();
     // OSThread library.  Multiply the preference value by 1000 to convert seconds to miliseconds
