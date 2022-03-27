@@ -490,11 +490,13 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p, RxSource src)
 
 
 /** Update telemetry info for this node based on received metrics
+ *  We only care about device telemetry here
  */
 void NodeDB::updateTelemetry(uint32_t nodeId, const Telemetry &t, RxSource src)
 {
     NodeInfo *info = getOrCreateNode(nodeId);
-    if (!info) {
+    // Environment metrics should never go to NodeDb but we'll safegaurd anyway
+    if (!info || t.which_variant != Telemetry_device_metrics_tag) {
         return;
     }
 

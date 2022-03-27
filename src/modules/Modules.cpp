@@ -12,7 +12,8 @@
 #include "modules/RoutingModule.h"
 #include "modules/TextMessageModule.h"
 #ifndef PORTDUINO
-#include "modules/Telemetry/Telemetry.h"
+#include "modules/Telemetry/DeviceTelemetry.h"
+#include "modules/Telemetry/EnvironmentTelemetry.h"
 #endif
 #ifndef NO_ESP32
 #include "modules/esp32/RangeTestModule.h"
@@ -42,7 +43,8 @@ void setupModules()
     upDownInterruptImpl1->init();
     cannedMessageModule = new CannedMessageModule();
 #ifndef PORTDUINO
-    new TelemetryModule();
+    new DeviceTelemetryModule();
+    new EnvironmentTelemetryModule();
 #endif
 #ifndef NO_ESP32
     // Only run on an esp32 based device.

@@ -22,6 +22,8 @@ template <class T> class ProtobufModule : protected SinglePortModule
     }
 
   protected:
+
+
     /**
      * Handle a received message, the data field in the message is already decoded and is provided
      *
