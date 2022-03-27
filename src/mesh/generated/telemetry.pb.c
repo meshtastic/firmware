@@ -6,6 +6,12 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
+PB_BIND(DeviceMetrics, DeviceMetrics, AUTO)
+
+
+PB_BIND(EnvironmentMetrics, EnvironmentMetrics, AUTO)
+
+
 PB_BIND(Telemetry, Telemetry, AUTO)
 
 
