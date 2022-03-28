@@ -15,7 +15,6 @@ class CardKbI2cImpl :
   public:
     CardKbI2cImpl();
     void init();
-    static void handlePressed();
 };
 
 extern CardKbI2cImpl *cardKbI2cImpl;

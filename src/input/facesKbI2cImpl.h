@@ -15,7 +15,6 @@ class FacesKbI2cImpl :
   public:
     FacesKbI2cImpl();
     void init();
-    static void handlePressed();
 };
 
 extern FacesKbI2cImpl *facesKbI2cImpl;
