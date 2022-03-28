@@ -9,7 +9,6 @@ class KbI2cBase :
 {
   public:
     explicit KbI2cBase(const char *name);
-    void PressHandler();
 
   protected:
     virtual int32_t runOnce() override;

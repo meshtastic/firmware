@@ -18,8 +18,3 @@ void FacesKbI2cImpl::init()
 
     inputBroker->registerSource(this);
 }
-
-void FacesKbI2cImpl::handlePressed()
-{
-    facesKbI2cImpl->PressHandler();
-}

@@ -19,9 +19,3 @@ void CardKbI2cImpl::init()
     DEBUG_MSG("registerSource\n");
     inputBroker->registerSource(this);
 }
-
-void CardKbI2cImpl::handlePressed()
-{
-    DEBUG_MSG("handlePressed\n");
-    cardKbI2cImpl->PressHandler();
-}
