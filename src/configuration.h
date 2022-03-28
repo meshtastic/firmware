@@ -126,7 +126,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 
 // -----------------------------------------------------------------------------
-// OLED
+// OLED & Input
 // -----------------------------------------------------------------------------
 
 #define SSD1306_ADDRESS 0x3C
@@ -142,6 +142,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // Define if screen should be mirrored left to right
 // #define SCREEN_MIRROR
+
+// The m5stack I2C Keyboard (also RAK14004)
+#define CARDKB_ADDR 0x5F
+
+// The older M5 Faces I2C Keyboard
+#define FACESKB_ADDR 0x88
 
 // -----------------------------------------------------------------------------
 // GPS

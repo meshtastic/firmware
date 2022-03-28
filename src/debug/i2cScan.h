@@ -47,6 +47,14 @@ void scanI2Cdevice(void)
                     DEBUG_MSG("unknown display found\n");
                 }
             }
+            if (addr == CARDKB_ADDR) {
+                cardkb_found = addr;
+                DEBUG_MSG("m5 cardKB found\n");
+            }
+            if (addr == FACESKB_ADDR) {
+                faceskb_found = addr;
+                DEBUG_MSG("m5 Faces found\n");
+            }
             if (addr == ST7567_ADDRESS) {
                 screen_found = addr;
                 DEBUG_MSG("st7567 display found\n");
