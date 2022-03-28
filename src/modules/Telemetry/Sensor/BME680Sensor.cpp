@@ -27,10 +27,10 @@ int32_t BME680Sensor::runOnce() {
 }
 
 bool BME680Sensor::getMeasurement(Telemetry *measurement) {
-    measurement->temperature = bme680.readTemperature();
-    measurement->relative_humidity = bme680.readHumidity();
-    measurement->barometric_pressure = bme680.readPressure() / 100.0F;
-    measurement->gas_resistance = bme680.readGas() / 1000.0;
+    measurement->variant.environment_metrics.temperature = bme680.readTemperature();
+    measurement->variant.environment_metrics.relative_humidity = bme680.readHumidity();
+    measurement->variant.environment_metrics.barometric_pressure = bme680.readPressure() / 100.0F;
+    measurement->variant.environment_metrics.gas_resistance = bme680.readGas() / 1000.0;
 
     return true;
 }    

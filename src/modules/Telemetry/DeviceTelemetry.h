@@ -4,17 +4,16 @@
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
-class TelemetryModule : private concurrency::OSThread, public ProtobufModule<Telemetry>
+class DeviceTelemetryModule : private concurrency::OSThread, public ProtobufModule<Telemetry>
 {
   public:
-    TelemetryModule()
-        : concurrency::OSThread("TelemetryModule"),
-          ProtobufModule("Telemetry", PortNum_TELEMETRY_APP, &Telemetry_msg)
+    DeviceTelemetryModule()
+        : concurrency::OSThread("DeviceTelemetryModule"),
+          ProtobufModule("DeviceTelemetry", PortNum_TELEMETRY_APP, &Telemetry_msg)
     {
         lastMeasurementPacket = nullptr;
     }
-    virtual bool wantUIFrame() override;
-    virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
+    virtual bool wantUIFrame() { return false; }
 
   protected:
     /** Called to handle a particular incoming message
@@ -28,8 +27,7 @@ class TelemetryModule : private concurrency::OSThread, public ProtobufModule<Tel
     bool sendOurTelemetry(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
 
   private:
-    float CelsiusToFahrenheit(float c);
+    String getSenderName(const MeshPacket &mp);
     bool firstTime = 1;
     const MeshPacket *lastMeasurementPacket;
-    uint32_t sensor_read_error_count = 0;
 };
