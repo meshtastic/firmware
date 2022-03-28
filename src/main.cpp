@@ -72,6 +72,12 @@ meshtastic::NodeStatus *nodeStatus = new meshtastic::NodeStatus();
 uint8_t screen_found;
 uint8_t screen_model;
 
+// The I2C address of the cardkb or RAK14004 (if found)
+uint8_t cardkb_found;
+
+// The I2C address of the Faces Keyboard (if found)
+uint8_t faceskb_found;
+
 bool axp192_found;
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
