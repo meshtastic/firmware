@@ -59,31 +59,32 @@ String DeviceTelemetryModule::getSenderName(const MeshPacket &mp)
 
 bool DeviceTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies)
 {
-    Telemetry m;
+    Telemetry t;
 
-    m.time = getTime();
-    m.which_variant = Telemetry_device_metrics_tag;
+    t.time = getTime();
+    t.which_variant = Telemetry_device_metrics_tag;
 
-    m.variant.device_metrics.air_util_tx = myNodeInfo.air_util_tx;
-    m.variant.device_metrics.battery_level = powerStatus->getBatteryChargePercent();
-    m.variant.device_metrics.channel_utilization = myNodeInfo.channel_utilization;
-    m.variant.device_metrics.voltage = powerStatus->getBatteryVoltageMv() / 1000.0;
+    t.variant.device_metrics.air_util_tx = myNodeInfo.air_util_tx;
+    t.variant.device_metrics.battery_level = powerStatus->getBatteryChargePercent();
+    t.variant.device_metrics.channel_utilization = myNodeInfo.channel_utilization;
+    t.variant.device_metrics.voltage = powerStatus->getBatteryVoltageMv() / 1000.0;
 
     DEBUG_MSG("-----------------------------------------\n");
     DEBUG_MSG("Device Telemetry: Read data\n");
 
-    DEBUG_MSG("Telemetry->time: %i\n", m.time);
-    DEBUG_MSG("Telemetry->air_util_tx: %f\n", m.variant.device_metrics.air_util_tx);
-    DEBUG_MSG("Telemetry->battery_level: %i\n", m.variant.device_metrics.battery_level);
-    DEBUG_MSG("Telemetry->channel_utilization: %f\n", m.variant.device_metrics.channel_utilization);
-    DEBUG_MSG("Telemetry->voltage: %f\n", m.variant.device_metrics.voltage);
+    DEBUG_MSG("Telemetry->time: %i\n", t.time);
+    DEBUG_MSG("Telemetry->air_util_tx: %f\n", t.variant.device_metrics.air_util_tx);
+    DEBUG_MSG("Telemetry->battery_level: %i\n", t.variant.device_metrics.battery_level);
+    DEBUG_MSG("Telemetry->channel_utilization: %f\n", t.variant.device_metrics.channel_utilization);
+    DEBUG_MSG("Telemetry->voltage: %f\n", t.variant.device_metrics.voltage);
 
-    MeshPacket *p = allocDataProtobuf(m);
+    MeshPacket *p = allocDataProtobuf(t);
     p->to = dest;
     p->decoded.want_response = wantReplies;
 
     lastMeasurementPacket = packetPool.allocCopy(*p);
-    DEBUG_MSG("Device Telemetry: Sending packet to mesh");
+    DEBUG_MSG("Device Telemetry: Sending packet to mesh\n");
     service.sendToMesh(p);
+    nodeDB.updateTelemetry(nodeDB.getNodeNum(), t, RX_SRC_LOCAL);
     return true;
 }
