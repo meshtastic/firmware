@@ -83,10 +83,6 @@ class ButtonThread : public concurrency::OSThread
         pinMode(BUTTON_PIN_TOUCH, INPUT_PULLUP_SENSE);
 #endif
         userButtonTouch.attachClick(touchPressed);
-        userButtonTouch.attachDuringLongPress(touchPressedLong);
-        userButtonTouch.attachDoubleClick(touchDoublePressed);
-        userButtonTouch.attachLongPressStart(touchPressedLongStart);
-        userButtonTouch.attachLongPressStop(touchPressedLongStop);
         wakeOnIrq(BUTTON_PIN_TOUCH, FALLING);
 #endif
 
@@ -122,28 +118,7 @@ class ButtonThread : public concurrency::OSThread
         screen->forceDisplay();
         DEBUG_MSG("touch press!\n");       
     }
-    static void touchDoublePressed()
-    {
-        DEBUG_MSG("touch double press!\n");       
-    }
-    static void touchPressedLong()
-    {
-        DEBUG_MSG("touch press long!\n");       
-    }
-    static void touchDoublePressedLong()
-    {
-        DEBUG_MSG("touch double pressed!\n");       
-    }
-    static void touchPressedLongStart()
-    {        
-        DEBUG_MSG("touch long press start!\n");       
-    }
-    static void touchPressedLongStop()
-    {       
-        DEBUG_MSG("touch long press stop!\n");       
-    }
-
-
+    
     static void userButtonPressed()
     {
         // DEBUG_MSG("press!\n");
