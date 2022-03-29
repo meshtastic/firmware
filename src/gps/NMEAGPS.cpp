@@ -127,7 +127,6 @@ bool NMEAGPS::lookForLocation()
     // We know the solution is fresh and valid, so just read the data
     auto loc = reader.location.value();
 
-    // Some GPSes (Air530) seem to send a zero longitude when the current fix is bogus
     // Bail out EARLY to avoid overwriting previous good data (like #857)
     if(toDegInt(loc.lat) == 0) {
         DEBUG_MSG("Ignoring bogus NMEA position\n");
