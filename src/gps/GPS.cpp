@@ -310,9 +310,7 @@ int GPS::prepareDeepSleep(void *unused)
 #include "UBloxGPS.h"
 #endif
 
-#ifdef HAS_AIR530_GPS
-#include "Air530GPS.h"
-#elif !defined(NO_GPS)
+#ifndef NO_GPS
 #include "NMEAGPS.h"
 #endif
 
@@ -346,11 +344,7 @@ GPS *createGps()
             // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
             // assume NMEA at 9600 baud.
             DEBUG_MSG("Hoping that NMEA might work\n");
-#ifdef HAS_AIR530_GPS
-            GPS *new_gps = new Air530GPS();
-#else
             GPS *new_gps = new NMEAGPS();
-#endif
             new_gps->setup();
             return new_gps;
         }
