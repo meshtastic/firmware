@@ -11,10 +11,8 @@
 
 /* Enum definitions */
 /* The frequency/regulatory region the user has selected.
-
  Note: In 1.0 builds (which must still be supported by the android app for a
  long time) this field will be unpopulated.
-
  If firmware is ever upgraded from an old 1.0ish build, the old
  MyNodeInfo.region string will be used to set UserPreferences.region and the
  old value will be no longer set. */
@@ -50,7 +48,6 @@ typedef enum _RegionCode {
 /* Defines the device's role on the Mesh network
    unset
      Behave normally.
-
    Router
      Functions as a router */
 typedef enum _Role { 
@@ -125,7 +122,6 @@ typedef enum _GpsCoordinateFormat {
 /* Bit field of boolean configuration options, indicating which optional
    fields to include when assembling POSITION messages
  Longitude and latitude are always included (also time if GPS-synced)
-
  NOTE: the more fields are included, the larger the message will be -
    leading to longer airtime and a higher risk of packet loss */
 typedef enum _PositionFlags { 
@@ -172,10 +168,8 @@ typedef enum _InputEventChar {
 } InputEventChar;
 
 /* The frequency/regulatory region the user has selected.
-
  Note: In 1.0 builds (which must still be supported by the android app for a
  long time) this field will be unpopulated.
-
  If firmware is ever upgraded from an old 1.0ish build, the old
  MyNodeInfo.region string will be used to set UserPreferences.region and the
  old value will be no longer set. */
@@ -209,7 +203,6 @@ typedef enum _RadioConfig_UserPreferences_Serial_Baud {
 /* Defines the device's role on the Mesh network
    unset
      Behave normally.
-
    Router
      Functions as a router */
 typedef enum _RadioConfig_UserPreferences_Serial_Mode { 
