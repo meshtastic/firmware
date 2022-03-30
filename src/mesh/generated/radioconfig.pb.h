@@ -51,10 +51,23 @@ typedef enum _RegionCode {
    Router
      Functions as a router */
 typedef enum _Role { 
-    /* Default device role */
-    Role_Default = 0, 
-    /* Router device role */
-    Role_Router = 1 
+    /* Client device role */
+    Role_Client = 0, 
+    /* ClientMute device role
+   This is like the client but packets will not hop over this node. Would be
+   useful if you want to save power by not contributing to the mesh. */
+    Role_ClientMute = 1, 
+    /* Router device role.
+   Uses an agressive algirithem for the flood networking so packets will
+   prefer to be routed over this node. Also assume that this will be generally
+   unattended and so will turn off the wifi/ble radio as well as the oled screen. */
+    Role_Router = 2, 
+    /* RouterClient device role
+   Uses an agressive algirithem for the flood networking so packets will
+   prefer to be routed over this node. Similiar power management as a regular
+   client, so the RouterClient can be used as both a Router and a Client. Useful
+   as a well placed base station that you could also use to send messages. */
+    Role_RouterClient = 3 
 } Role;
 
 /* Sets the charge control current of devices with a battery charger that can be
@@ -206,10 +219,16 @@ typedef enum _RadioConfig_UserPreferences_Serial_Baud {
    Router
      Functions as a router */
 typedef enum _RadioConfig_UserPreferences_Serial_Mode { 
-    /* Default device role */
+    /* Client device role */
     RadioConfig_UserPreferences_Serial_Mode_MODE_Default = 0, 
-    /* Router device role */
+    /* ClientMute device role
+   This is like the client but packets will not hop over this node. Would be
+   useful if you want to save power by not contributing to the mesh. */
     RadioConfig_UserPreferences_Serial_Mode_MODE_SIMPLE = 1, 
+    /* Router device role.
+   Uses an agressive algirithem for the flood networking so packets will
+   prefer to be routed over this node. Also assume that this will be generally
+   unattended and so will turn off the wifi/ble radio as well as the oled screen. */
     RadioConfig_UserPreferences_Serial_Mode_MODE_PROTO = 2 
 } RadioConfig_UserPreferences_Serial_Mode;
 
@@ -343,9 +362,9 @@ typedef struct _RadioConfig {
 #define _RegionCode_MAX RegionCode_TH
 #define _RegionCode_ARRAYSIZE ((RegionCode)(RegionCode_TH+1))
 
-#define _Role_MIN Role_Default
-#define _Role_MAX Role_Router
-#define _Role_ARRAYSIZE ((Role)(Role_Router+1))
+#define _Role_MIN Role_Client
+#define _Role_MAX Role_RouterClient
+#define _Role_ARRAYSIZE ((Role)(Role_RouterClient+1))
 
 #define _ChargeCurrent_MIN ChargeCurrent_MAUnset
 #define _ChargeCurrent_MAX ChargeCurrent_MA1320
