@@ -4,8 +4,7 @@
 #include "InputBroker.h"
 
 class UpDownInterruptBase :
-    public Observable<const InputEvent *>,
-    private concurrency::OSThread
+    public Observable<const InputEvent *>
 {
   public:
     explicit UpDownInterruptBase(
@@ -18,8 +17,6 @@ class UpDownInterruptBase :
     void intDownHandler();
     void intUpHandler();
 
-  protected:
-    virtual int32_t runOnce() override;
   private:
     uint8_t _pinDown = 0;
     uint8_t _pinUp = 0;
