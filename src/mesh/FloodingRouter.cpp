@@ -32,14 +32,19 @@ void FloodingRouter::sniffReceived(const MeshPacket *p, const Routing *c)
 
     if ((p->to == NODENUM_BROADCAST) && (p->hop_limit > 0) && (getFrom(p) != getNodeNum())) {
         if (p->id != 0) {
-            MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
+            if (radioConfig.preferences.role != Role_ClientMute) {
+                MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
 
-            tosend->hop_limit--; // bump down the hop count
+                tosend->hop_limit--; // bump down the hop count
 
-            printPacket("Rebroadcasting received floodmsg to neighbors", p);
-            // Note: we are careful to resend using the original senders node id
-            // We are careful not to call our hooked version of send() - because we don't want to check this again
-            Router::send(tosend);
+                printPacket("Rebroadcasting received floodmsg to neighbors", p);
+                // Note: we are careful to resend using the original senders node id
+                // We are careful not to call our hooked version of send() - because we don't want to check this again
+                Router::send(tosend);
+
+            } else {
+                DEBUG_MSG("Not rebroadcasting. Role = Role_ClientMute\n");
+            }
 
         } else {
             DEBUG_MSG("Ignoring a simple (0 id) broadcast\n");
