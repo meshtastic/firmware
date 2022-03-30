@@ -17,7 +17,7 @@ uint8_t oled_probe(byte addr)
     r &= 0x0f;
     if (r == 0x08) {
         o_probe = 2; // SH1106
-    } else if ( r == 0x06 || r == 0x07) {
+    } else if ( r == 0x03 || r == 0x06 || r == 0x07) {
         o_probe = 1; // SSD1306
     }
     DEBUG_MSG("0x%x subtype probed\n", r);
