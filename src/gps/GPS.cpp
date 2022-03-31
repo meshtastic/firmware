@@ -336,6 +336,7 @@ GPS *createGps()
             delete ublox;
             ublox = NULL;
         } else {
+            DEBUG_MSG("Using UBLOX Mode\n");
             return ublox;
         }
 #endif
@@ -343,7 +344,7 @@ GPS *createGps()
         if (GPS::_serial_gps) {
             // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
             // assume NMEA at 9600 baud.
-            DEBUG_MSG("Hoping that NMEA might work\n");
+            DEBUG_MSG("Using NMEA Mode\n");
             GPS *new_gps = new NMEAGPS();
             new_gps->setup();
             return new_gps;
