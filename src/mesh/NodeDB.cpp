@@ -453,8 +453,8 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p, RxSource src)
 
     if (src == RX_SRC_LOCAL) {
         // Local packet, fully authoritative
-        DEBUG_MSG("updatePosition LOCAL pos@%x:5, time=%u, latI=%d, lonI=%d\n",
-                p.pos_timestamp, p.time, p.latitude_i, p.longitude_i);
+        DEBUG_MSG("updatePosition LOCAL pos@%x, time=%u, latI=%d, lonI=%d, alt=%d\n",
+                p.pos_timestamp, p.time, p.latitude_i, p.longitude_i, p.altitude);
         info->position = p;
 
     } else if ((p.time > 0) && !p.latitude_i && !p.longitude_i && !p.pos_timestamp &&
