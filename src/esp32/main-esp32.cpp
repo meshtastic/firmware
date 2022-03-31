@@ -6,6 +6,7 @@
 
 #ifdef USE_NEW_ESP32_BLUETOOTH
 #include "ESP32Bluetooth.h"
+#include "mesh/http/WiFiAPClient.h"
 #else
 #include "nimble/BluetoothUtil.h"
 #endif
@@ -41,13 +42,15 @@ static void printBLEinfo() {
 #ifdef USE_NEW_ESP32_BLUETOOTH
 void setBluetoothEnable(bool on) {
     
-    if (!esp32Bluetooth) {
-        esp32Bluetooth = new ESP32Bluetooth();
-    }
-    if (on) {
-        esp32Bluetooth->setup();
-    } else {
-        esp32Bluetooth->shutdown();
+    if (!isWifiAvailable()) {
+        if (!esp32Bluetooth) {
+            esp32Bluetooth = new ESP32Bluetooth();
+        }
+        if (on) {
+            esp32Bluetooth->setup();
+        } else {
+            esp32Bluetooth->shutdown();
+        }
     }
 }
 #endif
