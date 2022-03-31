@@ -304,10 +304,10 @@ std::vector<std::map<char *, char *>>* htmlListDir(std::vector<std::map<char *, 
 {
     File root = FSCom.open(dirname);
     if(!root){
-        return;
+        return NULL;
     }
     if(!root.isDirectory()){
-        return;
+        return NULL;
     }
 
     // iterate over the file list
@@ -319,12 +319,12 @@ std::vector<std::map<char *, char *>>* htmlListDir(std::vector<std::map<char *, 
             }
         } else {          
             std::map<char*, char*> thisFileMap;
-            thisFileMap.insert("size", String(file.size()).c_str());
-            thisFileMap.insert("name", String(file.name()).substring(1).c_str());
+            thisFileMap[strdup("size")] = strdup(String(file.size()).c_str());
+            thisFileMap[strdup("name")] = strdup(String(file.name()).substring(1).c_str());
             if (String(file.name()).substring(1).endsWith(".gz")) {
                 String modifiedFile = String(file.name()).substring(1);
                 modifiedFile.remove((modifiedFile.length() - 3), 3);
-                thisFileMap.insert("nameModified", modifiedFile.c_str());
+                thisFileMap[strdup("nameModified")] = strdup(modifiedFile.c_str());
             }
             fileList->push_back(thisFileMap);
         }
@@ -666,7 +666,6 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     } else {
         ipStr = String(WiFi.localIP().toString());
     }
-    res->println("},");
     Json jsonObjWifi = Json::object{
         {"rssi", String(WiFi.RSSI())},
         {"ip", ipStr.c_str()}
@@ -692,7 +691,7 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     Json jsonObjDevice = Json::object{{"reboot_counter", Json(int(myNodeInfo.reboot_count))}};
 
     // data->radio
-    Json jsonObjRadio = Json::object{{"frequecy", Json(RadioLibInterface::instance->getFreq())},
+    Json jsonObjRadio = Json::object{{"frequency", Json(RadioLibInterface::instance->getFreq())},
                                      {"lora_channel", Json(int(RadioLibInterface::instance->getChannelNum()))}};
 
     // collect data to inner data object
