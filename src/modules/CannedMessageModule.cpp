@@ -307,6 +307,12 @@ void CannedMessageModule::drawFrame(
         display->setFont(FONT_MEDIUM);
         display->drawString(display->getWidth()/2 + x, 0 + y + 12, "Sending...");
     }
+    else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_DISABLED)
+    {
+        display->setTextAlignment(TEXT_ALIGN_LEFT);
+        display->setFont(FONT_SMALL);
+        display->drawString(10 + x, 0 + y + 16, "Canned Message\nModule disabled.");
+    }
     else
     {
         display->setTextAlignment(TEXT_ALIGN_LEFT);
