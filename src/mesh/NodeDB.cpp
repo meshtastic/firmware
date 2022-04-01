@@ -506,8 +506,8 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const Telemetry &t, RxSource src)
     } else {
         DEBUG_MSG("updateTelemetry REMOTE node=0x%x \n", nodeId);
     }
-    info->telemetry = t;
-    info->has_telemetry = true;
+    info->device_metrics = t.variant.device_metrics;
+    info->has_device_metrics = true;
     updateGUIforNode = info;
     notifyObservers(true); // Force an update whether or not our node counts have changed
 }
