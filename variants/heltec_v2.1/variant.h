@@ -5,7 +5,7 @@
 // Tested on Neo6m module.
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
-#define GPS_RX_PIN 32
+#define GPS_RX_PIN 36
 #define GPS_TX_PIN 33
 
 #ifndef USE_JTAG  // gpio15 is TDO for JTAG, so no I2C on this board while doing jtag
