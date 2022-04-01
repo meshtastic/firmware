@@ -1,9 +1,12 @@
-// the default ESP32 Pin of 15 is the Oled SCL, set to 36 and 37 and works fine.
+// Pin planning should refer to this document
+// https://resource.heltec.cn/download/WiFi_LoRa_32/WIFI_LoRa_32_V2.pdf
+
+// the default ESP32 Pin of 15 is the Oled SCL, 37 is battery pin.
 // Tested on Neo6m module.
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
-#define GPS_RX_PIN 36
-#define GPS_TX_PIN 37
+#define GPS_RX_PIN 32
+#define GPS_TX_PIN 33
 
 #ifndef USE_JTAG  // gpio15 is TDO for JTAG, so no I2C on this board while doing jtag
 #define I2C_SDA 4 // I2C pins for this board
