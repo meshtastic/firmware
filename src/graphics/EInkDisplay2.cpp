@@ -28,7 +28,7 @@
 #elif defined(PCA10059)
 
 //4.2 inch 300x400 - GxEPD2_420_M01
-//#define TECHO_DISPLAY_MODEL GxEPD2_420_M01
+#define TECHO_DISPLAY_MODEL GxEPD2_420_M01
 
 #endif
 
