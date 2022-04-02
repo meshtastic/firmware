@@ -25,7 +25,7 @@
 //1.54 inch 200x200 - GxEPD2_154_M09
 //#define TECHO_DISPLAY_MODEL GxEPD2_154_M09
 
-#elif defined(PCA10059_DIY)
+#elif defined(NORDIC_PCA10059)
 
 //4.2 inch 300x400 - GxEPD2_420_M01
 //#define TECHO_DISPLAY_MODEL GxEPD2_420_M01
@@ -52,7 +52,7 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl)
     //GxEPD2_154_M09
     //setGeometry(GEOMETRY_RAWMODE, 200, 200);
     
-    #elif defined(PCA10059_DIY)
+    #elif defined(NORDIC_PCA10059)
 
     //GxEPD2_420_M01
     //setGeometry(GEOMETRY_RAWMODE, 300, 400);
@@ -95,8 +95,8 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
         DEBUG_MSG("Updating T-ECHO E-Paper... ");
         #elif defined(RAK4630)
         DEBUG_MSG("Updating RAK4361_5005 E-Paper... ");
-        #elif defined(PCA10059_DIY)
-        DEBUG_MSG("Updating PCA10059_DIY E-Paper... ");
+        #elif defined(NORDIC_PCA10059)
+        DEBUG_MSG("Updating NORDIC_PCA10059 E-Paper... ");
         #endif
         
         #if defined(TTGO_T_ECHO)
@@ -113,7 +113,7 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
         // 4.2 inch 300x400 - GxEPD2_420_M01
         //adafruitDisplay->nextPage();
         
-        #elif defined(PCA10059_DIY)
+        #elif defined(NORDIC_PCA10059)
         adafruitDisplay->nextPage();
         #endif
         
@@ -190,7 +190,7 @@ bool EInkDisplay::connect()
 
     adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);       
 }
-#elif defined(PCA10059_DIY)
+#elif defined(NORDIC_PCA10059)
 {
     auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
     adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
