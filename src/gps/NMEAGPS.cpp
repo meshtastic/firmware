@@ -5,7 +5,7 @@
 #include <TinyGPS++.h>
 
 // GPS solutions older than this will be rejected - see TinyGPSDatum::age()
-#define GPS_SOL_EXPIRY_MS 300   // in millis
+#define GPS_SOL_EXPIRY_MS 5000   // in millis. give 1 second time to combine different sentences. NMEA Frequency isn't higher anyway
 #define NMEA_MSG_GXGSA "GNGSA"  // GSA message (GPGSA, GNGSA etc)
 
 static int32_t toDegInt(RawDegrees d)
@@ -64,7 +64,7 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         t.tm_mon = d.month() - 1;
         t.tm_year = d.year() - 1900;
         t.tm_isdst = false;
-        DEBUG_MSG("NMEA GPS time %d\n", t.tm_sec);
+        DEBUG_MSG("NMEA GPS time %d-%d-%d %d:%d:%d\n", d.year(), d.month(), t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
 
         perhapsSetRTC(RTCQualityGPS, t);
 
@@ -116,7 +116,7 @@ bool NMEAGPS::lookForLocation()
             (reader.time.age() < GPS_SOL_EXPIRY_MS) &&
             (reader.date.age() < GPS_SOL_EXPIRY_MS)))
     {
-        DEBUG_MSG("SOME data is TOO OLD\n");
+        DEBUG_MSG("SOME data is TOO OLD: LOC %u, TIME %u, DATE %u\n", reader.location.age(), reader.time.age(), reader.date.age());
         return false;
     }
 

@@ -13,8 +13,8 @@
 #include "modules/ReplyModule.h"
 #include "modules/RoutingModule.h"
 #include "modules/TextMessageModule.h"
-#ifndef PORTDUINO
 #include "modules/Telemetry/DeviceTelemetry.h"
+#ifndef PORTDUINO
 #include "modules/Telemetry/EnvironmentTelemetry.h"
 #endif
 #ifndef NO_ESP32
