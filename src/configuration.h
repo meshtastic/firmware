@@ -236,9 +236,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define HW_VENDOR HardwareModel_T_ECHO
 
-#elif defined(PCA10059_DIY)
+#elif defined(NORDIC_PCA10059)
 
-#define HW_VENDOR HardwareModel_PCA10059_DIY_EINK
+#define HW_VENDOR HardwareModel_NORDIC_PCA10059_DIY_EINK
 
 #elif NRF52_SERIES
 
