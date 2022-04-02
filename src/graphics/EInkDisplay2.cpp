@@ -25,6 +25,11 @@
 //1.54 inch 200x200 - GxEPD2_154_M09
 //#define TECHO_DISPLAY_MODEL GxEPD2_154_M09
 
+#elif defined(PCA10059_DIY)
+
+//4.2 inch 300x400 - GxEPD2_420_M01
+//#define TECHO_DISPLAY_MODEL GxEPD2_420_M01
+
 #endif
 
 GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT> *adafruitDisplay;
@@ -46,6 +51,11 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl)
 
     //GxEPD2_154_M09
     //setGeometry(GEOMETRY_RAWMODE, 200, 200);
+    
+    #elif defined(PCA10059_DIY)
+
+    //GxEPD2_420_M01
+    //setGeometry(GEOMETRY_RAWMODE, 300, 400);
     
     #endif
     // setGeometry(GEOMETRY_RAWMODE, 128, 64); // old resolution
@@ -71,8 +81,8 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
 
         // FIXME - only draw bits have changed (use backbuf similar to the other displays)
         // tft.drawBitmap(0, 0, buffer, 128, 64, TFT_YELLOW, TFT_BLACK);
-        for (uint64_t y = 0; y < displayHeight; y++) {
-            for (uint64_t x = 0; x < displayWidth; x++) {
+        for (uint32_t y = 0; y < displayHeight; y++) {
+            for (uint32_t x = 0; x < displayWidth; x++) {
 
                 // get src pixel in the page based ordering the OLED lib uses FIXME, super inefficent
                 auto b = buffer[x + (y / 8) * displayWidth];
@@ -85,6 +95,8 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
         DEBUG_MSG("Updating T-ECHO E-Paper... ");
         #elif defined(RAK4630)
         DEBUG_MSG("Updating RAK4361_5005 E-Paper... ");
+        #elif defined(PCA10059_DIY)
+        DEBUG_MSG("Updating PCA10059_DIY E-Paper... ");
         #endif
         
         #if defined(TTGO_T_ECHO)
@@ -101,6 +113,8 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
         // 4.2 inch 300x400 - GxEPD2_420_M01
         //adafruitDisplay->nextPage();
         
+        #elif defined(PCA10059_DIY)
+        adafruitDisplay->nextPage();
         #endif
         
         // Put screen to sleep to save power (possibly not necessary because we already did poweroff inside of display)
@@ -175,6 +189,14 @@ bool EInkDisplay::connect()
     //adafruitDisplay->setRotation(1);
 
     adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);       
+}
+#elif defined(PCA10059_DIY)
+{
+    auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
+    adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+    adafruitDisplay->init(115200, true, 10, false, SPI1, SPISettings(4000000, MSBFIRST, SPI_MODE0));
+    adafruitDisplay->setRotation(3);
+    adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
 }
 #endif
    
