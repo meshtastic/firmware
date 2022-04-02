@@ -69,7 +69,7 @@ extern "C" {
  * Buttons
  */
 
-#ifdef RAK_BASE_5005
+#ifdef PCA10059
 #define PIN_BUTTON1 (32 + 6) //BTN_DN		P1.06 Built in button
 
 //Pullup only for external button ?
@@ -229,7 +229,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_GPS_EN (-1)
 #define PIN_GPS_PPS (-1) // Pulse per second input from the GPS
 
-#ifdef RAK_BASE_5005
+#ifdef PCA10059
 #define GPS_RX_PIN PIN_SERIAL1_RX
 #define GPS_TX_PIN PIN_SERIAL1_TX
 #endif
