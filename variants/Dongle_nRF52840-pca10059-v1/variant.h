@@ -18,7 +18,7 @@
 #ifndef _VARIANT_NORDIC_PCA10059_
 #define _VARIANT_NORDIC_PCA10059_
 
-#define NORDIC_PCA10059
+#define PCA10059
 
 /** Master clock frequency */
 #define VARIANT_MCK (64000000ul)
