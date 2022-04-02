@@ -51,7 +51,7 @@ bool GPS::setup()
 {
     // Master power for the GPS
 #ifdef PIN_GPS_EN
-    digitalWrite(PIN_GPS_EN, PIN_GPS_EN);
+    digitalWrite(PIN_GPS_EN, 1);
     pinMode(PIN_GPS_EN, OUTPUT);
 #endif
 
@@ -268,7 +268,7 @@ int32_t GPS::runOnce()
 
     // 9600bps is approx 1 byte per msec, so considering our buffer size we never need to wake more often than 200ms
     // if not awake we can run super infrquently (once every 5 secs?) to see if we need to wake.
-    return isAwake ? 100 : 5000;
+    return isAwake ? GPS_THREAD_INTERVAL : 5000;
 }
 
 void GPS::forceWake(bool on)
