@@ -81,6 +81,8 @@ uint8_t faceskb_found;
 // The I2C address of the UBLOX GPS
 uint8_t ublox_found = 0;
 
+uint32_t serialSinceMsec;
+
 bool axp192_found;
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
@@ -144,6 +146,8 @@ void setup()
         consoleInit(); // Set serial baud rate and init our mesh console
     }
 #endif
+    
+    serialSinceMsec = millis();
 
     DEBUG_MSG("\n\n//\\ E S H T /\\ S T / C\n\n");
 
