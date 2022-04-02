@@ -78,6 +78,8 @@ uint8_t cardkb_found;
 // The I2C address of the Faces Keyboard (if found)
 uint8_t faceskb_found;
 
+uint32_t serialSinceMsec;
+
 bool axp192_found;
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
@@ -141,6 +143,8 @@ void setup()
         consoleInit(); // Set serial baud rate and init our mesh console
     }
 #endif
+    
+    serialSinceMsec = millis();
 
     DEBUG_MSG("\n\n//\\ E S H T /\\ S T / C\n\n");
 
