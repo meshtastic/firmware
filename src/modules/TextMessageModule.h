@@ -1,17 +1,17 @@
 #pragma once
-#include "SinglePortPlugin.h"
+#include "SinglePortModule.h"
 #include "Observer.h"
 
 /**
  * Text message handling for meshtastic - draws on the OLED display the most recent received message
  */
-class TextMessageModule : public SinglePortPlugin, public Observable<const MeshPacket *>
+class TextMessageModule : public SinglePortModule, public Observable<const MeshPacket *>
 {
   public:
     /** Constructor
      * name is for debugging output
      */
-    TextMessageModule() : SinglePortPlugin("text", PortNum_TEXT_MESSAGE_APP) {}
+    TextMessageModule() : SinglePortModule("text", PortNum_TEXT_MESSAGE_APP) {}
 
   protected:
 

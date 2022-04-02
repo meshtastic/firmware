@@ -180,7 +180,38 @@ uint32_t RadioInterface::getTxDelayMsec()
      */
     // const uint32_t MAX_TX_WAIT_MSEC = 2000; // stress test would still fail occasionally with 1000
 
-    return random(MIN_TX_WAIT_MSEC, shortPacketMsec);
+    return random((MIN_TX_WAIT_MSEC), (MIN_TX_WAIT_MSEC + shortPacketMsec));
+}
+
+
+/** The delay to use when we want to send something but the ether is busy */
+uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
+{
+    /** At the low end we want to pick a delay large enough that anyone who just completed sending (some other node)
+     * has had enough time to switch their radio back into receive mode.
+     */
+    const uint32_t MIN_TX_WAIT_MSEC = 100;
+
+    // The minimum value for a LoRa SNR
+    const uint32_t SNR_MIN = -20;
+
+    // The maximum value for a LoRa SNR
+    const uint32_t SNR_MAX = 15;
+
+    //  high SNR = Long Delay
+    //  low SNR = Short Delay
+    uint32_t delay = 0;
+
+    if (radioConfig.preferences.role == Role_Router || radioConfig.preferences.role == Role_RouterClient) {
+        delay = map(snr, SNR_MIN, SNR_MAX, MIN_TX_WAIT_MSEC, (MIN_TX_WAIT_MSEC + (shortPacketMsec / 2)));
+        DEBUG_MSG("rx_snr found in packet. As a router, setting tx delay:%d\n", delay);
+    } else {
+        delay = map(snr, SNR_MIN, SNR_MAX, MIN_TX_WAIT_MSEC + (shortPacketMsec / 2), (MIN_TX_WAIT_MSEC + shortPacketMsec * 2));
+        DEBUG_MSG("rx_snr found in packet. Setting tx delay:%d\n", delay);
+    }
+
+
+    return delay;
 }
 
 void printPacket(const char *prefix, const MeshPacket *p)
@@ -218,6 +249,9 @@ void printPacket(const char *prefix, const MeshPacket *p)
     }
     if (p->rx_snr != 0.0) {
         DEBUG_MSG(" rxSNR=%g", p->rx_snr);
+    }
+    if (p->rx_rssi != 0) {
+        DEBUG_MSG(" rxSNR=%g", p->rx_rssi);
     }
     if (p->priority != 0)
         DEBUG_MSG(" priority=%d", p->priority);

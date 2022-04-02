@@ -1,3 +1,5 @@
+#ifndef USE_NEW_ESP32_BLUETOOTH
+
 #pragma once
 
 #include "nimble/NimbleDefs.h"
@@ -23,3 +25,5 @@ extern int16_t updateResultHandle;
 #ifdef __cplusplus
 };
 #endif
+
+#endif //#ifndef USE_NEW_ESP32_BLUETOOTH

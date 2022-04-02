@@ -69,7 +69,7 @@ uint32_t dopThresholds[5] = {2000, 1000, 500, 200, 100};
 
 // At some point, we're going to ask all of the modules if they would like to display a screen frame
 // we'll need to hold onto pointers for the modules that can draw a frame.
-std::vector<MeshPlugin *> moduleFrames;
+std::vector<MeshModule *> moduleFrames;
 
 // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
 static char ourId[5];
@@ -194,7 +194,7 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
         // DEBUG_MSG("Screen is not in transition.  Frame: %d\n\n", module_frame);
     }
     // DEBUG_MSG("Drawing Module Frame %d\n\n", module_frame);
-    MeshPlugin &pi = *moduleFrames.at(module_frame);
+    MeshModule &pi = *moduleFrames.at(module_frame);
     pi.drawFrame(display, state, x, y);
 }
 
@@ -765,6 +765,10 @@ void Screen::setup()
     // is never found when probing i2c and therefore we don't call setup and never want to do (invalid) accesses to this device.
     useDisplay = true;
 
+#ifdef AutoOLEDWire_h
+       dispdev.setDetected(screen_model);
+#endif
+
     // I think this is not needed - redundant with ui.init
     // dispdev.resetOrientation();
 
@@ -828,7 +832,7 @@ void Screen::setup()
         textMessageObserver.observe(textMessageModule);
 
     // Modules can notify screen about refresh
-    MeshPlugin::observeUIEvents(&uiFrameEventObserver);
+    MeshModule::observeUIEvents(&uiFrameEventObserver);
 }
 
 void Screen::forceDisplay()
@@ -976,7 +980,7 @@ void Screen::setFrames()
     DEBUG_MSG("showing standard frames\n");
     showingNormalScreen = true;
 
-    moduleFrames = MeshPlugin::GetMeshModulesWithUIFrames();
+    moduleFrames = MeshModule::GetMeshModulesWithUIFrames();
     DEBUG_MSG("Showing %d module frames\n", moduleFrames.size());
     int totalFrameCount = MAX_NUM_NODES + NUM_EXTRA_FRAMES + moduleFrames.size();
     DEBUG_MSG("Total frame count: %d\n", totalFrameCount);
@@ -1361,19 +1365,21 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     }
 
     auto mode = "";
-
+    
     if (channels.getPrimary().modem_config == 0) {
-        mode = "ShrtSlow";
+        mode = "VLongSlow";
     } else if (channels.getPrimary().modem_config == 1) {
-        mode = "ShrtFast";
+        mode = "LongSlow";
     } else if (channels.getPrimary().modem_config == 2) {
-        mode = "LngFast";
+        mode = "LongFast";
     } else if (channels.getPrimary().modem_config == 3) {
-        mode = "LngSlow";
+        mode = "MidSlow";
     } else if (channels.getPrimary().modem_config == 4) {
-        mode = "MedSlow";
+        mode = "MidFast";
     } else if (channels.getPrimary().modem_config == 5) {
-        mode = "MedFast";
+        mode = "ShortSlow";
+    } else if (channels.getPrimary().modem_config == 6) {
+        mode = "ShortFast";    
     } else {
         mode = "Custom";
     }

@@ -1,5 +1,6 @@
 #include "configuration.h"
 #include "CannedMessageModule.h"
+#include "PowerFSM.h" // neede for button bypass
 #include "MeshService.h"
 #include "FSCommon.h"
 #include "mesh/generated/cannedmessages.pb.h"
@@ -23,7 +24,7 @@ extern bool loadProto(const char *filename, size_t protoSize, size_t objSize, co
 extern bool saveProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, const void *dest_struct);
 
 CannedMessageModule::CannedMessageModule()
-    : SinglePortPlugin("canned", PortNum_TEXT_MESSAGE_APP),
+    : SinglePortModule("canned", PortNum_TEXT_MESSAGE_APP),
     concurrency::OSThread("CannedMessageModule")
 {
     if (radioConfig.preferences.canned_message_module_enabled)
@@ -140,8 +141,13 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     if (event->inputEvent == static_cast<char>(InputEventChar_KEY_SELECT))
     {
         DEBUG_MSG("Canned message event Select\n");
-        this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
-        validEvent = true;
+        // when inactive, call the onebutton shortpress instead. Activate Module only on up/down
+        if ((this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED)) {
+            powerFSM.trigger(EVENT_PRESS);
+        }else{
+            this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
+            validEvent = true;
+        }
     }
 
     if (validEvent)
@@ -300,6 +306,12 @@ void CannedMessageModule::drawFrame(
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->setFont(FONT_MEDIUM);
         display->drawString(display->getWidth()/2 + x, 0 + y + 12, "Sending...");
+    }
+    else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_DISABLED)
+    {
+        display->setTextAlignment(TEXT_ALIGN_LEFT);
+        display->setFont(FONT_SMALL);
+        display->drawString(10 + x, 0 + y + 16, "Canned Message\nModule disabled.");
     }
     else
     {

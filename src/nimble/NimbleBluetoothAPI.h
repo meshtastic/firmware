@@ -1,3 +1,5 @@
+#ifndef USE_NEW_ESP32_BLUETOOTH
+
 #pragma once
 
 #include "PhoneAPI.h"
@@ -17,3 +19,5 @@ protected:
 };
 
 extern PhoneAPI *bluetoothPhoneAPI;
+
+#endif //#ifndef USE_NEW_ESP32_BLUETOOTH

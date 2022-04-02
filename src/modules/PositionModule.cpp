@@ -10,7 +10,7 @@
 PositionModule *positionModule;
 
 PositionModule::PositionModule()
-    : ProtobufPlugin("position", PortNum_POSITION_APP, Position_fields), concurrency::OSThread("PositionModule")
+    : ProtobufModule("position", PortNum_POSITION_APP, Position_fields), concurrency::OSThread("PositionModule")
 {
     isPromiscuous = true;          // We always want to update our nodedb, even if we are sniffing on others
     setIntervalFromNow(60 * 1000); // Send our initial position 60 seconds after we start (to give GPS time to setup)
@@ -32,11 +32,11 @@ bool PositionModule::handleReceivedProtobuf(const MeshPacket &mp, Position *pptr
     }
 
     // Log packet size and list of fields
-    DEBUG_MSG("POSITION node=%08x l=%d %s%s%s%s%s%s%s%s%s%s%s%s%s%s\n", getFrom(&mp), mp.decoded.payload.size,
+    DEBUG_MSG("POSITION node=%08x l=%d %s%s%s%s%s%s%s%s%s%s%s%s%s\n", getFrom(&mp), mp.decoded.payload.size,
               p.latitude_i ? "LAT " : "", p.longitude_i ? "LON " : "", p.altitude ? "MSL " : "", p.altitude_hae ? "HAE " : "",
               p.alt_geoid_sep ? "GEO " : "", p.PDOP ? "PDOP " : "", p.HDOP ? "HDOP " : "", p.VDOP ? "VDOP " : "",
               p.sats_in_view ? "SIV " : "", p.fix_quality ? "FXQ " : "", p.fix_type ? "FXT " : "", p.pos_timestamp ? "PTS " : "",
-              p.time ? "TIME " : "", p.battery_level ? "BAT " : "");
+              p.time ? "TIME " : "");
 
     if (p.time) {
         struct timeval tv;
@@ -69,9 +69,6 @@ MeshPacket *PositionModule::allocReply()
     p.latitude_i = node->position.latitude_i;
     p.longitude_i = node->position.longitude_i;
     p.time = node->position.time;
-
-    if (pos_flags & PositionFlags_POS_BATTERY)
-        p.battery_level = node->position.battery_level;
 
     if (pos_flags & PositionFlags_POS_ALTITUDE) {
         if (pos_flags & PositionFlags_POS_ALT_MSL)
@@ -128,8 +125,6 @@ int32_t PositionModule::runOnce()
 {
     NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
 
-    // radioConfig.preferences.position_broadcast_smart = true;
-
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();
     if (lastGpsSend == 0 || now - lastGpsSend >= getPref_position_broadcast_secs() * 1000) {
@@ -154,10 +149,10 @@ int32_t PositionModule::runOnce()
             DEBUG_MSG("Channel utilization is >50 percent. Skipping this opportunity to send.\n");
         }
 
-    } else if (radioConfig.preferences.position_broadcast_smart == true) {
+    } else if (!radioConfig.preferences.position_broadcast_smart_disabled) {
 
-        // Only send packets if the channel is less than 40% utilized.
-        if (airTime->channelUtilizationPercent() < 40) {
+        // Only send packets if the channel is less than 25% utilized.
+        if (airTime->channelUtilizationPercent() < 25) {
 
             NodeInfo *node2 = service.refreshMyNodeInfo(); // should guarantee there is now a position
 
@@ -198,7 +193,7 @@ int32_t PositionModule::runOnce()
                 }
             }
         } else {
-            DEBUG_MSG("Channel utilization is >40 percent. Skipping this opportunity to send.\n");
+            DEBUG_MSG("Channel utilization is >25 percent. Skipping this opportunity to send.\n");
         }
     }
 

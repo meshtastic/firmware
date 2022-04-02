@@ -51,7 +51,7 @@ MeshPacket *NodeInfoModule::allocReply()
 }
 
 NodeInfoModule::NodeInfoModule()
-    : ProtobufPlugin("nodeinfo", PortNum_NODEINFO_APP, User_fields), concurrency::OSThread("NodeInfoModule")
+    : ProtobufModule("nodeinfo", PortNum_NODEINFO_APP, User_fields), concurrency::OSThread("NodeInfoModule")
 {
     isPromiscuous = true; // We always want to update our nodedb, even if we are sniffing on others
     setIntervalFromNow(30 *

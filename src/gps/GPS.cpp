@@ -146,17 +146,6 @@ void GPS::setAwake(bool on)
     }
 }
 
-GpsOperation GPS::getGpsOp() const
-{
-    auto op = radioConfig.preferences.gps_operation;
-
-    if (op == GpsOperation_GpsOpUnset)
-        op = (radioConfig.preferences.location_share == LocationSharing_LocDisabled) ? GpsOperation_GpsOpTimeOnly
-                                                                                     : GpsOperation_GpsOpMobile;
-
-    return op;
-}
-
 /** Get how long we should stay looking for each aquisition in msecs
  */
 uint32_t GPS::getWakeTime() const
@@ -167,7 +156,7 @@ uint32_t GPS::getWakeTime() const
         return t; // already maxint
 
     if (t == 0)
-        t = radioConfig.preferences.is_router ? 5 * 60 : 15 * 60; // Allow up to 15 mins for each attempt (probably will be much
+        t = (radioConfig.preferences.role == Role_Router) ? 5 * 60 : 15 * 60; // Allow up to 15 mins for each attempt (probably will be much
                                                                   // less if we can find sats) or less if a router
 
     t *= 1000; // msecs
@@ -180,17 +169,17 @@ uint32_t GPS::getWakeTime() const
 uint32_t GPS::getSleepTime() const
 {
     uint32_t t = radioConfig.preferences.gps_update_interval;
+    bool gps_disabled = radioConfig.preferences.gps_disabled;
+    bool loc_share_disabled = radioConfig.preferences.location_share_disabled;
 
-    auto op = getGpsOp();
-    bool gotTime = (getRTCQuality() >= RTCQualityGPS);
-    if ((gotTime && op == GpsOperation_GpsOpTimeOnly) || (op == GpsOperation_GpsOpDisabled))
+    if (gps_disabled || loc_share_disabled)
         t = UINT32_MAX; // Sleep forever now
 
     if (t == UINT32_MAX)
         return t; // already maxint
 
     if (t == 0)                                                        // default - unset in preferences
-        t = radioConfig.preferences.is_router ? 24 * 60 * 60 : 2 * 60; // 2 mins or once per day for routers
+        t = (radioConfig.preferences.role == Role_Router) ? 24 * 60 * 60 : 2 * 60; // 2 mins or once per day for routers
 
     t *= 1000;
 
@@ -257,9 +246,8 @@ int32_t GPS::runOnce()
         bool tooLong = wakeTime != UINT32_MAX && (now - lastWakeStartMsec) > wakeTime;
 
         // Once we get a location we no longer desperately want an update
-        // or if we got a time and we are in GpsOpTimeOnly mode
         // DEBUG_MSG("gotLoc %d, tooLong %d, gotTime %d\n", gotLoc, tooLong, gotTime);
-        if ((gotLoc && gotTime) || tooLong || (gotTime && getGpsOp() == GpsOperation_GpsOpTimeOnly)) {
+        if ((gotLoc && gotTime) || tooLong) {
 
             if (tooLong) {
                 // we didn't get a location during this ack window, therefore declare loss of lock
@@ -322,9 +310,7 @@ int GPS::prepareDeepSleep(void *unused)
 #include "UBloxGPS.h"
 #endif
 
-#ifdef HAS_AIR530_GPS
-#include "Air530GPS.h"
-#elif !defined(NO_GPS)
+#ifndef NO_GPS
 #include "NMEAGPS.h"
 #endif
 
@@ -334,36 +320,35 @@ GPS *createGps()
 #ifdef NO_GPS
     return nullptr;
 #else
+    if (!radioConfig.preferences.gps_disabled){
 #ifdef GPS_ALTITUDE_HAE
-    DEBUG_MSG("Using HAE altitude model\n");
+        DEBUG_MSG("Using HAE altitude model\n");
 #else
-    DEBUG_MSG("Using MSL altitude model\n");
+        DEBUG_MSG("Using MSL altitude model\n");
 #endif
 // If we don't have bidirectional comms, we can't even try talking to UBLOX
 #ifdef GPS_TX_PIN
-    // Init GPS - first try ublox
-    UBloxGPS *ublox = new UBloxGPS();
+        // Init GPS - first try ublox
+        UBloxGPS *ublox = new UBloxGPS();
 
-    if (!ublox->setup()) {
-        DEBUG_MSG("ERROR: No UBLOX GPS found\n");
-        delete ublox;
-        ublox = NULL;
-    } else {
-        return ublox;
-    }
+        if (!ublox->setup()) {
+            DEBUG_MSG("ERROR: No UBLOX GPS found\n");
+            delete ublox;
+            ublox = NULL;
+        } else {
+            DEBUG_MSG("Using UBLOX Mode\n");
+            return ublox;
+        }
 #endif
 
-    if (GPS::_serial_gps) {
-        // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
-        // assume NMEA at 9600 baud.
-        DEBUG_MSG("Hoping that NMEA might work\n");
-#ifdef HAS_AIR530_GPS
-        GPS *new_gps = new Air530GPS();
-#else
-        GPS *new_gps = new NMEAGPS();
-#endif
-        new_gps->setup();
-        return new_gps;
+        if (GPS::_serial_gps) {
+            // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
+            // assume NMEA at 9600 baud.
+            DEBUG_MSG("Using NMEA Mode\n");
+            GPS *new_gps = new NMEAGPS();
+            new_gps->setup();
+            return new_gps;
+        }
     }
     return nullptr;
 #endif

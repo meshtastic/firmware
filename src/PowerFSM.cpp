@@ -16,7 +16,7 @@ static bool isPowered()
         return true;
     }
 
-    bool isRouter = radioConfig.preferences.is_router;
+    bool isRouter = (radioConfig.preferences.role == Role_Router ? 1 : 0);
 
     // If we are not a router and we already have AC power go to POWER state after init, otherwise go to ON
     // We assume routers might be powered all the time, but from a low current (solar) source
@@ -238,7 +238,7 @@ Fsm powerFSM(&stateBOOT);
 
 void PowerFSM_setup()
 {
-    bool isRouter = radioConfig.preferences.is_router;
+    bool isRouter = (radioConfig.preferences.role == Role_Router ? 1 : 0);
     bool hasPower = isPowered();
 
     DEBUG_MSG("PowerFSM init, USB power=%d\n", hasPower);
@@ -278,6 +278,12 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateDARK, &stateSHUTDOWN, EVENT_SHUTDOWN, NULL, "Shutdown");
     powerFSM.add_transition(&stateON, &stateSHUTDOWN, EVENT_SHUTDOWN, NULL, "Shutdown");
     powerFSM.add_transition(&stateSERIAL, &stateSHUTDOWN, EVENT_SHUTDOWN, NULL, "Shutdown");
+
+    // Inputbroker
+    powerFSM.add_transition(&stateLS, &stateON, EVENT_INPUT, NULL, "Input Device");
+    powerFSM.add_transition(&stateNB, &stateON, EVENT_INPUT, NULL, "Input Device");
+    powerFSM.add_transition(&stateDARK, &stateON, EVENT_INPUT, NULL, "Input Device");
+    powerFSM.add_transition(&stateON, &stateON, EVENT_INPUT, NULL, "Input Device"); // restarts the sleep timer
 
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_BLUETOOTH_PAIR, NULL, "Bluetooth pairing");
     powerFSM.add_transition(&stateON, &stateON, EVENT_BLUETOOTH_PAIR, NULL, "Bluetooth pairing");

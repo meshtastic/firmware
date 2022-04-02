@@ -276,7 +276,7 @@ bool perhapsDecode(MeshPacket *p)
     if (p->which_payloadVariant == MeshPacket_decoded_tag)
         return true; // If packet was already decoded just return
 
-    assert(p->which_payloadVariant == MeshPacket_encrypted_tag);
+    //assert(p->which_payloadVariant == MeshPacket_encrypted_tag);
 
     // Try to find a channel that works with this hash
     for (ChannelIndex chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
@@ -377,7 +377,7 @@ void Router::handleReceived(MeshPacket *p, RxSource src)
     }
 
     // call modules here
-    MeshPlugin::callPlugins(*p, src);
+    MeshModule::callPlugins(*p, src);
 }
 
 void Router::perhapsHandleReceived(MeshPacket *p)

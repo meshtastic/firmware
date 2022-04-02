@@ -1,11 +1,11 @@
 #pragma once
-#include "ProtobufPlugin.h"
+#include "ProtobufModule.h"
 #include "concurrency/OSThread.h"
 
 /**
  * Position module for sending/receiving positions into the mesh
  */
-class PositionModule : public ProtobufPlugin<Position>, private concurrency::OSThread
+class PositionModule : public ProtobufModule<Position>, private concurrency::OSThread
 {
     /// The id of the last packet we sent, to allow us to cancel it if we make something fresher
     PacketId prevPacketId = 0;
