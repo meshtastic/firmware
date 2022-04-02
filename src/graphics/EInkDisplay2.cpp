@@ -55,7 +55,7 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl)
     #elif defined(PCA10059)
 
     //GxEPD2_420_M01
-    //setGeometry(GEOMETRY_RAWMODE, 300, 400);
+    setGeometry(GEOMETRY_RAWMODE, 300, 400);
     
     #endif
     // setGeometry(GEOMETRY_RAWMODE, 128, 64); // old resolution
