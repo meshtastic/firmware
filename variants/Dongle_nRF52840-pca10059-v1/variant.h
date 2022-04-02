@@ -15,10 +15,10 @@
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-#ifndef _VARIANT_PCA10059_DIY_
-#define _VARIANT_PCA10059_DIY_
+#ifndef _VARIANT_NORDIC_PCA10059_
+#define _VARIANT_NORDIC_PCA10059_
 
-#define PCA10059_DIY
+#define NORDIC_PCA10059
 
 /** Master clock frequency */
 #define VARIANT_MCK (64000000ul)
@@ -203,7 +203,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
    SPI_CS    <->  P0.26 (Arduino GPIO number 26) 
  */
 
-// PCA10059_DIY LoRa module
+// NORDIC_PCA10059 LoRa module
 #define USE_SX1262
 #define SX126X_CS     (0 + 31)   	//LORA_CS	P0.31
 #define SX126X_DIO1   (0 + 29)   	//DIO1		P0.29
