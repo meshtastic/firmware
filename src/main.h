@@ -9,6 +9,7 @@ extern uint8_t screen_found;
 extern uint8_t screen_model;
 extern uint8_t cardkb_found;
 extern uint8_t faceskb_found;
+extern uint8_t ublox_found;
 
 extern bool axp192_found;
 extern bool isCharging;

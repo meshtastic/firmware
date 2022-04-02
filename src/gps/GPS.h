@@ -4,6 +4,8 @@
 #include "Observer.h"
 #include "concurrency/OSThread.h"
 
+extern uint8_t ublox_found;
+
 // Generate a string representation of DOP
 const char *getDOPString(uint32_t dop);
 

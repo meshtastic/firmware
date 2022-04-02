@@ -17,7 +17,7 @@ HardwareSerial *GPS::_serial_gps = NULL;
 #endif
 
 #ifdef GPS_I2C_ADDRESS
-uint8_t GPS::i2cAddress = GPS_I2C_ADDRESS;
+uint8_t GPS::i2cAddress = ublox_found;
 #else
 uint8_t GPS::i2cAddress = 0;
 #endif

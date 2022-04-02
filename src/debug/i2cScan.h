@@ -47,6 +47,7 @@ void scanI2Cdevice(void)
                     DEBUG_MSG("unknown display found\n");
                 }
             }
+
             if (addr == CARDKB_ADDR) {
                 cardkb_found = addr;
                 DEBUG_MSG("m5 cardKB found\n");
@@ -63,6 +64,12 @@ void scanI2Cdevice(void)
             if (addr == AXP192_SLAVE_ADDRESS) {
                 axp192_found = true;
                 DEBUG_MSG("axp192 PMU found\n");
+            }
+#endif
+#ifdef GPS_I2C_ADDRESS
+            if (addr == GPS_I2C_ADDRESS){
+                ublox_found = addr;
+                DEBUG_MSG("UBLOX I2C GPS found\n");
             }
 #endif
         } else if (err == 4) {

@@ -78,6 +78,9 @@ uint8_t cardkb_found;
 // The I2C address of the Faces Keyboard (if found)
 uint8_t faceskb_found;
 
+// The I2C address of the UBLOX GPS
+uint8_t ublox_found = 0;
+
 bool axp192_found;
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API

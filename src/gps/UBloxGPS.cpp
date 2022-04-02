@@ -20,16 +20,14 @@ bool UBloxGPS::tryConnect()
 {
     bool c = false;
 
-    if (_serial_gps)
-        c = ublox.begin(*_serial_gps);
+    // Try I2C first if it was detected. This is for the Wisblock GPS Modules. RAK 1910 is serial only while RAK 12500 has both interfaces. In that case prefer I2C
 
     if (!c && i2cAddress) {
-        extern bool neo6M; // Super skanky - if we are talking to the device i2c we assume it is a neo7 on a RAK815, which
-                           // supports the newer API
-        neo6M = true;
-
         c = ublox.begin(Wire, i2cAddress);
     }
+
+    if (!c && _serial_gps)
+        c = ublox.begin(*_serial_gps);
 
     if (c)
         setConnected();
