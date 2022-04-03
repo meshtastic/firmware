@@ -854,8 +854,9 @@ int32_t Screen::runOnce()
     }
 
     // Show boot screen for first 3 seconds, then switch to normal operation.
+    // serialSinceMsec adjusts for additional serial wait time during nRF52 bootup
     static bool showingBootScreen = true;
-    if (showingBootScreen && (millis() > 5000)) {
+    if (showingBootScreen && (millis() > (5000 + serialSinceMsec))) {
         DEBUG_MSG("Done with boot screen...\n");
         stopBootScreen();
         showingBootScreen = false;
