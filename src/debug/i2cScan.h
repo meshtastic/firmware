@@ -15,7 +15,7 @@ uint8_t oled_probe(byte addr)
         r = Wire.read();
     }
     r &= 0x0f;
-    if (r == 0x08) {
+    if (r == 0x08 || r == 0x00) {
         o_probe = 2; // SH1106
     } else if ( r == 0x03 || r == 0x06 || r == 0x07) {
         o_probe = 1; // SSD1306
