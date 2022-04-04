@@ -240,6 +240,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define HW_VENDOR HardwareModel_T_ECHO
 
+#elif defined(NANO_G1)
+
+#define HW_VENDOR HardwareModel_NANO_G1
+
 #elif NRF52_SERIES
 
 #define HW_VENDOR HardwareModel_NRF52_UNKNOWN
