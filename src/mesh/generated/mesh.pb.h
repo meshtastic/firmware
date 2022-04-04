@@ -562,9 +562,9 @@ typedef struct _NodeInfo {
     float snr; 
     /* Set to indicate the last time we received a packet from this node */
     uint32_t last_heard; 
-    /* The latest device telemetry data for the node. */
-    bool has_telemetry;
-    Telemetry telemetry; 
+    /* The latest device metrics for the node. */
+    bool has_device_metrics;
+    DeviceMetrics device_metrics; 
 } NodeInfo;
 
 /* A Routing control Data packet handled by the routing module */
@@ -737,7 +737,7 @@ extern "C" {
 #define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, Location_init_default}
 #define Location_init_default                    {0, 0, 0, 0, 0}
 #define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
-#define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0, false, Telemetry_init_default}
+#define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0, false, DeviceMetrics_init_default}
 #define MyNodeInfo_init_default                  {0, 0, "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
 #define LogRecord_init_default                   {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_default                   {0, 0, {MyNodeInfo_init_default}}
@@ -750,7 +750,7 @@ extern "C" {
 #define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, Location_init_zero}
 #define Location_init_zero                       {0, 0, 0, 0, 0}
 #define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
-#define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0, false, Telemetry_init_zero}
+#define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0, false, DeviceMetrics_init_zero}
 #define MyNodeInfo_init_zero                     {0, 0, "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
 #define LogRecord_init_zero                      {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_zero                      {0, 0, {MyNodeInfo_init_zero}}
@@ -833,7 +833,7 @@ extern "C" {
 #define NodeInfo_position_tag                    3
 #define NodeInfo_snr_tag                         4
 #define NodeInfo_last_heard_tag                  5
-#define NodeInfo_telemetry_tag                   6
+#define NodeInfo_device_metrics_tag              6
 #define Routing_route_request_tag                1
 #define Routing_route_reply_tag                  2
 #define Routing_error_reason_tag                 3
@@ -964,12 +964,12 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  user,              2) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  position,          3) \
 X(a, STATIC,   SINGULAR, FLOAT,    snr,               4) \
 X(a, STATIC,   SINGULAR, FIXED32,  last_heard,        5) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  telemetry,         6)
+X(a, STATIC,   OPTIONAL, MESSAGE,  device_metrics,    6)
 #define NodeInfo_CALLBACK NULL
 #define NodeInfo_DEFAULT NULL
 #define NodeInfo_user_MSGTYPE User
 #define NodeInfo_position_MSGTYPE Position
-#define NodeInfo_telemetry_MSGTYPE Telemetry
+#define NodeInfo_device_metrics_MSGTYPE DeviceMetrics
 
 #define MyNodeInfo_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   my_node_num,       1) \
@@ -1067,7 +1067,7 @@ extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 #define LogRecord_size                           81
 #define MeshPacket_size                          347
 #define MyNodeInfo_size                          210
-#define NodeInfo_size                            299
+#define NodeInfo_size                            283
 #define Position_size                            142
 #define RouteDiscovery_size                      40
 #define Routing_size                             42
