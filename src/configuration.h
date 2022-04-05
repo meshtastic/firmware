@@ -242,7 +242,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #elif defined(NORDIC_PCA10059)
 
-#define HW_VENDOR HardwareModel_NRF52840_PCA10059
+#define HW_VENDOR HardwareModel_NRF52840_PCA10059 
 
 #elif NRF52_SERIES
 
