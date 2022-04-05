@@ -8,10 +8,11 @@
 #include "mesh/http/WiFiAPClient.h"
 #include "power.h"
 #include "sleep.h"
+#include <FSCommon.h>
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>
 #include <HTTPURLEncodedBodyParser.hpp>
-#include <FSCommon.h>
+#include <json11.hpp>
 
 #ifndef NO_ESP32
 #include "esp_task_wdt.h"
@@ -270,8 +271,6 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
     DEBUG_MSG("webAPI handleAPIv1ToRadio\n");
 }
 
-bool firstFile = 1;
-
 void htmlDeleteDir(const char * dirname)
 {
     File root = FSCom.open(dirname);
@@ -299,70 +298,72 @@ void htmlDeleteDir(const char * dirname)
     root.close();
 }
 
-void htmlListDir(HTTPResponse *res, const char * dirname, uint8_t levels)
+std::vector<std::map<char *, char *>>* htmlListDir(std::vector<std::map<char *, char *>> *fileList, const char *dirname, uint8_t levels)
 {
     File root = FSCom.open(dirname);
     if(!root){
-        return;
+        return NULL;
     }
     if(!root.isDirectory()){
-        return;
+        return NULL;
     }
 
+    // iterate over the file list
     File file = root.openNextFile();
     while(file){
         if(file.isDirectory() && !String(file.name()).endsWith(".")) {
             if(levels){
-                htmlListDir(res, file.name(), levels -1);
+                htmlListDir(fileList, file.name(), levels -1);
             }
-        } else {
-            if (firstFile) {
-                firstFile = 0;
-            } else {
-                res->println(",");
-            }
-            res->println("{");
+        } else {          
+            std::map<char*, char*> thisFileMap;
+            thisFileMap[strdup("size")] = strdup(String(file.size()).c_str());
+            thisFileMap[strdup("name")] = strdup(String(file.name()).substring(1).c_str());
             if (String(file.name()).substring(1).endsWith(".gz")) {
                 String modifiedFile = String(file.name()).substring(1);
                 modifiedFile.remove((modifiedFile.length() - 3), 3);
-                res->print("\"nameModified\": \"" + modifiedFile + "\",");
-                res->print("\"name\": \"" + String(file.name()).substring(1) + "\",");
-            } else {
-                res->print("\"name\": \"" + String(file.name()).substring(1) + "\",");
+                thisFileMap[strdup("nameModified")] = strdup(modifiedFile.c_str());
             }
-            res->print("\"size\": " + String(file.size()));
-            res->print("}");
+            fileList->push_back(thisFileMap);
         }
         file.close();
         file = root.openNextFile();
     }
     root.close();
+    return fileList;
 }
 
 void handleFsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
 {
-
     res->setHeader("Content-Type", "application/json");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
-    res->println("{");
-    res->println("\"data\": {");
-    res->print("\"files\": [");
-    htmlListDir(res, "/", 10);
-    res->print("],");
-    res->print("\"filesystem\" : {");
-    res->print("\"total\" : " + String(FSCom.totalBytes()) + ",");
-    res->print("\"used\" : " + String(FSCom.usedBytes()) + ",");
-    res->print("\"free\" : " + String(FSCom.totalBytes() - FSCom.usedBytes()));
-    res->println("}");
-    res->println("},");
-    res->println("\"status\": \"ok\"");
-    res->println("}");
-}
 
+    using namespace json11;
+    auto fileList = htmlListDir(new std::vector<std::map<char *, char *>>(), "/", 10);
+
+    // create json output structure
+    Json filesystemObj = Json::object{
+        {"total", String(FSCom.totalBytes()).c_str()},
+        {"used", String(FSCom.usedBytes()).c_str()},
+        {"free", String(FSCom.totalBytes() - FSCom.usedBytes()).c_str()},
+    };
+
+    Json jsonObjInner = Json::object{{"files", Json(*fileList)},
+                                     {"filesystem", filesystemObj}
+    };
+
+    Json jsonObjOuter = Json::object{{"data", jsonObjInner}, {"status", "ok"}};
+
+    // serialize and write it to the stream
+    std::string jsonStr = jsonObjOuter.dump();
+    res->print(jsonStr.c_str());
+}
 
 void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
 {
+    using namespace json11;
+
     ResourceParameters *params = req->getParams();
     std::string paramValDelete;
 
@@ -373,15 +374,15 @@ void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
         std::string pathDelete = "/" + paramValDelete;
         if (FSCom.remove(pathDelete.c_str())) {
             Serial.println(pathDelete.c_str());
-            res->println("{");
-            res->println("\"status\": \"ok\"");
-            res->println("}");
+            Json jsonObjOuter = Json::object{{"status", "ok"}};
+            std::string jsonStr = jsonObjOuter.dump();
+            res->print(jsonStr.c_str());
             return;
         } else {
             Serial.println(pathDelete.c_str());
-            res->println("{");
-            res->println("\"status\": \"Error\"");
-            res->println("}");
+            Json jsonObjOuter = Json::object{{"status", "Error"}};
+            std::string jsonStr = jsonObjOuter.dump();
+            res->print(jsonStr.c_str());
             return;
         }
     }
@@ -598,6 +599,7 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
 
 void handleReport(HTTPRequest *req, HTTPResponse *res)
 {
+    using namespace json11;
 
     ResourceParameters *params = req->getParams();
     std::string content;
@@ -616,104 +618,89 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
         res->println("<pre>");
     }
 
-    res->println("{");
-
-    res->println("\"data\": {");
-
-    res->println("\"airtime\": {");
-
+    // data->airtime->tx_log
+    std::vector<String> txLogValues;
     uint32_t *logArray;
-
-    res->print("\"tx_log\": [");
-
     logArray = airTime->airtimeReport(TX_LOG);
     for (int i = 0; i < airTime->getPeriodsToLog(); i++) {
         uint32_t tmp;
         tmp = *(logArray + i);
-        res->printf("%d", tmp);
-        if (i != airTime->getPeriodsToLog() - 1) {
-            res->print(", ");
-        }
+        txLogValues.push_back(String(tmp));
     }
 
-    res->println("],");
-    res->print("\"rx_log\": [");
-
+    // data->airtime->rx_log
+    std::vector<String> rxLogValues;
     logArray = airTime->airtimeReport(RX_LOG);
     for (int i = 0; i < airTime->getPeriodsToLog(); i++) {
         uint32_t tmp;
         tmp = *(logArray + i);
-        res->printf("%d", tmp);
-        if (i != airTime->getPeriodsToLog() - 1) {
-            res->print(", ");
-        }
+        rxLogValues.push_back(String(tmp));
     }
 
-    res->println("],");
-    res->print("\"rx_all_log\": [");
-
+    // data->airtime->rx_all_log
+    std::vector<String> rxAllLogValues;
     logArray = airTime->airtimeReport(RX_ALL_LOG);
     for (int i = 0; i < airTime->getPeriodsToLog(); i++) {
         uint32_t tmp;
         tmp = *(logArray + i);
-        res->printf("%d", tmp);
-        if (i != airTime->getPeriodsToLog() - 1) {
-            res->print(", ");
-        }
+        rxAllLogValues.push_back(String(tmp));
     }
 
-    res->println("],");
-    res->printf("\"channel_utilization\": %3.2f%,\n", airTime->channelUtilizationPercent());
-    res->printf("\"utilization_tx\": %3.2f%,\n", airTime->utilizationTXPercent());
-    res->printf("\"seconds_since_boot\": %u,\n", airTime->getSecondsSinceBoot());
-    res->printf("\"seconds_per_period\": %u,\n", airTime->getSecondsPerPeriod());
-    res->printf("\"periods_to_log\": %u\n", airTime->getPeriodsToLog());
+    Json jsonObjAirtime = Json::object{
+        {"tx_log", Json(txLogValues)},
+        {"rx_log", Json(rxLogValues)},
+        {"rx_all_log", Json(rxAllLogValues)},
+        {"channel_utilization", Json(airTime->channelUtilizationPercent())},
+        {"utilization_tx", Json(airTime->utilizationTXPercent())},
+        {"seconds_since_boot", Json(int(airTime->getSecondsSinceBoot()))},
+        {"seconds_per_period", Json(int(airTime->getSecondsPerPeriod()))},
+        {"periods_to_log", Json(airTime->getPeriodsToLog())},
+    };
 
-    res->println("},");
-
-    res->println("\"wifi\": {");
-
-    res->println("\"rssi\": " + String(WiFi.RSSI()) + ",");
-
+    // data->wifi
+    String ipStr;
     if (radioConfig.preferences.wifi_ap_mode || isSoftAPForced()) {
-        res->println("\"ip\": \"" + String(WiFi.softAPIP().toString().c_str()) + "\"");
+        ipStr = String(WiFi.softAPIP().toString());
     } else {
-        res->println("\"ip\": \"" + String(WiFi.localIP().toString().c_str()) + "\"");
+        ipStr = String(WiFi.localIP().toString());
     }
+    Json jsonObjWifi = Json::object{
+        {"rssi", String(WiFi.RSSI())},
+        {"ip", ipStr.c_str()}
+    };
 
-    res->println("},");
+    // data->memory
+    Json jsonObjMemory = Json::object{{"heap_total", Json(int(ESP.getHeapSize()))},
+                                    {"heap_free", Json(int(ESP.getFreeHeap()))},
+                                    {"psram_total", Json(int(ESP.getPsramSize()))},
+                                    {"psram_free", Json(int(ESP.getFreePsram()))},
+                                    {"fs_total", String(FSCom.totalBytes()).c_str()},
+                                    {"fs_used", String(FSCom.usedBytes()).c_str()},
+                                    {"fs_free", String(FSCom.totalBytes() - FSCom.usedBytes()).c_str()}};
 
-    res->println("\"memory\": {");
-    res->printf("\"heap_total\": %d,\n", ESP.getHeapSize());
-    res->printf("\"heap_free\": %d,\n", ESP.getFreeHeap());
-    res->printf("\"psram_total\": %d,\n", ESP.getPsramSize());
-    res->printf("\"psram_free\": %d,\n", ESP.getFreePsram());
-    res->println("\"fs_total\" : " + String(FSCom.totalBytes()) + ",");
-    res->println("\"fs_used\" : " + String(FSCom.usedBytes()) + ",");
-    res->println("\"fs_free\" : " + String(FSCom.totalBytes() - FSCom.usedBytes()));
-    res->println("},");
+    // data->power
+    Json jsonObjPower = Json::object{{"battery_percent", Json(powerStatus->getBatteryChargePercent())},
+                                      {"battery_voltage_mv", Json(powerStatus->getBatteryVoltageMv())},
+                                      {"has_battery", BoolToString(powerStatus->getHasBattery())},
+                                      {"has_usb", BoolToString(powerStatus->getHasUSB())},
+                                      {"is_charging", BoolToString(powerStatus->getIsCharging())}};
 
-    res->println("\"power\": {");
-    res->printf("\"battery_percent\": %u,\n", powerStatus->getBatteryChargePercent());
-    res->printf("\"battery_voltage_mv\": %u,\n", powerStatus->getBatteryVoltageMv());
-    res->printf("\"has_battery\": %s,\n", BoolToString(powerStatus->getHasBattery()));
-    res->printf("\"has_usb\": %s,\n", BoolToString(powerStatus->getHasUSB()));
-    res->printf("\"is_charging\": %s\n", BoolToString(powerStatus->getIsCharging()));
-    res->println("},");
+    // data->device
+    Json jsonObjDevice = Json::object{{"reboot_counter", Json(int(myNodeInfo.reboot_count))}};
 
-    res->println("\"device\": {");
-    res->printf("\"reboot_counter\": %d\n", myNodeInfo.reboot_count);
-    res->println("},");
+    // data->radio
+    Json jsonObjRadio = Json::object{{"frequency", Json(RadioLibInterface::instance->getFreq())},
+                                     {"lora_channel", Json(int(RadioLibInterface::instance->getChannelNum()))}};
 
-    res->println("\"radio\": {");
-    res->printf("\"frequecy\": %f,\n", RadioLibInterface::instance->getFreq());
-    res->printf("\"lora_channel\": %d\n", RadioLibInterface::instance->getChannelNum());
-    res->println("}");
+    // collect data to inner data object
+    Json jsonObjInner = Json::object{{"airtime", jsonObjAirtime}, {"wifi", jsonObjWifi},     {"memory", jsonObjMemory},
+                                     {"power", jsonObjPower},     {"device", jsonObjDevice}, {"radio", jsonObjRadio}};
 
-    res->println("},");
-
-    res->println("\"status\": \"ok\"");
-    res->println("}");
+    // create json output structure
+    Json jsonObjOuter = Json::object{{"data", jsonObjInner}, {"status", "ok"}};
+    // serialize and write it to the stream
+    std::string jsonStr = jsonObjOuter.dump();
+    res->print(jsonStr.c_str());
 }
 
 /*
@@ -910,6 +897,8 @@ void handleRestart(HTTPRequest *req, HTTPResponse *res)
 
 void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
 {
+    using namespace json11;
+
     res->setHeader("Content-Type", "application/json");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "POST");
@@ -936,28 +925,25 @@ void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
         screen->blink();
     }
 
-    res->println("{");
-    res->println("\"status\": \"ok\"");
-    res->println("}");
+    Json jsonObjOuter = Json::object{{"status", "ok"}};
+    std::string jsonStr = jsonObjOuter.dump();
+    res->print(jsonStr.c_str());
 }
 
 void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
 {
+    using namespace json11;
+
     res->setHeader("Content-Type", "application/json");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
     // res->setHeader("Content-Type", "text/html");
 
     int n = WiFi.scanNetworks();
-    res->println("{");
-    res->println("\"data\": {");
-    if (n == 0) {
-        // No networks found.
-        res->println("\"networks\": []");
 
-    } else {
-        res->println("\"networks\": [");
-
+    // build list of network objects
+    std::vector<Json> networkObjs;
+    if (n > 0) {
         for (int i = 0; i < n; ++i) {
             char ssidArray[50];
             String ssidString = String(WiFi.SSID(i));
@@ -965,19 +951,20 @@ void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
             ssidString.toCharArray(ssidArray, 50);
 
             if (WiFi.encryptionType(i) != WIFI_AUTH_OPEN) {
-                res->printf("{\"ssid\": \"%s\",\"rssi\": %d}", ssidArray, WiFi.RSSI(i));
-                if (i != n - 1) {
-                    res->printf(",");
-                }
+                Json thisNetwork = Json::object{{"ssid", ssidArray}, {"rssi", WiFi.RSSI(i)}};
+                networkObjs.push_back(thisNetwork);
             }
             // Yield some cpu cycles to IP stack.
             //   This is important in case the list is large and it takes us time to return
             //   to the main loop.
             yield();
         }
-        res->println("]");
     }
-    res->println("},");
-    res->println("\"status\": \"ok\"");
-    res->println("}");
+
+    // build output structure
+    Json jsonObjOuter = Json::object{{"data", networkObjs}, {"status", "ok"}};
+
+    // serialize and write it to the stream
+    std::string jsonStr = jsonObjOuter.dump();
+    res->print(jsonStr.c_str());
 }

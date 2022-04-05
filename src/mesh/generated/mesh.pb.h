@@ -61,6 +61,10 @@ typedef enum _HardwareModel {
     HardwareModel_DIY_V1 = 39, 
     /* RAK WisBlock ESP32 core: https://docs.rakwireless.com/Product-Categories/WisBlock/RAK11200/Overview/ */
     HardwareModel_RAK11200 = 40, 
+    /* B&Q Consulting Nano Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:nano */
+    HardwareModel_NANO_G1 = 41, 
+    /* nRF52840 Dongle : https://www.nordicsemi.com/Products/Development-hardware/nrf52840-dongle/ */
+    HardwareModel_NRF52840_PCA10059 = 42, 
     /* Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits. */
     HardwareModel_PRIVATE_HW = 255 
 } HardwareModel;
@@ -112,7 +116,6 @@ typedef enum _Constants {
 } Constants;
 
 /* Error codes for critical errors
-
  The device might report these fault codes on the screen.
  If you encounter a fault code, please post on the meshtastic.discourse.group
  and we'll try to help. */
@@ -278,7 +281,6 @@ typedef struct _Location {
 } Location;
 
 /* Debug output from the device.
-
  To minimize the size of records inside the device code, if a time/source/level is not set
  on the message it is assumed to be a continuation of the previously sent message.
  This allows the device code to use fixed maxlen 64 byte strings for messages,
@@ -397,7 +399,6 @@ typedef struct _Position {
  Default: "'bout three meters-ish" :) */
     uint32_t gps_accuracy; 
     /* Ground speed in m/s and True North TRACK in 1/100 degrees
-
  Clarification of terms:
  - "track" is the direction of motion (measured in horizontal plane)
  - "heading" is where the fuselage points (measured in horizontal plane)
@@ -439,24 +440,20 @@ typedef struct _ToRadio_PeerInfo {
 /* Broadcast when a newly powered mesh node wants to find a node num it can use
  Sent from the phone over bluetooth to set the user id for the owner of this node.
  Also sent from nodes to each other when a new node signs on (so all clients can have this info)
-
  The algorithm is as follows:
  when a node starts up, it broadcasts their user and the normal flow is for all
  other nodes to reply with their User as well (so the new node can build its nodedb)
  If a node ever receives a User (not just the first broadcast) message where
  the sender node number equals our node number, that indicates a collision has
  occurred and the following steps should happen:
-
  If the receiving node (that was already in the mesh)'s macaddr is LOWER than the
  new User who just tried to sign in: it gets to keep its nodenum.
  We send a broadcast message of OUR User (we use a broadcast so that the other node can
  receive our message, considering we have the same id - it also serves to let
  observers correct their nodedb) - this case is rare so it should be okay.
-
  If any node receives a User where the macaddr is GTE than their local macaddr,
  they have been vetoed and should pick a new random nodenum (filtering against
  whatever it knows about the nodedb) and rebroadcast their User.
-
  A few nodenums are reserved and will never be requested:
  0xff - broadcast
  0 through 3 - for future use */
@@ -539,16 +536,12 @@ typedef struct _Data {
 } Data;
 
 /* The bluetooth to device link:
-
  Old BTLE protocol docs from TODO, merge in above and make real docs...
-
  use protocol buffers, and NanoPB
-
  messages from device to phone:
  POSITION_UPDATE (..., time)
  TEXT_RECEIVED(from, text, time)
  OPAQUE_RECEIVED(from, payload, time) (for signal messages or other applications)
-
  messages from phone to device:
  SET_MYID(id, human readable long, human readable short) (send down the unique ID
  string used for this node, a human readable string shown for that id, and a very
@@ -557,7 +550,6 @@ typedef struct _Data {
  nodes() (returns list of nodes, with full info, last time seen, loc, battery
  level etc) SET_CONFIG (switches device to a new set of radio params and
  preshared key, drops all existing nodes, force our node to rejoin this new group)
-
  Full information about a node on the mesh */
 typedef struct _NodeInfo { 
     /* The node number */
@@ -574,9 +566,9 @@ typedef struct _NodeInfo {
     float snr; 
     /* Set to indicate the last time we received a packet from this node */
     uint32_t last_heard; 
-    /* The latest telemetry data for the node. */
-    bool has_telemetry;
-    Telemetry telemetry; 
+    /* The latest device metrics for the node. */
+    bool has_device_metrics;
+    DeviceMetrics device_metrics; 
 } NodeInfo;
 
 /* A Routing control Data packet handled by the routing module */
@@ -749,7 +741,7 @@ extern "C" {
 #define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, Location_init_default}
 #define Location_init_default                    {0, 0, 0, 0, 0}
 #define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
-#define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0, false, Telemetry_init_default}
+#define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0, false, DeviceMetrics_init_default}
 #define MyNodeInfo_init_default                  {0, 0, "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
 #define LogRecord_init_default                   {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_default                   {0, 0, {MyNodeInfo_init_default}}
@@ -762,7 +754,7 @@ extern "C" {
 #define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, Location_init_zero}
 #define Location_init_zero                       {0, 0, 0, 0, 0}
 #define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
-#define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0, false, Telemetry_init_zero}
+#define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0, false, DeviceMetrics_init_zero}
 #define MyNodeInfo_init_zero                     {0, 0, "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
 #define LogRecord_init_zero                      {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_zero                      {0, 0, {MyNodeInfo_init_zero}}
@@ -845,7 +837,7 @@ extern "C" {
 #define NodeInfo_position_tag                    3
 #define NodeInfo_snr_tag                         4
 #define NodeInfo_last_heard_tag                  5
-#define NodeInfo_telemetry_tag                   6
+#define NodeInfo_device_metrics_tag              6
 #define Routing_route_request_tag                1
 #define Routing_route_reply_tag                  2
 #define Routing_error_reason_tag                 3
@@ -976,12 +968,12 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  user,              2) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  position,          3) \
 X(a, STATIC,   SINGULAR, FLOAT,    snr,               4) \
 X(a, STATIC,   SINGULAR, FIXED32,  last_heard,        5) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  telemetry,         6)
+X(a, STATIC,   OPTIONAL, MESSAGE,  device_metrics,    6)
 #define NodeInfo_CALLBACK NULL
 #define NodeInfo_DEFAULT NULL
 #define NodeInfo_user_MSGTYPE User
 #define NodeInfo_position_MSGTYPE Position
-#define NodeInfo_telemetry_MSGTYPE Telemetry
+#define NodeInfo_device_metrics_MSGTYPE DeviceMetrics
 
 #define MyNodeInfo_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   my_node_num,       1) \
@@ -1079,7 +1071,7 @@ extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 #define LogRecord_size                           81
 #define MeshPacket_size                          347
 #define MyNodeInfo_size                          210
-#define NodeInfo_size                            315
+#define NodeInfo_size                            283
 #define Position_size                            142
 #define RouteDiscovery_size                      40
 #define Routing_size                             42

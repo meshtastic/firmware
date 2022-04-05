@@ -22,7 +22,7 @@ int32_t MCP9808Sensor::runOnce() {
 }
 
 bool MCP9808Sensor::getMeasurement(Telemetry *measurement) {
-    measurement->temperature = mcp9808.readTempC();
+    measurement->variant.environment_metrics.temperature = mcp9808.readTempC();
 
     return true;
 }    

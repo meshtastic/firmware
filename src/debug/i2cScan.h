@@ -15,9 +15,9 @@ uint8_t oled_probe(byte addr)
         r = Wire.read();
     }
     r &= 0x0f;
-    if (r == 0x08) {
+    if (r == 0x08 || r == 0x00) {
         o_probe = 2; // SH1106
-    } else if ( r == 0x06 || r == 0x07) {
+    } else if ( r == 0x03 || r == 0x06 || r == 0x07) {
         o_probe = 1; // SSD1306
     }
     DEBUG_MSG("0x%x subtype probed\n", r);
@@ -46,6 +46,14 @@ void scanI2Cdevice(void)
                 } else {
                     DEBUG_MSG("unknown display found\n");
                 }
+            }
+            if (addr == CARDKB_ADDR) {
+                cardkb_found = addr;
+                DEBUG_MSG("m5 cardKB found\n");
+            }
+            if (addr == FACESKB_ADDR) {
+                faceskb_found = addr;
+                DEBUG_MSG("m5 Faces found\n");
             }
             if (addr == ST7567_ADDRESS) {
                 screen_found = addr;

@@ -44,7 +44,6 @@ typedef PB_BYTES_ARRAY_T(32) ChannelSettings_psk_t;
  users COULD type in a channel name and be able to talk.
  Y is a lower case letter from a-z that represents the channel 'speed' settings
  (for some future definition of speed)
-
  FIXME: Add description of multi-channel support and how primary vs secondary channels are used.
  FIXME: explain how apps use channels for security.
  explain how remote settings and remote gpio are managed as an example */

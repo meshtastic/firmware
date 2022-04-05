@@ -27,7 +27,7 @@ PB_BIND(Location, Location, AUTO)
 PB_BIND(MeshPacket, MeshPacket, 2)
 
 
-PB_BIND(NodeInfo, NodeInfo, 2)
+PB_BIND(NodeInfo, NodeInfo, AUTO)
 
 
 PB_BIND(MyNodeInfo, MyNodeInfo, AUTO)

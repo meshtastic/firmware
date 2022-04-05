@@ -2,8 +2,7 @@
 #include "UpDownInterruptBase.h"
 
 UpDownInterruptBase::UpDownInterruptBase(
-    const char *name) :
-    concurrency::OSThread(name)
+    const char *name)
 {
     this->_originName = name;
 }
@@ -31,11 +30,6 @@ void UpDownInterruptBase::init(
         this->_pinDown, this->_pinUp, pinPress);
 }
 
-int32_t UpDownInterruptBase::runOnce()
-{
-    return 30000; // TODO: technically this can be MAX_INT
-}
-
 void UpDownInterruptBase::intPressHandler()
 {
     InputEvent e;
@@ -43,7 +37,6 @@ void UpDownInterruptBase::intPressHandler()
     DEBUG_MSG("GPIO event Press\n");
     e.inputEvent = this->_eventPressed;
     this->notifyObservers(&e);
-    setIntervalFromNow(20); // TODO: this modifies a non-volatile variable!
 }
 
 void UpDownInterruptBase::intDownHandler()
@@ -53,7 +46,6 @@ void UpDownInterruptBase::intDownHandler()
     DEBUG_MSG("GPIO event Down\n");
     e.inputEvent = this->_eventDown;
     this->notifyObservers(&e);
-    setIntervalFromNow(20);
 }
 
 void UpDownInterruptBase::intUpHandler()
@@ -63,5 +55,4 @@ void UpDownInterruptBase::intUpHandler()
     DEBUG_MSG("GPIO event Up\n");
     e.inputEvent = this->_eventUp;
     this->notifyObservers(&e);
-    setIntervalFromNow(20);
 }

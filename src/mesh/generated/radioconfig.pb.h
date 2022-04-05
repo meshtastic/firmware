@@ -11,10 +11,8 @@
 
 /* Enum definitions */
 /* The frequency/regulatory region the user has selected.
-
  Note: In 1.0 builds (which must still be supported by the android app for a
  long time) this field will be unpopulated.
-
  If firmware is ever upgraded from an old 1.0ish build, the old
  MyNodeInfo.region string will be used to set UserPreferences.region and the
  old value will be no longer set. */
@@ -50,14 +48,26 @@ typedef enum _RegionCode {
 /* Defines the device's role on the Mesh network
    unset
      Behave normally.
-
    Router
      Functions as a router */
 typedef enum _Role { 
-    /* Default device role */
-    Role_Default = 0, 
-    /* Router device role */
-    Role_Router = 1 
+    /* Client device role */
+    Role_Client = 0, 
+    /* ClientMute device role
+   This is like the client but packets will not hop over this node. Would be
+   useful if you want to save power by not contributing to the mesh. */
+    Role_ClientMute = 1, 
+    /* Router device role.
+   Uses an agressive algirithem for the flood networking so packets will
+   prefer to be routed over this node. Also assume that this will be generally
+   unattended and so will turn off the wifi/ble radio as well as the oled screen. */
+    Role_Router = 2, 
+    /* RouterClient device role
+   Uses an agressive algirithem for the flood networking so packets will
+   prefer to be routed over this node. Similiar power management as a regular
+   client, so the RouterClient can be used as both a Router and a Client. Useful
+   as a well placed base station that you could also use to send messages. */
+    Role_RouterClient = 3 
 } Role;
 
 /* Sets the charge control current of devices with a battery charger that can be
@@ -125,7 +135,6 @@ typedef enum _GpsCoordinateFormat {
 /* Bit field of boolean configuration options, indicating which optional
    fields to include when assembling POSITION messages
  Longitude and latitude are always included (also time if GPS-synced)
-
  NOTE: the more fields are included, the larger the message will be -
    leading to longer airtime and a higher risk of packet loss */
 typedef enum _PositionFlags { 
@@ -172,10 +181,8 @@ typedef enum _InputEventChar {
 } InputEventChar;
 
 /* The frequency/regulatory region the user has selected.
-
  Note: In 1.0 builds (which must still be supported by the android app for a
  long time) this field will be unpopulated.
-
  If firmware is ever upgraded from an old 1.0ish build, the old
  MyNodeInfo.region string will be used to set UserPreferences.region and the
  old value will be no longer set. */
@@ -209,14 +216,19 @@ typedef enum _RadioConfig_UserPreferences_Serial_Baud {
 /* Defines the device's role on the Mesh network
    unset
      Behave normally.
-
    Router
      Functions as a router */
 typedef enum _RadioConfig_UserPreferences_Serial_Mode { 
-    /* Default device role */
+    /* Client device role */
     RadioConfig_UserPreferences_Serial_Mode_MODE_Default = 0, 
-    /* Router device role */
+    /* ClientMute device role
+   This is like the client but packets will not hop over this node. Would be
+   useful if you want to save power by not contributing to the mesh. */
     RadioConfig_UserPreferences_Serial_Mode_MODE_SIMPLE = 1, 
+    /* Router device role.
+   Uses an agressive algirithem for the flood networking so packets will
+   prefer to be routed over this node. Also assume that this will be generally
+   unattended and so will turn off the wifi/ble radio as well as the oled screen. */
     RadioConfig_UserPreferences_Serial_Mode_MODE_PROTO = 2 
 } RadioConfig_UserPreferences_Serial_Mode;
 
@@ -299,14 +311,14 @@ typedef struct _RadioConfig_UserPreferences {
     uint32_t store_forward_module_records; 
     uint32_t store_forward_module_history_return_max; 
     uint32_t store_forward_module_history_return_window; 
-    bool telemetry_module_measurement_enabled; 
-    bool telemetry_module_screen_enabled; 
-    uint32_t telemetry_module_read_error_count_threshold; 
-    uint32_t telemetry_module_update_interval; 
-    uint32_t telemetry_module_recovery_interval; 
-    bool telemetry_module_display_fahrenheit; 
-    RadioConfig_UserPreferences_TelemetrySensorType telemetry_module_sensor_type; 
-    uint32_t telemetry_module_sensor_pin; 
+    bool telemetry_module_environment_measurement_enabled; 
+    bool telemetry_module_environment_screen_enabled; 
+    uint32_t telemetry_module_environment_read_error_count_threshold; 
+    uint32_t telemetry_module_device_update_interval; 
+    uint32_t telemetry_module_environment_recovery_interval; 
+    bool telemetry_module_environment_display_fahrenheit; 
+    RadioConfig_UserPreferences_TelemetrySensorType telemetry_module_environment_sensor_type; 
+    uint32_t telemetry_module_environment_sensor_pin; 
     bool store_forward_module_enabled; 
     bool store_forward_module_heartbeat; 
     uint32_t position_flags; 
@@ -332,6 +344,7 @@ typedef struct _RadioConfig_UserPreferences {
     bool mqtt_encryption_enabled; 
     float adc_multiplier_override; 
     RadioConfig_UserPreferences_Serial_Baud serial_module_baud; 
+    uint32_t telemetry_module_environment_update_interval; 
 } RadioConfig_UserPreferences;
 
 /* The entire set of user settable/readable settings for our radio device.
@@ -349,9 +362,9 @@ typedef struct _RadioConfig {
 #define _RegionCode_MAX RegionCode_TH
 #define _RegionCode_ARRAYSIZE ((RegionCode)(RegionCode_TH+1))
 
-#define _Role_MIN Role_Default
-#define _Role_MAX Role_Router
-#define _Role_ARRAYSIZE ((Role)(Role_Router+1))
+#define _Role_MIN Role_Client
+#define _Role_MAX Role_RouterClient
+#define _Role_ARRAYSIZE ((Role)(Role_RouterClient+1))
 
 #define _ChargeCurrent_MIN ChargeCurrent_MAUnset
 #define _ChargeCurrent_MAX ChargeCurrent_MA1320
@@ -388,9 +401,9 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default}
-#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _Role_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_Serial_Mode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_TelemetrySensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, 0, "", 0, 0, 0, _RadioConfig_UserPreferences_Serial_Baud_MIN}
+#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _Role_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_Serial_Mode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_TelemetrySensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, 0, "", 0, 0, 0, _RadioConfig_UserPreferences_Serial_Baud_MIN, 0}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero}
-#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _Role_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_Serial_Mode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_TelemetrySensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, 0, "", 0, 0, 0, _RadioConfig_UserPreferences_Serial_Baud_MIN}
+#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _Role_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_Serial_Mode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_TelemetrySensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, 0, "", 0, 0, 0, _RadioConfig_UserPreferences_Serial_Baud_MIN, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define RadioConfig_UserPreferences_position_broadcast_secs_tag 1
@@ -444,14 +457,14 @@ extern "C" {
 #define RadioConfig_UserPreferences_store_forward_module_records_tag 137
 #define RadioConfig_UserPreferences_store_forward_module_history_return_max_tag 138
 #define RadioConfig_UserPreferences_store_forward_module_history_return_window_tag 139
-#define RadioConfig_UserPreferences_telemetry_module_measurement_enabled_tag 140
-#define RadioConfig_UserPreferences_telemetry_module_screen_enabled_tag 141
-#define RadioConfig_UserPreferences_telemetry_module_read_error_count_threshold_tag 142
-#define RadioConfig_UserPreferences_telemetry_module_update_interval_tag 143
-#define RadioConfig_UserPreferences_telemetry_module_recovery_interval_tag 144
-#define RadioConfig_UserPreferences_telemetry_module_display_fahrenheit_tag 145
-#define RadioConfig_UserPreferences_telemetry_module_sensor_type_tag 146
-#define RadioConfig_UserPreferences_telemetry_module_sensor_pin_tag 147
+#define RadioConfig_UserPreferences_telemetry_module_environment_measurement_enabled_tag 140
+#define RadioConfig_UserPreferences_telemetry_module_environment_screen_enabled_tag 141
+#define RadioConfig_UserPreferences_telemetry_module_environment_read_error_count_threshold_tag 142
+#define RadioConfig_UserPreferences_telemetry_module_device_update_interval_tag 143
+#define RadioConfig_UserPreferences_telemetry_module_environment_recovery_interval_tag 144
+#define RadioConfig_UserPreferences_telemetry_module_environment_display_fahrenheit_tag 145
+#define RadioConfig_UserPreferences_telemetry_module_environment_sensor_type_tag 146
+#define RadioConfig_UserPreferences_telemetry_module_environment_sensor_pin_tag 147
 #define RadioConfig_UserPreferences_store_forward_module_enabled_tag 148
 #define RadioConfig_UserPreferences_store_forward_module_heartbeat_tag 149
 #define RadioConfig_UserPreferences_position_flags_tag 150
@@ -477,6 +490,7 @@ extern "C" {
 #define RadioConfig_UserPreferences_mqtt_encryption_enabled_tag 174
 #define RadioConfig_UserPreferences_adc_multiplier_override_tag 175
 #define RadioConfig_UserPreferences_serial_module_baud_tag 176
+#define RadioConfig_UserPreferences_telemetry_module_environment_update_interval_tag 177
 #define RadioConfig_preferences_tag              1
 
 /* Struct field encoding specification for nanopb */
@@ -538,14 +552,14 @@ X(a, STATIC,   SINGULAR, BOOL,     range_test_module_save, 134) \
 X(a, STATIC,   SINGULAR, UINT32,   store_forward_module_records, 137) \
 X(a, STATIC,   SINGULAR, UINT32,   store_forward_module_history_return_max, 138) \
 X(a, STATIC,   SINGULAR, UINT32,   store_forward_module_history_return_window, 139) \
-X(a, STATIC,   SINGULAR, BOOL,     telemetry_module_measurement_enabled, 140) \
-X(a, STATIC,   SINGULAR, BOOL,     telemetry_module_screen_enabled, 141) \
-X(a, STATIC,   SINGULAR, UINT32,   telemetry_module_read_error_count_threshold, 142) \
-X(a, STATIC,   SINGULAR, UINT32,   telemetry_module_update_interval, 143) \
-X(a, STATIC,   SINGULAR, UINT32,   telemetry_module_recovery_interval, 144) \
-X(a, STATIC,   SINGULAR, BOOL,     telemetry_module_display_fahrenheit, 145) \
-X(a, STATIC,   SINGULAR, UENUM,    telemetry_module_sensor_type, 146) \
-X(a, STATIC,   SINGULAR, UINT32,   telemetry_module_sensor_pin, 147) \
+X(a, STATIC,   SINGULAR, BOOL,     telemetry_module_environment_measurement_enabled, 140) \
+X(a, STATIC,   SINGULAR, BOOL,     telemetry_module_environment_screen_enabled, 141) \
+X(a, STATIC,   SINGULAR, UINT32,   telemetry_module_environment_read_error_count_threshold, 142) \
+X(a, STATIC,   SINGULAR, UINT32,   telemetry_module_device_update_interval, 143) \
+X(a, STATIC,   SINGULAR, UINT32,   telemetry_module_environment_recovery_interval, 144) \
+X(a, STATIC,   SINGULAR, BOOL,     telemetry_module_environment_display_fahrenheit, 145) \
+X(a, STATIC,   SINGULAR, UENUM,    telemetry_module_environment_sensor_type, 146) \
+X(a, STATIC,   SINGULAR, UINT32,   telemetry_module_environment_sensor_pin, 147) \
 X(a, STATIC,   SINGULAR, BOOL,     store_forward_module_enabled, 148) \
 X(a, STATIC,   SINGULAR, BOOL,     store_forward_module_heartbeat, 149) \
 X(a, STATIC,   SINGULAR, UINT32,   position_flags,  150) \
@@ -570,7 +584,8 @@ X(a, STATIC,   SINGULAR, STRING,   canned_message_module_allow_input_source, 171
 X(a, STATIC,   SINGULAR, BOOL,     canned_message_module_send_bell, 173) \
 X(a, STATIC,   SINGULAR, BOOL,     mqtt_encryption_enabled, 174) \
 X(a, STATIC,   SINGULAR, FLOAT,    adc_multiplier_override, 175) \
-X(a, STATIC,   SINGULAR, UENUM,    serial_module_baud, 176)
+X(a, STATIC,   SINGULAR, UENUM,    serial_module_baud, 176) \
+X(a, STATIC,   SINGULAR, UINT32,   telemetry_module_environment_update_interval, 177)
 #define RadioConfig_UserPreferences_CALLBACK NULL
 #define RadioConfig_UserPreferences_DEFAULT NULL
 
@@ -582,8 +597,8 @@ extern const pb_msgdesc_t RadioConfig_UserPreferences_msg;
 #define RadioConfig_UserPreferences_fields &RadioConfig_UserPreferences_msg
 
 /* Maximum encoded size of messages (where known) */
-#define RadioConfig_UserPreferences_size         597
-#define RadioConfig_size                         600
+#define RadioConfig_UserPreferences_size         604
+#define RadioConfig_size                         607
 
 #ifdef __cplusplus
 } /* extern "C" */

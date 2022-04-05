@@ -126,7 +126,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 
 // -----------------------------------------------------------------------------
-// OLED
+// OLED & Input
 // -----------------------------------------------------------------------------
 
 #define SSD1306_ADDRESS 0x3C
@@ -143,11 +143,21 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Define if screen should be mirrored left to right
 // #define SCREEN_MIRROR
 
+// The m5stack I2C Keyboard (also RAK14004)
+#define CARDKB_ADDR 0x5F
+
+// The older M5 Faces I2C Keyboard
+#define FACESKB_ADDR 0x88
+
 // -----------------------------------------------------------------------------
 // GPS
 // -----------------------------------------------------------------------------
 
 #define GPS_BAUDRATE 9600
+
+#ifndef GPS_THREAD_INTERVAL
+#define GPS_THREAD_INTERVAL 100
+#endif
 
 #if defined(TBEAM_V10)
 // This string must exactly match the case used in release file names or the android updater won't work
@@ -229,6 +239,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #elif defined(TTGO_T_ECHO)
 
 #define HW_VENDOR HardwareModel_T_ECHO
+
+#elif defined(NANO_G1)
+
+#define HW_VENDOR HardwareModel_NANO_G1
+
+#elif defined(NORDIC_PCA10059)
+
+#define HW_VENDOR HardwareModel_NRF52840_PCA10059
 
 #elif NRF52_SERIES
 

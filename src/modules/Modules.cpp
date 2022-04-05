@@ -2,6 +2,8 @@
 #include "input/InputBroker.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
+#include "input/cardKbI2cImpl.h"
+#include "input/facesKbI2cImpl.h"
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/ExternalNotificationModule.h"
@@ -11,8 +13,9 @@
 #include "modules/ReplyModule.h"
 #include "modules/RoutingModule.h"
 #include "modules/TextMessageModule.h"
+#include "modules/Telemetry/DeviceTelemetry.h"
 #ifndef PORTDUINO
-#include "modules/Telemetry/Telemetry.h"
+#include "modules/Telemetry/EnvironmentTelemetry.h"
 #endif
 #ifndef NO_ESP32
 #include "modules/esp32/RangeTestModule.h"
@@ -40,9 +43,14 @@ void setupModules()
     rotaryEncoderInterruptImpl1->init();
     upDownInterruptImpl1 = new UpDownInterruptImpl1();
     upDownInterruptImpl1->init();
+    cardKbI2cImpl = new CardKbI2cImpl();
+    cardKbI2cImpl->init();
+    facesKbI2cImpl = new FacesKbI2cImpl();
+    facesKbI2cImpl->init();
     cannedMessageModule = new CannedMessageModule();
 #ifndef PORTDUINO
-    new TelemetryModule();
+    new DeviceTelemetryModule();
+    new EnvironmentTelemetryModule();
 #endif
 #ifndef NO_ESP32
     // Only run on an esp32 based device.
