@@ -43,11 +43,11 @@ extern "C" {
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs
-#define PIN_LED1 (0 + 12)         //Blue LED        P1.12
-#define PIN_LED2 (0 + 6)          //Built in Green  P0.06
+#define PIN_LED1 (0 + 12)           //Blue LED        P1.12
+#define PIN_LED2 (0 + 6)            //Built in Green  P0.06
 
 //Green Built in LED1
-//#define PIN_LED1 (0 + 6)        //LED1            P1.15
+//#define PIN_LED1 (0 + 6)          //LED1            P1.15
   
 //RGB NeoPixel LED2
 //#define PIN_LED1 (0 + 8) Red
@@ -60,14 +60,14 @@ extern "C" {
 #define LED_GREEN PIN_LED1
 #define LED_BLUE PIN_LED2
 
-#define LED_STATE_ON 0            // State when LED is litted
+#define LED_STATE_ON 0              // State when LED is litted
 
 /*
  * Buttons
  */
 
 #ifdef PCA10059
-#define PIN_BUTTON1 (32 + 6)      //BTN_DN           P1.06 Built in button
+#define PIN_BUTTON1 (32 + 6)        //BTN_DN           P1.06 Built in button
 #endif
 
 /*
