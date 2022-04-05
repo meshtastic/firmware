@@ -25,9 +25,9 @@
                 "0x802A"
             ]
         ],
-        "usb_product": "nRF52840 Dongle",
+        "usb_product": "PCA10059",
         "mcu": "nrf52840",
-        "variant": "Dongle_nRF52840-pca10059-v1",
+        "variant": "nRF52840 Dongle",
         "bsp": {
             "name": "adafruit"
         },
