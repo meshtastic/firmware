@@ -146,10 +146,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_GPS_EN     (-1)
 #define PIN_GPS_PPS    (-1)           // Pulse per second input from the GPS
 
-#ifdef PCA10059
 #define GPS_RX_PIN PIN_SERIAL1_RX
 #define GPS_TX_PIN PIN_SERIAL1_TX
-#endif
 
 // Battery
 // The battery sense is hooked to pin A0 (5)
