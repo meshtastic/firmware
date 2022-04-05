@@ -155,6 +155,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define GPS_BAUDRATE 9600
 
+#ifndef GPS_THREAD_INTERVAL
+#define GPS_THREAD_INTERVAL 100
+#endif
+
 #if defined(TBEAM_V10)
 // This string must exactly match the case used in release file names or the android updater won't work
 #define HW_VENDOR HardwareModel_TBEAM
@@ -235,6 +239,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #elif defined(TTGO_T_ECHO)
 
 #define HW_VENDOR HardwareModel_T_ECHO
+
+#elif defined(NANO_G1)
+
+#define HW_VENDOR HardwareModel_NANO_G1
 
 #elif defined(NORDIC_PCA10059)
 
