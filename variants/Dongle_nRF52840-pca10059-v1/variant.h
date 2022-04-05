@@ -66,9 +66,7 @@ extern "C" {
  * Buttons
  */
 
-#ifdef PCA10059
 #define PIN_BUTTON1 (32 + 6)        // BTN_DN           P1.06 Built in button
-#endif
 
 /*
  * Analog pins
