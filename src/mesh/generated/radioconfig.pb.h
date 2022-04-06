@@ -260,7 +260,6 @@ typedef enum _RadioConfig_UserPreferences_TelemetrySensorType {
 /* Struct definitions */
 typedef struct _RadioConfig_UserPreferences { 
     uint32_t position_broadcast_secs; 
-    uint32_t send_owner_interval; 
     uint32_t wait_bluetooth_secs; 
     uint32_t screen_on_secs; 
     uint32_t phone_timeout_secs; 
@@ -401,13 +400,12 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define RadioConfig_init_default                 {false, RadioConfig_UserPreferences_init_default}
-#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _Role_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_Serial_Mode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_TelemetrySensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, 0, "", 0, 0, 0, _RadioConfig_UserPreferences_Serial_Baud_MIN, 0}
+#define RadioConfig_UserPreferences_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _Role_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_Serial_Mode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_TelemetrySensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, 0, "", 0, 0, 0, _RadioConfig_UserPreferences_Serial_Baud_MIN, 0}
 #define RadioConfig_init_zero                    {false, RadioConfig_UserPreferences_init_zero}
-#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _Role_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_Serial_Mode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_TelemetrySensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, 0, "", 0, 0, 0, _RadioConfig_UserPreferences_Serial_Baud_MIN, 0}
+#define RadioConfig_UserPreferences_init_zero    {0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, _RegionCode_MIN, _ChargeCurrent_MIN, 0, _Role_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, _GpsCoordinateFormat_MIN, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_Serial_Mode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _RadioConfig_UserPreferences_TelemetrySensorType_MIN, 0, 0, 0, 0, 0, 0, 0, 0, "", "", 0, 0, 0, 0, 0, 0, _InputEventChar_MIN, _InputEventChar_MIN, _InputEventChar_MIN, 0, 0, "", 0, 0, 0, _RadioConfig_UserPreferences_Serial_Baud_MIN, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define RadioConfig_UserPreferences_position_broadcast_secs_tag 1
-#define RadioConfig_UserPreferences_send_owner_interval_tag 2
 #define RadioConfig_UserPreferences_wait_bluetooth_secs_tag 4
 #define RadioConfig_UserPreferences_screen_on_secs_tag 5
 #define RadioConfig_UserPreferences_phone_timeout_secs_tag 6
@@ -502,7 +500,6 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  preferences,       1)
 
 #define RadioConfig_UserPreferences_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   position_broadcast_secs,   1) \
-X(a, STATIC,   SINGULAR, UINT32,   send_owner_interval,   2) \
 X(a, STATIC,   SINGULAR, UINT32,   wait_bluetooth_secs,   4) \
 X(a, STATIC,   SINGULAR, UINT32,   screen_on_secs,    5) \
 X(a, STATIC,   SINGULAR, UINT32,   phone_timeout_secs,   6) \
@@ -597,8 +594,8 @@ extern const pb_msgdesc_t RadioConfig_UserPreferences_msg;
 #define RadioConfig_UserPreferences_fields &RadioConfig_UserPreferences_msg
 
 /* Maximum encoded size of messages (where known) */
-#define RadioConfig_UserPreferences_size         604
-#define RadioConfig_size                         607
+#define RadioConfig_UserPreferences_size         598
+#define RadioConfig_size                         601
 
 #ifdef __cplusplus
 } /* extern "C" */
