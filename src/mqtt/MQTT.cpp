@@ -290,8 +290,8 @@ String MQTT::downstreamPacketToJson(MeshPacket *mp)
             memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &Telemetry_msg,
                                      &scratch)) {
+                decoded = &scratch;
                 if (decoded->which_variant == Telemetry_environment_metrics_tag) {
-                    decoded = &scratch;
                     msgPayload = Json::object{
                         {"temperature", decoded->variant.environment_metrics.temperature},
                         {"relative_humidity", decoded->variant.environment_metrics.relative_humidity},
