@@ -42,6 +42,25 @@ bool GPS::setupGPS()
 #ifndef NO_ESP32
         _serial_gps->setRxBufferSize(2048); // the default is 256
 #endif
+#ifdef TTGO_T_ECHO
+        // Switch to 4800 baud, then close and reopen port
+        _serial_gps->write("$PCAS01,0*1C\r\n");
+        delay(250);
+        _serial_gps->end();
+        delay(250);
+        _serial_gps->begin(4800);
+        delay(250);
+        // Initialize the L76K Chip, use GPS + GLONASS
+        _serial_gps->write("$PCAS04,5*1C\r\n");
+        delay(250);
+        // only ask for RMC and GGA
+        _serial_gps->write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
+        delay(250);
+        // Switch to Vehicle Mode, since SoftRF enables Aviation < 2g
+        _serial_gps->write("$PCAS11,3*1E\r\n");
+        delay(250);
+
+#endif
     }
 
     return true;
