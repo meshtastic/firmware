@@ -146,7 +146,6 @@ extern NodeDB nodeDB;
 
         prefs.ls_secs = oneday
 
-        prefs.send_owner_interval = 2 # Send an owner packet every other network ping
         prefs.position_broadcast_secs = 12 hours # send either position or owner every 12hrs
         
         # get a new GPS position once per day
@@ -166,7 +165,6 @@ extern NodeDB nodeDB;
 #define PREF_GET(name, defaultVal)                                                                                               \
     inline uint32_t getPref_##name() { return radioConfig.preferences.name ? radioConfig.preferences.name : (defaultVal); }
 
-PREF_GET(send_owner_interval, IF_ROUTER(2, 4))
 PREF_GET(position_broadcast_secs, IF_ROUTER(12 * 60 * 60, 15 * 60))
 // Defaulting Telemetry to the same as position interval for now
 PREF_GET(telemetry_module_device_update_interval, IF_ROUTER(12 * 60 * 60, 15 * 60))

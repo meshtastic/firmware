@@ -61,6 +61,10 @@ typedef enum _HardwareModel {
     HardwareModel_DIY_V1 = 39, 
     /* RAK WisBlock ESP32 core: https://docs.rakwireless.com/Product-Categories/WisBlock/RAK11200/Overview/ */
     HardwareModel_RAK11200 = 40, 
+    /* B&Q Consulting Nano Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:nano */
+    HardwareModel_NANO_G1 = 41, 
+    /* nRF52840 Dongle : https://www.nordicsemi.com/Products/Development-hardware/nrf52840-dongle/ */
+    HardwareModel_NRF52840_PCA10059 = 42, 
     /* Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits. */
     HardwareModel_PRIVATE_HW = 255 
 } HardwareModel;
