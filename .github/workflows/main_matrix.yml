@@ -162,6 +162,7 @@ jobs:
           - board: rak4631_19003
           - board: rak4631_5005_eink
           - board: t-echo
+          - board: pca10059_diy_eink
 
     runs-on: ubuntu-latest
     steps:

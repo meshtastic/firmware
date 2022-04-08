@@ -42,6 +42,25 @@ bool GPS::setupGPS()
 #ifndef NO_ESP32
         _serial_gps->setRxBufferSize(2048); // the default is 256
 #endif
+#ifdef TTGO_T_ECHO
+        // Switch to 4800 baud, then close and reopen port
+        _serial_gps->write("$PCAS01,0*1C\r\n");
+        delay(250);
+        _serial_gps->end();
+        delay(250);
+        _serial_gps->begin(4800);
+        delay(250);
+        // Initialize the L76K Chip, use GPS + GLONASS
+        _serial_gps->write("$PCAS04,5*1C\r\n");
+        delay(250);
+        // only ask for RMC and GGA
+        _serial_gps->write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
+        delay(250);
+        // Switch to Vehicle Mode, since SoftRF enables Aviation < 2g
+        _serial_gps->write("$PCAS11,3*1E\r\n");
+        delay(250);
+
+#endif
     }
 
     return true;
@@ -51,7 +70,7 @@ bool GPS::setup()
 {
     // Master power for the GPS
 #ifdef PIN_GPS_EN
-    digitalWrite(PIN_GPS_EN, PIN_GPS_EN);
+    digitalWrite(PIN_GPS_EN, 1);
     pinMode(PIN_GPS_EN, OUTPUT);
 #endif
 
@@ -268,7 +287,7 @@ int32_t GPS::runOnce()
 
     // 9600bps is approx 1 byte per msec, so considering our buffer size we never need to wake more often than 200ms
     // if not awake we can run super infrquently (once every 5 secs?) to see if we need to wake.
-    return isAwake ? 100 : 5000;
+    return isAwake ? GPS_THREAD_INTERVAL : 5000;
 }
 
 void GPS::forceWake(bool on)
@@ -310,9 +329,7 @@ int GPS::prepareDeepSleep(void *unused)
 #include "UBloxGPS.h"
 #endif
 
-#ifdef HAS_AIR530_GPS
-#include "Air530GPS.h"
-#elif !defined(NO_GPS)
+#ifndef NO_GPS
 #include "NMEAGPS.h"
 #endif
 
@@ -338,6 +355,7 @@ GPS *createGps()
             delete ublox;
             ublox = NULL;
         } else {
+            DEBUG_MSG("Using UBLOX Mode\n");
             return ublox;
         }
 #endif
@@ -345,12 +363,8 @@ GPS *createGps()
         if (GPS::_serial_gps) {
             // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
             // assume NMEA at 9600 baud.
-            DEBUG_MSG("Hoping that NMEA might work\n");
-#ifdef HAS_AIR530_GPS
-            GPS *new_gps = new Air530GPS();
-#else
+            DEBUG_MSG("Using NMEA Mode\n");
             GPS *new_gps = new NMEAGPS();
-#endif
             new_gps->setup();
             return new_gps;
         }

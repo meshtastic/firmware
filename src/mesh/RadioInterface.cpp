@@ -202,7 +202,7 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
     //  low SNR = Short Delay
     uint32_t delay = 0;
 
-    if (radioConfig.preferences.role == Role_Router) {
+    if (radioConfig.preferences.role == Role_Router || radioConfig.preferences.role == Role_RouterClient) {
         delay = map(snr, SNR_MIN, SNR_MAX, MIN_TX_WAIT_MSEC, (MIN_TX_WAIT_MSEC + (shortPacketMsec / 2)));
         DEBUG_MSG("rx_snr found in packet. As a router, setting tx delay:%d\n", delay);
     } else {

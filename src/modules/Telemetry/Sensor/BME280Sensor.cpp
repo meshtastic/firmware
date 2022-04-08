@@ -21,9 +21,9 @@ int32_t BME280Sensor::runOnce() {
 }
 
 bool BME280Sensor::getMeasurement(Telemetry *measurement) {
-    measurement->temperature = bme280.readTemperature();
-    measurement->relative_humidity = bme280.readHumidity();
-    measurement->barometric_pressure = bme280.readPressure() / 100.0F;
+    measurement->variant.environment_metrics.temperature = bme280.readTemperature();
+    measurement->variant.environment_metrics.relative_humidity = bme280.readHumidity();
+    measurement->variant.environment_metrics.barometric_pressure = bme280.readPressure() / 100.0F;
 
     return true;
 }    

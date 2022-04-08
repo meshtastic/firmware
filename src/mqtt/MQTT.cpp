@@ -291,14 +291,16 @@ String MQTT::downstreamPacketToJson(MeshPacket *mp)
             if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &Telemetry_msg,
                                      &scratch)) {
                 decoded = &scratch;
-                msgPayload = Json::object{
-                    {"temperature", decoded->temperature},
-                    {"relative_humidity", decoded->relative_humidity},
-                    {"barometric_pressure", decoded->barometric_pressure},
-                    {"gas_resistance", decoded->gas_resistance},
-                    {"voltage", decoded->voltage},
-                    {"current", decoded->current},
-                };
+                if (decoded->which_variant == Telemetry_environment_metrics_tag) {
+                    msgPayload = Json::object{
+                        {"temperature", decoded->variant.environment_metrics.temperature},
+                        {"relative_humidity", decoded->variant.environment_metrics.relative_humidity},
+                        {"barometric_pressure", decoded->variant.environment_metrics.barometric_pressure},
+                        {"gas_resistance", decoded->variant.environment_metrics.gas_resistance},
+                        {"voltage", decoded->variant.environment_metrics.voltage},
+                        {"current", decoded->variant.environment_metrics.current},
+                    };
+                }
             } else
                 DEBUG_MSG("Error decoding protobuf for telemetry message!\n");
         };
