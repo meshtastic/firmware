@@ -158,6 +158,7 @@ jobs:
         include:
           - board: rak4631
           - board: t-echo
+          - board: pca10059_diy_eink
 
     runs-on: ubuntu-latest
     steps:
