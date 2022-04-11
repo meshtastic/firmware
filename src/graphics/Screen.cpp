@@ -1007,6 +1007,8 @@ void Screen::setWelcomeFrames()
 {
     if (address_found) {
         // DEBUG_MSG("showing Welcome frames\n");
+        ui.disableAllIndicators();
+
         static FrameCallback welcomeFrames[] = {drawWelcomeScreen};
         ui.setFrames(welcomeFrames, 1);
         ui.update();
