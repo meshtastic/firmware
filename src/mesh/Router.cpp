@@ -1,12 +1,15 @@
-#include "configuration.h"
 #include "Router.h"
 #include "Channels.h"
 #include "CryptoEngine.h"
 #include "NodeDB.h"
 #include "RTC.h"
+#include "configuration.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "modules/RoutingModule.h"
+extern "C" {
+#include "mesh/compression/unishox2.h"
+}
 
 #if defined(HAS_WIFI) || defined(PORTDUINO)
 #include "mqtt/MQTT.h"
@@ -210,29 +213,27 @@ ErrorCode Router::send(MeshPacket *p)
     if (p->which_payloadVariant == MeshPacket_decoded_tag) {
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
 
-
-
 #if defined(HAS_WIFI) || defined(PORTDUINO)
-        //check if we should send decrypted packets to mqtt
+        // check if we should send decrypted packets to mqtt
 
-        //truth table:
+        // truth table:
         /* mqtt_server  mqtt_encryption_enabled should_encrypt
          *    not set                        0              1
          *    not set                        1              1
          *        set                        0              0
          *        set                        1              1
-         * 
+         *
          * => so we only decrypt mqtt if they have a custom mqtt server AND mqtt_encryption_enabled is FALSE
-         */ 
+         */
 
         bool shouldActuallyEncrypt = true;
         if (*radioConfig.preferences.mqtt_server && !radioConfig.preferences.mqtt_encryption_enabled) {
             shouldActuallyEncrypt = false;
         }
-        
+
         DEBUG_MSG("Should encrypt MQTT?: %d\n", shouldActuallyEncrypt);
 
-        //the packet is currently in a decrypted state.  send it now if they want decrypted packets
+        // the packet is currently in a decrypted state.  send it now if they want decrypted packets
         if (mqtt && !shouldActuallyEncrypt)
             mqtt->onSend(*p, chIndex);
 #endif
@@ -244,8 +245,8 @@ ErrorCode Router::send(MeshPacket *p)
         }
 
 #if defined(HAS_WIFI) || defined(PORTDUINO)
-        //the packet is now encrypted.
-        //check if we should send encrypted packets to mqtt
+        // the packet is now encrypted.
+        // check if we should send encrypted packets to mqtt
         if (mqtt && shouldActuallyEncrypt)
             mqtt->onSend(*p, chIndex);
 #endif
@@ -276,7 +277,7 @@ bool perhapsDecode(MeshPacket *p)
     if (p->which_payloadVariant == MeshPacket_decoded_tag)
         return true; // If packet was already decoded just return
 
-    //assert(p->which_payloadVariant == MeshPacket_encrypted_tag);
+    // assert(p->which_payloadVariant == MeshPacket_encrypted_tag);
 
     // Try to find a channel that works with this hash
     for (ChannelIndex chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
@@ -323,6 +324,30 @@ Routing_Error perhapsEncode(MeshPacket *p)
         // printPacket("pre encrypt", p); // portnum valid here
 
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), Data_fields, &p->decoded);
+
+        if (1) {
+            // int orig_len, compressed_len;
+            int compressed_len;
+            char compressed_out[100] = {0};
+            // char *orig = (char *)"Hiiiiiiii! :) How are you doing? I am doing well.";
+            //  char *orig = (char *)"Meshtastic";
+
+            // orig_len = strlen(orig);
+            // compressed_len = unishox2_compress_simple(orig, orig_len, compressed_out);
+            compressed_len = unishox2_compress_simple((char *)bytes, numbytes, compressed_out);
+
+            Serial.println(compressed_len);
+            Serial.println(compressed_out);
+            //&p->decoded.portnum;
+
+            char decompressed_out[100] = {};
+            int decompressed_len;
+
+            decompressed_len = unishox2_decompress_simple(compressed_out, compressed_len, decompressed_out);
+
+            Serial.println(decompressed_len);
+            Serial.println(decompressed_out);
+        }
 
         if (numbytes > MAX_RHPACKETLEN)
             return Routing_Error_TOO_LARGE;
