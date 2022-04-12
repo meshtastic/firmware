@@ -325,26 +325,29 @@ Routing_Error perhapsEncode(MeshPacket *p)
 
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), Data_fields, &p->decoded);
 
-        if (1) {
-            // int orig_len, compressed_len;
+        if (p->decoded.portnum == PortNum_TEXT_MESSAGE_APP) {
+
+            char original_payload[Constants_DATA_PAYLOAD_LEN];
+            memcpy(original_payload, p->decoded.payload.bytes, p->decoded.payload.size);
+
             int compressed_len;
             char compressed_out[100] = {0};
-            // char *orig = (char *)"Hiiiiiiii! :) How are you doing? I am doing well.";
-            //  char *orig = (char *)"Meshtastic";
 
-            // orig_len = strlen(orig);
-            // compressed_len = unishox2_compress_simple(orig, orig_len, compressed_out);
-            compressed_len = unishox2_compress_simple((char *)bytes, numbytes, compressed_out);
+            compressed_len = unishox2_compress_simple(original_payload, p->decoded.payload.size, compressed_out);
 
+            Serial.print("Original length - ");
+            Serial.println(p->decoded.payload.size);
+
+            Serial.print("Compressed length - ");
             Serial.println(compressed_len);
-            Serial.println(compressed_out);
-            //&p->decoded.portnum;
+            //Serial.println(compressed_out);
 
             char decompressed_out[100] = {};
             int decompressed_len;
 
             decompressed_len = unishox2_decompress_simple(compressed_out, compressed_len, decompressed_out);
 
+            Serial.print("Decompressed length - ");
             Serial.println(decompressed_len);
             Serial.println(decompressed_out);
         }
