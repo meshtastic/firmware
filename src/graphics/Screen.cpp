@@ -668,8 +668,18 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         snprintf(lastStr, sizeof(lastStr), "%u seconds ago", agoSecs);
     else if (agoSecs < 120 * 60) // last 2 hrs
         snprintf(lastStr, sizeof(lastStr), "%u minutes ago", agoSecs / 60);
-    else
-        snprintf(lastStr, sizeof(lastStr), "%u hours ago", agoSecs / 60 / 60);
+    else {
+
+        uint32_t hours_in_month = 730;
+
+        // Only show hours ago if it's been less than 6 months. Otherwise, we may have bad
+        //   data.
+        if ((agoSecs / 60 / 60) < (hours_in_month * 6)) {
+            snprintf(lastStr, sizeof(lastStr), "%u hours ago", agoSecs / 60 / 60);
+        } else {
+            snprintf(lastStr, sizeof(lastStr), "unknown age");
+        }
+    }
 
     static char distStr[20];
     strcpy(distStr, "? km"); // might not have location data
