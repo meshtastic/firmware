@@ -363,9 +363,6 @@ void PowerFSM_setup()
 
     if (meshSds != UINT32_MAX)
         powerFSM.add_timed_transition(lowPowerState, &stateSDS, meshSds * 1000, NULL, "mesh timeout");
-    // removing for now, because some users don't even have phones
-    // powerFSM.add_timed_transition(lowPowerState, &stateSDS, getPref_phone_sds_timeout_sec() * 1000, NULL, "phone
-    // timeout");
 
     powerFSM.run_machine(); // run one interation of the state machine, so we run our on enter tasks for the initial DARK state
 }
