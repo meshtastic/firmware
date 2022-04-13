@@ -48,7 +48,7 @@ void PhoneAPI::close()
     if (state != STATE_SEND_NOTHING) {
         state = STATE_SEND_NOTHING;
 
-        unobserve();
+        unobserve(&service.fromNumChanged);
         releasePhonePacket(); // Don't leak phone packets on shutdown
 
         onConnectionChanged(false);
