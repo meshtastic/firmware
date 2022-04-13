@@ -89,8 +89,9 @@ template <class T> Observer<T>::~Observer()
 {
     for (typename std::list<Observable<T> *>::const_iterator iterator = observed.begin(); iterator != observed.end();
         ++iterator) {
-        unobserve(*iterator);
+        (*iterator)->removeObserver(this);
     }
+    observed.clear();
 }
 
 template <class T> void Observer<T>::unobserve(Observable<T> *o)
