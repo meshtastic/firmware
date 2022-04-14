@@ -894,9 +894,11 @@ int32_t Screen::runOnce()
         showingBootScreen = false;
     }
 
+#ifndef DISABLE_WELCOME_UNSET
     if (radioConfig.preferences.region == RegionCode_Unset) {
         setWelcomeFrames();
     }
+#endif
 
     // Process incoming commands.
     for (;;) {

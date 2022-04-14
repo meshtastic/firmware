@@ -10,9 +10,12 @@
 #include "target_specific.h"
 #include <DNSServer.h>
 #include <ESPmDNS.h>
-#include <NTPClient.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
+
+#ifndef DISABLE_NTP
+#include <NTPClient.h>
+#endif
 
 using namespace concurrency;
 
@@ -23,7 +26,10 @@ DNSServer dnsServer;
 
 // NTP
 WiFiUDP ntpUDP;
+
+#ifndef DISABLE_NTP
 NTPClient timeClient(ntpUDP, "0.pool.ntp.org");
+#endif
 
 uint8_t wifiDisconnectReason = 0;
 
@@ -67,13 +73,13 @@ static int32_t reconnectWiFi()
             DEBUG_MSG("... Reconnecting to WiFi access point\n");
             WiFi.mode(WIFI_MODE_STA);
             WiFi.begin(wifiName, wifiPsw);
-            
 
             // Starting timeClient;
         }
     }
 
-    //if (*wifiName) {
+#ifndef DISABLE_NTP
+    // if (*wifiName) {
     if (WiFi.isConnected()) {
         DEBUG_MSG("Updating NTP time\n");
         if (timeClient.update()) {
@@ -89,6 +95,7 @@ static int32_t reconnectWiFi()
             DEBUG_MSG("NTP Update failed\n");
         }
     }
+#endif
 
     return 30 * 1000; // every 30 seconds
 }
@@ -155,9 +162,11 @@ static void onNetworkConnected()
             MDNS.addService("https", "tcp", 443);
         }
 
+#ifndef DISABLE_NTP
         DEBUG_MSG("Starting NTP time client\n");
         timeClient.begin();
-        timeClient.setUpdateInterval(60*60); // Update once an hour
+        timeClient.setUpdateInterval(60 * 60); // Update once an hour
+#endif
 
         initWebServer();
         initApiServer();

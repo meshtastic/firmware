@@ -500,6 +500,7 @@ typedef struct _User {
 } User;
 
 typedef PB_BYTES_ARRAY_T(237) Data_payload_t;
+typedef PB_BYTES_ARRAY_T(237) Data_payload_compressed_t;
 /* (Formerly called SubPacket)
  The payload portion fo a packet, this is the actual bytes that are sent
  inside a radio packet (because from/to are broken out by the comms library) */
@@ -507,30 +508,34 @@ typedef struct _Data {
     /* Formerly named typ and of type Type */
     PortNum portnum; 
     /* TODO: REPLACE */
-    Data_payload_t payload; 
+    pb_size_t which_payloadVariant;
+    union {
+        Data_payload_t payload;
+        Data_payload_compressed_t payload_compressed;
+    }; 
+    /* TODO: REPLACE */
+    bool want_response; 
     /* Not normally used, but for testing a sender can request that recipient
  responds in kind (i.e. if it received a position, it should unicast back it's position).
  Note: that if you set this on a broadcast you will receive many replies. */
-    bool want_response; 
+    uint32_t dest; 
     /* The address of the destination node.
  This field is is filled in by the mesh radio device software, application
  layer software should never need it.
  RouteDiscovery messages _must_ populate this.
  Other message types might need to if they are doing multihop routing. */
-    uint32_t dest; 
+    uint32_t source; 
     /* The address of the original sender for this message.
  This field should _only_ be populated for reliable multihop packets (to keep
  packets small). */
-    uint32_t source; 
+    uint32_t request_id; 
     /* Only used in routing or response messages.
  Indicates the original message ID that this message is reporting failure on. (formerly called original_id) */
-    uint32_t request_id; 
-    /* If set, this message is intened to be a reply to a previously sent message with the defined id. */
     uint32_t reply_id; 
+    /* If set, this message is intened to be a reply to a previously sent message with the defined id. */
+    uint32_t emoji; 
     /* Defaults to false. If true, then what is in the payload should be treated as an emoji like giving
  a message a heart or poop emoji. */
-    uint32_t emoji; 
-    /* Location structure */
     bool has_location;
     Location location; 
 } Data;
@@ -738,7 +743,7 @@ extern "C" {
 #define User_init_default                        {"", "", "", {0}, _HardwareModel_MIN, 0, _Team_MIN, 0, 0, 0}
 #define RouteDiscovery_init_default              {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_default                     {0, {RouteDiscovery_init_default}}
-#define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, Location_init_default}
+#define Data_init_default                        {_PortNum_MIN, 0, {{0, {0}}}, 0, 0, 0, 0, 0, 0, false, Location_init_default}
 #define Location_init_default                    {0, 0, 0, 0, 0}
 #define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
 #define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0, false, DeviceMetrics_init_default}
@@ -751,7 +756,7 @@ extern "C" {
 #define User_init_zero                           {"", "", "", {0}, _HardwareModel_MIN, 0, _Team_MIN, 0, 0, 0}
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_zero                        {0, {RouteDiscovery_init_zero}}
-#define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, Location_init_zero}
+#define Data_init_zero                           {_PortNum_MIN, 0, {{0, {0}}}, 0, 0, 0, 0, 0, 0, false, Location_init_zero}
 #define Location_init_zero                       {0, 0, 0, 0, 0}
 #define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
 #define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0, false, DeviceMetrics_init_zero}
@@ -825,6 +830,7 @@ extern "C" {
 #define User_ant_azimuth_tag                     12
 #define Data_portnum_tag                         1
 #define Data_payload_tag                         2
+#define Data_payload_compressed_tag              10
 #define Data_want_response_tag                   3
 #define Data_dest_tag                            4
 #define Data_source_tag                          5
@@ -923,14 +929,15 @@ X(a, STATIC,   ONEOF,    UENUM,    (variant,error_reason,error_reason),   3)
 
 #define Data_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    portnum,           1) \
-X(a, STATIC,   SINGULAR, BYTES,    payload,           2) \
+X(a, STATIC,   ONEOF,    BYTES,    (payloadVariant,payload,payload),   2) \
 X(a, STATIC,   SINGULAR, BOOL,     want_response,     3) \
 X(a, STATIC,   SINGULAR, FIXED32,  dest,              4) \
 X(a, STATIC,   SINGULAR, FIXED32,  source,            5) \
 X(a, STATIC,   SINGULAR, FIXED32,  request_id,        6) \
 X(a, STATIC,   SINGULAR, FIXED32,  reply_id,          7) \
 X(a, STATIC,   SINGULAR, FIXED32,  emoji,             8) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  location,          9)
+X(a, STATIC,   OPTIONAL, MESSAGE,  location,          9) \
+X(a, STATIC,   ONEOF,    BYTES,    (payloadVariant,payload_compressed,payload_compressed),  10)
 #define Data_CALLBACK NULL
 #define Data_DEFAULT NULL
 #define Data_location_MSGTYPE Location
