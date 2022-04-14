@@ -131,6 +131,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 //#define DISABLE_NTP
 
+#define DISABLE_WELCOME_UNSET
+
 // -----------------------------------------------------------------------------
 // OLED & Input
 // -----------------------------------------------------------------------------
