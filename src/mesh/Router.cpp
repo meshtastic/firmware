@@ -360,13 +360,13 @@ Routing_Error perhapsEncode(MeshPacket *p)
             } else {
                 DEBUG_MSG("Compressing message.\n");
                 // Copy the compressed data into the meshpacket
-                p->decoded.payload_compressed.size = compressed_len;
-                memcpy(p->decoded.payload_compressed.bytes, compressed_out, compressed_len);
+                //p->decoded.payload_compressed.size = compressed_len;
+                //memcpy(p->decoded.payload_compressed.bytes, compressed_out, compressed_len);
 
-                p->decoded.which_payloadVariant = Data_payload_compressed_tag;
+                //p->decoded.which_payloadVariant = Data_payload_compressed_tag;
             }
 
-            if (0) {
+            if (1) {
                 char decompressed_out[Constants_DATA_PAYLOAD_LEN] = {};
                 int decompressed_len;
 
