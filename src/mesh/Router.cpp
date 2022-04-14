@@ -303,6 +303,14 @@ bool perhapsDecode(MeshPacket *p)
                 // parsing was successful
                 p->which_payloadVariant = MeshPacket_decoded_tag; // change type to decoded
                 p->channel = chIndex;                             // change to store the index instead of the hash
+
+
+                // Decompress if needed. jm
+                if (p->decoded.which_payloadVariant == Data_payload_compressed_tag) {
+                    // Decompress the file
+                }
+
+
                 printPacket("decoded message", p);
                 return true;
             }
@@ -321,35 +329,53 @@ Routing_Error perhapsEncode(MeshPacket *p)
     if (p->which_payloadVariant == MeshPacket_decoded_tag) {
         static uint8_t bytes[MAX_RHPACKETLEN]; // we have to use a scratch buffer because a union
 
-        // printPacket("pre encrypt", p); // portnum valid here
-
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), Data_fields, &p->decoded);
 
+        // Only allow encryption on the text message app.
+        //  TODO: Allow modules to opt into compression.
         if (p->decoded.portnum == PortNum_TEXT_MESSAGE_APP) {
 
             char original_payload[Constants_DATA_PAYLOAD_LEN];
             memcpy(original_payload, p->decoded.payload.bytes, p->decoded.payload.size);
 
-            int compressed_len;
-            char compressed_out[100] = {0};
+            char compressed_out[Constants_DATA_PAYLOAD_LEN] = {0};
 
-            compressed_len = unishox2_compress_simple(original_payload, p->decoded.payload.size, compressed_out);
+            int compressed_len = unishox2_compress_simple(original_payload, p->decoded.payload.size, compressed_out);
 
             Serial.print("Original length - ");
             Serial.println(p->decoded.payload.size);
 
             Serial.print("Compressed length - ");
             Serial.println(compressed_len);
-            //Serial.println(compressed_out);
+            // Serial.println(compressed_out);
 
-            char decompressed_out[100] = {};
-            int decompressed_len;
+            // If the compressed length is greater than or equal to the original size, don't use the compressed form
+            if (compressed_len >= p->decoded.payload.size) {
 
-            decompressed_len = unishox2_decompress_simple(compressed_out, compressed_len, decompressed_out);
+                DEBUG_MSG("Not compressing message. Not enough benefit from doing so.\n");
+                // Set the uncompressed payload varient anyway. Shouldn't hurt?
+                p->decoded.which_payloadVariant = Data_payload_tag;
 
-            Serial.print("Decompressed length - ");
-            Serial.println(decompressed_len);
-            Serial.println(decompressed_out);
+                // Otherwise we use the compressor
+            } else {
+                DEBUG_MSG("Compressing message.\n");
+                // Copy the compressed data into the meshpacket
+                p->decoded.payload_compressed.size = compressed_len;
+                memcpy(p->decoded.payload_compressed.bytes, compressed_out, compressed_len);
+
+                p->decoded.which_payloadVariant = Data_payload_compressed_tag;
+            }
+
+            if (0) {
+                char decompressed_out[Constants_DATA_PAYLOAD_LEN] = {};
+                int decompressed_len;
+
+                decompressed_len = unishox2_decompress_simple(compressed_out, compressed_len, decompressed_out);
+
+                Serial.print("Decompressed length - ");
+                Serial.println(decompressed_len);
+                Serial.println(decompressed_out);
+            }
         }
 
         if (numbytes > MAX_RHPACKETLEN)
