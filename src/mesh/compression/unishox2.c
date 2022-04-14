@@ -973,7 +973,7 @@ int32_t readUnicode(const char *in, int *bit_no_p, int len) {
   if (idx == 99)
     return 0x7FFFFF00 + 99;
   if (idx == 5) {
-    int idx = getStepCodeIdx(in, len, bit_no_p, 4);
+    idx = getStepCodeIdx(in, len, bit_no_p, 4);
     return 0x7FFFFF00 + idx;
   }
   if (idx >= 0) {
