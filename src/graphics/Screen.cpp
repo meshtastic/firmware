@@ -168,6 +168,28 @@ static void drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
 }
 
+// Used when booting without a region set
+static void drawWelcomeScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+
+    display->setFont(FONT_SMALL);
+
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->drawString(64 + x, y, "Meshtastic  :)");
+
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    display->drawString(x, y + FONT_HEIGHT_SMALL * 2 - 3, "Set the region using the");
+    display->drawString(x, y + FONT_HEIGHT_SMALL * 3 - 3, "Meshtastic Android, iOS,");
+    display->drawString(x, y + FONT_HEIGHT_SMALL * 4 - 3, "Flasher or CLI client.");
+
+#ifndef NO_ESP32
+    yield();
+    esp_task_wdt_reset();
+#endif
+
+}
+
 #ifdef HAS_EINK
 /// Used on eink displays while in deep sleep
 static void drawSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -646,8 +668,18 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         snprintf(lastStr, sizeof(lastStr), "%u seconds ago", agoSecs);
     else if (agoSecs < 120 * 60) // last 2 hrs
         snprintf(lastStr, sizeof(lastStr), "%u minutes ago", agoSecs / 60);
-    else
-        snprintf(lastStr, sizeof(lastStr), "%u hours ago", agoSecs / 60 / 60);
+    else {
+
+        uint32_t hours_in_month = 730;
+
+        // Only show hours ago if it's been less than 6 months. Otherwise, we may have bad
+        //   data.
+        if ((agoSecs / 60 / 60) < (hours_in_month * 6)) {
+            snprintf(lastStr, sizeof(lastStr), "%u hours ago", agoSecs / 60 / 60);
+        } else {
+            snprintf(lastStr, sizeof(lastStr), "unknown age");
+        }
+    }
 
     static char distStr[20];
     strcpy(distStr, "? km"); // might not have location data
@@ -766,7 +798,7 @@ void Screen::setup()
     useDisplay = true;
 
 #ifdef AutoOLEDWire_h
-       dispdev.setDetected(screen_model);
+    dispdev.setDetected(screen_model);
 #endif
 
     // I think this is not needed - redundant with ui.init
@@ -860,6 +892,10 @@ int32_t Screen::runOnce()
         DEBUG_MSG("Done with boot screen...\n");
         stopBootScreen();
         showingBootScreen = false;
+    }
+
+    if (radioConfig.preferences.region == RegionCode_Unset) {
+        setWelcomeFrames();
     }
 
     // Process incoming commands.
@@ -971,6 +1007,20 @@ void Screen::setSSLFrames()
         // DEBUG_MSG("showing SSL frames\n");
         static FrameCallback sslFrames[] = {drawSSLScreen};
         ui.setFrames(sslFrames, 1);
+        ui.update();
+    }
+}
+
+/* show a message that the SSL cert is being built
+ * it is expected that this will be used during the boot phase */
+void Screen::setWelcomeFrames()
+{
+    if (address_found) {
+        // DEBUG_MSG("showing Welcome frames\n");
+        ui.disableAllIndicators();
+
+        static FrameCallback welcomeFrames[] = {drawWelcomeScreen};
+        ui.setFrames(welcomeFrames, 1);
         ui.update();
     }
 }
@@ -1366,7 +1416,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     }
 
     auto mode = "";
-    
+
     if (channels.getPrimary().modem_config == 0) {
         mode = "VLongSlow";
     } else if (channels.getPrimary().modem_config == 1) {
@@ -1380,7 +1430,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     } else if (channels.getPrimary().modem_config == 5) {
         mode = "ShortSlow";
     } else if (channels.getPrimary().modem_config == 6) {
-        mode = "ShortFast";    
+        mode = "ShortFast";
     } else {
         mode = "Custom";
     }
@@ -1432,8 +1482,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     // Display Channel Utilization
     char chUtil[13];
     sprintf(chUtil, "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil),
-                        y + FONT_HEIGHT_SMALL * 1, chUtil);
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), y + FONT_HEIGHT_SMALL * 1, chUtil);
 
     // Line 3
     if (radioConfig.preferences.gps_format != GpsCoordinateFormat_GpsFormatDMS) // if DMS then don't draw altitude
@@ -1491,16 +1540,13 @@ int Screen::handleTextMessage(const MeshPacket *packet)
 int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 {
     if (showingNormalScreen) {
-        if (event->frameChanged)
-        {
+        if (event->frameChanged) {
             setFrames(); // Regen the list of screens (will show new text message)
-        }
-        else if (event->needRedraw)
-        {
+        } else if (event->needRedraw) {
             setFastFramerate();
             // TODO: We might also want switch to corresponding frame,
             //       but we don't know the exact frame number.
-            //ui.switchToFrame(0);
+            // ui.switchToFrame(0);
         }
     }
 
