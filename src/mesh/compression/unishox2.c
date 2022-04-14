@@ -129,11 +129,9 @@ void init_coder() {
   for (int i = 0; i < 3; i++) {
     for (int j = 0; j < 28; j++) {
       byte c = usx_sets[i][j];
-      if (c != 0 && c > 32) {
-        usx_code_94[c - USX_OFFSET_94] = (i << 5) + j;
-        if (c >= 'a' && c <= 'z')
-          usx_code_94[c - USX_OFFSET_94 - ('a' - 'A')] = (i << 5) + j;
-      }
+      usx_code_94[c - USX_OFFSET_94] = (i << 5) + j;
+      if (c >= 'a' && c <= 'z')
+        usx_code_94[c - USX_OFFSET_94 - ('a' - 'A')] = (i << 5) + j;
     }
   }
   is_inited = 1;
@@ -147,32 +145,31 @@ unsigned int usx_mask[] = {0x80, 0xC0, 0xE0, 0xF0, 0xF8, 0xFC, 0xFE, 0xFF};
 /// Otherwise clen bits in code are appended to out starting with MSB
 int append_bits(char *out, int olen, int ol, byte code, int clen) {
 
-  byte cur_bit;
-  byte blen;
-  unsigned char a_byte;
-  int oidx;
 
   //printf("%d,%x,%d,%d\n", ol, code, clen, state);
 
   while (clen > 0) {
-     cur_bit = ol % 8;
-     blen = clen;
-     a_byte = code & usx_mask[blen - 1];
-     a_byte >>= cur_bit;
-     if (blen + cur_bit > 8)
-        blen = (8 - cur_bit);
-     oidx = ol / 8;
-     if (oidx < 0 || olen <= oidx)
-        return -1;
-     if (cur_bit == 0)
-        out[oidx] = a_byte;
-     else
-        out[oidx] |= a_byte;
-     code <<= blen;
-     ol += blen;
-     clen -= blen;
-   }
-   return ol;
+    int oidx;
+    unsigned char a_byte;
+
+    byte cur_bit = ol % 8;
+    byte blen = clen;
+    a_byte = code & usx_mask[blen - 1];
+    a_byte >>= cur_bit;
+    if (blen + cur_bit > 8)
+      blen = (8 - cur_bit);
+    oidx = ol / 8;
+    if (oidx < 0 || olen <= oidx)
+      return -1;
+    if (cur_bit == 0)
+      out[oidx] = a_byte;
+    else
+      out[oidx] |= a_byte;
+    code <<= blen;
+    ol += blen;
+    clen -= blen;
+    }
+    return ol;
 }
 
 /// This is a safe call to append_bits() making sure it does not write past olen
