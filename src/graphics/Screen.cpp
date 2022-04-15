@@ -187,7 +187,6 @@ static void drawWelcomeScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
     yield();
     esp_task_wdt_reset();
 #endif
-
 }
 
 #ifdef HAS_EINK
@@ -895,7 +894,7 @@ int32_t Screen::runOnce()
     }
 
 #ifndef DISABLE_WELCOME_UNSET
-    if (radioConfig.preferences.region == RegionCode_Unset) {
+    if (showingNormalScreen && radioConfig.preferences.region == RegionCode_Unset) {
         setWelcomeFrames();
     }
 #endif
