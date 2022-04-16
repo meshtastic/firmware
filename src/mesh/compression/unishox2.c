@@ -129,9 +129,11 @@ void init_coder() {
   for (int i = 0; i < 3; i++) {
     for (int j = 0; j < 28; j++) {
       byte c = usx_sets[i][j];
-      usx_code_94[c - USX_OFFSET_94] = (i << 5) + j;
-      if (c >= 'a' && c <= 'z')
-        usx_code_94[c - USX_OFFSET_94 - ('a' - 'A')] = (i << 5) + j;
+      if (c > 32) {
+        usx_code_94[c - USX_OFFSET_94] = (i << 5) + j;
+        if (c >= 'a' && c <= 'z')
+          usx_code_94[c - USX_OFFSET_94 - ('a' - 'A')] = (i << 5) + j;
+      }
     }
   }
   is_inited = 1;
@@ -168,8 +170,8 @@ int append_bits(char *out, int olen, int ol, byte code, int clen) {
     code <<= blen;
     ol += blen;
     clen -= blen;
-    }
-    return ol;
+  }
+  return ol;
 }
 
 /// This is a safe call to append_bits() making sure it does not write past olen
