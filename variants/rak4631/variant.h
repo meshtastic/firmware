@@ -139,7 +139,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // FIXME - I think this is actually just the board power enable - it enables power to the CPU also 
 //#define PIN_EINK_PWR_ON (-1)
 
-// #define HAS_EINK
+#define HAS_EINK
 
 /*
  * Wire Interfaces
@@ -197,9 +197,6 @@ static const uint8_t SCK = PIN_SPI_SCK;
 
 #define GPS_RX_PIN PIN_SERIAL1_RX
 #define GPS_TX_PIN PIN_SERIAL1_TX
-
-//We try the I2C Address in UBX mode first, then switch to serial UBX, then fallback to NMEA.
-#define GPS_I2C_ADDRESS 66
 
 // Battery
 // The battery sense is hooked to pin A0 (5)

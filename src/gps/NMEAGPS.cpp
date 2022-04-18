@@ -128,8 +128,10 @@ bool NMEAGPS::lookForLocation()
     auto loc = reader.location.value();
 
     // Bail out EARLY to avoid overwriting previous good data (like #857)
-    if(toDegInt(loc.lat) == 0) {
-        DEBUG_MSG("Ignoring bogus NMEA position\n");
+    if((toDegInt(loc.lat) == 0) || (toDegInt(loc.lat) > 90)) {
+        return false;
+    }
+    if((toDegInt(loc.lng) == 0) || (toDegInt(loc.lng) > 180)) {
         return false;
     }
 

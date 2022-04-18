@@ -24,6 +24,7 @@
 #include "shutdown.h"
 #include "target_specific.h"
 #include "debug/i2cScan.h"
+#include "debug/EinkScan.h"
 #include "debug/axpDebug.h"
 #include <Wire.h>
 // #include <driver/rtc_io.h>
@@ -78,8 +79,7 @@ uint8_t cardkb_found;
 // The I2C address of the Faces Keyboard (if found)
 uint8_t faceskb_found;
 
-// The I2C address of the UBLOX GPS
-uint8_t ublox_found = 0;
+bool eink_found;
 
 uint32_t serialSinceMsec;
 
@@ -211,6 +211,9 @@ void setup()
 #endif
 
     scanI2Cdevice();
+#ifdef RAK4630
+    scanEInkDevice();
+#endif
 
     // Buttons & LED
     buttonThread = new ButtonThread();

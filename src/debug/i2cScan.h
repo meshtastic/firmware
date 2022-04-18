@@ -66,12 +66,6 @@ void scanI2Cdevice(void)
                 DEBUG_MSG("axp192 PMU found\n");
             }
 #endif
-#ifdef GPS_I2C_ADDRESS
-            if (addr == GPS_I2C_ADDRESS){
-                ublox_found = addr;
-                DEBUG_MSG("UBLOX I2C GPS found\n");
-            }
-#endif
         } else if (err == 4) {
             DEBUG_MSG("Unknow error at address 0x%x\n", addr);
         }
