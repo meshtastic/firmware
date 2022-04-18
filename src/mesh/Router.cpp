@@ -1,12 +1,15 @@
-#include "configuration.h"
 #include "Router.h"
 #include "Channels.h"
 #include "CryptoEngine.h"
 #include "NodeDB.h"
 #include "RTC.h"
+#include "configuration.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "modules/RoutingModule.h"
+extern "C" {
+#include "mesh/compression/unishox2.h"
+}
 
 #if defined(HAS_WIFI) || defined(PORTDUINO)
 #include "mqtt/MQTT.h"
@@ -210,29 +213,27 @@ ErrorCode Router::send(MeshPacket *p)
     if (p->which_payloadVariant == MeshPacket_decoded_tag) {
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
 
-
-
 #if defined(HAS_WIFI) || defined(PORTDUINO)
-        //check if we should send decrypted packets to mqtt
+        // check if we should send decrypted packets to mqtt
 
-        //truth table:
+        // truth table:
         /* mqtt_server  mqtt_encryption_enabled should_encrypt
          *    not set                        0              1
          *    not set                        1              1
          *        set                        0              0
          *        set                        1              1
-         * 
+         *
          * => so we only decrypt mqtt if they have a custom mqtt server AND mqtt_encryption_enabled is FALSE
-         */ 
+         */
 
         bool shouldActuallyEncrypt = true;
         if (*radioConfig.preferences.mqtt_server && !radioConfig.preferences.mqtt_encryption_enabled) {
             shouldActuallyEncrypt = false;
         }
-        
+
         DEBUG_MSG("Should encrypt MQTT?: %d\n", shouldActuallyEncrypt);
 
-        //the packet is currently in a decrypted state.  send it now if they want decrypted packets
+        // the packet is currently in a decrypted state.  send it now if they want decrypted packets
         if (mqtt && !shouldActuallyEncrypt)
             mqtt->onSend(*p, chIndex);
 #endif
@@ -244,8 +245,8 @@ ErrorCode Router::send(MeshPacket *p)
         }
 
 #if defined(HAS_WIFI) || defined(PORTDUINO)
-        //the packet is now encrypted.
-        //check if we should send encrypted packets to mqtt
+        // the packet is now encrypted.
+        // check if we should send encrypted packets to mqtt
         if (mqtt && shouldActuallyEncrypt)
             mqtt->onSend(*p, chIndex);
 #endif
@@ -276,7 +277,7 @@ bool perhapsDecode(MeshPacket *p)
     if (p->which_payloadVariant == MeshPacket_decoded_tag)
         return true; // If packet was already decoded just return
 
-    //assert(p->which_payloadVariant == MeshPacket_encrypted_tag);
+    // assert(p->which_payloadVariant == MeshPacket_encrypted_tag);
 
     // Try to find a channel that works with this hash
     for (ChannelIndex chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
@@ -302,6 +303,14 @@ bool perhapsDecode(MeshPacket *p)
                 // parsing was successful
                 p->which_payloadVariant = MeshPacket_decoded_tag; // change type to decoded
                 p->channel = chIndex;                             // change to store the index instead of the hash
+
+
+                // Decompress if needed. jm
+                if (p->decoded.which_payloadVariant == Data_payload_compressed_tag) {
+                    // Decompress the file
+                }
+
+
                 printPacket("decoded message", p);
                 return true;
             }
@@ -320,9 +329,54 @@ Routing_Error perhapsEncode(MeshPacket *p)
     if (p->which_payloadVariant == MeshPacket_decoded_tag) {
         static uint8_t bytes[MAX_RHPACKETLEN]; // we have to use a scratch buffer because a union
 
-        // printPacket("pre encrypt", p); // portnum valid here
-
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), Data_fields, &p->decoded);
+
+        // Only allow encryption on the text message app.
+        //  TODO: Allow modules to opt into compression.
+        if (p->decoded.portnum == PortNum_TEXT_MESSAGE_APP) {
+
+            char original_payload[Constants_DATA_PAYLOAD_LEN];
+            memcpy(original_payload, p->decoded.payload.bytes, p->decoded.payload.size);
+
+            char compressed_out[Constants_DATA_PAYLOAD_LEN] = {0};
+
+            int compressed_len = unishox2_compress_simple(original_payload, p->decoded.payload.size, compressed_out);
+
+            Serial.print("Original length - ");
+            Serial.println(p->decoded.payload.size);
+
+            Serial.print("Compressed length - ");
+            Serial.println(compressed_len);
+            // Serial.println(compressed_out);
+
+            // If the compressed length is greater than or equal to the original size, don't use the compressed form
+            if (compressed_len >= p->decoded.payload.size) {
+
+                DEBUG_MSG("Not compressing message. Not enough benefit from doing so.\n");
+                // Set the uncompressed payload varient anyway. Shouldn't hurt?
+                p->decoded.which_payloadVariant = Data_payload_tag;
+
+                // Otherwise we use the compressor
+            } else {
+                DEBUG_MSG("Compressing message.\n");
+                // Copy the compressed data into the meshpacket
+                //p->decoded.payload_compressed.size = compressed_len;
+                //memcpy(p->decoded.payload_compressed.bytes, compressed_out, compressed_len);
+
+                //p->decoded.which_payloadVariant = Data_payload_compressed_tag;
+            }
+
+            if (1) {
+                char decompressed_out[Constants_DATA_PAYLOAD_LEN] = {};
+                int decompressed_len;
+
+                decompressed_len = unishox2_decompress_simple(compressed_out, compressed_len, decompressed_out);
+
+                Serial.print("Decompressed length - ");
+                Serial.println(decompressed_len);
+                Serial.println(decompressed_out);
+            }
+        }
 
         if (numbytes > MAX_RHPACKETLEN)
             return Routing_Error_TOO_LARGE;
