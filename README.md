@@ -17,3 +17,7 @@ Manual Method
 [For nRF52 devices click here](https://meshtastic.org/docs/getting-started/flashing-nrf52)
 
 For developer information and specific building instructions, please see the [developer documentation](https://meshtastic.org/docs/developers)
+
+## Stats
+
+![Alt](https://repobeats.axiom.co/api/embed/99a2cf5622bb4807f9e8c3b86589f1133cce58a2.svg 'Repobeats analytics image')
