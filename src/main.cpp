@@ -24,7 +24,7 @@
 #include "shutdown.h"
 #include "target_specific.h"
 #include "debug/i2cScan.h"
-#include "debug/EinkScan.h"
+#include "debug/einkScan.h"
 #include "debug/axpDebug.h"
 #include <Wire.h>
 // #include <driver/rtc_io.h>
