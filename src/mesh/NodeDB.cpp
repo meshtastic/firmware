@@ -276,11 +276,9 @@ void NodeDB::pickNewNodeNum()
     myNodeInfo.my_node_num = r;
 }
 
-static const char *preffileOld = "/db.proto";
 static const char *preffile = "/prefs/db.proto";
 static const char *radiofile = "/prefs/radio.proto";
 static const char *channelfile = "/prefs/channels.proto";
-// const char *preftmp = "/db.proto.tmp";
 
 /** Load a protobuf from a file, return true for success */
 bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, void *dest_struct)
@@ -289,13 +287,6 @@ bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
 
     auto f = FSCom.open(filename);
-
-    // FIXME, temporary hack until every node in the universe is 1.2 or later - look for prefs in the old location (so we can
-    // preserve region)
-    if (!f && filename == preffile) {
-        filename = preffileOld;
-        f = FSCom.open(filename);
-    }
 
     bool okay = false;
     if (f) {
@@ -399,8 +390,6 @@ void NodeDB::saveToDisk()
         saveProto(radiofile, RadioConfig_size, sizeof(RadioConfig), RadioConfig_fields, &radioConfig);
         saveChannelsToDisk();
 
-        // remove any pre 1.2 pref files, turn on after 1.2 is in beta
-        // if(okay) FSCom.remove(preffileOld);
     } else {
         DEBUG_MSG("***** DEVELOPMENT MODE - DO NOT RELEASE - not saving to flash *****\n");
     }
