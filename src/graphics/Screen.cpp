@@ -31,6 +31,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "graphics/images.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
+#include "mesh/generated/deviceonly.pb.h"
 #include "mesh/Channels.h"
 #include "modules/TextMessageModule.h"
 #include "sleep.h"
@@ -43,6 +44,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 
 using namespace meshtastic; /** @todo remove */
+
+extern bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, void *dest_struct);
 
 namespace graphics
 {
@@ -76,6 +79,10 @@ static char ourId[5];
 
 // GeoCoord object for the screen
 GeoCoord geoCoord;
+
+// OEM Config File
+static const char *oemConfigFile = "/prefs/oem.proto";
+OEMStore oemStore;
 
 #ifdef SHOW_REDRAWS
 static bool heartbeat = false;
@@ -146,6 +153,54 @@ static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     // Draw region in upper left
     const char *region = myRegion ? myRegion->name : NULL;
     drawIconScreen(region, display, state, x, y);
+}
+
+static void drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    // draw an xbm image.
+    // Please note that everything that should be transitioned
+    // needs to be drawn relative to x and y
+
+    // draw centered icon left to right and centered above the one line of app text
+    display->drawXbm(x + (SCREEN_WIDTH - oemStore.oem_icon_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - oemStore.oem_icon_height) / 2 + 2,
+                     oemStore.oem_icon_width, oemStore.oem_icon_height, (const uint8_t *)oemStore.oem_icon_bits.bytes);
+
+    switch(oemStore.oem_font){
+        case 0:
+            display->setFont(FONT_SMALL);
+        break;
+        case 2:
+            display->setFont(FONT_LARGE);
+        break;
+        default:
+            display->setFont(FONT_MEDIUM);
+        break;
+    }
+    
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    const char *title = oemStore.oem_text;
+    display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
+    display->setFont(FONT_SMALL);
+
+    // Draw region in upper left
+    if (upperMsg)
+        display->drawString(x + 0, y + 0, upperMsg);
+
+    // Draw version in upper right
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%s",
+             xstr(APP_VERSION_SHORT)); // Note: we don't bother printing region or now, it makes the string too long
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(buf), y + 0, buf);
+    screen->forceDisplay();
+
+    // FIXME - draw serial # somewhere?
+}
+
+static void drawOEMBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    // Draw region in upper left
+    const char *region = myRegion ? myRegion->name : NULL;
+    drawOEMIconScreen(region, display, state, x, y);
 }
 
 // Used on boot when a certificate is being created
@@ -813,8 +868,8 @@ void Screen::setup()
     dispdev.setDetected(screen_model);
 #endif
 
-    // I think this is not needed - redundant with ui.init
-    // dispdev.resetOrientation();
+    // Load OEM config from Proto file if existent
+    loadProto(oemConfigFile, OEMStore_size, sizeof(oemConfigFile), OEMStore_fields, &oemStore);
 
     // Initialising the UI will init the display too.
     ui.init();
@@ -867,6 +922,7 @@ void Screen::setup()
     // twice initially.
     ui.update();
     ui.update();
+    serialSinceMsec = millis();
 
     // Subscribe to status updates
     powerStatusObserver.observe(&powerStatus->onNewStatus);
@@ -897,13 +953,28 @@ int32_t Screen::runOnce()
         return RUN_SAME;
     }
 
-    // Show boot screen for first 3 seconds, then switch to normal operation.
+    // Show boot screen for first 5 seconds, then switch to normal operation.
     // serialSinceMsec adjusts for additional serial wait time during nRF52 bootup
     static bool showingBootScreen = true;
     if (showingBootScreen && (millis() > (5000 + serialSinceMsec))) {
         DEBUG_MSG("Done with boot screen...\n");
         stopBootScreen();
         showingBootScreen = false;
+    }
+
+    // If we have an OEM Boot screen, toggle after 2,5 seconds
+    if(strlen(oemStore.oem_text) > 0){
+        static bool showingOEMBootScreen = true;
+        if (showingOEMBootScreen && (millis() > (2500 + serialSinceMsec))) {
+            DEBUG_MSG("Switch to OEM screen...\n");
+            // Change frames.
+            static FrameCallback bootOEMFrames[] = {drawOEMBootScreen};
+            static const int bootOEMFrameCount = sizeof(bootOEMFrames) / sizeof(bootOEMFrames[0]);
+            ui.setFrames(bootOEMFrames, bootOEMFrameCount);
+            ui.update();
+            ui.update();
+            showingOEMBootScreen = false;
+        }
     }
 
 #ifndef DISABLE_WELCOME_UNSET
