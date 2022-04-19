@@ -47,11 +47,9 @@ using namespace httpsserver;
 #include <WiFiClientSecure.h>
 HTTPClient httpClient;
 
-// needed for ESP32-targz
 #define DEST_FS_USES_LITTLEFS
 #define ESP_ARDUINO_VERSION_VAL(major, minor, patch) ((major << 16) | (minor << 8) | (patch))
 #define ESP_ARDUINO_VERSION ESP_ARDUINO_VERSION_VAL(1, 0, 4)
-#include <ESP32-targz.h>
 
 // We need to specify some content-type mapping, so the resources get delivered with the
 // right content type and are displayed correctly in the browser
@@ -63,57 +61,13 @@ char contentTypes[][2][32] = {{".txt", "text/plain"},     {".html", "text/html"}
                               {".svg", "image/svg+xml"},  {"", ""}};
 
 // const char *tarURL = "https://www.casler.org/temp/meshtastic-web.tar";
-const char *tarURL = "https://api-production-871d.up.railway.app/mirror/webui";
-const char *certificate = NULL; // change this as needed, leave as is for no TLS check (yolo security)
+// const char *tarURL = "https://api-production-871d.up.railway.app/mirror/webui";
+// const char *certificate = NULL; // change this as needed, leave as is for no TLS check (yolo security)
 
 // Our API to handle messages to and from the radio.
 HttpAPI webAPI;
 
-WiFiClient *getTarHTTPClientPtr(WiFiClientSecure *client, const char *url, const char *cert = NULL)
-{
-    if (cert == NULL) {
-        // New versions don't have setInsecure
-        // client->setInsecure();
-    } else {
-        client->setCACert(cert);
-    }
-    const char *UserAgent = "ESP32-HTTP-GzUpdater-Client";
-    httpClient.setReuse(true); // handle 301 redirects gracefully
-    httpClient.setUserAgent(UserAgent);
-    httpClient.setConnectTimeout(10000); // 10s timeout = 10000
-    if (!httpClient.begin(*client, url)) {
-        log_e("Can't open url %s", url);
-        return nullptr;
-    }
-    const char *headerKeys[] = {"location", "redirect", "Content-Type", "Content-Length", "Content-Disposition"};
-    const size_t numberOfHeaders = 5;
-    httpClient.collectHeaders(headerKeys, numberOfHeaders);
-    int httpCode = httpClient.GET();
-    // file found at server
-    if (httpCode == HTTP_CODE_FOUND || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
-        String newlocation = "";
-        String headerLocation = httpClient.header("location");
-        String headerRedirect = httpClient.header("redirect");
-        if (headerLocation != "") {
-            newlocation = headerLocation;
-            Serial.printf("302 (location): %s => %s\n", url, headerLocation.c_str());
-        } else if (headerRedirect != "") {
-            Serial.printf("301 (redirect): %s => %s\n", url, headerLocation.c_str());
-            newlocation = headerRedirect;
-        }
-        httpClient.end();
-        if (newlocation != "") {
-            log_w("Found 302/301 location header: %s", newlocation.c_str());
-            return getTarHTTPClientPtr(client, newlocation.c_str(), cert);
-        } else {
-            log_e("Empty redirect !!");
-            return nullptr;
-        }
-    }
-    if (httpCode != 200)
-        return nullptr;
-    return httpClient.getStreamPtr();
-}
+
 
 void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
 {
@@ -131,9 +85,9 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeAdmin = new ResourceNode("/admin", "GET", &handleAdmin);
     ResourceNode *nodeAdminSettings = new ResourceNode("/admin/settings", "GET", &handleAdminSettings);
     ResourceNode *nodeAdminSettingsApply = new ResourceNode("/admin/settings/apply", "POST", &handleAdminSettingsApply);
-    ResourceNode *nodeAdminFs = new ResourceNode("/admin/fs", "GET", &handleFs);
-    ResourceNode *nodeUpdateFs = new ResourceNode("/admin/fs/update", "POST", &handleUpdateFs);
-    ResourceNode *nodeDeleteFs = new ResourceNode("/admin/fs/delete", "GET", &handleDeleteFsContent);
+//    ResourceNode *nodeAdminFs = new ResourceNode("/admin/fs", "GET", &handleFs);
+//    ResourceNode *nodeUpdateFs = new ResourceNode("/admin/fs/update", "POST", &handleUpdateFs);
+//    ResourceNode *nodeDeleteFs = new ResourceNode("/admin/fs/delete", "GET", &handleDeleteFsContent);
 
     ResourceNode *nodeRestart = new ResourceNode("/restart", "POST", &handleRestart);
     ResourceNode *nodeFormUpload = new ResourceNode("/upload", "POST", &handleFormUpload);
@@ -160,10 +114,10 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     secureServer->registerNode(nodeJsonFsBrowseStatic);
     secureServer->registerNode(nodeJsonDelete);
     secureServer->registerNode(nodeJsonReport);
-    secureServer->registerNode(nodeUpdateFs);
-    secureServer->registerNode(nodeDeleteFs);
+//    secureServer->registerNode(nodeUpdateFs);
+//    secureServer->registerNode(nodeDeleteFs);
     secureServer->registerNode(nodeAdmin);
-    secureServer->registerNode(nodeAdminFs);
+//    secureServer->registerNode(nodeAdminFs);
     secureServer->registerNode(nodeAdminSettings);
     secureServer->registerNode(nodeAdminSettingsApply);
     secureServer->registerNode(nodeRoot); // This has to be last
@@ -181,10 +135,10 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     insecureServer->registerNode(nodeJsonFsBrowseStatic);
     insecureServer->registerNode(nodeJsonDelete);
     insecureServer->registerNode(nodeJsonReport);
-    insecureServer->registerNode(nodeUpdateFs);
-    insecureServer->registerNode(nodeDeleteFs);
+//    insecureServer->registerNode(nodeUpdateFs);
+//    insecureServer->registerNode(nodeDeleteFs);
     insecureServer->registerNode(nodeAdmin);
-    insecureServer->registerNode(nodeAdminFs);
+//    insecureServer->registerNode(nodeAdminFs);
     insecureServer->registerNode(nodeAdminSettings);
     insecureServer->registerNode(nodeAdminSettingsApply);
     insecureServer->registerNode(nodeRoot); // This has to be last
@@ -727,86 +681,6 @@ void handleHotspot(HTTPRequest *req, HTTPResponse *res)
     res->println("<meta http-equiv=\"refresh\" content=\"0;url=/\" />\n");
 }
 
-void handleUpdateFs(HTTPRequest *req, HTTPResponse *res)
-{
-    res->setHeader("Content-Type", "text/html");
-    res->setHeader("Access-Control-Allow-Origin", "*");
-    // res->setHeader("Access-Control-Allow-Methods", "POST");
-
-    res->println("<h1>Meshtastic</h1>\n");
-    res->println("Downloading Meshtastic Web Content...");
-
-    WiFiClientSecure *client = new WiFiClientSecure;
-    Stream *streamptr = getTarHTTPClientPtr(client, tarURL, certificate);
-
-    delay(5); // Let other network operations run
-
-    if (streamptr != nullptr) {
-        DEBUG_MSG("Connection to content server ... success!\n");
-
-        DEBUG_MSG("Deleting files from /static : \n");
-
-        htmlDeleteDir("/static");
-
-        delay(5); // Let other network operations run
-
-        TarUnpacker *TARUnpacker = new TarUnpacker();
-        TARUnpacker->haltOnError(false);  // stop on fail (manual restart/reset required)
-        TARUnpacker->setTarVerify(false); // true = enables health checks but slows down the overall process
-        TARUnpacker->setupFSCallbacks(targzTotalBytesFn, targzFreeBytesFn); // prevent the partition from exploding, recommended
-        TARUnpacker->setLoggerCallback(BaseUnpacker::targzPrintLoggerCallback); // gz log verbosity
-        TARUnpacker->setTarProgressCallback(
-            BaseUnpacker::defaultProgressCallback); // prints the untarring progress for each individual file
-        TARUnpacker->setTarStatusProgressCallback(
-            BaseUnpacker::defaultTarStatusProgressCallback);                        // print the filenames as they're expanded
-        TARUnpacker->setTarMessageCallback(BaseUnpacker::targzPrintLoggerCallback); // tar log verbosity
-
-        String contentLengthStr = httpClient.header("Content-Length");
-        contentLengthStr.trim();
-        int64_t streamSize = -1;
-        if (contentLengthStr != "") {
-            streamSize = atoi(contentLengthStr.c_str());
-            Serial.printf("Stream size %d\n", streamSize);
-            res->printf("Stream size %d<br><br>\n", streamSize);
-        }
-
-        if (!TARUnpacker->tarStreamExpander(streamptr, streamSize, FSCom, "/static")) {
-            res->printf("tarStreamExpander failed with return code #%d\n", TARUnpacker->tarGzGetError());
-            Serial.printf("tarStreamExpander failed with return code #%d\n", TARUnpacker->tarGzGetError());
-            // Close the connection on error and free up memory
-            client->stop();
-
-            return;
-        } else {
-            /*
-            // print leftover bytes if any (probably zero-fill from the server)
-            while (httpClient.connected()) {
-                size_t streamSize = streamptr->available();
-                if (streamSize) {
-                    Serial.printf("%02x ", streamptr->read());
-                } else
-                    break;
-            }
-            */
-        }
-
-    } else {
-        res->printf("Failed to establish http connection\n");
-        Serial.println("Failed to establish http connection");
-        return;
-        // Close the connection on error and free up memory
-        client->stop();
-    }
-
-    res->println("Done! Restarting the device. <a href=/>Click this in 10 seconds</a>");
-
-    /*
-     * This is a work around for a bug where we run out of memory.
-     *   TODO: Fixme!
-     */
-    // ESP.restart();
-    webServerThread->requestRestart = (millis() / 1000) + 5;
-}
 
 void handleDeleteFsContent(HTTPRequest *req, HTTPResponse *res)
 {
