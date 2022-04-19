@@ -210,7 +210,12 @@ typedef enum _RadioConfig_UserPreferences_Serial_Baud {
     /* TODO: REPLACE */
     RadioConfig_UserPreferences_Serial_Baud_BAUD_576000 = 10, 
     /* TODO: REPLACE */
-    RadioConfig_UserPreferences_Serial_Baud_BAUD_921600 = 11 
+    RadioConfig_UserPreferences_Serial_Baud_BAUD_921600 = 11, 
+    /* TODO: REPLACE */
+    RadioConfig_UserPreferences_Serial_Baud_BAUD_110 = 12, 
+    RadioConfig_UserPreferences_Serial_Baud_BAUD_300 = 13, 
+    RadioConfig_UserPreferences_Serial_Baud_BAUD_600 = 14, 
+    RadioConfig_UserPreferences_Serial_Baud_BAUD_1200 = 15 
 } RadioConfig_UserPreferences_Serial_Baud;
 
 /* Defines the device's role on the Mesh network
@@ -381,8 +386,8 @@ typedef struct _RadioConfig {
 #define _InputEventChar_ARRAYSIZE ((InputEventChar)(InputEventChar_KEY_BACK+1))
 
 #define _RadioConfig_UserPreferences_Serial_Baud_MIN RadioConfig_UserPreferences_Serial_Baud_BAUD_Default
-#define _RadioConfig_UserPreferences_Serial_Baud_MAX RadioConfig_UserPreferences_Serial_Baud_BAUD_921600
-#define _RadioConfig_UserPreferences_Serial_Baud_ARRAYSIZE ((RadioConfig_UserPreferences_Serial_Baud)(RadioConfig_UserPreferences_Serial_Baud_BAUD_921600+1))
+#define _RadioConfig_UserPreferences_Serial_Baud_MAX RadioConfig_UserPreferences_Serial_Baud_BAUD_1200
+#define _RadioConfig_UserPreferences_Serial_Baud_ARRAYSIZE ((RadioConfig_UserPreferences_Serial_Baud)(RadioConfig_UserPreferences_Serial_Baud_BAUD_1200+1))
 
 #define _RadioConfig_UserPreferences_Serial_Mode_MIN RadioConfig_UserPreferences_Serial_Mode_MODE_Default
 #define _RadioConfig_UserPreferences_Serial_Mode_MAX RadioConfig_UserPreferences_Serial_Mode_MODE_PROTO
