@@ -1,12 +1,9 @@
 #include "configuration.h"
 #include "CryptoEngine.h"
-#include "ocrypto_aes_ctr.h"
+#include <Adafruit_nRFCrypto.h>
 
 class NRF52CryptoEngine : public CryptoEngine
 {
-
-
-
   public:
     NRF52CryptoEngine() {}
 
@@ -22,12 +19,11 @@ class NRF52CryptoEngine : public CryptoEngine
         // DEBUG_MSG("NRF52 encrypt!\n");
 
         if (key.length > 0) {
-            ocrypto_aes_ctr_ctx ctx;
-
+            nRFCrypto_AES ctx;
             initNonce(fromNode, packetId);
-            ocrypto_aes_ctr_init(&ctx, key.bytes, key.length, nonce);
-
-            ocrypto_aes_ctr_encrypt(&ctx, bytes, bytes, numBytes);
+            ctx.begin();
+            ctx.Process((char*)bytes, numBytes, nonce, key.bytes, key.length, (char*)bytes, ctx.encryptFlag, ctx.ctrMode);
+            ctx.end();
         }
     }
 
@@ -36,12 +32,11 @@ class NRF52CryptoEngine : public CryptoEngine
         // DEBUG_MSG("NRF52 decrypt!\n");
 
         if (key.length > 0) {
-            ocrypto_aes_ctr_ctx ctx;
-
+            nRFCrypto_AES ctx;
             initNonce(fromNode, packetId);
-            ocrypto_aes_ctr_init(&ctx, key.bytes, key.length, nonce);
-
-            ocrypto_aes_ctr_decrypt(&ctx, bytes, bytes, numBytes);
+            ctx.begin();
+            ctx.Process((char*)bytes, numBytes, nonce, key.bytes, key.length, (char*)bytes, ctx.decryptFlag, ctx.ctrMode);
+            ctx.end();
         }
     }
 
