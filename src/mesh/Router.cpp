@@ -340,7 +340,8 @@ Routing_Error perhapsEncode(MeshPacket *p)
 
             char compressed_out[Constants_DATA_PAYLOAD_LEN] = {0};
 
-            int compressed_len = unishox2_compress_simple(original_payload, p->decoded.payload.size, compressed_out);
+            int compressed_len;
+            // compressed_len = unishox2_compress_simple(original_payload, p->decoded.payload.size, compressed_out);
 
             Serial.print("Original length - ");
             Serial.println(p->decoded.payload.size);
@@ -366,11 +367,11 @@ Routing_Error perhapsEncode(MeshPacket *p)
                 //p->decoded.which_payloadVariant = Data_payload_compressed_tag;
             }
 
-            if (1) {
+            if (0) {
                 char decompressed_out[Constants_DATA_PAYLOAD_LEN] = {};
                 int decompressed_len;
 
-                decompressed_len = unishox2_decompress_simple(compressed_out, compressed_len, decompressed_out);
+                // decompressed_len = unishox2_decompress_simple(compressed_out, compressed_len, decompressed_out);
 
                 Serial.print("Decompressed length - ");
                 Serial.println(decompressed_len);
