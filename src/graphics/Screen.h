@@ -235,6 +235,8 @@ class Screen : public concurrency::OSThread
     /// Draws our SSL cert screen during boot (called from WebServer)
     void setSSLFrames();
 
+    void setWelcomeFrames();
+
   protected:
     /// Updates the UI.
     //

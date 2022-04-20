@@ -31,6 +31,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "graphics/images.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
+#include "mesh/generated/deviceonly.pb.h"
 #include "mesh/Channels.h"
 #include "modules/TextMessageModule.h"
 #include "sleep.h"
@@ -43,6 +44,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 
 using namespace meshtastic; /** @todo remove */
+
+extern bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, void *dest_struct);
 
 namespace graphics
 {
@@ -76,6 +79,10 @@ static char ourId[5];
 
 // GeoCoord object for the screen
 GeoCoord geoCoord;
+
+// OEM Config File
+static const char *oemConfigFile = "/prefs/oem.proto";
+OEMStore oemStore;
 
 #ifdef SHOW_REDRAWS
 static bool heartbeat = false;
@@ -148,6 +155,54 @@ static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     drawIconScreen(region, display, state, x, y);
 }
 
+static void drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    // draw an xbm image.
+    // Please note that everything that should be transitioned
+    // needs to be drawn relative to x and y
+
+    // draw centered icon left to right and centered above the one line of app text
+    display->drawXbm(x + (SCREEN_WIDTH - oemStore.oem_icon_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - oemStore.oem_icon_height) / 2 + 2,
+                     oemStore.oem_icon_width, oemStore.oem_icon_height, (const uint8_t *)oemStore.oem_icon_bits.bytes);
+
+    switch(oemStore.oem_font){
+        case 0:
+            display->setFont(FONT_SMALL);
+        break;
+        case 2:
+            display->setFont(FONT_LARGE);
+        break;
+        default:
+            display->setFont(FONT_MEDIUM);
+        break;
+    }
+    
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    const char *title = oemStore.oem_text;
+    display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
+    display->setFont(FONT_SMALL);
+
+    // Draw region in upper left
+    if (upperMsg)
+        display->drawString(x + 0, y + 0, upperMsg);
+
+    // Draw version in upper right
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%s",
+             xstr(APP_VERSION_SHORT)); // Note: we don't bother printing region or now, it makes the string too long
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(buf), y + 0, buf);
+    screen->forceDisplay();
+
+    // FIXME - draw serial # somewhere?
+}
+
+static void drawOEMBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    // Draw region in upper left
+    const char *region = myRegion ? myRegion->name : NULL;
+    drawOEMIconScreen(region, display, state, x, y);
+}
+
 // Used on boot when a certificate is being created
 static void drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -166,6 +221,40 @@ static void drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     } else {
         display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . .  ");
     }
+}
+
+// Used when booting without a region set
+static void drawWelcomeScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+
+    if ((millis() / 10000) % 2) {
+        display->setFont(FONT_SMALL);
+
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->drawString(64 + x, y, "//\\ E S H T /\\ S T / C");
+
+        display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+        display->drawString(x, y + FONT_HEIGHT_SMALL * 2 - 3, "Set the region using the");
+        display->drawString(x, y + FONT_HEIGHT_SMALL * 3 - 3, "Meshtastic Android, iOS,");
+        display->drawString(x, y + FONT_HEIGHT_SMALL * 4 - 3, "Flasher or CLI client.");
+    } else {
+        display->setFont(FONT_SMALL);
+
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->drawString(64 + x, y, "//\\ E S H T /\\ S T / C");
+
+        display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+        display->drawString(x, y + FONT_HEIGHT_SMALL * 2 - 3, "Visit meshtastic.org");
+        display->drawString(x, y + FONT_HEIGHT_SMALL * 3 - 3, "for more information.");
+        display->drawString(x, y + FONT_HEIGHT_SMALL * 4 - 3, "");
+    }
+
+#ifndef NO_ESP32
+    yield();
+    esp_task_wdt_reset();
+#endif
 }
 
 #ifdef HAS_EINK
@@ -256,7 +345,7 @@ static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->drawString(0 + x, 0 + y, tempBuf);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    display->drawString(0 + x, FONT_HEIGHT_MEDIUM + y, "For help, please post on\nmeshtastic.discourse.group");
+    display->drawString(0 + x, FONT_HEIGHT_MEDIUM + y, "For help, please visit \nmeshtastic.org");
 }
 
 // Ignore messages orginating from phone (from the current node 0x0) unless range test or store and forward module are enabled
@@ -646,8 +735,18 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         snprintf(lastStr, sizeof(lastStr), "%u seconds ago", agoSecs);
     else if (agoSecs < 120 * 60) // last 2 hrs
         snprintf(lastStr, sizeof(lastStr), "%u minutes ago", agoSecs / 60);
-    else
-        snprintf(lastStr, sizeof(lastStr), "%u hours ago", agoSecs / 60 / 60);
+    else {
+
+        uint32_t hours_in_month = 730;
+
+        // Only show hours ago if it's been less than 6 months. Otherwise, we may have bad
+        //   data.
+        if ((agoSecs / 60 / 60) < (hours_in_month * 6)) {
+            snprintf(lastStr, sizeof(lastStr), "%u hours ago", agoSecs / 60 / 60);
+        } else {
+            snprintf(lastStr, sizeof(lastStr), "unknown age");
+        }
+    }
 
     static char distStr[20];
     strcpy(distStr, "? km"); // might not have location data
@@ -766,11 +865,11 @@ void Screen::setup()
     useDisplay = true;
 
 #ifdef AutoOLEDWire_h
-       dispdev.setDetected(screen_model);
+    dispdev.setDetected(screen_model);
 #endif
 
-    // I think this is not needed - redundant with ui.init
-    // dispdev.resetOrientation();
+    // Load OEM config from Proto file if existent
+    loadProto(oemConfigFile, OEMStore_size, sizeof(oemConfigFile), OEMStore_fields, &oemStore);
 
     // Initialising the UI will init the display too.
     ui.init();
@@ -823,6 +922,7 @@ void Screen::setup()
     // twice initially.
     ui.update();
     ui.update();
+    serialSinceMsec = millis();
 
     // Subscribe to status updates
     powerStatusObserver.observe(&powerStatus->onNewStatus);
@@ -853,7 +953,7 @@ int32_t Screen::runOnce()
         return RUN_SAME;
     }
 
-    // Show boot screen for first 3 seconds, then switch to normal operation.
+    // Show boot screen for first 5 seconds, then switch to normal operation.
     // serialSinceMsec adjusts for additional serial wait time during nRF52 bootup
     static bool showingBootScreen = true;
     if (showingBootScreen && (millis() > (5000 + serialSinceMsec))) {
@@ -861,6 +961,27 @@ int32_t Screen::runOnce()
         stopBootScreen();
         showingBootScreen = false;
     }
+
+    // If we have an OEM Boot screen, toggle after 2,5 seconds
+    if(strlen(oemStore.oem_text) > 0){
+        static bool showingOEMBootScreen = true;
+        if (showingOEMBootScreen && (millis() > (2500 + serialSinceMsec))) {
+            DEBUG_MSG("Switch to OEM screen...\n");
+            // Change frames.
+            static FrameCallback bootOEMFrames[] = {drawOEMBootScreen};
+            static const int bootOEMFrameCount = sizeof(bootOEMFrames) / sizeof(bootOEMFrames[0]);
+            ui.setFrames(bootOEMFrames, bootOEMFrameCount);
+            ui.update();
+            ui.update();
+            showingOEMBootScreen = false;
+        }
+    }
+
+#ifndef DISABLE_WELCOME_UNSET
+    if (showingNormalScreen && radioConfig.preferences.region == RegionCode_Unset) {
+        setWelcomeFrames();
+    }
+#endif
 
     // Process incoming commands.
     for (;;) {
@@ -971,6 +1092,20 @@ void Screen::setSSLFrames()
         // DEBUG_MSG("showing SSL frames\n");
         static FrameCallback sslFrames[] = {drawSSLScreen};
         ui.setFrames(sslFrames, 1);
+        ui.update();
+    }
+}
+
+/* show a message that the SSL cert is being built
+ * it is expected that this will be used during the boot phase */
+void Screen::setWelcomeFrames()
+{
+    if (address_found) {
+        // DEBUG_MSG("showing Welcome frames\n");
+        ui.disableAllIndicators();
+
+        static FrameCallback welcomeFrames[] = {drawWelcomeScreen};
+        ui.setFrames(welcomeFrames, 1);
         ui.update();
     }
 }
@@ -1366,7 +1501,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     }
 
     auto mode = "";
-    
+
     if (channels.getPrimary().modem_config == 0) {
         mode = "VLongSlow";
     } else if (channels.getPrimary().modem_config == 1) {
@@ -1380,7 +1515,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     } else if (channels.getPrimary().modem_config == 5) {
         mode = "ShortSlow";
     } else if (channels.getPrimary().modem_config == 6) {
-        mode = "ShortFast";    
+        mode = "ShortFast";
     } else {
         mode = "Custom";
     }
@@ -1432,8 +1567,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     // Display Channel Utilization
     char chUtil[13];
     sprintf(chUtil, "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil),
-                        y + FONT_HEIGHT_SMALL * 1, chUtil);
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), y + FONT_HEIGHT_SMALL * 1, chUtil);
 
     // Line 3
     if (radioConfig.preferences.gps_format != GpsCoordinateFormat_GpsFormatDMS) // if DMS then don't draw altitude
@@ -1491,16 +1625,13 @@ int Screen::handleTextMessage(const MeshPacket *packet)
 int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 {
     if (showingNormalScreen) {
-        if (event->frameChanged)
-        {
+        if (event->frameChanged) {
             setFrames(); // Regen the list of screens (will show new text message)
-        }
-        else if (event->needRedraw)
-        {
+        } else if (event->needRedraw) {
             setFastFramerate();
             // TODO: We might also want switch to corresponding frame,
             //       but we don't know the exact frame number.
-            //ui.switchToFrame(0);
+            // ui.switchToFrame(0);
         }
     }
 

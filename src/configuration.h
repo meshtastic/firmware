@@ -126,6 +126,16 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 
 // -----------------------------------------------------------------------------
+// Feature toggles
+// -----------------------------------------------------------------------------
+
+// Disable use of the NTP library and related features
+//#define DISABLE_NTP
+
+// Disable the welcome screen and allow 
+// #define DISABLE_WELCOME_UNSET
+
+// -----------------------------------------------------------------------------
 // OLED & Input
 // -----------------------------------------------------------------------------
 
