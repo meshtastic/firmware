@@ -6,21 +6,28 @@
 uint8_t oled_probe(byte addr)
 {
     uint8_t r = 0;
+    uint8_t r_prev = 0;
+    uint8_t c = 0;
     uint8_t o_probe = 0;
-    Wire.beginTransmission(addr);
-    Wire.write(0x00);
-    Wire.endTransmission();
-    Wire.requestFrom((int)addr, 1);
-    if (Wire.available()) {
-        r = Wire.read();
-    }
-    r &= 0x0f;
-    if (r == 0x08 || r == 0x00) {
-        o_probe = 2; // SH1106
-    } else if ( r == 0x03 || r == 0x06 || r == 0x07) {
-        o_probe = 1; // SSD1306
-    }
-    DEBUG_MSG("0x%x subtype probed\n", r);
+    do {
+        r_prev = r;
+        Wire.beginTransmission(addr);
+        Wire.write(0x00);
+        Wire.endTransmission();
+        Wire.requestFrom((int)addr, 1);
+        if (Wire.available()) {
+            r = Wire.read();
+        }
+        r &= 0x0f;
+
+        if (r == 0x08 || r == 0x00) {
+            o_probe = 2; // SH1106
+        } else if ( r == 0x03 || r == 0x06 || r == 0x07) {
+            o_probe = 1; // SSD1306
+        }
+        c++;
+    } while ((r != r_prev) && (c < 4));
+    DEBUG_MSG("0x%x subtype probed in %i tries \n", r, c);
     return o_probe;
 }
 

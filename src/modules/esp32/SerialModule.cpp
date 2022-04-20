@@ -93,6 +93,18 @@ int32_t SerialModule::runOnce()
 
             if (radioConfig.preferences.serial_module_baud == RadioConfig_UserPreferences_Serial_Baud_BAUD_Default) {
                 baud = 38400;
+            
+            } else if (radioConfig.preferences.serial_module_baud == RadioConfig_UserPreferences_Serial_Baud_BAUD_110) {
+                baud = 110;
+
+            } else if (radioConfig.preferences.serial_module_baud == RadioConfig_UserPreferences_Serial_Baud_BAUD_300) {
+                baud = 300;
+
+            } else if (radioConfig.preferences.serial_module_baud == RadioConfig_UserPreferences_Serial_Baud_BAUD_600) {
+                baud = 600;
+
+            } else if (radioConfig.preferences.serial_module_baud == RadioConfig_UserPreferences_Serial_Baud_BAUD_1200) {
+                baud = 1200;
 
             } else if (radioConfig.preferences.serial_module_baud == RadioConfig_UserPreferences_Serial_Baud_BAUD_2400) {
                 baud = 2400;
