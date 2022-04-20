@@ -72,6 +72,16 @@ MeshPacket *MeshPacketQueue::dequeue()
     return p;
 }
 
+MeshPacket *MeshPacketQueue::getFront()
+{
+    if (empty()) {
+        return NULL;
+    }
+
+    auto *p = queue.front();
+    return p;
+}
+
 /** Attempt to find and remove a packet from this queue.  Returns a pointer to the removed packet, or NULL if not found */
 MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id)
 {
