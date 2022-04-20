@@ -12,4 +12,8 @@ PB_BIND(DeviceState, DeviceState, 4)
 PB_BIND(ChannelFile, ChannelFile, 2)
 
 
+PB_BIND(OEMStore, OEMStore, 2)
+
+
+
 
