@@ -79,7 +79,7 @@ uint8_t cardkb_found;
 // The I2C address of the Faces Keyboard (if found)
 uint8_t faceskb_found;
 
-bool eink_found;
+bool eink_found = true;
 
 uint32_t serialSinceMsec;
 

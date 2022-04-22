@@ -16,12 +16,6 @@ HardwareSerial *GPS::_serial_gps = &Serial1;
 HardwareSerial *GPS::_serial_gps = NULL;
 #endif
 
-#ifdef GPS_I2C_ADDRESS
-uint8_t GPS::i2cAddress = ublox_found;
-#else
-uint8_t GPS::i2cAddress = 0;
-#endif
-
 GPS *gps;
 
 /// Multiple GPS instances might use the same serial port (in sequence), but we can

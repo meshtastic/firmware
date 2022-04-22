@@ -59,10 +59,8 @@ extern "C" {
  * Buttons
  */
 
-#ifdef RAK_BASE_5005
 #define PIN_BUTTON1 9 // Pin for button on E-ink button module or IO expansion
 #define BUTTON_NEED_PULLUP
-#endif
 #define PIN_BUTTON2 12
 #define PIN_BUTTON3 24
 #define PIN_BUTTON4 25
@@ -141,7 +139,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // FIXME - I think this is actually just the board power enable - it enables power to the CPU also 
 //#define PIN_EINK_PWR_ON (-1)
 
-// #define HAS_EINK
+#define HAS_EINK
 
 /*
  * Wire Interfaces
@@ -197,10 +195,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_GPS_EN (34)
 #define PIN_GPS_PPS (17) // Pulse per second input from the GPS
 
-#ifdef RAK_BASE_5005
 #define GPS_RX_PIN PIN_SERIAL1_RX
 #define GPS_TX_PIN PIN_SERIAL1_TX
-#endif
 
 // Battery
 // The battery sense is hooked to pin A0 (5)
