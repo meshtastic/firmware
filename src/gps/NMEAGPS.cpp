@@ -64,11 +64,12 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         t.tm_mon = d.month() - 1;
         t.tm_year = d.year() - 1900;
         t.tm_isdst = false;
-        DEBUG_MSG("NMEA GPS time %d-%d-%d %d:%d:%d\n", d.year(), d.month(), t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
-
-        perhapsSetRTC(RTCQualityGPS, t);
-
-        return true;
+        if (t.tm_mon > -1){
+            DEBUG_MSG("NMEA GPS time %d-%d-%d %d:%d:%d\n", d.year(), d.month(), t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
+            perhapsSetRTC(RTCQualityGPS, t);
+            return true;
+        } else
+            return false;
     } else
         return false;
 }

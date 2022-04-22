@@ -139,7 +139,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // FIXME - I think this is actually just the board power enable - it enables power to the CPU also 
 //#define PIN_EINK_PWR_ON (-1)
 
-#define HAS_EINK
+// #define HAS_EINK
 
 /*
  * Wire Interfaces

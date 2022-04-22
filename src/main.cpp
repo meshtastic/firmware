@@ -212,7 +212,7 @@ void setup()
 
     scanI2Cdevice();
 #ifdef RAK4630
-    scanEInkDevice();
+    // scanEInkDevice();
 #endif
 
     // Buttons & LED

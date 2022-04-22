@@ -154,6 +154,7 @@ void nrf52Setup()
     nRFCrypto.Random.generate(seed.seed8, sizeof(seed.seed8));
     DEBUG_MSG("Setting random seed %u\n", seed.seed32);
     randomSeed(seed.seed32);
+    nRFCrypto.end();
 }
 
 void cpuDeepSleep(uint64_t msecToWake)
