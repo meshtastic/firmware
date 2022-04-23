@@ -176,6 +176,25 @@ void RF95Interface::startReceive()
     enableInterrupt(isrRxLevel0);
 }
 
+bool RF95Interface::isChannelActive()
+{
+    // check if we can detect a LoRa preamble on the current channel
+    int16_t result;
+    setTransmitEnable(false);
+    setStandby();  // needed for smooth transition
+    result = lora->scanChannel();
+    
+    if (result == PREAMBLE_DETECTED) {
+        // DEBUG_MSG("Channel is busy!\n");
+        return true;
+    }
+
+    assert(result != ERR_WRONG_MODEM);
+    
+    // DEBUG_MSG("Channel is free!\n");
+    return false;
+}
+
 /** Could we send right now (i.e. either not actively receving or transmitting)? */
 bool RF95Interface::isActivelyReceiving()
 {
