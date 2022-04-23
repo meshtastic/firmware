@@ -228,6 +228,23 @@ void SX126xInterface<T>::startReceive()
 
 /** Could we send right now (i.e. either not actively receving or transmitting)? */
 template<typename T>
+bool SX126xInterface<T>::isChannelActive()
+{
+    // check if we can detect a LoRa preamble on the current channel
+    int16_t result;
+
+    setStandby(); 
+    result = lora.scanChannel();
+    if (result == PREAMBLE_DETECTED) 
+        return true;
+    
+    assert(result != ERR_WRONG_MODEM);
+    
+    return false;
+}
+
+/** Could we send right now (i.e. either not actively receving or transmitting)? */
+template<typename T>
 bool SX126xInterface<T>::isActivelyReceiving()
 {
     // The IRQ status will be cleared when we start our read operation.  Check if we've started a header, but haven't yet
