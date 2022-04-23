@@ -3,7 +3,7 @@
 [![Continuous Integration](https://github.com/meshtastic/Meshtastic-device/actions/workflows/main.yml/badge.svg)](https://github.com/meshtastic/Meshtastic-device/actions/workflows/main.yml)
 ![GitHub all releases](https://img.shields.io/github/downloads/meshtastic/meshtastic-device/total)
 [![CLA assistant](https://cla-assistant.io/readme/badge/meshtastic/Meshtastic-device)](https://cla-assistant.io/meshtastic/Meshtastic-device)
-[![Fiscal Contributors](https://opencollective.com/meshtastic/tiers/badge.svg)](https://opencollective.com/meshtastic/tiers/badge.svg)
+[![Fiscal Contributors](https://opencollective.com/meshtastic/tiers/badge.svg)](https://opencollective.com/meshtastic/)
 
 ## This repository contains the device firmware used in the [Meshtastic](https://meshtastic.org) project.
 
