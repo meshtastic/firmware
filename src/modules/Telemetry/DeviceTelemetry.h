@@ -27,7 +27,6 @@ class DeviceTelemetryModule : private concurrency::OSThread, public ProtobufModu
     bool sendOurTelemetry(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
 
   private:
-    String getSenderName(const MeshPacket &mp);
     bool firstTime = 1;
     const MeshPacket *lastMeasurementPacket;
 };
