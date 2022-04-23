@@ -118,10 +118,10 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
         return res;
     }
 
-    // set random transmit delay to let others reconfigure their radio,
+    // set (random) transmit delay to let others reconfigure their radio,
     // to avoid collisions and implement timing-based flooding
     // DEBUG_MSG("Set random delay before transmitting.\n");
-    setRandomDelay();  
+    setTransmitDelay();  
 
     return res;
 #else
@@ -187,11 +187,11 @@ void RadioLibInterface::onNotify(uint32_t notification)
         if (!txQueue.empty()) {
             if (!canSendImmediately()) {
                 // DEBUG_MSG("Currently Rx/Tx-ing: set random delay\n");
-                setRandomDelay(); // currently Rx/Tx-ing: reset random delay
+                setTransmitDelay(); // currently Rx/Tx-ing: reset random delay
             } else {
                 if (isChannelActive()) { // check if there is currently a LoRa packet on the channel
                     // DEBUG_MSG("Channel is active: set random delay\n");
-                    setRandomDelay(); // reset random delay
+                    setTransmitDelay(); // reset random delay
                 } else {
                     // Send any outgoing packets we have ready
                     MeshPacket *txp = txQueue.dequeue();
@@ -212,7 +212,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
     }
 }
 
-void RadioLibInterface::setRandomDelay()
+void RadioLibInterface::setTransmitDelay()
 {
     MeshPacket *p = txQueue.getFront();
     // We want all sending/receiving to be done by our daemon thread. 
