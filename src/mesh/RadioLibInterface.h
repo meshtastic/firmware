@@ -144,9 +144,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     virtual bool cancelSending(NodeNum from, PacketId id) override;
 
   private:
-    /** if we have something waiting to send, start a short random timer so we can come check for collision before actually doing
+    /** if we have something waiting to send, start a short (random) timer so we can come check for collision before actually doing
      * the transmit */
-    void setRandomDelay();
+    void setTransmitDelay();
 
     /** random timer with certain min. and max. settings */
     void startTransmitTimer(bool withDelay = true);
