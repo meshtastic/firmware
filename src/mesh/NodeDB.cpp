@@ -95,14 +95,16 @@ bool NodeDB::resetRadioConfig()
         nvs_flash_erase();
 #endif
 #ifdef NRF52_SERIES
-        FSCom.rmdir_r("/prefs");
-
+         // first, remove the "/prefs" (this removes most prefs)
+        FS.rmdir_r("/prefs");
+        // second, install default state (this will deal with the duplicate mac address issue)
+        installDefaultDeviceState();
+        // third, write to disk
+        saveToDisk();
         Bluefruit.begin();
-
         DEBUG_MSG("Clearing bluetooth bonds!\n");
         bond_print_list(BLE_GAP_ROLE_PERIPH);
         bond_print_list(BLE_GAP_ROLE_CENTRAL);
-
         Bluefruit.Periph.clearBonds();
         Bluefruit.Central.clearBonds();
 #endif
