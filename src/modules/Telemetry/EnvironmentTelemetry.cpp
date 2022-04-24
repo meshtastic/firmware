@@ -149,19 +149,6 @@ int32_t EnvironmentTelemetryModule::runOnce()
 #endif
 }
 
-String GetSenderName(const MeshPacket &mp)
-{
-    String sender;
-
-    auto node = nodeDB.getNode(getFrom(&mp));
-    if (node) {
-        sender = node->user.short_name;
-    } else {
-        sender = "UNK";
-    }
-    return sender;
-}
-
 uint32_t GetTimeSinceMeshPacket(const MeshPacket *mp)
 {
     uint32_t now = getTime();
@@ -198,7 +185,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     Telemetry lastMeasurement;
 
     uint32_t agoSecs = GetTimeSinceMeshPacket(lastMeasurementPacket);
-    String lastSender = GetSenderName(*lastMeasurementPacket);
+    const char *lastSender = getSenderShortName(*lastMeasurementPacket);
 
     auto &p = lastMeasurementPacket->decoded;
     if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, Telemetry_fields, &lastMeasurement)) {
@@ -213,16 +200,16 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     if (radioConfig.preferences.telemetry_module_environment_display_fahrenheit) {
         last_temp = String(CelsiusToFahrenheit(lastMeasurement.variant.environment_metrics.temperature), 0) + "°F";
     }
-    display->drawString(x, y += fontHeight(FONT_MEDIUM) - 2, "From: " + lastSender + "(" + String(agoSecs) + "s)");
-    display->drawString(x, y += fontHeight(FONT_SMALL) - 2,"Temp/Hum: " + last_temp + " / " + String(lastMeasurement.variant.environment_metrics.relative_humidity, 0) + "%");
+    display->drawString(x, y += fontHeight(FONT_MEDIUM) - 2, "From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
+    display->drawString(x, y += fontHeight(FONT_SMALL) - 2, "Temp/Hum: " + last_temp + " / " + String(lastMeasurement.variant.environment_metrics.relative_humidity, 0) + "%");
     if (lastMeasurement.variant.environment_metrics.barometric_pressure != 0) 
-        display->drawString(x, y += fontHeight(FONT_SMALL),"Press: " + String(lastMeasurement.variant.environment_metrics.barometric_pressure, 0) + "hPA");
+        display->drawString(x, y += fontHeight(FONT_SMALL), "Press: " + String(lastMeasurement.variant.environment_metrics.barometric_pressure, 0) + "hPA");
 }
 
 bool EnvironmentTelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Telemetry *t)
 {
     if (t->which_variant == Telemetry_environment_metrics_tag) {
-        String sender = GetSenderName(mp);
+        const char *sender = getSenderShortName(mp);
 
         DEBUG_MSG("-----------------------------------------\n");
         DEBUG_MSG("Environment Telemetry: Received data from %s\n", sender);
