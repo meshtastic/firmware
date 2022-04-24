@@ -96,7 +96,7 @@ bool NodeDB::resetRadioConfig()
 #endif
 #ifdef NRF52_SERIES
          // first, remove the "/prefs" (this removes most prefs)
-        FS.rmdir_r("/prefs");
+        FSCom.rmdir_r("/prefs");
         // second, install default state (this will deal with the duplicate mac address issue)
         installDefaultDeviceState();
         // third, write to disk
