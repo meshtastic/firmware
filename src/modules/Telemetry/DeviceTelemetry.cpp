@@ -27,7 +27,7 @@ int32_t DeviceTelemetryModule::runOnce()
 bool DeviceTelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Telemetry *t)
 {
     if (t->which_variant == Telemetry_device_metrics_tag) {
-        String sender = getSenderName(mp);
+        const char *sender = getSenderShortName(mp);
 
         DEBUG_MSG("-----------------------------------------\n");
         DEBUG_MSG("Device Telemetry: Received data from %s\n", sender);
@@ -42,19 +42,6 @@ bool DeviceTelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Telemet
         nodeDB.updateTelemetry(getFrom(&mp), *t, RX_SRC_RADIO);
     }
     return false; // Let others look at this message also if they want
-}
-
-String DeviceTelemetryModule::getSenderName(const MeshPacket &mp)
-{
-    String sender;
-
-    auto node = nodeDB.getNode(getFrom(&mp));
-    if (node) {
-        sender = node->user.short_name;
-    } else {
-        sender = "UNK";
-    }
-    return sender;
 }
 
 bool DeviceTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies)
