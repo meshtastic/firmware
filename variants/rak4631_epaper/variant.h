@@ -59,10 +59,8 @@ extern "C" {
  * Buttons
  */
 
-#ifdef RAK_BASE_5005
 #define PIN_BUTTON1 9 // Pin for button on E-ink button module or IO expansion
 #define BUTTON_NEED_PULLUP
-#endif
 #define PIN_BUTTON2 12
 #define PIN_BUTTON3 24
 #define PIN_BUTTON4 25
@@ -110,16 +108,38 @@ static const uint8_t AREF = PIN_AREF;
 /*
  * SPI Interfaces
  */
-#define SPI_INTERFACES_COUNT 1
+#define SPI_INTERFACES_COUNT 2
 
 #define PIN_SPI_MISO (45)
 #define PIN_SPI_MOSI (44)
 #define PIN_SPI_SCK (43)
 
+#define PIN_SPI1_MISO (29) // (0 + 29)
+#define PIN_SPI1_MOSI (30) // (0 + 30)
+#define PIN_SPI1_SCK  (3) // (0 + 3)
+
 static const uint8_t SS = 42;
 static const uint8_t MOSI = PIN_SPI_MOSI;
 static const uint8_t MISO = PIN_SPI_MISO;
 static const uint8_t SCK = PIN_SPI_SCK;
+
+  /*
+ * eink display pins
+ */
+
+#define PIN_EINK_EN (0 + 2) // (0 + 2) Note: this is really just backlight power
+#define PIN_EINK_CS (0 + 26)
+#define PIN_EINK_BUSY (0 + 4)
+#define PIN_EINK_DC (0 + 17)
+#define PIN_EINK_RES (-1)
+#define PIN_EINK_SCLK (0 + 3)
+#define PIN_EINK_MOSI (0 + 30) // also called SDI
+
+// Controls power for the eink display - Board power is enabled either by VBUS from USB or the CPU asserting PWR_ON
+// FIXME - I think this is actually just the board power enable - it enables power to the CPU also 
+//#define PIN_EINK_PWR_ON (-1)
+
+#define HAS_EINK
 
 /*
  * Wire Interfaces
@@ -175,10 +195,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_GPS_EN (34)
 #define PIN_GPS_PPS (17) // Pulse per second input from the GPS
 
-#ifdef RAK_BASE_5005
 #define GPS_RX_PIN PIN_SERIAL1_RX
 #define GPS_TX_PIN PIN_SERIAL1_TX
-#endif
 
 // Battery
 // The battery sense is hooked to pin A0 (5)

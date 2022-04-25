@@ -48,6 +48,17 @@ template <class T> class ProtobufModule : protected SinglePortModule
         return p;
     }
 
+    /**
+     * Gets the short name from the sender of the mesh packet
+     * Returns "???" if unknown sender
+     */
+    const char *getSenderShortName(const MeshPacket &mp)
+    {
+        auto node = nodeDB.getNode(getFrom(&mp));
+        const char *sender = (node) ? node->user.short_name : "???";
+        return sender;
+    }
+
   private:
     /** Called to handle a particular incoming message
 

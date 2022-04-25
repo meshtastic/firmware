@@ -132,6 +132,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     virtual void startReceive() = 0;
 
+    /** can we detect a LoRa preamble on the current channel? */
+    virtual bool isChannelActive() = 0;
+
     /** are we actively receiving a packet (only called during receiving state)
      *  This method is only public to facilitate debugging.  Do not call.
      */
@@ -141,18 +144,14 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     virtual bool cancelSending(NodeNum from, PacketId id) override;
 
   private:
-    /** if we have something waiting to send, start a short random timer so we can come check for collision before actually doing
-     * the transmit
-     *
-     * If the timer was already running, we just wait for that one to occur.
-     * */
+    /** if we have something waiting to send, start a short (random) timer so we can come check for collision before actually doing
+     * the transmit */
+    void setTransmitDelay();
+
+    /** random timer with certain min. and max. settings */
     void startTransmitTimer(bool withDelay = true);
 
-    /** if we have something waiting to send, start a short scaled timer based on SNR so we can come check for collision before actually doing
-     * the transmit
-     *
-     * If the timer was already running, we just wait for that one to occur.
-     * */
+    /** timer scaled to SNR of to be flooded packet */
     void startTransmitTimerSNR(float snr);
 
     void handleTransmitInterrupt();
