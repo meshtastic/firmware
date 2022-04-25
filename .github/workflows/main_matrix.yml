@@ -116,7 +116,8 @@ jobs:
       - name: Upgrade python tools
         run: |
           python -m pip install --upgrade pip
-          pip install -U platformio meshtastic adafruit-nrfutil littlefs-python
+          pip install -U platformio adafruit-nrfutil littlefs-python
+          pip install -U --pre meshtastic
 
       - name: Upgrade platformio
         run: |
