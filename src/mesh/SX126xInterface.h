@@ -46,6 +46,9 @@ class SX126xInterface : public RadioLibInterface
      */
     virtual void enableInterrupt(void (*callback)()) { lora.setDio1Action(callback); }
 
+    /** can we detect a LoRa preamble on the current channel? */
+    virtual bool isChannelActive() override;
+
     /** are we actively receiving a packet (only called during receiving state) */
     virtual bool isActivelyReceiving() override;
 

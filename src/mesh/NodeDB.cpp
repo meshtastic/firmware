@@ -95,14 +95,16 @@ bool NodeDB::resetRadioConfig()
         nvs_flash_erase();
 #endif
 #ifdef NRF52_SERIES
+         // first, remove the "/prefs" (this removes most prefs)
         FSCom.rmdir_r("/prefs");
-
+        // second, install default state (this will deal with the duplicate mac address issue)
+        installDefaultDeviceState();
+        // third, write to disk
+        saveToDisk();
         Bluefruit.begin();
-
         DEBUG_MSG("Clearing bluetooth bonds!\n");
         bond_print_list(BLE_GAP_ROLE_PERIPH);
         bond_print_list(BLE_GAP_ROLE_CENTRAL);
-
         Bluefruit.Periph.clearBonds();
         Bluefruit.Central.clearBonds();
 #endif
@@ -215,7 +217,7 @@ void NodeDB::init()
     myNodeInfo.error_address = 0;
 
     // likewise - we always want the app requirements to come from the running appload
-    myNodeInfo.min_app_version = 20200; // format is Mmmss (where M is 1+the numeric major number. i.e. 20120 means 1.1.20
+    myNodeInfo.min_app_version = 20300; // format is Mmmss (where M is 1+the numeric major number. i.e. 20120 means 1.1.20
 
     // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we won't
     // keep using that nodenum forever. Crummy guess at our nodenum (but we will check against the nodedb to avoid conflicts)
