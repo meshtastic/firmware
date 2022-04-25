@@ -54,6 +54,7 @@ void scanI2Cdevice(void)
                     DEBUG_MSG("unknown display found\n");
                 }
             }
+
             if (addr == CARDKB_ADDR) {
                 cardkb_found = addr;
                 DEBUG_MSG("m5 cardKB found\n");

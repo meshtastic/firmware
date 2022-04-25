@@ -28,6 +28,8 @@ class MeshPacketQueue
 
     MeshPacket *dequeue();
 
+    MeshPacket *getFront();
+
     /** Attempt to find and remove a packet from this queue.  Returns the packet which was removed from the queue */
     MeshPacket *remove(NodeNum from, PacketId id);
 };

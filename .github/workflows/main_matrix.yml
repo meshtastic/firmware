@@ -34,9 +34,8 @@ jobs:
           - board: heltec-v2.1
           - board: tbeam0.7
           - board: meshtastic-diy-v1
-          - board: rak4631_5005
-          - board: rak4631_19003
-          - board: rak4631_5005_eink
+          - board: rak4631
+          - board: rak4631_eink
           - board: t-echo
 
     runs-on: ubuntu-latest
@@ -117,7 +116,8 @@ jobs:
       - name: Upgrade python tools
         run: |
           python -m pip install --upgrade pip
-          pip install -U platformio meshtastic adafruit-nrfutil littlefs-python
+          pip install -U platformio adafruit-nrfutil littlefs-python
+          pip install -U --pre meshtastic
 
       - name: Upgrade platformio
         run: |
@@ -158,9 +158,8 @@ jobs:
       max-parallel: 2
       matrix:
         include:
-          - board: rak4631_5005
-          - board: rak4631_19003
-          - board: rak4631_5005_eink
+          - board: rak4631
+          - board: rak4631_eink
           - board: t-echo
           - board: pca10059_diy_eink
 
@@ -188,7 +187,8 @@ jobs:
       - name: Upgrade python tools
         run: |
           python -m pip install --upgrade pip
-          pip install -U platformio meshtastic adafruit-nrfutil
+          pip install -U platformio adafruit-nrfutil
+          pip install -U --pre meshtastic
 
       - name: Upgrade platformio
         run: |
@@ -235,7 +235,8 @@ jobs:
       - name: Upgrade python tools
         run: |
           python -m pip install --upgrade pip
-          pip install -U platformio meshtastic adafruit-nrfutil
+          pip install -U platformio adafruit-nrfutil
+          pip install -U --pre meshtastic
 
       - name: Upgrade platformio
         run: |
