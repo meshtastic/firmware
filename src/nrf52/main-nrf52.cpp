@@ -32,8 +32,8 @@ void __attribute__((noreturn)) __assert_func(const char *file, int line, const c
 {
     DEBUG_MSG("assert failed %s: %d, %s, test=%s\n", file, line, func, failedexpr);
     // debugger_break(); FIXME doesn't work, possibly not for segger
-    while (1)
-        ; // FIXME, reboot!
+    // Reboot cpu
+    NVIC_SystemReset();
 }
 
 void getMacAddr(uint8_t *dmac)
