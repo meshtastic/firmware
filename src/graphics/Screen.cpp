@@ -815,12 +815,25 @@ void _screen_header()
 }
 #endif
 
+// #ifdef RAK4630
+// Screen::Screen(uint8_t address, int sda, int scl) : OSThread("Screen"), cmdQueue(32), dispdev(address, sda, scl), dispdev_oled(address, sda, scl), ui(&dispdev)
+// {
+//     address_found = address;
+//     cmdQueue.setReader(this);
+//     if (screen_found) {
+//         (void)dispdev;
+//         AutoOLEDWire dispdev = dispdev_oled;
+//         (void)ui;
+//         OLEDDisplayUi ui(&dispdev);
+//     }
+// }
+// #else
 Screen::Screen(uint8_t address, int sda, int scl) : OSThread("Screen"), cmdQueue(32), dispdev(address, sda, scl), ui(&dispdev)
 {
     address_found = address;
     cmdQueue.setReader(this);
 }
-
+// #endif
 /**
  * Prepare the display for the unit going to the lowest power mode possible.  Most screens will just
  * poweroff, but eink screens will show a "I'm sleeping" graphic, possibly with a QR code

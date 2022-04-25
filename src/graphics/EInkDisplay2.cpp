@@ -1,6 +1,7 @@
 #include "configuration.h"
 
 #ifdef HAS_EINK
+#include "main.h"
 #include "EInkDisplay2.h"
 #include "SPILock.h"
 #include <SPI.h>
@@ -171,18 +172,46 @@ bool EInkDisplay::connect()
 }
 #elif defined(RAK4630)
 {
-    auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
+    if (eink_found) {
+        auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
 
-    adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
-    
-    adafruitDisplay->init(115200, true, 10, false, SPI1, SPISettings(4000000, MSBFIRST, SPI_MODE0));
+        adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+        
+        adafruitDisplay->init(115200, true, 10, false, SPI1, SPISettings(4000000, MSBFIRST, SPI_MODE0));
 
+        //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
     //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
-    adafruitDisplay->setRotation(3);
-    //For 1.54, 2.9 and 4.2
-    //adafruitDisplay->setRotation(1);
+        //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
+    //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
+        //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
+    //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
+        //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
+    //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
+        //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
+    //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
+        //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
+    //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
+        //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
+        adafruitDisplay->setRotation(3);
+        //For 1.54, 2.9 and 4.2
+        //adafruitDisplay->setRotation(1);
 
+        adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
     adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);       
+        adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
+    adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);       
+        adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
+    adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);       
+        adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
+    adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);       
+        adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
+    adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);       
+        adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
+    adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);       
+        adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
+    } else {
+        (void)adafruitDisplay;
+    }      
 }
 #elif defined(PCA10059)
 {

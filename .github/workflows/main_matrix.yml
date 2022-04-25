@@ -34,9 +34,8 @@ jobs:
           - board: heltec-v2.1
           - board: tbeam0.7
           - board: meshtastic-diy-v1
-          - board: rak4631_5005
-          - board: rak4631_19003
-          - board: rak4631_5005_eink
+          - board: rak4631
+          - board: rak4631_eink
           - board: t-echo
 
     runs-on: ubuntu-latest
@@ -158,9 +157,8 @@ jobs:
       max-parallel: 2
       matrix:
         include:
-          - board: rak4631_5005
-          - board: rak4631_19003
-          - board: rak4631_5005_eink
+          - board: rak4631
+          - board: rak4631_eink
           - board: t-echo
           - board: pca10059_diy_eink
 
