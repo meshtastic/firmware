@@ -5,6 +5,7 @@
 #include <ble_gap.h>
 #include <memory.h>
 #include <stdio.h>
+#include <Adafruit_nRFCrypto.h>
 // #include <Adafruit_USBD_Device.h>
 
 #include "NRF52Bluetooth.h"
@@ -145,13 +146,15 @@ void nrf52Setup()
 #endif
 
     // Init random seed
-    // FIXME - use this to get random numbers
-    // #include "nrf_rng.h"
-    // uint32_t r;
-    // ble_controller_rand_vector_get_blocking(&r, sizeof(r));
-    // randomSeed(r);
-    DEBUG_MSG("FIXME, call randomSeed\n");
-    // ::printf("TESTING PRINTF\n");
+    union seedParts {
+        uint32_t seed32;
+        uint8_t  seed8[4];
+    } seed;
+    nRFCrypto.begin();
+    nRFCrypto.Random.generate(seed.seed8, sizeof(seed.seed8));
+    DEBUG_MSG("Setting random seed %u\n", seed.seed32);
+    randomSeed(seed.seed32);
+    nRFCrypto.end();
 }
 
 void cpuDeepSleep(uint64_t msecToWake)

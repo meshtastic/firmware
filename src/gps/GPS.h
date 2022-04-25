@@ -40,9 +40,6 @@ class GPS : private concurrency::OSThread
     /** If !NULL we will use this serial port to construct our GPS */
     static HardwareSerial *_serial_gps;
 
-    /** If !0 we will attempt to connect to the GPS over I2C */
-    static uint8_t i2cAddress;
-
     Position p = Position_init_default;
 
     GPS() : concurrency::OSThread("GPS") {}
