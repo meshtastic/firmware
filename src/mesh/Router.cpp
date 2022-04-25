@@ -274,6 +274,9 @@ void Router::sniffReceived(const MeshPacket *p, const Routing *c)
 
 bool perhapsDecode(MeshPacket *p)
 {
+
+    //DEBUG_MSG("\n\n** perhapsDecode payloadVariant - %d\n\n", p->which_payloadVariant);
+
     if (p->which_payloadVariant == MeshPacket_decoded_tag)
         return true; // If packet was already decoded just return
 
@@ -304,12 +307,28 @@ bool perhapsDecode(MeshPacket *p)
                 p->which_payloadVariant = MeshPacket_decoded_tag; // change type to decoded
                 p->channel = chIndex;                             // change to store the index instead of the hash
 
-
-                // Decompress if needed. jm
-                if (p->decoded.which_payloadVariant == Data_payload_compressed_tag) {
-                    // Decompress the file
+                if (p->decoded.portnum == PortNum_TEXT_MESSAGE_APP) {
+                    DEBUG_MSG("\n\n** TEXT_MESSAGE_APP payloadVariant - %d\n\n", p->decoded.which_payloadVariant);
                 }
+                // Decompress if needed. jm
+                if (p->decoded.portnum == PortNum_TEXT_MESSAGE_APP) {
+                    if (p->decoded.which_payloadVariant == Data_payload_compressed_tag) {
+                        // Decompress the payload
+                        char compressed_in[Constants_DATA_PAYLOAD_LEN] = {};
+                        char decompressed_out[Constants_DATA_PAYLOAD_LEN] = {};
+                        int decompressed_len;
 
+                        memcpy(compressed_in, p->decoded.payload.bytes, p->decoded.payload.size);
+
+                        decompressed_len = unishox2_decompress_simple(compressed_in, p->decoded.payload.size, decompressed_out);
+
+                        DEBUG_MSG("\n\n**\n\nDecompressed length - %d \n", decompressed_len);
+                        // Serial.println(p->decoded.payload.bytes);
+                        Serial.println(decompressed_out);
+
+                        p->decoded.which_payloadVariant = Data_payload_tag;
+                    }
+                }
 
                 printPacket("decoded message", p);
                 return true;
@@ -341,37 +360,37 @@ Routing_Error perhapsEncode(MeshPacket *p)
             char compressed_out[Constants_DATA_PAYLOAD_LEN] = {0};
 
             int compressed_len;
-            // compressed_len = unishox2_compress_simple(original_payload, p->decoded.payload.size, compressed_out);
+            compressed_len = unishox2_compress_simple(original_payload, p->decoded.payload.size, compressed_out);
 
-            Serial.print("Original length - ");
-            Serial.println(p->decoded.payload.size);
+            DEBUG_MSG("Original length - %d \n", p->decoded.payload.size);
+            DEBUG_MSG("Compressed length - %d \n", compressed_len);
 
-            Serial.print("Compressed length - ");
-            Serial.println(compressed_len);
             // Serial.println(compressed_out);
 
             // If the compressed length is greater than or equal to the original size, don't use the compressed form
             if (compressed_len >= p->decoded.payload.size) {
 
-                DEBUG_MSG("Not compressing message. Not enough benefit from doing so.\n");
+                DEBUG_MSG("Not using compressing message.\n");
                 // Set the uncompressed payload varient anyway. Shouldn't hurt?
                 p->decoded.which_payloadVariant = Data_payload_tag;
 
                 // Otherwise we use the compressor
             } else {
-                DEBUG_MSG("Compressing message.\n");
+                DEBUG_MSG("Using compressed message.\n");
                 // Copy the compressed data into the meshpacket
-                //p->decoded.payload_compressed.size = compressed_len;
-                //memcpy(p->decoded.payload_compressed.bytes, compressed_out, compressed_len);
+                p->decoded.payload_compressed.size = compressed_len;
+                memcpy(p->decoded.payload_compressed.bytes, compressed_out, compressed_len);
 
-                //p->decoded.which_payloadVariant = Data_payload_compressed_tag;
+                DEBUG_MSG("\n\n** TEXT_MESSAGE_APP payloadVariant - %d\n\n", p->decoded.which_payloadVariant);
+                p->decoded.which_payloadVariant = Data_payload_compressed_tag;
+                DEBUG_MSG("\n\n** TEXT_MESSAGE_APP payloadVariant - %d\n\n", p->decoded.which_payloadVariant);
             }
 
             if (0) {
                 char decompressed_out[Constants_DATA_PAYLOAD_LEN] = {};
                 int decompressed_len;
 
-                // decompressed_len = unishox2_decompress_simple(compressed_out, compressed_len, decompressed_out);
+                decompressed_len = unishox2_decompress_simple(compressed_out, compressed_len, decompressed_out);
 
                 Serial.print("Decompressed length - ");
                 Serial.println(decompressed_len);
