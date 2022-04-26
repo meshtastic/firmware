@@ -1,7 +1,7 @@
 #include "configuration.h"
 #include "CryptoEngine.h"
 #include <Adafruit_nRFCrypto.h>
-
+#include "aes-256/tiny-aes.h"
 class NRF52CryptoEngine : public CryptoEngine
 {
   public:
@@ -18,7 +18,12 @@ class NRF52CryptoEngine : public CryptoEngine
     {
 //        DEBUG_MSG("NRF52 encrypt!\n");
 
-        if (key.length > 0) {
+        if (key.length > 16) {
+            AES_ctx ctx;
+            initNonce(fromNode, packetId);
+            AES_init_ctx_iv(&ctx, key.bytes, nonce);
+            AES_CTR_xcrypt_buffer(&ctx, bytes, numBytes);
+        } else if (key.length > 0) {
             nRFCrypto.begin();
             nRFCrypto_AES ctx;
             uint8_t myLen = ctx.blockLen(numBytes);
@@ -36,7 +41,12 @@ class NRF52CryptoEngine : public CryptoEngine
     {
 //        DEBUG_MSG("NRF52 decrypt!\n");
 
-        if (key.length > 0) {
+        if (key.length > 16) {
+            AES_ctx ctx;
+            initNonce(fromNode, packetId);
+            AES_init_ctx_iv(&ctx, key.bytes, nonce);
+            AES_CTR_xcrypt_buffer(&ctx, bytes, numBytes);
+        } else if (key.length > 0) {
             nRFCrypto.begin();
             nRFCrypto_AES ctx;
             uint8_t myLen = ctx.blockLen(numBytes);
