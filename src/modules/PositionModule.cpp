@@ -118,7 +118,7 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies)
     p->priority = MeshPacket_Priority_BACKGROUND;
     prevPacketId = p->id;
 
-    service.sendToMesh(p);
+    service.sendToMesh(p, RX_SRC_LOCAL, true);
 }
 
 int32_t PositionModule::runOnce()
