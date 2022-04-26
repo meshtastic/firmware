@@ -129,10 +129,16 @@ bool NMEAGPS::lookForLocation()
     auto loc = reader.location.value();
 
     // Bail out EARLY to avoid overwriting previous good data (like #857)
-    if((toDegInt(loc.lat) == 0) || (toDegInt(loc.lat) > 90)) {
+    if (toDegInt(loc.lat) > 900000000) {
+#ifdef GPS_EXTRAVERBOSE        
+        DEBUG_MSG("Bail out EARLY on LAT %i\n",toDegInt(loc.lat));
+#endif
         return false;
     }
-    if((toDegInt(loc.lng) == 0) || (toDegInt(loc.lng) > 180)) {
+    if (toDegInt(loc.lng) > 1800000000) {
+#ifdef GPS_EXTRAVERBOSE        
+        DEBUG_MSG("Bail out EARLY on LNG %i\n",toDegInt(loc.lng));
+#endif
         return false;
     }
 
