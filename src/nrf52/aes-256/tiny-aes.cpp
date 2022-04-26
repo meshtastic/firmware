@@ -53,16 +53,13 @@ static void KeyExpansion(uint8_t* RoundKey, const uint8_t* Key)
     RoundKey[(i * 4) + 3] = Key[(i * 4) + 3];
   }
 
-  for (i = Nk; i < Nb * (Nr + 1); ++i)
+  for (unsigned i = Nk; i < Nb * (Nr + 1); ++i)
   {
-    {
-      unsigned k = (i - 1) * 4;
-      tempa[0]=RoundKey[k + 0];
-      tempa[1]=RoundKey[k + 1];
-      tempa[2]=RoundKey[k + 2];
-      tempa[3]=RoundKey[k + 3];
-
-    }
+    unsigned k = (i - 1) * 4;
+    tempa[0]=RoundKey[k + 0];
+    tempa[1]=RoundKey[k + 1];
+    tempa[2]=RoundKey[k + 2];
+    tempa[3]=RoundKey[k + 3];
 
     if (i % Nk == 0)
     {
