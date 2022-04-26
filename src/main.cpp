@@ -152,6 +152,13 @@ void setup()
     DEBUG_MSG("\n\n//\\ E S H T /\\ S T / C\n\n");
 
     initDeepSleep();
+    
+    #if defined(TTGO_T_ECHO)
+    DEBUG_MSG("\n\nTTGO_T_ECHO PIN_EINK_PWR_ON\n\n");
+    pinMode(PIN_EINK_PWR_ON, OUTPUT);
+    digitalWrite(PIN_EINK_PWR_ON, HIGH);
+#elif
+#endif
 
 #ifdef VEXT_ENABLE
     pinMode(VEXT_ENABLE, OUTPUT);
