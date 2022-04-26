@@ -224,7 +224,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
     } else {
         // The GPS has lost lock, if we are fixed position we should just keep using
         // the old position
-#if GPS_EXTRAVERBOSE
+#ifdef GPS_EXTRAVERBOSE
         DEBUG_MSG("onGPSchanged() - lost validLocation\n");
 #endif
         if (radioConfig.preferences.fixed_position) {
