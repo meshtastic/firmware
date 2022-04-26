@@ -100,6 +100,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define GPS_TX_PIN 12
 #endif
 
+#ifndef TTGO_T_ECHO
+#define GPS_UBLOX
+#endif
+
 // -----------------------------------------------------------------------------
 // LoRa SPI
 // -----------------------------------------------------------------------------
