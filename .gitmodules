@@ -2,6 +2,9 @@
 	path = proto
 	url = https://github.com/meshtastic/Meshtastic-protobufs.git
 	branch = 1.2-legacy
+[submodule "sdk-nrfxlib"]
+	path = sdk-nrfxlib
+	url = https://github.com/nrfconnect/sdk-nrfxlib.git
 [submodule "design"]
 	path = design
 	url = https://github.com/meshtastic/meshtastic-design.git
