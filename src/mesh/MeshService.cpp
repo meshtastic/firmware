@@ -151,7 +151,7 @@ bool MeshService::cancelSending(PacketId id)
     return router->cancelSending(nodeDB.getNodeNum(), id);
 }
 
-void MeshService::sendToMesh(MeshPacket *p, RxSource src, bool ccToPhone = false)
+void MeshService::sendToMesh(MeshPacket *p, RxSource src, bool ccToPhone)
 {
     nodeDB.updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
 
