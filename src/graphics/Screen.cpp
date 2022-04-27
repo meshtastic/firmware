@@ -1557,7 +1557,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     else
         uptime += String(seconds) + "s ";
 
-    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityFromNet);
+    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice);
     if (rtc_sec > 0) {
         long hms = rtc_sec % SEC_PER_DAY;
         // hms += tz.tz_dsttime * SEC_PER_HOUR;
