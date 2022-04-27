@@ -156,6 +156,12 @@ void setup()
 
     initDeepSleep();
 
+    // Testing this fix für erratic T-Echo boot behaviour    
+#if defined(TTGO_T_ECHO) && defined(PIN_EINK_PWR_ON)
+    pinMode(PIN_EINK_PWR_ON, OUTPUT);
+    digitalWrite(PIN_EINK_PWR_ON, HIGH);
+#endif
+
 #ifdef VEXT_ENABLE
     pinMode(VEXT_ENABLE, OUTPUT);
     digitalWrite(VEXT_ENABLE, 0); // turn on the display power
