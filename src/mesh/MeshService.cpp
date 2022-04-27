@@ -71,17 +71,7 @@ int MeshService::handleFromRadio(const MeshPacket *mp)
     printPacket("Forwarding to phone", mp);
     nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
 
-    fromNum++;
-
-    if (toPhoneQueue.numFree() == 0) {
-        DEBUG_MSG("NOTE: tophone queue is full, discarding oldest\n");
-        MeshPacket *d = toPhoneQueue.dequeuePtr(0);
-        if (d)
-            releaseToPool(d);
-    }
-
-    MeshPacket *copied = packetPool.allocCopy(*mp);
-    assert(toPhoneQueue.enqueue(copied, 0)); // FIXME, instead of failing for full queue, delete the oldest mssages
+    sendToPhone((MeshPacket *)mp);
 
     return 0;
 }
@@ -161,12 +151,16 @@ bool MeshService::cancelSending(PacketId id)
     return router->cancelSending(nodeDB.getNodeNum(), id);
 }
 
-void MeshService::sendToMesh(MeshPacket *p, RxSource src)
+void MeshService::sendToMesh(MeshPacket *p, RxSource src, bool ccToPhone)
 {
     nodeDB.updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
 
     // Note: We might return !OK if our fifo was full, at that point the only option we have is to drop it
     router->sendLocal(p, src);
+
+    if (ccToPhone) {
+        sendToPhone(p);
+    }
 }
 
 void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
@@ -185,6 +179,20 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
             nodeInfoModule->sendOurNodeInfo(dest, wantReplies);
         }
     }
+}
+
+void MeshService::sendToPhone(MeshPacket *p) {
+    if (toPhoneQueue.numFree() == 0) {
+        DEBUG_MSG("NOTE: tophone queue is full, discarding oldest\n");
+        MeshPacket *d = toPhoneQueue.dequeuePtr(0);
+        if (d)
+            releaseToPool(d);
+    }
+
+    MeshPacket *copied = packetPool.allocCopy(*p);
+    perhapsDecode(copied);
+    assert(toPhoneQueue.enqueue(copied, 0)); // FIXME, instead of failing for full queue, delete the oldest mssages
+    fromNum++;
 }
 
 NodeInfo *MeshService::refreshMyNodeInfo()
@@ -224,7 +232,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
     } else {
         // The GPS has lost lock, if we are fixed position we should just keep using
         // the old position
-#if GPS_EXTRAVERBOSE
+#ifdef GPS_EXTRAVERBOSE
         DEBUG_MSG("onGPSchanged() - lost validLocation\n");
 #endif
         if (radioConfig.preferences.fixed_position) {

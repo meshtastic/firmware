@@ -1,5 +1,6 @@
 #include "RTC.h"
 #include "configuration.h"
+#include "main.h"
 #include <sys/time.h>
 #include <time.h>
 
@@ -18,14 +19,35 @@ static uint64_t zeroOffsetSecs; // GPS based time in secs since 1970 - only upda
 void readFromRTC()
 {
     struct timeval tv; /* btw settimeofday() is helpfull here too*/
-
+#ifdef RV3028_RTC
+    if(rtc_found == RV3028_RTC) {
+        uint32_t now = millis();
+        Melopero_RV3028 rtc;
+        rtc.initI2C();
+        tm t;
+        t.tm_year = rtc.getYear() - 1900;
+        t.tm_mon = rtc.getMonth() - 1;
+        t.tm_mday = rtc.getDate();
+        t.tm_hour = rtc.getHour();
+        t.tm_min = rtc.getMinute();
+        t.tm_sec = rtc.getSecond();
+        tv.tv_sec = mktime(&t);
+        tv.tv_usec = 0;
+        DEBUG_MSG("Read RTC time from RV3028 as %ld\n", tv.tv_sec);
+        timeStartMsec = now;
+        zeroOffsetSecs = tv.tv_sec;
+        if (currentQuality == RTCQualityNone) {
+            currentQuality = RTCQualityDevice;
+        }
+    }
+#else 
     if (!gettimeofday(&tv, NULL)) {
         uint32_t now = millis();
-
-        DEBUG_MSG("Read RTC time as %ld (cur millis %u) quality=%d\n", tv.tv_sec, now, currentQuality);
+        DEBUG_MSG("Read RTC time as %ld\n", tv.tv_sec);
         timeStartMsec = now;
         zeroOffsetSecs = tv.tv_sec;
     }
+#endif
 }
 
 /// If we haven't yet set our RTC this boot, set it from a GPS derived time
@@ -55,12 +77,20 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
         zeroOffsetSecs = tv->tv_sec;
 
         // If this platform has a setable RTC, set it
-#ifndef NO_ESP32
+#ifdef RV3028_RTC
+        if(rtc_found == RV3028_RTC) {
+            Melopero_RV3028 rtc;
+            rtc.initI2C();
+            tm *t = localtime(&tv->tv_sec);
+            rtc.setTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_wday, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
+            DEBUG_MSG("RV3028_RTC setTime %02d-%02d-%02d %02d:%02d:%02d %ld\n", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, tv->tv_sec);
+        }
+#elif !defined(NO_ESP32)
         settimeofday(tv, NULL);
 #endif
 
         // nrf52 doesn't have a readable RTC (yet - software not written)
-#if defined(PORTDUINO) || !defined(NO_ESP32)
+#if defined(PORTDUINO) || !defined(NO_ESP32) || defined(RV3028_RTC)
         readFromRTC();
 #endif
 

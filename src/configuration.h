@@ -25,6 +25,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #pragma once
 
 #include <Arduino.h>
+#ifdef RV3028_RTC
+    #include "Melopero_RV3028.h"
+#endif
+
 // -----------------------------------------------------------------------------
 // Version
 // -----------------------------------------------------------------------------
@@ -98,6 +102,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define GPS_TX_PIN -1
 #else
 #define GPS_TX_PIN 12
+#endif
+
+#ifndef TTGO_T_ECHO
+#define GPS_UBLOX
 #endif
 
 // -----------------------------------------------------------------------------
