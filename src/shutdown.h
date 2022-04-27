@@ -7,9 +7,11 @@
 void powerCommandsCheck()
 {
     if (rebootAtMsec && millis() > rebootAtMsec) {
+        DEBUG_MSG("Rebooting\n");
 #ifndef NO_ESP32
-        DEBUG_MSG("Rebooting for update\n");
         ESP.restart();
+#elif NRF52_SERIES
+        NVIC_SystemReset();
 #else
         DEBUG_MSG("FIXME implement reboot for this platform");
 #endif
