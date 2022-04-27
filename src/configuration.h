@@ -25,6 +25,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #pragma once
 
 #include <Arduino.h>
+#ifdef RV3028_RTC
+    #include "Melopero_RV3028.h"
+#endif
+
 // -----------------------------------------------------------------------------
 // Version
 // -----------------------------------------------------------------------------

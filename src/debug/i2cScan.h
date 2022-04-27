@@ -54,7 +54,16 @@ void scanI2Cdevice(void)
                     DEBUG_MSG("unknown display found\n");
                 }
             }
-
+#ifdef RV3028_RTC
+            if (addr == RV3028_RTC){
+                rtc_found = addr;
+                DEBUG_MSG("RV3028 RTC found\n");
+                Melopero_RV3028 rtc;
+                rtc.initI2C();
+                rtc.writeToRegister(0x35,0x07); // no Clkout
+                rtc.writeToRegister(0x37,0xB4);
+            }
+#endif
             if (addr == CARDKB_ADDR) {
                 cardkb_found = addr;
                 DEBUG_MSG("m5 cardKB found\n");
@@ -81,7 +90,7 @@ void scanI2Cdevice(void)
     if (nDevices == 0)
         DEBUG_MSG("No I2C devices found\n");
     else
-        DEBUG_MSG("done\n");
+        DEBUG_MSG("%i I2C devices found\n",nDevices);
 }
 #else
 void scanI2Cdevice(void) {}
