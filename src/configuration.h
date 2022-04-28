@@ -28,6 +28,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifdef RV3028_RTC
     #include "Melopero_RV3028.h"
 #endif
+#ifdef PCF8563_RTC
+    #include "pcf8563.h"
+#endif
 
 // -----------------------------------------------------------------------------
 // Version
