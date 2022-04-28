@@ -40,6 +40,28 @@ void readFromRTC()
             currentQuality = RTCQualityDevice;
         }
     }
+#elif defined(PCF8563_RTC)
+    if(rtc_found == PCF8563_RTC) {
+        uint32_t now = millis();
+        PCF8563_Class rtc;
+        rtc.begin();
+        auto tc = rtc.getDateTime();
+        tm t;
+        t.tm_year = tc.year;
+        t.tm_mon = tc.month;
+        t.tm_mday = tc.day;
+        t.tm_hour = tc.hour;
+        t.tm_min = tc.minute;
+        t.tm_sec = tc.second;
+        tv.tv_sec = mktime(&t);
+        tv.tv_usec = 0;
+        DEBUG_MSG("Read RTC time from PCF8563 as %ld\n", tv.tv_sec);
+        timeStartMsec = now;
+        zeroOffsetSecs = tv.tv_sec;
+        if (currentQuality == RTCQualityNone) {
+            currentQuality = RTCQualityDevice;
+        }
+    }
 #else 
     if (!gettimeofday(&tv, NULL)) {
         uint32_t now = millis();
@@ -84,6 +106,14 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
             tm *t = localtime(&tv->tv_sec);
             rtc.setTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_wday, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
             DEBUG_MSG("RV3028_RTC setTime %02d-%02d-%02d %02d:%02d:%02d %ld\n", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, tv->tv_sec);
+        }
+#elif defined(PCF8563_RTC)
+        if(rtc_found == PCF8563_RTC) {
+            PCF8563_Class rtc;
+            rtc.begin();
+            tm *t = localtime(&tv->tv_sec);
+            rtc.setDateTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_wday, t->tm_hour, t->tm_min, t->tm_sec);
+            DEBUG_MSG("PCF8563_RTC setDateTime %02d-%02d-%02d %02d:%02d:%02d %ld\n", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, tv->tv_sec);
         }
 #elif !defined(NO_ESP32)
         settimeofday(tv, NULL);

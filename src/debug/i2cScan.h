@@ -64,6 +64,12 @@ void scanI2Cdevice(void)
                 rtc.writeToRegister(0x37,0xB4);
             }
 #endif
+#ifdef PCF8563_RTC
+            if (addr == PCF8563_RTC){
+                rtc_found = addr;
+                DEBUG_MSG("PCF8563 RTC found\n");
+            }
+#endif
             if (addr == CARDKB_ADDR) {
                 cardkb_found = addr;
                 DEBUG_MSG("m5 cardKB found\n");
