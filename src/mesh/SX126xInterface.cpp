@@ -65,7 +65,7 @@ bool SX126xInterface<T>::init()
 #ifdef SX126X_TXEN
     // lora.begin sets Dio2 as RF switch control, which is not true if we are manually controlling RX and TX
     if (res == ERR_NONE)
-        res = lora.setDio2AsRfSwitch(false);
+        res = lora.setDio2AsRfSwitch(true);
 #endif
 
 #if 0
@@ -129,9 +129,6 @@ bool SX126xInterface<T>::reconfigure()
     err = lora.setSyncWord(syncWord);
     assert(err == ERR_NONE);
 
-    err = lora.setCurrentLimit(currentLimit);
-    assert(err == ERR_NONE);
-
     err = lora.setPreambleLength(preambleLength);
     assert(err == ERR_NONE);
 
@@ -143,7 +140,7 @@ bool SX126xInterface<T>::reconfigure()
         power = 22;
     err = lora.setOutputPower(power);
     assert(err == ERR_NONE);
-
+    
     startReceive(); // restart receiving
 
     return ERR_NONE;
@@ -191,7 +188,11 @@ void SX126xInterface<T>::addReceiveMetadata(MeshPacket *mp)
 template<typename T>
 void SX126xInterface<T>::configHardwareForSend()
 {
-#ifdef SX126X_TXEN // we have RXEN/TXEN control - turn on TX power / off RX power
+// If we have RXEN/TXEN control - turn on TX power / off RX power
+#ifdef SX126X_RXEN 
+    digitalWrite(SX126X_RXEN, LOW);
+#endif
+#ifdef SX126X_TXEN
     digitalWrite(SX126X_TXEN, HIGH);
 #endif
 
@@ -210,7 +211,11 @@ void SX126xInterface<T>::startReceive()
 
     setStandby();
 
-#ifdef SX126X_RXEN // we have RXEN/TXEN control - turn on RX power / off TX power
+// If we have RXEN/TXEN control - turn on RX power / off TX power
+#ifdef SX126X_TXEN
+    digitalWrite(SX126X_TXEN, LOW);
+#endif
+#ifdef SX126X_RXEN 
     digitalWrite(SX126X_RXEN, HIGH);
 #endif
 
