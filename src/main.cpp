@@ -97,8 +97,15 @@ const char *getDeviceName()
     getMacAddr(dmac);
 
     // Meshtastic_ab3c
-    static char name[20];
-    sprintf(name, "Meshtastic_%02x%02x", dmac[4], dmac[5]);
+    static char name[30];
+    // If we have an owner shortname and it is short.
+    if (owner.short_name != NULL
+	&& strlen(owner.short_name) >= 2
+	&& strlen(owner.short_name) < 10) {
+      sprintf(name, "Meshtastic_%s", owner.short_name);
+    } else {
+      sprintf(name, "Meshtastic_%02x%02x", dmac[4], dmac[5]);
+    }
     return name;
 }
 
