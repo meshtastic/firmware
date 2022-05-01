@@ -52,6 +52,7 @@ typedef struct _AdminMessage {
         User get_owner_response;
         AdminMessage_ConfigType get_config_request;
         Config get_config_response;
+        Config set_config;
         bool confirm_set_channel;
         bool confirm_set_radio;
         bool exit_simulator;
@@ -99,6 +100,7 @@ extern "C" {
 #define AdminMessage_get_owner_response_tag      9
 #define AdminMessage_get_config_request_tag      10
 #define AdminMessage_get_config_response_tag     11
+#define AdminMessage_set_config_tag              12
 #define AdminMessage_confirm_set_channel_tag     32
 #define AdminMessage_confirm_set_radio_tag       33
 #define AdminMessage_exit_simulator_tag          34
@@ -130,6 +132,7 @@ X(a, STATIC,   ONEOF,    BOOL,     (variant,get_owner_request,get_owner_request)
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_owner_response,get_owner_response),   9) \
 X(a, STATIC,   ONEOF,    UENUM,    (variant,get_config_request,get_config_request),  10) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_config_response,get_config_response),  11) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_config,set_config),  12) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_channel,confirm_set_channel),  32) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_radio,confirm_set_radio),  33) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,exit_simulator,exit_simulator),  34) \
@@ -156,6 +159,7 @@ X(a, STATIC,   ONEOF,    INT32,    (variant,shutdown_seconds,shutdown_seconds), 
 #define AdminMessage_variant_get_channel_response_MSGTYPE Channel
 #define AdminMessage_variant_get_owner_response_MSGTYPE User
 #define AdminMessage_variant_get_config_response_MSGTYPE Config
+#define AdminMessage_variant_set_config_MSGTYPE Config
 
 extern const pb_msgdesc_t AdminMessage_msg;
 
@@ -163,9 +167,9 @@ extern const pb_msgdesc_t AdminMessage_msg;
 #define AdminMessage_fields &AdminMessage_msg
 
 /* Maximum encoded size of messages (where known) */
-#if defined(Config_size)
+#if defined(Config_size) && defined(Config_size)
 #define AdminMessage_size                        (0 + sizeof(union AdminMessage_variant_size_union))
-union AdminMessage_variant_size_union {char f11[(6 + Config_size)]; char f0[551];};
+union AdminMessage_variant_size_union {char f0[551]; char f11[(6 + Config_size)]; char f12[(6 + Config_size)];};
 #endif
 
 #ifdef __cplusplus
