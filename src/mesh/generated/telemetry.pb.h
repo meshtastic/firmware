@@ -9,6 +9,31 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
+/* Enum definitions */
+/* TODO: REPLACE */
+typedef enum _TelemetrySensorType { 
+    /* No external telemetry sensor */
+    TelemetrySensorType_NotSet = 0, 
+    /* TODO: REPLACE */
+    TelemetrySensorType_DHT11 = 1, 
+    /* TODO: REPLACE */
+    TelemetrySensorType_DS18B20 = 2, 
+    /* TODO: REPLACE */
+    TelemetrySensorType_DHT12 = 3, 
+    /* TODO: REPLACE */
+    TelemetrySensorType_DHT21 = 4, 
+    /* TODO: REPLACE */
+    TelemetrySensorType_DHT22 = 5, 
+    /* TODO: REPLACE */
+    TelemetrySensorType_BME280 = 6, 
+    /* TODO: REPLACE */
+    TelemetrySensorType_BME680 = 7, 
+    /* TODO: REPLACE */
+    TelemetrySensorType_MCP9808 = 8, 
+    /* TODO: REPLACE */
+    TelemetrySensorType_SHTC3 = 9 
+} TelemetrySensorType;
+
 /* Struct definitions */
 /* Key native device metrics such as battery level */
 typedef struct _DeviceMetrics { 
@@ -53,6 +78,12 @@ typedef struct _Telemetry {
         EnvironmentMetrics environment_metrics;
     } variant; 
 } Telemetry;
+
+
+/* Helper constants for enums */
+#define _TelemetrySensorType_MIN TelemetrySensorType_NotSet
+#define _TelemetrySensorType_MAX TelemetrySensorType_SHTC3
+#define _TelemetrySensorType_ARRAYSIZE ((TelemetrySensorType)(TelemetrySensorType_SHTC3+1))
 
 
 #ifdef __cplusplus

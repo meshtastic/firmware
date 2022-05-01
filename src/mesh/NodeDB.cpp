@@ -35,6 +35,7 @@ NodeDB nodeDB;
 EXT_RAM_ATTR DeviceState devicestate;
 MyNodeInfo &myNodeInfo = devicestate.my_node;
 RadioConfig radioConfig;
+Config config;
 ChannelFile channelFile;
 
 /** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings

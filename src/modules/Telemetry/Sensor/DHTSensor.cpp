@@ -9,18 +9,18 @@ DHTSensor::DHTSensor() : TelemetrySensor {} {
 }
 
 int32_t DHTSensor::runOnce() {
-    if (RadioConfig_UserPreferences_TelemetrySensorType_DHT11 || 
-        RadioConfig_UserPreferences_TelemetrySensorType_DHT12) {
-        dht = new DHT(radioConfig.preferences.telemetry_module_environment_sensor_pin, DHT11);
+    if (TelemetrySensorType_DHT11 || 
+        TelemetrySensorType_DHT12) {
+        dht = new DHT(moduleConfig.environment_sensor_pin, DHT11);
     }
     else { 
-        dht = new DHT(radioConfig.preferences.telemetry_module_environment_sensor_pin, DHT22);
+        dht = new DHT(moduleConfig.environment_sensor_pin, DHT22);
     }
 
     dht->begin();
     dht->read();
     DEBUG_MSG("Telemetry: Opened DHT11/DHT12 on pin: %d\n",
-                radioConfig.preferences.telemetry_module_environment_sensor_pin);
+                moduleConfig.environment_sensor_pin);
 
     return (DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
 }
