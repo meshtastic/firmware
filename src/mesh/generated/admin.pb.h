@@ -29,7 +29,7 @@ typedef enum _AdminMessage_ConfigType {
     AdminMessage_ConfigType_MODULE_EXTNOTIF_CONFIG = 11, 
     AdminMessage_ConfigType_MODULE_STOREFORWARD_CONFIG = 12, 
     AdminMessage_ConfigType_MODULE_RANGETEST_CONFIG = 13, 
-    AdminMessage_ConfigType_MODULE_ENVIRONMENTAL_CONFIG = 14, 
+    AdminMessage_ConfigType_MODULE_TELEMETRY_CONFIG = 14, 
     AdminMessage_ConfigType_MODULE_CANNEDMSG_CONFIG = 15 
 } AdminMessage_ConfigType;
 
