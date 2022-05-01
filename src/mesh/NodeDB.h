@@ -12,6 +12,7 @@ extern DeviceState devicestate;
 extern ChannelFile channelFile;
 extern MyNodeInfo &myNodeInfo;
 extern RadioConfig radioConfig;
+extern Config config;
 extern User &owner;
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
@@ -161,13 +162,17 @@ extern NodeDB nodeDB;
 
 #define IF_ROUTER(routerVal, normalVal) ((radioConfig.preferences.role == Role_Router) ? (routerVal) : (normalVal))
 
+#define default_broadcast_interval_secs IF_ROUTER(12 * 60 * 60, 15 * 60)
+
+inline uint32_t getIntervalOrDefaultMs(uint32_t interval) {
+  if (interval > 0) return interval * 1000;
+  return default_broadcast_interval_secs * 1000;
+}
+
 #define PREF_GET(name, defaultVal)                                                                                               \
     inline uint32_t getPref_##name() { return radioConfig.preferences.name ? radioConfig.preferences.name : (defaultVal); }
 
 PREF_GET(position_broadcast_secs, IF_ROUTER(12 * 60 * 60, 15 * 60))
-// Defaulting Telemetry to the same as position interval for now
-PREF_GET(telemetry_module_device_update_interval, IF_ROUTER(12 * 60 * 60, 15 * 60))
-PREF_GET(telemetry_module_environment_update_interval, IF_ROUTER(12 * 60 * 60, 15 * 60))
 
 
 // Each time we wake into the DARK state allow 1 minute to send and receive BLE packets to the phone
