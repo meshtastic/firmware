@@ -277,11 +277,6 @@ void AdminModule::handleSetOwner(const User &o)
         owner.is_licensed = o.is_licensed;
     }
 
-    if ((!changed || o.team) && (owner.team != o.team)) {
-        changed = 1;
-        owner.team = o.team;
-    }
-
     if (changed) // If nothing really changed, don't broadcast on the network or write to flash
         service.reloadOwner();
 }
