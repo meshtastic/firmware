@@ -124,9 +124,12 @@ void AdminModule::handleGetConfig(const MeshPacket &req)
                 DEBUG_MSG("Requesting AdminMessage_ConfigType_MODULE_RANGETEST_CONFIG\n");
                 r.get_config_response.which_payloadVariant = AdminMessage_ConfigType_MODULE_RANGETEST_CONFIG;
                 break;
-            case AdminMessage_ConfigType_MODULE_ENVIRONMENTAL_CONFIG:
-                DEBUG_MSG("Requesting AdminMessage_ConfigType_MODULE_ENVIRONMENTAL_CONFIG\n");
-                r.get_config_response.which_payloadVariant = AdminMessage_ConfigType_MODULE_ENVIRONMENTAL_CONFIG;
+            case AdminMessage_ConfigType_MODULE_TELEMETRY_CONFIG:
+                DEBUG_MSG("Requesting AdminMessage_ConfigType_MODULE_TELEMETRY_CONFIG\n");
+                r.get_config_response.which_payloadVariant = AdminMessage_ConfigType_MODULE_TELEMETRY_CONFIG;
+                r.get_config_response.payloadVariant.module_config.which_payloadVariant = Config_ModuleConfig_telemetry_config_tag;
+                r.get_config_response.payloadVariant.module_config.payloadVariant.telemetry_config = 
+                    config.payloadVariant.module_config.payloadVariant.telemetry_config;
                 break;
             case AdminMessage_ConfigType_MODULE_CANNEDMSG_CONFIG:
                 DEBUG_MSG("Requesting AdminMessage_ConfigType_MODULE_CANNEDMSG_CONFIG\n");
