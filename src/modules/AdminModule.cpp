@@ -61,6 +61,79 @@ void AdminModule::handleGetRadio(const MeshPacket &req)
     }
 }
 
+void AdminModule::handleGetConfig(const MeshPacket &req)
+{
+    // We create the reply here
+    AdminMessage r = AdminMessage_init_default;
+    r.get_radio_response = radioConfig;
+
+    if (req.decoded.want_response) {
+        switch(r.get_config_request) {
+            case AdminMessage_RadioConfigType_ALL:
+                DEBUG_MSG("Requesting AdminMessage_RadioConfigType_ALL\n");
+                break;
+            case AdminMessage_RadioConfigType_CORE_ONLY:
+                DEBUG_MSG("Requesting AdminMessage_RadioConfigType_CORE_ONLY\n");
+                break;
+            case AdminMessage_RadioConfigType_MODULE_ONLY:
+                DEBUG_MSG("Requesting AdminMessage_RadioConfigType_MODULE_ONLY\n");
+                break;
+            case AdminMessage_RadioConfigType_DEVICE_CONFIG:
+                DEBUG_MSG("Requesting AdminMessage_RadioConfigType_DEVICE_CONFIG\n");
+                break;
+            case AdminMessage_RadioConfigType_GPS_CONFIG:
+                DEBUG_MSG("Requesting AdminMessage_RadioConfigType_GPS_CONFIG\n");
+                break;
+            case AdminMessage_RadioConfigType_POWER_CONFIG:
+                DEBUG_MSG("Requesting AdminMessage_RadioConfigType_POWER_CONFIG\n");
+                break;
+            case AdminMessage_RadioConfigType_WIFI_CONFIG:
+                DEBUG_MSG("Requesting AdminMessage_RadioConfigType_WIFI_CONFIG\n");
+                break;
+            case AdminMessage_RadioConfigType_DISPLAY_CONFIG:
+                DEBUG_MSG("Requesting AdminMessage_RadioConfigType_DISPLAY_CONFIG\n");
+                break;
+            case AdminMessage_RadioConfigType_LORA_CONFIG:
+                DEBUG_MSG("Requesting AdminMessage_RadioConfigType_LORA_CONFIG\n");
+                break;
+            case AdminMessage_RadioConfigType_MODULE_MQTT_CONFIG:
+                DEBUG_MSG("Requesting AdminMessage_RadioConfigType_MODULE_MQTT_CONFIG\n");
+                break;
+            case AdminMessage_RadioConfigType_MODULE_SERIAL_CONFIG:
+                DEBUG_MSG("Requesting AdminMessage_RadioConfigType_MODULE_SERIAL_CONFIG\n");
+                break;
+            case AdminMessage_RadioConfigType_MODULE_EXTNOTIF_CONFIG:
+                DEBUG_MSG("Requesting AdminMessage_RadioConfigType_MODULE_EXTNOTIF_CONFIG\n");
+                break;
+            case AdminMessage_RadioConfigType_MODULE_STOREFORWARD_CONFIG:
+                DEBUG_MSG("Requesting AdminMessage_RadioConfigType_MODULE_STOREFORWARD_CONFIG\n");
+                break;
+            case AdminMessage_RadioConfigType_MODULE_RANGETEST_CONFIG:
+                DEBUG_MSG("Requesting AdminMessage_RadioConfigType_MODULE_RANGETEST_CONFIG\n");
+                break;
+            case AdminMessage_RadioConfigType_MODULE_ENVIRONMENTAL_CONFIG:
+                DEBUG_MSG("Requesting AdminMessage_RadioConfigType_MODULE_ENVIRONMENTAL_CONFIG\n");
+                break;
+            case AdminMessage_RadioConfigType_MODULE_CANNEDMSG_CONFIG:
+                DEBUG_MSG("Requesting AdminMessage_RadioConfigType_MODULE_CANNEDMSG_CONFIG\n");
+                break;
+            default:
+                break;
+        }
+
+        // NOTE: The phone app needs to know the ls_secs & phone_timeout value so it can properly expect sleep behavior.
+        // So even if we internally use 0 to represent 'use default' we still need to send the value we are
+        // using to the app (so that even old phone apps work with new device loads).
+        r.get_radio_response.preferences.ls_secs = getPref_ls_secs();
+        r.get_radio_response.preferences.phone_timeout_secs = getPref_phone_timeout_secs();
+        // hideSecret(r.get_radio_response.preferences.wifi_ssid); // hmm - leave public for now, because only minimally private and useful for users to know current provisioning)
+        hideSecret(r.get_radio_response.preferences.wifi_password);
+
+        r.which_variant = AdminMessage_get_radio_response_tag;
+        myReply = allocDataProtobuf(r);
+    }
+}
+
 void AdminModule::handleGetOwner(const MeshPacket &req)
 {
     if (req.decoded.want_response) {
@@ -111,6 +184,11 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
     case AdminMessage_get_radio_request_tag:
         DEBUG_MSG("Client is getting radio\n");
         handleGetRadio(mp);
+        break;
+
+    case AdminMessage_get_config_request_tag:
+        DEBUG_MSG("Client is getting config\n");
+        handleGetConfig(mp);
         break;
 
     case AdminMessage_get_owner_request_tag:
