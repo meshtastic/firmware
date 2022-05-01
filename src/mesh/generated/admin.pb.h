@@ -12,6 +12,26 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
+/* Enum definitions */
+typedef enum _AdminMessage_RadioConfigType { 
+    AdminMessage_RadioConfigType_ALL = 0, 
+    AdminMessage_RadioConfigType_CORE_ONLY = 1, 
+    AdminMessage_RadioConfigType_MODULE_ONLY = 2, 
+    AdminMessage_RadioConfigType_DEVICE_CONFIG = 3, 
+    AdminMessage_RadioConfigType_GPS_CONFIG = 4, 
+    AdminMessage_RadioConfigType_POWER_CONFIG = 5, 
+    AdminMessage_RadioConfigType_WIFI_CONFIG = 6, 
+    AdminMessage_RadioConfigType_DISPLAY_CONFIG = 7, 
+    AdminMessage_RadioConfigType_LORA_CONFIG = 8, 
+    AdminMessage_RadioConfigType_MODULE_MQTT_CONFIG = 9, 
+    AdminMessage_RadioConfigType_MODULE_SERIAL_CONFIG = 10, 
+    AdminMessage_RadioConfigType_MODULE_EXTNOTIF_CONFIG = 11, 
+    AdminMessage_RadioConfigType_MODULE_STOREFORWARD_CONFIG = 12, 
+    AdminMessage_RadioConfigType_MODULE_RANGETEST_CONFIG = 13, 
+    AdminMessage_RadioConfigType_MODULE_ENVIRONMENTAL_CONFIG = 14, 
+    AdminMessage_RadioConfigType_MODULE_CANNEDMSG_CONFIG = 15 
+} AdminMessage_RadioConfigType;
+
 /* Struct definitions */
 /* This message is handled by the Admin module and is responsible for all settings/channel read/write operations.
  This message is used to do settings operations to both remote AND local nodes.
@@ -29,6 +49,7 @@ typedef struct _AdminMessage {
         Channel get_channel_response;
         bool get_owner_request;
         User get_owner_response;
+        AdminMessage_RadioConfigType get_config_request;
         bool confirm_set_channel;
         bool confirm_set_radio;
         bool exit_simulator;
@@ -50,6 +71,12 @@ typedef struct _AdminMessage {
 } AdminMessage;
 
 
+/* Helper constants for enums */
+#define _AdminMessage_RadioConfigType_MIN AdminMessage_RadioConfigType_ALL
+#define _AdminMessage_RadioConfigType_MAX AdminMessage_RadioConfigType_MODULE_CANNEDMSG_CONFIG
+#define _AdminMessage_RadioConfigType_ARRAYSIZE ((AdminMessage_RadioConfigType)(AdminMessage_RadioConfigType_MODULE_CANNEDMSG_CONFIG+1))
+
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -68,6 +95,7 @@ extern "C" {
 #define AdminMessage_get_channel_response_tag    7
 #define AdminMessage_get_owner_request_tag       8
 #define AdminMessage_get_owner_response_tag      9
+#define AdminMessage_get_config_request_tag      10
 #define AdminMessage_confirm_set_channel_tag     32
 #define AdminMessage_confirm_set_radio_tag       33
 #define AdminMessage_exit_simulator_tag          34
@@ -97,6 +125,7 @@ X(a, STATIC,   ONEOF,    UINT32,   (variant,get_channel_request,get_channel_requ
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_channel_response,get_channel_response),   7) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,get_owner_request,get_owner_request),   8) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_owner_response,get_owner_response),   9) \
+X(a, STATIC,   ONEOF,    UENUM,    (variant,get_config_request,get_config_request),  10) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_channel,confirm_set_channel),  32) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_radio,confirm_set_radio),  33) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,exit_simulator,exit_simulator),  34) \
