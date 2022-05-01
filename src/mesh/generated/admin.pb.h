@@ -53,6 +53,7 @@ typedef struct _AdminMessage {
         AdminMessage_ConfigType get_config_request;
         Config get_config_response;
         Config set_config;
+        bool confirm_set_config;
         bool confirm_set_channel;
         bool confirm_set_radio;
         bool exit_simulator;
@@ -101,6 +102,7 @@ extern "C" {
 #define AdminMessage_get_config_request_tag      10
 #define AdminMessage_get_config_response_tag     11
 #define AdminMessage_set_config_tag              12
+#define AdminMessage_confirm_set_config_tag      13
 #define AdminMessage_confirm_set_channel_tag     32
 #define AdminMessage_confirm_set_radio_tag       33
 #define AdminMessage_exit_simulator_tag          34
@@ -133,6 +135,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_owner_response,get_owner_respons
 X(a, STATIC,   ONEOF,    UENUM,    (variant,get_config_request,get_config_request),  10) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_config_response,get_config_response),  11) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_config,set_config),  12) \
+X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_config,confirm_set_config),  13) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_channel,confirm_set_channel),  32) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_radio,confirm_set_radio),  33) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,exit_simulator,exit_simulator),  34) \
