@@ -29,7 +29,7 @@ typedef enum _AdminMessage_ConfigType {
     AdminMessage_ConfigType_MODULE_EXTNOTIF_CONFIG = 11, 
     AdminMessage_ConfigType_MODULE_STOREFORWARD_CONFIG = 12, 
     AdminMessage_ConfigType_MODULE_RANGETEST_CONFIG = 13, 
-    AdminMessage_ConfigType_MODULE_ENVIRONMENTAL_CONFIG = 14, 
+    AdminMessage_ConfigType_MODULE_TELEMETRY_CONFIG = 14, 
     AdminMessage_ConfigType_MODULE_CANNEDMSG_CONFIG = 15 
 } AdminMessage_ConfigType;
 
@@ -165,7 +165,7 @@ extern const pb_msgdesc_t AdminMessage_msg;
 /* Maximum encoded size of messages (where known) */
 #if defined(Config_size)
 #define AdminMessage_size                        (0 + sizeof(union AdminMessage_variant_size_union))
-union AdminMessage_variant_size_union {char f0[598]; char f11[(6 + Config_size)];};
+union AdminMessage_variant_size_union {char f11[(6 + Config_size)]; char f0[551];};
 #endif
 
 #ifdef __cplusplus

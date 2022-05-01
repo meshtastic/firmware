@@ -50,17 +50,17 @@ int32_t EnvironmentTelemetryModule::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
     /*
-    radioConfig.preferences.telemetry_module_environment_measurement_enabled = 1;
-    radioConfig.preferences.telemetry_module_environment_screen_enabled = 1;
-    radioConfig.preferences.telemetry_module_environment_read_error_count_threshold = 5;
-    radioConfig.preferences.telemetry_module_environment_update_interval = 600;
-    radioConfig.preferences.telemetry_module_environment_recovery_interval = 60;
-    radioConfig.preferences.telemetry_module_environment_sensor_pin = 13; // If one-wire
-    radioConfig.preferences.telemetry_module_environment_sensor_type = RadioConfig_UserPreferences_TelemetrySensorType::RadioConfig_UserPreferences_TelemetrySensorType_BME280;
+    moduleConfig.environment_measurement_enabled = 1;
+    moduleConfig.environment_screen_enabled = 1;
+    moduleConfig.environment_read_error_count_threshold = 5;
+    moduleConfig.environment_update_interval = 600;
+    moduleConfig.environment_recovery_interval = 60;
+    moduleConfig.environment_sensor_pin = 13; // If one-wire
+    moduleConfig.environment_sensor_type = TelemetrySensorType::TelemetrySensorType_BME280;
     */
     
-    if (!(radioConfig.preferences.telemetry_module_environment_measurement_enabled ||
-          radioConfig.preferences.telemetry_module_environment_screen_enabled)) {
+    if (!(moduleConfig.environment_measurement_enabled ||
+          moduleConfig.environment_screen_enabled)) {
         // If this module is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
         return (INT32_MAX);
     }
@@ -69,24 +69,24 @@ int32_t EnvironmentTelemetryModule::runOnce()
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = 0;
 
-        if (radioConfig.preferences.telemetry_module_environment_measurement_enabled) {
+        if (moduleConfig.environment_measurement_enabled) {
             DEBUG_MSG("Environment Telemetry: Initializing\n");
             // it's possible to have this module enabled, only for displaying values on the screen.
             // therefore, we should only enable the sensor loop if measurement is also enabled
-            switch (radioConfig.preferences.telemetry_module_environment_sensor_type) {
+            switch (moduleConfig.environment_sensor_type) {
 
-                case RadioConfig_UserPreferences_TelemetrySensorType_DHT11:
-                case RadioConfig_UserPreferences_TelemetrySensorType_DHT12:
-                case RadioConfig_UserPreferences_TelemetrySensorType_DHT21:
-                case RadioConfig_UserPreferences_TelemetrySensorType_DHT22:
+                case TelemetrySensorType_DHT11:
+                case TelemetrySensorType_DHT12:
+                case TelemetrySensorType_DHT21:
+                case TelemetrySensorType_DHT22:
                     return dhtSensor.runOnce();
-                case RadioConfig_UserPreferences_TelemetrySensorType_DS18B20:
+                case TelemetrySensorType_DS18B20:
                     return dallasSensor.runOnce();
-                case RadioConfig_UserPreferences_TelemetrySensorType_BME280:
+                case TelemetrySensorType_BME280:
                     return bme280Sensor.runOnce();
-                case RadioConfig_UserPreferences_TelemetrySensorType_BME680:
+                case TelemetrySensorType_BME680:
                     return bme680Sensor.runOnce();
-                case RadioConfig_UserPreferences_TelemetrySensorType_MCP9808:
+                case TelemetrySensorType_MCP9808:
                     return mcp9808Sensor.runOnce();
                 default:
                     DEBUG_MSG("Environment Telemetry: Invalid sensor type selected; Disabling module");
@@ -97,55 +97,54 @@ int32_t EnvironmentTelemetryModule::runOnce()
         return (INT32_MAX);
     } else {
         // if we somehow got to a second run of this module with measurement disabled, then just wait forever
-        if (!radioConfig.preferences.telemetry_module_environment_measurement_enabled)  
+        if (!moduleConfig.environment_measurement_enabled)  
             return (INT32_MAX);
         // this is not the first time OSThread library has called this function
         // so just do what we intend to do on the interval
-        if (sensor_read_error_count > radioConfig.preferences.telemetry_module_environment_read_error_count_threshold) {
-            if (radioConfig.preferences.telemetry_module_environment_recovery_interval > 0) {
+        if (sensor_read_error_count > moduleConfig.environment_read_error_count_threshold) {
+            if (moduleConfig.environment_recovery_interval > 0) {
                 DEBUG_MSG("Environment Telemetry: TEMPORARILY DISABLED; The "
                           "telemetry_module_environment_read_error_count_threshold has been exceed: %d. Will retry reads in "
                           "%d seconds\n",
-                          radioConfig.preferences.telemetry_module_environment_read_error_count_threshold,
-                          radioConfig.preferences.telemetry_module_environment_recovery_interval);
+                          moduleConfig.environment_read_error_count_threshold,
+                          moduleConfig.environment_recovery_interval);
                 sensor_read_error_count = 0;
-                return (radioConfig.preferences.telemetry_module_environment_recovery_interval * 1000);
+                return (moduleConfig.environment_recovery_interval * 1000);
             }
             DEBUG_MSG("Environment Telemetry: DISABLED; The telemetry_module_environment_read_error_count_threshold has "
                       "been exceed: %d. Reads will not be retried until after device reset\n",
-                      radioConfig.preferences.telemetry_module_environment_read_error_count_threshold);
+                      moduleConfig.environment_read_error_count_threshold);
             return (INT32_MAX);
 
         } else if (sensor_read_error_count > 0) {
             DEBUG_MSG("Environment Telemetry: There have been %d sensor read failures. Will retry %d more times\n",
                       sensor_read_error_count, sensor_read_error_count, sensor_read_error_count,
-                      radioConfig.preferences.telemetry_module_environment_read_error_count_threshold -
+                      moduleConfig.environment_read_error_count_threshold -
                           sensor_read_error_count);
         }
         if (!sendOurTelemetry()) {
             // if we failed to read the sensor, then try again
             // as soon as we can according to the maximum polling frequency
 
-            switch (radioConfig.preferences.telemetry_module_environment_sensor_type) {
-                case RadioConfig_UserPreferences_TelemetrySensorType_DHT11:
-                case RadioConfig_UserPreferences_TelemetrySensorType_DHT12:
-                case RadioConfig_UserPreferences_TelemetrySensorType_DHT21:
-                case RadioConfig_UserPreferences_TelemetrySensorType_DHT22:
+            switch (moduleConfig.environment_sensor_type) {
+                case TelemetrySensorType_DHT11:
+                case TelemetrySensorType_DHT12:
+                case TelemetrySensorType_DHT21:
+                case TelemetrySensorType_DHT22:
                     return (DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
-                case RadioConfig_UserPreferences_TelemetrySensorType_DS18B20:
+                case TelemetrySensorType_DS18B20:
                     return (DS18B20_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
-                case RadioConfig_UserPreferences_TelemetrySensorType_BME280:
-                case RadioConfig_UserPreferences_TelemetrySensorType_BME680:
+                case TelemetrySensorType_BME280:
+                case TelemetrySensorType_BME680:
                     return (BME_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
-                case RadioConfig_UserPreferences_TelemetrySensorType_MCP9808:
+                case TelemetrySensorType_MCP9808:
                     return (MCP_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
                 default:
                     return (DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
             }
         }
     }
-    // OSThread library.  Multiply the preference value by 1000 to convert seconds to miliseconds
-    return (getPref_telemetry_module_environment_update_interval() * 1000);
+    return getIntervalOrDefaultMs(moduleConfig.environment_update_interval);
 #endif
 }
 
@@ -163,7 +162,7 @@ uint32_t GetTimeSinceMeshPacket(const MeshPacket *mp)
 
 bool EnvironmentTelemetryModule::wantUIFrame()
 {
-    return radioConfig.preferences.telemetry_module_environment_screen_enabled;
+    return moduleConfig.environment_screen_enabled;
 }
 
 float EnvironmentTelemetryModule::CelsiusToFahrenheit(float c)
@@ -197,7 +196,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
 
     display->setFont(FONT_SMALL);
     String last_temp = String(lastMeasurement.variant.environment_metrics.temperature, 0) + "°C";
-    if (radioConfig.preferences.telemetry_module_environment_display_fahrenheit) {
+    if (moduleConfig.environment_display_fahrenheit) {
         last_temp = String(CelsiusToFahrenheit(lastMeasurement.variant.environment_metrics.temperature), 0) + "°F";
     }
     display->drawString(x, y += fontHeight(FONT_MEDIUM) - 2, "From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
@@ -243,25 +242,25 @@ bool EnvironmentTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies
     DEBUG_MSG("-----------------------------------------\n");
     DEBUG_MSG("Environment Telemetry: Read data\n");
 
-    switch (radioConfig.preferences.telemetry_module_environment_sensor_type) {
-        case RadioConfig_UserPreferences_TelemetrySensorType_DS18B20:
+    switch (moduleConfig.environment_sensor_type) {
+        case TelemetrySensorType_DS18B20:
             if (!dallasSensor.getMeasurement(&m))
                 sensor_read_error_count++;
             break;
-        case RadioConfig_UserPreferences_TelemetrySensorType_DHT11:
-        case RadioConfig_UserPreferences_TelemetrySensorType_DHT12:
-        case RadioConfig_UserPreferences_TelemetrySensorType_DHT21:
-        case RadioConfig_UserPreferences_TelemetrySensorType_DHT22:
+        case TelemetrySensorType_DHT11:
+        case TelemetrySensorType_DHT12:
+        case TelemetrySensorType_DHT21:
+        case TelemetrySensorType_DHT22:
             if (!dhtSensor.getMeasurement(&m))
                 sensor_read_error_count++;
             break;
-        case RadioConfig_UserPreferences_TelemetrySensorType_BME280:
+        case TelemetrySensorType_BME280:
             bme280Sensor.getMeasurement(&m);
             break;
-        case RadioConfig_UserPreferences_TelemetrySensorType_BME680:
+        case TelemetrySensorType_BME680:
             bme680Sensor.getMeasurement(&m);
             break;
-        case RadioConfig_UserPreferences_TelemetrySensorType_MCP9808:
+        case TelemetrySensorType_MCP9808:
             mcp9808Sensor.getMeasurement(&m);
             break;
         default:

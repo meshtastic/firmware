@@ -1,6 +1,7 @@
 #pragma once
 #include "../mesh/generated/telemetry.pb.h"
 #include "ProtobufModule.h"
+#include "NodeDB.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
@@ -28,6 +29,7 @@ class EnvironmentTelemetryModule : private concurrency::OSThread, public Protobu
     bool sendOurTelemetry(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
 
   private:
+    Config_ModuleConfig_TelemetryConfig moduleConfig = config.payloadVariant.module_config.payloadVariant.telemetry_config;
     float CelsiusToFahrenheit(float c);
     bool firstTime = 1;
     const MeshPacket *lastMeasurementPacket;

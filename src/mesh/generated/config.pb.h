@@ -4,6 +4,7 @@
 #ifndef PB_CONFIG_PB_H_INCLUDED
 #define PB_CONFIG_PB_H_INCLUDED
 #include <pb.h>
+#include "telemetry.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
@@ -50,13 +51,27 @@ typedef struct _Config_ModuleConfig_StoreForwardConfig {
     char dummy_field;
 } Config_ModuleConfig_StoreForwardConfig;
 
-typedef struct _Config_ModuleConfig_TelemetryConfig { 
-    char dummy_field;
-} Config_ModuleConfig_TelemetryConfig;
-
 typedef struct _Config_PowerConfig { 
     char dummy_field;
 } Config_PowerConfig;
+
+typedef struct _Config_ModuleConfig_TelemetryConfig { 
+    uint32_t device_update_interval; 
+    uint32_t environment_update_interval; 
+    bool environment_measurement_enabled; 
+    bool environment_screen_enabled; 
+    uint32_t environment_read_error_count_threshold; 
+    uint32_t environment_recovery_interval; 
+    bool environment_display_fahrenheit; 
+    TelemetrySensorType environment_sensor_type; 
+    uint32_t environment_sensor_pin; 
+} Config_ModuleConfig_TelemetryConfig;
+
+typedef struct _Config_WiFiConfig { 
+    pb_callback_t wifi_ssid; 
+    pb_callback_t wifi_password; 
+    bool wifi_ap_mode; 
+} Config_WiFiConfig;
 
 typedef struct _Config_ModuleConfig { 
     pb_size_t which_payloadVariant;
@@ -70,12 +85,6 @@ typedef struct _Config_ModuleConfig {
         Config_ModuleConfig_CannedMessageConfig canned_message_config;
     } payloadVariant; 
 } Config_ModuleConfig;
-
-typedef struct _Config_WiFiConfig { 
-    pb_callback_t wifi_ssid; 
-    pb_callback_t wifi_password; 
-    bool wifi_ap_mode; 
-} Config_WiFiConfig;
 
 typedef struct _Config { 
     /* TODO: REPLACE */
@@ -110,7 +119,7 @@ extern "C" {
 #define Config_ModuleConfig_ExternalNotificationConfig_init_default {0}
 #define Config_ModuleConfig_StoreForwardConfig_init_default {0}
 #define Config_ModuleConfig_RangeTestConfig_init_default {0}
-#define Config_ModuleConfig_TelemetryConfig_init_default {0}
+#define Config_ModuleConfig_TelemetryConfig_init_default {0, 0, 0, 0, 0, 0, 0, _TelemetrySensorType_MIN, 0}
 #define Config_ModuleConfig_CannedMessageConfig_init_default {0}
 #define Config_init_zero                         {0, {Config_DeviceConfig_init_zero}}
 #define Config_DeviceConfig_init_zero            {0}
@@ -125,10 +134,22 @@ extern "C" {
 #define Config_ModuleConfig_ExternalNotificationConfig_init_zero {0}
 #define Config_ModuleConfig_StoreForwardConfig_init_zero {0}
 #define Config_ModuleConfig_RangeTestConfig_init_zero {0}
-#define Config_ModuleConfig_TelemetryConfig_init_zero {0}
+#define Config_ModuleConfig_TelemetryConfig_init_zero {0, 0, 0, 0, 0, 0, 0, _TelemetrySensorType_MIN, 0}
 #define Config_ModuleConfig_CannedMessageConfig_init_zero {0}
 
 /* Field tags (for use in manual encoding/decoding) */
+#define Config_ModuleConfig_TelemetryConfig_device_update_interval_tag 1
+#define Config_ModuleConfig_TelemetryConfig_environment_update_interval_tag 2
+#define Config_ModuleConfig_TelemetryConfig_environment_measurement_enabled_tag 3
+#define Config_ModuleConfig_TelemetryConfig_environment_screen_enabled_tag 4
+#define Config_ModuleConfig_TelemetryConfig_environment_read_error_count_threshold_tag 5
+#define Config_ModuleConfig_TelemetryConfig_environment_recovery_interval_tag 6
+#define Config_ModuleConfig_TelemetryConfig_environment_display_fahrenheit_tag 7
+#define Config_ModuleConfig_TelemetryConfig_environment_sensor_type_tag 8
+#define Config_ModuleConfig_TelemetryConfig_environment_sensor_pin_tag 9
+#define Config_WiFiConfig_wifi_ssid_tag          1
+#define Config_WiFiConfig_wifi_password_tag      2
+#define Config_WiFiConfig_wifi_ap_mode_tag       3
 #define Config_ModuleConfig_mqtt_config_tag      1
 #define Config_ModuleConfig_serial_config_tag    2
 #define Config_ModuleConfig_external_notification_config_tag 3
@@ -136,9 +157,6 @@ extern "C" {
 #define Config_ModuleConfig_range_test_config_tag 5
 #define Config_ModuleConfig_telemetry_config_tag 6
 #define Config_ModuleConfig_canned_message_config_tag 7
-#define Config_WiFiConfig_wifi_ssid_tag          1
-#define Config_WiFiConfig_wifi_password_tag      2
-#define Config_WiFiConfig_wifi_ap_mode_tag       3
 #define Config_device_config_tag                 1
 #define Config_gps_config_tag                    2
 #define Config_power_config_tag                  3
@@ -242,7 +260,15 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,canned_message_config,payload
 #define Config_ModuleConfig_RangeTestConfig_DEFAULT NULL
 
 #define Config_ModuleConfig_TelemetryConfig_FIELDLIST(X, a) \
-
+X(a, STATIC,   SINGULAR, UINT32,   device_update_interval,   1) \
+X(a, STATIC,   SINGULAR, UINT32,   environment_update_interval,   2) \
+X(a, STATIC,   SINGULAR, BOOL,     environment_measurement_enabled,   3) \
+X(a, STATIC,   SINGULAR, BOOL,     environment_screen_enabled,   4) \
+X(a, STATIC,   SINGULAR, UINT32,   environment_read_error_count_threshold,   5) \
+X(a, STATIC,   SINGULAR, UINT32,   environment_recovery_interval,   6) \
+X(a, STATIC,   SINGULAR, BOOL,     environment_display_fahrenheit,   7) \
+X(a, STATIC,   SINGULAR, UENUM,    environment_sensor_type,   8) \
+X(a, STATIC,   SINGULAR, UINT32,   environment_sensor_pin,   9)
 #define Config_ModuleConfig_TelemetryConfig_CALLBACK NULL
 #define Config_ModuleConfig_TelemetryConfig_DEFAULT NULL
 
@@ -297,8 +323,8 @@ extern const pb_msgdesc_t Config_ModuleConfig_CannedMessageConfig_msg;
 #define Config_ModuleConfig_RangeTestConfig_size 0
 #define Config_ModuleConfig_SerialConfig_size    0
 #define Config_ModuleConfig_StoreForwardConfig_size 0
-#define Config_ModuleConfig_TelemetryConfig_size 0
-#define Config_ModuleConfig_size                 2
+#define Config_ModuleConfig_TelemetryConfig_size 38
+#define Config_ModuleConfig_size                 40
 #define Config_PowerConfig_size                  0
 
 #ifdef __cplusplus
