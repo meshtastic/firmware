@@ -1,9 +1,9 @@
-#include "configuration.h"
 #include "AdminModule.h"
 #include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Router.h"
+#include "configuration.h"
 #include "main.h"
 
 #ifdef PORTDUINO
@@ -13,19 +13,22 @@
 AdminModule *adminModule;
 
 /// A special reserved string to indicate strings we can not share with external nodes.  We will use this 'reserved' word instead.
-/// Also, to make setting work correctly, if someone tries to set a string to this reserved value we assume they don't really want a change.
+/// Also, to make setting work correctly, if someone tries to set a string to this reserved value we assume they don't really want
+/// a change.
 static const char *secretReserved = "sekrit";
 
 /// If buf is !empty, change it to secret
-static void hideSecret(char *buf) {
-    if(*buf) {
+static void hideSecret(char *buf)
+{
+    if (*buf) {
         strcpy(buf, secretReserved);
     }
 }
 
 /// If buf is the reserved secret word, replace the buffer with currentVal
-static void writeSecret(char *buf, const char *currentVal) {
-    if(strcmp(buf, secretReserved) == 0) {
+static void writeSecret(char *buf, const char *currentVal)
+{
+    if (strcmp(buf, secretReserved) == 0) {
         strcpy(buf, currentVal);
     }
 }
@@ -53,10 +56,102 @@ void AdminModule::handleGetRadio(const MeshPacket &req)
         // using to the app (so that even old phone apps work with new device loads).
         r.get_radio_response.preferences.ls_secs = getPref_ls_secs();
         r.get_radio_response.preferences.phone_timeout_secs = getPref_phone_timeout_secs();
-        // hideSecret(r.get_radio_response.preferences.wifi_ssid); // hmm - leave public for now, because only minimally private and useful for users to know current provisioning)
+        // hideSecret(r.get_radio_response.preferences.wifi_ssid); // hmm - leave public for now, because only minimally private
+        // and useful for users to know current provisioning)
         hideSecret(r.get_radio_response.preferences.wifi_password);
 
         r.which_variant = AdminMessage_get_radio_response_tag;
+        myReply = allocDataProtobuf(r);
+    }
+}
+
+void AdminModule::handleGetConfig(const MeshPacket &req)
+{
+    // We create the reply here
+    AdminMessage r = AdminMessage_init_default;
+
+    if (req.decoded.want_response) {
+        switch (r.get_config_request) {
+        case AdminMessage_ConfigType_ALL:
+            DEBUG_MSG("Requesting config: AdminMessage_ConfigType_ALL\n");
+            r.get_config_response.which_payloadVariant = AdminMessage_ConfigType_ALL;
+            break;
+        case AdminMessage_ConfigType_CORE_ONLY:
+            DEBUG_MSG("Requesting config: AdminMessage_ConfigType_CORE_ONLY\n");
+            r.get_config_response.which_payloadVariant = AdminMessage_ConfigType_CORE_ONLY;
+            break;
+        case AdminMessage_ConfigType_MODULE_ONLY:
+            DEBUG_MSG("Requesting config: AdminMessage_ConfigType_MODULE_ONLY\n");
+            r.get_config_response.which_payloadVariant = AdminMessage_ConfigType_MODULE_ONLY;
+            break;
+        case AdminMessage_ConfigType_DEVICE_CONFIG:
+            DEBUG_MSG("Requesting config: AdminMessage_ConfigType_DEVICE_CONFIG\n");
+            r.get_config_response.which_payloadVariant = AdminMessage_ConfigType_DEVICE_CONFIG;
+            break;
+        case AdminMessage_ConfigType_GPS_CONFIG:
+            DEBUG_MSG("Requesting config: AdminMessage_ConfigType_GPS_CONFIG\n");
+            r.get_config_response.which_payloadVariant = AdminMessage_ConfigType_GPS_CONFIG;
+            break;
+        case AdminMessage_ConfigType_POWER_CONFIG:
+            DEBUG_MSG("Requesting config: AdminMessage_ConfigType_POWER_CONFIG\n");
+            r.get_config_response.which_payloadVariant = AdminMessage_ConfigType_POWER_CONFIG;
+            break;
+        case AdminMessage_ConfigType_WIFI_CONFIG:
+            DEBUG_MSG("Requesting config: AdminMessage_ConfigType_WIFI_CONFIG\n");
+            r.get_config_response.which_payloadVariant = AdminMessage_ConfigType_POWER_CONFIG;
+            break;
+        case AdminMessage_ConfigType_DISPLAY_CONFIG:
+            DEBUG_MSG("Requesting config: AdminMessage_ConfigType_DISPLAY_CONFIG\n");
+            r.get_config_response.which_payloadVariant = AdminMessage_ConfigType_DISPLAY_CONFIG;
+            break;
+        case AdminMessage_ConfigType_LORA_CONFIG:
+            DEBUG_MSG("Requesting config: AdminMessage_ConfigType_LORA_CONFIG\n");
+            r.get_config_response.which_payloadVariant = AdminMessage_ConfigType_LORA_CONFIG;
+            break;
+        case AdminMessage_ConfigType_MODULE_MQTT_CONFIG:
+            DEBUG_MSG("Requesting config: AdminMessage_ConfigType_MODULE_MQTT_CONFIG\n");
+            r.get_config_response.which_payloadVariant = AdminMessage_ConfigType_MODULE_MQTT_CONFIG;
+            break;
+        case AdminMessage_ConfigType_MODULE_SERIAL_CONFIG:
+            DEBUG_MSG("Requesting config: AdminMessage_ConfigType_MODULE_SERIAL_CONFIG\n");
+            r.get_config_response.which_payloadVariant = AdminMessage_ConfigType_MODULE_SERIAL_CONFIG;
+            break;
+        case AdminMessage_ConfigType_MODULE_EXTNOTIF_CONFIG:
+            DEBUG_MSG("Requesting config: AdminMessage_ConfigType_MODULE_EXTNOTIF_CONFIG\n");
+            r.get_config_response.which_payloadVariant = AdminMessage_ConfigType_MODULE_EXTNOTIF_CONFIG;
+            break;
+        case AdminMessage_ConfigType_MODULE_STOREFORWARD_CONFIG:
+            DEBUG_MSG("Requesting config: AdminMessage_ConfigType_MODULE_STOREFORWARD_CONFIG\n");
+            r.get_config_response.which_payloadVariant = AdminMessage_ConfigType_MODULE_STOREFORWARD_CONFIG;
+            break;
+        case AdminMessage_ConfigType_MODULE_RANGETEST_CONFIG:
+            DEBUG_MSG("Requesting config: AdminMessage_ConfigType_MODULE_RANGETEST_CONFIG\n");
+            r.get_config_response.which_payloadVariant = AdminMessage_ConfigType_MODULE_RANGETEST_CONFIG;
+            break;
+        case AdminMessage_ConfigType_MODULE_TELEMETRY_CONFIG:
+            DEBUG_MSG("Requesting config: AdminMessage_ConfigType_MODULE_TELEMETRY_CONFIG\n");
+            r.get_config_response.which_payloadVariant = AdminMessage_ConfigType_MODULE_TELEMETRY_CONFIG;
+            r.get_config_response.payloadVariant.module_config.which_payloadVariant = Config_ModuleConfig_telemetry_config_tag;
+            r.get_config_response.payloadVariant.module_config.payloadVariant.telemetry_config =
+                config.payloadVariant.module_config.payloadVariant.telemetry_config;
+            break;
+        case AdminMessage_ConfigType_MODULE_CANNEDMSG_CONFIG:
+            DEBUG_MSG("Requesting config: AdminMessage_ConfigType_MODULE_CANNEDMSG_CONFIG\n");
+            r.get_config_response.which_payloadVariant = AdminMessage_ConfigType_MODULE_CANNEDMSG_CONFIG;
+            break;
+        default:
+            break;
+        }
+
+        // NOTE: The phone app needs to know the ls_secs & phone_timeout value so it can properly expect sleep behavior.
+        // So even if we internally use 0 to represent 'use default' we still need to send the value we are
+        // using to the app (so that even old phone apps work with new device loads).
+        // r.get_radio_response.preferences.ls_secs = getPref_ls_secs();
+        // r.get_radio_response.preferences.phone_timeout_secs = getPref_phone_timeout_secs();
+        // hideSecret(r.get_radio_response.preferences.wifi_ssid); // hmm - leave public for now, because only minimally private
+        // and useful for users to know current provisioning) hideSecret(r.get_radio_response.preferences.wifi_password);
+
+        r.which_variant = AdminMessage_get_config_response_tag;
         myReply = allocDataProtobuf(r);
     }
 }
@@ -113,6 +208,16 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
         handleGetRadio(mp);
         break;
 
+    case AdminMessage_get_config_request_tag:
+        DEBUG_MSG("Client is getting config\n");
+        handleGetConfig(mp);
+        break;
+
+    case AdminMessage_set_config_tag:
+        DEBUG_MSG("Client is setting the config\n");
+        handleSetConfig(r->set_config);
+        break;
+
     case AdminMessage_get_owner_request_tag:
         DEBUG_MSG("Client is getting owner\n");
         handleGetOwner(mp);
@@ -142,16 +247,11 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
         AdminMessage response = AdminMessage_init_default;
         AdminMessageHandleResult handleResult = MeshModule::handleAdminMessageForAllPlugins(mp, r, &response);
 
-        if (handleResult == AdminMessageHandleResult::HANDLED_WITH_RESPONSE)
-        {
+        if (handleResult == AdminMessageHandleResult::HANDLED_WITH_RESPONSE) {
             myReply = allocDataProtobuf(response);
-        }
-        else if (mp.decoded.want_response)
-        {
+        } else if (mp.decoded.want_response) {
             DEBUG_MSG("We did not responded to a request that wanted a respond. req.variant=%d\n", r->which_variant);
-        }
-        else if (handleResult != AdminMessageHandleResult::HANDLED)
-        {
+        } else if (handleResult != AdminMessageHandleResult::HANDLED) {
             // Probably a message sent by us or sent to our local node.  FIXME, we should avoid scanning these messages
             DEBUG_MSG("Ignoring nonrelevant admin %d\n", r->which_variant);
         }
@@ -181,11 +281,6 @@ void AdminModule::handleSetOwner(const User &o)
         owner.is_licensed = o.is_licensed;
     }
 
-    if ((!changed || o.team) && (owner.team != o.team)) {
-        changed = 1;
-        owner.team = o.team;
-    }
-
     if (changed) // If nothing really changed, don't broadcast on the network or write to flash
         service.reloadOwner();
 }
@@ -208,6 +303,66 @@ void AdminModule::handleSetRadio(RadioConfig &r)
 {
     writeSecret(r.preferences.wifi_password, radioConfig.preferences.wifi_password);
     radioConfig = r;
+
+    service.reloadConfig();
+}
+
+void AdminModule::handleSetConfig(const Config &c)
+{
+    switch (c.which_payloadVariant) {
+    case AdminMessage_ConfigType_ALL:
+        DEBUG_MSG("Setting config: AdminMessage_ConfigType_ALL\n");
+        break;
+    case AdminMessage_ConfigType_CORE_ONLY:
+        DEBUG_MSG("Setting config: AdminMessage_ConfigType_CORE_ONLY\n");
+        break;
+    case AdminMessage_ConfigType_MODULE_ONLY:
+        DEBUG_MSG("Setting config: AdminMessage_ConfigType_MODULE_ONLY\n");
+        break;
+    case AdminMessage_ConfigType_DEVICE_CONFIG:
+        DEBUG_MSG("Setting config: AdminMessage_ConfigType_DEVICE_CONFIG\n");
+        break;
+    case AdminMessage_ConfigType_GPS_CONFIG:
+        DEBUG_MSG("Setting config: AdminMessage_ConfigType_GPS_CONFIG\n");
+        break;
+    case AdminMessage_ConfigType_POWER_CONFIG:
+        DEBUG_MSG("Setting config: AdminMessage_ConfigType_POWER_CONFIG\n");
+        break;
+    case AdminMessage_ConfigType_WIFI_CONFIG:
+        DEBUG_MSG("Setting config: AdminMessage_ConfigType_WIFI_CONFIG\n");
+        break;
+    case AdminMessage_ConfigType_DISPLAY_CONFIG:
+        DEBUG_MSG("Setting config: AdminMessage_ConfigType_DISPLAY_CONFIG\n");
+        break;
+    case AdminMessage_ConfigType_LORA_CONFIG:
+        DEBUG_MSG("Setting config: AdminMessage_ConfigType_LORA_CONFIG\n");
+        break;
+    case AdminMessage_ConfigType_MODULE_MQTT_CONFIG:
+        DEBUG_MSG("Setting config: AdminMessage_ConfigType_MODULE_MQTT_CONFIG\n");
+        break;
+    case AdminMessage_ConfigType_MODULE_SERIAL_CONFIG:
+        DEBUG_MSG("Setting config: AdminMessage_ConfigType_MODULE_SERIAL_CONFIG\n");
+        break;
+    case AdminMessage_ConfigType_MODULE_EXTNOTIF_CONFIG:
+        DEBUG_MSG("Setting config: AdminMessage_ConfigType_MODULE_EXTNOTIF_CONFIG\n");
+        break;
+    case AdminMessage_ConfigType_MODULE_STOREFORWARD_CONFIG:
+        DEBUG_MSG("Setting config: AdminMessage_ConfigType_MODULE_STOREFORWARD_CONFIG\n");
+        break;
+    case AdminMessage_ConfigType_MODULE_RANGETEST_CONFIG:
+        DEBUG_MSG("Setting config: AdminMessage_ConfigType_MODULE_RANGETEST_CONFIG\n");
+        break;
+    case AdminMessage_ConfigType_MODULE_TELEMETRY_CONFIG:
+        DEBUG_MSG("Setting config: AdminMessage_ConfigType_MODULE_TELEMETRY_CONFIG\n");
+        config.payloadVariant.module_config.payloadVariant.telemetry_config =
+            c.payloadVariant.module_config.payloadVariant.telemetry_config;
+        break;
+    case AdminMessage_ConfigType_MODULE_CANNEDMSG_CONFIG:
+        DEBUG_MSG("Setting config: AdminMessage_ConfigType_MODULE_CANNEDMSG_CONFIG\n");
+        break;
+    default:
+        break;
+    }
 
     service.reloadConfig();
 }

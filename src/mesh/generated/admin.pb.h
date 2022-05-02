@@ -5,12 +5,33 @@
 #define PB_ADMIN_PB_H_INCLUDED
 #include <pb.h>
 #include "channel.pb.h"
+#include "config.pb.h"
 #include "mesh.pb.h"
 #include "radioconfig.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
 #endif
+
+/* Enum definitions */
+typedef enum _AdminMessage_ConfigType { 
+    AdminMessage_ConfigType_ALL = 0, 
+    AdminMessage_ConfigType_CORE_ONLY = 1, 
+    AdminMessage_ConfigType_MODULE_ONLY = 2, 
+    AdminMessage_ConfigType_DEVICE_CONFIG = 3, 
+    AdminMessage_ConfigType_GPS_CONFIG = 4, 
+    AdminMessage_ConfigType_POWER_CONFIG = 5, 
+    AdminMessage_ConfigType_WIFI_CONFIG = 6, 
+    AdminMessage_ConfigType_DISPLAY_CONFIG = 7, 
+    AdminMessage_ConfigType_LORA_CONFIG = 8, 
+    AdminMessage_ConfigType_MODULE_MQTT_CONFIG = 9, 
+    AdminMessage_ConfigType_MODULE_SERIAL_CONFIG = 10, 
+    AdminMessage_ConfigType_MODULE_EXTNOTIF_CONFIG = 11, 
+    AdminMessage_ConfigType_MODULE_STOREFORWARD_CONFIG = 12, 
+    AdminMessage_ConfigType_MODULE_RANGETEST_CONFIG = 13, 
+    AdminMessage_ConfigType_MODULE_TELEMETRY_CONFIG = 14, 
+    AdminMessage_ConfigType_MODULE_CANNEDMSG_CONFIG = 15 
+} AdminMessage_ConfigType;
 
 /* Struct definitions */
 /* This message is handled by the Admin module and is responsible for all settings/channel read/write operations.
@@ -29,6 +50,10 @@ typedef struct _AdminMessage {
         Channel get_channel_response;
         bool get_owner_request;
         User get_owner_response;
+        AdminMessage_ConfigType get_config_request;
+        Config get_config_response;
+        Config set_config;
+        bool confirm_set_config;
         bool confirm_set_channel;
         bool confirm_set_radio;
         bool exit_simulator;
@@ -50,6 +75,12 @@ typedef struct _AdminMessage {
 } AdminMessage;
 
 
+/* Helper constants for enums */
+#define _AdminMessage_ConfigType_MIN AdminMessage_ConfigType_ALL
+#define _AdminMessage_ConfigType_MAX AdminMessage_ConfigType_MODULE_CANNEDMSG_CONFIG
+#define _AdminMessage_ConfigType_ARRAYSIZE ((AdminMessage_ConfigType)(AdminMessage_ConfigType_MODULE_CANNEDMSG_CONFIG+1))
+
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -68,6 +99,10 @@ extern "C" {
 #define AdminMessage_get_channel_response_tag    7
 #define AdminMessage_get_owner_request_tag       8
 #define AdminMessage_get_owner_response_tag      9
+#define AdminMessage_get_config_request_tag      10
+#define AdminMessage_get_config_response_tag     11
+#define AdminMessage_set_config_tag              12
+#define AdminMessage_confirm_set_config_tag      13
 #define AdminMessage_confirm_set_channel_tag     32
 #define AdminMessage_confirm_set_radio_tag       33
 #define AdminMessage_exit_simulator_tag          34
@@ -97,6 +132,10 @@ X(a, STATIC,   ONEOF,    UINT32,   (variant,get_channel_request,get_channel_requ
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_channel_response,get_channel_response),   7) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,get_owner_request,get_owner_request),   8) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_owner_response,get_owner_response),   9) \
+X(a, STATIC,   ONEOF,    UENUM,    (variant,get_config_request,get_config_request),  10) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_config_response,get_config_response),  11) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_config,set_config),  12) \
+X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_config,confirm_set_config),  13) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_channel,confirm_set_channel),  32) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_radio,confirm_set_radio),  33) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,exit_simulator,exit_simulator),  34) \
@@ -122,6 +161,8 @@ X(a, STATIC,   ONEOF,    INT32,    (variant,shutdown_seconds,shutdown_seconds), 
 #define AdminMessage_variant_get_radio_response_MSGTYPE RadioConfig
 #define AdminMessage_variant_get_channel_response_MSGTYPE Channel
 #define AdminMessage_variant_get_owner_response_MSGTYPE User
+#define AdminMessage_variant_get_config_response_MSGTYPE Config
+#define AdminMessage_variant_set_config_MSGTYPE Config
 
 extern const pb_msgdesc_t AdminMessage_msg;
 
@@ -129,7 +170,10 @@ extern const pb_msgdesc_t AdminMessage_msg;
 #define AdminMessage_fields &AdminMessage_msg
 
 /* Maximum encoded size of messages (where known) */
-#define AdminMessage_size                        598
+#if defined(Config_size) && defined(Config_size)
+#define AdminMessage_size                        (0 + sizeof(union AdminMessage_variant_size_union))
+union AdminMessage_variant_size_union {char f0[551]; char f11[(6 + Config_size)]; char f12[(6 + Config_size)];};
+#endif
 
 #ifdef __cplusplus
 } /* extern "C" */

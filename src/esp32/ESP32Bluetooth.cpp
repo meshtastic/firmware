@@ -23,9 +23,6 @@
 // proccess at once
 // static uint8_t trBytes[_max(_max(_max(_max(ToRadio_size, RadioConfig_size), User_size), MyNodeInfo_size), FromRadio_size)];
 static uint8_t fromRadioBytes[FromRadio_size];
-static uint8_t toRadioBytes[ToRadio_size];
-
-static bool bleConnected;
 
 NimBLECharacteristic *FromNumCharacteristic;
 NimBLEServer *bleServer;

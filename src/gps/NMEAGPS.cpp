@@ -65,7 +65,7 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         t.tm_year = d.year() - 1900;
         t.tm_isdst = false;
         if (t.tm_mon > -1){
-            DEBUG_MSG("NMEA GPS time %d-%d-%d %d:%d:%d\n", d.year(), d.month(), t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
+            DEBUG_MSG("NMEA GPS time %02d-%02d-%02d %02d:%02d:%02d\n", d.year(), d.month(), t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
             perhapsSetRTC(RTCQualityGPS, t);
             return true;
         } else
@@ -129,10 +129,16 @@ bool NMEAGPS::lookForLocation()
     auto loc = reader.location.value();
 
     // Bail out EARLY to avoid overwriting previous good data (like #857)
-    if((toDegInt(loc.lat) == 0) || (toDegInt(loc.lat) > 90)) {
+    if (toDegInt(loc.lat) > 900000000) {
+#ifdef GPS_EXTRAVERBOSE        
+        DEBUG_MSG("Bail out EARLY on LAT %i\n",toDegInt(loc.lat));
+#endif
         return false;
     }
-    if((toDegInt(loc.lng) == 0) || (toDegInt(loc.lng) > 180)) {
+    if (toDegInt(loc.lng) > 1800000000) {
+#ifdef GPS_EXTRAVERBOSE        
+        DEBUG_MSG("Bail out EARLY on LNG %i\n",toDegInt(loc.lng));
+#endif
         return false;
     }
 

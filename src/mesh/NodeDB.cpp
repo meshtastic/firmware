@@ -35,6 +35,7 @@ NodeDB nodeDB;
 EXT_RAM_ATTR DeviceState devicestate;
 MyNodeInfo &myNodeInfo = devicestate.my_node;
 RadioConfig radioConfig;
+Config config;
 ChannelFile channelFile;
 
 /** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings
@@ -140,6 +141,11 @@ bool NodeDB::resetRadioConfig()
     initRegion();
 
     return didFactoryReset;
+}
+
+void NodeDB::installDefaultConfig()
+{
+    memset(&config, 0, sizeof(config));
 }
 
 void NodeDB::installDefaultRadioConfig()
@@ -280,6 +286,7 @@ void NodeDB::pickNewNodeNum()
 
 static const char *preffile = "/prefs/db.proto";
 static const char *radiofile = "/prefs/radio.proto";
+static const char *configfile = "/prefs/config.proto";
 static const char *channelfile = "/prefs/channels.proto";
 
 /** Load a protobuf from a file, return true for success */
@@ -330,6 +337,10 @@ void NodeDB::loadFromDisk()
 
     if (!loadProto(radiofile, RadioConfig_size, sizeof(RadioConfig), RadioConfig_fields, &radioConfig)) {
         installDefaultRadioConfig(); // Our in RAM copy might now be corrupt
+    }
+
+    if (!loadProto(configfile, Config_size, sizeof(Config), Config_fields, &config)) {
+        installDefaultConfig(); // Our in RAM copy might now be corrupt
     }
 
     if (!loadProto(channelfile, ChannelFile_size, sizeof(ChannelFile), ChannelFile_fields, &channelFile)) {
@@ -390,6 +401,7 @@ void NodeDB::saveToDisk()
 #endif
         saveProto(preffile, DeviceState_size, sizeof(devicestate), DeviceState_fields, &devicestate);
         saveProto(radiofile, RadioConfig_size, sizeof(RadioConfig), RadioConfig_fields, &radioConfig);
+        saveProto(configfile, Config_size, sizeof(Config), Config_fields, &config);
         saveChannelsToDisk();
 
     } else {

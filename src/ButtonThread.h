@@ -135,7 +135,7 @@ class ButtonThread : public concurrency::OSThread
         screen->adjustBrightness();
 #endif
         // If user button is held down for 5 seconds, shutdown the device.
-        if (millis() - longPressTime > 5 * 1000) {
+        if ((millis() - longPressTime > 5 * 1000) && (longPressTime > 0)) {
 #ifdef TBEAM_V10
             if (axp192_found == true) {
                 setLed(false);
@@ -144,7 +144,7 @@ class ButtonThread : public concurrency::OSThread
 #elif NRF52_SERIES
             // Do actual shutdown when button released, otherwise the button release
             // may wake the board immediatedly.
-            if (!shutdown_on_long_stop) {
+            if ((!shutdown_on_long_stop) && (millis() > 30 * 1000)) { 
                 screen->startShutdownScreen();
                 DEBUG_MSG("Shutdown from long press");
                 playBeep();
@@ -180,18 +180,22 @@ class ButtonThread : public concurrency::OSThread
 
     static void userButtonPressedLongStart()
     {
-        DEBUG_MSG("Long press start!\n");
-        longPressTime = millis();
+        if (millis() > 30 * 1000) {
+            DEBUG_MSG("Long press start!\n");
+            longPressTime = millis();
+        }
     }
 
     static void userButtonPressedLongStop()
     {
-        DEBUG_MSG("Long press stop!\n");
-        longPressTime = 0;
-        if (shutdown_on_long_stop) {
-            playShutdownMelody();
-            delay(3000);
-            power->shutdown();
+        if (millis() > 30 * 1000){
+            DEBUG_MSG("Long press stop!\n");
+            longPressTime = 0;
+            if (shutdown_on_long_stop) {
+                playShutdownMelody();
+                delay(3000);
+                power->shutdown();
+            }
         }
     }
 };

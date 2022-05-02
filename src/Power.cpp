@@ -100,12 +100,11 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #ifndef ADC_MULTIPLIER
 #define ADC_MULTIPLIER 2.0
 #endif 
-    // Override variant or default ADC_MULTIPLIER if we have the override pref
-    float operativeAdcMultiplier = radioConfig.preferences.adc_multiplier_override > 0 ?
-        radioConfig.preferences.adc_multiplier_override :
-        ADC_MULTIPLIER;
 
 #ifdef BATTERY_PIN
+        // Override variant or default ADC_MULTIPLIER if we have the override pref
+        float operativeAdcMultiplier = radioConfig.preferences.adc_multiplier_override > 0 ?
+            radioConfig.preferences.adc_multiplier_override : ADC_MULTIPLIER;
         // Do not call analogRead() often. 
         const uint32_t min_read_interval = 5000;
         if (millis() - last_read_time_ms > min_read_interval) {
