@@ -123,7 +123,7 @@ class NodeDB
     void loadFromDisk();
 
     /// Reinit device state from scratch (not loading from disk)
-    void installDefaultDeviceState(), installDefaultRadioConfig(), installDefaultChannels(), installDefaultConfig();
+    void installDefaultDeviceState(), installDefaultRadioConfig(), installDefaultChannels();
 };
 
 /**
@@ -194,5 +194,3 @@ PREF_GET(min_wake_secs, 10)
  */
 extern uint32_t radioGeneration;
 
-// Config doesn't have a nanopb generated full size constant
-#define Config_size (Config_DeviceConfig_size + Config_DisplayConfig_size + Config_GpsConfig_size + Config_LoRaConfig_size + Config_ModuleConfig_CannedMessageConfig_size + Config_ModuleConfig_ExternalNotificationConfig_size + Config_ModuleConfig_MQTTConfig_size + Config_ModuleConfig_RangeTestConfig_size + Config_ModuleConfig_SerialConfig_size + Config_ModuleConfig_StoreForwardConfig_size + Config_ModuleConfig_TelemetryConfig_size + Config_ModuleConfig_size + Config_PowerConfig_size)
