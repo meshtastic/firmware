@@ -1,9 +1,9 @@
-#include "configuration.h"
 #include "sleep.h"
 #include "GPS.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "configuration.h"
 #include "error.h"
 #include "main.h"
 #include "target_specific.h"
@@ -11,10 +11,10 @@
 #ifndef NO_ESP32
 #include "esp32/pm.h"
 #include "esp_pm.h"
+#include "mesh/http/WiFiAPClient.h"
 #include "rom/rtc.h"
 #include <driver/rtc_io.h>
 #include <driver/uart.h>
-#include "mesh/http/WiFiAPClient.h"
 
 #include "nimble/BluetoothUtil.h"
 
@@ -51,25 +51,25 @@ void setCPUFast(bool on)
 #ifndef NO_ESP32
 
     if (isWifiAvailable()) {
-        /* 
-        * 
-        * There's a newly introduced bug in the espressif framework where WiFi is 
-        *   unstable when the frequency is less than 240mhz.
-        * 
-        *   This mostly impacts WiFi AP mode but we'll bump the frequency for
-        *     all WiFi use cases.
-        * (Added: Dec 23, 2021 by Jm Casler)
-        */
+        /*
+         *
+         * There's a newly introduced bug in the espressif framework where WiFi is
+         *   unstable when the frequency is less than 240mhz.
+         *
+         *   This mostly impacts WiFi AP mode but we'll bump the frequency for
+         *     all WiFi use cases.
+         * (Added: Dec 23, 2021 by Jm Casler)
+         */
         DEBUG_MSG("Setting CPU to 240mhz because WiFi is in use.\n");
         setCpuFrequencyMhz(240);
         return;
     }
 
-    // The Heltec LORA32 V1 runs at 26 MHz base frequency and doesn't react well to switching to 80 MHz...
-    #ifndef ARDUINO_HELTEC_WIFI_LORA_32
-        setCpuFrequencyMhz(on ? 240 : 80);
-    #endif
-    
+// The Heltec LORA32 V1 runs at 26 MHz base frequency and doesn't react well to switching to 80 MHz...
+#ifndef ARDUINO_HELTEC_WIFI_LORA_32
+    setCpuFrequencyMhz(on ? 240 : 80);
+#endif
+
 #endif
 }
 
@@ -284,12 +284,12 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
  */
 void enableModemSleep()
 {
-    static esp_pm_config_esp32_t config; // filled with zeros because bss
+    static esp_pm_config_esp32_t esp32_config; // filled with zeros because bss
 
-    config.max_freq_mhz = CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ;
-    config.min_freq_mhz = 20; // 10Mhz is minimum recommended
-    config.light_sleep_enable = false;
-    int rv = esp_pm_configure(&config);
+    esp32_config.max_freq_mhz = CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ;
+    esp32_config.min_freq_mhz = 20; // 10Mhz is minimum recommended
+    esp32_config.light_sleep_enable = false;
+    int rv = esp_pm_configure(&esp32_config);
     DEBUG_MSG("Sleep request result %x\n", rv);
 }
 #endif

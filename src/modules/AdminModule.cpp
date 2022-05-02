@@ -307,7 +307,7 @@ void AdminModule::handleSetRadio(RadioConfig &r)
     service.reloadConfig();
 }
 
-void AdminModule::handleSetConfig(Config &c)
+void AdminModule::handleSetConfig(const Config &c)
 {
     switch (c.which_payloadVariant) {
     case AdminMessage_ConfigType_ALL:

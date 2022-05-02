@@ -23,7 +23,7 @@ class AdminModule : public ProtobufModule<AdminMessage>
     void handleSetOwner(const User &o);
     void handleSetChannel(const Channel &cc);
     void handleSetRadio(RadioConfig &r);
-    void handleSetConfig(Config &c);
+    void handleSetConfig(const Config &c);
 
     void handleGetChannel(const MeshPacket &req, uint32_t channelIndex);
     void handleGetRadio(const MeshPacket &req);
