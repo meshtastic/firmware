@@ -7,6 +7,7 @@
 #include "channel.pb.h"
 #include "config.pb.h"
 #include "mesh.pb.h"
+#include "module_config.pb.h"
 #include "radioconfig.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
@@ -15,23 +16,23 @@
 
 /* Enum definitions */
 typedef enum _AdminMessage_ConfigType { 
-    AdminMessage_ConfigType_ALL = 0, 
-    AdminMessage_ConfigType_CORE_ONLY = 1, 
-    AdminMessage_ConfigType_MODULE_ONLY = 2, 
-    AdminMessage_ConfigType_DEVICE_CONFIG = 3, 
-    AdminMessage_ConfigType_GPS_CONFIG = 4, 
-    AdminMessage_ConfigType_POWER_CONFIG = 5, 
-    AdminMessage_ConfigType_WIFI_CONFIG = 6, 
-    AdminMessage_ConfigType_DISPLAY_CONFIG = 7, 
-    AdminMessage_ConfigType_LORA_CONFIG = 8, 
-    AdminMessage_ConfigType_MODULE_MQTT_CONFIG = 9, 
-    AdminMessage_ConfigType_MODULE_SERIAL_CONFIG = 10, 
-    AdminMessage_ConfigType_MODULE_EXTNOTIF_CONFIG = 11, 
-    AdminMessage_ConfigType_MODULE_STOREFORWARD_CONFIG = 12, 
-    AdminMessage_ConfigType_MODULE_RANGETEST_CONFIG = 13, 
-    AdminMessage_ConfigType_MODULE_TELEMETRY_CONFIG = 14, 
-    AdminMessage_ConfigType_MODULE_CANNEDMSG_CONFIG = 15 
+    AdminMessage_ConfigType_DEVICE_CONFIG = 0, 
+    AdminMessage_ConfigType_GPS_CONFIG = 1, 
+    AdminMessage_ConfigType_POWER_CONFIG = 2, 
+    AdminMessage_ConfigType_WIFI_CONFIG = 3, 
+    AdminMessage_ConfigType_DISPLAY_CONFIG = 4, 
+    AdminMessage_ConfigType_LORA_CONFIG = 5 
 } AdminMessage_ConfigType;
+
+typedef enum _AdminMessage_ModuleConfigType { 
+    AdminMessage_ModuleConfigType_MQTT_CONFIG = 0, 
+    AdminMessage_ModuleConfigType_SERIAL_CONFIG = 1, 
+    AdminMessage_ModuleConfigType_EXTNOTIF_CONFIG = 2, 
+    AdminMessage_ModuleConfigType_STOREFORWARD_CONFIG = 3, 
+    AdminMessage_ModuleConfigType_RANGETEST_CONFIG = 4, 
+    AdminMessage_ModuleConfigType_TELEMETRY_CONFIG = 5, 
+    AdminMessage_ModuleConfigType_CANNEDMSG_CONFIG = 6 
+} AdminMessage_ModuleConfigType;
 
 /* Struct definitions */
 /* This message is handled by the Admin module and is responsible for all settings/channel read/write operations.
@@ -54,6 +55,10 @@ typedef struct _AdminMessage {
         Config get_config_response;
         Config set_config;
         bool confirm_set_config;
+        AdminMessage_ModuleConfigType get_module_config_request;
+        ModuleConfig get_module_config_response;
+        ModuleConfig set_module_config;
+        bool confirm_set_module_config;
         bool confirm_set_channel;
         bool confirm_set_radio;
         bool exit_simulator;
@@ -76,9 +81,13 @@ typedef struct _AdminMessage {
 
 
 /* Helper constants for enums */
-#define _AdminMessage_ConfigType_MIN AdminMessage_ConfigType_ALL
-#define _AdminMessage_ConfigType_MAX AdminMessage_ConfigType_MODULE_CANNEDMSG_CONFIG
-#define _AdminMessage_ConfigType_ARRAYSIZE ((AdminMessage_ConfigType)(AdminMessage_ConfigType_MODULE_CANNEDMSG_CONFIG+1))
+#define _AdminMessage_ConfigType_MIN AdminMessage_ConfigType_DEVICE_CONFIG
+#define _AdminMessage_ConfigType_MAX AdminMessage_ConfigType_LORA_CONFIG
+#define _AdminMessage_ConfigType_ARRAYSIZE ((AdminMessage_ConfigType)(AdminMessage_ConfigType_LORA_CONFIG+1))
+
+#define _AdminMessage_ModuleConfigType_MIN AdminMessage_ModuleConfigType_MQTT_CONFIG
+#define _AdminMessage_ModuleConfigType_MAX AdminMessage_ModuleConfigType_CANNEDMSG_CONFIG
+#define _AdminMessage_ModuleConfigType_ARRAYSIZE ((AdminMessage_ModuleConfigType)(AdminMessage_ModuleConfigType_CANNEDMSG_CONFIG+1))
 
 
 #ifdef __cplusplus
@@ -103,6 +112,10 @@ extern "C" {
 #define AdminMessage_get_config_response_tag     11
 #define AdminMessage_set_config_tag              12
 #define AdminMessage_confirm_set_config_tag      13
+#define AdminMessage_get_module_config_request_tag 14
+#define AdminMessage_get_module_config_response_tag 15
+#define AdminMessage_set_module_config_tag       16
+#define AdminMessage_confirm_set_module_config_tag 17
 #define AdminMessage_confirm_set_channel_tag     32
 #define AdminMessage_confirm_set_radio_tag       33
 #define AdminMessage_exit_simulator_tag          34
@@ -136,6 +149,10 @@ X(a, STATIC,   ONEOF,    UENUM,    (variant,get_config_request,get_config_reques
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_config_response,get_config_response),  11) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_config,set_config),  12) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_config,confirm_set_config),  13) \
+X(a, STATIC,   ONEOF,    UENUM,    (variant,get_module_config_request,get_module_config_request),  14) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_module_config_response,get_module_config_response),  15) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_module_config,set_module_config),  16) \
+X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_module_config,confirm_set_module_config),  17) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_channel,confirm_set_channel),  32) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_radio,confirm_set_radio),  33) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,exit_simulator,exit_simulator),  34) \
@@ -163,6 +180,8 @@ X(a, STATIC,   ONEOF,    INT32,    (variant,shutdown_seconds,shutdown_seconds), 
 #define AdminMessage_variant_get_owner_response_MSGTYPE User
 #define AdminMessage_variant_get_config_response_MSGTYPE Config
 #define AdminMessage_variant_set_config_MSGTYPE Config
+#define AdminMessage_variant_get_module_config_response_MSGTYPE ModuleConfig
+#define AdminMessage_variant_set_module_config_MSGTYPE ModuleConfig
 
 extern const pb_msgdesc_t AdminMessage_msg;
 

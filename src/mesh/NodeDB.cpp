@@ -36,6 +36,7 @@ EXT_RAM_ATTR DeviceState devicestate;
 MyNodeInfo &myNodeInfo = devicestate.my_node;
 RadioConfig radioConfig;
 Config config;
+ModuleConfig moduleConfig;
 ChannelFile channelFile;
 
 /** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings
@@ -96,7 +97,7 @@ bool NodeDB::resetRadioConfig()
         nvs_flash_erase();
 #endif
 #ifdef NRF52_SERIES
-         // first, remove the "/prefs" (this removes most prefs)
+        // first, remove the "/prefs" (this removes most prefs)
         FSCom.rmdir_r("/prefs");
         // second, install default state (this will deal with the duplicate mac address issue)
         installDefaultDeviceState();
@@ -148,6 +149,11 @@ void NodeDB::installDefaultConfig()
     memset(&config, 0, sizeof(config));
 }
 
+void NodeDB::installDefaultModuleConfig()
+{
+    memset(&moduleConfig, 0, sizeof(moduleConfig));
+}
+
 void NodeDB::installDefaultRadioConfig()
 {
     memset(&radioConfig, 0, sizeof(radioConfig));
@@ -155,9 +161,7 @@ void NodeDB::installDefaultRadioConfig()
     resetRadioConfig();
 
     // for backward compat, default position flags are BAT+ALT+MSL (0x23 = 35)
-    radioConfig.preferences.position_flags = (PositionFlags_POS_BATTERY |
-        PositionFlags_POS_ALTITUDE | PositionFlags_POS_ALT_MSL);
-
+    radioConfig.preferences.position_flags = (PositionFlags_POS_BATTERY | PositionFlags_POS_ALTITUDE | PositionFlags_POS_ALT_MSL);
 }
 
 void NodeDB::installDefaultChannels()
@@ -247,8 +251,8 @@ void NodeDB::init()
     DEBUG_MSG("Number of Device Reboots: %d\n", myNodeInfo.reboot_count);
 
     /* The ESP32 has a wifi radio. This will need to be modified at some point so
-    *    the test isn't so simplistic.
-    */
+     *    the test isn't so simplistic.
+     */
     myNodeInfo.has_wifi = true;
 #endif
 
@@ -287,6 +291,7 @@ void NodeDB::pickNewNodeNum()
 static const char *preffile = "/prefs/db.proto";
 static const char *radiofile = "/prefs/radio.proto";
 static const char *configfile = "/prefs/config.proto";
+static const char *moduleConfigfile = "/prefs/module_config.proto";
 static const char *channelfile = "/prefs/channels.proto";
 
 /** Load a protobuf from a file, return true for success */
@@ -341,6 +346,10 @@ void NodeDB::loadFromDisk()
 
     if (!loadProto(configfile, Config_size, sizeof(Config), Config_fields, &config)) {
         installDefaultConfig(); // Our in RAM copy might now be corrupt
+    }
+
+    if (!loadProto(moduleConfigfile, ModuleConfig_size, sizeof(ModuleConfig), ModuleConfig_fields, &moduleConfig)) {
+        installDefaultModuleConfig(); // Our in RAM copy might now be corrupt
     }
 
     if (!loadProto(channelfile, ChannelFile_size, sizeof(ChannelFile), ChannelFile_fields, &channelFile)) {
@@ -402,6 +411,7 @@ void NodeDB::saveToDisk()
         saveProto(preffile, DeviceState_size, sizeof(devicestate), DeviceState_fields, &devicestate);
         saveProto(radiofile, RadioConfig_size, sizeof(RadioConfig), RadioConfig_fields, &radioConfig);
         saveProto(configfile, Config_size, sizeof(Config), Config_fields, &config);
+        saveProto(moduleConfigfile, Module_Config_size, sizeof(ModuleConfig), ModuleConfig_fields, &moduleConfig);
         saveChannelsToDisk();
 
     } else {
@@ -456,12 +466,11 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p, RxSource src)
 
     if (src == RX_SRC_LOCAL) {
         // Local packet, fully authoritative
-        DEBUG_MSG("updatePosition LOCAL pos@%x, time=%u, latI=%d, lonI=%d, alt=%d\n",
-                p.pos_timestamp, p.time, p.latitude_i, p.longitude_i, p.altitude);
+        DEBUG_MSG("updatePosition LOCAL pos@%x, time=%u, latI=%d, lonI=%d, alt=%d\n", p.pos_timestamp, p.time, p.latitude_i,
+                  p.longitude_i, p.altitude);
         info->position = p;
 
-    } else if ((p.time > 0) && !p.latitude_i && !p.longitude_i && !p.pos_timestamp &&
-                !p.location_source) {
+    } else if ((p.time > 0) && !p.latitude_i && !p.longitude_i && !p.pos_timestamp && !p.location_source) {
         // FIXME SPECIAL TIME SETTING PACKET FROM EUD TO RADIO
         // (stop-gap fix for issue #900)
         DEBUG_MSG("updatePosition SPECIAL time setting time=%u\n", p.time);
@@ -473,8 +482,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p, RxSource src)
         // recorded based on the packet rxTime
         //
         // FIXME perhaps handle RX_SRC_USER separately?
-        DEBUG_MSG("updatePosition REMOTE node=0x%x time=%u, latI=%d, lonI=%d\n",
-                nodeId, p.time, p.latitude_i, p.longitude_i);
+        DEBUG_MSG("updatePosition REMOTE node=0x%x time=%u, latI=%d, lonI=%d\n", nodeId, p.time, p.latitude_i, p.longitude_i);
 
         // First, back up fields that we want to protect from overwrite
         uint32_t tmp_time = info->position.time;
@@ -483,14 +491,13 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p, RxSource src)
         info->position = p;
 
         // Last, restore any fields that may have been overwritten
-        if (! info->position.time)
+        if (!info->position.time)
             info->position.time = tmp_time;
     }
     info->has_position = true;
     updateGUIforNode = info;
     notifyObservers(true); // Force an update whether or not our node counts have changed
 }
-
 
 /** Update telemetry info for this node based on received metrics
  *  We only care about device telemetry here
@@ -603,7 +610,7 @@ void recordCriticalError(CriticalErrorCode code, uint32_t address, const char *f
     // Print error to screen and serial port
     String lcd = String("Critical error ") + code + "!\n";
     screen->print(lcd.c_str());
-    if(filename)
+    if (filename)
         DEBUG_MSG("NOTE! Recording critical error %d at %s:%lx\n", code, filename, address);
     else
         DEBUG_MSG("NOTE! Recording critical error %d, address=%lx\n", code, address);
