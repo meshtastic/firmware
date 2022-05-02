@@ -37,6 +37,7 @@ jobs:
           - board: rak4631
           - board: rak4631_eink
           - board: t-echo
+          - board: nano-g1
 
     runs-on: ubuntu-latest
     steps:
@@ -91,6 +92,7 @@ jobs:
           - board: heltec-v2.1
           - board: tbeam0.7
           - board: meshtastic-diy-v1
+          - board: nano-g1
 
     runs-on: ubuntu-latest
     steps:
