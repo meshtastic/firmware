@@ -25,8 +25,8 @@ class AdminModule : public ProtobufModule<AdminMessage>
      */
     void handleGetOwner(const MeshPacket &req);
     void handleGetRadio(const MeshPacket &req);
-    void handleGetConfig(const MeshPacket &req);
-    void handleGetModuleConfig(const MeshPacket &req);
+    void handleGetConfig(const MeshPacket &req, uint32_t configType);
+    void handleGetModuleConfig(const MeshPacket &req, uint32_t configType);
     void handleGetChannel(const MeshPacket &req, uint32_t channelIndex);
 
     /**
