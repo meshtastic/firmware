@@ -16,12 +16,6 @@ HardwareSerial *GPS::_serial_gps = &Serial1;
 HardwareSerial *GPS::_serial_gps = NULL;
 #endif
 
-#ifdef GPS_I2C_ADDRESS
-uint8_t GPS::i2cAddress = GPS_I2C_ADDRESS;
-#else
-uint8_t GPS::i2cAddress = 0;
-#endif
-
 GPS *gps;
 
 /// Multiple GPS instances might use the same serial port (in sequence), but we can
@@ -42,6 +36,75 @@ bool GPS::setupGPS()
 #ifndef NO_ESP32
         _serial_gps->setRxBufferSize(2048); // the default is 256
 #endif
+#ifdef TTGO_T_ECHO
+        // Switch to 4800 baud, then close and reopen port
+        _serial_gps->write("$PCAS01,0*1C\r\n");
+        delay(250);
+        _serial_gps->end();
+        delay(250);
+        _serial_gps->begin(4800);
+        delay(250);
+        // Initialize the L76K Chip, use GPS + GLONASS
+        _serial_gps->write("$PCAS04,5*1C\r\n");
+        delay(250);
+        // only ask for RMC and GGA
+        _serial_gps->write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
+        delay(250);
+        // Switch to Vehicle Mode, since SoftRF enables Aviation < 2g
+        _serial_gps->write("$PCAS11,3*1E\r\n");
+        delay(250);
+
+#endif
+#ifdef GPS_UBLOX
+        // Set the UART port to output NMEA only
+        byte _message_nmea[] = {0xB5, 0x62, 0x06, 0x00, 0x14, 0x00,
+            0x01, 0x00, 0x00, 0x00, 0xC0, 0x08, 0x00, 0x00, 0x80, 0x25, 0x00, 0x00, 0x07, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x91, 0xAF};
+        _serial_gps->write(_message_nmea,sizeof(_message_nmea));
+        delay(250);
+
+        // disable GGL
+        byte _message_GGL[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00,
+            0xF0, 0x01, 0x01, 0x00, 0x01, 0x01, 0x01, 0x01,
+            0x05,0x3A};
+        _serial_gps->write(_message_GGL,sizeof(_message_GGL));
+        delay(250);
+
+        // disable GSA
+        byte _message_GSA[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00,
+            0xF0, 0x02, 0x01, 0x00, 0x01, 0x01, 0x01, 0x01,
+            0x06,0x41};
+        _serial_gps->write(_message_GSA,sizeof(_message_GSA));
+        delay(250);
+
+        // disable GSV
+        byte _message_GSV[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00,
+            0xF0, 0x03, 0x01, 0x00, 0x01, 0x01, 0x01, 0x01,
+            0x07,0x48};
+        _serial_gps->write(_message_GSV,sizeof(_message_GSV));
+        delay(250);
+
+        // disable VTG
+        byte _message_VTG[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00,
+            0xF0, 0x05, 0x01, 0x00, 0x01, 0x01, 0x01, 0x01,
+            0x09,0x56};
+        _serial_gps->write(_message_VTG,sizeof(_message_VTG));
+        delay(250);
+
+        // enable RMC
+        byte _message_RMC[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00,
+            0xF0, 0x04, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
+            0x09,0x54};
+        _serial_gps->write(_message_RMC,sizeof(_message_RMC));
+        delay(250);
+
+        // enable GGA
+        byte _message_GGA[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00,
+            0xF0, 0x00, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
+            0x05, 0x38};
+        _serial_gps->write(_message_GGA,sizeof(_message_GGA));
+        delay(250);
+#endif
     }
 
     return true;
@@ -51,7 +114,7 @@ bool GPS::setup()
 {
     // Master power for the GPS
 #ifdef PIN_GPS_EN
-    digitalWrite(PIN_GPS_EN, PIN_GPS_EN);
+    digitalWrite(PIN_GPS_EN, 1);
     pinMode(PIN_GPS_EN, OUTPUT);
 #endif
 
@@ -257,7 +320,6 @@ int32_t GPS::runOnce()
         bool tooLong = wakeTime != UINT32_MAX && (now - lastWakeStartMsec) > wakeTime;
 
         // Once we get a location we no longer desperately want an update
-        // or if we got a time and we are in GpsOpTimeOnly mode
         // DEBUG_MSG("gotLoc %d, tooLong %d, gotTime %d\n", gotLoc, tooLong, gotTime);
         if ((gotLoc && gotTime) || tooLong || (gotTime && getGpsOp() == GpsOperation_GpsOpTimeOnly)) {
 
@@ -280,7 +342,7 @@ int32_t GPS::runOnce()
 
     // 9600bps is approx 1 byte per msec, so considering our buffer size we never need to wake more often than 200ms
     // if not awake we can run super infrquently (once every 5 secs?) to see if we need to wake.
-    return isAwake ? 100 : 5000;
+    return isAwake ? GPS_THREAD_INTERVAL : 5000;
 }
 
 void GPS::forceWake(bool on)
@@ -318,13 +380,7 @@ int GPS::prepareDeepSleep(void *unused)
     return 0;
 }
 
-#ifdef GPS_TX_PIN
-#include "UBloxGPS.h"
-#endif
-
-#ifdef HAS_AIR530_GPS
-#include "Air530GPS.h"
-#elif !defined(NO_GPS)
+#ifndef NO_GPS
 #include "NMEAGPS.h"
 #endif
 
@@ -339,29 +395,11 @@ GPS *createGps()
 #else
     DEBUG_MSG("Using MSL altitude model\n");
 #endif
-// If we don't have bidirectional comms, we can't even try talking to UBLOX
-#ifdef GPS_TX_PIN
-    // Init GPS - first try ublox
-    UBloxGPS *ublox = new UBloxGPS();
-
-    if (!ublox->setup()) {
-        DEBUG_MSG("ERROR: No UBLOX GPS found\n");
-        delete ublox;
-        ublox = NULL;
-    } else {
-        return ublox;
-    }
-#endif
-
     if (GPS::_serial_gps) {
         // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
         // assume NMEA at 9600 baud.
         DEBUG_MSG("Hoping that NMEA might work\n");
-#ifdef HAS_AIR530_GPS
-        GPS *new_gps = new Air530GPS();
-#else
         GPS *new_gps = new NMEAGPS();
-#endif
         new_gps->setup();
         return new_gps;
     }

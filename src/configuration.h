@@ -100,6 +100,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define GPS_TX_PIN 12
 #endif
 
+#ifndef TTGO_T_ECHO
+#define GPS_UBLOX
+#endif
+
 // -----------------------------------------------------------------------------
 // LoRa SPI
 // -----------------------------------------------------------------------------
@@ -148,6 +152,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 
 #define GPS_BAUDRATE 9600
+
+#ifndef GPS_THREAD_INTERVAL
+#define GPS_THREAD_INTERVAL 100
+#endif
 
 #if defined(TBEAM_V10)
 // This string must exactly match the case used in release file names or the android updater won't work
