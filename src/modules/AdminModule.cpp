@@ -192,22 +192,22 @@ void AdminModule::handleSetRadio(RadioConfig &r)
 void AdminModule::handleSetConfig(const Config &c)
 {
     switch (c.which_payloadVariant) {
-    case AdminMessage_ConfigType_DEVICE_CONFIG:
+    case Config_device_config_tag:
         DEBUG_MSG("Setting config: Device\n");
         break;
-    case AdminMessage_ConfigType_GPS_CONFIG:
+    case Config_gps_config_tag:
         DEBUG_MSG("Setting config: GPS\n");
         break;
-    case AdminMessage_ConfigType_POWER_CONFIG:
+    case Config_power_config_tag:
         DEBUG_MSG("Setting config: Power\n");
         break;
-    case AdminMessage_ConfigType_WIFI_CONFIG:
+    case Config_wifi_config_tag:
         DEBUG_MSG("Setting config: WiFi\n");
         break;
-    case AdminMessage_ConfigType_DISPLAY_CONFIG:
+    case Config_display_config_tag:
         DEBUG_MSG("Setting config: Display\n");
         break;
-    case AdminMessage_ConfigType_LORA_CONFIG:
+    case Config_lora_config_tag:
         DEBUG_MSG("Setting config: LoRa\n");
         break;
     }
@@ -218,25 +218,26 @@ void AdminModule::handleSetConfig(const Config &c)
 void AdminModule::handleSetModuleConfig(const ModuleConfig &c)
 {
     switch (c.which_payloadVariant) {
-    case AdminMessage_ModuleConfigType_MQTT_CONFIG:
+    case ModuleConfig_mqtt_config_tag:
         DEBUG_MSG("Setting module config: MQTT\n");
         break;
-    case AdminMessage_ModuleConfigType_SERIAL_CONFIG:
+    case ModuleConfig_serial_config_tag:
         DEBUG_MSG("Setting module config: Serial\n");
         break;
-    case AdminMessage_ModuleConfigType_EXTNOTIF_CONFIG:
+    case ModuleConfig_external_notification_config_tag:
         DEBUG_MSG("Setting module config: External Notification\n");
         break;
-    case AdminMessage_ModuleConfigType_STOREFORWARD_CONFIG:
+    case ModuleConfig_store_forward_config_tag:
         DEBUG_MSG("Setting module config: Store & Forward\n");
         break;
-    case AdminMessage_ModuleConfigType_RANGETEST_CONFIG:
+    case ModuleConfig_range_test_config_tag:
         DEBUG_MSG("Setting module config: Range Test\n");
         break;
-    case AdminMessage_ModuleConfigType_TELEMETRY_CONFIG:
+    case ModuleConfig_telemetry_config_tag:
         DEBUG_MSG("Setting module config: Telemetry\n");
+        moduleConfig.payloadVariant.telemetry_config = c.payloadVariant.telemetry_config;
         break;
-    case AdminMessage_ModuleConfigType_CANNEDMSG_CONFIG:
+    case ModuleConfig_canned_message_config_tag:
         DEBUG_MSG("Setting module config: Canned Message\n");
         break;
     }
