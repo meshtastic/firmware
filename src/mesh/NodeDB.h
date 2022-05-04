@@ -12,6 +12,8 @@ extern DeviceState devicestate;
 extern ChannelFile channelFile;
 extern MyNodeInfo &myNodeInfo;
 extern RadioConfig radioConfig;
+extern Config config;
+extern ModuleConfig moduleConfig;
 extern User &owner;
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
@@ -63,7 +65,7 @@ class NodeDB
 
     /** Update telemetry info for this node based on received metrics
      */
-    void updateTelemetry(uint32_t nodeId,  const Telemetry &t, RxSource src = RX_SRC_RADIO);
+    void updateTelemetry(uint32_t nodeId, const Telemetry &t, RxSource src = RX_SRC_RADIO);
 
     /** Update user info for this node based on received user data
      */
@@ -122,7 +124,8 @@ class NodeDB
     void loadFromDisk();
 
     /// Reinit device state from scratch (not loading from disk)
-    void installDefaultDeviceState(), installDefaultRadioConfig(), installDefaultChannels();
+    void installDefaultDeviceState(), installDefaultRadioConfig(), installDefaultChannels(), installDefaultConfig(),
+        installDefaultModuleConfig();
 };
 
 /**
@@ -146,7 +149,7 @@ extern NodeDB nodeDB;
         prefs.ls_secs = oneday
 
         prefs.position_broadcast_secs = 12 hours # send either position or owner every 12hrs
-        
+
         # get a new GPS position once per day
         prefs.gps_update_interval = oneday
 
@@ -161,14 +164,19 @@ extern NodeDB nodeDB;
 
 #define IF_ROUTER(routerVal, normalVal) ((radioConfig.preferences.role == Role_Router) ? (routerVal) : (normalVal))
 
+#define default_broadcast_interval_secs IF_ROUTER(12 * 60 * 60, 15 * 60)
+
+inline uint32_t getIntervalOrDefaultMs(uint32_t interval)
+{
+    if (interval > 0)
+        return interval * 1000;
+    return default_broadcast_interval_secs * 1000;
+}
+
 #define PREF_GET(name, defaultVal)                                                                                               \
     inline uint32_t getPref_##name() { return radioConfig.preferences.name ? radioConfig.preferences.name : (defaultVal); }
 
 PREF_GET(position_broadcast_secs, IF_ROUTER(12 * 60 * 60, 15 * 60))
-// Defaulting Telemetry to the same as position interval for now
-PREF_GET(telemetry_module_device_update_interval, IF_ROUTER(12 * 60 * 60, 15 * 60))
-PREF_GET(telemetry_module_environment_update_interval, IF_ROUTER(12 * 60 * 60, 15 * 60))
-
 
 // Each time we wake into the DARK state allow 1 minute to send and receive BLE packets to the phone
 PREF_GET(wait_bluetooth_secs, IF_ROUTER(1, 60))
@@ -184,8 +192,12 @@ PREF_GET(ls_secs, IF_ROUTER(24 * 60 * 60, 5 * 60))
 PREF_GET(phone_timeout_secs, 15 * 60)
 PREF_GET(min_wake_secs, 10)
 
-/** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings 
+/** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings
  * might have changed is incremented.  Allows others to detect they might now be on a new channel.
  */
 extern uint32_t radioGeneration;
 
+// Config doesn't have a nanopb generated full size constant
+#define Config_size (Config_DeviceConfig_size + Config_DisplayConfig_size + Config_GpsConfig_size + Config_LoRaConfig_size + Config_PowerConfig_size)
+
+#define Module_Config_size (Config_ModuleConfig_CannedMessageConfig_size + Config_ModuleConfig_ExternalNotificationConfig_size + Config_ModuleConfig_MQTTConfig_size + Config_ModuleConfig_RangeTestConfig_size + Config_ModuleConfig_SerialConfig_size + Config_ModuleConfig_StoreForwardConfig_size + Config_ModuleConfig_TelemetryConfig_size + Config_ModuleConfig_size)

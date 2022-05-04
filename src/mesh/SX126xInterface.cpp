@@ -65,7 +65,7 @@ bool SX126xInterface<T>::init()
 #ifdef SX126X_TXEN
     // lora.begin sets Dio2 as RF switch control, which is not true if we are manually controlling RX and TX
     if (res == ERR_NONE)
-        res = lora.setDio2AsRfSwitch(false);
+        res = lora.setDio2AsRfSwitch(true);
 #endif
 
 #if 0
@@ -194,6 +194,9 @@ void SX126xInterface<T>::configHardwareForSend()
 #ifdef SX126X_TXEN // we have RXEN/TXEN control - turn on TX power / off RX power
     digitalWrite(SX126X_TXEN, HIGH);
 #endif
+#ifdef SX126X_RXEN
+    digitalWrite(SX126X_RXEN, LOW);
+#endif
 
     RadioLibInterface::configHardwareForSend();
 }
@@ -213,7 +216,10 @@ void SX126xInterface<T>::startReceive()
 #ifdef SX126X_RXEN // we have RXEN/TXEN control - turn on RX power / off TX power
     digitalWrite(SX126X_RXEN, HIGH);
 #endif
-
+#ifdef SX126X_TXEN
+    digitalWrite(SX126X_TXEN, LOW);
+#endif
+  
     // int err = lora.startReceive();
     int err = lora.startReceiveDutyCycleAuto(); // We use a 32 bit preamble so this should save some power by letting radio sit in
                                                 // standby mostly.

@@ -79,6 +79,9 @@ uint8_t cardkb_found;
 // The I2C address of the Faces Keyboard (if found)
 uint8_t faceskb_found;
 
+// The I2C address of the RTC Module (if found)
+uint8_t rtc_found;
+
 bool eink_found = true;
 
 uint32_t serialSinceMsec;
@@ -152,6 +155,12 @@ void setup()
     DEBUG_MSG("\n\n//\\ E S H T /\\ S T / C\n\n");
 
     initDeepSleep();
+
+    // Testing this fix für erratic T-Echo boot behaviour    
+#if defined(TTGO_T_ECHO) && defined(PIN_EINK_PWR_ON)
+    pinMode(PIN_EINK_PWR_ON, OUTPUT);
+    digitalWrite(PIN_EINK_PWR_ON, HIGH);
+#endif
 
 #ifdef VEXT_ENABLE
     pinMode(VEXT_ENABLE, OUTPUT);

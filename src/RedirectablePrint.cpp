@@ -72,7 +72,7 @@ size_t RedirectablePrint::logDebug(const char *format, ...)
 
         // If we are the first message on a report, include the header
         if (!isContinuationMessage) {
-            uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityFromNet);
+            uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice);
             if (rtc_sec > 0) {
                 long hms = rtc_sec % SEC_PER_DAY;
                 // hms += tz.tz_dsttime * SEC_PER_HOUR;

@@ -5,17 +5,21 @@
 #include <Arduino.h>
 
 enum RTCQuality {
+
     /// We haven't had our RTC set yet
     RTCQualityNone = 0,
 
+    /// We got time from an onboard peripheral after boot.
+    RTCQualityDevice = 1,
+
     /// Some other node gave us a time we can use
-    RTCQualityFromNet = 1,
+    RTCQualityFromNet = 2,
 
     /// Our time is based on NTP
-    RTCQualityNTP= 2,
+    RTCQualityNTP= 3,
 
     /// Our time is based on our own GPS
-    RTCQualityGPS = 3
+    RTCQualityGPS = 4
 };
 
 RTCQuality getRTCQuality();
