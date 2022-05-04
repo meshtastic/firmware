@@ -226,7 +226,7 @@ External serial flash WP25R1635FZUIL0
 #define PIN_SPI1_SCK PIN_EINK_SCLK
 
 /*
- * Air530 GPS pins
+ * GPS pins
  */
 
 #define PIN_GPS_WAKE (32 + 2) // An output to wake GPS, low means allow sleep, high means force wake
@@ -234,6 +234,8 @@ External serial flash WP25R1635FZUIL0
 // #define PIN_GPS_PPS (32 + 4)  // Pulse per second input from the GPS
 #define PIN_GPS_TX (32 + 9)   // This is for bits going TOWARDS the CPU
 #define PIN_GPS_RX (32 + 8)   // This is for bits going TOWARDS the GPS
+
+#define GPS_THREAD_INTERVAL 50
 
 #define PIN_SERIAL1_RX PIN_GPS_TX
 #define PIN_SERIAL1_TX PIN_GPS_RX
