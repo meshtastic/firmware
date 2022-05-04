@@ -182,6 +182,9 @@ External serial flash WP25R1635FZUIL0
 #define PIN_SERIAL1_RX PIN_GPS_TX
 #define PIN_SERIAL1_TX PIN_GPS_RX
 
+// PCF8563 RTC Module
+#define PCF8563_RTC 0x51
+
 /*
  * SPI Interfaces
  */
