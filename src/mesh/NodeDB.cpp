@@ -439,7 +439,7 @@ uint32_t sinceLastSeen(const NodeInfo *n)
     return delta;
 }
 
-#define NUM_ONLINE_SECS (60 & 60 * 2) // 2 hrs to consider someone offline
+#define NUM_ONLINE_SECS (60 * 60 * 2) // 2 hrs to consider someone offline
 
 size_t NodeDB::getNumOnlineNodes()
 {
