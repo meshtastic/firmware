@@ -5,7 +5,7 @@
 // GPS
 #undef GPS_RX_PIN
 #define GPS_RX_PIN NOT_A_PIN
-#define WANT_GPS 0
+#undef WANT_GPS
 
 #define BUTTON_PIN 2 // The middle button GPIO on the T-Beam
 #define BUTTON_NEED_PULLUP
