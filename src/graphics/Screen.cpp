@@ -20,6 +20,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 #include "configuration.h"
+#ifndef NO_SCREEN
 #include <OLEDDisplay.h>
 
 #include "GPS.h"
@@ -1652,3 +1653,4 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 }
 
 } // namespace graphics
+#endif // NO_SCREEN

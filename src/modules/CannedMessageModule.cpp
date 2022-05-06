@@ -1,4 +1,5 @@
 #include "configuration.h"
+#ifndef NO_SCREEN
 #include "CannedMessageModule.h"
 #include "PowerFSM.h" // neede for button bypass
 #include "MeshService.h"
@@ -548,3 +549,4 @@ void CannedMessageModule::handleSetCannedMessageModulePart4(const char *from_msg
         this->saveProtoForModule();
     }
 }
+#endif
