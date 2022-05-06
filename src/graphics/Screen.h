@@ -1,6 +1,7 @@
 #pragma once
 
 #ifdef NO_SCREEN
+#include "power.h"
 namespace graphics
 {
 // Noop class for boards without screen.
@@ -15,6 +16,8 @@ class Screen
     void adjustBrightness(){}
     void doDeepSleep() {}
     void forceDisplay() {}
+    void startBluetoothPinScreen(uint32_t pin) {}
+    void stopBluetoothPinScreen() {}
 };
 }
 
