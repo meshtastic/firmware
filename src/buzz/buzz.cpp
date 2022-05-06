@@ -1,10 +1,6 @@
 #include "buzz.h"
 #include "configuration.h"
 
-#ifdef NRF52_SERIES
-#include "variant.h"
-#endif
-
 #ifndef PIN_BUZZER
 
 // Noop methods for boards w/o buzzer
