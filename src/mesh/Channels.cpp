@@ -1,7 +1,7 @@
-#include "configuration.h"
 #include "Channels.h"
 #include "CryptoEngine.h"
 #include "NodeDB.h"
+#include "configuration.h"
 
 #include <assert.h>
 
@@ -83,10 +83,11 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
 {
     Channel &ch = getByIndex(chIndex);
     ChannelSettings &channelSettings = ch.settings;
+    Config_LoRaConfig &loraConfig = config.payloadVariant.lora_config;
 
-    channelSettings.modem_config = ChannelSettings_ModemConfig_LongFast; // Default to Long Range & Fast
+    loraConfig.modem_config = Config_LoRaConfig_ModemConfig_LongFast; // Default to Long Range & Fast
 
-    channelSettings.tx_power = 0; // default
+    loraConfig.tx_power = 0; // default
     uint8_t defaultpskIndex = 1;
     channelSettings.psk.bytes[0] = defaultpskIndex;
     channelSettings.psk.size = 1;
@@ -202,6 +203,7 @@ void Channels::setChannel(const Channel &c)
 
 const char *Channels::getName(size_t chIndex)
 {
+    Config_LoRaConfig &loraConfig = config.payloadVariant.lora_config;
     // Convert the short "" representation for Default into a usable string
     const ChannelSettings &channelSettings = getByIndex(chIndex).settings;
     const char *channelName = channelSettings.name;
@@ -209,29 +211,29 @@ const char *Channels::getName(size_t chIndex)
         // Per mesh.proto spec, if bandwidth is specified we must ignore modemConfig enum, we assume that in that case
         // the app fucked up and forgot to set channelSettings.name
 
-        if (channelSettings.bandwidth != 0)
+        if (loraConfig.bandwidth != 0)
             channelName = "Unset";
         else
-            switch (channelSettings.modem_config) {
-            case ChannelSettings_ModemConfig_ShortSlow:
+            switch (loraConfig.modem_config) {
+            case Config_LoRaConfig_ModemConfig_ShortSlow:
                 channelName = "ShortSlow";
                 break;
-            case ChannelSettings_ModemConfig_ShortFast:
+            case Config_LoRaConfig_ModemConfig_ShortFast:
                 channelName = "ShortFast";
                 break;
-            case ChannelSettings_ModemConfig_MidSlow:
+            case Config_LoRaConfig_ModemConfig_MidSlow:
                 channelName = "MediumSlow";
                 break;
-            case ChannelSettings_ModemConfig_MidFast:
+            case Config_LoRaConfig_ModemConfig_MidFast:
                 channelName = "MediumFast";
                 break;
-            case ChannelSettings_ModemConfig_LongFast:
+            case Config_LoRaConfig_ModemConfig_LongFast:
                 channelName = "LongFast";
                 break;
-            case ChannelSettings_ModemConfig_LongSlow:
+            case Config_LoRaConfig_ModemConfig_LongSlow:
                 channelName = "LongSlow";
                 break;
-            case ChannelSettings_ModemConfig_VLongSlow:
+            case Config_LoRaConfig_ModemConfig_VLongSlow:
                 channelName = "VLongSlow";
                 break;
             default:

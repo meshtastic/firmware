@@ -31,8 +31,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "graphics/images.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
-#include "mesh/generated/deviceonly.pb.h"
 #include "mesh/Channels.h"
+#include "mesh/generated/deviceonly.pb.h"
 #include "modules/TextMessageModule.h"
 #include "sleep.h"
 #include "target_specific.h"
@@ -162,21 +162,22 @@ static void drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDi
     // needs to be drawn relative to x and y
 
     // draw centered icon left to right and centered above the one line of app text
-    display->drawXbm(x + (SCREEN_WIDTH - oemStore.oem_icon_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - oemStore.oem_icon_height) / 2 + 2,
-                     oemStore.oem_icon_width, oemStore.oem_icon_height, (const uint8_t *)oemStore.oem_icon_bits.bytes);
+    display->drawXbm(x + (SCREEN_WIDTH - oemStore.oem_icon_width) / 2,
+                     y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - oemStore.oem_icon_height) / 2 + 2, oemStore.oem_icon_width,
+                     oemStore.oem_icon_height, (const uint8_t *)oemStore.oem_icon_bits.bytes);
 
-    switch(oemStore.oem_font){
-        case 0:
-            display->setFont(FONT_SMALL);
+    switch (oemStore.oem_font) {
+    case 0:
+        display->setFont(FONT_SMALL);
         break;
-        case 2:
-            display->setFont(FONT_LARGE);
+    case 2:
+        display->setFont(FONT_LARGE);
         break;
-        default:
-            display->setFont(FONT_MEDIUM);
+    default:
+        display->setFont(FONT_MEDIUM);
         break;
     }
-    
+
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     const char *title = oemStore.oem_text;
     display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
@@ -816,7 +817,8 @@ void _screen_header()
 #endif
 
 // #ifdef RAK4630
-// Screen::Screen(uint8_t address, int sda, int scl) : OSThread("Screen"), cmdQueue(32), dispdev(address, sda, scl), dispdev_oled(address, sda, scl), ui(&dispdev)
+// Screen::Screen(uint8_t address, int sda, int scl) : OSThread("Screen"), cmdQueue(32), dispdev(address, sda, scl),
+// dispdev_oled(address, sda, scl), ui(&dispdev)
 // {
 //     address_found = address;
 //     cmdQueue.setReader(this);
@@ -976,7 +978,7 @@ int32_t Screen::runOnce()
     }
 
     // If we have an OEM Boot screen, toggle after 2,5 seconds
-    if(strlen(oemStore.oem_text) > 0){
+    if (strlen(oemStore.oem_text) > 0) {
         static bool showingOEMBootScreen = true;
         if (showingOEMBootScreen && (millis() > (2500 + serialSinceMsec))) {
             DEBUG_MSG("Switch to OEM screen...\n");
@@ -1515,22 +1517,33 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 
     auto mode = "";
 
-    if (channels.getPrimary().modem_config == 0) {
-        mode = "VLongSlow";
-    } else if (channels.getPrimary().modem_config == 1) {
-        mode = "LongSlow";
-    } else if (channels.getPrimary().modem_config == 2) {
-        mode = "LongFast";
-    } else if (channels.getPrimary().modem_config == 3) {
-        mode = "MidSlow";
-    } else if (channels.getPrimary().modem_config == 4) {
-        mode = "MidFast";
-    } else if (channels.getPrimary().modem_config == 5) {
+    Config_LoRaConfig &loraConfig = config.payloadVariant.lora_config;
+
+    switch (loraConfig.modem_config) {
+    case Config_LoRaConfig_ModemConfig_ShortSlow:
         mode = "ShortSlow";
-    } else if (channels.getPrimary().modem_config == 6) {
+        break;
+    case Config_LoRaConfig_ModemConfig_ShortFast:
         mode = "ShortFast";
-    } else {
+        break;
+    case Config_LoRaConfig_ModemConfig_MidSlow:
+        mode = "MediumSlow";
+        break;
+    case Config_LoRaConfig_ModemConfig_MidFast:
+        mode = "MediumFast";
+        break;
+    case Config_LoRaConfig_ModemConfig_LongFast:
+        mode = "LongFast";
+        break;
+    case Config_LoRaConfig_ModemConfig_LongSlow:
+        mode = "LongSlow";
+        break;
+    case Config_LoRaConfig_ModemConfig_VLongSlow:
+        mode = "VLongSlow";
+        break;
+    default:
         mode = "Custom";
+        break;
     }
 
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(mode), y, mode);

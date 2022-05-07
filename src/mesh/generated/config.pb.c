@@ -52,3 +52,4 @@ PB_BIND(Config_ModuleConfig_CannedMessageConfig, Config_ModuleConfig_CannedMessa
 
 
 
+

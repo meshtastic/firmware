@@ -76,15 +76,15 @@ const RegionInfo regions[] = {
      */
     RDEF(IN, 865.0f, 867.0f, 100, 0, 30, true, false),
 
-   /*
-        https://rrf.rsm.govt.nz/smart-web/smart/page/-smart/domain/licence/LicenceSummary.wdk?id=219752
-        https://iotalliance.org.nz/wp-content/uploads/sites/4/2019/05/IoT-Spectrum-in-NZ-Briefing-Paper.pdf
-     */
+    /*
+         https://rrf.rsm.govt.nz/smart-web/smart/page/-smart/domain/licence/LicenceSummary.wdk?id=219752
+         https://iotalliance.org.nz/wp-content/uploads/sites/4/2019/05/IoT-Spectrum-in-NZ-Briefing-Paper.pdf
+      */
     RDEF(NZ865, 864.0f, 868.0f, 100, 0, 0, true, false),
 
-     /*
-        https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
-     */
+    /*
+       https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
+    */
     RDEF(TH, 920.0f, 925.0f, 100, 0, 16, true, false),
 
     /*
@@ -183,7 +183,6 @@ uint32_t RadioInterface::getTxDelayMsec()
     return random((MIN_TX_WAIT_MSEC), (MIN_TX_WAIT_MSEC + shortPacketMsec));
 }
 
-
 /** The delay to use when we want to send something but the ether is busy */
 uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
 {
@@ -209,7 +208,6 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
         delay = map(snr, SNR_MIN, SNR_MAX, MIN_TX_WAIT_MSEC + (shortPacketMsec / 2), (MIN_TX_WAIT_MSEC + shortPacketMsec * 2));
         DEBUG_MSG("rx_snr found in packet. Setting tx delay:%d\n", delay);
     }
-
 
     return delay;
 }
@@ -351,41 +349,41 @@ void RadioInterface::applyModemConfig()
 {
     // Set up default configuration
     // No Sync Words in LORA mode
-
+    Config_LoRaConfig &loraConfig = config.payloadVariant.lora_config;
     auto channelSettings = channels.getPrimary();
-    if (channelSettings.spread_factor == 0) {
-        switch (channelSettings.modem_config) {
-        case ChannelSettings_ModemConfig_ShortFast:
+    if (loraConfig.spread_factor == 0) {
+        switch (loraConfig.modem_config) {
+        case Config_LoRaConfig_ModemConfig_ShortFast:
             bw = 250;
             cr = 8;
             sf = 7;
             break;
-        case ChannelSettings_ModemConfig_ShortSlow:
+        case Config_LoRaConfig_ModemConfig_ShortSlow:
             bw = 250;
             cr = 8;
             sf = 8;
             break;
-        case ChannelSettings_ModemConfig_MidFast:
+        case Config_LoRaConfig_ModemConfig_MidFast:
             bw = 250;
             cr = 8;
             sf = 9;
             break;
-        case ChannelSettings_ModemConfig_MidSlow:
+        case Config_LoRaConfig_ModemConfig_MidSlow:
             bw = 250;
             cr = 8;
             sf = 10;
             break;
-        case ChannelSettings_ModemConfig_LongFast:
+        case Config_LoRaConfig_ModemConfig_LongFast:
             bw = 250;
             cr = 8;
             sf = 11;
             break;
-        case ChannelSettings_ModemConfig_LongSlow:
+        case Config_LoRaConfig_ModemConfig_LongSlow:
             bw = 125;
             cr = 8;
             sf = 12;
             break;
-        case ChannelSettings_ModemConfig_VLongSlow:
+        case Config_LoRaConfig_ModemConfig_VLongSlow:
             bw = 31.25;
             cr = 8;
             sf = 12;
@@ -394,9 +392,9 @@ void RadioInterface::applyModemConfig()
             assert(0); // Unknown enum
         }
     } else {
-        sf = channelSettings.spread_factor;
-        cr = channelSettings.coding_rate;
-        bw = channelSettings.bandwidth;
+        sf = loraConfig.spread_factor;
+        cr = loraConfig.coding_rate;
+        bw = loraConfig.bandwidth;
 
         if (bw == 31) // This parameter is not an integer
             bw = 31.25;
@@ -404,7 +402,7 @@ void RadioInterface::applyModemConfig()
             bw = 62.5;
     }
 
-    power = channelSettings.tx_power;
+    power = loraConfig.tx_power;
     shortPacketMsec = getPacketTime(sizeof(PacketHeader));
     assert(myRegion); // Should have been found in init
 
@@ -419,7 +417,7 @@ void RadioInterface::applyModemConfig()
     saveChannelNum(channel_num);
     saveFreq(freq);
 
-    DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, power=%d\n", channelName, channelSettings.modem_config, channel_num, power);
+    DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, power=%d\n", channelName, loraConfig.modem_config, channel_num, power);
     DEBUG_MSG("Radio myRegion->freqStart / myRegion->freqEnd: %f -> %f (%f mhz)\n", myRegion->freqStart, myRegion->freqEnd,
               myRegion->freqEnd - myRegion->freqStart);
     DEBUG_MSG("Radio myRegion->numChannels: %d\n", numChannels);

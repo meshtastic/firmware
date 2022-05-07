@@ -209,6 +209,8 @@ void AdminModule::handleSetConfig(const Config &c)
         break;
     case Config_lora_config_tag:
         DEBUG_MSG("Setting config: LoRa\n");
+        config.payloadVariant.lora_config = c.payloadVariant.lora_config;
+        service.reloadConfig();
         break;
     }
 
@@ -248,15 +250,8 @@ void AdminModule::handleSetModuleConfig(const ModuleConfig &c)
 void AdminModule::handleSetChannel(const Channel &cc)
 {
     channels.setChannel(cc);
-
-    // Just update and save the channels - no need to update the radio for ! primary channel changes
-    if (cc.index == 0) {
-        // FIXME, this updates the user preferences also, which isn't needed - we really just want to notify on configChanged
-        service.reloadConfig();
-    } else {
-        channels.onConfigChanged(); // tell the radios about this change
-        nodeDB.saveChannelsToDisk();
-    }
+    channels.onConfigChanged(); // tell the radios about this change
+    nodeDB.saveChannelsToDisk();
 }
 
 /**
@@ -325,6 +320,7 @@ void AdminModule::handleGetConfig(const MeshPacket &req, const uint32_t configTy
         case AdminMessage_ConfigType_LORA_CONFIG:
             DEBUG_MSG("Getting config: LoRa\n");
             res.get_config_response.which_payloadVariant = Config_lora_config_tag;
+            res.get_config_response.payloadVariant.lora_config = config.payloadVariant.lora_config;
             break;
         }
 

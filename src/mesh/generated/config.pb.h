@@ -10,6 +10,17 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
+/* Enum definitions */
+typedef enum _Config_LoRaConfig_ModemConfig { 
+    Config_LoRaConfig_ModemConfig_VLongSlow = 0, 
+    Config_LoRaConfig_ModemConfig_LongSlow = 1, 
+    Config_LoRaConfig_ModemConfig_LongFast = 2, 
+    Config_LoRaConfig_ModemConfig_MidSlow = 3, 
+    Config_LoRaConfig_ModemConfig_MidFast = 4, 
+    Config_LoRaConfig_ModemConfig_ShortSlow = 5, 
+    Config_LoRaConfig_ModemConfig_ShortFast = 6 
+} Config_LoRaConfig_ModemConfig;
+
 /* Struct definitions */
 typedef struct _Config_DeviceConfig { 
     char dummy_field;
@@ -22,10 +33,6 @@ typedef struct _Config_DisplayConfig {
 typedef struct _Config_GpsConfig { 
     char dummy_field;
 } Config_GpsConfig;
-
-typedef struct _Config_LoRaConfig { 
-    char dummy_field;
-} Config_LoRaConfig;
 
 typedef struct _Config_ModuleConfig_CannedMessageConfig { 
     char dummy_field;
@@ -54,6 +61,14 @@ typedef struct _Config_ModuleConfig_StoreForwardConfig {
 typedef struct _Config_PowerConfig { 
     char dummy_field;
 } Config_PowerConfig;
+
+typedef struct _Config_LoRaConfig { 
+    int32_t tx_power; 
+    Config_LoRaConfig_ModemConfig modem_config; 
+    uint32_t bandwidth; 
+    uint32_t spread_factor; 
+    uint32_t coding_rate; 
+} Config_LoRaConfig;
 
 typedef struct _Config_ModuleConfig_TelemetryConfig { 
     uint32_t device_update_interval; 
@@ -101,6 +116,12 @@ typedef struct _Config {
 } Config;
 
 
+/* Helper constants for enums */
+#define _Config_LoRaConfig_ModemConfig_MIN Config_LoRaConfig_ModemConfig_VLongSlow
+#define _Config_LoRaConfig_ModemConfig_MAX Config_LoRaConfig_ModemConfig_ShortFast
+#define _Config_LoRaConfig_ModemConfig_ARRAYSIZE ((Config_LoRaConfig_ModemConfig)(Config_LoRaConfig_ModemConfig_ShortFast+1))
+
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -112,7 +133,7 @@ extern "C" {
 #define Config_PowerConfig_init_default          {0}
 #define Config_WiFiConfig_init_default           {{{NULL}, NULL}, {{NULL}, NULL}, 0}
 #define Config_DisplayConfig_init_default        {0}
-#define Config_LoRaConfig_init_default           {0}
+#define Config_LoRaConfig_init_default           {0, _Config_LoRaConfig_ModemConfig_MIN, 0, 0, 0}
 #define Config_ModuleConfig_init_default         {0, {Config_ModuleConfig_MQTTConfig_init_default}}
 #define Config_ModuleConfig_MQTTConfig_init_default {0}
 #define Config_ModuleConfig_SerialConfig_init_default {0}
@@ -127,7 +148,7 @@ extern "C" {
 #define Config_PowerConfig_init_zero             {0}
 #define Config_WiFiConfig_init_zero              {{{NULL}, NULL}, {{NULL}, NULL}, 0}
 #define Config_DisplayConfig_init_zero           {0}
-#define Config_LoRaConfig_init_zero              {0}
+#define Config_LoRaConfig_init_zero              {0, _Config_LoRaConfig_ModemConfig_MIN, 0, 0, 0}
 #define Config_ModuleConfig_init_zero            {0, {Config_ModuleConfig_MQTTConfig_init_zero}}
 #define Config_ModuleConfig_MQTTConfig_init_zero {0}
 #define Config_ModuleConfig_SerialConfig_init_zero {0}
@@ -138,6 +159,11 @@ extern "C" {
 #define Config_ModuleConfig_CannedMessageConfig_init_zero {0}
 
 /* Field tags (for use in manual encoding/decoding) */
+#define Config_LoRaConfig_tx_power_tag           1
+#define Config_LoRaConfig_modem_config_tag       3
+#define Config_LoRaConfig_bandwidth_tag          6
+#define Config_LoRaConfig_spread_factor_tag      7
+#define Config_LoRaConfig_coding_rate_tag        8
 #define Config_ModuleConfig_TelemetryConfig_device_update_interval_tag 1
 #define Config_ModuleConfig_TelemetryConfig_environment_update_interval_tag 2
 #define Config_ModuleConfig_TelemetryConfig_environment_measurement_enabled_tag 3
@@ -212,7 +238,11 @@ X(a, STATIC,   SINGULAR, BOOL,     wifi_ap_mode,      3)
 #define Config_DisplayConfig_DEFAULT NULL
 
 #define Config_LoRaConfig_FIELDLIST(X, a) \
-
+X(a, STATIC,   SINGULAR, INT32,    tx_power,          1) \
+X(a, STATIC,   SINGULAR, UENUM,    modem_config,      3) \
+X(a, STATIC,   SINGULAR, UINT32,   bandwidth,         6) \
+X(a, STATIC,   SINGULAR, UINT32,   spread_factor,     7) \
+X(a, STATIC,   SINGULAR, UINT32,   coding_rate,       8)
 #define Config_LoRaConfig_CALLBACK NULL
 #define Config_LoRaConfig_DEFAULT NULL
 
@@ -316,7 +346,7 @@ extern const pb_msgdesc_t Config_ModuleConfig_CannedMessageConfig_msg;
 #define Config_DeviceConfig_size                 0
 #define Config_DisplayConfig_size                0
 #define Config_GpsConfig_size                    0
-#define Config_LoRaConfig_size                   0
+#define Config_LoRaConfig_size                   31
 #define Config_ModuleConfig_CannedMessageConfig_size 0
 #define Config_ModuleConfig_ExternalNotificationConfig_size 0
 #define Config_ModuleConfig_MQTTConfig_size      0
