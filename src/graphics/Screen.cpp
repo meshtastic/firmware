@@ -1518,9 +1518,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 
     auto mode = "";
 
-    Config_LoRaConfig &loraConfig = config.payloadVariant.lora;
-
-    switch (loraConfig.modem_preset) {
+    switch (config.payloadVariant.lora.modem_preset) {
     case Config_LoRaConfig_ModemPreset_ShortSlow:
         mode = "ShortSlow";
         break;

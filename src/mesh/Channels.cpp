@@ -203,7 +203,6 @@ void Channels::setChannel(const Channel &c)
 
 const char *Channels::getName(size_t chIndex)
 {
-    Config_LoRaConfig &loraConfig = config.payloadVariant.lora;
     // Convert the short "" representation for Default into a usable string
     const ChannelSettings &channelSettings = getByIndex(chIndex).settings;
     const char *channelName = channelSettings.name;
@@ -211,10 +210,10 @@ const char *Channels::getName(size_t chIndex)
         // Per mesh.proto spec, if bandwidth is specified we must ignore modemPreset enum, we assume that in that case
         // the app fucked up and forgot to set channelSettings.name
 
-        if (loraConfig.bandwidth != 0)
+        if (config.payloadVariant.lora.bandwidth != 0)
             channelName = "Unset";
         else
-            switch (loraConfig.modem_preset) {
+            switch (config.payloadVariant.lora.modem_preset) {
             case Config_LoRaConfig_ModemPreset_ShortSlow:
                 channelName = "ShortSlow";
                 break;
