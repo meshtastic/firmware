@@ -3,37 +3,26 @@
 
 RotaryEncoderInterruptImpl1 *rotaryEncoderInterruptImpl1;
 
-RotaryEncoderInterruptImpl1::RotaryEncoderInterruptImpl1() :
-    RotaryEncoderInterruptBase(
-        "rotEnc1")
-{
-}
+RotaryEncoderInterruptImpl1::RotaryEncoderInterruptImpl1() : RotaryEncoderInterruptBase("rotEnc1") {}
 
 void RotaryEncoderInterruptImpl1::init()
 {
-    if (!radioConfig.preferences.rotary1_enabled)
-    {
+    if (!moduleConfig.payloadVariant.canned_message.rotary1_enabled) {
         // Input device is disabled.
         return;
     }
 
-    uint8_t pinA = radioConfig.preferences.inputbroker_pin_a;
-    uint8_t pinB = radioConfig.preferences.inputbroker_pin_b;
-    uint8_t pinPress = radioConfig.preferences.inputbroker_pin_press;
-    char eventCw =
-        static_cast<char>(radioConfig.preferences.inputbroker_event_cw);
-    char eventCcw =
-        static_cast<char>(radioConfig.preferences.inputbroker_event_ccw);
-    char eventPressed =
-        static_cast<char>(radioConfig.preferences.inputbroker_event_press);
+    uint8_t pinA = moduleConfig.payloadVariant.canned_message.inputbroker_pin_a;
+    uint8_t pinB = moduleConfig.payloadVariant.canned_message.inputbroker_pin_b;
+    uint8_t pinPress = moduleConfig.payloadVariant.canned_message.inputbroker_pin_press;
+    char eventCw = static_cast<char>(moduleConfig.payloadVariant.canned_message.inputbroker_event_cw);
+    char eventCcw = static_cast<char>(moduleConfig.payloadVariant.canned_message.inputbroker_event_ccw);
+    char eventPressed = static_cast<char>(moduleConfig.payloadVariant.canned_message.inputbroker_event_press);
 
-    //radioConfig.preferences.ext_notification_module_output
-    RotaryEncoderInterruptBase::init(
-        pinA, pinB, pinPress,
-        eventCw, eventCcw, eventPressed,
-        RotaryEncoderInterruptImpl1::handleIntA,
-        RotaryEncoderInterruptImpl1::handleIntB,
-        RotaryEncoderInterruptImpl1::handleIntPressed);
+    // moduleConfig.payloadVariant.canned_message.ext_notification_module_output
+    RotaryEncoderInterruptBase::init(pinA, pinB, pinPress, eventCw, eventCcw, eventPressed,
+                                     RotaryEncoderInterruptImpl1::handleIntA, RotaryEncoderInterruptImpl1::handleIntB,
+                                     RotaryEncoderInterruptImpl1::handleIntPressed);
     inputBroker->registerSource(this);
 }
 

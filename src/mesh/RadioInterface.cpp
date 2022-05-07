@@ -13,7 +13,8 @@
 
 #define RDEF(name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted, frequency_switching)                 \
     {                                                                                                                            \
-        RegionCode_##name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted, frequency_switching, #name   \
+        Config_LoRaConfig_RegionCode_##name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted,            \
+            frequency_switching, #name                                                                                           \
     }
 
 const RegionInfo regions[] = {
@@ -99,10 +100,10 @@ const RegionInfo *myRegion;
 void initRegion()
 {
     const RegionInfo *r = regions;
-    for (; r->code != RegionCode_Unset && r->code != radioConfig.preferences.region; r++)
+    for (; r->code != Config_LoRaConfig_RegionCode_Unset && r->code != config.payloadVariant.lora.region; r++)
         ;
     myRegion = r;
-    DEBUG_MSG("Wanted region %d, using %s\n", radioConfig.preferences.region, r->name);
+    DEBUG_MSG("Wanted region %d, using %s\n", config.payloadVariant.lora.region, r->name);
 }
 
 /**
@@ -207,7 +208,8 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
     //  low SNR = Short Delay
     uint32_t delay = 0;
 
-    if (radioConfig.preferences.role == Role_Router || radioConfig.preferences.role == Role_RouterClient) {
+    if (config.payloadVariant.device.role == Config_DeviceConfig_Role_Router ||
+        config.payloadVariant.device.role == Config_DeviceConfig_Role_RouterClient) {
         delay = map(snr, SNR_MIN, SNR_MAX, MIN_TX_WAIT_MSEC, (MIN_TX_WAIT_MSEC + (shortPacketMsec / 2)));
         DEBUG_MSG("rx_snr found in packet. As a router, setting tx delay:%d\n", delay);
     } else {
@@ -355,41 +357,41 @@ void RadioInterface::applyModemConfig()
 {
     // Set up default configuration
     // No Sync Words in LORA mode
-    Config_LoRaConfig &loraConfig = config.payloadVariant.lora_config;
+    Config_LoRaConfig &loraConfig = config.payloadVariant.lora;
     auto channelSettings = channels.getPrimary();
     if (loraConfig.spread_factor == 0) {
-        switch (loraConfig.modem_config) {
-        case Config_LoRaConfig_ModemConfig_ShortFast:
+        switch (loraConfig.modem_preset) {
+        case Config_LoRaConfig_ModemPreset_ShortFast:
             bw = 250;
             cr = 8;
             sf = 7;
             break;
-        case Config_LoRaConfig_ModemConfig_ShortSlow:
+        case Config_LoRaConfig_ModemPreset_ShortSlow:
             bw = 250;
             cr = 8;
             sf = 8;
             break;
-        case Config_LoRaConfig_ModemConfig_MidFast:
+        case Config_LoRaConfig_ModemPreset_MidFast:
             bw = 250;
             cr = 8;
             sf = 9;
             break;
-        case Config_LoRaConfig_ModemConfig_MidSlow:
+        case Config_LoRaConfig_ModemPreset_MidSlow:
             bw = 250;
             cr = 8;
             sf = 10;
             break;
-        case Config_LoRaConfig_ModemConfig_LongFast:
+        case Config_LoRaConfig_ModemPreset_LongFast:
             bw = 250;
             cr = 8;
             sf = 11;
             break;
-        case Config_LoRaConfig_ModemConfig_LongSlow:
+        case Config_LoRaConfig_ModemPreset_LongSlow:
             bw = 125;
             cr = 8;
             sf = 12;
             break;
-        case Config_LoRaConfig_ModemConfig_VLongSlow:
+        case Config_LoRaConfig_ModemPreset_VLongSlow:
             bw = 31.25;
             cr = 8;
             sf = 12;
@@ -423,7 +425,7 @@ void RadioInterface::applyModemConfig()
     saveChannelNum(channel_num);
     saveFreq(freq);
 
-    DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, power=%d\n", channelName, loraConfig.modem_config, channel_num, power);
+    DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, power=%d\n", channelName, loraConfig.modem_preset, channel_num, power);
     DEBUG_MSG("Radio myRegion->freqStart / myRegion->freqEnd: %f -> %f (%f mhz)\n", myRegion->freqStart, myRegion->freqEnd,
               myRegion->freqEnd - myRegion->freqStart);
     DEBUG_MSG("Radio myRegion->numChannels: %d\n", numChannels);

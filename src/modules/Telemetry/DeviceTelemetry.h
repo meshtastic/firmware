@@ -1,7 +1,7 @@
 #pragma once
 #include "../mesh/generated/telemetry.pb.h"
-#include "ProtobufModule.h"
 #include "NodeDB.h"
+#include "ProtobufModule.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
@@ -9,8 +9,7 @@ class DeviceTelemetryModule : private concurrency::OSThread, public ProtobufModu
 {
   public:
     DeviceTelemetryModule()
-        : concurrency::OSThread("DeviceTelemetryModule"),
-          ProtobufModule("DeviceTelemetry", PortNum_TELEMETRY_APP, &Telemetry_msg)
+        : concurrency::OSThread("DeviceTelemetryModule"), ProtobufModule("DeviceTelemetry", PortNum_TELEMETRY_APP, &Telemetry_msg)
     {
         lastMeasurementPacket = nullptr;
     }
@@ -28,7 +27,6 @@ class DeviceTelemetryModule : private concurrency::OSThread, public ProtobufModu
     bool sendOurTelemetry(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
 
   private:
-    Config_ModuleConfig_TelemetryConfig moduleConfig = config.payloadVariant.module_config.payloadVariant.telemetry_config;
     bool firstTime = 1;
     const MeshPacket *lastMeasurementPacket;
 };

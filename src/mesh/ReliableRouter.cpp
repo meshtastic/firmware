@@ -1,7 +1,7 @@
-#include "configuration.h"
 #include "ReliableRouter.h"
 #include "MeshModule.h"
 #include "MeshTypes.h"
+#include "configuration.h"
 #include "mesh-pb-constants.h"
 
 // ReliableRouter::ReliableRouter() {}
@@ -14,11 +14,11 @@ ErrorCode ReliableRouter::send(MeshPacket *p)
 {
     if (p->want_ack) {
         // If someone asks for acks on broadcast, we need the hop limit to be at least one, so that first node that receives our
-        // message will rebroadcast.  But asking for hop_limit 0 in that context means the client app has no preference on hop counts
-        // and we want this message to get through the whole mesh, so use the default.
+        // message will rebroadcast.  But asking for hop_limit 0 in that context means the client app has no preference on hop
+        // counts and we want this message to get through the whole mesh, so use the default.
         if (p->to == NODENUM_BROADCAST && p->hop_limit == 0) {
-            if (radioConfig.preferences.hop_limit && radioConfig.preferences.hop_limit <= HOP_MAX) {
-                p->hop_limit = (radioConfig.preferences.hop_limit >= HOP_MAX) ? HOP_MAX : radioConfig.preferences.hop_limit;
+            if (config.payloadVariant.lora.hop_limit && config.payloadVariant.lora.hop_limit <= HOP_MAX) {
+                p->hop_limit = (config.payloadVariant.lora.hop_limit >= HOP_MAX) ? HOP_MAX : config.payloadVariant.lora.hop_limit;
             } else {
                 p->hop_limit = HOP_RELIABLE;
             }
@@ -41,9 +41,9 @@ bool ReliableRouter::shouldFilterReceived(MeshPacket *p)
         // If this is the first time we saw this, cancel any retransmissions we have queued up and generate an internal ack for
         // the original sending process.
 
-        // FIXME - we might want to turn off this "optimization", it does save lots of airtime but it assumes that once we've heard one
-        // one adjacent node hear our packet that a) probably other adjacent nodes heard it and b) we can trust those nodes to reach
-        // our destination.  Both of which might be incorrect.
+        // FIXME - we might want to turn off this "optimization", it does save lots of airtime but it assumes that once we've
+        // heard one one adjacent node hear our packet that a) probably other adjacent nodes heard it and b) we can trust those
+        // nodes to reach our destination.  Both of which might be incorrect.
         auto key = GlobalPacketId(getFrom(p), p->id);
         auto old = findPendingPacket(key);
         if (old) {
@@ -53,8 +53,7 @@ bool ReliableRouter::shouldFilterReceived(MeshPacket *p)
             sendAckNak(Routing_Error_NONE, getFrom(p), p->id, old->packet->channel);
 
             stopRetransmission(key);
-        }
-        else {
+        } else {
             DEBUG_MSG("didn't find pending packet\n");
         }
     }
