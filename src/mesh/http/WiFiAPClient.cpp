@@ -59,10 +59,11 @@ static WifiSleepObserver wifiSleepObserver;
 
 static int32_t reconnectWiFi()
 {
-    const char *wifiName = radioConfig.preferences.wifi_ssid;
-    const char *wifiPsw = radioConfig.preferences.wifi_password;
+    const char *wifiName = config.payloadVariant.wifi.ssid;
+    const char *wifiPsw = config.payloadVariant.wifi.psk;
 
-    if (radioConfig.has_preferences && needReconnect && !WiFi.isConnected()) {
+    if (needReconnect && !WiFi.isConnected()) {
+        // if (radioConfig.has_preferences && needReconnect && !WiFi.isConnected()) {
 
         if (!*wifiPsw) // Treat empty password as no password
             wifiPsw = NULL;
@@ -114,7 +115,7 @@ bool isWifiAvailable()
         return true;
     }
 
-    const char *wifiName = radioConfig.preferences.wifi_ssid;
+    const char *wifiName = config.payloadVariant.wifi.ssid;
 
     if (*wifiName) {
         return true;
@@ -184,16 +185,14 @@ bool initWifi(bool forceSoftAP)
 {
     forcedSoftAP = forceSoftAP;
 
-    // strcpy(radioConfig.preferences.wifi_ssid, "meshtastic");
-    // strcpy(radioConfig.preferences.wifi_password, "meshtastic!");
-
-    if ((radioConfig.has_preferences && radioConfig.preferences.wifi_ssid[0]) || forceSoftAP) {
-        const char *wifiName = radioConfig.preferences.wifi_ssid;
-        const char *wifiPsw = radioConfig.preferences.wifi_password;
+    if ((config.payloadVariant.wifi.ssid[0]) || forceSoftAP) {
+        // if ((radioConfig.has_preferences && config.payloadVariant.wifi.ssid[0]) || forceSoftAP) {
+        const char *wifiName = config.payloadVariant.wifi.ssid;
+        const char *wifiPsw = config.payloadVariant.wifi.psk;
 
         if (forceSoftAP) {
             DEBUG_MSG("WiFi ... Forced AP Mode\n");
-        } else if (radioConfig.preferences.wifi_ap_mode) {
+        } else if (config.payloadVariant.wifi.ap_mode) {
             DEBUG_MSG("WiFi ... AP Mode\n");
         } else {
             DEBUG_MSG("WiFi ... Client Mode\n");
@@ -205,7 +204,7 @@ bool initWifi(bool forceSoftAP)
             wifiPsw = NULL;
 
         if (*wifiName || forceSoftAP) {
-            if (radioConfig.preferences.wifi_ap_mode || forceSoftAP) {
+            if (config.payloadVariant.wifi.ap_mode || forceSoftAP) {
 
                 IPAddress apIP(192, 168, 42, 1);
                 WiFi.onEvent(WiFiEvent);
@@ -364,7 +363,7 @@ static void WiFiEvent(WiFiEvent_t event)
 
 void handleDNSResponse()
 {
-    if (radioConfig.preferences.wifi_ap_mode || isSoftAPForced()) {
+    if (config.payloadVariant.wifi.ap_mode || isSoftAPForced()) {
         dnsServer.processNextRequest();
     }
 }

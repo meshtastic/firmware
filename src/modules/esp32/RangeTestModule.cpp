@@ -36,23 +36,23 @@ int32_t RangeTestModule::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    // radioConfig.preferences.range_test_module_enabled = 1;
-    // radioConfig.preferences.range_test_module_sender = 45;
-    // radioConfig.preferences.range_test_module_save = 1;
+    // moduleConfig.payloadVariant.range_test.enabled = 1;
+    // moduleConfig.payloadVariant.range_test.sender = 45;
+    // moduleConfig.payloadVariant.range_test.save = 1;
 
     // Fixed position is useful when testing indoors.
     // radioConfig.preferences.fixed_position = 1;
 
-    uint32_t senderHeartbeat = radioConfig.preferences.range_test_module_sender * 1000;
+    uint32_t senderHeartbeat = moduleConfig.payloadVariant.range_test.sender * 1000;
 
-    if (radioConfig.preferences.range_test_module_enabled) {
+    if (moduleConfig.payloadVariant.range_test.enabled) {
 
         if (firstTime) {
             rangeTestModuleRadio = new RangeTestModuleRadio();
 
             firstTime = 0;
 
-            if (radioConfig.preferences.range_test_module_sender) {
+            if (moduleConfig.payloadVariant.range_test.sender) {
                 DEBUG_MSG("Initializing Range Test Module -- Sender\n");
                 return (5000); // Sending first message 5 seconds after initilization.
             } else {
@@ -62,7 +62,7 @@ int32_t RangeTestModule::runOnce()
 
         } else {
 
-            if (radioConfig.preferences.range_test_module_sender) {
+            if (moduleConfig.payloadVariant.range_test.sender) {
                 // If sender
                 DEBUG_MSG("Range Test Module - Sending heartbeat every %d ms\n", (senderHeartbeat));
 
@@ -71,7 +71,7 @@ int32_t RangeTestModule::runOnce()
                 DEBUG_MSG("gpsStatus->getHasLock()      %d\n", gpsStatus->getHasLock());
                 DEBUG_MSG("gpsStatus->getDOP()          %d\n", gpsStatus->getDOP());
                 DEBUG_MSG("gpsStatus->getHasLock()      %d\n", gpsStatus->getHasLock());
-                DEBUG_MSG("pref.fixed_position()        %d\n", radioConfig.preferences.fixed_position);
+                DEBUG_MSG("pref.fixed_position()        %d\n", config.payloadVariant.position.fixed_position);
 
                 // Only send packets if the channel is less than 25% utilized.
                 if (airTime->channelUtilizationPercent() < 25) {
@@ -131,7 +131,7 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
 
-    if (radioConfig.preferences.range_test_module_enabled) {
+    if (moduleConfig.payloadVariant.range_test.enabled) {
 
         /*
             auto &p = mp.decoded;
@@ -141,7 +141,7 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const MeshPacket &mp)
 
         if (getFrom(&mp) != nodeDB.getNodeNum()) {
 
-            if (radioConfig.preferences.range_test_module_save) {
+            if (moduleConfig.payloadVariant.range_test.save) {
                 appendFile(mp);
             }
 

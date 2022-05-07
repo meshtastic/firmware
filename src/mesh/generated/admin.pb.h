@@ -8,7 +8,6 @@
 #include "config.pb.h"
 #include "mesh.pb.h"
 #include "module_config.pb.h"
-#include "radioconfig.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
@@ -17,7 +16,7 @@
 /* Enum definitions */
 typedef enum _AdminMessage_ConfigType { 
     AdminMessage_ConfigType_DEVICE_CONFIG = 0, 
-    AdminMessage_ConfigType_GPS_CONFIG = 1, 
+    AdminMessage_ConfigType_POSITION_CONFIG = 1, 
     AdminMessage_ConfigType_POWER_CONFIG = 2, 
     AdminMessage_ConfigType_WIFI_CONFIG = 3, 
     AdminMessage_ConfigType_DISPLAY_CONFIG = 4, 
@@ -39,14 +38,11 @@ typedef enum _AdminMessage_ModuleConfigType {
  This message is used to do settings operations to both remote AND local nodes.
  (Prior to 1.2 these operations were done via special ToRadio operations) */
 typedef struct _AdminMessage { 
-    /* Set the radio provisioning for this node */
+    /* Set the owner for this node */
     pb_size_t which_variant;
     union {
-        RadioConfig set_radio;
         User set_owner;
         Channel set_channel;
-        bool get_radio_request;
-        RadioConfig get_radio_response;
         uint32_t get_channel_request;
         Channel get_channel_response;
         bool get_owner_request;
@@ -95,15 +91,12 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define AdminMessage_init_default                {0, {RadioConfig_init_default}}
-#define AdminMessage_init_zero                   {0, {RadioConfig_init_zero}}
+#define AdminMessage_init_default                {0, {User_init_default}}
+#define AdminMessage_init_zero                   {0, {User_init_zero}}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define AdminMessage_set_radio_tag               1
 #define AdminMessage_set_owner_tag               2
 #define AdminMessage_set_channel_tag             3
-#define AdminMessage_get_radio_request_tag       4
-#define AdminMessage_get_radio_response_tag      5
 #define AdminMessage_get_channel_request_tag     6
 #define AdminMessage_get_channel_response_tag    7
 #define AdminMessage_get_owner_request_tag       8
@@ -136,11 +129,8 @@ extern "C" {
 
 /* Struct field encoding specification for nanopb */
 #define AdminMessage_FIELDLIST(X, a) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_radio,set_radio),   1) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_owner,set_owner),   2) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_channel,set_channel),   3) \
-X(a, STATIC,   ONEOF,    BOOL,     (variant,get_radio_request,get_radio_request),   4) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_radio_response,get_radio_response),   5) \
 X(a, STATIC,   ONEOF,    UINT32,   (variant,get_channel_request,get_channel_request),   6) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_channel_response,get_channel_response),   7) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,get_owner_request,get_owner_request),   8) \
@@ -172,10 +162,8 @@ X(a, STATIC,   ONEOF,    STRING,   (variant,set_canned_message_module_part4,set_
 X(a, STATIC,   ONEOF,    INT32,    (variant,shutdown_seconds,shutdown_seconds),  51)
 #define AdminMessage_CALLBACK NULL
 #define AdminMessage_DEFAULT NULL
-#define AdminMessage_variant_set_radio_MSGTYPE RadioConfig
 #define AdminMessage_variant_set_owner_MSGTYPE User
 #define AdminMessage_variant_set_channel_MSGTYPE Channel
-#define AdminMessage_variant_get_radio_response_MSGTYPE RadioConfig
 #define AdminMessage_variant_get_channel_response_MSGTYPE Channel
 #define AdminMessage_variant_get_owner_response_MSGTYPE User
 #define AdminMessage_variant_get_config_response_MSGTYPE Config
@@ -189,10 +177,7 @@ extern const pb_msgdesc_t AdminMessage_msg;
 #define AdminMessage_fields &AdminMessage_msg
 
 /* Maximum encoded size of messages (where known) */
-#if defined(Config_size) && defined(Config_size)
-#define AdminMessage_size                        (0 + sizeof(union AdminMessage_variant_size_union))
-union AdminMessage_variant_size_union {char f0[551]; char f11[(6 + Config_size)]; char f12[(6 + Config_size)];};
-#endif
+#define AdminMessage_size                        204
 
 #ifdef __cplusplus
 } /* extern "C" */

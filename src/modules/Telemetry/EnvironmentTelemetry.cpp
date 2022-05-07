@@ -1,8 +1,8 @@
 #include "EnvironmentTelemetry.h"
 #include "../mesh/generated/telemetry.pb.h"
-#include "PowerFSM.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
 #include "configuration.h"
@@ -50,17 +50,17 @@ int32_t EnvironmentTelemetryModule::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
     /*
-    moduleConfig.environment_measurement_enabled = 1;
-    moduleConfig.environment_screen_enabled = 1;
-    moduleConfig.environment_read_error_count_threshold = 5;
-    moduleConfig.environment_update_interval = 600;
-    moduleConfig.environment_recovery_interval = 60;
-    moduleConfig.environment_sensor_pin = 13; // If one-wire
-    moduleConfig.environment_sensor_type = TelemetrySensorType::TelemetrySensorType_BME280;
+    moduleConfig.payloadVariant.telemetry.environment_measurement_enabled = 1;
+    moduleConfig.payloadVariant.telemetry.environment_screen_enabled = 1;
+    moduleConfig.payloadVariant.telemetry.environment_read_error_count_threshold = 5;
+    moduleConfig.payloadVariant.telemetry.environment_update_interval = 600;
+    moduleConfig.payloadVariant.telemetry.environment_recovery_interval = 60;
+    moduleConfig.payloadVariant.telemetry.environment_sensor_pin = 13; // If one-wire
+    moduleConfig.payloadVariant.telemetry.environment_sensor_type = TelemetrySensorType::TelemetrySensorType_BME280;
     */
-    
-    if (!(moduleConfig.environment_measurement_enabled ||
-          moduleConfig.environment_screen_enabled)) {
+
+    if (!(moduleConfig.payloadVariant.telemetry.environment_measurement_enabled ||
+          moduleConfig.payloadVariant.telemetry.environment_screen_enabled)) {
         // If this module is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
         return (INT32_MAX);
     }
@@ -69,82 +69,81 @@ int32_t EnvironmentTelemetryModule::runOnce()
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = 0;
 
-        if (moduleConfig.environment_measurement_enabled) {
+        if (moduleConfig.payloadVariant.telemetry.environment_measurement_enabled) {
             DEBUG_MSG("Environment Telemetry: Initializing\n");
             // it's possible to have this module enabled, only for displaying values on the screen.
             // therefore, we should only enable the sensor loop if measurement is also enabled
-            switch (moduleConfig.environment_sensor_type) {
+            switch (moduleConfig.payloadVariant.telemetry.environment_sensor_type) {
 
-                case TelemetrySensorType_DHT11:
-                case TelemetrySensorType_DHT12:
-                case TelemetrySensorType_DHT21:
-                case TelemetrySensorType_DHT22:
-                    return dhtSensor.runOnce();
-                case TelemetrySensorType_DS18B20:
-                    return dallasSensor.runOnce();
-                case TelemetrySensorType_BME280:
-                    return bme280Sensor.runOnce();
-                case TelemetrySensorType_BME680:
-                    return bme680Sensor.runOnce();
-                case TelemetrySensorType_MCP9808:
-                    return mcp9808Sensor.runOnce();
-                default:
-                    DEBUG_MSG("Environment Telemetry: Invalid sensor type selected; Disabling module");
-                    return (INT32_MAX);
-                    break;
+            case TelemetrySensorType_DHT11:
+            case TelemetrySensorType_DHT12:
+            case TelemetrySensorType_DHT21:
+            case TelemetrySensorType_DHT22:
+                return dhtSensor.runOnce();
+            case TelemetrySensorType_DS18B20:
+                return dallasSensor.runOnce();
+            case TelemetrySensorType_BME280:
+                return bme280Sensor.runOnce();
+            case TelemetrySensorType_BME680:
+                return bme680Sensor.runOnce();
+            case TelemetrySensorType_MCP9808:
+                return mcp9808Sensor.runOnce();
+            default:
+                DEBUG_MSG("Environment Telemetry: Invalid sensor type selected; Disabling module");
+                return (INT32_MAX);
+                break;
             }
         }
         return (INT32_MAX);
     } else {
         // if we somehow got to a second run of this module with measurement disabled, then just wait forever
-        if (!moduleConfig.environment_measurement_enabled)  
+        if (!moduleConfig.payloadVariant.telemetry.environment_measurement_enabled)
             return (INT32_MAX);
         // this is not the first time OSThread library has called this function
         // so just do what we intend to do on the interval
-        if (sensor_read_error_count > moduleConfig.environment_read_error_count_threshold) {
-            if (moduleConfig.environment_recovery_interval > 0) {
+        if (sensor_read_error_count > moduleConfig.payloadVariant.telemetry.environment_read_error_count_threshold) {
+            if (moduleConfig.payloadVariant.telemetry.environment_recovery_interval > 0) {
                 DEBUG_MSG("Environment Telemetry: TEMPORARILY DISABLED; The "
                           "telemetry_module_environment_read_error_count_threshold has been exceed: %d. Will retry reads in "
                           "%d seconds\n",
-                          moduleConfig.environment_read_error_count_threshold,
-                          moduleConfig.environment_recovery_interval);
+                          moduleConfig.payloadVariant.telemetry.environment_read_error_count_threshold,
+                          moduleConfig.payloadVariant.telemetry.environment_recovery_interval);
                 sensor_read_error_count = 0;
-                return (moduleConfig.environment_recovery_interval * 1000);
+                return (moduleConfig.payloadVariant.telemetry.environment_recovery_interval * 1000);
             }
             DEBUG_MSG("Environment Telemetry: DISABLED; The telemetry_module_environment_read_error_count_threshold has "
                       "been exceed: %d. Reads will not be retried until after device reset\n",
-                      moduleConfig.environment_read_error_count_threshold);
+                      moduleConfig.payloadVariant.telemetry.environment_read_error_count_threshold);
             return (INT32_MAX);
 
         } else if (sensor_read_error_count > 0) {
             DEBUG_MSG("Environment Telemetry: There have been %d sensor read failures. Will retry %d more times\n",
                       sensor_read_error_count, sensor_read_error_count, sensor_read_error_count,
-                      moduleConfig.environment_read_error_count_threshold -
-                          sensor_read_error_count);
+                      moduleConfig.payloadVariant.telemetry.environment_read_error_count_threshold - sensor_read_error_count);
         }
         if (!sendOurTelemetry()) {
             // if we failed to read the sensor, then try again
             // as soon as we can according to the maximum polling frequency
 
-            switch (moduleConfig.environment_sensor_type) {
-                case TelemetrySensorType_DHT11:
-                case TelemetrySensorType_DHT12:
-                case TelemetrySensorType_DHT21:
-                case TelemetrySensorType_DHT22:
-                    return (DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
-                case TelemetrySensorType_DS18B20:
-                    return (DS18B20_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
-                case TelemetrySensorType_BME280:
-                case TelemetrySensorType_BME680:
-                    return (BME_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
-                case TelemetrySensorType_MCP9808:
-                    return (MCP_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
-                default:
-                    return (DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
+            switch (moduleConfig.payloadVariant.telemetry.environment_sensor_type) {
+            case TelemetrySensorType_DHT11:
+            case TelemetrySensorType_DHT12:
+            case TelemetrySensorType_DHT21:
+            case TelemetrySensorType_DHT22:
+                return (DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
+            case TelemetrySensorType_DS18B20:
+                return (DS18B20_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
+            case TelemetrySensorType_BME280:
+            case TelemetrySensorType_BME680:
+                return (BME_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
+            case TelemetrySensorType_MCP9808:
+                return (MCP_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
+            default:
+                return (DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
             }
         }
     }
-    return getIntervalOrDefaultMs(moduleConfig.environment_update_interval);
+    return getIntervalOrDefaultMs(moduleConfig.payloadVariant.telemetry.environment_update_interval);
 #endif
 }
 
@@ -162,7 +161,7 @@ uint32_t GetTimeSinceMeshPacket(const MeshPacket *mp)
 
 bool EnvironmentTelemetryModule::wantUIFrame()
 {
-    return moduleConfig.environment_screen_enabled;
+    return moduleConfig.payloadVariant.telemetry.environment_screen_enabled;
 }
 
 float EnvironmentTelemetryModule::CelsiusToFahrenheit(float c)
@@ -196,13 +195,16 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
 
     display->setFont(FONT_SMALL);
     String last_temp = String(lastMeasurement.variant.environment_metrics.temperature, 0) + "°C";
-    if (moduleConfig.environment_display_fahrenheit) {
+    if (moduleConfig.payloadVariant.telemetry.environment_display_fahrenheit) {
         last_temp = String(CelsiusToFahrenheit(lastMeasurement.variant.environment_metrics.temperature), 0) + "°F";
     }
     display->drawString(x, y += fontHeight(FONT_MEDIUM) - 2, "From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
-    display->drawString(x, y += fontHeight(FONT_SMALL) - 2, "Temp/Hum: " + last_temp + " / " + String(lastMeasurement.variant.environment_metrics.relative_humidity, 0) + "%");
-    if (lastMeasurement.variant.environment_metrics.barometric_pressure != 0) 
-        display->drawString(x, y += fontHeight(FONT_SMALL), "Press: " + String(lastMeasurement.variant.environment_metrics.barometric_pressure, 0) + "hPA");
+    display->drawString(x, y += fontHeight(FONT_SMALL) - 2,
+                        "Temp/Hum: " + last_temp + " / " +
+                            String(lastMeasurement.variant.environment_metrics.relative_humidity, 0) + "%");
+    if (lastMeasurement.variant.environment_metrics.barometric_pressure != 0)
+        display->drawString(x, y += fontHeight(FONT_SMALL),
+                            "Press: " + String(lastMeasurement.variant.environment_metrics.barometric_pressure, 0) + "hPA");
 }
 
 bool EnvironmentTelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Telemetry *t)
@@ -238,33 +240,33 @@ bool EnvironmentTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies
     m.variant.environment_metrics.relative_humidity = 0;
     m.variant.environment_metrics.temperature = 0;
     m.variant.environment_metrics.voltage = 0;
- 
+
     DEBUG_MSG("-----------------------------------------\n");
     DEBUG_MSG("Environment Telemetry: Read data\n");
 
-    switch (moduleConfig.environment_sensor_type) {
-        case TelemetrySensorType_DS18B20:
-            if (!dallasSensor.getMeasurement(&m))
-                sensor_read_error_count++;
-            break;
-        case TelemetrySensorType_DHT11:
-        case TelemetrySensorType_DHT12:
-        case TelemetrySensorType_DHT21:
-        case TelemetrySensorType_DHT22:
-            if (!dhtSensor.getMeasurement(&m))
-                sensor_read_error_count++;
-            break;
-        case TelemetrySensorType_BME280:
-            bme280Sensor.getMeasurement(&m);
-            break;
-        case TelemetrySensorType_BME680:
-            bme680Sensor.getMeasurement(&m);
-            break;
-        case TelemetrySensorType_MCP9808:
-            mcp9808Sensor.getMeasurement(&m);
-            break;
-        default:
-            DEBUG_MSG("Environment Telemetry: No external sensor type selected; Only sending internal metrics\n");
+    switch (moduleConfig.payloadVariant.telemetry.environment_sensor_type) {
+    case TelemetrySensorType_DS18B20:
+        if (!dallasSensor.getMeasurement(&m))
+            sensor_read_error_count++;
+        break;
+    case TelemetrySensorType_DHT11:
+    case TelemetrySensorType_DHT12:
+    case TelemetrySensorType_DHT21:
+    case TelemetrySensorType_DHT22:
+        if (!dhtSensor.getMeasurement(&m))
+            sensor_read_error_count++;
+        break;
+    case TelemetrySensorType_BME280:
+        bme280Sensor.getMeasurement(&m);
+        break;
+    case TelemetrySensorType_BME680:
+        bme680Sensor.getMeasurement(&m);
+        break;
+    case TelemetrySensorType_MCP9808:
+        mcp9808Sensor.getMeasurement(&m);
+        break;
+    default:
+        DEBUG_MSG("Environment Telemetry: No external sensor type selected; Only sending internal metrics\n");
     }
 
     DEBUG_MSG("Telemetry->time: %i\n", m.time);

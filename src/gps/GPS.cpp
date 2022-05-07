@@ -1,7 +1,7 @@
-#include "configuration.h"
 #include "GPS.h"
 #include "NodeDB.h"
 #include "RTC.h"
+#include "configuration.h"
 #include "sleep.h"
 #include <assert.h>
 
@@ -57,52 +57,39 @@ bool GPS::setupGPS()
 #endif
 #ifdef GPS_UBLOX
         // Set the UART port to output NMEA only
-        byte _message_nmea[] = {0xB5, 0x62, 0x06, 0x00, 0x14, 0x00,
-            0x01, 0x00, 0x00, 0x00, 0xC0, 0x08, 0x00, 0x00, 0x80, 0x25, 0x00, 0x00, 0x07, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x91, 0xAF};
-        _serial_gps->write(_message_nmea,sizeof(_message_nmea));
+        byte _message_nmea[] = {0xB5, 0x62, 0x06, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0xC0, 0x08, 0x00, 0x00,
+                                0x80, 0x25, 0x00, 0x00, 0x07, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x91, 0xAF};
+        _serial_gps->write(_message_nmea, sizeof(_message_nmea));
         delay(250);
 
         // disable GGL
-        byte _message_GGL[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00,
-            0xF0, 0x01, 0x01, 0x00, 0x01, 0x01, 0x01, 0x01,
-            0x05,0x3A};
-        _serial_gps->write(_message_GGL,sizeof(_message_GGL));
+        byte _message_GGL[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x01, 0x01, 0x00, 0x01, 0x01, 0x01, 0x01, 0x05, 0x3A};
+        _serial_gps->write(_message_GGL, sizeof(_message_GGL));
         delay(250);
 
         // disable GSA
-        byte _message_GSA[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00,
-            0xF0, 0x02, 0x01, 0x00, 0x01, 0x01, 0x01, 0x01,
-            0x06,0x41};
-        _serial_gps->write(_message_GSA,sizeof(_message_GSA));
+        byte _message_GSA[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x02, 0x01, 0x00, 0x01, 0x01, 0x01, 0x01, 0x06, 0x41};
+        _serial_gps->write(_message_GSA, sizeof(_message_GSA));
         delay(250);
 
         // disable GSV
-        byte _message_GSV[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00,
-            0xF0, 0x03, 0x01, 0x00, 0x01, 0x01, 0x01, 0x01,
-            0x07,0x48};
-        _serial_gps->write(_message_GSV,sizeof(_message_GSV));
+        byte _message_GSV[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x03, 0x01, 0x00, 0x01, 0x01, 0x01, 0x01, 0x07, 0x48};
+        _serial_gps->write(_message_GSV, sizeof(_message_GSV));
         delay(250);
 
         // disable VTG
-        byte _message_VTG[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00,
-            0xF0, 0x05, 0x01, 0x00, 0x01, 0x01, 0x01, 0x01,
-            0x09,0x56};
-        _serial_gps->write(_message_VTG,sizeof(_message_VTG));
+        byte _message_VTG[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x05, 0x01, 0x00, 0x01, 0x01, 0x01, 0x01, 0x09, 0x56};
+        _serial_gps->write(_message_VTG, sizeof(_message_VTG));
         delay(250);
 
         // enable RMC
-        byte _message_RMC[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00,
-            0xF0, 0x04, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
-            0x09,0x54};
-        _serial_gps->write(_message_RMC,sizeof(_message_RMC));
+        byte _message_RMC[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x04, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x09, 0x54};
+        _serial_gps->write(_message_RMC, sizeof(_message_RMC));
         delay(250);
 
         // enable GGA
-        byte _message_GGA[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00,
-            0xF0, 0x00, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
-            0x05, 0x38};
-        _serial_gps->write(_message_GGA,sizeof(_message_GGA));
+        byte _message_GGA[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x00, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x05, 0x38};
+        _serial_gps->write(_message_GGA, sizeof(_message_GGA));
         delay(250);
 #endif
     }
@@ -143,7 +130,10 @@ GPS::~GPS()
     notifyDeepSleepObserver.unobserve(&notifyDeepSleep);
 }
 
-bool GPS::hasLock() { return hasValidLocation; }
+bool GPS::hasLock()
+{
+    return hasValidLocation;
+}
 
 // Allow defining the polarity of the WAKE output.  default is active high
 #ifndef GPS_WAKE_ACTIVE
@@ -213,14 +203,16 @@ void GPS::setAwake(bool on)
  */
 uint32_t GPS::getWakeTime() const
 {
-    uint32_t t = radioConfig.preferences.gps_attempt_time;
+    uint32_t t = config.payloadVariant.position.gps_attempt_time;
 
     if (t == UINT32_MAX)
         return t; // already maxint
 
     if (t == 0)
-        t = (radioConfig.preferences.role == Role_Router) ? 5 * 60 : 15 * 60; // Allow up to 15 mins for each attempt (probably will be much
-                                                                  // less if we can find sats) or less if a router
+        t = (config.payloadVariant.device.role == Config_DeviceConfig_Role_Router)
+                ? 5 * 60
+                : 15 * 60; // Allow up to 15 mins for each attempt (probably will be much
+                           // less if we can find sats) or less if a router
 
     t *= 1000; // msecs
 
@@ -231,9 +223,9 @@ uint32_t GPS::getWakeTime() const
  */
 uint32_t GPS::getSleepTime() const
 {
-    uint32_t t = radioConfig.preferences.gps_update_interval;
-    bool gps_disabled = radioConfig.preferences.gps_disabled;
-    bool loc_share_disabled = radioConfig.preferences.location_share_disabled;
+    uint32_t t = config.payloadVariant.position.gps_update_interval;
+    bool gps_disabled = config.payloadVariant.position.gps_disabled;
+    bool loc_share_disabled = config.payloadVariant.position.location_share_disabled;
 
     if (gps_disabled || loc_share_disabled)
         t = UINT32_MAX; // Sleep forever now
@@ -241,8 +233,9 @@ uint32_t GPS::getSleepTime() const
     if (t == UINT32_MAX)
         return t; // already maxint
 
-    if (t == 0)                                                        // default - unset in preferences
-        t = (radioConfig.preferences.role == Role_Router) ? 24 * 60 * 60 : 2 * 60; // 2 mins or once per day for routers
+    if (t == 0) // default - unset in preferences
+        t = (config.payloadVariant.device.role == Config_DeviceConfig_Role_Router) ? 24 * 60 * 60
+                                                                                   : 2 * 60; // 2 mins or once per day for routers
 
     t *= 1000;
 
@@ -255,12 +248,10 @@ void GPS::publishUpdate()
         shouldPublish = false;
 
         // In debug logs, identify position by @timestamp:stage (stage 2 = publish)
-        DEBUG_MSG("publishing pos@%x:2, hasVal=%d, GPSlock=%d\n", 
-                    p.pos_timestamp, hasValidLocation, hasLock());
+        DEBUG_MSG("publishing pos@%x:2, hasVal=%d, GPSlock=%d\n", p.pos_timestamp, hasValidLocation, hasLock());
 
         // Notify any status instances that are observing us
-        const meshtastic::GPSStatus status =
-            meshtastic::GPSStatus(hasValidLocation, isConnected(), p);
+        const meshtastic::GPSStatus status = meshtastic::GPSStatus(hasValidLocation, isConnected(), p);
         newStatus.notifyObservers(&status);
     }
 }
@@ -379,7 +370,7 @@ GPS *createGps()
 #ifdef NO_GPS
     return nullptr;
 #else
-    if (!radioConfig.preferences.gps_disabled){
+    if (!config.payloadVariant.position.gps_disabled) {
 #ifdef GPS_ALTITUDE_HAE
         DEBUG_MSG("Using HAE altitude model\n");
 #else

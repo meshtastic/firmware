@@ -56,11 +56,6 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
         handleGetOwner(mp);
         break;
 
-    case AdminMessage_get_radio_request_tag:
-        DEBUG_MSG("Client is getting radio\n");
-        handleGetRadio(mp);
-        break;
-
     case AdminMessage_get_config_request_tag:
         DEBUG_MSG("Client is getting config\n");
         handleGetConfig(mp, r->get_channel_request);
@@ -87,11 +82,6 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
     case AdminMessage_set_owner_tag:
         DEBUG_MSG("Client is setting owner\n");
         handleSetOwner(r->set_owner);
-        break;
-
-    case AdminMessage_set_radio_tag:
-        DEBUG_MSG("Client is setting radio\n");
-        handleSetRadio(r->set_radio);
         break;
 
     case AdminMessage_set_config_tag:
@@ -181,36 +171,40 @@ void AdminModule::handleSetOwner(const User &o)
         service.reloadOwner();
 }
 
-void AdminModule::handleSetRadio(RadioConfig &r)
-{
-    writeSecret(r.preferences.wifi_password, radioConfig.preferences.wifi_password);
-    radioConfig = r;
+// void AdminModule::handleSetRadio(RadioConfig &r)
+// {
+//     // writeSecret(r.preferences.wifi_password, radioConfig.preferences.wifi_password);
+//     radioConfig = r;
 
-    service.reloadConfig();
-}
+//     service.reloadConfig();
+// }
 
 void AdminModule::handleSetConfig(const Config &c)
 {
     switch (c.which_payloadVariant) {
-    case Config_device_config_tag:
+    case Config_device_tag:
         DEBUG_MSG("Setting config: Device\n");
+        config.payloadVariant.device = c.payloadVariant.device;
         break;
-    case Config_gps_config_tag:
-        DEBUG_MSG("Setting config: GPS\n");
+    case Config_position_tag:
+        DEBUG_MSG("Setting config: Position\n");
+        config.payloadVariant.position = c.payloadVariant.position;
         break;
-    case Config_power_config_tag:
+    case Config_power_tag:
         DEBUG_MSG("Setting config: Power\n");
+        config.payloadVariant.power = c.payloadVariant.power;
         break;
-    case Config_wifi_config_tag:
+    case Config_wifi_tag:
         DEBUG_MSG("Setting config: WiFi\n");
+        config.payloadVariant.wifi = c.payloadVariant.wifi;
         break;
-    case Config_display_config_tag:
+    case Config_display_tag:
         DEBUG_MSG("Setting config: Display\n");
+        config.payloadVariant.display = c.payloadVariant.display;
         break;
-    case Config_lora_config_tag:
+    case Config_lora_tag:
         DEBUG_MSG("Setting config: LoRa\n");
-        config.payloadVariant.lora_config = c.payloadVariant.lora_config;
-        service.reloadConfig();
+        config.payloadVariant.lora = c.payloadVariant.lora;
         break;
     }
 
@@ -220,27 +214,33 @@ void AdminModule::handleSetConfig(const Config &c)
 void AdminModule::handleSetModuleConfig(const ModuleConfig &c)
 {
     switch (c.which_payloadVariant) {
-    case ModuleConfig_mqtt_config_tag:
+    case ModuleConfig_mqtt_tag:
         DEBUG_MSG("Setting module config: MQTT\n");
+        moduleConfig.payloadVariant.mqtt = c.payloadVariant.mqtt;
         break;
-    case ModuleConfig_serial_config_tag:
+    case ModuleConfig_serial_tag:
         DEBUG_MSG("Setting module config: Serial\n");
+        moduleConfig.payloadVariant.serial = c.payloadVariant.serial;
         break;
-    case ModuleConfig_external_notification_config_tag:
+    case ModuleConfig_external_notification_tag:
         DEBUG_MSG("Setting module config: External Notification\n");
+        moduleConfig.payloadVariant.external_notification = c.payloadVariant.external_notification;
         break;
-    case ModuleConfig_store_forward_config_tag:
+    case ModuleConfig_store_forward_tag:
         DEBUG_MSG("Setting module config: Store & Forward\n");
+        moduleConfig.payloadVariant.store_forward = c.payloadVariant.store_forward;
         break;
-    case ModuleConfig_range_test_config_tag:
+    case ModuleConfig_range_test_tag:
         DEBUG_MSG("Setting module config: Range Test\n");
+        moduleConfig.payloadVariant.range_test = c.payloadVariant.range_test;
         break;
-    case ModuleConfig_telemetry_config_tag:
+    case ModuleConfig_telemetry_tag:
         DEBUG_MSG("Setting module config: Telemetry\n");
-        moduleConfig.payloadVariant.telemetry_config = c.payloadVariant.telemetry_config;
+        moduleConfig.payloadVariant.telemetry = c.payloadVariant.telemetry;
         break;
-    case ModuleConfig_canned_message_config_tag:
+    case ModuleConfig_canned_message_tag:
         DEBUG_MSG("Setting module config: Canned Message\n");
+        moduleConfig.payloadVariant.canned_message = c.payloadVariant.canned_message;
         break;
     }
 
@@ -270,26 +270,28 @@ void AdminModule::handleGetOwner(const MeshPacket &req)
     }
 }
 
-void AdminModule::handleGetRadio(const MeshPacket &req)
-{
-    if (req.decoded.want_response) {
-        // We create the reply here
-        AdminMessage res = AdminMessage_init_default;
-        res.get_radio_response = radioConfig;
+// void AdminModule::handleGetRadio(const MeshPacket &req)
+// {
+//     if (req.decoded.want_response) {
+//         // We create the reply here
+//         AdminMessage res = AdminMessage_init_default;
+//         res.get_radio_response = radioConfig;
 
-        // NOTE: The phone app needs to know the ls_secs & phone_timeout value so it can properly expect sleep behavior.
-        // So even if we internally use 0 to represent 'use default' we still need to send the value we are
-        // using to the app (so that even old phone apps work with new device loads).
-        res.get_radio_response.preferences.ls_secs = getPref_ls_secs();
-        res.get_radio_response.preferences.phone_timeout_secs = getPref_phone_timeout_secs();
-        // hideSecret(r.get_radio_response.preferences.wifi_ssid); // hmm - leave public for now, because only minimally private
-        // and useful for users to know current provisioning)
-        hideSecret(res.get_radio_response.preferences.wifi_password);
+//         // NOTE: The phone app needs to know the ls_secs & phone_timeout value so it can properly expect sleep behavior.
+//         // So even if we internally use 0 to represent 'use default' we still need to send the value we are
+//         // using to the app (so that even old phone apps work with new device loads).
+//         // res.get_radio_response.preferences.ls_secs = getPref_ls_secs(); //TODO: Re-implement if necceasry
+//         // res.get_radio_response.preferences.phone_timeout_secs = getPref_phone_timeout_secs(); //TODO: Re-implement if
+//         necceasry
+//         // hideSecret(r.get_radio_response.preferences.wifi_ssid); // hmm - leave public for now, because only minimally
+//         private
+//         // and useful for users to know current provisioning)
+//         // hideSecret(res.get_radio_response.preferences.wifi_password);
 
-        res.which_variant = AdminMessage_get_radio_response_tag;
-        myReply = allocDataProtobuf(res);
-    }
-}
+//         res.which_variant = AdminMessage_get_radio_response_tag;
+//         myReply = allocDataProtobuf(res);
+//     }
+// }
 
 void AdminModule::handleGetConfig(const MeshPacket &req, const uint32_t configType)
 {
@@ -299,28 +301,28 @@ void AdminModule::handleGetConfig(const MeshPacket &req, const uint32_t configTy
         switch (configType) {
         case AdminMessage_ConfigType_DEVICE_CONFIG:
             DEBUG_MSG("Getting config: Device\n");
-            res.get_config_response.which_payloadVariant = Config_device_config_tag;
+            res.get_config_response.which_payloadVariant = Config_device_tag;
             break;
-        case AdminMessage_ConfigType_GPS_CONFIG:
-            DEBUG_MSG("Getting config: GPS\n");
-            res.get_config_response.which_payloadVariant = Config_gps_config_tag;
+        case AdminMessage_ConfigType_POSITION_CONFIG:
+            DEBUG_MSG("Getting config: Position\n");
+            res.get_config_response.which_payloadVariant = Config_position_tag;
             break;
         case AdminMessage_ConfigType_POWER_CONFIG:
             DEBUG_MSG("Getting config: Power\n");
-            res.get_config_response.which_payloadVariant = Config_power_config_tag;
+            res.get_config_response.which_payloadVariant = Config_power_tag;
             break;
         case AdminMessage_ConfigType_WIFI_CONFIG:
             DEBUG_MSG("Getting config: WiFi\n");
-            res.get_config_response.which_payloadVariant = Config_wifi_config_tag;
+            res.get_config_response.which_payloadVariant = Config_wifi_tag;
             break;
         case AdminMessage_ConfigType_DISPLAY_CONFIG:
             DEBUG_MSG("Getting config: Display\n");
-            res.get_config_response.which_payloadVariant = Config_display_config_tag;
+            res.get_config_response.which_payloadVariant = Config_display_tag;
             break;
         case AdminMessage_ConfigType_LORA_CONFIG:
             DEBUG_MSG("Getting config: LoRa\n");
-            res.get_config_response.which_payloadVariant = Config_lora_config_tag;
-            res.get_config_response.payloadVariant.lora_config = config.payloadVariant.lora_config;
+            res.get_config_response.which_payloadVariant = Config_lora_tag;
+            res.get_config_response.payloadVariant.lora = config.payloadVariant.lora;
             break;
         }
 
@@ -331,7 +333,7 @@ void AdminModule::handleGetConfig(const MeshPacket &req, const uint32_t configTy
         // r.get_radio_response.preferences.phone_timeout_secs = getPref_phone_timeout_secs();
         // hideSecret(r.get_radio_response.preferences.wifi_ssid); // hmm - leave public for now, because only minimally private
         // and useful for users to know current provisioning) hideSecret(r.get_radio_response.preferences.wifi_password);
-        // r.get_config_response.which_payloadVariant = Config_ModuleConfig_telemetry_config_tag;
+        // r.get_config_response.which_payloadVariant = Config_ModuleConfig_telemetry_tag;
         res.which_variant = AdminMessage_get_config_response_tag;
         myReply = allocDataProtobuf(res);
     }
@@ -345,32 +347,39 @@ void AdminModule::handleGetModuleConfig(const MeshPacket &req, const uint32_t co
         switch (configType) {
         case AdminMessage_ModuleConfigType_MQTT_CONFIG:
             DEBUG_MSG("Getting module config: MQTT\n");
-            res.get_module_config_response.which_payloadVariant = ModuleConfig_mqtt_config_tag;
+            res.get_module_config_response.which_payloadVariant = ModuleConfig_mqtt_tag;
+            res.get_module_config_response.payloadVariant.mqtt = moduleConfig.payloadVariant.mqtt;
             break;
         case AdminMessage_ModuleConfigType_SERIAL_CONFIG:
             DEBUG_MSG("Getting module config: Serial\n");
-            res.get_module_config_response.which_payloadVariant = ModuleConfig_serial_config_tag;
+            res.get_module_config_response.which_payloadVariant = ModuleConfig_serial_tag;
+            res.get_module_config_response.payloadVariant.serial = moduleConfig.payloadVariant.serial;
             break;
         case AdminMessage_ModuleConfigType_EXTNOTIF_CONFIG:
             DEBUG_MSG("Getting module config: External Notification\n");
-            res.get_module_config_response.which_payloadVariant = ModuleConfig_external_notification_config_tag;
+            res.get_module_config_response.which_payloadVariant = ModuleConfig_external_notification_tag;
+            res.get_module_config_response.payloadVariant.external_notification =
+                moduleConfig.payloadVariant.external_notification;
             break;
         case AdminMessage_ModuleConfigType_STOREFORWARD_CONFIG:
             DEBUG_MSG("Getting module config: Store & Forward\n");
-            res.get_module_config_response.which_payloadVariant = ModuleConfig_store_forward_config_tag;
+            res.get_module_config_response.which_payloadVariant = ModuleConfig_store_forward_tag;
+            res.get_module_config_response.payloadVariant.store_forward = moduleConfig.payloadVariant.store_forward;
             break;
         case AdminMessage_ModuleConfigType_RANGETEST_CONFIG:
             DEBUG_MSG("Getting module config: Range Test\n");
-            res.get_module_config_response.which_payloadVariant = ModuleConfig_range_test_config_tag;
+            res.get_module_config_response.which_payloadVariant = ModuleConfig_range_test_tag;
+            res.get_module_config_response.payloadVariant.range_test = moduleConfig.payloadVariant.range_test;
             break;
         case AdminMessage_ModuleConfigType_TELEMETRY_CONFIG:
             DEBUG_MSG("Getting module config: Telemetry\n");
-            res.get_module_config_response.which_payloadVariant = ModuleConfig_telemetry_config_tag;
-            res.get_module_config_response.payloadVariant.telemetry_config = moduleConfig.payloadVariant.telemetry_config;
+            res.get_module_config_response.which_payloadVariant = ModuleConfig_telemetry_tag;
+            res.get_module_config_response.payloadVariant.telemetry = moduleConfig.payloadVariant.telemetry;
             break;
         case AdminMessage_ModuleConfigType_CANNEDMSG_CONFIG:
             DEBUG_MSG("Getting module config: Canned Message\n");
-            res.get_module_config_response.which_payloadVariant = ModuleConfig_canned_message_config_tag;
+            res.get_module_config_response.which_payloadVariant = ModuleConfig_canned_message_tag;
+            res.get_module_config_response.payloadVariant.canned_message = moduleConfig.payloadVariant.canned_message;
             break;
         }
 
@@ -381,7 +390,7 @@ void AdminModule::handleGetModuleConfig(const MeshPacket &req, const uint32_t co
         // r.get_radio_response.preferences.phone_timeout_secs = getPref_phone_timeout_secs();
         // hideSecret(r.get_radio_response.preferences.wifi_ssid); // hmm - leave public for now, because only minimally private
         // and useful for users to know current provisioning) hideSecret(r.get_radio_response.preferences.wifi_password);
-        // r.get_config_response.which_payloadVariant = Config_ModuleConfig_telemetry_config_tag;
+        // r.get_config_response.which_payloadVariant = Config_ModuleConfig_telemetry_tag;
         res.which_variant = AdminMessage_get_module_config_response_tag;
         myReply = allocDataProtobuf(res);
     }
