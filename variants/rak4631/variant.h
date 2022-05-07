@@ -201,6 +201,9 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // RAK12002 RTC Module
 #define RV3028_RTC (uint8_t) 0b1010010
 
+// RAK18001 Buzzer in Slot C
+#define PIN_BUZZER 21 // IO3 is PWM2
+
 // Battery
 // The battery sense is hooked to pin A0 (5)
 #define BATTERY_PIN PIN_A0

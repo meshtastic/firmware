@@ -798,7 +798,9 @@ void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
             count = count - 1;
         }
     } else {
+#ifndef NO_SCREEN        
         screen->blink();
+#endif        
     }
 
     Json jsonObjOuter = Json::object{{"status", "ok"}};
