@@ -75,7 +75,7 @@ typedef struct _ChannelSettings {
  is the special (minimally secure) "Default"channel.
  In user interfaces it should be rendered as a local language translation of "X".
  For channel_num hashing empty string will be treated as "X".
- Where "X" is selected based on the English words listed above for ModemConfig */
+ Where "X" is selected based on the English words listed above for ModemPreset */
     uint8_t channel_num; 
     /* Used to construct a globally unique channel ID.
  The full globally unique ID will be: "name.id" where ID is shown as base36.

@@ -1,10 +1,10 @@
-#include "configuration.h"
-#include "concurrency/OSThread.h"
 #include "PowerFSM.h"
 #include "RadioLibInterface.h"
+#include "buzz.h"
+#include "concurrency/OSThread.h"
+#include "configuration.h"
 #include "graphics/Screen.h"
 #include "power.h"
-#include "buzz.h"
 #include <OneButton.h>
 
 #ifndef NO_ESP32
@@ -85,7 +85,6 @@ class ButtonThread : public concurrency::OSThread
         userButtonTouch.attachClick(touchPressed);
         wakeOnIrq(BUTTON_PIN_TOUCH, FALLING);
 #endif
-
     }
 
   protected:
@@ -114,16 +113,17 @@ class ButtonThread : public concurrency::OSThread
 
   private:
     static void touchPressed()
-    {        
+    {
         screen->forceDisplay();
-        DEBUG_MSG("touch press!\n");       
+        DEBUG_MSG("touch press!\n");
     }
-    
+
     static void userButtonPressed()
     {
         // DEBUG_MSG("press!\n");
 #ifdef BUTTON_PIN
-        if ((BUTTON_PIN != radioConfig.preferences.inputbroker_pin_press) || !radioConfig.preferences.canned_message_module_enabled) {
+        if ((BUTTON_PIN != moduleConfig.payloadVariant.canned_message.inputbroker_pin_press) ||
+            !moduleConfig.payloadVariant.canned_message.enabled) {
             powerFSM.trigger(EVENT_PRESS);
         }
 #endif
@@ -144,7 +144,7 @@ class ButtonThread : public concurrency::OSThread
 #elif NRF52_SERIES
             // Do actual shutdown when button released, otherwise the button release
             // may wake the board immediatedly.
-            if ((!shutdown_on_long_stop) && (millis() > 30 * 1000)) { 
+            if ((!shutdown_on_long_stop) && (millis() > 30 * 1000)) {
                 screen->startShutdownScreen();
                 DEBUG_MSG("Shutdown from long press");
                 playBeep();
@@ -163,7 +163,7 @@ class ButtonThread : public concurrency::OSThread
 #ifndef NO_ESP32
         disablePin();
 #elif defined(HAS_EINK)
-        digitalWrite(PIN_EINK_EN,digitalRead(PIN_EINK_EN) == LOW);
+        digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
 #endif
     }
 
@@ -177,7 +177,6 @@ class ButtonThread : public concurrency::OSThread
 #endif
     }
 
-
     static void userButtonPressedLongStart()
     {
         if (millis() > 30 * 1000) {
@@ -188,7 +187,7 @@ class ButtonThread : public concurrency::OSThread
 
     static void userButtonPressedLongStop()
     {
-        if (millis() > 30 * 1000){
+        if (millis() > 30 * 1000) {
             DEBUG_MSG("Long press stop!\n");
             longPressTime = 0;
             if (shutdown_on_long_stop) {
@@ -200,4 +199,4 @@ class ButtonThread : public concurrency::OSThread
     }
 };
 
-}
+} // namespace concurrency

@@ -93,8 +93,8 @@ bool RadioLibInterface::canSendImmediately()
 /// bluetooth comms code.  If the txmit queue is empty it might return an error
 ErrorCode RadioLibInterface::send(MeshPacket *p)
 {
-    if (radioConfig.preferences.region != RegionCode_Unset) {
-        if (disabled || radioConfig.preferences.is_lora_tx_disabled) {
+    if (config.payloadVariant.lora.region != Config_LoRaConfig_RegionCode_Unset) {
+        if (disabled || config.payloadVariant.lora.tx_disabled) {
             DEBUG_MSG("send - lora_tx_disabled\n");
             packetPool.release(p);
             return ERRNO_DISABLED;
@@ -121,7 +121,7 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
     // set (random) transmit delay to let others reconfigure their radio,
     // to avoid collisions and implement timing-based flooding
     // DEBUG_MSG("Set random delay before transmitting.\n");
-    setTransmitDelay();  
+    setTransmitDelay();
 
     return res;
 #else
@@ -154,10 +154,10 @@ bool RadioLibInterface::cancelSending(NodeNum from, PacketId id)
 /** radio helper thread callback.
 
 We never immediately transmit after any operation (either rx or tx).  Instead we should start receiving and
-wait a random delay of 100ms to 100ms+shortPacketMsec to make sure we are not stomping on someone else.  The 100ms delay at the beginning ensures all
-possible listeners have had time to finish processing the previous packet and now have their radio in RX state.  The up to 100ms+shortPacketMsec
-random delay gives a chance for all possible senders to have high odds of detecting that someone else started transmitting first
-and then they will wait until that packet finishes.
+wait a random delay of 100ms to 100ms+shortPacketMsec to make sure we are not stomping on someone else.  The 100ms delay at the
+beginning ensures all possible listeners have had time to finish processing the previous packet and now have their radio in RX
+state.  The up to 100ms+shortPacketMsec random delay gives a chance for all possible senders to have high odds of detecting that
+someone else started transmitting first and then they will wait until that packet finishes.
 
 NOTE: the large flood rebroadcast delay might still be needed even with this approach.  Because we might not be able to hear other
 transmitters that we are potentially stomping on.  Requires further thought.
@@ -215,7 +215,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
 void RadioLibInterface::setTransmitDelay()
 {
     MeshPacket *p = txQueue.getFront();
-    // We want all sending/receiving to be done by our daemon thread. 
+    // We want all sending/receiving to be done by our daemon thread.
     // We use a delay here because this packet might have been sent in response to a packet we just received.
     // So we want to make sure the other side has had a chance to reconfigure its radio.
 
@@ -345,7 +345,7 @@ void RadioLibInterface::handleReceiveInterrupt()
 void RadioLibInterface::startSend(MeshPacket *txp)
 {
     printPacket("Starting low level send", txp);
-    if (disabled || radioConfig.preferences.is_lora_tx_disabled) {
+    if (disabled || config.payloadVariant.lora.tx_disabled) {
         DEBUG_MSG("startSend is dropping tx packet because we are disabled\n");
         packetPool.release(txp);
     } else {

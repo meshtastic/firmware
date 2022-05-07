@@ -34,7 +34,6 @@ NodeDB nodeDB;
 // we have plenty of ram so statically alloc this tempbuf (for now)
 EXT_RAM_ATTR DeviceState devicestate;
 MyNodeInfo &myNodeInfo = devicestate.my_node;
-RadioConfig radioConfig;
 Config config;
 ModuleConfig moduleConfig;
 ChannelFile channelFile;
@@ -88,8 +87,8 @@ bool NodeDB::resetRadioConfig()
 
     radioGeneration++;
 
-    radioConfig.has_preferences = true;
-    if (radioConfig.preferences.factory_reset) {
+    // radioConfig.has_preferences = true;
+    if (config.payloadVariant.device.factory_reset) {
         DEBUG_MSG("Performing factory reset!\n");
         installDefaultDeviceState();
 #ifndef NO_ESP32
@@ -127,11 +126,11 @@ bool NodeDB::resetRadioConfig()
         DEBUG_MSG("***** DEVELOPMENT MODE - DO NOT RELEASE *****\n");
 
         // Sleep quite frequently to stress test the BLE comms, broadcast position every 6 mins
-        radioConfig.preferences.screen_on_secs = 10;
-        radioConfig.preferences.wait_bluetooth_secs = 10;
-        radioConfig.preferences.position_broadcast_secs = 6 * 60;
-        radioConfig.preferences.ls_secs = 60;
-        radioConfig.preferences.region = RegionCode_TW;
+        config.payloadVariant.display.screen_on_secs = 10;
+        config.payloadVariant.power.wait_bluetooth_secs = 10;
+        config.payloadVariant.position.position_broadcast_secs = 6 * 60;
+        config.payloadVariant.power.ls_secs = 60;
+        config.payloadVariant.lora.region = Config_LoRaConfig_RegionCode_TW;
 
         // Enter super deep sleep soon and stay there not very long
         // radioConfig.preferences.mesh_sds_timeout_secs = 10;
@@ -154,15 +153,17 @@ void NodeDB::installDefaultModuleConfig()
     memset(&moduleConfig, 0, sizeof(moduleConfig));
 }
 
-void NodeDB::installDefaultRadioConfig()
-{
-    memset(&radioConfig, 0, sizeof(radioConfig));
-    radioConfig.has_preferences = true;
-    resetRadioConfig();
+// void NodeDB::installDefaultRadioConfig()
+// {
+//     memset(&radioConfig, 0, sizeof(radioConfig));
+//     radioConfig.has_preferences = true;
+//     resetRadioConfig();
 
-    // for backward compat, default position flags are BAT+ALT+MSL (0x23 = 35)
-    radioConfig.preferences.position_flags = (PositionFlags_POS_BATTERY | PositionFlags_POS_ALTITUDE | PositionFlags_POS_ALT_MSL);
-}
+//     // for backward compat, default position flags are BAT+ALT+MSL (0x23 = 35)
+//     config.payloadVariant.position.position_flags =
+//         (Config_PositionConfig_PositionFlags_POS_BATTERY | Config_PositionConfig_PositionFlags_POS_ALTITUDE |
+//          Config_PositionConfig_PositionFlags_POS_ALT_MSL);
+// }
 
 void NodeDB::installDefaultChannels()
 {
@@ -173,7 +174,7 @@ void NodeDB::installDefaultDeviceState()
 {
     // We try to preserve the region setting because it will really bum users out if we discard it
     String oldRegion = myNodeInfo.region;
-    RegionCode oldRegionCode = radioConfig.preferences.region;
+    Config_LoRaConfig_RegionCode oldRegionCode = config.payloadVariant.lora.region;
 
     memset(&devicestate, 0, sizeof(devicestate));
 
@@ -203,13 +204,12 @@ void NodeDB::installDefaultDeviceState()
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 
     // Restore region if possible
-    if (oldRegionCode != RegionCode_Unset)
-        radioConfig.preferences.region = oldRegionCode;
+    if (oldRegionCode != Config_LoRaConfig_RegionCode_Unset)
+        config.payloadVariant.lora.region = oldRegionCode;
     if (oldRegion.length()) // If the old style region was set, try to keep it up-to-date
         strcpy(myNodeInfo.region, oldRegion.c_str());
 
     installDefaultChannels();
-    installDefaultRadioConfig();
     installDefaultConfig();
 }
 
@@ -259,7 +259,7 @@ void NodeDB::init()
 
     resetRadioConfig(); // If bogus settings got saved, then fix them
 
-    DEBUG_MSG("region=%d, NODENUM=0x%x, dbsize=%d\n", radioConfig.preferences.region, myNodeInfo.my_node_num, *numNodes);
+    DEBUG_MSG("region=%d, NODENUM=0x%x, dbsize=%d\n", config.payloadVariant.lora.region, myNodeInfo.my_node_num, *numNodes);
 }
 
 // We reserve a few nodenums for future use
@@ -292,7 +292,7 @@ void NodeDB::pickNewNodeNum()
 static const char *preffile = "/prefs/db.proto";
 static const char *radiofile = "/prefs/radio.proto";
 static const char *configfile = "/prefs/config.proto";
-static const char *moduleConfigfile = "/prefs/module_config.proto";
+static const char *moduleConfigfile = "/prefs/module.proto";
 static const char *channelfile = "/prefs/channels.proto";
 
 /** Load a protobuf from a file, return true for success */
@@ -339,10 +339,6 @@ void NodeDB::loadFromDisk()
         } else {
             DEBUG_MSG("Loaded saved preferences version %d\n", devicestate.version);
         }
-    }
-
-    if (!loadProto(radiofile, RadioConfig_size, sizeof(RadioConfig), RadioConfig_fields, &radioConfig)) {
-        installDefaultRadioConfig(); // Our in RAM copy might now be corrupt
     }
 
     if (!loadProto(configfile, Config_size, sizeof(Config), Config_fields, &config)) {
@@ -410,7 +406,6 @@ void NodeDB::saveToDisk()
         FSCom.mkdir("/prefs");
 #endif
         saveProto(preffile, DeviceState_size, sizeof(devicestate), DeviceState_fields, &devicestate);
-        saveProto(radiofile, RadioConfig_size, sizeof(RadioConfig), RadioConfig_fields, &radioConfig);
         saveProto(configfile, Config_size, sizeof(Config), Config_fields, &config);
         saveProto(moduleConfigfile, Module_Config_size, sizeof(ModuleConfig), ModuleConfig_fields, &moduleConfig);
         saveChannelsToDisk();

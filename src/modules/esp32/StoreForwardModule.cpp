@@ -19,13 +19,12 @@ int32_t StoreForwardModule::runOnce()
 
 #ifndef NO_ESP32
 
-    if (radioConfig.preferences.store_forward_module_enabled) {
+    if (moduleConfig.payloadVariant.store_forward.enabled) {
 
-        if (radioConfig.preferences.role == Role_Router) {
+        if (config.payloadVariant.device.role == Config_DeviceConfig_Role_Router) {
 
             // Send out the message queue.
             if (this->busy) {
-                
 
                 // Only send packets if the channel is less than 25% utilized.
                 if (airTime->channelUtilizationPercent() < 25) {
@@ -43,7 +42,7 @@ int32_t StoreForwardModule::runOnce()
                     } else {
                         this->packetHistoryTXQueue_index++;
                     }
-                    
+
                 } else {
                     DEBUG_MSG("Channel utilization is too high. Skipping this opportunity to send and will retry later.\n");
                 }
@@ -243,7 +242,7 @@ void StoreForwardModule::sendMessage(NodeNum dest, char *str)
 ProcessMessage StoreForwardModule::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
-    if (radioConfig.preferences.store_forward_module_enabled) {
+    if (moduleConfig.payloadVariant.store_forward.enabled) {
 
         DEBUG_MSG("--- S&F Received something\n");
 
@@ -267,10 +266,11 @@ ProcessMessage StoreForwardModule::handleReceived(const MeshPacket &mp)
                     }
                 } else if ((p.payload.bytes[0] == 'S') && (p.payload.bytes[1] == 'F') && (p.payload.bytes[2] == 'm') &&
                            (p.payload.bytes[3] == 0x00)) {
-                    strlcpy(this->routerMessage, "01234567890123456789012345678901234567890123456789012345678901234567890123456789"
-                                                 "01234567890123456789012345678901234567890123456789012345678901234567890123456789"
-                                                 "01234567890123456789012345678901234567890123456789012345678901234567890123456",
-                                                 sizeof(this->routerMessage));
+                    strlcpy(this->routerMessage,
+                            "01234567890123456789012345678901234567890123456789012345678901234567890123456789"
+                            "01234567890123456789012345678901234567890123456789012345678901234567890123456789"
+                            "01234567890123456789012345678901234567890123456789012345678901234567890123456",
+                            sizeof(this->routerMessage));
                     storeForwardModule->sendMessage(getFrom(&mp), this->routerMessage);
 
                 } else {
@@ -295,7 +295,7 @@ ProcessMessage StoreForwardModule::handleReceived(const MeshPacket &mp)
 
 ProcessMessage StoreForwardModule::handleReceivedProtobuf(const MeshPacket &mp, StoreAndForward *p)
 {
-    if (!radioConfig.preferences.store_forward_module_enabled) {
+    if (!moduleConfig.payloadVariant.store_forward.enabled) {
         // If this module is not enabled in any capacity, don't handle the packet, and allow other modules to consume
         return ProcessMessage::CONTINUE;
     }
@@ -391,14 +391,14 @@ StoreForwardModule::StoreForwardModule()
             without having to configure it from the PythonAPI or WebUI.
         */
 
-        radioConfig.preferences.store_forward_module_enabled = 1;
-        radioConfig.preferences.is_always_powered = 1;
+        moduleConfig.payloadVariant.store_forward.enabled = 1;
+        config.payloadVariant.power.is_always_powered = 1;
     }
 
-    if (radioConfig.preferences.store_forward_module_enabled) {
+    if (moduleConfig.payloadVariant.store_forward.enabled) {
 
         // Router
-        if (radioConfig.preferences.role == Role_Router) {
+        if (config.payloadVariant.device.role == Config_DeviceConfig_Role_Router) {
             DEBUG_MSG("Initializing Store & Forward Module - Enabled as Router\n");
             if (ESP.getPsramSize()) {
                 if (ESP.getFreePsram() >= 1024 * 1024) {
@@ -406,20 +406,20 @@ StoreForwardModule::StoreForwardModule()
                     // Do the startup here
 
                     // Maximum number of records to return.
-                    if (radioConfig.preferences.store_forward_module_history_return_max)
-                        this->historyReturnMax = radioConfig.preferences.store_forward_module_history_return_max;
+                    if (moduleConfig.payloadVariant.store_forward.history_return_max)
+                        this->historyReturnMax = moduleConfig.payloadVariant.store_forward.history_return_max;
 
                     // Maximum time window for records to return (in minutes)
-                    if (radioConfig.preferences.store_forward_module_history_return_window)
-                        this->historyReturnWindow = radioConfig.preferences.store_forward_module_history_return_window;
+                    if (moduleConfig.payloadVariant.store_forward.history_return_window)
+                        this->historyReturnWindow = moduleConfig.payloadVariant.store_forward.history_return_window;
 
                     // Maximum number of records to store in memory
-                    if (radioConfig.preferences.store_forward_module_records)
-                        this->records = radioConfig.preferences.store_forward_module_records;
+                    if (moduleConfig.payloadVariant.store_forward.records)
+                        this->records = moduleConfig.payloadVariant.store_forward.records;
 
                     // Maximum number of records to store in memory
-                    if (radioConfig.preferences.store_forward_module_heartbeat)
-                        this->heartbeat = radioConfig.preferences.store_forward_module_heartbeat;
+                    if (moduleConfig.payloadVariant.store_forward.heartbeat)
+                        this->heartbeat = moduleConfig.payloadVariant.store_forward.heartbeat;
 
                     // Popupate PSRAM with our data structures.
                     this->populatePSRAM();
