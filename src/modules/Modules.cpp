@@ -47,7 +47,9 @@ void setupModules()
     cardKbI2cImpl->init();
     facesKbI2cImpl = new FacesKbI2cImpl();
     facesKbI2cImpl->init();
+#ifndef NO_SCREEN    
     cannedMessageModule = new CannedMessageModule();
+#endif
 #ifndef PORTDUINO
     new DeviceTelemetryModule();
     new EnvironmentTelemetryModule();
