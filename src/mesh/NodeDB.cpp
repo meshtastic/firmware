@@ -210,6 +210,7 @@ void NodeDB::installDefaultDeviceState()
 
     installDefaultChannels();
     installDefaultRadioConfig();
+    installDefaultConfig();
 }
 
 void NodeDB::init()
