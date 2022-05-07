@@ -118,8 +118,8 @@ MeshPacket *Router::allocForSending()
     p->which_payloadVariant = MeshPacket_decoded_tag; // Assume payload is decoded at start.
     p->from = nodeDB.getNodeNum();
     p->to = NODENUM_BROADCAST;
-    if (radioConfig.preferences.hop_limit && radioConfig.preferences.hop_limit <= HOP_MAX) {
-        p->hop_limit = (radioConfig.preferences.hop_limit >= HOP_MAX) ? HOP_MAX : radioConfig.preferences.hop_limit;
+    if (config.payloadVariant.lora.hop_limit && config.payloadVariant.lora.hop_limit <= HOP_MAX) {
+        p->hop_limit = (config.payloadVariant.lora.hop_limit >= HOP_MAX) ? HOP_MAX : config.payloadVariant.lora.hop_limit;
     } else {
         p->hop_limit = HOP_RELIABLE;
     }
@@ -227,7 +227,7 @@ ErrorCode Router::send(MeshPacket *p)
          */
 
         bool shouldActuallyEncrypt = true;
-        if (*radioConfig.preferences.mqtt_server && !radioConfig.preferences.mqtt_encryption_enabled) {
+        if (*moduleConfig.payloadVariant.mqtt.address && !moduleConfig.payloadVariant.mqtt.encryption_enabled) {
             shouldActuallyEncrypt = false;
         }
 
@@ -304,12 +304,10 @@ bool perhapsDecode(MeshPacket *p)
                 p->which_payloadVariant = MeshPacket_decoded_tag; // change type to decoded
                 p->channel = chIndex;                             // change to store the index instead of the hash
 
-
                 // Decompress if needed. jm
                 if (p->decoded.which_payloadVariant == Data_payload_compressed_tag) {
                     // Decompress the file
                 }
-
 
                 printPacket("decoded message", p);
                 return true;
@@ -361,10 +359,10 @@ Routing_Error perhapsEncode(MeshPacket *p)
             } else {
                 DEBUG_MSG("Compressing message.\n");
                 // Copy the compressed data into the meshpacket
-                //p->decoded.payload_compressed.size = compressed_len;
-                //memcpy(p->decoded.payload_compressed.bytes, compressed_out, compressed_len);
+                // p->decoded.payload_compressed.size = compressed_len;
+                // memcpy(p->decoded.payload_compressed.bytes, compressed_out, compressed_len);
 
-                //p->decoded.which_payloadVariant = Data_payload_compressed_tag;
+                // p->decoded.which_payloadVariant = Data_payload_compressed_tag;
             }
 
             if (0) {
@@ -437,8 +435,8 @@ void Router::handleReceived(MeshPacket *p, RxSource src)
 
 void Router::perhapsHandleReceived(MeshPacket *p)
 {
-    assert(radioConfig.has_preferences);
-    bool ignore = is_in_repeated(radioConfig.preferences.ignore_incoming, p->from);
+    // assert(radioConfig.has_preferences);
+    bool ignore = is_in_repeated(config.payloadVariant.lora.ignore_incoming, p->from);
 
     if (ignore)
         DEBUG_MSG("Ignoring incoming message, 0x%x is in our ignore list\n", p->from);

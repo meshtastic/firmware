@@ -31,3 +31,6 @@ PB_BIND(ModuleConfig_CannedMessageConfig, ModuleConfig_CannedMessageConfig, AUTO
 
 
 
+
+
+

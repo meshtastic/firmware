@@ -1,8 +1,8 @@
 #include "DeviceTelemetry.h"
 #include "../mesh/generated/telemetry.pb.h"
-#include "PowerFSM.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
 #include "configuration.h"
@@ -20,8 +20,8 @@ int32_t DeviceTelemetryModule::runOnce()
     }
     sendOurTelemetry();
     // OSThread library.  Multiply the preference value by 1000 to convert seconds to miliseconds
-    
-    return getIntervalOrDefaultMs(moduleConfig.device_update_interval);
+
+    return getIntervalOrDefaultMs(moduleConfig.payloadVariant.telemetry.device_update_interval);
 #endif
 }
 
@@ -33,7 +33,7 @@ bool DeviceTelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Telemet
         DEBUG_MSG("-----------------------------------------\n");
         DEBUG_MSG("Device Telemetry: Received data from %s\n", sender);
         DEBUG_MSG("Telemetry->time: %i\n", t->time);
-        DEBUG_MSG("Telemetry->air_util_tx: %f\n", t->variant.device_metrics.air_util_tx );
+        DEBUG_MSG("Telemetry->air_util_tx: %f\n", t->variant.device_metrics.air_util_tx);
         DEBUG_MSG("Telemetry->battery_level: %i\n", t->variant.device_metrics.battery_level);
         DEBUG_MSG("Telemetry->channel_utilization: %f\n", t->variant.device_metrics.channel_utilization);
         DEBUG_MSG("Telemetry->voltage: %f\n", t->variant.device_metrics.voltage);

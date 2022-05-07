@@ -353,8 +353,8 @@ static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
 // Ignore messages orginating from phone (from the current node 0x0) unless range test or store and forward module are enabled
 static bool shouldDrawMessage(const MeshPacket *packet)
 {
-    return packet->from != 0 && !radioConfig.preferences.range_test_module_enabled &&
-           !radioConfig.preferences.store_forward_module_enabled;
+    return packet->from != 0 && !moduleConfig.payloadVariant.range_test.enabled &&
+           !moduleConfig.payloadVariant.store_forward.enabled;
 }
 
 /// Draw the last text message we received
@@ -468,7 +468,7 @@ static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, NodeStatus *no
 // Draw GPS status summary
 static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
-    if (radioConfig.preferences.fixed_position) {
+    if (config.payloadVariant.position.fixed_position) {
         // GPS coordinates are currently fixed
         display->drawString(x - 1, y - 2, "Fixed GPS");
         return;
@@ -507,10 +507,10 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
 static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
     String displayLine = "";
-    if (!gps->getIsConnected() && !radioConfig.preferences.fixed_position) {
+    if (!gps->getIsConnected() && !config.payloadVariant.position.fixed_position) {
         // displayLine = "No GPS Module";
         // display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
-    } else if (!gps->getHasLock() && !radioConfig.preferences.fixed_position) {
+    } else if (!gps->getHasLock() && !config.payloadVariant.position.fixed_position) {
         // displayLine = "No GPS Lock";
         // display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
@@ -523,32 +523,32 @@ static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GP
 // Draw GPS status coordinates
 static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
-    auto gpsFormat = radioConfig.preferences.gps_format;
+    auto gpsFormat = config.payloadVariant.display.gps_format;
     String displayLine = "";
 
-    if (!gps->getIsConnected() && !radioConfig.preferences.fixed_position) {
+    if (!gps->getIsConnected() && !config.payloadVariant.position.fixed_position) {
         displayLine = "No GPS Module";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
-    } else if (!gps->getHasLock() && !radioConfig.preferences.fixed_position) {
+    } else if (!gps->getHasLock() && !config.payloadVariant.position.fixed_position) {
         displayLine = "No GPS Lock";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
 
-        if (gpsFormat != GpsCoordinateFormat_GpsFormatDMS) {
+        if (gpsFormat != Config_DisplayConfig_GpsCoordinateFormat_GpsFormatDMS) {
             char coordinateLine[22];
             geoCoord.updateCoords(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()), int32_t(gps->getAltitude()));
-            if (gpsFormat == GpsCoordinateFormat_GpsFormatDec) { // Decimal Degrees
+            if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_GpsFormatDec) { // Decimal Degrees
                 sprintf(coordinateLine, "%f %f", geoCoord.getLatitude() * 1e-7, geoCoord.getLongitude() * 1e-7);
-            } else if (gpsFormat == GpsCoordinateFormat_GpsFormatUTM) { // Universal Transverse Mercator
+            } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_GpsFormatUTM) { // Universal Transverse Mercator
                 sprintf(coordinateLine, "%2i%1c %06u %07u", geoCoord.getUTMZone(), geoCoord.getUTMBand(),
                         geoCoord.getUTMEasting(), geoCoord.getUTMNorthing());
-            } else if (gpsFormat == GpsCoordinateFormat_GpsFormatMGRS) { // Military Grid Reference System
+            } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_GpsFormatMGRS) { // Military Grid Reference System
                 sprintf(coordinateLine, "%2i%1c %1c%1c %05u %05u", geoCoord.getMGRSZone(), geoCoord.getMGRSBand(),
                         geoCoord.getMGRSEast100k(), geoCoord.getMGRSNorth100k(), geoCoord.getMGRSEasting(),
                         geoCoord.getMGRSNorthing());
-            } else if (gpsFormat == GpsCoordinateFormat_GpsFormatOLC) { // Open Location Code
+            } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_GpsFormatOLC) { // Open Location Code
                 geoCoord.getOLCCode(coordinateLine);
-            } else if (gpsFormat == GpsCoordinateFormat_GpsFormatOSGR) {              // Ordnance Survey Grid Reference
+            } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_GpsFormatOSGR) { // Ordnance Survey Grid Reference
                 if (geoCoord.getOSGRE100k() == 'I' || geoCoord.getOSGRN100k() == 'I') // OSGR is only valid around the UK region
                     sprintf(coordinateLine, "%s", "Out of Boundary");
                 else
@@ -557,7 +557,7 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
             }
 
             // If fixed position, display text "Fixed GPS" alternating with the coordinates.
-            if (radioConfig.preferences.fixed_position) {
+            if (config.payloadVariant.position.fixed_position) {
                 if ((millis() / 10000) % 2) {
                     display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
                 } else {
@@ -994,7 +994,7 @@ int32_t Screen::runOnce()
     }
 
 #ifndef DISABLE_WELCOME_UNSET
-    if (showingNormalScreen && radioConfig.preferences.region == RegionCode_Unset) {
+    if (showingNormalScreen && config.payloadVariant.lora.region == Config_LoRaConfig_RegionCode_Unset) {
         setWelcomeFrames();
     }
 #endif
@@ -1067,8 +1067,8 @@ int32_t Screen::runOnce()
     // standard screen switching is stopped.
     if (showingNormalScreen) {
         // standard screen loop handling here
-        if (radioConfig.preferences.auto_screen_carousel_secs > 0 &&
-            (millis() - lastScreenTransition) > (radioConfig.preferences.auto_screen_carousel_secs * 1000)) {
+        if (config.payloadVariant.display.auto_screen_carousel_secs > 0 &&
+            (millis() - lastScreenTransition) > (config.payloadVariant.display.auto_screen_carousel_secs * 1000)) {
             DEBUG_MSG("LastScreenTransition exceeded %ums transitioning to next frame\n", (millis() - lastScreenTransition));
             handleOnPress();
         }
@@ -1343,8 +1343,8 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
 #ifdef HAS_WIFI
-    const char *wifiName = radioConfig.preferences.wifi_ssid;
-    const char *wifiPsw = radioConfig.preferences.wifi_password;
+    const char *wifiName = config.payloadVariant.wifi.ssid;
+    const char *wifiPsw = config.payloadVariant.wifi.psk;
 
     displayedNodeNum = 0; // Not currently showing a node pane
 
@@ -1355,7 +1355,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
     if (isSoftAPForced()) {
         display->drawString(x, y, String("WiFi: Software AP (Admin)"));
-    } else if (radioConfig.preferences.wifi_ap_mode) {
+    } else if (config.payloadVariant.wifi.ap_mode) {
         display->drawString(x, y, String("WiFi: Software AP"));
     } else if (WiFi.status() != WL_CONNECTED) {
         display->drawString(x, y, String("WiFi: Not Connected"));
@@ -1378,8 +1378,8 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
     - WL_NO_SHIELD: assigned when no WiFi shield is present;
 
     */
-    if (WiFi.status() == WL_CONNECTED || isSoftAPForced() || radioConfig.preferences.wifi_ap_mode) {
-        if (radioConfig.preferences.wifi_ap_mode || isSoftAPForced()) {
+    if (WiFi.status() == WL_CONNECTED || isSoftAPForced() || config.payloadVariant.wifi.ap_mode) {
+        if (config.payloadVariant.wifi.ap_mode || isSoftAPForced()) {
             display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IP: " + String(WiFi.softAPIP().toString().c_str()));
 
             // Number of connections to the AP. Default max for the esp32 is 4
@@ -1471,7 +1471,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         }
 
     } else {
-        if (radioConfig.preferences.wifi_ap_mode) {
+        if (config.payloadVariant.wifi.ap_mode) {
             if ((millis() / 10000) % 2) {
                 display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
             } else {
@@ -1518,28 +1518,26 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 
     auto mode = "";
 
-    Config_LoRaConfig &loraConfig = config.payloadVariant.lora_config;
-
-    switch (loraConfig.modem_config) {
-    case Config_LoRaConfig_ModemConfig_ShortSlow:
+    switch (config.payloadVariant.lora.modem_preset) {
+    case Config_LoRaConfig_ModemPreset_ShortSlow:
         mode = "ShortSlow";
         break;
-    case Config_LoRaConfig_ModemConfig_ShortFast:
+    case Config_LoRaConfig_ModemPreset_ShortFast:
         mode = "ShortFast";
         break;
-    case Config_LoRaConfig_ModemConfig_MidSlow:
+    case Config_LoRaConfig_ModemPreset_MidSlow:
         mode = "MediumSlow";
         break;
-    case Config_LoRaConfig_ModemConfig_MidFast:
+    case Config_LoRaConfig_ModemPreset_MidFast:
         mode = "MediumFast";
         break;
-    case Config_LoRaConfig_ModemConfig_LongFast:
+    case Config_LoRaConfig_ModemPreset_LongFast:
         mode = "LongFast";
         break;
-    case Config_LoRaConfig_ModemConfig_LongSlow:
+    case Config_LoRaConfig_ModemPreset_LongSlow:
         mode = "LongSlow";
         break;
-    case Config_LoRaConfig_ModemConfig_VLongSlow:
+    case Config_LoRaConfig_ModemPreset_VLongSlow:
         mode = "VLongSlow";
         break;
     default:
@@ -1597,7 +1595,8 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), y + FONT_HEIGHT_SMALL * 1, chUtil);
 
     // Line 3
-    if (radioConfig.preferences.gps_format != GpsCoordinateFormat_GpsFormatDMS) // if DMS then don't draw altitude
+    if (config.payloadVariant.display.gps_format !=
+        Config_DisplayConfig_GpsCoordinateFormat_GpsFormatDMS) // if DMS then don't draw altitude
         drawGPSAltitude(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
 
     // Line 4

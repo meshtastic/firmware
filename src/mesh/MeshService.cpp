@@ -181,7 +181,8 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
     }
 }
 
-void MeshService::sendToPhone(MeshPacket *p) {
+void MeshService::sendToPhone(MeshPacket *p)
+{
     if (toPhoneQueue.numFree() == 0) {
         DEBUG_MSG("NOTE: tophone queue is full, discarding oldest\n");
         MeshPacket *d = toPhoneQueue.dequeuePtr(0);
@@ -235,7 +236,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
 #ifdef GPS_EXTRAVERBOSE
         DEBUG_MSG("onGPSchanged() - lost validLocation\n");
 #endif
-        if (radioConfig.preferences.fixed_position) {
+        if (config.payloadVariant.position.fixed_position) {
             DEBUG_MSG("WARNING: Using fixed position\n");
             pos = node->position;
         }
@@ -247,8 +248,8 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
     pos.time = getValidTime(RTCQualityGPS);
 
     // In debug logs, identify position by @timestamp:stage (stage 4 = nodeDB)
-    DEBUG_MSG("onGPSChanged() pos@%x, time=%u, lat=%d, lon=%d, alt=%d\n", 
-                pos.pos_timestamp, pos.time, pos.latitude_i, pos.longitude_i, pos.altitude);
+    DEBUG_MSG("onGPSChanged() pos@%x, time=%u, lat=%d, lon=%d, alt=%d\n", pos.pos_timestamp, pos.time, pos.latitude_i,
+              pos.longitude_i, pos.altitude);
 
     // Update our current position in the local DB
     nodeDB.updatePosition(nodeDB.getNodeNum(), pos, RX_SRC_LOCAL);
