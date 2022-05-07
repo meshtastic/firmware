@@ -159,9 +159,15 @@ uint32_t RadioInterface::getPacketTime(MeshPacket *p)
 uint32_t RadioInterface::getRetransmissionMsec(const MeshPacket *p)
 {
     assert(shortPacketMsec); // Better be non zero
-
-    // was 20 and 22 secs respectively, but now with shortPacketMsec as 2269, this should give the same range
-    return random(9 * shortPacketMsec, 10 * shortPacketMsec);
+    static uint8_t bytes[MAX_RHPACKETLEN];
+    size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), Data_fields, &p->decoded);
+    uint32_t packetAirtime = getPacketTime(numbytes + sizeof(PacketHeader));
+    uint32_t tCADmsec = 2 * (1 << sf) / bw; // duration of CAD is roughly 2 symbols according to SX127x datasheet 
+    /* Make sure enough time has elapsed for this packet to be sent and an ACK is received. 
+     * Right now we have to wait until another node floods the same packet, as that is our implicit ACK.
+     * TODO: Revise when want_ack will be used (right now it is always set to 0 afterwards).
+     */
+    return 2*packetAirtime + 2*MIN_TX_WAIT_MSEC + shortPacketMsec + shortPacketMsec*2 + PROCESSING_TIME_MSEC + 2*tCADmsec;
 }
 
 /** The delay to use when we want to send something but the ether is busy */
