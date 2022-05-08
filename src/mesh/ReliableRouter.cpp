@@ -150,7 +150,7 @@ bool ReliableRouter::stopRetransmission(GlobalPacketId key)
     if (old) {
         auto numErased = pending.erase(key);
         assert(numErased == 1);
-        packetPool.release(old->packet);
+        cancelSending(getFrom(old->packet), old->packet->id);
         return true;
     } else
         return false;
