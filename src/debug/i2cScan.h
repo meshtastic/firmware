@@ -34,6 +34,7 @@ uint8_t oled_probe(byte addr)
 void scanI2Cdevice(void)
 {
     byte err, addr;
+    uint8_t r = 0x00;
     int nDevices = 0;
     for (addr = 1; addr < 127; addr++) {
         Wire.beginTransmission(addr);
@@ -72,7 +73,22 @@ void scanI2Cdevice(void)
 #endif
             if (addr == CARDKB_ADDR) {
                 cardkb_found = addr;
-                DEBUG_MSG("m5 cardKB found\n");
+                // Do we have the RAK14006 instead?
+                Wire.beginTransmission(addr);
+                Wire.write(0x04); // SENSOR_GET_VERSION
+                Wire.endTransmission();
+                delay(20);
+                Wire.requestFrom((int)addr, 1);
+                if (Wire.available()) {
+                    r = Wire.read();
+                }
+                if (r == 0x02) { // KEYPAD_VERSION
+                    DEBUG_MSG("RAK14004 found\n");
+                    kb_model = 0x02;
+                } else {
+                    DEBUG_MSG("m5 cardKB found\n");
+                    kb_model = 0x00;
+                }
             }
             if (addr == FACESKB_ADDR) {
                 faceskb_found = addr;
