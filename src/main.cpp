@@ -75,6 +75,8 @@ uint8_t screen_model;
 
 // The I2C address of the cardkb or RAK14004 (if found)
 uint8_t cardkb_found;
+// 0x02 for RAK14004 and 0x00 for cardkb
+uint8_t kb_model;
 
 // The I2C address of the Faces Keyboard (if found)
 uint8_t faceskb_found;
@@ -295,7 +297,7 @@ void setup()
 
         // Don't call screen setup until after nodedb is setup (because we need
         // the current region name)
-#if defined(ST7735_CS) || defined(HAS_EINK)
+#if defined(ST7735_CS) || defined(HAS_EINK) || defined(ILI9341_DRIVER)
     screen->setup();
 #else
     if (screen_found)
