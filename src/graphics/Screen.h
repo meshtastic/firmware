@@ -313,7 +313,7 @@ class Screen : public concurrency::OSThread
     SH1106Wire dispdev;
 #elif defined(USE_SSD1306)
     SSD1306Wire dispdev;
-#elif defined(ST7735_CS)
+#elif defined(ST7735_CS) || defined(ILI9341_DRIVER)
     TFTDisplay dispdev;
 #elif defined(HAS_EINK)
     EInkDisplay dispdev;
