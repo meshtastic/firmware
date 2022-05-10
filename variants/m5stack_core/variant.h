@@ -10,6 +10,9 @@
 
 #define BUTTON_PIN 38
 
+#define PIN_BUZZER 25
+#define TONE_PIN_CHANNEL 0
+
 #undef RF95_SCK
 #undef RF95_MISO
 #undef RF95_MOSI
@@ -31,8 +34,6 @@
 #undef GPS_TX_PIN
 #define GPS_RX_PIN 16
 #define GPS_TX_PIN 17
-
-#define NO_GPS
 
 // Define if screen should be mirrored left to right
 #define SCREEN_ROTATE
