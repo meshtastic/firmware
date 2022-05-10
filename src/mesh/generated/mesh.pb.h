@@ -65,6 +65,10 @@ typedef enum _HardwareModel {
     HardwareModel_NANO_G1 = 41, 
     /* nRF52840 Dongle : https://www.nordicsemi.com/Products/Development-hardware/nrf52840-dongle/ */
     HardwareModel_NRF52840_PCA10059 = 42, 
+    /* Custom Disaster Radio esp32 v3 device https://github.com/sudomesh/disaster-radio/tree/master/hardware/board_esp32_v3 */
+    HardwareModel_DR_DEV = 43, 
+    /* M5 esp32 based MCU modules with enclosure, TFT and LORA Shields. All Variants (Basic, Core, Fire, Core2, Paper) https://m5stack.com/ */
+    HardwareModel_M5STACK = 44, 
     /* Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits. */
     HardwareModel_PRIVATE_HW = 255 
 } HardwareModel;
@@ -231,6 +235,11 @@ typedef enum _LogRecord_Level {
 } LogRecord_Level;
 
 /* Struct definitions */
+typedef struct _Compressed { 
+    PortNum portnum; 
+    pb_callback_t data; 
+} Compressed;
+
 /* Location of a waypoint to associate with a message */
 typedef struct _Location { 
     /* Id of the location */
@@ -397,8 +406,11 @@ typedef struct _RouteDiscovery {
     uint32_t route[8]; 
 } RouteDiscovery;
 
+/* Compressed message payload */
 typedef struct _ToRadio_PeerInfo { 
+    /* PortNum to determine the how to handle the compressed payload. */
     uint32_t app_version; 
+    /* Compressed data. */
     bool mqtt_gateway; 
 } ToRadio_PeerInfo;
 
@@ -707,6 +719,7 @@ extern "C" {
 #define FromRadio_init_default                   {0, 0, {MyNodeInfo_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
 #define ToRadio_PeerInfo_init_default            {0, 0}
+#define Compressed_init_default                  {_PortNum_MIN, {{NULL}, NULL}}
 #define Position_init_zero                       {0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define User_init_zero                           {"", "", "", {0}, _HardwareModel_MIN, 0, 0, 0, 0}
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
@@ -720,8 +733,11 @@ extern "C" {
 #define FromRadio_init_zero                      {0, 0, {MyNodeInfo_init_zero}}
 #define ToRadio_init_zero                        {0, {MeshPacket_init_zero}}
 #define ToRadio_PeerInfo_init_zero               {0, 0}
+#define Compressed_init_zero                     {_PortNum_MIN, {{NULL}, NULL}}
 
 /* Field tags (for use in manual encoding/decoding) */
+#define Compressed_portnum_tag                   1
+#define Compressed_data_tag                      2
 #define Location_id_tag                          1
 #define Location_latitude_i_tag                  2
 #define Location_longitude_i_tag                 3
@@ -995,6 +1011,12 @@ X(a, STATIC,   SINGULAR, BOOL,     mqtt_gateway,      2)
 #define ToRadio_PeerInfo_CALLBACK NULL
 #define ToRadio_PeerInfo_DEFAULT NULL
 
+#define Compressed_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    portnum,           1) \
+X(a, CALLBACK, SINGULAR, BYTES,    data,              2)
+#define Compressed_CALLBACK pb_default_field_callback
+#define Compressed_DEFAULT NULL
+
 extern const pb_msgdesc_t Position_msg;
 extern const pb_msgdesc_t User_msg;
 extern const pb_msgdesc_t RouteDiscovery_msg;
@@ -1008,6 +1030,7 @@ extern const pb_msgdesc_t LogRecord_msg;
 extern const pb_msgdesc_t FromRadio_msg;
 extern const pb_msgdesc_t ToRadio_msg;
 extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
+extern const pb_msgdesc_t Compressed_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define Position_fields &Position_msg
@@ -1023,8 +1046,10 @@ extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 #define FromRadio_fields &FromRadio_msg
 #define ToRadio_fields &ToRadio_msg
 #define ToRadio_PeerInfo_fields &ToRadio_PeerInfo_msg
+#define Compressed_fields &Compressed_msg
 
 /* Maximum encoded size of messages (where known) */
+/* Compressed_size depends on runtime parameters */
 #define Data_size                                296
 #define FromRadio_size                           356
 #define Location_size                            24

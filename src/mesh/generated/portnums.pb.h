@@ -29,8 +29,7 @@ typedef enum _PortNum {
     PortNum_UNKNOWN_APP = 0, 
     /* A simple UTF-8 text message, which even the little micros in the mesh
  can understand and show on their screen eventually in some circumstances
- even signal might send messages in this form (see below)
- Formerly called CLEAR_TEXT */
+ even signal might send messages in this form (see below) */
     PortNum_TEXT_MESSAGE_APP = 1, 
     /* Reserved for built-in GPIO/example app.
  See remote_hardware.proto/HardwareMessage for details on the message sent/received to this port number */
@@ -70,6 +69,8 @@ typedef enum _PortNum {
  Maintained by Github user a-f-G-U-C (a Meshtastic contributor)
  Project files at https://github.com/a-f-G-U-C/Meshtastic-ZPS */
     PortNum_ZPS_APP = 68, 
+    /* Compressed payloads. */
+    PortNum_COMPRESSION_APP = 69, 
     /* Private applications should use portnums >= 256.
  To simplify initial development and testing you can use "PRIVATE_APP"
  in your code without needing to rebuild protobuf files (via [regen-protos.sh](https://github.com/meshtastic/Meshtastic-device/blob/master/bin/regen-protos.sh)) */
