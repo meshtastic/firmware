@@ -269,6 +269,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define HW_VENDOR HardwareModel_NRF52840_PCA10059
 
+#elif defined(M5STACK)
+
+#define HW_VENDOR HardwareModel_M5STACK
+
 #elif NRF52_SERIES
 
 #define HW_VENDOR HardwareModel_NRF52_UNKNOWN
