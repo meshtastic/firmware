@@ -281,14 +281,6 @@ typedef struct _MyNodeInfo {
  Not the same as UserPreferences.location_sharing */
     bool has_gps; 
     /* The maximum number of 'software' channels that can be set on this node. */
-    char region[12]; 
-    /* Deprecated! ONLY USED IN DEVICE CODE (for upgrading old 1.0 firmwares) DO NOT READ ELSEWHERE.
- The region code for my radio (US, CN, etc...)
- Note: This string is deprecated.
- The 1.0 builds populate it based on the flashed firmware name.
- But for newer builds this string will be unpopulated (missing/null).
- For those builds you should instead look at the new read/write region enum in UserSettings
- The format of this string was 1.0-US or 1.0-CN etc.. Or empty string if unset. */
     char firmware_version[18]; 
     /* 0.0.5 etc... */
     CriticalErrorCode error_code; 
@@ -714,7 +706,7 @@ extern "C" {
 #define Location_init_default                    {0, 0, 0, 0, 0}
 #define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
 #define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0, false, DeviceMetrics_init_default}
-#define MyNodeInfo_init_default                  {0, 0, "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
+#define MyNodeInfo_init_default                  {0, 0, "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
 #define LogRecord_init_default                   {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_default                   {0, 0, {MyNodeInfo_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
@@ -728,7 +720,7 @@ extern "C" {
 #define Location_init_zero                       {0, 0, 0, 0, 0}
 #define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
 #define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0, false, DeviceMetrics_init_zero}
-#define MyNodeInfo_init_zero                     {0, 0, "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
+#define MyNodeInfo_init_zero                     {0, 0, "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
 #define LogRecord_init_zero                      {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_zero                      {0, 0, {MyNodeInfo_init_zero}}
 #define ToRadio_init_zero                        {0, {MeshPacket_init_zero}}
@@ -749,7 +741,6 @@ extern "C" {
 #define LogRecord_level_tag                      4
 #define MyNodeInfo_my_node_num_tag               1
 #define MyNodeInfo_has_gps_tag                   2
-#define MyNodeInfo_region_tag                    4
 #define MyNodeInfo_firmware_version_tag          6
 #define MyNodeInfo_error_code_tag                7
 #define MyNodeInfo_error_address_tag             8
@@ -954,7 +945,6 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  device_metrics,    6)
 #define MyNodeInfo_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   my_node_num,       1) \
 X(a, STATIC,   SINGULAR, BOOL,     has_gps,           2) \
-X(a, STATIC,   SINGULAR, STRING,   region,            4) \
 X(a, STATIC,   SINGULAR, STRING,   firmware_version,   6) \
 X(a, STATIC,   SINGULAR, UENUM,    error_code,        7) \
 X(a, STATIC,   SINGULAR, UINT32,   error_address,     8) \
@@ -1055,7 +1045,7 @@ extern const pb_msgdesc_t Compressed_msg;
 #define Location_size                            24
 #define LogRecord_size                           81
 #define MeshPacket_size                          347
-#define MyNodeInfo_size                          210
+#define MyNodeInfo_size                          197
 #define NodeInfo_size                            281
 #define Position_size                            142
 #define RouteDiscovery_size                      40

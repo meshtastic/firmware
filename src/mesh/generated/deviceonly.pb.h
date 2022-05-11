@@ -159,7 +159,7 @@ extern const pb_msgdesc_t OEMStore_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define ChannelFile_size                         624
-#define DeviceState_size                         19197
+#define DeviceState_size                         19184
 #define OEMStore_size                            2106
 
 #ifdef __cplusplus
