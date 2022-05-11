@@ -146,6 +146,7 @@ bool NodeDB::resetRadioConfig()
 void NodeDB::installDefaultConfig()
 {
     memset(&config, 0, sizeof(config));
+    config.payloadVariant.device.ntp_server[0] = '0.pool.ntp.org';
 }
 
 void NodeDB::installDefaultModuleConfig()
@@ -172,10 +173,6 @@ void NodeDB::installDefaultChannels()
 
 void NodeDB::installDefaultDeviceState()
 {
-    // We try to preserve the region setting because it will really bum users out if we discard it
-    String oldRegion = myNodeInfo.region;
-    Config_LoRaConfig_RegionCode oldRegionCode = config.payloadVariant.lora.region;
-
     memset(&devicestate, 0, sizeof(devicestate));
 
     *numNodes = 0; // Forget node DB
@@ -202,12 +199,6 @@ void NodeDB::installDefaultDeviceState()
 
     sprintf(owner.id, "!%08x", getNodeNum()); // Default node ID now based on nodenum
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
-
-    // Restore region if possible
-    if (oldRegionCode != Config_LoRaConfig_RegionCode_Unset)
-        config.payloadVariant.lora.region = oldRegionCode;
-    if (oldRegion.length()) // If the old style region was set, try to keep it up-to-date
-        strcpy(myNodeInfo.region, oldRegion.c_str());
 
     installDefaultChannels();
     installDefaultConfig();

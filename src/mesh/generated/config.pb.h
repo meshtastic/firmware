@@ -92,6 +92,7 @@ typedef struct _Config_DeviceConfig {
     bool serial_disabled; 
     bool factory_reset; 
     bool debug_log_enabled; 
+    char ntp_server[33]; 
 } Config_DeviceConfig;
 
 typedef struct _Config_DisplayConfig { 
@@ -194,14 +195,14 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define Config_init_default                      {0, {Config_DeviceConfig_init_default}}
-#define Config_DeviceConfig_init_default         {_Config_DeviceConfig_Role_MIN, 0, 0, 0}
+#define Config_DeviceConfig_init_default         {_Config_DeviceConfig_Role_MIN, 0, 0, 0, ""}
 #define Config_PositionConfig_init_default       {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_default          {_Config_PowerConfig_ChargeCurrent_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_WiFiConfig_init_default           {"", "", 0}
 #define Config_DisplayConfig_init_default        {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0}
 #define Config_LoRaConfig_init_default           {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, {0, 0, 0}}
 #define Config_init_zero                         {0, {Config_DeviceConfig_init_zero}}
-#define Config_DeviceConfig_init_zero            {_Config_DeviceConfig_Role_MIN, 0, 0, 0}
+#define Config_DeviceConfig_init_zero            {_Config_DeviceConfig_Role_MIN, 0, 0, 0, ""}
 #define Config_PositionConfig_init_zero          {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_zero             {_Config_PowerConfig_ChargeCurrent_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_WiFiConfig_init_zero              {"", "", 0}
@@ -213,6 +214,7 @@ extern "C" {
 #define Config_DeviceConfig_serial_disabled_tag  2
 #define Config_DeviceConfig_factory_reset_tag    3
 #define Config_DeviceConfig_debug_log_enabled_tag 4
+#define Config_DeviceConfig_ntp_server_tag       5
 #define Config_DisplayConfig_screen_on_secs_tag  1
 #define Config_DisplayConfig_gps_format_tag      2
 #define Config_DisplayConfig_auto_screen_carousel_secs_tag 3
@@ -279,7 +281,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,lora,payloadVariant.lora),   
 X(a, STATIC,   SINGULAR, UENUM,    role,              1) \
 X(a, STATIC,   SINGULAR, BOOL,     serial_disabled,   2) \
 X(a, STATIC,   SINGULAR, BOOL,     factory_reset,     3) \
-X(a, STATIC,   SINGULAR, BOOL,     debug_log_enabled,   4)
+X(a, STATIC,   SINGULAR, BOOL,     debug_log_enabled,   4) \
+X(a, STATIC,   SINGULAR, STRING,   ntp_server,        5)
 #define Config_DeviceConfig_CALLBACK NULL
 #define Config_DeviceConfig_DEFAULT NULL
 
@@ -359,7 +362,7 @@ extern const pb_msgdesc_t Config_LoRaConfig_msg;
 #define Config_LoRaConfig_fields &Config_LoRaConfig_msg
 
 /* Maximum encoded size of messages (where known) */
-#define Config_DeviceConfig_size                 8
+#define Config_DeviceConfig_size                 42
 #define Config_DisplayConfig_size                14
 #define Config_LoRaConfig_size                   67
 #define Config_PositionConfig_size               40

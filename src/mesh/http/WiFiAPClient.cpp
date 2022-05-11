@@ -28,7 +28,7 @@ DNSServer dnsServer;
 WiFiUDP ntpUDP;
 
 #ifndef DISABLE_NTP
-NTPClient timeClient(ntpUDP, "0.pool.ntp.org");
+NTPClient timeClient(ntpUDP, config.payloadVariant.device.ntp_server);
 #endif
 
 uint8_t wifiDisconnectReason = 0;
