@@ -80,7 +80,6 @@ static int32_t reconnectWiFi()
     }
 
 #ifndef DISABLE_NTP
-    // if (*wifiName) {
     if (WiFi.isConnected()) {
         DEBUG_MSG("Updating NTP time\n");
         if (timeClient.update()) {
@@ -98,7 +97,7 @@ static int32_t reconnectWiFi()
     }
 #endif
 
-    return 30 * 1000; // every 30 seconds
+    return 1024 * 1000; // every 1024 seconds
 }
 
 static Periodic *wifiReconnect;
