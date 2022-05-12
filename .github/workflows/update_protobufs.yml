@@ -29,5 +29,5 @@ jobs:
         uses: peter-evans/create-pull-request@v3
         with:
           add-paths: |
-            proto
+            protobufs
             src/mesh

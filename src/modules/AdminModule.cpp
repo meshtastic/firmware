@@ -171,14 +171,6 @@ void AdminModule::handleSetOwner(const User &o)
         service.reloadOwner();
 }
 
-// void AdminModule::handleSetRadio(RadioConfig &r)
-// {
-//     // writeSecret(r.preferences.wifi_password, radioConfig.preferences.wifi_password);
-//     radioConfig = r;
-
-//     service.reloadConfig();
-// }
-
 void AdminModule::handleSetConfig(const Config &c)
 {
     switch (c.which_payloadVariant) {
@@ -270,29 +262,6 @@ void AdminModule::handleGetOwner(const MeshPacket &req)
     }
 }
 
-// void AdminModule::handleGetRadio(const MeshPacket &req)
-// {
-//     if (req.decoded.want_response) {
-//         // We create the reply here
-//         AdminMessage res = AdminMessage_init_default;
-//         res.get_radio_response = radioConfig;
-
-//         // NOTE: The phone app needs to know the ls_secs & phone_timeout value so it can properly expect sleep behavior.
-//         // So even if we internally use 0 to represent 'use default' we still need to send the value we are
-//         // using to the app (so that even old phone apps work with new device loads).
-//         // res.get_radio_response.preferences.ls_secs = getPref_ls_secs(); //TODO: Re-implement if necceasry
-//         // res.get_radio_response.preferences.phone_timeout_secs = getPref_phone_timeout_secs(); //TODO: Re-implement if
-//         necceasry
-//         // hideSecret(r.get_radio_response.preferences.wifi_ssid); // hmm - leave public for now, because only minimally
-//         private
-//         // and useful for users to know current provisioning)
-//         // hideSecret(res.get_radio_response.preferences.wifi_password);
-
-//         res.which_variant = AdminMessage_get_radio_response_tag;
-//         myReply = allocDataProtobuf(res);
-//     }
-// }
-
 void AdminModule::handleGetConfig(const MeshPacket &req, const uint32_t configType)
 {
     AdminMessage res = AdminMessage_init_default;
@@ -302,22 +271,28 @@ void AdminModule::handleGetConfig(const MeshPacket &req, const uint32_t configTy
         case AdminMessage_ConfigType_DEVICE_CONFIG:
             DEBUG_MSG("Getting config: Device\n");
             res.get_config_response.which_payloadVariant = Config_device_tag;
+            res.get_config_response.payloadVariant.device = config.payloadVariant.device;
             break;
         case AdminMessage_ConfigType_POSITION_CONFIG:
             DEBUG_MSG("Getting config: Position\n");
             res.get_config_response.which_payloadVariant = Config_position_tag;
+            res.get_config_response.payloadVariant.position = config.payloadVariant.position;
             break;
         case AdminMessage_ConfigType_POWER_CONFIG:
             DEBUG_MSG("Getting config: Power\n");
             res.get_config_response.which_payloadVariant = Config_power_tag;
+            res.get_config_response.payloadVariant.power = config.payloadVariant.power;
             break;
         case AdminMessage_ConfigType_WIFI_CONFIG:
             DEBUG_MSG("Getting config: WiFi\n");
             res.get_config_response.which_payloadVariant = Config_wifi_tag;
+            res.get_config_response.payloadVariant.wifi = config.payloadVariant.wifi;
+            writeSecret(res.get_config_response.payloadVariant.wifi.psk, config.payloadVariant.wifi.psk);
             break;
         case AdminMessage_ConfigType_DISPLAY_CONFIG:
             DEBUG_MSG("Getting config: Display\n");
             res.get_config_response.which_payloadVariant = Config_display_tag;
+            res.get_config_response.payloadVariant.display = config.payloadVariant.display;
             break;
         case AdminMessage_ConfigType_LORA_CONFIG:
             DEBUG_MSG("Getting config: LoRa\n");

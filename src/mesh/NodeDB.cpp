@@ -146,7 +146,7 @@ bool NodeDB::resetRadioConfig()
 void NodeDB::installDefaultConfig()
 {
     memset(&config, 0, sizeof(config));
-    config.payloadVariant.device.ntp_server[0] = '0.pool.ntp.org';
+    *config.payloadVariant.device.ntp_server = '0.pool.ntp.org';
 }
 
 void NodeDB::installDefaultModuleConfig()
