@@ -1,4 +1,4 @@
-name: Continuous Integration
+name: CI
 on:
   # # Triggers the workflow on push but only for the master branch
   push:
