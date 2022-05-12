@@ -146,7 +146,7 @@ bool NodeDB::resetRadioConfig()
 void NodeDB::installDefaultConfig()
 {
     memset(&config, 0, sizeof(config));
-    *config.payloadVariant.device.ntp_server = '0.pool.ntp.org';
+    strncpy(config.payloadVariant.device.ntp_server, "0.pool.ntp.org", 32);
 }
 
 void NodeDB::installDefaultModuleConfig()
@@ -281,7 +281,6 @@ void NodeDB::pickNewNodeNum()
 }
 
 static const char *preffile = "/prefs/db.proto";
-static const char *radiofile = "/prefs/radio.proto";
 static const char *configfile = "/prefs/config.proto";
 static const char *moduleConfigfile = "/prefs/module.proto";
 static const char *channelfile = "/prefs/channels.proto";
