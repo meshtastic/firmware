@@ -18,7 +18,8 @@
  This abstraction is used only on the the 'app side' of the world (ie python, javascript and android etc) to show a group of Channels as a (long) URL */
 typedef struct _ChannelSet { 
     /* TODO: REPLACE */
-    pb_callback_t settings; 
+    pb_size_t settings_count;
+    ChannelSettings settings[10]; 
 } ChannelSet;
 
 
@@ -27,16 +28,16 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define ChannelSet_init_default                  {{{NULL}, NULL}}
-#define ChannelSet_init_zero                     {{{NULL}, NULL}}
+#define ChannelSet_init_default                  {0, {ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default}}
+#define ChannelSet_init_zero                     {0, {ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero}}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define ChannelSet_settings_tag                  1
 
 /* Struct field encoding specification for nanopb */
 #define ChannelSet_FIELDLIST(X, a) \
-X(a, CALLBACK, REPEATED, MESSAGE,  settings,          1)
-#define ChannelSet_CALLBACK pb_default_field_callback
+X(a, STATIC,   REPEATED, MESSAGE,  settings,          1)
+#define ChannelSet_CALLBACK NULL
 #define ChannelSet_DEFAULT NULL
 #define ChannelSet_settings_MSGTYPE ChannelSettings
 
@@ -46,7 +47,7 @@ extern const pb_msgdesc_t ChannelSet_msg;
 #define ChannelSet_fields &ChannelSet_msg
 
 /* Maximum encoded size of messages (where known) */
-/* ChannelSet_size depends on runtime parameters */
+#define ChannelSet_size                          630
 
 #ifdef __cplusplus
 } /* extern "C" */
