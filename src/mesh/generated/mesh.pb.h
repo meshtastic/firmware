@@ -235,9 +235,10 @@ typedef enum _LogRecord_Level {
 } LogRecord_Level;
 
 /* Struct definitions */
+typedef PB_BYTES_ARRAY_T(237) Compressed_data_t;
 typedef struct _Compressed { 
     PortNum portnum; 
-    pb_callback_t data; 
+    Compressed_data_t data; 
 } Compressed;
 
 /* Location of a waypoint to associate with a message */
@@ -711,7 +712,7 @@ extern "C" {
 #define FromRadio_init_default                   {0, 0, {MyNodeInfo_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
 #define ToRadio_PeerInfo_init_default            {0, 0}
-#define Compressed_init_default                  {_PortNum_MIN, {{NULL}, NULL}}
+#define Compressed_init_default                  {_PortNum_MIN, {0, {0}}}
 #define Position_init_zero                       {0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define User_init_zero                           {"", "", "", {0}, _HardwareModel_MIN, 0, 0, 0, 0}
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
@@ -725,7 +726,7 @@ extern "C" {
 #define FromRadio_init_zero                      {0, 0, {MyNodeInfo_init_zero}}
 #define ToRadio_init_zero                        {0, {MeshPacket_init_zero}}
 #define ToRadio_PeerInfo_init_zero               {0, 0}
-#define Compressed_init_zero                     {_PortNum_MIN, {{NULL}, NULL}}
+#define Compressed_init_zero                     {_PortNum_MIN, {0, {0}}}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define Compressed_portnum_tag                   1
@@ -1003,8 +1004,8 @@ X(a, STATIC,   SINGULAR, BOOL,     mqtt_gateway,      2)
 
 #define Compressed_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    portnum,           1) \
-X(a, CALLBACK, SINGULAR, BYTES,    data,              2)
-#define Compressed_CALLBACK pb_default_field_callback
+X(a, STATIC,   SINGULAR, BYTES,    data,              2)
+#define Compressed_CALLBACK NULL
 #define Compressed_DEFAULT NULL
 
 extern const pb_msgdesc_t Position_msg;
@@ -1039,7 +1040,7 @@ extern const pb_msgdesc_t Compressed_msg;
 #define Compressed_fields &Compressed_msg
 
 /* Maximum encoded size of messages (where known) */
-/* Compressed_size depends on runtime parameters */
+#define Compressed_size                          243
 #define Data_size                                296
 #define FromRadio_size                           356
 #define Location_size                            24
