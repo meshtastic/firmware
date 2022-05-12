@@ -97,7 +97,7 @@ static int32_t reconnectWiFi()
     }
 #endif
 
-    return 1024 * 1000; // every 1024 seconds
+    return 43200 * 1000; // every 12 hours
 }
 
 static Periodic *wifiReconnect;
