@@ -19,7 +19,7 @@
 typedef struct _ChannelSet { 
     /* TODO: REPLACE */
     pb_size_t settings_count;
-    ChannelSettings settings[10]; 
+    ChannelSettings settings[8]; 
 } ChannelSet;
 
 
@@ -28,8 +28,8 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define ChannelSet_init_default                  {0, {ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default}}
-#define ChannelSet_init_zero                     {0, {ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero}}
+#define ChannelSet_init_default                  {0, {ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default}}
+#define ChannelSet_init_zero                     {0, {ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero}}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define ChannelSet_settings_tag                  1
@@ -47,7 +47,7 @@ extern const pb_msgdesc_t ChannelSet_msg;
 #define ChannelSet_fields &ChannelSet_msg
 
 /* Maximum encoded size of messages (where known) */
-#define ChannelSet_size                          630
+#define ChannelSet_size                          504
 
 #ifdef __cplusplus
 } /* extern "C" */
