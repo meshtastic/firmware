@@ -25,10 +25,9 @@ typedef enum _Config_PositionConfig_PositionFlags {
     Config_PositionConfig_PositionFlags_POS_GEO_SEP = 4, 
     Config_PositionConfig_PositionFlags_POS_DOP = 8, 
     Config_PositionConfig_PositionFlags_POS_HVDOP = 16, 
-    Config_PositionConfig_PositionFlags_POS_BATTERY = 32, 
-    Config_PositionConfig_PositionFlags_POS_SATINVIEW = 64, 
-    Config_PositionConfig_PositionFlags_POS_SEQ_NOS = 128, 
-    Config_PositionConfig_PositionFlags_POS_TIMESTAMP = 256 
+    Config_PositionConfig_PositionFlags_POS_SATINVIEW = 32, 
+    Config_PositionConfig_PositionFlags_POS_SEQ_NOS = 64, 
+    Config_PositionConfig_PositionFlags_POS_TIMESTAMP = 128 
 } Config_PositionConfig_PositionFlags;
 
 typedef enum _Config_PowerConfig_ChargeCurrent { 
