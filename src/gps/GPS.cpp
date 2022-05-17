@@ -25,7 +25,7 @@ static bool didSerialInit;
 bool GPS::getACK(uint8_t c, uint8_t i) {
   uint8_t b;
   uint8_t ack = 0;
-  uint8_t ackP[2] = {c, i};
+  const uint8_t ackP[2] = {c, i};
   uint8_t buf[250];
   unsigned long startTime = millis();
 
@@ -38,14 +38,14 @@ bool GPS::getACK(uint8_t c, uint8_t i) {
   buf[8] = 0x00;
   buf[9] = 0x00;
 
-  for (int i = 2; i < 6; i++) {
-    buf[8] += buf[i];
+  for (int j = 2; j < 6; j++) {
+    buf[8] += buf[j];
     buf[9] += buf[8];
   }
 
-  for (int i = 0; i < 2; i++) {
-    buf[6+i] = ackP[i];
-    buf[8] += buf[6+i];
+  for (int j = 0; j < 2; j++) {
+    buf[6 + j] = ackP[j];
+    buf[8] += buf[6 + j];
     buf[9] += buf[8];
   }
 
