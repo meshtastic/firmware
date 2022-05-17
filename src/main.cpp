@@ -226,10 +226,6 @@ class ButtonThread : public OSThread
 
 #ifdef BUTTON_PIN_TOUCH
         userButtonTouch = OneButton(BUTTON_PIN_TOUCH, true, true);
-#ifdef INPUT_PULLUP_SENSE
-        // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
-        pinMode(BUTTON_PIN_TOUCH, INPUT_PULLUP_SENSE);
-#endif
         userButtonTouch.attachClick(touchPressed);
         userButtonTouch.attachDuringLongPress(touchPressedLong);
         userButtonTouch.attachDoubleClick(touchDoublePressed);
