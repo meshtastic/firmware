@@ -137,6 +137,8 @@ class GPS : private concurrency::OSThread
 
     GpsOperation getGpsOp() const;
 
+    bool getACK(uint8_t cl, uint8_t id);
+
     /**
      * Tell users we have new GPS readings
      */
