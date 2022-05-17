@@ -135,6 +135,8 @@ class GPS : private concurrency::OSThread
      */
     uint32_t getSleepTime() const;
 
+    bool getACK(uint8_t c, uint8_t i);
+
     /**
      * Tell users we have new GPS readings
      */
