@@ -37,12 +37,16 @@ bool GPS::setupGPS()
         _serial_gps->setRxBufferSize(2048); // the default is 256
 #endif
 #ifdef TTGO_T_ECHO
-        // Switch to 4800 baud, then close and reopen port
-        _serial_gps->write("$PCAS01,0*1C\r\n");
-        delay(250);
+        // Switch to 9600 baud, then close and reopen port
         _serial_gps->end();
         delay(250);
         _serial_gps->begin(4800);
+        delay(250);
+        _serial_gps->write("$PCAS01,1*1D\r\n");
+        delay(250);
+        _serial_gps->end();
+        delay(250);
+        _serial_gps->begin(9600);
         delay(250);
         // Initialize the L76K Chip, use GPS + GLONASS
         _serial_gps->write("$PCAS04,5*1C\r\n");
@@ -53,7 +57,6 @@ bool GPS::setupGPS()
         // Switch to Vehicle Mode, since SoftRF enables Aviation < 2g
         _serial_gps->write("$PCAS11,3*1E\r\n");
         delay(250);
-
 #endif
 #ifdef GPS_UBLOX
         // Set the UART port to output NMEA only
