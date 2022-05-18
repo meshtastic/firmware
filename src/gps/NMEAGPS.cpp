@@ -26,8 +26,8 @@ bool NMEAGPS::factoryReset()
             0xFF, 0xFF, 0x00, 0x00, 0x17, 0x2B, 0x7E};
         _serial_gps->write(_message_reset,sizeof(_message_reset));
         delay(1000);
-        return true;
 #endif
+return true;
 }
 
 bool NMEAGPS::setupGPS()
