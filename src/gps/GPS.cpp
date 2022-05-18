@@ -96,12 +96,16 @@ bool GPS::setupGPS()
         delay(250);
 #endif
 #ifdef GPS_UBLOX
+        delay(250);
         // Set the UART port to output NMEA only
         byte _message_nmea[] = {0xB5, 0x62, 0x06, 0x00, 0x14, 0x00,
             0x01, 0x00, 0x00, 0x00, 0xC0, 0x08, 0x00, 0x00, 0x80, 0x25, 0x00, 0x00, 0x07, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x91, 0xAF};
         _serial_gps->write(_message_nmea,sizeof(_message_nmea));
-        
+        if (!getACK(0x06, 0x00)) {
+            DEBUG_MSG("WARNING: Unable to enable NMEA Mode.\n");
+            return true;
+        }        
         // disable GGL
         byte _message_GGL[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00,
             0xF0, 0x01, 0x01, 0x00, 0x01, 0x01, 0x01, 0x01,
@@ -335,6 +339,15 @@ int32_t GPS::runOnce()
     if (whileIdle()) {
         // if we have received valid NMEA claim we are connected
         setConnected();
+    } else {
+#ifdef GPS_UBLOX        
+        // reset the GPS on next bootup
+        if(devicestate.did_gps_reset && (millis() > 60000)) {
+            DEBUG_MSG("GPS is not communicating, trying factory reset on next bootup.\n");
+            devicestate.did_gps_reset = false;
+            nodeDB.saveToDisk();
+        }
+#endif
     }
 
     // If we are overdue for an update, turn on the GPS and at least publish the current status
