@@ -26,17 +26,8 @@ bool GPS::getACK(uint8_t c, uint8_t i) {
   uint8_t b;
   uint8_t ack = 0;
   const uint8_t ackP[2] = {c, i};
-  uint8_t buf[250];
+  uint8_t buf[10] = {0xB5, 0x62, 0x05, 0x01, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00};
   unsigned long startTime = millis();
-
-  buf[0] = 0xB5;
-  buf[1] = 0x62;
-  buf[2] = 0x05;
-  buf[3] = 0x01;
-  buf[4] = 0x02;
-  buf[5] = 0x00;
-  buf[8] = 0x00;
-  buf[9] = 0x00;
 
   for (int j = 2; j < 6; j++) {
     buf[8] += buf[j];
@@ -53,7 +44,7 @@ bool GPS::getACK(uint8_t c, uint8_t i) {
     if (ack > 9) {
       return true;
     }
-    if (millis() - startTime > 2000) {
+    if (millis() - startTime > 1000) {
       return false;
     }
     if (_serial_gps->available()) {
@@ -111,41 +102,56 @@ bool GPS::setupGPS()
             0x91, 0xAF};
         _serial_gps->write(_message_nmea,sizeof(_message_nmea));
         if (!getACK(0x06, 0x00)) DEBUG_MSG("WARNING: Unable to set UART.\n");
-
+        
         // disable GGL
         byte _message_GGL[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00,
             0xF0, 0x01, 0x01, 0x00, 0x01, 0x01, 0x01, 0x01,
             0x05,0x3A};
         _serial_gps->write(_message_GGL,sizeof(_message_GGL));
-        if (!getACK(0x06, 0x01)) DEBUG_MSG("WARNING: Unable to disable NMEA GGL.\n");
+        if (!getACK(0x06, 0x01)) {
+            DEBUG_MSG("WARNING: Unable to disable NMEA GGL.\n");
+            return true;
+        }
 
         // disable GSA
         byte _message_GSA[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00,
             0xF0, 0x02, 0x01, 0x00, 0x01, 0x01, 0x01, 0x01,
             0x06,0x41};
         _serial_gps->write(_message_GSA,sizeof(_message_GSA));
-        if (!getACK(0x06, 0x01)) DEBUG_MSG("WARNING: Unable to disable NMEA GSA.\n");
+        if (!getACK(0x06, 0x01)) {
+            DEBUG_MSG("WARNING: Unable to disable NMEA GSA.\n");
+            return true;
+        }
 
         // disable GSV
         byte _message_GSV[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00,
             0xF0, 0x03, 0x01, 0x00, 0x01, 0x01, 0x01, 0x01,
             0x07,0x48};
         _serial_gps->write(_message_GSV,sizeof(_message_GSV));
-        if (!getACK(0x06, 0x01)) DEBUG_MSG("WARNING: Unable to disable NMEA GSV.\n");
+        if (!getACK(0x06, 0x01)) {
+            DEBUG_MSG("WARNING: Unable to disable NMEA GSV.\n");
+            return true;
+        }
 
         // disable VTG
         byte _message_VTG[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00,
             0xF0, 0x05, 0x01, 0x00, 0x01, 0x01, 0x01, 0x01,
             0x09,0x56};
         _serial_gps->write(_message_VTG,sizeof(_message_VTG));
-        if (!getACK(0x06, 0x01)) DEBUG_MSG("WARNING: Unable to disable NMEA VTG.\n");
+        if (!getACK(0x06, 0x01)) {
+            DEBUG_MSG("WARNING: Unable to disable NMEA VTG.\n");
+            return true;
+        }
 
         // enable RMC
         byte _message_RMC[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00,
             0xF0, 0x04, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
             0x09,0x54};
         _serial_gps->write(_message_RMC,sizeof(_message_RMC));
-        if (!getACK(0x06, 0x01)) DEBUG_MSG("WARNING: Unable to enable NMEA RMC.\n");
+        if (!getACK(0x06, 0x01)) {
+            DEBUG_MSG("WARNING: Unable to enable NMEA RMC.\n");
+            return true;
+        }
 
         // enable GGA
         byte _message_GGA[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00,
