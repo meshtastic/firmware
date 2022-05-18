@@ -567,6 +567,7 @@ void setup()
 
     // ONCE we will factory reset the GPS for bug #327
     if (gps && !devicestate.did_gps_reset) {
+        DEBUG_MSG("GPS FactoryReset requested\n");
         if (gps->factoryReset()) { // If we don't succeed try again next time
             devicestate.did_gps_reset = true;
             nodeDB.saveToDisk();
