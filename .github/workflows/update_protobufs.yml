@@ -13,7 +13,7 @@ jobs:
 
       - name: Update submodule
         run: |
-          git submodule update --remote proto
+          git submodule update --remote protobufs
 
       - name: Download nanopb
         run: |
