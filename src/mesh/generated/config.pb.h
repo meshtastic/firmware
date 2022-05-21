@@ -4,7 +4,6 @@
 #ifndef PB_CONFIG_PB_H_INCLUDED
 #define PB_CONFIG_PB_H_INCLUDED
 #include <pb.h>
-#include "telemetry.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
@@ -118,7 +117,6 @@ typedef struct _Config_PositionConfig {
     uint32_t position_broadcast_secs; 
     bool position_broadcast_smart_disabled; 
     bool fixed_position; 
-    bool location_share_disabled; 
     bool gps_disabled; 
     uint32_t gps_update_interval; 
     uint32_t gps_attempt_time; 
@@ -195,14 +193,14 @@ extern "C" {
 /* Initializer values for message structs */
 #define Config_init_default                      {0, {Config_DeviceConfig_init_default}}
 #define Config_DeviceConfig_init_default         {_Config_DeviceConfig_Role_MIN, 0, 0, 0, ""}
-#define Config_PositionConfig_init_default       {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define Config_PositionConfig_init_default       {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_default          {_Config_PowerConfig_ChargeCurrent_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_WiFiConfig_init_default           {"", "", 0}
 #define Config_DisplayConfig_init_default        {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0}
 #define Config_LoRaConfig_init_default           {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, {0, 0, 0}}
 #define Config_init_zero                         {0, {Config_DeviceConfig_init_zero}}
 #define Config_DeviceConfig_init_zero            {_Config_DeviceConfig_Role_MIN, 0, 0, 0, ""}
-#define Config_PositionConfig_init_zero          {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define Config_PositionConfig_init_zero          {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_zero             {_Config_PowerConfig_ChargeCurrent_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_WiFiConfig_init_zero              {"", "", 0}
 #define Config_DisplayConfig_init_zero           {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0}
@@ -230,7 +228,6 @@ extern "C" {
 #define Config_PositionConfig_position_broadcast_secs_tag 1
 #define Config_PositionConfig_position_broadcast_smart_disabled_tag 2
 #define Config_PositionConfig_fixed_position_tag 3
-#define Config_PositionConfig_location_share_disabled_tag 4
 #define Config_PositionConfig_gps_disabled_tag   5
 #define Config_PositionConfig_gps_update_interval_tag 6
 #define Config_PositionConfig_gps_attempt_time_tag 7
@@ -289,7 +286,6 @@ X(a, STATIC,   SINGULAR, STRING,   ntp_server,        5)
 X(a, STATIC,   SINGULAR, UINT32,   position_broadcast_secs,   1) \
 X(a, STATIC,   SINGULAR, BOOL,     position_broadcast_smart_disabled,   2) \
 X(a, STATIC,   SINGULAR, BOOL,     fixed_position,    3) \
-X(a, STATIC,   SINGULAR, BOOL,     location_share_disabled,   4) \
 X(a, STATIC,   SINGULAR, BOOL,     gps_disabled,      5) \
 X(a, STATIC,   SINGULAR, UINT32,   gps_update_interval,   6) \
 X(a, STATIC,   SINGULAR, UINT32,   gps_attempt_time,   7) \
@@ -364,7 +360,7 @@ extern const pb_msgdesc_t Config_LoRaConfig_msg;
 #define Config_DeviceConfig_size                 42
 #define Config_DisplayConfig_size                14
 #define Config_LoRaConfig_size                   67
-#define Config_PositionConfig_size               40
+#define Config_PositionConfig_size               38
 #define Config_PowerConfig_size                  55
 #define Config_WiFiConfig_size                   101
 #define Config_size                              103
