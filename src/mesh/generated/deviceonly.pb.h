@@ -5,6 +5,7 @@
 #define PB_DEVICEONLY_PB_H_INCLUDED
 #include <pb.h>
 #include "channel.pb.h"
+#include "config.pb.h"
 #include "mesh.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
@@ -64,6 +65,27 @@ typedef struct _DeviceState {
     bool did_gps_reset; 
 } DeviceState;
 
+typedef struct _LocalConfig { 
+    /* TODO: REPLACE */
+    bool has_device;
+    Config_DeviceConfig device; 
+    /* TODO: REPLACE */
+    bool has_position;
+    Config_PositionConfig position; 
+    /* TODO: REPLACE */
+    bool has_power;
+    Config_PowerConfig power; 
+    /* TODO: REPLACE */
+    bool has_wifi;
+    Config_WiFiConfig wifi; 
+    /* TODO: REPLACE */
+    bool has_display;
+    Config_DisplayConfig display; 
+    /* TODO: REPLACE */
+    bool has_lora;
+    Config_LoRaConfig lora; 
+} LocalConfig;
+
 typedef PB_BYTES_ARRAY_T(2048) OEMStore_oem_icon_bits_t;
 /* This can be used for customizing the firmware distribution. If populated,
  show a secondary bootup screen with cuatom logo and text for 2.5 seconds. */
@@ -95,9 +117,11 @@ extern "C" {
 #define DeviceState_init_default                 {false, MyNodeInfo_init_default, false, User_init_default, 0, {NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default}, 0, {MeshPacket_init_default}, false, MeshPacket_init_default, 0, 0, 0}
 #define ChannelFile_init_default                 {0, {Channel_init_default, Channel_init_default, Channel_init_default, Channel_init_default, Channel_init_default, Channel_init_default, Channel_init_default, Channel_init_default}}
 #define OEMStore_init_default                    {0, 0, {0, {0}}, _ScreenFonts_MIN, ""}
+#define LocalConfig_init_default                 {false, Config_DeviceConfig_init_default, false, Config_PositionConfig_init_default, false, Config_PowerConfig_init_default, false, Config_WiFiConfig_init_default, false, Config_DisplayConfig_init_default, false, Config_LoRaConfig_init_default}
 #define DeviceState_init_zero                    {false, MyNodeInfo_init_zero, false, User_init_zero, 0, {NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero}, 0, {MeshPacket_init_zero}, false, MeshPacket_init_zero, 0, 0, 0}
 #define ChannelFile_init_zero                    {0, {Channel_init_zero, Channel_init_zero, Channel_init_zero, Channel_init_zero, Channel_init_zero, Channel_init_zero, Channel_init_zero, Channel_init_zero}}
 #define OEMStore_init_zero                       {0, 0, {0, {0}}, _ScreenFonts_MIN, ""}
+#define LocalConfig_init_zero                    {false, Config_DeviceConfig_init_zero, false, Config_PositionConfig_init_zero, false, Config_PowerConfig_init_zero, false, Config_WiFiConfig_init_zero, false, Config_DisplayConfig_init_zero, false, Config_LoRaConfig_init_zero}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define ChannelFile_channels_tag                 1
@@ -109,6 +133,12 @@ extern "C" {
 #define DeviceState_version_tag                  8
 #define DeviceState_no_save_tag                  9
 #define DeviceState_did_gps_reset_tag            11
+#define LocalConfig_device_tag                   1
+#define LocalConfig_position_tag                 2
+#define LocalConfig_power_tag                    3
+#define LocalConfig_wifi_tag                     4
+#define LocalConfig_display_tag                  5
+#define LocalConfig_lora_tag                     6
 #define OEMStore_oem_icon_width_tag              1
 #define OEMStore_oem_icon_height_tag             2
 #define OEMStore_oem_icon_bits_tag               3
@@ -148,18 +178,37 @@ X(a, STATIC,   SINGULAR, STRING,   oem_text,          5)
 #define OEMStore_CALLBACK NULL
 #define OEMStore_DEFAULT NULL
 
+#define LocalConfig_FIELDLIST(X, a) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  device,            1) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  position,          2) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  power,             3) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  wifi,              4) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  display,           5) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  lora,              6)
+#define LocalConfig_CALLBACK NULL
+#define LocalConfig_DEFAULT NULL
+#define LocalConfig_device_MSGTYPE Config_DeviceConfig
+#define LocalConfig_position_MSGTYPE Config_PositionConfig
+#define LocalConfig_power_MSGTYPE Config_PowerConfig
+#define LocalConfig_wifi_MSGTYPE Config_WiFiConfig
+#define LocalConfig_display_MSGTYPE Config_DisplayConfig
+#define LocalConfig_lora_MSGTYPE Config_LoRaConfig
+
 extern const pb_msgdesc_t DeviceState_msg;
 extern const pb_msgdesc_t ChannelFile_msg;
 extern const pb_msgdesc_t OEMStore_msg;
+extern const pb_msgdesc_t LocalConfig_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define DeviceState_fields &DeviceState_msg
 #define ChannelFile_fields &ChannelFile_msg
 #define OEMStore_fields &OEMStore_msg
+#define LocalConfig_fields &LocalConfig_msg
 
 /* Maximum encoded size of messages (where known) */
 #define ChannelFile_size                         624
 #define DeviceState_size                         19184
+#define LocalConfig_size                         329
 #define OEMStore_size                            2106
 
 #ifdef __cplusplus
