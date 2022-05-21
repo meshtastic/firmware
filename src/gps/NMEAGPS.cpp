@@ -235,6 +235,10 @@ bool NMEAGPS::hasLock()
     return false;
 }
 
+bool NMEAGPS::hasFlow()
+{
+    return reader.passedChecksum() > 0;
+}
 
 bool NMEAGPS::whileIdle()
 {

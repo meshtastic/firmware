@@ -610,7 +610,7 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 
     // data->wifi
     String ipStr;
-    if (config.payloadVariant.wifi.ap_mode || isSoftAPForced()) {
+    if (config.wifi.ap_mode || isSoftAPForced()) {
         ipStr = String(WiFi.softAPIP().toString());
     } else {
         ipStr = String(WiFi.localIP().toString());

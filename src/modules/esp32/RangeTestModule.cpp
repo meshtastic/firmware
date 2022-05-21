@@ -71,7 +71,7 @@ int32_t RangeTestModule::runOnce()
                 DEBUG_MSG("gpsStatus->getHasLock()      %d\n", gpsStatus->getHasLock());
                 DEBUG_MSG("gpsStatus->getDOP()          %d\n", gpsStatus->getDOP());
                 DEBUG_MSG("gpsStatus->getHasLock()      %d\n", gpsStatus->getHasLock());
-                DEBUG_MSG("pref.fixed_position()        %d\n", config.payloadVariant.position.fixed_position);
+                DEBUG_MSG("pref.fixed_position()        %d\n", config.position.fixed_position);
 
                 // Only send packets if the channel is less than 25% utilized.
                 if (airTime->channelUtilizationPercent() < 25) {
