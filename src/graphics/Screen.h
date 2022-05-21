@@ -196,12 +196,12 @@ class Screen : public concurrency::OSThread
             SKIPREST = false;
 
             // map UTF-8 cyrillic chars to it Windows-1251 (CP-1251) ASCII codes
+            if (ch == 129) return (uint8_t)(168); // Ё
+            if (ch == 145) return (uint8_t)(184); // ё
             if (ch > 143 && ch < 192) return (uint8_t)(ch + 48);
             if (ch > 127 && ch < 144) return (uint8_t)(ch + 112);
-            if (ch == 101) return (uint8_t)(168); // Ё
-            if (ch == 145) return (uint8_t)(184); // ё
 
-            return ch;
+            if (ch != 0xD0 && ch != 0xD1) return ch;
         }
 
         uint8_t last = LASTCHAR; // get last char
