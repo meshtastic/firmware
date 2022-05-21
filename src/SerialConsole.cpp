@@ -45,8 +45,8 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port)
 bool SerialConsole::checkIsConnected()
 {
     uint32_t now = millis();
-    return (now - lastContactMsec) < config.payloadVariant.power.phone_timeout_secs
-               ? config.payloadVariant.power.phone_timeout_secs
+    return (now - lastContactMsec) < config.power.phone_timeout_secs
+               ? config.power.phone_timeout_secs
                : default_phone_timeout_secs * 1000UL;
 }
 
@@ -57,7 +57,7 @@ bool SerialConsole::checkIsConnected()
 bool SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
 {
     // Turn off debug serial printing once the API is activated, because other threads could print and corrupt packets
-    if (!config.payloadVariant.device.debug_log_enabled)
+    if (!config.device.debug_log_enabled)
         setDestination(&noopPrint);
     canWrite = true;
 

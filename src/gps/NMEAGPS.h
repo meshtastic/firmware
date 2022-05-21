@@ -51,4 +51,6 @@ class NMEAGPS : public GPS
     virtual bool lookForLocation() override;
 
     virtual bool hasLock() override;
+
+    virtual bool hasFlow() override;
 };

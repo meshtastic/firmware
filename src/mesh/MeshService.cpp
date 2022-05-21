@@ -236,7 +236,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
 #ifdef GPS_EXTRAVERBOSE
         DEBUG_MSG("onGPSchanged() - lost validLocation\n");
 #endif
-        if (config.payloadVariant.position.fixed_position) {
+        if (config.position.fixed_position) {
             DEBUG_MSG("WARNING: Using fixed position\n");
             pos = node->position;
         }

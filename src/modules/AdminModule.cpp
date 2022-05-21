@@ -176,27 +176,27 @@ void AdminModule::handleSetConfig(const Config &c)
     switch (c.which_payloadVariant) {
     case Config_device_tag:
         DEBUG_MSG("Setting config: Device\n");
-        config.payloadVariant.device = c.payloadVariant.device;
+        config.device = c.payloadVariant.device;
         break;
     case Config_position_tag:
         DEBUG_MSG("Setting config: Position\n");
-        config.payloadVariant.position = c.payloadVariant.position;
+        config.position = c.payloadVariant.position;
         break;
     case Config_power_tag:
         DEBUG_MSG("Setting config: Power\n");
-        config.payloadVariant.power = c.payloadVariant.power;
+        config.power = c.payloadVariant.power;
         break;
     case Config_wifi_tag:
         DEBUG_MSG("Setting config: WiFi\n");
-        config.payloadVariant.wifi = c.payloadVariant.wifi;
+        config.wifi = c.payloadVariant.wifi;
         break;
     case Config_display_tag:
         DEBUG_MSG("Setting config: Display\n");
-        config.payloadVariant.display = c.payloadVariant.display;
+        config.display = c.payloadVariant.display;
         break;
     case Config_lora_tag:
         DEBUG_MSG("Setting config: LoRa\n");
-        config.payloadVariant.lora = c.payloadVariant.lora;
+        config.lora = c.payloadVariant.lora;
         break;
     }
 
@@ -271,33 +271,33 @@ void AdminModule::handleGetConfig(const MeshPacket &req, const uint32_t configTy
         case AdminMessage_ConfigType_DEVICE_CONFIG:
             DEBUG_MSG("Getting config: Device\n");
             res.get_config_response.which_payloadVariant = Config_device_tag;
-            res.get_config_response.payloadVariant.device = config.payloadVariant.device;
+            res.get_config_response.payloadVariant.device = config.device;
             break;
         case AdminMessage_ConfigType_POSITION_CONFIG:
             DEBUG_MSG("Getting config: Position\n");
             res.get_config_response.which_payloadVariant = Config_position_tag;
-            res.get_config_response.payloadVariant.position = config.payloadVariant.position;
+            res.get_config_response.payloadVariant.position = config.position;
             break;
         case AdminMessage_ConfigType_POWER_CONFIG:
             DEBUG_MSG("Getting config: Power\n");
             res.get_config_response.which_payloadVariant = Config_power_tag;
-            res.get_config_response.payloadVariant.power = config.payloadVariant.power;
+            res.get_config_response.payloadVariant.power = config.power;
             break;
         case AdminMessage_ConfigType_WIFI_CONFIG:
             DEBUG_MSG("Getting config: WiFi\n");
             res.get_config_response.which_payloadVariant = Config_wifi_tag;
-            res.get_config_response.payloadVariant.wifi = config.payloadVariant.wifi;
-            writeSecret(res.get_config_response.payloadVariant.wifi.psk, config.payloadVariant.wifi.psk);
+            res.get_config_response.payloadVariant.wifi = config.wifi;
+            writeSecret(res.get_config_response.payloadVariant.wifi.psk, config.wifi.psk);
             break;
         case AdminMessage_ConfigType_DISPLAY_CONFIG:
             DEBUG_MSG("Getting config: Display\n");
             res.get_config_response.which_payloadVariant = Config_display_tag;
-            res.get_config_response.payloadVariant.display = config.payloadVariant.display;
+            res.get_config_response.payloadVariant.display = config.display;
             break;
         case AdminMessage_ConfigType_LORA_CONFIG:
             DEBUG_MSG("Getting config: LoRa\n");
             res.get_config_response.which_payloadVariant = Config_lora_tag;
-            res.get_config_response.payloadVariant.lora = config.payloadVariant.lora;
+            res.get_config_response.payloadVariant.lora = config.lora;
             break;
         }
 

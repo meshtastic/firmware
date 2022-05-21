@@ -357,7 +357,7 @@ bool Power::axp192Init()
             DEBUG_MSG("DCDC3: %s\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
             DEBUG_MSG("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
 
-            switch (config.payloadVariant.power.charge_current) {
+            switch (config.power.charge_current) {
             case Config_PowerConfig_ChargeCurrent_MAUnset:
                 axp.setChargeControlCur(AXP1XX_CHARGE_CUR_450MA);
                 break;

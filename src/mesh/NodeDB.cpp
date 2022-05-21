@@ -34,7 +34,7 @@ NodeDB nodeDB;
 // we have plenty of ram so statically alloc this tempbuf (for now)
 EXT_RAM_ATTR DeviceState devicestate;
 MyNodeInfo &myNodeInfo = devicestate.my_node;
-Config config;
+LocalConfig config;
 ModuleConfig moduleConfig;
 ChannelFile channelFile;
 
@@ -88,7 +88,7 @@ bool NodeDB::resetRadioConfig()
     radioGeneration++;
 
     // radioConfig.has_preferences = true;
-    if (config.payloadVariant.device.factory_reset) {
+    if (config.device.factory_reset) {
         DEBUG_MSG("Performing factory reset!\n");
         installDefaultDeviceState();
 #ifndef NO_ESP32
@@ -126,11 +126,11 @@ bool NodeDB::resetRadioConfig()
         DEBUG_MSG("***** DEVELOPMENT MODE - DO NOT RELEASE *****\n");
 
         // Sleep quite frequently to stress test the BLE comms, broadcast position every 6 mins
-        config.payloadVariant.display.screen_on_secs = 10;
-        config.payloadVariant.power.wait_bluetooth_secs = 10;
-        config.payloadVariant.position.position_broadcast_secs = 6 * 60;
-        config.payloadVariant.power.ls_secs = 60;
-        config.payloadVariant.lora.region = Config_LoRaConfig_RegionCode_TW;
+        config.display.screen_on_secs = 10;
+        config.power.wait_bluetooth_secs = 10;
+        config.position.position_broadcast_secs = 6 * 60;
+        config.power.ls_secs = 60;
+        config.lora.region = Config_LoRaConfig_RegionCode_TW;
 
         // Enter super deep sleep soon and stay there not very long
         // radioConfig.preferences.mesh_sds_timeout_secs = 10;
@@ -145,13 +145,19 @@ bool NodeDB::resetRadioConfig()
 
 void NodeDB::installDefaultConfig()
 {
-    memset(&config, 0, sizeof(config));
-    strncpy(config.payloadVariant.device.ntp_server, "0.pool.ntp.org", 32);
+    memset(&config, 0, sizeof(LocalConfig));
+    config.lora.region = Config_LoRaConfig_RegionCode_Unset;
+    config.lora.modem_preset = Config_LoRaConfig_ModemPreset_LongFast;
+    resetRadioConfig();
+    strncpy(config.device.ntp_server, "0.pool.ntp.org", 32);
+    // for backward compat, default position flags are ALT+MSL
+    config.position.position_flags =
+        (Config_PositionConfig_PositionFlags_POS_ALTITUDE | Config_PositionConfig_PositionFlags_POS_ALT_MSL);
 }
 
 void NodeDB::installDefaultModuleConfig()
 {
-    memset(&moduleConfig, 0, sizeof(moduleConfig));
+    memset(&moduleConfig, 0, sizeof(ModuleConfig));
 }
 
 // void NodeDB::installDefaultRadioConfig()
@@ -161,19 +167,19 @@ void NodeDB::installDefaultModuleConfig()
 //     resetRadioConfig();
 
 //     // for backward compat, default position flags are BAT+ALT+MSL (0x23 = 35)
-//     config.payloadVariant.position.position_flags =
+//     config.position.position_flags =
 //         (Config_PositionConfig_PositionFlags_POS_BATTERY | Config_PositionConfig_PositionFlags_POS_ALTITUDE |
 //          Config_PositionConfig_PositionFlags_POS_ALT_MSL);
 // }
 
 void NodeDB::installDefaultChannels()
 {
-    memset(&channelFile, 0, sizeof(channelFile));
+    memset(&channelFile, 0, sizeof(ChannelFile));
 }
 
 void NodeDB::installDefaultDeviceState()
 {
-    memset(&devicestate, 0, sizeof(devicestate));
+    memset(&devicestate, 0, sizeof(DeviceState));
 
     *numNodes = 0; // Forget node DB
 
@@ -250,7 +256,7 @@ void NodeDB::init()
 
     resetRadioConfig(); // If bogus settings got saved, then fix them
 
-    DEBUG_MSG("region=%d, NODENUM=0x%x, dbsize=%d\n", config.payloadVariant.lora.region, myNodeInfo.my_node_num, *numNodes);
+    DEBUG_MSG("region=%d, NODENUM=0x%x, dbsize=%d\n", config.lora.region, myNodeInfo.my_node_num, *numNodes);
 }
 
 // We reserve a few nodenums for future use
@@ -331,7 +337,7 @@ void NodeDB::loadFromDisk()
         }
     }
 
-    if (!loadProto(configfile, Config_size, sizeof(Config), Config_fields, &config)) {
+    if (!loadProto(configfile, LocalConfig_size, sizeof(LocalConfig), LocalConfig_fields, &config)) {
         installDefaultConfig(); // Our in RAM copy might now be corrupt
     }
 
@@ -366,7 +372,7 @@ bool saveProto(const char *filename, size_t protoSize, size_t objSize, const pb_
         f.close();
 
         // brief window of risk here ;-)
-        if (!FSCom.remove(filename))
+        if (FSCom.exists(filename) && !FSCom.remove(filename))
             DEBUG_MSG("Warning: Can't remove old pref file\n");
         if (!FSCom.rename(filenameTmp.c_str(), filename))
             DEBUG_MSG("Error: can't rename new pref file\n");
@@ -396,7 +402,14 @@ void NodeDB::saveToDisk()
         FSCom.mkdir("/prefs");
 #endif
         saveProto(preffile, DeviceState_size, sizeof(devicestate), DeviceState_fields, &devicestate);
-        saveProto(configfile, Config_size, sizeof(Config), Config_fields, &config);
+        // save all config segments
+        config.has_device = true;
+        config.has_display = true;
+        config.has_lora = true;
+        config.has_position = true;
+        config.has_power = true;
+        config.has_wifi = true;
+        saveProto(configfile, LocalConfig_size, sizeof(LocalConfig), LocalConfig_fields, &config);
         saveProto(moduleConfigfile, Module_Config_size, sizeof(ModuleConfig), ModuleConfig_fields, &moduleConfig);
         saveChannelsToDisk();
 
