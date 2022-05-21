@@ -284,9 +284,8 @@ uint32_t GPS::getSleepTime() const
 {
     uint32_t t = config.payloadVariant.position.gps_update_interval;
     bool gps_disabled = config.payloadVariant.position.gps_disabled;
-    bool loc_share_disabled = config.payloadVariant.position.location_share_disabled;
 
-    if (gps_disabled || loc_share_disabled)
+    if (gps_disabled)
         t = UINT32_MAX; // Sleep forever now
 
     if (t == UINT32_MAX)
