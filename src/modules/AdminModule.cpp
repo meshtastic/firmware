@@ -176,27 +176,27 @@ void AdminModule::handleSetConfig(const Config &c)
     switch (c.which_payloadVariant) {
     case Config_device_tag:
         DEBUG_MSG("Setting config: Device\n");
-        config.payloadVariant.device = c.payloadVariant.device;
+        config.device = c.payloadVariant.device;
         break;
     case Config_position_tag:
         DEBUG_MSG("Setting config: Position\n");
-        config.payloadVariant.position = c.payloadVariant.position;
+        config.position = c.payloadVariant.position;
         break;
     case Config_power_tag:
         DEBUG_MSG("Setting config: Power\n");
-        config.payloadVariant.power = c.payloadVariant.power;
+        config.power = c.payloadVariant.power;
         break;
     case Config_wifi_tag:
         DEBUG_MSG("Setting config: WiFi\n");
-        config.payloadVariant.wifi = c.payloadVariant.wifi;
+        config.wifi = c.payloadVariant.wifi;
         break;
     case Config_display_tag:
         DEBUG_MSG("Setting config: Display\n");
-        config.payloadVariant.display = c.payloadVariant.display;
+        config.display = c.payloadVariant.display;
         break;
     case Config_lora_tag:
         DEBUG_MSG("Setting config: LoRa\n");
-        config.payloadVariant.lora = c.payloadVariant.lora;
+        config.lora = c.payloadVariant.lora;
         break;
     }
 
@@ -208,31 +208,31 @@ void AdminModule::handleSetModuleConfig(const ModuleConfig &c)
     switch (c.which_payloadVariant) {
     case ModuleConfig_mqtt_tag:
         DEBUG_MSG("Setting module config: MQTT\n");
-        moduleConfig.payloadVariant.mqtt = c.payloadVariant.mqtt;
+        moduleConfig.mqtt = c.payloadVariant.mqtt;
         break;
     case ModuleConfig_serial_tag:
         DEBUG_MSG("Setting module config: Serial\n");
-        moduleConfig.payloadVariant.serial = c.payloadVariant.serial;
+        moduleConfig.serial = c.payloadVariant.serial;
         break;
     case ModuleConfig_external_notification_tag:
         DEBUG_MSG("Setting module config: External Notification\n");
-        moduleConfig.payloadVariant.external_notification = c.payloadVariant.external_notification;
+        moduleConfig.external_notification = c.payloadVariant.external_notification;
         break;
     case ModuleConfig_store_forward_tag:
         DEBUG_MSG("Setting module config: Store & Forward\n");
-        moduleConfig.payloadVariant.store_forward = c.payloadVariant.store_forward;
+        moduleConfig.store_forward = c.payloadVariant.store_forward;
         break;
     case ModuleConfig_range_test_tag:
         DEBUG_MSG("Setting module config: Range Test\n");
-        moduleConfig.payloadVariant.range_test = c.payloadVariant.range_test;
+        moduleConfig.range_test = c.payloadVariant.range_test;
         break;
     case ModuleConfig_telemetry_tag:
         DEBUG_MSG("Setting module config: Telemetry\n");
-        moduleConfig.payloadVariant.telemetry = c.payloadVariant.telemetry;
+        moduleConfig.telemetry = c.payloadVariant.telemetry;
         break;
     case ModuleConfig_canned_message_tag:
         DEBUG_MSG("Setting module config: Canned Message\n");
-        moduleConfig.payloadVariant.canned_message = c.payloadVariant.canned_message;
+        moduleConfig.canned_message = c.payloadVariant.canned_message;
         break;
     }
 
@@ -271,33 +271,33 @@ void AdminModule::handleGetConfig(const MeshPacket &req, const uint32_t configTy
         case AdminMessage_ConfigType_DEVICE_CONFIG:
             DEBUG_MSG("Getting config: Device\n");
             res.get_config_response.which_payloadVariant = Config_device_tag;
-            res.get_config_response.payloadVariant.device = config.payloadVariant.device;
+            res.get_config_response.payloadVariant.device = config.device;
             break;
         case AdminMessage_ConfigType_POSITION_CONFIG:
             DEBUG_MSG("Getting config: Position\n");
             res.get_config_response.which_payloadVariant = Config_position_tag;
-            res.get_config_response.payloadVariant.position = config.payloadVariant.position;
+            res.get_config_response.payloadVariant.position = config.position;
             break;
         case AdminMessage_ConfigType_POWER_CONFIG:
             DEBUG_MSG("Getting config: Power\n");
             res.get_config_response.which_payloadVariant = Config_power_tag;
-            res.get_config_response.payloadVariant.power = config.payloadVariant.power;
+            res.get_config_response.payloadVariant.power = config.power;
             break;
         case AdminMessage_ConfigType_WIFI_CONFIG:
             DEBUG_MSG("Getting config: WiFi\n");
             res.get_config_response.which_payloadVariant = Config_wifi_tag;
-            res.get_config_response.payloadVariant.wifi = config.payloadVariant.wifi;
-            writeSecret(res.get_config_response.payloadVariant.wifi.psk, config.payloadVariant.wifi.psk);
+            res.get_config_response.payloadVariant.wifi = config.wifi;
+            writeSecret(res.get_config_response.payloadVariant.wifi.psk, config.wifi.psk);
             break;
         case AdminMessage_ConfigType_DISPLAY_CONFIG:
             DEBUG_MSG("Getting config: Display\n");
             res.get_config_response.which_payloadVariant = Config_display_tag;
-            res.get_config_response.payloadVariant.display = config.payloadVariant.display;
+            res.get_config_response.payloadVariant.display = config.display;
             break;
         case AdminMessage_ConfigType_LORA_CONFIG:
             DEBUG_MSG("Getting config: LoRa\n");
             res.get_config_response.which_payloadVariant = Config_lora_tag;
-            res.get_config_response.payloadVariant.lora = config.payloadVariant.lora;
+            res.get_config_response.payloadVariant.lora = config.lora;
             break;
         }
 
@@ -323,38 +323,38 @@ void AdminModule::handleGetModuleConfig(const MeshPacket &req, const uint32_t co
         case AdminMessage_ModuleConfigType_MQTT_CONFIG:
             DEBUG_MSG("Getting module config: MQTT\n");
             res.get_module_config_response.which_payloadVariant = ModuleConfig_mqtt_tag;
-            res.get_module_config_response.payloadVariant.mqtt = moduleConfig.payloadVariant.mqtt;
+            res.get_module_config_response.payloadVariant.mqtt = moduleConfig.mqtt;
             break;
         case AdminMessage_ModuleConfigType_SERIAL_CONFIG:
             DEBUG_MSG("Getting module config: Serial\n");
             res.get_module_config_response.which_payloadVariant = ModuleConfig_serial_tag;
-            res.get_module_config_response.payloadVariant.serial = moduleConfig.payloadVariant.serial;
+            res.get_module_config_response.payloadVariant.serial = moduleConfig.serial;
             break;
         case AdminMessage_ModuleConfigType_EXTNOTIF_CONFIG:
             DEBUG_MSG("Getting module config: External Notification\n");
             res.get_module_config_response.which_payloadVariant = ModuleConfig_external_notification_tag;
             res.get_module_config_response.payloadVariant.external_notification =
-                moduleConfig.payloadVariant.external_notification;
+                moduleConfig.external_notification;
             break;
         case AdminMessage_ModuleConfigType_STOREFORWARD_CONFIG:
             DEBUG_MSG("Getting module config: Store & Forward\n");
             res.get_module_config_response.which_payloadVariant = ModuleConfig_store_forward_tag;
-            res.get_module_config_response.payloadVariant.store_forward = moduleConfig.payloadVariant.store_forward;
+            res.get_module_config_response.payloadVariant.store_forward = moduleConfig.store_forward;
             break;
         case AdminMessage_ModuleConfigType_RANGETEST_CONFIG:
             DEBUG_MSG("Getting module config: Range Test\n");
             res.get_module_config_response.which_payloadVariant = ModuleConfig_range_test_tag;
-            res.get_module_config_response.payloadVariant.range_test = moduleConfig.payloadVariant.range_test;
+            res.get_module_config_response.payloadVariant.range_test = moduleConfig.range_test;
             break;
         case AdminMessage_ModuleConfigType_TELEMETRY_CONFIG:
             DEBUG_MSG("Getting module config: Telemetry\n");
             res.get_module_config_response.which_payloadVariant = ModuleConfig_telemetry_tag;
-            res.get_module_config_response.payloadVariant.telemetry = moduleConfig.payloadVariant.telemetry;
+            res.get_module_config_response.payloadVariant.telemetry = moduleConfig.telemetry;
             break;
         case AdminMessage_ModuleConfigType_CANNEDMSG_CONFIG:
             DEBUG_MSG("Getting module config: Canned Message\n");
             res.get_module_config_response.which_payloadVariant = ModuleConfig_canned_message_tag;
-            res.get_module_config_response.payloadVariant.canned_message = moduleConfig.payloadVariant.canned_message;
+            res.get_module_config_response.payloadVariant.canned_message = moduleConfig.canned_message;
             break;
         }
 

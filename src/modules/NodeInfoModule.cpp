@@ -69,6 +69,6 @@ int32_t NodeInfoModule::runOnce()
     DEBUG_MSG("Sending our nodeinfo to mesh (wantReplies=%d)\n", requestReplies);
     sendOurNodeInfo(NODENUM_BROADCAST, requestReplies); // Send our info (don't request replies)
 
-    return config.payloadVariant.position.position_broadcast_secs ? config.payloadVariant.position.position_broadcast_secs
+    return config.position.position_broadcast_secs ? config.position.position_broadcast_secs
                                                                   : default_broadcast_interval_secs * 1000;
 }

@@ -12,15 +12,15 @@
 static bool isPowered()
 {
     // Completely circumvents the battery / power sensing logic and assumes constant power source
-    if (config.payloadVariant.power.is_always_powered) {
+    if (config.power.is_always_powered) {
         return true;
     }
 
-    bool isRouter = (config.payloadVariant.device.role == Config_DeviceConfig_Role_Router ? 1 : 0);
+    bool isRouter = (config.device.role == Config_DeviceConfig_Role_Router ? 1 : 0);
 
     // If we are not a router and we already have AC power go to POWER state after init, otherwise go to ON
     // We assume routers might be powered all the time, but from a low current (solar) source
-    bool isLowPower = config.payloadVariant.power.is_low_power || isRouter;
+    bool isLowPower = config.power.is_low_power || isRouter;
 
     /* To determine if we're externally powered, assumptions
         1) If we're powered up and there's no battery, we must be getting power externally. (because we'd be dead otherwise)
@@ -34,7 +34,7 @@ static void sdsEnter()
 {
     DEBUG_MSG("Enter state: SDS\n");
     // FIXME - make sure GPS and LORA radio are off first - because we want close to zero current draw
-    doDeepSleep(config.payloadVariant.power.sds_secs ? config.payloadVariant.power.sds_secs : default_sds_secs * 1000LL);
+    doDeepSleep(config.power.sds_secs ? config.power.sds_secs : default_sds_secs * 1000LL);
 }
 
 extern Power *power;
@@ -52,7 +52,7 @@ static uint32_t secsSlept;
 static void lsEnter()
 {
     DEBUG_MSG("lsEnter begin, ls_secs=%u\n",
-              config.payloadVariant.power.ls_secs ? config.payloadVariant.power.ls_secs : default_ls_secs);
+              config.power.ls_secs ? config.power.ls_secs : default_ls_secs);
     screen->setOn(false);
     secsSlept = 0; // How long have we been sleeping this time
 
@@ -66,7 +66,7 @@ static void lsIdle()
 #ifndef NO_ESP32
 
     // Do we have more sleeping to do?
-    if (secsSlept < config.payloadVariant.power.ls_secs ? config.payloadVariant.power.ls_secs : default_ls_secs * 1000) {
+    if (secsSlept < config.power.ls_secs ? config.power.ls_secs : default_ls_secs * 1000) {
         // Briefly come out of sleep long enough to blink the led once every few seconds
         uint32_t sleepTime = 30;
 
@@ -239,7 +239,7 @@ Fsm powerFSM(&stateBOOT);
 
 void PowerFSM_setup()
 {
-    bool isRouter = (config.payloadVariant.device.role == Config_DeviceConfig_Role_Router ? 1 : 0);
+    bool isRouter = (config.device.role == Config_DeviceConfig_Role_Router ? 1 : 0);
     bool hasPower = isPowered();
 
     DEBUG_MSG("PowerFSM init, USB power=%d\n", hasPower);
@@ -334,7 +334,7 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateON, &stateON, EVENT_FIRMWARE_UPDATE, NULL, "Got firmware update");
 
     powerFSM.add_timed_transition(&stateON, &stateDARK,
-                                  config.payloadVariant.display.screen_on_secs ? config.payloadVariant.display.screen_on_secs
+                                  config.display.screen_on_secs ? config.display.screen_on_secs
                                                                                : 60 * 1000,
                                   NULL, "Screen-on timeout");
 
@@ -347,20 +347,20 @@ void PowerFSM_setup()
     // We never enter light-sleep or NB states on NRF52 (because the CPU uses so little power normally)
 
     // See: https://github.com/meshtastic/Meshtastic-device/issues/1071
-    if (isRouter || config.payloadVariant.power.is_power_saving) {
+    if (isRouter || config.power.is_power_saving) {
 
         // I don't think this transition is correct, turning off for now - @geeksville
         // powerFSM.add_timed_transition(&stateDARK, &stateNB, getPref_phone_timeout_secs() * 1000, NULL, "Phone timeout");
         powerFSM.add_timed_transition(&stateNB, &stateLS,
-                                      config.payloadVariant.power.min_wake_secs ? config.payloadVariant.power.min_wake_secs
+                                      config.power.min_wake_secs ? config.power.min_wake_secs
                                                                                 : default_min_wake_secs * 1000,
                                       NULL, "Min wake timeout");
         powerFSM.add_timed_transition(&stateDARK, &stateLS,
-                                      config.payloadVariant.power.wait_bluetooth_secs
-                                          ? config.payloadVariant.power.wait_bluetooth_secs
+                                      config.power.wait_bluetooth_secs
+                                          ? config.power.wait_bluetooth_secs
                                           : default_wait_bluetooth_secs * 1000,
                                       NULL, "Bluetooth timeout");
-        meshSds = config.payloadVariant.power.mesh_sds_timeout_secs ? config.payloadVariant.power.mesh_sds_timeout_secs
+        meshSds = config.power.mesh_sds_timeout_secs ? config.power.mesh_sds_timeout_secs
                                                                     : default_mesh_sds_timeout_secs;
 
     } else {

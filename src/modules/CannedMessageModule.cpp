@@ -28,7 +28,7 @@ extern bool saveProto(const char *filename, size_t protoSize, size_t objSize, co
 CannedMessageModule::CannedMessageModule()
     : SinglePortModule("canned", PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("CannedMessageModule")
 {
-    if (moduleConfig.payloadVariant.canned_message.enabled) {
+    if (moduleConfig.canned_message.enabled) {
         this->loadProtoForModule();
         if (this->splitConfiguredMessages() <= 0) {
             DEBUG_MSG("CannedMessageModule: No messages are configured. Module is disabled\n");
@@ -91,9 +91,9 @@ int CannedMessageModule::splitConfiguredMessages()
 
 int CannedMessageModule::handleInputEvent(const InputEvent *event)
 {
-    if ((strlen(moduleConfig.payloadVariant.canned_message.allow_input_source) > 0) &&
-        (strcmp(moduleConfig.payloadVariant.canned_message.allow_input_source, event->source) != 0) &&
-        (strcmp(moduleConfig.payloadVariant.canned_message.allow_input_source, "_any") != 0)) {
+    if ((strlen(moduleConfig.canned_message.allow_input_source) > 0) &&
+        (strcmp(moduleConfig.canned_message.allow_input_source, event->source) != 0) &&
+        (strcmp(moduleConfig.canned_message.allow_input_source, "_any") != 0)) {
         // Event source is not accepted.
         // Event only accepted if source matches the configured one, or
         //   the configured one is "_any" (or if there is no configured
@@ -138,7 +138,7 @@ void CannedMessageModule::sendText(NodeNum dest, const char *message, bool wantR
     p->want_ack = true;
     p->decoded.payload.size = strlen(message);
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
-    if (moduleConfig.payloadVariant.canned_message.send_bell) {
+    if (moduleConfig.canned_message.send_bell) {
         p->decoded.payload.bytes[p->decoded.payload.size - 1] = 7; // Bell character
         p->decoded.payload.bytes[p->decoded.payload.size] = '\0';  // Bell character
         p->decoded.payload.size++;
@@ -151,7 +151,7 @@ void CannedMessageModule::sendText(NodeNum dest, const char *message, bool wantR
 
 int32_t CannedMessageModule::runOnce()
 {
-    if ((!moduleConfig.payloadVariant.canned_message.enabled) || (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) ||
+    if ((!moduleConfig.canned_message.enabled) || (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) ||
         (this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE)) {
         return 30000; // TODO: should return MAX_VAL
     }
@@ -214,7 +214,7 @@ const char *CannedMessageModule::getNextMessage()
 }
 bool CannedMessageModule::shouldDraw()
 {
-    if (!moduleConfig.payloadVariant.canned_message.enabled) {
+    if (!moduleConfig.canned_message.enabled) {
         return false;
     }
     return (currentMessageIndex != -1) || (this->runState != CANNED_MESSAGE_RUN_STATE_INACTIVE);
