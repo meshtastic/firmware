@@ -118,8 +118,8 @@ class ButtonThread : public concurrency::OSThread
     {
         // DEBUG_MSG("press!\n");
 #ifdef BUTTON_PIN
-        if ((BUTTON_PIN != moduleConfig.payloadVariant.canned_message.inputbroker_pin_press) ||
-            !moduleConfig.payloadVariant.canned_message.enabled) {
+        if ((BUTTON_PIN != moduleConfig.canned_message.inputbroker_pin_press) ||
+            !moduleConfig.canned_message.enabled) {
             powerFSM.trigger(EVENT_PRESS);
         }
 #endif

@@ -93,8 +93,8 @@ bool RadioLibInterface::canSendImmediately()
 /// bluetooth comms code.  If the txmit queue is empty it might return an error
 ErrorCode RadioLibInterface::send(MeshPacket *p)
 {
-    if (config.payloadVariant.lora.region != Config_LoRaConfig_RegionCode_Unset) {
-        if (disabled || config.payloadVariant.lora.tx_disabled) {
+    if (config.lora.region != Config_LoRaConfig_RegionCode_Unset) {
+        if (disabled || config.lora.tx_disabled) {
             DEBUG_MSG("send - lora_tx_disabled\n");
             packetPool.release(p);
             return ERRNO_DISABLED;
@@ -345,7 +345,7 @@ void RadioLibInterface::handleReceiveInterrupt()
 void RadioLibInterface::startSend(MeshPacket *txp)
 {
     printPacket("Starting low level send", txp);
-    if (disabled || config.payloadVariant.lora.tx_disabled) {
+    if (disabled || config.lora.tx_disabled) {
         DEBUG_MSG("startSend is dropping tx packet because we are disabled\n");
         packetPool.release(txp);
     } else {

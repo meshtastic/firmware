@@ -62,7 +62,7 @@ class GPSStatus : public Status
 
     int32_t getLatitude() const
     {
-        if (config.payloadVariant.position.fixed_position) {
+        if (config.position.fixed_position) {
 #ifdef GPS_EXTRAVERBOSE
             DEBUG_MSG("WARNING: Using fixed latitude\n");
 #endif
@@ -75,7 +75,7 @@ class GPSStatus : public Status
 
     int32_t getLongitude() const
     {
-        if (config.payloadVariant.position.fixed_position) {
+        if (config.position.fixed_position) {
 #ifdef GPS_EXTRAVERBOSE
             DEBUG_MSG("WARNING: Using fixed longitude\n");
 #endif
@@ -88,7 +88,7 @@ class GPSStatus : public Status
 
     int32_t getAltitude() const
     {
-        if (config.payloadVariant.position.fixed_position) {
+        if (config.position.fixed_position) {
 #ifdef GPS_EXTRAVERBOSE
             DEBUG_MSG("WARNING: Using fixed altitude\n");
 #endif

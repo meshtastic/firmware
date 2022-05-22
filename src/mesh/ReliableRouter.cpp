@@ -17,8 +17,8 @@ ErrorCode ReliableRouter::send(MeshPacket *p)
         // message will rebroadcast.  But asking for hop_limit 0 in that context means the client app has no preference on hop
         // counts and we want this message to get through the whole mesh, so use the default.
         if (p->to == NODENUM_BROADCAST && p->hop_limit == 0) {
-            if (config.payloadVariant.lora.hop_limit && config.payloadVariant.lora.hop_limit <= HOP_MAX) {
-                p->hop_limit = (config.payloadVariant.lora.hop_limit >= HOP_MAX) ? HOP_MAX : config.payloadVariant.lora.hop_limit;
+            if (config.lora.hop_limit && config.lora.hop_limit <= HOP_MAX) {
+                p->hop_limit = (config.lora.hop_limit >= HOP_MAX) ? HOP_MAX : config.lora.hop_limit;
             } else {
                 p->hop_limit = HOP_RELIABLE;
             }

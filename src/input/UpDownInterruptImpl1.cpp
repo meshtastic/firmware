@@ -8,14 +8,14 @@ UpDownInterruptImpl1::UpDownInterruptImpl1() : UpDownInterruptBase("upDown1") {}
 void UpDownInterruptImpl1::init()
 {
 
-    if (!moduleConfig.payloadVariant.canned_message.updown1_enabled) {
+    if (!moduleConfig.canned_message.updown1_enabled) {
         // Input device is disabled.
         return;
     }
 
-    uint8_t pinUp = moduleConfig.payloadVariant.canned_message.inputbroker_pin_a;
-    uint8_t pinDown = moduleConfig.payloadVariant.canned_message.inputbroker_pin_b;
-    uint8_t pinPress = moduleConfig.payloadVariant.canned_message.inputbroker_pin_press;
+    uint8_t pinUp = moduleConfig.canned_message.inputbroker_pin_a;
+    uint8_t pinDown = moduleConfig.canned_message.inputbroker_pin_b;
+    uint8_t pinPress = moduleConfig.canned_message.inputbroker_pin_press;
 
     char eventDown = static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_KEY_DOWN);
     char eventUp = static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_KEY_UP);

@@ -353,8 +353,8 @@ static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
 // Ignore messages orginating from phone (from the current node 0x0) unless range test or store and forward module are enabled
 static bool shouldDrawMessage(const MeshPacket *packet)
 {
-    return packet->from != 0 && !moduleConfig.payloadVariant.range_test.enabled &&
-           !moduleConfig.payloadVariant.store_forward.enabled;
+    return packet->from != 0 && !moduleConfig.range_test.enabled &&
+           !moduleConfig.store_forward.enabled;
 }
 
 /// Draw the last text message we received
@@ -468,7 +468,7 @@ static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, NodeStatus *no
 // Draw GPS status summary
 static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
-    if (config.payloadVariant.position.fixed_position) {
+    if (config.position.fixed_position) {
         // GPS coordinates are currently fixed
         display->drawString(x - 1, y - 2, "Fixed GPS");
         return;
@@ -507,10 +507,10 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
 static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
     String displayLine = "";
-    if (!gps->getIsConnected() && !config.payloadVariant.position.fixed_position) {
+    if (!gps->getIsConnected() && !config.position.fixed_position) {
         // displayLine = "No GPS Module";
         // display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
-    } else if (!gps->getHasLock() && !config.payloadVariant.position.fixed_position) {
+    } else if (!gps->getHasLock() && !config.position.fixed_position) {
         // displayLine = "No GPS Lock";
         // display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
@@ -523,13 +523,13 @@ static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GP
 // Draw GPS status coordinates
 static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
-    auto gpsFormat = config.payloadVariant.display.gps_format;
+    auto gpsFormat = config.display.gps_format;
     String displayLine = "";
 
-    if (!gps->getIsConnected() && !config.payloadVariant.position.fixed_position) {
+    if (!gps->getIsConnected() && !config.position.fixed_position) {
         displayLine = "No GPS Module";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
-    } else if (!gps->getHasLock() && !config.payloadVariant.position.fixed_position) {
+    } else if (!gps->getHasLock() && !config.position.fixed_position) {
         displayLine = "No GPS Lock";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
@@ -557,7 +557,7 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
             }
 
             // If fixed position, display text "Fixed GPS" alternating with the coordinates.
-            if (config.payloadVariant.position.fixed_position) {
+            if (config.position.fixed_position) {
                 if ((millis() / 10000) % 2) {
                     display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
                 } else {
@@ -994,7 +994,7 @@ int32_t Screen::runOnce()
     }
 
 #ifndef DISABLE_WELCOME_UNSET
-    if (showingNormalScreen && config.payloadVariant.lora.region == Config_LoRaConfig_RegionCode_Unset) {
+    if (showingNormalScreen && config.lora.region == Config_LoRaConfig_RegionCode_Unset) {
         setWelcomeFrames();
     }
 #endif
@@ -1067,8 +1067,8 @@ int32_t Screen::runOnce()
     // standard screen switching is stopped.
     if (showingNormalScreen) {
         // standard screen loop handling here
-        if (config.payloadVariant.display.auto_screen_carousel_secs > 0 &&
-            (millis() - lastScreenTransition) > (config.payloadVariant.display.auto_screen_carousel_secs * 1000)) {
+        if (config.display.auto_screen_carousel_secs > 0 &&
+            (millis() - lastScreenTransition) > (config.display.auto_screen_carousel_secs * 1000)) {
             DEBUG_MSG("LastScreenTransition exceeded %ums transitioning to next frame\n", (millis() - lastScreenTransition));
             handleOnPress();
         }
@@ -1343,8 +1343,8 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
 #ifdef HAS_WIFI
-    const char *wifiName = config.payloadVariant.wifi.ssid;
-    const char *wifiPsw = config.payloadVariant.wifi.psk;
+    const char *wifiName = config.wifi.ssid;
+    const char *wifiPsw = config.wifi.psk;
 
     displayedNodeNum = 0; // Not currently showing a node pane
 
@@ -1355,7 +1355,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
     if (isSoftAPForced()) {
         display->drawString(x, y, String("WiFi: Software AP (Admin)"));
-    } else if (config.payloadVariant.wifi.ap_mode) {
+    } else if (config.wifi.ap_mode) {
         display->drawString(x, y, String("WiFi: Software AP"));
     } else if (WiFi.status() != WL_CONNECTED) {
         display->drawString(x, y, String("WiFi: Not Connected"));
@@ -1378,8 +1378,8 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
     - WL_NO_SHIELD: assigned when no WiFi shield is present;
 
     */
-    if (WiFi.status() == WL_CONNECTED || isSoftAPForced() || config.payloadVariant.wifi.ap_mode) {
-        if (config.payloadVariant.wifi.ap_mode || isSoftAPForced()) {
+    if (WiFi.status() == WL_CONNECTED || isSoftAPForced() || config.wifi.ap_mode) {
+        if (config.wifi.ap_mode || isSoftAPForced()) {
             display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IP: " + String(WiFi.softAPIP().toString().c_str()));
 
             // Number of connections to the AP. Default max for the esp32 is 4
@@ -1471,7 +1471,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         }
 
     } else {
-        if (config.payloadVariant.wifi.ap_mode) {
+        if (config.wifi.ap_mode) {
             if ((millis() / 10000) % 2) {
                 display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
             } else {
@@ -1518,7 +1518,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 
     auto mode = "";
 
-    switch (config.payloadVariant.lora.modem_preset) {
+    switch (config.lora.modem_preset) {
     case Config_LoRaConfig_ModemPreset_ShortSlow:
         mode = "ShortSlow";
         break;
@@ -1595,7 +1595,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), y + FONT_HEIGHT_SMALL * 1, chUtil);
 
     // Line 3
-    if (config.payloadVariant.display.gps_format !=
+    if (config.display.gps_format !=
         Config_DisplayConfig_GpsCoordinateFormat_GpsFormatDMS) // if DMS then don't draw altitude
         drawGPSAltitude(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
 

@@ -32,7 +32,7 @@ void FloodingRouter::sniffReceived(const MeshPacket *p, const Routing *c)
 
     if ((p->to == NODENUM_BROADCAST) && (p->hop_limit > 0) && (getFrom(p) != getNodeNum())) {
         if (p->id != 0) {
-            if (config.payloadVariant.device.role != Config_DeviceConfig_Role_ClientMute) {
+            if (config.device.role != Config_DeviceConfig_Role_ClientMute) {
                 MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
 
                 tosend->hop_limit--; // bump down the hop count
