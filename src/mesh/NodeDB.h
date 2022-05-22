@@ -11,8 +11,8 @@
 extern DeviceState devicestate;
 extern ChannelFile channelFile;
 extern MyNodeInfo &myNodeInfo;
-extern Config config;
-extern ModuleConfig moduleConfig;
+extern LocalConfig config;
+extern LocalModuleConfig moduleConfig;
 extern User &owner;
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
@@ -161,7 +161,7 @@ extern NodeDB nodeDB;
 // Our delay functions check for this for times that should never expire
 #define NODE_DELAY_FOREVER 0xffffffff
 
-#define IF_ROUTER(routerVal, normalVal) ((config.payloadVariant.device.role == Config_DeviceConfig_Role_Router) ? (routerVal) : (normalVal))
+#define IF_ROUTER(routerVal, normalVal) ((config.device.role == Config_DeviceConfig_Role_Router) ? (routerVal) : (normalVal))
 
 #define default_broadcast_interval_secs IF_ROUTER(12 * 60 * 60, 15 * 60)
 #define default_wait_bluetooth_secs IF_ROUTER(1, 60)

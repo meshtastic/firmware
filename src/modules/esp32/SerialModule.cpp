@@ -76,13 +76,13 @@ int32_t SerialModule::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    // moduleConfig.payloadVariant.serial.enabled = 1;
-    // moduleConfig.payloadVariant.serial.rxd = 35;
-    // moduleConfig.payloadVariant.serial.txd = 15;
-    // moduleConfig.payloadVariant.serial.timeout = 1000;
-    // moduleConfig.payloadVariant.serial.echo = 1;
+    // moduleConfig.serial.enabled = 1;
+    // moduleConfig.serial.rxd = 35;
+    // moduleConfig.serial.txd = 15;
+    // moduleConfig.serial.timeout = 1000;
+    // moduleConfig.serial.echo = 1;
 
-    if (moduleConfig.payloadVariant.serial.enabled) {
+    if (moduleConfig.serial.enabled) {
 
         if (firstTime) {
 
@@ -91,65 +91,65 @@ int32_t SerialModule::runOnce()
 
             uint32_t baud = 0;
 
-            if (moduleConfig.payloadVariant.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_Default) {
+            if (moduleConfig.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_Default) {
                 baud = 38400;
 
-            } else if (moduleConfig.payloadVariant.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_110) {
+            } else if (moduleConfig.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_110) {
                 baud = 110;
 
-            } else if (moduleConfig.payloadVariant.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_300) {
+            } else if (moduleConfig.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_300) {
                 baud = 300;
 
-            } else if (moduleConfig.payloadVariant.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_600) {
+            } else if (moduleConfig.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_600) {
                 baud = 600;
 
-            } else if (moduleConfig.payloadVariant.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_1200) {
+            } else if (moduleConfig.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_1200) {
                 baud = 1200;
 
-            } else if (moduleConfig.payloadVariant.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_2400) {
+            } else if (moduleConfig.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_2400) {
                 baud = 2400;
 
-            } else if (moduleConfig.payloadVariant.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_4800) {
+            } else if (moduleConfig.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_4800) {
                 baud = 4800;
 
-            } else if (moduleConfig.payloadVariant.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_9600) {
+            } else if (moduleConfig.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_9600) {
                 baud = 9600;
 
-            } else if (moduleConfig.payloadVariant.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_19200) {
+            } else if (moduleConfig.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_19200) {
                 baud = 19200;
 
-            } else if (moduleConfig.payloadVariant.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_38400) {
+            } else if (moduleConfig.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_38400) {
                 baud = 38400;
 
-            } else if (moduleConfig.payloadVariant.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_57600) {
+            } else if (moduleConfig.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_57600) {
                 baud = 57600;
 
-            } else if (moduleConfig.payloadVariant.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_115200) {
+            } else if (moduleConfig.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_115200) {
                 baud = 115200;
 
-            } else if (moduleConfig.payloadVariant.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_230400) {
+            } else if (moduleConfig.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_230400) {
                 baud = 230400;
 
-            } else if (moduleConfig.payloadVariant.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_460800) {
+            } else if (moduleConfig.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_460800) {
                 baud = 460800;
 
-            } else if (moduleConfig.payloadVariant.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_576000) {
+            } else if (moduleConfig.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_576000) {
                 baud = 576000;
 
-            } else if (moduleConfig.payloadVariant.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_921600) {
+            } else if (moduleConfig.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_921600) {
                 baud = 921600;
             }
 
-            if (moduleConfig.payloadVariant.serial.rxd && moduleConfig.payloadVariant.serial.txd) {
-                Serial2.begin(baud, SERIAL_8N1, moduleConfig.payloadVariant.serial.rxd, moduleConfig.payloadVariant.serial.txd);
+            if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
+                Serial2.begin(baud, SERIAL_8N1, moduleConfig.serial.rxd, moduleConfig.serial.txd);
 
             } else {
                 Serial2.begin(baud, SERIAL_8N1, RXD2, TXD2);
             }
 
-            if (moduleConfig.payloadVariant.serial.timeout) {
+            if (moduleConfig.serial.timeout) {
                 Serial2.setTimeout(
-                    moduleConfig.payloadVariant.serial.timeout); // Number of MS to wait to set the timeout for the string.
+                    moduleConfig.serial.timeout); // Number of MS to wait to set the timeout for the string.
 
             } else {
                 Serial2.setTimeout(TIMEOUT); // Number of MS to wait to set the timeout for the string.
@@ -211,7 +211,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
 
-    if (moduleConfig.payloadVariant.serial.enabled) {
+    if (moduleConfig.serial.enabled) {
 
         auto &p = mp.decoded;
         // DEBUG_MSG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s\n",
@@ -220,10 +220,10 @@ ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
         if (getFrom(&mp) == nodeDB.getNodeNum()) {
 
             /*
-             * If moduleConfig.payloadVariant.serial.echo is true, then echo the packets that are sent out
+             * If moduleConfig.serial.echo is true, then echo the packets that are sent out
              * back to the TX of the serial interface.
              */
-            if (moduleConfig.payloadVariant.serial.echo) {
+            if (moduleConfig.serial.echo) {
 
                 // For some reason, we get the packet back twice when we send out of the radio.
                 //   TODO: need to find out why.
@@ -237,13 +237,13 @@ ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
 
         } else {
 
-            if (moduleConfig.payloadVariant.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_MODE_Default ||
-                moduleConfig.payloadVariant.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_MODE_SIMPLE) {
+            if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_MODE_Default ||
+                moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_MODE_SIMPLE) {
                 // DEBUG_MSG("* * Message came from the mesh\n");
                 // Serial2.println("* * Message came from the mesh");
                 Serial2.printf("%s", p.payload.bytes);
 
-            } else if (moduleConfig.payloadVariant.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_MODE_PROTO) {
+            } else if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_MODE_PROTO) {
             }
         }
 

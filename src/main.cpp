@@ -148,7 +148,7 @@ void setup()
 #endif
 
 #ifdef DEBUG_PORT
-    if (!config.payloadVariant.device.serial_disabled) {
+    if (!config.device.serial_disabled) {
         consoleInit(); // Set serial baud rate and init our mesh console
     }
 #endif

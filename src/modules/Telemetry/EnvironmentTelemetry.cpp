@@ -50,17 +50,17 @@ int32_t EnvironmentTelemetryModule::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
     /*
-    moduleConfig.payloadVariant.telemetry.environment_measurement_enabled = 1;
-    moduleConfig.payloadVariant.telemetry.environment_screen_enabled = 1;
-    moduleConfig.payloadVariant.telemetry.environment_read_error_count_threshold = 5;
-    moduleConfig.payloadVariant.telemetry.environment_update_interval = 600;
-    moduleConfig.payloadVariant.telemetry.environment_recovery_interval = 60;
-    moduleConfig.payloadVariant.telemetry.environment_sensor_pin = 13; // If one-wire
-    moduleConfig.payloadVariant.telemetry.environment_sensor_type = TelemetrySensorType::TelemetrySensorType_BME280;
+    moduleConfig.telemetry.environment_measurement_enabled = 1;
+    moduleConfig.telemetry.environment_screen_enabled = 1;
+    moduleConfig.telemetry.environment_read_error_count_threshold = 5;
+    moduleConfig.telemetry.environment_update_interval = 600;
+    moduleConfig.telemetry.environment_recovery_interval = 60;
+    moduleConfig.telemetry.environment_sensor_pin = 13; // If one-wire
+    moduleConfig.telemetry.environment_sensor_type = TelemetrySensorType::TelemetrySensorType_BME280;
     */
 
-    if (!(moduleConfig.payloadVariant.telemetry.environment_measurement_enabled ||
-          moduleConfig.payloadVariant.telemetry.environment_screen_enabled)) {
+    if (!(moduleConfig.telemetry.environment_measurement_enabled ||
+          moduleConfig.telemetry.environment_screen_enabled)) {
         // If this module is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
         return (INT32_MAX);
     }
@@ -69,11 +69,11 @@ int32_t EnvironmentTelemetryModule::runOnce()
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = 0;
 
-        if (moduleConfig.payloadVariant.telemetry.environment_measurement_enabled) {
+        if (moduleConfig.telemetry.environment_measurement_enabled) {
             DEBUG_MSG("Environment Telemetry: Initializing\n");
             // it's possible to have this module enabled, only for displaying values on the screen.
             // therefore, we should only enable the sensor loop if measurement is also enabled
-            switch (moduleConfig.payloadVariant.telemetry.environment_sensor_type) {
+            switch (moduleConfig.telemetry.environment_sensor_type) {
 
             case TelemetrySensorType_DHT11:
             case TelemetrySensorType_DHT12:
@@ -97,35 +97,35 @@ int32_t EnvironmentTelemetryModule::runOnce()
         return (INT32_MAX);
     } else {
         // if we somehow got to a second run of this module with measurement disabled, then just wait forever
-        if (!moduleConfig.payloadVariant.telemetry.environment_measurement_enabled)
+        if (!moduleConfig.telemetry.environment_measurement_enabled)
             return (INT32_MAX);
         // this is not the first time OSThread library has called this function
         // so just do what we intend to do on the interval
-        if (sensor_read_error_count > moduleConfig.payloadVariant.telemetry.environment_read_error_count_threshold) {
-            if (moduleConfig.payloadVariant.telemetry.environment_recovery_interval > 0) {
+        if (sensor_read_error_count > moduleConfig.telemetry.environment_read_error_count_threshold) {
+            if (moduleConfig.telemetry.environment_recovery_interval > 0) {
                 DEBUG_MSG("Environment Telemetry: TEMPORARILY DISABLED; The "
                           "telemetry_module_environment_read_error_count_threshold has been exceed: %d. Will retry reads in "
                           "%d seconds\n",
-                          moduleConfig.payloadVariant.telemetry.environment_read_error_count_threshold,
-                          moduleConfig.payloadVariant.telemetry.environment_recovery_interval);
+                          moduleConfig.telemetry.environment_read_error_count_threshold,
+                          moduleConfig.telemetry.environment_recovery_interval);
                 sensor_read_error_count = 0;
-                return (moduleConfig.payloadVariant.telemetry.environment_recovery_interval * 1000);
+                return (moduleConfig.telemetry.environment_recovery_interval * 1000);
             }
             DEBUG_MSG("Environment Telemetry: DISABLED; The telemetry_module_environment_read_error_count_threshold has "
                       "been exceed: %d. Reads will not be retried until after device reset\n",
-                      moduleConfig.payloadVariant.telemetry.environment_read_error_count_threshold);
+                      moduleConfig.telemetry.environment_read_error_count_threshold);
             return (INT32_MAX);
 
         } else if (sensor_read_error_count > 0) {
             DEBUG_MSG("Environment Telemetry: There have been %d sensor read failures. Will retry %d more times\n",
                       sensor_read_error_count, sensor_read_error_count, sensor_read_error_count,
-                      moduleConfig.payloadVariant.telemetry.environment_read_error_count_threshold - sensor_read_error_count);
+                      moduleConfig.telemetry.environment_read_error_count_threshold - sensor_read_error_count);
         }
         if (!sendOurTelemetry()) {
             // if we failed to read the sensor, then try again
             // as soon as we can according to the maximum polling frequency
 
-            switch (moduleConfig.payloadVariant.telemetry.environment_sensor_type) {
+            switch (moduleConfig.telemetry.environment_sensor_type) {
             case TelemetrySensorType_DHT11:
             case TelemetrySensorType_DHT12:
             case TelemetrySensorType_DHT21:
@@ -143,7 +143,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
             }
         }
     }
-    return getIntervalOrDefaultMs(moduleConfig.payloadVariant.telemetry.environment_update_interval);
+    return getIntervalOrDefaultMs(moduleConfig.telemetry.environment_update_interval);
 #endif
 }
 
@@ -161,7 +161,7 @@ uint32_t GetTimeSinceMeshPacket(const MeshPacket *mp)
 
 bool EnvironmentTelemetryModule::wantUIFrame()
 {
-    return moduleConfig.payloadVariant.telemetry.environment_screen_enabled;
+    return moduleConfig.telemetry.environment_screen_enabled;
 }
 
 float EnvironmentTelemetryModule::CelsiusToFahrenheit(float c)
@@ -195,7 +195,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
 
     display->setFont(FONT_SMALL);
     String last_temp = String(lastMeasurement.variant.environment_metrics.temperature, 0) + "°C";
-    if (moduleConfig.payloadVariant.telemetry.environment_display_fahrenheit) {
+    if (moduleConfig.telemetry.environment_display_fahrenheit) {
         last_temp = String(CelsiusToFahrenheit(lastMeasurement.variant.environment_metrics.temperature), 0) + "°F";
     }
     display->drawString(x, y += fontHeight(FONT_MEDIUM) - 2, "From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
@@ -244,7 +244,7 @@ bool EnvironmentTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies
     DEBUG_MSG("-----------------------------------------\n");
     DEBUG_MSG("Environment Telemetry: Read data\n");
 
-    switch (moduleConfig.payloadVariant.telemetry.environment_sensor_type) {
+    switch (moduleConfig.telemetry.environment_sensor_type) {
     case TelemetrySensorType_DS18B20:
         if (!dallasSensor.getMeasurement(&m))
             sensor_read_error_count++;

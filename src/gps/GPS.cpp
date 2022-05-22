@@ -194,6 +194,11 @@ bool GPS::hasLock()
     return hasValidLocation;
 }
 
+bool GPS::hasFlow()
+{
+    return hasGPS;
+}
+
 // Allow defining the polarity of the WAKE output.  default is active high
 #ifndef GPS_WAKE_ACTIVE
 #define GPS_WAKE_ACTIVE 1
@@ -262,13 +267,13 @@ void GPS::setAwake(bool on)
  */
 uint32_t GPS::getWakeTime() const
 {
-    uint32_t t = config.payloadVariant.position.gps_attempt_time;
+    uint32_t t = config.position.gps_attempt_time;
 
     if (t == UINT32_MAX)
         return t; // already maxint
 
     if (t == 0)
-        t = (config.payloadVariant.device.role == Config_DeviceConfig_Role_Router)
+        t = (config.device.role == Config_DeviceConfig_Role_Router)
                 ? 5 * 60
                 : 15 * 60; // Allow up to 15 mins for each attempt (probably will be much
                            // less if we can find sats) or less if a router
@@ -282,8 +287,8 @@ uint32_t GPS::getWakeTime() const
  */
 uint32_t GPS::getSleepTime() const
 {
-    uint32_t t = config.payloadVariant.position.gps_update_interval;
-    bool gps_disabled = config.payloadVariant.position.gps_disabled;
+    uint32_t t = config.position.gps_update_interval;
+    bool gps_disabled = config.position.gps_disabled;
 
     if (gps_disabled)
         t = UINT32_MAX; // Sleep forever now
@@ -292,7 +297,7 @@ uint32_t GPS::getSleepTime() const
         return t; // already maxint
 
     if (t == 0) // default - unset in preferences
-        t = (config.payloadVariant.device.role == Config_DeviceConfig_Role_Router) ? 24 * 60 * 60
+        t = (config.device.role == Config_DeviceConfig_Role_Router) ? 24 * 60 * 60
                                                                                    : 2 * 60; // 2 mins or once per day for routers
 
     t *= 1000;
@@ -322,7 +327,7 @@ int32_t GPS::runOnce()
     } else {
 #ifdef GPS_UBLOX        
         // reset the GPS on next bootup
-        if(devicestate.did_gps_reset && (millis() > 60000)) {
+        if(devicestate.did_gps_reset && (millis() > 60000) && !hasFlow()) {
             DEBUG_MSG("GPS is not communicating, trying factory reset on next bootup.\n");
             devicestate.did_gps_reset = false;
             nodeDB.saveToDisk();
@@ -437,7 +442,7 @@ GPS *createGps()
 #ifdef NO_GPS
     return nullptr;
 #else
-    if (!config.payloadVariant.position.gps_disabled) {
+    if (!config.position.gps_disabled) {
 #ifdef GPS_ALTITUDE_HAE
         DEBUG_MSG("Using HAE altitude model\n");
 #else

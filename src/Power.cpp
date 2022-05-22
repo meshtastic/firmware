@@ -104,8 +104,8 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
 #ifdef BATTERY_PIN
         // Override variant or default ADC_MULTIPLIER if we have the override pref
-        float operativeAdcMultiplier = config.payloadVariant.power.adc_multiplier_override > 0
-                                           ? config.payloadVariant.power.adc_multiplier_override
+        float operativeAdcMultiplier = config.power.adc_multiplier_override > 0
+                                           ? config.power.adc_multiplier_override
                                            : ADC_MULTIPLIER;
         // Do not call analogRead() often.
         const uint32_t min_read_interval = 5000;
@@ -357,7 +357,7 @@ bool Power::axp192Init()
             DEBUG_MSG("DCDC3: %s\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
             DEBUG_MSG("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
 
-            switch (config.payloadVariant.power.charge_current) {
+            switch (config.power.charge_current) {
             case Config_PowerConfig_ChargeCurrent_MAUnset:
                 axp.setChargeControlCur(AXP1XX_CHARGE_CUR_450MA);
                 break;
