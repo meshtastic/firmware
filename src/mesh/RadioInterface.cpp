@@ -100,10 +100,10 @@ const RegionInfo *myRegion;
 void initRegion()
 {
     const RegionInfo *r = regions;
-    for (; r->code != Config_LoRaConfig_RegionCode_Unset && r->code != config.payloadVariant.lora.region; r++)
+    for (; r->code != Config_LoRaConfig_RegionCode_Unset && r->code != config.lora.region; r++)
         ;
     myRegion = r;
-    DEBUG_MSG("Wanted region %d, using %s\n", config.payloadVariant.lora.region, r->name);
+    DEBUG_MSG("Wanted region %d, using %s\n", config.lora.region, r->name);
 }
 
 /**
@@ -208,8 +208,8 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
     //  low SNR = Short Delay
     uint32_t delay = 0;
 
-    if (config.payloadVariant.device.role == Config_DeviceConfig_Role_Router ||
-        config.payloadVariant.device.role == Config_DeviceConfig_Role_RouterClient) {
+    if (config.device.role == Config_DeviceConfig_Role_Router ||
+        config.device.role == Config_DeviceConfig_Role_RouterClient) {
         delay = map(snr, SNR_MIN, SNR_MAX, MIN_TX_WAIT_MSEC, (MIN_TX_WAIT_MSEC + (shortPacketMsec / 2)));
         DEBUG_MSG("rx_snr found in packet. As a router, setting tx delay:%d\n", delay);
     } else {
@@ -357,7 +357,7 @@ void RadioInterface::applyModemConfig()
 {
     // Set up default configuration
     // No Sync Words in LORA mode
-    Config_LoRaConfig &loraConfig = config.payloadVariant.lora;
+    Config_LoRaConfig &loraConfig = config.lora;
     auto channelSettings = channels.getPrimary();
     if (loraConfig.spread_factor == 0) {
         switch (loraConfig.modem_preset) {

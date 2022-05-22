@@ -7,19 +7,19 @@ RotaryEncoderInterruptImpl1::RotaryEncoderInterruptImpl1() : RotaryEncoderInterr
 
 void RotaryEncoderInterruptImpl1::init()
 {
-    if (!moduleConfig.payloadVariant.canned_message.rotary1_enabled) {
+    if (!moduleConfig.canned_message.rotary1_enabled) {
         // Input device is disabled.
         return;
     }
 
-    uint8_t pinA = moduleConfig.payloadVariant.canned_message.inputbroker_pin_a;
-    uint8_t pinB = moduleConfig.payloadVariant.canned_message.inputbroker_pin_b;
-    uint8_t pinPress = moduleConfig.payloadVariant.canned_message.inputbroker_pin_press;
-    char eventCw = static_cast<char>(moduleConfig.payloadVariant.canned_message.inputbroker_event_cw);
-    char eventCcw = static_cast<char>(moduleConfig.payloadVariant.canned_message.inputbroker_event_ccw);
-    char eventPressed = static_cast<char>(moduleConfig.payloadVariant.canned_message.inputbroker_event_press);
+    uint8_t pinA = moduleConfig.canned_message.inputbroker_pin_a;
+    uint8_t pinB = moduleConfig.canned_message.inputbroker_pin_b;
+    uint8_t pinPress = moduleConfig.canned_message.inputbroker_pin_press;
+    char eventCw = static_cast<char>(moduleConfig.canned_message.inputbroker_event_cw);
+    char eventCcw = static_cast<char>(moduleConfig.canned_message.inputbroker_event_ccw);
+    char eventPressed = static_cast<char>(moduleConfig.canned_message.inputbroker_event_press);
 
-    // moduleConfig.payloadVariant.canned_message.ext_notification_module_output
+    // moduleConfig.canned_message.ext_notification_module_output
     RotaryEncoderInterruptBase::init(pinA, pinB, pinPress, eventCw, eventCcw, eventPressed,
                                      RotaryEncoderInterruptImpl1::handleIntA, RotaryEncoderInterruptImpl1::handleIntB,
                                      RotaryEncoderInterruptImpl1::handleIntPressed);
