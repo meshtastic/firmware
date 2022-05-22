@@ -111,18 +111,18 @@ void MQTT::reconnect()
         const char *mqttUsername = "meshdev";
         const char *mqttPassword = "large4cats";
 
-        if (*moduleConfig.payloadVariant.mqtt.address) {
-            serverAddr = moduleConfig.payloadVariant.mqtt.address; // Override the default
+        if (*moduleConfig.mqtt.address) {
+            serverAddr = moduleConfig.mqtt.address; // Override the default
             mqttUsername =
-                moduleConfig.payloadVariant.mqtt.username; // do not use the hardcoded credentials for a custom mqtt server
-            mqttPassword = moduleConfig.payloadVariant.mqtt.password;
+                moduleConfig.mqtt.username; // do not use the hardcoded credentials for a custom mqtt server
+            mqttPassword = moduleConfig.mqtt.password;
         } else {
             // we are using the default server.  Use the hardcoded credentials by default, but allow overriding
-            if (*moduleConfig.payloadVariant.mqtt.username && moduleConfig.payloadVariant.mqtt.username[0] != '\0') {
-                mqttUsername = moduleConfig.payloadVariant.mqtt.username;
+            if (*moduleConfig.mqtt.username && moduleConfig.mqtt.username[0] != '\0') {
+                mqttUsername = moduleConfig.mqtt.username;
             }
-            if (*moduleConfig.payloadVariant.mqtt.password && moduleConfig.payloadVariant.mqtt.password[0] != '\0') {
-                mqttPassword = moduleConfig.payloadVariant.mqtt.password;
+            if (*moduleConfig.mqtt.password && moduleConfig.mqtt.password[0] != '\0') {
+                mqttPassword = moduleConfig.mqtt.password;
             }
         }
 
@@ -175,7 +175,7 @@ bool MQTT::wantsLink() const
 {
     bool hasChannel = false;
 
-    if (moduleConfig.payloadVariant.mqtt.disabled) {
+    if (moduleConfig.mqtt.disabled) {
         // DEBUG_MSG("MQTT disabled...\n");
     } else {
         // No need for link if no channel needed it

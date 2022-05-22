@@ -227,7 +227,7 @@ ErrorCode Router::send(MeshPacket *p)
          */
 
         bool shouldActuallyEncrypt = true;
-        if (*moduleConfig.payloadVariant.mqtt.address && !moduleConfig.payloadVariant.mqtt.encryption_enabled) {
+        if (*moduleConfig.mqtt.address && !moduleConfig.mqtt.encryption_enabled) {
             shouldActuallyEncrypt = false;
         }
 

@@ -19,7 +19,7 @@ int32_t StoreForwardModule::runOnce()
 
 #ifndef NO_ESP32
 
-    if (moduleConfig.payloadVariant.store_forward.enabled) {
+    if (moduleConfig.store_forward.enabled) {
 
         if (config.device.role == Config_DeviceConfig_Role_Router) {
 
@@ -242,7 +242,7 @@ void StoreForwardModule::sendMessage(NodeNum dest, char *str)
 ProcessMessage StoreForwardModule::handleReceived(const MeshPacket &mp)
 {
 #ifndef NO_ESP32
-    if (moduleConfig.payloadVariant.store_forward.enabled) {
+    if (moduleConfig.store_forward.enabled) {
 
         DEBUG_MSG("--- S&F Received something\n");
 
@@ -295,7 +295,7 @@ ProcessMessage StoreForwardModule::handleReceived(const MeshPacket &mp)
 
 ProcessMessage StoreForwardModule::handleReceivedProtobuf(const MeshPacket &mp, StoreAndForward *p)
 {
-    if (!moduleConfig.payloadVariant.store_forward.enabled) {
+    if (!moduleConfig.store_forward.enabled) {
         // If this module is not enabled in any capacity, don't handle the packet, and allow other modules to consume
         return ProcessMessage::CONTINUE;
     }
@@ -391,11 +391,11 @@ StoreForwardModule::StoreForwardModule()
             without having to configure it from the PythonAPI or WebUI.
         */
 
-        moduleConfig.payloadVariant.store_forward.enabled = 1;
+        moduleConfig.store_forward.enabled = 1;
         config.power.is_always_powered = 1;
     }
 
-    if (moduleConfig.payloadVariant.store_forward.enabled) {
+    if (moduleConfig.store_forward.enabled) {
 
         // Router
         if (config.device.role == Config_DeviceConfig_Role_Router) {
@@ -406,20 +406,20 @@ StoreForwardModule::StoreForwardModule()
                     // Do the startup here
 
                     // Maximum number of records to return.
-                    if (moduleConfig.payloadVariant.store_forward.history_return_max)
-                        this->historyReturnMax = moduleConfig.payloadVariant.store_forward.history_return_max;
+                    if (moduleConfig.store_forward.history_return_max)
+                        this->historyReturnMax = moduleConfig.store_forward.history_return_max;
 
                     // Maximum time window for records to return (in minutes)
-                    if (moduleConfig.payloadVariant.store_forward.history_return_window)
-                        this->historyReturnWindow = moduleConfig.payloadVariant.store_forward.history_return_window;
+                    if (moduleConfig.store_forward.history_return_window)
+                        this->historyReturnWindow = moduleConfig.store_forward.history_return_window;
 
                     // Maximum number of records to store in memory
-                    if (moduleConfig.payloadVariant.store_forward.records)
-                        this->records = moduleConfig.payloadVariant.store_forward.records;
+                    if (moduleConfig.store_forward.records)
+                        this->records = moduleConfig.store_forward.records;
 
                     // Maximum number of records to store in memory
-                    if (moduleConfig.payloadVariant.store_forward.heartbeat)
-                        this->heartbeat = moduleConfig.payloadVariant.store_forward.heartbeat;
+                    if (moduleConfig.store_forward.heartbeat)
+                        this->heartbeat = moduleConfig.store_forward.heartbeat;
 
                     // Popupate PSRAM with our data structures.
                     this->populatePSRAM();

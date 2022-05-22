@@ -208,31 +208,31 @@ void AdminModule::handleSetModuleConfig(const ModuleConfig &c)
     switch (c.which_payloadVariant) {
     case ModuleConfig_mqtt_tag:
         DEBUG_MSG("Setting module config: MQTT\n");
-        moduleConfig.payloadVariant.mqtt = c.payloadVariant.mqtt;
+        moduleConfig.mqtt = c.payloadVariant.mqtt;
         break;
     case ModuleConfig_serial_tag:
         DEBUG_MSG("Setting module config: Serial\n");
-        moduleConfig.payloadVariant.serial = c.payloadVariant.serial;
+        moduleConfig.serial = c.payloadVariant.serial;
         break;
     case ModuleConfig_external_notification_tag:
         DEBUG_MSG("Setting module config: External Notification\n");
-        moduleConfig.payloadVariant.external_notification = c.payloadVariant.external_notification;
+        moduleConfig.external_notification = c.payloadVariant.external_notification;
         break;
     case ModuleConfig_store_forward_tag:
         DEBUG_MSG("Setting module config: Store & Forward\n");
-        moduleConfig.payloadVariant.store_forward = c.payloadVariant.store_forward;
+        moduleConfig.store_forward = c.payloadVariant.store_forward;
         break;
     case ModuleConfig_range_test_tag:
         DEBUG_MSG("Setting module config: Range Test\n");
-        moduleConfig.payloadVariant.range_test = c.payloadVariant.range_test;
+        moduleConfig.range_test = c.payloadVariant.range_test;
         break;
     case ModuleConfig_telemetry_tag:
         DEBUG_MSG("Setting module config: Telemetry\n");
-        moduleConfig.payloadVariant.telemetry = c.payloadVariant.telemetry;
+        moduleConfig.telemetry = c.payloadVariant.telemetry;
         break;
     case ModuleConfig_canned_message_tag:
         DEBUG_MSG("Setting module config: Canned Message\n");
-        moduleConfig.payloadVariant.canned_message = c.payloadVariant.canned_message;
+        moduleConfig.canned_message = c.payloadVariant.canned_message;
         break;
     }
 
@@ -323,38 +323,38 @@ void AdminModule::handleGetModuleConfig(const MeshPacket &req, const uint32_t co
         case AdminMessage_ModuleConfigType_MQTT_CONFIG:
             DEBUG_MSG("Getting module config: MQTT\n");
             res.get_module_config_response.which_payloadVariant = ModuleConfig_mqtt_tag;
-            res.get_module_config_response.payloadVariant.mqtt = moduleConfig.payloadVariant.mqtt;
+            res.get_module_config_response.payloadVariant.mqtt = moduleConfig.mqtt;
             break;
         case AdminMessage_ModuleConfigType_SERIAL_CONFIG:
             DEBUG_MSG("Getting module config: Serial\n");
             res.get_module_config_response.which_payloadVariant = ModuleConfig_serial_tag;
-            res.get_module_config_response.payloadVariant.serial = moduleConfig.payloadVariant.serial;
+            res.get_module_config_response.payloadVariant.serial = moduleConfig.serial;
             break;
         case AdminMessage_ModuleConfigType_EXTNOTIF_CONFIG:
             DEBUG_MSG("Getting module config: External Notification\n");
             res.get_module_config_response.which_payloadVariant = ModuleConfig_external_notification_tag;
             res.get_module_config_response.payloadVariant.external_notification =
-                moduleConfig.payloadVariant.external_notification;
+                moduleConfig.external_notification;
             break;
         case AdminMessage_ModuleConfigType_STOREFORWARD_CONFIG:
             DEBUG_MSG("Getting module config: Store & Forward\n");
             res.get_module_config_response.which_payloadVariant = ModuleConfig_store_forward_tag;
-            res.get_module_config_response.payloadVariant.store_forward = moduleConfig.payloadVariant.store_forward;
+            res.get_module_config_response.payloadVariant.store_forward = moduleConfig.store_forward;
             break;
         case AdminMessage_ModuleConfigType_RANGETEST_CONFIG:
             DEBUG_MSG("Getting module config: Range Test\n");
             res.get_module_config_response.which_payloadVariant = ModuleConfig_range_test_tag;
-            res.get_module_config_response.payloadVariant.range_test = moduleConfig.payloadVariant.range_test;
+            res.get_module_config_response.payloadVariant.range_test = moduleConfig.range_test;
             break;
         case AdminMessage_ModuleConfigType_TELEMETRY_CONFIG:
             DEBUG_MSG("Getting module config: Telemetry\n");
             res.get_module_config_response.which_payloadVariant = ModuleConfig_telemetry_tag;
-            res.get_module_config_response.payloadVariant.telemetry = moduleConfig.payloadVariant.telemetry;
+            res.get_module_config_response.payloadVariant.telemetry = moduleConfig.telemetry;
             break;
         case AdminMessage_ModuleConfigType_CANNEDMSG_CONFIG:
             DEBUG_MSG("Getting module config: Canned Message\n");
             res.get_module_config_response.which_payloadVariant = ModuleConfig_canned_message_tag;
-            res.get_module_config_response.payloadVariant.canned_message = moduleConfig.payloadVariant.canned_message;
+            res.get_module_config_response.payloadVariant.canned_message = moduleConfig.canned_message;
             break;
         }
 

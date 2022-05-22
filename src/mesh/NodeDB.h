@@ -12,7 +12,7 @@ extern DeviceState devicestate;
 extern ChannelFile channelFile;
 extern MyNodeInfo &myNodeInfo;
 extern LocalConfig config;
-extern ModuleConfig moduleConfig;
+extern LocalModuleConfig moduleConfig;
 extern User &owner;
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
