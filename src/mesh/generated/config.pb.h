@@ -144,6 +144,7 @@ typedef struct _Config_WiFiConfig {
     char ssid[33]; 
     char psk[64]; 
     bool ap_mode; 
+    bool ap_hidden; 
 } Config_WiFiConfig;
 
 typedef struct _Config { 
@@ -195,14 +196,14 @@ extern "C" {
 #define Config_DeviceConfig_init_default         {_Config_DeviceConfig_Role_MIN, 0, 0, 0, ""}
 #define Config_PositionConfig_init_default       {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_default          {_Config_PowerConfig_ChargeCurrent_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define Config_WiFiConfig_init_default           {"", "", 0}
+#define Config_WiFiConfig_init_default           {"", "", 0, 0}
 #define Config_DisplayConfig_init_default        {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0}
 #define Config_LoRaConfig_init_default           {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, {0, 0, 0}}
 #define Config_init_zero                         {0, {Config_DeviceConfig_init_zero}}
 #define Config_DeviceConfig_init_zero            {_Config_DeviceConfig_Role_MIN, 0, 0, 0, ""}
 #define Config_PositionConfig_init_zero          {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_zero             {_Config_PowerConfig_ChargeCurrent_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define Config_WiFiConfig_init_zero              {"", "", 0}
+#define Config_WiFiConfig_init_zero              {"", "", 0, 0}
 #define Config_DisplayConfig_init_zero           {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0}
 #define Config_LoRaConfig_init_zero              {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, {0, 0, 0}}
 
@@ -249,6 +250,7 @@ extern "C" {
 #define Config_WiFiConfig_ssid_tag               1
 #define Config_WiFiConfig_psk_tag                2
 #define Config_WiFiConfig_ap_mode_tag            3
+#define Config_WiFiConfig_ap_hidden_tag          4
 #define Config_device_tag                        1
 #define Config_position_tag                      2
 #define Config_power_tag                         3
@@ -314,7 +316,8 @@ X(a, STATIC,   SINGULAR, UINT32,   min_wake_secs,    12)
 #define Config_WiFiConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   ssid,              1) \
 X(a, STATIC,   SINGULAR, STRING,   psk,               2) \
-X(a, STATIC,   SINGULAR, BOOL,     ap_mode,           3)
+X(a, STATIC,   SINGULAR, BOOL,     ap_mode,           3) \
+X(a, STATIC,   SINGULAR, BOOL,     ap_hidden,         4)
 #define Config_WiFiConfig_CALLBACK NULL
 #define Config_WiFiConfig_DEFAULT NULL
 
@@ -362,8 +365,8 @@ extern const pb_msgdesc_t Config_LoRaConfig_msg;
 #define Config_LoRaConfig_size                   67
 #define Config_PositionConfig_size               38
 #define Config_PowerConfig_size                  55
-#define Config_WiFiConfig_size                   101
-#define Config_size                              103
+#define Config_WiFiConfig_size                   103
+#define Config_size                              105
 
 #ifdef __cplusplus
 } /* extern "C" */

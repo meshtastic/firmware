@@ -208,7 +208,7 @@ extern const pb_msgdesc_t LocalConfig_msg;
 /* Maximum encoded size of messages (where known) */
 #define ChannelFile_size                         624
 #define DeviceState_size                         19184
-#define LocalConfig_size                         329
+#define LocalConfig_size                         331
 #define OEMStore_size                            2106
 
 #ifdef __cplusplus
