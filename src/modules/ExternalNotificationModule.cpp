@@ -19,26 +19,26 @@
 
     Quick reference:
 
-        moduleConfig.payloadVariant.external_notification.enabled
+        moduleConfig.external_notification.enabled
             0 = Disabled (Default)
             1 = Enabled
 
-        moduleConfig.payloadVariant.external_notification.active
+        moduleConfig.external_notification.active
             0 = Active Low (Default)
             1 = Active High
 
-        moduleConfig.payloadVariant.external_notification.alert_message
+        moduleConfig.external_notification.alert_message
             0 = Disabled (Default)
             1 = Alert when a text message comes
 
-        moduleConfig.payloadVariant.external_notification.alert_bell
+        moduleConfig.external_notification.alert_bell
             0 = Disabled (Default)
             1 = Alert when the bell character is received
 
-        moduleConfig.payloadVariant.external_notification.output
+        moduleConfig.external_notification.output
             GPIO of the output. (Default = 13)
 
-        moduleConfig.payloadVariant.external_notification.output_ms
+        moduleConfig.external_notification.output_ms
             Amount of time in ms for the alert. Default is 1000.
 
 */
@@ -59,19 +59,19 @@ int32_t ExternalNotificationModule::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    // moduleConfig.payloadVariant.external_notification.enabled = 1;
-    // moduleConfig.payloadVariant.external_notification.alert_message = 1;
+    // moduleConfig.external_notification.enabled = 1;
+    // moduleConfig.external_notification.alert_message = 1;
 
-    // moduleConfig.payloadVariant.external_notification.active = 1;
-    // moduleConfig.payloadVariant.external_notification.alert_bell = 1;
-    // moduleConfig.payloadVariant.external_notification.output_ms = 1000;
-    // moduleConfig.payloadVariant.external_notification.output = 13;
+    // moduleConfig.external_notification.active = 1;
+    // moduleConfig.external_notification.alert_bell = 1;
+    // moduleConfig.external_notification.output_ms = 1000;
+    // moduleConfig.external_notification.output = 13;
 
     if (externalCurrentState) {
 
         // If the output is turned on, turn it back off after the given period of time.
-        if (externalTurnedOn + (moduleConfig.payloadVariant.external_notification.output_ms
-                                    ? moduleConfig.payloadVariant.external_notification.output_ms
+        if (externalTurnedOn + (moduleConfig.external_notification.output_ms
+                                    ? moduleConfig.external_notification.output_ms
                                     : EXT_NOTIFICATION_MODULE_OUTPUT_MS) <
             millis()) {
             DEBUG_MSG("Turning off external notification\n");
@@ -88,10 +88,10 @@ void ExternalNotificationModule::setExternalOn()
     externalCurrentState = 1;
     externalTurnedOn = millis();
 
-    digitalWrite((moduleConfig.payloadVariant.external_notification.output
-                      ? moduleConfig.payloadVariant.external_notification.output
+    digitalWrite((moduleConfig.external_notification.output
+                      ? moduleConfig.external_notification.output
                       : EXT_NOTIFICATION_MODULE_OUTPUT),
-                 (moduleConfig.payloadVariant.external_notification.active ? true : false));
+                 (moduleConfig.external_notification.active ? true : false));
 #endif
 }
 
@@ -100,10 +100,10 @@ void ExternalNotificationModule::setExternalOff()
 #ifdef EXT_NOTIFY_OUT
     externalCurrentState = 0;
 
-    digitalWrite((moduleConfig.payloadVariant.external_notification.output
-                      ? moduleConfig.payloadVariant.external_notification.output
+    digitalWrite((moduleConfig.external_notification.output
+                      ? moduleConfig.external_notification.output
                       : EXT_NOTIFICATION_MODULE_OUTPUT),
-                 (moduleConfig.payloadVariant.external_notification.active ? false : true));
+                 (moduleConfig.external_notification.active ? false : true));
 #endif
 }
 
@@ -124,21 +124,21 @@ ExternalNotificationModule::ExternalNotificationModule()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    // moduleConfig.payloadVariant.external_notification.enabled = 1;
-    // moduleConfig.payloadVariant.external_notification.alert_message = 1;
+    // moduleConfig.external_notification.enabled = 1;
+    // moduleConfig.external_notification.alert_message = 1;
 
-    // moduleConfig.payloadVariant.external_notification.active = 1;
-    // moduleConfig.payloadVariant.external_notification.alert_bell = 1;
-    // moduleConfig.payloadVariant.external_notification.output_ms = 1000;
-    // moduleConfig.payloadVariant.external_notification.output = 13;
+    // moduleConfig.external_notification.active = 1;
+    // moduleConfig.external_notification.alert_bell = 1;
+    // moduleConfig.external_notification.output_ms = 1000;
+    // moduleConfig.external_notification.output = 13;
 
-    if (moduleConfig.payloadVariant.external_notification.enabled) {
+    if (moduleConfig.external_notification.enabled) {
 
         DEBUG_MSG("Initializing External Notification Module\n");
 
         // Set the direction of a pin
-        pinMode((moduleConfig.payloadVariant.external_notification.output
-                     ? moduleConfig.payloadVariant.external_notification.output
+        pinMode((moduleConfig.external_notification.output
+                     ? moduleConfig.external_notification.output
                      : EXT_NOTIFICATION_MODULE_OUTPUT),
                 OUTPUT);
 
@@ -157,13 +157,13 @@ ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
 #ifndef NO_ESP32
 #ifdef EXT_NOTIFY_OUT
 
-    if (moduleConfig.payloadVariant.external_notification.enabled) {
+    if (moduleConfig.external_notification.enabled) {
 
         if (getFrom(&mp) != nodeDB.getNodeNum()) {
 
             // TODO: This may be a problem if messages are sent in unicide, but I'm not sure if it will.
             //   Need to know if and how this could be a problem.
-            if (moduleConfig.payloadVariant.external_notification.alert_bell) {
+            if (moduleConfig.external_notification.alert_bell) {
                 auto &p = mp.decoded;
                 DEBUG_MSG("externalNotificationModule - Notification Bell\n");
                 for (int i = 0; i < p.payload.size; i++) {
@@ -173,7 +173,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
                 }
             }
 
-            if (moduleConfig.payloadVariant.external_notification.alert_message) {
+            if (moduleConfig.external_notification.alert_message) {
                 DEBUG_MSG("externalNotificationModule - Notification Module\n");
                 setExternalOn();
             }
