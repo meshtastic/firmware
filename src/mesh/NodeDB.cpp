@@ -34,8 +34,8 @@ NodeDB nodeDB;
 // we have plenty of ram so statically alloc this tempbuf (for now)
 EXT_RAM_ATTR DeviceState devicestate;
 MyNodeInfo &myNodeInfo = devicestate.my_node;
-RadioConfig radioConfig;
-Config config;
+LocalConfig config;
+LocalModuleConfig moduleConfig;
 ChannelFile channelFile;
 
 /** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings
@@ -87,8 +87,8 @@ bool NodeDB::resetRadioConfig()
 
     radioGeneration++;
 
-    radioConfig.has_preferences = true;
-    if (radioConfig.preferences.factory_reset) {
+    // radioConfig.has_preferences = true;
+    if (config.device.factory_reset) {
         DEBUG_MSG("Performing factory reset!\n");
         installDefaultDeviceState();
 #ifndef NO_ESP32
@@ -96,7 +96,7 @@ bool NodeDB::resetRadioConfig()
         nvs_flash_erase();
 #endif
 #ifdef NRF52_SERIES
-         // first, remove the "/prefs" (this removes most prefs)
+        // first, remove the "/prefs" (this removes most prefs)
         FSCom.rmdir_r("/prefs");
         // second, install default state (this will deal with the duplicate mac address issue)
         installDefaultDeviceState();
@@ -126,11 +126,11 @@ bool NodeDB::resetRadioConfig()
         DEBUG_MSG("***** DEVELOPMENT MODE - DO NOT RELEASE *****\n");
 
         // Sleep quite frequently to stress test the BLE comms, broadcast position every 6 mins
-        radioConfig.preferences.screen_on_secs = 10;
-        radioConfig.preferences.wait_bluetooth_secs = 10;
-        radioConfig.preferences.position_broadcast_secs = 6 * 60;
-        radioConfig.preferences.ls_secs = 60;
-        radioConfig.preferences.region = RegionCode_TW;
+        config.display.screen_on_secs = 10;
+        config.power.wait_bluetooth_secs = 10;
+        config.position.position_broadcast_secs = 6 * 60;
+        config.power.ls_secs = 60;
+        config.lora.region = Config_LoRaConfig_RegionCode_TW;
 
         // Enter super deep sleep soon and stay there not very long
         // radioConfig.preferences.mesh_sds_timeout_secs = 10;
@@ -145,33 +145,41 @@ bool NodeDB::resetRadioConfig()
 
 void NodeDB::installDefaultConfig()
 {
-    memset(&config, 0, sizeof(config));
-}
-
-void NodeDB::installDefaultRadioConfig()
-{
-    memset(&radioConfig, 0, sizeof(radioConfig));
-    radioConfig.has_preferences = true;
+    memset(&config, 0, sizeof(LocalConfig));
+    config.lora.region = Config_LoRaConfig_RegionCode_Unset;
+    config.lora.modem_preset = Config_LoRaConfig_ModemPreset_LongFast;
     resetRadioConfig();
-
-    // for backward compat, default position flags are BAT+ALT+MSL (0x23 = 35)
-    radioConfig.preferences.position_flags = (PositionFlags_POS_BATTERY |
-        PositionFlags_POS_ALTITUDE | PositionFlags_POS_ALT_MSL);
-
+    strncpy(config.device.ntp_server, "0.pool.ntp.org", 32);
+    // for backward compat, default position flags are ALT+MSL
+    config.position.position_flags =
+        (Config_PositionConfig_PositionFlags_POS_ALTITUDE | Config_PositionConfig_PositionFlags_POS_ALT_MSL);
 }
+
+void NodeDB::installDefaultModuleConfig()
+{
+    memset(&moduleConfig, 0, sizeof(ModuleConfig));
+}
+
+// void NodeDB::installDefaultRadioConfig()
+// {
+//     memset(&radioConfig, 0, sizeof(radioConfig));
+//     radioConfig.has_preferences = true;
+//     resetRadioConfig();
+
+//     // for backward compat, default position flags are BAT+ALT+MSL (0x23 = 35)
+//     config.position.position_flags =
+//         (Config_PositionConfig_PositionFlags_POS_BATTERY | Config_PositionConfig_PositionFlags_POS_ALTITUDE |
+//          Config_PositionConfig_PositionFlags_POS_ALT_MSL);
+// }
 
 void NodeDB::installDefaultChannels()
 {
-    memset(&channelFile, 0, sizeof(channelFile));
+    memset(&channelFile, 0, sizeof(ChannelFile));
 }
 
 void NodeDB::installDefaultDeviceState()
 {
-    // We try to preserve the region setting because it will really bum users out if we discard it
-    String oldRegion = myNodeInfo.region;
-    RegionCode oldRegionCode = radioConfig.preferences.region;
-
-    memset(&devicestate, 0, sizeof(devicestate));
+    memset(&devicestate, 0, sizeof(DeviceState));
 
     *numNodes = 0; // Forget node DB
 
@@ -198,14 +206,8 @@ void NodeDB::installDefaultDeviceState()
     sprintf(owner.id, "!%08x", getNodeNum()); // Default node ID now based on nodenum
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 
-    // Restore region if possible
-    if (oldRegionCode != RegionCode_Unset)
-        radioConfig.preferences.region = oldRegionCode;
-    if (oldRegion.length()) // If the old style region was set, try to keep it up-to-date
-        strcpy(myNodeInfo.region, oldRegion.c_str());
-
     installDefaultChannels();
-    installDefaultRadioConfig();
+    installDefaultConfig();
 }
 
 void NodeDB::init()
@@ -247,14 +249,14 @@ void NodeDB::init()
     DEBUG_MSG("Number of Device Reboots: %d\n", myNodeInfo.reboot_count);
 
     /* The ESP32 has a wifi radio. This will need to be modified at some point so
-    *    the test isn't so simplistic.
-    */
+     *    the test isn't so simplistic.
+     */
     myNodeInfo.has_wifi = true;
 #endif
 
     resetRadioConfig(); // If bogus settings got saved, then fix them
 
-    DEBUG_MSG("region=%d, NODENUM=0x%x, dbsize=%d\n", radioConfig.preferences.region, myNodeInfo.my_node_num, *numNodes);
+    DEBUG_MSG("region=%d, NODENUM=0x%x, dbsize=%d\n", config.lora.region, myNodeInfo.my_node_num, *numNodes);
 }
 
 // We reserve a few nodenums for future use
@@ -285,8 +287,8 @@ void NodeDB::pickNewNodeNum()
 }
 
 static const char *preffile = "/prefs/db.proto";
-static const char *radiofile = "/prefs/radio.proto";
 static const char *configfile = "/prefs/config.proto";
+static const char *moduleConfigfile = "/prefs/module.proto";
 static const char *channelfile = "/prefs/channels.proto";
 
 /** Load a protobuf from a file, return true for success */
@@ -335,12 +337,12 @@ void NodeDB::loadFromDisk()
         }
     }
 
-    if (!loadProto(radiofile, RadioConfig_size, sizeof(RadioConfig), RadioConfig_fields, &radioConfig)) {
-        installDefaultRadioConfig(); // Our in RAM copy might now be corrupt
+    if (!loadProto(configfile, LocalConfig_size, sizeof(LocalConfig), LocalConfig_fields, &config)) {
+        installDefaultConfig(); // Our in RAM copy might now be corrupt
     }
 
-    if (!loadProto(configfile, Config_size, sizeof(Config), Config_fields, &config)) {
-        installDefaultConfig(); // Our in RAM copy might now be corrupt
+    if (!loadProto(moduleConfigfile, ModuleConfig_size, sizeof(ModuleConfig), ModuleConfig_fields, &moduleConfig)) {
+        installDefaultModuleConfig(); // Our in RAM copy might now be corrupt
     }
 
     if (!loadProto(channelfile, ChannelFile_size, sizeof(ChannelFile), ChannelFile_fields, &channelFile)) {
@@ -370,7 +372,7 @@ bool saveProto(const char *filename, size_t protoSize, size_t objSize, const pb_
         f.close();
 
         // brief window of risk here ;-)
-        if (!FSCom.remove(filename))
+        if (FSCom.exists(filename) && !FSCom.remove(filename))
             DEBUG_MSG("Warning: Can't remove old pref file\n");
         if (!FSCom.rename(filenameTmp.c_str(), filename))
             DEBUG_MSG("Error: can't rename new pref file\n");
@@ -400,8 +402,15 @@ void NodeDB::saveToDisk()
         FSCom.mkdir("/prefs");
 #endif
         saveProto(preffile, DeviceState_size, sizeof(devicestate), DeviceState_fields, &devicestate);
-        saveProto(radiofile, RadioConfig_size, sizeof(RadioConfig), RadioConfig_fields, &radioConfig);
-        saveProto(configfile, Config_size, sizeof(Config), Config_fields, &config);
+        // save all config segments
+        config.has_device = true;
+        config.has_display = true;
+        config.has_lora = true;
+        config.has_position = true;
+        config.has_power = true;
+        config.has_wifi = true;
+        saveProto(configfile, LocalConfig_size, sizeof(LocalConfig), LocalConfig_fields, &config);
+        saveProto(moduleConfigfile, Module_Config_size, sizeof(ModuleConfig), ModuleConfig_fields, &moduleConfig);
         saveChannelsToDisk();
 
     } else {
@@ -429,7 +438,7 @@ uint32_t sinceLastSeen(const NodeInfo *n)
     return delta;
 }
 
-#define NUM_ONLINE_SECS (60 & 60 * 2) // 2 hrs to consider someone offline
+#define NUM_ONLINE_SECS (60 * 60 * 2) // 2 hrs to consider someone offline
 
 size_t NodeDB::getNumOnlineNodes()
 {
@@ -456,12 +465,11 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p, RxSource src)
 
     if (src == RX_SRC_LOCAL) {
         // Local packet, fully authoritative
-        DEBUG_MSG("updatePosition LOCAL pos@%x, time=%u, latI=%d, lonI=%d, alt=%d\n",
-                p.pos_timestamp, p.time, p.latitude_i, p.longitude_i, p.altitude);
+        DEBUG_MSG("updatePosition LOCAL pos@%x, time=%u, latI=%d, lonI=%d, alt=%d\n", p.pos_timestamp, p.time, p.latitude_i,
+                  p.longitude_i, p.altitude);
         info->position = p;
 
-    } else if ((p.time > 0) && !p.latitude_i && !p.longitude_i && !p.pos_timestamp &&
-                !p.location_source) {
+    } else if ((p.time > 0) && !p.latitude_i && !p.longitude_i && !p.pos_timestamp && !p.location_source) {
         // FIXME SPECIAL TIME SETTING PACKET FROM EUD TO RADIO
         // (stop-gap fix for issue #900)
         DEBUG_MSG("updatePosition SPECIAL time setting time=%u\n", p.time);
@@ -473,8 +481,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p, RxSource src)
         // recorded based on the packet rxTime
         //
         // FIXME perhaps handle RX_SRC_USER separately?
-        DEBUG_MSG("updatePosition REMOTE node=0x%x time=%u, latI=%d, lonI=%d\n",
-                nodeId, p.time, p.latitude_i, p.longitude_i);
+        DEBUG_MSG("updatePosition REMOTE node=0x%x time=%u, latI=%d, lonI=%d\n", nodeId, p.time, p.latitude_i, p.longitude_i);
 
         // First, back up fields that we want to protect from overwrite
         uint32_t tmp_time = info->position.time;
@@ -483,14 +490,13 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p, RxSource src)
         info->position = p;
 
         // Last, restore any fields that may have been overwritten
-        if (! info->position.time)
+        if (!info->position.time)
             info->position.time = tmp_time;
     }
     info->has_position = true;
     updateGUIforNode = info;
     notifyObservers(true); // Force an update whether or not our node counts have changed
 }
-
 
 /** Update telemetry info for this node based on received metrics
  *  We only care about device telemetry here
@@ -603,7 +609,7 @@ void recordCriticalError(CriticalErrorCode code, uint32_t address, const char *f
     // Print error to screen and serial port
     String lcd = String("Critical error ") + code + "!\n";
     screen->print(lcd.c_str());
-    if(filename)
+    if (filename)
         DEBUG_MSG("NOTE! Recording critical error %d at %s:%lx\n", code, filename, address);
     else
         DEBUG_MSG("NOTE! Recording critical error %d, address=%lx\n", code, address);

@@ -65,6 +65,10 @@ typedef enum _HardwareModel {
     HardwareModel_NANO_G1 = 41, 
     /* nRF52840 Dongle : https://www.nordicsemi.com/Products/Development-hardware/nrf52840-dongle/ */
     HardwareModel_NRF52840_PCA10059 = 42, 
+    /* Custom Disaster Radio esp32 v3 device https://github.com/sudomesh/disaster-radio/tree/master/hardware/board_esp32_v3 */
+    HardwareModel_DR_DEV = 43, 
+    /* M5 esp32 based MCU modules with enclosure, TFT and LORA Shields. All Variants (Basic, Core, Fire, Core2, Paper) https://m5stack.com/ */
+    HardwareModel_M5STACK = 44, 
     /* Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits. */
     HardwareModel_PRIVATE_HW = 255 
 } HardwareModel;
@@ -231,6 +235,12 @@ typedef enum _LogRecord_Level {
 } LogRecord_Level;
 
 /* Struct definitions */
+typedef PB_BYTES_ARRAY_T(237) Compressed_data_t;
+typedef struct _Compressed { 
+    PortNum portnum; 
+    Compressed_data_t data; 
+} Compressed;
+
 /* Location of a waypoint to associate with a message */
 typedef struct _Location { 
     /* Id of the location */
@@ -272,14 +282,6 @@ typedef struct _MyNodeInfo {
  Not the same as UserPreferences.location_sharing */
     bool has_gps; 
     /* The maximum number of 'software' channels that can be set on this node. */
-    char region[12]; 
-    /* Deprecated! ONLY USED IN DEVICE CODE (for upgrading old 1.0 firmwares) DO NOT READ ELSEWHERE.
- The region code for my radio (US, CN, etc...)
- Note: This string is deprecated.
- The 1.0 builds populate it based on the flashed firmware name.
- But for newer builds this string will be unpopulated (missing/null).
- For those builds you should instead look at the new read/write region enum in UserSettings
- The format of this string was 1.0-US or 1.0-CN etc.. Or empty string if unset. */
     char firmware_version[18]; 
     /* 0.0.5 etc... */
     CriticalErrorCode error_code; 
@@ -397,8 +399,11 @@ typedef struct _RouteDiscovery {
     uint32_t route[8]; 
 } RouteDiscovery;
 
+/* Compressed message payload */
 typedef struct _ToRadio_PeerInfo { 
+    /* PortNum to determine the how to handle the compressed payload. */
     uint32_t app_version; 
+    /* Compressed data. */
     bool mqtt_gateway; 
 } ToRadio_PeerInfo;
 
@@ -702,11 +707,12 @@ extern "C" {
 #define Location_init_default                    {0, 0, 0, 0, 0}
 #define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
 #define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0, false, DeviceMetrics_init_default}
-#define MyNodeInfo_init_default                  {0, 0, "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
+#define MyNodeInfo_init_default                  {0, 0, "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
 #define LogRecord_init_default                   {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_default                   {0, 0, {MyNodeInfo_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
 #define ToRadio_PeerInfo_init_default            {0, 0}
+#define Compressed_init_default                  {_PortNum_MIN, {0, {0}}}
 #define Position_init_zero                       {0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define User_init_zero                           {"", "", "", {0}, _HardwareModel_MIN, 0, 0, 0, 0}
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
@@ -715,13 +721,16 @@ extern "C" {
 #define Location_init_zero                       {0, 0, 0, 0, 0}
 #define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
 #define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0, false, DeviceMetrics_init_zero}
-#define MyNodeInfo_init_zero                     {0, 0, "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
+#define MyNodeInfo_init_zero                     {0, 0, "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
 #define LogRecord_init_zero                      {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_zero                      {0, 0, {MyNodeInfo_init_zero}}
 #define ToRadio_init_zero                        {0, {MeshPacket_init_zero}}
 #define ToRadio_PeerInfo_init_zero               {0, 0}
+#define Compressed_init_zero                     {_PortNum_MIN, {0, {0}}}
 
 /* Field tags (for use in manual encoding/decoding) */
+#define Compressed_portnum_tag                   1
+#define Compressed_data_tag                      2
 #define Location_id_tag                          1
 #define Location_latitude_i_tag                  2
 #define Location_longitude_i_tag                 3
@@ -733,7 +742,6 @@ extern "C" {
 #define LogRecord_level_tag                      4
 #define MyNodeInfo_my_node_num_tag               1
 #define MyNodeInfo_has_gps_tag                   2
-#define MyNodeInfo_region_tag                    4
 #define MyNodeInfo_firmware_version_tag          6
 #define MyNodeInfo_error_code_tag                7
 #define MyNodeInfo_error_address_tag             8
@@ -938,7 +946,6 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  device_metrics,    6)
 #define MyNodeInfo_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   my_node_num,       1) \
 X(a, STATIC,   SINGULAR, BOOL,     has_gps,           2) \
-X(a, STATIC,   SINGULAR, STRING,   region,            4) \
 X(a, STATIC,   SINGULAR, STRING,   firmware_version,   6) \
 X(a, STATIC,   SINGULAR, UENUM,    error_code,        7) \
 X(a, STATIC,   SINGULAR, UINT32,   error_address,     8) \
@@ -995,6 +1002,12 @@ X(a, STATIC,   SINGULAR, BOOL,     mqtt_gateway,      2)
 #define ToRadio_PeerInfo_CALLBACK NULL
 #define ToRadio_PeerInfo_DEFAULT NULL
 
+#define Compressed_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    portnum,           1) \
+X(a, STATIC,   SINGULAR, BYTES,    data,              2)
+#define Compressed_CALLBACK NULL
+#define Compressed_DEFAULT NULL
+
 extern const pb_msgdesc_t Position_msg;
 extern const pb_msgdesc_t User_msg;
 extern const pb_msgdesc_t RouteDiscovery_msg;
@@ -1008,6 +1021,7 @@ extern const pb_msgdesc_t LogRecord_msg;
 extern const pb_msgdesc_t FromRadio_msg;
 extern const pb_msgdesc_t ToRadio_msg;
 extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
+extern const pb_msgdesc_t Compressed_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define Position_fields &Position_msg
@@ -1023,14 +1037,16 @@ extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 #define FromRadio_fields &FromRadio_msg
 #define ToRadio_fields &ToRadio_msg
 #define ToRadio_PeerInfo_fields &ToRadio_PeerInfo_msg
+#define Compressed_fields &Compressed_msg
 
 /* Maximum encoded size of messages (where known) */
+#define Compressed_size                          243
 #define Data_size                                296
 #define FromRadio_size                           356
 #define Location_size                            24
 #define LogRecord_size                           81
 #define MeshPacket_size                          347
-#define MyNodeInfo_size                          210
+#define MyNodeInfo_size                          197
 #define NodeInfo_size                            281
 #define Position_size                            142
 #define RouteDiscovery_size                      40

@@ -10,16 +10,6 @@
 #endif
 
 /* Enum definitions */
-typedef enum _ChannelSettings_ModemConfig { 
-    ChannelSettings_ModemConfig_VLongSlow = 0, 
-    ChannelSettings_ModemConfig_LongSlow = 1, 
-    ChannelSettings_ModemConfig_LongFast = 2, 
-    ChannelSettings_ModemConfig_MidSlow = 3, 
-    ChannelSettings_ModemConfig_MidFast = 4, 
-    ChannelSettings_ModemConfig_ShortSlow = 5, 
-    ChannelSettings_ModemConfig_ShortFast = 6 
-} ChannelSettings_ModemConfig;
-
 typedef enum _Channel_Role { 
     Channel_Role_DISABLED = 0, 
     Channel_Role_PRIMARY = 1, 
@@ -48,28 +38,6 @@ typedef PB_BYTES_ARRAY_T(32) ChannelSettings_psk_t;
  FIXME: explain how apps use channels for security.
  explain how remote settings and remote gpio are managed as an example */
 typedef struct _ChannelSettings { 
-    /* If zero then, use default max legal continuous power (ie. something that won't
- burn out the radio hardware)
- In most cases you should use zero here.
- Units are in dBm. */
-    int8_t tx_power; 
-    /* Note: This is the 'old' mechanism for specifying channel parameters.
- Either modem_config or bandwidth/spreading/coding will be specified - NOT BOTH.
- As a heuristic: If bandwidth is specified, do not use modem_config.
- Because protobufs take ZERO space when the value is zero this works out nicely.
- This value is replaced by bandwidth/spread_factor/coding_rate.
- If you'd like to experiment with other options add them to MeshRadio.cpp in the device code. */
-    ChannelSettings_ModemConfig modem_config; 
-    /* Bandwidth in MHz
- Certain bandwidth numbers are 'special' and will be converted to the
- appropriate floating point value: 31 -> 31.25MHz */
-    ChannelSettings_psk_t psk; 
-    /* A number from 7 to 12.
- Indicates number of chirps per symbol as 1<<spread_factor. */
-    char name[12]; 
-    /* The denominator of the coding rate.
- ie for 4/8, the value is 8. 5/8 the value is 5. */
-    uint16_t bandwidth; 
     /* NOTE: this field is _independent_ and unrelated to the concepts in channel.proto.
  this is controlling the actual hardware frequency the radio is transmitting on.
  In a perfect world we would have called it something else (band?) but I forgot to make this change during the big 1.2 renaming.
@@ -88,7 +56,7 @@ typedef struct _ChannelSettings {
      hash = ((hash << 5) + hash) + (unsigned char) c;
    return hash;
  } */
-    uint32_t spread_factor; 
+    ChannelSettings_psk_t psk; 
     /* A simple pre-shared key for now for crypto.
  Must be either 0 bytes (no crypto), 16 bytes (AES128), or 32 bytes (AES256).
  A special shorthand is used for 1 byte long psks.
@@ -99,7 +67,7 @@ typedef struct _ChannelSettings {
  `1` = The special "default" channel key: {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59, 0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0xbf}
  `2` through 10 = The default channel key, except with 1 through 9 added to the last byte.
  Shown to user as simple1 through 10 */
-    uint8_t coding_rate; 
+    char name[12]; 
     /* A SHORT name that will be packed into the URL.
  Less than 12 bytes.
  Something for end users to call the channel
@@ -107,7 +75,7 @@ typedef struct _ChannelSettings {
  is the special (minimally secure) "Default"channel.
  In user interfaces it should be rendered as a local language translation of "X".
  For channel_num hashing empty string will be treated as "X".
- Where "X" is selected based on the English words listed above for ModemConfig */
+ Where "X" is selected based on the English words listed above for ModemPreset */
     uint8_t channel_num; 
     /* Used to construct a globally unique channel ID.
  The full globally unique ID will be: "name.id" where ID is shown as base36.
@@ -142,10 +110,6 @@ typedef struct _Channel {
 
 
 /* Helper constants for enums */
-#define _ChannelSettings_ModemConfig_MIN ChannelSettings_ModemConfig_VLongSlow
-#define _ChannelSettings_ModemConfig_MAX ChannelSettings_ModemConfig_ShortFast
-#define _ChannelSettings_ModemConfig_ARRAYSIZE ((ChannelSettings_ModemConfig)(ChannelSettings_ModemConfig_ShortFast+1))
-
 #define _Channel_Role_MIN Channel_Role_DISABLED
 #define _Channel_Role_MAX Channel_Role_SECONDARY
 #define _Channel_Role_ARRAYSIZE ((Channel_Role)(Channel_Role_SECONDARY+1))
@@ -156,19 +120,14 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define ChannelSettings_init_default             {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, "", 0, 0, 0, 0, 0, 0, 0}
+#define ChannelSettings_init_default             {{0, {0}}, "", 0, 0, 0, 0}
 #define Channel_init_default                     {0, false, ChannelSettings_init_default, _Channel_Role_MIN}
-#define ChannelSettings_init_zero                {0, _ChannelSettings_ModemConfig_MIN, {0, {0}}, "", 0, 0, 0, 0, 0, 0, 0}
+#define ChannelSettings_init_zero                {{0, {0}}, "", 0, 0, 0, 0}
 #define Channel_init_zero                        {0, false, ChannelSettings_init_zero, _Channel_Role_MIN}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define ChannelSettings_tx_power_tag             1
-#define ChannelSettings_modem_config_tag         3
 #define ChannelSettings_psk_tag                  4
 #define ChannelSettings_name_tag                 5
-#define ChannelSettings_bandwidth_tag            6
-#define ChannelSettings_spread_factor_tag        7
-#define ChannelSettings_coding_rate_tag          8
 #define ChannelSettings_channel_num_tag          9
 #define ChannelSettings_id_tag                   10
 #define ChannelSettings_uplink_enabled_tag       16
@@ -179,13 +138,8 @@ extern "C" {
 
 /* Struct field encoding specification for nanopb */
 #define ChannelSettings_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, INT32,    tx_power,          1) \
-X(a, STATIC,   SINGULAR, UENUM,    modem_config,      3) \
 X(a, STATIC,   SINGULAR, BYTES,    psk,               4) \
 X(a, STATIC,   SINGULAR, STRING,   name,              5) \
-X(a, STATIC,   SINGULAR, UINT32,   bandwidth,         6) \
-X(a, STATIC,   SINGULAR, UINT32,   spread_factor,     7) \
-X(a, STATIC,   SINGULAR, UINT32,   coding_rate,       8) \
 X(a, STATIC,   SINGULAR, UINT32,   channel_num,       9) \
 X(a, STATIC,   SINGULAR, FIXED32,  id,               10) \
 X(a, STATIC,   SINGULAR, BOOL,     uplink_enabled,   16) \
@@ -209,8 +163,8 @@ extern const pb_msgdesc_t Channel_msg;
 #define Channel_fields &Channel_msg
 
 /* Maximum encoded size of messages (where known) */
-#define ChannelSettings_size                     87
-#define Channel_size                             102
+#define ChannelSettings_size                     61
+#define Channel_size                             76
 
 #ifdef __cplusplus
 } /* extern "C" */

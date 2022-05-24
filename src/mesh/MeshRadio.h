@@ -7,7 +7,7 @@
 
 // Map from old region names to new region enums
 struct RegionInfo {
-    RegionCode code;
+    Config_LoRaConfig_RegionCode code;
     float freqStart;
     float freqEnd;
     float dutyCycle;

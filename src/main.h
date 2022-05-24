@@ -8,6 +8,7 @@
 extern uint8_t screen_found;
 extern uint8_t screen_model;
 extern uint8_t cardkb_found;
+extern uint8_t kb_model;
 extern uint8_t faceskb_found;
 extern uint8_t rtc_found;
 

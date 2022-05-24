@@ -67,8 +67,6 @@ char contentTypes[][2][32] = {{".txt", "text/plain"},     {".html", "text/html"}
 // Our API to handle messages to and from the radio.
 HttpAPI webAPI;
 
-
-
 void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
 {
 
@@ -85,9 +83,9 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeAdmin = new ResourceNode("/admin", "GET", &handleAdmin);
     ResourceNode *nodeAdminSettings = new ResourceNode("/admin/settings", "GET", &handleAdminSettings);
     ResourceNode *nodeAdminSettingsApply = new ResourceNode("/admin/settings/apply", "POST", &handleAdminSettingsApply);
-//    ResourceNode *nodeAdminFs = new ResourceNode("/admin/fs", "GET", &handleFs);
-//    ResourceNode *nodeUpdateFs = new ResourceNode("/admin/fs/update", "POST", &handleUpdateFs);
-//    ResourceNode *nodeDeleteFs = new ResourceNode("/admin/fs/delete", "GET", &handleDeleteFsContent);
+    //    ResourceNode *nodeAdminFs = new ResourceNode("/admin/fs", "GET", &handleFs);
+    //    ResourceNode *nodeUpdateFs = new ResourceNode("/admin/fs/update", "POST", &handleUpdateFs);
+    //    ResourceNode *nodeDeleteFs = new ResourceNode("/admin/fs/delete", "GET", &handleDeleteFsContent);
 
     ResourceNode *nodeRestart = new ResourceNode("/restart", "POST", &handleRestart);
     ResourceNode *nodeFormUpload = new ResourceNode("/upload", "POST", &handleFormUpload);
@@ -97,7 +95,6 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeJsonReport = new ResourceNode("/json/report", "GET", &handleReport);
     ResourceNode *nodeJsonFsBrowseStatic = new ResourceNode("/json/fs/browse/static", "GET", &handleFsBrowseStatic);
     ResourceNode *nodeJsonDelete = new ResourceNode("/json/fs/delete/static", "DELETE", &handleFsDeleteStatic);
-
 
     ResourceNode *nodeRoot = new ResourceNode("/*", "GET", &handleStatic);
 
@@ -114,10 +111,10 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     secureServer->registerNode(nodeJsonFsBrowseStatic);
     secureServer->registerNode(nodeJsonDelete);
     secureServer->registerNode(nodeJsonReport);
-//    secureServer->registerNode(nodeUpdateFs);
-//    secureServer->registerNode(nodeDeleteFs);
+    //    secureServer->registerNode(nodeUpdateFs);
+    //    secureServer->registerNode(nodeDeleteFs);
     secureServer->registerNode(nodeAdmin);
-//    secureServer->registerNode(nodeAdminFs);
+    //    secureServer->registerNode(nodeAdminFs);
     secureServer->registerNode(nodeAdminSettings);
     secureServer->registerNode(nodeAdminSettingsApply);
     secureServer->registerNode(nodeRoot); // This has to be last
@@ -135,10 +132,10 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     insecureServer->registerNode(nodeJsonFsBrowseStatic);
     insecureServer->registerNode(nodeJsonDelete);
     insecureServer->registerNode(nodeJsonReport);
-//    insecureServer->registerNode(nodeUpdateFs);
-//    insecureServer->registerNode(nodeDeleteFs);
+    //    insecureServer->registerNode(nodeUpdateFs);
+    //    insecureServer->registerNode(nodeDeleteFs);
     insecureServer->registerNode(nodeAdmin);
-//    insecureServer->registerNode(nodeAdminFs);
+    //    insecureServer->registerNode(nodeAdminFs);
     insecureServer->registerNode(nodeAdminSettings);
     insecureServer->registerNode(nodeAdminSettingsApply);
     insecureServer->registerNode(nodeRoot); // This has to be last
@@ -227,19 +224,19 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
     DEBUG_MSG("webAPI handleAPIv1ToRadio\n");
 }
 
-void htmlDeleteDir(const char * dirname)
+void htmlDeleteDir(const char *dirname)
 {
     File root = FSCom.open(dirname);
-    if(!root){
+    if (!root) {
         return;
     }
-    if(!root.isDirectory()){
+    if (!root.isDirectory()) {
         return;
     }
 
     File file = root.openNextFile();
-    while(file){
-        if(file.isDirectory() && !String(file.name()).endsWith(".")) {
+    while (file) {
+        if (file.isDirectory() && !String(file.name()).endsWith(".")) {
             htmlDeleteDir(file.name());
             file.close();
         } else {
@@ -247,32 +244,32 @@ void htmlDeleteDir(const char * dirname)
             file.close();
             DEBUG_MSG("    %s\n", fileName.c_str());
             FSCom.remove(fileName);
-
         }
         file = root.openNextFile();
     }
     root.close();
 }
 
-std::vector<std::map<char *, char *>>* htmlListDir(std::vector<std::map<char *, char *>> *fileList, const char *dirname, uint8_t levels)
+std::vector<std::map<char *, char *>> *htmlListDir(std::vector<std::map<char *, char *>> *fileList, const char *dirname,
+                                                   uint8_t levels)
 {
     File root = FSCom.open(dirname);
-    if(!root){
+    if (!root) {
         return NULL;
     }
-    if(!root.isDirectory()){
+    if (!root.isDirectory()) {
         return NULL;
     }
 
     // iterate over the file list
     File file = root.openNextFile();
-    while(file){
-        if(file.isDirectory() && !String(file.name()).endsWith(".")) {
-            if(levels){
-                htmlListDir(fileList, file.name(), levels -1);
+    while (file) {
+        if (file.isDirectory() && !String(file.name()).endsWith(".")) {
+            if (levels) {
+                htmlListDir(fileList, file.name(), levels - 1);
             }
-        } else {          
-            std::map<char*, char*> thisFileMap;
+        } else {
+            std::map<char *, char *> thisFileMap;
             thisFileMap[strdup("size")] = strdup(String(file.size()).c_str());
             thisFileMap[strdup("name")] = strdup(String(file.name()).substring(1).c_str());
             if (String(file.name()).substring(1).endsWith(".gz")) {
@@ -305,9 +302,7 @@ void handleFsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
         {"free", String(FSCom.totalBytes() - FSCom.usedBytes()).c_str()},
     };
 
-    Json jsonObjInner = Json::object{{"files", Json(*fileList)},
-                                     {"filesystem", filesystemObj}
-    };
+    Json jsonObjInner = Json::object{{"files", Json(*fileList)}, {"filesystem", filesystemObj}};
 
     Json jsonObjOuter = Json::object{{"data", jsonObjInner}, {"status", "ok"}};
 
@@ -365,7 +360,7 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
             filename = "/static/index.html";
             filenameGzip = "/static/index.html.gz";
         }
-        
+
         if (FSCom.exists(filename.c_str())) {
             file = FSCom.open(filename.c_str());
             if (!file.available()) {
@@ -615,31 +610,28 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 
     // data->wifi
     String ipStr;
-    if (radioConfig.preferences.wifi_ap_mode || isSoftAPForced()) {
+    if (config.wifi.ap_mode || isSoftAPForced()) {
         ipStr = String(WiFi.softAPIP().toString());
     } else {
         ipStr = String(WiFi.localIP().toString());
     }
-    Json jsonObjWifi = Json::object{
-        {"rssi", String(WiFi.RSSI())},
-        {"ip", ipStr.c_str()}
-    };
+    Json jsonObjWifi = Json::object{{"rssi", String(WiFi.RSSI())}, {"ip", ipStr.c_str()}};
 
     // data->memory
     Json jsonObjMemory = Json::object{{"heap_total", Json(int(ESP.getHeapSize()))},
-                                    {"heap_free", Json(int(ESP.getFreeHeap()))},
-                                    {"psram_total", Json(int(ESP.getPsramSize()))},
-                                    {"psram_free", Json(int(ESP.getFreePsram()))},
-                                    {"fs_total", String(FSCom.totalBytes()).c_str()},
-                                    {"fs_used", String(FSCom.usedBytes()).c_str()},
-                                    {"fs_free", String(FSCom.totalBytes() - FSCom.usedBytes()).c_str()}};
+                                      {"heap_free", Json(int(ESP.getFreeHeap()))},
+                                      {"psram_total", Json(int(ESP.getPsramSize()))},
+                                      {"psram_free", Json(int(ESP.getFreePsram()))},
+                                      {"fs_total", String(FSCom.totalBytes()).c_str()},
+                                      {"fs_used", String(FSCom.usedBytes()).c_str()},
+                                      {"fs_free", String(FSCom.totalBytes() - FSCom.usedBytes()).c_str()}};
 
     // data->power
     Json jsonObjPower = Json::object{{"battery_percent", Json(powerStatus->getBatteryChargePercent())},
-                                      {"battery_voltage_mv", Json(powerStatus->getBatteryVoltageMv())},
-                                      {"has_battery", BoolToString(powerStatus->getHasBattery())},
-                                      {"has_usb", BoolToString(powerStatus->getHasUSB())},
-                                      {"is_charging", BoolToString(powerStatus->getIsCharging())}};
+                                     {"battery_voltage_mv", Json(powerStatus->getBatteryVoltageMv())},
+                                     {"has_battery", BoolToString(powerStatus->getHasBattery())},
+                                     {"has_usb", BoolToString(powerStatus->getHasUSB())},
+                                     {"is_charging", BoolToString(powerStatus->getIsCharging())}};
 
     // data->device
     Json jsonObjDevice = Json::object{{"reboot_counter", Json(int(myNodeInfo.reboot_count))}};
@@ -680,7 +672,6 @@ void handleHotspot(HTTPRequest *req, HTTPResponse *res)
     // res->println("<!DOCTYPE html>");
     res->println("<meta http-equiv=\"refresh\" content=\"0;url=/\" />\n");
 }
-
 
 void handleDeleteFsContent(HTTPRequest *req, HTTPResponse *res)
 {
@@ -723,7 +714,8 @@ void handleAdminSettings(HTTPRequest *req, HTTPResponse *res)
     res->println("<tr><td>Set?</td><td>Setting</td><td>current value</td><td>new value</td></tr>\n");
     res->println("<tr><td><input type=checkbox></td><td>WiFi SSID</td><td>false</td><td><input type=radio></td></tr>\n");
     res->println("<tr><td><input type=checkbox></td><td>WiFi Password</td><td>false</td><td><input type=radio></td></tr>\n");
-    res->println("<tr><td><input type=checkbox></td><td>Smart Position Update</td><td>false</td><td><input type=radio></td></tr>\n");
+    res->println(
+        "<tr><td><input type=checkbox></td><td>Smart Position Update</td><td>false</td><td><input type=radio></td></tr>\n");
     res->println("<tr><td><input type=checkbox></td><td>is_always_powered</td><td>false</td><td><input type=radio></td></tr>\n");
     res->println("<tr><td><input type=checkbox></td><td>is_always_powered</td><td>false</td><td><input type=radio></td></tr>\n");
     res->println("</table>\n");
@@ -744,7 +736,6 @@ void handleAdminSettingsApply(HTTPRequest *req, HTTPResponse *res)
 
     res->println("Settings Applied. Please wait.\n");
 }
-
 
 void handleFs(HTTPRequest *req, HTTPResponse *res)
 {
@@ -798,7 +789,9 @@ void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
             count = count - 1;
         }
     } else {
+#ifndef NO_SCREEN
         screen->blink();
+#endif
     }
 
     Json jsonObjOuter = Json::object{{"status", "ok"}};
