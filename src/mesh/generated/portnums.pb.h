@@ -46,6 +46,8 @@ typedef enum _PortNum {
     /* Admin control packets.
  Payload is a [AdminMessage](/docs/developers/protobufs/api#adminmessage) message */
     PortNum_ADMIN_APP = 6, 
+    /* Compressed TEXT_MESSAGE payloads. */
+    PortNum_TEXT_MESSAGE_COMPRESSED_APP = 7, 
     /* Provides a 'ping' service that replies to any packet it receives.
  Also serves as a small example module. */
     PortNum_REPLY_APP = 32, 
@@ -69,8 +71,6 @@ typedef enum _PortNum {
  Maintained by Github user a-f-G-U-C (a Meshtastic contributor)
  Project files at https://github.com/a-f-G-U-C/Meshtastic-ZPS */
     PortNum_ZPS_APP = 68, 
-    /* Compressed payloads. */
-    PortNum_COMPRESSION_APP = 69, 
     /* Private applications should use portnums >= 256.
  To simplify initial development and testing you can use "PRIVATE_APP"
  in your code without needing to rebuild protobuf files (via [regen-protos.sh](https://github.com/meshtastic/Meshtastic-device/blob/master/bin/regen-protos.sh)) */
