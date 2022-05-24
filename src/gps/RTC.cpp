@@ -120,7 +120,7 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
 #endif
 
         // nrf52 doesn't have a readable RTC (yet - software not written)
-#if defined(PORTDUINO) || !defined(NO_ESP32) || defined(RV3028_RTC)
+#if defined(PORTDUINO) || !defined(NO_ESP32) || defined(RV3028_RTC) || defined(PCF8563_RTC)
         readFromRTC();
 #endif
 

@@ -1,7 +1,7 @@
 #pragma once
 #include "../mesh/generated/telemetry.pb.h"
-#include "ProtobufModule.h"
 #include "NodeDB.h"
+#include "ProtobufModule.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
@@ -15,7 +15,11 @@ class EnvironmentTelemetryModule : private concurrency::OSThread, public Protobu
         lastMeasurementPacket = nullptr;
     }
     virtual bool wantUIFrame() override;
+#ifdef NO_SCREEN
+    void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+#else
     virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
+#endif
 
   protected:
     /** Called to handle a particular incoming message
@@ -29,7 +33,6 @@ class EnvironmentTelemetryModule : private concurrency::OSThread, public Protobu
     bool sendOurTelemetry(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
 
   private:
-    Config_ModuleConfig_TelemetryConfig moduleConfig = config.payloadVariant.module_config.payloadVariant.telemetry_config;
     float CelsiusToFahrenheit(float c);
     bool firstTime = 1;
     const MeshPacket *lastMeasurementPacket;

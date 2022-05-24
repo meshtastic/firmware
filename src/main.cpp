@@ -1,4 +1,3 @@
-#include "configuration.h"
 #include "GPS.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
@@ -6,6 +5,7 @@
 #include "PowerFSM.h"
 #include "airtime.h"
 #include "buzz.h"
+#include "configuration.h"
 #include "error.h"
 #include "power.h"
 // #include "rom/rtc.h"
@@ -17,28 +17,28 @@
 #include "SPILock.h"
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
+#include "debug/axpDebug.h"
+#include "debug/einkScan.h"
+#include "debug/i2cScan.h"
 #include "graphics/Screen.h"
 #include "main.h"
 #include "modules/Modules.h"
-#include "sleep.h"
 #include "shutdown.h"
+#include "sleep.h"
 #include "target_specific.h"
-#include "debug/i2cScan.h"
-#include "debug/einkScan.h"
-#include "debug/axpDebug.h"
 #include <Wire.h>
 // #include <driver/rtc_io.h>
 
 #include "mesh/http/WiFiAPClient.h"
 
 #ifndef NO_ESP32
-    #include "mesh/http/WebServer.h"
+#include "mesh/http/WebServer.h"
 
-    #ifdef USE_NEW_ESP32_BLUETOOTH
-        #include "esp32/ESP32Bluetooth.h"
-    #else
-        #include "nimble/BluetoothUtil.h"
-    #endif
+#ifdef USE_NEW_ESP32_BLUETOOTH
+#include "esp32/ESP32Bluetooth.h"
+#else
+#include "nimble/BluetoothUtil.h"
+#endif
 
 #endif
 
@@ -47,10 +47,10 @@
 #include "mqtt/MQTT.h"
 #endif
 
+#include "LLCC68Interface.h"
 #include "RF95Interface.h"
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
-#include "LLCC68Interface.h"
 
 #include "ButtonThread.h"
 #include "PowerFSMThread.h"
@@ -75,6 +75,8 @@ uint8_t screen_model;
 
 // The I2C address of the cardkb or RAK14004 (if found)
 uint8_t cardkb_found;
+// 0x02 for RAK14004 and 0x00 for cardkb
+uint8_t kb_model;
 
 // The I2C address of the Faces Keyboard (if found)
 uint8_t faceskb_found;
@@ -126,7 +128,8 @@ RadioInterface *rIf = NULL;
 /**
  * Some platforms (nrf52) might provide an alterate version that supresses calling delay from sleep.
  */
-__attribute__ ((weak, noinline)) bool loopCanSleep() {
+__attribute__((weak, noinline)) bool loopCanSleep()
+{
     return true;
 }
 
@@ -145,18 +148,18 @@ void setup()
 #endif
 
 #ifdef DEBUG_PORT
-    if (!radioConfig.preferences.serial_disabled) {
+    if (!config.device.serial_disabled) {
         consoleInit(); // Set serial baud rate and init our mesh console
     }
 #endif
-    
+
     serialSinceMsec = millis();
 
     DEBUG_MSG("\n\n//\\ E S H T /\\ S T / C\n\n");
 
     initDeepSleep();
 
-    // Testing this fix für erratic T-Echo boot behaviour    
+    // Testing this fix für erratic T-Echo boot behaviour
 #if defined(TTGO_T_ECHO) && defined(PIN_EINK_PWR_ON)
     pinMode(PIN_EINK_PWR_ON, OUTPUT);
     digitalWrite(PIN_EINK_PWR_ON, HIGH);
@@ -201,7 +204,7 @@ void setup()
 
     fsInit();
 
-    //router = new DSRRouter();
+    // router = new DSRRouter();
     router = new ReliableRouter();
 
 #ifdef I2C_SDA
@@ -294,7 +297,7 @@ void setup()
 
         // Don't call screen setup until after nodedb is setup (because we need
         // the current region name)
-#if defined(ST7735_CS) || defined(HAS_EINK)
+#if defined(ST7735_CS) || defined(HAS_EINK) || defined(ILI9341_DRIVER)
     screen->setup();
 #else
     if (screen_found)
@@ -307,6 +310,7 @@ void setup()
 
     // ONCE we will factory reset the GPS for bug #327
     if (gps && !devicestate.did_gps_reset) {
+        DEBUG_MSG("GPS FactoryReset requested\n");
         if (gps->factoryReset()) { // If we don't succeed try again next time
             devicestate.did_gps_reset = true;
             nodeDB.saveToDisk();
@@ -407,14 +411,12 @@ void setup()
 
     if (!rIf)
         RECORD_CRITICALERROR(CriticalErrorCode_NoRadio);
-    else{
+    else {
         router->addInterface(rIf);
 
         // Calculate and save the bit rate to myNodeInfo
         // TODO: This needs to be added what ever method changes the channel from the phone.
-        myNodeInfo.bitrate = (float(Constants_DATA_PAYLOAD_LEN) /
-                        (float(rIf->getPacketTime(Constants_DATA_PAYLOAD_LEN)))
-                        ) * 1000;
+        myNodeInfo.bitrate = (float(Constants_DATA_PAYLOAD_LEN) / (float(rIf->getPacketTime(Constants_DATA_PAYLOAD_LEN)))) * 1000;
         DEBUG_MSG("myNodeInfo.bitrate = %f bytes / sec\n", myNodeInfo.bitrate);
     }
 
@@ -426,7 +428,7 @@ void setup()
     setCPUFast(false); // 80MHz is fine for our slow peripherals
 }
 
-uint32_t rebootAtMsec; // If not zero we will reboot at this time (used to reboot shortly after the update completes)
+uint32_t rebootAtMsec;   // If not zero we will reboot at this time (used to reboot shortly after the update completes)
 uint32_t shutdownAtMsec; // If not zero we will shutdown at this time (used to shutdown from python or mobile client)
 
 // If a thread does something that might need for it to be rescheduled ASAP it can set this flag

@@ -15,5 +15,11 @@ PB_BIND(ChannelFile, ChannelFile, 2)
 PB_BIND(OEMStore, OEMStore, 2)
 
 
+PB_BIND(LocalConfig, LocalConfig, 2)
+
+
+PB_BIND(LocalModuleConfig, LocalModuleConfig, 2)
+
+
 
 

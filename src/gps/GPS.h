@@ -57,6 +57,9 @@ class GPS : private concurrency::OSThread
     /// Returns true if we have acquired GPS lock.
     virtual bool hasLock();
 
+    /// Returns true if there's valid data flow with the chip.
+    virtual bool hasFlow();
+
     /// Return true if we are connected to a GPS
     bool isConnected() const { return hasGPS; }
 
@@ -134,6 +137,8 @@ class GPS : private concurrency::OSThread
     /** Get how long we should sleep between aqusition attempts
      */
     uint32_t getSleepTime() const;
+
+    bool getACK(uint8_t c, uint8_t i);
 
     /**
      * Tell users we have new GPS readings

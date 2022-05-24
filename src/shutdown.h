@@ -1,8 +1,8 @@
+#include "buzz.h"
 #include "configuration.h"
 #include "graphics/Screen.h"
-#include "power.h"
-#include "buzz.h"
 #include "main.h"
+#include "power.h"
 
 void powerCommandsCheck()
 {
@@ -30,7 +30,7 @@ void powerCommandsCheck()
         DEBUG_MSG("Shutting down from admin command\n");
 #ifdef TBEAM_V10
         if (axp192_found == true) {
-            setLed(false);
+            // setLed(false); //TODO: FIXME: this is not working
             power->shutdown();
         }
 #elif NRF52_SERIES

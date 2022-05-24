@@ -20,15 +20,22 @@ class AdminModule : public ProtobufModule<AdminMessage>
     virtual bool handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *p) override;
 
   private:
+    /**
+     * Getters
+     */
+    void handleGetOwner(const MeshPacket &req);
+    void handleGetConfig(const MeshPacket &req, uint32_t configType);
+    void handleGetModuleConfig(const MeshPacket &req, uint32_t configType);
+    void handleGetChannel(const MeshPacket &req, uint32_t channelIndex);
+
+    /**
+     * Setters
+     */
     void handleSetOwner(const User &o);
     void handleSetChannel(const Channel &cc);
-    void handleSetRadio(RadioConfig &r);
     void handleSetConfig(const Config &c);
-
-    void handleGetChannel(const MeshPacket &req, uint32_t channelIndex);
-    void handleGetRadio(const MeshPacket &req);
-    void handleGetConfig(const MeshPacket &req);
-    void handleGetOwner(const MeshPacket &req);
+    void handleSetModuleConfig(const ModuleConfig &c);
+    void handleSetChannel();
 };
 
 extern AdminModule *adminModule;

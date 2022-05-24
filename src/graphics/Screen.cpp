@@ -20,6 +20,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 #include "configuration.h"
+#ifndef NO_SCREEN
 #include <OLEDDisplay.h>
 
 #include "GPS.h"
@@ -31,8 +32,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "graphics/images.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
-#include "mesh/generated/deviceonly.pb.h"
 #include "mesh/Channels.h"
+#include "mesh/generated/deviceonly.pb.h"
 #include "modules/TextMessageModule.h"
 #include "sleep.h"
 #include "target_specific.h"
@@ -93,7 +94,7 @@ static uint16_t displayWidth, displayHeight;
 #define SCREEN_WIDTH displayWidth
 #define SCREEN_HEIGHT displayHeight
 
-#ifdef HAS_EINK
+#if defined(HAS_EINK) || defined(ILI9341_DRIVER)
 // The screen is bigger so use bigger fonts
 #define FONT_SMALL ArialMT_Plain_16
 #define FONT_MEDIUM ArialMT_Plain_24
@@ -162,21 +163,22 @@ static void drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDi
     // needs to be drawn relative to x and y
 
     // draw centered icon left to right and centered above the one line of app text
-    display->drawXbm(x + (SCREEN_WIDTH - oemStore.oem_icon_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - oemStore.oem_icon_height) / 2 + 2,
-                     oemStore.oem_icon_width, oemStore.oem_icon_height, (const uint8_t *)oemStore.oem_icon_bits.bytes);
+    display->drawXbm(x + (SCREEN_WIDTH - oemStore.oem_icon_width) / 2,
+                     y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - oemStore.oem_icon_height) / 2 + 2, oemStore.oem_icon_width,
+                     oemStore.oem_icon_height, (const uint8_t *)oemStore.oem_icon_bits.bytes);
 
-    switch(oemStore.oem_font){
-        case 0:
-            display->setFont(FONT_SMALL);
+    switch (oemStore.oem_font) {
+    case 0:
+        display->setFont(FONT_SMALL);
         break;
-        case 2:
-            display->setFont(FONT_LARGE);
+    case 2:
+        display->setFont(FONT_LARGE);
         break;
-        default:
-            display->setFont(FONT_MEDIUM);
+    default:
+        display->setFont(FONT_MEDIUM);
         break;
     }
-    
+
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     const char *title = oemStore.oem_text;
     display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
@@ -351,8 +353,8 @@ static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
 // Ignore messages orginating from phone (from the current node 0x0) unless range test or store and forward module are enabled
 static bool shouldDrawMessage(const MeshPacket *packet)
 {
-    return packet->from != 0 && !radioConfig.preferences.range_test_module_enabled &&
-           !radioConfig.preferences.store_forward_module_enabled;
+    return packet->from != 0 && !moduleConfig.range_test.enabled &&
+           !moduleConfig.store_forward.enabled;
 }
 
 /// Draw the last text message we received
@@ -466,7 +468,7 @@ static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, NodeStatus *no
 // Draw GPS status summary
 static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
-    if (radioConfig.preferences.fixed_position) {
+    if (config.position.fixed_position) {
         // GPS coordinates are currently fixed
         display->drawString(x - 1, y - 2, "Fixed GPS");
         return;
@@ -505,10 +507,10 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
 static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
     String displayLine = "";
-    if (!gps->getIsConnected() && !radioConfig.preferences.fixed_position) {
+    if (!gps->getIsConnected() && !config.position.fixed_position) {
         // displayLine = "No GPS Module";
         // display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
-    } else if (!gps->getHasLock() && !radioConfig.preferences.fixed_position) {
+    } else if (!gps->getHasLock() && !config.position.fixed_position) {
         // displayLine = "No GPS Lock";
         // display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
@@ -521,32 +523,32 @@ static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GP
 // Draw GPS status coordinates
 static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
-    auto gpsFormat = radioConfig.preferences.gps_format;
+    auto gpsFormat = config.display.gps_format;
     String displayLine = "";
 
-    if (!gps->getIsConnected() && !radioConfig.preferences.fixed_position) {
+    if (!gps->getIsConnected() && !config.position.fixed_position) {
         displayLine = "No GPS Module";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
-    } else if (!gps->getHasLock() && !radioConfig.preferences.fixed_position) {
+    } else if (!gps->getHasLock() && !config.position.fixed_position) {
         displayLine = "No GPS Lock";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
 
-        if (gpsFormat != GpsCoordinateFormat_GpsFormatDMS) {
+        if (gpsFormat != Config_DisplayConfig_GpsCoordinateFormat_GpsFormatDMS) {
             char coordinateLine[22];
             geoCoord.updateCoords(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()), int32_t(gps->getAltitude()));
-            if (gpsFormat == GpsCoordinateFormat_GpsFormatDec) { // Decimal Degrees
+            if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_GpsFormatDec) { // Decimal Degrees
                 sprintf(coordinateLine, "%f %f", geoCoord.getLatitude() * 1e-7, geoCoord.getLongitude() * 1e-7);
-            } else if (gpsFormat == GpsCoordinateFormat_GpsFormatUTM) { // Universal Transverse Mercator
+            } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_GpsFormatUTM) { // Universal Transverse Mercator
                 sprintf(coordinateLine, "%2i%1c %06u %07u", geoCoord.getUTMZone(), geoCoord.getUTMBand(),
                         geoCoord.getUTMEasting(), geoCoord.getUTMNorthing());
-            } else if (gpsFormat == GpsCoordinateFormat_GpsFormatMGRS) { // Military Grid Reference System
+            } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_GpsFormatMGRS) { // Military Grid Reference System
                 sprintf(coordinateLine, "%2i%1c %1c%1c %05u %05u", geoCoord.getMGRSZone(), geoCoord.getMGRSBand(),
                         geoCoord.getMGRSEast100k(), geoCoord.getMGRSNorth100k(), geoCoord.getMGRSEasting(),
                         geoCoord.getMGRSNorthing());
-            } else if (gpsFormat == GpsCoordinateFormat_GpsFormatOLC) { // Open Location Code
+            } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_GpsFormatOLC) { // Open Location Code
                 geoCoord.getOLCCode(coordinateLine);
-            } else if (gpsFormat == GpsCoordinateFormat_GpsFormatOSGR) {              // Ordnance Survey Grid Reference
+            } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_GpsFormatOSGR) { // Ordnance Survey Grid Reference
                 if (geoCoord.getOSGRE100k() == 'I' || geoCoord.getOSGRN100k() == 'I') // OSGR is only valid around the UK region
                     sprintf(coordinateLine, "%s", "Out of Boundary");
                 else
@@ -555,7 +557,7 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
             }
 
             // If fixed position, display text "Fixed GPS" alternating with the coordinates.
-            if (radioConfig.preferences.fixed_position) {
+            if (config.position.fixed_position) {
                 if ((millis() / 10000) % 2) {
                     display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
                 } else {
@@ -816,7 +818,8 @@ void _screen_header()
 #endif
 
 // #ifdef RAK4630
-// Screen::Screen(uint8_t address, int sda, int scl) : OSThread("Screen"), cmdQueue(32), dispdev(address, sda, scl), dispdev_oled(address, sda, scl), ui(&dispdev)
+// Screen::Screen(uint8_t address, int sda, int scl) : OSThread("Screen"), cmdQueue(32), dispdev(address, sda, scl),
+// dispdev_oled(address, sda, scl), ui(&dispdev)
 // {
 //     address_found = address;
 //     cmdQueue.setReader(this);
@@ -976,7 +979,7 @@ int32_t Screen::runOnce()
     }
 
     // If we have an OEM Boot screen, toggle after 2,5 seconds
-    if(strlen(oemStore.oem_text) > 0){
+    if (strlen(oemStore.oem_text) > 0) {
         static bool showingOEMBootScreen = true;
         if (showingOEMBootScreen && (millis() > (2500 + serialSinceMsec))) {
             DEBUG_MSG("Switch to OEM screen...\n");
@@ -991,7 +994,7 @@ int32_t Screen::runOnce()
     }
 
 #ifndef DISABLE_WELCOME_UNSET
-    if (showingNormalScreen && radioConfig.preferences.region == RegionCode_Unset) {
+    if (showingNormalScreen && config.lora.region == Config_LoRaConfig_RegionCode_Unset) {
         setWelcomeFrames();
     }
 #endif
@@ -1064,8 +1067,8 @@ int32_t Screen::runOnce()
     // standard screen switching is stopped.
     if (showingNormalScreen) {
         // standard screen loop handling here
-        if (radioConfig.preferences.auto_screen_carousel_secs > 0 &&
-            (millis() - lastScreenTransition) > (radioConfig.preferences.auto_screen_carousel_secs * 1000)) {
+        if (config.display.auto_screen_carousel_secs > 0 &&
+            (millis() - lastScreenTransition) > (config.display.auto_screen_carousel_secs * 1000)) {
             DEBUG_MSG("LastScreenTransition exceeded %ums transitioning to next frame\n", (millis() - lastScreenTransition));
             handleOnPress();
         }
@@ -1340,8 +1343,8 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
 #ifdef HAS_WIFI
-    const char *wifiName = radioConfig.preferences.wifi_ssid;
-    const char *wifiPsw = radioConfig.preferences.wifi_password;
+    const char *wifiName = config.wifi.ssid;
+    const char *wifiPsw = config.wifi.psk;
 
     displayedNodeNum = 0; // Not currently showing a node pane
 
@@ -1352,7 +1355,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
     if (isSoftAPForced()) {
         display->drawString(x, y, String("WiFi: Software AP (Admin)"));
-    } else if (radioConfig.preferences.wifi_ap_mode) {
+    } else if (config.wifi.ap_mode) {
         display->drawString(x, y, String("WiFi: Software AP"));
     } else if (WiFi.status() != WL_CONNECTED) {
         display->drawString(x, y, String("WiFi: Not Connected"));
@@ -1375,8 +1378,8 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
     - WL_NO_SHIELD: assigned when no WiFi shield is present;
 
     */
-    if (WiFi.status() == WL_CONNECTED || isSoftAPForced() || radioConfig.preferences.wifi_ap_mode) {
-        if (radioConfig.preferences.wifi_ap_mode || isSoftAPForced()) {
+    if (WiFi.status() == WL_CONNECTED || isSoftAPForced() || config.wifi.ap_mode) {
+        if (config.wifi.ap_mode || isSoftAPForced()) {
             display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IP: " + String(WiFi.softAPIP().toString().c_str()));
 
             // Number of connections to the AP. Default max for the esp32 is 4
@@ -1468,7 +1471,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         }
 
     } else {
-        if (radioConfig.preferences.wifi_ap_mode) {
+        if (config.wifi.ap_mode) {
             if ((millis() / 10000) % 2) {
                 display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
             } else {
@@ -1515,22 +1518,31 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 
     auto mode = "";
 
-    if (channels.getPrimary().modem_config == 0) {
-        mode = "VLongSlow";
-    } else if (channels.getPrimary().modem_config == 1) {
-        mode = "LongSlow";
-    } else if (channels.getPrimary().modem_config == 2) {
-        mode = "LongFast";
-    } else if (channels.getPrimary().modem_config == 3) {
-        mode = "MidSlow";
-    } else if (channels.getPrimary().modem_config == 4) {
-        mode = "MidFast";
-    } else if (channels.getPrimary().modem_config == 5) {
+    switch (config.lora.modem_preset) {
+    case Config_LoRaConfig_ModemPreset_ShortSlow:
         mode = "ShortSlow";
-    } else if (channels.getPrimary().modem_config == 6) {
+        break;
+    case Config_LoRaConfig_ModemPreset_ShortFast:
         mode = "ShortFast";
-    } else {
+        break;
+    case Config_LoRaConfig_ModemPreset_MidSlow:
+        mode = "MediumSlow";
+        break;
+    case Config_LoRaConfig_ModemPreset_MidFast:
+        mode = "MediumFast";
+        break;
+    case Config_LoRaConfig_ModemPreset_LongFast:
+        mode = "LongFast";
+        break;
+    case Config_LoRaConfig_ModemPreset_LongSlow:
+        mode = "LongSlow";
+        break;
+    case Config_LoRaConfig_ModemPreset_VLongSlow:
+        mode = "VLongSlow";
+        break;
+    default:
         mode = "Custom";
+        break;
     }
 
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(mode), y, mode);
@@ -1583,7 +1595,8 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), y + FONT_HEIGHT_SMALL * 1, chUtil);
 
     // Line 3
-    if (radioConfig.preferences.gps_format != GpsCoordinateFormat_GpsFormatDMS) // if DMS then don't draw altitude
+    if (config.display.gps_format !=
+        Config_DisplayConfig_GpsCoordinateFormat_GpsFormatDMS) // if DMS then don't draw altitude
         drawGPSAltitude(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
 
     // Line 4
@@ -1652,3 +1665,4 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 }
 
 } // namespace graphics
+#endif // NO_SCREEN
