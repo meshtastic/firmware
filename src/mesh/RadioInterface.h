@@ -63,6 +63,8 @@ class RadioInterface
     uint8_t cr = 7;
 
     uint16_t preambleLength = 32; // 8 is default, but we use longer to increase the amount of sleep time when receiving
+    const uint32_t MIN_TX_WAIT_MSEC = 100;  // minimum time to wait before transmitting after sensing the channel in ms 
+    const uint32_t PROCESSING_TIME_MSEC = 4500;  // time to construct, process and construct a packet again (empirically determined)
 
     MeshPacket *sendingPacket = NULL; // The packet we are currently sending
     uint32_t lastTxStart = 0L;

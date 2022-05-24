@@ -1,23 +1,18 @@
-# Meshtastic-device
-[![Open in Visual Studio Code](https://open.vscode.dev/badges/open-in-vscode.svg)](https://open.vscode.dev/meshtastic/Meshtastic-device)
-[![Continuous Integration](https://github.com/meshtastic/Meshtastic-device/actions/workflows/main_matrix.yml/badge.svg)](https://github.com/meshtastic/Meshtastic-device/actions/workflows/main_matrix.yml)
-![GitHub all releases](https://img.shields.io/github/downloads/meshtastic/meshtastic-device/total)
+# Meshtastic Firmware
+
+![GitHub release downloads](https://img.shields.io/github/downloads/meshtastic/meshtastic-device/total)
+[![CI](https://img.shields.io/github/workflow/status/meshtastic/Meshtastic-device/CI?label=actions&logo=github&color=yellow)](https://github.com/meshtastic/repo/actions/workflows/main_matrix.yml)
 [![CLA assistant](https://cla-assistant.io/readme/badge/meshtastic/Meshtastic-device)](https://cla-assistant.io/meshtastic/Meshtastic-device)
-[![Fiscal Contributors](https://opencollective.com/meshtastic/tiers/badge.svg)](https://opencollective.com/meshtastic/)
+[![Fiscal Contributors](https://opencollective.com/meshtastic/tiers/badge.svg?label=Fiscal%20Contributors&color=deeppink)](https://opencollective.com/meshtastic/)
+[![Vercel](https://img.shields.io/static/v1?label=Powered%20by&message=Vercel&style=flat&logo=vercel&color=000000)](https://vercel.com?utm_source=meshtastic&utm_campaign=oss)
 
-## This repository contains the device firmware used in the [Meshtastic](https://meshtastic.org) project.
+## Overview
 
-Update Instructions
+This repository contains the device firmware for the Meshtastic project.
 
-[Using Meshtastic Flasher](https://meshtastic.org/docs/getting-started/meshtastic-flasher)
 
-Manual Method
-
-[For ESP32 devices click here](https://meshtastic.org/docs/getting-started/flashing-esp32)
-
-[For nRF52 devices click here](https://meshtastic.org/docs/getting-started/flashing-nrf52)
-
-For developer information and specific building instructions, please see the [developer documentation](https://meshtastic.org/docs/developers)
+**[Building Instructions](https://meshtastic.org/docs/developers/Firmware/build)**
+**[Flashing Instructions](https://meshtastic.org/docs/getting-started/flashing-firmware/)**
 
 ## Stats
 

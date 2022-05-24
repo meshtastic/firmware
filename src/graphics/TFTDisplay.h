@@ -22,6 +22,12 @@ class TFTDisplay : public OLEDDisplay
 
     // Write the buffer to the display memory
     virtual void display(void) override;
+    
+    /**
+     * shim to make the abstraction happy
+     * 
+     */
+    void setDetected(uint8_t detected);
 
   protected:
     // the header size of the buffer used, e.g. for the SPI command header

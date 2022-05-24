@@ -60,7 +60,7 @@ MeshPacket *PositionModule::allocReply()
 
     // configuration of POSITION packet
     //   consider making this a function argument?
-    uint32_t pos_flags = radioConfig.preferences.position_flags;
+    uint32_t pos_flags = config.position.position_flags;
 
     // Populate a Position struct with ONLY the requested fields
     Position p = Position_init_default; //   Start with an empty structure
@@ -70,28 +70,28 @@ MeshPacket *PositionModule::allocReply()
     p.longitude_i = node->position.longitude_i;
     p.time = node->position.time;
 
-    if (pos_flags & PositionFlags_POS_ALTITUDE) {
-        if (pos_flags & PositionFlags_POS_ALT_MSL)
+    if (pos_flags & Config_PositionConfig_PositionFlags_POS_ALTITUDE) {
+        if (pos_flags & Config_PositionConfig_PositionFlags_POS_ALT_MSL)
             p.altitude = node->position.altitude;
         else
             p.altitude_hae = node->position.altitude_hae;
 
-        if (pos_flags & PositionFlags_POS_GEO_SEP)
+        if (pos_flags & Config_PositionConfig_PositionFlags_POS_GEO_SEP)
             p.alt_geoid_sep = node->position.alt_geoid_sep;
     }
 
-    if (pos_flags & PositionFlags_POS_DOP) {
-        if (pos_flags & PositionFlags_POS_HVDOP) {
+    if (pos_flags & Config_PositionConfig_PositionFlags_POS_DOP) {
+        if (pos_flags & Config_PositionConfig_PositionFlags_POS_HVDOP) {
             p.HDOP = node->position.HDOP;
             p.VDOP = node->position.VDOP;
         } else
             p.PDOP = node->position.PDOP;
     }
 
-    if (pos_flags & PositionFlags_POS_SATINVIEW)
+    if (pos_flags & Config_PositionConfig_PositionFlags_POS_SATINVIEW)
         p.sats_in_view = node->position.sats_in_view;
 
-    if (pos_flags & PositionFlags_POS_TIMESTAMP)
+    if (pos_flags & Config_PositionConfig_PositionFlags_POS_TIMESTAMP)
         p.pos_timestamp = node->position.pos_timestamp;
 
     // Strip out any time information before sending packets to other nodes - to keep the wire size small (and because other
@@ -127,7 +127,9 @@ int32_t PositionModule::runOnce()
 
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();
-    if (lastGpsSend == 0 || now - lastGpsSend >= getPref_position_broadcast_secs() * 1000) {
+    if (lastGpsSend == 0 || now - lastGpsSend >= config.position.position_broadcast_secs
+            ? config.position.position_broadcast_secs
+            : default_broadcast_interval_secs * 1000) {
 
         // Only send packets if the channel is less than 40% utilized.
         if (airTime->channelUtilizationPercent() < 40) {
@@ -149,7 +151,7 @@ int32_t PositionModule::runOnce()
             DEBUG_MSG("Channel utilization is >50 percent. Skipping this opportunity to send.\n");
         }
 
-    } else if (!radioConfig.preferences.position_broadcast_smart_disabled) {
+    } else if (!config.position.position_broadcast_smart_disabled) {
 
         // Only send packets if the channel is less than 25% utilized.
         if (airTime->channelUtilizationPercent() < 25) {

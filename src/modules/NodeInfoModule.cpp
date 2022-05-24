@@ -1,9 +1,9 @@
-#include "configuration.h"
 #include "NodeInfoModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
 #include "Router.h"
+#include "configuration.h"
 #include "main.h"
 
 NodeInfoModule *nodeInfoModule;
@@ -19,7 +19,7 @@ bool NodeInfoModule::handleReceivedProtobuf(const MeshPacket &mp, User *pptr)
     // Show new nodes on LCD screen
     if (wasBroadcast) {
         String lcd = String("Joined: ") + p.long_name + "\n";
-        if(screen)
+        if (screen)
             screen->print(lcd.c_str());
     }
 
@@ -69,6 +69,6 @@ int32_t NodeInfoModule::runOnce()
     DEBUG_MSG("Sending our nodeinfo to mesh (wantReplies=%d)\n", requestReplies);
     sendOurNodeInfo(NODENUM_BROADCAST, requestReplies); // Send our info (don't request replies)
 
-    return getPref_position_broadcast_secs() * 1000;
+    return config.position.position_broadcast_secs ? config.position.position_broadcast_secs
+                                                                  : default_broadcast_interval_secs * 1000;
 }
-

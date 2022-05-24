@@ -1,5 +1,5 @@
-#include "configuration.h"
 #include "kbI2cBase.h"
+#include "configuration.h"
 #include <Wire.h>
 
 KbI2cBase::KbI2cBase(const char *name) : concurrency::OSThread(name)
@@ -10,40 +10,39 @@ KbI2cBase::KbI2cBase(const char *name) : concurrency::OSThread(name)
 int32_t KbI2cBase::runOnce()
 {
     InputEvent e;
-    e.inputEvent = InputEventChar_KEY_NONE;
+    e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_KEY_NONE;
     e.source = this->_originName;
 
     Wire.requestFrom(CARDKB_ADDR, 1);
-    
-    while(Wire.available()) {
+
+    while (Wire.available()) {
         char c = Wire.read();
-        switch(c) {
+        switch (c) {
         case 0x1b: // ESC
-            e.inputEvent = InputEventChar_KEY_CANCEL;
+            e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_KEY_CANCEL;
             break;
         case 0x08: // Back
-            e.inputEvent = InputEventChar_KEY_BACK;
+            e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_KEY_BACK;
             break;
         case 0xb5: // Up
-            e.inputEvent = InputEventChar_KEY_UP;
+            e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_KEY_UP;
             break;
         case 0xb6: // Down
-            e.inputEvent = InputEventChar_KEY_DOWN;
+            e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_KEY_DOWN;
             break;
         case 0xb4: // Left
-            e.inputEvent = InputEventChar_KEY_LEFT;
+            e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_KEY_LEFT;
             break;
         case 0xb7: // Right
-            e.inputEvent = InputEventChar_KEY_RIGHT;
+            e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_KEY_RIGHT;
             break;
         case 0x0d: // Enter
-            e.inputEvent = InputEventChar_KEY_SELECT;
+            e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_KEY_SELECT;
             break;
         }
     }
 
-    if (e.inputEvent != InputEventChar_KEY_NONE)
-    {
+    if (e.inputEvent != ModuleConfig_CannedMessageConfig_InputEventChar_KEY_NONE) {
         this->notifyObservers(&e);
     }
     return 500;

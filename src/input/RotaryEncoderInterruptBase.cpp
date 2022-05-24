@@ -1,17 +1,14 @@
-#include "configuration.h"
 #include "RotaryEncoderInterruptBase.h"
+#include "configuration.h"
 
-RotaryEncoderInterruptBase::RotaryEncoderInterruptBase(
-    const char *name) :
-    concurrency::OSThread(name)
+RotaryEncoderInterruptBase::RotaryEncoderInterruptBase(const char *name) : concurrency::OSThread(name)
 {
     this->_originName = name;
 }
 
 void RotaryEncoderInterruptBase::init(
-    uint8_t pinA, uint8_t pinB, uint8_t pinPress,
-    char eventCw, char eventCcw, char eventPressed,
-//    std::function<void(void)> onIntA, std::function<void(void)> onIntB, std::function<void(void)> onIntPress) :
+    uint8_t pinA, uint8_t pinB, uint8_t pinPress, char eventCw, char eventCcw, char eventPressed,
+    //    std::function<void(void)> onIntA, std::function<void(void)> onIntB, std::function<void(void)> onIntPress) :
     void (*onIntA)(), void (*onIntB)(), void (*onIntPress)())
 {
     this->_pinA = pinA;
@@ -24,42 +21,34 @@ void RotaryEncoderInterruptBase::init(
     pinMode(this->_pinA, INPUT_PULLUP);
     pinMode(this->_pinB, INPUT_PULLUP);
 
-//    attachInterrupt(pinPress, onIntPress, RISING);
+    //    attachInterrupt(pinPress, onIntPress, RISING);
     attachInterrupt(pinPress, onIntPress, RISING);
     attachInterrupt(this->_pinA, onIntA, CHANGE);
     attachInterrupt(this->_pinB, onIntB, CHANGE);
 
     this->rotaryLevelA = digitalRead(this->_pinA);
     this->rotaryLevelB = digitalRead(this->_pinB);
-    DEBUG_MSG("Rotary initialized (%d, %d, %d)\n",
-        this->_pinA, this->_pinB, pinPress);
+    DEBUG_MSG("Rotary initialized (%d, %d, %d)\n", this->_pinA, this->_pinB, pinPress);
 }
-
 
 int32_t RotaryEncoderInterruptBase::runOnce()
 {
     InputEvent e;
-    e.inputEvent = InputEventChar_KEY_NONE;
+    e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_KEY_NONE;
     e.source = this->_originName;
 
-    if (this->action == ROTARY_ACTION_PRESSED)
-    {
+    if (this->action == ROTARY_ACTION_PRESSED) {
         DEBUG_MSG("Rotary event Press\n");
         e.inputEvent = this->_eventPressed;
-    }
-    else if (this->action == ROTARY_ACTION_CW)
-    {
+    } else if (this->action == ROTARY_ACTION_CW) {
         DEBUG_MSG("Rotary event CW\n");
         e.inputEvent = this->_eventCw;
-    }
-    else if (this->action == ROTARY_ACTION_CCW)
-    {
+    } else if (this->action == ROTARY_ACTION_CCW) {
         DEBUG_MSG("Rotary event CCW\n");
         e.inputEvent = this->_eventCcw;
     }
 
-    if (e.inputEvent != InputEventChar_KEY_NONE)
-    {
+    if (e.inputEvent != ModuleConfig_CannedMessageConfig_InputEventChar_KEY_NONE) {
         this->notifyObservers(&e);
     }
 
@@ -67,7 +56,6 @@ int32_t RotaryEncoderInterruptBase::runOnce()
 
     return 30000; // TODO: technically this can be MAX_INT
 }
-
 
 void RotaryEncoderInterruptBase::intPressHandler()
 {
@@ -79,66 +67,47 @@ void RotaryEncoderInterruptBase::intAHandler()
 {
     // CW rotation (at least on most common rotary encoders)
     int currentLevelA = digitalRead(this->_pinA);
-    if (this->rotaryLevelA == currentLevelA)
-    {
+    if (this->rotaryLevelA == currentLevelA) {
         return;
     }
     this->rotaryLevelA = currentLevelA;
-    this->rotaryStateCCW = intHandler(
-        currentLevelA == HIGH,
-        this->rotaryLevelB,
-        ROTARY_ACTION_CCW,
-        this->rotaryStateCCW);
+    this->rotaryStateCCW = intHandler(currentLevelA == HIGH, this->rotaryLevelB, ROTARY_ACTION_CCW, this->rotaryStateCCW);
 }
 
 void RotaryEncoderInterruptBase::intBHandler()
 {
     // CW rotation (at least on most common rotary encoders)
     int currentLevelB = digitalRead(this->_pinB);
-    if (this->rotaryLevelB == currentLevelB)
-    {
+    if (this->rotaryLevelB == currentLevelB) {
         return;
     }
     this->rotaryLevelB = currentLevelB;
-    this->rotaryStateCW = intHandler(
-        currentLevelB == HIGH,
-        this->rotaryLevelA,
-        ROTARY_ACTION_CW,
-        this->rotaryStateCW);
+    this->rotaryStateCW = intHandler(currentLevelB == HIGH, this->rotaryLevelA, ROTARY_ACTION_CW, this->rotaryStateCW);
 }
 
 /**
  * @brief Rotary action implementation.
  *   We assume, the following pin setup:
  *    A   --||
- *    GND --||]======== 
+ *    GND --||]========
  *    B   --||
- * 
+ *
  * @return The new state for rotary pin.
  */
-RotaryEncoderInterruptBaseStateType RotaryEncoderInterruptBase::intHandler(
-    bool actualPinRaising,
-    int otherPinLevel,
-    RotaryEncoderInterruptBaseActionType action,
-    RotaryEncoderInterruptBaseStateType state)
+RotaryEncoderInterruptBaseStateType RotaryEncoderInterruptBase::intHandler(bool actualPinRaising, int otherPinLevel,
+                                                                           RotaryEncoderInterruptBaseActionType action,
+                                                                           RotaryEncoderInterruptBaseStateType state)
 {
-    RotaryEncoderInterruptBaseStateType newState =
-        state;
-    if (actualPinRaising && (otherPinLevel == LOW))
-    {
-        if (state == ROTARY_EVENT_CLEARED)
-        {
+    RotaryEncoderInterruptBaseStateType newState = state;
+    if (actualPinRaising && (otherPinLevel == LOW)) {
+        if (state == ROTARY_EVENT_CLEARED) {
             newState = ROTARY_EVENT_OCCURRED;
-            if ((this->action != ROTARY_ACTION_PRESSED)
-                && (this->action != action))
-            {
+            if ((this->action != ROTARY_ACTION_PRESSED) && (this->action != action)) {
                 this->action = action;
                 DEBUG_MSG("Rotary action\n");
             }
         }
-    }
-    else if (!actualPinRaising && (otherPinLevel == HIGH))
-    {
+    } else if (!actualPinRaising && (otherPinLevel == HIGH)) {
         // Logic to prevent bouncing.
         newState = ROTARY_EVENT_CLEARED;
     }

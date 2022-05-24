@@ -25,6 +25,8 @@ class NMEAGPS : public GPS
   public:
     virtual bool setupGPS() override;
 
+    virtual bool factoryReset() override;
+
   protected:
     /** Subclasses should look for serial rx characters here and feed it to their GPS parser
      * 
@@ -49,4 +51,6 @@ class NMEAGPS : public GPS
     virtual bool lookForLocation() override;
 
     virtual bool hasLock() override;
+
+    virtual bool hasFlow() override;
 };
