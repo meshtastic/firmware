@@ -218,7 +218,7 @@ bool initWifi(bool forceSoftAP)
                 } else {
 
                     // If AP is configured to be hidden hidden
-                    if (config.payloadVariant.wifi.ap_hidden) {
+                    if (config.wifi.ap_hidden) {
 
                         // The configurations on softAP are from the espresif library
                         int ok = WiFi.softAP(wifiName, wifiPsw, 1, 1, 4);
