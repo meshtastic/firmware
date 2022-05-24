@@ -216,6 +216,17 @@ bool initWifi(bool forceSoftAP)
                     DEBUG_MSG("Starting (Forced) WIFI AP: ssid=%s, ok=%d\n", softAPssid, ok);
 
                 } else {
+
+                    // If AP is configured to be hidden hidden
+                    if (config.wifi.ap_hidden) {
+
+                        // The configurations on softAP are from the espresif library
+                        int ok = WiFi.softAP(wifiName, wifiPsw, 1, 1, 4);
+                        DEBUG_MSG("Starting hiddem WIFI AP: ssid=%s, ok=%d\n", wifiName, ok);
+                    } else {
+                        int ok = WiFi.softAP(wifiName, wifiPsw);
+                        DEBUG_MSG("Starting WIFI AP: ssid=%s, ok=%d\n", wifiName, ok);
+                    }
                     int ok = WiFi.softAP(wifiName, wifiPsw);
                     DEBUG_MSG("Starting WIFI AP: ssid=%s, ok=%d\n", wifiName, ok);
                 }
