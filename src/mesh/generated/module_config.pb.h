@@ -13,21 +13,21 @@
 /* Enum definitions */
 typedef enum _ModuleConfig_SerialConfig_Serial_Baud { 
     ModuleConfig_SerialConfig_Serial_Baud_BAUD_Default = 0, 
-    ModuleConfig_SerialConfig_Serial_Baud_BAUD_2400 = 1, 
-    ModuleConfig_SerialConfig_Serial_Baud_BAUD_4800 = 2, 
-    ModuleConfig_SerialConfig_Serial_Baud_BAUD_9600 = 3, 
-    ModuleConfig_SerialConfig_Serial_Baud_BAUD_19200 = 4, 
-    ModuleConfig_SerialConfig_Serial_Baud_BAUD_38400 = 5, 
-    ModuleConfig_SerialConfig_Serial_Baud_BAUD_57600 = 6, 
-    ModuleConfig_SerialConfig_Serial_Baud_BAUD_115200 = 7, 
-    ModuleConfig_SerialConfig_Serial_Baud_BAUD_230400 = 8, 
-    ModuleConfig_SerialConfig_Serial_Baud_BAUD_460800 = 9, 
-    ModuleConfig_SerialConfig_Serial_Baud_BAUD_576000 = 10, 
-    ModuleConfig_SerialConfig_Serial_Baud_BAUD_921600 = 11, 
-    ModuleConfig_SerialConfig_Serial_Baud_BAUD_110 = 12, 
-    ModuleConfig_SerialConfig_Serial_Baud_BAUD_300 = 13, 
-    ModuleConfig_SerialConfig_Serial_Baud_BAUD_600 = 14, 
-    ModuleConfig_SerialConfig_Serial_Baud_BAUD_1200 = 15 
+    ModuleConfig_SerialConfig_Serial_Baud_BAUD_110 = 1, 
+    ModuleConfig_SerialConfig_Serial_Baud_BAUD_300 = 2, 
+    ModuleConfig_SerialConfig_Serial_Baud_BAUD_600 = 3, 
+    ModuleConfig_SerialConfig_Serial_Baud_BAUD_1200 = 4, 
+    ModuleConfig_SerialConfig_Serial_Baud_BAUD_2400 = 5, 
+    ModuleConfig_SerialConfig_Serial_Baud_BAUD_4800 = 6, 
+    ModuleConfig_SerialConfig_Serial_Baud_BAUD_9600 = 7, 
+    ModuleConfig_SerialConfig_Serial_Baud_BAUD_19200 = 8, 
+    ModuleConfig_SerialConfig_Serial_Baud_BAUD_38400 = 9, 
+    ModuleConfig_SerialConfig_Serial_Baud_BAUD_57600 = 10, 
+    ModuleConfig_SerialConfig_Serial_Baud_BAUD_115200 = 11, 
+    ModuleConfig_SerialConfig_Serial_Baud_BAUD_230400 = 12, 
+    ModuleConfig_SerialConfig_Serial_Baud_BAUD_460800 = 13, 
+    ModuleConfig_SerialConfig_Serial_Baud_BAUD_576000 = 14, 
+    ModuleConfig_SerialConfig_Serial_Baud_BAUD_921600 = 15 
 } ModuleConfig_SerialConfig_Serial_Baud;
 
 typedef enum _ModuleConfig_SerialConfig_Serial_Mode { 
@@ -133,8 +133,8 @@ typedef struct _ModuleConfig {
 
 /* Helper constants for enums */
 #define _ModuleConfig_SerialConfig_Serial_Baud_MIN ModuleConfig_SerialConfig_Serial_Baud_BAUD_Default
-#define _ModuleConfig_SerialConfig_Serial_Baud_MAX ModuleConfig_SerialConfig_Serial_Baud_BAUD_1200
-#define _ModuleConfig_SerialConfig_Serial_Baud_ARRAYSIZE ((ModuleConfig_SerialConfig_Serial_Baud)(ModuleConfig_SerialConfig_Serial_Baud_BAUD_1200+1))
+#define _ModuleConfig_SerialConfig_Serial_Baud_MAX ModuleConfig_SerialConfig_Serial_Baud_BAUD_921600
+#define _ModuleConfig_SerialConfig_Serial_Baud_ARRAYSIZE ((ModuleConfig_SerialConfig_Serial_Baud)(ModuleConfig_SerialConfig_Serial_Baud_BAUD_921600+1))
 
 #define _ModuleConfig_SerialConfig_Serial_Mode_MIN ModuleConfig_SerialConfig_Serial_Mode_MODE_Default
 #define _ModuleConfig_SerialConfig_Serial_Mode_MAX ModuleConfig_SerialConfig_Serial_Mode_MODE_PROTO
