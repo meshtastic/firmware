@@ -65,44 +65,13 @@ typedef enum _HardwareModel {
     HardwareModel_NANO_G1 = 41, 
     /* nRF52840 Dongle : https://www.nordicsemi.com/Products/Development-hardware/nrf52840-dongle/ */
     HardwareModel_NRF52840_PCA10059 = 42, 
+    /* Custom Disaster Radio esp32 v3 device https://github.com/sudomesh/disaster-radio/tree/master/hardware/board_esp32_v3 */
+    HardwareModel_DR_DEV = 43, 
+    /* M5 esp32 based MCU modules with enclosure, TFT and LORA Shields. All Variants (Basic, Core, Fire, Core2, Paper) https://m5stack.com/ */
+    HardwareModel_M5STACK = 44, 
     /* Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits. */
     HardwareModel_PRIVATE_HW = 255 
 } HardwareModel;
-
-/* The team colors are based on the names of "friendly teams" in ATAK:
- https://github.com/deptofdefense/AndroidTacticalAssaultKit-CIV/blob/master/atak/ATAK/app/src/main/assets/filters/team_filters.xml */
-typedef enum _Team { 
-    /* the default (unset) is "achromatic" (unaffiliated) */
-    Team_CLEAR = 0, 
-    /* TODO: REPLACE */
-    Team_CYAN = 1, 
-    /* TODO: REPLACE */
-    Team_WHITE = 2, 
-    /* TODO: REPLACE */
-    Team_YELLOW = 3, 
-    /* TODO: REPLACE */
-    Team_ORANGE = 4, 
-    /* TODO: REPLACE */
-    Team_MAGENTA = 5, 
-    /* TODO: REPLACE */
-    Team_RED = 6, 
-    /* TODO: REPLACE */
-    Team_MAROON = 7, 
-    /* TODO: REPLACE */
-    Team_PURPLE = 8, 
-    /* TODO: REPLACE */
-    Team_DARK_BLUE = 9, 
-    /* TODO: REPLACE */
-    Team_BLUE = 10, 
-    /* TODO: REPLACE */
-    Team_TEAL = 11, 
-    /* TODO: REPLACE */
-    Team_GREEN = 12, 
-    /* TODO: REPLACE */
-    Team_DARK_GREEN = 13, 
-    /* TODO: REPLACE */
-    Team_BROWN = 14 
-} Team;
 
 /* Shared constants between device and phone */
 typedef enum _Constants { 
@@ -164,18 +133,17 @@ typedef enum _Position_LocSource {
     Position_LocSource_LOCSRC_GPS_EXTERNAL = 3 
 } Position_LocSource;
 
-/* The team colors are based on the names of "friendly teams" in ATAK:
- https://github.com/deptofdefense/AndroidTacticalAssaultKit-CIV/blob/master/atak/ATAK/app/src/main/assets/filters/team_filters.xml */
+/* Shared constants between device and phone */
 typedef enum _Position_AltSource { 
-    /* the default (unset) is "achromatic" (unaffiliated) */
+    /* First enum must be zero, and we are just using this enum to
+ pass int constants between two very different environments */
     Position_AltSource_ALTSRC_UNSPECIFIED = 0, 
-    /* TODO: REPLACE */
+    /* From mesh.options
+ note: this payload length is ONLY the bytes that are sent inside of the Data protobuf (excluding protobuf overhead). The 16 byte header is
+ outside of this envelope */
     Position_AltSource_ALTSRC_MANUAL_ENTRY = 1, 
-    /* TODO: REPLACE */
     Position_AltSource_ALTSRC_GPS_INTERNAL = 2, 
-    /* TODO: REPLACE */
     Position_AltSource_ALTSRC_GPS_EXTERNAL = 3, 
-    /* TODO: REPLACE */
     Position_AltSource_ALTSRC_BAROMETRIC = 4 
 } Position_AltSource;
 
@@ -232,14 +200,15 @@ typedef enum _MeshPacket_Priority {
     MeshPacket_Priority_MAX = 127 
 } MeshPacket_Priority;
 
-/* The team colors are based on the names of "friendly teams" in ATAK:
- https://github.com/deptofdefense/AndroidTacticalAssaultKit-CIV/blob/master/atak/ATAK/app/src/main/assets/filters/team_filters.xml */
+/* Shared constants between device and phone */
 typedef enum _MeshPacket_Delayed { 
-    /* the default (unset) is "achromatic" (unaffiliated) */
+    /* First enum must be zero, and we are just using this enum to
+ pass int constants between two very different environments */
     MeshPacket_Delayed_NO_DELAY = 0, 
-    /* TODO: REPLACE */
+    /* From mesh.options
+ note: this payload length is ONLY the bytes that are sent inside of the Data protobuf (excluding protobuf overhead). The 16 byte header is
+ outside of this envelope */
     MeshPacket_Delayed_DELAYED_BROADCAST = 1, 
-    /* TODO: REPLACE */
     MeshPacket_Delayed_DELAYED_DIRECT = 2 
 } MeshPacket_Delayed;
 
@@ -266,6 +235,12 @@ typedef enum _LogRecord_Level {
 } LogRecord_Level;
 
 /* Struct definitions */
+typedef PB_BYTES_ARRAY_T(237) Compressed_data_t;
+typedef struct _Compressed { 
+    PortNum portnum; 
+    Compressed_data_t data; 
+} Compressed;
+
 /* Location of a waypoint to associate with a message */
 typedef struct _Location { 
     /* Id of the location */
@@ -307,14 +282,6 @@ typedef struct _MyNodeInfo {
  Not the same as UserPreferences.location_sharing */
     bool has_gps; 
     /* The maximum number of 'software' channels that can be set on this node. */
-    char region[12]; 
-    /* Deprecated! ONLY USED IN DEVICE CODE (for upgrading old 1.0 firmwares) DO NOT READ ELSEWHERE.
- The region code for my radio (US, CN, etc...)
- Note: This string is deprecated.
- The 1.0 builds populate it based on the flashed firmware name.
- But for newer builds this string will be unpopulated (missing/null).
- For those builds you should instead look at the new read/write region enum in UserSettings
- The format of this string was 1.0-US or 1.0-CN etc.. Or empty string if unset. */
     char firmware_version[18]; 
     /* 0.0.5 etc... */
     CriticalErrorCode error_code; 
@@ -432,8 +399,11 @@ typedef struct _RouteDiscovery {
     uint32_t route[8]; 
 } RouteDiscovery;
 
+/* Compressed message payload */
 typedef struct _ToRadio_PeerInfo { 
+    /* PortNum to determine the how to handle the compressed payload. */
     uint32_t app_version; 
+    /* Compressed data. */
     bool mqtt_gateway; 
 } ToRadio_PeerInfo;
 
@@ -480,12 +450,6 @@ typedef struct _User {
  If this user is a licensed operator, set this flag.
  Also, "long_name" should be their licence number. */
     bool is_licensed; 
-    /* Participants in the same network can self-group into different teams.
- Short-term this can be used to visually differentiate them on the map;
- in the longer term it could also help users to semi-automatically
- select or ignore messages according to team affiliation.
- In total, 14 teams are defined (encoded in 4 bits) */
-    Team team; 
     /* Transmit power at antenna connector, in decibel-milliwatt
  An optional self-reported value useful in network planning, discovery
  and positioning - along with ant_gain_dbi and ant_azimuth below */
@@ -697,10 +661,6 @@ typedef struct _ToRadio {
 #define _HardwareModel_MAX HardwareModel_PRIVATE_HW
 #define _HardwareModel_ARRAYSIZE ((HardwareModel)(HardwareModel_PRIVATE_HW+1))
 
-#define _Team_MIN Team_CLEAR
-#define _Team_MAX Team_BROWN
-#define _Team_ARRAYSIZE ((Team)(Team_BROWN+1))
-
 #define _Constants_MIN Constants_Unused
 #define _Constants_MAX Constants_DATA_PAYLOAD_LEN
 #define _Constants_ARRAYSIZE ((Constants)(Constants_DATA_PAYLOAD_LEN+1))
@@ -740,33 +700,37 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define Position_init_default                    {0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define User_init_default                        {"", "", "", {0}, _HardwareModel_MIN, 0, _Team_MIN, 0, 0, 0}
+#define User_init_default                        {"", "", "", {0}, _HardwareModel_MIN, 0, 0, 0, 0}
 #define RouteDiscovery_init_default              {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_default                     {0, {RouteDiscovery_init_default}}
 #define Data_init_default                        {_PortNum_MIN, 0, {{0, {0}}}, 0, 0, 0, 0, 0, 0, false, Location_init_default}
 #define Location_init_default                    {0, 0, 0, 0, 0}
 #define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
 #define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0, false, DeviceMetrics_init_default}
-#define MyNodeInfo_init_default                  {0, 0, "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
+#define MyNodeInfo_init_default                  {0, 0, "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
 #define LogRecord_init_default                   {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_default                   {0, 0, {MyNodeInfo_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
 #define ToRadio_PeerInfo_init_default            {0, 0}
+#define Compressed_init_default                  {_PortNum_MIN, {0, {0}}}
 #define Position_init_zero                       {0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define User_init_zero                           {"", "", "", {0}, _HardwareModel_MIN, 0, _Team_MIN, 0, 0, 0}
+#define User_init_zero                           {"", "", "", {0}, _HardwareModel_MIN, 0, 0, 0, 0}
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_zero                        {0, {RouteDiscovery_init_zero}}
 #define Data_init_zero                           {_PortNum_MIN, 0, {{0, {0}}}, 0, 0, 0, 0, 0, 0, false, Location_init_zero}
 #define Location_init_zero                       {0, 0, 0, 0, 0}
 #define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
 #define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0, false, DeviceMetrics_init_zero}
-#define MyNodeInfo_init_zero                     {0, 0, "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
+#define MyNodeInfo_init_zero                     {0, 0, "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
 #define LogRecord_init_zero                      {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_zero                      {0, 0, {MyNodeInfo_init_zero}}
 #define ToRadio_init_zero                        {0, {MeshPacket_init_zero}}
 #define ToRadio_PeerInfo_init_zero               {0, 0}
+#define Compressed_init_zero                     {_PortNum_MIN, {0, {0}}}
 
 /* Field tags (for use in manual encoding/decoding) */
+#define Compressed_portnum_tag                   1
+#define Compressed_data_tag                      2
 #define Location_id_tag                          1
 #define Location_latitude_i_tag                  2
 #define Location_longitude_i_tag                 3
@@ -778,7 +742,6 @@ extern "C" {
 #define LogRecord_level_tag                      4
 #define MyNodeInfo_my_node_num_tag               1
 #define MyNodeInfo_has_gps_tag                   2
-#define MyNodeInfo_region_tag                    4
 #define MyNodeInfo_firmware_version_tag          6
 #define MyNodeInfo_error_code_tag                7
 #define MyNodeInfo_error_address_tag             8
@@ -824,7 +787,6 @@ extern "C" {
 #define User_macaddr_tag                         4
 #define User_hw_model_tag                        6
 #define User_is_licensed_tag                     7
-#define User_team_tag                            8
 #define User_tx_power_dbm_tag                    10
 #define User_ant_gain_dbi_tag                    11
 #define User_ant_azimuth_tag                     12
@@ -906,7 +868,6 @@ X(a, STATIC,   SINGULAR, STRING,   short_name,        3) \
 X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, macaddr,           4) \
 X(a, STATIC,   SINGULAR, UENUM,    hw_model,          6) \
 X(a, STATIC,   SINGULAR, BOOL,     is_licensed,       7) \
-X(a, STATIC,   SINGULAR, UENUM,    team,              8) \
 X(a, STATIC,   SINGULAR, UINT32,   tx_power_dbm,     10) \
 X(a, STATIC,   SINGULAR, UINT32,   ant_gain_dbi,     11) \
 X(a, STATIC,   SINGULAR, UINT32,   ant_azimuth,      12)
@@ -985,7 +946,6 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  device_metrics,    6)
 #define MyNodeInfo_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   my_node_num,       1) \
 X(a, STATIC,   SINGULAR, BOOL,     has_gps,           2) \
-X(a, STATIC,   SINGULAR, STRING,   region,            4) \
 X(a, STATIC,   SINGULAR, STRING,   firmware_version,   6) \
 X(a, STATIC,   SINGULAR, UENUM,    error_code,        7) \
 X(a, STATIC,   SINGULAR, UINT32,   error_address,     8) \
@@ -1042,6 +1002,12 @@ X(a, STATIC,   SINGULAR, BOOL,     mqtt_gateway,      2)
 #define ToRadio_PeerInfo_CALLBACK NULL
 #define ToRadio_PeerInfo_DEFAULT NULL
 
+#define Compressed_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    portnum,           1) \
+X(a, STATIC,   SINGULAR, BYTES,    data,              2)
+#define Compressed_CALLBACK NULL
+#define Compressed_DEFAULT NULL
+
 extern const pb_msgdesc_t Position_msg;
 extern const pb_msgdesc_t User_msg;
 extern const pb_msgdesc_t RouteDiscovery_msg;
@@ -1055,6 +1021,7 @@ extern const pb_msgdesc_t LogRecord_msg;
 extern const pb_msgdesc_t FromRadio_msg;
 extern const pb_msgdesc_t ToRadio_msg;
 extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
+extern const pb_msgdesc_t Compressed_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define Position_fields &Position_msg
@@ -1070,21 +1037,23 @@ extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 #define FromRadio_fields &FromRadio_msg
 #define ToRadio_fields &ToRadio_msg
 #define ToRadio_PeerInfo_fields &ToRadio_PeerInfo_msg
+#define Compressed_fields &Compressed_msg
 
 /* Maximum encoded size of messages (where known) */
+#define Compressed_size                          243
 #define Data_size                                296
 #define FromRadio_size                           356
 #define Location_size                            24
 #define LogRecord_size                           81
 #define MeshPacket_size                          347
-#define MyNodeInfo_size                          210
-#define NodeInfo_size                            283
+#define MyNodeInfo_size                          197
+#define NodeInfo_size                            281
 #define Position_size                            142
 #define RouteDiscovery_size                      40
 #define Routing_size                             42
 #define ToRadio_PeerInfo_size                    8
 #define ToRadio_size                             350
-#define User_size                                97
+#define User_size                                95
 
 #ifdef __cplusplus
 } /* extern "C" */

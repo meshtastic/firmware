@@ -11,7 +11,8 @@
 extern DeviceState devicestate;
 extern ChannelFile channelFile;
 extern MyNodeInfo &myNodeInfo;
-extern RadioConfig radioConfig;
+extern LocalConfig config;
+extern LocalModuleConfig moduleConfig;
 extern User &owner;
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
@@ -63,7 +64,7 @@ class NodeDB
 
     /** Update telemetry info for this node based on received metrics
      */
-    void updateTelemetry(uint32_t nodeId,  const Telemetry &t, RxSource src = RX_SRC_RADIO);
+    void updateTelemetry(uint32_t nodeId, const Telemetry &t, RxSource src = RX_SRC_RADIO);
 
     /** Update user info for this node based on received user data
      */
@@ -122,7 +123,8 @@ class NodeDB
     void loadFromDisk();
 
     /// Reinit device state from scratch (not loading from disk)
-    void installDefaultDeviceState(), installDefaultRadioConfig(), installDefaultChannels();
+    void installDefaultDeviceState(), installDefaultChannels(), installDefaultConfig(),
+        installDefaultModuleConfig();
 };
 
 /**
@@ -146,7 +148,7 @@ extern NodeDB nodeDB;
         prefs.ls_secs = oneday
 
         prefs.position_broadcast_secs = 12 hours # send either position or owner every 12hrs
-        
+
         # get a new GPS position once per day
         prefs.gps_update_interval = oneday
 
@@ -159,33 +161,27 @@ extern NodeDB nodeDB;
 // Our delay functions check for this for times that should never expire
 #define NODE_DELAY_FOREVER 0xffffffff
 
-#define IF_ROUTER(routerVal, normalVal) ((radioConfig.preferences.role == Role_Router) ? (routerVal) : (normalVal))
+#define IF_ROUTER(routerVal, normalVal) ((config.device.role == Config_DeviceConfig_Role_Router) ? (routerVal) : (normalVal))
 
-#define PREF_GET(name, defaultVal)                                                                                               \
-    inline uint32_t getPref_##name() { return radioConfig.preferences.name ? radioConfig.preferences.name : (defaultVal); }
+#define default_broadcast_interval_secs IF_ROUTER(12 * 60 * 60, 15 * 60)
+#define default_wait_bluetooth_secs IF_ROUTER(1, 60)
+#define default_mesh_sds_timeout_secs IF_ROUTER(NODE_DELAY_FOREVER, 2 * 60 * 60)
+#define default_sds_secs 365 * 24 * 60 * 60
+#define default_ls_secs IF_ROUTER(24 * 60 * 60, 5 * 60)
+#define default_phone_timeout_secs 15 * 60
+#define default_min_wake_secs 10
 
-PREF_GET(position_broadcast_secs, IF_ROUTER(12 * 60 * 60, 15 * 60))
-// Defaulting Telemetry to the same as position interval for now
-PREF_GET(telemetry_module_device_update_interval, IF_ROUTER(12 * 60 * 60, 15 * 60))
-PREF_GET(telemetry_module_environment_update_interval, IF_ROUTER(12 * 60 * 60, 15 * 60))
 
+inline uint32_t getIntervalOrDefaultMs(uint32_t interval)
+{
+    if (interval > 0)
+        return interval * 1000;
+    return default_broadcast_interval_secs * 1000;
+}
 
-// Each time we wake into the DARK state allow 1 minute to send and receive BLE packets to the phone
-PREF_GET(wait_bluetooth_secs, IF_ROUTER(1, 60))
-
-PREF_GET(screen_on_secs, 60)
-PREF_GET(mesh_sds_timeout_secs, IF_ROUTER(NODE_DELAY_FOREVER, 2 * 60 * 60))
-PREF_GET(sds_secs, 365 * 24 * 60 * 60)
-
-// We default to sleeping (with bluetooth off for 5 minutes at a time).  This seems to be a good tradeoff between
-// latency for the user sending messages and power savings because of not having to run (expensive) ESP32 bluetooth
-PREF_GET(ls_secs, IF_ROUTER(24 * 60 * 60, 5 * 60))
-
-PREF_GET(phone_timeout_secs, 15 * 60)
-PREF_GET(min_wake_secs, 10)
-
-/** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings 
+/** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings
  * might have changed is incremented.  Allows others to detect they might now be on a new channel.
  */
 extern uint32_t radioGeneration;
 
+#define Module_Config_size (ModuleConfig_CannedMessageConfig_size + ModuleConfig_ExternalNotificationConfig_size + ModuleConfig_MQTTConfig_size + ModuleConfig_RangeTestConfig_size + ModuleConfig_SerialConfig_size + ModuleConfig_StoreForwardConfig_size + ModuleConfig_TelemetryConfig_size + ModuleConfig_size)

@@ -1,4 +1,6 @@
 #pragma once
+#ifdef NO_SCREEN
+#else
 #include "ProtobufModule.h"
 #include "input/InputBroker.h"
 
@@ -84,3 +86,4 @@ class CannedMessageModule :
 };
 
 extern CannedMessageModule *cannedMessageModule;
+#endif

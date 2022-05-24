@@ -111,17 +111,18 @@ void MQTT::reconnect()
         const char *mqttUsername = "meshdev";
         const char *mqttPassword = "large4cats";
 
-        if (*radioConfig.preferences.mqtt_server) {
-            serverAddr = radioConfig.preferences.mqtt_server;     // Override the default
-            mqttUsername = radioConfig.preferences.mqtt_username; // do not use the hardcoded credentials for a custom mqtt server
-            mqttPassword = radioConfig.preferences.mqtt_password;
+        if (*moduleConfig.mqtt.address) {
+            serverAddr = moduleConfig.mqtt.address; // Override the default
+            mqttUsername =
+                moduleConfig.mqtt.username; // do not use the hardcoded credentials for a custom mqtt server
+            mqttPassword = moduleConfig.mqtt.password;
         } else {
             // we are using the default server.  Use the hardcoded credentials by default, but allow overriding
-            if (*radioConfig.preferences.mqtt_username && radioConfig.preferences.mqtt_username[0] != '\0') {
-                mqttUsername = radioConfig.preferences.mqtt_username;
+            if (*moduleConfig.mqtt.username && moduleConfig.mqtt.username[0] != '\0') {
+                mqttUsername = moduleConfig.mqtt.username;
             }
-            if (*radioConfig.preferences.mqtt_password && radioConfig.preferences.mqtt_password[0] != '\0') {
-                mqttPassword = radioConfig.preferences.mqtt_password;
+            if (*moduleConfig.mqtt.password && moduleConfig.mqtt.password[0] != '\0') {
+                mqttPassword = moduleConfig.mqtt.password;
             }
         }
 
@@ -174,7 +175,7 @@ bool MQTT::wantsLink() const
 {
     bool hasChannel = false;
 
-    if (radioConfig.preferences.mqtt_disabled) {
+    if (moduleConfig.mqtt.disabled) {
         // DEBUG_MSG("MQTT disabled...\n");
     } else {
         // No need for link if no channel needed it
@@ -254,7 +255,7 @@ String MQTT::downstreamPacketToJson(MeshPacket *mp)
 {
     using namespace json11;
 
-    // the created jsonObj is immutable after creation, so 
+    // the created jsonObj is immutable after creation, so
     // we need to do the heavy lifting before assembling it.
     String msgType;
     Json msgPayload;
@@ -288,8 +289,7 @@ String MQTT::downstreamPacketToJson(MeshPacket *mp)
         Telemetry *decoded = NULL;
         if (mp->which_payloadVariant == MeshPacket_decoded_tag) {
             memset(&scratch, 0, sizeof(scratch));
-            if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &Telemetry_msg,
-                                     &scratch)) {
+            if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &Telemetry_msg, &scratch)) {
                 decoded = &scratch;
                 if (decoded->which_variant == Telemetry_environment_metrics_tag) {
                     msgPayload = Json::object{

@@ -152,10 +152,11 @@ void createSSLCert()
 
                     yield();
                     esp_task_wdt_reset();
-
+#ifndef NO_SCREEN
                     if (millis() / 1000 >= 3) {
                         screen->setSSLFrames();
                     }
+#endif                    
                 }
                 runLoop = false;
             } else {

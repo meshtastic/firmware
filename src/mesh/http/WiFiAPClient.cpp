@@ -28,7 +28,7 @@ DNSServer dnsServer;
 WiFiUDP ntpUDP;
 
 #ifndef DISABLE_NTP
-NTPClient timeClient(ntpUDP, "0.pool.ntp.org");
+NTPClient timeClient(ntpUDP, config.device.ntp_server);
 #endif
 
 uint8_t wifiDisconnectReason = 0;
@@ -59,10 +59,11 @@ static WifiSleepObserver wifiSleepObserver;
 
 static int32_t reconnectWiFi()
 {
-    const char *wifiName = radioConfig.preferences.wifi_ssid;
-    const char *wifiPsw = radioConfig.preferences.wifi_password;
+    const char *wifiName = config.wifi.ssid;
+    const char *wifiPsw = config.wifi.psk;
 
-    if (radioConfig.has_preferences && needReconnect && !WiFi.isConnected()) {
+    if (needReconnect && !WiFi.isConnected()) {
+        // if (radioConfig.has_preferences && needReconnect && !WiFi.isConnected()) {
 
         if (!*wifiPsw) // Treat empty password as no password
             wifiPsw = NULL;
@@ -79,7 +80,6 @@ static int32_t reconnectWiFi()
     }
 
 #ifndef DISABLE_NTP
-    // if (*wifiName) {
     if (WiFi.isConnected()) {
         DEBUG_MSG("Updating NTP time\n");
         if (timeClient.update()) {
@@ -97,7 +97,7 @@ static int32_t reconnectWiFi()
     }
 #endif
 
-    return 30 * 1000; // every 30 seconds
+    return 43200 * 1000; // every 12 hours
 }
 
 static Periodic *wifiReconnect;
@@ -114,7 +114,7 @@ bool isWifiAvailable()
         return true;
     }
 
-    const char *wifiName = radioConfig.preferences.wifi_ssid;
+    const char *wifiName = config.wifi.ssid;
 
     if (*wifiName) {
         return true;
@@ -184,16 +184,14 @@ bool initWifi(bool forceSoftAP)
 {
     forcedSoftAP = forceSoftAP;
 
-    // strcpy(radioConfig.preferences.wifi_ssid, "meshtastic");
-    // strcpy(radioConfig.preferences.wifi_password, "meshtastic!");
-
-    if ((radioConfig.has_preferences && radioConfig.preferences.wifi_ssid[0]) || forceSoftAP) {
-        const char *wifiName = radioConfig.preferences.wifi_ssid;
-        const char *wifiPsw = radioConfig.preferences.wifi_password;
+    if ((config.wifi.ssid[0]) || forceSoftAP) {
+        // if ((radioConfig.has_preferences && config.wifi.ssid[0]) || forceSoftAP) {
+        const char *wifiName = config.wifi.ssid;
+        const char *wifiPsw = config.wifi.psk;
 
         if (forceSoftAP) {
             DEBUG_MSG("WiFi ... Forced AP Mode\n");
-        } else if (radioConfig.preferences.wifi_ap_mode) {
+        } else if (config.wifi.ap_mode) {
             DEBUG_MSG("WiFi ... AP Mode\n");
         } else {
             DEBUG_MSG("WiFi ... Client Mode\n");
@@ -205,7 +203,7 @@ bool initWifi(bool forceSoftAP)
             wifiPsw = NULL;
 
         if (*wifiName || forceSoftAP) {
-            if (radioConfig.preferences.wifi_ap_mode || forceSoftAP) {
+            if (config.wifi.ap_mode || forceSoftAP) {
 
                 IPAddress apIP(192, 168, 42, 1);
                 WiFi.onEvent(WiFiEvent);
@@ -218,6 +216,17 @@ bool initWifi(bool forceSoftAP)
                     DEBUG_MSG("Starting (Forced) WIFI AP: ssid=%s, ok=%d\n", softAPssid, ok);
 
                 } else {
+
+                    // If AP is configured to be hidden hidden
+                    if (config.wifi.ap_hidden) {
+
+                        // The configurations on softAP are from the espresif library
+                        int ok = WiFi.softAP(wifiName, wifiPsw, 1, 1, 4);
+                        DEBUG_MSG("Starting hiddem WIFI AP: ssid=%s, ok=%d\n", wifiName, ok);
+                    } else {
+                        int ok = WiFi.softAP(wifiName, wifiPsw);
+                        DEBUG_MSG("Starting WIFI AP: ssid=%s, ok=%d\n", wifiName, ok);
+                    }
                     int ok = WiFi.softAP(wifiName, wifiPsw);
                     DEBUG_MSG("Starting WIFI AP: ssid=%s, ok=%d\n", wifiName, ok);
                 }
@@ -364,7 +373,7 @@ static void WiFiEvent(WiFiEvent_t event)
 
 void handleDNSResponse()
 {
-    if (radioConfig.preferences.wifi_ap_mode || isSoftAPForced()) {
+    if (config.wifi.ap_mode || isSoftAPForced()) {
         dnsServer.processNextRequest();
     }
 }
