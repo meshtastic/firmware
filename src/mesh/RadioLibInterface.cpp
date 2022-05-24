@@ -93,8 +93,15 @@ bool RadioLibInterface::canSendImmediately()
 /// bluetooth comms code.  If the txmit queue is empty it might return an error
 ErrorCode RadioLibInterface::send(MeshPacket *p)
 {
+  
+#ifndef DISABLE_WELCOME_UNSET
+  
     if (config.lora.region != Config_LoRaConfig_RegionCode_Unset) {
         if (disabled || config.lora.tx_disabled) {
+
+
+    if (radioConfig.preferences.region != RegionCode_Unset) {
+        if (disabled || radioConfig.preferences.is_lora_tx_disabled) {
             DEBUG_MSG("send - lora_tx_disabled\n");
             packetPool.release(p);
             return ERRNO_DISABLED;
@@ -105,6 +112,16 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
         packetPool.release(p);
         return ERRNO_DISABLED;
     }
+
+#else
+
+    if (disabled || radioConfig.preferences.is_lora_tx_disabled) {
+        DEBUG_MSG("send - lora_tx_disabled\n");
+        packetPool.release(p);
+        return ERRNO_DISABLED;
+    }
+
+#endif
 
     // Sometimes when testing it is useful to be able to never turn on the xmitter
 #ifndef LORA_DISABLE_SENDING
