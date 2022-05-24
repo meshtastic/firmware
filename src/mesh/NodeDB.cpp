@@ -146,6 +146,13 @@ bool NodeDB::resetRadioConfig()
 void NodeDB::installDefaultConfig()
 {
     memset(&config, 0, sizeof(LocalConfig));
+    config.has_device = true;
+    config.has_display = true;
+    config.has_lora = true;
+    config.has_position = true;
+    config.has_power = true;
+    config.has_wifi = true;
+
     config.lora.region = Config_LoRaConfig_RegionCode_Unset;
     config.lora.modem_preset = Config_LoRaConfig_ModemPreset_LongFast;
     resetRadioConfig();
@@ -158,6 +165,13 @@ void NodeDB::installDefaultConfig()
 void NodeDB::installDefaultModuleConfig()
 {
     memset(&moduleConfig, 0, sizeof(ModuleConfig));
+    moduleConfig.has_canned_message = true;
+    moduleConfig.has_external_notification = true;
+    moduleConfig.has_mqtt = true;
+    moduleConfig.has_range_test = true;
+    moduleConfig.has_serial = true;
+    moduleConfig.has_store_forward = true;
+    moduleConfig.has_telemetry = true;
 }
 
 // void NodeDB::installDefaultRadioConfig()
@@ -341,7 +355,7 @@ void NodeDB::loadFromDisk()
         installDefaultConfig(); // Our in RAM copy might now be corrupt
     }
 
-    if (!loadProto(moduleConfigfile, ModuleConfig_size, sizeof(ModuleConfig), ModuleConfig_fields, &moduleConfig)) {
+    if (!loadProto(moduleConfigfile, LocalModuleConfig_size, sizeof(LocalModuleConfig), LocalModuleConfig_fields, &moduleConfig)) {
         installDefaultModuleConfig(); // Our in RAM copy might now be corrupt
     }
 
@@ -402,6 +416,7 @@ void NodeDB::saveToDisk()
         FSCom.mkdir("/prefs");
 #endif
         saveProto(preffile, DeviceState_size, sizeof(devicestate), DeviceState_fields, &devicestate);
+
         // save all config segments
         config.has_device = true;
         config.has_display = true;
@@ -410,7 +425,16 @@ void NodeDB::saveToDisk()
         config.has_power = true;
         config.has_wifi = true;
         saveProto(configfile, LocalConfig_size, sizeof(LocalConfig), LocalConfig_fields, &config);
-        saveProto(moduleConfigfile, Module_Config_size, sizeof(ModuleConfig), ModuleConfig_fields, &moduleConfig);
+
+        moduleConfig.has_canned_message = true;
+        moduleConfig.has_external_notification = true;
+        moduleConfig.has_mqtt = true;
+        moduleConfig.has_range_test = true;
+        moduleConfig.has_serial = true;
+        moduleConfig.has_store_forward = true;
+        moduleConfig.has_telemetry = true;
+        saveProto(moduleConfigfile, LocalModuleConfig_size, sizeof(LocalModuleConfig), LocalModuleConfig_fields, &moduleConfig);
+
         saveChannelsToDisk();
 
     } else {
