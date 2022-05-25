@@ -144,7 +144,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //#define DISABLE_NTP
 
 // Disable the welcome screen and allow 
-// #define DISABLE_WELCOME_UNSET
+//#define DISABLE_WELCOME_UNSET
 
 // -----------------------------------------------------------------------------
 // OLED & Input
