@@ -176,26 +176,32 @@ void AdminModule::handleSetConfig(const Config &c)
     switch (c.which_payloadVariant) {
     case Config_device_tag:
         DEBUG_MSG("Setting config: Device\n");
+        config.has_device = true;
         config.device = c.payloadVariant.device;
         break;
     case Config_position_tag:
         DEBUG_MSG("Setting config: Position\n");
+        config.has_position = true;
         config.position = c.payloadVariant.position;
         break;
     case Config_power_tag:
         DEBUG_MSG("Setting config: Power\n");
+        config.has_power = true;
         config.power = c.payloadVariant.power;
         break;
     case Config_wifi_tag:
         DEBUG_MSG("Setting config: WiFi\n");
+        config.has_wifi = true;
         config.wifi = c.payloadVariant.wifi;
         break;
     case Config_display_tag:
         DEBUG_MSG("Setting config: Display\n");
+        config.has_display = true;
         config.display = c.payloadVariant.display;
         break;
     case Config_lora_tag:
         DEBUG_MSG("Setting config: LoRa\n");
+        config.has_lora = true;
         config.lora = c.payloadVariant.lora;
         break;
     }
@@ -208,30 +214,37 @@ void AdminModule::handleSetModuleConfig(const ModuleConfig &c)
     switch (c.which_payloadVariant) {
     case ModuleConfig_mqtt_tag:
         DEBUG_MSG("Setting module config: MQTT\n");
+        moduleConfig.has_mqtt = true;
         moduleConfig.mqtt = c.payloadVariant.mqtt;
         break;
     case ModuleConfig_serial_tag:
         DEBUG_MSG("Setting module config: Serial\n");
+        moduleConfig.has_serial = true;
         moduleConfig.serial = c.payloadVariant.serial;
         break;
     case ModuleConfig_external_notification_tag:
         DEBUG_MSG("Setting module config: External Notification\n");
+        moduleConfig.has_external_notification = true;
         moduleConfig.external_notification = c.payloadVariant.external_notification;
         break;
     case ModuleConfig_store_forward_tag:
         DEBUG_MSG("Setting module config: Store & Forward\n");
+        moduleConfig.has_store_forward = true;
         moduleConfig.store_forward = c.payloadVariant.store_forward;
         break;
     case ModuleConfig_range_test_tag:
         DEBUG_MSG("Setting module config: Range Test\n");
+        moduleConfig.has_range_test = true;
         moduleConfig.range_test = c.payloadVariant.range_test;
         break;
     case ModuleConfig_telemetry_tag:
         DEBUG_MSG("Setting module config: Telemetry\n");
+        moduleConfig.has_telemetry = true;
         moduleConfig.telemetry = c.payloadVariant.telemetry;
         break;
     case ModuleConfig_canned_message_tag:
         DEBUG_MSG("Setting module config: Canned Message\n");
+        moduleConfig.has_canned_message = true;
         moduleConfig.canned_message = c.payloadVariant.canned_message;
         break;
     }

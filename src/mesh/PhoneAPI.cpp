@@ -179,9 +179,6 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             // Encapsulate as a FromRadio packet
             fromRadioScratch.which_payloadVariant = FromRadio_packet_tag;
             fromRadioScratch.packet = *packetForPhone;
-
-            // TODO: Remove with compression rework
-            fromRadioScratch.packet.decoded.which_payloadVariant = Data_payload_tag;
         }
         releasePhonePacket();
         break;

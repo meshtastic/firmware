@@ -36,8 +36,8 @@ int32_t RangeTestModule::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    // moduleConfig.range_test.enabled = 1;
-    // moduleConfig.range_test.sender = 45;
+    //moduleConfig.range_test.enabled = 1;
+    //moduleConfig.range_test.sender = 30;
     // moduleConfig.range_test.save = 1;
 
     // Fixed position is useful when testing indoors.
@@ -115,7 +115,7 @@ void RangeTestModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 
     packetSequence++;
 
-    static char heartbeatString[20];
+    static char heartbeatString[MAX_RHPACKETLEN];
     snprintf(heartbeatString, sizeof(heartbeatString), "seq %u", packetSequence);
 
     p->decoded.payload.size = strlen(heartbeatString); // You must specify how many bytes are in the reply
