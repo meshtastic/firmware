@@ -26,6 +26,8 @@
 #endif
 
 // Temporary shim for radio lib macros until we upgrade to upstream for portduino
+#define RADIOLIB_PREAMBLE_DETECTED PREAMBLE_DETECTED
+
 #define RADIOLIB_ERR_NONE ERR_NONE
 #define RADIOLIB_ERR_WRONG_MODEM ERR_WRONG_MODEM
 
