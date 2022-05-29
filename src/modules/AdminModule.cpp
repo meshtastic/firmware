@@ -58,7 +58,7 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
 
     case AdminMessage_get_config_request_tag:
         DEBUG_MSG("Client is getting config\n");
-        handleGetConfig(mp, r->get_channel_request);
+        handleGetConfig(mp, r->get_config_request);
         break;
 
     case AdminMessage_get_module_config_request_tag:
