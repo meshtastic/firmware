@@ -203,6 +203,11 @@ GPS::~GPS()
 
 bool GPS::hasLock() { return hasValidLocation; }
 
+bool GPS::hasFlow()
+{
+    return hasGPS;
+}
+
 // Allow defining the polarity of the WAKE output.  default is active high
 #ifndef GPS_WAKE_ACTIVE
 #define GPS_WAKE_ACTIVE 1
@@ -342,7 +347,7 @@ int32_t GPS::runOnce()
     } else {
 #ifdef GPS_UBLOX        
         // reset the GPS on next bootup
-        if(devicestate.did_gps_reset && (millis() > 60000)) {
+        if(devicestate.did_gps_reset && (millis() > 60000) && !hasFlow()) {
             DEBUG_MSG("GPS is not communicating, trying factory reset on next bootup.\n");
             devicestate.did_gps_reset = false;
             nodeDB.saveToDisk();
