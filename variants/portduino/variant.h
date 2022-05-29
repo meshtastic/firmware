@@ -27,6 +27,8 @@
 
 // Temporary shim for radio lib macros until we upgrade to upstream for portduino
 #define RADIOLIB_ERR_NONE ERR_NONE
+#define RADIOLIB_ERR_WRONG_MODEM ERR_WRONG_MODEM
+
 #define RADIOLIB_SX126X_IRQ_HEADER_VALID SX126X_IRQ_HEADER_VALID
 #define RADIOLIB_SX126X_LORA_CRC_ON SX126X_LORA_CRC_ON
 
