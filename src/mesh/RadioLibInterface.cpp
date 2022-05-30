@@ -308,7 +308,7 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
         xmitMsec = getPacketTime(length);
 
         int state = iface->readData(radiobuf, length);
-        if (state != ERR_NONE) {
+        if (state != RADIOLIB_ERR_NONE) {
             DEBUG_MSG("ignoring received packet due to error=%d\n", state);
             rxBad++;
 
@@ -374,7 +374,7 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
             size_t numbytes = beginSending(txp);
 
             int res = iface->startTransmit(radiobuf, numbytes);
-            if (res != ERR_NONE) {
+            if (res != RADIOLIB_ERR_NONE) {
                 RECORD_CRITICALERROR(CriticalErrorCode_RadioSpiBug);
 
                 // This send failed, but make sure to 'complete' it properly
