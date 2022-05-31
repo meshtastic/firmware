@@ -275,6 +275,9 @@ External serial flash WP25R1635FZUIL0
 #define ADC_MULTIPLIER VBAT_DIVIDER_COMP 
 #define VBAT_RAW_TO_SCALED(x) (REAL_VBAT_MV_PER_LSB * x)
 
+#define I2C_SDA PIN_WIRE_SDA
+#define I2C_SCL PIN_WIRE_SCL
+
 #ifdef __cplusplus
 }
 #endif
