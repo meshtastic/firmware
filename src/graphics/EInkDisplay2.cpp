@@ -199,7 +199,7 @@ bool EInkDisplay::connect()
         (void)adafruitDisplay;
     }      
 }
-#elif defined(PCA10059) || defined(PRIVATE_HW)
+#elif defined(PCA10059)
 {
     auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
     adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
@@ -208,7 +208,12 @@ bool EInkDisplay::connect()
     adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
 }
 #elif defined(PRIVATE_HW)
- adafruitDisplay->setRotation(0);    
+    auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
+    adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+    adafruitDisplay->init(115200, true, 10, false, SPI, SPISettings(4000000, MSBFIRST, SPI_MODE0));
+    adafruitDisplay->setRotation(0);
+    adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
+  
 #endif
    
     
