@@ -1,7 +1,10 @@
-#define I2C_SDA 32 //-1
-#define I2C_SCL 33 //-1
+#define I2C_SDA 21 //-1
+#define I2C_SCL 22 //-1
 
 //#define LED_PIN 10
+
+// PCF8563 RTC Module
+#define PCF8563_RTC 0x51
 
 #define BUTTON_NEED_PULLUP
 #define BUTTON_PIN 5
