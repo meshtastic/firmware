@@ -31,6 +31,11 @@
 //4.2 inch 300x400 - GxEPD2_420_M01
 #define TECHO_DISPLAY_MODEL GxEPD2_420_M01
 
+#elif defined(PRIVATE_HW)
+//M5Stack CoreInk
+//1.54 inch 200x200 - GxEPD2_154_M09
+#define TECHO_DISPLAY_MODEL GxEPD2_154_M09
+
 #endif
 
 GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT> *adafruitDisplay;
@@ -57,6 +62,12 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl)
 
     //GxEPD2_420_M01
     setGeometry(GEOMETRY_RAWMODE, 300, 400);
+    
+    #elif defined(PRIVATE_HW)
+    
+    //M5Stack_CoreInk 200x200
+    //1.54 inch 200x200 - GxEPD2_154_M09
+    setGeometry(GEOMETRY_RAWMODE, 200, 200);
     
     #endif
     // setGeometry(GEOMETRY_RAWMODE, 128, 64); // old resolution
@@ -108,7 +119,7 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
         // 4.2 inch 300x400 - GxEPD2_420_M01
         //adafruitDisplay->nextPage();
         
-        #elif defined(PCA10059)
+        #elif defined(PCA10059) || defined(PRIVATE_HW)
         adafruitDisplay->nextPage();
         #endif
         
@@ -180,40 +191,15 @@ bool EInkDisplay::connect()
         adafruitDisplay->init(115200, true, 10, false, SPI1, SPISettings(4000000, MSBFIRST, SPI_MODE0));
 
         //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
-    //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
-        //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
-    //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
-        //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
-    //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
-        //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
-    //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
-        //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
-    //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
-        //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
-    //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
-        //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
         adafruitDisplay->setRotation(3);
         //For 1.54, 2.9 and 4.2
         //adafruitDisplay->setRotation(1);
-
-        adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
-    adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);       
-        adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
-    adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);       
-        adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
-    adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);       
-        adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
-    adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);       
-        adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
-    adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);       
-        adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
-    adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);       
-        adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
+        //adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
     } else {
         (void)adafruitDisplay;
     }      
 }
-#elif defined(PCA10059)
+#elif defined(PCA10059) || defined(PRIVATE_HW)
 {
     auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
     adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
@@ -221,6 +207,8 @@ bool EInkDisplay::connect()
     adafruitDisplay->setRotation(3);
     adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
 }
+#elif defined(PRIVATE_HW)
+ adafruitDisplay->setRotation(0);    
 #endif
    
     
