@@ -67,7 +67,6 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl)
     
     //M5Stack_CoreInk 200x200
     //1.54 inch 200x200 - GxEPD2_154_M09
-    //setGeometry(GEOMETRY_RAWMODE, 200, 200);
     setGeometry(GEOMETRY_RAWMODE, EPD_HEIGHT, EPD_WIDTH);
 
     #endif
