@@ -192,7 +192,7 @@ bool EInkDisplay::connect()
 
         //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
         adafruitDisplay->setRotation(3);
-        //For 1.54, 2.9 and 4.2
+        //For 1.54, 2.9 and 4.2 with Partial Updates
         //adafruitDisplay->setRotation(1);
         //adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
     } else {
