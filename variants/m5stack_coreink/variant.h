@@ -1,7 +1,7 @@
 #define I2C_SDA 21 //-1
 #define I2C_SCL 22 //-1
 
-//#define LED_PIN 10
+#define LED_PIN 10
 
 // PCF8563 RTC Module
 #define PCF8563_RTC 0x51
