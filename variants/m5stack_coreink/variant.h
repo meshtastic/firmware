@@ -38,6 +38,7 @@
 
 #define HAS_EINK
 //https://docs.m5stack.com/en/core/coreink
+//https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/docs/schematic/Core/coreink/coreink_sch.pdf
 #define PIN_EINK_EN    -1
 #define PIN_EINK_CS    9          // EPD_CS
 #define PIN_EINK_BUSY  4          // EPD_BUSY
