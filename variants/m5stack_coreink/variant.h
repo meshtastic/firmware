@@ -3,6 +3,7 @@
 
 //#define LED_PIN 10
 
+#include "pcf8563.h"
 // PCF8563 RTC Module
 #define PCF8563_RTC 0x51
 
