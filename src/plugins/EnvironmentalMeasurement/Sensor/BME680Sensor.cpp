@@ -10,7 +10,7 @@ BME680Sensor::BME680Sensor() : EnvironmentalMeasurementSensor {} {
 int32_t BME680Sensor::runOnce() {
     unsigned bme680Status;
     // Default i2c address for BME680
-    bme680Status = bme680.begin(0x76); 
+    bme680Status = bme680.begin(0x77); 
     if (!bme680Status) {
         DEBUG_MSG("Could not find a valid BME680 sensor, check wiring, address, sensor ID!");
         // TODO more verbose diagnosticsEnvironmentalMeasurementSensor
