@@ -56,6 +56,8 @@ class CryptoEngine
      * a 32 bit block counter (starts at zero)
      */
     void initNonce(uint32_t fromNode, uint64_t packetId);
+
+    void hexDump(const char * desc, const void * addr, const int len, int perLine);
 };
 
 extern CryptoEngine *crypto;
