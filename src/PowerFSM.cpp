@@ -335,7 +335,7 @@ void PowerFSM_setup()
 
     powerFSM.add_timed_transition(&stateON, &stateDARK,
                                   config.display.screen_on_secs ? config.display.screen_on_secs
-                                                                               : 60 * 1000,
+                                                                               : 60 * 1000 * 10,
                                   NULL, "Screen-on timeout");
 
     // On most boards we use light-sleep to be our main state, but on NRF52 we just stay in DARK
