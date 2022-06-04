@@ -9,7 +9,8 @@ DHTSensor::DHTSensor() : TelemetrySensor{} {}
 
 int32_t DHTSensor::runOnce()
 {
-    if (TelemetrySensorType_DHT11 || TelemetrySensorType_DHT12) {
+    if (moduleConfig.telemetry.environment_sensor_type == TelemetrySensorType_DHT11 || 
+        moduleConfig.telemetry.environment_sensor_type == TelemetrySensorType_DHT12) {
         dht = new DHT(moduleConfig.telemetry.environment_sensor_pin, DHT11);
     } else {
         dht = new DHT(moduleConfig.telemetry.environment_sensor_pin, DHT22);
