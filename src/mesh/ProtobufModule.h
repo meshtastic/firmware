@@ -77,10 +77,13 @@ template <class T> class ProtobufModule : protected SinglePortModule
         T *decoded = NULL;
         if (mp.which_payloadVariant == MeshPacket_decoded_tag && mp.decoded.portnum == ourPortNum) {
             memset(&scratch, 0, sizeof(scratch));
-            if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, fields, &scratch))
+            if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, fields, &scratch)) {
                 decoded = &scratch;
-            else
+            } else {
                 DEBUG_MSG("Error decoding protobuf module!\n");
+                // if we can't decode it, nobody can process it!
+                return ProcessMessage::STOP;
+            }
         }
 
         return handleReceivedProtobuf(mp, decoded) ? ProcessMessage::STOP : ProcessMessage::CONTINUE;
