@@ -82,8 +82,10 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 case TelemetrySensorType_DHT21:
                 case TelemetrySensorType_DHT22:
                     result = dhtSensor.runOnce();
+                break;
                 case TelemetrySensorType_DS18B20:
                     result = dallasSensor.runOnce();
+                break;
                 default:
                     DEBUG_MSG("Environment Telemetry: No sensor type specified; Checking for detected i2c sensors\n");
                 break;
