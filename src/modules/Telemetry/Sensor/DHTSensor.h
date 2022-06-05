@@ -2,8 +2,6 @@
 #include "TelemetrySensor.h"
 #include <DHT.h>
 
-#define DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS 1000
-
 class DHTSensor : virtual public TelemetrySensor {
 private:
     DHT *dht = NULL;
