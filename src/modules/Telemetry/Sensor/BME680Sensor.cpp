@@ -14,11 +14,9 @@ int32_t BME680Sensor::runOnce() {
     if (!hasSensor(TelemetrySensorType_BME680)) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-
     bme680Status = bme680.begin(nodeTelemetrySensorsMap[TelemetrySensorType_BME680]); 
     if (!bme680Status) {
-        DEBUG_MSG("Tried BME680 sensor, falling back to BME280.\n");
-        nodeTelemetrySensorsMap[TelemetrySensorType_BME280] = nodeTelemetrySensorsMap[TelemetrySensorType_BME680];
+        DEBUG_MSG("Could not connect to any detected BME-680 sensor.\nRemoving from nodeTelemetrySensorsMap.\n");
         nodeTelemetrySensorsMap[TelemetrySensorType_BME680] = 0;
     } else {
         DEBUG_MSG("Opened BME680 on default i2c bus\n");

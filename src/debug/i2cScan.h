@@ -106,9 +106,21 @@ void scanI2Cdevice(void)
             }
 #endif
         if (addr == BME_ADDR || addr == BME_ADDR_ALTERNATE) {
-            // Assume BME680 first until we find out otherwise in environmental telemetry init
-            nodeTelemetrySensorsMap[TelemetrySensorType_BME680] = addr;
-            DEBUG_MSG("Bosch BME sensor found at address 0x%x\n", (uint8_t)addr);
+            Wire.beginTransmission(addr);
+            Wire.write(0xD0); // GET_ID
+            Wire.endTransmission();
+            delay(20);
+            Wire.requestFrom((int)addr, 1);
+            if (Wire.available()) {
+                r = Wire.read();
+            }
+            if (r == 0x61) {
+                DEBUG_MSG("BME-680 sensor found at address 0x%x\n", (uint8_t)addr);
+                nodeTelemetrySensorsMap[TelemetrySensorType_BME680] = addr;
+            } else if (r == 0x60) {
+                DEBUG_MSG("BME-280 sensor found at address 0x%x\n", (uint8_t)addr);
+                nodeTelemetrySensorsMap[TelemetrySensorType_BME280] = addr;
+            }
         }
         if (addr == MCP9808_ADDR) {
             nodeTelemetrySensorsMap[TelemetrySensorType_MCP9808] = addr;

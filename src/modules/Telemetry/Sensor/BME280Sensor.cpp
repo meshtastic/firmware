@@ -14,10 +14,9 @@ int32_t BME280Sensor::runOnce() {
     if (!hasSensor(TelemetrySensorType_BME280)) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-
     bme280Status = bme280.begin(nodeTelemetrySensorsMap[TelemetrySensorType_BME280]); 
     if (!bme280Status) {
-        DEBUG_MSG("Could not connect to any detected bosch sensor.\nRemoving from nodeTelemetrySensorsMap.\n");
+        DEBUG_MSG("Could not connect to any detected BME-280 sensor.\nRemoving from nodeTelemetrySensorsMap.\n");
         nodeTelemetrySensorsMap[TelemetrySensorType_BME280] = 0;
     } else {
         DEBUG_MSG("Opened BME280 on default i2c bus\n");
