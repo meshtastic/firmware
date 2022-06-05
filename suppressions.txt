@@ -29,6 +29,7 @@ useInitializationList
 unreadVariable
 
 redundantInitialization
+redundantAssignInSwitch
 
 //cstyleCast:src/mesh/MemoryPool.h:71
 cstyleCast
