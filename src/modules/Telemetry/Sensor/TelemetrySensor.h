@@ -1,7 +1,14 @@
 #pragma once
 #include "../mesh/generated/telemetry.pb.h"
 #include "NodeDB.h"
+#include "main.h"
+#include <map>
+
 #define DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS 1000
+
+inline bool hasSensor(TelemetrySensorType sensorType) { 
+  return sensorType < sizeof(nodeTelemetrySensorsMap) && nodeTelemetrySensorsMap[sensorType] > 0;
+}
 
 class TelemetrySensor
 {
