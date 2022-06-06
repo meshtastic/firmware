@@ -211,8 +211,12 @@ void Power::shutdown()
 {
 #ifdef TBEAM_V10
     DEBUG_MSG("Shutting down\n");
+    axp.setChgLEDMode(AXP20X_LED_OFF);
     axp.shutdown();
 #elif NRF52_SERIES
+    playBeep();
+    ledOff(PIN_LED1);
+    ledOff(PIN_LED2);
     doDeepSleep(DELAY_FOREVER);
 #endif
 }
