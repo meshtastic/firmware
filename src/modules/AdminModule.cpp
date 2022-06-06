@@ -17,14 +17,6 @@ AdminModule *adminModule;
 /// a change.
 static const char *secretReserved = "sekrit";
 
-/// If buf is !empty, change it to secret
-static void hideSecret(char *buf)
-{
-    if (*buf) {
-        strcpy(buf, secretReserved);
-    }
-}
-
 /// If buf is the reserved secret word, replace the buffer with currentVal
 static void writeSecret(char *buf, const char *currentVal)
 {
