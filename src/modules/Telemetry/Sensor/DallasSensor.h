@@ -3,8 +3,6 @@
 #include <DS18B20.h>
 #include <OneWire.h>
 
-#define DS18B20_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS 1000
-
 class DallasSensor : virtual public TelemetrySensor {
 private:
     OneWire *oneWire = NULL;
