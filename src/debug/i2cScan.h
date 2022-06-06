@@ -1,6 +1,7 @@
 #include "../configuration.h"
 #include "../main.h"
 #include <Wire.h>
+#include "mesh/generated/telemetry.pb.h"
 
 #ifndef NO_WIRE
 uint8_t oled_probe(byte addr)
@@ -104,6 +105,27 @@ void scanI2Cdevice(void)
                 DEBUG_MSG("axp192 PMU found\n");
             }
 #endif
+        if (addr == BME_ADDR || addr == BME_ADDR_ALTERNATE) {
+            Wire.beginTransmission(addr);
+            Wire.write(0xD0); // GET_ID
+            Wire.endTransmission();
+            delay(20);
+            Wire.requestFrom((int)addr, 1);
+            if (Wire.available()) {
+                r = Wire.read();
+            }
+            if (r == 0x61) {
+                DEBUG_MSG("BME-680 sensor found at address 0x%x\n", (uint8_t)addr);
+                nodeTelemetrySensorsMap[TelemetrySensorType_BME680] = addr;
+            } else if (r == 0x60) {
+                DEBUG_MSG("BME-280 sensor found at address 0x%x\n", (uint8_t)addr);
+                nodeTelemetrySensorsMap[TelemetrySensorType_BME280] = addr;
+            }
+        }
+        if (addr == MCP9808_ADDR) {
+            nodeTelemetrySensorsMap[TelemetrySensorType_MCP9808] = addr;
+            DEBUG_MSG("MCP9808 sensor found at address 0x%x\n", (uint8_t)addr);
+        }
         } else if (err == 4) {
             DEBUG_MSG("Unknow error at address 0x%x\n", addr);
         }

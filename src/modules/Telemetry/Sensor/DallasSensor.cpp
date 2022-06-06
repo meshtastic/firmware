@@ -15,12 +15,13 @@ int32_t DallasSensor::runOnce()
     ds18b20->begin();
     ds18b20->setResolution(12);
     ds18b20->requestTemperatures();
-    DEBUG_MSG("Telemetry: Opened DS18B20 on pin: %d\n", moduleConfig.telemetry.environment_sensor_pin);
-    return (DS18B20_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
+    DEBUG_MSG("Opened DS18B20 on pin: %d\n", moduleConfig.telemetry.environment_sensor_pin);
+    return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
 }
 
 bool DallasSensor::getMeasurement(Telemetry *measurement)
 {
+    DEBUG_MSG("DallasSensor::getMeasurement\n");
     if (ds18b20->isConversionComplete()) {
         measurement->variant.environment_metrics.temperature = ds18b20->getTempC();
         measurement->variant.environment_metrics.relative_humidity = 0;
