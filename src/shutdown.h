@@ -30,7 +30,7 @@ void powerCommandsCheck()
         DEBUG_MSG("Shutting down from admin command\n");
 #ifdef TBEAM_V10
         if (axp192_found == true) {
-            // setLed(false); //TODO: FIXME: this is not working
+            playShutdownMelody();
             power->shutdown();
         }
 #elif NRF52_SERIES
