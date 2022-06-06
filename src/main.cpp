@@ -89,6 +89,8 @@ bool eink_found = true;
 uint32_t serialSinceMsec;
 
 bool axp192_found;
+// Array map of sensor types (as array index) and i2c address as value we'll find in the i2c scan
+uint8_t nodeTelemetrySensorsMap[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
 

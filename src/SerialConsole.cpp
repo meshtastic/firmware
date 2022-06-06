@@ -45,9 +45,8 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port)
 bool SerialConsole::checkIsConnected()
 {
     uint32_t now = millis();
-    return (now - lastContactMsec) < config.power.phone_timeout_secs
-               ? config.power.phone_timeout_secs
-               : default_phone_timeout_secs * 1000UL;
+    uint32_t timeout = (config.power.phone_timeout_secs > 0 ? config.power.phone_timeout_secs : default_phone_timeout_secs )* 1000UL;
+    return (now - lastContactMsec) < timeout;
 }
 
 /**
