@@ -5,6 +5,7 @@
 #include "main.h"
 #include "sleep.h"
 #include "utils.h"
+#include "buzz/buzz.h"
 
 #ifdef TBEAM_V10
 // FIXME. nasty hack cleanup how we load axp192
