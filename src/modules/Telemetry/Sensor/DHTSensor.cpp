@@ -5,10 +5,12 @@
 #include "configuration.h"
 #include <DHT.h>
 
-DHTSensor::DHTSensor() : TelemetrySensor{} {}
-
-int32_t DHTSensor::runOnce()
+DHTSensor::DHTSensor() : 
+    TelemetrySensor(TelemetrySensorType_NotSet, "DHT") 
 {
+}
+
+int32_t DHTSensor::runOnce() {
     if (moduleConfig.telemetry.environment_sensor_type == TelemetrySensorType_DHT11 || 
         moduleConfig.telemetry.environment_sensor_type == TelemetrySensorType_DHT12) {
         dht = new DHT(moduleConfig.telemetry.environment_sensor_pin, DHT11);
@@ -23,9 +25,10 @@ int32_t DHTSensor::runOnce()
     return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
 }
 
-bool DHTSensor::getMeasurement(Telemetry *measurement)
-{
-    DEBUG_MSG("DHTSensor::getMeasurement\n");
+void DHTSensor::setup() { }
+
+bool DHTSensor::getMetrics(Telemetry *measurement) {
+    DEBUG_MSG("DHTSensor::getMetrics\n");
     if (!dht->read(true)) {
         DEBUG_MSG("Telemetry: FAILED TO READ DATA\n");
         return false;
