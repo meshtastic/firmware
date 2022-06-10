@@ -12,6 +12,7 @@ class TelemetrySensor
     {
         this->sensorName = sensorName;
         this->sensorType = sensorType;
+        this->status = 0;
     }
 
     const char *sensorName;
