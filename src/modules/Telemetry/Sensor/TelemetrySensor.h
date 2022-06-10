@@ -24,7 +24,7 @@ class TelemetrySensor
             DEBUG_MSG("Could not connect to detected %s sensor.\n Removing from nodeTelemetrySensorsMap.\n", sensorName);
             nodeTelemetrySensorsMap[sensorType] = 0;
         } else {
-            DEBUG_MSG("TelemetrySensor: Opened %s on default i2c bus\n", sensorName);
+            DEBUG_MSG("Opened %s sensor on default i2c bus\n", sensorName);
             setup();
         }
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
