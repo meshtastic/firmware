@@ -3,29 +3,26 @@
 #include "TelemetrySensor.h"
 #include "BME280Sensor.h"
 #include <Adafruit_BME280.h>
+#include <typeinfo>
 
-BME280Sensor::BME280Sensor() : TelemetrySensor {} 
+BME280Sensor::BME280Sensor() : 
+    TelemetrySensor(TelemetrySensorType_BME280, "BME280")
 {
 }
 
 int32_t BME280Sensor::runOnce() {
-    unsigned bme280Status;
     DEBUG_MSG("Init sensor: TelemetrySensorType_BME280\n");
-    if (!hasSensor(TelemetrySensorType_BME280)) {
+    if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    bme280Status = bme280.begin(nodeTelemetrySensorsMap[TelemetrySensorType_BME280]); 
-    if (!bme280Status) {
-        DEBUG_MSG("Could not connect to any detected BME-280 sensor.\nRemoving from nodeTelemetrySensorsMap.\n");
-        nodeTelemetrySensorsMap[TelemetrySensorType_BME280] = 0;
-    } else {
-        DEBUG_MSG("Opened BME280 on default i2c bus\n");
-    }
-    return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
+    status = bme280.begin(nodeTelemetrySensorsMap[TelemetrySensorType_BME280]); 
+    return initI2CSensor();
 }
 
-bool BME280Sensor::getMeasurement(Telemetry *measurement) {
-    DEBUG_MSG("BME280Sensor::getMeasurement\n");
+void BME280Sensor::setup() { }
+
+bool BME280Sensor::getMetrics(Telemetry *measurement) {
+    DEBUG_MSG("BME280Sensor::getMetrics\n");
     measurement->variant.environment_metrics.temperature = bme280.readTemperature();
     measurement->variant.environment_metrics.relative_humidity = bme280.readHumidity();
     measurement->variant.environment_metrics.barometric_pressure = bme280.readPressure() / 100.0F;
