@@ -8,8 +8,11 @@ private:
     OneWire *oneWire = NULL;
     DS18B20 *ds18b20 = NULL;
 
+protected:
+    virtual void setup() override;
+
 public:
     DallasSensor();
     virtual int32_t runOnce() override;
-    virtual bool getMeasurement(Telemetry *measurement) override;
+    virtual bool getMetrics(Telemetry *measurement) override;
 };    
