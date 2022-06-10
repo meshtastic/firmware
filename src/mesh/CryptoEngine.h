@@ -21,9 +21,9 @@ class CryptoEngine
 {
   protected:
     /** Our per packet nonce */
-    uint8_t nonce[16];
+    uint8_t nonce[16] = {0};
 
-    CryptoKey key;
+    CryptoKey key = {};
 
     uint8_t private_key[32];
     bool keyPairSet;
@@ -56,8 +56,8 @@ class CryptoEngine
      *
      * @param bytes is updated in place
      */
-    virtual void encrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes);
-    virtual void decrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes);
+    virtual void encrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
+    virtual void decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
 
   protected:
     /**
@@ -68,7 +68,9 @@ class CryptoEngine
      * a 32 bit sending node number (stored in little endian order)
      * a 32 bit block counter (starts at zero)
      */
-    void initNonce(uint32_t fromNode, uint64_t packetNum);
+    void initNonce(uint32_t fromNode, uint64_t packetId);
+
+    void hexDump(const char * desc, const void * addr, const int len, int perLine);
 };
 
 extern CryptoEngine *crypto;

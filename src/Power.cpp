@@ -1,10 +1,11 @@
-#include "configuration.h"
 #include "power.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "configuration.h"
 #include "main.h"
 #include "sleep.h"
 #include "utils.h"
+#include "buzz/buzz.h"
 
 #ifdef TBEAM_V10
 // FIXME. nasty hack cleanup how we load axp192
@@ -13,27 +14,28 @@
 
 AXP20X_Class axp;
 #else
-// Copy of the base class defined in axp20x.h. 
+// Copy of the base class defined in axp20x.h.
 // I'd rather not inlude axp20x.h as it brings Wire dependency.
-class HasBatteryLevel {
-public:
-  /**
-   * Battery state of charge, from 0 to 100 or -1 for unknown
-   */
-  virtual int getBattPercentage() { return -1; }
+class HasBatteryLevel
+{
+  public:
+    /**
+     * Battery state of charge, from 0 to 100 or -1 for unknown
+     */
+    virtual int getBattPercentage() { return -1; }
 
-  /**
-   * The raw voltage of the battery or NAN if unknown
-   */
-  virtual float getBattVoltage() { return NAN; }
+    /**
+     * The raw voltage of the battery or NAN if unknown
+     */
+    virtual float getBattVoltage() { return NAN; }
 
-  /**
-   * return true if there is a battery installed in this unit
-   */
-  virtual bool isBatteryConnect() { return false; }
+    /**
+     * return true if there is a battery installed in this unit
+     */
+    virtual bool isBatteryConnect() { return false; }
 
-  virtual bool isVBUSPlug() { return false; }
-  virtual bool isChargeing() { return false; }
+    virtual bool isVBUSPlug() { return false; }
+    virtual bool isChargeing() { return false; }
 };
 #endif
 
@@ -75,7 +77,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
      *
      * FIXME - use a lipo lookup table, the current % full is super wrong
      */
-    virtual int getBattPercentage()
+    virtual int getBattPercentage() override
     {
         float v = getBattVoltage();
 
@@ -94,25 +96,29 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /**
      * The raw voltage of the batteryin millivolts or NAN if unknown
      */
-    virtual float getBattVoltage()
+    virtual float getBattVoltage() override
     {
 
 #ifndef ADC_MULTIPLIER
 #define ADC_MULTIPLIER 2.0
-#endif 
+#endif
 
 #ifdef BATTERY_PIN
-        // Do not call analogRead() often. 
+        // Override variant or default ADC_MULTIPLIER if we have the override pref
+        float operativeAdcMultiplier = config.power.adc_multiplier_override > 0
+                                           ? config.power.adc_multiplier_override
+                                           : ADC_MULTIPLIER;
+        // Do not call analogRead() often.
         const uint32_t min_read_interval = 5000;
         if (millis() - last_read_time_ms > min_read_interval) {
             last_read_time_ms = millis();
             uint32_t raw = analogRead(BATTERY_PIN);
             float scaled;
-            #ifndef VBAT_RAW_TO_SCALED
-            scaled = 1000.0 * ADC_MULTIPLIER * (AREF_VOLTAGE / 1024.0) * raw;
-            #else
-            scaled = VBAT_RAW_TO_SCALED(raw); //defined in variant.h
-            #endif
+#ifndef VBAT_RAW_TO_SCALED
+            scaled = 1000.0 * operativeAdcMultiplier * (AREF_VOLTAGE / 1024.0) * raw;
+#else
+            scaled = VBAT_RAW_TO_SCALED(raw); // defined in variant.h
+#endif
             // DEBUG_MSG("battery gpio %d raw val=%u scaled=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled));
             last_read_value = scaled;
             return scaled;
@@ -127,15 +133,15 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /**
      * return true if there is a battery installed in this unit
      */
-    virtual bool isBatteryConnect() { return getBattPercentage() != -1; }
+    virtual bool isBatteryConnect() override { return getBattPercentage() != -1; }
 
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
     /// in power
-    virtual bool isVBUSPlug() { return getBattVoltage() > chargingVolt; }
+    virtual bool isVBUSPlug() override { return getBattVoltage() > chargingVolt; }
 
     /// Assume charging if we have a battery and external power is connected.
     /// we can't be smart enough to say 'full'?
-    virtual bool isChargeing() { return isBatteryConnect() && isVBUSPlug(); }
+    virtual bool isChargeing() override { return isBatteryConnect() && isVBUSPlug(); }
 
   private:
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
@@ -149,7 +155,11 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
 AnalogBatteryLevel analogLevel;
 
-Power::Power() : OSThread("Power") {}
+Power::Power() : OSThread("Power")
+{
+    statusHandler = {};
+    low_voltage_counter = 0;
+}
 
 bool Power::analogInit()
 {
@@ -165,7 +175,7 @@ bool Power::analogInit()
 #endif
 #ifdef NRF52_SERIES
 #ifdef VBAT_AR_INTERNAL
-     analogReference(VBAT_AR_INTERNAL);
+    analogReference(VBAT_AR_INTERNAL);
 #else
     analogReference(AR_INTERNAL); // 3.6V
 #endif
@@ -174,9 +184,10 @@ bool Power::analogInit()
 #ifndef BATTERY_SENSE_RESOLUTION_BITS
 #define BATTERY_SENSE_RESOLUTION_BITS 10
 #endif
-    
+
     // adcStart(BATTERY_PIN);
-    analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS); // Default of 12 is not very linear. Recommended to use 10 or 11 depending on needed resolution.
+    analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS); // Default of 12 is not very linear. Recommended to use 10 or 11
+                                                         // depending on needed resolution.
     batteryLevel = &analogLevel;
     return true;
 #else
@@ -201,8 +212,12 @@ void Power::shutdown()
 {
 #ifdef TBEAM_V10
     DEBUG_MSG("Shutting down\n");
+    axp.setChgLEDMode(AXP20X_LED_OFF);
     axp.shutdown();
 #elif NRF52_SERIES
+    playBeep();
+    ledOff(PIN_LED1);
+    ledOff(PIN_LED2);
     doDeepSleep(DELAY_FOREVER);
 #endif
 }
@@ -232,35 +247,34 @@ void Power::readPowerStatus()
         }
 
         // Notify any status instances that are observing us
-        const PowerStatus powerStatus =
+        const PowerStatus powerStatus2 =
             PowerStatus(hasBattery ? OptTrue : OptFalse, batteryLevel->isVBUSPlug() ? OptTrue : OptFalse,
                         batteryLevel->isChargeing() ? OptTrue : OptFalse, batteryVoltageMv, batteryChargePercent);
-        DEBUG_MSG("Battery: usbPower=%d, isCharging=%d, batMv=%d, batPct=%d\n", powerStatus.getHasUSB(),
-                  powerStatus.getIsCharging(), powerStatus.getBatteryVoltageMv(), powerStatus.getBatteryChargePercent());
-        newStatus.notifyObservers(&powerStatus);
+        DEBUG_MSG("Battery: usbPower=%d, isCharging=%d, batMv=%d, batPct=%d\n", powerStatus2.getHasUSB(),
+                  powerStatus2.getIsCharging(), powerStatus2.getBatteryVoltageMv(), powerStatus2.getBatteryChargePercent());
+        newStatus.notifyObservers(&powerStatus2);
 
-
-        // If we have a battery at all and it is less than 10% full, force deep sleep if we have more than 3 low readings in a row
-        // Supect fluctuating voltage on the RAK4631 to force it to deep sleep even if battery is at 85% after only a few days
-        #ifdef NRF52_SERIES
-        if (powerStatus.getHasBattery() && !powerStatus.getHasUSB()){
-            if (batteryLevel->getBattVoltage() < MIN_BAT_MILLIVOLTS){
+// If we have a battery at all and it is less than 10% full, force deep sleep if we have more than 3 low readings in a row
+// Supect fluctuating voltage on the RAK4631 to force it to deep sleep even if battery is at 85% after only a few days
+#ifdef NRF52_SERIES
+        if (powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
+            if (batteryLevel->getBattVoltage() < MIN_BAT_MILLIVOLTS) {
                 low_voltage_counter++;
-                if (low_voltage_counter>3)
+                if (low_voltage_counter > 3)
                     powerFSM.trigger(EVENT_LOW_BATTERY);
             } else {
                 low_voltage_counter = 0;
             }
         }
-        #else
+#else
         // If we have a battery at all and it is less than 10% full, force deep sleep
-        if (powerStatus.getHasBattery() && !powerStatus.getHasUSB() && batteryLevel->getBattVoltage() < MIN_BAT_MILLIVOLTS)
+        if (powerStatus2.getHasBattery() && !powerStatus2.getHasUSB() && batteryLevel->getBattVoltage() < MIN_BAT_MILLIVOLTS)
             powerFSM.trigger(EVENT_LOW_BATTERY);
-        #endif
+#endif
     } else {
         // No power sensing on this board - tell everyone else we have no idea what is happening
-        const PowerStatus powerStatus = PowerStatus(OptUnknown, OptUnknown, OptUnknown, -1, -1);
-        newStatus.notifyObservers(&powerStatus);
+        const PowerStatus powerStatus3 = PowerStatus(OptUnknown, OptUnknown, OptUnknown, -1, -1);
+        newStatus.notifyObservers(&powerStatus3);
     }
 }
 
@@ -348,40 +362,58 @@ bool Power::axp192Init()
             DEBUG_MSG("DCDC3: %s\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
             DEBUG_MSG("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
 
-            if (radioConfig.preferences.charge_current == ChargeCurrent_MAUnset) {
+            switch (config.power.charge_current) {
+            case Config_PowerConfig_ChargeCurrent_MAUnset:
                 axp.setChargeControlCur(AXP1XX_CHARGE_CUR_450MA);
-            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA100) {
+                break;
+            case Config_PowerConfig_ChargeCurrent_MA100:
                 axp.setChargeControlCur(AXP1XX_CHARGE_CUR_100MA);
-            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA190) {
+                break;
+            case Config_PowerConfig_ChargeCurrent_MA190:
                 axp.setChargeControlCur(AXP1XX_CHARGE_CUR_190MA);
-            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA280) {
+                break;
+            case Config_PowerConfig_ChargeCurrent_MA280:
                 axp.setChargeControlCur(AXP1XX_CHARGE_CUR_280MA);
-            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA360) {
+                break;
+            case Config_PowerConfig_ChargeCurrent_MA360:
                 axp.setChargeControlCur(AXP1XX_CHARGE_CUR_360MA);
-            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA450) {
+                break;
+            case Config_PowerConfig_ChargeCurrent_MA450:
                 axp.setChargeControlCur(AXP1XX_CHARGE_CUR_450MA);
-            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA550) {
+                break;
+            case Config_PowerConfig_ChargeCurrent_MA550:
                 axp.setChargeControlCur(AXP1XX_CHARGE_CUR_550MA);
-            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA630) {
+                break;
+            case Config_PowerConfig_ChargeCurrent_MA630:
                 axp.setChargeControlCur(AXP1XX_CHARGE_CUR_630MA);
-            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA700) {
+                break;
+            case Config_PowerConfig_ChargeCurrent_MA700:
                 axp.setChargeControlCur(AXP1XX_CHARGE_CUR_700MA);
-            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA780) {
+                break;
+            case Config_PowerConfig_ChargeCurrent_MA780:
                 axp.setChargeControlCur(AXP1XX_CHARGE_CUR_780MA);
-            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA880) {
+                break;
+            case Config_PowerConfig_ChargeCurrent_MA880:
                 axp.setChargeControlCur(AXP1XX_CHARGE_CUR_880MA);
-            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA960) {
+                break;
+            case Config_PowerConfig_ChargeCurrent_MA960:
                 axp.setChargeControlCur(AXP1XX_CHARGE_CUR_960MA);
-            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA1000) {
+                break;
+            case Config_PowerConfig_ChargeCurrent_MA1000:
                 axp.setChargeControlCur(AXP1XX_CHARGE_CUR_1000MA);
-            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA1080) {
+                break;
+            case Config_PowerConfig_ChargeCurrent_MA1080:
                 axp.setChargeControlCur(AXP1XX_CHARGE_CUR_1080MA);
-            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA1160) {
+                break;
+            case Config_PowerConfig_ChargeCurrent_MA1160:
                 axp.setChargeControlCur(AXP1XX_CHARGE_CUR_1160MA);
-            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA1240) {
+                break;
+            case Config_PowerConfig_ChargeCurrent_MA1240:
                 axp.setChargeControlCur(AXP1XX_CHARGE_CUR_1240MA);
-            } else if (radioConfig.preferences.charge_current == ChargeCurrent_MA1320) {
+                break;
+            case Config_PowerConfig_ChargeCurrent_MA1320:
                 axp.setChargeControlCur(AXP1XX_CHARGE_CUR_1320MA);
+                break;
             }
 
 #if 0

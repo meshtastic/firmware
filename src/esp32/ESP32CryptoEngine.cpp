@@ -32,7 +32,7 @@ class ESP32CryptoEngine : public CryptoEngine
      * @param bytes a _static_ buffer that will remain valid for the life of this crypto instance (i.e. this class will cache the
      * provided pointer)
      */
-    virtual void setKey(const CryptoKey &k)
+    virtual void setKey(const CryptoKey &k) override
     {
         CryptoEngine::setKey(k);
 
@@ -47,15 +47,16 @@ class ESP32CryptoEngine : public CryptoEngine
      *
      * @param bytes is updated in place
      */
-    virtual void encrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes)
+    virtual void encrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes) override
     {
+        hexDump("before", bytes, numBytes, 16);
         if (key.length > 0) {
             uint8_t stream_block[16];
             static uint8_t scratch[MAX_BLOCKSIZE];
             size_t nc_off = 0;
 
-            // DEBUG_MSG("ESP32 crypt fr=%x, num=%x, numBytes=%d!\n", fromNode, (uint32_t) packetNum, numBytes);
-            initNonce(fromNode, packetNum);
+            DEBUG_MSG("ESP32 crypt fr=%x, num=%x, numBytes=%d!\n", fromNode, (uint32_t) packetId, numBytes);
+            initNonce(fromNode, packetId);
             assert(numBytes <= MAX_BLOCKSIZE);
             memcpy(scratch, bytes, numBytes);
             memset(scratch + numBytes, 0,
@@ -64,14 +65,13 @@ class ESP32CryptoEngine : public CryptoEngine
             auto res = mbedtls_aes_crypt_ctr(&aes, numBytes, &nc_off, nonce, stream_block, scratch, bytes);
             assert(!res);
         }
+        hexDump("after", bytes, numBytes, 16);
     }
 
-    virtual void decrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes)
+    virtual void decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes) override
     {
-        // DEBUG_MSG("ESP32 decrypt!\n");
-
         // For CTR, the implementation is the same
-        encrypt(fromNode, packetNum, numBytes, bytes);
+        encrypt(fromNode, packetId, numBytes, bytes);
     }
 
   private:

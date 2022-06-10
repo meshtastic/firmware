@@ -1,7 +1,7 @@
-#include "configuration.h"
 #include "GPS.h"
 #include "NodeDB.h"
 #include "RTC.h"
+#include "configuration.h"
 #include "sleep.h"
 #include <assert.h>
 
@@ -16,17 +16,48 @@ HardwareSerial *GPS::_serial_gps = &Serial1;
 HardwareSerial *GPS::_serial_gps = NULL;
 #endif
 
-#ifdef GPS_I2C_ADDRESS
-uint8_t GPS::i2cAddress = GPS_I2C_ADDRESS;
-#else
-uint8_t GPS::i2cAddress = 0;
-#endif
-
 GPS *gps;
 
 /// Multiple GPS instances might use the same serial port (in sequence), but we can
 /// only init that port once.
 static bool didSerialInit;
+
+bool GPS::getACK(uint8_t c, uint8_t i) {
+  uint8_t b;
+  uint8_t ack = 0;
+  const uint8_t ackP[2] = {c, i};
+  uint8_t buf[10] = {0xB5, 0x62, 0x05, 0x01, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00};
+  unsigned long startTime = millis();
+
+  for (int j = 2; j < 6; j++) {
+    buf[8] += buf[j];
+    buf[9] += buf[8];
+  }
+
+  for (int j = 0; j < 2; j++) {
+    buf[6 + j] = ackP[j];
+    buf[8] += buf[6 + j];
+    buf[9] += buf[8];
+  }
+
+  while (1) {
+    if (ack > 9) {
+      return true;
+    }
+    if (millis() - startTime > 1000) {
+      return false;
+    }
+    if (_serial_gps->available()) {
+      b = _serial_gps->read();
+      if (b == buf[ack]) {
+        ack++;
+      }
+      else {
+        ack = 0;
+      }
+    }
+  }
+}
 
 bool GPS::setupGPS()
 {
@@ -42,6 +73,84 @@ bool GPS::setupGPS()
 #ifndef NO_ESP32
         _serial_gps->setRxBufferSize(2048); // the default is 256
 #endif
+#ifdef TTGO_T_ECHO
+        // Switch to 9600 baud, then close and reopen port
+        _serial_gps->end();
+        delay(250);
+        _serial_gps->begin(4800);
+        delay(250);
+        _serial_gps->write("$PCAS01,1*1D\r\n");
+        delay(250);
+        _serial_gps->end();
+        delay(250);
+        _serial_gps->begin(9600);
+        delay(250);
+        // Initialize the L76K Chip, use GPS + GLONASS
+        _serial_gps->write("$PCAS04,5*1C\r\n");
+        delay(250);
+        // only ask for RMC and GGA
+        _serial_gps->write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
+        delay(250);
+        // Switch to Vehicle Mode, since SoftRF enables Aviation < 2g
+        _serial_gps->write("$PCAS11,3*1E\r\n");
+        delay(250);
+#endif
+#ifdef GPS_UBLOX
+        delay(250);
+        // Set the UART port to output NMEA only
+        byte _message_nmea[] = {0xB5, 0x62, 0x06, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0xC0, 0x08, 0x00, 0x00,
+                                0x80, 0x25, 0x00, 0x00, 0x07, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x91, 0xAF};
+        _serial_gps->write(_message_nmea, sizeof(_message_nmea));
+        if (!getACK(0x06, 0x00)) {
+            DEBUG_MSG("WARNING: Unable to enable NMEA Mode.\n");
+            return true;
+        }  
+
+        // disable GGL
+        byte _message_GGL[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x01, 0x01, 0x00, 0x01, 0x01, 0x01, 0x01, 0x05, 0x3A};
+        _serial_gps->write(_message_GGL, sizeof(_message_GGL));
+        if (!getACK(0x06, 0x01)) {
+            DEBUG_MSG("WARNING: Unable to disable NMEA GGL.\n");
+            return true;
+        }
+
+        // disable GSA
+        byte _message_GSA[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x02, 0x01, 0x00, 0x01, 0x01, 0x01, 0x01, 0x06, 0x41};
+        _serial_gps->write(_message_GSA, sizeof(_message_GSA));
+        if (!getACK(0x06, 0x01)) {
+            DEBUG_MSG("WARNING: Unable to disable NMEA GSA.\n");
+            return true;
+        }
+
+        // disable GSV
+        byte _message_GSV[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x03, 0x01, 0x00, 0x01, 0x01, 0x01, 0x01, 0x07, 0x48};
+        _serial_gps->write(_message_GSV, sizeof(_message_GSV));
+        if (!getACK(0x06, 0x01)) {
+            DEBUG_MSG("WARNING: Unable to disable NMEA GSV.\n");
+            return true;
+        }
+
+        // disable VTG
+        byte _message_VTG[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x05, 0x01, 0x00, 0x01, 0x01, 0x01, 0x01, 0x09, 0x56};
+        _serial_gps->write(_message_VTG, sizeof(_message_VTG));
+        if (!getACK(0x06, 0x01)) {
+            DEBUG_MSG("WARNING: Unable to disable NMEA VTG.\n");
+            return true;
+        }
+
+        // enable RMC
+        byte _message_RMC[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x04, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x09, 0x54};
+        _serial_gps->write(_message_RMC, sizeof(_message_RMC));
+        if (!getACK(0x06, 0x01)) {
+            DEBUG_MSG("WARNING: Unable to enable NMEA RMC.\n");
+            return true;
+        }
+
+        // enable GGA
+        byte _message_GGA[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x00, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x05, 0x38};
+        _serial_gps->write(_message_GGA, sizeof(_message_GGA));
+        if (!getACK(0x06, 0x01)) DEBUG_MSG("WARNING: Unable to enable NMEA GGA.\n");
+#endif
     }
 
     return true;
@@ -51,7 +160,7 @@ bool GPS::setup()
 {
     // Master power for the GPS
 #ifdef PIN_GPS_EN
-    digitalWrite(PIN_GPS_EN, PIN_GPS_EN);
+    digitalWrite(PIN_GPS_EN, 1);
     pinMode(PIN_GPS_EN, OUTPUT);
 #endif
 
@@ -76,11 +185,19 @@ bool GPS::setup()
 GPS::~GPS()
 {
     // we really should unregister our sleep observer
-    notifySleepObserver.unobserve();
-    notifyDeepSleepObserver.unobserve();
+    notifySleepObserver.unobserve(&notifySleep);
+    notifyDeepSleepObserver.unobserve(&notifyDeepSleep);
 }
 
-bool GPS::hasLock() { return hasValidLocation; }
+bool GPS::hasLock()
+{
+    return hasValidLocation;
+}
+
+bool GPS::hasFlow()
+{
+    return hasGPS;
+}
 
 // Allow defining the polarity of the WAKE output.  default is active high
 #ifndef GPS_WAKE_ACTIVE
@@ -146,29 +263,20 @@ void GPS::setAwake(bool on)
     }
 }
 
-GpsOperation GPS::getGpsOp() const
-{
-    auto op = radioConfig.preferences.gps_operation;
-
-    if (op == GpsOperation_GpsOpUnset)
-        op = (radioConfig.preferences.location_share == LocationSharing_LocDisabled) ? GpsOperation_GpsOpTimeOnly
-                                                                                     : GpsOperation_GpsOpMobile;
-
-    return op;
-}
-
 /** Get how long we should stay looking for each aquisition in msecs
  */
 uint32_t GPS::getWakeTime() const
 {
-    uint32_t t = radioConfig.preferences.gps_attempt_time;
+    uint32_t t = config.position.gps_attempt_time;
 
     if (t == UINT32_MAX)
         return t; // already maxint
 
     if (t == 0)
-        t = radioConfig.preferences.is_router ? 5 * 60 : 15 * 60; // Allow up to 15 mins for each attempt (probably will be much
-                                                                  // less if we can find sats) or less if a router
+        t = (config.device.role == Config_DeviceConfig_Role_Router)
+                ? 5 * 60
+                : 15 * 60; // Allow up to 15 mins for each attempt (probably will be much
+                           // less if we can find sats) or less if a router
 
     t *= 1000; // msecs
 
@@ -179,18 +287,18 @@ uint32_t GPS::getWakeTime() const
  */
 uint32_t GPS::getSleepTime() const
 {
-    uint32_t t = radioConfig.preferences.gps_update_interval;
+    uint32_t t = config.position.gps_update_interval;
+    bool gps_disabled = config.position.gps_disabled;
 
-    auto op = getGpsOp();
-    bool gotTime = (getRTCQuality() >= RTCQualityGPS);
-    if ((gotTime && op == GpsOperation_GpsOpTimeOnly) || (op == GpsOperation_GpsOpDisabled))
+    if (gps_disabled)
         t = UINT32_MAX; // Sleep forever now
 
     if (t == UINT32_MAX)
         return t; // already maxint
 
-    if (t == 0)                                                        // default - unset in preferences
-        t = radioConfig.preferences.is_router ? 24 * 60 * 60 : 2 * 60; // 2 mins or once per day for routers
+    if (t == 0) // default - unset in preferences
+        t = (config.device.role == Config_DeviceConfig_Role_Router) ? 24 * 60 * 60
+                                                                                   : 2 * 60; // 2 mins or once per day for routers
 
     t *= 1000;
 
@@ -203,12 +311,10 @@ void GPS::publishUpdate()
         shouldPublish = false;
 
         // In debug logs, identify position by @timestamp:stage (stage 2 = publish)
-        DEBUG_MSG("publishing pos@%x:2, hasVal=%d, GPSlock=%d\n", 
-                    p.pos_timestamp, hasValidLocation, hasLock());
+        DEBUG_MSG("publishing pos@%x:2, hasVal=%d, GPSlock=%d\n", p.pos_timestamp, hasValidLocation, hasLock());
 
         // Notify any status instances that are observing us
-        const meshtastic::GPSStatus status =
-            meshtastic::GPSStatus(hasValidLocation, isConnected(), p);
+        const meshtastic::GPSStatus status = meshtastic::GPSStatus(hasValidLocation, isConnected(), p);
         newStatus.notifyObservers(&status);
     }
 }
@@ -218,6 +324,15 @@ int32_t GPS::runOnce()
     if (whileIdle()) {
         // if we have received valid NMEA claim we are connected
         setConnected();
+    } else {
+#ifdef GPS_UBLOX        
+        // reset the GPS on next bootup
+        if(devicestate.did_gps_reset && (millis() > 60000) && !hasFlow()) {
+            DEBUG_MSG("GPS is not communicating, trying factory reset on next bootup.\n");
+            devicestate.did_gps_reset = false;
+            nodeDB.saveToDisk();
+        }
+#endif
     }
 
     // If we are overdue for an update, turn on the GPS and at least publish the current status
@@ -257,9 +372,8 @@ int32_t GPS::runOnce()
         bool tooLong = wakeTime != UINT32_MAX && (now - lastWakeStartMsec) > wakeTime;
 
         // Once we get a location we no longer desperately want an update
-        // or if we got a time and we are in GpsOpTimeOnly mode
         // DEBUG_MSG("gotLoc %d, tooLong %d, gotTime %d\n", gotLoc, tooLong, gotTime);
-        if ((gotLoc && gotTime) || tooLong || (gotTime && getGpsOp() == GpsOperation_GpsOpTimeOnly)) {
+        if ((gotLoc && gotTime) || tooLong) {
 
             if (tooLong) {
                 // we didn't get a location during this ack window, therefore declare loss of lock
@@ -280,7 +394,7 @@ int32_t GPS::runOnce()
 
     // 9600bps is approx 1 byte per msec, so considering our buffer size we never need to wake more often than 200ms
     // if not awake we can run super infrquently (once every 5 secs?) to see if we need to wake.
-    return isAwake ? 100 : 5000;
+    return isAwake ? GPS_THREAD_INTERVAL : 5000;
 }
 
 void GPS::forceWake(bool on)
@@ -318,13 +432,7 @@ int GPS::prepareDeepSleep(void *unused)
     return 0;
 }
 
-#ifdef GPS_TX_PIN
-#include "UBloxGPS.h"
-#endif
-
-#ifdef HAS_AIR530_GPS
-#include "Air530GPS.h"
-#elif !defined(NO_GPS)
+#ifndef NO_GPS
 #include "NMEAGPS.h"
 #endif
 
@@ -334,36 +442,19 @@ GPS *createGps()
 #ifdef NO_GPS
     return nullptr;
 #else
+    if (!config.position.gps_disabled) {
 #ifdef GPS_ALTITUDE_HAE
-    DEBUG_MSG("Using HAE altitude model\n");
+        DEBUG_MSG("Using HAE altitude model\n");
 #else
-    DEBUG_MSG("Using MSL altitude model\n");
+        DEBUG_MSG("Using MSL altitude model\n");
 #endif
-// If we don't have bidirectional comms, we can't even try talking to UBLOX
-#ifdef GPS_TX_PIN
-    // Init GPS - first try ublox
-    UBloxGPS *ublox = new UBloxGPS();
-
-    if (!ublox->setup()) {
-        DEBUG_MSG("ERROR: No UBLOX GPS found\n");
-        delete ublox;
-        ublox = NULL;
-    } else {
-        return ublox;
-    }
-#endif
-
-    if (GPS::_serial_gps) {
-        // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
-        // assume NMEA at 9600 baud.
-        DEBUG_MSG("Hoping that NMEA might work\n");
-#ifdef HAS_AIR530_GPS
-        GPS *new_gps = new Air530GPS();
-#else
-        GPS *new_gps = new NMEAGPS();
-#endif
-        new_gps->setup();
-        return new_gps;
+        if (GPS::_serial_gps) {
+            // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
+            // assume NMEA at 9600 baud.
+            GPS *new_gps = new NMEAGPS();
+            new_gps->setup();
+            return new_gps;
+        }
     }
     return nullptr;
 #endif

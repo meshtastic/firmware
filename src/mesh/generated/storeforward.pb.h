@@ -50,12 +50,17 @@ typedef struct _StoreAndForward_Statistics {
     uint32_t return_window; 
 } StoreAndForward_Statistics;
 
+/* TODO: REPLACE */
 typedef struct _StoreAndForward { 
+    /* TODO: REPLACE */
     StoreAndForward_RequestResponse rr; 
+    /* TODO: REPLACE */
     bool has_stats;
     StoreAndForward_Statistics stats; 
+    /* TODO: REPLACE */
     bool has_history;
     StoreAndForward_History history; 
+    /* TODO: REPLACE */
     bool has_heartbeat;
     StoreAndForward_Heartbeat heartbeat; 
 } StoreAndForward;

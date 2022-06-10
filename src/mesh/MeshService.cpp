@@ -12,8 +12,8 @@
 #include "RTC.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
-#include "plugins/NodeInfoPlugin.h"
-#include "plugins/PositionPlugin.h"
+#include "modules/NodeInfoModule.h"
+#include "modules/PositionModule.h"
 #include "power.h"
 
 /*
@@ -71,17 +71,7 @@ int MeshService::handleFromRadio(const MeshPacket *mp)
     printPacket("Forwarding to phone", mp);
     nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
 
-    fromNum++;
-
-    if (toPhoneQueue.numFree() == 0) {
-        DEBUG_MSG("NOTE: tophone queue is full, discarding oldest\n");
-        MeshPacket *d = toPhoneQueue.dequeuePtr(0);
-        if (d)
-            releaseToPool(d);
-    }
-
-    MeshPacket *copied = packetPool.allocCopy(*mp);
-    assert(toPhoneQueue.enqueue(copied, 0)); // FIXME, instead of failing for full queue, delete the oldest mssages
+    sendToPhone((MeshPacket *)mp);
 
     return 0;
 }
@@ -115,10 +105,10 @@ void MeshService::reloadOwner()
     // DEBUG_MSG("reloadOwner()\n");
     // update our local data directly
     nodeDB.updateUser(nodeDB.getNodeNum(), owner);
-    assert(nodeInfoPlugin);
+    assert(nodeInfoModule);
     // update everyone else
-    if (nodeInfoPlugin)
-        nodeInfoPlugin->sendOurNodeInfo();
+    if (nodeInfoModule)
+        nodeInfoModule->sendOurNodeInfo();
     nodeDB.saveToDisk();
 }
 
@@ -161,12 +151,16 @@ bool MeshService::cancelSending(PacketId id)
     return router->cancelSending(nodeDB.getNodeNum(), id);
 }
 
-void MeshService::sendToMesh(MeshPacket *p, RxSource src)
+void MeshService::sendToMesh(MeshPacket *p, RxSource src, bool ccToPhone)
 {
     nodeDB.updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
 
     // Note: We might return !OK if our fifo was full, at that point the only option we have is to drop it
     router->sendLocal(p, src);
+
+    if (ccToPhone) {
+        sendToPhone(p);
+    }
 }
 
 void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
@@ -175,16 +169,31 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
     assert(node);
 
     if (node->has_position) {
-        if (positionPlugin) {
+        if (positionModule) {
             DEBUG_MSG("Sending position ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
-            positionPlugin->sendOurPosition(dest, wantReplies);
+            positionModule->sendOurPosition(dest, wantReplies);
         }
     } else {
-        if (nodeInfoPlugin) {
+        if (nodeInfoModule) {
             DEBUG_MSG("Sending nodeinfo ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
-            nodeInfoPlugin->sendOurNodeInfo(dest, wantReplies);
+            nodeInfoModule->sendOurNodeInfo(dest, wantReplies);
         }
     }
+}
+
+void MeshService::sendToPhone(MeshPacket *p)
+{
+    if (toPhoneQueue.numFree() == 0) {
+        DEBUG_MSG("NOTE: tophone queue is full, discarding oldest\n");
+        MeshPacket *d = toPhoneQueue.dequeuePtr(0);
+        if (d)
+            releaseToPool(d);
+    }
+
+    MeshPacket *copied = packetPool.allocCopy(*p);
+    perhapsDecode(copied);
+    assert(toPhoneQueue.enqueue(copied, 0)); // FIXME, instead of failing for full queue, delete the oldest mssages
+    fromNum++;
 }
 
 NodeInfo *MeshService::refreshMyNodeInfo()
@@ -207,8 +216,7 @@ NodeInfo *MeshService::refreshMyNodeInfo()
     // For the time in the position field, only set that if we have a real GPS clock
     position.time = getValidTime(RTCQualityGPS);
 
-    position.battery_level = powerStatus->getBatteryChargePercent();
-    updateBatteryLevel(position.battery_level);
+    updateBatteryLevel(powerStatus->getBatteryChargePercent());
 
     return node;
 }
@@ -225,10 +233,10 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
     } else {
         // The GPS has lost lock, if we are fixed position we should just keep using
         // the old position
-#if GPS_EXTRAVERBOSE
+#ifdef GPS_EXTRAVERBOSE
         DEBUG_MSG("onGPSchanged() - lost validLocation\n");
 #endif
-        if (radioConfig.preferences.fixed_position) {
+        if (config.position.fixed_position) {
             DEBUG_MSG("WARNING: Using fixed position\n");
             pos = node->position;
         }
@@ -238,11 +246,10 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
     // I KNOW this is redundant with refreshMyNodeInfo() above, but these are
     //   inexpensive nonblocking calls and can be refactored in due course
     pos.time = getValidTime(RTCQualityGPS);
-    pos.battery_level = powerStatus->getBatteryChargePercent();
 
     // In debug logs, identify position by @timestamp:stage (stage 4 = nodeDB)
-    DEBUG_MSG("onGPSChanged() pos@%x:4, time=%u, lat=%d, bat=%d\n", 
-                pos.pos_timestamp, pos.time, pos.latitude_i, pos.battery_level);
+    DEBUG_MSG("onGPSChanged() pos@%x, time=%u, lat=%d, lon=%d, alt=%d\n", pos.pos_timestamp, pos.time, pos.latitude_i,
+              pos.longitude_i, pos.altitude);
 
     // Update our current position in the local DB
     nodeDB.updatePosition(nodeDB.getNodeNum(), pos, RX_SRC_LOCAL);

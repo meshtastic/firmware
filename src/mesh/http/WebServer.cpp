@@ -1,13 +1,12 @@
-#include "main.h"
 #include "mesh/http/WebServer.h"
 #include "NodeDB.h"
+#include "graphics/Screen.h"
+#include "main.h"
 #include "mesh/http/WiFiAPClient.h"
+#include "sleep.h"
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>
 #include <HTTPURLEncodedBodyParser.hpp>
-#include "sleep.h"
-#include "graphics/Screen.h"
-
 
 #include <WebServer.h>
 #include <WiFi.h>
@@ -60,19 +59,9 @@ static void handleWebResponse()
             // will be ignored by the NRF boards.
             handleDNSResponse();
 
-            if(secureServer)
+            if (secureServer)
                 secureServer->loop();
             insecureServer->loop();
-        }
-
-        /*
-            Slow down the CPU if we have not received a request within the last few
-            seconds.
-        */
-
-        if (millis() - getTimeSpeedUp() >= (25 * 1000)) {
-            setCpuFrequencyMhz(80);
-            setTimeSpeedUp();
         }
     }
 }
@@ -81,7 +70,6 @@ static void taskCreateCert(void *parameter)
 {
     prefs.begin("MeshtasticHTTPS", false);
 
-
 #if 0
     // Delete the saved certs (used in debugging)
     DEBUG_MSG("Deleting any saved SSL keys ...\n");
@@ -89,7 +77,6 @@ static void taskCreateCert(void *parameter)
     prefs.remove("PK");
     prefs.remove("cert");
 #endif
-
 
     DEBUG_MSG("Checking if we have a previously saved SSL Certificate.\n");
 
@@ -112,8 +99,6 @@ static void taskCreateCert(void *parameter)
 
     } else {
 
-        setCPUFast(true);
-
         DEBUG_MSG("Creating the certificate. This may take a while. Please wait...\n");
         yield();
         cert = new SSLCert();
@@ -125,29 +110,16 @@ static void taskCreateCert(void *parameter)
         if (createCertResult != 0) {
             DEBUG_MSG("Creating the certificate failed\n");
 
-            // Serial.printf("Creating the certificate failed. Error Code = 0x%02X, check SSLCert.hpp for details",
-            //              createCertResult);
-            // while (true)
-            //    delay(500);
         } else {
             DEBUG_MSG("Creating the certificate was successful\n");
 
             DEBUG_MSG("Created Private Key: %d Bytes\n", cert->getPKLength());
-            // for (int i = 0; i < cert->getPKLength(); i++)
-            //  Serial.print(cert->getPKData()[i], HEX);
-            // Serial.println();
 
             DEBUG_MSG("Created Certificate: %d Bytes\n", cert->getCertLength());
-            // for (int i = 0; i < cert->getCertLength(); i++)
-            //  Serial.print(cert->getCertData()[i], HEX);
-            // Serial.println();
 
             prefs.putBytes("PK", (uint8_t *)cert->getPKData(), cert->getPKLength());
             prefs.putBytes("cert", (uint8_t *)cert->getCertData(), cert->getCertLength());
         }
-
-        setCPUFast(false);
-
     }
 
     isCertReady = true;
@@ -158,19 +130,19 @@ static void taskCreateCert(void *parameter)
 
 void createSSLCert()
 {
-    bool runLoop = false;
     if (isWifiAvailable() && !isCertReady) {
+        bool runLoop = false;
 
         // Create a new process just to handle creating the cert.
         //   This is a workaround for Bug: https://github.com/fhessel/esp32_https_server/issues/48
         //  jm@casler.org (Oct 2020)
         xTaskCreate(taskCreateCert, /* Task function. */
                     "createCert",   /* String with name of task. */
-                    //16384,          /* Stack size in bytes. */
-                    8192,          /* Stack size in bytes. */
-                    NULL,           /* Parameter passed as input of the task */
-                    16,             /* Priority of the task. */
-                    NULL);          /* Task handle. */
+                    // 16384,          /* Stack size in bytes. */
+                    8192,  /* Stack size in bytes. */
+                    NULL,  /* Parameter passed as input of the task */
+                    16,    /* Priority of the task. */
+                    NULL); /* Task handle. */
 
         DEBUG_MSG("Waiting for SSL Cert to be generated.\n");
         while (!isCertReady) {
@@ -180,10 +152,11 @@ void createSSLCert()
 
                     yield();
                     esp_task_wdt_reset();
-
-                    if (millis() / 1000 >= 3) {       
-                        screen->setSSLFrames();                            
+#ifndef NO_SCREEN
+                    if (millis() / 1000 >= 3) {
+                        screen->setSSLFrames();
                     }
+#endif                    
                 }
                 runLoop = false;
             } else {
@@ -203,6 +176,10 @@ int32_t WebServerThread::runOnce()
     // DEBUG_MSG("WebServerThread::runOnce()\n");
     handleWebResponse();
 
+    if (requestRestart && (millis() / 1000) > requestRestart) {
+        ESP.restart();
+    }
+
     // Loop every 5ms.
     return (5);
 }
@@ -217,11 +194,11 @@ void initWebServer()
 
     registerHandlers(insecureServer, secureServer);
 
-    if(secureServer) {
+    if (secureServer) {
         DEBUG_MSG("Starting Secure Web Server...\n");
         secureServer->start();
     }
-    DEBUG_MSG("Starting Insecure Web Server...\n");    
+    DEBUG_MSG("Starting Insecure Web Server...\n");
     insecureServer->start();
     if (insecureServer->isRunning()) {
         DEBUG_MSG("Web Servers Ready! :-) \n");

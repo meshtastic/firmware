@@ -21,13 +21,16 @@ PB_BIND(Routing, Routing, AUTO)
 PB_BIND(Data, Data, 2)
 
 
+PB_BIND(Location, Location, AUTO)
+
+
 PB_BIND(MeshPacket, MeshPacket, 2)
 
 
 PB_BIND(NodeInfo, NodeInfo, AUTO)
 
 
-PB_BIND(MyNodeInfo, MyNodeInfo, 2)
+PB_BIND(MyNodeInfo, MyNodeInfo, AUTO)
 
 
 PB_BIND(LogRecord, LogRecord, AUTO)
@@ -41,6 +44,8 @@ PB_BIND(ToRadio, ToRadio, 2)
 
 PB_BIND(ToRadio_PeerInfo, ToRadio_PeerInfo, AUTO)
 
+
+PB_BIND(Compressed, Compressed, AUTO)
 
 
 

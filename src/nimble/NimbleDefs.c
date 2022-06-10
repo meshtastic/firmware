@@ -1,3 +1,5 @@
+#ifndef USE_NEW_ESP32_BLUETOOTH
+
 #include "NimbleDefs.h"
 
 // NRF52 wants these constants as byte arrays
@@ -44,3 +46,5 @@ const struct ble_gatt_svc_def gatt_svr_svcs[] = {
         0, /* No more services. */
     },
 };
+
+#endif //#ifndef USE_NEW_ESP32_BLUETOOTH

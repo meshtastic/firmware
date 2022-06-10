@@ -1,4 +1,3 @@
-#include "configuration.h"
 #include "RadioInterface.h"
 #include "Channels.h"
 #include "MeshRadio.h"
@@ -6,56 +5,105 @@
 #include "NodeDB.h"
 #include "Router.h"
 #include "assert.h"
+#include "configuration.h"
 #include "sleep.h"
 #include <assert.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
 
-#define RDEF(name, freq, spacing, num_ch, power_limit)                                                                           \
+#define RDEF(name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted, frequency_switching)                 \
     {                                                                                                                            \
-        RegionCode_##name, num_ch, power_limit, freq, spacing, #name                                                             \
+        Config_LoRaConfig_RegionCode_##name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted,            \
+            frequency_switching, #name                                                                                           \
     }
 
 const RegionInfo regions[] = {
-    RDEF(US, 903.08f, 2.16f, 13, 0), RDEF(EU433, 433.175f, 0.2f, 8, 0), RDEF(EU865, 865.2f, 0.3f, 10, 0),
-    RDEF(CN, 470.0f, 2.0f, 20, 0),
-    RDEF(JP, 920.0f, 0.5f, 10, 13),    // See https://github.com/meshtastic/Meshtastic-device/issues/346 power level 13
-    RDEF(ANZ, 916.0f, 0.5f, 20, 0),    // AU/NZ channel settings 915-928MHz
-    RDEF(KR, 921.9f, 0.2f, 8, 0),      // KR channel settings (KR920-923) Start from TTN download channel
-                                       // freq. (921.9f is for download, others are for uplink)
-    RDEF(TW, 923.0f, 0.2f, 10, 0),     // TW channel settings (AS2 bandplan 923-925MHz)
-    RDEF(RU, 868.9f, 0.2f, 2, 20),     // See notes below
-    RDEF(Unset, 903.08f, 2.16f, 13, 0) // Assume US freqs if unset, Must be last
+    /*
+        https://link.springer.com/content/pdf/bbm%3A978-1-4842-4357-2%2F1.pdf
+        https://www.thethingsnetwork.org/docs/lorawan/regional-parameters/
+    */
+    RDEF(US, 902.0f, 928.0f, 100, 0, 30, true, false),
+
+    /*
+        https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
+     */
+    RDEF(EU433, 433.0f, 434.0f, 10, 0, 12, true, false),
+
+    /*
+        https://www.thethingsnetwork.org/docs/lorawan/duty-cycle/
+        https://www.thethingsnetwork.org/docs/lorawan/regional-parameters/
+        https://www.legislation.gov.uk/uksi/1999/930/schedule/6/part/III/made/data.xht?view=snippet&wrap=true
+
+        audio_permitted = false per regulation
+     */
+    RDEF(EU868, 869.4f, 869.65f, 10, 0, 16, false, false),
+
+    /*
+        https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
+     */
+    RDEF(CN, 470.0f, 510.0f, 100, 0, 19, true, false),
+
+    /*
+        https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
+     */
+    RDEF(JP, 920.8f, 927.8f, 100, 0, 16, true, false),
+
+    /*
+        https://www.iot.org.au/wp/wp-content/uploads/2016/12/IoTSpectrumFactSheet.pdf
+        https://iotalliance.org.nz/wp-content/uploads/sites/4/2019/05/IoT-Spectrum-in-NZ-Briefing-Paper.pdf
+     */
+    RDEF(ANZ, 915.0f, 928.0f, 100, 0, 30, true, false),
+
+    /*
+        https://digital.gov.ru/uploaded/files/prilozhenie-12-k-reshenyu-gkrch-18-46-03-1.pdf
+
+        Note:
+            - We do LBT, so 100% is allowed.
+     */
+    RDEF(RU, 868.7f, 869.2f, 100, 0, 20, true, false),
+
+    /*
+        ???
+     */
+    RDEF(KR, 920.0f, 923.0f, 100, 0, 0, true, false),
+
+    /*
+        ???
+     */
+    RDEF(TW, 920.0f, 925.0f, 100, 0, 0, true, false),
+
+    /*
+        https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
+     */
+    RDEF(IN, 865.0f, 867.0f, 100, 0, 30, true, false),
+
+    /*
+         https://rrf.rsm.govt.nz/smart-web/smart/page/-smart/domain/licence/LicenceSummary.wdk?id=219752
+         https://iotalliance.org.nz/wp-content/uploads/sites/4/2019/05/IoT-Spectrum-in-NZ-Briefing-Paper.pdf
+      */
+    RDEF(NZ865, 864.0f, 868.0f, 100, 0, 0, true, false),
+
+    /*
+       https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
+    */
+    RDEF(TH, 920.0f, 925.0f, 100, 0, 16, true, false),
+
+    /*
+        This needs to be last. Same as US.
+    */
+    RDEF(Unset, 902.0f, 928.0f, 100, 0, 30, true, false)
+
 };
-
-/* Notes about the RU bandplan (from @denis-d in https://meshtastic.discourse.group/t/russian-band-plan-proposal/2786/2):
-
-According to Annex 12 to GKRCh (National Radio Frequency Commission) decision № 18-46-03-1 (September 11th 2018)
-https://digital.gov.ru/uploaded/files/prilozhenie-12-k-reshenyu-gkrch-18-46-03-1.pdf 1 We have 3 options for 868 MHz:
-
-864,0 - 865,0 MHz ERP 25mW, Duty Cycle 0.1% (3.6 sec in hour) or LBT (Listen Before Talk), prohibited in airports.
-866,0 - 868,0 MHz ERP 25mW, Duty Cycle 1% or LBT, PSD (Power Spectrum Density) 1000mW/MHz, prohibited in airports
-868,7 - 869,2 MHz ERP 100mW, Duty Cycle 10% or LBT, no resctrictions
-and according to RP2-1.0.2 LoRaWAN® Regional Parameters RP2-1.0.2 LoRaWAN® Regional Parameters - LoRa Alliance®
-I propose to use following meshtastic bandplan:
-1 channel - central frequency 868.9MHz 125kHz band
-Protective band - 75kHz
-2 channel - central frequency 869.1MHz 125kHz band
-
-RDEF(RU, 868.9f, 0.2f, 2, 20)
-*/
 
 const RegionInfo *myRegion;
 
 void initRegion()
 {
     const RegionInfo *r = regions;
-    for (; r->code != RegionCode_Unset && r->code != radioConfig.preferences.region; r++)
+    for (; r->code != Config_LoRaConfig_RegionCode_Unset && r->code != config.lora.region; r++)
         ;
     myRegion = r;
-    DEBUG_MSG("Wanted region %d, using %s\n", radioConfig.preferences.region, r->name);
-
-    myNodeInfo.num_bands = myRegion->numChannels; // Tell our android app how many channels we have
+    DEBUG_MSG("Wanted region %d, using %s\n", config.lora.region, r->name);
 }
 
 /**
@@ -112,9 +160,15 @@ uint32_t RadioInterface::getPacketTime(MeshPacket *p)
 uint32_t RadioInterface::getRetransmissionMsec(const MeshPacket *p)
 {
     assert(shortPacketMsec); // Better be non zero
-
-    // was 20 and 22 secs respectively, but now with shortPacketMsec as 2269, this should give the same range
-    return random(9 * shortPacketMsec, 10 * shortPacketMsec);
+    static uint8_t bytes[MAX_RHPACKETLEN];
+    size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), Data_fields, &p->decoded);
+    uint32_t packetAirtime = getPacketTime(numbytes + sizeof(PacketHeader));
+    uint32_t tCADmsec = 2 * (1 << sf) / bw; // duration of CAD is roughly 2 symbols according to SX127x datasheet 
+    /* Make sure enough time has elapsed for this packet to be sent and an ACK is received. 
+     * Right now we have to wait until another node floods the same packet, as that is our implicit ACK.
+     * TODO: Revise when want_ack will be used (right now it is always set to 0 afterwards).
+     */
+    return 2*packetAirtime + 2*MIN_TX_WAIT_MSEC + shortPacketMsec + shortPacketMsec*2 + PROCESSING_TIME_MSEC + 2*tCADmsec;
 }
 
 /** The delay to use when we want to send something but the ether is busy */
@@ -133,7 +187,37 @@ uint32_t RadioInterface::getTxDelayMsec()
      */
     // const uint32_t MAX_TX_WAIT_MSEC = 2000; // stress test would still fail occasionally with 1000
 
-    return random(MIN_TX_WAIT_MSEC, shortPacketMsec);
+    return random((MIN_TX_WAIT_MSEC), (MIN_TX_WAIT_MSEC + shortPacketMsec));
+}
+
+/** The delay to use when we want to send something but the ether is busy */
+uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
+{
+    /** At the low end we want to pick a delay large enough that anyone who just completed sending (some other node)
+     * has had enough time to switch their radio back into receive mode.
+     */
+    const uint32_t MIN_TX_WAIT_MSEC = 100;
+
+    // The minimum value for a LoRa SNR
+    const uint32_t SNR_MIN = -20;
+
+    // The maximum value for a LoRa SNR
+    const uint32_t SNR_MAX = 15;
+
+    //  high SNR = Long Delay
+    //  low SNR = Short Delay
+    uint32_t delay = 0;
+
+    if (config.device.role == Config_DeviceConfig_Role_Router ||
+        config.device.role == Config_DeviceConfig_Role_RouterClient) {
+        delay = map(snr, SNR_MIN, SNR_MAX, MIN_TX_WAIT_MSEC, (MIN_TX_WAIT_MSEC + (shortPacketMsec / 2)));
+        DEBUG_MSG("rx_snr found in packet. As a router, setting tx delay:%d\n", delay);
+    } else {
+        delay = map(snr, SNR_MIN, SNR_MAX, MIN_TX_WAIT_MSEC + (shortPacketMsec / 2), (MIN_TX_WAIT_MSEC + shortPacketMsec * 2));
+        DEBUG_MSG("rx_snr found in packet. Setting tx delay:%d\n", delay);
+    }
+
+    return delay;
 }
 
 void printPacket(const char *prefix, const MeshPacket *p)
@@ -171,6 +255,9 @@ void printPacket(const char *prefix, const MeshPacket *p)
     }
     if (p->rx_snr != 0.0) {
         DEBUG_MSG(" rxSNR=%g", p->rx_snr);
+    }
+    if (p->rx_rssi != 0) {
+        DEBUG_MSG(" rxRSSI=%g", p->rx_rssi);
     }
     if (p->priority != 0)
         DEBUG_MSG(" priority=%d", p->priority);
@@ -270,50 +357,52 @@ void RadioInterface::applyModemConfig()
 {
     // Set up default configuration
     // No Sync Words in LORA mode
-
+    Config_LoRaConfig &loraConfig = config.lora;
     auto channelSettings = channels.getPrimary();
-    if (channelSettings.spread_factor == 0) {
-        switch (channelSettings.modem_config) {
-        case ChannelSettings_ModemConfig_Bw125Cr45Sf128: ///< Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on. Default medium
-                                                         ///< range
-            bw = 125;
-            cr = 5;
+    if (loraConfig.spread_factor == 0) {
+        switch (loraConfig.modem_preset) {
+        case Config_LoRaConfig_ModemPreset_ShortFast:
+            bw = 250;
+            cr = 8;
             sf = 7;
             break;
-        case ChannelSettings_ModemConfig_Bw500Cr45Sf128: ///< Bw = 500 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on. Fast+short
-                                                         ///< range
-            bw = 500;
-            cr = 5;
-            sf = 7;
+        case Config_LoRaConfig_ModemPreset_ShortSlow:
+            bw = 250;
+            cr = 8;
+            sf = 8;
             break;
-        case ChannelSettings_ModemConfig_Bw31_25Cr48Sf512: ///< Bw = 31.25 kHz, Cr = 4/8, Sf = 512chips/symbol, CRC on. Slow+long
-                                                           ///< range
-            bw = 31.25;
+        case Config_LoRaConfig_ModemPreset_MidFast:
+            bw = 250;
             cr = 8;
             sf = 9;
             break;
-        case ChannelSettings_ModemConfig_Bw125Cr48Sf4096:
+        case Config_LoRaConfig_ModemPreset_MidSlow:
+            bw = 250;
+            cr = 8;
+            sf = 10;
+            break;
+        case Config_LoRaConfig_ModemPreset_LongFast:
+            bw = 250;
+            cr = 8;
+            sf = 11;
+            break;
+        case Config_LoRaConfig_ModemPreset_LongSlow:
             bw = 125;
             cr = 8;
             sf = 12;
             break;
-        case ChannelSettings_ModemConfig_Bw250Cr46Sf2048:
-            bw = 250;
-            cr = 6;
-            sf = 11;
-            break;
-        case ChannelSettings_ModemConfig_Bw250Cr47Sf1024:
-            bw = 250;
-            cr = 7;
-            sf = 10;
+        case Config_LoRaConfig_ModemPreset_VLongSlow:
+            bw = 31.25;
+            cr = 8;
+            sf = 12;
             break;
         default:
             assert(0); // Unknown enum
         }
     } else {
-        sf = channelSettings.spread_factor;
-        cr = channelSettings.coding_rate;
-        bw = channelSettings.bandwidth;
+        sf = loraConfig.spread_factor;
+        cr = loraConfig.coding_rate;
+        bw = loraConfig.bandwidth;
 
         if (bw == 31) // This parameter is not an integer
             bw = 31.25;
@@ -321,26 +410,27 @@ void RadioInterface::applyModemConfig()
             bw = 62.5;
     }
 
-    power = channelSettings.tx_power;
-
+    power = loraConfig.tx_power;
     shortPacketMsec = getPacketTime(sizeof(PacketHeader));
-
     assert(myRegion); // Should have been found in init
+
+    // Calculate the number of channels
+    uint32_t numChannels = floor((myRegion->freqEnd - myRegion->freqStart) / (myRegion->spacing + (bw / 1000)));
 
     // If user has manually specified a channel num, then use that, otherwise generate one by hashing the name
     const char *channelName = channels.getName(channels.getPrimaryIndex());
-    int channel_num = channelSettings.channel_num ? channelSettings.channel_num - 1 : hash(channelName) % myRegion->numChannels;
-    float freq = myRegion->freq + radioConfig.preferences.frequency_offset + myRegion->spacing * channel_num;
+    int channel_num = channelSettings.channel_num ? channelSettings.channel_num - 1 : hash(channelName) % numChannels;
+    float freq = myRegion->freqStart + ((((myRegion->freqEnd - myRegion->freqStart) / numChannels) / 2) * channel_num);
 
     saveChannelNum(channel_num);
     saveFreq(freq);
 
-    DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, power=%d\n", channelName, channelSettings.modem_config, channel_num, power);
-    DEBUG_MSG("Radio myRegion->freq: %f\n", myRegion->freq);
-    DEBUG_MSG("Radio myRegion->spacing: %f\n", myRegion->spacing);
-    DEBUG_MSG("Radio myRegion->numChannels: %d\n", myRegion->numChannels);
+    DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, power=%d\n", channelName, loraConfig.modem_preset, channel_num, power);
+    DEBUG_MSG("Radio myRegion->freqStart / myRegion->freqEnd: %f -> %f (%f mhz)\n", myRegion->freqStart, myRegion->freqEnd,
+              myRegion->freqEnd - myRegion->freqStart);
+    DEBUG_MSG("Radio myRegion->numChannels: %d\n", numChannels);
     DEBUG_MSG("Radio channel_num: %d\n", channel_num);
-    DEBUG_MSG("Radio frequency: %f\n", getFreq()); // the frequency could be overridden in RadioInterface::getFreq() for some modules
+    DEBUG_MSG("Radio frequency: %f\n", getFreq());
     DEBUG_MSG("Short packet time: %u msec\n", shortPacketMsec);
 }
 

@@ -15,17 +15,17 @@ class SX126xInterface : public RadioLibInterface
     /// Initialise the Driver transport hardware and software.
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
-    virtual bool init();
+    virtual bool init() override;
 
     /// Apply any radio provisioning changes
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
-    virtual bool reconfigure();
+    virtual bool reconfigure() override;
 
     /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.
-    virtual bool sleep();
+    virtual bool sleep() override;
 
-    bool isIRQPending() { return lora.getIrqStatus() != 0; }
+    bool isIRQPending() override { return lora.getIrqStatus() != 0; }
 
   protected:
 
@@ -39,32 +39,35 @@ class SX126xInterface : public RadioLibInterface
     /**
      * Glue functions called from ISR land
      */
-    virtual void disableInterrupt();
+    virtual void disableInterrupt() override;
 
     /**
      * Enable a particular ISR callback glue function
      */
     virtual void enableInterrupt(void (*callback)()) { lora.setDio1Action(callback); }
 
+    /** can we detect a LoRa preamble on the current channel? */
+    virtual bool isChannelActive() override;
+
     /** are we actively receiving a packet (only called during receiving state) */
-    virtual bool isActivelyReceiving();
+    virtual bool isActivelyReceiving() override;
 
     /**
      * Start waiting to receive a message
      */
-    virtual void startReceive();
+    virtual void startReceive() override;
 
     /**
      *  We override to turn on transmitter power as needed.
      */
-    virtual void configHardwareForSend();
+    virtual void configHardwareForSend() override;
 
     /**
      * Add SNR data to received messages
      */
-    virtual void addReceiveMetadata(MeshPacket *mp);
+    virtual void addReceiveMetadata(MeshPacket *mp) override;
 
-    virtual void setStandby();
+    virtual void setStandby() override;
 
   private:
 };

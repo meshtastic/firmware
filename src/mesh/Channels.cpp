@@ -1,13 +1,13 @@
-#include "configuration.h"
 #include "Channels.h"
 #include "CryptoEngine.h"
 #include "NodeDB.h"
+#include "configuration.h"
 
 #include <assert.h>
 
 /// 16 bytes of random PSK for our _public_ default channel that all devices power up on (AES128)
 static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
-                                     0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0xbf};
+                                     0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0x01};
 
 Channels channels;
 
@@ -83,13 +83,11 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
 {
     Channel &ch = getByIndex(chIndex);
     ChannelSettings &channelSettings = ch.settings;
+    Config_LoRaConfig &loraConfig = config.lora;
 
-    // radioConfig.modem_config = RadioConfig_ModemConfig_Bw125Cr45Sf128;  // medium range and fast
-    // channelSettings.modem_config = ChannelSettings_ModemConfig_Bw500Cr45Sf128;  // short range and fast, but wide
-    // bandwidth so incompatible radios can talk together
-    channelSettings.modem_config = ChannelSettings_ModemConfig_Bw125Cr48Sf4096; // slow and long range
+    loraConfig.modem_preset = Config_LoRaConfig_ModemPreset_LongFast; // Default to Long Range & Fast
 
-    channelSettings.tx_power = 0; // default
+    loraConfig.tx_power = 0; // default
     uint8_t defaultpskIndex = 1;
     channelSettings.psk.bytes[0] = defaultpskIndex;
     channelSettings.psk.size = 1;
@@ -102,7 +100,7 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
 CryptoKey Channels::getKey(ChannelIndex chIndex)
 {
     Channel &ch = getByIndex(chIndex);
-    ChannelSettings &channelSettings = ch.settings;
+    const ChannelSettings &channelSettings = ch.settings;
     assert(ch.has_settings);
 
     CryptoKey k;
@@ -206,33 +204,36 @@ void Channels::setChannel(const Channel &c)
 const char *Channels::getName(size_t chIndex)
 {
     // Convert the short "" representation for Default into a usable string
-    ChannelSettings &channelSettings = getByIndex(chIndex).settings;
+    const ChannelSettings &channelSettings = getByIndex(chIndex).settings;
     const char *channelName = channelSettings.name;
     if (!*channelName) { // emptystring
-        // Per mesh.proto spec, if bandwidth is specified we must ignore modemConfig enum, we assume that in that case
+        // Per mesh.proto spec, if bandwidth is specified we must ignore modemPreset enum, we assume that in that case
         // the app fucked up and forgot to set channelSettings.name
 
-        if (channelSettings.bandwidth != 0)
+        if (config.lora.bandwidth != 0)
             channelName = "Unset";
         else
-            switch (channelSettings.modem_config) {
-            case ChannelSettings_ModemConfig_Bw125Cr45Sf128:
+            switch (config.lora.modem_preset) {
+            case Config_LoRaConfig_ModemPreset_ShortSlow:
                 channelName = "ShortSlow";
                 break;
-            case ChannelSettings_ModemConfig_Bw500Cr45Sf128:
+            case Config_LoRaConfig_ModemPreset_ShortFast:
                 channelName = "ShortFast";
                 break;
-            case ChannelSettings_ModemConfig_Bw31_25Cr48Sf512:
-                channelName = "LongFast";
-                break;
-            case ChannelSettings_ModemConfig_Bw125Cr48Sf4096:
-                channelName = "LongSlow";
-                break;
-            case ChannelSettings_ModemConfig_Bw250Cr46Sf2048:
+            case Config_LoRaConfig_ModemPreset_MidSlow:
                 channelName = "MediumSlow";
                 break;
-            case ChannelSettings_ModemConfig_Bw250Cr47Sf1024:
+            case Config_LoRaConfig_ModemPreset_MidFast:
                 channelName = "MediumFast";
+                break;
+            case Config_LoRaConfig_ModemPreset_LongFast:
+                channelName = "LongFast";
+                break;
+            case Config_LoRaConfig_ModemPreset_LongSlow:
+                channelName = "LongSlow";
+                break;
+            case Config_LoRaConfig_ModemPreset_VLongSlow:
+                channelName = "VLongSlow";
                 break;
             default:
                 channelName = "Invalid";

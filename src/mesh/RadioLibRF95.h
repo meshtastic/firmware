@@ -16,7 +16,7 @@ class RadioLibRF95: public SX1278 {
 
       \param mod Instance of Module that will be used to communicate with the %LoRa chip.
     */
-    RadioLibRF95(Module* mod);
+    explicit RadioLibRF95(Module* mod);
 
     // basic methods
 
@@ -43,7 +43,7 @@ class RadioLibRF95: public SX1278 {
 
       \returns \ref status_codes
     */
-    int16_t begin(float freq = 915.0, float bw = 125.0, uint8_t sf = 9, uint8_t cr = 7, uint8_t syncWord = SX127X_SYNC_WORD, int8_t power = 17, uint16_t preambleLength = 8, uint8_t gain = 0);
+    int16_t begin(float freq = 915.0, float bw = 125.0, uint8_t sf = 9, uint8_t cr = 7, uint8_t syncWord = RADIOLIB_SX127X_SYNC_WORD, int8_t power = 17, uint16_t preambleLength = 8, uint8_t gain = 0);
 
     // configuration methods
 

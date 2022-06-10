@@ -1,13 +1,15 @@
-#include "configuration.h"
 #include "Router.h"
 #include "Channels.h"
 #include "CryptoEngine.h"
 #include "NodeDB.h"
 #include "RTC.h"
+#include "configuration.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
-#include "plugins/RoutingPlugin.h"
-#include "base64.h"
+#include "modules/RoutingModule.h"
+extern "C" {
+#include "mesh/compression/unishox2.h"
+}
 
 #if defined(HAS_WIFI) || defined(PORTDUINO)
 #include "mqtt/MQTT.h"
@@ -116,8 +118,8 @@ MeshPacket *Router::allocForSending()
     p->which_payloadVariant = MeshPacket_decoded_tag; // Assume payload is decoded at start.
     p->from = nodeDB.getNodeNum();
     p->to = NODENUM_BROADCAST;
-    if (radioConfig.preferences.hop_limit && radioConfig.preferences.hop_limit <= HOP_MAX) {
-        p->hop_limit = (radioConfig.preferences.hop_limit >= HOP_MAX) ? HOP_MAX : radioConfig.preferences.hop_limit;
+    if (config.lora.hop_limit && config.lora.hop_limit <= HOP_MAX) {
+        p->hop_limit = (config.lora.hop_limit >= HOP_MAX) ? HOP_MAX : config.lora.hop_limit;
     } else {
         p->hop_limit = HOP_RELIABLE;
     }
@@ -133,7 +135,7 @@ MeshPacket *Router::allocForSending()
  */
 void Router::sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex)
 {
-    routingPlugin->sendAckNak(err, to, idFrom, chIndex);
+    routingModule->sendAckNak(err, to, idFrom, chIndex);
 }
 
 void Router::abortSendAndNak(Routing_Error err, MeshPacket *p)
@@ -211,6 +213,31 @@ ErrorCode Router::send(MeshPacket *p)
     if (p->which_payloadVariant == MeshPacket_decoded_tag) {
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
 
+#if defined(HAS_WIFI) || defined(PORTDUINO)
+        // check if we should send decrypted packets to mqtt
+
+        // truth table:
+        /* mqtt_server  mqtt_encryption_enabled should_encrypt
+         *    not set                        0              1
+         *    not set                        1              1
+         *        set                        0              0
+         *        set                        1              1
+         *
+         * => so we only decrypt mqtt if they have a custom mqtt server AND mqtt_encryption_enabled is FALSE
+         */
+
+        bool shouldActuallyEncrypt = true;
+        if (*moduleConfig.mqtt.address && !moduleConfig.mqtt.encryption_enabled) {
+            shouldActuallyEncrypt = false;
+        }
+
+        DEBUG_MSG("Should encrypt MQTT?: %d\n", shouldActuallyEncrypt);
+
+        // the packet is currently in a decrypted state.  send it now if they want decrypted packets
+        if (mqtt && !shouldActuallyEncrypt)
+            mqtt->onSend(*p, chIndex);
+#endif
+
         auto encodeResult = perhapsEncode(p);
         if (encodeResult != Routing_Error_NONE) {
             abortSendAndNak(encodeResult, p);
@@ -218,7 +245,9 @@ ErrorCode Router::send(MeshPacket *p)
         }
 
 #if defined(HAS_WIFI) || defined(PORTDUINO)
-        if (mqtt)
+        // the packet is now encrypted.
+        // check if we should send encrypted packets to mqtt
+        if (mqtt && shouldActuallyEncrypt)
             mqtt->onSend(*p, chIndex);
 #endif
     }
@@ -250,10 +279,13 @@ bool isDirectMessage(const MeshPacket *p)
 
 bool perhapsDecode(MeshPacket *p)
 {
+
+    // DEBUG_MSG("\n\n** perhapsDecode payloadVariant - %d\n\n", p->which_payloadVariant);
+
     if (p->which_payloadVariant == MeshPacket_decoded_tag)
         return true; // If packet was already decoded just return
 
-    assert(p->which_payloadVariant == MeshPacket_encrypted_tag);
+    // assert(p->which_payloadVariant == MeshPacket_encrypted_tag);
 
     // Try to find a channel that works with this hash
     for (ChannelIndex chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
@@ -279,6 +311,34 @@ bool perhapsDecode(MeshPacket *p)
                     crypto->decryptCurve25519_Blake2b(p->from, p->id, p->decoded.payload.size, p->decoded.payload.bytes);
                 p->which_payloadVariant = MeshPacket_decoded_tag; // change type to decoded
                 p->channel = chIndex;                             // change to store the index instead of the hash
+
+                /*
+                if (p->decoded.portnum == PortNum_TEXT_MESSAGE_APP) {
+                    DEBUG_MSG("\n\n** TEXT_MESSAGE_APP\n");
+                } else if (p->decoded.portnum == PortNum_TEXT_MESSAGE_COMPRESSED_APP) {
+                    DEBUG_MSG("\n\n** PortNum_TEXT_MESSAGE_COMPRESSED_APP\n");
+                }
+                */
+
+                // Decompress if needed. jm
+                if (p->decoded.portnum == PortNum_TEXT_MESSAGE_COMPRESSED_APP) {
+                    // Decompress the payload
+                    char compressed_in[Constants_DATA_PAYLOAD_LEN] = {};
+                    char decompressed_out[Constants_DATA_PAYLOAD_LEN] = {};
+                    int decompressed_len;
+
+                    memcpy(compressed_in, p->decoded.payload.bytes, p->decoded.payload.size);
+
+                    decompressed_len = unishox2_decompress_simple(compressed_in, p->decoded.payload.size, decompressed_out);
+
+                    // DEBUG_MSG("\n\n**\n\nDecompressed length - %d \n", decompressed_len);
+
+                    memcpy(p->decoded.payload.bytes, decompressed_out, decompressed_len);
+
+                    // Switch the port from PortNum_TEXT_MESSAGE_COMPRESSED_APP to PortNum_TEXT_MESSAGE_APP
+                    p->decoded.portnum = PortNum_TEXT_MESSAGE_APP;
+                }
+
                 printPacket("decoded message", p);
                 return true;
             }
@@ -301,9 +361,42 @@ Routing_Error perhapsEncode(MeshPacket *p)
 
         static uint8_t bytes[MAX_RHPACKETLEN]; // we have to use a scratch buffer because a union
 
-        // printPacket("pre encrypt", p); // portnum valid here
-
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), Data_fields, &p->decoded);
+
+        // Only allow encryption on the text message app.
+        //  TODO: Allow modules to opt into compression.
+        if (p->decoded.portnum == PortNum_TEXT_MESSAGE_APP) {
+
+            char original_payload[Constants_DATA_PAYLOAD_LEN];
+            memcpy(original_payload, p->decoded.payload.bytes, p->decoded.payload.size);
+
+            char compressed_out[Constants_DATA_PAYLOAD_LEN] = {0};
+
+            int compressed_len;
+            compressed_len = unishox2_compress_simple(original_payload, p->decoded.payload.size, compressed_out);
+
+            DEBUG_MSG("Original length - %d \n", p->decoded.payload.size);
+            DEBUG_MSG("Compressed length - %d \n", compressed_len);
+            DEBUG_MSG("Original message - %s \n", p->decoded.payload.bytes);
+
+            // If the compressed length is greater than or equal to the original size, don't use the compressed form
+            if (compressed_len >= p->decoded.payload.size) {
+
+                DEBUG_MSG("Not using compressing message.\n");
+                // Set the uncompressed payload varient anyway. Shouldn't hurt?
+                // p->decoded.which_payloadVariant = Data_payload_tag;
+
+                // Otherwise we use the compressor
+            } else {
+                DEBUG_MSG("Using compressed message.\n");
+                // Copy the compressed data into the meshpacket
+
+                p->decoded.payload.size = compressed_len;
+                memcpy(p->decoded.payload.bytes, compressed_out, compressed_len);
+
+                p->decoded.portnum = PortNum_TEXT_MESSAGE_COMPRESSED_APP;
+            }
+        }
 
         if (numbytes > MAX_RHPACKETLEN)
             return Routing_Error_TOO_LARGE;
@@ -357,14 +450,14 @@ void Router::handleReceived(MeshPacket *p, RxSource src)
         printPacket("packet decoding failed (no PSK?)", p);
     }
 
-    // call plugins here
-    MeshPlugin::callPlugins(*p, src);
+    // call modules here
+    MeshModule::callPlugins(*p, src);
 }
 
 void Router::perhapsHandleReceived(MeshPacket *p)
 {
-    assert(radioConfig.has_preferences);
-    bool ignore = is_in_repeated(radioConfig.preferences.ignore_incoming, p->from);
+    // assert(radioConfig.has_preferences);
+    bool ignore = is_in_repeated(config.lora.ignore_incoming, p->from);
 
     if (ignore)
         DEBUG_MSG("Ignoring incoming message, 0x%x is in our ignore list\n", p->from);

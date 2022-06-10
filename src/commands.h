@@ -14,4 +14,5 @@ enum class Cmd {
         STOP_BOOT_SCREEN,
         PRINT,
         SELF_DESTRUCT,
+        START_SHUTDOWN_SCREEN,
 };

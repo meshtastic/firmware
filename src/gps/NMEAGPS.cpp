@@ -5,7 +5,7 @@
 #include <TinyGPS++.h>
 
 // GPS solutions older than this will be rejected - see TinyGPSDatum::age()
-#define GPS_SOL_EXPIRY_MS 300   // in millis
+#define GPS_SOL_EXPIRY_MS 5000   // in millis. give 1 second time to combine different sentences. NMEA Frequency isn't higher anyway
 #define NMEA_MSG_GXGSA "GNGSA"  // GSA message (GPGSA, GNGSA etc)
 
 static int32_t toDegInt(RawDegrees d)
@@ -15,6 +15,19 @@ static int32_t toDegInt(RawDegrees d)
     if (d.negative)
         r *= -1;
     return r;
+}
+
+bool NMEAGPS::factoryReset()
+{
+#ifdef GPS_UBLOX
+    // Factory Reset
+    byte _message_reset[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF,
+        0xFB, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0xFF, 0xFF, 0x00, 0x00, 0x17, 0x2B, 0x7E};
+    _serial_gps->write(_message_reset,sizeof(_message_reset));
+    delay(1000);
+#endif
+    return true;
 }
 
 bool NMEAGPS::setupGPS()
@@ -64,11 +77,12 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         t.tm_mon = d.month() - 1;
         t.tm_year = d.year() - 1900;
         t.tm_isdst = false;
-        DEBUG_MSG("NMEA GPS time %d\n", t.tm_sec);
-
-        perhapsSetRTC(RTCQualityGPS, t);
-
-        return true;
+        if (t.tm_mon > -1){
+            DEBUG_MSG("NMEA GPS time %02d-%02d-%02d %02d:%02d:%02d\n", d.year(), d.month(), t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
+            perhapsSetRTC(RTCQualityGPS, t);
+            return true;
+        } else
+            return false;
     } else
         return false;
 }
@@ -116,7 +130,7 @@ bool NMEAGPS::lookForLocation()
             (reader.time.age() < GPS_SOL_EXPIRY_MS) &&
             (reader.date.age() < GPS_SOL_EXPIRY_MS)))
     {
-        DEBUG_MSG("SOME data is TOO OLD\n");
+        DEBUG_MSG("SOME data is TOO OLD: LOC %u, TIME %u, DATE %u\n", reader.location.age(), reader.time.age(), reader.date.age());
         return false;
     }
 
@@ -127,10 +141,17 @@ bool NMEAGPS::lookForLocation()
     // We know the solution is fresh and valid, so just read the data
     auto loc = reader.location.value();
 
-    // Some GPSes (Air530) seem to send a zero longitude when the current fix is bogus
     // Bail out EARLY to avoid overwriting previous good data (like #857)
-    if(toDegInt(loc.lat) == 0) {
-        DEBUG_MSG("Ignoring bogus NMEA position\n");
+    if (toDegInt(loc.lat) > 900000000) {
+#ifdef GPS_EXTRAVERBOSE        
+        DEBUG_MSG("Bail out EARLY on LAT %i\n",toDegInt(loc.lat));
+#endif
+        return false;
+    }
+    if (toDegInt(loc.lng) > 1800000000) {
+#ifdef GPS_EXTRAVERBOSE        
+        DEBUG_MSG("Bail out EARLY on LNG %i\n",toDegInt(loc.lng));
+#endif
         return false;
     }
 
@@ -214,6 +235,10 @@ bool NMEAGPS::hasLock()
     return false;
 }
 
+bool NMEAGPS::hasFlow()
+{
+    return reader.passedChecksum() > 0;
+}
 
 bool NMEAGPS::whileIdle()
 {

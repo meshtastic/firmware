@@ -1,15 +1,10 @@
 #include "mesh-pb-constants.h"
-#include "FS.h"
+#include "FSCommon.h"
 #include "configuration.h"
 #include <Arduino.h>
 #include <assert.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
-
-#ifdef ARDUINO_ARCH_NRF52
-#include "Adafruit_LittleFS.h"
-using namespace Adafruit_LittleFS_Namespace; // To get File type
-#endif
 
 /// helper function for encoding a record as a protobuf, any failures to encode are fatal and we will panic
 /// returns the encoded packet size

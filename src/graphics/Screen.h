@@ -1,6 +1,7 @@
 #pragma once
 
 #ifdef NO_SCREEN
+#include "power.h"
 namespace graphics
 {
 // Noop class for boards without screen.
@@ -14,6 +15,9 @@ class Screen
     void print(const char*){}
     void adjustBrightness(){}
     void doDeepSleep() {}
+    void forceDisplay() {}
+    void startBluetoothPinScreen(uint32_t pin) {}
+    void stopBluetoothPinScreen() {}
 };
 }
 
@@ -24,12 +28,15 @@ class Screen
 
 #include "../configuration.h"
 
-#ifdef USE_SH1106
-#include <SH1106Wire.h>
-#elif defined(USE_ST7567)
+#ifdef USE_ST7567
 #include <ST7567Wire.h>
-#else
+#elif defined(USE_SH1106)
+#include <SH1106Wire.h>
+#elif defined(USE_SSD1306)
 #include <SSD1306Wire.h>
+#else
+// the SH1106/SSD1306 variant is auto-detected
+#include <AutoOLEDWire.h>
 #endif
 
 #include "EInkDisplay2.h"
@@ -40,6 +47,7 @@ class Screen
 #include "concurrency/OSThread.h"
 #include "power.h"
 #include <string>
+#include "mesh/MeshModule.h"
 
 // 0 to 255, though particular variants might define different defaults
 #ifndef BRIGHTNESS_DEFAULT
@@ -90,9 +98,11 @@ class Screen : public concurrency::OSThread
         CallbackObserver<Screen, const meshtastic::Status *>(this, &Screen::handleStatusUpdate);
     CallbackObserver<Screen, const MeshPacket *> textMessageObserver =
         CallbackObserver<Screen, const MeshPacket *>(this, &Screen::handleTextMessage);
+    CallbackObserver<Screen, const UIFrameEvent *> uiFrameEventObserver =
+        CallbackObserver<Screen, const UIFrameEvent *>(this, &Screen::handleUIFrameEvent);
 
   public:
-    Screen(uint8_t address, int sda = -1, int scl = -1);
+    explicit Screen(uint8_t address, int sda = -1, int scl = -1);
 
     Screen(const Screen &) = delete;
     Screen &operator=(const Screen &) = delete;
@@ -150,6 +160,12 @@ class Screen : public concurrency::OSThread
         enqueueCmd(cmd);
     }
 
+    void startShutdownScreen()
+    {
+        ScreenCmd cmd;
+        cmd.cmd = Cmd::START_SHUTDOWN_SCREEN;
+        enqueueCmd(cmd);
+    }
 
     /// Stops showing the bluetooth PIN screen.
     void stopBluetoothPinScreen() { enqueueCmd(ScreenCmd{.cmd = Cmd::STOP_BLUETOOTH_PIN_SCREEN}); }
@@ -220,12 +236,15 @@ class Screen : public concurrency::OSThread
 
     int handleStatusUpdate(const meshtastic::Status *arg);
     int handleTextMessage(const MeshPacket *arg);
+    int handleUIFrameEvent(const UIFrameEvent *arg);
 
     /// Used to force (super slow) eink displays to draw critical frames
     void forceDisplay();
 
     /// Draws our SSL cert screen during boot (called from WebServer)
     void setSSLFrames();
+
+    void setWelcomeFrames();
 
   protected:
     /// Updates the UI.
@@ -260,8 +279,8 @@ class Screen : public concurrency::OSThread
     void handleStartBluetoothPinScreen(uint32_t pin);
     void handlePrint(const char *text);
     void handleStartFirmwareUpdateScreen();
+    void handleShutdownScreen();
     void handleSelfDestruct();
-
     /// Rebuilds our list of frames (screens) to default ones.
     void setFrames();
 
@@ -289,17 +308,22 @@ class Screen : public concurrency::OSThread
     DebugInfo debugInfo;
 
     /// Display device
-    /** FIXME cleanup display abstraction */
-#ifdef ST7735_CS
+
+// #ifdef RAK4630
+//     EInkDisplay dispdev;
+//     AutoOLEDWire dispdev_oled;
+#ifdef USE_SH1106
+    SH1106Wire dispdev;
+#elif defined(USE_SSD1306)
+    SSD1306Wire dispdev;
+#elif defined(ST7735_CS) || defined(ILI9341_DRIVER)
     TFTDisplay dispdev;
 #elif defined(HAS_EINK)
     EInkDisplay dispdev;
-#elif defined(USE_SH1106)
-    SH1106Wire dispdev;
 #elif defined(USE_ST7567)
     ST7567Wire dispdev;
 #else
-    SSD1306Wire dispdev;
+    AutoOLEDWire dispdev;
 #endif
     /// UI helper for rendering to frames and switching between them
     OLEDDisplayUi ui;

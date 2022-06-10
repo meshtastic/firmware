@@ -64,15 +64,15 @@ bool SX126xInterface<T>::init()
 
 #ifdef SX126X_TXEN
     // lora.begin sets Dio2 as RF switch control, which is not true if we are manually controlling RX and TX
-    if (res == ERR_NONE)
-        res = lora.setDio2AsRfSwitch(false);
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.setDio2AsRfSwitch(true);
 #endif
 
 #if 0
     // Read/write a register we are not using (only used for FSK mode) to test SPI comms
     uint8_t crcLSB = 0;
     int err = lora.readRegister(SX126X_REG_CRC_POLYNOMIAL_LSB, &crcLSB, 1);
-    if(err != ERR_NONE)
+    if(err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(CriticalErrorCode_SX1262Failure);
 
     //if(crcLSB != 0x0f)
@@ -80,11 +80,11 @@ bool SX126xInterface<T>::init()
     
     crcLSB = 0x5a;
     err = lora.writeRegister(SX126X_REG_CRC_POLYNOMIAL_LSB, &crcLSB, 1);
-    if(err != ERR_NONE)
+    if(err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(CriticalErrorCode_SX1262Failure);  
 
     err = lora.readRegister(SX126X_REG_CRC_POLYNOMIAL_LSB, &crcLSB, 1);
-    if(err != ERR_NONE)
+    if(err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(CriticalErrorCode_SX1262Failure);
 
     if(crcLSB != 0x5a)
@@ -92,13 +92,13 @@ bool SX126xInterface<T>::init()
     // If we got this far register accesses (and therefore SPI comms) are good
 #endif
 
-    if (res == ERR_NONE)
-        res = lora.setCRC(SX126X_LORA_CRC_ON);
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.setCRC(RADIOLIB_SX126X_LORA_CRC_ON);
 
-    if (res == ERR_NONE)
+    if (res == RADIOLIB_ERR_NONE)
         startReceive(); // start receiving
 
-    return res == ERR_NONE;
+    return res == RADIOLIB_ERR_NONE;
 }
 
 template<typename T>
@@ -111,42 +111,43 @@ bool SX126xInterface<T>::reconfigure()
 
     // configure publicly accessible settings
     int err = lora.setSpreadingFactor(sf);
-    if (err != ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(CriticalErrorCode_InvalidRadioSetting);
 
     err = lora.setBandwidth(bw);
-    if (err != ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(CriticalErrorCode_InvalidRadioSetting);
 
     err = lora.setCodingRate(cr);
-    if (err != ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(CriticalErrorCode_InvalidRadioSetting);
 
     // Hmm - seems to lower SNR when the signal levels are high.  Leaving off for now...
-    err = lora.setRxGain(true);
-    assert(err == ERR_NONE);
+    // TODO: Confirm gain registers are okay now
+    // err = lora.setRxGain(true);
+    // assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setSyncWord(syncWord);
-    assert(err == ERR_NONE);
+    assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setCurrentLimit(currentLimit);
-    assert(err == ERR_NONE);
+    assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setPreambleLength(preambleLength);
-    assert(err == ERR_NONE);
+    assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setFrequency(getFreq());
-    if (err != ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(CriticalErrorCode_InvalidRadioSetting);
 
     if (power > 22) // This chip has lower power limits than some
         power = 22;
     err = lora.setOutputPower(power);
-    assert(err == ERR_NONE);
+    assert(err == RADIOLIB_ERR_NONE);
 
     startReceive(); // restart receiving
 
-    return ERR_NONE;
+    return RADIOLIB_ERR_NONE;
 }
 
 template<typename T>
@@ -161,7 +162,7 @@ void SX126xInterface<T>::setStandby()
     checkNotification(); // handle any pending interrupts before we force standby
     
     int err = lora.standby();
-    assert(err == ERR_NONE);
+    assert(err == RADIOLIB_ERR_NONE);
 
 #ifdef SX126X_RXEN // we have RXEN/TXEN control - turn off RX and TX power
     digitalWrite(SX126X_RXEN, LOW);
@@ -194,6 +195,9 @@ void SX126xInterface<T>::configHardwareForSend()
 #ifdef SX126X_TXEN // we have RXEN/TXEN control - turn on TX power / off RX power
     digitalWrite(SX126X_TXEN, HIGH);
 #endif
+#ifdef SX126X_RXEN
+    digitalWrite(SX126X_RXEN, LOW);
+#endif
 
     RadioLibInterface::configHardwareForSend();
 }
@@ -213,17 +217,37 @@ void SX126xInterface<T>::startReceive()
 #ifdef SX126X_RXEN // we have RXEN/TXEN control - turn on RX power / off TX power
     digitalWrite(SX126X_RXEN, HIGH);
 #endif
-
+#ifdef SX126X_TXEN
+    digitalWrite(SX126X_TXEN, LOW);
+#endif
+  
     // int err = lora.startReceive();
     int err = lora.startReceiveDutyCycleAuto(); // We use a 32 bit preamble so this should save some power by letting radio sit in
                                                 // standby mostly.
-    assert(err == ERR_NONE);
+    assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = true;
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
 #endif
+}
+
+/** Could we send right now (i.e. either not actively receving or transmitting)? */
+template<typename T>
+bool SX126xInterface<T>::isChannelActive()
+{
+    // check if we can detect a LoRa preamble on the current channel
+    int16_t result;
+
+    setStandby(); 
+    result = lora.scanChannel();
+    if (result == RADIOLIB_PREAMBLE_DETECTED) 
+        return true;
+    
+    assert(result != RADIOLIB_ERR_WRONG_MODEM);
+    
+    return false;
 }
 
 /** Could we send right now (i.e. either not actively receving or transmitting)? */
@@ -236,7 +260,7 @@ bool SX126xInterface<T>::isActivelyReceiving()
     // never even get a valid header, so we don't want preamble to get set and stay set due to noise on the network.
 
     uint16_t irq = lora.getIrqStatus();
-    bool hasPreamble = (irq & SX126X_IRQ_HEADER_VALID);
+    bool hasPreamble = (irq & RADIOLIB_SX126X_IRQ_HEADER_VALID);
 
     // this is not correct - often always true - need to add an extra conditional
     // size_t bytesPending = lora.getPacketLength();

@@ -24,64 +24,6 @@
 
 #define USE_LFXO // Board uses 32khz crystal for LF
 
-/*
-@geeksville eink TODO:
-
-soonish:
-DONE hook cdc acm device to debug output
-DONE fix bootloader to use two buttons - remove bootloader hacks
-DONE get second button working in app load
-DONE use tp_ser_io as a button, it goes high when pressed unify eink display classes
-fix display width and height
-clean up eink drawing to not have the nasty timeout hack
-measure current draws
-DONE put eink to sleep when we think the screen is off
-enable gps sleep mode
-turn off txco on lora?
-make screen.adjustBrightness() a nop on eink screens
-
-later:
-enable flash on qspi.
-fix floating point SEGGER printf on nrf52 - see "new NMEA GPS pos"
-add factory/power on self test
-
-feedback to give:
-
-* bootloader is finished
-
-* the capacitive touch sensor works, though I'm not sure what use you are intending for it
-
-* remove ipx connector for nfc, instead use two caps and loop traces on the back of the board as an antenna?
-
-* the i2c RTC seems to talk fine on the i2c bus.  However, I'm not sure of the utility of that part.  Instead I'd be in favor of
-the following:
-
-* move BAT1 to power the GPS VBACKUP instead per page 6 of the Air530 datasheet.  And remove the i2c RTC entirely.
-
-* remove the cp2014 chip.
-
-* I've made the serial flash chip work, but if you do a new spin of the board I recommend:
-connect pin 3 and pin 7 of U4 to spare GPIOs on the processor (instead of their current connections),
-This would allow using 4 bit wide interface mode to the serial flash - doubling the transfer speed! see example here:
-https://infocenter.nordicsemi.com/topic/ug_nrf52840_dk/UG/nrf52840_DK/hw_external_memory.html?cp=4_0_4_7_4
-Once again - I'm glad you added that external flash chip.
-
-* Power measurements
-When powered by 4V battery
-
-CPU on, lora radio RX mode, bluetooth enabled, GPS trying to lock.  total draw 43mA
-CPU on, lora radio RX mode, bluetooth enabled, GPS super low power sleep mode.  Total draw 20mA
-CPU on, lora radio TX mode, bluetooth enabled, GPS super low power sleep mode.  Total draw 132mA
-
-Note: power consumption while connected via BLE to a phone almost identical.
-
-Note: eink display for all tests was in sleep mode most of the time.  Current draw during the brief periods while the eink was being drawn was not
-measured (but it was low).
-
-Note: Turning off EINK PWR_ON produces no noticeable power savings over just putting the eink display into sleep mode.
-
-*/
-
 /*----------------------------------------------------------------------------
  *        Headers
  *----------------------------------------------------------------------------*/
@@ -120,6 +62,7 @@ extern "C" {
  */
 #define PIN_BUTTON1 (32 + 10)
 #define PIN_BUTTON2 (0 + 18) // 0.18 is labeled on the board as RESET but we configure it in the bootloader as a regular GPIO
+#define PIN_BUTTON_TOUCH (0 + 11) // 0.11 is the soft touch button on T-Echo
 
 /*
  * Analog pins
@@ -225,7 +168,7 @@ External serial flash WP25R1635FZUIL0
 #define PIN_SPI1_SCK PIN_EINK_SCLK
 
 /*
- * Air530 GPS pins
+ * GPS pins
  */
 
 #define PIN_GPS_WAKE (32 + 2) // An output to wake GPS, low means allow sleep, high means force wake
@@ -234,8 +177,13 @@ External serial flash WP25R1635FZUIL0
 #define PIN_GPS_TX (32 + 9)   // This is for bits going TOWARDS the CPU
 #define PIN_GPS_RX (32 + 8)   // This is for bits going TOWARDS the GPS
 
+#define GPS_THREAD_INTERVAL 50
+
 #define PIN_SERIAL1_RX PIN_GPS_TX
 #define PIN_SERIAL1_TX PIN_GPS_RX
+
+// PCF8563 RTC Module
+#define PCF8563_RTC 0x51
 
 /*
  * SPI Interfaces

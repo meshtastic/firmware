@@ -4,13 +4,15 @@
 #include "airtime.h"
 #include "main.h"
 #include "mesh/http/ContentHelper.h"
+#include "mesh/http/WebServer.h"
 #include "mesh/http/WiFiAPClient.h"
 #include "power.h"
 #include "sleep.h"
+#include <FSCommon.h>
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>
 #include <HTTPURLEncodedBodyParser.hpp>
-#include <SPIFFS.h>
+#include <json11.hpp>
 
 #ifndef NO_ESP32
 #include "esp_task_wdt.h"
@@ -41,6 +43,14 @@ using namespace httpsserver;
 
 #include "mesh/http/ContentHandler.h"
 
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+HTTPClient httpClient;
+
+#define DEST_FS_USES_LITTLEFS
+#define ESP_ARDUINO_VERSION_VAL(major, minor, patch) ((major << 16) | (minor << 8) | (patch))
+#define ESP_ARDUINO_VERSION ESP_ARDUINO_VERSION_VAL(1, 0, 4)
+
 // We need to specify some content-type mapping, so the resources get delivered with the
 // right content type and are displayed correctly in the browser
 char contentTypes[][2][32] = {{".txt", "text/plain"},     {".html", "text/html"},
@@ -50,21 +60,12 @@ char contentTypes[][2][32] = {{".txt", "text/plain"},     {".html", "text/html"}
                               {".css", "text/css"},       {".ico", "image/vnd.microsoft.icon"},
                               {".svg", "image/svg+xml"},  {"", ""}};
 
+// const char *tarURL = "https://www.casler.org/temp/meshtastic-web.tar";
+// const char *tarURL = "https://api-production-871d.up.railway.app/mirror/webui";
+// const char *certificate = NULL; // change this as needed, leave as is for no TLS check (yolo security)
+
 // Our API to handle messages to and from the radio.
 HttpAPI webAPI;
-
-uint32_t numberOfRequests = 0;
-uint32_t timeSpeedUp = 0;
-
-uint32_t getTimeSpeedUp()
-{
-    return timeSpeedUp;
-}
-
-void setTimeSpeedUp()
-{
-    timeSpeedUp = millis();
-}
 
 void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
 {
@@ -79,15 +80,22 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeHotspotApple = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
     ResourceNode *nodeHotspotAndroid = new ResourceNode("/generate_204", "GET", &handleHotspot);
 
+    ResourceNode *nodeAdmin = new ResourceNode("/admin", "GET", &handleAdmin);
+    ResourceNode *nodeAdminSettings = new ResourceNode("/admin/settings", "GET", &handleAdminSettings);
+    ResourceNode *nodeAdminSettingsApply = new ResourceNode("/admin/settings/apply", "POST", &handleAdminSettingsApply);
+    //    ResourceNode *nodeAdminFs = new ResourceNode("/admin/fs", "GET", &handleFs);
+    //    ResourceNode *nodeUpdateFs = new ResourceNode("/admin/fs/update", "POST", &handleUpdateFs);
+    //    ResourceNode *nodeDeleteFs = new ResourceNode("/admin/fs/delete", "GET", &handleDeleteFsContent);
+
     ResourceNode *nodeRestart = new ResourceNode("/restart", "POST", &handleRestart);
     ResourceNode *nodeFormUpload = new ResourceNode("/upload", "POST", &handleFormUpload);
 
     ResourceNode *nodeJsonScanNetworks = new ResourceNode("/json/scanNetworks", "GET", &handleScanNetworks);
     ResourceNode *nodeJsonBlinkLED = new ResourceNode("/json/blink", "POST", &handleBlinkLED);
     ResourceNode *nodeJsonReport = new ResourceNode("/json/report", "GET", &handleReport);
-    ResourceNode *nodeJsonSpiffsBrowseStatic = new ResourceNode("/json/spiffs/browse/static", "GET", &handleSpiffsBrowseStatic);
-    ResourceNode *nodeJsonDelete = new ResourceNode("/json/spiffs/delete/static", "DELETE", &handleSpiffsDeleteStatic);
-    
+    ResourceNode *nodeJsonFsBrowseStatic = new ResourceNode("/json/fs/browse/static", "GET", &handleFsBrowseStatic);
+    ResourceNode *nodeJsonDelete = new ResourceNode("/json/fs/delete/static", "DELETE", &handleFsDeleteStatic);
+
     ResourceNode *nodeRoot = new ResourceNode("/*", "GET", &handleStatic);
 
     // Secure nodes
@@ -100,12 +108,16 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     secureServer->registerNode(nodeFormUpload);
     secureServer->registerNode(nodeJsonScanNetworks);
     secureServer->registerNode(nodeJsonBlinkLED);
-    secureServer->registerNode(nodeJsonSpiffsBrowseStatic);
+    secureServer->registerNode(nodeJsonFsBrowseStatic);
     secureServer->registerNode(nodeJsonDelete);
     secureServer->registerNode(nodeJsonReport);
-    secureServer->registerNode(nodeRoot);
-
-    secureServer->addMiddleware(&middlewareSpeedUp240);
+    //    secureServer->registerNode(nodeUpdateFs);
+    //    secureServer->registerNode(nodeDeleteFs);
+    secureServer->registerNode(nodeAdmin);
+    //    secureServer->registerNode(nodeAdminFs);
+    secureServer->registerNode(nodeAdminSettings);
+    secureServer->registerNode(nodeAdminSettingsApply);
+    secureServer->registerNode(nodeRoot); // This has to be last
 
     // Insecure nodes
     insecureServer->registerNode(nodeAPIv1ToRadioOptions);
@@ -117,53 +129,22 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     insecureServer->registerNode(nodeFormUpload);
     insecureServer->registerNode(nodeJsonScanNetworks);
     insecureServer->registerNode(nodeJsonBlinkLED);
-    insecureServer->registerNode(nodeJsonSpiffsBrowseStatic);
+    insecureServer->registerNode(nodeJsonFsBrowseStatic);
     insecureServer->registerNode(nodeJsonDelete);
     insecureServer->registerNode(nodeJsonReport);
-    insecureServer->registerNode(nodeRoot);
-
-    insecureServer->addMiddleware(&middlewareSpeedUp160);
-}
-
-void middlewareSpeedUp240(HTTPRequest *req, HTTPResponse *res, std::function<void()> next)
-{
-    // We want to print the response status, so we need to call next() first.
-    next();
-
-    // Phone (or other device) has contacted us over WiFi. Keep the radio turned on.
-    //   TODO: This should go into its own middleware layer separate from the speedup.
-    powerFSM.trigger(EVENT_CONTACT_FROM_PHONE);
-
-    setCpuFrequencyMhz(240);
-    setTimeSpeedUp();
-
-    numberOfRequests++;
-}
-
-void middlewareSpeedUp160(HTTPRequest *req, HTTPResponse *res, std::function<void()> next)
-{
-    // We want to print the response status, so we need to call next() first.
-    next();
-
-    // Phone (or other device) has contacted us over WiFi. Keep the radio turned on.
-    //   TODO: This should go into its own middleware layer separate from the speedup.
-    powerFSM.trigger(EVENT_CONTACT_FROM_PHONE);
-
-    // If the frequency is 240mhz, we have recently gotten a HTTPS request.
-    //   In that case, leave the frequency where it is and just update the
-    //   countdown timer (timeSpeedUp).
-    if (getCpuFrequencyMhz() != 240) {
-        setCpuFrequencyMhz(160);
-    }
-    setTimeSpeedUp();
-
-    numberOfRequests++;
+    //    insecureServer->registerNode(nodeUpdateFs);
+    //    insecureServer->registerNode(nodeDeleteFs);
+    insecureServer->registerNode(nodeAdmin);
+    //    insecureServer->registerNode(nodeAdminFs);
+    insecureServer->registerNode(nodeAdminSettings);
+    insecureServer->registerNode(nodeAdminSettingsApply);
+    insecureServer->registerNode(nodeRoot); // This has to be last
 }
 
 void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
 {
 
-    DEBUG_MSG("+++++++++++++++ webAPI handleAPIv1FromRadio\n");
+    DEBUG_MSG("webAPI handleAPIv1FromRadio\n");
 
     /*
         For documentation, see:
@@ -208,12 +189,12 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
         res->write(txBuf, len);
     }
 
-    DEBUG_MSG("--------------- webAPI handleAPIv1FromRadio, len %d\n", len);
+    DEBUG_MSG("webAPI handleAPIv1FromRadio, len %d\n", len);
 }
 
 void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
 {
-    DEBUG_MSG("+++++++++++++++ webAPI handleAPIv1ToRadio\n");
+    DEBUG_MSG("webAPI handleAPIv1ToRadio\n");
 
     /*
         For documentation, see:
@@ -226,7 +207,6 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "PUT, OPTIONS");
     res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/Meshtastic-protobufs/master/mesh.proto");
-
 
     if (req->getMethod() == "OPTIONS") {
         res->setStatusCode(204); // Success with no content
@@ -241,65 +221,100 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
     webAPI.handleToRadio(buffer, s);
 
     res->write(buffer, s);
-    DEBUG_MSG("--------------- webAPI handleAPIv1ToRadio\n");
+    DEBUG_MSG("webAPI handleAPIv1ToRadio\n");
 }
 
-void handleSpiffsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
+void htmlDeleteDir(const char *dirname)
 {
+    File root = FSCom.open(dirname);
+    if (!root) {
+        return;
+    }
+    if (!root.isDirectory()) {
+        return;
+    }
 
+    File file = root.openNextFile();
+    while (file) {
+        if (file.isDirectory() && !String(file.name()).endsWith(".")) {
+            htmlDeleteDir(file.name());
+            file.close();
+        } else {
+            String fileName = String(file.name());
+            file.close();
+            DEBUG_MSG("    %s\n", fileName.c_str());
+            FSCom.remove(fileName);
+        }
+        file = root.openNextFile();
+    }
+    root.close();
+}
+
+std::vector<std::map<char *, char *>> *htmlListDir(std::vector<std::map<char *, char *>> *fileList, const char *dirname,
+                                                   uint8_t levels)
+{
+    File root = FSCom.open(dirname);
+    if (!root) {
+        return NULL;
+    }
+    if (!root.isDirectory()) {
+        return NULL;
+    }
+
+    // iterate over the file list
+    File file = root.openNextFile();
+    while (file) {
+        if (file.isDirectory() && !String(file.name()).endsWith(".")) {
+            if (levels) {
+                htmlListDir(fileList, file.name(), levels - 1);
+            }
+        } else {
+            std::map<char *, char *> thisFileMap;
+            thisFileMap[strdup("size")] = strdup(String(file.size()).c_str());
+            thisFileMap[strdup("name")] = strdup(String(file.name()).substring(1).c_str());
+            if (String(file.name()).substring(1).endsWith(".gz")) {
+                String modifiedFile = String(file.name()).substring(1);
+                modifiedFile.remove((modifiedFile.length() - 3), 3);
+                thisFileMap[strdup("nameModified")] = strdup(modifiedFile.c_str());
+            }
+            fileList->push_back(thisFileMap);
+        }
+        file.close();
+        file = root.openNextFile();
+    }
+    root.close();
+    return fileList;
+}
+
+void handleFsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
+{
     res->setHeader("Content-Type", "application/json");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
 
-    File root = SPIFFS.open("/");
+    using namespace json11;
+    auto fileList = htmlListDir(new std::vector<std::map<char *, char *>>(), "/", 10);
 
-    if (root.isDirectory()) {
-        res->println("{");
-        res->println("\"data\": {");
+    // create json output structure
+    Json filesystemObj = Json::object{
+        {"total", String(FSCom.totalBytes()).c_str()},
+        {"used", String(FSCom.usedBytes()).c_str()},
+        {"free", String(FSCom.totalBytes() - FSCom.usedBytes()).c_str()},
+    };
 
-        File file = root.openNextFile();
-        res->print("\"files\": [");
-        bool firstFile = 1;
-        while (file) {
-            String filePath = String(file.name());
-            if (filePath.indexOf("/static") == 0) {
-                if (firstFile) {
-                    firstFile = 0;
-                } else {
-                    res->println(",");
-                }
+    Json jsonObjInner = Json::object{{"files", Json(*fileList)}, {"filesystem", filesystemObj}};
 
-                res->println("{");
+    Json jsonObjOuter = Json::object{{"data", jsonObjInner}, {"status", "ok"}};
 
-                if (String(file.name()).substring(1).endsWith(".gz")) {
-                    String modifiedFile = String(file.name()).substring(1);
-                    modifiedFile.remove((modifiedFile.length() - 3), 3);
-                    res->print("\"nameModified\": \"" + modifiedFile + "\",");
-                    res->print("\"name\": \"" + String(file.name()).substring(1) + "\",");
-
-                } else {
-                    res->print("\"name\": \"" + String(file.name()).substring(1) + "\",");
-                }
-                res->print("\"size\": " + String(file.size()));
-                res->print("}");
-            }
-
-            file = root.openNextFile();
-        }
-        res->print("],");
-        res->print("\"filesystem\" : {");
-        res->print("\"total\" : " + String(SPIFFS.totalBytes()) + ",");
-        res->print("\"used\" : " + String(SPIFFS.usedBytes()) + ",");
-        res->print("\"free\" : " + String(SPIFFS.totalBytes() - SPIFFS.usedBytes()));
-        res->println("}");
-        res->println("},");
-        res->println("\"status\": \"ok\"");
-        res->println("}");
-    }
+    // serialize and write it to the stream
+    std::string jsonStr = jsonObjOuter.dump();
+    res->print(jsonStr.c_str());
 }
 
-void handleSpiffsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
+void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
 {
+    using namespace json11;
+
     ResourceParameters *params = req->getParams();
     std::string paramValDelete;
 
@@ -308,17 +323,17 @@ void handleSpiffsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Methods", "DELETE");
     if (params->getQueryParameter("delete", paramValDelete)) {
         std::string pathDelete = "/" + paramValDelete;
-        if (SPIFFS.remove(pathDelete.c_str())) {
+        if (FSCom.remove(pathDelete.c_str())) {
             Serial.println(pathDelete.c_str());
-            res->println("{");
-            res->println("\"status\": \"ok\"");
-            res->println("}");
+            Json jsonObjOuter = Json::object{{"status", "ok"}};
+            std::string jsonStr = jsonObjOuter.dump();
+            res->print(jsonStr.c_str());
             return;
         } else {
             Serial.println(pathDelete.c_str());
-            res->println("{");
-            res->println("\"status\": \"Error\"");
-            res->println("}");
+            Json jsonObjOuter = Json::object{{"status", "Error"}};
+            std::string jsonStr = jsonObjOuter.dump();
+            res->print(jsonStr.c_str());
             return;
         }
     }
@@ -336,29 +351,43 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
         std::string filename = "/static/" + parameter1;
         std::string filenameGzip = "/static/" + parameter1 + ".gz";
 
-
-        // Try to open the file from SPIFFS
+        // Try to open the file
         File file;
 
         bool has_set_content_type = false;
 
-        if (SPIFFS.exists(filename.c_str())) {
-            file = SPIFFS.open(filename.c_str());
+        if (filename == "/static/") {
+            filename = "/static/index.html";
+            filenameGzip = "/static/index.html.gz";
+        }
+
+        if (FSCom.exists(filename.c_str())) {
+            file = FSCom.open(filename.c_str());
             if (!file.available()) {
                 DEBUG_MSG("File not available - %s\n", filename.c_str());
             }
-        } else if (SPIFFS.exists(filenameGzip.c_str())) {
-            file = SPIFFS.open(filenameGzip.c_str());
+        } else if (FSCom.exists(filenameGzip.c_str())) {
+            file = FSCom.open(filenameGzip.c_str());
             res->setHeader("Content-Encoding", "gzip");
             if (!file.available()) {
-                DEBUG_MSG("File not available\n");
+                DEBUG_MSG("File not available - %s\n", filenameGzip.c_str());
             }
         } else {
             has_set_content_type = true;
             filenameGzip = "/static/index.html.gz";
-            file = SPIFFS.open(filenameGzip.c_str());
-            res->setHeader("Content-Encoding", "gzip");
+            file = FSCom.open(filenameGzip.c_str());
             res->setHeader("Content-Type", "text/html");
+            if (!file.available()) {
+                DEBUG_MSG("File not available - %s\n", filenameGzip.c_str());
+                res->println("Web server is running.<br><br>The content you are looking for can't be found. Please see: <a "
+                             "href=https://meshtastic.org/docs/getting-started/faq#wifi--web-browser>FAQ</a>.<br><br><a "
+                             "href=/admin>admin</a>");
+
+                return;
+
+            } else {
+                res->setHeader("Content-Encoding", "gzip");
+            }
         }
 
         res->setHeader("Content-Length", httpsserver::intToString(file.size()));
@@ -379,7 +408,7 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
             res->setHeader("Content-Type", "application/octet-stream");
         }
 
-        // Read the file from SPIFFS and write it to the HTTP response body
+        // Read the file and write it to the HTTP response body
         size_t length = 0;
         do {
             char buffer[256];
@@ -393,6 +422,7 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
         return;
 
     } else {
+        DEBUG_MSG("ERROR: This should not have happened...\n");
         res->println("ERROR: This should not have happened...");
     }
 }
@@ -402,10 +432,6 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
 
     DEBUG_MSG("Form Upload - Disabling keep-alive\n");
     res->setHeader("Connection", "close");
-
-    DEBUG_MSG("Form Upload - Set frequency to 240mhz\n");
-    // The upload process is very CPU intensive. Let's speed things up a bit.
-    setCpuFrequencyMhz(240);
 
     // First, we need to check the encoding of the form that we have received.
     // The browser will set the Content-Type request header, so we can use it for that purpose.
@@ -475,20 +501,12 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
             return;
         }
 
-        // SPIFFS limits the total lenth of a path + file to 31 characters.
-        if (filename.length() + 8 > 31) {
-            DEBUG_MSG("Uploaded filename too long!\n");
-            res->println("<p>Uploaded filename too long! Limit of 23 characters.</p>");
-            delete parser;
-            return;
-        }
-
         // You should check file name validity and all that, but we skip that to make the core
         // concepts of the body parser functionality easier to understand.
         std::string pathname = "/static/" + filename;
 
-        // Create a new file on spiffs to stream the data into
-        File file = SPIFFS.open(pathname.c_str(), "w");
+        // Create a new file to stream the data into
+        File file = FSCom.open(pathname.c_str(), "w");
         size_t fileLength = 0;
         didwrite = true;
 
@@ -502,7 +520,7 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
             // DEBUG_MSG("\n\nreadLength - %i\n", readLength);
 
             // Abort the transfer if there is less than 50k space left on the filesystem.
-            if (SPIFFS.totalBytes() - SPIFFS.usedBytes() < 51200) {
+            if (FSCom.totalBytes() - FSCom.usedBytes() < 51200) {
                 file.close();
                 res->println("<p>Write aborted! Reserving 50k on filesystem.</p>");
 
@@ -532,6 +550,7 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
 
 void handleReport(HTTPRequest *req, HTTPResponse *res)
 {
+    using namespace json11;
 
     ResourceParameters *params = req->getParams();
     std::string content;
@@ -550,103 +569,86 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
         res->println("<pre>");
     }
 
-    res->println("{");
-
-    res->println("\"data\": {");
-
-    res->println("\"airtime\": {");
-
+    // data->airtime->tx_log
+    std::vector<String> txLogValues;
     uint32_t *logArray;
-
-    res->print("\"tx_log\": [");
-
-    logArray = airtimeReport(TX_LOG);
-    for (int i = 0; i < getPeriodsToLog(); i++) {
+    logArray = airTime->airtimeReport(TX_LOG);
+    for (int i = 0; i < airTime->getPeriodsToLog(); i++) {
         uint32_t tmp;
         tmp = *(logArray + i);
-        res->printf("%d", tmp);
-        if (i != getPeriodsToLog() - 1) {
-            res->print(", ");
-        }
+        txLogValues.push_back(String(tmp));
     }
 
-    res->println("],");
-    res->print("\"rx_log\": [");
-
-    logArray = airtimeReport(RX_LOG);
-    for (int i = 0; i < getPeriodsToLog(); i++) {
+    // data->airtime->rx_log
+    std::vector<String> rxLogValues;
+    logArray = airTime->airtimeReport(RX_LOG);
+    for (int i = 0; i < airTime->getPeriodsToLog(); i++) {
         uint32_t tmp;
         tmp = *(logArray + i);
-        res->printf("%d", tmp);
-        if (i != getPeriodsToLog() - 1) {
-            res->print(", ");
-        }
+        rxLogValues.push_back(String(tmp));
     }
 
-    res->println("],");
-    res->print("\"rx_all_log\": [");
-
-    logArray = airtimeReport(RX_ALL_LOG);
-    for (int i = 0; i < getPeriodsToLog(); i++) {
+    // data->airtime->rx_all_log
+    std::vector<String> rxAllLogValues;
+    logArray = airTime->airtimeReport(RX_ALL_LOG);
+    for (int i = 0; i < airTime->getPeriodsToLog(); i++) {
         uint32_t tmp;
         tmp = *(logArray + i);
-        res->printf("%d", tmp);
-        if (i != getPeriodsToLog() - 1) {
-            res->print(", ");
-        }
+        rxAllLogValues.push_back(String(tmp));
     }
 
-    res->println("],");
-    res->printf("\"seconds_since_boot\": %u,\n", getSecondsSinceBoot());
-    res->printf("\"seconds_per_period\": %u,\n", getSecondsPerPeriod());
-    res->printf("\"periods_to_log\": %u\n", getPeriodsToLog());
+    Json jsonObjAirtime = Json::object{
+        {"tx_log", Json(txLogValues)},
+        {"rx_log", Json(rxLogValues)},
+        {"rx_all_log", Json(rxAllLogValues)},
+        {"channel_utilization", Json(airTime->channelUtilizationPercent())},
+        {"utilization_tx", Json(airTime->utilizationTXPercent())},
+        {"seconds_since_boot", Json(int(airTime->getSecondsSinceBoot()))},
+        {"seconds_per_period", Json(int(airTime->getSecondsPerPeriod()))},
+        {"periods_to_log", Json(airTime->getPeriodsToLog())},
+    };
 
-    res->println("},");
-
-    res->println("\"wifi\": {");
-
-    res->printf("\"web_request_count\": %d,\n", numberOfRequests);
-    res->println("\"rssi\": " + String(WiFi.RSSI()) + ",");
-
-    if (radioConfig.preferences.wifi_ap_mode || isSoftAPForced()) {
-        res->println("\"ip\": \"" + String(WiFi.softAPIP().toString().c_str()) + "\"");
+    // data->wifi
+    String ipStr;
+    if (config.wifi.ap_mode || isSoftAPForced()) {
+        ipStr = String(WiFi.softAPIP().toString());
     } else {
-        res->println("\"ip\": \"" + String(WiFi.localIP().toString().c_str()) + "\"");
+        ipStr = String(WiFi.localIP().toString());
     }
+    Json jsonObjWifi = Json::object{{"rssi", String(WiFi.RSSI())}, {"ip", ipStr.c_str()}};
 
-    res->println("},");
+    // data->memory
+    Json jsonObjMemory = Json::object{{"heap_total", Json(int(ESP.getHeapSize()))},
+                                      {"heap_free", Json(int(ESP.getFreeHeap()))},
+                                      {"psram_total", Json(int(ESP.getPsramSize()))},
+                                      {"psram_free", Json(int(ESP.getFreePsram()))},
+                                      {"fs_total", String(FSCom.totalBytes()).c_str()},
+                                      {"fs_used", String(FSCom.usedBytes()).c_str()},
+                                      {"fs_free", String(FSCom.totalBytes() - FSCom.usedBytes()).c_str()}};
 
-    res->println("\"memory\": {");
-    res->printf("\"heap_total\": %d,\n", ESP.getHeapSize());
-    res->printf("\"heap_free\": %d,\n", ESP.getFreeHeap());
-    res->printf("\"psram_total\": %d,\n", ESP.getPsramSize());
-    res->printf("\"psram_free\": %d,\n", ESP.getFreePsram());
-    res->println("\"spiffs_total\" : " + String(SPIFFS.totalBytes()) + ",");
-    res->println("\"spiffs_used\" : " + String(SPIFFS.usedBytes()) + ",");
-    res->println("\"spiffs_free\" : " + String(SPIFFS.totalBytes() - SPIFFS.usedBytes()));
-    res->println("},");
+    // data->power
+    Json jsonObjPower = Json::object{{"battery_percent", Json(powerStatus->getBatteryChargePercent())},
+                                     {"battery_voltage_mv", Json(powerStatus->getBatteryVoltageMv())},
+                                     {"has_battery", BoolToString(powerStatus->getHasBattery())},
+                                     {"has_usb", BoolToString(powerStatus->getHasUSB())},
+                                     {"is_charging", BoolToString(powerStatus->getIsCharging())}};
 
-    res->println("\"power\": {");
-    res->printf("\"battery_percent\": %u,\n", powerStatus->getBatteryChargePercent());
-    res->printf("\"battery_voltage_mv\": %u,\n", powerStatus->getBatteryVoltageMv());
-    res->printf("\"has_battery\": %s,\n", BoolToString(powerStatus->getHasBattery()));
-    res->printf("\"has_usb\": %s,\n", BoolToString(powerStatus->getHasUSB()));
-    res->printf("\"is_charging\": %s\n", BoolToString(powerStatus->getIsCharging()));
-    res->println("},");
+    // data->device
+    Json jsonObjDevice = Json::object{{"reboot_counter", Json(int(myNodeInfo.reboot_count))}};
 
-    res->println("\"device\": {");
-    res->printf("\"reboot_counter\": %d\n", myNodeInfo.reboot_count);
-    res->println("},");
+    // data->radio
+    Json jsonObjRadio = Json::object{{"frequency", Json(RadioLibInterface::instance->getFreq())},
+                                     {"lora_channel", Json(int(RadioLibInterface::instance->getChannelNum()))}};
 
-    res->println("\"radio\": {");
-    res->printf("\"frequecy\": %f,\n", RadioLibInterface::instance->getFreq());
-    res->printf("\"lora_channel\": %d\n", RadioLibInterface::instance->getChannelNum());
-    res->println("}");
+    // collect data to inner data object
+    Json jsonObjInner = Json::object{{"airtime", jsonObjAirtime}, {"wifi", jsonObjWifi},     {"memory", jsonObjMemory},
+                                     {"power", jsonObjPower},     {"device", jsonObjDevice}, {"radio", jsonObjRadio}};
 
-    res->println("},");
-
-    res->println("\"status\": \"ok\"");
-    res->println("}");
+    // create json output structure
+    Json jsonObjOuter = Json::object{{"data", jsonObjInner}, {"status", "ok"}};
+    // serialize and write it to the stream
+    std::string jsonStr = jsonObjOuter.dump();
+    res->print(jsonStr.c_str());
 }
 
 /*
@@ -671,20 +673,99 @@ void handleHotspot(HTTPRequest *req, HTTPResponse *res)
     res->println("<meta http-equiv=\"refresh\" content=\"0;url=/\" />\n");
 }
 
+void handleDeleteFsContent(HTTPRequest *req, HTTPResponse *res)
+{
+    res->setHeader("Content-Type", "text/html");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "GET");
+
+    res->println("<h1>Meshtastic</h1>\n");
+    res->println("Deleting Content in /static/*");
+
+    DEBUG_MSG("Deleting files from /static/* : \n");
+
+    htmlDeleteDir("/static");
+
+    res->println("<p><hr><p><a href=/admin>Back to admin</a>\n");
+}
+
+void handleAdmin(HTTPRequest *req, HTTPResponse *res)
+{
+    res->setHeader("Content-Type", "text/html");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "GET");
+
+    res->println("<h1>Meshtastic</h1>\n");
+    res->println("<a href=/admin/settings>Settings</a><br>\n");
+    res->println("<a href=/admin/fs>Manage Web Content</a><br>\n");
+    res->println("<a href=/json/report>Device Report</a><br>\n");
+}
+
+void handleAdminSettings(HTTPRequest *req, HTTPResponse *res)
+{
+    res->setHeader("Content-Type", "text/html");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "GET");
+
+    res->println("<h1>Meshtastic</h1>\n");
+    res->println("This isn't done.\n");
+    res->println("<form action=/admin/settings/apply method=post>\n");
+    res->println("<table border=1>\n");
+    res->println("<tr><td>Set?</td><td>Setting</td><td>current value</td><td>new value</td></tr>\n");
+    res->println("<tr><td><input type=checkbox></td><td>WiFi SSID</td><td>false</td><td><input type=radio></td></tr>\n");
+    res->println("<tr><td><input type=checkbox></td><td>WiFi Password</td><td>false</td><td><input type=radio></td></tr>\n");
+    res->println(
+        "<tr><td><input type=checkbox></td><td>Smart Position Update</td><td>false</td><td><input type=radio></td></tr>\n");
+    res->println("<tr><td><input type=checkbox></td><td>is_always_powered</td><td>false</td><td><input type=radio></td></tr>\n");
+    res->println("<tr><td><input type=checkbox></td><td>is_always_powered</td><td>false</td><td><input type=radio></td></tr>\n");
+    res->println("</table>\n");
+    res->println("<table>\n");
+    res->println("<input type=submit value=Apply New Settings>\n");
+    res->println("<form>\n");
+    res->println("<p><hr><p><a href=/admin>Back to admin</a>\n");
+}
+
+void handleAdminSettingsApply(HTTPRequest *req, HTTPResponse *res)
+{
+    res->setHeader("Content-Type", "text/html");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "POST");
+    res->println("<h1>Meshtastic</h1>\n");
+    res->println(
+        "<html><head><meta http-equiv=\"refresh\" content=\"1;url=/admin/settings\" /><title>Settings Applied. </title>");
+
+    res->println("Settings Applied. Please wait.\n");
+}
+
+void handleFs(HTTPRequest *req, HTTPResponse *res)
+{
+    res->setHeader("Content-Type", "text/html");
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Access-Control-Allow-Methods", "GET");
+
+    res->println("<h1>Meshtastic</h1>\n");
+    res->println("<a href=/admin/fs/delete>Delete Web Content</a><p><form action=/admin/fs/update "
+                 "method=post><input type=submit value=UPDATE_WEB_CONTENT></form>Be patient!");
+    res->println("<p><hr><p><a href=/admin>Back to admin</a>\n");
+}
+
 void handleRestart(HTTPRequest *req, HTTPResponse *res)
 {
     res->setHeader("Content-Type", "text/html");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
 
-    DEBUG_MSG("***** Restarted on HTTP(s) Request *****\n");
+    res->println("<h1>Meshtastic</h1>\n");
     res->println("Restarting");
 
-    ESP.restart();
+    DEBUG_MSG("***** Restarted on HTTP(s) Request *****\n");
+    webServerThread->requestRestart = (millis() / 1000) + 5;
 }
 
 void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
 {
+    using namespace json11;
+
     res->setHeader("Content-Type", "application/json");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "POST");
@@ -708,55 +789,51 @@ void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
             count = count - 1;
         }
     } else {
+#ifndef NO_SCREEN
         screen->blink();
+#endif
     }
 
-    res->println("{");
-    res->println("\"status\": \"ok\"");
-    res->println("}");
+    Json jsonObjOuter = Json::object{{"status", "ok"}};
+    std::string jsonStr = jsonObjOuter.dump();
+    res->print(jsonStr.c_str());
 }
 
 void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
 {
+    using namespace json11;
+
     res->setHeader("Content-Type", "application/json");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
     // res->setHeader("Content-Type", "text/html");
 
     int n = WiFi.scanNetworks();
-    res->println("{");
-    res->println("\"data\": {");
-    if (n == 0) {
-        // No networks found.
-        res->println("\"networks\": []");
 
-    } else {
-        res->println("\"networks\": [");
-
+    // build list of network objects
+    std::vector<Json> networkObjs;
+    if (n > 0) {
         for (int i = 0; i < n; ++i) {
             char ssidArray[50];
             String ssidString = String(WiFi.SSID(i));
-            // String ssidString = String(WiFi.SSID(i)).toCharArray(ssidArray, WiFi.SSID(i).length());
             ssidString.replace("\"", "\\\"");
             ssidString.toCharArray(ssidArray, 50);
 
             if (WiFi.encryptionType(i) != WIFI_AUTH_OPEN) {
-                // res->println("{\"ssid\": \"%s\",\"rssi\": -75}, ", String(WiFi.SSID(i).c_str() );
-
-                res->printf("{\"ssid\": \"%s\",\"rssi\": %d}", ssidArray, WiFi.RSSI(i));
-                // WiFi.RSSI(i)
-                if (i != n - 1) {
-                    res->printf(",");
-                }
+                Json thisNetwork = Json::object{{"ssid", ssidArray}, {"rssi", WiFi.RSSI(i)}};
+                networkObjs.push_back(thisNetwork);
             }
             // Yield some cpu cycles to IP stack.
             //   This is important in case the list is large and it takes us time to return
             //   to the main loop.
             yield();
         }
-        res->println("]");
     }
-    res->println("},");
-    res->println("\"status\": \"ok\"");
-    res->println("}");
+
+    // build output structure
+    Json jsonObjOuter = Json::object{{"data", networkObjs}, {"status", "ok"}};
+
+    // serialize and write it to the stream
+    std::string jsonStr = jsonObjOuter.dump();
+    res->print(jsonStr.c_str());
 }

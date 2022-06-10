@@ -37,7 +37,7 @@ class Router : protected concurrency::OSThread
      * do idle processing
      * Mostly looking in our incoming rxPacket queue and calling handleReceived.
      */
-    virtual int32_t runOnce();
+    virtual int32_t runOnce() override;
 
     /**
      * Works like send, but if we are sending to the local node, we directly put the message in the receive queue.
@@ -71,7 +71,7 @@ class Router : protected concurrency::OSThread
     void enqueueReceivedMessage(MeshPacket *p);
 
   protected:
-    friend class RoutingPlugin;
+    friend class RoutingModule;
 
     /**
      * Send a packet on a suitable interface.  This routine will
@@ -85,7 +85,7 @@ class Router : protected concurrency::OSThread
     /**
      * Should this incoming filter be dropped?
      *
-     * FIXME, move this into the new RoutingPlugin and do the filtering there using the regular plugin logic
+     * FIXME, move this into the new RoutingModule and do the filtering there using the regular module logic
      *
      * Called immedately on receiption, before any further processing.
      * @return true to abandon the packet

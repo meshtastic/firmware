@@ -1,7 +1,7 @@
-#include "configuration.h"
 #include "SerialConsole.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "configuration.h"
 
 #define Port Serial
 
@@ -28,6 +28,16 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port)
                       // setDestination(&noopPrint); for testing, try turning off 'all' debug output and see what leaks
 
     Port.begin(SERIAL_BAUD);
+#ifdef NRF52_SERIES
+    time_t timeout = millis();
+    while (!Port) {
+        if ((millis() - timeout) < 5000) {
+            delay(100);
+        } else {
+            break;
+        }
+    }
+#endif
     emitRebooted();
 }
 
@@ -35,7 +45,8 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port)
 bool SerialConsole::checkIsConnected()
 {
     uint32_t now = millis();
-    return (now - lastContactMsec) < getPref_phone_timeout_secs() * 1000UL;
+    uint32_t timeout = (config.power.phone_timeout_secs > 0 ? config.power.phone_timeout_secs : default_phone_timeout_secs )* 1000UL;
+    return (now - lastContactMsec) < timeout;
 }
 
 /**
@@ -45,10 +56,9 @@ bool SerialConsole::checkIsConnected()
 bool SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
 {
     // Turn off debug serial printing once the API is activated, because other threads could print and corrupt packets
-    if (!radioConfig.preferences.debug_log_enabled)
+    if (!config.device.debug_log_enabled)
         setDestination(&noopPrint);
     canWrite = true;
 
     return StreamAPI::handleToRadio(buf, len);
 }
-

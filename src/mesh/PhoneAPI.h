@@ -24,6 +24,7 @@ class PhoneAPI
         STATE_SEND_NOTHING, // (Eventual) Initial state, don't send anything until the client starts asking for config
                             // (disconnected)
         STATE_SEND_MY_INFO, // send our my info record
+        STATE_SEND_GROUPS,
         // STATE_SEND_RADIO, // in 1.2 we now send this as a regular mesh packet
         // STATE_SEND_OWNER, no need to send Owner specially, it is just part of the nodedb
         STATE_SEND_NODEINFO, // states progress in this order as the device sends to to the client
@@ -45,7 +46,7 @@ class PhoneAPI
     /// We temporarily keep the nodeInfo here between the call to available and getFromRadio
     const NodeInfo *nodeInfoForPhone = NULL;
 
-    ToRadio toRadioScratch; // this is a static scratch object, any data must be copied elsewhere before returning
+    ToRadio toRadioScratch = {0}; // this is a static scratch object, any data must be copied elsewhere before returning
 
     /// Use to ensure that clients don't get confused about old messages from the radio
     uint32_t config_nonce = 0;
@@ -86,7 +87,7 @@ class PhoneAPI
 
   protected:
     /// Our fromradio packet while it is being assembled
-    FromRadio fromRadioScratch;
+    FromRadio fromRadioScratch = {};
 
     /** the last msec we heard from the client on the other side of this link */
     uint32_t lastContactMsec = 0;
@@ -123,5 +124,5 @@ class PhoneAPI
     bool handleToRadioPacket(MeshPacket &p);
 
     /// If the mesh service tells us fromNum has changed, tell the phone
-    virtual int onNotify(uint32_t newValue);
+    virtual int onNotify(uint32_t newValue) override;
 };

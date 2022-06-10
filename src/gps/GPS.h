@@ -40,9 +40,6 @@ class GPS : private concurrency::OSThread
     /** If !NULL we will use this serial port to construct our GPS */
     static HardwareSerial *_serial_gps;
 
-    /** If !0 we will attempt to connect to the GPS over I2C */
-    static uint8_t i2cAddress;
-
     Position p = Position_init_default;
 
     GPS() : concurrency::OSThread("GPS") {}
@@ -59,6 +56,9 @@ class GPS : private concurrency::OSThread
 
     /// Returns true if we have acquired GPS lock.
     virtual bool hasLock();
+
+    /// Returns true if there's valid data flow with the chip.
+    virtual bool hasFlow();
 
     /// Return true if we are connected to a GPS
     bool isConnected() const { return hasGPS; }
@@ -138,14 +138,14 @@ class GPS : private concurrency::OSThread
      */
     uint32_t getSleepTime() const;
 
-    GpsOperation getGpsOp() const;
+    bool getACK(uint8_t c, uint8_t i);
 
     /**
      * Tell users we have new GPS readings
      */
     void publishUpdate();
 
-    virtual int32_t runOnce();
+    virtual int32_t runOnce() override;
 };
 
 // Creates an instance of the GPS class. 

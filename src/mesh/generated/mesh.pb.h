@@ -5,6 +5,7 @@
 #define PB_MESH_PB_H_INCLUDED
 #include <pb.h>
 #include "portnums.pb.h"
+#include "telemetry.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
@@ -16,51 +17,61 @@
  Because they will be used to find firmware filenames in the android app for OTA updates.
  To match the old style filenames, _ is converted to -, p is converted to . */
 typedef enum _HardwareModel { 
+    /* TODO: REPLACE */
     HardwareModel_UNSET = 0, 
+    /* TODO: REPLACE */
     HardwareModel_TLORA_V2 = 1, 
+    /* TODO: REPLACE */
     HardwareModel_TLORA_V1 = 2, 
+    /* TODO: REPLACE */
     HardwareModel_TLORA_V2_1_1p6 = 3, 
+    /* TODO: REPLACE */
     HardwareModel_TBEAM = 4, 
-    /* The original heltec WiFi_Lora_32_V2, which had battery voltage sensing hooked to GPIO 13 (see HELTEC_V2 for the new version). */
+    /* The original heltec WiFi_Lora_32_V2, which had battery voltage sensing hooked to GPIO 13
+ (see HELTEC_V2 for the new version). */
     HardwareModel_HELTEC_V2_0 = 5, 
+    /* TODO: REPLACE */
     HardwareModel_TBEAM0p7 = 6, 
+    /* TODO: REPLACE */
     HardwareModel_T_ECHO = 7, 
+    /* TODO: REPLACE */
     HardwareModel_TLORA_V1_1p3 = 8, 
+    /* TODO: REPLACE */
     HardwareModel_RAK4631 = 9, 
-    /* The new version of the heltec WiFi_Lora_32_V2 board that has battery sensing hooked to GPIO 37.  Sadly they did not update anything on the silkscreen to identify this board */
+    /* The new version of the heltec WiFi_Lora_32_V2 board that has battery sensing hooked to GPIO 37.
+ Sadly they did not update anything on the silkscreen to identify this board */
     HardwareModel_HELTEC_V2_1 = 10, 
+    /* Ancient heltec WiFi_Lora_32 board */
+    HardwareModel_HELTEC_V1 = 11, 
     /* Less common/prototype boards listed here (needs one more byte over the air) */
     HardwareModel_LORA_RELAY_V1 = 32, 
+    /* TODO: REPLACE */
     HardwareModel_NRF52840DK = 33, 
+    /* TODO: REPLACE */
     HardwareModel_PPR = 34, 
+    /* TODO: REPLACE */
     HardwareModel_GENIEBLOCKS = 35, 
+    /* TODO: REPLACE */
     HardwareModel_NRF52_UNKNOWN = 36, 
+    /* TODO: REPLACE */
     HardwareModel_PORTDUINO = 37, 
     /* The simulator built into the android app */
     HardwareModel_ANDROID_SIM = 38, 
     /* Custom DIY device based on @NanoVHF schematics: https://github.com/NanoVHF/Meshtastic-DIY/tree/main/Schematics */
-    HardwareModel_DIY_V1 = 39 
+    HardwareModel_DIY_V1 = 39, 
+    /* RAK WisBlock ESP32 core: https://docs.rakwireless.com/Product-Categories/WisBlock/RAK11200/Overview/ */
+    HardwareModel_RAK11200 = 40, 
+    /* B&Q Consulting Nano Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:nano */
+    HardwareModel_NANO_G1 = 41, 
+    /* nRF52840 Dongle : https://www.nordicsemi.com/Products/Development-hardware/nrf52840-dongle/ */
+    HardwareModel_NRF52840_PCA10059 = 42, 
+    /* Custom Disaster Radio esp32 v3 device https://github.com/sudomesh/disaster-radio/tree/master/hardware/board_esp32_v3 */
+    HardwareModel_DR_DEV = 43, 
+    /* M5 esp32 based MCU modules with enclosure, TFT and LORA Shields. All Variants (Basic, Core, Fire, Core2, Paper) https://m5stack.com/ */
+    HardwareModel_M5STACK = 44, 
+    /* Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits. */
+    HardwareModel_PRIVATE_HW = 255 
 } HardwareModel;
-
-/* The team colors are based on the names of "friendly teams" in ATAK:
- https://github.com/deptofdefense/AndroidTacticalAssaultKit-CIV/blob/master/atak/ATAK/app/src/main/assets/filters/team_filters.xml */
-typedef enum _Team { 
-    Team_CLEAR = 0, /* the default (unset) is "achromatic" (unaffiliated) */
-    Team_CYAN = 1, 
-    Team_WHITE = 2, 
-    Team_YELLOW = 3, 
-    Team_ORANGE = 4, 
-    Team_MAGENTA = 5, 
-    Team_RED = 6, 
-    Team_MAROON = 7, 
-    Team_PURPLE = 8, 
-    Team_DARK_BLUE = 9, 
-    Team_BLUE = 10, 
-    Team_TEAL = 11, 
-    Team_GREEN = 12, 
-    Team_DARK_GREEN = 13, 
-    Team_BROWN = 14 
-} Team;
 
 /* Shared constants between device and phone */
 typedef enum _Constants { 
@@ -74,11 +85,11 @@ typedef enum _Constants {
 } Constants;
 
 /* Error codes for critical errors
-
  The device might report these fault codes on the screen.
  If you encounter a fault code, please post on the meshtastic.discourse.group
  and we'll try to help. */
 typedef enum _CriticalErrorCode { 
+    /* TODO: REPLACE */
     CriticalErrorCode_None = 0, 
     /* A software bug was detected while trying to send lora */
     CriticalErrorCode_TxWatchdog = 1, 
@@ -102,8 +113,8 @@ typedef enum _CriticalErrorCode {
     CriticalErrorCode_Brownout = 9, 
     /* Selftest of SX1262 radio chip failed */
     CriticalErrorCode_SX1262Failure = 10, 
-    /* A (likely software but possibly hardware) failure was detected while trying to send packets. If this occurs on your board, please
-post in the forum so that we can ask you to collect some information to allow fixing this bug */
+    /* A (likely software but possibly hardware) failure was detected while trying to send packets.
+ If this occurs on your board, please post in the forum so that we can ask you to collect some information to allow fixing this bug */
     CriticalErrorCode_RadioSpiBug = 11 
 } CriticalErrorCode;
 
@@ -112,16 +123,24 @@ post in the forum so that we can ask you to collect some information to allow fi
  Because they will be used to find firmware filenames in the android app for OTA updates.
  To match the old style filenames, _ is converted to -, p is converted to . */
 typedef enum _Position_LocSource { 
+    /* TODO: REPLACE */
     Position_LocSource_LOCSRC_UNSPECIFIED = 0, 
+    /* TODO: REPLACE */
     Position_LocSource_LOCSRC_MANUAL_ENTRY = 1, 
+    /* TODO: REPLACE */
     Position_LocSource_LOCSRC_GPS_INTERNAL = 2, 
+    /* TODO: REPLACE */
     Position_LocSource_LOCSRC_GPS_EXTERNAL = 3 
 } Position_LocSource;
 
-/* The team colors are based on the names of "friendly teams" in ATAK:
- https://github.com/deptofdefense/AndroidTacticalAssaultKit-CIV/blob/master/atak/ATAK/app/src/main/assets/filters/team_filters.xml */
+/* Shared constants between device and phone */
 typedef enum _Position_AltSource { 
-    Position_AltSource_ALTSRC_UNSPECIFIED = 0, /* the default (unset) is "achromatic" (unaffiliated) */
+    /* First enum must be zero, and we are just using this enum to
+ pass int constants between two very different environments */
+    Position_AltSource_ALTSRC_UNSPECIFIED = 0, 
+    /* From mesh.options
+ note: this payload length is ONLY the bytes that are sent inside of the Data protobuf (excluding protobuf overhead). The 16 byte header is
+ outside of this envelope */
     Position_AltSource_ALTSRC_MANUAL_ENTRY = 1, 
     Position_AltSource_ALTSRC_GPS_INTERNAL = 2, 
     Position_AltSource_ALTSRC_GPS_EXTERNAL = 3, 
@@ -133,18 +152,29 @@ typedef enum _Position_AltSource {
  Because they will be used to find firmware filenames in the android app for OTA updates.
  To match the old style filenames, _ is converted to -, p is converted to . */
 typedef enum _Routing_Error { 
+    /* TODO: REPLACE */
     Routing_Error_NONE = 0, 
+    /* TODO: REPLACE */
     Routing_Error_NO_ROUTE = 1, 
+    /* TODO: REPLACE */
     Routing_Error_GOT_NAK = 2, 
+    /* TODO: REPLACE */
     Routing_Error_TIMEOUT = 3, 
+    /* TODO: REPLACE */
     Routing_Error_NO_INTERFACE = 4, 
-    /* The original heltec WiFi_Lora_32_V2, which had battery voltage sensing hooked to GPIO 13 (see HELTEC_V2 for the new version). */
+    /* The original heltec WiFi_Lora_32_V2, which had battery voltage sensing hooked to GPIO 13
+ (see HELTEC_V2 for the new version). */
     Routing_Error_MAX_RETRANSMIT = 5, 
+    /* TODO: REPLACE */
     Routing_Error_NO_CHANNEL = 6, 
+    /* TODO: REPLACE */
     Routing_Error_TOO_LARGE = 7, 
+    /* TODO: REPLACE */
     Routing_Error_NO_RESPONSE = 8, 
+    /* TODO: REPLACE */
     Routing_Error_BAD_REQUEST = 32, 
-    /* The new version of the heltec WiFi_Lora_32_V2 board that has battery sensing hooked to GPIO 37.  Sadly they did not update anything on the silkscreen to identify this board */
+    /* The new version of the heltec WiFi_Lora_32_V2 board that has battery sensing hooked to GPIO 37.
+ Sadly they did not update anything on the silkscreen to identify this board */
     Routing_Error_NOT_AUTHORIZED = 33 
 } Routing_Error;
 
@@ -153,20 +183,31 @@ typedef enum _Routing_Error {
  Because they will be used to find firmware filenames in the android app for OTA updates.
  To match the old style filenames, _ is converted to -, p is converted to . */
 typedef enum _MeshPacket_Priority { 
+    /* TODO: REPLACE */
     MeshPacket_Priority_UNSET = 0, 
+    /* TODO: REPLACE */
     MeshPacket_Priority_MIN = 1, 
+    /* TODO: REPLACE */
     MeshPacket_Priority_BACKGROUND = 10, 
+    /* TODO: REPLACE */
     MeshPacket_Priority_DEFAULT = 64, 
+    /* TODO: REPLACE */
     MeshPacket_Priority_RELIABLE = 70, 
-    /* The original heltec WiFi_Lora_32_V2, which had battery voltage sensing hooked to GPIO 13 (see HELTEC_V2 for the new version). */
+    /* The original heltec WiFi_Lora_32_V2, which had battery voltage sensing hooked to GPIO 13
+ (see HELTEC_V2 for the new version). */
     MeshPacket_Priority_ACK = 120, 
+    /* TODO: REPLACE */
     MeshPacket_Priority_MAX = 127 
 } MeshPacket_Priority;
 
-/* The team colors are based on the names of "friendly teams" in ATAK:
- https://github.com/deptofdefense/AndroidTacticalAssaultKit-CIV/blob/master/atak/ATAK/app/src/main/assets/filters/team_filters.xml */
+/* Shared constants between device and phone */
 typedef enum _MeshPacket_Delayed { 
-    MeshPacket_Delayed_NO_DELAY = 0, /* the default (unset) is "achromatic" (unaffiliated) */
+    /* First enum must be zero, and we are just using this enum to
+ pass int constants between two very different environments */
+    MeshPacket_Delayed_NO_DELAY = 0, 
+    /* From mesh.options
+ note: this payload length is ONLY the bytes that are sent inside of the Data protobuf (excluding protobuf overhead). The 16 byte header is
+ outside of this envelope */
     MeshPacket_Delayed_DELAYED_BROADCAST = 1, 
     MeshPacket_Delayed_DELAYED_DIRECT = 2 
 } MeshPacket_Delayed;
@@ -176,52 +217,51 @@ typedef enum _MeshPacket_Delayed {
  Because they will be used to find firmware filenames in the android app for OTA updates.
  To match the old style filenames, _ is converted to -, p is converted to . */
 typedef enum _LogRecord_Level { 
+    /* TODO: REPLACE */
     LogRecord_Level_UNSET = 0, 
+    /* TODO: REPLACE */
     LogRecord_Level_CRITICAL = 50, 
+    /* TODO: REPLACE */
     LogRecord_Level_ERROR = 40, 
+    /* TODO: REPLACE */
     LogRecord_Level_WARNING = 30, 
+    /* TODO: REPLACE */
     LogRecord_Level_INFO = 20, 
-    /* The original heltec WiFi_Lora_32_V2, which had battery voltage sensing hooked to GPIO 13 (see HELTEC_V2 for the new version). */
+    /* The original heltec WiFi_Lora_32_V2, which had battery voltage sensing hooked to GPIO 13
+ (see HELTEC_V2 for the new version). */
     LogRecord_Level_DEBUG = 10, 
+    /* TODO: REPLACE */
     LogRecord_Level_TRACE = 5 
 } LogRecord_Level;
 
 /* Struct definitions */
-typedef PB_BYTES_ARRAY_T(237) Data_payload_t;
-/* (Formerly called SubPacket)
- The payload portion fo a packet, this is the actual bytes that are sent
- inside a radio packet (because from/to are broken out by the comms library) */
-typedef struct _Data { 
-    /* Formerly named typ and of type Type */
+typedef PB_BYTES_ARRAY_T(237) Compressed_data_t;
+typedef struct _Compressed { 
     PortNum portnum; 
-    /* Required */
-    Data_payload_t payload; 
-    /* Not normally used, but for testing a sender can request that recipient
- responds in kind (i.e. if it received a position, it should unicast back it's position).
- Note: that if you set this on a broadcast you will receive many replies. */
-    bool want_response; 
-    /* The address of the destination node.
- This field is is filled in by the mesh radio device software, application
- layer software should never need it.
- RouteDiscovery messages _must_ populate this.
- Other message types might need to if they are doing multihop routing. */
-    uint32_t dest; 
-    /* The address of the original sender for this message.
- This field should _only_ be populated for reliable multihop packets (to keep
- packets small). */
-    uint32_t source; 
-    /* Only used in routing or response messages.
- Indicates the original message ID that this message is reporting failure on. (formerly called original_id) */
-    uint32_t request_id; 
-} Data;
+    Compressed_data_t data; 
+} Compressed;
+
+/* Location of a waypoint to associate with a message */
+typedef struct _Location { 
+    /* Id of the location */
+    uint32_t id; 
+    /* latitude_i */
+    int32_t latitude_i; 
+    /* longitude_i */
+    int32_t longitude_i; 
+    /* Time the location is to expire (epoch) */
+    uint32_t expire; 
+    /* If true, only allow the original sender to update the location. */
+    bool locked; 
+} Location;
 
 /* Debug output from the device.
-
  To minimize the size of records inside the device code, if a time/source/level is not set
  on the message it is assumed to be a continuation of the previously sent message.
  This allows the device code to use fixed maxlen 64 byte strings for messages,
  and then extend as needed by emitting multiple records. */
 typedef struct _LogRecord { 
+    /* Log levels, chosen to match python logging conventions. */
     char message[64]; 
     /* Seconds since 1970 - or 0 for unknown/unset */
     uint32_t time; 
@@ -241,24 +281,7 @@ typedef struct _MyNodeInfo {
     /* Note: This flag merely means we detected a hardware GPS in our node.
  Not the same as UserPreferences.location_sharing */
     bool has_gps; 
-    /* # of frequencies that can be used (set at build time in the device flash image).
- Note: this is different from max_channels, this field is telling the # of frequency bands this node can use.
- (old name was num_channels) */
-    uint32_t num_bands; 
     /* The maximum number of 'software' channels that can be set on this node. */
-    char region[12]; 
-    /* Deprecated! ONLY USED IN DEVICE CODE (for upgrading old 1.0 firmwares) DO NOT READ ELSEWHERE.
- The region code for my radio (US, CN, etc...)
- Note: This string is deprecated.
- The 1.0 builds populate it based on the flashed firmware name.
- But for newer builds this string will be unpopulated (missing/null).
- For those builds you should instead look at the new read/write region enum in UserSettings
- The format of this string was 1.0-US or 1.0-CN etc.. Or empty string if unset. */
-    char hw_model_deprecated[16]; 
-    /* TBEAM, HELTEC, etc...
- Starting in 1.2.11 moved to hw_model enum in the NodeInfo object.
- Apps will still need the string here for older builds
- (so OTA update can find the right image), but if the enum is available it will be used instead. */
     char firmware_version[18]; 
     /* 0.0.5 etc... */
     CriticalErrorCode error_code; 
@@ -287,18 +310,18 @@ typedef struct _MyNodeInfo {
     /* The minimum app version that can talk to this device.
  Phone/PC apps should compare this to their build number and if too low tell the user they must update their app */
     uint32_t max_channels; 
-    /* 48 time windows of 1hr each with the airtime transmitted out of the device per hour. */
+    /* 24 time windows of 1hr each with the airtime transmitted out of the device per hour. */
     pb_size_t air_period_tx_count;
-    uint32_t air_period_tx[24]; 
-    /* 48 time windows of 1hr each with the airtime of valid packets for your mesh. */
+    uint32_t air_period_tx[8]; 
+    /* 24 time windows of 1hr each with the airtime of valid packets for your mesh. */
     pb_size_t air_period_rx_count;
-    uint32_t air_period_rx[24]; 
+    uint32_t air_period_rx[8]; 
     /* Is the device wifi capable? */
     bool has_wifi; 
-    /* The private key for this device.
- This is used to generate a shared key via Diffie-Hellman key exchange. */
-    pb_byte_t private_key[32]; 
-    bool bluetooth_paired; 
+    /* Utilization for the current channel, including well formed TX, RX and malformed RX (aka noise). */
+    float channel_utilization; 
+    /* Percent of airtime for transmission used within the last hour. */
+    float air_util_tx; 
 } MyNodeInfo;
 
 /* a gps position */
@@ -306,18 +329,19 @@ typedef struct _Position {
     /* The new preferred location encoding, divide by 1e-7 to get degrees
  in floating point */
     int32_t latitude_i; 
+    /* TODO: REPLACE */
     int32_t longitude_i; 
     /* In meters above MSL (but see issue #359) */
     int32_t altitude; 
-    /* 1-100 (0 means not provided) */
-    int32_t battery_level; 
     /* This is usually not sent over the mesh (to save space), but it is sent
  from the phone so that the local device can set its RTC If it is sent over
  the mesh (because there are devices on the mesh without GPS), it will only
  be sent by devices which has a hardware GPS clock.
  seconds since 1970 */
     uint32_t time; 
+    /* TODO: REPLACE */
     Position_LocSource location_source; 
+    /* TODO: REPLACE */
     Position_AltSource altitude_source; 
     /* Positional timestamp (actual timestamp of GPS solution) in integer epoch seconds */
     uint32_t pos_timestamp; 
@@ -330,21 +354,25 @@ typedef struct _Position {
     /* Horizontal, Vertical and Position Dilution of Precision, in 1/100 units
  - PDOP is sufficient for most cases
  - for higher precision scenarios, HDOP and VDOP can be used instead,
-   in which case PDOP becomes redundant (PDOP=sqrt(HDOP^2 + VDOP^2)) */
+   in which case PDOP becomes redundant (PDOP=sqrt(HDOP^2 + VDOP^2))
+ TODO: REMOVE/INTEGRATE */
     uint32_t PDOP; 
+    /* TODO: REPLACE */
     uint32_t HDOP; 
+    /* TODO: REPLACE */
     uint32_t VDOP; 
     /* GPS accuracy (a hardware specific constant) in mm
    multiplied with DOP to calculate positional accuracy
  Default: "'bout three meters-ish" :) */
     uint32_t gps_accuracy; 
     /* Ground speed in m/s and True North TRACK in 1/100 degrees
-
  Clarification of terms:
  - "track" is the direction of motion (measured in horizontal plane)
  - "heading" is where the fuselage points (measured in horizontal plane)
- - "yaw" indicates a relative rotation about the vertical axis */
+ - "yaw" indicates a relative rotation about the vertical axis
+ TODO: REMOVE/INTEGRATE */
     uint32_t ground_speed; 
+    /* TODO: REPLACE */
     uint32_t ground_track; 
     /* GPS fix quality (from NMEA GxGGA statement or similar) */
     uint32_t fix_quality; 
@@ -371,32 +399,31 @@ typedef struct _RouteDiscovery {
     uint32_t route[8]; 
 } RouteDiscovery;
 
+/* Compressed message payload */
 typedef struct _ToRadio_PeerInfo { 
+    /* PortNum to determine the how to handle the compressed payload. */
     uint32_t app_version; 
+    /* Compressed data. */
     bool mqtt_gateway; 
 } ToRadio_PeerInfo;
 
 /* Broadcast when a newly powered mesh node wants to find a node num it can use
  Sent from the phone over bluetooth to set the user id for the owner of this node.
  Also sent from nodes to each other when a new node signs on (so all clients can have this info)
-
  The algorithm is as follows:
  when a node starts up, it broadcasts their user and the normal flow is for all
  other nodes to reply with their User as well (so the new node can build its nodedb)
  If a node ever receives a User (not just the first broadcast) message where
  the sender node number equals our node number, that indicates a collision has
  occurred and the following steps should happen:
-
  If the receiving node (that was already in the mesh)'s macaddr is LOWER than the
  new User who just tried to sign in: it gets to keep its nodenum.
  We send a broadcast message of OUR User (we use a broadcast so that the other node can
  receive our message, considering we have the same id - it also serves to let
  observers correct their nodedb) - this case is rare so it should be okay.
-
  If any node receives a User where the macaddr is GTE than their local macaddr,
  they have been vetoed and should pick a new random nodenum (filtering against
  whatever it knows about the nodedb) and rebroadcast their User.
-
  A few nodenums are reserved and will never be requested:
  0xff - broadcast
  0 through 3 - for future use */
@@ -419,16 +446,10 @@ typedef struct _User {
  Apps will still need the string here for older builds
  (so OTA update can find the right image), but if the enum is available it will be used instead. */
     HardwareModel hw_model; 
-    /* In some regions HAM radio operators have different bandwidth limitations than others.
+    /* In some regions Ham radio operators have different bandwidth limitations than others.
  If this user is a licensed operator, set this flag.
  Also, "long_name" should be their licence number. */
     bool is_licensed; 
-    /* Participants in the same network can self-group into different teams.
- Short-term this can be used to visually differentiate them on the map;
- in the longer term it could also help users to semi-automatically
- select or ignore messages according to team affiliation.
- In total, 14 teams are defined (encoded in 4 bits) */
-    Team team; 
     /* Transmit power at antenna connector, in decibel-milliwatt
  An optional self-reported value useful in network planning, discovery
  and positioning - along with ant_gain_dbi and ant_azimuth below */
@@ -440,10 +461,90 @@ typedef struct _User {
  Zero = not applicable (mobile or omni) or not specified
  (use a value of 360 to indicate an antenna azimuth of zero degrees) */
     uint32_t ant_azimuth; 
-    /* The public key of the user's device.
- This is used for direct message payload encryption. */
-    pb_byte_t public_key[32]; 
 } User;
+
+typedef PB_BYTES_ARRAY_T(237) Data_payload_t;
+/* (Formerly called SubPacket)
+ The payload portion fo a packet, this is the actual bytes that are sent
+ inside a radio packet (because from/to are broken out by the comms library) */
+typedef struct _Data { 
+    /* Formerly named typ and of type Type */
+    PortNum portnum; 
+    /* TODO: REPLACE */
+    Data_payload_t payload; 
+    /* Not normally used, but for testing a sender can request that recipient
+ responds in kind (i.e. if it received a position, it should unicast back it's position).
+ Note: that if you set this on a broadcast you will receive many replies. */
+    bool want_response; 
+    /* The address of the destination node.
+ This field is is filled in by the mesh radio device software, application
+ layer software should never need it.
+ RouteDiscovery messages _must_ populate this.
+ Other message types might need to if they are doing multihop routing. */
+    uint32_t dest; 
+    /* The address of the original sender for this message.
+ This field should _only_ be populated for reliable multihop packets (to keep
+ packets small). */
+    uint32_t source; 
+    /* Only used in routing or response messages.
+ Indicates the original message ID that this message is reporting failure on. (formerly called original_id) */
+    uint32_t request_id; 
+    /* If set, this message is intened to be a reply to a previously sent message with the defined id. */
+    uint32_t reply_id; 
+    /* Defaults to false. If true, then what is in the payload should be treated as an emoji like giving
+ a message a heart or poop emoji. */
+    uint32_t emoji; 
+    /* Location structure */
+    bool has_location;
+    Location location; 
+} Data;
+
+/* The bluetooth to device link:
+ Old BTLE protocol docs from TODO, merge in above and make real docs...
+ use protocol buffers, and NanoPB
+ messages from device to phone:
+ POSITION_UPDATE (..., time)
+ TEXT_RECEIVED(from, text, time)
+ OPAQUE_RECEIVED(from, payload, time) (for signal messages or other applications)
+ messages from phone to device:
+ SET_MYID(id, human readable long, human readable short) (send down the unique ID
+ string used for this node, a human readable string shown for that id, and a very
+ short human readable string suitable for oled screen) SEND_OPAQUE(dest, payload)
+ (for signal messages or other applications) SEND_TEXT(dest, text) Get all
+ nodes() (returns list of nodes, with full info, last time seen, loc, battery
+ level etc) SET_CONFIG (switches device to a new set of radio params and
+ preshared key, drops all existing nodes, force our node to rejoin this new group)
+ Full information about a node on the mesh */
+typedef struct _NodeInfo { 
+    /* The node number */
+    uint32_t num; 
+    /* The user info for this node */
+    bool has_user;
+    User user; 
+    /* This position data. Note: before 1.2.14 we would also store the last time we've heard from this node in position.time, that is no longer true.
+ Position.time now indicates the last time we received a POSITION from that node. */
+    bool has_position;
+    Position position; 
+    /* Returns the Signal-to-noise ratio (SNR) of the last received message,
+ as measured by the receiver. Return SNR of the last received message in dB */
+    float snr; 
+    /* Set to indicate the last time we received a packet from this node */
+    uint32_t last_heard; 
+    /* The latest device metrics for the node. */
+    bool has_device_metrics;
+    DeviceMetrics device_metrics; 
+} NodeInfo;
+
+/* A Routing control Data packet handled by the routing module */
+typedef struct _Routing { 
+    /* A route request going from the requester */
+    pb_size_t which_variant;
+    union {
+        RouteDiscovery route_request;
+        RouteDiscovery route_reply;
+        Routing_Error error_reason;
+    }; 
+} Routing;
 
 typedef PB_BYTES_ARRAY_T(256) MeshPacket_encrypted_t;
 /* A packet envelope sent/received over the mesh
@@ -452,7 +553,7 @@ typedef PB_BYTES_ARRAY_T(256) MeshPacket_encrypted_t;
 typedef struct _MeshPacket { 
     /* The sending node number.
  Note: Our crypto implementation uses this field as well.
- See [crypto](/developers/device/encryption.md) for details.
+ See [crypto](/docs/developers/firmware/encryption) for details.
  FIXME - really should be fixed32 instead, this encoding only hurts the ble link though. */
     uint32_t from; 
     /* The (immediatSee Priority description for more details.y should be fixed32 instead, this encoding only
@@ -466,11 +567,13 @@ typedef struct _MeshPacket {
  contains the 'channel hash' instead of the index.
  This 'trick' is only used while the payloadVariant is an 'encrypted'. */
     uint8_t channel; 
+    /* TODO: REPLACE */
     pb_size_t which_payloadVariant;
     union {
         Data decoded;
         MeshPacket_encrypted_t encrypted;
     }; 
+    /* TODO: REPLACE */
     uint32_t id; 
     /* A unique ID for this packet.
  Always 0 for no-ack packets or non broadcast packets (and therefore take zero bytes of space).
@@ -479,7 +582,7 @@ typedef struct _MeshPacket {
  needs to be unique for a few minutes (long enough to last for the length of
  any ACK or the completion of a mesh broadcast flood).
  Note: Our crypto implementation uses this id as well.
- See [crypto](/developers/device/encryption.md) for details.
+ See [crypto](/docs/developers/firmware/encryption) for details.
  FIXME - really should be fixed32 instead, this encoding only
  hurts the ble link though. */
     uint32_t rx_time; 
@@ -514,63 +617,15 @@ typedef struct _MeshPacket {
     MeshPacket_Delayed delayed; 
 } MeshPacket;
 
-/* The bluetooth to device link:
-
- Old BTLE protocol docs from TODO, merge in above and make real docs...
-
- use protocol buffers, and NanoPB
-
- messages from device to phone:
- POSITION_UPDATE (..., time)
- TEXT_RECEIVED(from, text, time)
- OPAQUE_RECEIVED(from, payload, time) (for signal messages or other applications)
-
- messages from phone to device:
- SET_MYID(id, human readable long, human readable short) (send down the unique ID
- string used for this node, a human readable string shown for that id, and a very
- short human readable string suitable for oled screen) SEND_OPAQUE(dest, payload)
- (for signal messages or other applications) SEND_TEXT(dest, text) Get all
- nodes() (returns list of nodes, with full info, last time seen, loc, battery
- level etc) SET_CONFIG (switches device to a new set of radio params and
- preshared key, drops all existing nodes, force our node to rejoin this new group)
-
- Full information about a node on the mesh */
-typedef struct _NodeInfo { 
-    /* The node number */
-    uint32_t num; 
-    /* The user info for this node */
-    bool has_user;
-    User user; 
-    /* This position data. Note: before 1.2.14 we would also store the last time we've heard from this node in position.time, that is no longer true.
- Position.time now indicates the last time we received a POSITION from that node. */
-    bool has_position;
-    Position position; 
-    /* Returns the Signal-to-noise ratio (SNR) of the last received message,
- as measured by the receiver. Return SNR of the last received message in dB */
-    uint32_t last_heard; 
-    /* Set to indicate the last time we received a packet from this node */
-    float snr; 
-} NodeInfo;
-
-/* A Routing control Data packet handled by the routing plugin */
-typedef struct _Routing { 
-    /* A route request going from the requester */
-    pb_size_t which_variant;
-    union {
-        RouteDiscovery route_request;
-        RouteDiscovery route_reply;
-        Routing_Error error_reason;
-    }; 
-} Routing;
-
 /* Packets from the radio to the phone will appear on the fromRadio characteristic.
  It will support READ and NOTIFY. When a new packet arrives the device will BLE notify?
  It will sit in that descriptor until consumed by the phone,
  at which point the next item in the FIFO will be populated. */
 typedef struct _FromRadio { 
-    /* The packet num, used to allow the phone to request missing read packets from the FIFO,
+    /* The packet id, used to allow the phone to request missing read packets from the FIFO,
  see our bluetooth docs */
-    uint32_t num; 
+    uint32_t id; 
+    /* Log levels, chosen to match python logging conventions. */
     pb_size_t which_payloadVariant;
     union {
         MyNodeInfo my_info;
@@ -598,12 +653,8 @@ typedef struct _ToRadio {
 
 /* Helper constants for enums */
 #define _HardwareModel_MIN HardwareModel_UNSET
-#define _HardwareModel_MAX HardwareModel_DIY_V1
-#define _HardwareModel_ARRAYSIZE ((HardwareModel)(HardwareModel_DIY_V1+1))
-
-#define _Team_MIN Team_CLEAR
-#define _Team_MAX Team_BROWN
-#define _Team_ARRAYSIZE ((Team)(Team_BROWN+1))
+#define _HardwareModel_MAX HardwareModel_PRIVATE_HW
+#define _HardwareModel_ARRAYSIZE ((HardwareModel)(HardwareModel_PRIVATE_HW+1))
 
 #define _Constants_MIN Constants_Unused
 #define _Constants_MAX Constants_DATA_PAYLOAD_LEN
@@ -643,47 +694,49 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define Position_init_default                    {0, 0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define User_init_default                        {"", "", "", {0}, _HardwareModel_MIN, 0, _Team_MIN, 0, 0, 0, {0}}
+#define Position_init_default                    {0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define User_init_default                        {"", "", "", {0}, _HardwareModel_MIN, 0, 0, 0, 0}
 #define RouteDiscovery_init_default              {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_default                     {0, {RouteDiscovery_init_default}}
-#define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0}
+#define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, Location_init_default}
+#define Location_init_default                    {0, 0, 0, 0, 0}
 #define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
-#define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0}
-#define MyNodeInfo_init_default                  {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, {0}, 0}
+#define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0, false, DeviceMetrics_init_default}
+#define MyNodeInfo_init_default                  {0, 0, "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
 #define LogRecord_init_default                   {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_default                   {0, 0, {MyNodeInfo_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
 #define ToRadio_PeerInfo_init_default            {0, 0}
-#define Position_init_zero                       {0, 0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define User_init_zero                           {"", "", "", {0}, _HardwareModel_MIN, 0, _Team_MIN, 0, 0, 0, {0}}
+#define Compressed_init_default                  {_PortNum_MIN, {0, {0}}}
+#define Position_init_zero                       {0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define User_init_zero                           {"", "", "", {0}, _HardwareModel_MIN, 0, 0, 0, 0}
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_zero                        {0, {RouteDiscovery_init_zero}}
-#define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0}
+#define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, Location_init_zero}
+#define Location_init_zero                       {0, 0, 0, 0, 0}
 #define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
-#define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0}
-#define MyNodeInfo_init_zero                     {0, 0, 0, "", "", "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, {0}, 0}
+#define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0, false, DeviceMetrics_init_zero}
+#define MyNodeInfo_init_zero                     {0, 0, "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
 #define LogRecord_init_zero                      {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_zero                      {0, 0, {MyNodeInfo_init_zero}}
 #define ToRadio_init_zero                        {0, {MeshPacket_init_zero}}
 #define ToRadio_PeerInfo_init_zero               {0, 0}
+#define Compressed_init_zero                     {_PortNum_MIN, {0, {0}}}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define Data_portnum_tag                         1
-#define Data_payload_tag                         2
-#define Data_want_response_tag                   3
-#define Data_dest_tag                            4
-#define Data_source_tag                          5
-#define Data_request_id_tag                      6
+#define Compressed_portnum_tag                   1
+#define Compressed_data_tag                      2
+#define Location_id_tag                          1
+#define Location_latitude_i_tag                  2
+#define Location_longitude_i_tag                 3
+#define Location_expire_tag                      4
+#define Location_locked_tag                      5
 #define LogRecord_message_tag                    1
 #define LogRecord_time_tag                       2
 #define LogRecord_source_tag                     3
 #define LogRecord_level_tag                      4
 #define MyNodeInfo_my_node_num_tag               1
 #define MyNodeInfo_has_gps_tag                   2
-#define MyNodeInfo_num_bands_tag                 3
-#define MyNodeInfo_region_tag                    4
-#define MyNodeInfo_hw_model_deprecated_tag       5
 #define MyNodeInfo_firmware_version_tag          6
 #define MyNodeInfo_error_code_tag                7
 #define MyNodeInfo_error_address_tag             8
@@ -696,12 +749,11 @@ extern "C" {
 #define MyNodeInfo_air_period_tx_tag             16
 #define MyNodeInfo_air_period_rx_tag             17
 #define MyNodeInfo_has_wifi_tag                  18
-#define MyNodeInfo_private_key_tag               20
-#define MyNodeInfo_bluetooth_paired_tag          21
+#define MyNodeInfo_channel_utilization_tag       19
+#define MyNodeInfo_air_util_tx_tag               20
 #define Position_latitude_i_tag                  1
 #define Position_longitude_i_tag                 2
 #define Position_altitude_tag                    3
-#define Position_battery_level_tag               4
 #define Position_time_tag                        9
 #define Position_location_source_tag             10
 #define Position_altitude_source_tag             11
@@ -730,11 +782,27 @@ extern "C" {
 #define User_macaddr_tag                         4
 #define User_hw_model_tag                        6
 #define User_is_licensed_tag                     7
-#define User_team_tag                            8
 #define User_tx_power_dbm_tag                    10
 #define User_ant_gain_dbi_tag                    11
 #define User_ant_azimuth_tag                     12
-#define User_public_key_tag                      13
+#define Data_portnum_tag                         1
+#define Data_payload_tag                         2
+#define Data_want_response_tag                   3
+#define Data_dest_tag                            4
+#define Data_source_tag                          5
+#define Data_request_id_tag                      6
+#define Data_reply_id_tag                        7
+#define Data_emoji_tag                           8
+#define Data_location_tag                        9
+#define NodeInfo_num_tag                         1
+#define NodeInfo_user_tag                        2
+#define NodeInfo_position_tag                    3
+#define NodeInfo_snr_tag                         4
+#define NodeInfo_last_heard_tag                  5
+#define NodeInfo_device_metrics_tag              6
+#define Routing_route_request_tag                1
+#define Routing_route_reply_tag                  2
+#define Routing_error_reason_tag                 3
 #define MeshPacket_from_tag                      1
 #define MeshPacket_to_tag                        2
 #define MeshPacket_channel_tag                   3
@@ -748,15 +816,7 @@ extern "C" {
 #define MeshPacket_priority_tag                  12
 #define MeshPacket_rx_rssi_tag                   13
 #define MeshPacket_delayed_tag                   15
-#define NodeInfo_num_tag                         1
-#define NodeInfo_user_tag                        2
-#define NodeInfo_position_tag                    3
-#define NodeInfo_last_heard_tag                  4
-#define NodeInfo_snr_tag                         7
-#define Routing_route_request_tag                1
-#define Routing_route_reply_tag                  2
-#define Routing_error_reason_tag                 3
-#define FromRadio_num_tag                        1
+#define FromRadio_id_tag                         1
 #define FromRadio_my_info_tag                    3
 #define FromRadio_node_info_tag                  4
 #define FromRadio_log_record_tag                 7
@@ -773,7 +833,6 @@ extern "C" {
 X(a, STATIC,   SINGULAR, SFIXED32, latitude_i,        1) \
 X(a, STATIC,   SINGULAR, SFIXED32, longitude_i,       2) \
 X(a, STATIC,   SINGULAR, INT32,    altitude,          3) \
-X(a, STATIC,   SINGULAR, INT32,    battery_level,     4) \
 X(a, STATIC,   SINGULAR, FIXED32,  time,              9) \
 X(a, STATIC,   SINGULAR, UENUM,    location_source,  10) \
 X(a, STATIC,   SINGULAR, UENUM,    altitude_source,  11) \
@@ -803,7 +862,6 @@ X(a, STATIC,   SINGULAR, STRING,   short_name,        3) \
 X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, macaddr,           4) \
 X(a, STATIC,   SINGULAR, UENUM,    hw_model,          6) \
 X(a, STATIC,   SINGULAR, BOOL,     is_licensed,       7) \
-X(a, STATIC,   SINGULAR, UENUM,    team,              8) \
 X(a, STATIC,   SINGULAR, UINT32,   tx_power_dbm,     10) \
 X(a, STATIC,   SINGULAR, UINT32,   ant_gain_dbi,     11) \
 X(a, STATIC,   SINGULAR, UINT32,   ant_azimuth,      12) \
@@ -831,9 +889,22 @@ X(a, STATIC,   SINGULAR, BYTES,    payload,           2) \
 X(a, STATIC,   SINGULAR, BOOL,     want_response,     3) \
 X(a, STATIC,   SINGULAR, FIXED32,  dest,              4) \
 X(a, STATIC,   SINGULAR, FIXED32,  source,            5) \
-X(a, STATIC,   SINGULAR, FIXED32,  request_id,        6)
+X(a, STATIC,   SINGULAR, FIXED32,  request_id,        6) \
+X(a, STATIC,   SINGULAR, FIXED32,  reply_id,          7) \
+X(a, STATIC,   SINGULAR, FIXED32,  emoji,             8) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  location,          9)
 #define Data_CALLBACK NULL
 #define Data_DEFAULT NULL
+#define Data_location_MSGTYPE Location
+
+#define Location_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   id,                1) \
+X(a, STATIC,   SINGULAR, SFIXED32, latitude_i,        2) \
+X(a, STATIC,   SINGULAR, SFIXED32, longitude_i,       3) \
+X(a, STATIC,   SINGULAR, UINT32,   expire,            4) \
+X(a, STATIC,   SINGULAR, BOOL,     locked,            5)
+#define Location_CALLBACK NULL
+#define Location_DEFAULT NULL
 
 #define MeshPacket_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, FIXED32,  from,              1) \
@@ -857,19 +928,18 @@ X(a, STATIC,   SINGULAR, UENUM,    delayed,          15)
 X(a, STATIC,   SINGULAR, UINT32,   num,               1) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  user,              2) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  position,          3) \
-X(a, STATIC,   SINGULAR, FIXED32,  last_heard,        4) \
-X(a, STATIC,   SINGULAR, FLOAT,    snr,               7)
+X(a, STATIC,   SINGULAR, FLOAT,    snr,               4) \
+X(a, STATIC,   SINGULAR, FIXED32,  last_heard,        5) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  device_metrics,    6)
 #define NodeInfo_CALLBACK NULL
 #define NodeInfo_DEFAULT NULL
 #define NodeInfo_user_MSGTYPE User
 #define NodeInfo_position_MSGTYPE Position
+#define NodeInfo_device_metrics_MSGTYPE DeviceMetrics
 
 #define MyNodeInfo_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   my_node_num,       1) \
 X(a, STATIC,   SINGULAR, BOOL,     has_gps,           2) \
-X(a, STATIC,   SINGULAR, UINT32,   num_bands,         3) \
-X(a, STATIC,   SINGULAR, STRING,   region,            4) \
-X(a, STATIC,   SINGULAR, STRING,   hw_model_deprecated,   5) \
 X(a, STATIC,   SINGULAR, STRING,   firmware_version,   6) \
 X(a, STATIC,   SINGULAR, UENUM,    error_code,        7) \
 X(a, STATIC,   SINGULAR, UINT32,   error_address,     8) \
@@ -882,8 +952,8 @@ X(a, STATIC,   SINGULAR, UINT32,   max_channels,     15) \
 X(a, STATIC,   REPEATED, UINT32,   air_period_tx,    16) \
 X(a, STATIC,   REPEATED, UINT32,   air_period_rx,    17) \
 X(a, STATIC,   SINGULAR, BOOL,     has_wifi,         18) \
-X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, private_key,      20) \
-X(a, STATIC,   SINGULAR, BOOL,     bluetooth_paired,  21)
+X(a, STATIC,   SINGULAR, FLOAT,    channel_utilization,  19) \
+X(a, STATIC,   SINGULAR, FLOAT,    air_util_tx,      20)
 #define MyNodeInfo_CALLBACK NULL
 #define MyNodeInfo_DEFAULT NULL
 
@@ -896,7 +966,7 @@ X(a, STATIC,   SINGULAR, UENUM,    level,             4)
 #define LogRecord_DEFAULT NULL
 
 #define FromRadio_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UINT32,   num,               1) \
+X(a, STATIC,   SINGULAR, UINT32,   id,                1) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,my_info,my_info),   3) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,node_info,node_info),   4) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,log_record,log_record),   7) \
@@ -926,11 +996,18 @@ X(a, STATIC,   SINGULAR, BOOL,     mqtt_gateway,      2)
 #define ToRadio_PeerInfo_CALLBACK NULL
 #define ToRadio_PeerInfo_DEFAULT NULL
 
+#define Compressed_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    portnum,           1) \
+X(a, STATIC,   SINGULAR, BYTES,    data,              2)
+#define Compressed_CALLBACK NULL
+#define Compressed_DEFAULT NULL
+
 extern const pb_msgdesc_t Position_msg;
 extern const pb_msgdesc_t User_msg;
 extern const pb_msgdesc_t RouteDiscovery_msg;
 extern const pb_msgdesc_t Routing_msg;
 extern const pb_msgdesc_t Data_msg;
+extern const pb_msgdesc_t Location_msg;
 extern const pb_msgdesc_t MeshPacket_msg;
 extern const pb_msgdesc_t NodeInfo_msg;
 extern const pb_msgdesc_t MyNodeInfo_msg;
@@ -938,6 +1015,7 @@ extern const pb_msgdesc_t LogRecord_msg;
 extern const pb_msgdesc_t FromRadio_msg;
 extern const pb_msgdesc_t ToRadio_msg;
 extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
+extern const pb_msgdesc_t Compressed_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define Position_fields &Position_msg
@@ -945,6 +1023,7 @@ extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 #define RouteDiscovery_fields &RouteDiscovery_msg
 #define Routing_fields &Routing_msg
 #define Data_fields &Data_msg
+#define Location_fields &Location_msg
 #define MeshPacket_fields &MeshPacket_msg
 #define NodeInfo_fields &NodeInfo_msg
 #define MyNodeInfo_fields &MyNodeInfo_msg
@@ -952,20 +1031,23 @@ extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 #define FromRadio_fields &FromRadio_msg
 #define ToRadio_fields &ToRadio_msg
 #define ToRadio_PeerInfo_fields &ToRadio_PeerInfo_msg
+#define Compressed_fields &Compressed_msg
 
 /* Maximum encoded size of messages (where known) */
-#define Data_size                                260
-#define FromRadio_size                           492
+#define Compressed_size                          243
+#define Data_size                                296
+#define FromRadio_size                           356
+#define Location_size                            24
 #define LogRecord_size                           81
-#define MeshPacket_size                          311
-#define MyNodeInfo_size                          483
-#define NodeInfo_size                            305
-#define Position_size                            153
+#define MeshPacket_size                          347
+#define MyNodeInfo_size                          197
+#define NodeInfo_size                            281
+#define Position_size                            142
 #define RouteDiscovery_size                      40
 #define Routing_size                             42
 #define ToRadio_PeerInfo_size                    8
-#define ToRadio_size                             314
-#define User_size                                130
+#define ToRadio_size                             350
+#define User_size                                95
 
 #ifdef __cplusplus
 } /* extern "C" */

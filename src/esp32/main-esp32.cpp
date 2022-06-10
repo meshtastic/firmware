@@ -3,7 +3,14 @@
 #include "configuration.h"
 #include "esp_task_wdt.h"
 #include "main.h"
+
+#ifdef USE_NEW_ESP32_BLUETOOTH
+#include "ESP32Bluetooth.h"
+#include "mesh/http/WiFiAPClient.h"
+#else
 #include "nimble/BluetoothUtil.h"
+#endif
+
 #include "sleep.h"
 #include "target_specific.h"
 #include "utils.h"
@@ -11,6 +18,10 @@
 #include <driver/rtc_io.h>
 #include <nvs.h>
 #include <nvs_flash.h>
+
+#ifdef USE_NEW_ESP32_BLUETOOTH
+ESP32Bluetooth *esp32Bluetooth;
+#endif
 
 void getMacAddr(uint8_t *dmac)
 {
@@ -28,6 +39,21 @@ static void printBLEinfo() {
     }
 
 } */
+#ifdef USE_NEW_ESP32_BLUETOOTH
+void setBluetoothEnable(bool on) {
+    
+    if (!isWifiAvailable()) {
+        if (!esp32Bluetooth) {
+            esp32Bluetooth = new ESP32Bluetooth();
+        }
+        if (on) {
+            esp32Bluetooth->setup();
+        } else {
+            esp32Bluetooth->shutdown();
+        }
+    }
+}
+#endif
 
 void esp32Setup()
 {
@@ -43,8 +69,8 @@ void esp32Setup()
     nvs_stats_t nvs_stats;
     auto res = nvs_get_stats(NULL, &nvs_stats);
     assert(res == ESP_OK);
-    DEBUG_MSG("NVS: UsedEntries %d, FreeEntries %d, AllEntries %d\n", nvs_stats.used_entries, nvs_stats.free_entries,
-              nvs_stats.total_entries);
+    DEBUG_MSG("NVS: UsedEntries %d, FreeEntries %d, AllEntries %d, NameSpaces %d\n", nvs_stats.used_entries, nvs_stats.free_entries,
+              nvs_stats.total_entries, nvs_stats.namespace_count);
 
     DEBUG_MSG("Setup Preferences in Flash Storage\n");
 
@@ -92,11 +118,12 @@ uint32_t axpDebugRead()
 Periodic axpDebugOutput(axpDebugRead);
 #endif
 
+
 /// loop code specific to ESP32 targets
 void esp32Loop()
 {
     esp_task_wdt_reset(); // service our app level watchdog
-    loopBLE();
+    //loopBLE();
 
     // for debug printing
     // radio.radioIf.canSleep();

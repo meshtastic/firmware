@@ -18,7 +18,7 @@ class MeshPacketQueue
     bool replaceLowerPriorityPacket(MeshPacket *mp);
 
   public:
-    MeshPacketQueue(size_t _maxLen);
+    explicit MeshPacketQueue(size_t _maxLen);
 
     /** enqueue a packet, return false if full */
     bool enqueue(MeshPacket *p);
@@ -27,6 +27,8 @@ class MeshPacketQueue
     bool empty();
 
     MeshPacket *dequeue();
+
+    MeshPacket *getFront();
 
     /** Attempt to find and remove a packet from this queue.  Returns the packet which was removed from the queue */
     MeshPacket *remove(NodeNum from, PacketId id);

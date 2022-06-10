@@ -5,6 +5,7 @@
 #define PB_APPONLY_PB_H_INCLUDED
 #include <pb.h>
 #include "channel.pb.h"
+#include "config.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
@@ -17,7 +18,12 @@
  No DISABLED channels are included.
  This abstraction is used only on the the 'app side' of the world (ie python, javascript and android etc) to show a group of Channels as a (long) URL */
 typedef struct _ChannelSet { 
-    pb_callback_t settings; 
+    /* Channel list with settings */
+    pb_size_t settings_count;
+    ChannelSettings settings[8]; 
+    /* LoRa config */
+    bool has_lora_config;
+    Config_LoRaConfig lora_config; 
 } ChannelSet;
 
 
@@ -26,18 +32,21 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define ChannelSet_init_default                  {{{NULL}, NULL}}
-#define ChannelSet_init_zero                     {{{NULL}, NULL}}
+#define ChannelSet_init_default                  {0, {ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default}, false, Config_LoRaConfig_init_default}
+#define ChannelSet_init_zero                     {0, {ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero}, false, Config_LoRaConfig_init_zero}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define ChannelSet_settings_tag                  1
+#define ChannelSet_lora_config_tag               2
 
 /* Struct field encoding specification for nanopb */
 #define ChannelSet_FIELDLIST(X, a) \
-X(a, CALLBACK, REPEATED, MESSAGE,  settings,          1)
-#define ChannelSet_CALLBACK pb_default_field_callback
+X(a, STATIC,   REPEATED, MESSAGE,  settings,          1) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  lora_config,       2)
+#define ChannelSet_CALLBACK NULL
 #define ChannelSet_DEFAULT NULL
 #define ChannelSet_settings_MSGTYPE ChannelSettings
+#define ChannelSet_lora_config_MSGTYPE Config_LoRaConfig
 
 extern const pb_msgdesc_t ChannelSet_msg;
 
@@ -45,7 +54,7 @@ extern const pb_msgdesc_t ChannelSet_msg;
 #define ChannelSet_fields &ChannelSet_msg
 
 /* Maximum encoded size of messages (where known) */
-/* ChannelSet_size depends on runtime parameters */
+#define ChannelSet_size                          573
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -1,5 +1,5 @@
-#include "configuration.h"
 #include "FloodingRouter.h"
+#include "configuration.h"
 #include "mesh-pb-constants.h"
 
 FloodingRouter::FloodingRouter() {}
@@ -29,18 +29,22 @@ bool FloodingRouter::shouldFilterReceived(MeshPacket *p)
 
 void FloodingRouter::sniffReceived(const MeshPacket *p, const Routing *c)
 {
-    // If a broadcast, possibly _also_ send copies out into the mesh.
-    // (FIXME, do something smarter than naive flooding here)
-    if (p->to == NODENUM_BROADCAST && p->hop_limit > 0 && getFrom(p) != getNodeNum()) {
+
+    if ((p->to == NODENUM_BROADCAST) && (p->hop_limit > 0) && (getFrom(p) != getNodeNum())) {
         if (p->id != 0) {
-            MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
+            if (config.device.role != Config_DeviceConfig_Role_ClientMute) {
+                MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
 
-            tosend->hop_limit--; // bump down the hop count
+                tosend->hop_limit--; // bump down the hop count
 
-            printPacket("Rebroadcasting received floodmsg to neighbors", p);
-            // Note: we are careful to resend using the original senders node id
-            // We are careful not to call our hooked version of send() - because we don't want to check this again
-            Router::send(tosend);
+                printPacket("Rebroadcasting received floodmsg to neighbors", p);
+                // Note: we are careful to resend using the original senders node id
+                // We are careful not to call our hooked version of send() - because we don't want to check this again
+                Router::send(tosend);
+
+            } else {
+                DEBUG_MSG("Not rebroadcasting. Role = Role_ClientMute\n");
+            }
 
         } else {
             DEBUG_MSG("Ignoring a simple (0 id) broadcast\n");

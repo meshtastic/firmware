@@ -76,13 +76,13 @@ bool RF95Interface::init()
     DEBUG_MSG("Current limit set to %f\n", currentLimit);
     DEBUG_MSG("Current limit set result %d\n", res);
 
-    if (res == ERR_NONE)
-        res = lora->setCRC(SX126X_LORA_CRC_ON);
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora->setCRC(RADIOLIB_SX126X_LORA_CRC_ON);
 
-    if (res == ERR_NONE)
+    if (res == RADIOLIB_ERR_NONE)
         startReceive(); // start receiving
 
-    return res == ERR_NONE;
+    return res == RADIOLIB_ERR_NONE;
 }
 
 void INTERRUPT_ATTR RF95Interface::disableInterrupt()
@@ -99,39 +99,39 @@ bool RF95Interface::reconfigure()
 
     // configure publicly accessible settings
     int err = lora->setSpreadingFactor(sf);
-    if (err != ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(CriticalErrorCode_InvalidRadioSetting);
 
     err = lora->setBandwidth(bw);
-    if (err != ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(CriticalErrorCode_InvalidRadioSetting);
 
     err = lora->setCodingRate(cr);
-    if (err != ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(CriticalErrorCode_InvalidRadioSetting);
 
     err = lora->setSyncWord(syncWord);
-    assert(err == ERR_NONE);
+    assert(err == RADIOLIB_ERR_NONE);
 
     err = lora->setCurrentLimit(currentLimit);
-    assert(err == ERR_NONE);
+    assert(err == RADIOLIB_ERR_NONE);
 
     err = lora->setPreambleLength(preambleLength);
-    assert(err == ERR_NONE);
+    assert(err == RADIOLIB_ERR_NONE);
 
     err = lora->setFrequency(getFreq());
-    if (err != ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(CriticalErrorCode_InvalidRadioSetting);
 
     if (power > MAX_POWER) // This chip has lower power limits than some
         power = MAX_POWER;
     err = lora->setOutputPower(power);
-    if (err != ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(CriticalErrorCode_InvalidRadioSetting);
 
     startReceive(); // restart receiving
 
-    return ERR_NONE;
+    return RADIOLIB_ERR_NONE;
 }
 
 /**
@@ -140,12 +140,14 @@ bool RF95Interface::reconfigure()
 void RF95Interface::addReceiveMetadata(MeshPacket *mp)
 {
     mp->rx_snr = lora->getSNR();
+    mp->rx_rssi = lround(lora->getRSSI());
+
 }
 
 void RF95Interface::setStandby()
 {
     int err = lora->standby();
-    assert(err == ERR_NONE);
+    assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = false; // If we were receiving, not any more
     disableInterrupt();
@@ -166,12 +168,30 @@ void RF95Interface::startReceive()
     setTransmitEnable(false);
     setStandby();
     int err = lora->startReceive();
-    assert(err == ERR_NONE);
+    assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = true;
 
     // Must be done AFTER, starting receive, because startReceive clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
+}
+
+bool RF95Interface::isChannelActive()
+{
+    // check if we can detect a LoRa preamble on the current channel
+    int16_t result;
+    setTransmitEnable(false);
+    setStandby();  // needed for smooth transition
+    result = lora->scanChannel();
+    
+    if (result == RADIOLIB_PREAMBLE_DETECTED) {
+        // DEBUG_MSG("Channel is busy!\n");
+        return true;
+    }
+    assert(result != RADIOLIB_ERR_WRONG_MODEM);
+    
+    // DEBUG_MSG("Channel is free!\n");
+    return false;
 }
 
 /** Could we send right now (i.e. either not actively receving or transmitting)? */

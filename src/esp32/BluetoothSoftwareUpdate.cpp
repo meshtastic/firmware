@@ -1,3 +1,5 @@
+#ifndef USE_NEW_ESP32_BLUETOOTH
+
 #include <Arduino.h>
 
 #include "../concurrency/LockGuard.h"
@@ -58,7 +60,7 @@ int update_size_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_
     return 0;
 }
 
-#define MAX_BLOCKSIZE 512
+#define MAX_BLOCKSIZE_FOR_BT 512
 
 /// Handle writes to data
 int update_data_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
@@ -66,7 +68,7 @@ int update_data_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble_
     concurrency::LockGuard g(updateLock);
 
     static uint8_t
-        data[MAX_BLOCKSIZE]; // we temporarily copy here because I'm worried that a fast sender might be able overwrite srcbuf
+        data[MAX_BLOCKSIZE_FOR_BT]; // we temporarily copy here because I'm worried that a fast sender might be able overwrite srcbuf
 
     uint16_t len = 0;
 
@@ -104,8 +106,8 @@ int update_crc32_callback(uint16_t conn_handle, uint16_t attr_handle, struct ble
     } else {
         if (Update.end()) {
             if (update_region == U_SPIFFS) {
-                DEBUG_MSG("SPIFFS updated!\n");
-                nodeDB.saveToDisk(); // Since we just wiped spiffs, we need to save our current state
+                DEBUG_MSG("Filesystem updated!\n");
+                nodeDB.saveToDisk(); // Since we just wiped the filesystem, we need to save our current state
             } else {
                 DEBUG_MSG("Appload updated, rebooting in 5 seconds!\n");
                 rebootAtMsec = millis() + 5000;
@@ -154,3 +156,5 @@ void reinitUpdateService()
     res = ble_gatts_add_svcs(gatt_update_svcs);
     assert(res == 0);
 }
+
+#endif //#ifndef USE_NEW_ESP32_BLUETOOTH
