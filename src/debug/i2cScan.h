@@ -122,6 +122,23 @@ void scanI2Cdevice(void)
                 nodeTelemetrySensorsMap[TelemetrySensorType_BME280] = addr;
             }
         }
+        if (addr == INA_ADDR || addr == INA_ADDR_ALTERNATE) {
+            Wire.beginTransmission(addr);
+            Wire.write(0xFE); // INA260_REG_MFG_UID
+            Wire.endTransmission();
+            delay(20);
+            Wire.requestFrom((int)addr, 1);
+            if (Wire.available()) {
+                r = Wire.read();
+            }
+            if (r == 0x5449) {
+                DEBUG_MSG("INA260 sensor found at address 0x%x\n", (uint8_t)addr);
+                nodeTelemetrySensorsMap[TelemetrySensorType_INA260] = addr;
+            } else { // Assume INA219 if INA260 mfr ID is not found
+                DEBUG_MSG("INA219 sensor found at address 0x%x\n", (uint8_t)addr);
+                nodeTelemetrySensorsMap[TelemetrySensorType_INA219] = addr;
+            }
+        }
         if (addr == MCP9808_ADDR) {
             nodeTelemetrySensorsMap[TelemetrySensorType_MCP9808] = addr;
             DEBUG_MSG("MCP9808 sensor found at address 0x%x\n", (uint8_t)addr);
