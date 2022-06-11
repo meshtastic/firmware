@@ -127,7 +127,7 @@ void scanI2Cdevice(void)
             Wire.write(0xFE); // INA260_REG_MFG_UID
             Wire.endTransmission();
             delay(20);
-            Wire.requestFrom((int)addr, 1);
+            Wire.requestFrom((int)addr, 2);
             if (Wire.available()) {
                 r = Wire.read();
             }
