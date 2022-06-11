@@ -131,6 +131,7 @@ void scanI2Cdevice(void)
             if (Wire.available()) {
                 r = Wire.read();
             }
+            DEBUG_MSG("INA260_REG_MFG_UID: 0x%x\n", (uint8_t)r);
             if (r == 0x5449) {
                 DEBUG_MSG("INA260 sensor found at address 0x%x\n", (uint8_t)addr);
                 nodeTelemetrySensorsMap[TelemetrySensorType_INA260] = addr;

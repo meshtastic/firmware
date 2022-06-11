@@ -102,8 +102,6 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = bme280Sensor.runOnce();
             if (mcp9808Sensor.hasSensor()) 
                 result = mcp9808Sensor.runOnce();
-            if (mcp9808Sensor.hasSensor()) 
-                result = mcp9808Sensor.runOnce();
             if (ina260Sensor.hasSensor()) 
                 result = ina260Sensor.runOnce();
             if (ina219Sensor.hasSensor())
