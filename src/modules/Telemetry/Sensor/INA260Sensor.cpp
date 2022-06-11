@@ -24,7 +24,7 @@ void INA260Sensor::setup()
 
 bool INA260Sensor::getMetrics(Telemetry *measurement) {
     // mV conversion to V
-    measurement->variant.environment_metrics.voltage = ina260.readBusVoltage() * 1000;
+    measurement->variant.environment_metrics.voltage = ina260.readBusVoltage() / 1000;
     measurement->variant.environment_metrics.current = ina260.readCurrent();
     return true;
 }    
