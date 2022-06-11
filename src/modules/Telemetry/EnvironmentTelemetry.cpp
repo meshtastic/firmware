@@ -16,12 +16,17 @@
 #include "Sensor/DHTSensor.h"
 #include "Sensor/DallasSensor.h"
 #include "Sensor/MCP9808Sensor.h"
+#include "Sensor/INA260Sensor.h"
+#include "Sensor/INA219Sensor.h"
+
 
 BME280Sensor bme280Sensor;
 BME680Sensor bme680Sensor;
 DHTSensor dhtSensor;
 DallasSensor dallasSensor;
 MCP9808Sensor mcp9808Sensor;
+INA260Sensor ina260Sensor;
+INA219Sensor ina219Sensor;
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
@@ -50,6 +55,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
         Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
     */
+    moduleConfig.telemetry.environment_measurement_enabled = 1;
    
     /*
     moduleConfig.telemetry.environment_measurement_enabled = 1;
@@ -96,6 +102,10 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = bme280Sensor.runOnce();
             if (mcp9808Sensor.hasSensor()) 
                 result = mcp9808Sensor.runOnce();
+            if (ina260Sensor.hasSensor()) 
+                result = ina260Sensor.runOnce();
+            if (ina219Sensor.hasSensor())
+                result = ina219Sensor.runOnce();
         }
         return result;
     } else {
@@ -252,6 +262,10 @@ bool EnvironmentTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies
         bme680Sensor.getMetrics(&m);
     if (mcp9808Sensor.hasSensor())
         mcp9808Sensor.getMetrics(&m);
+    if (ina219Sensor.hasSensor())
+        ina219Sensor.getMetrics(&m);
+    if (ina260Sensor.hasSensor())
+        ina260Sensor.getMetrics(&m);
 
     DEBUG_MSG("Telemetry->time: %i\n", m.time);
     DEBUG_MSG("Telemetry->barometric_pressure: %f\n", m.variant.environment_metrics.barometric_pressure);

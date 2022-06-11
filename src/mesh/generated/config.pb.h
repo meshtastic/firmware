@@ -120,8 +120,6 @@ typedef struct _Config_PositionConfig {
     bool gps_disabled; 
     uint32_t gps_update_interval; 
     uint32_t gps_attempt_time; 
-    bool gps_accept_2d; 
-    uint32_t gps_max_dop; 
     uint32_t position_flags; 
 } Config_PositionConfig;
 
@@ -194,14 +192,14 @@ extern "C" {
 /* Initializer values for message structs */
 #define Config_init_default                      {0, {Config_DeviceConfig_init_default}}
 #define Config_DeviceConfig_init_default         {_Config_DeviceConfig_Role_MIN, 0, 0, 0, ""}
-#define Config_PositionConfig_init_default       {0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define Config_PositionConfig_init_default       {0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_default          {_Config_PowerConfig_ChargeCurrent_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_WiFiConfig_init_default           {"", "", 0, 0}
 #define Config_DisplayConfig_init_default        {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0}
 #define Config_LoRaConfig_init_default           {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, {0, 0, 0}}
 #define Config_init_zero                         {0, {Config_DeviceConfig_init_zero}}
 #define Config_DeviceConfig_init_zero            {_Config_DeviceConfig_Role_MIN, 0, 0, 0, ""}
-#define Config_PositionConfig_init_zero          {0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define Config_PositionConfig_init_zero          {0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_zero             {_Config_PowerConfig_ChargeCurrent_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_WiFiConfig_init_zero              {"", "", 0, 0}
 #define Config_DisplayConfig_init_zero           {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0}
@@ -232,8 +230,6 @@ extern "C" {
 #define Config_PositionConfig_gps_disabled_tag   5
 #define Config_PositionConfig_gps_update_interval_tag 6
 #define Config_PositionConfig_gps_attempt_time_tag 7
-#define Config_PositionConfig_gps_accept_2d_tag  8
-#define Config_PositionConfig_gps_max_dop_tag    9
 #define Config_PositionConfig_position_flags_tag 10
 #define Config_PowerConfig_charge_current_tag    1
 #define Config_PowerConfig_is_low_power_tag      2
@@ -291,8 +287,6 @@ X(a, STATIC,   SINGULAR, BOOL,     fixed_position,    3) \
 X(a, STATIC,   SINGULAR, BOOL,     gps_disabled,      5) \
 X(a, STATIC,   SINGULAR, UINT32,   gps_update_interval,   6) \
 X(a, STATIC,   SINGULAR, UINT32,   gps_attempt_time,   7) \
-X(a, STATIC,   SINGULAR, BOOL,     gps_accept_2d,     8) \
-X(a, STATIC,   SINGULAR, UINT32,   gps_max_dop,       9) \
 X(a, STATIC,   SINGULAR, UINT32,   position_flags,   10)
 #define Config_PositionConfig_CALLBACK NULL
 #define Config_PositionConfig_DEFAULT NULL
@@ -363,7 +357,7 @@ extern const pb_msgdesc_t Config_LoRaConfig_msg;
 #define Config_DeviceConfig_size                 42
 #define Config_DisplayConfig_size                14
 #define Config_LoRaConfig_size                   67
-#define Config_PositionConfig_size               38
+#define Config_PositionConfig_size               30
 #define Config_PowerConfig_size                  55
 #define Config_WiFiConfig_size                   103
 #define Config_size                              105
