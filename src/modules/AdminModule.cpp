@@ -306,11 +306,10 @@ void AdminModule::handleGetConfig(const MeshPacket &req, const uint32_t configTy
             break;
         }
 
-        // NOTE: The phone app needs to know the ls_secs & phone_timeout value so it can properly expect sleep behavior.
+        // NOTE: The phone app needs to know the ls_secs value so it can properly expect sleep behavior.
         // So even if we internally use 0 to represent 'use default' we still need to send the value we are
         // using to the app (so that even old phone apps work with new device loads).
         // r.get_radio_response.preferences.ls_secs = getPref_ls_secs();
-        // r.get_radio_response.preferences.phone_timeout_secs = getPref_phone_timeout_secs();
         // hideSecret(r.get_radio_response.preferences.wifi_ssid); // hmm - leave public for now, because only minimally private
         // and useful for users to know current provisioning) hideSecret(r.get_radio_response.preferences.wifi_password);
         // r.get_config_response.which_payloadVariant = Config_ModuleConfig_telemetry_tag;
@@ -363,11 +362,10 @@ void AdminModule::handleGetModuleConfig(const MeshPacket &req, const uint32_t co
             break;
         }
 
-        // NOTE: The phone app needs to know the ls_secs & phone_timeout value so it can properly expect sleep behavior.
+        // NOTE: The phone app needs to know the ls_secsvalue so it can properly expect sleep behavior.
         // So even if we internally use 0 to represent 'use default' we still need to send the value we are
         // using to the app (so that even old phone apps work with new device loads).
         // r.get_radio_response.preferences.ls_secs = getPref_ls_secs();
-        // r.get_radio_response.preferences.phone_timeout_secs = getPref_phone_timeout_secs();
         // hideSecret(r.get_radio_response.preferences.wifi_ssid); // hmm - leave public for now, because only minimally private
         // and useful for users to know current provisioning) hideSecret(r.get_radio_response.preferences.wifi_password);
         // r.get_config_response.which_payloadVariant = Config_ModuleConfig_telemetry_tag;
