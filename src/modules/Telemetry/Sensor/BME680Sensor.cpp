@@ -10,11 +10,11 @@ BME680Sensor::BME680Sensor() :
 }
 
 int32_t BME680Sensor::runOnce() {
-    DEBUG_MSG("runOnce: TelemetrySensorType_BME680\n");
+    DEBUG_MSG("Init sensor: %s\n", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    status = bme680.begin(nodeTelemetrySensorsMap[TelemetrySensorType_BME680]); 
+    status = bme680.begin(nodeTelemetrySensorsMap[sensorType]); 
     return initI2CSensor();
 }
 
@@ -29,7 +29,6 @@ void BME680Sensor::setup()
 }
 
 bool BME680Sensor::getMetrics(Telemetry *measurement) {
-    
     measurement->variant.environment_metrics.temperature = bme680.readTemperature();
     measurement->variant.environment_metrics.relative_humidity = bme680.readHumidity();
     measurement->variant.environment_metrics.barometric_pressure = bme680.readPressure() / 100.0F;
