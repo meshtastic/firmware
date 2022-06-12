@@ -131,7 +131,6 @@ typedef struct _Config_PowerConfig {
     bool is_power_saving; 
     float adc_multiplier_override; 
     uint32_t wait_bluetooth_secs; 
-    uint32_t phone_timeout_secs; 
     uint32_t mesh_sds_timeout_secs; 
     uint32_t sds_secs; 
     uint32_t ls_secs; 
@@ -193,14 +192,14 @@ extern "C" {
 #define Config_init_default                      {0, {Config_DeviceConfig_init_default}}
 #define Config_DeviceConfig_init_default         {_Config_DeviceConfig_Role_MIN, 0, 0, 0, ""}
 #define Config_PositionConfig_init_default       {0, 0, 0, 0, 0, 0, 0}
-#define Config_PowerConfig_init_default          {_Config_PowerConfig_ChargeCurrent_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define Config_PowerConfig_init_default          {_Config_PowerConfig_ChargeCurrent_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_WiFiConfig_init_default           {"", "", 0, 0}
 #define Config_DisplayConfig_init_default        {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0}
 #define Config_LoRaConfig_init_default           {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, {0, 0, 0}}
 #define Config_init_zero                         {0, {Config_DeviceConfig_init_zero}}
 #define Config_DeviceConfig_init_zero            {_Config_DeviceConfig_Role_MIN, 0, 0, 0, ""}
 #define Config_PositionConfig_init_zero          {0, 0, 0, 0, 0, 0, 0}
-#define Config_PowerConfig_init_zero             {_Config_PowerConfig_ChargeCurrent_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define Config_PowerConfig_init_zero             {_Config_PowerConfig_ChargeCurrent_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_WiFiConfig_init_zero              {"", "", 0, 0}
 #define Config_DisplayConfig_init_zero           {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0}
 #define Config_LoRaConfig_init_zero              {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, {0, 0, 0}}
@@ -238,7 +237,6 @@ extern "C" {
 #define Config_PowerConfig_is_power_saving_tag   5
 #define Config_PowerConfig_adc_multiplier_override_tag 6
 #define Config_PowerConfig_wait_bluetooth_secs_tag 7
-#define Config_PowerConfig_phone_timeout_secs_tag 8
 #define Config_PowerConfig_mesh_sds_timeout_secs_tag 9
 #define Config_PowerConfig_sds_secs_tag          10
 #define Config_PowerConfig_ls_secs_tag           11
@@ -299,7 +297,6 @@ X(a, STATIC,   SINGULAR, UINT32,   on_battery_shutdown_after_secs,   4) \
 X(a, STATIC,   SINGULAR, BOOL,     is_power_saving,   5) \
 X(a, STATIC,   SINGULAR, FLOAT,    adc_multiplier_override,   6) \
 X(a, STATIC,   SINGULAR, UINT32,   wait_bluetooth_secs,   7) \
-X(a, STATIC,   SINGULAR, UINT32,   phone_timeout_secs,   8) \
 X(a, STATIC,   SINGULAR, UINT32,   mesh_sds_timeout_secs,   9) \
 X(a, STATIC,   SINGULAR, UINT32,   sds_secs,         10) \
 X(a, STATIC,   SINGULAR, UINT32,   ls_secs,          11) \
@@ -358,7 +355,7 @@ extern const pb_msgdesc_t Config_LoRaConfig_msg;
 #define Config_DisplayConfig_size                14
 #define Config_LoRaConfig_size                   67
 #define Config_PositionConfig_size               30
-#define Config_PowerConfig_size                  55
+#define Config_PowerConfig_size                  49
 #define Config_WiFiConfig_size                   103
 #define Config_size                              105
 

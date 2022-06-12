@@ -348,9 +348,6 @@ void PowerFSM_setup()
 
     // See: https://github.com/meshtastic/Meshtastic-device/issues/1071
     if (isRouter || config.power.is_power_saving) {
-
-        // I don't think this transition is correct, turning off for now - @geeksville
-        // powerFSM.add_timed_transition(&stateDARK, &stateNB, getPref_phone_timeout_secs() * 1000, NULL, "Phone timeout");
         powerFSM.add_timed_transition(&stateNB, &stateLS,
                                       config.power.min_wake_secs ? config.power.min_wake_secs
                                                                                 : default_min_wake_secs * 1000,
