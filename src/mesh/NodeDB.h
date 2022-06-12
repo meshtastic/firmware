@@ -168,7 +168,6 @@ extern NodeDB nodeDB;
 #define default_mesh_sds_timeout_secs IF_ROUTER(NODE_DELAY_FOREVER, 2 * 60 * 60)
 #define default_sds_secs 365 * 24 * 60 * 60
 #define default_ls_secs IF_ROUTER(24 * 60 * 60, 5 * 60)
-#define default_phone_timeout_secs 15 * 60
 #define default_min_wake_secs 10
 
 

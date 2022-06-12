@@ -10,11 +10,11 @@ MCP9808Sensor::MCP9808Sensor() :
 }
 
 int32_t MCP9808Sensor::runOnce() {
-    DEBUG_MSG("Init sensor: TelemetrySensorType_MCP9808\n");
+    DEBUG_MSG("Init sensor: %s\n", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    status = mcp9808.begin(nodeTelemetrySensorsMap[TelemetrySensorType_MCP9808]);
+    status = mcp9808.begin(nodeTelemetrySensorsMap[sensorType]);
     return initI2CSensor();
 }
 
