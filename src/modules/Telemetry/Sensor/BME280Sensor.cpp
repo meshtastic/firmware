@@ -11,11 +11,11 @@ BME280Sensor::BME280Sensor() :
 }
 
 int32_t BME280Sensor::runOnce() {
-    DEBUG_MSG("Init sensor: TelemetrySensorType_BME280\n");
+    DEBUG_MSG("Init sensor: %s\n", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    status = bme280.begin(nodeTelemetrySensorsMap[TelemetrySensorType_BME280]); 
+    status = bme280.begin(nodeTelemetrySensorsMap[sensorType]); 
     return initI2CSensor();
 }
 
