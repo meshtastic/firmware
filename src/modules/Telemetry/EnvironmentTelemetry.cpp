@@ -16,12 +16,17 @@
 #include "Sensor/DHTSensor.h"
 #include "Sensor/DallasSensor.h"
 #include "Sensor/MCP9808Sensor.h"
+#include "Sensor/INA260Sensor.h"
+#include "Sensor/INA219Sensor.h"
+
 
 BME280Sensor bme280Sensor;
 BME680Sensor bme680Sensor;
 DHTSensor dhtSensor;
 DallasSensor dallasSensor;
 MCP9808Sensor mcp9808Sensor;
+INA260Sensor ina260Sensor;
+INA219Sensor ina219Sensor;
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
@@ -90,12 +95,16 @@ int32_t EnvironmentTelemetryModule::runOnce()
                     DEBUG_MSG("Environment Telemetry: No sensor type specified; Checking for detected i2c sensors\n");
                 break;
             }
-            if (hasSensor(TelemetrySensorType_BME680)) 
+            if (bme680Sensor.hasSensor()) 
                 result = bme680Sensor.runOnce();
-            if (hasSensor(TelemetrySensorType_BME280)) 
+            if (bme280Sensor.hasSensor()) 
                 result = bme280Sensor.runOnce();
-            if (hasSensor(TelemetrySensorType_MCP9808)) 
+            if (mcp9808Sensor.hasSensor()) 
                 result = mcp9808Sensor.runOnce();
+            if (ina260Sensor.hasSensor()) 
+                result = ina260Sensor.runOnce();
+            if (ina219Sensor.hasSensor())
+                result = ina219Sensor.runOnce();
         }
         return result;
     } else {
@@ -233,25 +242,29 @@ bool EnvironmentTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies
 
     switch (moduleConfig.telemetry.environment_sensor_type) {
         case TelemetrySensorType_DS18B20:
-            if (!dallasSensor.getMeasurement(&m))
+            if (!dallasSensor.getMetrics(&m))
                 sensor_read_error_count++;
             break;
         case TelemetrySensorType_DHT11:
         case TelemetrySensorType_DHT12:
         case TelemetrySensorType_DHT21:
         case TelemetrySensorType_DHT22:
-            if (!dhtSensor.getMeasurement(&m))
+            if (!dhtSensor.getMetrics(&m))
                 sensor_read_error_count++;
             break;
         default:
             DEBUG_MSG("Environment Telemetry: No specified sensor type; Trying any detected i2c sensors\n");
     }
-    if (hasSensor(TelemetrySensorType_BME280)) 
-        bme280Sensor.getMeasurement(&m);
-    if (hasSensor(TelemetrySensorType_BME680)) 
-        bme680Sensor.getMeasurement(&m);
-    if (hasSensor(TelemetrySensorType_MCP9808)) 
-        mcp9808Sensor.getMeasurement(&m);
+    if (bme280Sensor.hasSensor())
+        bme280Sensor.getMetrics(&m);
+    if (bme680Sensor.hasSensor())
+        bme680Sensor.getMetrics(&m);
+    if (mcp9808Sensor.hasSensor())
+        mcp9808Sensor.getMetrics(&m);
+    if (ina219Sensor.hasSensor())
+        ina219Sensor.getMetrics(&m);
+    if (ina260Sensor.hasSensor())
+        ina260Sensor.getMetrics(&m);
 
     DEBUG_MSG("Telemetry->time: %i\n", m.time);
     DEBUG_MSG("Telemetry->barometric_pressure: %f\n", m.variant.environment_metrics.barometric_pressure);

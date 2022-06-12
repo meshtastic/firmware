@@ -6,10 +6,12 @@
 #include <DS18B20.h>
 #include <OneWire.h>
 
-DallasSensor::DallasSensor() : TelemetrySensor{} {}
-
-int32_t DallasSensor::runOnce()
+DallasSensor::DallasSensor() : 
+    TelemetrySensor(TelemetrySensorType_DS18B20, "DS18B20") 
 {
+}
+
+int32_t DallasSensor::runOnce() {
     oneWire = new OneWire(moduleConfig.telemetry.environment_sensor_pin);
     ds18b20 = new DS18B20(oneWire);
     ds18b20->begin();
@@ -19,9 +21,10 @@ int32_t DallasSensor::runOnce()
     return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
 }
 
-bool DallasSensor::getMeasurement(Telemetry *measurement)
-{
-    DEBUG_MSG("DallasSensor::getMeasurement\n");
+void DallasSensor::setup() {}
+
+bool DallasSensor::getMetrics(Telemetry *measurement){
+    DEBUG_MSG("DallasSensor::getMetrics\n");
     if (ds18b20->isConversionComplete()) {
         measurement->variant.environment_metrics.temperature = ds18b20->getTempC();
         measurement->variant.environment_metrics.relative_humidity = 0;
