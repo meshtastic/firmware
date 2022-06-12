@@ -335,7 +335,7 @@ void PowerFSM_setup()
 
     powerFSM.add_timed_transition(&stateON, &stateDARK,
                                   config.display.screen_on_secs ? config.display.screen_on_secs
-                                                                               : 60 * 1000,
+                                                                               : 60 * 1000 * 10,
                                   NULL, "Screen-on timeout");
 
     // On most boards we use light-sleep to be our main state, but on NRF52 we just stay in DARK
@@ -348,9 +348,6 @@ void PowerFSM_setup()
 
     // See: https://github.com/meshtastic/Meshtastic-device/issues/1071
     if (isRouter || config.power.is_power_saving) {
-
-        // I don't think this transition is correct, turning off for now - @geeksville
-        // powerFSM.add_timed_transition(&stateDARK, &stateNB, getPref_phone_timeout_secs() * 1000, NULL, "Phone timeout");
         powerFSM.add_timed_transition(&stateNB, &stateLS,
                                       config.power.min_wake_secs ? config.power.min_wake_secs
                                                                                 : default_min_wake_secs * 1000,

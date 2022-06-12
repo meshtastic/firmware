@@ -4,25 +4,26 @@
 #include "MCP9808Sensor.h"
 #include <Adafruit_MCP9808.h>
 
-MCP9808Sensor::MCP9808Sensor() : TelemetrySensor {} {
+MCP9808Sensor::MCP9808Sensor() : 
+    TelemetrySensor(TelemetrySensorType_MCP9808, "MCP9808") 
+{
 }
 
 int32_t MCP9808Sensor::runOnce() {
-    unsigned mcp9808Status;
-    // Default i2c address for MCP9808
-    mcp9808Status = mcp9808.begin(0x18); 
-    if (!mcp9808Status) {
-        DEBUG_MSG("Could not find a valid MCP9808 sensor, check wiring, address, sensor ID!");
-    } else {
-        DEBUG_MSG("TelemetrySensor: Opened MCP9808 on default i2c bus");
-        // Reduce resolution from 0.0625 degrees (precision) to 0.125 degrees (high). 
-        mcp9808.setResolution(2);
+    DEBUG_MSG("Init sensor: %s\n", sensorName);
+    if (!hasSensor()) {
+        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    return (MCP_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
+    status = mcp9808.begin(nodeTelemetrySensorsMap[sensorType]);
+    return initI2CSensor();
 }
 
-bool MCP9808Sensor::getMeasurement(Telemetry *measurement) {
-    measurement->variant.environment_metrics.temperature = mcp9808.readTempC();
+void MCP9808Sensor::setup() {
+    mcp9808.setResolution(2);
+}
 
+bool MCP9808Sensor::getMetrics(Telemetry *measurement) {
+    DEBUG_MSG("MCP9808Sensor::getMetrics\n");
+    measurement->variant.environment_metrics.temperature = mcp9808.readTempC();
     return true;
 }    

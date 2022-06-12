@@ -5,11 +5,14 @@
 #include "configuration.h"
 #include <DHT.h>
 
-DHTSensor::DHTSensor() : TelemetrySensor{} {}
-
-int32_t DHTSensor::runOnce()
+DHTSensor::DHTSensor() : 
+    TelemetrySensor(TelemetrySensorType_NotSet, "DHT") 
 {
-    if (TelemetrySensorType_DHT11 || TelemetrySensorType_DHT12) {
+}
+
+int32_t DHTSensor::runOnce() {
+    if (moduleConfig.telemetry.environment_sensor_type == TelemetrySensorType_DHT11 || 
+        moduleConfig.telemetry.environment_sensor_type == TelemetrySensorType_DHT12) {
         dht = new DHT(moduleConfig.telemetry.environment_sensor_pin, DHT11);
     } else {
         dht = new DHT(moduleConfig.telemetry.environment_sensor_pin, DHT22);
@@ -17,13 +20,15 @@ int32_t DHTSensor::runOnce()
 
     dht->begin();
     dht->read();
-    DEBUG_MSG("Telemetry: Opened DHT11/DHT12 on pin: %d\n", moduleConfig.telemetry.environment_sensor_pin);
+    DEBUG_MSG("Opened DHT11/DHT12 on pin: %d\n", moduleConfig.telemetry.environment_sensor_pin);
 
-    return (DHT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS);
+    return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
 }
 
-bool DHTSensor::getMeasurement(Telemetry *measurement)
-{
+void DHTSensor::setup() { }
+
+bool DHTSensor::getMetrics(Telemetry *measurement) {
+    DEBUG_MSG("DHTSensor::getMetrics\n");
     if (!dht->read(true)) {
         DEBUG_MSG("Telemetry: FAILED TO READ DATA\n");
         return false;

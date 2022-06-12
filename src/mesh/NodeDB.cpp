@@ -308,12 +308,12 @@ static const char *channelfile = "/prefs/channels.proto";
 /** Load a protobuf from a file, return true for success */
 bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, void *dest_struct)
 {
+    bool okay = false;
 #ifdef FSCom
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
 
     auto f = FSCom.open(filename);
 
-    bool okay = false;
     if (f) {
         DEBUG_MSG("Loading %s\n", filename);
         pb_istream_t stream = {&readcb, &f, protoSize};
@@ -367,12 +367,12 @@ void NodeDB::loadFromDisk()
 /** Save a protobuf from a file, return true for success */
 bool saveProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, const void *dest_struct)
 {
+    bool okay = false;
 #ifdef FSCom
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
     String filenameTmp = filename;
     filenameTmp += ".tmp";
     auto f = FSCom.open(filenameTmp.c_str(), FILE_O_WRITE);
-    bool okay = false;
     if (f) {
         DEBUG_MSG("Saving %s\n", filename);
         pb_ostream_t stream = {&writecb, &f, protoSize};

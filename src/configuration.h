@@ -25,6 +25,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #pragma once
 
 #include <Arduino.h>
+
 #ifdef RV3028_RTC
     #include "Melopero_RV3028.h"
 #endif
@@ -144,7 +145,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //#define DISABLE_NTP
 
 // Disable the welcome screen and allow 
-//#define DISABLE_WELCOME_UNSET
+#define DISABLE_WELCOME_UNSET
 
 // -----------------------------------------------------------------------------
 // OLED & Input
@@ -169,6 +170,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // The older M5 Faces I2C Keyboard
 #define FACESKB_ADDR 0x88
+
+// -----------------------------------------------------------------------------
+// SENSOR
+// -----------------------------------------------------------------------------
+#define BME_ADDR 0x76
+#define BME_ADDR_ALTERNATE 0x77
+#define MCP9808_ADDR 0x18
+#define INA_ADDR 0x40
+#define INA_ADDR_ALTERNATE 0x41
 
 // -----------------------------------------------------------------------------
 // GPS

@@ -1,9 +1,11 @@
 #pragma once
 
+#include <map>
 #include "GPSStatus.h"
 #include "NodeStatus.h"
 #include "PowerStatus.h"
 #include "graphics/Screen.h"
+#include "mesh/generated/telemetry.pb.h"
 
 extern uint8_t screen_found;
 extern uint8_t screen_model;
@@ -16,6 +18,8 @@ extern bool eink_found;
 extern bool axp192_found;
 extern bool isCharging;
 extern bool isUSBPowered;
+
+extern uint8_t nodeTelemetrySensorsMap[12];
 
 // Global Screen singleton.
 extern graphics::Screen *screen;
