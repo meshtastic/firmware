@@ -4,6 +4,8 @@
 #include "configuration.h"
 
 #define Port Serial
+// Defaulting to the formerly removed phone_timeout_secs value of 15 minutes
+#define SERIAL_CONNECTION_TIMEOUT (15 * 60) * 1000UL
 
 SerialConsole *console;
 
@@ -41,13 +43,12 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port)
     emitRebooted();
 }
 
+
 // For the serial port we can't really detect if any client is on the other side, so instead just look for recent messages
 bool SerialConsole::checkIsConnected()
 {
     uint32_t now = millis();
-    return (now - lastContactMsec) < config.power.phone_timeout_secs
-               ? config.power.phone_timeout_secs
-               : default_phone_timeout_secs * 1000UL;
+    return (now - lastContactMsec) < SERIAL_CONNECTION_TIMEOUT;
 }
 
 /**

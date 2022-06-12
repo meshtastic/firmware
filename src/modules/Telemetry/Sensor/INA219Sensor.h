@@ -1,16 +1,17 @@
 #include "../mesh/generated/telemetry.pb.h"
 #include "TelemetrySensor.h"
-#include <Adafruit_BME280.h>
+#include <Adafruit_INA219.h>
 
-class BME280Sensor : virtual public TelemetrySensor {
+
+class INA219Sensor : virtual public TelemetrySensor {
 private:
-    Adafruit_BME280 bme280;
+    Adafruit_INA219 ina219;
 
 protected:
     virtual void setup() override;
-
+    
 public:
-    BME280Sensor();
+    INA219Sensor();
     virtual int32_t runOnce() override;
     virtual bool getMetrics(Telemetry *measurement) override;
 };    

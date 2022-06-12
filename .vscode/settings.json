@@ -51,7 +51,8 @@
         "iterator": "cpp",
         "shared_mutex": "cpp",
         "iostream": "cpp",
-        "esp_nimble_hci.h": "c"
+        "esp_nimble_hci.h": "c",
+        "map": "cpp"
     },
     "cSpell.words": [
         "Blox",
