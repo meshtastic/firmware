@@ -10,7 +10,7 @@ uint16_t getRegisterValue(uint8_t address, uint8_t reg, uint8_t length) {
     Wire.write(reg);
     Wire.endTransmission();
     delay(20);
-    Wire.requestFrom((int)address, (int)length);
+    Wire.requestFrom(address, length);
     DEBUG_MSG("Wire.available() = %d\n", Wire.available());
     if (Wire.available() == 2) {
         // Read MSB, then LSB
