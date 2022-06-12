@@ -55,7 +55,6 @@ int32_t EnvironmentTelemetryModule::runOnce()
         Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
     */
-    moduleConfig.telemetry.environment_measurement_enabled = 1;
    
     /*
     moduleConfig.telemetry.environment_measurement_enabled = 1;
