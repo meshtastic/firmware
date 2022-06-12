@@ -250,6 +250,9 @@ void NodeDB::init()
 
     // Include our owner in the node db under our nodenum
     NodeInfo *info = getOrCreateNode(getNodeNum());
+
+    // Calculate Curve25519 public and private keys
+    crypto->generateKeyPair(owner.public_key, myNodeInfo.private_key);
     info->user = owner;
     info->has_user = true;
 
@@ -522,6 +525,14 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p, RxSource src)
     notifyObservers(true); // Force an update whether or not our node counts have changed
 }
 
+void printBytes(const uint8_t *bytes, size_t len)
+{
+    for (size_t i = 0; i < len; i++) {
+        DEBUG_MSG("%02x", bytes[i]);
+    }
+    DEBUG_MSG("\n");
+}
+
 /** Update telemetry info for this node based on received metrics
  *  We only care about device telemetry here
  */
@@ -554,13 +565,15 @@ void NodeDB::updateUser(uint32_t nodeId, const User &p)
         return;
     }
 
-    DEBUG_MSG("old user %s/%s/%s\n", info->user.id, info->user.long_name, info->user.short_name);
+    DEBUG_MSG("old user %s/%s/%s/", info->user.id, info->user.long_name, info->user.short_name);
+    printBytes(info->user.public_key, 32);
 
     bool changed = memcmp(&info->user, &p,
                           sizeof(info->user)); // Both of these blocks start as filled with zero so I think this is okay
 
     info->user = p;
-    DEBUG_MSG("updating changed=%d user %s/%s/%s\n", changed, info->user.id, info->user.long_name, info->user.short_name);
+    DEBUG_MSG("updating changed=%d user %s/%s/%s/", changed, info->user.id, info->user.long_name, info->user.short_name);
+    printBytes(info->user.public_key, 32);
     info->has_user = true;
 
     if (changed) {

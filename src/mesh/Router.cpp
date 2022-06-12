@@ -183,6 +183,11 @@ void printBytes(const char *label, const uint8_t *p, size_t numbytes)
     DEBUG_MSG("\n");
 }
 
+bool isDirectMessage(const MeshPacket *p)
+{
+    return p->to == nodeDB.getNodeNum() && (p->decoded.portnum == PortNum_ROUTING_APP) ? false : p->want_ack;
+}
+
 /**
  * Send a packet on a suitable interface.  This routine will
  * later free() the packet to pool.  This routine is not allowed to stall.
@@ -239,6 +244,7 @@ ErrorCode Router::send(MeshPacket *p)
 #endif
 
         auto encodeResult = perhapsEncode(p);
+        if (isDirectMessage(p)) p->want_ack = true;
         if (encodeResult != Routing_Error_NONE) {
             abortSendAndNak(encodeResult, p);
             return encodeResult; // FIXME - this isn't a valid ErrorCode
@@ -304,6 +310,8 @@ bool perhapsDecode(MeshPacket *p)
                 DEBUG_MSG("Invalid portnum (bad psk?)!\n");
             } else {
                 // parsing was successful
+                if (isDirectMessage(p)) // This is a direct message to us so decrypt the payload
+                    crypto->decryptCurve25519_Blake2b(p->from, p->id, p->decoded.payload.size, p->decoded.payload.bytes);
                 p->which_payloadVariant = MeshPacket_decoded_tag; // change type to decoded
                 p->channel = chIndex;                             // change to store the index instead of the hash
 
@@ -344,12 +352,15 @@ bool perhapsDecode(MeshPacket *p)
     return false;
 }
 
-/** Return 0 for success or a Routing_Errror code for failure
+/** Return 0 for success or a Routing_Error code for failure
  */
 Routing_Error perhapsEncode(MeshPacket *p)
 {
     // If the packet is not yet encrypted, do so now
     if (p->which_payloadVariant == MeshPacket_decoded_tag) {
+        if (isDirectMessage(p)) // Encrypt the payload for the recipient node seperately from the rest of the packet
+            crypto->encryptCurve25519_Blake2b(p->to, getFrom(p), p->id, p->decoded.payload.size, p->decoded.payload.bytes);
+
         static uint8_t bytes[MAX_RHPACKETLEN]; // we have to use a scratch buffer because a union
 
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), Data_fields, &p->decoded);
