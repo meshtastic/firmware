@@ -20,14 +20,14 @@ static bool isPowered()
 
     // If we are not a router and we already have AC power go to POWER state after init, otherwise go to ON
     // We assume routers might be powered all the time, but from a low current (solar) source
-    bool isLowPower = config.power.is_low_power || isRouter;
+    bool isPowerSavingMode = config.power.is_power_saving || isRouter;
 
     /* To determine if we're externally powered, assumptions
         1) If we're powered up and there's no battery, we must be getting power externally. (because we'd be dead otherwise)
 
         2) If we detect USB power from the power management chip, we must be getting power externally.
     */
-    return !isLowPower && powerStatus && (!powerStatus->getHasBattery() || powerStatus->getHasUSB());
+    return !isPowerSavingMode && powerStatus && (!powerStatus->getHasBattery() || powerStatus->getHasUSB());
 }
 
 static void sdsEnter()
