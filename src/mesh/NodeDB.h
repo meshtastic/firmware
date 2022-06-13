@@ -138,7 +138,7 @@ extern NodeDB nodeDB;
 /*
   If is_router is set, we use a number of different default values
 
-        # FIXME - after tuning, move these params into the on-device defaults based on is_router and is_low_power
+        # FIXME - after tuning, move these params into the on-device defaults based on is_router and is_power_saving
 
         # prefs.position_broadcast_secs = FIXME possibly broadcast only once an hr
         prefs.wait_bluetooth_secs = 1  # Don't stay in bluetooth mode
@@ -152,7 +152,7 @@ extern NodeDB nodeDB;
         # get a new GPS position once per day
         prefs.gps_update_interval = oneday
 
-        prefs.is_low_power = True
+        prefs.is_power_saving = True
 
         # allow up to five minutes for each new GPS lock attempt
         prefs.gps_attempt_time = 300
