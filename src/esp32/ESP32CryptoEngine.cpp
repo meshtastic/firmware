@@ -49,7 +49,6 @@ class ESP32CryptoEngine : public CryptoEngine
      */
     virtual void encrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes) override
     {
-        hexDump("before", bytes, numBytes, 16);
         if (key.length > 0) {
             uint8_t stream_block[16];
             static uint8_t scratch[MAX_BLOCKSIZE];
@@ -65,7 +64,6 @@ class ESP32CryptoEngine : public CryptoEngine
             auto res = mbedtls_aes_crypt_ctr(&aes, numBytes, &nc_off, nonce, stream_block, scratch, bytes);
             assert(!res);
         }
-        hexDump("after", bytes, numBytes, 16);
     }
 
     virtual void decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes) override
