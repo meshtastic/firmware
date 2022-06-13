@@ -159,61 +159,50 @@ uint32_t RadioInterface::getPacketTime(MeshPacket *p)
 /** The delay to use for retransmitting dropped packets */
 uint32_t RadioInterface::getRetransmissionMsec(const MeshPacket *p)
 {
-    assert(shortPacketMsec); // Better be non zero
+    assert(slotTimeMsec); // Better be non zero
     static uint8_t bytes[MAX_RHPACKETLEN];
     size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), Data_fields, &p->decoded);
     uint32_t packetAirtime = getPacketTime(numbytes + sizeof(PacketHeader));
-    uint32_t tCADmsec = 2 * (1 << sf) / bw; // duration of CAD is roughly 2 symbols according to SX127x datasheet 
-    /* Make sure enough time has elapsed for this packet to be sent and an ACK is received. 
-     * Right now we have to wait until another node floods the same packet, as that is our implicit ACK.
-     * TODO: Revise when want_ack will be used (right now it is always set to 0 afterwards).
-     */
-    return 2*packetAirtime + 2*MIN_TX_WAIT_MSEC + shortPacketMsec + shortPacketMsec*2 + PROCESSING_TIME_MSEC + 2*tCADmsec;
+    // Make sure enough time has elapsed for this packet to be sent and an ACK is received. 
+    // DEBUG_MSG("Waiting for flooding message with airtime %d and slotTime is %d\n", packetAirtime, slotTimeMsec);
+    float channelUtil = airTime->channelUtilizationPercent();
+    uint8_t CWsize = map(channelUtil, 0, 100, CWmin, CWmax);
+    // Assuming we pick max. of CWsize and there will be a receiver with SNR at half the range
+    return 2*packetAirtime + (pow(2, CWsize) + pow(2, int((CWmax+CWmin)/2))) * slotTimeMsec + PROCESSING_TIME_MSEC;
 }
 
-/** The delay to use when we want to send something but the ether is busy */
+/** The delay to use when we want to send something */
 uint32_t RadioInterface::getTxDelayMsec()
 {
-    /** At the low end we want to pick a delay large enough that anyone who just completed sending (some other node)
-     * has had enough time to switch their radio back into receive mode.
-     */
-    const uint32_t MIN_TX_WAIT_MSEC = 100;
-
-    /**
-     * At the high end, this value is used to spread node attempts across time so when they are replying to a packet
-     * they don't both check that the airwaves are clear at the same moment.  As long as they are off by some amount
-     * one of the two will be first to start transmitting and the other will see that.  I bet 500ms is more than enough
-     * to guarantee this.
-     */
-    // const uint32_t MAX_TX_WAIT_MSEC = 2000; // stress test would still fail occasionally with 1000
-
-    return random((MIN_TX_WAIT_MSEC), (MIN_TX_WAIT_MSEC + shortPacketMsec));
+    /** We wait a random multiple of 'slotTimes' (see definition in header file) in order to avoid collisions.
+    The pool to take a random multiple from is the contention window (CW), which size depends on the 
+    current channel utilization. */
+    float channelUtil = airTime->channelUtilizationPercent();
+    uint8_t CWsize = map(channelUtil, 0, 100, CWmin, CWmax);
+    // DEBUG_MSG("Current channel utilization is %f so setting CWsize to %d\n", channelUtil, CWsize);
+    return random(0, pow(2, CWsize)) * slotTimeMsec;
 }
 
-/** The delay to use when we want to send something but the ether is busy */
+/** The delay to use when we want to flood a message */
 uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
 {
-    /** At the low end we want to pick a delay large enough that anyone who just completed sending (some other node)
-     * has had enough time to switch their radio back into receive mode.
-     */
-    const uint32_t MIN_TX_WAIT_MSEC = 100;
-
     // The minimum value for a LoRa SNR
     const uint32_t SNR_MIN = -20;
 
     // The maximum value for a LoRa SNR
     const uint32_t SNR_MAX = 15;
 
-    //  high SNR = Long Delay
-    //  low SNR = Short Delay
+    //  high SNR = large CW size (Long Delay)
+    //  low SNR = small CW size (Short Delay)
     uint32_t delay = 0;
-
+    uint8_t CWsize = map(snr, SNR_MIN, SNR_MAX, CWmin, CWmax);
+    // DEBUG_MSG("rx_snr of %f so setting CWsize to:%d\n", snr, CWsize);
     if (config.device.role == Config_DeviceConfig_Role_Router ||
         config.device.role == Config_DeviceConfig_Role_RouterClient) {
-        delay = map(snr, SNR_MIN, SNR_MAX, MIN_TX_WAIT_MSEC, (MIN_TX_WAIT_MSEC + (shortPacketMsec / 2)));
+        delay = random(0, 2*CWsize) * slotTimeMsec;
         DEBUG_MSG("rx_snr found in packet. As a router, setting tx delay:%d\n", delay);
     } else {
-        delay = map(snr, SNR_MIN, SNR_MAX, MIN_TX_WAIT_MSEC + (shortPacketMsec / 2), (MIN_TX_WAIT_MSEC + shortPacketMsec * 2));
+        delay = random(0, pow(2, CWsize)) * slotTimeMsec;
         DEBUG_MSG("rx_snr found in packet. Setting tx delay:%d\n", delay);
     }
 
@@ -411,7 +400,6 @@ void RadioInterface::applyModemConfig()
     }
 
     power = loraConfig.tx_power;
-    shortPacketMsec = getPacketTime(sizeof(PacketHeader));
     assert(myRegion); // Should have been found in init
 
     // Calculate the number of channels
@@ -431,7 +419,7 @@ void RadioInterface::applyModemConfig()
     DEBUG_MSG("Radio myRegion->numChannels: %d\n", numChannels);
     DEBUG_MSG("Radio channel_num: %d\n", channel_num);
     DEBUG_MSG("Radio frequency: %f\n", getFreq());
-    DEBUG_MSG("Short packet time: %u msec\n", shortPacketMsec);
+    DEBUG_MSG("Slot time: %u msec\n", slotTimeMsec);
 }
 
 /**
