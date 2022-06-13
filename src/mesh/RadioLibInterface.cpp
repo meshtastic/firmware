@@ -11,11 +11,18 @@
 // FIXME, we default to 4MHz SPI, SPI mode 0, check if the datasheet says it can really do that
 static SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 
-void LockingModule::SPItransfer(uint8_t cmd, uint8_t reg, uint8_t *dataOut, uint8_t *dataIn, uint8_t numBytes)
+void LockingModule::SPIbeginTransaction()
 {
-    concurrency::LockGuard g(spiLock);
+    spiLock->lock();
 
-    Module::SPItransfer(cmd, reg, dataOut, dataIn, numBytes);
+    Module::SPIbeginTransaction();
+}
+
+void LockingModule::SPIendTransaction()
+{
+    spiLock->unlock();
+
+    Module::SPIendTransaction();
 }
 
 RadioLibInterface::RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy,
