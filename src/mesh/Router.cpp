@@ -185,7 +185,7 @@ void printBytes(const char *label, const uint8_t *p, size_t numbytes)
 
 bool isDirectMessage(const MeshPacket *p)
 {
-    return p->to == nodeDB.getNodeNum() && (p->decoded.portnum == PortNum_ROUTING_APP) ? false : p->want_ack;
+    return p->to != -1 && (p->decoded.portnum == PortNum_ROUTING_APP) ? false : p->want_ack;
 }
 
 /**
@@ -310,7 +310,7 @@ bool perhapsDecode(MeshPacket *p)
                 DEBUG_MSG("Invalid portnum (bad psk?)!\n");
             } else {
                 // parsing was successful
-                if (isDirectMessage(p)) // This is a direct message to us so decrypt the payload
+                if (isDirectMessage(p) && p->to == nodeDB.getNodeNum()) // This is a direct message to us so decrypt the payload
                     crypto->decryptCurve25519_Blake2b(p->from, p->id, p->decoded.payload.size, p->decoded.payload.bytes);
                 p->which_payloadVariant = MeshPacket_decoded_tag; // change type to decoded
                 p->channel = chIndex;                             // change to store the index instead of the hash
