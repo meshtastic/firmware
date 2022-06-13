@@ -170,17 +170,11 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
     }
 
     /** radio helper thread callback.
-
-    We never immediately transmit after any operation (either rx or tx).  Instead we should start receiving and
-    wait a random delay of 100ms to 100ms+shortPacketMsec to make sure we are not stomping on someone else.  The 100ms delay
-    at the beginning ensures all possible listeners have had time to finish processing the previous packet and now have their
-    radio in RX state.  The up to 100ms+shortPacketMsec random delay gives a chance for all possible senders to have high odds
-    of detecting that someone else started transmitting first and then they will wait until that packet finishes.
-
-    NOTE: the large flood rebroadcast delay might still be needed even with this approach.  Because we might not be able to
-    hear other transmitters that we are potentially stomping on.  Requires further thought.
-
-    FIXME, the MIN_TX_WAIT_MSEC and MAX_TX_WAIT_MSEC values should be tuned via logic analyzer later.
+    We never immediately transmit after any operation (either Rx or Tx). Instead we should wait a random multiple of 
+    'slotTimes' (see definition in RadioInterface.h) taken from a contention window (CW) to lower the chance of collision. 
+    The CW size is determined by setTransmitDelay() and depends either on the current channel utilization or SNR in case 
+    of a flooding message. After this, we perform channel activity detection (CAD) and reset the transmit delay if it is
+    currently active. 
     */
     void RadioLibInterface::onNotify(uint32_t notification)
     {
