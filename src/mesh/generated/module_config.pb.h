@@ -115,7 +115,7 @@ typedef struct _ModuleConfig_TelemetryConfig {
     uint32_t environment_sensor_pin; 
 } ModuleConfig_TelemetryConfig;
 
-/* TODO: REPLACE */
+/* Module Config */
 typedef struct _ModuleConfig { 
     /* TODO: REPLACE */
     pb_size_t which_payloadVariant;
