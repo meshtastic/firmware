@@ -91,7 +91,7 @@ bool NodeDB::resetRadioConfig()
     if (config.device.factory_reset) {
         DEBUG_MSG("Performing factory reset!\n");
         // first, remove the "/prefs" (this removes most prefs)
-        FSCom.rmdir_r("/prefs");
+        rmDir("/prefs");
         // second, install default state (this will deal with the duplicate mac address issue)
         installDefaultDeviceState();
         // third, write to disk
