@@ -20,13 +20,10 @@ class PhoneAPI
     : public Observer<uint32_t> // FIXME, we shouldn't be inheriting from Observer, instead use CallbackObserver as a member
 {
     enum State {
-        STATE_UNUSED,       // (no longer used) old default state - until Android apps are all updated, uses the old BLE API
-        STATE_SEND_NOTHING, // (Eventual) Initial state, don't send anything until the client starts asking for config
-                            // (disconnected)
+        STATE_SEND_NOTHING, // Initial state, don't send anything until the client starts asking for config
         STATE_SEND_MY_INFO, // send our my info record
-        STATE_SEND_GROUPS,
-        // STATE_SEND_RADIO, // in 1.2 we now send this as a regular mesh packet
-        // STATE_SEND_OWNER, no need to send Owner specially, it is just part of the nodedb
+        STATE_SEND_GROUPS, // new in 1.3?
+        STATE_SEND_CONFIG, // Replacement for the old Radioconfig
         STATE_SEND_NODEINFO, // states progress in this order as the device sends to to the client
         STATE_SEND_COMPLETE_ID,
         STATE_SEND_PACKETS // send packets or debug strings

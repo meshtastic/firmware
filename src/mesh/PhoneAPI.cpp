@@ -112,7 +112,8 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
  *
  * Our sending states progress in the following sequence (the client app ASSUMES THIS SEQUENCE, DO NOT CHANGE IT):
  *      STATE_SEND_MY_INFO, // send our my info record
-        STATE_SEND_RADIO,
+ *      STATE_SEND_GROUPS
+        STATE_SEND_CONFIG,
         STATE_SEND_NODEINFO, // states progress in this order as the device sends to to the client
         STATE_SEND_COMPLETE_ID,
         STATE_SEND_PACKETS // send packets or debug strings
@@ -140,12 +141,23 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         myNodeInfo.has_gps = gps && gps->isConnected(); // Update with latest GPS connect info
         fromRadioScratch.which_payloadVariant = FromRadio_my_info_tag;
         fromRadioScratch.my_info = myNodeInfo;
-        state = STATE_SEND_NODEINFO;
+        state = STATE_SEND_CONFIG;
 
         service.refreshMyNodeInfo(); // Update my NodeInfo because the client will be asking for it soon.
         break;
 
-    case STATE_SEND_NODEINFO: {
+    case STATE_SEND_CONFIG:
+        fromRadioScratch.which_payloadVariant = FromRadio_config_tag;
+        fromRadioScratch.config = config;
+
+        // NOTE: The phone app needs to know the ls_secs value so it can properly expect sleep behavior.
+        // So even if we internally use 0 to represent 'use default' we still need to send the value we are
+        // using to the app (so that even old phone apps work with new device loads).
+        fromRadioScratch.config.power.ls_secs = default_ls_secs;
+        state = STATE_SEND_NODEINFO;
+        break;
+
+    case STATE_SEND_NODEINFO:
         const NodeInfo *info = nodeInfoForPhone;
         nodeInfoForPhone = NULL; // We just consumed a nodeinfo, will need a new one next time
 
@@ -162,7 +174,6 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             return getFromRadio(buf);
         }
         break;
-    }
 
     case STATE_SEND_COMPLETE_ID:
         fromRadioScratch.which_payloadVariant = FromRadio_config_complete_id_tag;
