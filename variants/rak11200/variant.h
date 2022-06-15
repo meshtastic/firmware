@@ -82,3 +82,5 @@ static const uint8_t SCK = 33;
 #define SX126X_TXEN (-1)
 #define SX126X_RXEN (WB_IO3)
 #define SX126X_E22 // DIO2 controlls an antenna switch and the TCXO voltage is controlled by DIO3
+
+#define CONSOLE_MAX_BAUD 115200
