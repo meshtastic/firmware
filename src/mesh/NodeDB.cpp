@@ -48,7 +48,7 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define here.
 */
 
-#define DEVICESTATE_CUR_VER 11
+#define DEVICESTATE_CUR_VER 13
 #define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
 
 // FIXME - move this somewhere else
@@ -146,6 +146,7 @@ bool NodeDB::resetRadioConfig()
 void NodeDB::installDefaultConfig()
 {
     memset(&config, 0, sizeof(LocalConfig));
+    config.version = DEVICESTATE_CUR_VER;
     config.has_device = true;
     config.has_display = true;
     config.has_lora = true;
@@ -165,6 +166,7 @@ void NodeDB::installDefaultConfig()
 void NodeDB::installDefaultModuleConfig()
 {
     memset(&moduleConfig, 0, sizeof(ModuleConfig));
+    moduleConfig.version = DEVICESTATE_CUR_VER;
     moduleConfig.has_canned_message = true;
     moduleConfig.has_external_notification = true;
     moduleConfig.has_mqtt = true;
@@ -189,6 +191,7 @@ void NodeDB::installDefaultModuleConfig()
 void NodeDB::installDefaultChannels()
 {
     memset(&channelFile, 0, sizeof(ChannelFile));
+    channelFile.version = DEVICESTATE_CUR_VER;
 }
 
 void NodeDB::installDefaultDeviceState()
@@ -347,20 +350,41 @@ void NodeDB::loadFromDisk()
             DEBUG_MSG("Warn: devicestate %d is old, discarding\n", devicestate.version);
             installDefaultDeviceState();
         } else {
-            DEBUG_MSG("Loaded saved preferences version %d\n", devicestate.version);
+            DEBUG_MSG("Loaded saved devicestate version %d\n", devicestate.version);
         }
     }
 
     if (!loadProto(configfile, LocalConfig_size, sizeof(LocalConfig), LocalConfig_fields, &config)) {
         installDefaultConfig(); // Our in RAM copy might now be corrupt
+    } else {
+        if (config.version < DEVICESTATE_MIN_VER) {
+            DEBUG_MSG("Warn: config %d is old, discarding\n", config.version);
+            installDefaultConfig();
+        } else {
+            DEBUG_MSG("Loaded saved config version %d\n", config.version);
+        }
     }
 
     if (!loadProto(moduleConfigfile, LocalModuleConfig_size, sizeof(LocalModuleConfig), LocalModuleConfig_fields, &moduleConfig)) {
         installDefaultModuleConfig(); // Our in RAM copy might now be corrupt
+    } else {
+        if (moduleConfig.version < DEVICESTATE_MIN_VER) {
+            DEBUG_MSG("Warn: moduleConfig %d is old, discarding\n", moduleConfig.version);
+            installDefaultModuleConfig();
+        } else {
+            DEBUG_MSG("Loaded saved moduleConfig version %d\n", moduleConfig.version);
+        }
     }
 
     if (!loadProto(channelfile, ChannelFile_size, sizeof(ChannelFile), ChannelFile_fields, &channelFile)) {
         installDefaultChannels(); // Our in RAM copy might now be corrupt
+    } else {
+        if (channelFile.version < DEVICESTATE_MIN_VER) {
+            DEBUG_MSG("Warn: channelFile %d is old, discarding\n", channelFile.version);
+            installDefaultChannels();
+        } else {
+            DEBUG_MSG("Loaded saved channelFile version %d\n", channelFile.version);
+        }
     }
 }
 
