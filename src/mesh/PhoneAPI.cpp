@@ -232,6 +232,9 @@ bool PhoneAPI::available()
 
     case STATE_SEND_MY_INFO:
         return true;
+            
+    case STATE_SEND_CONFIG:
+        return true;
 
     case STATE_SEND_NODEINFO:
         if (!nodeInfoForPhone)
