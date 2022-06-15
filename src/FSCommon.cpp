@@ -28,6 +28,34 @@ void listDir(const char * dirname, uint8_t levels)
 #endif
 }
 
+void rmDir(const char * dirname)
+#ifdef FSCom
+{
+    File root = FSCom.open(dirname);
+    if(!root){
+        return;
+    }
+    if(!root.isDirectory()){
+        return;
+    }
+
+    File file = root.openNextFile();
+    while(file){
+        if(file.isDirectory() && !String(file.name()).endsWith(".")) {
+            file.close();
+            rmDir(file.name());
+            FSCom.rmdir(file.name());
+        } else {
+            file.close();
+            FSCom.remove(file.name());
+        }
+        file.close();
+        file = root.openNextFile();
+    }
+    file.close();
+#endif
+}
+
 void fsInit()
 {
 #ifdef FSCom
