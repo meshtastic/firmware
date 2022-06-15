@@ -90,18 +90,17 @@ bool NodeDB::resetRadioConfig()
     // radioConfig.has_preferences = true;
     if (config.device.factory_reset) {
         DEBUG_MSG("Performing factory reset!\n");
-        installDefaultDeviceState();
-#ifndef NO_ESP32
-        // This will erase what's in NVS including ssl keys, persistant variables and ble pairing
-        nvs_flash_erase();
-#endif
-#ifdef NRF52_SERIES
         // first, remove the "/prefs" (this removes most prefs)
         FSCom.rmdir_r("/prefs");
         // second, install default state (this will deal with the duplicate mac address issue)
         installDefaultDeviceState();
         // third, write to disk
         saveToDisk();
+#ifndef NO_ESP32
+        // This will erase what's in NVS including ssl keys, persistant variables and ble pairing
+        nvs_flash_erase();
+#endif
+#ifdef NRF52_SERIES
         Bluefruit.begin();
         DEBUG_MSG("Clearing bluetooth bonds!\n");
         bond_print_list(BLE_GAP_ROLE_PERIPH);
@@ -175,18 +174,6 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.has_store_forward = true;
     moduleConfig.has_telemetry = true;
 }
-
-// void NodeDB::installDefaultRadioConfig()
-// {
-//     memset(&radioConfig, 0, sizeof(radioConfig));
-//     radioConfig.has_preferences = true;
-//     resetRadioConfig();
-
-//     // for backward compat, default position flags are BAT+ALT+MSL (0x23 = 35)
-//     config.position.position_flags =
-//         (Config_PositionConfig_PositionFlags_POS_BATTERY | Config_PositionConfig_PositionFlags_POS_ALTITUDE |
-//          Config_PositionConfig_PositionFlags_POS_ALT_MSL);
-// }
 
 void NodeDB::installDefaultChannels()
 {
@@ -349,6 +336,18 @@ void NodeDB::loadFromDisk()
         if (devicestate.version < DEVICESTATE_MIN_VER) {
             DEBUG_MSG("Warn: devicestate %d is old, discarding\n", devicestate.version);
             installDefaultDeviceState();
+#ifndef NO_ESP32
+        // This will erase what's in NVS including ssl keys, persistant variables and ble pairing
+        nvs_flash_erase();
+#endif
+#ifdef NRF52_SERIES
+        Bluefruit.begin();
+        DEBUG_MSG("Clearing bluetooth bonds!\n");
+        bond_print_list(BLE_GAP_ROLE_PERIPH);
+        bond_print_list(BLE_GAP_ROLE_CENTRAL);
+        Bluefruit.Periph.clearBonds();
+        Bluefruit.Central.clearBonds();
+#endif
         } else {
             DEBUG_MSG("Loaded saved devicestate version %d\n", devicestate.version);
         }
