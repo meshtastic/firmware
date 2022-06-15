@@ -157,7 +157,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         state = STATE_SEND_NODEINFO;
         break;
 
-    case STATE_SEND_NODEINFO:
+    case STATE_SEND_NODEINFO: {
         const NodeInfo *info = nodeInfoForPhone;
         nodeInfoForPhone = NULL; // We just consumed a nodeinfo, will need a new one next time
 
@@ -174,6 +174,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             return getFromRadio(buf);
         }
         break;
+    }
 
     case STATE_SEND_COMPLETE_ID:
         fromRadioScratch.which_payloadVariant = FromRadio_config_complete_id_tag;
