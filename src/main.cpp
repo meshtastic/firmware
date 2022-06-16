@@ -101,15 +101,14 @@ const char *getDeviceName()
 
     getMacAddr(dmac);
 
-    // Meshtastic_ab3c
-    static char name[30];
-    // If we have an owner shortname and it is short.
-    if (owner.short_name != NULL
-	&& strlen(owner.short_name) >= 2
-	&& strlen(owner.short_name) < 10) {
-      sprintf(name, "Meshtastic_%s", owner.short_name);
+    // Meshtastic_ab3c or Shortname_abcd
+    static char name[20];
+    sprintf(name, "%02x%02x", dmac[4], dmac[5]);
+    // if the shortname exists and is NOT the new default of ab3c, use it for BLE name.
+    if ((owner.short_name != NULL) && (owner.short_name != name)) {
+        sprintf(name, "%s_%02x%02x", owner.short_name, dmac[4], dmac[5]);
     } else {
-      sprintf(name, "Meshtastic_%02x%02x", dmac[4], dmac[5]);
+        sprintf(name, "Meshtastic_%02x%02x", dmac[4], dmac[5]);
     }
     return name;
 }
