@@ -148,13 +148,43 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
     case STATE_SEND_CONFIG:
         fromRadioScratch.which_payloadVariant = FromRadio_config_tag;
-        fromRadioScratch.config = config;
+        switch (config_state) {
+            case Config_device_tag:
+                fromRadioScratch.config.which_payloadVariant = Config_device_tag;
+                fromRadioScratch.config.payloadVariant.device = config.device;
+                break;
+            case Config_position_tag:
+                fromRadioScratch.config.which_payloadVariant = Config_position_tag;
+                fromRadioScratch.config.payloadVariant.position = config.position;
+                break;
+            case Config_power_tag:
+                fromRadioScratch.config.which_payloadVariant = Config_power_tag;
+                fromRadioScratch.config.payloadVariant.power = config.power;
+                fromRadioScratch.config.payloadVariant.power.ls_secs = default_ls_secs;
+                break;
+            case Config_wifi_tag:
+                fromRadioScratch.config.which_payloadVariant = Config_wifi_tag;
+                fromRadioScratch.config.payloadVariant.wifi = config.wifi;
+                break;
+            case Config_display_tag:
+                fromRadioScratch.config.which_payloadVariant = Config_display_tag;
+                fromRadioScratch.config.payloadVariant.display = config.display;
+                break;
+            case Config_lora_tag:
+                fromRadioScratch.config.which_payloadVariant = Config_lora_tag;
+                fromRadioScratch.config.payloadVariant.lora = config.lora;
+                break;
+        }
 
         // NOTE: The phone app needs to know the ls_secs value so it can properly expect sleep behavior.
         // So even if we internally use 0 to represent 'use default' we still need to send the value we are
         // using to the app (so that even old phone apps work with new device loads).
-        fromRadioScratch.config.power.ls_secs = default_ls_secs;
-        state = STATE_SEND_NODEINFO;
+        
+        config_state++;
+        // Advance when we have sent all of our config objects
+        if (config_state > Config_lora_tag) {
+            state = STATE_SEND_NODEINFO;
+        }
         break;
 
     case STATE_SEND_NODEINFO: {

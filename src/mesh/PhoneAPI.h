@@ -31,6 +31,8 @@ class PhoneAPI
 
     State state = STATE_SEND_NOTHING;
 
+    int8_t config_state = Config_device_tag;
+
     /**
      * Each packet sent to the phone has an incrementing count
      */
