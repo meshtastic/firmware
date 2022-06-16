@@ -225,6 +225,11 @@ void NRF52Bluetooth::setup()
     Bluefruit.autoConnLed(false);
     Bluefruit.begin();
 
+    // Clear existing data.
+    Bluefruit.Advertising.stop();
+    Bluefruit.Advertising.clearData();
+    Bluefruit.ScanResponse.clearData();
+
     // Set the advertised device name (keep it short!)
     Bluefruit.setName(getDeviceName());
 
