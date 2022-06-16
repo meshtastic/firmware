@@ -40,21 +40,13 @@ class LockingModule : public Module
         : Module(cs, irq, rst, gpio, spi, spiSettings)
     {
     }
-
-    /*!
-    \brief SPI single transfer method.
-
-    \param cmd SPI access command (read/write/burst/...).
-
-    \param reg Address of SPI register to transfer to/from.
-
-    \param dataOut Data that will be transfered from master to slave.
-
-    \param dataIn Data that was transfered from slave to master.
-
-    \param numBytes Number of bytes to transfer.
-    */
-    virtual void SPItransfer(uint8_t cmd, uint8_t reg, uint8_t *dataOut, uint8_t *dataIn, uint8_t numBytes);
+    
+#ifdef PORTDUINO
+    void SPItransfer(uint8_t cmd, uint8_t reg, uint8_t *dataOut, uint8_t *dataIn, uint8_t numBytes) override;
+#else
+    void SPIbeginTransaction() override;
+    void SPIendTransaction() override;
+#endif
 };
 
 class RadioLibInterface : public RadioInterface, protected concurrency::NotifiedWorkerThread

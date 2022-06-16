@@ -48,7 +48,7 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define here.
 */
 
-#define DEVICESTATE_CUR_VER 11
+#define DEVICESTATE_CUR_VER 13
 #define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
 
 // FIXME - move this somewhere else
@@ -90,18 +90,17 @@ bool NodeDB::resetRadioConfig()
     // radioConfig.has_preferences = true;
     if (config.device.factory_reset) {
         DEBUG_MSG("Performing factory reset!\n");
+        // first, remove the "/prefs" (this removes most prefs)
+        rmDir("/prefs");
+        // second, install default state (this will deal with the duplicate mac address issue)
         installDefaultDeviceState();
+        // third, write to disk
+        saveToDisk();
 #ifndef NO_ESP32
         // This will erase what's in NVS including ssl keys, persistant variables and ble pairing
         nvs_flash_erase();
 #endif
 #ifdef NRF52_SERIES
-        // first, remove the "/prefs" (this removes most prefs)
-        FSCom.rmdir_r("/prefs");
-        // second, install default state (this will deal with the duplicate mac address issue)
-        installDefaultDeviceState();
-        // third, write to disk
-        saveToDisk();
         Bluefruit.begin();
         DEBUG_MSG("Clearing bluetooth bonds!\n");
         bond_print_list(BLE_GAP_ROLE_PERIPH);
@@ -146,6 +145,7 @@ bool NodeDB::resetRadioConfig()
 void NodeDB::installDefaultConfig()
 {
     memset(&config, 0, sizeof(LocalConfig));
+    config.version = DEVICESTATE_CUR_VER;
     config.has_device = true;
     config.has_display = true;
     config.has_lora = true;
@@ -165,6 +165,7 @@ void NodeDB::installDefaultConfig()
 void NodeDB::installDefaultModuleConfig()
 {
     memset(&moduleConfig, 0, sizeof(ModuleConfig));
+    moduleConfig.version = DEVICESTATE_CUR_VER;
     moduleConfig.has_canned_message = true;
     moduleConfig.has_external_notification = true;
     moduleConfig.has_mqtt = true;
@@ -174,21 +175,10 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.has_telemetry = true;
 }
 
-// void NodeDB::installDefaultRadioConfig()
-// {
-//     memset(&radioConfig, 0, sizeof(radioConfig));
-//     radioConfig.has_preferences = true;
-//     resetRadioConfig();
-
-//     // for backward compat, default position flags are BAT+ALT+MSL (0x23 = 35)
-//     config.position.position_flags =
-//         (Config_PositionConfig_PositionFlags_POS_BATTERY | Config_PositionConfig_PositionFlags_POS_ALTITUDE |
-//          Config_PositionConfig_PositionFlags_POS_ALT_MSL);
-// }
-
 void NodeDB::installDefaultChannels()
 {
     memset(&channelFile, 0, sizeof(ChannelFile));
+    channelFile.version = DEVICESTATE_CUR_VER;
 }
 
 void NodeDB::installDefaultDeviceState()
@@ -215,7 +205,7 @@ void NodeDB::installDefaultDeviceState()
     // Set default owner name
     pickNewNodeNum(); // based on macaddr now
     sprintf(owner.long_name, "Unknown %02x%02x", ourMacAddr[4], ourMacAddr[5]);
-    sprintf(owner.short_name, "?%02X", (unsigned)(myNodeInfo.my_node_num & 0xff));
+    sprintf(owner.short_name, "%02x%02x", ourMacAddr[4], ourMacAddr[5]);
 
     sprintf(owner.id, "!%08x", getNodeNum()); // Default node ID now based on nodenum
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
@@ -346,21 +336,54 @@ void NodeDB::loadFromDisk()
         if (devicestate.version < DEVICESTATE_MIN_VER) {
             DEBUG_MSG("Warn: devicestate %d is old, discarding\n", devicestate.version);
             installDefaultDeviceState();
+#ifndef NO_ESP32
+        // This will erase what's in NVS including ssl keys, persistant variables and ble pairing
+        nvs_flash_erase();
+#endif
+#ifdef NRF52_SERIES
+        Bluefruit.begin();
+        DEBUG_MSG("Clearing bluetooth bonds!\n");
+        bond_print_list(BLE_GAP_ROLE_PERIPH);
+        bond_print_list(BLE_GAP_ROLE_CENTRAL);
+        Bluefruit.Periph.clearBonds();
+        Bluefruit.Central.clearBonds();
+#endif
         } else {
-            DEBUG_MSG("Loaded saved preferences version %d\n", devicestate.version);
+            DEBUG_MSG("Loaded saved devicestate version %d\n", devicestate.version);
         }
     }
 
     if (!loadProto(configfile, LocalConfig_size, sizeof(LocalConfig), LocalConfig_fields, &config)) {
         installDefaultConfig(); // Our in RAM copy might now be corrupt
+    } else {
+        if (config.version < DEVICESTATE_MIN_VER) {
+            DEBUG_MSG("Warn: config %d is old, discarding\n", config.version);
+            installDefaultConfig();
+        } else {
+            DEBUG_MSG("Loaded saved config version %d\n", config.version);
+        }
     }
 
     if (!loadProto(moduleConfigfile, LocalModuleConfig_size, sizeof(LocalModuleConfig), LocalModuleConfig_fields, &moduleConfig)) {
         installDefaultModuleConfig(); // Our in RAM copy might now be corrupt
+    } else {
+        if (moduleConfig.version < DEVICESTATE_MIN_VER) {
+            DEBUG_MSG("Warn: moduleConfig %d is old, discarding\n", moduleConfig.version);
+            installDefaultModuleConfig();
+        } else {
+            DEBUG_MSG("Loaded saved moduleConfig version %d\n", moduleConfig.version);
+        }
     }
 
     if (!loadProto(channelfile, ChannelFile_size, sizeof(ChannelFile), ChannelFile_fields, &channelFile)) {
         installDefaultChannels(); // Our in RAM copy might now be corrupt
+    } else {
+        if (channelFile.version < DEVICESTATE_MIN_VER) {
+            DEBUG_MSG("Warn: channelFile %d is old, discarding\n", channelFile.version);
+            installDefaultChannels();
+        } else {
+            DEBUG_MSG("Loaded saved channelFile version %d\n", channelFile.version);
+        }
     }
 }
 

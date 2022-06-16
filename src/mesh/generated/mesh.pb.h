@@ -4,6 +4,7 @@
 #ifndef PB_MESH_PB_H_INCLUDED
 #define PB_MESH_PB_H_INCLUDED
 #include <pb.h>
+#include "localonly.pb.h"
 #include "portnums.pb.h"
 #include "telemetry.pb.h"
 
@@ -630,6 +631,7 @@ typedef struct _FromRadio {
     union {
         MyNodeInfo my_info;
         NodeInfo node_info;
+        LocalConfig config;
         LogRecord log_record;
         uint32_t config_complete_id;
         bool rebooted;
@@ -819,6 +821,7 @@ extern "C" {
 #define FromRadio_id_tag                         1
 #define FromRadio_my_info_tag                    3
 #define FromRadio_node_info_tag                  4
+#define FromRadio_config_tag                     6
 #define FromRadio_log_record_tag                 7
 #define FromRadio_config_complete_id_tag         8
 #define FromRadio_rebooted_tag                   9
@@ -968,6 +971,7 @@ X(a, STATIC,   SINGULAR, UENUM,    level,             4)
 X(a, STATIC,   SINGULAR, UINT32,   id,                1) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,my_info,my_info),   3) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,node_info,node_info),   4) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,config,config),   6) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,log_record,log_record),   7) \
 X(a, STATIC,   ONEOF,    UINT32,   (payloadVariant,config_complete_id,config_complete_id),   8) \
 X(a, STATIC,   ONEOF,    BOOL,     (payloadVariant,rebooted,rebooted),   9) \
@@ -976,6 +980,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,packet,packet),  11)
 #define FromRadio_DEFAULT NULL
 #define FromRadio_payloadVariant_my_info_MSGTYPE MyNodeInfo
 #define FromRadio_payloadVariant_node_info_MSGTYPE NodeInfo
+#define FromRadio_payloadVariant_config_MSGTYPE LocalConfig
 #define FromRadio_payloadVariant_log_record_MSGTYPE LogRecord
 #define FromRadio_payloadVariant_packet_MSGTYPE MeshPacket
 
