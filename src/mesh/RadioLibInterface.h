@@ -40,9 +40,13 @@ class LockingModule : public Module
         : Module(cs, irq, rst, gpio, spi, spiSettings)
     {
     }
-
+    
+#ifdef PORTDUINO
+    void SPItransfer(uint8_t cmd, uint8_t reg, uint8_t *dataOut, uint8_t *dataIn, uint8_t numBytes) override;
+#else
     void SPIbeginTransaction() override;
     void SPIendTransaction() override;
+#endif
 };
 
 class RadioLibInterface : public RadioInterface, protected concurrency::NotifiedWorkerThread
