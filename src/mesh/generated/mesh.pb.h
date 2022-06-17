@@ -4,7 +4,7 @@
 #ifndef PB_MESH_PB_H_INCLUDED
 #define PB_MESH_PB_H_INCLUDED
 #include <pb.h>
-#include "localonly.pb.h"
+#include "config.pb.h"
 #include "portnums.pb.h"
 #include "telemetry.pb.h"
 
@@ -631,7 +631,7 @@ typedef struct _FromRadio {
     union {
         MyNodeInfo my_info;
         NodeInfo node_info;
-        LocalConfig config;
+        Config config;
         LogRecord log_record;
         uint32_t config_complete_id;
         bool rebooted;
@@ -980,7 +980,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,packet,packet),  11)
 #define FromRadio_DEFAULT NULL
 #define FromRadio_payloadVariant_my_info_MSGTYPE MyNodeInfo
 #define FromRadio_payloadVariant_node_info_MSGTYPE NodeInfo
-#define FromRadio_payloadVariant_config_MSGTYPE LocalConfig
+#define FromRadio_payloadVariant_config_MSGTYPE Config
 #define FromRadio_payloadVariant_log_record_MSGTYPE LogRecord
 #define FromRadio_payloadVariant_packet_MSGTYPE MeshPacket
 
