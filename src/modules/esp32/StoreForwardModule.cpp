@@ -392,7 +392,6 @@ StoreForwardModule::StoreForwardModule()
         */
 
         moduleConfig.store_forward.enabled = 1;
-        config.power.is_always_powered = 1;
     }
 
     if (moduleConfig.store_forward.enabled) {

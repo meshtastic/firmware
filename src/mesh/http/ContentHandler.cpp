@@ -716,8 +716,6 @@ void handleAdminSettings(HTTPRequest *req, HTTPResponse *res)
     res->println("<tr><td><input type=checkbox></td><td>WiFi Password</td><td>false</td><td><input type=radio></td></tr>\n");
     res->println(
         "<tr><td><input type=checkbox></td><td>Smart Position Update</td><td>false</td><td><input type=radio></td></tr>\n");
-    res->println("<tr><td><input type=checkbox></td><td>is_always_powered</td><td>false</td><td><input type=radio></td></tr>\n");
-    res->println("<tr><td><input type=checkbox></td><td>is_always_powered</td><td>false</td><td><input type=radio></td></tr>\n");
     res->println("</table>\n");
     res->println("<table>\n");
     res->println("<input type=submit value=Apply New Settings>\n");

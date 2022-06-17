@@ -11,10 +11,10 @@
 /// Should we behave as if we have AC power now?
 static bool isPowered()
 {
-    // Completely circumvents the battery / power sensing logic and assumes constant power source
-    if (config.power.is_always_powered) {
+    // Circumvent the battery sensing logic and assumes constant power if no battery pin or power mgmt IC
+    #if !defined(BATTERY_PIN) && !defined(AXP192_SLAVE_ADDRESS)
         return true;
-    }
+    #endif
 
     bool isRouter = (config.device.role == Config_DeviceConfig_Role_Router ? 1 : 0);
 
