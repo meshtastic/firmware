@@ -210,8 +210,7 @@ bool EInkDisplay::connect()
 #elif defined(M5_COREINK)
     auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
     adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
-    delay(100);
-    adafruitDisplay->init(115200, true, 20, false, SPI, SPISettings(4000000, MSBFIRST, SPI_MODE0));
+    adafruitDisplay->init(115200, true, 40, false, SPI, SPISettings(4000000, MSBFIRST, SPI_MODE0));
     adafruitDisplay->setRotation(0);
     adafruitDisplay->setPartialWindow(0, 0, EPD_WIDTH, EPD_HEIGHT);
 #endif
