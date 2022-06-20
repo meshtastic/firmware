@@ -39,7 +39,7 @@ jobs:
           - board: t-echo
           - board: nano-g1
           - board: m5stack_core
-          - board: m5stack_core_eink
+          - board: m5stack_coreink
           
     runs-on: ubuntu-latest
     steps:
@@ -96,7 +96,7 @@ jobs:
           - board: meshtastic-diy-v1
           - board: nano-g1
           - board: m5stack_core
-          - board: m5stack_core_eink
+          - board: m5stack_coreink
 
     runs-on: ubuntu-latest
     steps:
