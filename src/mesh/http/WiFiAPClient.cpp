@@ -222,7 +222,7 @@ bool initWifi(bool forceSoftAP)
 
                         // The configurations on softAP are from the espresif library
                         int ok = WiFi.softAP(wifiName, wifiPsw, 1, 1, 4);
-                        DEBUG_MSG("Starting hiddem WIFI AP: ssid=%s, ok=%d\n", wifiName, ok);
+                        DEBUG_MSG("Starting hidden WIFI AP: ssid=%s, ok=%d\n", wifiName, ok);
                     } else {
                         int ok = WiFi.softAP(wifiName, wifiPsw);
                         DEBUG_MSG("Starting WIFI AP: ssid=%s, ok=%d\n", wifiName, ok);

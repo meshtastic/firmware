@@ -38,7 +38,9 @@ jobs:
           - board: rak4631_eink
           - board: t-echo
           - board: nano-g1
-
+          - board: m5stack-core
+          - board: m5stack-coreink
+          
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -93,6 +95,8 @@ jobs:
           - board: tbeam0.7
           - board: meshtastic-diy-v1
           - board: nano-g1
+          - board: m5stack-core
+          - board: m5stack-coreink
 
     runs-on: ubuntu-latest
     steps:
