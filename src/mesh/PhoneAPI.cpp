@@ -184,6 +184,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         // Advance when we have sent all of our config objects
         if (config_state > Config_lora_tag) {
             state = STATE_SEND_NODEINFO;
+            config_state = Config_device_tag;
         }
         break;
 
