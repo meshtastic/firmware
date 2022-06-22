@@ -142,10 +142,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 
 // Disable use of the NTP library and related features
-//#define DISABLE_NTP
+// #define DISABLE_NTP
 
 // Disable the welcome screen and allow 
-#define DISABLE_WELCOME_UNSET
+// #define DISABLE_WELCOME_UNSET
 
 // -----------------------------------------------------------------------------
 // OLED & Input

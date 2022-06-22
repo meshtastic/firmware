@@ -1531,10 +1531,10 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     case Config_LoRaConfig_ModemPreset_MedFast:
         mode = "MedF";
         break;
-    case Config_LoRaConfig_ModemPreset_LongFast:
+    case Config_LoRaConfig_ModemPreset_LongSlow:
         mode = "LongS";
         break;
-    case Config_LoRaConfig_ModemPreset_LongSlow:
+    case Config_LoRaConfig_ModemPreset_LongFast:
         mode = "LongF";
         break;
     case Config_LoRaConfig_ModemPreset_VLongSlow:
