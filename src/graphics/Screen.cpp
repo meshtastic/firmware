@@ -1520,25 +1520,25 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 
     switch (config.lora.modem_preset) {
     case Config_LoRaConfig_ModemPreset_ShortSlow:
-        mode = "ShortSlow";
+        mode = "ShortS";
         break;
     case Config_LoRaConfig_ModemPreset_ShortFast:
-        mode = "ShortFast";
+        mode = "ShortF";
         break;
-    case Config_LoRaConfig_ModemPreset_MidSlow:
-        mode = "MediumSlow";
+    case Config_LoRaConfig_ModemPreset_MedSlow:
+        mode = "MedS";
         break;
-    case Config_LoRaConfig_ModemPreset_MidFast:
-        mode = "MediumFast";
+    case Config_LoRaConfig_ModemPreset_MedFast:
+        mode = "MedF";
         break;
     case Config_LoRaConfig_ModemPreset_LongFast:
-        mode = "LongFast";
+        mode = "LongS";
         break;
     case Config_LoRaConfig_ModemPreset_LongSlow:
-        mode = "LongSlow";
+        mode = "LongF";
         break;
     case Config_LoRaConfig_ModemPreset_VLongSlow:
-        mode = "VLongSlow";
+        mode = "VeryL";
         break;
     default:
         mode = "Custom";
