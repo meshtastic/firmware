@@ -26,7 +26,9 @@ typedef enum _Config_PositionConfig_PositionFlags {
     Config_PositionConfig_PositionFlags_POS_HVDOP = 16, 
     Config_PositionConfig_PositionFlags_POS_SATINVIEW = 32, 
     Config_PositionConfig_PositionFlags_POS_SEQ_NOS = 64, 
-    Config_PositionConfig_PositionFlags_POS_TIMESTAMP = 128 
+    Config_PositionConfig_PositionFlags_POS_TIMESTAMP = 128, 
+    Config_PositionConfig_PositionFlags_POS_HEADING = 256, 
+    Config_PositionConfig_PositionFlags_POS_SPEED = 512 
 } Config_PositionConfig_PositionFlags;
 
 typedef enum _Config_PowerConfig_ChargeCurrent { 
@@ -78,8 +80,8 @@ typedef enum _Config_LoRaConfig_ModemPreset {
     Config_LoRaConfig_ModemPreset_LongFast = 0, 
     Config_LoRaConfig_ModemPreset_LongSlow = 1, 
     Config_LoRaConfig_ModemPreset_VLongSlow = 2, 
-    Config_LoRaConfig_ModemPreset_MidSlow = 3, 
-    Config_LoRaConfig_ModemPreset_MidFast = 4, 
+    Config_LoRaConfig_ModemPreset_MedSlow = 3, 
+    Config_LoRaConfig_ModemPreset_MedFast = 4, 
     Config_LoRaConfig_ModemPreset_ShortSlow = 5, 
     Config_LoRaConfig_ModemPreset_ShortFast = 6 
 } Config_LoRaConfig_ModemPreset;
@@ -145,17 +147,11 @@ typedef struct _Config_WiFiConfig {
 typedef struct _Config { 
     pb_size_t which_payloadVariant;
     union {
-        /* TODO: REPLACE */
         Config_DeviceConfig device;
-        /* TODO: REPLACE */
         Config_PositionConfig position;
-        /* TODO: REPLACE */
         Config_PowerConfig power;
-        /* TODO: REPLACE */
         Config_WiFiConfig wifi;
-        /* TODO: REPLACE */
         Config_DisplayConfig display;
-        /* TODO: REPLACE */
         Config_LoRaConfig lora;
     } payloadVariant;
 } Config;
@@ -167,8 +163,8 @@ typedef struct _Config {
 #define _Config_DeviceConfig_Role_ARRAYSIZE ((Config_DeviceConfig_Role)(Config_DeviceConfig_Role_RouterClient+1))
 
 #define _Config_PositionConfig_PositionFlags_MIN Config_PositionConfig_PositionFlags_POS_UNDEFINED
-#define _Config_PositionConfig_PositionFlags_MAX Config_PositionConfig_PositionFlags_POS_TIMESTAMP
-#define _Config_PositionConfig_PositionFlags_ARRAYSIZE ((Config_PositionConfig_PositionFlags)(Config_PositionConfig_PositionFlags_POS_TIMESTAMP+1))
+#define _Config_PositionConfig_PositionFlags_MAX Config_PositionConfig_PositionFlags_POS_SPEED
+#define _Config_PositionConfig_PositionFlags_ARRAYSIZE ((Config_PositionConfig_PositionFlags)(Config_PositionConfig_PositionFlags_POS_SPEED+1))
 
 #define _Config_PowerConfig_ChargeCurrent_MIN Config_PowerConfig_ChargeCurrent_MAUnset
 #define _Config_PowerConfig_ChargeCurrent_MAX Config_PowerConfig_ChargeCurrent_MA1320
