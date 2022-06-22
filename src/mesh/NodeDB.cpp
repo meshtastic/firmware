@@ -337,16 +337,16 @@ void NodeDB::loadFromDisk()
             DEBUG_MSG("Warn: devicestate %d is old, discarding\n", devicestate.version);
             installDefaultDeviceState();
 #ifndef NO_ESP32
-        // This will erase what's in NVS including ssl keys, persistant variables and ble pairing
-        nvs_flash_erase();
+            // This will erase what's in NVS including ssl keys, persistant variables and ble pairing
+            nvs_flash_erase();
 #endif
 #ifdef NRF52_SERIES
-        Bluefruit.begin();
-        DEBUG_MSG("Clearing bluetooth bonds!\n");
-        bond_print_list(BLE_GAP_ROLE_PERIPH);
-        bond_print_list(BLE_GAP_ROLE_CENTRAL);
-        Bluefruit.Periph.clearBonds();
-        Bluefruit.Central.clearBonds();
+            Bluefruit.begin();
+            DEBUG_MSG("Clearing bluetooth bonds!\n");
+            bond_print_list(BLE_GAP_ROLE_PERIPH);
+            bond_print_list(BLE_GAP_ROLE_CENTRAL);
+            Bluefruit.Periph.clearBonds();
+            Bluefruit.Central.clearBonds();
 #endif
         } else {
             DEBUG_MSG("Loaded saved devicestate version %d\n", devicestate.version);
