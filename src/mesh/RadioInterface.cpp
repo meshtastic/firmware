@@ -360,12 +360,12 @@ void RadioInterface::applyModemConfig()
             cr = 8;
             sf = 8;
             break;
-        case Config_LoRaConfig_ModemPreset_MidFast:
+        case Config_LoRaConfig_ModemPreset_MedFast:
             bw = 250;
             cr = 8;
             sf = 9;
             break;
-        case Config_LoRaConfig_ModemPreset_MidSlow:
+        case Config_LoRaConfig_ModemPreset_MedSlow:
             bw = 250;
             cr = 8;
             sf = 10;
