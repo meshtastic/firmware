@@ -56,6 +56,10 @@ bool SX126xInterface<T>::init()
     // \todo Display actual typename of the adapter, not just `SX126x`
     DEBUG_MSG("SX126x init result %d\n", res);
 
+    DEBUG_MSG("Frequency set to %f\n", getFreq());    
+    DEBUG_MSG("Bandwidth set to %f\n", bw);    
+    DEBUG_MSG("Power output set to %d\n", power);    
+
     // current limit was removed from module' ctor
     // override default value (60 mA)
     res = lora.setCurrentLimit(currentLimit);
