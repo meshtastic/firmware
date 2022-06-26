@@ -211,7 +211,7 @@ const char *Channels::getName(size_t chIndex)
         // the app fucked up and forgot to set channelSettings.name
 
         if (config.lora.bandwidth != 0)
-            channelName = "Unset";
+            channelName = "Custom";
         else
             switch (config.lora.modem_preset) {
             case Config_LoRaConfig_ModemPreset_ShortSlow:
@@ -226,10 +226,10 @@ const char *Channels::getName(size_t chIndex)
             case Config_LoRaConfig_ModemPreset_MedFast:
                 channelName = "MedF";
                 break;
-            case Config_LoRaConfig_ModemPreset_LongFast:
+            case Config_LoRaConfig_ModemPreset_LongSlow:
                 channelName = "LongS";
                 break;
-            case Config_LoRaConfig_ModemPreset_LongSlow:
+            case Config_LoRaConfig_ModemPreset_LongFast:
                 channelName = "LongF";
                 break;
             case Config_LoRaConfig_ModemPreset_VLongSlow:
