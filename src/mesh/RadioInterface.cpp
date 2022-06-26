@@ -417,7 +417,7 @@ void RadioInterface::applyModemConfig()
     float freq = myRegion->freqStart + ((((myRegion->freqEnd - myRegion->freqStart) / numChannels) / 2) * channel_num);
 
     saveChannelNum(channel_num);
-    saveFreq(freq);
+    saveFreq(freq + config.lora.frequency_offset);
 
     DEBUG_MSG("Set radio: name=%s, config=%u, ch=%d, power=%d\n", channelName, loraConfig.modem_preset, channel_num, power);
     DEBUG_MSG("Radio myRegion->freqStart / myRegion->freqEnd: %f -> %f (%f mhz)\n", myRegion->freqStart, myRegion->freqEnd,
