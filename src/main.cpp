@@ -105,7 +105,7 @@ const char *getDeviceName()
     static char name[20];
     sprintf(name, "%02x%02x", dmac[4], dmac[5]);
     // if the shortname exists and is NOT the new default of ab3c, use it for BLE name.
-    if ((owner.short_name != NULL) && (owner.short_name != name)) {
+    if ((owner.short_name != NULL) && (strcmp(owner.short_name, name) != 0)) {
         sprintf(name, "%s_%02x%02x", owner.short_name, dmac[4], dmac[5]);
     } else {
         sprintf(name, "Meshtastic_%02x%02x", dmac[4], dmac[5]);
