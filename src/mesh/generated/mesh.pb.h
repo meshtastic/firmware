@@ -7,6 +7,7 @@
 #include "config.pb.h"
 #include "portnums.pb.h"
 #include "telemetry.pb.h"
+#include "module_config.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
@@ -652,6 +653,8 @@ typedef struct _FromRadio {
      Not used on all transports, currently just used for the serial console.
      NOTE: This ID must not change - to keep (minimal) compatibility with <1.2 version of android apps. */
         bool rebooted;
+        /* Include a module config */
+        ModuleConfig moduleConfig;
         /* Log levels, chosen to match python logging conventions. */
         MeshPacket packet;
     };
@@ -856,6 +859,7 @@ extern "C" {
 #define FromRadio_log_record_tag                 7
 #define FromRadio_config_complete_id_tag         8
 #define FromRadio_rebooted_tag                   9
+#define FromRadio_moduleConfig_tag               10
 #define FromRadio_packet_tag                     11
 #define ToRadio_packet_tag                       2
 #define ToRadio_peer_info_tag                    3
@@ -1006,6 +1010,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,config,config),   6) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,log_record,log_record),   7) \
 X(a, STATIC,   ONEOF,    UINT32,   (payloadVariant,config_complete_id,config_complete_id),   8) \
 X(a, STATIC,   ONEOF,    BOOL,     (payloadVariant,rebooted,rebooted),   9) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,moduleConfig,moduleConfig),  10) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,packet,packet),  11)
 #define FromRadio_CALLBACK NULL
 #define FromRadio_DEFAULT NULL
@@ -1013,6 +1018,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,packet,packet),  11)
 #define FromRadio_payloadVariant_node_info_MSGTYPE NodeInfo
 #define FromRadio_payloadVariant_config_MSGTYPE Config
 #define FromRadio_payloadVariant_log_record_MSGTYPE LogRecord
+#define FromRadio_payloadVariant_moduleConfig_MSGTYPE ModuleConfig
 #define FromRadio_payloadVariant_packet_MSGTYPE MeshPacket
 
 #define ToRadio_FIELDLIST(X, a) \
