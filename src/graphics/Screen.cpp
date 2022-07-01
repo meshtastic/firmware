@@ -609,7 +609,9 @@ class Point
 
     void scale(float f)
     {
-        x *= f;
+        //FIXME we use a -f here because when rotating/drawing on the screen
+        //the x axis seems to get flipped this work around flips it back
+        x *= -f;
         y *= f;
     }
 };
