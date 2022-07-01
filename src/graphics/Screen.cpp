@@ -609,9 +609,9 @@ class Point
 
     void scale(float f)
     {
-        //We use -f here to counter act the flip that happens when
-        //drawing and rotating on screen
-        x *= -f;
+        //We use -f here to counter the flip that happens
+        //on the y axis when drawing and rotating on screen
+        x *= f;
         y *= -f;
     }
 };
