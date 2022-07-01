@@ -668,14 +668,15 @@ static int8_t prevFrame = -1;
 // Draw the arrow pointing to a node's location
 static void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, float headingRadian)
 {
-    Point tip(0.0f, 0.5f), tail(0.0f, -0.5f); // pointing up initially
+    //arrow gets inverted when draw so start upside down.
+    Point tip(0.0f, -0.5f), tail(0.0f, 0.5f);
     float arrowOffsetX = 0.2f, arrowOffsetY = 0.2f;
-    Point leftArrow(tip.x - arrowOffsetX, tip.y - arrowOffsetY), rightArrow(tip.x + arrowOffsetX, tip.y - arrowOffsetY);
+    Point leftArrow(tip.x - arrowOffsetX, tip.y + arrowOffsetY), rightArrow(tip.x + arrowOffsetX, tip.y + arrowOffsetY);
 
     Point *arrowPoints[] = {&tip, &tail, &leftArrow, &rightArrow};
 
     for (int i = 0; i < 4; i++) {
-        arrowPoints[i]->rotate(0);
+        arrowPoints[i]->rotate(headingRadian);
         arrowPoints[i]->scale(COMPASS_DIAM * 0.6);
         arrowPoints[i]->translate(compassX, compassY);
     }
