@@ -699,7 +699,7 @@ static void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t com
 }
     
 // Draw west
-static void drawCompassHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading)
+static void drawCompassWest(OLEDDisplay *display, int16_t compassX, int16_t compassY)
 {
     Point W1(-0.04f, -0.55f), W2(-0.04f, -0.65f);
     Point W3(0.000f, -0.55f), W4(0.04f, -0.65f);
@@ -707,7 +707,7 @@ static void drawCompassHeading(OLEDDisplay *display, int16_t compassX, int16_t c
     Point *headPoints[] = {&W1, &W2, &W3, &W4, &W5};
 
     for (int i = 0; i < 5; i++) {
-        headPoints[i]->rotate(myHeading);
+        headPoints[i]->rotate(4.71239);
         headPoints[i]->scale(COMPASS_DIAM);
         headPoints[i]->translate(compassX, compassY);
     }
@@ -798,6 +798,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     if (ourNode && hasPosition(ourNode)) {
         Position &op = ourNode->position;
         drawCompassNorth(display, compassX, compassY);
+        drawCompassWest(display, compassX, compassY);
         float myHeading = estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
         drawCompassHeading(display, compassX, compassY, myHeading);
 
