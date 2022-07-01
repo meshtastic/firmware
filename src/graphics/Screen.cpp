@@ -609,10 +609,10 @@ class Point
 
     void scale(float f)
     {
-        //FIXME we use a -f here because when rotating/drawing on the screen
-        //the x axis seems to get flipped this work around flips it back
+        //We use -f here to counter act the flip that happens when
+        //drawing and rotating on screen
         x *= -f;
-        y *= f;
+        y *= -f;
     }
 };
 
@@ -668,10 +668,9 @@ static int8_t prevFrame = -1;
 // Draw the arrow pointing to a node's location
 static void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, float headingRadian)
 {
-    //arrow gets inverted when draw so start upside down.
-    Point tip(0.0f, -0.5f), tail(0.0f, 0.5f);
+    Point tip(0.0f, 0.5f), tail(0.0f, -0.5f); // pointing up initially
     float arrowOffsetX = 0.2f, arrowOffsetY = 0.2f;
-    Point leftArrow(tip.x - arrowOffsetX, tip.y + arrowOffsetY), rightArrow(tip.x + arrowOffsetX, tip.y + arrowOffsetY);
+    Point leftArrow(tip.x - arrowOffsetX, tip.y - arrowOffsetY), rightArrow(tip.x + arrowOffsetX, tip.y - arrowOffsetY);
 
     Point *arrowPoints[] = {&tip, &tail, &leftArrow, &rightArrow};
 
@@ -688,8 +687,8 @@ static void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t comp
 // Draw north
 static void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY)
 {
-    Point N1(-0.04f, -0.65f), N2(0.04f, -0.65f);
-    Point N3(-0.04f, -0.55f), N4(0.04f, -0.55f);
+    Point N1(-0.04f, 0.65f), N2(0.04f, 0.65f);
+    Point N3(-0.04f, 0.55f), N4(0.04f, 0.55f);
     Point *rosePoints[] = {&N1, &N2, &N3, &N4};
 
     for (int i = 0; i < 4; i++) {
@@ -704,9 +703,9 @@ static void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t com
 // Draw the compass heading
 static void drawCompassHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading)
 {
-    Point H1(-0.04f, -0.65f), H2(0.04f, -0.65f);
-    Point H3(-0.04f, -0.55f), H4(0.04f, -0.55f);
-    Point H5(-0.04f, -0.60f), H6(0.04f, -0.60f);
+    Point H1(-0.04f, 0.65f), H2(0.04f, 0.65f);
+    Point H3(-0.04f, 0.55f), H4(0.04f, 0.55f);
+    Point H5(-0.04f, 0.60f), H6(0.04f, 0.60f);
     Point *headPoints[] = {&H1, &H2, &H3, &H4, &H5, &H6};
 
     for (int i = 0; i < 6; i++) {
