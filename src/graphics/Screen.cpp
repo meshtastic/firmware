@@ -697,6 +697,25 @@ static void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t com
     drawLine(display, N2, N4);
     drawLine(display, N1, N4);
 }
+    
+// Draw west
+static void drawCompassHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading)
+{
+    Point W1(-0.04f, -0.55f), W2(-0.04f, -0.65f);
+    Point W3(0.000f, -0.55f), W4(0.04f, -0.65f);
+    Point W5(0.04f, -0.55f);
+    Point *headPoints[] = {&W1, &W2, &W3, &W4, &W5};
+
+    for (int i = 0; i < 5; i++) {
+        headPoints[i]->rotate(myHeading);
+        headPoints[i]->scale(COMPASS_DIAM);
+        headPoints[i]->translate(compassX, compassY);
+    }
+    drawLine(display, W1, W2);
+    drawLine(display, W2, W3);
+    drawLine(display, W3, W4);
+    drawLine(display, W4, W5)
+}
 
 // Draw the compass heading
 static void drawCompassHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading)
