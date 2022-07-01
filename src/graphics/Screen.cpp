@@ -595,7 +595,7 @@ class Point
     void rotate(float radian)
     {
         float cos = cosf(radian), sin = sinf(radian);
-        float rx = x * cos - y * sin, ry = x * sin + y * cos;
+        float rx = x * cos + y * sin, ry = -x * sin + y * cos;
 
         x = rx;
         y = ry;
@@ -681,22 +681,39 @@ static void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t comp
     drawLine(display, leftArrow, tip);
     drawLine(display, rightArrow, tip);
 }
-
-// Draw the compass heading
-static void drawCompassHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading)
+    
+// Draw north
+static void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY)
 {
     Point N1(-0.04f, -0.65f), N2(0.04f, -0.65f);
     Point N3(-0.04f, -0.55f), N4(0.04f, -0.55f);
     Point *rosePoints[] = {&N1, &N2, &N3, &N4};
 
     for (int i = 0; i < 4; i++) {
-        rosePoints[i]->rotate(myHeading);
-        rosePoints[i]->scale(-1 * COMPASS_DIAM);
+        rosePoints[i]->scale(COMPASS_DIAM);
         rosePoints[i]->translate(compassX, compassY);
     }
     drawLine(display, N1, N3);
     drawLine(display, N2, N4);
     drawLine(display, N1, N4);
+}
+
+// Draw the compass heading
+static void drawCompassHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading)
+{
+    Point H1(-0.04f, -0.65f), H2(0.04f, -0.65f);
+    Point H3(-0.04f, -0.55f), H4(0.04f, -0.55f);
+    Point H5(-0.04f, -0.60f), H6(0.04f, -0.60f);
+    Point *headPoints[] = {&H1, &H2, &H3, &H4, &H5, &H6};
+
+    for (int i = 0; i < 6; i++) {
+        headPoints[i]->rotate(myHeading);
+        headPoints[i]->scale(COMPASS_DIAM);
+        headPoints[i]->translate(compassX, compassY);
+    }
+    drawLine(display, H1, H3);
+    drawLine(display, H2, H4);
+    drawLine(display, H5, H6);
 }
 
 /// Convert an integer GPS coords to a floating point
@@ -761,6 +778,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 
     if (ourNode && hasPosition(ourNode)) {
         Position &op = ourNode->position;
+        drawCompassNorth(display, compassX, compassY);
         float myHeading = estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
         drawCompassHeading(display, compassX, compassY, myHeading);
 
@@ -775,12 +793,9 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             else
                 snprintf(distStr, sizeof(distStr), "%.1f km", d / 1000);
 
-            // FIXME, also keep the guess at the operators heading and add/substract
-            // it.  currently we don't do this and instead draw north up only.
             float bearingToOther =
-                GeoCoord::bearing(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
-            float headingRadian = bearingToOther - myHeading;
-            drawNodeHeading(display, compassX, compassY, headingRadian);
+                GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
+            drawNodeHeading(display, compassX, compassY, bearingToOther);
         }
     }
     if (!hasNodeHeading)
