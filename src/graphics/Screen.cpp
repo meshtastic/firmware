@@ -714,7 +714,7 @@ static void drawCompassWest(OLEDDisplay *display, int16_t compassX, int16_t comp
     drawLine(display, W1, W2);
     drawLine(display, W2, W3);
     drawLine(display, W3, W4);
-    drawLine(display, W4, W5)
+    drawLine(display, W4, W5);
 }
 
 // Draw the compass heading
