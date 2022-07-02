@@ -89,26 +89,7 @@ bool NodeDB::resetRadioConfig()
 
     // radioConfig.has_preferences = true;
     if (config.device.factory_reset) {
-        DEBUG_MSG("Performing factory reset!\n");
-        // first, remove the "/prefs" (this removes most prefs)
-        rmDir("/prefs");
-        // second, install default state (this will deal with the duplicate mac address issue)
-        installDefaultDeviceState();
-        // third, write to disk
-        saveToDisk();
-#ifndef NO_ESP32
-        // This will erase what's in NVS including ssl keys, persistant variables and ble pairing
-        nvs_flash_erase();
-#endif
-#ifdef NRF52_SERIES
-        Bluefruit.begin();
-        DEBUG_MSG("Clearing bluetooth bonds!\n");
-        bond_print_list(BLE_GAP_ROLE_PERIPH);
-        bond_print_list(BLE_GAP_ROLE_CENTRAL);
-        Bluefruit.Periph.clearBonds();
-        Bluefruit.Central.clearBonds();
-#endif
-        didFactoryReset = true;
+       didFactoryReset = factoryReset();
     }
 
     if (channelFile.channels_count != MAX_NUM_CHANNELS) {
@@ -142,8 +123,33 @@ bool NodeDB::resetRadioConfig()
     return didFactoryReset;
 }
 
+bool NodeDB::factoryReset() 
+{
+    DEBUG_MSG("Performing factory reset!\n");
+    // first, remove the "/prefs" (this removes most prefs)
+    rmDir("/prefs");
+    // second, install default state (this will deal with the duplicate mac address issue)
+    installDefaultDeviceState();
+    // third, write to disk
+    saveToDisk();
+#ifndef NO_ESP32
+    // This will erase what's in NVS including ssl keys, persistant variables and ble pairing
+    nvs_flash_erase();
+#endif
+#ifdef NRF52_SERIES
+    Bluefruit.begin();
+    DEBUG_MSG("Clearing bluetooth bonds!\n");
+    bond_print_list(BLE_GAP_ROLE_PERIPH);
+    bond_print_list(BLE_GAP_ROLE_CENTRAL);
+    Bluefruit.Periph.clearBonds();
+    Bluefruit.Central.clearBonds();
+#endif
+    return true;
+}
+
 void NodeDB::installDefaultConfig()
 {
+    DEBUG_MSG("Installing default LocalConfig\n");
     memset(&config, 0, sizeof(LocalConfig));
     config.version = DEVICESTATE_CUR_VER;
     config.has_device = true;
@@ -164,25 +170,28 @@ void NodeDB::installDefaultConfig()
 
 void NodeDB::installDefaultModuleConfig()
 {
+    DEBUG_MSG("Installing default ModuleConfig\n");
     memset(&moduleConfig, 0, sizeof(ModuleConfig));
     moduleConfig.version = DEVICESTATE_CUR_VER;
-    moduleConfig.has_canned_message = true;
-    moduleConfig.has_external_notification = true;
     moduleConfig.has_mqtt = true;
     moduleConfig.has_range_test = true;
     moduleConfig.has_serial = true;
     moduleConfig.has_store_forward = true;
     moduleConfig.has_telemetry = true;
+    moduleConfig.has_external_notification = true;
+    moduleConfig.has_canned_message = true;
 }
 
 void NodeDB::installDefaultChannels()
 {
+    DEBUG_MSG("Installing default ChannelFile\n");
     memset(&channelFile, 0, sizeof(ChannelFile));
     channelFile.version = DEVICESTATE_CUR_VER;
 }
 
 void NodeDB::installDefaultDeviceState()
 {
+    DEBUG_MSG("Installing default DeviceState\n");
     memset(&devicestate, 0, sizeof(DeviceState));
 
     *numNodes = 0; // Forget node DB
@@ -209,23 +218,18 @@ void NodeDB::installDefaultDeviceState()
 
     sprintf(owner.id, "!%08x", getNodeNum()); // Default node ID now based on nodenum
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
-
-    installDefaultChannels();
-    installDefaultConfig();
 }
 
 void NodeDB::init()
 {
-    installDefaultDeviceState();
-
+    DEBUG_MSG("Initializing NodeDB\n");
     // saveToDisk();
     loadFromDisk();
     // saveToDisk();
 
     myNodeInfo.max_channels = MAX_NUM_CHANNELS; // tell others the max # of channels we can understand
 
-    myNodeInfo.error_code =
-        CriticalErrorCode_None; // For the error code, only show values from this boot (discard value from flash)
+    myNodeInfo.error_code = CriticalErrorCode_None; // For the error code, only show values from this boot (discard value from flash)
     myNodeInfo.error_address = 0;
 
     // likewise - we always want the app requirements to come from the running appload
