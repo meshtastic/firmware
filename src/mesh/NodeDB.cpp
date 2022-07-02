@@ -225,7 +225,6 @@ void NodeDB::init()
     DEBUG_MSG("Initializing NodeDB\n");
     // saveToDisk();
     loadFromDisk();
-    // saveToDisk();
 
     myNodeInfo.max_channels = MAX_NUM_CHANNELS; // tell others the max # of channels we can understand
 
@@ -263,8 +262,8 @@ void NodeDB::init()
 #endif
 
     resetRadioConfig(); // If bogus settings got saved, then fix them
-
     DEBUG_MSG("region=%d, NODENUM=0x%x, dbsize=%d\n", config.lora.region, myNodeInfo.my_node_num, *numNodes);
+    saveToDisk();
 }
 
 // We reserve a few nodenums for future use
@@ -463,7 +462,6 @@ void NodeDB::saveToDisk()
         saveProto(moduleConfigFileName, LocalModuleConfig_size, sizeof(LocalModuleConfig), LocalModuleConfig_fields, &moduleConfig);
 
         saveChannelsToDisk();
-
     } else {
         DEBUG_MSG("***** DEVELOPMENT MODE - DO NOT RELEASE - not saving to flash *****\n");
     }
