@@ -356,7 +356,7 @@ String MQTT::downstreamPacketToJson(MeshPacket *mp)
                                 {"payload", msgPayload}};
 
     // serialize and return it
-    std::string jsonStr = jsonObj.dump();
+    static std::string jsonStr = jsonObj.dump();
     DEBUG_MSG("serialized json message: %s\n", jsonStr.c_str());
 
     return jsonStr.c_str();
