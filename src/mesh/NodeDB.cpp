@@ -294,10 +294,10 @@ void NodeDB::pickNewNodeNum()
     myNodeInfo.my_node_num = r;
 }
 
-static const char *preffile = "/prefs/db.proto";
-static const char *configfile = "/prefs/config.proto";
-static const char *moduleConfigfile = "/prefs/module.proto";
-static const char *channelfile = "/prefs/channels.proto";
+static const char *prefFileName = "/prefs/db.proto";
+static const char *configFileName = "/prefs/config.proto";
+static const char *moduleConfigFileName = "/prefs/module.proto";
+static const char *channelFileName = "/prefs/channels.proto";
 
 /** Load a protobuf from a file, return true for success */
 bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, void *dest_struct)
@@ -334,7 +334,7 @@ bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_
 void NodeDB::loadFromDisk()
 {
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
-    if (!loadProto(preffile, DeviceState_size, sizeof(devicestate), DeviceState_fields, &devicestate)) {
+    if (!loadProto(prefFileName, DeviceState_size, sizeof(devicestate), DeviceState_fields, &devicestate)) {
         installDefaultDeviceState(); // Our in RAM copy might now be corrupt
     } else {
         if (devicestate.version < DEVICESTATE_MIN_VER) {
@@ -357,7 +357,7 @@ void NodeDB::loadFromDisk()
         }
     }
 
-    if (!loadProto(configfile, LocalConfig_size, sizeof(LocalConfig), LocalConfig_fields, &config)) {
+    if (!loadProto(configFileName, LocalConfig_size, sizeof(LocalConfig), LocalConfig_fields, &config)) {
         installDefaultConfig(); // Our in RAM copy might now be corrupt
     } else {
         if (config.version < DEVICESTATE_MIN_VER) {
@@ -368,7 +368,7 @@ void NodeDB::loadFromDisk()
         }
     }
 
-    if (!loadProto(moduleConfigfile, LocalModuleConfig_size, sizeof(LocalModuleConfig), LocalModuleConfig_fields, &moduleConfig)) {
+    if (!loadProto(moduleConfigFileName, LocalModuleConfig_size, sizeof(LocalModuleConfig), LocalModuleConfig_fields, &moduleConfig)) {
         installDefaultModuleConfig(); // Our in RAM copy might now be corrupt
     } else {
         if (moduleConfig.version < DEVICESTATE_MIN_VER) {
@@ -379,7 +379,7 @@ void NodeDB::loadFromDisk()
         }
     }
 
-    if (!loadProto(channelfile, ChannelFile_size, sizeof(ChannelFile), ChannelFile_fields, &channelFile)) {
+    if (!loadProto(channelFileName, ChannelFile_size, sizeof(ChannelFile), ChannelFile_fields, &channelFile)) {
         installDefaultChannels(); // Our in RAM copy might now be corrupt
     } else {
         if (channelFile.version < DEVICESTATE_MIN_VER) {
@@ -432,7 +432,7 @@ void NodeDB::saveChannelsToDisk()
 #ifdef FSCom
         FSCom.mkdir("/prefs");
 #endif
-        saveProto(channelfile, ChannelFile_size, sizeof(ChannelFile), ChannelFile_fields, &channelFile);
+        saveProto(channelFileName, ChannelFile_size, sizeof(ChannelFile), ChannelFile_fields, &channelFile);
     }
 }
 
@@ -442,7 +442,7 @@ void NodeDB::saveToDisk()
 #ifdef FSCom
         FSCom.mkdir("/prefs");
 #endif
-        saveProto(preffile, DeviceState_size, sizeof(devicestate), DeviceState_fields, &devicestate);
+        saveProto(prefFileName, DeviceState_size, sizeof(devicestate), DeviceState_fields, &devicestate);
 
         // save all config segments
         config.has_device = true;
@@ -451,7 +451,7 @@ void NodeDB::saveToDisk()
         config.has_position = true;
         config.has_power = true;
         config.has_wifi = true;
-        saveProto(configfile, LocalConfig_size, sizeof(LocalConfig), LocalConfig_fields, &config);
+        saveProto(configFileName, LocalConfig_size, sizeof(LocalConfig), LocalConfig_fields, &config);
 
         moduleConfig.has_canned_message = true;
         moduleConfig.has_external_notification = true;
@@ -460,7 +460,7 @@ void NodeDB::saveToDisk()
         moduleConfig.has_serial = true;
         moduleConfig.has_store_forward = true;
         moduleConfig.has_telemetry = true;
-        saveProto(moduleConfigfile, LocalModuleConfig_size, sizeof(LocalModuleConfig), LocalModuleConfig_fields, &moduleConfig);
+        saveProto(moduleConfigFileName, LocalModuleConfig_size, sizeof(LocalModuleConfig), LocalModuleConfig_fields, &moduleConfig);
 
         saveChannelsToDisk();
 
