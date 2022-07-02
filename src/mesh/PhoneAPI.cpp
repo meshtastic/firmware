@@ -183,11 +183,47 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         config_state++;
         // Advance when we have sent all of our config objects
         if (config_state > Config_lora_tag) {
+            state = STATE_SEND_MODULECONFIG;
+            config_state = ModuleConfig_mqtt_tag;
+        }
+        break;
+
+    case STATE_SEND_MODULECONFIG:
+        fromRadioScratch.which_payloadVariant = FromRadio_moduleConfig_tag;
+        switch (config_state) {
+            case ModuleConfig_mqtt_tag:
+                fromRadioScratch.moduleConfig.which_payloadVariant = ModuleConfig_mqtt_tag;
+                fromRadioScratch.moduleConfig.payloadVariant.mqtt = moduleConfig.mqtt;
+                break;
+            case ModuleConfig_serial_tag:
+                fromRadioScratch.moduleConfig.which_payloadVariant = ModuleConfig_serial_tag;
+                fromRadioScratch.moduleConfig.payloadVariant.serial = moduleConfig.serial;
+                break;
+            case ModuleConfig_external_notification_tag:
+                fromRadioScratch.moduleConfig.which_payloadVariant = ModuleConfig_external_notification_tag;
+                fromRadioScratch.moduleConfig.payloadVariant.external_notification = moduleConfig.external_notification;
+                break;
+            case ModuleConfig_range_test_tag:
+                fromRadioScratch.moduleConfig.which_payloadVariant = ModuleConfig_range_test_tag;
+                fromRadioScratch.moduleConfig.payloadVariant.range_test = moduleConfig.range_test;
+                break;
+            case ModuleConfig_telemetry_tag:
+                fromRadioScratch.moduleConfig.which_payloadVariant = ModuleConfig_telemetry_tag;
+                fromRadioScratch.moduleConfig.payloadVariant.telemetry = moduleConfig.telemetry;
+                break;
+            case ModuleConfig_canned_message_tag:
+                fromRadioScratch.moduleConfig.which_payloadVariant = ModuleConfig_canned_message_tag;
+                fromRadioScratch.moduleConfig.payloadVariant.canned_message = moduleConfig.canned_message;
+                break;
+        }
+
+        config_state++;
+        // Advance when we have sent all of our ModuleConfig objects
+        if (config_state > ModuleConfig_canned_message_tag) {
             state = STATE_SEND_NODEINFO;
             config_state = Config_device_tag;
         }
         break;
-
     case STATE_SEND_NODEINFO: {
         const NodeInfo *info = nodeInfoForPhone;
         nodeInfoForPhone = NULL; // We just consumed a nodeinfo, will need a new one next time
@@ -265,6 +301,9 @@ bool PhoneAPI::available()
         return true;
             
     case STATE_SEND_CONFIG:
+        return true;        
+
+    case STATE_SEND_MODULECONFIG:
         return true;
 
     case STATE_SEND_NODEINFO:
