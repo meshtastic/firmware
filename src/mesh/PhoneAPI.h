@@ -24,6 +24,7 @@ class PhoneAPI
         STATE_SEND_MY_INFO, // send our my info record
         STATE_SEND_GROUPS, // new in 1.3?
         STATE_SEND_CONFIG, // Replacement for the old Radioconfig
+        STATE_SEND_MODULECONFIG, // Send Module specific config
         STATE_SEND_NODEINFO, // states progress in this order as the device sends to to the client
         STATE_SEND_COMPLETE_ID,
         STATE_SEND_PACKETS // send packets or debug strings
