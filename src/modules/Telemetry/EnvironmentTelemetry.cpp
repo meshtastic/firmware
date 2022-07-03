@@ -202,7 +202,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
             "Press: " + String(lastMeasurement.variant.environment_metrics.barometric_pressure, 0) + "hPA");
     if (lastMeasurement.variant.environment_metrics.voltage != 0)
         display->drawString(x, y += fontHeight(FONT_SMALL),
-            "Volt/Amp: " + String(lastMeasurement.variant.environment_metrics.voltage, 0) + "V / " + String(lastMeasurement.variant.environment_metrics.current, 0)) + "A";
+            "Volt/Cur: " + String(lastMeasurement.variant.environment_metrics.voltage, 0) + "V / " + String(lastMeasurement.variant.environment_metrics.current, 0) + "mA");
 }
 
 bool EnvironmentTelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Telemetry *t)
