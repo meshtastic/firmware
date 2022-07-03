@@ -643,6 +643,11 @@ static float estimatedHeading(double lat, double lon)
     }
 
     float d = GeoCoord::latLongToMeter(oldLat, oldLon, lat, lon);
+    if ((gps->getDOP() < dopThresholds[3]) && (gps->getNumSatellites() > 6))
+    {
+        if (d < 5) //GPS satellite visibility seems good use movement threshold of 5 meters
+            return b;
+    }
     if (d < 10) // haven't moved enough, just keep current bearing
         return b;
 
