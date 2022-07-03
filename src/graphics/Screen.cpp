@@ -574,8 +574,10 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
                     geoCoord.getDMSLatCP());
             sprintf(lonLine, "%3i° %2i' %2u\" %1c", geoCoord.getDMSLonDeg(), geoCoord.getDMSLonMin(), geoCoord.getDMSLonSec(),
                     geoCoord.getDMSLonCP());
+            displayLine = "PDOP: " + String(gps->getDOP());
             display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(latLine))) / 2, y - FONT_HEIGHT_SMALL * 1, latLine);
             display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(lonLine))) / 2, y, lonLine);
+            display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
         }
     }
 }
