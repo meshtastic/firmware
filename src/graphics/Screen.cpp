@@ -515,7 +515,7 @@ static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GP
         // display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
         geoCoord.updateCoords(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()), int32_t(gps->getAltitude()));
-        displayLine = "Altitude: " + String(geoCoord.getAltitude()) + "m";
+        displayLine = "DOP: " + String(gps->getDOP());
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     }
 }
@@ -574,10 +574,8 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
                     geoCoord.getDMSLatCP());
             sprintf(lonLine, "%3i° %2i' %2u\" %1c", geoCoord.getDMSLonDeg(), geoCoord.getDMSLonMin(), geoCoord.getDMSLonSec(),
                     geoCoord.getDMSLonCP());
-            displayLine = "PDOP: " + String(gps->getDOP());
             display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(latLine))) / 2, y - FONT_HEIGHT_SMALL * 1, latLine);
             display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(lonLine))) / 2, y, lonLine);
-            display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
         }
     }
 }
