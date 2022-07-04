@@ -723,6 +723,10 @@ static void drawCompassHeading(OLEDDisplay *display, int16_t compassX, int16_t c
     drawLine(display, H1, H3);
     drawLine(display, H2, H4);
     drawLine(display, H5, H6);
+    
+    if (goodGpsSatVisibility) {
+        display->drawString(compassX, compassY, "o");
+    }
 }
 
 /// Convert an integer GPS coords to a floating point
