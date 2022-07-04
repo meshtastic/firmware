@@ -595,7 +595,7 @@ class Point
     void rotate(float radian)
     {
         float cos = cosf(radian), sin = sinf(radian);
-        float rx = x * cos - y * sin, ry = x * sin + y * cos;
+        float rx = x * cos + y * sin, ry = -x * sin + y * cos;
 
         x = rx;
         y = ry;
@@ -609,8 +609,10 @@ class Point
 
     void scale(float f)
     {
+        //We use -f here to counter the flip that happens
+        //on the y axis when drawing and rotating on screen
         x *= f;
-        y *= f;
+        y *= -f;
     }
 };
 
@@ -682,16 +684,17 @@ static void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t comp
     drawLine(display, rightArrow, tip);
 }
 
-// Draw the compass heading
-static void drawCompassHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading)
+// Draw north
+static void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading)
 {
-    Point N1(-0.04f, -0.65f), N2(0.04f, -0.65f);
-    Point N3(-0.04f, -0.55f), N4(0.04f, -0.55f);
+    Point N1(-0.04f, 0.65f), N2(0.04f, 0.65f);
+    Point N3(-0.04f, 0.55f), N4(0.04f, 0.55f);
     Point *rosePoints[] = {&N1, &N2, &N3, &N4};
 
     for (int i = 0; i < 4; i++) {
-        rosePoints[i]->rotate(myHeading);
-        rosePoints[i]->scale(-1 * COMPASS_DIAM);
+        // North on compass will be negative of heading
+        rosePoints[i]->rotate(-myHeading);
+        rosePoints[i]->scale(COMPASS_DIAM);
         rosePoints[i]->translate(compassX, compassY);
     }
     drawLine(display, N1, N3);
@@ -762,7 +765,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     if (ourNode && hasPosition(ourNode)) {
         Position &op = ourNode->position;
         float myHeading = estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
-        drawCompassHeading(display, compassX, compassY, myHeading);
+        drawCompassNorth(display, compassX, compassY, myHeading);
 
         if (hasPosition(node)) {
             // display direction toward node
@@ -775,10 +778,8 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             else
                 snprintf(distStr, sizeof(distStr), "%.1f km", d / 1000);
 
-            // FIXME, also keep the guess at the operators heading and add/substract
-            // it.  currently we don't do this and instead draw north up only.
             float bearingToOther =
-                GeoCoord::bearing(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
+                GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
             float headingRadian = bearingToOther - myHeading;
             drawNodeHeading(display, compassX, compassY, headingRadian);
         }
