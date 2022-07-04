@@ -629,7 +629,7 @@ static void drawLine(OLEDDisplay *d, const Point &p1, const Point &p2)
  * We keep a series of "after you've gone 10 meters, what is your heading since
  * the last reference point?"
  */
-static float estimatedHeading(double lat, double lon)
+static float estimatedHeading(double lat, double lon, const GPSStatus *gps)
 {
     static double oldLat, oldLon;
     static float b;
@@ -726,7 +726,7 @@ static void drawCompassHeading(OLEDDisplay *display, int16_t compassX, int16_t c
 /// Convert an integer GPS coords to a floating point
 #define DegD(i) (i * 1e-7)
 
-static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const GPSStatus *gps)
 {
     // We only advance our nodeIndex if the frame # has changed - because
     // drawNodeInfo will be called repeatedly while the frame is shown
@@ -786,7 +786,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     if (ourNode && hasPosition(ourNode)) {
         Position &op = ourNode->position;
         drawCompassNorth(display, compassX, compassY);
-        float myHeading = estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
+        float myHeading = estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i), gps);
         drawCompassHeading(display, compassX, compassY, myHeading);
 
         if (hasPosition(node)) {
