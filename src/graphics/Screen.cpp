@@ -71,6 +71,9 @@ uint8_t imgBattery[16] = {0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 
 // Threshold values for the GPS lock accuracy bar display
 uint32_t dopThresholds[5] = {2000, 1000, 500, 200, 100};
 
+// Stores if we can expect good gps accuracy
+bool goodGpsSatVisibility = false;
+
 // At some point, we're going to ask all of the modules if they would like to display a screen frame
 // we'll need to hold onto pointers for the modules that can draw a frame.
 std::vector<MeshModule *> moduleFrames;
@@ -643,12 +646,11 @@ static float estimatedHeading(double lat, double lon)
     }
 
     float d = GeoCoord::latLongToMeter(oldLat, oldLon, lat, lon);
-    if ((meshtastic::gps->getDOP() < dopThresholds[3]) && (meshtastic::gps->getNumSatellites() > 6))
-    {
-        if (d < 5) //GPS satellite visibility seems good use movement threshold of 5 meters
+    if (goodGpsSatVisibility) {
+        if (d < 5) //GPS satellite visibility seems good, use movement threshold of 5 meters
             return b;
     }
-    if (d < 10) // haven't moved enough, just keep current bearing
+    else if (d < 10) // haven't moved enough, just keep current bearing
         return b;
 
     b = GeoCoord::bearing(oldLat, oldLon, lat, lon);
@@ -1623,6 +1625,12 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 
     // Line 4
     drawGPScoordinates(display, x, y + FONT_HEIGHT_SMALL * 3, gpsStatus);
+    
+    if ((gpsStatus->getDOP() < dopThresholds[3]) && (gpsStatus->getNumSatellites() > 6)) {
+        goodGpsSatVisibility = true;
+    } else {
+        goodGpsSatVisibility = false;
+    }
 
     /* Display a heartbeat pixel that blinks every time the frame is redrawn */
 #ifdef SHOW_REDRAWS
