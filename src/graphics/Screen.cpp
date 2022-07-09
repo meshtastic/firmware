@@ -792,7 +792,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             // If the top of the compass is a static north then bearingToOther can be drawn on the compass directly
             // If the top of the compass is not a static north we need adjust bearingToOther based on heading
             if(!compassNorthTop)
-                float bearingToOther = bearingToOther - myHeading;
+                bearingToOther -= myHeading;
             drawNodeHeading(display, compassX, compassY, bearingToOther);
         }
     }
