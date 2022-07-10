@@ -68,7 +68,7 @@ static char btPIN[16] = "888888";
 // This defines the layout of the compass.
 // If true, North with remain static at the top of the compass.
 // If false, your current heading is static at the top of the compass.
-bool compassNorthTop = false;
+bool compassNorthTop = true;
 
 // This image definition is here instead of images.h because it's modified dynamically by the drawBattery function
 uint8_t imgBattery[16] = {0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0xE7, 0x3C};
