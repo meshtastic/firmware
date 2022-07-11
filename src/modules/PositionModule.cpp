@@ -169,10 +169,6 @@ int32_t PositionModule::runOnce()
                 float distance = GeoCoord::latLongToMeter(lastGpsLatitude * 1e-7, lastGpsLongitude * 1e-7,
                                                           node->position.latitude_i * 1e-7, node->position.longitude_i * 1e-7);
 
-                // Set the current coords as our last ones, after we've compared distance with current
-                lastGpsLatitude = node->position.latitude_i;
-                lastGpsLongitude = node->position.longitude_i;
-
                 // Yes, this has a bunch of magic numbers. Sorry. This is to make the scale non-linear.
                 const float distanceTravelMath = 1203 / (sqrt(pow(myNodeInfo.bitrate, 1.5) / 1.1));
                 uint32_t distanceTravelThreshold =
@@ -190,6 +186,10 @@ int32_t PositionModule::runOnce()
                     DEBUG_MSG("Sending smart pos@%x:6 to mesh (wantReplies=%d, d=%d, dtt=%d, tt=%d)\n", node2->position.pos_timestamp,
                               requestReplies, distance, distanceTravelThreshold, timeTravel);
                     sendOurPosition(NODENUM_BROADCAST, requestReplies);
+
+                    // Set the current coords as our last ones, after we've compared distance with current and decided to send
+                    lastGpsLatitude = node->position.latitude_i;
+                    lastGpsLongitude = node->position.longitude_i;
 
                     /* Update lastGpsSend to now. This means if the device is stationary, then
                        getPref_position_broadcast_secs will still apply.
