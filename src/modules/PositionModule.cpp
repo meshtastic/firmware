@@ -171,22 +171,25 @@ int32_t PositionModule::runOnce()
 
                 // Yes, this has a bunch of magic numbers. Sorry. This is to make the scale non-linear.
                 const float distanceTravelMath = 1203 / (sqrt(pow(myNodeInfo.bitrate, 1.5) / 1.1));
-                uint32_t distanceTravel =
+                uint32_t distanceTravelThreshold =
                     (distanceTravelMath >= distanceTravelMinimum) ? distanceTravelMath : distanceTravelMinimum;
 
                 // Yes, this has a bunch of magic numbers. Sorry.
                 uint32_t timeTravel =
                     ((1500 / myNodeInfo.bitrate) >= timeTravelMinimum) ? (1500 / myNodeInfo.bitrate) : timeTravelMinimum;
-
                 // If the distance traveled since the last update is greater than 100 meters
                 //   and it's been at least 60 seconds since the last update
-                if ((abs(distance) >= distanceTravel) && (now - lastGpsSend >= timeTravel * 1000)) {
+                if ((abs(distance) >= distanceTravelThreshold) && (now - lastGpsSend) >= (timeTravel * 1000)) {
                     bool requestReplies = currentGeneration != radioGeneration;
                     currentGeneration = radioGeneration;
 
-                    DEBUG_MSG("Sending smart pos@%x:6 to mesh (wantReplies=%d, dt=%d, tt=%d)\n", node2->position.pos_timestamp,
-                              requestReplies, distanceTravel, timeTravel);
+                    DEBUG_MSG("Sending smart pos@%x:6 to mesh (wantReplies=%d, d=%d, dtt=%d, tt=%d)\n", node2->position.pos_timestamp,
+                              requestReplies, distance, distanceTravelThreshold, timeTravel);
                     sendOurPosition(NODENUM_BROADCAST, requestReplies);
+
+                    // Set the current coords as our last ones, after we've compared distance with current and decided to send
+                    lastGpsLatitude = node->position.latitude_i;
+                    lastGpsLongitude = node->position.longitude_i;
 
                     /* Update lastGpsSend to now. This means if the device is stationary, then
                        getPref_position_broadcast_secs will still apply.
