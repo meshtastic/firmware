@@ -41,7 +41,7 @@ const RegionInfo regions[] = {
         we do not need to follow it. The European Union regulations clearly state that the power limit for this frequency range is 500 mW, or 27 dBm.
         It also states that we can use interference avoidance and spectrum access techniques to avoid a duty cycle.
         It might be worthwhile in the future to implement frequency hopping to avoid duty cycling.
-        (Please refer to page 69 in the following document)
+        (Please refer to section 4.21 in the following document)
         https://ec.europa.eu/growth/tools-databases/tris/index.cfm/ro/search/?trisaction=search.detail&year=2021&num=528&dLang=EN
      */
     RDEF(EU868, 869.4f, 869.65f, 10, 0, 27, false, false),
