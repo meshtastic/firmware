@@ -35,8 +35,16 @@ const RegionInfo regions[] = {
         https://www.legislation.gov.uk/uksi/1999/930/schedule/6/part/III/made/data.xht?view=snippet&wrap=true
 
         audio_permitted = false per regulation
+
+        Special Note:
+        The link above describes LoRaWAN's band plan, stating a power limit of 16 dBm. This is their own suggested specification,
+        we do not need to follow it. The European Union regulations clearly state that the power limit for this frequency range is 500 mW, or 27 dBm.
+        It also states that we can use interference avoidance and spectrum access techniques to avoid a duty cycle.
+        It might be worthwhile in the future to implement frequency hopping to avoid duty cycling.
+        (Please refer to page 69 in the following document)
+        https://ec.europa.eu/growth/tools-databases/tris/index.cfm/ro/search/?trisaction=search.detail&year=2021&num=528&dLang=EN
      */
-    RDEF(EU868, 869.4f, 869.65f, 10, 0, 16, false, false),
+    RDEF(EU868, 869.4f, 869.65f, 10, 0, 27, false, false),
 
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
