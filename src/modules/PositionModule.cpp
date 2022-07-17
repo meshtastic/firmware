@@ -177,8 +177,8 @@ int32_t PositionModule::runOnce()
                 // Yes, this has a bunch of magic numbers. Sorry.
                 uint32_t timeTravel =
                     ((1500 / myNodeInfo.bitrate) >= timeTravelMinimum) ? (1500 / myNodeInfo.bitrate) : timeTravelMinimum;
-                // If the distance traveled since the last update is greater than 100 meters
-                //   and it's been at least 60 seconds since the last update
+                // If the distance traveled since the last update is greater than distanceTravelMinimum meters
+                //   and it's been at least timeTravelMinimum seconds since the last update
                 if ((abs(distance) >= distanceTravelThreshold) && (now - lastGpsSend) >= (timeTravel * 1000)) {
                     bool requestReplies = currentGeneration != radioGeneration;
                     currentGeneration = radioGeneration;
