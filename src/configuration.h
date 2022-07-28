@@ -98,7 +98,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Standard definitions for ESP32 targets
 //
 
+#if !defined(NO_ESP32) || defined(PORTDUINO)
 #define HAS_WIFI
+#endif
 
 #define GPS_SERIAL_NUM 1
 #define GPS_RX_PIN 34

@@ -18,12 +18,13 @@
 #define FSBegin() FSCom.begin(true)
 #define FILE_O_WRITE "w"
 #define FILE_O_READ "r"
-#else
+#elif !defined(NO_NRF52)
 // NRF52 version
 #include "InternalFileSystem.h"
 #define FSCom InternalFS
 #define FSBegin() FSCom.begin()
 using namespace Adafruit_LittleFS_Namespace;
+#else
 #endif
 
 void fsInit();

@@ -14,7 +14,7 @@
 #include "modules/RoutingModule.h"
 #include "modules/TextMessageModule.h"
 #include "modules/Telemetry/DeviceTelemetry.h"
-#ifndef PORTDUINO
+#ifndef NO_TELEMETRY
 #include "modules/Telemetry/EnvironmentTelemetry.h"
 #endif
 #ifndef NO_ESP32
@@ -28,7 +28,9 @@
  */
 void setupModules()
 {
+#ifndef NO_BUTTON
     inputBroker = new InputBroker();
+#endif
     adminModule = new AdminModule();
     nodeInfoModule = new NodeInfoModule();
     positionModule = new PositionModule();
@@ -39,6 +41,7 @@ void setupModules()
 
     new RemoteHardwareModule();
     new ReplyModule();
+#ifndef NO_BUTTON
     rotaryEncoderInterruptImpl1 = new RotaryEncoderInterruptImpl1();
     rotaryEncoderInterruptImpl1->init();
     upDownInterruptImpl1 = new UpDownInterruptImpl1();
@@ -47,10 +50,11 @@ void setupModules()
     cardKbI2cImpl->init();
     facesKbI2cImpl = new FacesKbI2cImpl();
     facesKbI2cImpl->init();
+#endif
 #ifndef NO_SCREEN    
     cannedMessageModule = new CannedMessageModule();
 #endif
-#ifndef PORTDUINO
+#ifndef NO_TELEMETRY
     new DeviceTelemetryModule();
     new EnvironmentTelemetryModule();
 #endif
