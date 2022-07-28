@@ -52,7 +52,9 @@
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
 
+#ifndef NO_BUTTON
 #include "ButtonThread.h"
+#endif
 #include "PowerFSMThread.h"
 
 using namespace concurrency;
@@ -126,11 +128,15 @@ static int32_t ledBlinker()
 
 uint32_t timeLastPowered = 0;
 
+#ifndef NO_BUTTON
 bool ButtonThread::shutdown_on_long_stop = false;
+#endif
 
 static Periodic *ledPeriodic;
 static OSThread *powerFSMthread, *buttonThread;
+#ifndef NO_BUTTON
 uint32_t ButtonThread::longPressTime = 0;
+#endif
 
 RadioInterface *rIf = NULL;
 
@@ -236,8 +242,10 @@ void setup()
     // scanEInkDevice();
 #endif
 
+#ifndef NO_BUTTON
     // Buttons & LED
     buttonThread = new ButtonThread();
+#endif
 
 #ifdef LED_PIN
     pinMode(LED_PIN, OUTPUT);
