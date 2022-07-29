@@ -133,20 +133,20 @@ int32_t PositionModule::runOnce()
 
         // Only send packets if the channel is less than 40% utilized.
         if (airTime->channelUtilizationPercent() < 40) {
+            if (node->has_position && (node->position.latitude_i != 0 || node->position.longitude_i != 0)) {
+                lastGpsSend = now;
 
-            lastGpsSend = now;
+                lastGpsLatitude = node->position.latitude_i;
+                lastGpsLongitude = node->position.longitude_i;
 
-            lastGpsLatitude = node->position.latitude_i;
-            lastGpsLongitude = node->position.longitude_i;
+                // If we changed channels, ask everyone else for their latest info
+                bool requestReplies = currentGeneration != radioGeneration;
+                currentGeneration = radioGeneration;
 
-            // If we changed channels, ask everyone else for their latest info
-            bool requestReplies = currentGeneration != radioGeneration;
-            currentGeneration = radioGeneration;
+                DEBUG_MSG("Sending pos@%x:6 to mesh (wantReplies=%d)\n", node->position.pos_timestamp, requestReplies);
 
-            DEBUG_MSG("Sending pos@%x:6 to mesh (wantReplies=%d)\n", node->position.pos_timestamp, requestReplies);
-
-            sendOurPosition(NODENUM_BROADCAST, requestReplies);
-
+                sendOurPosition(NODENUM_BROADCAST, requestReplies);
+            }
         } else {
             DEBUG_MSG("Channel utilization is >50 percent. Skipping this opportunity to send.\n");
         }
