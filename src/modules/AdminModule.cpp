@@ -6,7 +6,7 @@
 #include "configuration.h"
 #include "main.h"
 
-#ifdef PORTDUINO
+#ifdef ARCH_PORTDUINO
 #include "unistd.h"
 #endif
 
@@ -110,7 +110,7 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
         break;
     }
 
-#ifdef PORTDUINO
+#ifdef ARCH_PORTDUINO
     case AdminMessage_exit_simulator_tag:
         DEBUG_MSG("Exiting simulator\n");
         _exit(0);

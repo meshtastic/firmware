@@ -14,10 +14,10 @@
 #include "modules/RoutingModule.h"
 #include "modules/TextMessageModule.h"
 #include "modules/Telemetry/DeviceTelemetry.h"
-#ifndef NO_TELEMETRY
+#if HAS_TELEMETRY
 #include "modules/Telemetry/EnvironmentTelemetry.h"
 #endif
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 #include "modules/esp32/RangeTestModule.h"
 #include "modules/esp32/SerialModule.h"
 #include "modules/esp32/StoreForwardModule.h"
@@ -28,7 +28,7 @@
  */
 void setupModules()
 {
-#ifndef NO_BUTTON
+#if HAS_BUTTON
     inputBroker = new InputBroker();
 #endif
     adminModule = new AdminModule();
@@ -41,7 +41,7 @@ void setupModules()
 
     new RemoteHardwareModule();
     new ReplyModule();
-#ifndef NO_BUTTON
+#if HAS_BUTTON
     rotaryEncoderInterruptImpl1 = new RotaryEncoderInterruptImpl1();
     rotaryEncoderInterruptImpl1->init();
     upDownInterruptImpl1 = new UpDownInterruptImpl1();
@@ -51,14 +51,14 @@ void setupModules()
     facesKbI2cImpl = new FacesKbI2cImpl();
     facesKbI2cImpl->init();
 #endif
-#ifndef NO_SCREEN    
+#if HAS_SCREEN
     cannedMessageModule = new CannedMessageModule();
 #endif
-#ifndef NO_TELEMETRY
+#if HAS_TELEMETRY
     new DeviceTelemetryModule();
     new EnvironmentTelemetryModule();
 #endif
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
     // Only run on an esp32 based device.
 
     /*

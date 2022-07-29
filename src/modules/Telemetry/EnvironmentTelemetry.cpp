@@ -31,7 +31,7 @@ INA219Sensor ina219Sensor;
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
-#ifdef HAS_EINK
+#ifdef USE_EINK
 // The screen is bigger so use bigger fonts
 #define FONT_SMALL ArialMT_Plain_16
 #define FONT_MEDIUM ArialMT_Plain_24
@@ -49,7 +49,7 @@ INA219Sensor ina219Sensor;
 
 int32_t EnvironmentTelemetryModule::runOnce()
 {
-#ifndef PORTDUINO
+#ifndef ARCH_PORTDUINO
     int32_t result = INT32_MAX;
     /*
         Uncomment the preferences below if you want to use the module
