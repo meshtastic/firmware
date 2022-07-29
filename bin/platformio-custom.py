@@ -17,7 +17,7 @@ Import("projenv")
 
 prefsLoc = projenv["PROJECT_DIR"] + "/version.properties"
 verObj = readProps(prefsLoc)
-print("Using meshtastic platformio-custom.py, firmare version " + verObj['long'])
+print("Using meshtastic platformio-custom.py, firmware version " + verObj['long'])
 # print("path is" + ','.join(sys.path))
 
 # General options that are passed to the C and C++ compilers
