@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#ifdef HAS_EINK
+#ifdef USE_EINK
 #include "main.h"
 #include "EInkDisplay2.h"
 #include "SPILock.h"

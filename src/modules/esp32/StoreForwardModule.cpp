@@ -17,7 +17,7 @@ StoreForwardModule *storeForwardModule;
 int32_t StoreForwardModule::runOnce()
 {
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 
     if (moduleConfig.store_forward.enabled) {
 
@@ -241,7 +241,7 @@ void StoreForwardModule::sendMessage(NodeNum dest, char *str)
 
 ProcessMessage StoreForwardModule::handleReceived(const MeshPacket &mp)
 {
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
     if (moduleConfig.store_forward.enabled) {
 
         DEBUG_MSG("--- S&F Received something\n");
@@ -381,7 +381,7 @@ StoreForwardModule::StoreForwardModule()
     : SinglePortModule("StoreForwardModule", PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("StoreForwardModule")
 {
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 
     isPromiscuous = true; // Brown chicken brown cow
 

@@ -1,5 +1,3 @@
-#define USE_SIM_RADIO
-
 // Pine64 uses a common pinout for their SX1262 vs RF95 modules - both can be enabled and we will probe at runtime for RF95 and if
 // not found then probe for SX1262.  Currently the RF95 code is disabled because I think the RF95 module won't need to ship.
 // #define USE_RF95
@@ -38,5 +36,3 @@
 #define RADIOLIB_SX127X_REG_MODEM_STAT SX127X_REG_MODEM_STAT
 #define RADIOLIB_SX127X_SYNC_WORD SX127X_SYNC_WORD
 #define RADIOLIB_SX127X_MASK_IRQ_FLAG_VALID_HEADER SX127X_MASK_IRQ_FLAG_VALID_HEADER
-
-#define NO_TELEMETRY
