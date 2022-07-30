@@ -112,7 +112,18 @@ class AnalogBatteryLevel : public HasBatteryLevel
         const uint32_t min_read_interval = 5000;
         if (millis() - last_read_time_ms > min_read_interval) {
             last_read_time_ms = millis();
+
+#ifdef BATTERY_SENSE_SAMPLES
+//Set the number of samples, it has an effect of increasing sensitivity, especially in complex electromagnetic environment.
+            uint32_t raw = 0;
+            for(uint32_t i=0; i<BATTERY_SENSE_SAMPLES;i++){
+                raw += analogRead(BATTERY_PIN);
+            }
+            raw = raw/BATTERY_SENSE_SAMPLES;
+#else
             uint32_t raw = analogRead(BATTERY_PIN);
+#endif
+
             float scaled;
 #ifndef VBAT_RAW_TO_SCALED
             scaled = 1000.0 * operativeAdcMultiplier * (AREF_VOLTAGE / 1024.0) * raw;
