@@ -1,5 +1,7 @@
 #pragma once
 
+#include "configuration.h"
+
 #if !HAS_SCREEN
 #include "power.h"
 namespace graphics
