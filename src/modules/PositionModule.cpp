@@ -148,7 +148,7 @@ int32_t PositionModule::runOnce()
                 sendOurPosition(NODENUM_BROADCAST, requestReplies);
             }
         } else {
-            DEBUG_MSG("Channel utilization is >50 percent. Skipping this opportunity to send.\n");
+            DEBUG_MSG("Channel utilization is >40 percent. Skipping this opportunity to send.\n");
         }
 
     } else if (!config.position.position_broadcast_smart_disabled) {
