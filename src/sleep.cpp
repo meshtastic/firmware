@@ -8,7 +8,7 @@
 #include "main.h"
 #include "target_specific.h"
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 #include "esp32/pm.h"
 #include "esp_pm.h"
 #include "mesh/http/WiFiAPClient.h"
@@ -48,7 +48,7 @@ RTC_DATA_ATTR int bootCount = 0;
  */
 void setCPUFast(bool on)
 {
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 
     if (isWifiAvailable()) {
         /*
@@ -101,7 +101,7 @@ void setGPSPower(bool on)
 // Perform power on init that we do on each wake from deep sleep
 void initDeepSleep()
 {
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
     bootCount++;
     wakeCause = esp_sleep_get_wakeup_cause();
     /*
@@ -207,7 +207,7 @@ void doDeepSleep(uint64_t msecToWake)
     cpuDeepSleep(msecToWake);
 }
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 /**
  * enter light sleep (preserves ram but stops everything about CPU).
  *

@@ -115,12 +115,12 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
             rtc.setDateTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_wday, t->tm_hour, t->tm_min, t->tm_sec);
             DEBUG_MSG("PCF8563_RTC setDateTime %02d-%02d-%02d %02d:%02d:%02d %ld\n", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, tv->tv_sec);
         }
-#elif !defined(NO_ESP32)
+#elif defined(ARCH_ESP32)
         settimeofday(tv, NULL);
 #endif
 
         // nrf52 doesn't have a readable RTC (yet - software not written)
-#if defined(PORTDUINO) || !defined(NO_ESP32) || defined(RV3028_RTC) || defined(PCF8563_RTC)
+#ifdef HAS_RTC
         readFromRTC();
 #endif
 

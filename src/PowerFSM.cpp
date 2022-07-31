@@ -63,7 +63,7 @@ static void lsIdle()
 {
     // DEBUG_MSG("lsIdle begin ls_secs=%u\n", getPref_ls_secs());
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 
     // Do we have more sleeping to do?
     if (secsSlept < config.power.ls_secs ? config.power.ls_secs : default_ls_secs * 1000) {
@@ -343,7 +343,7 @@ void PowerFSM_setup()
 
     uint32_t meshSds = 0;
 
-#ifndef NRF52_SERIES
+#ifdef ARCH_ESP32
     // We never enter light-sleep or NB states on NRF52 (because the CPU uses so little power normally)
 
     // See: https://github.com/meshtastic/Meshtastic-device/issues/1071

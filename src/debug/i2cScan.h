@@ -3,7 +3,7 @@
 #include <Wire.h>
 #include "mesh/generated/telemetry.pb.h"
 
-#ifndef NO_WIRE
+#if HAS_WIRE
 uint16_t getRegisterValue(uint8_t address, uint8_t reg, uint8_t length) {
     uint16_t value = 0x00;
     Wire.beginTransmission(address);
