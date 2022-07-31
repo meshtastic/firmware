@@ -8,16 +8,16 @@ void powerCommandsCheck()
 {
     if (rebootAtMsec && millis() > rebootAtMsec) {
         DEBUG_MSG("Rebooting\n");
-#ifndef NO_ESP32
+#if defined(ARCH_ESP32)
         ESP.restart();
-#elif NRF52_SERIES
+#elif defined(ARCH_NRF52)
         NVIC_SystemReset();
 #else
         DEBUG_MSG("FIXME implement reboot for this platform");
 #endif
     }
 
-#if NRF52_SERIES
+#if defined(ARCH_NRF52)
     if (shutdownAtMsec) {
         screen->startShutdownScreen();
         playBeep();
@@ -40,7 +40,7 @@ void powerCommandsCheck()
             playShutdownMelody();
             power->shutdown();
         }
-#elif NRF52_SERIES
+#elif defined(ARCH_NRF52)
         playShutdownMelody();
         power->shutdown();
 #else

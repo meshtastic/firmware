@@ -17,14 +17,14 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 #include "mesh/http/WiFiAPClient.h"
 #include "modules/esp32/StoreForwardModule.h"
 #include <Preferences.h>
 #include <nvs_flash.h>
 #endif
 
-#ifdef NRF52_SERIES
+#ifdef ARCH_NRF52
 #include <bluefruit.h>
 #include <utility/bonding.h>
 #endif
@@ -132,11 +132,11 @@ bool NodeDB::factoryReset()
     installDefaultDeviceState();
     // third, write to disk
     saveToDisk();
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
     // This will erase what's in NVS including ssl keys, persistant variables and ble pairing
     nvs_flash_erase();
 #endif
-#ifdef NRF52_SERIES
+#ifdef ARCH_NRF52
     Bluefruit.begin();
     DEBUG_MSG("Clearing bluetooth bonds!\n");
     bond_print_list(BLE_GAP_ROLE_PERIPH);
@@ -248,7 +248,7 @@ void NodeDB::init()
 
     strncpy(myNodeInfo.firmware_version, optstr(APP_VERSION), sizeof(myNodeInfo.firmware_version));
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
     Preferences preferences;
     preferences.begin("meshtastic", false);
     myNodeInfo.reboot_count = preferences.getUInt("rebootCounter", 0);
@@ -339,11 +339,11 @@ void NodeDB::loadFromDisk()
         if (devicestate.version < DEVICESTATE_MIN_VER) {
             DEBUG_MSG("Warn: devicestate %d is old, discarding\n", devicestate.version);
             installDefaultDeviceState();
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
             // This will erase what's in NVS including ssl keys, persistant variables and ble pairing
             nvs_flash_erase();
 #endif
-#ifdef NRF52_SERIES
+#ifdef ARCH_NRF52
             Bluefruit.begin();
             DEBUG_MSG("Clearing bluetooth bonds!\n");
             bond_print_list(BLE_GAP_ROLE_PERIPH);
@@ -669,7 +669,7 @@ void recordCriticalError(CriticalErrorCode code, uint32_t address, const char *f
     myNodeInfo.error_count++;
 
     // Currently portuino is mostly used for simulation.  Make sue the user notices something really bad happend
-#ifdef PORTDUINO
+#ifdef ARCH_PORTDUINO
     DEBUG_MSG("A critical failure occurred, portduino is exiting...");
     exit(2);
 #endif

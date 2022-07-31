@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <functional>
 
-#ifdef HAS_WIFI
+#ifdef ARCH_ESP32
 #include <DNSServer.h>
 #include <WiFi.h>
 #endif
