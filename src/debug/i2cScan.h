@@ -124,6 +124,9 @@ void scanI2Cdevice(void)
             } else if (registerValue == 0x60) {
                 DEBUG_MSG("BME-280 sensor found at address 0x%x\n", (uint8_t)addr);
                 nodeTelemetrySensorsMap[TelemetrySensorType_BME280] = addr;
+            } else {
+                DEBUG_MSG("BMP-280 sensor found at address 0x%x\n", (uint8_t)addr);
+                nodeTelemetrySensorsMap[TelemetrySensorType_BMP280] = addr;
             }
         }
         if (addr == INA_ADDR || addr == INA_ADDR_ALTERNATE) {
