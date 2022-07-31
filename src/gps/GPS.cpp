@@ -65,12 +65,12 @@ bool GPS::setupGPS()
         didSerialInit = true;
 
 // ESP32 has a special set of parameters vs other arduino ports
-#if defined(GPS_RX_PIN) && !defined(NO_ESP32)
+#if defined(GPS_RX_PIN) && defined(ARCH_ESP32)
         _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
 #else
         _serial_gps->begin(GPS_BAUDRATE);
 #endif
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
         _serial_gps->setRxBufferSize(2048); // the default is 256
 #endif
 #ifdef TTGO_T_ECHO
@@ -432,14 +432,14 @@ int GPS::prepareDeepSleep(void *unused)
     return 0;
 }
 
-#ifndef NO_GPS
+#if HAS_GPS
 #include "NMEAGPS.h"
 #endif
 
 GPS *createGps()
 {
 
-#ifdef NO_GPS
+#if !HAS_GPS
     return nullptr;
 #else
     if (!config.position.gps_disabled) {

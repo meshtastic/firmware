@@ -11,7 +11,7 @@
 // FIXME, we default to 4MHz SPI, SPI mode 0, check if the datasheet says it can really do that
 static SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 
-#ifdef PORTDUINO
+#ifdef ARCH_PORTDUINO
 
 void LockingModule::SPItransfer(uint8_t cmd, uint8_t reg, uint8_t *dataOut, uint8_t *dataIn, uint8_t numBytes)
 {
@@ -45,7 +45,7 @@ RadioLibInterface::RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq
     instance = this;
 }
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 // ESP32 doesn't use that flag
 #define YIELD_FROM_ISR(x) portYIELD_FROM_ISR()
 #else
@@ -96,7 +96,7 @@ bool RadioLibInterface::canSendImmediately()
         if (busyTx && (millis() - lastTxStart > 60000)) {
             DEBUG_MSG("Hardware Failure! busyTx for more than 60s\n");
             RECORD_CRITICALERROR(CriticalErrorCode_TransmitFailed);
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
             if (busyTx && (millis() - lastTxStart > 65000)) // After 5s more, reboot
                 ESP.restart();
 #endif

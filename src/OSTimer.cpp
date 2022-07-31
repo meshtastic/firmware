@@ -15,7 +15,7 @@ bool scheduleOSCallback(PendableFunction callback, void *param1, uint32_t param2
     return xTimerPendFunctionCall(callback, param1, param2, pdMS_TO_TICKS(delayMsec));
 } */
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 
 // Super skanky quick hack to use hardware timers of the ESP32
 static hw_timer_t *timer;
