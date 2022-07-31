@@ -108,11 +108,7 @@ typedef struct _ModuleConfig_TelemetryConfig {
     uint32_t environment_update_interval;
     bool environment_measurement_enabled;
     bool environment_screen_enabled;
-    uint32_t environment_read_error_count_threshold;
-    uint32_t environment_recovery_interval;
     bool environment_display_fahrenheit;
-    TelemetrySensorType environment_sensor_type;
-    uint32_t environment_sensor_pin;
 } ModuleConfig_TelemetryConfig;
 
 /* Module Config */
@@ -162,7 +158,7 @@ extern "C" {
 #define ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0}
 #define ModuleConfig_StoreForwardConfig_init_default {0, 0, 0, 0, 0}
 #define ModuleConfig_RangeTestConfig_init_default {0, 0, 0}
-#define ModuleConfig_TelemetryConfig_init_default {0, 0, 0, 0, 0, 0, 0, _TelemetrySensorType_MIN, 0}
+#define ModuleConfig_TelemetryConfig_init_default {0, 0, 0, 0, 0}
 #define ModuleConfig_CannedMessageConfig_init_default {0, 0, 0, 0, _ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define ModuleConfig_init_zero                   {0, {ModuleConfig_MQTTConfig_init_zero}}
 #define ModuleConfig_MQTTConfig_init_zero        {0, "", "", "", 0}
@@ -170,7 +166,7 @@ extern "C" {
 #define ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0}
 #define ModuleConfig_StoreForwardConfig_init_zero {0, 0, 0, 0, 0}
 #define ModuleConfig_RangeTestConfig_init_zero   {0, 0, 0}
-#define ModuleConfig_TelemetryConfig_init_zero   {0, 0, 0, 0, 0, 0, 0, _TelemetrySensorType_MIN, 0}
+#define ModuleConfig_TelemetryConfig_init_zero   {0, 0, 0, 0, 0}
 #define ModuleConfig_CannedMessageConfig_init_zero {0, 0, 0, 0, _ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -215,11 +211,7 @@ extern "C" {
 #define ModuleConfig_TelemetryConfig_environment_update_interval_tag 2
 #define ModuleConfig_TelemetryConfig_environment_measurement_enabled_tag 3
 #define ModuleConfig_TelemetryConfig_environment_screen_enabled_tag 4
-#define ModuleConfig_TelemetryConfig_environment_read_error_count_threshold_tag 5
-#define ModuleConfig_TelemetryConfig_environment_recovery_interval_tag 6
 #define ModuleConfig_TelemetryConfig_environment_display_fahrenheit_tag 7
-#define ModuleConfig_TelemetryConfig_environment_sensor_type_tag 8
-#define ModuleConfig_TelemetryConfig_environment_sensor_pin_tag 9
 #define ModuleConfig_mqtt_tag                    1
 #define ModuleConfig_serial_tag                  2
 #define ModuleConfig_external_notification_tag   3
@@ -298,11 +290,7 @@ X(a, STATIC,   SINGULAR, UINT32,   device_update_interval,   1) \
 X(a, STATIC,   SINGULAR, UINT32,   environment_update_interval,   2) \
 X(a, STATIC,   SINGULAR, BOOL,     environment_measurement_enabled,   3) \
 X(a, STATIC,   SINGULAR, BOOL,     environment_screen_enabled,   4) \
-X(a, STATIC,   SINGULAR, UINT32,   environment_read_error_count_threshold,   5) \
-X(a, STATIC,   SINGULAR, UINT32,   environment_recovery_interval,   6) \
-X(a, STATIC,   SINGULAR, BOOL,     environment_display_fahrenheit,   7) \
-X(a, STATIC,   SINGULAR, UENUM,    environment_sensor_type,   8) \
-X(a, STATIC,   SINGULAR, UINT32,   environment_sensor_pin,   9)
+X(a, STATIC,   SINGULAR, BOOL,     environment_display_fahrenheit,   7)
 #define ModuleConfig_TelemetryConfig_CALLBACK NULL
 #define ModuleConfig_TelemetryConfig_DEFAULT NULL
 
@@ -347,7 +335,7 @@ extern const pb_msgdesc_t ModuleConfig_CannedMessageConfig_msg;
 #define ModuleConfig_RangeTestConfig_size        10
 #define ModuleConfig_SerialConfig_size           26
 #define ModuleConfig_StoreForwardConfig_size     22
-#define ModuleConfig_TelemetryConfig_size        38
+#define ModuleConfig_TelemetryConfig_size        18
 #define ModuleConfig_size                        105
 
 #ifdef __cplusplus

@@ -14,28 +14,18 @@
 typedef enum _TelemetrySensorType { 
     /* No external telemetry sensor explicitly set */
     TelemetrySensorType_NotSet = 0, 
-    /* Moderate accuracy temperature */
-    TelemetrySensorType_DHT11 = 1, 
-    /* High accuracy temperature */
-    TelemetrySensorType_DS18B20 = 2, 
-    /* Moderate accuracy temperature and humidity */
-    TelemetrySensorType_DHT12 = 3, 
-    /* Moderate accuracy temperature and humidity */
-    TelemetrySensorType_DHT21 = 4, 
-    /* Moderate accuracy temperature and humidity */
-    TelemetrySensorType_DHT22 = 5, 
     /* High accuracy temperature, pressure, humidity */
-    TelemetrySensorType_BME280 = 6, 
+    TelemetrySensorType_BME280 = 1, 
     /* High accuracy temperature, pressure, humidity, and air resistance */
-    TelemetrySensorType_BME680 = 7, 
+    TelemetrySensorType_BME680 = 2, 
     /* Very high accuracy temperature */
-    TelemetrySensorType_MCP9808 = 8, 
-    /* Moderate accuracy temperature and humidity */
-    TelemetrySensorType_SHTC3 = 9, 
+    TelemetrySensorType_MCP9808 = 3, 
     /* Moderate accuracy current and voltage */
-    TelemetrySensorType_INA260 = 10, 
+    TelemetrySensorType_INA260 = 4, 
     /* Moderate accuracy current and voltage */
-    TelemetrySensorType_INA219 = 11 
+    TelemetrySensorType_INA219 = 5, 
+    /* High accuracy temperature and pressure */
+    TelemetrySensorType_BMP280 = 6 
 } TelemetrySensorType;
 
 /* Struct definitions */
@@ -87,8 +77,8 @@ typedef struct _Telemetry {
 
 /* Helper constants for enums */
 #define _TelemetrySensorType_MIN TelemetrySensorType_NotSet
-#define _TelemetrySensorType_MAX TelemetrySensorType_INA219
-#define _TelemetrySensorType_ARRAYSIZE ((TelemetrySensorType)(TelemetrySensorType_INA219+1))
+#define _TelemetrySensorType_MAX TelemetrySensorType_BMP280
+#define _TelemetrySensorType_ARRAYSIZE ((TelemetrySensorType)(TelemetrySensorType_BMP280+1))
 
 
 #ifdef __cplusplus

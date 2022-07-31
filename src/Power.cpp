@@ -46,7 +46,7 @@ Power *power;
 using namespace meshtastic;
 
 #ifndef AREF_VOLTAGE
-#if defined(NRF52_SERIES)
+#if defined(ARCH_NRF52)
 /*
  * Internal Reference is +/-0.6V, with an adjustable gain of 1/6, 1/5, 1/4,
  * 1/3, 1/2 or 1, meaning 3.6, 3.0, 2.4, 1.8, 1.2 or 0.6V for the ADC levels.
@@ -84,7 +84,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
         if (v < noBatVolt)
             return -1; // If voltage is super low assume no battery installed
 
-#ifndef NRF52_SERIES
+#ifdef ARCH_ESP32
         // This does not work on a RAK4631 with battery connected
         if (v > chargingVolt)
             return 0; // While charging we can't report % full on the battery
@@ -112,7 +112,18 @@ class AnalogBatteryLevel : public HasBatteryLevel
         const uint32_t min_read_interval = 5000;
         if (millis() - last_read_time_ms > min_read_interval) {
             last_read_time_ms = millis();
+
+#ifdef BATTERY_SENSE_SAMPLES
+//Set the number of samples, it has an effect of increasing sensitivity, especially in complex electromagnetic environment.
+            uint32_t raw = 0;
+            for(uint32_t i=0; i<BATTERY_SENSE_SAMPLES;i++){
+                raw += analogRead(BATTERY_PIN);
+            }
+            raw = raw/BATTERY_SENSE_SAMPLES;
+#else
             uint32_t raw = analogRead(BATTERY_PIN);
+#endif
+
             float scaled;
 #ifndef VBAT_RAW_TO_SCALED
             scaled = 1000.0 * operativeAdcMultiplier * (AREF_VOLTAGE / 1024.0) * raw;
@@ -169,11 +180,11 @@ bool Power::analogInit()
     // disable any internal pullups
     pinMode(BATTERY_PIN, INPUT);
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
     // ESP32 needs special analog stuff
     adcAttachPin(BATTERY_PIN);
 #endif
-#ifdef NRF52_SERIES
+#ifdef ARCH_NRF52
 #ifdef VBAT_AR_INTERNAL
     analogReference(VBAT_AR_INTERNAL);
 #else
@@ -214,7 +225,7 @@ void Power::shutdown()
     DEBUG_MSG("Shutting down\n");
     axp.setChgLEDMode(AXP20X_LED_OFF);
     axp.shutdown();
-#elif NRF52_SERIES
+#elif defined(ARCH_NRF52)
     playBeep();
     ledOff(PIN_LED1);
     ledOff(PIN_LED2);
@@ -256,7 +267,7 @@ void Power::readPowerStatus()
 
 // If we have a battery at all and it is less than 10% full, force deep sleep if we have more than 3 low readings in a row
 // Supect fluctuating voltage on the RAK4631 to force it to deep sleep even if battery is at 85% after only a few days
-#ifdef NRF52_SERIES
+#ifdef ARCH_NRF52
         if (powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
             if (batteryLevel->getBattVoltage() < MIN_BAT_MILLIVOLTS) {
                 low_voltage_counter++;

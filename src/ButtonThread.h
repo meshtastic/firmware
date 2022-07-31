@@ -7,7 +7,7 @@
 #include "power.h"
 #include <OneButton.h>
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 #include "nimble/BluetoothUtil.h"
 #endif
 
@@ -127,7 +127,7 @@ class ButtonThread : public concurrency::OSThread
     static void userButtonPressedLong()
     {
         // DEBUG_MSG("Long press!\n");
-#ifndef NRF52_SERIES
+#ifdef ARCH_ESP32
         screen->adjustBrightness();
 #endif
         // If user button is held down for 5 seconds, shutdown the device.
@@ -137,7 +137,7 @@ class ButtonThread : public concurrency::OSThread
                 setLed(false);
                 power->shutdown();
             }
-#elif NRF52_SERIES
+#elif defined(ARCH_NRF52)
             // Do actual shutdown when button released, otherwise the button release
             // may wake the board immediatedly.
             if ((!shutdown_on_long_stop) && (millis() > 30 * 1000)) {
@@ -163,19 +163,19 @@ class ButtonThread : public concurrency::OSThread
 
     static void userButtonDoublePressed()
     {
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
         disablePin();
-#elif defined(HAS_EINK)
+#elif defined(USE_EINK)
         digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
 #endif
     }
 
     static void userButtonMultiPressed()
     {
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
         clearNVS();
 #endif
-#ifdef NRF52_SERIES
+#ifdef ARCH_NRF52
         clearBonds();
 #endif
     }

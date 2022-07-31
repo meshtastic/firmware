@@ -1,18 +1,16 @@
 #include "../mesh/generated/telemetry.pb.h"
 #include "TelemetrySensor.h"
-#include <DS18B20.h>
-#include <OneWire.h>
+#include <Adafruit_BMP280.h>
 
-class DallasSensor : virtual public TelemetrySensor {
+class BMP280Sensor : virtual public TelemetrySensor {
 private:
-    OneWire *oneWire = NULL;
-    DS18B20 *ds18b20 = NULL;
+    Adafruit_BMP280 bmp280;
 
 protected:
     virtual void setup() override;
 
 public:
-    DallasSensor();
+    BMP280Sensor();
     virtual int32_t runOnce() override;
     virtual bool getMetrics(Telemetry *measurement) override;
 };    
