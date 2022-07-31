@@ -12,7 +12,7 @@
 
 int32_t DeviceTelemetryModule::runOnce()
 {
-#ifndef PORTDUINO
+#ifndef ARCH_PORTDUINO
     if (firstTime) {
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = 0;

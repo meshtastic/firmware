@@ -161,7 +161,7 @@ void cpuDeepSleep(uint64_t msecToWake)
 {
     // FIXME, configure RTC or button press to wake us
     // FIXME, power down SPI, I2C, RAMs
-#ifndef NO_WIRE
+#if HAS_WIRE
     Wire.end();
 #endif
     SPI.end();

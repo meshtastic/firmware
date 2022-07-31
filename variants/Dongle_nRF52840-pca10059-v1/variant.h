@@ -123,7 +123,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_EINK_SCLK  (9)           // EPD_SCLK	
 #define PIN_EINK_MOSI  (10)          // EPD_MOSI	
 
-#define HAS_EINK
+#define USE_EINK
 
 /*
  * Wire Interfaces

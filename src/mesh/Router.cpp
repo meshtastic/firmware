@@ -11,7 +11,7 @@ extern "C" {
 #include "mesh/compression/unishox2.h"
 }
 
-#if defined(HAS_WIFI) || defined(PORTDUINO)
+#if HAS_WIFI
 #include "mqtt/MQTT.h"
 #endif
 
@@ -213,7 +213,7 @@ ErrorCode Router::send(MeshPacket *p)
     if (p->which_payloadVariant == MeshPacket_decoded_tag) {
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
 
-#if defined(HAS_WIFI) || defined(PORTDUINO)
+#if HAS_WIFI
         // check if we should send decrypted packets to mqtt
 
         // truth table:
@@ -244,7 +244,7 @@ ErrorCode Router::send(MeshPacket *p)
             return encodeResult; // FIXME - this isn't a valid ErrorCode
         }
 
-#if defined(HAS_WIFI) || defined(PORTDUINO)
+#if HAS_WIFI
         // the packet is now encrypted.
         // check if we should send encrypted packets to mqtt
         if (mqtt && shouldActuallyEncrypt)
