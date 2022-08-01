@@ -29,8 +29,12 @@ bool FloodingRouter::shouldFilterReceived(MeshPacket *p)
 
 void FloodingRouter::sniffReceived(const MeshPacket *p, const Routing *c)
 {
-
-    if ((p->to == NODENUM_BROADCAST) && (p->hop_limit > 0) && (getFrom(p) != getNodeNum())) {
+    PacketId ackId = ((c && c->error_reason == Routing_Error_NONE) || !c) ? p->decoded.request_id : 0;
+    if (ackId && p->to != getNodeNum()) {
+        // do not flood direct message that is ACKed 
+        DEBUG_MSG("Receiving an ACK not for me, but don't need to rebroadcast this direct message anymore.\n");
+        Router::cancelSending(p->to, p->decoded.request_id);   // cancel rebroadcast for this DM
+    } else if ((p->to != getNodeNum()) && (p->hop_limit > 0) && (getFrom(p) != getNodeNum())) {
         if (p->id != 0) {
             if (config.device.role != Config_DeviceConfig_Role_ClientMute) {
                 MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
