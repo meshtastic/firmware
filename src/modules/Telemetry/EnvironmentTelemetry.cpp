@@ -11,12 +11,14 @@
 #include <OLEDDisplayUi.h>
 
 // Sensors
+#include "Sensor/BMP280Sensor.h"
 #include "Sensor/BME280Sensor.h"
 #include "Sensor/BME680Sensor.h"
 #include "Sensor/MCP9808Sensor.h"
 #include "Sensor/INA260Sensor.h"
 #include "Sensor/INA219Sensor.h"
 
+BMP280Sensor bmp280Sensor;
 BME280Sensor bme280Sensor;
 BME680Sensor bme680Sensor;
 MCP9808Sensor mcp9808Sensor;
@@ -69,10 +71,12 @@ int32_t EnvironmentTelemetryModule::runOnce()
             DEBUG_MSG("Environment Telemetry: Initializing\n");
             // it's possible to have this module enabled, only for displaying values on the screen.
             // therefore, we should only enable the sensor loop if measurement is also enabled
-            if (bme680Sensor.hasSensor()) 
-                result = bme680Sensor.runOnce();
+            if (bmp280Sensor.hasSensor()) 
+                result = bmp280Sensor.runOnce();
             if (bme280Sensor.hasSensor()) 
                 result = bme280Sensor.runOnce();
+            if (bme680Sensor.hasSensor()) 
+                result = bme680Sensor.runOnce();
             if (mcp9808Sensor.hasSensor()) 
                 result = mcp9808Sensor.runOnce();
             if (ina260Sensor.hasSensor()) 
@@ -196,6 +200,8 @@ bool EnvironmentTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies
     DEBUG_MSG("-----------------------------------------\n");
     DEBUG_MSG("Environment Telemetry: Read data\n");
 
+    if (bmp280Sensor.hasSensor())
+        bmp280Sensor.getMetrics(&m);
     if (bme280Sensor.hasSensor())
         bme280Sensor.getMetrics(&m);
     if (bme680Sensor.hasSensor())
@@ -223,6 +229,6 @@ bool EnvironmentTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies
 
     lastMeasurementPacket = packetPool.allocCopy(*p);
     DEBUG_MSG("Environment Telemetry: Sending packet to mesh");
-    service.sendToMesh(p);
+    service.sendToMesh(p, RX_SRC_LOCAL, true);
     return true;
 }

@@ -19,7 +19,7 @@ extern bool axp192_found;
 extern bool isCharging;
 extern bool isUSBPowered;
 
-extern uint8_t nodeTelemetrySensorsMap[6];
+extern uint8_t nodeTelemetrySensorsMap[7];
 
 // Global Screen singleton.
 extern graphics::Screen *screen;

@@ -72,7 +72,7 @@ bool DeviceTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies)
 
     lastMeasurementPacket = packetPool.allocCopy(*p);
     DEBUG_MSG("Device Telemetry: Sending packet to mesh\n");
-    service.sendToMesh(p);
+    service.sendToMesh(p, RX_SRC_LOCAL, true);
     nodeDB.updateTelemetry(nodeDB.getNodeNum(), t, RX_SRC_LOCAL);
     return true;
 }
