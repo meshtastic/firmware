@@ -20,7 +20,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 #include "configuration.h"
-#ifndef NO_SCREEN
+#if HAS_SCREEN
 #include <OLEDDisplay.h>
 
 #include "GPS.h"
@@ -39,7 +39,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "target_specific.h"
 #include "utils.h"
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 #include "esp_task_wdt.h"
 #include "mesh/http/WiFiAPClient.h"
 #endif
@@ -99,7 +99,7 @@ static uint16_t displayWidth, displayHeight;
 #define SCREEN_WIDTH displayWidth
 #define SCREEN_HEIGHT displayHeight
 
-#if defined(HAS_EINK) || defined(ILI9341_DRIVER)
+#if defined(USE_EINK) || defined(ILI9341_DRIVER)
 // The screen is bigger so use bigger fonts
 #define FONT_SMALL ArialMT_Plain_16
 #define FONT_MEDIUM ArialMT_Plain_24
@@ -217,7 +217,7 @@ static void drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     display->setFont(FONT_SMALL);
     display->drawString(64 + x, y, "Creating SSL certificate");
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
     yield();
     esp_task_wdt_reset();
 #endif
@@ -258,13 +258,13 @@ static void drawWelcomeScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
         display->drawString(x, y + FONT_HEIGHT_SMALL * 4 - 3, "");
     }
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
     yield();
     esp_task_wdt_reset();
 #endif
 }
 
-#ifdef HAS_EINK
+#ifdef USE_EINK
 /// Used on eink displays while in deep sleep
 static void drawSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -856,7 +856,7 @@ Screen::Screen(uint8_t address, int sda, int scl) : OSThread("Screen"), cmdQueue
  */
 void Screen::doDeepSleep()
 {
-#ifdef HAS_EINK
+#ifdef USE_EINK
     static FrameCallback sleepFrames[] = {drawSleepScreen};
     static const int sleepFrameCount = sizeof(sleepFrames) / sizeof(sleepFrames[0]);
     ui.setFrames(sleepFrames, sleepFrameCount);
@@ -967,7 +967,7 @@ void Screen::setup()
 void Screen::forceDisplay()
 {
     // Nasty hack to force epaper updates for 'key' frames.  FIXME, cleanup.
-#ifdef HAS_EINK
+#ifdef USE_EINK
     dispdev.forceDisplay();
 #endif
 }
@@ -1068,7 +1068,7 @@ int32_t Screen::runOnce()
         DEBUG_MSG("Setting idle framerate\n");
         targetFramerate = IDLE_FRAMERATE;
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
         setCPUFast(false); // Turn up the CPU to improve screen animations
 #endif
 
@@ -1193,7 +1193,7 @@ void Screen::setFrames()
     // call a method on debugInfoScreen object (for more details)
     normalFrames[numframes++] = &Screen::drawDebugInfoSettingsTrampoline;
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
     if (isWifiAvailable()) {
         // call a method on debugInfoScreen object (for more details)
         normalFrames[numframes++] = &Screen::drawDebugInfoWiFiTrampoline;
@@ -1300,7 +1300,7 @@ void Screen::setFastFramerate()
     // We are about to start a transition so speed up fps
     targetFramerate = SCREEN_TRANSITION_FRAMERATE;
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
     setCPUFast(true); // Turn up the CPU to improve screen animations
 #endif
 
@@ -1355,7 +1355,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 // Jm
 void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-#ifdef HAS_WIFI
+#if HAS_WIFI
     const char *wifiName = config.wifi.ssid;
     const char *wifiPsw = config.wifi.psk;
 
@@ -1678,4 +1678,5 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 }
 
 } // namespace graphics
-#endif // NO_SCREEN
+
+#endif // HAS_SCREEN

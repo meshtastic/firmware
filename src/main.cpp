@@ -31,7 +31,7 @@
 
 #include "mesh/http/WiFiAPClient.h"
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 #include "mesh/http/WebServer.h"
 
 #ifdef USE_NEW_ESP32_BLUETOOTH
@@ -42,7 +42,7 @@
 
 #endif
 
-#if defined(HAS_WIFI) || defined(PORTDUINO)
+#if HAS_WIFI
 #include "mesh/wifi/WiFiServerAPI.h"
 #include "mqtt/MQTT.h"
 #endif
@@ -52,7 +52,9 @@
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
 
+#if HAS_BUTTON
 #include "ButtonThread.h"
+#endif
 #include "PowerFSMThread.h"
 
 using namespace concurrency;
@@ -91,7 +93,7 @@ uint32_t serialSinceMsec;
 bool axp192_found;
 
 // Array map of sensor types (as array index) and i2c address as value we'll find in the i2c scan
-uint8_t nodeTelemetrySensorsMap[12] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+uint8_t nodeTelemetrySensorsMap[7] = { 0, 0, 0, 0, 0, 0, 0 };
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
 
@@ -126,11 +128,15 @@ static int32_t ledBlinker()
 
 uint32_t timeLastPowered = 0;
 
+#if HAS_BUTTON
 bool ButtonThread::shutdown_on_long_stop = false;
+#endif
 
 static Periodic *ledPeriodic;
 static OSThread *powerFSMthread, *buttonThread;
+#if HAS_BUTTON
 uint32_t ButtonThread::longPressTime = 0;
+#endif
 
 RadioInterface *rIf = NULL;
 
@@ -187,7 +193,7 @@ void setup()
     bool forceSoftAP = 0;
 
 #ifdef BUTTON_PIN
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 
     // If the button is connected to GPIO 12, don't enable the ability to use
     // meshtasticAdmin on the device.
@@ -218,7 +224,7 @@ void setup()
 
 #ifdef I2C_SDA
     Wire.begin(I2C_SDA, I2C_SCL);
-#elif !defined(NO_WIRE)
+#elif HAS_WIRE
     Wire.begin();
 #endif
 
@@ -236,8 +242,10 @@ void setup()
     // scanEInkDevice();
 #endif
 
+#if HAS_BUTTON
     // Buttons & LED
     buttonThread = new ButtonThread();
+#endif
 
 #ifdef LED_PIN
     pinMode(LED_PIN, OUTPUT);
@@ -247,7 +255,7 @@ void setup()
     // Hello
     DEBUG_MSG("Meshtastic hwvendor=%d, swver=%s\n", HW_VENDOR, optstr(APP_VERSION));
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
     // Don't init display if we don't have one or we are waking headless due to a timer event
     if (wakeCause == ESP_SLEEP_WAKEUP_TIMER)
         screen_found = 0; // forget we even have the hardware
@@ -255,7 +263,7 @@ void setup()
     esp32Setup();
 #endif
 
-#ifdef NRF52_SERIES
+#ifdef ARCH_NRF52
     nrf52Setup();
 #endif
     playStartMelody();
@@ -271,7 +279,7 @@ void setup()
 
     // Init our SPI controller (must be before screen and lora)
     initSPI();
-#ifdef NO_ESP32
+#ifndef ARCH_ESP32
     SPI.begin();
 #else
     // ESP32
@@ -306,7 +314,7 @@ void setup()
 
         // Don't call screen setup until after nodedb is setup (because we need
         // the current region name)
-#if defined(ST7735_CS) || defined(HAS_EINK) || defined(ILI9341_DRIVER)
+#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER)
     screen->setup();
 #else
     if (screen_found)
@@ -386,7 +394,7 @@ void setup()
     }
 #endif
 
-#ifdef USE_SIM_RADIO
+#if !HAS_RADIO
     if (!rIf) {
         rIf = new SimRadio;
         if (!rIf->init()) {
@@ -399,19 +407,19 @@ void setup()
     }
 #endif
 
-#if defined(PORTDUINO) || defined(HAS_WIFI)
+#if HAS_WIFI
     mqttInit();
 #endif
 
     // Initialize Wifi
     initWifi(forceSoftAP);
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
     // Start web server thread.
     webServerThread = new WebServerThread();
 #endif
 
-#ifdef PORTDUINO
+#ifdef ARCH_PORTDUINO
     initApiServer();
 #endif
 
@@ -452,10 +460,10 @@ void loop()
 
     // heap_caps_check_integrity_all(true); // FIXME - disable this expensive check
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
     esp32Loop();
 #endif
-#ifdef NRF52_SERIES
+#ifdef ARCH_NRF52
     nrf52Loop();
 #endif
     powerCommandsCheck();

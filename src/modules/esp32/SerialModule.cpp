@@ -69,7 +69,7 @@ SerialModuleRadio::SerialModuleRadio() : SinglePortModule("SerialModuleRadio", P
 
 int32_t SerialModule::runOnce()
 {
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 
     /*
         Uncomment the preferences below if you want to use the module
@@ -209,7 +209,7 @@ void SerialModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 
 ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
 {
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 
     if (moduleConfig.serial.enabled) {
 
