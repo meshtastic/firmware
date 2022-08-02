@@ -1,6 +1,8 @@
 #pragma once
 
-#ifdef NO_SCREEN
+#include "configuration.h"
+
+#if !HAS_SCREEN
 #include "power.h"
 namespace graphics
 {
@@ -315,7 +317,7 @@ class Screen : public concurrency::OSThread
     SSD1306Wire dispdev;
 #elif defined(ST7735_CS) || defined(ILI9341_DRIVER)
     TFTDisplay dispdev;
-#elif defined(HAS_EINK)
+#elif defined(USE_EINK)
     EInkDisplay dispdev;
 #elif defined(USE_ST7567)
     ST7567Wire dispdev;

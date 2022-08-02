@@ -15,7 +15,7 @@ class EnvironmentTelemetryModule : private concurrency::OSThread, public Protobu
         lastMeasurementPacket = nullptr;
     }
     virtual bool wantUIFrame() override;
-#ifdef NO_SCREEN
+#if !HAS_SCREEN
     void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 #else
     virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;

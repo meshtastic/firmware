@@ -15,7 +15,7 @@
 #include "sleep.h"
 #include <WiFi.h>
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 #include "mesh/http/WiFiAPClient.h"
 #include <nvs_flash.h>
 #endif
@@ -508,7 +508,7 @@ void disablePin()
 // This should go somewhere else.
 void clearNVS()
 {
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 
     // As soon as the LED flashing from double click is done, immediately do a tripple click to
     // erase nvs memory.
