@@ -14,10 +14,10 @@
 #include "modules/RoutingModule.h"
 #include "modules/TextMessageModule.h"
 #include "modules/Telemetry/DeviceTelemetry.h"
-#ifndef PORTDUINO
+#if HAS_TELEMETRY
 #include "modules/Telemetry/EnvironmentTelemetry.h"
 #endif
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 #include "modules/esp32/RangeTestModule.h"
 #include "modules/esp32/SerialModule.h"
 #include "modules/esp32/StoreForwardModule.h"
@@ -28,7 +28,9 @@
  */
 void setupModules()
 {
+#if HAS_BUTTON
     inputBroker = new InputBroker();
+#endif
     adminModule = new AdminModule();
     nodeInfoModule = new NodeInfoModule();
     positionModule = new PositionModule();
@@ -39,6 +41,7 @@ void setupModules()
 
     new RemoteHardwareModule();
     new ReplyModule();
+#if HAS_BUTTON
     rotaryEncoderInterruptImpl1 = new RotaryEncoderInterruptImpl1();
     rotaryEncoderInterruptImpl1->init();
     upDownInterruptImpl1 = new UpDownInterruptImpl1();
@@ -47,14 +50,15 @@ void setupModules()
     cardKbI2cImpl->init();
     facesKbI2cImpl = new FacesKbI2cImpl();
     facesKbI2cImpl->init();
-#ifndef NO_SCREEN    
+#endif
+#if HAS_SCREEN
     cannedMessageModule = new CannedMessageModule();
 #endif
-#ifndef PORTDUINO
+#if HAS_TELEMETRY
     new DeviceTelemetryModule();
     new EnvironmentTelemetryModule();
 #endif
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
     // Only run on an esp32 based device.
 
     /*

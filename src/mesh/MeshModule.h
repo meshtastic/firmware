@@ -4,7 +4,7 @@
 #include "mesh/MeshTypes.h"
 #include <vector>
 
-#ifndef NO_SCREEN
+#if HAS_SCREEN
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 #endif
@@ -72,7 +72,7 @@ class MeshModule
     static void observeUIEvents(Observer<const UIFrameEvent *> *observer);
     static AdminMessageHandleResult handleAdminMessageForAllPlugins(
         const MeshPacket &mp, AdminMessage *request, AdminMessage *response);
-#ifndef NO_SCREEN
+#if HAS_SCREEN
     virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) { return; }
 #endif
   protected:

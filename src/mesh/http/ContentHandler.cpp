@@ -14,7 +14,7 @@
 #include <HTTPURLEncodedBodyParser.hpp>
 #include <json11.hpp>
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 #include "esp_task_wdt.h"
 #endif
 
@@ -787,7 +787,7 @@ void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
             count = count - 1;
         }
     } else {
-#ifndef NO_SCREEN
+#if HAS_SCREEN
         screen->blink();
 #endif
     }
