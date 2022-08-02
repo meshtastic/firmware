@@ -70,6 +70,8 @@
     #define HW_VENDOR HardwareModel_NANO_G1
 #elif defined(M5STACK)
     #define HW_VENDOR HardwareModel_M5STACK
+#elif defined(STATION_G1)
+    #define HW_VENDOR HardwareModel_STATION_G1
 #endif
 
 //
