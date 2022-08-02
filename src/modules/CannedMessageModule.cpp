@@ -1,5 +1,5 @@
 #include "configuration.h"
-#ifndef NO_SCREEN
+#if HAS_SCREEN
 #include "CannedMessageModule.h"
 #include "FSCommon.h"
 #include "MeshService.h"

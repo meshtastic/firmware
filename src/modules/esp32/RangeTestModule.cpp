@@ -29,7 +29,7 @@ uint32_t packetSequence = 0;
 
 int32_t RangeTestModule::runOnce()
 {
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 
     /*
         Uncomment the preferences below if you want to use the module
@@ -129,7 +129,7 @@ void RangeTestModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 
 ProcessMessage RangeTestModuleRadio::handleReceived(const MeshPacket &mp)
 {
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 
     if (moduleConfig.range_test.enabled) {
 

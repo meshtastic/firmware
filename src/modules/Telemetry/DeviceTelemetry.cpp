@@ -12,7 +12,7 @@
 
 int32_t DeviceTelemetryModule::runOnce()
 {
-#ifndef PORTDUINO
+#ifndef ARCH_PORTDUINO
     if (firstTime) {
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = 0;
@@ -72,7 +72,7 @@ bool DeviceTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies)
 
     lastMeasurementPacket = packetPool.allocCopy(*p);
     DEBUG_MSG("Device Telemetry: Sending packet to mesh\n");
-    service.sendToMesh(p);
+    service.sendToMesh(p, RX_SRC_LOCAL, true);
     nodeDB.updateTelemetry(nodeDB.getNodeNum(), t, RX_SRC_LOCAL);
     return true;
 }

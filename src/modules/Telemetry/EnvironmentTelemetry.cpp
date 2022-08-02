@@ -11,19 +11,16 @@
 #include <OLEDDisplayUi.h>
 
 // Sensors
+#include "Sensor/BMP280Sensor.h"
 #include "Sensor/BME280Sensor.h"
 #include "Sensor/BME680Sensor.h"
-#include "Sensor/DHTSensor.h"
-#include "Sensor/DallasSensor.h"
 #include "Sensor/MCP9808Sensor.h"
 #include "Sensor/INA260Sensor.h"
 #include "Sensor/INA219Sensor.h"
 
-
+BMP280Sensor bmp280Sensor;
 BME280Sensor bme280Sensor;
 BME680Sensor bme680Sensor;
-DHTSensor dhtSensor;
-DallasSensor dallasSensor;
 MCP9808Sensor mcp9808Sensor;
 INA260Sensor ina260Sensor;
 INA219Sensor ina219Sensor;
@@ -31,7 +28,7 @@ INA219Sensor ina219Sensor;
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
-#ifdef HAS_EINK
+#ifdef USE_EINK
 // The screen is bigger so use bigger fonts
 #define FONT_SMALL ArialMT_Plain_16
 #define FONT_MEDIUM ArialMT_Plain_24
@@ -49,22 +46,16 @@ INA219Sensor ina219Sensor;
 
 int32_t EnvironmentTelemetryModule::runOnce()
 {
-#ifndef PORTDUINO
+#ifndef ARCH_PORTDUINO
     int32_t result = INT32_MAX;
     /*
         Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
     */
    
-    /*
-    moduleConfig.telemetry.environment_measurement_enabled = 1;
-    moduleConfig.telemetry.environment_screen_enabled = 1;
-    moduleConfig.telemetry.environment_read_error_count_threshold = 5;
-    moduleConfig.telemetry.environment_update_interval = 600;
-    moduleConfig.telemetry.environment_recovery_interval = 60;
-    moduleConfig.telemetry.environment_sensor_pin = 13; // If one-wire
-    moduleConfig.telemetry.environment_sensor_type = TelemetrySensorType::TelemetrySensorType_BME280;
-    */
+    // moduleConfig.telemetry.environment_measurement_enabled = 1;
+    // moduleConfig.telemetry.environment_screen_enabled = 1;
+    // moduleConfig.telemetry.environment_update_interval = 45;
 
     if (!(moduleConfig.telemetry.environment_measurement_enabled ||
           moduleConfig.telemetry.environment_screen_enabled)) {
@@ -80,25 +71,12 @@ int32_t EnvironmentTelemetryModule::runOnce()
             DEBUG_MSG("Environment Telemetry: Initializing\n");
             // it's possible to have this module enabled, only for displaying values on the screen.
             // therefore, we should only enable the sensor loop if measurement is also enabled
-            
-            switch (moduleConfig.telemetry.environment_sensor_type) {
-                case TelemetrySensorType_DHT11:
-                case TelemetrySensorType_DHT12:
-                case TelemetrySensorType_DHT21:
-                case TelemetrySensorType_DHT22:
-                    result = dhtSensor.runOnce();
-                break;
-                case TelemetrySensorType_DS18B20:
-                    result = dallasSensor.runOnce();
-                break;
-                default:
-                    DEBUG_MSG("Environment Telemetry: No sensor type specified; Checking for detected i2c sensors\n");
-                break;
-            }
-            if (bme680Sensor.hasSensor()) 
-                result = bme680Sensor.runOnce();
+            if (bmp280Sensor.hasSensor()) 
+                result = bmp280Sensor.runOnce();
             if (bme280Sensor.hasSensor()) 
                 result = bme280Sensor.runOnce();
+            if (bme680Sensor.hasSensor()) 
+                result = bme680Sensor.runOnce();
             if (mcp9808Sensor.hasSensor()) 
                 result = mcp9808Sensor.runOnce();
             if (ina260Sensor.hasSensor()) 
@@ -113,26 +91,6 @@ int32_t EnvironmentTelemetryModule::runOnce()
             return result;
         // this is not the first time OSThread library has called this function
         // so just do what we intend to do on the interval
-        if (sensor_read_error_count > moduleConfig.telemetry.environment_read_error_count_threshold) {
-            if (moduleConfig.telemetry.environment_recovery_interval > 0) {
-                DEBUG_MSG("Environment Telemetry: TEMPORARILY DISABLED; The "
-                          "telemetry_module_environment_read_error_count_threshold has been exceed: %d. Will retry reads in "
-                          "%d seconds\n",
-                          moduleConfig.telemetry.environment_read_error_count_threshold,
-                          moduleConfig.telemetry.environment_recovery_interval);
-                sensor_read_error_count = 0;
-                return (moduleConfig.telemetry.environment_recovery_interval * 1000);
-            }
-            DEBUG_MSG("Environment Telemetry: DISABLED; The telemetry_module_environment_read_error_count_threshold has "
-                      "been exceed: %d. Reads will not be retried until after device reset\n",
-                      moduleConfig.telemetry.environment_read_error_count_threshold);
-            return result;
-
-        } else if (sensor_read_error_count > 0) {
-            DEBUG_MSG("Environment Telemetry: There have been %d sensor read failures. Will retry %d more times\n",
-                      sensor_read_error_count, sensor_read_error_count, sensor_read_error_count,
-                      moduleConfig.telemetry.environment_read_error_count_threshold - sensor_read_error_count);
-        }
         if (!sendOurTelemetry()) {
             // if we failed to read the sensor, then try again
             // as soon as we can according to the maximum polling frequency
@@ -242,21 +200,8 @@ bool EnvironmentTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies
     DEBUG_MSG("-----------------------------------------\n");
     DEBUG_MSG("Environment Telemetry: Read data\n");
 
-    switch (moduleConfig.telemetry.environment_sensor_type) {
-        case TelemetrySensorType_DS18B20:
-            if (!dallasSensor.getMetrics(&m))
-                sensor_read_error_count++;
-            break;
-        case TelemetrySensorType_DHT11:
-        case TelemetrySensorType_DHT12:
-        case TelemetrySensorType_DHT21:
-        case TelemetrySensorType_DHT22:
-            if (!dhtSensor.getMetrics(&m))
-                sensor_read_error_count++;
-            break;
-        default:
-            DEBUG_MSG("Environment Telemetry: No specified sensor type; Trying any detected i2c sensors\n");
-    }
+    if (bmp280Sensor.hasSensor())
+        bmp280Sensor.getMetrics(&m);
     if (bme280Sensor.hasSensor())
         bme280Sensor.getMetrics(&m);
     if (bme680Sensor.hasSensor())
@@ -284,6 +229,6 @@ bool EnvironmentTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies
 
     lastMeasurementPacket = packetPool.allocCopy(*p);
     DEBUG_MSG("Environment Telemetry: Sending packet to mesh");
-    service.sendToMesh(p);
+    service.sendToMesh(p, RX_SRC_LOCAL, true);
     return true;
 }
