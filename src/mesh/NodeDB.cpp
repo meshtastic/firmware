@@ -435,6 +435,16 @@ void NodeDB::saveChannelsToDisk()
     }
 }
 
+void NodeDB::saveDeviceStateToDisk() 
+{
+    if (!devicestate.no_save) {
+#ifdef FSCom
+        FSCom.mkdir("/prefs");
+#endif
+        saveProto(prefFileName, DeviceState_size, sizeof(devicestate), DeviceState_fields, &devicestate);
+    }
+}
+
 void NodeDB::saveToDisk()
 {
     if (!devicestate.no_save) {
