@@ -71,8 +71,6 @@ typedef enum _HardwareModel {
     HardwareModel_DR_DEV = 43, 
     /* M5 esp32 based MCU modules with enclosure, TFT and LORA Shields. All Variants (Basic, Core, Fire, Core2, Paper) https://m5stack.com/ */
     HardwareModel_M5STACK = 44,
-    /* B&Q Consulting Station Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:station */
-    HardwareModel_STATION_G1 = 45,  
     /* Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits. */
     HardwareModel_PRIVATE_HW = 255 
 } HardwareModel;
