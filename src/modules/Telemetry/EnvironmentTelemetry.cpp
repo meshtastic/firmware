@@ -229,6 +229,6 @@ bool EnvironmentTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies
 
     lastMeasurementPacket = packetPool.allocCopy(*p);
     DEBUG_MSG("Environment Telemetry: Sending packet to mesh");
-    service.sendToMesh(p);
+    service.sendToMesh(p, RX_SRC_LOCAL, true);
     return true;
 }

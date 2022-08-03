@@ -16,7 +16,7 @@ ErrorCode ReliableRouter::send(MeshPacket *p)
         // If someone asks for acks on broadcast, we need the hop limit to be at least one, so that first node that receives our
         // message will rebroadcast.  But asking for hop_limit 0 in that context means the client app has no preference on hop
         // counts and we want this message to get through the whole mesh, so use the default.
-        if (p->to == NODENUM_BROADCAST && p->hop_limit == 0) {
+        if (p->hop_limit == 0) {
             if (config.lora.hop_limit && config.lora.hop_limit <= HOP_MAX) {
                 p->hop_limit = (config.lora.hop_limit >= HOP_MAX) ? HOP_MAX : config.lora.hop_limit;
             } else {
@@ -34,7 +34,7 @@ ErrorCode ReliableRouter::send(MeshPacket *p)
 bool ReliableRouter::shouldFilterReceived(MeshPacket *p)
 {
     // Note: do not use getFrom() here, because we want to ignore messages sent from phone
-    if (p->to == NODENUM_BROADCAST && p->from == getNodeNum()) {
+    if (p->from == getNodeNum()) {
         printPacket("Rx someone rebroadcasting for us", p);
 
         // We are seeing someone rebroadcast one of our broadcast attempts.
