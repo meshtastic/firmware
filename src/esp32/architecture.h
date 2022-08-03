@@ -70,6 +70,8 @@
     #define HW_VENDOR HardwareModel_NANO_G1
 #elif defined(M5STACK)
     #define HW_VENDOR HardwareModel_M5STACK
+#elif defined(STATION_G1)
+    #define HW_VENDOR HardwareModel_STATION_G1
 #endif
 
 //
@@ -77,11 +79,15 @@
 //
 
 #define GPS_SERIAL_NUM 1
+#ifndef GPS_RX_PIN
 #define GPS_RX_PIN 34
+#endif
+#ifndef GPS_TX_PIN
 #ifdef USE_JTAG
 #define GPS_TX_PIN -1
 #else
 #define GPS_TX_PIN 12
+#endif
 #endif
 
 // -----------------------------------------------------------------------------
