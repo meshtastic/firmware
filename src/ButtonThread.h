@@ -144,15 +144,8 @@ class ButtonThread : public concurrency::OSThread
                 screen->startShutdownScreen();
                 DEBUG_MSG("Shutdown from long press");
                 playBeep();
-#ifdef PIN_LED1
                 ledOff(PIN_LED1);
-#endif
-#ifdef PIN_LED2        
                 ledOff(PIN_LED2);
-#endif
-#ifdef PIN_LED3        
-                ledOff(PIN_LED3);
-#endif
                 shutdown_on_long_stop = true;
             }
 #endif
