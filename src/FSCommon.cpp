@@ -33,7 +33,7 @@ bool copyFile(const char* from, const char* to)
 bool renameFile(const char* pathFrom, const char* pathTo)
 {
 #ifdef FSCom
-    if (copyFile(pathFrom, pathTo) & FSCom.remove(pathFrom) ) {
+    if (copyFile(pathFrom, pathTo) && FSCom.remove(pathFrom) ) {
         return true;
     } else{
         return false;
