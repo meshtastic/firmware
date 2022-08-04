@@ -21,15 +21,8 @@ void powerCommandsCheck()
     if (shutdownAtMsec) {
         screen->startShutdownScreen();
         playBeep();
-#ifdef PIN_LED1
         ledOff(PIN_LED1);
-#endif
-#ifdef PIN_LED2        
         ledOff(PIN_LED2);
-#endif
-#ifdef PIN_LED3        
-        ledOff(PIN_LED3);
-#endif
     }
 #endif
 
