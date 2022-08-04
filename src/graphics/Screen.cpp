@@ -948,9 +948,11 @@ void Screen::setup()
     handleSetOn(true);
 
     // On some ssd1306 clones, the first draw command is discarded, so draw it
-    // twice initially.
+    // twice initially. Skip this for EINK Displays to save a few seconds during boot
     ui.update();
+#ifndef USE_EINK
     ui.update();
+#endif
     serialSinceMsec = millis();
 
     // Subscribe to status updates
