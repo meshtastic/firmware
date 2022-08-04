@@ -414,7 +414,7 @@ bool saveProto(const char *filename, size_t protoSize, size_t objSize, const pb_
         // brief window of risk here ;-)
         if (FSCom.exists(filename) && !FSCom.remove(filename))
             DEBUG_MSG("Warning: Can't remove old pref file\n");
-        if (!FSCom.rename(filenameTmp.c_str(), filename))
+        if (!renameFile(filenameTmp.c_str(), filename))
             DEBUG_MSG("Error: can't rename new pref file\n");
     } else {
         DEBUG_MSG("Can't write prefs\n");
@@ -432,6 +432,16 @@ void NodeDB::saveChannelsToDisk()
         FSCom.mkdir("/prefs");
 #endif
         saveProto(channelFileName, ChannelFile_size, sizeof(ChannelFile), ChannelFile_fields, &channelFile);
+    }
+}
+
+void NodeDB::saveDeviceStateToDisk() 
+{
+    if (!devicestate.no_save) {
+#ifdef FSCom
+        FSCom.mkdir("/prefs");
+#endif
+        saveProto(prefFileName, DeviceState_size, sizeof(devicestate), DeviceState_fields, &devicestate);
     }
 }
 

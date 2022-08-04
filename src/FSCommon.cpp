@@ -1,6 +1,46 @@
 #include "configuration.h"
 #include "FSCommon.h"
 
+
+bool copyFile(const char* from, const char* to)
+{
+#ifdef FSCom
+    unsigned char cbuffer[16];
+   
+    File f1 = FSCom.open(from, FILE_O_READ);
+    if (!f1){
+        DEBUG_MSG("Failed to open file");
+        return false;
+    }
+
+    File f2 = FSCom.open(to, FILE_O_WRITE);
+    if (!f2) {
+        DEBUG_MSG("Failed to open file");
+        return false;
+    }
+   
+    while (f1.available() > 0) {
+        byte i = f1.read(cbuffer, 16);
+        f2.write(cbuffer, i);
+    }
+   
+    f2.close();
+    f1.close();
+    return true;
+#endif
+}
+
+bool renameFile(const char* pathFrom, const char* pathTo)
+{
+#ifdef FSCom
+    if (copyFile(pathFrom, pathTo) && FSCom.remove(pathFrom) ) {
+        return true;
+    } else{
+        return false;
+    }
+#endif
+}
+
 void listDir(const char * dirname, uint8_t levels)
 {
 #ifdef FSCom
