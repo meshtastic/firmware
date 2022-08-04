@@ -31,5 +31,6 @@ using namespace Adafruit_LittleFS_Namespace;
 #endif
 
 void fsInit();
+bool renameFile(const char* pathFrom, const char* pathTo);
 void listDir(const char * dirname, uint8_t levels);
 void rmDir(const char * dirname);
