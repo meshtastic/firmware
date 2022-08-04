@@ -330,7 +330,7 @@ int32_t GPS::runOnce()
         if(devicestate.did_gps_reset && (millis() > 60000) && !hasFlow()) {
             DEBUG_MSG("GPS is not communicating, trying factory reset on next bootup.\n");
             devicestate.did_gps_reset = false;
-            nodeDB.saveToDisk();
+            nodeDB.saveDeviceStateToDisk();
         }
 #endif
     }
