@@ -1370,7 +1370,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
     if (isSoftAPForced()) {
         display->drawString(x, y, String("WiFi: Software AP (Admin)"));
-    } else if (config.wifi.ap_mode) {
+    } else if (config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPoint || config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPointHidden) {
         display->drawString(x, y, String("WiFi: Software AP"));
     } else if (WiFi.status() != WL_CONNECTED) {
         display->drawString(x, y, String("WiFi: Not Connected"));
@@ -1393,8 +1393,8 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
     - WL_NO_SHIELD: assigned when no WiFi shield is present;
 
     */
-    if (WiFi.status() == WL_CONNECTED || isSoftAPForced() || config.wifi.ap_mode) {
-        if (config.wifi.ap_mode || isSoftAPForced()) {
+    if (WiFi.status() == WL_CONNECTED || isSoftAPForced() || config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPoint || config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPointHidden) {
+        if (config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPoint || config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPointHidden || isSoftAPForced()) {
             display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IP: " + String(WiFi.softAPIP().toString().c_str()));
 
             // Number of connections to the AP. Default max for the esp32 is 4
@@ -1486,7 +1486,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         }
 
     } else {
-        if (config.wifi.ap_mode) {
+        if (config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPoint || config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPointHidden) {
             if ((millis() / 10000) % 2) {
                 display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
             } else {

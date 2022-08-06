@@ -191,10 +191,14 @@ bool initWifi(bool forceSoftAP)
 
         if (forceSoftAP) {
             DEBUG_MSG("WiFi ... Forced AP Mode\n");
-        } else if (config.wifi.ap_mode) {
+        } else if (config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPoint) {
             DEBUG_MSG("WiFi ... AP Mode\n");
-        } else {
+        } else if (config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPointHidden) {
+            DEBUG_MSG("WiFi ... Hidden AP Mode\n");
+        } else if (config.wifi.mode == Config_WiFiConfig_WiFiMode_Client) {
             DEBUG_MSG("WiFi ... Client Mode\n");
+        } else {
+            DEBUG_MSG("WiFi ... WiFi Disabled\n");
         }
 
         createSSLCert();
@@ -203,7 +207,7 @@ bool initWifi(bool forceSoftAP)
             wifiPsw = NULL;
 
         if (*wifiName || forceSoftAP) {
-            if (config.wifi.ap_mode || forceSoftAP) {
+            if (config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPoint || config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPointHidden || forceSoftAP) {
 
                 IPAddress apIP(192, 168, 42, 1);
                 WiFi.onEvent(WiFiEvent);
@@ -218,7 +222,7 @@ bool initWifi(bool forceSoftAP)
                 } else {
 
                     // If AP is configured to be hidden hidden
-                    if (config.wifi.ap_hidden) {
+                    if (config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPointHidden) {
 
                         // The configurations on softAP are from the espresif library
                         int ok = WiFi.softAP(wifiName, wifiPsw, 1, 1, 4);
@@ -373,7 +377,7 @@ static void WiFiEvent(WiFiEvent_t event)
 
 void handleDNSResponse()
 {
-    if (config.wifi.ap_mode || isSoftAPForced()) {
+    if (config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPoint || config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPointHidden || isSoftAPForced()) {
         dnsServer.processNextRequest();
     }
 }
