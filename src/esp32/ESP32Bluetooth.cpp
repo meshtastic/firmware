@@ -62,7 +62,7 @@ PhoneAPI *bluetoothPhoneAPI;
 class ESP32BluetoothToRadioCallback : public NimBLECharacteristicCallbacks {
     virtual void onWrite(NimBLECharacteristic *pCharacteristic) {
         DEBUG_MSG("To Radio onwrite\n");
-        auto valueString = pCharacteristic->getValue();
+        auto valueString = pCharacteristic->getValue().c_str();
         
         bluetoothPhoneAPI->handleToRadio(reinterpret_cast<const uint8_t*>(&valueString[0]), pCharacteristic->getDataLength());
     }
