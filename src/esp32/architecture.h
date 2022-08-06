@@ -103,3 +103,5 @@
 #endif
 
 #define SERIAL0_RX_GPIO 3 // Always GPIO3 on ESP32
+
+#define CONFIG_NIMBLE_CPP_LOG_LEVEL 2
