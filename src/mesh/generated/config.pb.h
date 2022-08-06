@@ -51,6 +51,13 @@ typedef enum _Config_PowerConfig_ChargeCurrent {
     Config_PowerConfig_ChargeCurrent_MA1320 = 16 
 } Config_PowerConfig_ChargeCurrent;
 
+typedef enum _Config_WiFiConfig_WiFiMode { 
+    Config_WiFiConfig_WiFiMode_Off = 0, 
+    Config_WiFiConfig_WiFiMode_Client = 1, 
+    Config_WiFiConfig_WiFiMode_AccessPoint = 2, 
+    Config_WiFiConfig_WiFiMode_AccessPointHidden = 3 
+} Config_WiFiConfig_WiFiMode;
+
 typedef enum _Config_DisplayConfig_GpsCoordinateFormat { 
     Config_DisplayConfig_GpsCoordinateFormat_GpsFormatDec = 0, 
     Config_DisplayConfig_GpsCoordinateFormat_GpsFormatDMS = 1, 
@@ -99,6 +106,7 @@ typedef struct _Config_DisplayConfig {
     uint32_t screen_on_secs;
     Config_DisplayConfig_GpsCoordinateFormat gps_format;
     uint32_t auto_screen_carousel_secs;
+    bool compass_north_top;
 } Config_DisplayConfig;
 
 typedef struct _Config_LoRaConfig { 
@@ -138,10 +146,9 @@ typedef struct _Config_PowerConfig {
 } Config_PowerConfig;
 
 typedef struct _Config_WiFiConfig { 
+    Config_WiFiConfig_WiFiMode mode;
     char ssid[33];
     char psk[64];
-    bool ap_mode;
-    bool ap_hidden;
 } Config_WiFiConfig;
 
 typedef struct _Config { 
@@ -170,6 +177,10 @@ typedef struct _Config {
 #define _Config_PowerConfig_ChargeCurrent_MAX Config_PowerConfig_ChargeCurrent_MA1320
 #define _Config_PowerConfig_ChargeCurrent_ARRAYSIZE ((Config_PowerConfig_ChargeCurrent)(Config_PowerConfig_ChargeCurrent_MA1320+1))
 
+#define _Config_WiFiConfig_WiFiMode_MIN Config_WiFiConfig_WiFiMode_Off
+#define _Config_WiFiConfig_WiFiMode_MAX Config_WiFiConfig_WiFiMode_AccessPointHidden
+#define _Config_WiFiConfig_WiFiMode_ARRAYSIZE ((Config_WiFiConfig_WiFiMode)(Config_WiFiConfig_WiFiMode_AccessPointHidden+1))
+
 #define _Config_DisplayConfig_GpsCoordinateFormat_MIN Config_DisplayConfig_GpsCoordinateFormat_GpsFormatDec
 #define _Config_DisplayConfig_GpsCoordinateFormat_MAX Config_DisplayConfig_GpsCoordinateFormat_GpsFormatOSGR
 #define _Config_DisplayConfig_GpsCoordinateFormat_ARRAYSIZE ((Config_DisplayConfig_GpsCoordinateFormat)(Config_DisplayConfig_GpsCoordinateFormat_GpsFormatOSGR+1))
@@ -192,15 +203,15 @@ extern "C" {
 #define Config_DeviceConfig_init_default         {_Config_DeviceConfig_Role_MIN, 0, 0, 0, ""}
 #define Config_PositionConfig_init_default       {0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_default          {_Config_PowerConfig_ChargeCurrent_MIN, 0, 0, 0, 0, 0, 0, 0, 0}
-#define Config_WiFiConfig_init_default           {"", "", 0, 0}
-#define Config_DisplayConfig_init_default        {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0}
+#define Config_WiFiConfig_init_default           {_Config_WiFiConfig_WiFiMode_MIN, "", ""}
+#define Config_DisplayConfig_init_default        {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0}
 #define Config_LoRaConfig_init_default           {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, {0, 0, 0}}
 #define Config_init_zero                         {0, {Config_DeviceConfig_init_zero}}
 #define Config_DeviceConfig_init_zero            {_Config_DeviceConfig_Role_MIN, 0, 0, 0, ""}
 #define Config_PositionConfig_init_zero          {0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_zero             {_Config_PowerConfig_ChargeCurrent_MIN, 0, 0, 0, 0, 0, 0, 0, 0}
-#define Config_WiFiConfig_init_zero              {"", "", 0, 0}
-#define Config_DisplayConfig_init_zero           {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0}
+#define Config_WiFiConfig_init_zero              {_Config_WiFiConfig_WiFiMode_MIN, "", ""}
+#define Config_DisplayConfig_init_zero           {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0}
 #define Config_LoRaConfig_init_zero              {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, {0, 0, 0}}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -212,6 +223,7 @@ extern "C" {
 #define Config_DisplayConfig_screen_on_secs_tag  1
 #define Config_DisplayConfig_gps_format_tag      2
 #define Config_DisplayConfig_auto_screen_carousel_secs_tag 3
+#define Config_DisplayConfig_compass_north_top_tag 4
 #define Config_LoRaConfig_tx_power_tag           1
 #define Config_LoRaConfig_modem_preset_tag       2
 #define Config_LoRaConfig_bandwidth_tag          3
@@ -238,10 +250,9 @@ extern "C" {
 #define Config_PowerConfig_sds_secs_tag          10
 #define Config_PowerConfig_ls_secs_tag           11
 #define Config_PowerConfig_min_wake_secs_tag     12
-#define Config_WiFiConfig_ssid_tag               1
-#define Config_WiFiConfig_psk_tag                2
-#define Config_WiFiConfig_ap_mode_tag            3
-#define Config_WiFiConfig_ap_hidden_tag          4
+#define Config_WiFiConfig_mode_tag               1
+#define Config_WiFiConfig_ssid_tag               2
+#define Config_WiFiConfig_psk_tag                3
 #define Config_device_tag                        1
 #define Config_position_tag                      2
 #define Config_power_tag                         3
@@ -300,17 +311,17 @@ X(a, STATIC,   SINGULAR, UINT32,   min_wake_secs,    12)
 #define Config_PowerConfig_DEFAULT NULL
 
 #define Config_WiFiConfig_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, STRING,   ssid,              1) \
-X(a, STATIC,   SINGULAR, STRING,   psk,               2) \
-X(a, STATIC,   SINGULAR, BOOL,     ap_mode,           3) \
-X(a, STATIC,   SINGULAR, BOOL,     ap_hidden,         4)
+X(a, STATIC,   SINGULAR, UENUM,    mode,              1) \
+X(a, STATIC,   SINGULAR, STRING,   ssid,              2) \
+X(a, STATIC,   SINGULAR, STRING,   psk,               3)
 #define Config_WiFiConfig_CALLBACK NULL
 #define Config_WiFiConfig_DEFAULT NULL
 
 #define Config_DisplayConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   screen_on_secs,    1) \
 X(a, STATIC,   SINGULAR, UENUM,    gps_format,        2) \
-X(a, STATIC,   SINGULAR, UINT32,   auto_screen_carousel_secs,   3)
+X(a, STATIC,   SINGULAR, UINT32,   auto_screen_carousel_secs,   3) \
+X(a, STATIC,   SINGULAR, BOOL,     compass_north_top,   4)
 #define Config_DisplayConfig_CALLBACK NULL
 #define Config_DisplayConfig_DEFAULT NULL
 
@@ -347,12 +358,12 @@ extern const pb_msgdesc_t Config_LoRaConfig_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define Config_DeviceConfig_size                 42
-#define Config_DisplayConfig_size                14
+#define Config_DisplayConfig_size                16
 #define Config_LoRaConfig_size                   67
 #define Config_PositionConfig_size               30
 #define Config_PowerConfig_size                  45
-#define Config_WiFiConfig_size                   103
-#define Config_size                              105
+#define Config_WiFiConfig_size                   101
+#define Config_size                              103
 
 #ifdef __cplusplus
 } /* extern "C" */
