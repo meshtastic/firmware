@@ -52,7 +52,7 @@ typedef enum _Config_PowerConfig_ChargeCurrent {
 } Config_PowerConfig_ChargeCurrent;
 
 typedef enum _Config_WiFiConfig_WiFiMode { 
-    Config_WiFiConfig_WiFiMode_Off = 0, 
+    Config_WiFiConfig_WiFiMode_Disabled = 0, 
     Config_WiFiConfig_WiFiMode_Client = 1, 
     Config_WiFiConfig_WiFiMode_AccessPoint = 2, 
     Config_WiFiConfig_WiFiMode_AccessPointHidden = 3 
@@ -177,7 +177,7 @@ typedef struct _Config {
 #define _Config_PowerConfig_ChargeCurrent_MAX Config_PowerConfig_ChargeCurrent_MA1320
 #define _Config_PowerConfig_ChargeCurrent_ARRAYSIZE ((Config_PowerConfig_ChargeCurrent)(Config_PowerConfig_ChargeCurrent_MA1320+1))
 
-#define _Config_WiFiConfig_WiFiMode_MIN Config_WiFiConfig_WiFiMode_Off
+#define _Config_WiFiConfig_WiFiMode_MIN Config_WiFiConfig_WiFiMode_Disabled
 #define _Config_WiFiConfig_WiFiMode_MAX Config_WiFiConfig_WiFiMode_AccessPointHidden
 #define _Config_WiFiConfig_WiFiMode_ARRAYSIZE ((Config_WiFiConfig_WiFiMode)(Config_WiFiConfig_WiFiMode_AccessPointHidden+1))
 
