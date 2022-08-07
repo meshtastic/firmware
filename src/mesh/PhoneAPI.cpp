@@ -110,7 +110,6 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
  * Our sending states progress in the following sequence (the client app ASSUMES THIS SEQUENCE, DO NOT CHANGE IT):
  *      STATE_SEND_MY_INFO, // send our my info record
  *      STATE_SEND_NODEINFO, // states progress in this order as the device sends to the client
- *      STATE_SEND_GROUPS
         STATE_SEND_CONFIG,
         STATE_SEND_COMPLETE_ID,
         STATE_SEND_PACKETS // send packets or debug strings
