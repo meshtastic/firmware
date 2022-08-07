@@ -168,7 +168,7 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
     NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
     assert(node);
 
-    if (node->has_position) {
+    if (node->has_position && (node->position.latitude_i != 0 || node->position.longitude_i != 0)) {
         if (positionModule) {
             DEBUG_MSG("Sending position ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
             positionModule->sendOurPosition(dest, wantReplies);

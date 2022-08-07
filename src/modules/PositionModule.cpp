@@ -103,6 +103,8 @@ MeshPacket *PositionModule::allocReply()
     } else
         DEBUG_MSG("Providing time to mesh %u\n", p.time);
 
+    DEBUG_MSG("Position reply: time=%i, latI=%i, lonI=-%i\n", p.time, p.latitude_i, p.longitude_i);
+
     return allocDataProtobuf(p);
 }
 
@@ -144,7 +146,6 @@ int32_t PositionModule::runOnce()
                 currentGeneration = radioGeneration;
 
                 DEBUG_MSG("Sending pos@%x:6 to mesh (wantReplies=%d)\n", node->position.pos_timestamp, requestReplies);
-
                 sendOurPosition(NODENUM_BROADCAST, requestReplies);
             }
         } else {
