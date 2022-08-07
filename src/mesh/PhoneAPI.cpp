@@ -79,20 +79,17 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
     memset(&toRadioScratch, 0, sizeof(toRadioScratch));
     if (pb_decode_from_bytes(buf, bufLength, ToRadio_fields, &toRadioScratch)) {
         switch (toRadioScratch.which_payloadVariant) {
-        case ToRadio_packet_tag:
-            return handleToRadioPacket(toRadioScratch.packet);
+            case ToRadio_packet_tag:
+                return handleToRadioPacket(toRadioScratch.packet);
+            case ToRadio_want_config_id_tag:
+                config_nonce = toRadioScratch.want_config_id;
+                DEBUG_MSG("Client wants config, nonce=%u\n", config_nonce);
 
-        case ToRadio_want_config_id_tag:
-            config_nonce = toRadioScratch.want_config_id;
-            DEBUG_MSG("Client wants config, nonce=%u\n", config_nonce);
-
-            handleStartConfig();
-            break;
-
-        case ToRadio_disconnect_tag:
-            close();
-            break;
-
+                handleStartConfig();
+                break;
+            case ToRadio_disconnect_tag:
+                close();
+                break;
         default:
             // Ignore nop messages
             // DEBUG_MSG("Error: unexpected ToRadio variant\n");
@@ -112,9 +109,9 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
  *
  * Our sending states progress in the following sequence (the client app ASSUMES THIS SEQUENCE, DO NOT CHANGE IT):
  *      STATE_SEND_MY_INFO, // send our my info record
+ *      STATE_SEND_NODEINFO, // states progress in this order as the device sends to the client
  *      STATE_SEND_GROUPS
         STATE_SEND_CONFIG,
-        STATE_SEND_NODEINFO, // states progress in this order as the device sends to to the client
         STATE_SEND_COMPLETE_ID,
         STATE_SEND_PACKETS // send packets or debug strings
  */
@@ -141,10 +138,29 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         myNodeInfo.has_gps = gps && gps->isConnected(); // Update with latest GPS connect info
         fromRadioScratch.which_payloadVariant = FromRadio_my_info_tag;
         fromRadioScratch.my_info = myNodeInfo;
-        state = STATE_SEND_CONFIG;
+        state = STATE_SEND_NODEINFO;
 
         service.refreshMyNodeInfo(); // Update my NodeInfo because the client will be asking for it soon.
         break;
+
+    case STATE_SEND_NODEINFO: {
+        const NodeInfo *info = nodeInfoForPhone;
+        nodeInfoForPhone = NULL; // We just consumed a nodeinfo, will need a new one next time
+
+        if (info) {
+            DEBUG_MSG("Sending nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s\n", info->num, info->last_heard, info->user.id,
+                      info->user.long_name);
+            fromRadioScratch.which_payloadVariant = FromRadio_node_info_tag;
+            fromRadioScratch.node_info = *info;
+            // Stay in current state until done sending nodeinfos
+        } else {
+            DEBUG_MSG("Done sending nodeinfos\n");
+            state = STATE_SEND_CONFIG;
+            // Go ahead and send that ID right now
+            return getFromRadio(buf);
+        }
+        break;
+    }
 
     case STATE_SEND_CONFIG:
         fromRadioScratch.which_payloadVariant = FromRadio_config_tag;
@@ -220,28 +236,10 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         config_state++;
         // Advance when we have sent all of our ModuleConfig objects
         if (config_state > ModuleConfig_canned_message_tag) {
-            state = STATE_SEND_NODEINFO;
+            state = STATE_SEND_COMPLETE_ID;
             config_state = Config_device_tag;
         }
         break;
-    case STATE_SEND_NODEINFO: {
-        const NodeInfo *info = nodeInfoForPhone;
-        nodeInfoForPhone = NULL; // We just consumed a nodeinfo, will need a new one next time
-
-        if (info) {
-            DEBUG_MSG("Sending nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s\n", info->num, info->last_heard, info->user.id,
-                      info->user.long_name);
-            fromRadioScratch.which_payloadVariant = FromRadio_node_info_tag;
-            fromRadioScratch.node_info = *info;
-            // Stay in current state until done sending nodeinfos
-        } else {
-            DEBUG_MSG("Done sending nodeinfos\n");
-            state = STATE_SEND_COMPLETE_ID;
-            // Go ahead and send that ID right now
-            return getFromRadio(buf);
-        }
-        break;
-    }
 
     case STATE_SEND_COMPLETE_ID:
         fromRadioScratch.which_payloadVariant = FromRadio_config_complete_id_tag;
