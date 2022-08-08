@@ -13,7 +13,7 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define here.
 */
 
-#define DEVICESTATE_CUR_VER 13
+#define DEVICESTATE_CUR_VER 14
 #define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
 
 extern DeviceState devicestate;
