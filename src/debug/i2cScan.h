@@ -3,6 +3,10 @@
 #include <Wire.h>
 #include "mesh/generated/telemetry.pb.h"
 
+#ifdef HAS_AXP192
+#include "axp20x.h"
+#endif
+
 #if HAS_WIRE
 uint16_t getRegisterValue(uint8_t address, uint8_t reg, uint8_t length) {
     uint16_t value = 0x00;
