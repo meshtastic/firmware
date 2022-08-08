@@ -6,6 +6,7 @@
 #include <pb.h>
 #include "channel.pb.h"
 #include "config.pb.h"
+#include "device_metadata.pb.h"
 #include "mesh.pb.h"
 #include "module_config.pb.h"
 
@@ -73,6 +74,8 @@ typedef struct _AdminMessage {
         ModuleConfig set_module_config;
         /* Sent immediatly after a config change has been sent to ensure comms, if this is not recieved, the config will be reverted after 10 mins */
         bool confirm_set_module_config;
+        /* Send all channels in the response to this message */
+        bool get_all_channel_request;
         /* Setting channels/radio config remotely carries the risk that you might send an invalid config and the radio never talks to your mesh again.
      Therefore if setting either of these properties remotely, you must send a confirm_xxx message within 10 minutes.
      If you fail to do so, the radio will assume loss of comms and revert your changes.
@@ -111,6 +114,10 @@ typedef struct _AdminMessage {
         char set_canned_message_module_part4[201];
         /* Tell the node to shutdown in this many seconds (or <0 to cancel shutdown) */
         int32_t shutdown_seconds;
+        /* Request the node to send device metadata (firmware, protobuf version, etc) */
+        uint32_t get_device_metadata_request;
+        /* Device metadata response */
+        DeviceMetadata get_device_metadata_response;
     };
 } AdminMessage;
 
@@ -148,6 +155,7 @@ extern "C" {
 #define AdminMessage_get_module_config_response_tag 15
 #define AdminMessage_set_module_config_tag       16
 #define AdminMessage_confirm_set_module_config_tag 17
+#define AdminMessage_get_all_channel_request_tag 18
 #define AdminMessage_confirm_set_channel_tag     32
 #define AdminMessage_confirm_set_radio_tag       33
 #define AdminMessage_exit_simulator_tag          34
@@ -165,6 +173,8 @@ extern "C" {
 #define AdminMessage_set_canned_message_module_part3_tag 46
 #define AdminMessage_set_canned_message_module_part4_tag 47
 #define AdminMessage_shutdown_seconds_tag        51
+#define AdminMessage_get_device_metadata_request_tag 52
+#define AdminMessage_get_device_metadata_response_tag 53
 
 /* Struct field encoding specification for nanopb */
 #define AdminMessage_FIELDLIST(X, a) \
@@ -182,6 +192,7 @@ X(a, STATIC,   ONEOF,    UENUM,    (variant,get_module_config_request,get_module
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_module_config_response,get_module_config_response),  15) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_module_config,set_module_config),  16) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_module_config,confirm_set_module_config),  17) \
+X(a, STATIC,   ONEOF,    BOOL,     (variant,get_all_channel_request,get_all_channel_request),  18) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_channel,confirm_set_channel),  32) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_radio,confirm_set_radio),  33) \
 X(a, STATIC,   ONEOF,    BOOL,     (variant,exit_simulator,exit_simulator),  34) \
@@ -198,7 +209,9 @@ X(a, STATIC,   ONEOF,    STRING,   (variant,set_canned_message_module_part1,set_
 X(a, STATIC,   ONEOF,    STRING,   (variant,set_canned_message_module_part2,set_canned_message_module_part2),  45) \
 X(a, STATIC,   ONEOF,    STRING,   (variant,set_canned_message_module_part3,set_canned_message_module_part3),  46) \
 X(a, STATIC,   ONEOF,    STRING,   (variant,set_canned_message_module_part4,set_canned_message_module_part4),  47) \
-X(a, STATIC,   ONEOF,    INT32,    (variant,shutdown_seconds,shutdown_seconds),  51)
+X(a, STATIC,   ONEOF,    INT32,    (variant,shutdown_seconds,shutdown_seconds),  51) \
+X(a, STATIC,   ONEOF,    UINT32,   (variant,get_device_metadata_request,get_device_metadata_request),  52) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_device_metadata_response,get_device_metadata_response),  53)
 #define AdminMessage_CALLBACK NULL
 #define AdminMessage_DEFAULT NULL
 #define AdminMessage_variant_set_owner_MSGTYPE User
@@ -209,6 +222,7 @@ X(a, STATIC,   ONEOF,    INT32,    (variant,shutdown_seconds,shutdown_seconds), 
 #define AdminMessage_variant_set_config_MSGTYPE Config
 #define AdminMessage_variant_get_module_config_response_MSGTYPE ModuleConfig
 #define AdminMessage_variant_set_module_config_MSGTYPE ModuleConfig
+#define AdminMessage_variant_get_device_metadata_response_MSGTYPE DeviceMetadata
 
 extern const pb_msgdesc_t AdminMessage_msg;
 
