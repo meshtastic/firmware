@@ -307,7 +307,7 @@ void setup()
     setupModules();
 
     // Do this after service.init (because that clears error_code)
-#ifdef AXP192_SLAVE_ADDRESS
+#ifdef HAS_AXP192
     if (!axp192_found)
         RECORD_CRITICALERROR(CriticalErrorCode_NoAXP192); // Record a hardware fault for missing hardware
 #endif

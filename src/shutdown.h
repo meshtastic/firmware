@@ -35,7 +35,7 @@ void powerCommandsCheck()
 
     if (shutdownAtMsec && millis() > shutdownAtMsec) {
         DEBUG_MSG("Shutting down from admin command\n");
-#ifdef TBEAM_V10
+#ifdef HAS_AXP192
         if (axp192_found == true) {
             playShutdownMelody();
             power->shutdown();
