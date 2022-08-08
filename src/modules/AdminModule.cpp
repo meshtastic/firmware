@@ -109,6 +109,11 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
         shutdownAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
         break;
     }
+    case AdminMessage_get_device_metadata_request_tag: {
+        DEBUG_MSG("Client is getting device metadata\n");
+        handleGetDeviceMetadata(mp);
+        break;
+    }
 
 #ifdef ARCH_PORTDUINO
     case AdminMessage_exit_simulator_tag:
@@ -372,6 +377,18 @@ void AdminModule::handleGetModuleConfig(const MeshPacket &req, const uint32_t co
         res.which_variant = AdminMessage_get_module_config_response_tag;
         myReply = allocDataProtobuf(res);
     }
+}
+
+void AdminModule::handleGetDeviceMetadata(const MeshPacket &req) {
+    AdminMessage r = AdminMessage_init_default;
+    
+    DeviceMetadata deviceMetadata;
+    strncpy(deviceMetadata.firmware_version, myNodeInfo.firmware_version, 18);
+    deviceMetadata.device_state_version = DEVICESTATE_CUR_VER;
+
+    r.get_device_metadata_response = deviceMetadata;
+    r.which_variant = AdminMessage_get_device_metadata_response_tag;
+    myReply = allocDataProtobuf(r);
 }
 
 void AdminModule::handleGetChannel(const MeshPacket &req, uint32_t channelIndex)
