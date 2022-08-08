@@ -297,7 +297,7 @@ bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_
 #ifdef FSCom
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
 
-    auto f = FSCom.open(filename);
+    auto f = FSCom.open(filename, FILE_O_READ);
 
     if (f) {
         DEBUG_MSG("Loading %s\n", filename);

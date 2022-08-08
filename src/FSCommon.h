@@ -13,6 +13,15 @@
 #define FILE_O_READ "r"
 #endif
 
+#if defined(ARCH_RP2040)
+// RP2040
+#include "LittleFS.h"
+#define FSCom LittleFS
+#define FSBegin() FSCom.begin()
+#define FILE_O_WRITE "w"
+#define FILE_O_READ "r"
+#endif
+
 #if defined(ARCH_ESP32)
 // ESP32 version
 #include "LITTLEFS.h"
