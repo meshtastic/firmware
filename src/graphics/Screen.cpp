@@ -65,11 +65,6 @@ static FrameCallback normalFrames[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
 static uint32_t targetFramerate = IDLE_FRAMERATE;
 static char btPIN[16] = "888888";
     
-// This defines the layout of the compass.
-// If true, North with remain static at the top of the compass.
-// If false, your current heading is static at the top of the compass.
-bool compassNorthTop = false;
-
 // This image definition is here instead of images.h because it's modified dynamically by the drawBattery function
 uint8_t imgBattery[16] = {0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0xE7, 0x3C};
 
@@ -693,7 +688,7 @@ static void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t comp
 static void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading)
 {
     //If north is supposed to be at the top of the compass we want rotation to be +0
-    if(compassNorthTop)
+    if(config.display.compass_north_top)
         myHeading = -0;
     
     Point N1(-0.04f, 0.65f), N2(0.04f, 0.65f);
@@ -791,7 +786,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
                 GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
             // If the top of the compass is a static north then bearingToOther can be drawn on the compass directly
             // If the top of the compass is not a static north we need adjust bearingToOther based on heading
-            if(!compassNorthTop)
+            if(!config.display.compass_north_top)
                 bearingToOther -= myHeading;
             drawNodeHeading(display, compassX, compassY, bearingToOther);
         }
