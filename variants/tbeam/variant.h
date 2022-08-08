@@ -34,4 +34,4 @@
 // Leave undefined to disable our PMU IRQ handler.  DO NOT ENABLE THIS because the pmuirq can cause sperious interrupts
 // and waking from light sleep
 // #define PMU_IRQ 35
-#define AXP192_SLAVE_ADDRESS 0x34
+#define HAS_AXP192

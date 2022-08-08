@@ -7,9 +7,7 @@
 #include "utils.h"
 #include "buzz/buzz.h"
 
-#ifdef TBEAM_V10
-// FIXME. nasty hack cleanup how we load axp192
-#undef AXP192_SLAVE_ADDRESS
+#ifdef HAS_AXP192
 #include "axp20x.h"
 
 AXP20X_Class axp;
@@ -221,7 +219,7 @@ bool Power::setup()
 
 void Power::shutdown()
 {
-#ifdef TBEAM_V10
+#ifdef HAS_AXP192
     DEBUG_MSG("Shutting down\n");
     axp.setChgLEDMode(AXP20X_LED_OFF);
     axp.shutdown();
@@ -293,7 +291,7 @@ int32_t Power::runOnce()
 {
     readPowerStatus();
 
-#ifdef TBEAM_V10
+#ifdef HAS_AXP192
     // WE no longer use the IRQ line to wake the CPU (due to false wakes from sleep), but we do poll
     // the IRQ status by reading the registers over I2C
     axp.readIRQ();
@@ -343,7 +341,7 @@ int32_t Power::runOnce()
  */
 bool Power::axp192Init()
 {
-#ifdef TBEAM_V10
+#ifdef HAS_AXP192
     if (axp192_found) {
         if (!axp.begin(Wire, AXP192_SLAVE_ADDRESS)) {
             batteryLevel = &axp;

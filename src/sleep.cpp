@@ -21,7 +21,7 @@
 esp_sleep_source_t wakeCause; // the reason we booted this time
 #endif
 
-#ifdef TBEAM_V10
+#ifdef HAS_AXP192
 #include "axp20x.h"
 extern AXP20X_Class axp;
 #endif
@@ -80,7 +80,7 @@ void setLed(bool ledOn)
     digitalWrite(LED_PIN, ledOn ^ LED_INVERTED);
 #endif
 
-#ifdef TBEAM_V10
+#ifdef HAS_AXP192
     if (axp192_found) {
         // blink the axp led
         axp.setChgLEDMode(ledOn ? AXP20X_LED_LOW_LEVEL : AXP20X_LED_OFF);
@@ -92,7 +92,7 @@ void setGPSPower(bool on)
 {
     DEBUG_MSG("Setting GPS power=%d\n", on);
 
-#ifdef TBEAM_V10
+#ifdef HAS_AXP192
     if (axp192_found)
         axp.setPowerOutPut(AXP192_LDO3, on ? AXP202_ON : AXP202_OFF); // GPS main power
 #endif
@@ -187,7 +187,7 @@ void doDeepSleep(uint64_t msecToWake)
     digitalWrite(VEXT_ENABLE, 1); // turn off the display power
 #endif
 
-#ifdef TBEAM_V10
+#ifdef HAS_AXP192
     if (axp192_found) {
         // Obsolete comment: from back when we we used to receive lora packets while CPU was in deep sleep.
         // We no longer do that, because our light-sleep current draws are low enough and it provides fast start/low cost
