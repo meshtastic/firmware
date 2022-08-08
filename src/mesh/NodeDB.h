@@ -8,6 +8,14 @@
 #include "NodeStatus.h"
 #include "mesh-pb-constants.h"
 
+/*
+DeviceState versions used to be defined in the .proto file but really only this function cares.  So changed to a
+#define here.
+*/
+
+#define DEVICESTATE_CUR_VER 14
+#define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
+
 extern DeviceState devicestate;
 extern ChannelFile channelFile;
 extern MyNodeInfo &myNodeInfo;

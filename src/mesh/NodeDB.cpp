@@ -43,14 +43,6 @@ ChannelFile channelFile;
  */
 uint32_t radioGeneration;
 
-/*
-DeviceState versions used to be defined in the .proto file but really only this function cares.  So changed to a
-#define here.
-*/
-
-#define DEVICESTATE_CUR_VER 13
-#define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
-
 // FIXME - move this somewhere else
 extern void getMacAddr(uint8_t *dmac);
 
