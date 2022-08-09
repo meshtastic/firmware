@@ -109,6 +109,9 @@ class ESP32BluetoothServerCallback : public NimBLEServerCallbacks {
             screen->stopBluetoothPinScreen();
         }
     }
+    virtual void onDisconnect(NimBLEServer* pServer, ble_gap_conn_desc *desc) {
+        DEBUG_MSG("BLE disconnect\n");
+    }
 };
 
 
@@ -175,7 +178,7 @@ void ESP32Bluetooth::setup()
     bleServer = NimBLEDevice::createServer();
     
     ESP32BluetoothServerCallback *serverCallbacks = new ESP32BluetoothServerCallback();
-    bleServer->setCallbacks(serverCallbacks);
+    bleServer->setCallbacks(serverCallbacks, true);
 
     NimBLEService *bleService = bleServer->createService(MESH_SERVICE_UUID);
     //NimBLECharacteristic *pNonSecureCharacteristic = bleService->createCharacteristic("1234", NIMBLE_PROPERTY::READ );
@@ -210,7 +213,6 @@ void ESP32Bluetooth::setup()
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(MESH_SERVICE_UUID);
     pAdvertising->start();
-
 }
 
 

@@ -257,10 +257,10 @@ typedef struct _Location {
     uint32_t expire;
     /* If true, only allow the original sender to update the location. */
     bool locked;
-    /* Name of the location - max 40 chars */
+    /* Name of the location - max 30 chars */
     char name[30];
     /* *
- Description of the location - max 160 chars */
+ Description of the location - max 100 chars */
     char description[100];
 } Location;
 
