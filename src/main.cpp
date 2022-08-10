@@ -17,9 +17,9 @@
 #include "SPILock.h"
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
-#include "debug/axpDebug.h"
-#include "debug/einkScan.h"
-#include "debug/i2cScan.h"
+#include "detect/axpDebug.h"
+#include "detect/einkScan.h"
+#include "detect/i2cScan.h"
 #include "graphics/Screen.h"
 #include "main.h"
 #include "modules/Modules.h"
@@ -35,7 +35,7 @@
 #include "mesh/http/WebServer.h"
 
 #ifdef USE_NEW_ESP32_BLUETOOTH
-#include "esp32/ESP32Bluetooth.h"
+#include "platform/esp32/ESP32Bluetooth.h"
 #else
 #include "nimble/BluetoothUtil.h"
 #endif
