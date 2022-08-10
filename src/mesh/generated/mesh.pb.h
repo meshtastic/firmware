@@ -257,6 +257,11 @@ typedef struct _Location {
     uint32_t expire;
     /* If true, only allow the original sender to update the location. */
     bool locked;
+    /* Name of the location - max 40 chars */
+    char name[30];
+    /* *
+ Description of the location - max 160 chars */
+    char description[100];
 } Location;
 
 /* Debug output from the device.
@@ -737,7 +742,7 @@ extern "C" {
 #define RouteDiscovery_init_default              {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_default                     {0, {RouteDiscovery_init_default}}
 #define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, Location_init_default}
-#define Location_init_default                    {0, 0, 0, 0, 0}
+#define Location_init_default                    {0, 0, 0, 0, 0, "", ""}
 #define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
 #define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0, false, DeviceMetrics_init_default}
 #define MyNodeInfo_init_default                  {0, 0, "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
@@ -751,7 +756,7 @@ extern "C" {
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_zero                        {0, {RouteDiscovery_init_zero}}
 #define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, Location_init_zero}
-#define Location_init_zero                       {0, 0, 0, 0, 0}
+#define Location_init_zero                       {0, 0, 0, 0, 0, "", ""}
 #define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
 #define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0, false, DeviceMetrics_init_zero}
 #define MyNodeInfo_init_zero                     {0, 0, "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
@@ -769,6 +774,8 @@ extern "C" {
 #define Location_longitude_i_tag                 3
 #define Location_expire_tag                      4
 #define Location_locked_tag                      5
+#define Location_name_tag                        6
+#define Location_description_tag                 7
 #define LogRecord_message_tag                    1
 #define LogRecord_time_tag                       2
 #define LogRecord_source_tag                     3
@@ -941,7 +948,9 @@ X(a, STATIC,   SINGULAR, UINT32,   id,                1) \
 X(a, STATIC,   SINGULAR, SFIXED32, latitude_i,        2) \
 X(a, STATIC,   SINGULAR, SFIXED32, longitude_i,       3) \
 X(a, STATIC,   SINGULAR, UINT32,   expire,            4) \
-X(a, STATIC,   SINGULAR, BOOL,     locked,            5)
+X(a, STATIC,   SINGULAR, BOOL,     locked,            5) \
+X(a, STATIC,   SINGULAR, STRING,   name,              6) \
+X(a, STATIC,   SINGULAR, STRING,   description,       7)
 #define Location_CALLBACK NULL
 #define Location_DEFAULT NULL
 
@@ -1078,18 +1087,18 @@ extern const pb_msgdesc_t Compressed_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define Compressed_size                          243
-#define Data_size                                296
-#define FromRadio_size                           356
-#define Location_size                            24
+#define Data_size                                429
+#define FromRadio_size                           489
+#define Location_size                            156
 #define LogRecord_size                           81
-#define MeshPacket_size                          347
+#define MeshPacket_size                          480
 #define MyNodeInfo_size                          197
 #define NodeInfo_size                            281
 #define Position_size                            142
 #define RouteDiscovery_size                      40
 #define Routing_size                             42
 #define ToRadio_PeerInfo_size                    8
-#define ToRadio_size                             350
+#define ToRadio_size                             483
 #define User_size                                95
 
 #ifdef __cplusplus
