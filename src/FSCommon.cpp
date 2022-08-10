@@ -44,7 +44,7 @@ bool renameFile(const char* pathFrom, const char* pathTo)
 void listDir(const char * dirname, uint8_t levels)
 {
 #ifdef FSCom
-    File root = FSCom.open(dirname);
+    File root = FSCom.open(dirname, FILE_O_READ);
     if(!root){
         return;
     }
@@ -71,7 +71,7 @@ void listDir(const char * dirname, uint8_t levels)
 void rmDir(const char * dirname)
 {
 #ifdef FSCom
-    File file = FSCom.open(dirname);
+    File file = FSCom.open(dirname, FILE_O_READ);
     if(!file){
         return;
     }
