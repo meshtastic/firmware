@@ -28,7 +28,6 @@ pio run --environment $1 # -v
 SRCELF=.pio/build/$1/firmware.elf
 cp $SRCELF $OUTDIR/$basename.elf
 
-echo "Copying uf2 file"
 SRCBIN=.pio/build/$1/firmware.uf2
 cp $SRCBIN $OUTDIR/$basename.uf2
 
