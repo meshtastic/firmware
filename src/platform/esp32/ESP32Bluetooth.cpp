@@ -109,8 +109,10 @@ class ESP32BluetoothServerCallback : public NimBLEServerCallbacks {
             screen->stopBluetoothPinScreen();
         }
     }
+    virtual void onDisconnect(NimBLEServer* pServer, ble_gap_conn_desc *desc) {
+        DEBUG_MSG("BLE disconnect\n");
+    }
 };
-
 
 static ESP32BluetoothToRadioCallback *toRadioCallbacks;
 static ESP32BluetoothFromRadioCallback *fromRadioCallbacks;
@@ -120,6 +122,9 @@ void ESP32Bluetooth::shutdown()
     // Shutdown bluetooth for minimum power draw
     DEBUG_MSG("Disable bluetooth\n");
     //Bluefruit.Advertising.stop();
+    NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+    pAdvertising->reset();
+    pAdvertising->stop();
 }
 
 void ESP32Bluetooth::setup()
@@ -175,7 +180,7 @@ void ESP32Bluetooth::setup()
     bleServer = NimBLEDevice::createServer();
     
     ESP32BluetoothServerCallback *serverCallbacks = new ESP32BluetoothServerCallback();
-    bleServer->setCallbacks(serverCallbacks);
+    bleServer->setCallbacks(serverCallbacks, true);
 
     NimBLEService *bleService = bleServer->createService(MESH_SERVICE_UUID);
     //NimBLECharacteristic *pNonSecureCharacteristic = bleService->createCharacteristic("1234", NIMBLE_PROPERTY::READ );
@@ -208,9 +213,9 @@ void ESP32Bluetooth::setup()
     //ToRadioCharacteristic->setCallbacks()
 
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+    pAdvertising->reset();
     pAdvertising->addServiceUUID(MESH_SERVICE_UUID);
-    pAdvertising->start();
-
+    pAdvertising->start(0);
 }
 
 
@@ -228,7 +233,7 @@ void ESP32Bluetooth::clearBonds()
 
     //Bluefruit.Periph.clearBonds();
     //Bluefruit.Central.clearBonds();
-    
+    NimBLEDevice::deleteAllBonds();
 }
 
 void clearNVS() {
