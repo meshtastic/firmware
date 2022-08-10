@@ -217,7 +217,7 @@ jobs:
             release/*.elf
           retention-days: 90
 
-  build-rp2040:
+  build-rpi2040:
     strategy:
       fail-fast: false
       max-parallel: 2
