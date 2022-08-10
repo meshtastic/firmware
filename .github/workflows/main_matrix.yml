@@ -256,7 +256,7 @@ jobs:
           pio upgrade
 
       - name: Build Raspberry Pi 2040
-        run: bin/build-rpi2040.sh ${{ matrix.board }}
+        run: ./bin/build-rpi2040.sh ${{ matrix.board }}
 
       - name: Get release version string
         run: echo "::set-output name=version::$(./bin/buildinfo.py long)"
