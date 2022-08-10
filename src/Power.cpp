@@ -156,8 +156,21 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
     /// in power
 
+#ifndef BAT_FULLVOLT
+#define BAT_FULLVOLT 4200
+#endif 
+#ifndef BAT_EMPTYVOLT
+#define BAT_EMPTYVOLT 3270
+#endif 
+#ifndef BAT_CHARGINGVOLT
+#define BAT_CHARGINGVOLT 4210
+#endif 
+#ifndef BAT_NOBATVOLT
+#define BAT_NOBATVOLT 2230
+#endif 
+
     /// For heltecs with no battery connected, the measured voltage is 2204, so raising to 2230 from 2100
-    const float fullVolt = 4200, emptyVolt = 3270, chargingVolt = 4210, noBatVolt = 2230;
+    const float fullVolt = BAT_FULLVOLT, emptyVolt = BAT_EMPTYVOLT, chargingVolt = BAT_CHARGINGVOLT, noBatVolt = BAT_NOBATVOLT;
     float last_read_value = 0.0;
     uint32_t last_read_time_ms = 0;
 };

@@ -26,11 +26,16 @@
 //#define SX126X_E22 // Not really an E22 
 // Internally the module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
 // code)
+#define SX126X_MAX_POWER 16  //Ensure the PA does not exceed the saturation output power. More Info:https://uniteng.com/wiki/doku.php?id=meshtastic:station#rf_design_-_lora_station_edition_g1
 #endif
 
 #define BATTERY_PIN 35    // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define BATTERY_SENSE_SAMPLES 30  //Set the number of samples, It has an effect of increasing sensitivity.
-#define ADC_MULTIPLIER 2.15
+#define ADC_MULTIPLIER 6.45
+#define BAT_FULLVOLT 12600
+#define BAT_EMPTYVOLT 8200
+#define BAT_CHARGINGVOLT 12600
+#define BAT_NOBATVOLT 6690
 
 // different screen
 #define USE_SH1106
