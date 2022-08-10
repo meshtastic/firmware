@@ -41,6 +41,7 @@ jobs:
           - board: station-g1
           - board: m5stack-core
           - board: m5stack-coreink
+          - board: pico
           
     runs-on: ubuntu-latest
     steps:
@@ -125,7 +126,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -U platformio adafruit-nrfutil littlefs-python
-          pip install -U --pre meshtastic
 
       - name: Upgrade platformio
         run: |
@@ -196,7 +196,60 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -U platformio adafruit-nrfutil
-          pip install -U --pre meshtastic
+
+      - name: Upgrade platformio
+        run: |
+          pio upgrade
+
+      - name: Build NRF52
+        run: bin/build-nrf52.sh ${{ matrix.board }}
+
+      - name: Get release version string
+        run: echo "::set-output name=version::$(./bin/buildinfo.py long)"
+        id: version
+
+      - name: Store binaries as an artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: firmware-${{ matrix.board }}-${{ steps.version.outputs.version }}.zip
+          path: |
+            release/*.uf2
+            release/*.elf
+          retention-days: 90
+
+  build-rp2040:
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - board: pico
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          submodules: "recursive"
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
+
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.x
+
+      - name: Cache python libs
+        uses: actions/cache@v1
+        id: cache-pip # needed in if test
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip
+
+      - name: Upgrade python tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install -U platformio adafruit-nrfutil
 
       - name: Upgrade platformio
         run: |
