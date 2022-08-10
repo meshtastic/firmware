@@ -41,7 +41,7 @@ jobs:
           - board: station-g1
           - board: m5stack-core
           - board: m5stack-coreink
-          - board: pico
+        # - board: pico
           
     runs-on: ubuntu-latest
     steps:
