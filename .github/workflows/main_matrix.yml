@@ -255,8 +255,8 @@ jobs:
         run: |
           pio upgrade
 
-      - name: Build NRF52
-        run: bin/build-nrf52.sh ${{ matrix.board }}
+      - name: Build Raspberry Pi 2040
+        run: bin/build-rpi2040.sh ${{ matrix.board }}
 
       - name: Get release version string
         run: echo "::set-output name=version::$(./bin/buildinfo.py long)"
@@ -342,7 +342,7 @@ jobs:
 
   gather-artifacts:
     runs-on: ubuntu-latest
-    needs: [build-esp32, build-nrf52, build-native]
+    needs: [build-esp32, build-nrf52, build-native, build-rpi2040]
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
