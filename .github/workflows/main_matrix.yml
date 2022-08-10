@@ -431,7 +431,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: release/archive/firmware-${{ steps.version.outputs.version }}.zip
+          asset_path: firmware-${{ steps.version.outputs.version }}
           asset_name: firmware-${{ steps.version.outputs.version }}.zip
           asset_content_type: application/zip
 
@@ -442,7 +442,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: release/archive/elfs-${{ steps.version.outputs.version }}.zip
+          asset_path: elfs-${{ steps.version.outputs.version }}
           asset_name: debug-elfs-${{ steps.version.outputs.version }}.zip
           asset_content_type: application/zip
       
