@@ -442,6 +442,6 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: elfs-${{ steps.version.outputs.version }}
+          asset_path: ./debug-elfs-${{ steps.version.outputs.version }}
           asset_name: debug-elfs-${{ steps.version.outputs.version }}.zip
           asset_content_type: application/zip
