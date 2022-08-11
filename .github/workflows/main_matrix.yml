@@ -483,7 +483,7 @@ jobs:
           git config --global user.name 'github-actions'
           git config --global user.email 'bot@noreply.github.com'
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
-          git add setup.py
+          git add version.properties
           git commit -m "bump version" && git push || echo "No changes to commit"
           git log -n 1 --pretty=format:"%H" | tail -n 1 | awk '{print "::set-output name=sha::"$0}'
 
