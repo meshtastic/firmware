@@ -438,7 +438,10 @@ jobs:
       - uses: actions/download-artifact@v2
         with:
           name: debug-elfs-${{ steps.version.outputs.version }}.zip
-          path: ./
+          path: ./elfs
+      
+      - name: Zip Elfs
+        run: zip -j -r ./debug-elfs-${{ steps.version.outputs.version }}.zip ./elfs
 
       - name: Add debug elfs to release
         uses: actions/upload-release-asset@v1
