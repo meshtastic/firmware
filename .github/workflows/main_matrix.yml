@@ -435,13 +435,13 @@ jobs:
           asset_name: firmware-${{ steps.version.outputs.version }}.zip
           asset_content_type: application/zip
 
-      # - name: Add debug elfs to release
-      #   uses: actions/upload-release-asset@v1
-      #   if: contains(steps.verify-changed-files.outputs.changed_files, 'version.properties') && ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
-      #   env:
-      #     GITHUB_TOKEN: ${{ github.token }}
-      #   with:
-      #     upload_url: ${{ steps.create_release.outputs.upload_url }}
-      #     asset_path: elfs-${{ steps.version.outputs.version }}
-      #     asset_name: debug-elfs-${{ steps.version.outputs.version }}.zip
-      #     asset_content_type: application/zip
+      - name: Add debug elfs to release
+        uses: actions/upload-release-asset@v1
+        if: contains(steps.verify-changed-files.outputs.changed_files, 'version.properties') && ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: elfs-${{ steps.version.outputs.version }}
+          asset_name: debug-elfs-${{ steps.version.outputs.version }}.zip
+          asset_content_type: application/zip
