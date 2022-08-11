@@ -403,17 +403,44 @@ jobs:
           artifacts-dir: pr
           artifacts: ./firmware-${{ steps.version.outputs.version }}.zip
 
-      - name: Verify version.properties change
-        uses: tj-actions/verify-changed-files@v10.1
-        id: verify-changed-files
+  release-artifacts:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
+    needs: [gather-artifacts]
+    steps:
+    - uses: actions/checkout@v3
         with:
-          files: |
-             version.properties
+          fetch-depth: 0
+          
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v25
+
+      - uses: actions/download-artifact@v2
+        if: contains(steps.changed-files.outputs.modified_files, 'version.properties')
+        with:
+          name: firmware-${{ steps.version.outputs.version }}
+          path: ./output
+
+      - name: Zip firmware
+        run: zip -j -r ./firmware-${{ steps.version.outputs.version }}.zip ./output
+
+      - uses: actions/download-artifact@v2
+        with:
+          name: debug-elfs-${{ steps.version.outputs.version }}.zip
+          path: ./elfs
+      
+      - name: Zip Elfs
+        run: zip -j -r ./debug-elfs-${{ steps.version.outputs.version }}.zip ./elfs
+
+      # For diagnostics
+      - name: Show artifacts
+        run: ls -lR
 
       - name: Create release
         uses: actions/create-release@v1
         id: create_release
-        if: contains(steps.verify-changed-files.outputs.changed_files, 'version.properties') && ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
+        if: contains(steps.changed-files.outputs.modified_files, 'version.properties')
         with:
           draft: true
           prerelease: true
@@ -425,8 +452,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Add bins to release
+        if: contains(steps.changed-files.outputs.modified_files, 'version.properties')
         uses: actions/upload-release-asset@v1
-        if: contains(steps.verify-changed-files.outputs.changed_files, 'version.properties') && ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
@@ -435,17 +462,9 @@ jobs:
           asset_name: firmware-${{ steps.version.outputs.version }}.zip
           asset_content_type: application/zip
 
-      - uses: actions/download-artifact@v2
-        with:
-          name: debug-elfs-${{ steps.version.outputs.version }}.zip
-          path: ./elfs
-      
-      - name: Zip Elfs
-        run: zip -j -r ./debug-elfs-${{ steps.version.outputs.version }}.zip ./elfs
-
       - name: Add debug elfs to release
+        if: contains(steps.changed-files.outputs.modified_files, 'version.properties')
         uses: actions/upload-release-asset@v1
-        if: contains(steps.verify-changed-files.outputs.changed_files, 'version.properties') && ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
