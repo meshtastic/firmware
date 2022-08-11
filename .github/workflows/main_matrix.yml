@@ -408,7 +408,7 @@ jobs:
     if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
     needs: [gather-artifacts]
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 0
           
