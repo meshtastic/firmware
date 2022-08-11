@@ -419,10 +419,6 @@ jobs:
       - name: Get release version string
         run: echo "::set-output name=version::$(./bin/buildinfo.py long)"
         id: version
-          
-      - name: Get changed files
-        id: changed-files
-        uses: tj-actions/changed-files@v25
 
       - uses: actions/download-artifact@v2
         with:
