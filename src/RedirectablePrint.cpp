@@ -38,20 +38,13 @@ size_t RedirectablePrint::write(uint8_t c)
 size_t RedirectablePrint::vprintf(const char *format, va_list arg)
 {
     va_list copy;
+    static char printBuf[160];
 
     va_copy(copy, arg);
-    int len = vsnprintf(printBuf, printBufLen, format, copy);
+    int len = vsnprintf(printBuf, sizeof(printBuf), format, copy);
     va_end(copy);
-    if (len < 0) {
-        va_end(arg);
-        return 0;
-    };
-    if (len >= (int)printBufLen) {
-        delete[] printBuf;
-        printBufLen *= 2;
-        printBuf = new char[printBufLen];
-        len = vsnprintf(printBuf, printBufLen, format, arg);
-    }
+
+    if (len < 0) return 0;
 
     len = Print::write(printBuf, len);
     return len;
