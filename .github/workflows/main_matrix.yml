@@ -406,7 +406,7 @@ jobs:
   release-artifacts:
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'workflow_dispatch' }}
-    needs: [gather-artifacts]
+    needs: [gather-artifacts, after-checks]
     steps:
       - name: Checkout
         uses: actions/checkout@v2
