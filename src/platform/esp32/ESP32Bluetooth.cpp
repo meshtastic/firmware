@@ -10,8 +10,6 @@
 #include "mesh/mesh-pb-constants.h"
 #include <NimBLEDevice.h>
 
-static uint8_t fromRadioBytes[FromRadio_size];
-
 NimBLECharacteristic *fromNumCharacteristic;
 NimBLEServer *bleServer;
 
@@ -28,14 +26,11 @@ class BluetoothPhoneAPI : public PhoneAPI
         PhoneAPI::onNowHasData(fromRadioNum);
 
         DEBUG_MSG("BLE notify fromNum\n");
-        //fromNum.notify32(fromRadioNum);
         
         uint8_t val[4];
         put_le32(val, fromRadioNum);
 
-        std::string fromNumByteString(&val[0], &val[0] + sizeof(val));
-
-        fromNumCharacteristic->setValue(fromNumByteString);
+        fromNumCharacteristic->setValue(val, sizeof(val));
         fromNumCharacteristic->notify();
     }
 
@@ -64,6 +59,7 @@ class ESP32BluetoothToRadioCallback : public NimBLECharacteristicCallbacks
 class ESP32BluetoothFromRadioCallback : public NimBLECharacteristicCallbacks {
     virtual void onRead(NimBLECharacteristic *pCharacteristic) {
         DEBUG_MSG("From Radio onread\n");
+        uint8_t fromRadioBytes[FromRadio_size];
         size_t numBytes = bluetoothPhoneAPI->getFromRadio(fromRadioBytes);
 
         std::string fromRadioByteString(fromRadioBytes, fromRadioBytes + numBytes);
@@ -136,6 +132,12 @@ void ESP32Bluetooth::setup()
     ESP32BluetoothServerCallback *serverCallbacks = new ESP32BluetoothServerCallback();
     bleServer->setCallbacks(serverCallbacks, true);
 
+    setupService();
+    startAdvertising();
+}
+
+void ESP32Bluetooth::setupService() 
+{
     NimBLEService *bleService = bleServer->createService(MESH_SERVICE_UUID);
 
     //define the characteristics that the app is looking for
@@ -151,20 +153,16 @@ void ESP32Bluetooth::setup()
     fromRadioCallbacks = new ESP32BluetoothFromRadioCallback();
     FromRadioCharacteristic->setCallbacks(fromRadioCallbacks);
 
-
     bleService->start();
-
-
 }
 
-void startAdvertising() 
+void ESP32Bluetooth::startAdvertising() 
 {
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->reset();
     pAdvertising->addServiceUUID(MESH_SERVICE_UUID);
     pAdvertising->start(0);
 }
-
 
 /// Given a level between 0-100, update the BLE attribute
 void updateBatteryLevel(uint8_t level)
