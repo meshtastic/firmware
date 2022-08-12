@@ -6,6 +6,7 @@ on:
     paths-ignore:
       - "**.md"
       - "**.yml"
+      - "version.properties"
 
   # Note: This is different from "pull_request". Need to specify ref when doing checkouts.
   pull_request_target:
@@ -480,10 +481,10 @@ jobs:
       - name: Commit updated version.py
         id: commit_updated
         run: |
-          git config --global user.name 'github-actions'
-          git config --global user.email 'bot@noreply.github.com'
-          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+          git config --global user.name 'thebentern'
+          git config --global user.email 'benmmeadors@gmail.com'
+          git remote set-url origin https://x-access-token:${{ secrets.ARTIFACTS_TOKEN }}@github.com/${{ github.repository }}
           git add version.properties
-          git commit -m "bump version" && git push || echo "No changes to commit"
+          git commit -m "Bump version" && git push || echo "No changes to commit"
           git log -n 1 --pretty=format:"%H" | tail -n 1 | awk '{print "::set-output name=sha::"$0}'
 
