@@ -74,7 +74,8 @@ class ESP32BluetoothFromRadioCallback : public NimBLECharacteristicCallbacks {
     }
 };
 
-class ESP32BluetoothServerCallback : public NimBLEServerCallbacks {
+class ESP32BluetoothServerCallback : public NimBLEServerCallbacks 
+{
     virtual uint32_t onPassKeyRequest() {
 
         uint32_t passkey = 0;
@@ -104,6 +105,7 @@ class ESP32BluetoothServerCallback : public NimBLEServerCallbacks {
             screen->stopBluetoothPinScreen();
         }
     }
+
     virtual void onDisconnect(NimBLEServer* pServer, ble_gap_conn_desc *desc) {
         DEBUG_MSG("BLE disconnect\n");
     }
@@ -154,6 +156,11 @@ void ESP32Bluetooth::setup()
 
     bleService->start();
 
+
+}
+
+void startAdvertising() 
+{
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->reset();
     pAdvertising->addServiceUUID(MESH_SERVICE_UUID);
@@ -173,12 +180,14 @@ void ESP32Bluetooth::clearBonds()
     NimBLEDevice::deleteAllBonds();
 }
 
-void clearNVS() {
+void clearNVS() 
+{
     NimBLEDevice::deleteAllBonds();
     ESP.restart();
 }
 
-void disablePin() {
+void disablePin() 
+{
     DEBUG_MSG("User Override, disabling bluetooth pin requirement\n");
     // keep track of when it was pressed, so we know it was within X seconds
 
