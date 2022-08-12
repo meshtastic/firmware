@@ -51,8 +51,6 @@ static BluetoothPhoneAPI *bluetoothPhoneAPI;
  * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
  */
 
-BluetoothPhoneAPI *bluetoothPhoneAPI;
-
 class ESP32BluetoothToRadioCallback : public NimBLECharacteristicCallbacks 
 {
     virtual void onWrite(NimBLECharacteristic *pCharacteristic) {
