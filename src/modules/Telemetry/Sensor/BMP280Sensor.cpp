@@ -6,7 +6,7 @@
 #include <typeinfo>
 
 BMP280Sensor::BMP280Sensor() : 
-    TelemetrySensor(TelemetrySensorType_BME280, "BMP280")
+    TelemetrySensor(TelemetrySensorType_BMP280, "BMP280")
 {
 }
 
