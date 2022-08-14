@@ -46,7 +46,7 @@ void setBluetoothEnable(bool on) {
         if (!esp32Bluetooth) {
             esp32Bluetooth = new ESP32Bluetooth();
         }
-        if (on) {
+        if (on && !esp32Bluetooth->isActive()) {
             esp32Bluetooth->setup();
         } else {
             esp32Bluetooth->shutdown();
