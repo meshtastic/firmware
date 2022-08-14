@@ -426,8 +426,8 @@ jobs:
           name: firmware-${{ steps.version.outputs.version }}
           path: ./output
       
-      - name: permissions
-      - run: |
+      - name: Device scripts permissions
+        run: |
           chmod +x ./output/device-install.sh
           chmod +x ./output/device-update.sh
 
