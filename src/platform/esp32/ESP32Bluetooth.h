@@ -8,6 +8,7 @@ class ESP32Bluetooth
     void setup();
     void shutdown();
     void clearBonds();
+    bool isActive();
 
   private:
     void setupService();
