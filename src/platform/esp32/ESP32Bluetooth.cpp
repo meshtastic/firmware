@@ -56,7 +56,8 @@ class ESP32BluetoothToRadioCallback : public NimBLECharacteristicCallbacks
     }
 };
 
-class ESP32BluetoothFromRadioCallback : public NimBLECharacteristicCallbacks {
+class ESP32BluetoothFromRadioCallback : public NimBLECharacteristicCallbacks 
+{
     virtual void onRead(NimBLECharacteristic *pCharacteristic) {
         DEBUG_MSG("From Radio onread\n");
         uint8_t fromRadioBytes[FromRadio_size];
@@ -91,7 +92,8 @@ class ESP32BluetoothServerCallback : public NimBLEServerCallbacks
         return passkey;
     }
 
-    virtual void onAuthenticationComplete(ble_gap_conn_desc *desc) {
+    virtual void onAuthenticationComplete(ble_gap_conn_desc *desc) 
+    {
         DEBUG_MSG("BLE authentication complete\n");
 
         if (passkeyShowing) {
@@ -100,7 +102,8 @@ class ESP32BluetoothServerCallback : public NimBLEServerCallbacks
         }
     }
 
-    virtual void onDisconnect(NimBLEServer* pServer, ble_gap_conn_desc *desc) {
+    virtual void onDisconnect(NimBLEServer* pServer, ble_gap_conn_desc *desc)
+     {
         DEBUG_MSG("BLE disconnect\n");
     }
 };
@@ -116,6 +119,12 @@ void ESP32Bluetooth::shutdown()
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->reset();
     pAdvertising->stop();
+}
+
+bool ESP32Bluetooth::isActive()
+{
+    NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+    return bleServer && (bleServer->getConnectedCount() > 0 || pAdvertising->isAdvertising());
 }
 
 void ESP32Bluetooth::setup()
