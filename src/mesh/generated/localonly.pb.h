@@ -31,6 +31,9 @@ typedef struct _LocalConfig {
     /* The part of the config that is specific to the Lora Radio */
     bool has_lora;
     Config_LoRaConfig lora;
+    /* The part of the config that is specific to the Bluetooth settings */
+    bool has_bluetooth;
+    Config_BluetoothConfig bluetooth;
     /* A version integer used to invalidate old save files when we make
  incompatible changes This integer is set at build time and is private to
  NodeDB.cpp in the device code. */
@@ -71,9 +74,9 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define LocalConfig_init_default                 {false, Config_DeviceConfig_init_default, false, Config_PositionConfig_init_default, false, Config_PowerConfig_init_default, false, Config_WiFiConfig_init_default, false, Config_DisplayConfig_init_default, false, Config_LoRaConfig_init_default, 0}
+#define LocalConfig_init_default                 {false, Config_DeviceConfig_init_default, false, Config_PositionConfig_init_default, false, Config_PowerConfig_init_default, false, Config_WiFiConfig_init_default, false, Config_DisplayConfig_init_default, false, Config_LoRaConfig_init_default, false, Config_BluetoothConfig_init_default, 0}
 #define LocalModuleConfig_init_default           {false, ModuleConfig_MQTTConfig_init_default, false, ModuleConfig_SerialConfig_init_default, false, ModuleConfig_ExternalNotificationConfig_init_default, false, ModuleConfig_StoreForwardConfig_init_default, false, ModuleConfig_RangeTestConfig_init_default, false, ModuleConfig_TelemetryConfig_init_default, false, ModuleConfig_CannedMessageConfig_init_default, 0}
-#define LocalConfig_init_zero                    {false, Config_DeviceConfig_init_zero, false, Config_PositionConfig_init_zero, false, Config_PowerConfig_init_zero, false, Config_WiFiConfig_init_zero, false, Config_DisplayConfig_init_zero, false, Config_LoRaConfig_init_zero, 0}
+#define LocalConfig_init_zero                    {false, Config_DeviceConfig_init_zero, false, Config_PositionConfig_init_zero, false, Config_PowerConfig_init_zero, false, Config_WiFiConfig_init_zero, false, Config_DisplayConfig_init_zero, false, Config_LoRaConfig_init_zero, false, Config_BluetoothConfig_init_zero, 0}
 #define LocalModuleConfig_init_zero              {false, ModuleConfig_MQTTConfig_init_zero, false, ModuleConfig_SerialConfig_init_zero, false, ModuleConfig_ExternalNotificationConfig_init_zero, false, ModuleConfig_StoreForwardConfig_init_zero, false, ModuleConfig_RangeTestConfig_init_zero, false, ModuleConfig_TelemetryConfig_init_zero, false, ModuleConfig_CannedMessageConfig_init_zero, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -83,7 +86,8 @@ extern "C" {
 #define LocalConfig_wifi_tag                     4
 #define LocalConfig_display_tag                  5
 #define LocalConfig_lora_tag                     6
-#define LocalConfig_version_tag                  7
+#define LocalConfig_bluetooth_tag                7
+#define LocalConfig_version_tag                  8
 #define LocalModuleConfig_mqtt_tag               1
 #define LocalModuleConfig_serial_tag             2
 #define LocalModuleConfig_external_notification_tag 3
@@ -101,7 +105,8 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  power,             3) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  wifi,              4) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  display,           5) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  lora,              6) \
-X(a, STATIC,   SINGULAR, UINT32,   version,           7)
+X(a, STATIC,   OPTIONAL, MESSAGE,  bluetooth,         7) \
+X(a, STATIC,   SINGULAR, UINT32,   version,           8)
 #define LocalConfig_CALLBACK NULL
 #define LocalConfig_DEFAULT NULL
 #define LocalConfig_device_MSGTYPE Config_DeviceConfig
@@ -110,6 +115,7 @@ X(a, STATIC,   SINGULAR, UINT32,   version,           7)
 #define LocalConfig_wifi_MSGTYPE Config_WiFiConfig
 #define LocalConfig_display_MSGTYPE Config_DisplayConfig
 #define LocalConfig_lora_MSGTYPE Config_LoRaConfig
+#define LocalConfig_bluetooth_MSGTYPE Config_BluetoothConfig
 
 #define LocalModuleConfig_FIELDLIST(X, a) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  mqtt,              1) \
@@ -138,7 +144,7 @@ extern const pb_msgdesc_t LocalModuleConfig_msg;
 #define LocalModuleConfig_fields &LocalModuleConfig_msg
 
 /* Maximum encoded size of messages (where known) */
-#define LocalConfig_size                         321
+#define LocalConfig_size                         333
 #define LocalModuleConfig_size                   268
 
 #ifdef __cplusplus

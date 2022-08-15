@@ -189,15 +189,18 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
                 fromRadioScratch.config.which_payloadVariant = Config_lora_tag;
                 fromRadioScratch.config.payloadVariant.lora = config.lora;
                 break;
+            case Config_bluetooth_tag:
+                fromRadioScratch.config.which_payloadVariant = Config_bluetooth_tag;
+                fromRadioScratch.config.payloadVariant.bluetooth = config.bluetooth;
+                break;
         }
-
         // NOTE: The phone app needs to know the ls_secs value so it can properly expect sleep behavior.
         // So even if we internally use 0 to represent 'use default' we still need to send the value we are
         // using to the app (so that even old phone apps work with new device loads).
         
         config_state++;
         // Advance when we have sent all of our config objects
-        if (config_state > Config_lora_tag) {
+        if (config_state > Config_bluetooth_tag) {
             state = STATE_SEND_MODULECONFIG;
             config_state = ModuleConfig_mqtt_tag;
         }

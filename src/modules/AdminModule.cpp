@@ -202,6 +202,12 @@ void AdminModule::handleSetConfig(const Config &c)
         config.lora = c.payloadVariant.lora;
         break;
     }
+    case Config_bluetooth_tag:
+        DEBUG_MSG("Setting config: Bluetooth\n");
+        config.has_bluetooth = true;
+        config.bluetooth = c.payloadVariant.bluetooth;
+        break;
+    }
 
     service.reloadConfig();
 }
