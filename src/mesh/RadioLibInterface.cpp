@@ -43,6 +43,10 @@ RadioLibInterface::RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq
     : NotifiedWorkerThread("RadioIf"), module(cs, irq, rst, busy, spi, spiSettings), iface(_iface)
 {
     instance = this;
+#if defined(ARCH_STM32WL) && defined(USE_SX1262)
+    module.setCb_digitalWrite(stm32wl_emulate_digitalWrite);
+    module.setCb_digitalRead(stm32wl_emulate_digitalRead);
+#endif
 }
 
 #ifdef ARCH_ESP32
