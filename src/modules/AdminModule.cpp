@@ -201,7 +201,6 @@ void AdminModule::handleSetConfig(const Config &c)
         config.has_lora = true;
         config.lora = c.payloadVariant.lora;
         break;
-    }
     case Config_bluetooth_tag:
         DEBUG_MSG("Setting config: Bluetooth\n");
         config.has_bluetooth = true;
@@ -215,41 +214,41 @@ void AdminModule::handleSetConfig(const Config &c)
 void AdminModule::handleSetModuleConfig(const ModuleConfig &c)
 {
     switch (c.which_payloadVariant) {
-    case ModuleConfig_mqtt_tag:
-        DEBUG_MSG("Setting module config: MQTT\n");
-        moduleConfig.has_mqtt = true;
-        moduleConfig.mqtt = c.payloadVariant.mqtt;
-        break;
-    case ModuleConfig_serial_tag:
-        DEBUG_MSG("Setting module config: Serial\n");
-        moduleConfig.has_serial = true;
-        moduleConfig.serial = c.payloadVariant.serial;
-        break;
-    case ModuleConfig_external_notification_tag:
-        DEBUG_MSG("Setting module config: External Notification\n");
-        moduleConfig.has_external_notification = true;
-        moduleConfig.external_notification = c.payloadVariant.external_notification;
-        break;
-    case ModuleConfig_store_forward_tag:
-        DEBUG_MSG("Setting module config: Store & Forward\n");
-        moduleConfig.has_store_forward = true;
-        moduleConfig.store_forward = c.payloadVariant.store_forward;
-        break;
-    case ModuleConfig_range_test_tag:
-        DEBUG_MSG("Setting module config: Range Test\n");
-        moduleConfig.has_range_test = true;
-        moduleConfig.range_test = c.payloadVariant.range_test;
-        break;
-    case ModuleConfig_telemetry_tag:
-        DEBUG_MSG("Setting module config: Telemetry\n");
-        moduleConfig.has_telemetry = true;
-        moduleConfig.telemetry = c.payloadVariant.telemetry;
-        break;
-    case ModuleConfig_canned_message_tag:
-        DEBUG_MSG("Setting module config: Canned Message\n");
-        moduleConfig.has_canned_message = true;
-        moduleConfig.canned_message = c.payloadVariant.canned_message;
-        break;
+        case ModuleConfig_mqtt_tag:
+            DEBUG_MSG("Setting module config: MQTT\n");
+            moduleConfig.has_mqtt = true;
+            moduleConfig.mqtt = c.payloadVariant.mqtt;
+            break;
+        case ModuleConfig_serial_tag:
+            DEBUG_MSG("Setting module config: Serial\n");
+            moduleConfig.has_serial = true;
+            moduleConfig.serial = c.payloadVariant.serial;
+            break;
+        case ModuleConfig_external_notification_tag:
+            DEBUG_MSG("Setting module config: External Notification\n");
+            moduleConfig.has_external_notification = true;
+            moduleConfig.external_notification = c.payloadVariant.external_notification;
+            break;
+        case ModuleConfig_store_forward_tag:
+            DEBUG_MSG("Setting module config: Store & Forward\n");
+            moduleConfig.has_store_forward = true;
+            moduleConfig.store_forward = c.payloadVariant.store_forward;
+            break;
+        case ModuleConfig_range_test_tag:
+            DEBUG_MSG("Setting module config: Range Test\n");
+            moduleConfig.has_range_test = true;
+            moduleConfig.range_test = c.payloadVariant.range_test;
+            break;
+        case ModuleConfig_telemetry_tag:
+            DEBUG_MSG("Setting module config: Telemetry\n");
+            moduleConfig.has_telemetry = true;
+            moduleConfig.telemetry = c.payloadVariant.telemetry;
+            break;
+        case ModuleConfig_canned_message_tag:
+            DEBUG_MSG("Setting module config: Canned Message\n");
+            moduleConfig.has_canned_message = true;
+            moduleConfig.canned_message = c.payloadVariant.canned_message;
+            break;
     }
 
     service.reloadConfig();
@@ -315,8 +314,12 @@ void AdminModule::handleGetConfig(const MeshPacket &req, const uint32_t configTy
             res.get_config_response.which_payloadVariant = Config_lora_tag;
             res.get_config_response.payloadVariant.lora = config.lora;
             break;
+        case AdminMessage_ConfigType_BLUETOOTH_CONFIG:
+            DEBUG_MSG("Getting config: Bluetooth\n");
+            res.get_config_response.which_payloadVariant = Config_bluetooth_tag;
+            res.get_config_response.payloadVariant.bluetooth = config.bluetooth;
+            break;
         }
-
         // NOTE: The phone app needs to know the ls_secs value so it can properly expect sleep behavior.
         // So even if we internally use 0 to represent 'use default' we still need to send the value we are
         // using to the app (so that even old phone apps work with new device loads).

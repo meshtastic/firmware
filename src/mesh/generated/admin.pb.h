@@ -21,7 +21,8 @@ typedef enum _AdminMessage_ConfigType {
     AdminMessage_ConfigType_POWER_CONFIG = 2, 
     AdminMessage_ConfigType_WIFI_CONFIG = 3, 
     AdminMessage_ConfigType_DISPLAY_CONFIG = 4, 
-    AdminMessage_ConfigType_LORA_CONFIG = 5 
+    AdminMessage_ConfigType_LORA_CONFIG = 5, 
+    AdminMessage_ConfigType_BLUETOOTH_CONFIG = 6 
 } AdminMessage_ConfigType;
 
 typedef enum _AdminMessage_ModuleConfigType { 
@@ -106,8 +107,8 @@ typedef struct _AdminMessage {
 
 /* Helper constants for enums */
 #define _AdminMessage_ConfigType_MIN AdminMessage_ConfigType_DEVICE_CONFIG
-#define _AdminMessage_ConfigType_MAX AdminMessage_ConfigType_LORA_CONFIG
-#define _AdminMessage_ConfigType_ARRAYSIZE ((AdminMessage_ConfigType)(AdminMessage_ConfigType_LORA_CONFIG+1))
+#define _AdminMessage_ConfigType_MAX AdminMessage_ConfigType_BLUETOOTH_CONFIG
+#define _AdminMessage_ConfigType_ARRAYSIZE ((AdminMessage_ConfigType)(AdminMessage_ConfigType_BLUETOOTH_CONFIG+1))
 
 #define _AdminMessage_ModuleConfigType_MIN AdminMessage_ModuleConfigType_MQTT_CONFIG
 #define _AdminMessage_ModuleConfigType_MAX AdminMessage_ModuleConfigType_CANNEDMSG_CONFIG
