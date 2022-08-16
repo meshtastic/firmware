@@ -92,7 +92,19 @@ typedef enum _Config_LoRaConfig_ModemPreset {
     Config_LoRaConfig_ModemPreset_ShortFast = 6 
 } Config_LoRaConfig_ModemPreset;
 
+typedef enum _Config_BluetoothConfig_PairingMode { 
+    Config_BluetoothConfig_PairingMode_RandomPin = 0, 
+    Config_BluetoothConfig_PairingMode_FixedPin = 1, 
+    Config_BluetoothConfig_PairingMode_NoPin = 2 
+} Config_BluetoothConfig_PairingMode;
+
 /* Struct definitions */
+typedef struct _Config_BluetoothConfig { 
+    bool enabled;
+    Config_BluetoothConfig_PairingMode mode;
+    uint32_t fixed_pin;
+} Config_BluetoothConfig;
+
 typedef struct _Config_DeviceConfig { 
     Config_DeviceConfig_Role role;
     bool serial_disabled;
@@ -160,6 +172,7 @@ typedef struct _Config {
         Config_WiFiConfig wifi;
         Config_DisplayConfig display;
         Config_LoRaConfig lora;
+        Config_BluetoothConfig bluetooth;
     } payloadVariant;
 } Config;
 
@@ -193,6 +206,10 @@ typedef struct _Config {
 #define _Config_LoRaConfig_ModemPreset_MAX Config_LoRaConfig_ModemPreset_ShortFast
 #define _Config_LoRaConfig_ModemPreset_ARRAYSIZE ((Config_LoRaConfig_ModemPreset)(Config_LoRaConfig_ModemPreset_ShortFast+1))
 
+#define _Config_BluetoothConfig_PairingMode_MIN Config_BluetoothConfig_PairingMode_RandomPin
+#define _Config_BluetoothConfig_PairingMode_MAX Config_BluetoothConfig_PairingMode_NoPin
+#define _Config_BluetoothConfig_PairingMode_ARRAYSIZE ((Config_BluetoothConfig_PairingMode)(Config_BluetoothConfig_PairingMode_NoPin+1))
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -206,6 +223,7 @@ extern "C" {
 #define Config_WiFiConfig_init_default           {0, _Config_WiFiConfig_WiFiMode_MIN, "", ""}
 #define Config_DisplayConfig_init_default        {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0}
 #define Config_LoRaConfig_init_default           {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, {0, 0, 0}}
+#define Config_BluetoothConfig_init_default      {0, _Config_BluetoothConfig_PairingMode_MIN, 0}
 #define Config_init_zero                         {0, {Config_DeviceConfig_init_zero}}
 #define Config_DeviceConfig_init_zero            {_Config_DeviceConfig_Role_MIN, 0, 0, 0, ""}
 #define Config_PositionConfig_init_zero          {0, 0, 0, 0, 0, 0, 0}
@@ -213,8 +231,12 @@ extern "C" {
 #define Config_WiFiConfig_init_zero              {0, _Config_WiFiConfig_WiFiMode_MIN, "", ""}
 #define Config_DisplayConfig_init_zero           {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0}
 #define Config_LoRaConfig_init_zero              {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, {0, 0, 0}}
+#define Config_BluetoothConfig_init_zero         {0, _Config_BluetoothConfig_PairingMode_MIN, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
+#define Config_BluetoothConfig_enabled_tag       1
+#define Config_BluetoothConfig_mode_tag          2
+#define Config_BluetoothConfig_fixed_pin_tag     3
 #define Config_DeviceConfig_role_tag             1
 #define Config_DeviceConfig_serial_disabled_tag  2
 #define Config_DeviceConfig_factory_reset_tag    3
@@ -260,6 +282,7 @@ extern "C" {
 #define Config_wifi_tag                          4
 #define Config_display_tag                       5
 #define Config_lora_tag                          6
+#define Config_bluetooth_tag                     7
 
 /* Struct field encoding specification for nanopb */
 #define Config_FIELDLIST(X, a) \
@@ -268,7 +291,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,position,payloadVariant.posit
 X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,power,payloadVariant.power),   3) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,wifi,payloadVariant.wifi),   4) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,display,payloadVariant.display),   5) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,lora,payloadVariant.lora),   6)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,lora,payloadVariant.lora),   6) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,bluetooth,payloadVariant.bluetooth),   7)
 #define Config_CALLBACK NULL
 #define Config_DEFAULT NULL
 #define Config_payloadVariant_device_MSGTYPE Config_DeviceConfig
@@ -277,6 +301,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,lora,payloadVariant.lora),   
 #define Config_payloadVariant_wifi_MSGTYPE Config_WiFiConfig
 #define Config_payloadVariant_display_MSGTYPE Config_DisplayConfig
 #define Config_payloadVariant_lora_MSGTYPE Config_LoRaConfig
+#define Config_payloadVariant_bluetooth_MSGTYPE Config_BluetoothConfig
 
 #define Config_DeviceConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    role,              1) \
@@ -341,6 +366,13 @@ X(a, STATIC,   REPEATED, UINT32,   ignore_incoming, 103)
 #define Config_LoRaConfig_CALLBACK NULL
 #define Config_LoRaConfig_DEFAULT NULL
 
+#define Config_BluetoothConfig_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
+X(a, STATIC,   SINGULAR, UENUM,    mode,              2) \
+X(a, STATIC,   SINGULAR, UINT32,   fixed_pin,         3)
+#define Config_BluetoothConfig_CALLBACK NULL
+#define Config_BluetoothConfig_DEFAULT NULL
+
 extern const pb_msgdesc_t Config_msg;
 extern const pb_msgdesc_t Config_DeviceConfig_msg;
 extern const pb_msgdesc_t Config_PositionConfig_msg;
@@ -348,6 +380,7 @@ extern const pb_msgdesc_t Config_PowerConfig_msg;
 extern const pb_msgdesc_t Config_WiFiConfig_msg;
 extern const pb_msgdesc_t Config_DisplayConfig_msg;
 extern const pb_msgdesc_t Config_LoRaConfig_msg;
+extern const pb_msgdesc_t Config_BluetoothConfig_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define Config_fields &Config_msg
@@ -357,8 +390,10 @@ extern const pb_msgdesc_t Config_LoRaConfig_msg;
 #define Config_WiFiConfig_fields &Config_WiFiConfig_msg
 #define Config_DisplayConfig_fields &Config_DisplayConfig_msg
 #define Config_LoRaConfig_fields &Config_LoRaConfig_msg
+#define Config_BluetoothConfig_fields &Config_BluetoothConfig_msg
 
 /* Maximum encoded size of messages (where known) */
+#define Config_BluetoothConfig_size              10
 #define Config_DeviceConfig_size                 42
 #define Config_DisplayConfig_size                16
 #define Config_LoRaConfig_size                   67

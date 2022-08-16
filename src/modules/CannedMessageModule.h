@@ -39,15 +39,8 @@ class CannedMessageModule :
     void eventDown();
     void eventSelect();
 
-    void handleGetCannedMessageModulePart1(const MeshPacket &req, AdminMessage *response);
-    void handleGetCannedMessageModulePart2(const MeshPacket &req, AdminMessage *response);
-    void handleGetCannedMessageModulePart3(const MeshPacket &req, AdminMessage *response);
-    void handleGetCannedMessageModulePart4(const MeshPacket &req, AdminMessage *response);
-
-    void handleSetCannedMessageModulePart1(const char *from_msg);
-    void handleSetCannedMessageModulePart2(const char *from_msg);
-    void handleSetCannedMessageModulePart3(const char *from_msg);
-    void handleSetCannedMessageModulePart4(const char *from_msg);
+    void handleGetCannedMessageModuleMessages(const MeshPacket &req, AdminMessage *response);
+    void handleSetCannedMessageModuleMessages(const char *from_msg);
 
   protected:
 
