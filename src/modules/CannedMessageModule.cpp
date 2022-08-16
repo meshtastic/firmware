@@ -46,16 +46,14 @@ CannedMessageModule::CannedMessageModule()
  *
  * @return int Returns the number of messages found.
  */
+// FIXME: This is just one set of messages now
 int CannedMessageModule::splitConfiguredMessages()
 {
     int messageIndex = 0;
     int i = 0;
 
     // collect all the message parts
-    strcpy(this->messageStore, cannedMessageModuleConfig.messagesPart1);
-    strcat(this->messageStore, cannedMessageModuleConfig.messagesPart2);
-    strcat(this->messageStore, cannedMessageModuleConfig.messagesPart3);
-    strcat(this->messageStore, cannedMessageModuleConfig.messagesPart4);
+    strcpy(this->messageStore, cannedMessageModuleConfig.messages);
 
     // The first message points to the beginning of the store.
     this->messages[messageIndex++] = this->messageStore;
@@ -294,10 +292,7 @@ bool CannedMessageModule::saveProtoForModule()
  */
 void CannedMessageModule::installDefaultCannedMessageModuleConfig()
 {
-    memset(cannedMessageModuleConfig.messagesPart1, 0, sizeof(cannedMessageModuleConfig.messagesPart1));
-    memset(cannedMessageModuleConfig.messagesPart2, 0, sizeof(cannedMessageModuleConfig.messagesPart2));
-    memset(cannedMessageModuleConfig.messagesPart3, 0, sizeof(cannedMessageModuleConfig.messagesPart3));
-    memset(cannedMessageModuleConfig.messagesPart4, 0, sizeof(cannedMessageModuleConfig.messagesPart4));
+    memset(cannedMessageModuleConfig.messages, 0, sizeof(cannedMessageModuleConfig.messages));
 }
 
 /**
@@ -315,51 +310,15 @@ AdminMessageHandleResult CannedMessageModule::handleAdminMessageForModule(const 
     AdminMessageHandleResult result;
 
     switch (request->which_variant) {
-    case AdminMessage_get_canned_message_module_part1_request_tag:
-        DEBUG_MSG("Client is getting radio canned message part1\n");
-        this->handleGetCannedMessageModulePart1(mp, response);
+    case AdminMessage_get_canned_message_module_messages_request_tag:
+        DEBUG_MSG("Client is getting radio canned messages\n");
+        this->handleGetCannedMessageModuleMessages(mp, response);
         result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
         break;
 
-    case AdminMessage_get_canned_message_module_part2_request_tag:
-        DEBUG_MSG("Client is getting radio canned message part2\n");
-        this->handleGetCannedMessageModulePart2(mp, response);
-        result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
-        break;
-
-    case AdminMessage_get_canned_message_module_part3_request_tag:
-        DEBUG_MSG("Client is getting radio canned message part3\n");
-        this->handleGetCannedMessageModulePart3(mp, response);
-        result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
-        break;
-
-    case AdminMessage_get_canned_message_module_part4_request_tag:
-        DEBUG_MSG("Client is getting radio canned message part4\n");
-        this->handleGetCannedMessageModulePart4(mp, response);
-        result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
-        break;
-
-    case AdminMessage_set_canned_message_module_part1_tag:
-        DEBUG_MSG("Client is setting radio canned message part 1\n");
-        this->handleSetCannedMessageModulePart1(request->set_canned_message_module_part1);
-        result = AdminMessageHandleResult::HANDLED;
-        break;
-
-    case AdminMessage_set_canned_message_module_part2_tag:
-        DEBUG_MSG("Client is setting radio canned message part 2\n");
-        this->handleSetCannedMessageModulePart2(request->set_canned_message_module_part2);
-        result = AdminMessageHandleResult::HANDLED;
-        break;
-
-    case AdminMessage_set_canned_message_module_part3_tag:
-        DEBUG_MSG("Client is setting radio canned message part 3\n");
-        this->handleSetCannedMessageModulePart3(request->set_canned_message_module_part3);
-        result = AdminMessageHandleResult::HANDLED;
-        break;
-
-    case AdminMessage_set_canned_message_module_part4_tag:
-        DEBUG_MSG("Client is setting radio canned message part 4\n");
-        this->handleSetCannedMessageModulePart4(request->set_canned_message_module_part4);
+    case AdminMessage_set_canned_message_module_messages_tag:
+        DEBUG_MSG("Client is setting radio canned messages\n");
+        this->handleSetCannedMessageModuleMessages(request->set_canned_message_module_messages);
         result = AdminMessageHandleResult::HANDLED;
         break;
 
@@ -370,49 +329,23 @@ AdminMessageHandleResult CannedMessageModule::handleAdminMessageForModule(const 
     return result;
 }
 
-void CannedMessageModule::handleGetCannedMessageModulePart1(const MeshPacket &req, AdminMessage *response)
+void CannedMessageModule::handleGetCannedMessageModuleMessages(const MeshPacket &req, AdminMessage *response)
 {
-    DEBUG_MSG("*** handleGetCannedMessageModulePart1\n");
+    DEBUG_MSG("*** handleGetCannedMessageModuleMessages\n");
     assert(req.decoded.want_response);
 
-    response->which_variant = AdminMessage_get_canned_message_module_part1_response_tag;
-    strcpy(response->get_canned_message_module_part1_response, cannedMessageModuleConfig.messagesPart1);
+    response->which_variant = AdminMessage_get_canned_message_module_messages_response_tag;
+    strcpy(response->get_canned_message_module_messages_response, cannedMessageModuleConfig.messages);
 }
 
-void CannedMessageModule::handleGetCannedMessageModulePart2(const MeshPacket &req, AdminMessage *response)
-{
-    DEBUG_MSG("*** handleGetCannedMessageModulePart2\n");
-    assert(req.decoded.want_response);
 
-    response->which_variant = AdminMessage_get_canned_message_module_part2_response_tag;
-    strcpy(response->get_canned_message_module_part2_response, cannedMessageModuleConfig.messagesPart2);
-}
-
-void CannedMessageModule::handleGetCannedMessageModulePart3(const MeshPacket &req, AdminMessage *response)
-{
-    DEBUG_MSG("*** handleGetCannedMessageModulePart3\n");
-    assert(req.decoded.want_response);
-
-    response->which_variant = AdminMessage_get_canned_message_module_part3_response_tag;
-    strcpy(response->get_canned_message_module_part3_response, cannedMessageModuleConfig.messagesPart3);
-}
-
-void CannedMessageModule::handleGetCannedMessageModulePart4(const MeshPacket &req, AdminMessage *response)
-{
-    DEBUG_MSG("*** handleGetCannedMessageModulePart4\n");
-    assert(req.decoded.want_response);
-
-    response->which_variant = AdminMessage_get_canned_message_module_part4_response_tag;
-    strcpy(response->get_canned_message_module_part4_response, cannedMessageModuleConfig.messagesPart4);
-}
-
-void CannedMessageModule::handleSetCannedMessageModulePart1(const char *from_msg)
+void CannedMessageModule::handleSetCannedMessageModuleMessages(const char *from_msg)
 {
     int changed = 0;
 
     if (*from_msg) {
-        changed |= strcmp(cannedMessageModuleConfig.messagesPart1, from_msg);
-        strcpy(cannedMessageModuleConfig.messagesPart1, from_msg);
+        changed |= strcmp(cannedMessageModuleConfig.messages, from_msg);
+        strcpy(cannedMessageModuleConfig.messages, from_msg);
         DEBUG_MSG("*** from_msg.text:%s\n", from_msg);
     }
 
@@ -421,45 +354,4 @@ void CannedMessageModule::handleSetCannedMessageModulePart1(const char *from_msg
     }
 }
 
-void CannedMessageModule::handleSetCannedMessageModulePart2(const char *from_msg)
-{
-    int changed = 0;
-
-    if (*from_msg) {
-        changed |= strcmp(cannedMessageModuleConfig.messagesPart2, from_msg);
-        strcpy(cannedMessageModuleConfig.messagesPart2, from_msg);
-    }
-
-    if (changed) {
-        this->saveProtoForModule();
-    }
-}
-
-void CannedMessageModule::handleSetCannedMessageModulePart3(const char *from_msg)
-{
-    int changed = 0;
-
-    if (*from_msg) {
-        changed |= strcmp(cannedMessageModuleConfig.messagesPart3, from_msg);
-        strcpy(cannedMessageModuleConfig.messagesPart3, from_msg);
-    }
-
-    if (changed) {
-        this->saveProtoForModule();
-    }
-}
-
-void CannedMessageModule::handleSetCannedMessageModulePart4(const char *from_msg)
-{
-    int changed = 0;
-
-    if (*from_msg) {
-        changed |= strcmp(cannedMessageModuleConfig.messagesPart4, from_msg);
-        strcpy(cannedMessageModuleConfig.messagesPart4, from_msg);
-    }
-
-    if (changed) {
-        this->saveProtoForModule();
-    }
-}
 #endif

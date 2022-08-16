@@ -459,17 +459,6 @@ typedef struct _User {
  If this user is a licensed operator, set this flag.
  Also, "long_name" should be their licence number. */
     bool is_licensed;
-    /* Transmit power at antenna connector, in decibel-milliwatt
- An optional self-reported value useful in network planning, discovery
- and positioning - along with ant_gain_dbi and ant_azimuth below */
-    uint32_t tx_power_dbm;
-    /* Antenna gain (applicable to both Tx and Rx), in decibel-isotropic */
-    uint32_t ant_gain_dbi;
-    /* Directional antenna true azimuth *if applicable*, in degrees (0-360)
- Only applicable in case of stationary nodes with a directional antenna
- Zero = not applicable (mobile or omni) or not specified
- (use a value of 360 to indicate an antenna azimuth of zero degrees) */
-    uint32_t ant_azimuth;
 } User;
 
 typedef PB_BYTES_ARRAY_T(237) Data_payload_t;
@@ -738,7 +727,7 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define Position_init_default                    {0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define User_init_default                        {"", "", "", {0}, _HardwareModel_MIN, 0, 0, 0, 0}
+#define User_init_default                        {"", "", "", {0}, _HardwareModel_MIN, 0}
 #define RouteDiscovery_init_default              {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_default                     {0, {RouteDiscovery_init_default}}
 #define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, Location_init_default}
@@ -752,7 +741,7 @@ extern "C" {
 #define ToRadio_PeerInfo_init_default            {0, 0}
 #define Compressed_init_default                  {_PortNum_MIN, {0, {0}}}
 #define Position_init_zero                       {0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define User_init_zero                           {"", "", "", {0}, _HardwareModel_MIN, 0, 0, 0, 0}
+#define User_init_zero                           {"", "", "", {0}, _HardwareModel_MIN, 0}
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_zero                        {0, {RouteDiscovery_init_zero}}
 #define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, Location_init_zero}
@@ -827,9 +816,6 @@ extern "C" {
 #define User_macaddr_tag                         4
 #define User_hw_model_tag                        6
 #define User_is_licensed_tag                     7
-#define User_tx_power_dbm_tag                    10
-#define User_ant_gain_dbi_tag                    11
-#define User_ant_azimuth_tag                     12
 #define Data_portnum_tag                         1
 #define Data_payload_tag                         2
 #define Data_want_response_tag                   3
@@ -908,10 +894,7 @@ X(a, STATIC,   SINGULAR, STRING,   long_name,         2) \
 X(a, STATIC,   SINGULAR, STRING,   short_name,        3) \
 X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, macaddr,           4) \
 X(a, STATIC,   SINGULAR, UENUM,    hw_model,          6) \
-X(a, STATIC,   SINGULAR, BOOL,     is_licensed,       7) \
-X(a, STATIC,   SINGULAR, UINT32,   tx_power_dbm,     10) \
-X(a, STATIC,   SINGULAR, UINT32,   ant_gain_dbi,     11) \
-X(a, STATIC,   SINGULAR, UINT32,   ant_azimuth,      12)
+X(a, STATIC,   SINGULAR, BOOL,     is_licensed,       7)
 #define User_CALLBACK NULL
 #define User_DEFAULT NULL
 
@@ -1093,13 +1076,13 @@ extern const pb_msgdesc_t Compressed_msg;
 #define LogRecord_size                           81
 #define MeshPacket_size                          480
 #define MyNodeInfo_size                          197
-#define NodeInfo_size                            281
+#define NodeInfo_size                            263
 #define Position_size                            142
 #define RouteDiscovery_size                      40
 #define Routing_size                             42
 #define ToRadio_PeerInfo_size                    8
 #define ToRadio_size                             483
-#define User_size                                95
+#define User_size                                77
 
 #ifdef __cplusplus
 } /* extern "C" */

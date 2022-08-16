@@ -150,14 +150,17 @@ void NodeDB::installDefaultConfig()
     config.has_position = true;
     config.has_power = true;
     config.has_wifi = true;
+    config.has_bluetooth = true;
 
     config.lora.region = Config_LoRaConfig_RegionCode_Unset;
     config.lora.modem_preset = Config_LoRaConfig_ModemPreset_LongFast;
     resetRadioConfig();
     strncpy(config.device.ntp_server, "0.pool.ntp.org", 32);
+    // FIXME: Default to bluetooth capability of platform as default
+    config.bluetooth.enabled = true;
+    config.bluetooth.fixed_pin = defaultBLEPin;
     // for backward compat, default position flags are ALT+MSL
-    config.position.position_flags =
-        (Config_PositionConfig_PositionFlags_POS_ALTITUDE | Config_PositionConfig_PositionFlags_POS_ALT_MSL);
+    config.position.position_flags = (Config_PositionConfig_PositionFlags_POS_ALTITUDE | Config_PositionConfig_PositionFlags_POS_ALT_MSL);
 }
 
 void NodeDB::installDefaultModuleConfig()
@@ -452,6 +455,7 @@ void NodeDB::saveToDisk()
         config.has_position = true;
         config.has_power = true;
         config.has_wifi = true;
+        config.has_bluetooth = true;
         saveProto(configFileName, LocalConfig_size, sizeof(LocalConfig), LocalConfig_fields, &config);
 
         moduleConfig.has_canned_message = true;

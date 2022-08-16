@@ -27,6 +27,10 @@ PB_BIND(Config_DisplayConfig, Config_DisplayConfig, AUTO)
 PB_BIND(Config_LoRaConfig, Config_LoRaConfig, 2)
 
 
+PB_BIND(Config_BluetoothConfig, Config_BluetoothConfig, AUTO)
+
+
+
 
 
 
