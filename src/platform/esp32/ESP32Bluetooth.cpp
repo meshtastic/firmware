@@ -134,7 +134,6 @@ void ESP32Bluetooth::setup()
     NimBLEDevice::init(getDeviceName());
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
 
-    // FIXME fails in iOS
     if (config.bluetooth.mode == Config_BluetoothConfig_PairingMode_NoPin) {
         NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
         NimBLEDevice::setSecurityAuth(true, false, true);
