@@ -72,13 +72,13 @@ class ESP32BluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
 class ESP32BluetoothServerCallback : public NimBLEServerCallbacks 
 {
     virtual uint32_t onPassKeyRequest() {
-
-        uint32_t passkey = 0;
+        uint32_t passkey = config.bluetooth.fixed_pin;
 
         if (doublepressed > 0 && (doublepressed + (30 * 1000)) > millis()) {
-            DEBUG_MSG("User has overridden passkey\n");
-            passkey = defaultBLEPin;
-        } else {
+            DEBUG_MSG("User has set BLE pairing mode to fixed-pin\n");
+            config.bluetooth.mode = Config_BluetoothConfig_PairingMode_FixedPin;
+            nodeDB.saveToDisk();
+        } else if (config.bluetooth.mode == Config_BluetoothConfig_PairingMode_RandomPin) {
             DEBUG_MSG("Using random passkey\n");
             // This is the passkey to be entered on peer - we pick a number >100,000 to ensure 6 digits
             passkey = random(100000, 999999); 
@@ -134,8 +134,15 @@ void ESP32Bluetooth::setup()
     NimBLEDevice::init(getDeviceName());
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
 
-    NimBLEDevice::setSecurityAuth(true, true, true);
-    NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
+    // FIXME fails in iOS
+    if (config.bluetooth.mode == Config_BluetoothConfig_PairingMode_NoPin) {
+        NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
+        NimBLEDevice::setSecurityAuth(true, false, true);
+    }
+    else {
+        NimBLEDevice::setSecurityAuth(true, true, true);
+        NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
+    }
     bleServer = NimBLEDevice::createServer();
     
     ESP32BluetoothServerCallback *serverCallbacks = new ESP32BluetoothServerCallback();
