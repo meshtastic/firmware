@@ -33,13 +33,7 @@
 
 #ifdef ARCH_ESP32
 #include "mesh/http/WebServer.h"
-
-#ifdef USE_NEW_ESP32_BLUETOOTH
-#include "platform/esp32/ESP32Bluetooth.h"
-#else
-#include "nimble/BluetoothUtil.h"
-#endif
-
+#include "nimble/NimbleBluetooth.h"
 #endif
 
 #if HAS_WIFI

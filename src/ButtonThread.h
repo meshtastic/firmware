@@ -7,10 +7,6 @@
 #include "power.h"
 #include <OneButton.h>
 
-#ifdef ARCH_ESP32
-#include "nimble/BluetoothUtil.h"
-#endif
-
 namespace concurrency
 {
 /**

@@ -1,7 +1,5 @@
-#ifdef USE_NEW_ESP32_BLUETOOTH
-
 #include "configuration.h"
-#include "ESP32Bluetooth.h"
+#include "NimbleBluetooth.h"
 #include "BluetoothCommon.h"
 #include "PowerFSM.h"
 #include "sleep.h"
@@ -46,7 +44,7 @@ static BluetoothPhoneAPI *bluetoothPhoneAPI;
  * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
  */
 
-class ESP32BluetoothToRadioCallback : public NimBLECharacteristicCallbacks 
+class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks 
 {
     virtual void onWrite(NimBLECharacteristic *pCharacteristic) {
         DEBUG_MSG("To Radio onwrite\n");
@@ -56,7 +54,7 @@ class ESP32BluetoothToRadioCallback : public NimBLECharacteristicCallbacks
     }
 };
 
-class ESP32BluetoothFromRadioCallback : public NimBLECharacteristicCallbacks 
+class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks 
 {
     virtual void onRead(NimBLECharacteristic *pCharacteristic) {
         DEBUG_MSG("From Radio onread\n");
@@ -69,7 +67,7 @@ class ESP32BluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
     }
 };
 
-class ESP32BluetoothServerCallback : public NimBLEServerCallbacks 
+class NimbleBluetoothServerCallback : public NimBLEServerCallbacks 
 {
     virtual uint32_t onPassKeyRequest() {
         uint32_t passkey = config.bluetooth.fixed_pin;
@@ -108,10 +106,10 @@ class ESP32BluetoothServerCallback : public NimBLEServerCallbacks
     }
 };
 
-static ESP32BluetoothToRadioCallback *toRadioCallbacks;
-static ESP32BluetoothFromRadioCallback *fromRadioCallbacks;
+static NimbleBluetoothToRadioCallback *toRadioCallbacks;
+static NimbleBluetoothFromRadioCallback *fromRadioCallbacks;
 
-void ESP32Bluetooth::shutdown()
+void NimbleBluetooth::shutdown()
 {
     // Shutdown bluetooth for minimum power draw
     DEBUG_MSG("Disable bluetooth\n");
@@ -121,15 +119,15 @@ void ESP32Bluetooth::shutdown()
     pAdvertising->stop();
 }
 
-bool ESP32Bluetooth::isActive()
+bool NimbleBluetooth::isActive()
 {
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     return bleServer && (bleServer->getConnectedCount() > 0 || pAdvertising->isAdvertising());
 }
 
-void ESP32Bluetooth::setup()
+void NimbleBluetooth::setup()
 {
-    DEBUG_MSG("Initialise the ESP32 bluetooth module\n");
+    DEBUG_MSG("Initialise the NimBLE bluetooth module\n");
 
     NimBLEDevice::init(getDeviceName());
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
@@ -145,14 +143,14 @@ void ESP32Bluetooth::setup()
     }
     bleServer = NimBLEDevice::createServer();
     
-    ESP32BluetoothServerCallback *serverCallbacks = new ESP32BluetoothServerCallback();
+    NimbleBluetoothServerCallback *serverCallbacks = new NimbleBluetoothServerCallback();
     bleServer->setCallbacks(serverCallbacks, true);
 
     setupService();
     startAdvertising();
 }
 
-void ESP32Bluetooth::setupService() 
+void NimbleBluetooth::setupService() 
 {
     NimBLEService *bleService = bleServer->createService(MESH_SERVICE_UUID);
 
@@ -163,16 +161,16 @@ void ESP32Bluetooth::setupService()
     
     bluetoothPhoneAPI = new BluetoothPhoneAPI();
 
-    toRadioCallbacks = new ESP32BluetoothToRadioCallback();
+    toRadioCallbacks = new NimbleBluetoothToRadioCallback();
     ToRadioCharacteristic->setCallbacks(toRadioCallbacks);
 
-    fromRadioCallbacks = new ESP32BluetoothFromRadioCallback();
+    fromRadioCallbacks = new NimbleBluetoothFromRadioCallback();
     FromRadioCharacteristic->setCallbacks(fromRadioCallbacks);
 
     bleService->start();
 }
 
-void ESP32Bluetooth::startAdvertising() 
+void NimbleBluetooth::startAdvertising() 
 {
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->reset();
@@ -186,7 +184,7 @@ void updateBatteryLevel(uint8_t level)
     //blebas.write(level);
 }
 
-void ESP32Bluetooth::clearBonds()
+void NimbleBluetooth::clearBonds()
 {
     DEBUG_MSG("Clearing bluetooth bonds!\n");
     NimBLEDevice::deleteAllBonds();
@@ -195,7 +193,9 @@ void ESP32Bluetooth::clearBonds()
 void clearNVS() 
 {
     NimBLEDevice::deleteAllBonds();
+#ifdef ARCH_ESP32
     ESP.restart();
+#endif
 }
 
 void disablePin() 
@@ -218,5 +218,3 @@ void disablePin()
 
     doublepressed = millis();
 }
-
-#endif

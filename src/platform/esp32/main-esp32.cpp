@@ -1,15 +1,10 @@
-#include "BluetoothSoftwareUpdate.h"
 #include "PowerFSM.h"
 #include "configuration.h"
 #include "esp_task_wdt.h"
 #include "main.h"
 
-#ifdef USE_NEW_ESP32_BLUETOOTH
-#include "ESP32Bluetooth.h"
+#include "nimble/NimbleBluetooth.h"
 #include "mesh/http/WiFiAPClient.h"
-#else
-#include "nimble/BluetoothUtil.h"
-#endif
 
 #include "sleep.h"
 #include "target_specific.h"
@@ -19,9 +14,7 @@
 #include <nvs.h>
 #include <nvs_flash.h>
 
-#ifdef USE_NEW_ESP32_BLUETOOTH
-ESP32Bluetooth *esp32Bluetooth;
-#endif
+NimbleBluetooth *nimbleBluetooth;
 
 void getMacAddr(uint8_t *dmac)
 {
@@ -39,21 +32,19 @@ static void printBLEinfo() {
     }
 
 } */
-#ifdef USE_NEW_ESP32_BLUETOOTH
 void setBluetoothEnable(bool on) {
     
     if (!isWifiAvailable()) {
-        if (!esp32Bluetooth) {
-            esp32Bluetooth = new ESP32Bluetooth();
+        if (!nimbleBluetooth) {
+            nimbleBluetooth = new NimbleBluetooth();
         }
-        if (on && !esp32Bluetooth->isActive()) {
-            esp32Bluetooth->setup();
+        if (on && !nimbleBluetooth->isActive()) {
+            nimbleBluetooth->setup();
         } else {
-            esp32Bluetooth->shutdown();
+            nimbleBluetooth->shutdown();
         }
     }
 }
-#endif
 
 void esp32Setup()
 {
