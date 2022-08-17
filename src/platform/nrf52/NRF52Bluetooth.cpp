@@ -168,9 +168,6 @@ void setupMeshService(void)
     // any characteristic(s) within that service definition.. Calling .begin() on
     // a BLECharacteristic will cause it to be added to the last BLEService that
     // was 'begin()'ed!
-
-    fromNum.setProperties(CHR_PROPS_NOTIFY | CHR_PROPS_READ);
-    fromNum.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS); // FIXME, secure this!!!
     fromNum.setFixedLen(0); // Variable len (either 0 or 4)  FIXME consider changing protocol so it is fixed 4 byte len, where 0 means empty
     fromNum.setMaxLen(4);
     fromNum.setCccdWriteCallback(cccd_callback); // Optionally capture CCCD updates
@@ -198,6 +195,11 @@ void setupMeshService(void)
     toRadio.setWriteCallback(toRadioWriteCb, false); 
     toRadio.begin();
 }
+
+void setPairingMode() {
+    
+}
+
 
 // FIXME, turn off soft device access for debugging
 static bool isSoftDeviceAllowed = true;
