@@ -130,11 +130,7 @@ void fromRadioAuthorizeCb(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_e
 {
     if (request->offset == 0) {
         // If the read is long, we will get multiple authorize invocations - we only populate data on the first
-
         size_t numBytes = bluetoothPhoneAPI->getFromRadio(fromRadioBytes);
-
-        // DEBUG_MSG("fromRadioAuthorizeCb numBytes=%u\n", numBytes);
-        // if (numBytes >= 2) DEBUG_MSG("fromRadio bytes %x %x\n", fromRadioBytes[0], fromRadioBytes[1]);
 
         // Someone is going to read our value as soon as this callback returns.  So fill it with the next message in the queue
         // or make empty if the queue is empty
@@ -175,17 +171,13 @@ void setupMeshService(void)
 
     fromNum.setProperties(CHR_PROPS_NOTIFY | CHR_PROPS_READ);
     fromNum.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS); // FIXME, secure this!!!
-    fromNum.setFixedLen(
-        0); // Variable len (either 0 or 4)  FIXME consider changing protocol so it is fixed 4 byte len, where 0 means empty
+    fromNum.setFixedLen(0); // Variable len (either 0 or 4)  FIXME consider changing protocol so it is fixed 4 byte len, where 0 means empty
     fromNum.setMaxLen(4);
     fromNum.setCccdWriteCallback(cccd_callback); // Optionally capture CCCD updates
     // We don't yet need to hook the fromNum auth callback
     // fromNum.setReadAuthorizeCallback(fromNumAuthorizeCb);
     fromNum.write32(0); // Provide default fromNum of 0
     fromNum.begin();
-    // uint8_t hrmdata[2] = {0b00000110, 0x40}; // Set the characteristic to use 8-bit values, with the sensor connected and
-    // detected
-    // hrmc.write(hrmdata, 2);
 
     fromRadio.setProperties(CHR_PROPS_READ);
     fromRadio.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS); // FIXME secure this!
@@ -202,9 +194,8 @@ void setupMeshService(void)
     toRadio.setFixedLen(0);
     toRadio.setMaxLen(512);
     toRadio.setBuffer(toRadioBytes, sizeof(toRadioBytes));
-    toRadio.setWriteCallback(
-        toRadioWriteCb,
-        false); // We don't call this callback via the adafruit queue, because we can safely run in the BLE context
+    // We don't call this callback via the adafruit queue, because we can safely run in the BLE context
+    toRadio.setWriteCallback(toRadioWriteCb, false); 
     toRadio.begin();
 }
 
@@ -239,8 +230,6 @@ void NRF52Bluetooth::setup()
 
     // Configure and Start the Device Information Service
     DEBUG_MSG("Configuring the Device Information Service\n");
-    // FIXME, we should set a mfg string based on our HW_VENDOR enum
-    // bledis.setManufacturer(HW_VENDOR);
     bledis.setModel(optstr(HW_VERSION));
     bledis.setFirmwareRev(optstr(APP_VERSION));
     bledis.begin();
@@ -249,7 +238,6 @@ void NRF52Bluetooth::setup()
     DEBUG_MSG("Configuring the Battery Service\n");
     blebas.begin();
     blebas.write(0); // Unknown battery level for now
-
     bledfu.begin(); // Install the DFU helper
 
     // Setup the Heart Rate Monitor service using
@@ -258,7 +246,8 @@ void NRF52Bluetooth::setup()
     setupMeshService();
 
     // Supposedly debugging works with soft device if you disable advertising
-    if (isSoftDeviceAllowed) {
+    if (isSoftDeviceAllowed) 
+    {
         // Setup the advertising packet(s)
         DEBUG_MSG("Setting up the advertising payload(s)\n");
         startAdv();
