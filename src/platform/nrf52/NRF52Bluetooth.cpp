@@ -1,3 +1,4 @@
+#include <Arduino.h>
 #include "configuration.h"
 #include "NRF52Bluetooth.h"
 #include "BluetoothCommon.h"
@@ -11,6 +12,7 @@ static BLEService meshBleService = BLEService(BLEUuid(MESH_SERVICE_UUID_16));
 static BLECharacteristic fromNum = BLECharacteristic(BLEUuid(FROMNUM_UUID_16));
 static BLECharacteristic fromRadio = BLECharacteristic(BLEUuid(FROMRADIO_UUID_16));
 static BLECharacteristic toRadio = BLECharacteristic(BLEUuid(TORADIO_UUID_16));
+static BLESecurity bleSecurity = BLESecurity();
 
 static BLEDis bledis; // DIS (Device Information Service) helper class instance
 static BLEBas blebas; // BAS (Battery Service) helper class instance
@@ -200,7 +202,6 @@ void setPairingMode() {
     
 }
 
-
 // FIXME, turn off soft device access for debugging
 static bool isSoftDeviceAllowed = true;
 
@@ -236,6 +237,13 @@ void NRF52Bluetooth::setup()
     bledis.setFirmwareRev(optstr(APP_VERSION));
     bledis.begin();
 
+    if (config.bluetooth.mode != Config_BluetoothConfig_PairingMode_NoPin) {
+        int32_t key = config.bluetooth.mode == Config_BluetoothConfig_PairingMode_FixedPin ? 
+            config.bluetooth.fixed_pin : random(100000, 999999);
+        auto pinString = std::to_string(key);
+        DEBUG_MSG("Bluetooth pin set to '%i'\n", key);
+        bleSecurity.setPIN(pinString.c_str());
+    }
     // Start the BLE Battery Service and set it to 100%
     DEBUG_MSG("Configuring the Battery Service\n");
     blebas.begin();
