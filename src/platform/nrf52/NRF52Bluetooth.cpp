@@ -2,6 +2,7 @@
 #include "configuration.h"
 #include "NRF52Bluetooth.h"
 #include "BluetoothCommon.h"
+#include "PowerFSM.h"
 #include "main.h"
 #include "mesh/PhoneAPI.h"
 #include "mesh/mesh-pb-constants.h"
@@ -23,7 +24,7 @@ static BLEDfu bledfu; // DFU software update helper service
 static uint8_t fromRadioBytes[FromRadio_size];
 static uint8_t toRadioBytes[ToRadio_size];
 
-static bool bleConnected;
+static uint16_t connectionHandle;
 
 class BluetoothPhoneAPI : public PhoneAPI
 {
@@ -40,7 +41,8 @@ class BluetoothPhoneAPI : public PhoneAPI
 
     /// Check the current underlying physical link to see if the client is currently connected
     virtual bool checkIsConnected() override {
-        return bleConnected;
+        BLEConnection *connection = Bluefruit.Connection(connectionHandle);
+        return connection->connected();
     }
 };
 
@@ -55,7 +57,6 @@ void onConnect(uint16_t conn_handle)
     connection->getPeerName(central_name, sizeof(central_name));
 
     DEBUG_MSG("BLE Connected to %s\n", central_name);
-    bleConnected = true;
 }
 
 /**
@@ -65,9 +66,6 @@ void onConnect(uint16_t conn_handle)
  */
 void onDisconnect(uint16_t conn_handle, uint8_t reason)
 {
-    // FIXME - we currently assume only one active connection
-    bleConnected = false;
-
     DEBUG_MSG("BLE Disconnected, reason = 0x%x\n", reason);
 }
 
@@ -200,7 +198,6 @@ void setupMeshService(void)
 // FIXME, turn off soft device access for debugging
 static bool isSoftDeviceAllowed = true;
 static uint32_t configuredPasskey;
-static uint8_t keyArray[4];
 
 void NRF52Bluetooth::shutdown()
 {
@@ -211,6 +208,9 @@ void NRF52Bluetooth::shutdown()
 
 void NRF52Bluetooth::setup()
 {
+    Bluefruit.Periph.clearBonds();
+    Bluefruit.Central.clearBonds();
+
     // Initialise the Bluefruit module
     DEBUG_MSG("Initialise the Bluefruit nRF52 module\n");
     Bluefruit.autoConnLed(false);
@@ -221,23 +221,22 @@ void NRF52Bluetooth::setup()
     Bluefruit.Advertising.stop();
     Bluefruit.Advertising.clearData();
     Bluefruit.ScanResponse.clearData();
+    config.bluetooth.mode = Config_BluetoothConfig_PairingMode_NoPin;
 
     if (config.bluetooth.mode != Config_BluetoothConfig_PairingMode_NoPin) {
-        Bluefruit.Security.setIOCaps(true, true, false);
+        configuredPasskey = config.bluetooth.mode == Config_BluetoothConfig_PairingMode_FixedPin ? 
+            config.bluetooth.fixed_pin : random(100000, 999999);
+        auto pinString = std::to_string(configuredPasskey);
+        DEBUG_MSG("Bluetooth pin set to '%i'\n", configuredPasskey);
+        Bluefruit.Security.setPIN(pinString.c_str());
+        Bluefruit.Security.setIOCaps(true, false, false);
         Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onPairingPasskey);
         Bluefruit.Security.setPairCompleteCallback(NRF52Bluetooth::onPairingCompleted);
         Bluefruit.Security.setSecuredCallback(NRF52Bluetooth::onConnectionSecured);
-
-        configuredPasskey = config.bluetooth.mode == Config_BluetoothConfig_PairingMode_FixedPin ? 
-            config.bluetooth.fixed_pin : random(100000, 999999);
-        convertToUint8(keyArray, configuredPasskey);
-        // auto pinString = std::to_string(configuredPasskey);
-        // configuredPassKey = pinString.c_str();
-        DEBUG_MSG("Bluetooth pin set to '%i'\n", configuredPasskey);
-        // Bluefruit.Security.setPIN(pinString.c_str());
         meshBleService.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
     }
     else {
+        Bluefruit.Security.setIOCaps(false, false, false);
         meshBleService.setPermission(SECMODE_OPEN, SECMODE_OPEN);
     }
 
@@ -291,37 +290,41 @@ void NRF52Bluetooth::clearBonds()
     Bluefruit.Central.clearBonds();
 }
 
-static void NRF52Bluetooth::onConnectionSecured(uint16_t conn_handle)
+void NRF52Bluetooth::onConnectionSecured(uint16_t conn_handle)
 {
     DEBUG_MSG("BLE connection secured\n");
+    BLEConnection* connection = Bluefruit.Connection(conn_handle);
+
+    if (!connection->secured())
+    {
+        connection->requestPairing();
+    }
 }
 
-void NRF52Bluetooth::convertToUint8(uint8_t target[4], uint32_t source)
+bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passkey[6], bool match_request)
 {
-    target[3] = (uint8_t)source;
-    target[2] = (uint8_t)(source>>=8);
-    target[1] = (uint8_t)(source>>=8);
-    target[0] = (uint8_t)(source>>=8);
-}
+    DEBUG_MSG("BLE pairing process started with passkey %.3s %.3s\n", passkey, passkey+3);
+    static char specified[6];
+    sprintf(specified, "%.3s%.3s", passkey, passkey+3);
+    static char configured[6];
+    sprintf(configured, "%i", configuredPasskey);
 
-static bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passkey[6], bool match_request)
-{
-    DEBUG_MSG("BLE pairing process started\n");
-    
     if (match_request)
     {
+        DEBUG_MSG("*** Enter passkey %d on the peer side ***\n", passkey);
+        powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
+        screen->startBluetoothPinScreen(configuredPasskey);
         bool accepted = false;
-
         uint32_t start_time = millis();
-
         while(millis() < start_time + 30000)
         {
-            if (keyArray == passkey) {
+            if (specified == configured) {
+                DEBUG_MSG("Configured passkey matches client entered key\n");
                 accepted = true;
                 break;
+            } else {
+                DEBUG_MSG("Waiting for correct passkey from client\n");
             }
-
-            // Disconnected while waiting for input
             if (!Bluefruit.connected(conn_handle)) break;
         }
 
@@ -332,14 +335,16 @@ static bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const
 
         return accepted;
     }
-
+    DEBUG_MSG("BLE passkey pairing: match_request=%i\n", match_request);
     return true;
 }
 
-static void NRF52Bluetooth::onPairingCompleted(uint16_t conn_handle, uint8_t auth_status)
+void NRF52Bluetooth::onPairingCompleted(uint16_t conn_handle, uint8_t auth_status)
 {
     if (auth_status == BLE_GAP_SEC_STATUS_SUCCESS)
-        DEBUG_MSG("BLE pairing failed\n");
-    else
         DEBUG_MSG("BLE pairing success\n");
+    else
+        DEBUG_MSG("BLE pairing failed\n");
+
+    screen->stopBluetoothPinScreen();
 }
