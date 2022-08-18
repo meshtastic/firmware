@@ -57,6 +57,7 @@ void onConnect(uint16_t conn_handle)
     connection->getPeerName(central_name, sizeof(central_name));
 
     DEBUG_MSG("BLE Connected to %s\n", central_name);
+    bluetoothPhoneAPI->setInitalState();
 }
 
 /**
@@ -221,7 +222,6 @@ void NRF52Bluetooth::setup()
     Bluefruit.Advertising.stop();
     Bluefruit.Advertising.clearData();
     Bluefruit.ScanResponse.clearData();
-    config.bluetooth.mode = Config_BluetoothConfig_PairingMode_NoPin;
 
     if (config.bluetooth.mode != Config_BluetoothConfig_PairingMode_NoPin) {
         configuredPasskey = config.bluetooth.mode == Config_BluetoothConfig_PairingMode_FixedPin ? 
@@ -308,12 +308,11 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
     sprintf(specified, "%.3s%.3s", passkey, passkey+3);
     static char configured[6];
     sprintf(configured, "%i", configuredPasskey);
-
+    powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
+    screen->startBluetoothPinScreen(configuredPasskey);
+    
     if (match_request)
     {
-        DEBUG_MSG("*** Enter passkey %d on the peer side ***\n", passkey);
-        powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
-        screen->startBluetoothPinScreen(configuredPasskey);
         bool accepted = false;
         uint32_t start_time = millis();
         while(millis() < start_time + 30000)

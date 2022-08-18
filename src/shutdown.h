@@ -8,6 +8,7 @@ void powerCommandsCheck()
 {
     if (rebootAtMsec && millis() > rebootAtMsec) {
         DEBUG_MSG("Rebooting\n");
+        screen->startRebootScreen();
 #if defined(ARCH_ESP32)
         ESP.restart();
 #elif defined(ARCH_NRF52)

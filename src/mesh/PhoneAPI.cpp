@@ -116,13 +116,11 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
  */
 size_t PhoneAPI::getFromRadio(uint8_t *buf)
 {
+    DEBUG_MSG("getFromRadio, state=%d\n", state);
     if (!available()) {
         // DEBUG_MSG("PhoneAPI::getFromRadio, !available\n");
         return 0;
     }
-
-    DEBUG_MSG("getFromRadio, state=%d\n", state);
-
     // In case we send a FromRadio packet
     memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
 
@@ -278,7 +276,10 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     return 0;
 }
 
-void PhoneAPI::handleDisconnect() {}
+void PhoneAPI::handleDisconnect() 
+{
+    DEBUG_MSG("PhoneAPI disconnect\n");
+}
 
 void PhoneAPI::releasePhonePacket()
 {

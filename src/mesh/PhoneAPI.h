@@ -59,7 +59,7 @@ class PhoneAPI
     // Call this when the client drops the connection, resets the state to STATE_SEND_NOTHING
     // Unregisters our observer.  A closed connection **can** be reopened by calling init again.
     virtual void close();
-
+    
     /**
      * Handle a ToRadio protobuf
      * @return true true if a packet was queued for sending (so that caller can yield)
@@ -80,6 +80,8 @@ class PhoneAPI
     bool available();
 
     bool isConnected() { return state != STATE_SEND_NOTHING; }
+
+    void setInitalState() { state = STATE_SEND_MY_INFO; }
 
     /// emit a debugging log character, FIXME - implement
     void debugOut(char c) { }

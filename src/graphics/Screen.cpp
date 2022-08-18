@@ -317,6 +317,14 @@ static void drawFrameShutdown(OLEDDisplay *display, OLEDDisplayUiState *state, i
     display->drawString(64 + x, 26 + y, "Shutting down...");
 }
 
+static void drawFrameReboot(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+
+    display->setFont(FONT_MEDIUM);
+    display->drawString(64 + x, 26 + y, "Rebooting...");
+}
+
 static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->setTextAlignment(TEXT_ALIGN_CENTER);
@@ -1042,6 +1050,9 @@ int32_t Screen::runOnce()
         case Cmd::START_SHUTDOWN_SCREEN:
             handleShutdownScreen();
             break;
+        case Cmd::START_REBOOT_SCREEN:
+            handleShutdownScreen();
+            break;
         default:
             DEBUG_MSG("BUG: invalid cmd\n");
         }
@@ -1231,6 +1242,18 @@ void Screen::handleShutdownScreen()
 
     ui.disableAllIndicators();
     ui.setFrames(shutdownFrames, 1);
+    setFastFramerate();
+}
+
+void Screen::handleRebootScreen()
+{
+    DEBUG_MSG("showing reboot screen\n");
+    showingNormalScreen = false;
+
+    static FrameCallback rebootFrames[] = {drawFrameReboot};
+
+    ui.disableAllIndicators();
+    ui.setFrames(rebootFrames, 1);
     setFastFramerate();
 }
 
