@@ -228,26 +228,17 @@ static void drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 // Used when booting without a region set
 static void drawWelcomeScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-
+    display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->drawString(64 + x, y, "//\\ E S H T /\\ S T / C");
+    display->drawString(64 + x, y + FONT_HEIGHT_SMALL, getDeviceName());
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    
     if ((millis() / 10000) % 2) {
-        display->setFont(FONT_SMALL);
-
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->drawString(64 + x, y, "//\\ E S H T /\\ S T / C");
-
-        display->setTextAlignment(TEXT_ALIGN_LEFT);
-
         display->drawString(x, y + FONT_HEIGHT_SMALL * 2 - 3, "Set the region using the");
         display->drawString(x, y + FONT_HEIGHT_SMALL * 3 - 3, "Meshtastic Android, iOS,");
         display->drawString(x, y + FONT_HEIGHT_SMALL * 4 - 3, "Flasher or CLI client.");
     } else {
-        display->setFont(FONT_SMALL);
-
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->drawString(64 + x, y, "//\\ E S H T /\\ S T / C");
-
-        display->setTextAlignment(TEXT_ALIGN_LEFT);
-
         display->drawString(x, y + FONT_HEIGHT_SMALL * 2 - 3, "Visit meshtastic.org");
         display->drawString(x, y + FONT_HEIGHT_SMALL * 3 - 3, "for more information.");
         display->drawString(x, y + FONT_HEIGHT_SMALL * 4 - 3, "");
