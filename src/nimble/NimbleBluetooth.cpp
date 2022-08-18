@@ -136,7 +136,6 @@ void NimbleBluetooth::setup()
     NimBLEDevice::init(getDeviceName());
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
 
-    // FIXME fails in iOS
     if (config.bluetooth.mode != Config_BluetoothConfig_PairingMode_NoPin) {
         NimBLEDevice::setSecurityAuth(true, true, true);
         NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
@@ -153,12 +152,19 @@ void NimbleBluetooth::setup()
 void NimbleBluetooth::setupService() 
 {
     NimBLEService *bleService = bleServer->createService(MESH_SERVICE_UUID);
-
-    //define the characteristics that the app is looking for
-    NimBLECharacteristic *ToRadioCharacteristic = bleService->createCharacteristic(TORADIO_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_AUTHEN | NIMBLE_PROPERTY::WRITE_ENC);
-    NimBLECharacteristic *FromRadioCharacteristic = bleService->createCharacteristic(FROMRADIO_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
-    fromNumCharacteristic = bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
-    
+    NimBLECharacteristic *ToRadioCharacteristic;
+    NimBLECharacteristic *FromRadioCharacteristic;
+    // Define the characteristics that the app is looking for
+    if (config.bluetooth.mode == Config_BluetoothConfig_PairingMode_NoPin) {
+        ToRadioCharacteristic = bleService->createCharacteristic(TORADIO_UUID, NIMBLE_PROPERTY::WRITE);
+        FromRadioCharacteristic = bleService->createCharacteristic(FROMRADIO_UUID, NIMBLE_PROPERTY::READ);
+        fromNumCharacteristic = bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ);
+    }
+    else {
+        ToRadioCharacteristic = bleService->createCharacteristic(TORADIO_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_AUTHEN | NIMBLE_PROPERTY::WRITE_ENC);
+        FromRadioCharacteristic = bleService->createCharacteristic(FROMRADIO_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
+        fromNumCharacteristic = bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
+    }
     bluetoothPhoneAPI = new BluetoothPhoneAPI();
 
     toRadioCallbacks = new NimbleBluetoothToRadioCallback();
