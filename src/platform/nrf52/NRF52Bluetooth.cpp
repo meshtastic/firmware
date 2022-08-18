@@ -304,35 +304,15 @@ void NRF52Bluetooth::onConnectionSecured(uint16_t conn_handle)
 bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passkey[6], bool match_request)
 {
     DEBUG_MSG("BLE pairing process started with passkey %.3s %.3s\n", passkey, passkey+3);
-    static char specified[6];
-    sprintf(specified, "%.3s%.3s", passkey, passkey+3);
-    static char configured[6];
-    sprintf(configured, "%i", configuredPasskey);
-    powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
     screen->startBluetoothPinScreen(configuredPasskey);
-    
+
     if (match_request)
     {
-        bool accepted = false;
         uint32_t start_time = millis();
         while(millis() < start_time + 30000)
         {
-            if (specified == configured) {
-                DEBUG_MSG("Configured passkey matches client entered key\n");
-                accepted = true;
-                break;
-            } else {
-                DEBUG_MSG("Waiting for correct passkey from client\n");
-            }
             if (!Bluefruit.connected(conn_handle)) break;
         }
-
-        if (accepted)
-            DEBUG_MSG("BLE Accepted\n");
-        else
-            DEBUG_MSG("BLE Declined\n");
-
-        return accepted;
     }
     DEBUG_MSG("BLE passkey pairing: match_request=%i\n", match_request);
     return true;
