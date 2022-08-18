@@ -20,6 +20,7 @@ class Screen
     void forceDisplay() {}
     void startBluetoothPinScreen(uint32_t pin) {}
     void stopBluetoothPinScreen() {}
+    void startRebootScreen() {}
 };
 }
 
