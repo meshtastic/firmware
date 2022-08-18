@@ -209,8 +209,9 @@ void NRF52Bluetooth::shutdown()
 
 void NRF52Bluetooth::setup()
 {
-    Bluefruit.Periph.clearBonds();
-    Bluefruit.Central.clearBonds();
+    // Uncomment for testing
+    // Bluefruit.Periph.clearBonds();
+    // Bluefruit.Central.clearBonds();
 
     // Initialise the Bluefruit module
     DEBUG_MSG("Initialise the Bluefruit nRF52 module\n");

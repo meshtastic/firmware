@@ -98,6 +98,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
             passkeyShowing = false;
             screen->stopBluetoothPinScreen();
         }
+        bluetoothPhoneAPI->setInitalState();
     }
 
     virtual void onDisconnect(NimBLEServer* pServer, ble_gap_conn_desc *desc)
@@ -127,6 +128,9 @@ bool NimbleBluetooth::isActive()
 
 void NimbleBluetooth::setup()
 {
+    // Uncomment for testing
+    // NimbleBluetooth::clearBonds();
+
     DEBUG_MSG("Initialise the NimBLE bluetooth module\n");
 
     NimBLEDevice::init(getDeviceName());

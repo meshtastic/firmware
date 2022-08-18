@@ -1051,7 +1051,7 @@ int32_t Screen::runOnce()
             handleShutdownScreen();
             break;
         case Cmd::START_REBOOT_SCREEN:
-            handleShutdownScreen();
+            handleRebootScreen();
             break;
         default:
             DEBUG_MSG("BUG: invalid cmd\n");

@@ -211,11 +211,12 @@ void AdminModule::handleSetConfig(const Config &c)
             break;
     }
 
-    bool didSave = service.reloadConfig();
-
+    service.reloadConfig();
     // Reboot 5 seconds after a config that requires rebooting is set
-    if (didSave && requiresReboot) {
-        rebootAtMsec = millis() + 5 * 1000;
+    if (requiresReboot) {
+        DEBUG_MSG("Rebooting due to config changes\n");
+        screen->startRebootScreen();
+        rebootAtMsec = millis() + (5 * 1000);
     }
 }
 
