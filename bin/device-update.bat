@@ -29,8 +29,6 @@ IF "__%FILENAME%__" == "____" (
 IF EXIST %FILENAME% (
     echo Trying to flash update %FILENAME%
     %PYTHON% -m esptool --baud 115200 write_flash 0x10000 %FILENAME%
-    echo Erasing the otadata partition, which will turn off flash flippy-flop and force the first image to be used
-    %PYTHON% -m esptool --baud 115200 erase_region 0xe000 0x2000
 ) else (
     echo "Invalid file: %FILENAME%"
 	goto HELP
