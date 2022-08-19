@@ -48,7 +48,7 @@ if [ -f "${FILENAME}" ]; then
 	echo "Trying to flash ${FILENAME}, but first erasing and writing system information"
 	"$PYTHON" -m esptool  erase_flash
 	"$PYTHON" -m esptool  write_flash 0x1000 system-info.bin
-	"$PYTHON" -m esptool  write_flash 0x00390000 littlefs-*.bin
+	"$PYTHON" -m esptool  write_flash 0x2B0000 littlefs-*.bin
 	"$PYTHON" -m esptool  write_flash 0x10000 ${FILENAME}
 else
 	echo "Invalid file: ${FILENAME}"
