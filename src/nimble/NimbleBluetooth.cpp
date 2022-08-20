@@ -98,7 +98,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
             passkeyShowing = false;
             screen->stopBluetoothPinScreen();
         }
-        // bluetoothPhoneAPI->setInitialState();
+        bluetoothPhoneAPI->setInitialState();
     }
 
     virtual void onDisconnect(NimBLEServer* pServer, ble_gap_conn_desc *desc)

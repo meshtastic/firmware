@@ -57,7 +57,7 @@ void onConnect(uint16_t conn_handle)
     connection->getPeerName(central_name, sizeof(central_name));
 
     DEBUG_MSG("BLE Connected to %s\n", central_name);
-    // bluetoothPhoneAPI->setInitialState();
+    bluetoothPhoneAPI->setInitialState();
 }
 
 /**
