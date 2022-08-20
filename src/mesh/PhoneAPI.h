@@ -81,7 +81,7 @@ class PhoneAPI
 
     bool isConnected() { return state != STATE_SEND_NOTHING; }
 
-    void setInitalState() { state = STATE_SEND_MY_INFO; }
+    void setInitialState() { state = STATE_SEND_MY_INFO; }
 
     /// emit a debugging log character, FIXME - implement
     void debugOut(char c) { }

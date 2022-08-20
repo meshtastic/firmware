@@ -21,7 +21,7 @@ PB_BIND(Routing, Routing, AUTO)
 PB_BIND(Data, Data, 2)
 
 
-PB_BIND(Location, Location, AUTO)
+PB_BIND(Waypoint, Waypoint, AUTO)
 
 
 PB_BIND(MeshPacket, MeshPacket, 2)
