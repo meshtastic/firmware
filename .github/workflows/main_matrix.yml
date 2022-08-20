@@ -381,6 +381,11 @@ jobs:
       # For diagnostics
       - name: Show artifacts
         run: ls -lR
+        
+      - name: Device scripts permissions
+        run: |
+          chmod +x ./output/device-install.sh
+          chmod +x ./output/device-update.sh
 
       - name: Zip firmware
         run: zip -j -r ./firmware-${{ steps.version.outputs.version }}.zip ./output
