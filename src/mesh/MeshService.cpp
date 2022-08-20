@@ -177,11 +177,9 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
             DEBUG_MSG("Sending position ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
             positionModule->sendOurPosition(dest, wantReplies);
         }
-    } else {
-        if (nodeInfoModule) {
-            DEBUG_MSG("Sending nodeinfo ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
-            nodeInfoModule->sendOurNodeInfo(dest, wantReplies);
-        }
+    } else if (nodeInfoModule) {
+        DEBUG_MSG("Sending nodeinfo ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
+        nodeInfoModule->sendOurNodeInfo(dest, wantReplies);
     }
 }
 

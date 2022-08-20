@@ -31,7 +31,7 @@ IF EXIST %FILENAME% (
 	%PYTHON% -m esptool --baud 115200 erase_flash
 	%PYTHON% -m esptool --baud 115200 write_flash 0x1000 system-info.bin
     for %%f in (littlefs-*.bin) do (
-        %PYTHON% -m esptool --baud 115200 write_flash 0x2B0000 %%f
+        %PYTHON% -m esptool --baud 115200 write_flash 0x00390000 %%f
     )
 	%PYTHON% -m esptool --baud 115200 write_flash 0x10000 %FILENAME%
 ) else (
