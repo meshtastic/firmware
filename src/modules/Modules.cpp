@@ -72,6 +72,8 @@ void setupModules()
     storeForwardModule = new StoreForwardModule();
 
     new RangeTestModule();
+#elif defined(ARCH_NRF52)
+new ExternalNotificationModule();
 #endif
 
     // NOTE! This module must be added LAST because it likes to check for replies from other modules and avoid sending extra acks
