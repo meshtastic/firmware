@@ -290,8 +290,13 @@ static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, 
     display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Enter this code");
 
     display->setFont(FONT_LARGE);
-    display->drawString(64 + x, 26 + y, btPIN);
 
+    auto displayPin = new String(btPIN);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->drawString(12 + x, 26 + y, displayPin->substring(0, 3));
+    display->drawString(72 + x, 26 + y, displayPin->substring(3, 6));
+    
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(FONT_SMALL);
     char buf[30];
     const char *name = "Name: ";
@@ -328,9 +333,6 @@ static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, i
     } else {
         display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . .  ");
     }
-
-    // display->setFont(FONT_LARGE);
-    // display->drawString(64 + x, 26 + y, btPIN);
 }
 
 /// Draw the last text message we received
