@@ -240,6 +240,7 @@ Fsm powerFSM(&stateBOOT);
 void PowerFSM_setup()
 {
     bool isRouter = (config.device.role == Config_DeviceConfig_Role_Router ? 1 : 0);
+    uint32_t screenOnSecs = config.display.screen_on_secs ? config.display.screen_on_secs : default_screen_on_secs;
     bool hasPower = isPowered();
 
     DEBUG_MSG("PowerFSM init, USB power=%d\n", hasPower);
@@ -251,8 +252,7 @@ void PowerFSM_setup()
 
     // We need this transition, because we might not transition if we were waiting to enter light-sleep, because when we wake from
     // light sleep we _always_ transition to NB or dark and
-    powerFSM.add_transition(&stateLS, isRouter ? &stateNB : &stateDARK, EVENT_PACKET_FOR_PHONE, NULL,
-                            "Received packet, exiting light sleep");
+    powerFSM.add_transition(&stateLS, isRouter ? &stateNB : &stateDARK, EVENT_PACKET_FOR_PHONE, NULL, "Received packet, exiting light sleep");
     powerFSM.add_transition(&stateNB, &stateNB, EVENT_PACKET_FOR_PHONE, NULL, "Received packet, resetting win wake");
 
     // Handle press events - note: we ignore button presses when in API mode
@@ -261,8 +261,7 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_PRESS, NULL, "Press");
     powerFSM.add_transition(&statePOWER, &statePOWER, EVENT_PRESS, screenPress, "Press");
     powerFSM.add_transition(&stateON, &stateON, EVENT_PRESS, screenPress, "Press"); // reenter On to restart our timers
-    powerFSM.add_transition(&stateSERIAL, &stateSERIAL, EVENT_PRESS, screenPress,
-                            "Press"); // Allow button to work while in serial API
+    powerFSM.add_transition(&stateSERIAL, &stateSERIAL, EVENT_PRESS, screenPress, "Press"); // Allow button to work while in serial API
 
     // Handle critically low power battery by forcing deep sleep
     powerFSM.add_transition(&stateBOOT, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
@@ -333,10 +332,7 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_FIRMWARE_UPDATE, NULL, "Got firmware update");
     powerFSM.add_transition(&stateON, &stateON, EVENT_FIRMWARE_UPDATE, NULL, "Got firmware update");
 
-    powerFSM.add_timed_transition(&stateON, &stateDARK,
-                                  config.display.screen_on_secs ? config.display.screen_on_secs
-                                                                               : 60 * 1000 * 10,
-                                  NULL, "Screen-on timeout");
+    powerFSM.add_timed_transition(&stateON, &stateDARK, screenOnSecs, NULL, "Screen-on timeout");
 
     // On most boards we use light-sleep to be our main state, but on NRF52 we just stay in DARK
     State *lowPowerState = &stateLS;
@@ -348,17 +344,12 @@ void PowerFSM_setup()
 
     // See: https://github.com/meshtastic/Meshtastic-device/issues/1071
     if (isRouter || config.power.is_power_saving) {
-        powerFSM.add_timed_transition(&stateNB, &stateLS,
-                                      config.power.min_wake_secs ? config.power.min_wake_secs
-                                                                                : default_min_wake_secs * 1000,
-                                      NULL, "Min wake timeout");
-        powerFSM.add_timed_transition(&stateDARK, &stateLS,
-                                      config.power.wait_bluetooth_secs
-                                          ? config.power.wait_bluetooth_secs
-                                          : default_wait_bluetooth_secs * 1000,
-                                      NULL, "Bluetooth timeout");
-        meshSds = config.power.mesh_sds_timeout_secs ? config.power.mesh_sds_timeout_secs
-                                                                    : default_mesh_sds_timeout_secs;
+        uint32_t minWakeSecs = config.power.min_wake_secs ? config.power.min_wake_secs : default_min_wake_secs * 1000;
+        uint32_t waitBluetoothSecs = config.power.wait_bluetooth_secs ? config.power.wait_bluetooth_secs : default_wait_bluetooth_secs * 1000;
+
+        powerFSM.add_timed_transition(&stateNB, &stateLS, minWakeSecs, NULL, "Min wake timeout");
+        powerFSM.add_timed_transition(&stateDARK, &stateLS, waitBluetoothSecs, NULL, "Bluetooth timeout");
+        meshSds = config.power.mesh_sds_timeout_secs ? config.power.mesh_sds_timeout_secs : default_mesh_sds_timeout_secs;
 
     } else {
 

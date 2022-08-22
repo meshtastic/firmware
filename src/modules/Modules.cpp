@@ -13,8 +13,9 @@
 #include "modules/ReplyModule.h"
 #include "modules/RoutingModule.h"
 #include "modules/TextMessageModule.h"
-#include "modules/Telemetry/DeviceTelemetry.h"
+#include "modules/WaypointModule.h"
 #if HAS_TELEMETRY
+#include "modules/Telemetry/DeviceTelemetry.h"
 #include "modules/Telemetry/EnvironmentTelemetry.h"
 #endif
 #ifdef ARCH_ESP32
@@ -34,6 +35,7 @@ void setupModules()
     adminModule = new AdminModule();
     nodeInfoModule = new NodeInfoModule();
     positionModule = new PositionModule();
+    waypointModule = new WaypointModule();
     textMessageModule = new TextMessageModule();
     
     // Note: if the rest of meshtastic doesn't need to explicitly use your module, you do not need to assign the instance
@@ -70,6 +72,8 @@ void setupModules()
     storeForwardModule = new StoreForwardModule();
 
     new RangeTestModule();
+#elif defined(ARCH_NRF52)
+new ExternalNotificationModule();
 #endif
 
     // NOTE! This module must be added LAST because it likes to check for replies from other modules and avoid sending extra acks

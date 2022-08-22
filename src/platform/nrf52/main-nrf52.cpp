@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <Adafruit_nRFCrypto.h>
 // #include <Adafruit_USBD_Device.h>
+#include "NodeDB.h"
 
 #include "NRF52Bluetooth.h"
 #include "error.h"
@@ -68,7 +69,7 @@ static const bool useSoftDevice = true; // Set to false for easier debugging
 
 void setBluetoothEnable(bool on)
 {
-    if (on != bleOn) {
+    if (on != bleOn && config.bluetooth.enabled == true) {
         if (on) {
             if (!nrf52Bluetooth) {
                 if (!useSoftDevice)
@@ -81,9 +82,8 @@ void setBluetoothEnable(bool on)
                     initBrownout();
                 }
             }
-        } else {
-            if (nrf52Bluetooth)
-                nrf52Bluetooth->shutdown();
+        } else if (nrf52Bluetooth) {
+            nrf52Bluetooth->shutdown();
         }
         bleOn = on;
     }

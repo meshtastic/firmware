@@ -6,6 +6,9 @@
 // defaults for ESP32 architecture
 //
 
+#ifndef HAS_BLUETOOTH
+    #define HAS_BLUETOOTH 1
+#endif
 #ifndef HAS_WIFI
     #define HAS_WIFI 1
 #endif

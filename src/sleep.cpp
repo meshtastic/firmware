@@ -16,8 +16,6 @@
 #include <driver/rtc_io.h>
 #include <driver/uart.h>
 
-#include "nimble/BluetoothUtil.h"
-
 esp_sleep_source_t wakeCause; // the reason we booted this time
 #endif
 

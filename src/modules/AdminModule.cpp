@@ -170,45 +170,54 @@ void AdminModule::handleSetOwner(const User &o)
 
 void AdminModule::handleSetConfig(const Config &c)
 {
+    bool requiresReboot = false;
     switch (c.which_payloadVariant) {
-    case Config_device_tag:
-        DEBUG_MSG("Setting config: Device\n");
-        config.has_device = true;
-        config.device = c.payloadVariant.device;
-        break;
-    case Config_position_tag:
-        DEBUG_MSG("Setting config: Position\n");
-        config.has_position = true;
-        config.position = c.payloadVariant.position;
-        break;
-    case Config_power_tag:
-        DEBUG_MSG("Setting config: Power\n");
-        config.has_power = true;
-        config.power = c.payloadVariant.power;
-        break;
-    case Config_wifi_tag:
-        DEBUG_MSG("Setting config: WiFi\n");
-        config.has_wifi = true;
-        config.wifi = c.payloadVariant.wifi;
-        break;
-    case Config_display_tag:
-        DEBUG_MSG("Setting config: Display\n");
-        config.has_display = true;
-        config.display = c.payloadVariant.display;
-        break;
-    case Config_lora_tag:
-        DEBUG_MSG("Setting config: LoRa\n");
-        config.has_lora = true;
-        config.lora = c.payloadVariant.lora;
-        break;
-    case Config_bluetooth_tag:
-        DEBUG_MSG("Setting config: Bluetooth\n");
-        config.has_bluetooth = true;
-        config.bluetooth = c.payloadVariant.bluetooth;
-        break;
+        case Config_device_tag:
+            DEBUG_MSG("Setting config: Device\n");
+            config.has_device = true;
+            config.device = c.payloadVariant.device;
+            break;
+        case Config_position_tag:
+            DEBUG_MSG("Setting config: Position\n");
+            config.has_position = true;
+            config.position = c.payloadVariant.position;
+            break;
+        case Config_power_tag:
+            DEBUG_MSG("Setting config: Power\n");
+            config.has_power = true;
+            config.power = c.payloadVariant.power;
+            break;
+        case Config_wifi_tag:
+            DEBUG_MSG("Setting config: WiFi\n");
+            config.has_wifi = true;
+            config.wifi = c.payloadVariant.wifi;
+            break;
+        case Config_display_tag:
+            DEBUG_MSG("Setting config: Display\n");
+            config.has_display = true;
+            config.display = c.payloadVariant.display;
+            break;
+        case Config_lora_tag:
+            DEBUG_MSG("Setting config: LoRa\n");
+            config.has_lora = true;
+            config.lora = c.payloadVariant.lora;
+            requiresReboot = true;
+            break;
+        case Config_bluetooth_tag:
+            DEBUG_MSG("Setting config: Bluetooth\n");
+            config.has_bluetooth = true;
+            config.bluetooth = c.payloadVariant.bluetooth;
+            requiresReboot = true;
+            break;
     }
 
     service.reloadConfig();
+    // Reboot 5 seconds after a config that requires rebooting is set
+    if (requiresReboot) {
+        DEBUG_MSG("Rebooting due to config changes\n");
+        screen->startRebootScreen();
+        rebootAtMsec = millis() + (5 * 1000);
+    }
 }
 
 void AdminModule::handleSetModuleConfig(const ModuleConfig &c)

@@ -1,7 +1,5 @@
-#ifdef USE_NEW_ESP32_BLUETOOTH
-
 #include "configuration.h"
-#include "ESP32Bluetooth.h"
+#include "NimbleBluetooth.h"
 #include "BluetoothCommon.h"
 #include "PowerFSM.h"
 #include "sleep.h"
@@ -46,7 +44,7 @@ static BluetoothPhoneAPI *bluetoothPhoneAPI;
  * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
  */
 
-class ESP32BluetoothToRadioCallback : public NimBLECharacteristicCallbacks 
+class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks 
 {
     virtual void onWrite(NimBLECharacteristic *pCharacteristic) {
         DEBUG_MSG("To Radio onwrite\n");
@@ -56,7 +54,7 @@ class ESP32BluetoothToRadioCallback : public NimBLECharacteristicCallbacks
     }
 };
 
-class ESP32BluetoothFromRadioCallback : public NimBLECharacteristicCallbacks 
+class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks 
 {
     virtual void onRead(NimBLECharacteristic *pCharacteristic) {
         DEBUG_MSG("From Radio onread\n");
@@ -69,7 +67,7 @@ class ESP32BluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
     }
 };
 
-class ESP32BluetoothServerCallback : public NimBLEServerCallbacks 
+class NimbleBluetoothServerCallback : public NimBLEServerCallbacks 
 {
     virtual uint32_t onPassKeyRequest() {
         uint32_t passkey = config.bluetooth.fixed_pin;
@@ -100,6 +98,7 @@ class ESP32BluetoothServerCallback : public NimBLEServerCallbacks
             passkeyShowing = false;
             screen->stopBluetoothPinScreen();
         }
+        // bluetoothPhoneAPI->setInitialState();
     }
 
     virtual void onDisconnect(NimBLEServer* pServer, ble_gap_conn_desc *desc)
@@ -108,10 +107,10 @@ class ESP32BluetoothServerCallback : public NimBLEServerCallbacks
     }
 };
 
-static ESP32BluetoothToRadioCallback *toRadioCallbacks;
-static ESP32BluetoothFromRadioCallback *fromRadioCallbacks;
+static NimbleBluetoothToRadioCallback *toRadioCallbacks;
+static NimbleBluetoothFromRadioCallback *fromRadioCallbacks;
 
-void ESP32Bluetooth::shutdown()
+void NimbleBluetooth::shutdown()
 {
     // Shutdown bluetooth for minimum power draw
     DEBUG_MSG("Disable bluetooth\n");
@@ -121,58 +120,63 @@ void ESP32Bluetooth::shutdown()
     pAdvertising->stop();
 }
 
-bool ESP32Bluetooth::isActive()
+bool NimbleBluetooth::isActive()
 {
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     return bleServer && (bleServer->getConnectedCount() > 0 || pAdvertising->isAdvertising());
 }
 
-void ESP32Bluetooth::setup()
+void NimbleBluetooth::setup()
 {
-    DEBUG_MSG("Initialise the ESP32 bluetooth module\n");
+    // Uncomment for testing
+    // NimbleBluetooth::clearBonds();
+
+    DEBUG_MSG("Initialise the NimBLE bluetooth module\n");
 
     NimBLEDevice::init(getDeviceName());
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
 
-    // FIXME fails in iOS
-    if (config.bluetooth.mode == Config_BluetoothConfig_PairingMode_NoPin) {
-        NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
-        NimBLEDevice::setSecurityAuth(true, false, true);
-    }
-    else {
+    if (config.bluetooth.mode != Config_BluetoothConfig_PairingMode_NoPin) {
         NimBLEDevice::setSecurityAuth(true, true, true);
         NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
     }
     bleServer = NimBLEDevice::createServer();
     
-    ESP32BluetoothServerCallback *serverCallbacks = new ESP32BluetoothServerCallback();
+    NimbleBluetoothServerCallback *serverCallbacks = new NimbleBluetoothServerCallback();
     bleServer->setCallbacks(serverCallbacks, true);
 
     setupService();
     startAdvertising();
 }
 
-void ESP32Bluetooth::setupService() 
+void NimbleBluetooth::setupService() 
 {
     NimBLEService *bleService = bleServer->createService(MESH_SERVICE_UUID);
-
-    //define the characteristics that the app is looking for
-    NimBLECharacteristic *ToRadioCharacteristic = bleService->createCharacteristic(TORADIO_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_AUTHEN | NIMBLE_PROPERTY::WRITE_ENC);
-    NimBLECharacteristic *FromRadioCharacteristic = bleService->createCharacteristic(FROMRADIO_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
-    fromNumCharacteristic = bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
-    
+    NimBLECharacteristic *ToRadioCharacteristic;
+    NimBLECharacteristic *FromRadioCharacteristic;
+    // Define the characteristics that the app is looking for
+    if (config.bluetooth.mode == Config_BluetoothConfig_PairingMode_NoPin) {
+        ToRadioCharacteristic = bleService->createCharacteristic(TORADIO_UUID, NIMBLE_PROPERTY::WRITE);
+        FromRadioCharacteristic = bleService->createCharacteristic(FROMRADIO_UUID, NIMBLE_PROPERTY::READ);
+        fromNumCharacteristic = bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ);
+    }
+    else {
+        ToRadioCharacteristic = bleService->createCharacteristic(TORADIO_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_AUTHEN | NIMBLE_PROPERTY::WRITE_ENC);
+        FromRadioCharacteristic = bleService->createCharacteristic(FROMRADIO_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
+        fromNumCharacteristic = bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
+    }
     bluetoothPhoneAPI = new BluetoothPhoneAPI();
 
-    toRadioCallbacks = new ESP32BluetoothToRadioCallback();
+    toRadioCallbacks = new NimbleBluetoothToRadioCallback();
     ToRadioCharacteristic->setCallbacks(toRadioCallbacks);
 
-    fromRadioCallbacks = new ESP32BluetoothFromRadioCallback();
+    fromRadioCallbacks = new NimbleBluetoothFromRadioCallback();
     FromRadioCharacteristic->setCallbacks(fromRadioCallbacks);
 
     bleService->start();
 }
 
-void ESP32Bluetooth::startAdvertising() 
+void NimbleBluetooth::startAdvertising() 
 {
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->reset();
@@ -186,7 +190,7 @@ void updateBatteryLevel(uint8_t level)
     //blebas.write(level);
 }
 
-void ESP32Bluetooth::clearBonds()
+void NimbleBluetooth::clearBonds()
 {
     DEBUG_MSG("Clearing bluetooth bonds!\n");
     NimBLEDevice::deleteAllBonds();
@@ -195,7 +199,9 @@ void ESP32Bluetooth::clearBonds()
 void clearNVS() 
 {
     NimBLEDevice::deleteAllBonds();
+#ifdef ARCH_ESP32
     ESP.restart();
+#endif
 }
 
 void disablePin() 
@@ -218,5 +224,3 @@ void disablePin()
 
     doublepressed = millis();
 }
-
-#endif

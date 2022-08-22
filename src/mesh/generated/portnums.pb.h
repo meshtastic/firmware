@@ -48,7 +48,8 @@ typedef enum _PortNum {
     PortNum_ADMIN_APP = 6, 
     /* Compressed TEXT_MESSAGE payloads. */
     PortNum_TEXT_MESSAGE_COMPRESSED_APP = 7, 
-    /* Waypoint payloads. */
+    /* Waypoint payloads.
+ Payload is a [Waypoint](/docs/developers/protobufs/api#waypoint) message */
     PortNum_WAYPOINT_APP = 8, 
     /* Provides a 'ping' service that replies to any packet it receives.
  Also serves as a small example module. */

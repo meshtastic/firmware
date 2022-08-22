@@ -179,12 +179,11 @@ extern NodeDB nodeDB;
 #define default_sds_secs 365 * 24 * 60 * 60
 #define default_ls_secs IF_ROUTER(24 * 60 * 60, 5 * 60)
 #define default_min_wake_secs 10
-
+#define default_screen_on_secs 60 * 1000 * 10
 
 inline uint32_t getIntervalOrDefaultMs(uint32_t interval)
 {
-    if (interval > 0)
-        return interval * 1000;
+    if (interval > 0) return interval * 1000;
     return default_broadcast_interval_secs * 1000;
 }
 

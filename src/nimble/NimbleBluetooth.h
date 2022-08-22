@@ -1,8 +1,6 @@
-#ifdef USE_NEW_ESP32_BLUETOOTH
-
 #pragma once
 
-class ESP32Bluetooth
+class NimbleBluetooth
 {
   public:
     void setup();
@@ -18,5 +16,3 @@ class ESP32Bluetooth
 void setBluetoothEnable(bool on);
 void clearNVS();
 void disablePin();
-
-#endif
