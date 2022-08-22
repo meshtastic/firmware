@@ -488,13 +488,9 @@ jobs:
         run: >-
           bin/bump_version.py
           
-      - name: Commit updated version.properties
-        id: commit_updated
-        run: |
-          git config --global user.name 'thebentern'
-          git config --global user.email 'benmmeadors@gmail.com'
-          git remote set-url origin https://x-access-token:${{ secrets.ARTIFACTS_TOKEN }}@github.com/${{ github.repository }}
-          git add version.properties
-          git commit -m "Bump version" && git push -f || echo "No changes to commit"
-          git log -n 1 --pretty=format:"%H" | tail -n 1 | awk '{print "::set-output name=sha::"$0}'
+      - name: Create version.properties pull request
+        uses: peter-evans/create-pull-request@v3
+        with:
+          add-paths: |
+            version.properties
 
