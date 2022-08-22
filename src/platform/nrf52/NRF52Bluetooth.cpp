@@ -1,6 +1,8 @@
+#include <Arduino.h>
 #include "configuration.h"
 #include "NRF52Bluetooth.h"
 #include "BluetoothCommon.h"
+#include "PowerFSM.h"
 #include "main.h"
 #include "mesh/PhoneAPI.h"
 #include "mesh/mesh-pb-constants.h"
@@ -22,7 +24,7 @@ static BLEDfu bledfu; // DFU software update helper service
 static uint8_t fromRadioBytes[FromRadio_size];
 static uint8_t toRadioBytes[ToRadio_size];
 
-static bool bleConnected;
+static uint16_t connectionHandle;
 
 class BluetoothPhoneAPI : public PhoneAPI
 {
@@ -39,13 +41,14 @@ class BluetoothPhoneAPI : public PhoneAPI
 
     /// Check the current underlying physical link to see if the client is currently connected
     virtual bool checkIsConnected() override {
-        return bleConnected;
+        BLEConnection *connection = Bluefruit.Connection(connectionHandle);
+        return connection->connected();
     }
 };
 
 static BluetoothPhoneAPI *bluetoothPhoneAPI;
 
-void connect_callback(uint16_t conn_handle)
+void onConnect(uint16_t conn_handle)
 {
     // Get the reference to current connection
     BLEConnection *connection = Bluefruit.Connection(conn_handle);
@@ -54,7 +57,7 @@ void connect_callback(uint16_t conn_handle)
     connection->getPeerName(central_name, sizeof(central_name));
 
     DEBUG_MSG("BLE Connected to %s\n", central_name);
-    bleConnected = true;
+    // bluetoothPhoneAPI->setInitialState();
 }
 
 /**
@@ -62,15 +65,12 @@ void connect_callback(uint16_t conn_handle)
  * @param conn_handle connection where this event happens
  * @param reason is a BLE_HCI_STATUS_CODE which can be found in ble_hci.h
  */
-void disconnect_callback(uint16_t conn_handle, uint8_t reason)
+void onDisconnect(uint16_t conn_handle, uint8_t reason)
 {
-    // FIXME - we currently assume only one active connection
-    bleConnected = false;
-
     DEBUG_MSG("BLE Disconnected, reason = 0x%x\n", reason);
 }
 
-void cccd_callback(uint16_t conn_hdl, BLECharacteristic *chr, uint16_t cccd_value)
+void onCCCD(uint16_t conn_hdl, BLECharacteristic *chr, uint16_t cccd_value)
 {
     // Display the raw request packet
     DEBUG_MSG("CCCD Updated: %u\n", cccd_value);
@@ -126,7 +126,7 @@ static void authorizeRead(uint16_t conn_hdl)
 /**
  * client is starting read, pull the bytes from our API class
  */
-void fromRadioAuthorizeCb(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_evt_read_t *request)
+void onFromRadio(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_evt_read_t *request)
 {
     if (request->offset == 0) {
         // If the read is long, we will get multiple authorize invocations - we only populate data on the first
@@ -141,7 +141,7 @@ void fromRadioAuthorizeCb(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_e
     authorizeRead(conn_hdl);
 }
 
-void toRadioWriteCb(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *data, uint16_t len)
+void onToRadio(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *data, uint16_t len)
 {
     DEBUG_MSG("toRadioWriteCb data %p, len %u\n", data, len);
 
@@ -151,7 +151,7 @@ void toRadioWriteCb(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *data, ui
 /**
  * client is starting read, pull the bytes from our API class
  */
-void fromNumAuthorizeCb(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_evt_read_t *request)
+void onFromNumAuthorize(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_evt_read_t *request)
 {
     DEBUG_MSG("fromNumAuthorizeCb\n");
 
@@ -168,39 +168,37 @@ void setupMeshService(void)
     // any characteristic(s) within that service definition.. Calling .begin() on
     // a BLECharacteristic will cause it to be added to the last BLEService that
     // was 'begin()'ed!
-
-    fromNum.setProperties(CHR_PROPS_NOTIFY | CHR_PROPS_READ);
-    fromNum.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS); // FIXME, secure this!!!
     fromNum.setFixedLen(0); // Variable len (either 0 or 4)  FIXME consider changing protocol so it is fixed 4 byte len, where 0 means empty
     fromNum.setMaxLen(4);
-    fromNum.setCccdWriteCallback(cccd_callback); // Optionally capture CCCD updates
+    fromNum.setCccdWriteCallback(onCCCD); // Optionally capture CCCD updates
     // We don't yet need to hook the fromNum auth callback
     // fromNum.setReadAuthorizeCallback(fromNumAuthorizeCb);
     fromNum.write32(0); // Provide default fromNum of 0
     fromNum.begin();
 
     fromRadio.setProperties(CHR_PROPS_READ);
-    fromRadio.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS); // FIXME secure this!
+    // fromRadio.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS); // FIXME secure this!
     fromRadio.setMaxLen(sizeof(fromRadioBytes));
     fromRadio.setReadAuthorizeCallback(
-        fromRadioAuthorizeCb,
+        onFromRadio,
         false); // We don't call this callback via the adafruit queue, because we can safely run in the BLE context
     fromRadio.setBuffer(fromRadioBytes, sizeof(fromRadioBytes)); // we preallocate our fromradio buffer so we won't waste space
     // for two copies
     fromRadio.begin();
 
     toRadio.setProperties(CHR_PROPS_WRITE);
-    toRadio.setPermission(SECMODE_OPEN, SECMODE_OPEN); // FIXME secure this!
+    // toRadio.setPermission(SECMODE_OPEN, SECMODE_OPEN); // FIXME secure this!
     toRadio.setFixedLen(0);
     toRadio.setMaxLen(512);
     toRadio.setBuffer(toRadioBytes, sizeof(toRadioBytes));
     // We don't call this callback via the adafruit queue, because we can safely run in the BLE context
-    toRadio.setWriteCallback(toRadioWriteCb, false); 
+    toRadio.setWriteCallback(onToRadio, false); 
     toRadio.begin();
 }
 
 // FIXME, turn off soft device access for debugging
 static bool isSoftDeviceAllowed = true;
+static uint32_t configuredPasskey;
 
 void NRF52Bluetooth::shutdown()
 {
@@ -211,9 +209,14 @@ void NRF52Bluetooth::shutdown()
 
 void NRF52Bluetooth::setup()
 {
+    // Uncomment for testing
+    // Bluefruit.Periph.clearBonds();
+    // Bluefruit.Central.clearBonds();
+
     // Initialise the Bluefruit module
     DEBUG_MSG("Initialise the Bluefruit nRF52 module\n");
     Bluefruit.autoConnLed(false);
+    Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
     Bluefruit.begin();
 
     // Clear existing data.
@@ -221,12 +224,29 @@ void NRF52Bluetooth::setup()
     Bluefruit.Advertising.clearData();
     Bluefruit.ScanResponse.clearData();
 
+    if (config.bluetooth.mode != Config_BluetoothConfig_PairingMode_NoPin) {
+        configuredPasskey = config.bluetooth.mode == Config_BluetoothConfig_PairingMode_FixedPin ? 
+            config.bluetooth.fixed_pin : random(100000, 999999);
+        auto pinString = std::to_string(configuredPasskey);
+        DEBUG_MSG("Bluetooth pin set to '%i'\n", configuredPasskey);
+        Bluefruit.Security.setPIN(pinString.c_str());
+        Bluefruit.Security.setIOCaps(true, false, false);
+        Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onPairingPasskey);
+        Bluefruit.Security.setPairCompleteCallback(NRF52Bluetooth::onPairingCompleted);
+        Bluefruit.Security.setSecuredCallback(NRF52Bluetooth::onConnectionSecured);
+        meshBleService.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
+    }
+    else {
+        Bluefruit.Security.setIOCaps(false, false, false);
+        meshBleService.setPermission(SECMODE_OPEN, SECMODE_OPEN);
+    }
+
     // Set the advertised device name (keep it short!)
     Bluefruit.setName(getDeviceName());
 
     // Set the connect/disconnect callback handlers
-    Bluefruit.Periph.setConnectCallback(connect_callback);
-    Bluefruit.Periph.setDisconnectCallback(disconnect_callback);
+    Bluefruit.Periph.setConnectCallback(onConnect);
+    Bluefruit.Periph.setDisconnectCallback(onDisconnect);
 
     // Configure and Start the Device Information Service
     DEBUG_MSG("Configuring the Device Information Service\n");
@@ -251,7 +271,6 @@ void NRF52Bluetooth::setup()
         // Setup the advertising packet(s)
         DEBUG_MSG("Setting up the advertising payload(s)\n");
         startAdv();
-
         DEBUG_MSG("Advertising\n");
     }
 }
@@ -270,4 +289,42 @@ void NRF52Bluetooth::clearBonds()
 
     Bluefruit.Periph.clearBonds();
     Bluefruit.Central.clearBonds();
+}
+
+void NRF52Bluetooth::onConnectionSecured(uint16_t conn_handle)
+{
+    DEBUG_MSG("BLE connection secured\n");
+    BLEConnection* connection = Bluefruit.Connection(conn_handle);
+
+    if (!connection->secured())
+    {
+        connection->requestPairing();
+    }
+}
+
+bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passkey[6], bool match_request)
+{
+    DEBUG_MSG("BLE pairing process started with passkey %.3s %.3s\n", passkey, passkey+3);
+    screen->startBluetoothPinScreen(configuredPasskey);
+
+    if (match_request)
+    {
+        uint32_t start_time = millis();
+        while(millis() < start_time + 30000)
+        {
+            if (!Bluefruit.connected(conn_handle)) break;
+        }
+    }
+    DEBUG_MSG("BLE passkey pairing: match_request=%i\n", match_request);
+    return true;
+}
+
+void NRF52Bluetooth::onPairingCompleted(uint16_t conn_handle, uint8_t auth_status)
+{
+    if (auth_status == BLE_GAP_SEC_STATUS_SUCCESS)
+        DEBUG_MSG("BLE pairing success\n");
+    else
+        DEBUG_MSG("BLE pairing failed\n");
+
+    screen->stopBluetoothPinScreen();
 }

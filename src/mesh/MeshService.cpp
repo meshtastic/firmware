@@ -16,6 +16,10 @@
 #include "modules/PositionModule.h"
 #include "power.h"
 
+#ifdef ARCH_ESP32
+#include "nimble/NimbleBluetooth.h"
+#endif
+
 /*
 receivedPacketQueue - this is a queue of messages we've received from the mesh, which we are keeping to deliver to the phone.
 It is implemented with a FreeRTos queue (wrapped with a little RTQueue class) of pointers to MeshPacket protobufs (which were

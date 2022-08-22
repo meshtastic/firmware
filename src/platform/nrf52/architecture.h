@@ -5,7 +5,9 @@
 //
 // defaults for NRF52 architecture
 //
-
+#ifndef HAS_BLUETOOTH
+    #define HAS_BLUETOOTH 1
+#endif
 #ifndef HAS_SCREEN
     #define HAS_SCREEN 1
 #endif

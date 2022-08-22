@@ -175,9 +175,7 @@ bool MQTT::wantsLink() const
 {
     bool hasChannel = false;
 
-    if (moduleConfig.mqtt.disabled) {
-        // DEBUG_MSG("MQTT disabled...\n");
-    } else {
+    if (moduleConfig.mqtt.enabled) {
         // No need for link if no channel needed it
         size_t numChan = channels.getNumChannels();
         for (size_t i = 0; i < numChan; i++) {

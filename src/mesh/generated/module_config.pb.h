@@ -72,7 +72,7 @@ typedef struct _ModuleConfig_ExternalNotificationConfig {
 } ModuleConfig_ExternalNotificationConfig;
 
 typedef struct _ModuleConfig_MQTTConfig { 
-    bool disabled;
+    bool enabled;
     char address[32];
     char username[32];
     char password[32];
@@ -187,7 +187,7 @@ extern "C" {
 #define ModuleConfig_ExternalNotificationConfig_active_tag 4
 #define ModuleConfig_ExternalNotificationConfig_alert_message_tag 5
 #define ModuleConfig_ExternalNotificationConfig_alert_bell_tag 6
-#define ModuleConfig_MQTTConfig_disabled_tag     1
+#define ModuleConfig_MQTTConfig_enabled_tag      1
 #define ModuleConfig_MQTTConfig_address_tag      2
 #define ModuleConfig_MQTTConfig_username_tag     3
 #define ModuleConfig_MQTTConfig_password_tag     4
@@ -240,7 +240,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,canned_message,payloadVariant
 #define ModuleConfig_payloadVariant_canned_message_MSGTYPE ModuleConfig_CannedMessageConfig
 
 #define ModuleConfig_MQTTConfig_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, BOOL,     disabled,          1) \
+X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
 X(a, STATIC,   SINGULAR, STRING,   address,           2) \
 X(a, STATIC,   SINGULAR, STRING,   username,          3) \
 X(a, STATIC,   SINGULAR, STRING,   password,          4) \

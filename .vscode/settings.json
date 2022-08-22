@@ -52,7 +52,8 @@
         "shared_mutex": "cpp",
         "iostream": "cpp",
         "esp_nimble_hci.h": "c",
-        "map": "cpp"
+        "map": "cpp",
+        "random": "cpp"
     },
     "cSpell.words": [
         "Blox",

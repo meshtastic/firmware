@@ -116,13 +116,11 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
  */
 size_t PhoneAPI::getFromRadio(uint8_t *buf)
 {
+    DEBUG_MSG("getFromRadio, state=%d\n", state);
     if (!available()) {
-        // DEBUG_MSG("getFromRadio, !available\n");
+        // DEBUG_MSG("PhoneAPI::getFromRadio, !available\n");
         return 0;
     }
-
-    DEBUG_MSG("getFromRadio, state=%d\n", state);
-
     // In case we send a FromRadio packet
     memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
 
@@ -278,7 +276,10 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     return 0;
 }
 
-void PhoneAPI::handleDisconnect() {}
+void PhoneAPI::handleDisconnect() 
+{
+    DEBUG_MSG("PhoneAPI disconnect\n");
+}
 
 void PhoneAPI::releasePhonePacket()
 {
@@ -294,35 +295,28 @@ void PhoneAPI::releasePhonePacket()
 bool PhoneAPI::available()
 {
     switch (state) {
-    case STATE_SEND_NOTHING:
-        return false;
-
-    case STATE_SEND_MY_INFO:
-        return true;
-            
-    case STATE_SEND_CONFIG:
-        return true;        
-
-    case STATE_SEND_MODULECONFIG:
-        return true;
-
-    case STATE_SEND_NODEINFO:
-        if (!nodeInfoForPhone)
-            nodeInfoForPhone = nodeDB.readNextInfo();
-        return true; // Always say we have something, because we might need to advance our state machine
-
-    case STATE_SEND_COMPLETE_ID:
-        return true;
-
-    case STATE_SEND_PACKETS: {
-        // Try to pull a new packet from the service (if we haven't already)
-        if (!packetForPhone)
-            packetForPhone = service.getForPhone();
-        bool hasPacket = !!packetForPhone;
-        // DEBUG_MSG("available hasPacket=%d\n", hasPacket);
-        return hasPacket;
+        case STATE_SEND_NOTHING:
+            return false;
+        case STATE_SEND_MY_INFO:
+            return true;
+        case STATE_SEND_CONFIG:
+            return true;        
+        case STATE_SEND_MODULECONFIG:
+            return true;
+        case STATE_SEND_NODEINFO:
+            if (!nodeInfoForPhone)
+                nodeInfoForPhone = nodeDB.readNextInfo();
+            return true; // Always say we have something, because we might need to advance our state machine
+        case STATE_SEND_COMPLETE_ID:
+            return true;
+        case STATE_SEND_PACKETS: {
+            // Try to pull a new packet from the service (if we haven't already)
+            if (!packetForPhone)
+                packetForPhone = service.getForPhone();
+            bool hasPacket = !!packetForPhone;
+            // DEBUG_MSG("available hasPacket=%d\n", hasPacket);
+            return hasPacket;
     }
-
     default:
         assert(0); // unexpected state - FIXME, make an error code and reboot
     }

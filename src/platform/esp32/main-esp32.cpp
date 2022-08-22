@@ -1,15 +1,10 @@
-#include "BluetoothSoftwareUpdate.h"
 #include "PowerFSM.h"
 #include "configuration.h"
 #include "esp_task_wdt.h"
 #include "main.h"
 
-#ifdef USE_NEW_ESP32_BLUETOOTH
-#include "ESP32Bluetooth.h"
+#include "nimble/NimbleBluetooth.h"
 #include "mesh/http/WiFiAPClient.h"
-#else
-#include "nimble/BluetoothUtil.h"
-#endif
 
 #include "sleep.h"
 #include "target_specific.h"
@@ -19,41 +14,26 @@
 #include <nvs.h>
 #include <nvs_flash.h>
 
-#ifdef USE_NEW_ESP32_BLUETOOTH
-ESP32Bluetooth *esp32Bluetooth;
-#endif
+NimbleBluetooth *nimbleBluetooth;
 
 void getMacAddr(uint8_t *dmac)
 {
     assert(esp_efuse_mac_get_default(dmac) == ESP_OK);
 }
 
-/*
-static void printBLEinfo() {
-        int dev_num = esp_ble_get_bond_device_num();
-
-    esp_ble_bond_dev_t *dev_list = (esp_ble_bond_dev_t *)malloc(sizeof(esp_ble_bond_dev_t) * dev_num);
-    esp_ble_get_bond_device_list(&dev_num, dev_list);
-    for (int i = 0; i < dev_num; i++) {
-        // esp_ble_remove_bond_device(dev_list[i].bd_addr);
-    }
-
-} */
-#ifdef USE_NEW_ESP32_BLUETOOTH
 void setBluetoothEnable(bool on) {
     
-    if (!isWifiAvailable()) {
-        if (!esp32Bluetooth) {
-            esp32Bluetooth = new ESP32Bluetooth();
+    if (!isWifiAvailable() && config.bluetooth.enabled == true) {
+        if (!nimbleBluetooth) {
+            nimbleBluetooth = new NimbleBluetooth();
         }
-        if (on && !esp32Bluetooth->isActive()) {
-            esp32Bluetooth->setup();
+        if (on && !nimbleBluetooth->isActive()) {
+            nimbleBluetooth->setup();
         } else {
-            esp32Bluetooth->shutdown();
+            nimbleBluetooth->shutdown();
         }
     }
 }
-#endif
 
 void esp32Setup()
 {
@@ -123,7 +103,6 @@ Periodic axpDebugOutput(axpDebugRead);
 void esp32Loop()
 {
     esp_task_wdt_reset(); // service our app level watchdog
-    //loopBLE();
 
     // for debug printing
     // radio.radioIf.canSleep();
