@@ -6,7 +6,6 @@
 #include "input/facesKbI2cImpl.h"
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
-#include "modules/ExternalNotificationModule.h"
 #include "modules/NodeInfoModule.h"
 #include "modules/PositionModule.h"
 #include "modules/RemoteHardwareModule.h"
@@ -23,7 +22,9 @@
 #include "modules/esp32/SerialModule.h"
 #include "modules/esp32/StoreForwardModule.h"
 #endif
-
+#if defined(ARCH_ESP32) || defined(ARCH_NRF52)
+#include "modules/ExternalNotificationModule.h"
+#endif
 /**
  * Create module instances here.  If you are adding a new module, you must 'new' it here (or somewhere else)
  */
