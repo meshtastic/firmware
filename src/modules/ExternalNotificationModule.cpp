@@ -116,7 +116,6 @@ ExternalNotificationModule::ExternalNotificationModule()
     // restrict to the admin channel for rx
     boundChannel = Channels::gpioChannel;
 
-#ifdef ARCH_ESP32
 #ifdef EXT_NOTIFY_OUT
 
     /*
@@ -149,12 +148,10 @@ ExternalNotificationModule::ExternalNotificationModule()
         enabled = false;
     }
 #endif
-#endif
 }
 
 ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
 {
-#ifdef ARCH_ESP32
 #ifdef EXT_NOTIFY_OUT
 
     if (moduleConfig.external_notification.enabled) {
@@ -182,8 +179,6 @@ ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
     } else {
         DEBUG_MSG("External Notification Module Disabled\n");
     }
-#endif
-
 #endif
 
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
