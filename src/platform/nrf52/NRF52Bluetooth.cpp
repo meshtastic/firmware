@@ -1,8 +1,6 @@
-#include <Arduino.h>
 #include "configuration.h"
 #include "NRF52Bluetooth.h"
 #include "BluetoothCommon.h"
-#include "PowerFSM.h"
 #include "main.h"
 #include "mesh/PhoneAPI.h"
 #include "mesh/mesh-pb-constants.h"
@@ -24,6 +22,7 @@ static BLEDfu bledfu; // DFU software update helper service
 static uint8_t fromRadioBytes[FromRadio_size];
 static uint8_t toRadioBytes[ToRadio_size];
 
+static bool bleConnected;
 static uint16_t connectionHandle;
 
 class BluetoothPhoneAPI : public PhoneAPI
@@ -57,7 +56,7 @@ void onConnect(uint16_t conn_handle)
     connection->getPeerName(central_name, sizeof(central_name));
 
     DEBUG_MSG("BLE Connected to %s\n", central_name);
-    // bluetoothPhoneAPI->setInitialState();
+    bleConnected = true;
 }
 
 /**
@@ -67,10 +66,13 @@ void onConnect(uint16_t conn_handle)
  */
 void onDisconnect(uint16_t conn_handle, uint8_t reason)
 {
+    // FIXME - we currently assume only one active connection
+    bleConnected = false;
+
     DEBUG_MSG("BLE Disconnected, reason = 0x%x\n", reason);
 }
 
-void onCCCD(uint16_t conn_hdl, BLECharacteristic *chr, uint16_t cccd_value)
+void onCccd(uint16_t conn_hdl, BLECharacteristic *chr, uint16_t cccd_value)
 {
     // Display the raw request packet
     DEBUG_MSG("CCCD Updated: %u\n", cccd_value);
@@ -126,7 +128,7 @@ static void authorizeRead(uint16_t conn_hdl)
 /**
  * client is starting read, pull the bytes from our API class
  */
-void onFromRadio(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_evt_read_t *request)
+void onFromRadioAuthorize(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_evt_read_t *request)
 {
     if (request->offset == 0) {
         // If the read is long, we will get multiple authorize invocations - we only populate data on the first
@@ -141,7 +143,7 @@ void onFromRadio(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_evt_read_t
     authorizeRead(conn_hdl);
 }
 
-void onToRadio(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *data, uint16_t len)
+void onToRadioWrite(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *data, uint16_t len)
 {
     DEBUG_MSG("toRadioWriteCb data %p, len %u\n", data, len);
 
@@ -168,31 +170,33 @@ void setupMeshService(void)
     // any characteristic(s) within that service definition.. Calling .begin() on
     // a BLECharacteristic will cause it to be added to the last BLEService that
     // was 'begin()'ed!
+    auto secMode = config.bluetooth.mode == Config_BluetoothConfig_PairingMode_NoPin ? SECMODE_OPEN : SECMODE_ENC_NO_MITM;
+
+    fromNum.setProperties(CHR_PROPS_NOTIFY | CHR_PROPS_READ);
+    fromNum.setPermission(secMode, SECMODE_NO_ACCESS); // FIXME, secure this!!!
     fromNum.setFixedLen(0); // Variable len (either 0 or 4)  FIXME consider changing protocol so it is fixed 4 byte len, where 0 means empty
     fromNum.setMaxLen(4);
-    fromNum.setCccdWriteCallback(onCCCD); // Optionally capture CCCD updates
+    fromNum.setCccdWriteCallback(onCccd); // Optionally capture CCCD updates
     // We don't yet need to hook the fromNum auth callback
     // fromNum.setReadAuthorizeCallback(fromNumAuthorizeCb);
     fromNum.write32(0); // Provide default fromNum of 0
     fromNum.begin();
 
     fromRadio.setProperties(CHR_PROPS_READ);
-    // fromRadio.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS); // FIXME secure this!
+    fromRadio.setPermission(secMode, SECMODE_NO_ACCESS); 
     fromRadio.setMaxLen(sizeof(fromRadioBytes));
-    fromRadio.setReadAuthorizeCallback(
-        onFromRadio,
-        false); // We don't call this callback via the adafruit queue, because we can safely run in the BLE context
+    fromRadio.setReadAuthorizeCallback(onFromRadioAuthorize, false); // We don't call this callback via the adafruit queue, because we can safely run in the BLE context
     fromRadio.setBuffer(fromRadioBytes, sizeof(fromRadioBytes)); // we preallocate our fromradio buffer so we won't waste space
     // for two copies
     fromRadio.begin();
 
     toRadio.setProperties(CHR_PROPS_WRITE);
-    // toRadio.setPermission(SECMODE_OPEN, SECMODE_OPEN); // FIXME secure this!
+    toRadio.setPermission(secMode, secMode); // FIXME secure this!
     toRadio.setFixedLen(0);
     toRadio.setMaxLen(512);
     toRadio.setBuffer(toRadioBytes, sizeof(toRadioBytes));
     // We don't call this callback via the adafruit queue, because we can safely run in the BLE context
-    toRadio.setWriteCallback(onToRadio, false); 
+    toRadio.setWriteCallback(onToRadioWrite, false); 
     toRadio.begin();
 }
 
@@ -209,12 +213,8 @@ void NRF52Bluetooth::shutdown()
 
 void NRF52Bluetooth::setup()
 {
-    // Uncomment for testing
-    // Bluefruit.Periph.clearBonds();
-    // Bluefruit.Central.clearBonds();
-
     // Initialise the Bluefruit module
-    DEBUG_MSG("Initialise the Bluefruit nRF52 module\n");
+    DEBUG_MSG("Initialize the Bluefruit nRF52 module\n");
     Bluefruit.autoConnLed(false);
     Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
     Bluefruit.begin();
@@ -240,7 +240,6 @@ void NRF52Bluetooth::setup()
         Bluefruit.Security.setIOCaps(false, false, false);
         meshBleService.setPermission(SECMODE_OPEN, SECMODE_OPEN);
     }
-
     // Set the advertised device name (keep it short!)
     Bluefruit.setName(getDeviceName());
 
@@ -271,6 +270,7 @@ void NRF52Bluetooth::setup()
         // Setup the advertising packet(s)
         DEBUG_MSG("Setting up the advertising payload(s)\n");
         startAdv();
+
         DEBUG_MSG("Advertising\n");
     }
 }
@@ -294,12 +294,7 @@ void NRF52Bluetooth::clearBonds()
 void NRF52Bluetooth::onConnectionSecured(uint16_t conn_handle)
 {
     DEBUG_MSG("BLE connection secured\n");
-    BLEConnection* connection = Bluefruit.Connection(conn_handle);
-
-    if (!connection->secured())
-    {
-        connection->requestPairing();
-    }
+    //bluetoothPhoneAPI->setInitialState();
 }
 
 bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passkey[6], bool match_request)
