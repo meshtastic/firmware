@@ -129,7 +129,7 @@ int32_t PositionModule::runOnce()
 
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();
-    if (lastGpsSend == 0 || now - lastGpsSend >= config.position.position_broadcast_secs * 1000
+    if (lastGpsSend == 0 || (now - lastGpsSend) >= (config.position.position_broadcast_secs * 1000)
             ? config.position.position_broadcast_secs * 1000
             : default_broadcast_interval_secs * 1000) {
 
