@@ -112,6 +112,13 @@ bool NodeDB::resetRadioConfig()
     // Update the global myRegion
     initRegion();
 
+    if (didFactoryReset) {
+        config.device.factory_reset = false;
+        DEBUG_MSG("Rebooting due to factory reset");
+        screen->startRebootScreen();
+        rebootAtMsec = millis() + (5 * 1000);
+    }
+
     return didFactoryReset;
 }
 
@@ -122,6 +129,7 @@ bool NodeDB::factoryReset()
     rmDir("/prefs");
     // second, install default state (this will deal with the duplicate mac address issue)
     installDefaultDeviceState();
+    installDefaultConfig();
     // third, write to disk
     saveToDisk();
 #ifdef ARCH_ESP32
