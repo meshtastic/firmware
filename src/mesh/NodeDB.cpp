@@ -159,7 +159,11 @@ void NodeDB::installDefaultConfig()
     // FIXME: Default to bluetooth capability of platform as default
     config.bluetooth.enabled = true;
     config.bluetooth.fixed_pin = defaultBLEPin;
-    bool hasScreen = screen_found || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER);
+#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER)
+    bool hasScreen = true;
+#else
+    bool hasScreen = screen_found;
+#endif
     config.bluetooth.mode = hasScreen ? Config_BluetoothConfig_PairingMode_RandomPin : Config_BluetoothConfig_PairingMode_FixedPin;
     // for backward compat, default position flags are ALT+MSL
     config.position.position_flags = (Config_PositionConfig_PositionFlags_POS_ALTITUDE | Config_PositionConfig_PositionFlags_POS_ALT_MSL);
