@@ -851,9 +851,11 @@ int readBit(const char *in, int bit_no) {
 int read8bitCode(const char *in, int len, int bit_no) {
   int bit_pos = bit_no & 0x07;
   int char_pos = bit_no >> 3;
+  len >>= 3;
   byte code = (((byte)in[char_pos]) << bit_pos);
-  if (bit_no + bit_pos < len) {
-    code |= ((byte)in[++char_pos]) >> (8 - bit_pos);
+  char_pos++;
+  if (char_pos < len) {
+    code |= ((byte)in[char_pos]) >> (8 - bit_pos);
   } else
     code |= (0xFF >> (8 - bit_pos));
   return code;
@@ -1033,31 +1035,37 @@ int decodeRepeat(const char *in, int len, char *out, int olen, int ol, int *bit_
   if (prev_lines) {
     int32_t dict_len = readCount(in, bit_no, len) + NICE_LEN;
     if (dict_len < NICE_LEN)
-      return ol;
+      return -1;
     int32_t dist = readCount(in, bit_no, len);
     if (dist < 0)
-      return ol;
+      return -1;
     int32_t ctx = readCount(in, bit_no, len);
     if (ctx < 0)
-      return ol;
+      return -1;
     struct us_lnk_lst *cur_line = prev_lines;
     const int left = olen - ol;
-    while (ctx--)
+    while (ctx-- && cur_line)
       cur_line = cur_line->previous;
+    if (cur_line == NULL)
+      return -1;
     if (left <= 0) return olen + 1;
+    if (dist >= strlen(cur_line->data))
+      return -1;
     memmove(out + ol, cur_line->data + dist, min_of(left, dict_len));
     if (left < dict_len) return olen + 1;
     ol += dict_len;
   } else {
     int32_t dict_len = readCount(in, bit_no, len) + NICE_LEN;
     if (dict_len < NICE_LEN)
-      return ol;
+      return -1;
     int32_t dist = readCount(in, bit_no, len) + NICE_LEN - 1;
     if (dist < NICE_LEN - 1)
-      return ol;
+      return -1;
     const int32_t left = olen - ol;
     //printf("Decode len: %d, dist: %d\n", dict_len - NICE_LEN, dist - NICE_LEN + 1);
     if (left <= 0) return olen + 1;
+    if (ol - dist < 0)
+      return -1;
     memmove(out + ol, out + ol - dist, min_of(left, dict_len));
     if (left < dict_len) return olen + 1;
     ol += dict_len;
@@ -1119,7 +1127,10 @@ int unishox2_decompress_lines(const char *in, int len, UNISHOX_API_OUT_AND_LEN(c
               continue;
             }
             if (h == USX_DICT) {
-              DEC_OUTPUT_CHARS(olen, ol = decodeRepeat(in, len, out, olen, ol, &bit_no, prev_lines));
+              int rpt_ret = decodeRepeat(in, len, out, olen, ol, &bit_no, prev_lines);
+              if (rpt_ret < 0)
+                return ol; // if we break here it will only break out of switch
+              DEC_OUTPUT_CHARS(olen, ol = rpt_ret);
               h = dstate;
               continue;
             }
@@ -1191,7 +1202,10 @@ int unishox2_decompress_lines(const char *in, int len, UNISHOX_API_OUT_AND_LEN(c
          }
       } else
       if (h == USX_DICT) {
-        DEC_OUTPUT_CHARS(olen, ol = decodeRepeat(in, len, out, olen, ol, &bit_no, prev_lines));
+        int rpt_ret = decodeRepeat(in, len, out, olen, ol, &bit_no, prev_lines);
+        if (rpt_ret < 0)
+          break;
+        DEC_OUTPUT_CHARS(olen, ol = rpt_ret);
         continue;
       } else
       if (h == USX_DELTA) {
@@ -1208,12 +1222,21 @@ int unishox2_decompress_lines(const char *in, int len, UNISHOX_API_OUT_AND_LEN(c
         }
         if (h == USX_NUM && v == 0) {
           int idx = getStepCodeIdx(in, len, &bit_no, 5);
+          if (idx == 99)
+            break;
           if (idx == 0) {
             idx = getStepCodeIdx(in, len, &bit_no, 4);
+            if (idx >= 5)
+              break;
             int32_t rem = readCount(in, &bit_no, len);
             if (rem < 0)
               break;
-            rem = (int)strlen(usx_templates[idx]) - rem;
+            if (usx_templates[idx] == NULL)
+              break;
+            size_t tlen = strlen(usx_templates[idx]);
+            if (rem > tlen)
+              break;
+            rem = tlen - rem;
             int eof = 0;
             for (int j = 0; j < rem; j++) {
               char c_t = usx_templates[idx][j];
