@@ -29,7 +29,7 @@ void setBluetoothEnable(bool on) {
         }
         if (on && !nimbleBluetooth->isActive()) {
             nimbleBluetooth->setup();
-        } else {
+        } else if (!on) {
             nimbleBluetooth->shutdown();
         }
     }
