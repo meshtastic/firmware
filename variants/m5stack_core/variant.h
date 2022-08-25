@@ -39,5 +39,4 @@
 #define SCREEN_ROTATE
 
 // LCD screens are slow, so slowdown the wipe so it looks better
-#define SCREEN_TRANSITION_MSECS 1
 #define SCREEN_TRANSITION_FRAMERATE 1 // fps

@@ -126,7 +126,6 @@ static const uint8_t AREF = PIN_AREF;
 #define SCREEN_MIRROR
 
 // LCD screens are slow, so slowdown the wipe so it looks better
-#define SCREEN_TRANSITION_MSECS 1000
 #define SCREEN_TRANSITION_FRAMERATE 10 // fps
 
 /*

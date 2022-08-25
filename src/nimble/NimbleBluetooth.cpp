@@ -122,8 +122,7 @@ void NimbleBluetooth::shutdown()
 
 bool NimbleBluetooth::isActive()
 {
-    NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
-    return bleServer && (bleServer->getConnectedCount() > 0 || pAdvertising->isAdvertising());
+    return bleServer;
 }
 
 void NimbleBluetooth::setup()
