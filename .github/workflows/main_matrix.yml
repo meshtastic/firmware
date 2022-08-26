@@ -36,7 +36,8 @@ jobs:
           - board: meshtastic-diy-v1
           - board: rak4631
           - board: rak4631_eink
-          - board: t-echo
+          - board: t-echo-sx1262
+          - board: t-echo-sx1268
           - board: nano-g1
           - board: station-g1
           - board: m5stack-core
@@ -168,7 +169,8 @@ jobs:
         include:
           - board: rak4631
           - board: rak4631_eink
-          - board: t-echo
+          - board: t-echo-sx1262
+          - board: t-echo-sx1268
           - board: pca10059_diy_eink
 
     runs-on: ubuntu-latest
