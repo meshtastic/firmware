@@ -162,6 +162,7 @@ void NodeDB::installDefaultConfig()
 
     config.lora.region = Config_LoRaConfig_RegionCode_Unset;
     config.lora.modem_preset = Config_LoRaConfig_ModemPreset_LongFast;
+    config.lora.hop_limit = HOP_RELIABLE;
     resetRadioConfig();
     strncpy(config.device.ntp_server, "0.pool.ntp.org", 32);
     // FIXME: Default to bluetooth capability of platform as default
