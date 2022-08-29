@@ -22,7 +22,6 @@ static BLEDfu bledfu; // DFU software update helper service
 static uint8_t fromRadioBytes[FromRadio_size];
 static uint8_t toRadioBytes[ToRadio_size];
 
-static bool bleConnected;
 static uint16_t connectionHandle;
 
 class BluetoothPhoneAPI : public PhoneAPI
@@ -51,12 +50,12 @@ void onConnect(uint16_t conn_handle)
 {
     // Get the reference to current connection
     BLEConnection *connection = Bluefruit.Connection(conn_handle);
+    connectionHandle = conn_handle;
 
     char central_name[32] = {0};
     connection->getPeerName(central_name, sizeof(central_name));
 
     DEBUG_MSG("BLE Connected to %s\n", central_name);
-    bleConnected = true;
 }
 
 /**
@@ -67,8 +66,6 @@ void onConnect(uint16_t conn_handle)
 void onDisconnect(uint16_t conn_handle, uint8_t reason)
 {
     // FIXME - we currently assume only one active connection
-    bleConnected = false;
-
     DEBUG_MSG("BLE Disconnected, reason = 0x%x\n", reason);
 }
 
@@ -294,7 +291,6 @@ void NRF52Bluetooth::clearBonds()
 void NRF52Bluetooth::onConnectionSecured(uint16_t conn_handle)
 {
     DEBUG_MSG("BLE connection secured\n");
-    //bluetoothPhoneAPI->setInitialState();
 }
 
 bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passkey[6], bool match_request)
