@@ -84,10 +84,10 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
             case ToRadio_want_config_id_tag:
                 config_nonce = toRadioScratch.want_config_id;
                 DEBUG_MSG("Client wants config, nonce=%u\n", config_nonce);
-
                 handleStartConfig();
                 break;
             case ToRadio_disconnect_tag:
+                DEBUG_MSG("Disconnecting from phone\n");
                 close();
                 break;
         default:
@@ -116,9 +116,8 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
  */
 size_t PhoneAPI::getFromRadio(uint8_t *buf)
 {
-    DEBUG_MSG("getFromRadio, state=%d\n", state);
     if (!available()) {
-        // DEBUG_MSG("PhoneAPI::getFromRadio, !available\n");
+        DEBUG_MSG("getFromRadio=not available\n");
         return 0;
     }
     // In case we send a FromRadio packet
@@ -127,9 +126,11 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     // Advance states as needed
     switch (state) {
     case STATE_SEND_NOTHING:
+        DEBUG_MSG("getFromRadio=STATE_SEND_NOTHING\n");
         break;
-
+        
     case STATE_SEND_MY_INFO:
+        DEBUG_MSG("getFromRadio=STATE_SEND_MY_INFO\n");
         // If the user has specified they don't want our node to share its location, make sure to tell the phone
         // app not to send locations on our behalf.
         myNodeInfo.has_gps = gps && gps->isConnected(); // Update with latest GPS connect info
@@ -141,6 +142,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         break;
 
     case STATE_SEND_NODEINFO: {
+        DEBUG_MSG("getFromRadio=STATE_SEND_NODEINFO\n");
         const NodeInfo *info = nodeInfoForPhone;
         nodeInfoForPhone = NULL; // We just consumed a nodeinfo, will need a new one next time
 
@@ -160,6 +162,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     }
 
     case STATE_SEND_CONFIG:
+        DEBUG_MSG("getFromRadio=STATE_SEND_CONFIG\n");
         fromRadioScratch.which_payloadVariant = FromRadio_config_tag;
         switch (config_state) {
             case Config_device_tag:
@@ -205,6 +208,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         break;
 
     case STATE_SEND_MODULECONFIG:
+        DEBUG_MSG("getFromRadio=STATE_SEND_MODULECONFIG\n");
         fromRadioScratch.which_payloadVariant = FromRadio_moduleConfig_tag;
         switch (config_state) {
             case ModuleConfig_mqtt_tag:
@@ -242,6 +246,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         break;
 
     case STATE_SEND_COMPLETE_ID:
+        DEBUG_MSG("getFromRadio=STATE_SEND_COMPLETE_ID\n");
         fromRadioScratch.which_payloadVariant = FromRadio_config_complete_id_tag;
         fromRadioScratch.config_complete_id = config_nonce;
         config_nonce = 0;
@@ -250,6 +255,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
     case STATE_SEND_PACKETS:
         // Do we have a message from the mesh?
+        DEBUG_MSG("getFromRadio=STATE_SEND_PACKETS\n");
         if (packetForPhone) {
             printPacket("phone downloaded packet", packetForPhone);
 
@@ -310,11 +316,10 @@ bool PhoneAPI::available()
         case STATE_SEND_COMPLETE_ID:
             return true;
         case STATE_SEND_PACKETS: {
-            // Try to pull a new packet from the service (if we haven't already)
             if (!packetForPhone)
                 packetForPhone = service.getForPhone();
             bool hasPacket = !!packetForPhone;
-            // DEBUG_MSG("available hasPacket=%d\n", hasPacket);
+            DEBUG_MSG("available hasPacket=%d\n", hasPacket);
             return hasPacket;
     }
     default:
