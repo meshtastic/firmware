@@ -289,7 +289,14 @@ String MQTT::downstreamPacketToJson(MeshPacket *mp)
             memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &Telemetry_msg, &scratch)) {
                 decoded = &scratch;
-                if (decoded->which_variant == Telemetry_environment_metrics_tag) {
+                if (decoded->which_variant == Telemetry_device_metrics_tag) {
+                    msgPayload = Json::object{
+                        {"battery_level", decoded->variant.device_metrics.battery_level},
+                        {"voltage", decoded->variant.device_metrics.voltage},
+                        {"channel_utilization", decoded->variant.device_metrics.channel_utilization},
+                        {"air_util_tx", decoded->variant.device_metrics.air_util_tx},
+                    };
+                } else if (decoded->which_variant == Telemetry_environment_metrics_tag) {
                     msgPayload = Json::object{
                         {"temperature", decoded->variant.environment_metrics.temperature},
                         {"relative_humidity", decoded->variant.environment_metrics.relative_humidity},
@@ -331,7 +338,11 @@ String MQTT::downstreamPacketToJson(MeshPacket *mp)
             if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &Position_msg, &scratch)) {
                 decoded = &scratch;
                 msgPayload = Json::object{
-                    {"latitude_i", decoded->latitude_i}, {"longitude_i", decoded->longitude_i}, {"altitude", decoded->altitude}};
+                    {"time", decoded->time},
+                    {"pos_timestamp", decoded->pos_timestamp},
+                    {"latitude_i", decoded->latitude_i}, 
+                    {"longitude_i", decoded->longitude_i}, 
+                    {"altitude", decoded->altitude}};
             } else {
                 DEBUG_MSG("Error decoding protobuf for position message!\n");
             }
