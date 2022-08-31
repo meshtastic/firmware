@@ -14,6 +14,7 @@
 // not found then probe for SX1262
 #define USE_RF95
 #define USE_SX1262
+#define USE_SX1268
 
 #define LORA_DIO0 26 // a No connect on the SX1262 module
 #define LORA_RESET 23

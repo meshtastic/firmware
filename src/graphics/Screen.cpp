@@ -120,9 +120,6 @@ static uint16_t displayWidth, displayHeight;
 
 #define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
 
-#ifndef SCREEN_TRANSITION_MSECS
-#define SCREEN_TRANSITION_MSECS 300
-#endif
 
 /**
  * Draw the icon with extra info printed around the corners
@@ -910,7 +907,7 @@ void Screen::setup()
     displayWidth = dispdev.width();
     displayHeight = dispdev.height();
 
-    ui.setTimePerTransition(SCREEN_TRANSITION_MSECS);
+    ui.setTimePerTransition(0);
 
     ui.setIndicatorPosition(BOTTOM);
     // Defines where the first frame is located in the bar.
@@ -1076,10 +1073,6 @@ int32_t Screen::runOnce()
         // oldFrameState = ui.getUiState()->frameState;
         DEBUG_MSG("Setting idle framerate\n");
         targetFramerate = IDLE_FRAMERATE;
-
-#ifdef ARCH_ESP32
-        setCPUFast(false); // Turn up the CPU to improve screen animations
-#endif
 
         ui.setTargetFPS(targetFramerate);
         forceDisplay();
@@ -1320,10 +1313,6 @@ void Screen::setFastFramerate()
 
     // We are about to start a transition so speed up fps
     targetFramerate = SCREEN_TRANSITION_FRAMERATE;
-
-#ifdef ARCH_ESP32
-    setCPUFast(true); // Turn up the CPU to improve screen animations
-#endif
 
     ui.setTargetFPS(targetFramerate);
     setInterval(0); // redraw ASAP

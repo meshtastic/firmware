@@ -112,6 +112,13 @@ bool NodeDB::resetRadioConfig()
     // Update the global myRegion
     initRegion();
 
+    if (didFactoryReset) {
+        config.device.factory_reset = false;
+        DEBUG_MSG("Rebooting due to factory reset");
+        screen->startRebootScreen();
+        rebootAtMsec = millis() + (5 * 1000);
+    }
+
     return didFactoryReset;
 }
 
@@ -122,6 +129,7 @@ bool NodeDB::factoryReset()
     rmDir("/prefs");
     // second, install default state (this will deal with the duplicate mac address issue)
     installDefaultDeviceState();
+    installDefaultConfig();
     // third, write to disk
     saveToDisk();
 #ifdef ARCH_ESP32
@@ -159,7 +167,12 @@ void NodeDB::installDefaultConfig()
     // FIXME: Default to bluetooth capability of platform as default
     config.bluetooth.enabled = true;
     config.bluetooth.fixed_pin = defaultBLEPin;
-    config.bluetooth.mode = screen_found ? Config_BluetoothConfig_PairingMode_RandomPin : Config_BluetoothConfig_PairingMode_FixedPin;
+#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER)
+    bool hasScreen = true;
+#else
+    bool hasScreen = screen_found;
+#endif
+    config.bluetooth.mode = hasScreen ? Config_BluetoothConfig_PairingMode_RandomPin : Config_BluetoothConfig_PairingMode_FixedPin;
     // for backward compat, default position flags are ALT+MSL
     config.position.position_flags = (Config_PositionConfig_PositionFlags_POS_ALTITUDE | Config_PositionConfig_PositionFlags_POS_ALT_MSL);
 }

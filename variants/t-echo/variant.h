@@ -124,6 +124,7 @@ External serial flash WP25R1635FZUIL0
  */
 
 #define USE_SX1262
+#define USE_SX1268
 #define SX126X_CS (0 + 24) // FIXME - we really should define LORA_CS instead
 #define SX126X_DIO1 (0 + 20)
 // Note DIO2 is attached internally to the module to an analog switch for TX/RX switching
@@ -157,9 +158,6 @@ External serial flash WP25R1635FZUIL0
 #define PIN_EINK_PWR_ON (0 + 12)
 
 #define USE_EINK
-
-// No screen wipes on eink
-#define SCREEN_TRANSITION_MSECS 0
 
 #define PIN_SPI1_MISO                                                                                                            \
     (32 + 7) // FIXME not really needed, but for now the SPI code requires something to be defined, pick an used GPIO
