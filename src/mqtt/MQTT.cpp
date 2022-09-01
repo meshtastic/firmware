@@ -291,7 +291,7 @@ String MQTT::downstreamPacketToJson(MeshPacket *mp)
                 decoded = &scratch;
                 if (decoded->which_variant == Telemetry_device_metrics_tag) {
                     msgPayload = Json::object{
-                        {"battery_level", decoded->variant.device_metrics.battery_level},
+                        {"battery_level", (int)decoded->variant.device_metrics.battery_level},
                         {"voltage", decoded->variant.device_metrics.voltage},
                         {"channel_utilization", decoded->variant.device_metrics.channel_utilization},
                         {"air_util_tx", decoded->variant.device_metrics.air_util_tx},
@@ -337,12 +337,36 @@ String MQTT::downstreamPacketToJson(MeshPacket *mp)
             memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &Position_msg, &scratch)) {
                 decoded = &scratch;
-                msgPayload = Json::object{
-                    {"time", decoded->time},
-                    {"pos_timestamp", decoded->pos_timestamp},
+                msgPayload = Json::object{{"time", (int)decoded->time},
+                    {"pos_timestamp", (int)decoded->pos_timestamp},
                     {"latitude_i", decoded->latitude_i}, 
                     {"longitude_i", decoded->longitude_i}, 
-                    {"altitude", decoded->altitude}};
+                    {"altitude", decoded->altitude}
+                };
+            } else {
+                DEBUG_MSG("Error decoding protobuf for position message!\n");
+            }
+        };
+        break;
+    }
+
+    case PortNum_WAYPOINT_APP: {
+        msgType = "position";
+        Waypoint scratch;
+        Waypoint *decoded = NULL;
+        if (mp->which_payloadVariant == MeshPacket_decoded_tag) {
+            memset(&scratch, 0, sizeof(scratch));
+            if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &Waypoint_msg, &scratch)) {
+                decoded = &scratch;
+                msgPayload = Json::object{
+                    {"id", (int)decoded->id},
+                    {"name", decoded->name},
+                    {"description", decoded->description},
+                    {"expire", (int)decoded->expire},
+                    {"locked", decoded->locked},
+                    {"latitude_i", decoded->latitude_i}, 
+                    {"longitude_i", decoded->longitude_i}, 
+                };
             } else {
                 DEBUG_MSG("Error decoding protobuf for position message!\n");
             }
@@ -362,7 +386,8 @@ String MQTT::downstreamPacketToJson(MeshPacket *mp)
                                 {"channel", Json((int)mp->channel)},
                                 {"type", msgType.c_str()},
                                 {"sender", owner.id},
-                                {"payload", msgPayload}};
+                                {"payload", msgPayload}
+                                };
 
     // serialize and return it
     static std::string jsonStr = jsonObj.dump();
