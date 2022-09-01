@@ -53,9 +53,9 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
                     //     p->decoded.payload.size = jsonPayloadStr.length();
                     //     MeshPacket *packet = packetPool.allocCopy(*p);
                     //     service.sendToMesh(packet, RX_SRC_LOCAL);
-                    } else {
-                        DEBUG_MSG("Received MQTT json payload too long, dropping\n");
-                    }
+                    // } else {
+                    //     DEBUG_MSG("Received MQTT json payload too long, dropping\n");
+                    // }
                 } else {
                     DEBUG_MSG("Ignoring downlink message we originally sent.\n");
                 }
