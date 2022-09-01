@@ -44,14 +44,15 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
                 if (json["sender"].string_value().compare(owner.id) != 0) {
                     std::string jsonPayloadStr = json["payload"].dump();
                     DEBUG_MSG("Received json payload %s, length %u\n", jsonPayloadStr.c_str(), jsonPayloadStr.length());
+                    // FIXME Not sure we need to be doing this
                     // construct protobuf data packet using TEXT_MESSAGE, send it to the mesh
-                    MeshPacket *p = router->allocForSending();
-                    p->decoded.portnum = PortNum_TEXT_MESSAGE_APP;
-                    if (jsonPayloadStr.length() <= sizeof(p->decoded.payload.bytes)) {
-                        memcpy(p->decoded.payload.bytes, jsonPayloadStr.c_str(), jsonPayloadStr.length());
-                        p->decoded.payload.size = jsonPayloadStr.length();
-                        MeshPacket *packet = packetPool.allocCopy(*p);
-                        service.sendToMesh(packet, RX_SRC_LOCAL);
+                    // MeshPacket *p = router->allocForSending();
+                    // p->decoded.portnum = PortNum_TEXT_MESSAGE_APP;
+                    // if (jsonPayloadStr.length() <= sizeof(p->decoded.payload.bytes)) {
+                    //     memcpy(p->decoded.payload.bytes, jsonPayloadStr.c_str(), jsonPayloadStr.length());
+                    //     p->decoded.payload.size = jsonPayloadStr.length();
+                    //     MeshPacket *packet = packetPool.allocCopy(*p);
+                    //     service.sendToMesh(packet, RX_SRC_LOCAL);
                     } else {
                         DEBUG_MSG("Received MQTT json payload too long, dropping\n");
                     }
@@ -319,10 +320,12 @@ String MQTT::downstreamPacketToJson(MeshPacket *mp)
             memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &User_msg, &scratch)) {
                 decoded = &scratch;
-                msgPayload = Json::object{{"id", decoded->id},
-                                          {"longname", decoded->long_name},
-                                          {"shortname", decoded->short_name},
-                                          {"hardware", decoded->hw_model}};
+                msgPayload = Json::object{
+                    {"id", decoded->id},
+                    {"longname", decoded->long_name},
+                    {"shortname", decoded->short_name},
+                    {"hardware", decoded->hw_model}
+                };
 
             } else
                 DEBUG_MSG("Error decoding protobuf for nodeinfo message!\n");
@@ -337,7 +340,8 @@ String MQTT::downstreamPacketToJson(MeshPacket *mp)
             memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &Position_msg, &scratch)) {
                 decoded = &scratch;
-                msgPayload = Json::object{{"time", (int)decoded->time},
+                msgPayload = Json::object{
+                    {"time", (int)decoded->time},
                     {"pos_timestamp", (int)decoded->pos_timestamp},
                     {"latitude_i", decoded->latitude_i}, 
                     {"longitude_i", decoded->longitude_i}, 
@@ -379,15 +383,16 @@ String MQTT::downstreamPacketToJson(MeshPacket *mp)
     }
 
     // assemble the final jsonObj
-    Json jsonObj = Json::object{{"id", Json((int)mp->id)},
-                                {"timestamp", Json((int)mp->rx_time)},
-                                {"to", Json((int)mp->to)},
-                                {"from", Json((int)mp->from)},
-                                {"channel", Json((int)mp->channel)},
-                                {"type", msgType.c_str()},
-                                {"sender", owner.id},
-                                {"payload", msgPayload}
-                                };
+    Json jsonObj = Json::object{
+        {"id", Json((int)mp->id)},
+        {"timestamp", Json((int)mp->rx_time)},
+        {"to", Json((int)mp->to)},
+        {"from", Json((int)mp->from)},
+        {"channel", Json((int)mp->channel)},
+        {"type", msgType.c_str()},
+        {"sender", owner.id},
+        {"payload", msgPayload}
+    };
 
     // serialize and return it
     static std::string jsonStr = jsonObj.dump();
