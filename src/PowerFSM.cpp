@@ -240,7 +240,7 @@ Fsm powerFSM(&stateBOOT);
 void PowerFSM_setup()
 {
     bool isRouter = (config.device.role == Config_DeviceConfig_Role_Router ? 1 : 0);
-    uint32_t screenOnSecs = config.display.screen_on_secs ? config.display.screen_on_secs : default_screen_on_secs;
+    uint32_t screenOnSecs = config.display.screen_on_secs ? (config.display.screen_on_secs * 1000) : default_screen_on_secs;
     bool hasPower = isPowered();
 
     DEBUG_MSG("PowerFSM init, USB power=%d\n", hasPower);
