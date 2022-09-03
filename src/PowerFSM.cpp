@@ -51,7 +51,7 @@ static uint32_t secsSlept;
 
 static void lsEnter()
 {
-    DEBUG_MSG("lsEnter begin, ls_secs=%u\n", getConfiguredOrDefaultMs(config.power.ls_secs, default_ls_secs));
+    DEBUG_MSG("lsEnter begin, ls_secs=%u\n", config.power.ls_secs > 0 ? config.power.ls_secs : default_ls_secs));
     screen->setOn(false);
     secsSlept = 0; // How long have we been sleeping this time
 
