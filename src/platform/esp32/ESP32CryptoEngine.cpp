@@ -1,16 +1,16 @@
 #include "CryptoEngine.h"
 #include "configuration.h"
 
+#if CONFIG_IDF_TARGET_ESP32S3
+#include "mbedtls/aes.h"
+#else
 #include "crypto/includes.h"
-
 #include "crypto/common.h"
-
 // #include "esp_system.h"
-
 #include "crypto/aes.h"
 #include "crypto/aes_wrap.h"
 #include "mbedtls/aes.h"
-
+#endif
 
 
 class ESP32CryptoEngine : public CryptoEngine
