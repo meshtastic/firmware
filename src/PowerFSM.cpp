@@ -51,8 +51,7 @@ static uint32_t secsSlept;
 
 static void lsEnter()
 {
-    DEBUG_MSG("lsEnter begin, ls_secs=%u\n",
-              config.power.ls_secs ? config.power.ls_secs : default_ls_secs);
+    DEBUG_MSG("lsEnter begin, ls_secs=%u\n", getConfiguredOrDefaultMs(config.power.ls_secs, default_ls_secs));
     screen->setOn(false);
     secsSlept = 0; // How long have we been sleeping this time
 
@@ -66,7 +65,7 @@ static void lsIdle()
 #ifdef ARCH_ESP32
 
     // Do we have more sleeping to do?
-    if (secsSlept < config.power.ls_secs ? config.power.ls_secs : default_ls_secs * 1000) {
+    if (secsSlept < config.power.ls_secs ? config.power.ls_secs : default_ls_secs) {
         // Briefly come out of sleep long enough to blink the led once every few seconds
         uint32_t sleepTime = 30;
 
@@ -200,8 +199,7 @@ static void onEnter()
 
     uint32_t now = millis();
 
-    if (now - lastPingMs >
-        30 * 1000) { // if more than a minute since our last press, ask node we are looking at to update their state
+    if ((now - lastPingMs) > 30 * 1000) { // if more than a minute since our last press, ask node we are looking at to update their state
         if (displayedNodeNum)
             service.sendNetworkPing(displayedNodeNum, true); // Refresh the currently displayed node
         lastPingMs = now;
@@ -240,7 +238,6 @@ Fsm powerFSM(&stateBOOT);
 void PowerFSM_setup()
 {
     bool isRouter = (config.device.role == Config_DeviceConfig_Role_Router ? 1 : 0);
-    uint32_t screenOnSecs = config.display.screen_on_secs ? (config.display.screen_on_secs * 1000) : default_screen_on_secs;
     bool hasPower = isPowered();
 
     DEBUG_MSG("PowerFSM init, USB power=%d\n", hasPower);
@@ -332,7 +329,7 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_FIRMWARE_UPDATE, NULL, "Got firmware update");
     powerFSM.add_transition(&stateON, &stateON, EVENT_FIRMWARE_UPDATE, NULL, "Got firmware update");
 
-    powerFSM.add_timed_transition(&stateON, &stateDARK, screenOnSecs, NULL, "Screen-on timeout");
+    powerFSM.add_timed_transition(&stateON, &stateDARK, getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL, "Screen-on timeout");
 
     // On most boards we use light-sleep to be our main state, but on NRF52 we just stay in DARK
     State *lowPowerState = &stateLS;
@@ -344,11 +341,8 @@ void PowerFSM_setup()
 
     // See: https://github.com/meshtastic/Meshtastic-device/issues/1071
     if (isRouter || config.power.is_power_saving) {
-        uint32_t minWakeSecs = config.power.min_wake_secs ? config.power.min_wake_secs : default_min_wake_secs * 1000;
-        uint32_t waitBluetoothSecs = config.power.wait_bluetooth_secs ? config.power.wait_bluetooth_secs : default_wait_bluetooth_secs * 1000;
-
-        powerFSM.add_timed_transition(&stateNB, &stateLS, minWakeSecs, NULL, "Min wake timeout");
-        powerFSM.add_timed_transition(&stateDARK, &stateLS, waitBluetoothSecs, NULL, "Bluetooth timeout");
+        powerFSM.add_timed_transition(&stateNB, &stateLS, getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs), NULL, "Min wake timeout");
+        powerFSM.add_timed_transition(&stateDARK, &stateLS, getConfiguredOrDefaultMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs), NULL, "Bluetooth timeout");
         meshSds = config.power.mesh_sds_timeout_secs ? config.power.mesh_sds_timeout_secs : default_mesh_sds_timeout_secs;
 
     } else {
