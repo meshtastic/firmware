@@ -76,6 +76,7 @@ typedef struct _ModuleConfig_MQTTConfig {
     char username[32];
     char password[32];
     bool encryption_enabled;
+    bool json_enabled;
 } ModuleConfig_MQTTConfig;
 
 typedef struct _ModuleConfig_RangeTestConfig { 
@@ -152,7 +153,7 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define ModuleConfig_init_default                {0, {ModuleConfig_MQTTConfig_init_default}}
-#define ModuleConfig_MQTTConfig_init_default     {0, "", "", "", 0}
+#define ModuleConfig_MQTTConfig_init_default     {0, "", "", "", 0, 0}
 #define ModuleConfig_SerialConfig_init_default   {0, 0, 0, 0, _ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _ModuleConfig_SerialConfig_Serial_Mode_MIN}
 #define ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0}
 #define ModuleConfig_StoreForwardConfig_init_default {0, 0, 0, 0, 0}
@@ -160,7 +161,7 @@ extern "C" {
 #define ModuleConfig_TelemetryConfig_init_default {0, 0, 0, 0, 0}
 #define ModuleConfig_CannedMessageConfig_init_default {0, 0, 0, 0, _ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define ModuleConfig_init_zero                   {0, {ModuleConfig_MQTTConfig_init_zero}}
-#define ModuleConfig_MQTTConfig_init_zero        {0, "", "", "", 0}
+#define ModuleConfig_MQTTConfig_init_zero        {0, "", "", "", 0, 0}
 #define ModuleConfig_SerialConfig_init_zero      {0, 0, 0, 0, _ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _ModuleConfig_SerialConfig_Serial_Mode_MIN}
 #define ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0}
 #define ModuleConfig_StoreForwardConfig_init_zero {0, 0, 0, 0, 0}
@@ -191,6 +192,7 @@ extern "C" {
 #define ModuleConfig_MQTTConfig_username_tag     3
 #define ModuleConfig_MQTTConfig_password_tag     4
 #define ModuleConfig_MQTTConfig_encryption_enabled_tag 5
+#define ModuleConfig_MQTTConfig_json_enabled_tag 6
 #define ModuleConfig_RangeTestConfig_enabled_tag 1
 #define ModuleConfig_RangeTestConfig_sender_tag  2
 #define ModuleConfig_RangeTestConfig_save_tag    3
@@ -243,7 +245,8 @@ X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
 X(a, STATIC,   SINGULAR, STRING,   address,           2) \
 X(a, STATIC,   SINGULAR, STRING,   username,          3) \
 X(a, STATIC,   SINGULAR, STRING,   password,          4) \
-X(a, STATIC,   SINGULAR, BOOL,     encryption_enabled,   5)
+X(a, STATIC,   SINGULAR, BOOL,     encryption_enabled,   5) \
+X(a, STATIC,   SINGULAR, BOOL,     json_enabled,      6)
 #define ModuleConfig_MQTTConfig_CALLBACK NULL
 #define ModuleConfig_MQTTConfig_DEFAULT NULL
 
@@ -330,12 +333,12 @@ extern const pb_msgdesc_t ModuleConfig_CannedMessageConfig_msg;
 /* Maximum encoded size of messages (where known) */
 #define ModuleConfig_CannedMessageConfig_size    49
 #define ModuleConfig_ExternalNotificationConfig_size 20
-#define ModuleConfig_MQTTConfig_size             103
+#define ModuleConfig_MQTTConfig_size             105
 #define ModuleConfig_RangeTestConfig_size        10
 #define ModuleConfig_SerialConfig_size           26
 #define ModuleConfig_StoreForwardConfig_size     22
 #define ModuleConfig_TelemetryConfig_size        18
-#define ModuleConfig_size                        105
+#define ModuleConfig_size                        107
 
 #ifdef __cplusplus
 } /* extern "C" */
