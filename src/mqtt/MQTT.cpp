@@ -27,7 +27,7 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
 {
     // parsing ServiceEnvelope
     ServiceEnvelope e = ServiceEnvelope_init_default;
-    if (!pb_decode_from_bytes(payload, length, ServiceEnvelope_fields, &e)) {
+    if (moduleConfig.mqtt.json_enabled && !pb_decode_from_bytes(payload, length, ServiceEnvelope_fields, &e)) {
 
         // check if this is a json payload message
         using namespace json11;
@@ -238,13 +238,15 @@ void MQTT::onSend(const MeshPacket &mp, ChannelIndex chIndex)
 
         pubSub.publish(topic.c_str(), bytes, numBytes, false);
 
-        // handle json topic
-        using namespace json11;
-        auto jsonString = this->downstreamPacketToJson((MeshPacket *)&mp);
-        if (jsonString.length() != 0) {
-            String topicJson = jsonTopic + channelId + "/" + owner.id;
-            DEBUG_MSG("publish json message to %s, %u bytes: %s\n", topicJson.c_str(), jsonString.length(), jsonString.c_str());
-            pubSub.publish(topicJson.c_str(), jsonString.c_str(), false);
+        if (moduleConfig.mqtt.json_enabled) {
+            // handle json topic
+            using namespace json11;
+            auto jsonString = this->downstreamPacketToJson((MeshPacket *)&mp);
+            if (jsonString.length() != 0) {
+                String topicJson = jsonTopic + channelId + "/" + owner.id;
+                DEBUG_MSG("publish json message to %s, %u bytes: %s\n", topicJson.c_str(), jsonString.length(), jsonString.c_str());
+                pubSub.publish(topicJson.c_str(), jsonString.c_str(), false);
+            }
         }
     }
 }
