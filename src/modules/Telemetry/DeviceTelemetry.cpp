@@ -21,7 +21,7 @@ int32_t DeviceTelemetryModule::runOnce()
     sendOurTelemetry();
     // OSThread library.  Multiply the preference value by 1000 to convert seconds to miliseconds
 
-    return getIntervalOrDefaultMs(moduleConfig.telemetry.device_update_interval);
+    return getConfiguredOrDefaultMs(moduleConfig.telemetry.device_update_interval);
 #endif
 }
 
