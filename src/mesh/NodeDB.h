@@ -179,12 +179,18 @@ extern NodeDB nodeDB;
 #define default_sds_secs 365 * 24 * 60 * 60
 #define default_ls_secs IF_ROUTER(24 * 60 * 60, 5 * 60)
 #define default_min_wake_secs 10
-#define default_screen_on_secs 60 * 1000 * 10
+#define default_screen_on_secs 60 * 10
 
-inline uint32_t getIntervalOrDefaultMs(uint32_t interval)
+inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval)
 {
-    if (interval > 0) return interval * 1000;
+    if (configuredInterval > 0) return configuredInterval * 1000;
     return default_broadcast_interval_secs * 1000;
+}
+
+inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t defaultInterval)
+{
+    if (configuredInterval > 0) return configuredInterval * 1000;
+    return defaultInterval * 1000;
 }
 
 /** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings
