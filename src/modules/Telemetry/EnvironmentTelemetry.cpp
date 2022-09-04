@@ -97,7 +97,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
             return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
         }
     }
-    return getIntervalOrDefaultMs(moduleConfig.telemetry.environment_update_interval);
+    return getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval);
 #endif
 }
 
