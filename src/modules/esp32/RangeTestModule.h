@@ -30,7 +30,7 @@ class RangeTestModuleRadio : public SinglePortModule
   public:
     RangeTestModuleRadio() : SinglePortModule("RangeTestModuleRadio", PortNum_TEXT_MESSAGE_APP)
     {
-        loopbackOk = true; // Allow locally generated messages to loop back to the client
+        // loopbackOk = true; // Allow locally generated messages to loop back to the client
     }
 
     /**
