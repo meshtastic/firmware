@@ -44,8 +44,8 @@
     #define HW_VENDOR HardwareModel_TBEAM
 #elif defined(TBEAM_V07)
     #define HW_VENDOR HardwareModel_TBEAM0p7
-#elif defined(TBEAM_S3_M2)
-    #define HW_VENDOR HardwareModel_TBEAM_S3_M2
+#elif defined(LILYGO_TBEAM_S3_CORE)
+    #define HW_VENDOR HardwareModel_LILYGO_TBEAM_S3_CORE
 #elif defined(DIY_V1)
     #define HW_VENDOR HardwareModel_DIY_V1
 #elif defined(RAK_11200)

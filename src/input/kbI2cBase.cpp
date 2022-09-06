@@ -2,6 +2,8 @@
 #include "configuration.h"
 #include <Wire.h>
 
+extern uint8_t cardkb_found;
+
 KbI2cBase::KbI2cBase(const char *name) : concurrency::OSThread(name)
 {
     this->_originName = name;
@@ -9,6 +11,11 @@ KbI2cBase::KbI2cBase(const char *name) : concurrency::OSThread(name)
 
 int32_t KbI2cBase::runOnce()
 {
+    if (cardkb_found != CARDKB_ADDR){
+        // Input device is not detected.
+        return 500;
+    }
+
     InputEvent e;
     e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_KEY_NONE;
     e.source = this->_originName;

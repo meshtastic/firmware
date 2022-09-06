@@ -74,7 +74,7 @@ typedef enum _HardwareModel {
     /* B&Q Consulting Station Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:station */
     HardwareModel_STATION_G1 = 45, 
     /* TODO: REPLACE */
-    HardwareModel_TBEAM_S3_M2 = 46,
+    HardwareModel_LILYGO_TBEAM_S3_CORE = 46,
     /* Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits. */
     HardwareModel_PRIVATE_HW = 255 
 } HardwareModel;

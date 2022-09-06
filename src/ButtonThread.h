@@ -128,7 +128,7 @@ class ButtonThread : public concurrency::OSThread
 #endif
         // If user button is held down for 5 seconds, shutdown the device.
         if ((millis() - longPressTime > 5 * 1000) && (longPressTime > 0)) {
-#ifdef HAS_AXP192
+#if defined(HAS_AXP192) || defined(HAS_AXP2101)
             if (axp192_found == true) {
                 setLed(false);
                 power->shutdown();
