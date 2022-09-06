@@ -62,7 +62,7 @@ static int32_t reconnectWiFi()
     const char *wifiName = config.wifi.ssid;
     const char *wifiPsw = config.wifi.psk;
 
-    if (needReconnect && !WiFi.isConnected()) {
+    if (config.wifi.enabled && needReconnect && !WiFi.isConnected()) {
         // if (radioConfig.has_preferences && needReconnect && !WiFi.isConnected()) {
 
         if (!*wifiPsw) // Treat empty password as no password
@@ -184,7 +184,7 @@ bool initWifi(bool forceSoftAP)
 {
     forcedSoftAP = forceSoftAP;
 
-    if ((config.wifi.ssid[0]) || forceSoftAP) {
+    if (config.wifi.enabled && ((config.wifi.ssid[0]) || forceSoftAP)) {
         // if ((radioConfig.has_preferences && config.wifi.ssid[0]) || forceSoftAP) {
         const char *wifiName = config.wifi.ssid;
         const char *wifiPsw = config.wifi.psk;
