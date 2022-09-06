@@ -44,6 +44,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "mesh/http/WiFiAPClient.h"
 #endif
 
+#ifdef OLED_RU
+#include "fonts/OLEDDisplayFontsRU.h"
+#endif
+
 using namespace meshtastic; /** @todo remove */
 
 extern bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, void *dest_struct);
@@ -100,7 +104,11 @@ static uint16_t displayWidth, displayHeight;
 #define FONT_MEDIUM ArialMT_Plain_24
 #define FONT_LARGE ArialMT_Plain_24
 #else
+#ifdef OLED_RU
+#define FONT_SMALL ArialMT_Plain_10_RU
+#else
 #define FONT_SMALL ArialMT_Plain_10
+#endif
 #define FONT_MEDIUM ArialMT_Plain_16
 #define FONT_LARGE ArialMT_Plain_24
 #endif
