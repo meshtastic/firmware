@@ -212,7 +212,7 @@ class Screen : public concurrency::OSThread
         uint8_t last = LASTCHAR; // get last char
         LASTCHAR = ch;
 
-        switch (last) { // conversion depnding on first UTF8-character
+        switch (last) { // conversion depending on first UTF8-character
         case 0xC2: {
             SKIPREST = false;
             return (uint8_t)ch;
@@ -221,10 +221,23 @@ class Screen : public concurrency::OSThread
             SKIPREST = false;
             return (uint8_t)(ch | 0xC0);
         }
+        // map UTF-8 cyrillic chars to it Windows-1251 (CP-1251) ASCII codes
+        // note: in this case we must use compatible font - provided ArialMT_Plain_10/16/24 by 'ThingPulse/esp8266-oled-ssd1306' library
+        // have empty chars for non-latin ASCII symbols
+        case 0xD0: {
+            SKIPREST = false;
+            if (ch == 129) return (uint8_t)(168); // Ё
+            if (ch > 143 && ch < 192) return (uint8_t)(ch + 48);
+        }
+        case 0xD1: {
+            SKIPREST = false;
+            if (ch == 145) return (uint8_t)(184); // ё
+            if (ch > 127 && ch < 144) return (uint8_t)(ch + 112);
+        }
         }
 
         // We want to strip out prefix chars for two-byte char formats
-        if (ch == 0xC2 || ch == 0xC3 || ch == 0x82)
+        if (ch == 0xC2 || ch == 0xC3 || ch == 0x82 || ch == 0xD0 || ch == 0xD1)
             return (uint8_t)0;
 
         // If we already returned an unconvertable-character symbol for this unconvertable-character sequence, return NULs for the
