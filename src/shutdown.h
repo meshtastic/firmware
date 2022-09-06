@@ -35,7 +35,7 @@ void powerCommandsCheck()
 
     if (shutdownAtMsec && millis() > shutdownAtMsec) {
         DEBUG_MSG("Shutting down from admin command\n");
-#ifdef HAS_AXP192
+#if defined(HAS_AXP192) || defined(HAS_AXP2101)
         if (axp192_found == true) {
             playShutdownMelody();
             power->shutdown();

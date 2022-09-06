@@ -19,9 +19,9 @@
 esp_sleep_source_t wakeCause; // the reason we booted this time
 #endif
 
-#ifdef HAS_AXP192
-#include "axp20x.h"
-extern AXP20X_Class axp;
+#if defined(HAS_AXP192) || defined(HAS_AXP2101)
+#include "XPowersLibInterface.hpp"
+extern XPowersLibInterface *PMU;
 #endif
 
 /// Called to ask any observers if they want to veto sleep. Return 1 to veto or 0 to allow sleep to happen
@@ -78,10 +78,10 @@ void setLed(bool ledOn)
     digitalWrite(LED_PIN, ledOn ^ LED_INVERTED);
 #endif
 
-#ifdef HAS_AXP192
+#if defined(HAS_AXP192) || defined(HAS_AXP2101)
     if (axp192_found) {
         // blink the axp led
-        axp.setChgLEDMode(ledOn ? AXP20X_LED_LOW_LEVEL : AXP20X_LED_OFF);
+        PMU->setChargingLedMode(ledOn ? XPOWERS_CHG_LED_ON : XPOWERS_CHG_LED_OFF);
     }
 #endif
 }
@@ -90,9 +90,14 @@ void setGPSPower(bool on)
 {
     DEBUG_MSG("Setting GPS power=%d\n", on);
 
-#ifdef HAS_AXP192
-    if (axp192_found)
-        axp.setPowerOutPut(AXP192_LDO3, on ? AXP202_ON : AXP202_OFF); // GPS main power
+#if defined(HAS_AXP192) || defined(HAS_AXP2101)
+    if (axp192_found){
+#ifdef LILYGO_TBEAM_S3_CORE
+        on ? PMU->enablePowerOutput(XPOWERS_ALDO4) : PMU->disablePowerOutput(XPOWERS_ALDO4);
+#else
+        on ? PMU->enablePowerOutput(XPOWERS_LDO3)  : PMU->disablePowerOutput(XPOWERS_LDO3);
+#endif /*LILYGO_TBEAM_S3_CORE*/
+    }
 #endif
 }
 
@@ -185,7 +190,7 @@ void doDeepSleep(uint64_t msecToWake)
     digitalWrite(VEXT_ENABLE, 1); // turn off the display power
 #endif
 
-#ifdef HAS_AXP192
+#if defined(HAS_AXP192) || defined(HAS_AXP2101)
     if (axp192_found) {
         // Obsolete comment: from back when we we used to receive lora packets while CPU was in deep sleep.
         // We no longer do that, because our light-sleep current draws are low enough and it provides fast start/low cost
@@ -198,7 +203,11 @@ void doDeepSleep(uint64_t msecToWake)
         // in its sequencer (true?) so the average power draw should be much lower even if we were listinging for packets
         // all the time.
 
-        axp.setPowerOutPut(AXP192_LDO2, AXP202_OFF); // LORA radio
+#ifdef LILYGO_TBEAM_S3_CORE
+       PMU->disablePowerOutput(XPOWERS_ALDO3); // lora radio power channel
+#else
+       PMU->disablePowerOutput(XPOWERS_LDO2);  // lora radio power channel
+#endif /*LILYGO_TBEAM_S3_CORE*/
     }
 #endif
 
