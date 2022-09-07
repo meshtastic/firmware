@@ -191,6 +191,7 @@ void AdminModule::handleSetConfig(const Config &c)
             DEBUG_MSG("Setting config: WiFi\n");
             config.has_wifi = true;
             config.wifi = c.payloadVariant.wifi;
+            requiresReboot = true;
             break;
         case Config_display_tag:
             DEBUG_MSG("Setting config: Display\n");
