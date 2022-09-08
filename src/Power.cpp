@@ -391,6 +391,12 @@ bool Power::axpChipInit()
     }
 
     if (!PMU) {
+                /*
+        * In XPowersLib, if the XPowersAXPxxx object is released, Wire.end() will be called at the same time. 
+        * In order not to affect other devices, if the initialization of the PMU fails, Wire needs to be re-initialized once, 
+        * if there are multiple devices sharing the bus.
+        * * */
+        Wire.begin(I2C_SDA, I2C_SCL);
         return false;
     }
 
@@ -427,16 +433,6 @@ bool Power::axpChipInit()
         //disable all axp chip interrupt
         PMU->disableIRQ(XPOWERS_AXP192_ALL_IRQ);
 
-        /*
-        PMU->enableIRQ(XPOWERS_AXP192_VBUS_REMOVE_IRQ |
-                       XPOWERS_AXP192_VBUS_INSERT_IRQ |
-                       XPOWERS_AXP192_BAT_CHG_DONE_IRQ |
-                       XPOWERS_AXP192_BAT_CHG_START_IRQ |
-                       XPOWERS_AXP192_BAT_REMOVE_IRQ |
-                       XPOWERS_AXP192_BAT_INSERT_IRQ |
-                       XPOWERS_AXP192_PKEY_SHORT_IRQ
-                      );
-        */
 
         if(config.power.charge_current == Config_PowerConfig_ChargeCurrent_MAUnset){
             config.power.charge_current = Config_PowerConfig_ChargeCurrent_MA450;

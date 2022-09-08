@@ -79,7 +79,7 @@ void setLed(bool ledOn)
 #endif
 
 #ifdef HAS_PMU
-    if (pmu_found) {
+    if (pmu_found && PMU) {
         // blink the axp led
         PMU->setChargingLedMode(ledOn ? XPOWERS_CHG_LED_ON : XPOWERS_CHG_LED_OFF);
     }
@@ -91,12 +91,15 @@ void setGPSPower(bool on)
     DEBUG_MSG("Setting GPS power=%d\n", on);
 
 #ifdef HAS_PMU
-    if (pmu_found){
-#ifdef LILYGO_TBEAM_S3_CORE
-        on ? PMU->enablePowerOutput(XPOWERS_ALDO4) : PMU->disablePowerOutput(XPOWERS_ALDO4);
-#else
-        on ? PMU->enablePowerOutput(XPOWERS_LDO3)  : PMU->disablePowerOutput(XPOWERS_LDO3);
-#endif /*LILYGO_TBEAM_S3_CORE*/
+    if (pmu_found && PMU){
+        uint8_t model = PMU->getChipModel();
+        if(model == XPOWERS_AXP2101){
+            // t-beam-s3-core GNSS  power channel
+            on ? PMU->enablePowerOutput(XPOWERS_ALDO4) : PMU->disablePowerOutput(XPOWERS_ALDO4);
+        }else if(model == XPOWERS_AXP192){
+            // t-beam GNSS  power channel
+            on ? PMU->enablePowerOutput(XPOWERS_LDO3)  : PMU->disablePowerOutput(XPOWERS_LDO3);         
+        }
     }
 #endif
 }
@@ -191,7 +194,7 @@ void doDeepSleep(uint64_t msecToWake)
 #endif
 
 #ifdef HAS_PMU
-    if (pmu_found) {
+    if (pmu_found && PMU) {
         // Obsolete comment: from back when we we used to receive lora packets while CPU was in deep sleep.
         // We no longer do that, because our light-sleep current draws are low enough and it provides fast start/low cost
         // wake.  We currently use deep sleep only for 'we want our device to actually be off - because our battery is
@@ -203,11 +206,12 @@ void doDeepSleep(uint64_t msecToWake)
         // in its sequencer (true?) so the average power draw should be much lower even if we were listinging for packets
         // all the time.
 
-#ifdef LILYGO_TBEAM_S3_CORE
-       PMU->disablePowerOutput(XPOWERS_ALDO3); // lora radio power channel
-#else
-       PMU->disablePowerOutput(XPOWERS_LDO2);  // lora radio power channel
-#endif /*LILYGO_TBEAM_S3_CORE*/
+        uint8_t model = PMU->getChipModel();
+        if(model == XPOWERS_AXP2101){
+            PMU->disablePowerOutput(XPOWERS_ALDO3); // lora radio power channel
+        }else if(model == XPOWERS_AXP192){
+            PMU->disablePowerOutput(XPOWERS_LDO2);  // lora radio power channel
+        }
     }
 #endif
 
