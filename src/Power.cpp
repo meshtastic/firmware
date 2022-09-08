@@ -564,9 +564,9 @@ bool Power::axpChipInit()
 
             readPowerStatus();
 
-    axp192_found = true;
+    pmu_found = true;
 
-    return axp192_found;
+    return pmu_found;
 
 #else
     return false;

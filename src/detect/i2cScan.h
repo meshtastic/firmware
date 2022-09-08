@@ -117,7 +117,7 @@ void scanI2Cdevice(void)
             }
 #if defined(HAS_AXP192) || defined(HAS_AXP2101)
             if (addr == XPOWERS_AXP192_AXP2101_ADDRESS) {
-                axp192_found = true;
+                pmu_found = true;
                 DEBUG_MSG("axp192/axp2101 PMU found\n");
             }
 #endif
