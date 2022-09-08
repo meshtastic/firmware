@@ -45,6 +45,8 @@ typedef enum _HardwareModel {
     HardwareModel_HELTEC_V2_1 = 10, 
     /* Ancient heltec WiFi_Lora_32 board */
     HardwareModel_HELTEC_V1 = 11, 
+   /* TODO: REPLACE */
+    HardwareModel_LILYGO_TBEAM_S3_CORE = 12,
     /* Less common/prototype boards listed here (needs one more byte over the air) */
     HardwareModel_LORA_RELAY_V1 = 32, 
     /* TODO: REPLACE */
@@ -73,8 +75,6 @@ typedef enum _HardwareModel {
     HardwareModel_M5STACK = 44, 
     /* B&Q Consulting Station Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:station */
     HardwareModel_STATION_G1 = 45, 
-    /* TODO: REPLACE */
-    HardwareModel_LILYGO_TBEAM_S3_CORE = 46,
     /* Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits. */
     HardwareModel_PRIVATE_HW = 255 
 } HardwareModel;
