@@ -80,7 +80,25 @@ bool GPS::setupGPS()
         _serial_gps->setRxBufferSize(2048); // the default is 256
 #endif
 
-#if defined(TTGO_T_ECHO) || defined(LILYGO_TBEAM_S3_CORE) 
+#ifdef LILYGO_TBEAM_S3_CORE
+        /*
+        * t-beam-s3-core uses the same L76K GNSS module as t-echo. 
+        * Unlike t-echo, L76K uses 9600 baud rate for communication by default.
+        * */
+        _serial_gps->begin(9600);
+        delay(250);
+        // Initialize the L76K Chip, use GPS + GLONASS
+        _serial_gps->write("$PCAS04,5*1C\r\n");
+        delay(250);
+        // only ask for RMC and GGA
+        _serial_gps->write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
+        delay(250);
+        // Switch to Vehicle Mode, since SoftRF enables Aviation < 2g
+        _serial_gps->write("$PCAS11,3*1E\r\n");
+        delay(250);
+#endif
+
+#ifdef TTGO_T_ECHO
         // Switch to 9600 baud, then close and reopen port
         _serial_gps->end();
         delay(250);
