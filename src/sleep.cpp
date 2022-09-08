@@ -79,7 +79,7 @@ void setLed(bool ledOn)
 #endif
 
 #if defined(HAS_AXP192) || defined(HAS_AXP2101)
-    if (axp192_found) {
+    if (pmu_found) {
         // blink the axp led
         PMU->setChargingLedMode(ledOn ? XPOWERS_CHG_LED_ON : XPOWERS_CHG_LED_OFF);
     }
@@ -91,7 +91,7 @@ void setGPSPower(bool on)
     DEBUG_MSG("Setting GPS power=%d\n", on);
 
 #if defined(HAS_AXP192) || defined(HAS_AXP2101)
-    if (axp192_found){
+    if (pmu_found){
 #ifdef LILYGO_TBEAM_S3_CORE
         on ? PMU->enablePowerOutput(XPOWERS_ALDO4) : PMU->disablePowerOutput(XPOWERS_ALDO4);
 #else
@@ -191,7 +191,7 @@ void doDeepSleep(uint64_t msecToWake)
 #endif
 
 #if defined(HAS_AXP192) || defined(HAS_AXP2101)
-    if (axp192_found) {
+    if (pmu_found) {
         // Obsolete comment: from back when we we used to receive lora packets while CPU was in deep sleep.
         // We no longer do that, because our light-sleep current draws are low enough and it provides fast start/low cost
         // wake.  We currently use deep sleep only for 'we want our device to actually be off - because our battery is
@@ -264,7 +264,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #endif
 #ifdef PMU_IRQ
     // wake due to PMU can happen repeatedly if there is no battery installed or the battery fills
-    if (axp192_found)
+    if (pmu_found)
         gpio_wakeup_enable((gpio_num_t)PMU_IRQ, GPIO_INTR_LOW_LEVEL); // pmu irq
 #endif
     assert(esp_sleep_enable_gpio_wakeup() == ESP_OK);
