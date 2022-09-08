@@ -7,7 +7,7 @@
 #include "utils.h"
 #include "buzz/buzz.h"
 
-#if defined(HAS_AXP192) || defined(HAS_AXP2101)
+#ifdef HAS_PMU
 #include "XPowersLibInterface.hpp"
 #include "XPowersAXP2101.tpp"
 #include "XPowersAXP192.tpp"
@@ -235,7 +235,7 @@ void Power::shutdown()
 {
 
 
-#if defined(HAS_AXP192) || defined(HAS_AXP2101)
+#ifdef HAS_PMU
     DEBUG_MSG("Shutting down\n");
     if(PMU){
         PMU->setChargingLedMode(XPOWERS_CHG_LED_OFF);
@@ -309,7 +309,7 @@ int32_t Power::runOnce()
 {
     readPowerStatus();
 
-#if defined(HAS_AXP192) || defined(HAS_AXP2101)
+#ifdef HAS_PMU
     // WE no longer use the IRQ line to wake the CPU (due to false wakes from sleep), but we do poll
     // the IRQ status by reading the registers over I2C
     if(PMU){
@@ -366,7 +366,7 @@ int32_t Power::runOnce()
 bool Power::axpChipInit()
 {
 
-#if defined(HAS_AXP192) || defined(HAS_AXP2101)
+#ifdef HAS_PMU
 
     if (!PMU) {
         PMU = new XPowersAXP2101(Wire, I2C_SDA, I2C_SCL);

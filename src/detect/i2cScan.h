@@ -115,7 +115,7 @@ void scanI2Cdevice(void)
                 screen_found = addr;
                 DEBUG_MSG("st7567 display found\n");
             }
-#if defined(HAS_AXP192) || defined(HAS_AXP2101)
+#ifdef HAS_PMU
             if (addr == XPOWERS_AXP192_AXP2101_ADDRESS) {
                 pmu_found = true;
                 DEBUG_MSG("axp192/axp2101 PMU found\n");

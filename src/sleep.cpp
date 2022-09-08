@@ -19,7 +19,7 @@
 esp_sleep_source_t wakeCause; // the reason we booted this time
 #endif
 
-#if defined(HAS_AXP192) || defined(HAS_AXP2101)
+#ifdef HAS_PMU
 #include "XPowersLibInterface.hpp"
 extern XPowersLibInterface *PMU;
 #endif
@@ -78,7 +78,7 @@ void setLed(bool ledOn)
     digitalWrite(LED_PIN, ledOn ^ LED_INVERTED);
 #endif
 
-#if defined(HAS_AXP192) || defined(HAS_AXP2101)
+#ifdef HAS_PMU
     if (pmu_found) {
         // blink the axp led
         PMU->setChargingLedMode(ledOn ? XPOWERS_CHG_LED_ON : XPOWERS_CHG_LED_OFF);
@@ -90,7 +90,7 @@ void setGPSPower(bool on)
 {
     DEBUG_MSG("Setting GPS power=%d\n", on);
 
-#if defined(HAS_AXP192) || defined(HAS_AXP2101)
+#ifdef HAS_PMU
     if (pmu_found){
 #ifdef LILYGO_TBEAM_S3_CORE
         on ? PMU->enablePowerOutput(XPOWERS_ALDO4) : PMU->disablePowerOutput(XPOWERS_ALDO4);
@@ -190,7 +190,7 @@ void doDeepSleep(uint64_t msecToWake)
     digitalWrite(VEXT_ENABLE, 1); // turn off the display power
 #endif
 
-#if defined(HAS_AXP192) || defined(HAS_AXP2101)
+#ifdef HAS_PMU
     if (pmu_found) {
         // Obsolete comment: from back when we we used to receive lora packets while CPU was in deep sleep.
         // We no longer do that, because our light-sleep current draws are low enough and it provides fast start/low cost
