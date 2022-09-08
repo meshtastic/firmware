@@ -11,11 +11,6 @@ KbI2cBase::KbI2cBase(const char *name) : concurrency::OSThread(name)
 
 int32_t KbI2cBase::runOnce()
 {
-    if (cardkb_found != CARDKB_ADDR){
-        // Input device is not detected.
-        return 500;
-    }
-
     InputEvent e;
     e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_KEY_NONE;
     e.source = this->_originName;
