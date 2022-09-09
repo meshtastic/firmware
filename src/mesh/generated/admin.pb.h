@@ -40,16 +40,8 @@ typedef enum _AdminMessage_ModuleConfigType {
  This message is used to do settings operations to both remote AND local nodes.
  (Prior to 1.2 these operations were done via special ToRadio operations) */
 typedef struct _AdminMessage { 
-    pb_size_t which_variant;
+    pb_size_t which_payload_variant;
     union {
-        /* Set the owner for this node */
-        User set_owner;
-        /* Set channels (using the new API).
-     A special channel is the "primary channel".
-     The other records are secondary channels.
-     Note: only one channel can be marked as primary.
-     If the client sets a particular channel to be primary, the previous channel will be set to SECONDARY automatically. */
-        Channel set_channel;
         /* Send the specified channel in the response to this message
      NOTE: This field is sent with the channel index + 1 (to ensure we never try to send 'zero' - which protobufs treats as not present) */
         uint32_t get_channel_request;
@@ -63,20 +55,38 @@ typedef struct _AdminMessage {
         AdminMessage_ConfigType get_config_request;
         /* Send the current Config in the response to this message. */
         Config get_config_response;
-        /* Set the current Config */
-        Config set_config;
-        /* Sent immediatly after a config change has been sent to ensure comms, if this is not recieved, the config will be reverted after 10 mins */
-        bool confirm_set_config;
         /* Ask for the following config data to be sent */
         AdminMessage_ModuleConfigType get_module_config_request;
         /* Send the current Config in the response to this message. */
         ModuleConfig get_module_config_response;
-        /* Set the current Config */
-        ModuleConfig set_module_config;
-        /* Sent immediatly after a config change has been sent to ensure comms, if this is not recieved, the config will be reverted after 10 mins */
-        bool confirm_set_module_config;
         /* Send all channels in the response to this message */
         bool get_all_channel_request;
+        /* Get the Canned Message Module messages in the response to this message. */
+        bool get_canned_message_module_messages_request;
+        /* Get the Canned Message Module messages in the response to this message. */
+        char get_canned_message_module_messages_response[201];
+        /* Request the node to send device metadata (firmware, protobuf version, etc) */
+        uint32_t get_device_metadata_request;
+        /* Device metadata response */
+        DeviceMetadata get_device_metadata_response;
+        /* Set the owner for this node */
+        User set_owner;
+        /* Set channels (using the new API).
+     A special channel is the "primary channel".
+     The other records are secondary channels.
+     Note: only one channel can be marked as primary.
+     If the client sets a particular channel to be primary, the previous channel will be set to SECONDARY automatically. */
+        Channel set_channel;
+        /* Set the current Config */
+        Config set_config;
+        /* Set the current Config */
+        ModuleConfig set_module_config;
+        /* Set the Canned Message Module messages text. */
+        char set_canned_message_module_messages[201];
+        /* Sent immediatly after a config change has been sent to ensure comms, if this is not recieved, the config will be reverted after 10 mins */
+        bool confirm_set_config;
+        /* Sent immediatly after a config change has been sent to ensure comms, if this is not recieved, the config will be reverted after 10 mins */
+        bool confirm_set_module_config;
         /* Setting channels/radio config remotely carries the risk that you might send an invalid config and the radio never talks to your mesh again.
      Therefore if setting either of these properties remotely, you must send a confirm_xxx message within 10 minutes.
      If you fail to do so, the radio will assume loss of comms and revert your changes.
@@ -89,18 +99,10 @@ typedef struct _AdminMessage {
         bool exit_simulator;
         /* Tell the node to reboot in this many seconds (or <0 to cancel reboot) */
         int32_t reboot_seconds;
-        /* Get the Canned Message Module messages in the response to this message. */
-        bool get_canned_message_module_messages_request;
-        /* Get the Canned Message Module messages in the response to this message. */
-        char get_canned_message_module_messages_response[201];
-        /* Set the Canned Message Module messages text. */
-        char set_canned_message_module_messages[201];
         /* Tell the node to shutdown in this many seconds (or <0 to cancel shutdown) */
         int32_t shutdown_seconds;
-        /* Request the node to send device metadata (firmware, protobuf version, etc) */
-        uint32_t get_device_metadata_request;
-        /* Device metadata response */
-        DeviceMetadata get_device_metadata_response;
+        /* Tell the node to factory reset, all device settings will be returned to factory defaults. */
+        int32_t factory_reset;
     };
 } AdminMessage;
 
@@ -120,74 +122,76 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define AdminMessage_init_default                {0, {User_init_default}}
-#define AdminMessage_init_zero                   {0, {User_init_zero}}
+#define AdminMessage_init_default                {0, {0}}
+#define AdminMessage_init_zero                   {0, {0}}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define AdminMessage_set_owner_tag               2
-#define AdminMessage_set_channel_tag             3
-#define AdminMessage_get_channel_request_tag     6
-#define AdminMessage_get_channel_response_tag    7
-#define AdminMessage_get_owner_request_tag       8
-#define AdminMessage_get_owner_response_tag      9
-#define AdminMessage_get_config_request_tag      10
-#define AdminMessage_get_config_response_tag     11
-#define AdminMessage_set_config_tag              12
-#define AdminMessage_confirm_set_config_tag      13
-#define AdminMessage_get_module_config_request_tag 14
-#define AdminMessage_get_module_config_response_tag 15
-#define AdminMessage_set_module_config_tag       16
-#define AdminMessage_confirm_set_module_config_tag 17
-#define AdminMessage_get_all_channel_request_tag 18
-#define AdminMessage_confirm_set_channel_tag     32
-#define AdminMessage_confirm_set_radio_tag       33
-#define AdminMessage_exit_simulator_tag          34
-#define AdminMessage_reboot_seconds_tag          35
-#define AdminMessage_get_canned_message_module_messages_request_tag 36
-#define AdminMessage_get_canned_message_module_messages_response_tag 37
-#define AdminMessage_set_canned_message_module_messages_tag 44
-#define AdminMessage_shutdown_seconds_tag        51
-#define AdminMessage_get_device_metadata_request_tag 52
-#define AdminMessage_get_device_metadata_response_tag 53
+#define AdminMessage_get_channel_request_tag     1
+#define AdminMessage_get_channel_response_tag    2
+#define AdminMessage_get_owner_request_tag       3
+#define AdminMessage_get_owner_response_tag      4
+#define AdminMessage_get_config_request_tag      5
+#define AdminMessage_get_config_response_tag     6
+#define AdminMessage_get_module_config_request_tag 7
+#define AdminMessage_get_module_config_response_tag 8
+#define AdminMessage_get_all_channel_request_tag 9
+#define AdminMessage_get_canned_message_module_messages_request_tag 10
+#define AdminMessage_get_canned_message_module_messages_response_tag 11
+#define AdminMessage_get_device_metadata_request_tag 12
+#define AdminMessage_get_device_metadata_response_tag 13
+#define AdminMessage_set_owner_tag               32
+#define AdminMessage_set_channel_tag             33
+#define AdminMessage_set_config_tag              34
+#define AdminMessage_set_module_config_tag       35
+#define AdminMessage_set_canned_message_module_messages_tag 36
+#define AdminMessage_confirm_set_config_tag      64
+#define AdminMessage_confirm_set_module_config_tag 65
+#define AdminMessage_confirm_set_channel_tag     66
+#define AdminMessage_confirm_set_radio_tag       67
+#define AdminMessage_exit_simulator_tag          96
+#define AdminMessage_reboot_seconds_tag          97
+#define AdminMessage_shutdown_seconds_tag        98
+#define AdminMessage_factory_reset_tag           99
 
 /* Struct field encoding specification for nanopb */
 #define AdminMessage_FIELDLIST(X, a) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_owner,set_owner),   2) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_channel,set_channel),   3) \
-X(a, STATIC,   ONEOF,    UINT32,   (variant,get_channel_request,get_channel_request),   6) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_channel_response,get_channel_response),   7) \
-X(a, STATIC,   ONEOF,    BOOL,     (variant,get_owner_request,get_owner_request),   8) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_owner_response,get_owner_response),   9) \
-X(a, STATIC,   ONEOF,    UENUM,    (variant,get_config_request,get_config_request),  10) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_config_response,get_config_response),  11) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_config,set_config),  12) \
-X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_config,confirm_set_config),  13) \
-X(a, STATIC,   ONEOF,    UENUM,    (variant,get_module_config_request,get_module_config_request),  14) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_module_config_response,get_module_config_response),  15) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,set_module_config,set_module_config),  16) \
-X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_module_config,confirm_set_module_config),  17) \
-X(a, STATIC,   ONEOF,    BOOL,     (variant,get_all_channel_request,get_all_channel_request),  18) \
-X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_channel,confirm_set_channel),  32) \
-X(a, STATIC,   ONEOF,    BOOL,     (variant,confirm_set_radio,confirm_set_radio),  33) \
-X(a, STATIC,   ONEOF,    BOOL,     (variant,exit_simulator,exit_simulator),  34) \
-X(a, STATIC,   ONEOF,    INT32,    (variant,reboot_seconds,reboot_seconds),  35) \
-X(a, STATIC,   ONEOF,    BOOL,     (variant,get_canned_message_module_messages_request,get_canned_message_module_messages_request),  36) \
-X(a, STATIC,   ONEOF,    STRING,   (variant,get_canned_message_module_messages_response,get_canned_message_module_messages_response),  37) \
-X(a, STATIC,   ONEOF,    STRING,   (variant,set_canned_message_module_messages,set_canned_message_module_messages),  44) \
-X(a, STATIC,   ONEOF,    INT32,    (variant,shutdown_seconds,shutdown_seconds),  51) \
-X(a, STATIC,   ONEOF,    UINT32,   (variant,get_device_metadata_request,get_device_metadata_request),  52) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,get_device_metadata_response,get_device_metadata_response),  53)
+X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,get_channel_request,get_channel_request),   1) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,get_channel_response,get_channel_response),   2) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,get_owner_request,get_owner_request),   3) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,get_owner_response,get_owner_response),   4) \
+X(a, STATIC,   ONEOF,    UENUM,    (payload_variant,get_config_request,get_config_request),   5) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,get_config_response,get_config_response),   6) \
+X(a, STATIC,   ONEOF,    UENUM,    (payload_variant,get_module_config_request,get_module_config_request),   7) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,get_module_config_response,get_module_config_response),   8) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,get_all_channel_request,get_all_channel_request),   9) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,get_canned_message_module_messages_request,get_canned_message_module_messages_request),  10) \
+X(a, STATIC,   ONEOF,    STRING,   (payload_variant,get_canned_message_module_messages_response,get_canned_message_module_messages_response),  11) \
+X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,get_device_metadata_request,get_device_metadata_request),  12) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,get_device_metadata_response,get_device_metadata_response),  13) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_owner,set_owner),  32) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_channel,set_channel),  33) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_config,set_config),  34) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_module_config,set_module_config),  35) \
+X(a, STATIC,   ONEOF,    STRING,   (payload_variant,set_canned_message_module_messages,set_canned_message_module_messages),  36) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,confirm_set_config,confirm_set_config),  64) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,confirm_set_module_config,confirm_set_module_config),  65) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,confirm_set_channel,confirm_set_channel),  66) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,confirm_set_radio,confirm_set_radio),  67) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,exit_simulator,exit_simulator),  96) \
+X(a, STATIC,   ONEOF,    INT32,    (payload_variant,reboot_seconds,reboot_seconds),  97) \
+X(a, STATIC,   ONEOF,    INT32,    (payload_variant,shutdown_seconds,shutdown_seconds),  98) \
+X(a, STATIC,   ONEOF,    INT32,    (payload_variant,factory_reset,factory_reset),  99)
 #define AdminMessage_CALLBACK NULL
 #define AdminMessage_DEFAULT NULL
-#define AdminMessage_variant_set_owner_MSGTYPE User
-#define AdminMessage_variant_set_channel_MSGTYPE Channel
-#define AdminMessage_variant_get_channel_response_MSGTYPE Channel
-#define AdminMessage_variant_get_owner_response_MSGTYPE User
-#define AdminMessage_variant_get_config_response_MSGTYPE Config
-#define AdminMessage_variant_set_config_MSGTYPE Config
-#define AdminMessage_variant_get_module_config_response_MSGTYPE ModuleConfig
-#define AdminMessage_variant_set_module_config_MSGTYPE ModuleConfig
-#define AdminMessage_variant_get_device_metadata_response_MSGTYPE DeviceMetadata
+#define AdminMessage_payload_variant_get_channel_response_MSGTYPE Channel
+#define AdminMessage_payload_variant_get_owner_response_MSGTYPE User
+#define AdminMessage_payload_variant_get_config_response_MSGTYPE Config
+#define AdminMessage_payload_variant_get_module_config_response_MSGTYPE ModuleConfig
+#define AdminMessage_payload_variant_get_device_metadata_response_MSGTYPE DeviceMetadata
+#define AdminMessage_payload_variant_set_owner_MSGTYPE User
+#define AdminMessage_payload_variant_set_channel_MSGTYPE Channel
+#define AdminMessage_payload_variant_set_config_MSGTYPE Config
+#define AdminMessage_payload_variant_set_module_config_MSGTYPE ModuleConfig
 
 extern const pb_msgdesc_t AdminMessage_msg;
 
@@ -195,7 +199,12 @@ extern const pb_msgdesc_t AdminMessage_msg;
 #define AdminMessage_fields &AdminMessage_msg
 
 /* Maximum encoded size of messages (where known) */
-#define AdminMessage_size                        204
+#if defined(Config_size) && defined(Config_size)
+union AdminMessage_payload_variant_size_union {char f6[(6 + Config_size)]; char f34[(7 + Config_size)]; char f0[204];};
+#endif
+#if defined(Config_size) && defined(Config_size)
+#define AdminMessage_size                        (0 + sizeof(union AdminMessage_payload_variant_size_union))
+#endif
 
 #ifdef __cplusplus
 } /* extern "C" */
