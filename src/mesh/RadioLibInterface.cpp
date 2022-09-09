@@ -99,7 +99,7 @@ bool RadioLibInterface::canSendImmediately()
         // TX IRQ from the radio, the radio is probably broken.
         if (busyTx && (millis() - lastTxStart > 60000)) {
             DEBUG_MSG("Hardware Failure! busyTx for more than 60s\n");
-            RECORD_CRITICALERROR(CriticalErrorCode_TransmitFailed);
+            RECORD_CRITICALERROR(CriticalErrorCode_TRANSMIT_FAILED);
 #ifdef ARCH_ESP32
             if (busyTx && (millis() - lastTxStart > 65000)) // After 5s more, reboot
                 ESP.restart();
@@ -120,10 +120,10 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
 
 #ifndef DISABLE_WELCOME_UNSET
 
-    if (config.lora.region != Config_LoRaConfig_RegionCode_Unset) {
+    if (config.lora.region != Config_LoRaConfig_RegionCode_UNSET) {
         if (disabled || config.lora.tx_disabled) {
 
-            if (config.lora.region != Config_LoRaConfig_RegionCode_Unset) {
+            if (config.lora.region != Config_LoRaConfig_RegionCode_UNSET) {
                 if (disabled || config.lora.tx_disabled) {
                     DEBUG_MSG("send - lora_tx_disabled\n");
                     packetPool.release(p);
@@ -362,7 +362,7 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
 
                 addReceiveMetadata(mp);
 
-                mp->which_payloadVariant = MeshPacket_encrypted_tag; // Mark that the payload is still encrypted at this point
+                mp->which_payload_variant = MeshPacket_encrypted_tag; // Mark that the payload is still encrypted at this point
                 assert(((uint32_t)payloadLen) <= sizeof(mp->encrypted.bytes));
                 memcpy(mp->encrypted.bytes, payload, payloadLen);
                 mp->encrypted.size = payloadLen;
@@ -393,7 +393,7 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
 
             int res = iface->startTransmit(radiobuf, numbytes);
             if (res != RADIOLIB_ERR_NONE) {
-                RECORD_CRITICALERROR(CriticalErrorCode_RadioSpiBug);
+                RECORD_CRITICALERROR(CriticalErrorCode_RADIO_SPI_BUG);
 
                 // This send failed, but make sure to 'complete' it properly
                 completeSending();

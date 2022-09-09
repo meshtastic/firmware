@@ -34,8 +34,8 @@ bool PositionModule::handleReceivedProtobuf(const MeshPacket &mp, Position *pptr
     // Log packet size and list of fields
     DEBUG_MSG("POSITION node=%08x l=%d %s%s%s%s%s%s%s%s%s%s%s%s%s\n", getFrom(&mp), mp.decoded.payload.size,
               p.latitude_i ? "LAT " : "", p.longitude_i ? "LON " : "", p.altitude ? "MSL " : "", p.altitude_hae ? "HAE " : "",
-              p.alt_geoid_sep ? "GEO " : "", p.PDOP ? "PDOP " : "", p.HDOP ? "HDOP " : "", p.VDOP ? "VDOP " : "",
-              p.sats_in_view ? "SIV " : "", p.fix_quality ? "FXQ " : "", p.fix_type ? "FXT " : "", p.pos_timestamp ? "PTS " : "",
+              p.PDOP ? "PDOP " : "", p.HDOP ? "HDOP " : "", p.VDOP ? "VDOP " : "",
+              p.sats_in_view ? "SIV " : "", p.fix_quality ? "FXQ " : "", p.fix_type ? "FXT " : "", p.timestamp ? "PTS " : "",
               p.time ? "TIME " : "");
 
     if (p.time) {
@@ -70,29 +70,26 @@ MeshPacket *PositionModule::allocReply()
     p.longitude_i = node->position.longitude_i;
     p.time = node->position.time;
 
-    if (pos_flags & Config_PositionConfig_PositionFlags_POS_ALTITUDE) {
-        if (pos_flags & Config_PositionConfig_PositionFlags_POS_ALT_MSL)
+    if (pos_flags & Config_PositionConfig_PositionFlags_ALTITUDE) {
+        if (pos_flags & Config_PositionConfig_PositionFlags_ALTITUDE_MSL)
             p.altitude = node->position.altitude;
         else
             p.altitude_hae = node->position.altitude_hae;
-
-        if (pos_flags & Config_PositionConfig_PositionFlags_POS_GEO_SEP)
-            p.alt_geoid_sep = node->position.alt_geoid_sep;
     }
 
-    if (pos_flags & Config_PositionConfig_PositionFlags_POS_DOP) {
-        if (pos_flags & Config_PositionConfig_PositionFlags_POS_HVDOP) {
+    if (pos_flags & Config_PositionConfig_PositionFlags_DOP) {
+        if (pos_flags & Config_PositionConfig_PositionFlags_HVDOP) {
             p.HDOP = node->position.HDOP;
             p.VDOP = node->position.VDOP;
         } else
             p.PDOP = node->position.PDOP;
     }
 
-    if (pos_flags & Config_PositionConfig_PositionFlags_POS_SATINVIEW)
+    if (pos_flags & Config_PositionConfig_PositionFlags_SATINVIEW)
         p.sats_in_view = node->position.sats_in_view;
 
-    if (pos_flags & Config_PositionConfig_PositionFlags_POS_TIMESTAMP)
-        p.pos_timestamp = node->position.pos_timestamp;
+    if (pos_flags & Config_PositionConfig_PositionFlags_TIMESTAMP)
+        p.timestamp = node->position.timestamp;
 
     // Strip out any time information before sending packets to other nodes - to keep the wire size small (and because other
     // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS to include the time, so that gpsless
@@ -144,7 +141,7 @@ int32_t PositionModule::runOnce()
                 bool requestReplies = currentGeneration != radioGeneration;
                 currentGeneration = radioGeneration;
 
-                DEBUG_MSG("Sending pos@%x:6 to mesh (wantReplies=%d)\n", node->position.pos_timestamp, requestReplies);
+                DEBUG_MSG("Sending pos@%x:6 to mesh (wantReplies=%d)\n", node->position.timestamp, requestReplies);
                 sendOurPosition(NODENUM_BROADCAST, requestReplies);
             }
         } else {
@@ -183,7 +180,7 @@ int32_t PositionModule::runOnce()
                     bool requestReplies = currentGeneration != radioGeneration;
                     currentGeneration = radioGeneration;
 
-                    DEBUG_MSG("Sending smart pos@%x:6 to mesh (wantReplies=%d, d=%d, dtt=%d, tt=%d)\n", node2->position.pos_timestamp,
+                    DEBUG_MSG("Sending smart pos@%x:6 to mesh (wantReplies=%d, d=%d, dtt=%d, tt=%d)\n", node2->position.timestamp,
                               requestReplies, distance, distanceTravelThreshold, timeTravel);
                     sendOurPosition(NODENUM_BROADCAST, requestReplies);
 
