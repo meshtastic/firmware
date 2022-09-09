@@ -48,8 +48,6 @@ using namespace httpsserver;
 HTTPClient httpClient;
 
 #define DEST_FS_USES_LITTLEFS
-#define ESP_ARDUINO_VERSION_VAL(major, minor, patch) ((major << 16) | (minor << 8) | (patch))
-#define ESP_ARDUINO_VERSION ESP_ARDUINO_VERSION_VAL(1, 0, 4)
 
 // We need to specify some content-type mapping, so the resources get delivered with the
 // right content type and are displayed correctly in the browser
