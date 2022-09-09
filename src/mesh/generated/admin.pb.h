@@ -19,7 +19,7 @@ typedef enum _AdminMessage_ConfigType {
     AdminMessage_ConfigType_DEVICE_CONFIG = 0, 
     AdminMessage_ConfigType_POSITION_CONFIG = 1, 
     AdminMessage_ConfigType_POWER_CONFIG = 2, 
-    AdminMessage_ConfigType_WIFI_CONFIG = 3, 
+    AdminMessage_ConfigType_NETWORK_CONFIG = 3, 
     AdminMessage_ConfigType_DISPLAY_CONFIG = 4, 
     AdminMessage_ConfigType_LORA_CONFIG = 5, 
     AdminMessage_ConfigType_BLUETOOTH_CONFIG = 6 
