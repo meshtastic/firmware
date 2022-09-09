@@ -72,7 +72,7 @@ void MeshModule::callPlugins(const MeshPacket &mp, RxSource src)
     bool moduleFound = false;
 
     // We now allow **encrypted** packets to pass through the modules
-    bool isDecoded = mp.which_payloadVariant == MeshPacket_decoded_tag;
+    bool isDecoded = mp.which_payload_variant == MeshPacket_decoded_tag;
 
     currentReply = NULL; // No reply yet
 
@@ -211,7 +211,7 @@ void MeshModule::sendResponse(const MeshPacket &req)
  */
 void setReplyTo(MeshPacket *p, const MeshPacket &to)
 {
-    assert(p->which_payloadVariant == MeshPacket_decoded_tag); // Should already be set by now
+    assert(p->which_payload_variant == MeshPacket_decoded_tag); // Should already be set by now
     p->to = getFrom(&to);    // Make sure that if we are sending to the local node, we use our local node addr, not 0
     p->channel = to.channel; // Use the same channel that the request came in on
 
@@ -266,7 +266,7 @@ AdminMessageHandleResult MeshModule::handleAdminMessageForAllPlugins(const MeshP
                 // In case we have a response it always has priority.
                 DEBUG_MSG("Reply prepared by module '%s' of variant: %d\n",
                     pi.name,
-                    response->which_variant);
+                    response->which_payload_variant);
                 handled = h;
             }
             else if ((handled != AdminMessageHandleResult::HANDLED_WITH_RESPONSE) &&

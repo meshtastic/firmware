@@ -38,7 +38,7 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
     bool handled = false;
     assert(r);
 
-    switch (r->which_variant) {
+    switch (r->which_payload_variant) {
 
     /**
      * Getters
@@ -129,10 +129,10 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
         if (handleResult == AdminMessageHandleResult::HANDLED_WITH_RESPONSE) {
             myReply = allocDataProtobuf(res);
         } else if (mp.decoded.want_response) {
-            DEBUG_MSG("We did not responded to a request that wanted a respond. req.variant=%d\n", r->which_variant);
+            DEBUG_MSG("We did not responded to a request that wanted a respond. req.variant=%d\n", r->which_payload_variant);
         } else if (handleResult != AdminMessageHandleResult::HANDLED) {
             // Probably a message sent by us or sent to our local node.  FIXME, we should avoid scanning these messages
-            DEBUG_MSG("Ignoring nonrelevant admin %d\n", r->which_variant);
+            DEBUG_MSG("Ignoring nonrelevant admin %d\n", r->which_payload_variant);
         }
         break;
     }
@@ -171,43 +171,43 @@ void AdminModule::handleSetOwner(const User &o)
 void AdminModule::handleSetConfig(const Config &c)
 {
     bool requiresReboot = false;
-    switch (c.which_payloadVariant) {
+    switch (c.which_payload_variant) {
         case Config_device_tag:
             DEBUG_MSG("Setting config: Device\n");
             config.has_device = true;
-            config.device = c.payloadVariant.device;
+            config.device = c.payload_variant.device;
             break;
         case Config_position_tag:
             DEBUG_MSG("Setting config: Position\n");
             config.has_position = true;
-            config.position = c.payloadVariant.position;
+            config.position = c.payload_variant.position;
             break;
         case Config_power_tag:
             DEBUG_MSG("Setting config: Power\n");
             config.has_power = true;
-            config.power = c.payloadVariant.power;
+            config.power = c.payload_variant.power;
             break;
-        case Config_wifi_tag:
+        case Config_network_tag:
             DEBUG_MSG("Setting config: WiFi\n");
-            config.has_wifi = true;
-            config.wifi = c.payloadVariant.wifi;
+            config.has_network = true;
+            config.network = c.payload_variant.network;
             requiresReboot = true;
             break;
         case Config_display_tag:
             DEBUG_MSG("Setting config: Display\n");
             config.has_display = true;
-            config.display = c.payloadVariant.display;
+            config.display = c.payload_variant.display;
             break;
         case Config_lora_tag:
             DEBUG_MSG("Setting config: LoRa\n");
             config.has_lora = true;
-            config.lora = c.payloadVariant.lora;
+            config.lora = c.payload_variant.lora;
             requiresReboot = true;
             break;
         case Config_bluetooth_tag:
             DEBUG_MSG("Setting config: Bluetooth\n");
             config.has_bluetooth = true;
-            config.bluetooth = c.payloadVariant.bluetooth;
+            config.bluetooth = c.payload_variant.bluetooth;
             requiresReboot = true;
             break;
     }
@@ -223,41 +223,41 @@ void AdminModule::handleSetConfig(const Config &c)
 
 void AdminModule::handleSetModuleConfig(const ModuleConfig &c)
 {
-    switch (c.which_payloadVariant) {
+    switch (c.which_payload_variant) {
         case ModuleConfig_mqtt_tag:
             DEBUG_MSG("Setting module config: MQTT\n");
             moduleConfig.has_mqtt = true;
-            moduleConfig.mqtt = c.payloadVariant.mqtt;
+            moduleConfig.mqtt = c.payload_variant.mqtt;
             break;
         case ModuleConfig_serial_tag:
             DEBUG_MSG("Setting module config: Serial\n");
             moduleConfig.has_serial = true;
-            moduleConfig.serial = c.payloadVariant.serial;
+            moduleConfig.serial = c.payload_variant.serial;
             break;
         case ModuleConfig_external_notification_tag:
             DEBUG_MSG("Setting module config: External Notification\n");
             moduleConfig.has_external_notification = true;
-            moduleConfig.external_notification = c.payloadVariant.external_notification;
+            moduleConfig.external_notification = c.payload_variant.external_notification;
             break;
         case ModuleConfig_store_forward_tag:
             DEBUG_MSG("Setting module config: Store & Forward\n");
             moduleConfig.has_store_forward = true;
-            moduleConfig.store_forward = c.payloadVariant.store_forward;
+            moduleConfig.store_forward = c.payload_variant.store_forward;
             break;
         case ModuleConfig_range_test_tag:
             DEBUG_MSG("Setting module config: Range Test\n");
             moduleConfig.has_range_test = true;
-            moduleConfig.range_test = c.payloadVariant.range_test;
+            moduleConfig.range_test = c.payload_variant.range_test;
             break;
         case ModuleConfig_telemetry_tag:
             DEBUG_MSG("Setting module config: Telemetry\n");
             moduleConfig.has_telemetry = true;
-            moduleConfig.telemetry = c.payloadVariant.telemetry;
+            moduleConfig.telemetry = c.payload_variant.telemetry;
             break;
         case ModuleConfig_canned_message_tag:
             DEBUG_MSG("Setting module config: Canned Message\n");
             moduleConfig.has_canned_message = true;
-            moduleConfig.canned_message = c.payloadVariant.canned_message;
+            moduleConfig.canned_message = c.payload_variant.canned_message;
             break;
     }
 
@@ -282,7 +282,7 @@ void AdminModule::handleGetOwner(const MeshPacket &req)
         AdminMessage res = AdminMessage_init_default;
         res.get_owner_response = owner;
 
-        res.which_variant = AdminMessage_get_owner_response_tag;
+        res.which_payload_variant = AdminMessage_get_owner_response_tag;
         myReply = allocDataProtobuf(res);
     }
 }
@@ -295,39 +295,39 @@ void AdminModule::handleGetConfig(const MeshPacket &req, const uint32_t configTy
         switch (configType) {
         case AdminMessage_ConfigType_DEVICE_CONFIG:
             DEBUG_MSG("Getting config: Device\n");
-            res.get_config_response.which_payloadVariant = Config_device_tag;
-            res.get_config_response.payloadVariant.device = config.device;
+            res.get_config_response.which_payload_variant = Config_device_tag;
+            res.get_config_response.payload_variant.device = config.device;
             break;
         case AdminMessage_ConfigType_POSITION_CONFIG:
             DEBUG_MSG("Getting config: Position\n");
-            res.get_config_response.which_payloadVariant = Config_position_tag;
-            res.get_config_response.payloadVariant.position = config.position;
+            res.get_config_response.which_payload_variant = Config_position_tag;
+            res.get_config_response.payload_variant.position = config.position;
             break;
         case AdminMessage_ConfigType_POWER_CONFIG:
             DEBUG_MSG("Getting config: Power\n");
-            res.get_config_response.which_payloadVariant = Config_power_tag;
-            res.get_config_response.payloadVariant.power = config.power;
+            res.get_config_response.which_payload_variant = Config_power_tag;
+            res.get_config_response.payload_variant.power = config.power;
             break;
-        case AdminMessage_ConfigType_WIFI_CONFIG:
-            DEBUG_MSG("Getting config: WiFi\n");
-            res.get_config_response.which_payloadVariant = Config_wifi_tag;
-            res.get_config_response.payloadVariant.wifi = config.wifi;
-            writeSecret(res.get_config_response.payloadVariant.wifi.psk, config.wifi.psk);
+        case AdminMessage_ConfigType_NETWORK_CONFIG:
+            DEBUG_MSG("Getting config: Network\n");
+            res.get_config_response.which_payload_variant = Config_network_tag;
+            res.get_config_response.payload_variant.network = config.network;
+            writeSecret(res.get_config_response.payload_variant.network.wifi_psk, config.network.wifi_psk);
             break;
         case AdminMessage_ConfigType_DISPLAY_CONFIG:
             DEBUG_MSG("Getting config: Display\n");
-            res.get_config_response.which_payloadVariant = Config_display_tag;
-            res.get_config_response.payloadVariant.display = config.display;
+            res.get_config_response.which_payload_variant = Config_display_tag;
+            res.get_config_response.payload_variant.display = config.display;
             break;
         case AdminMessage_ConfigType_LORA_CONFIG:
             DEBUG_MSG("Getting config: LoRa\n");
-            res.get_config_response.which_payloadVariant = Config_lora_tag;
-            res.get_config_response.payloadVariant.lora = config.lora;
+            res.get_config_response.which_payload_variant = Config_lora_tag;
+            res.get_config_response.payload_variant.lora = config.lora;
             break;
         case AdminMessage_ConfigType_BLUETOOTH_CONFIG:
             DEBUG_MSG("Getting config: Bluetooth\n");
-            res.get_config_response.which_payloadVariant = Config_bluetooth_tag;
-            res.get_config_response.payloadVariant.bluetooth = config.bluetooth;
+            res.get_config_response.which_payload_variant = Config_bluetooth_tag;
+            res.get_config_response.payload_variant.bluetooth = config.bluetooth;
             break;
         }
         // NOTE: The phone app needs to know the ls_secs value so it can properly expect sleep behavior.
@@ -337,7 +337,7 @@ void AdminModule::handleGetConfig(const MeshPacket &req, const uint32_t configTy
         // hideSecret(r.get_radio_response.preferences.wifi_ssid); // hmm - leave public for now, because only minimally private
         // and useful for users to know current provisioning) hideSecret(r.get_radio_response.preferences.wifi_password);
         // r.get_config_response.which_payloadVariant = Config_ModuleConfig_telemetry_tag;
-        res.which_variant = AdminMessage_get_config_response_tag;
+        res.which_payload_variant = AdminMessage_get_config_response_tag;
         myReply = allocDataProtobuf(res);
     }
 }
@@ -350,39 +350,39 @@ void AdminModule::handleGetModuleConfig(const MeshPacket &req, const uint32_t co
         switch (configType) {
         case AdminMessage_ModuleConfigType_MQTT_CONFIG:
             DEBUG_MSG("Getting module config: MQTT\n");
-            res.get_module_config_response.which_payloadVariant = ModuleConfig_mqtt_tag;
-            res.get_module_config_response.payloadVariant.mqtt = moduleConfig.mqtt;
+            res.get_module_config_response.which_payload_variant = ModuleConfig_mqtt_tag;
+            res.get_module_config_response.payload_variant.mqtt = moduleConfig.mqtt;
             break;
         case AdminMessage_ModuleConfigType_SERIAL_CONFIG:
             DEBUG_MSG("Getting module config: Serial\n");
-            res.get_module_config_response.which_payloadVariant = ModuleConfig_serial_tag;
-            res.get_module_config_response.payloadVariant.serial = moduleConfig.serial;
+            res.get_module_config_response.which_payload_variant = ModuleConfig_serial_tag;
+            res.get_module_config_response.payload_variant.serial = moduleConfig.serial;
             break;
         case AdminMessage_ModuleConfigType_EXTNOTIF_CONFIG:
             DEBUG_MSG("Getting module config: External Notification\n");
-            res.get_module_config_response.which_payloadVariant = ModuleConfig_external_notification_tag;
-            res.get_module_config_response.payloadVariant.external_notification =
+            res.get_module_config_response.which_payload_variant = ModuleConfig_external_notification_tag;
+            res.get_module_config_response.payload_variant.external_notification =
                 moduleConfig.external_notification;
             break;
         case AdminMessage_ModuleConfigType_STOREFORWARD_CONFIG:
             DEBUG_MSG("Getting module config: Store & Forward\n");
-            res.get_module_config_response.which_payloadVariant = ModuleConfig_store_forward_tag;
-            res.get_module_config_response.payloadVariant.store_forward = moduleConfig.store_forward;
+            res.get_module_config_response.which_payload_variant = ModuleConfig_store_forward_tag;
+            res.get_module_config_response.payload_variant.store_forward = moduleConfig.store_forward;
             break;
         case AdminMessage_ModuleConfigType_RANGETEST_CONFIG:
             DEBUG_MSG("Getting module config: Range Test\n");
-            res.get_module_config_response.which_payloadVariant = ModuleConfig_range_test_tag;
-            res.get_module_config_response.payloadVariant.range_test = moduleConfig.range_test;
+            res.get_module_config_response.which_payload_variant = ModuleConfig_range_test_tag;
+            res.get_module_config_response.payload_variant.range_test = moduleConfig.range_test;
             break;
         case AdminMessage_ModuleConfigType_TELEMETRY_CONFIG:
             DEBUG_MSG("Getting module config: Telemetry\n");
-            res.get_module_config_response.which_payloadVariant = ModuleConfig_telemetry_tag;
-            res.get_module_config_response.payloadVariant.telemetry = moduleConfig.telemetry;
+            res.get_module_config_response.which_payload_variant = ModuleConfig_telemetry_tag;
+            res.get_module_config_response.payload_variant.telemetry = moduleConfig.telemetry;
             break;
         case AdminMessage_ModuleConfigType_CANNEDMSG_CONFIG:
             DEBUG_MSG("Getting module config: Canned Message\n");
-            res.get_module_config_response.which_payloadVariant = ModuleConfig_canned_message_tag;
-            res.get_module_config_response.payloadVariant.canned_message = moduleConfig.canned_message;
+            res.get_module_config_response.which_payload_variant = ModuleConfig_canned_message_tag;
+            res.get_module_config_response.payload_variant.canned_message = moduleConfig.canned_message;
             break;
         }
 
@@ -393,7 +393,7 @@ void AdminModule::handleGetModuleConfig(const MeshPacket &req, const uint32_t co
         // hideSecret(r.get_radio_response.preferences.wifi_ssid); // hmm - leave public for now, because only minimally private
         // and useful for users to know current provisioning) hideSecret(r.get_radio_response.preferences.wifi_password);
         // r.get_config_response.which_payloadVariant = Config_ModuleConfig_telemetry_tag;
-        res.which_variant = AdminMessage_get_module_config_response_tag;
+        res.which_payload_variant = AdminMessage_get_module_config_response_tag;
         myReply = allocDataProtobuf(res);
     }
 }
@@ -406,7 +406,7 @@ void AdminModule::handleGetDeviceMetadata(const MeshPacket &req) {
     deviceMetadata.device_state_version = DEVICESTATE_CUR_VER;
 
     r.get_device_metadata_response = deviceMetadata;
-    r.which_variant = AdminMessage_get_device_metadata_response_tag;
+    r.which_payload_variant = AdminMessage_get_device_metadata_response_tag;
     myReply = allocDataProtobuf(r);
 }
 
@@ -416,7 +416,7 @@ void AdminModule::handleGetChannel(const MeshPacket &req, uint32_t channelIndex)
         // We create the reply here
         AdminMessage r = AdminMessage_init_default;
         r.get_channel_response = channels.getByIndex(channelIndex);
-        r.which_variant = AdminMessage_get_channel_response_tag;
+        r.which_payload_variant = AdminMessage_get_channel_response_tag;
         myReply = allocDataProtobuf(r);
     }
 }

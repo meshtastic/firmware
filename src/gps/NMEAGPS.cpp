@@ -155,7 +155,7 @@ bool NMEAGPS::lookForLocation()
         return false;
     }
 
-    p.location_source = Position_LocSource_LOCSRC_GPS_INTERNAL;
+    p.location_source = Position_LocSource_LOC_INTERNAL;
 
     // Dilution of precision (an accuracy metric) is reported in 10^2 units, so we need to scale down when we use it
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
@@ -176,8 +176,7 @@ bool NMEAGPS::lookForLocation()
     p.latitude_i = toDegInt(loc.lat);
     p.longitude_i = toDegInt(loc.lng);
 
-    p.alt_geoid_sep = reader.geoidHeight.meters();
-    p.altitude_hae = reader.altitude.meters() + p.alt_geoid_sep;
+    p.altitude_hae = reader.altitude.meters() + reader.geoidHeight.meters();
     p.altitude = reader.altitude.meters();
 
     p.fix_quality = fixQual;
@@ -194,7 +193,7 @@ bool NMEAGPS::lookForLocation()
     t.tm_mon = reader.date.month() - 1;
     t.tm_year = reader.date.year() - 1900;
     t.tm_isdst = false;
-    p.pos_timestamp = mktime(&t);
+    p.timestamp = mktime(&t);
 
     // Nice to have, if available
     if (reader.satellites.isUpdated()) {

@@ -27,7 +27,7 @@ const RegionInfo regions[] = {
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
      */
-    RDEF(EU433, 433.0f, 434.0f, 10, 0, 12, true, false),
+    RDEF(EU_433, 433.0f, 434.0f, 10, 0, 12, true, false),
 
     /*
         https://www.thethingsnetwork.org/docs/lorawan/duty-cycle/
@@ -43,7 +43,7 @@ const RegionInfo regions[] = {
         (Please refer to section 4.21 in the following document)
         https://ec.europa.eu/growth/tools-databases/tris/index.cfm/ro/search/?trisaction=search.detail&year=2021&num=528&dLang=EN
      */
-    RDEF(EU868, 869.4f, 869.65f, 10, 0, 27, false, false),
+    RDEF(EU_868, 869.4f, 869.65f, 10, 0, 27, false, false),
 
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
@@ -88,7 +88,7 @@ const RegionInfo regions[] = {
          https://rrf.rsm.govt.nz/smart-web/smart/page/-smart/domain/licence/LicenceSummary.wdk?id=219752
          https://iotalliance.org.nz/wp-content/uploads/sites/4/2019/05/IoT-Spectrum-in-NZ-Briefing-Paper.pdf
       */
-    RDEF(NZ865, 864.0f, 868.0f, 100, 0, 0, true, false),
+    RDEF(NZ_865, 864.0f, 868.0f, 100, 0, 0, true, false),
 
     /*
        https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
@@ -98,7 +98,7 @@ const RegionInfo regions[] = {
     /*
         This needs to be last. Same as US.
     */
-    RDEF(Unset, 902.0f, 928.0f, 100, 0, 30, true, false)
+    RDEF(UNSET, 902.0f, 928.0f, 100, 0, 30, true, false)
 
 };
 
@@ -107,7 +107,7 @@ const RegionInfo *myRegion;
 void initRegion()
 {
     const RegionInfo *r = regions;
-    for (; r->code != Config_LoRaConfig_RegionCode_Unset && r->code != config.lora.region; r++)
+    for (; r->code != Config_LoRaConfig_RegionCode_UNSET && r->code != config.lora.region; r++)
         ;
     myRegion = r;
     DEBUG_MSG("Wanted region %d, using %s\n", config.lora.region, r->name);
@@ -157,7 +157,7 @@ uint32_t RadioInterface::getPacketTime(uint32_t pl)
 
 uint32_t RadioInterface::getPacketTime(MeshPacket *p)
 {
-    assert(p->which_payloadVariant == MeshPacket_encrypted_tag); // It should have already been encoded by now
+    assert(p->which_payload_variant == MeshPacket_encrypted_tag); // It should have already been encoded by now
     uint32_t pl = p->encrypted.size + sizeof(PacketHeader);
 
     return getPacketTime(pl);
@@ -204,8 +204,8 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
     uint32_t delay = 0;
     uint8_t CWsize = map(snr, SNR_MIN, SNR_MAX, CWmin, CWmax);
     // DEBUG_MSG("rx_snr of %f so setting CWsize to:%d\n", snr, CWsize);
-    if (config.device.role == Config_DeviceConfig_Role_Router ||
-        config.device.role == Config_DeviceConfig_Role_RouterClient) {
+    if (config.device.role == Config_DeviceConfig_Role_ROUTER ||
+        config.device.role == Config_DeviceConfig_Role_ROUTER_CLIENT) {
         delay = random(0, 2*CWsize) * slotTimeMsec;
         DEBUG_MSG("rx_snr found in packet. As a router, setting tx delay:%d\n", delay);
     } else {
@@ -220,7 +220,7 @@ void printPacket(const char *prefix, const MeshPacket *p)
 {
     DEBUG_MSG("%s (id=0x%08x Fr0x%02x To0x%02x, WantAck%d, HopLim%d Ch0x%x", prefix, p->id, p->from & 0xff, p->to & 0xff,
               p->want_ack, p->hop_limit, p->channel);
-    if (p->which_payloadVariant == MeshPacket_decoded_tag) {
+    if (p->which_payload_variant == MeshPacket_decoded_tag) {
         auto &s = p->decoded;
 
         DEBUG_MSG(" Portnum=%d", s.portnum);
@@ -357,37 +357,37 @@ void RadioInterface::applyModemConfig()
     auto channelSettings = channels.getPrimary();
     if (loraConfig.spread_factor == 0) {
         switch (loraConfig.modem_preset) {
-        case Config_LoRaConfig_ModemPreset_ShortFast:
+        case Config_LoRaConfig_ModemPreset_SHORT_FAST:
             bw = 250;
             cr = 8;
             sf = 7;
             break;
-        case Config_LoRaConfig_ModemPreset_ShortSlow:
+        case Config_LoRaConfig_ModemPreset_SHORT_SLOW:
             bw = 250;
             cr = 8;
             sf = 8;
             break;
-        case Config_LoRaConfig_ModemPreset_MedFast:
+        case Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
             bw = 250;
             cr = 8;
             sf = 9;
             break;
-        case Config_LoRaConfig_ModemPreset_MedSlow:
+        case Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
             bw = 250;
             cr = 8;
             sf = 10;
             break;
-        case Config_LoRaConfig_ModemPreset_LongFast:
+        case Config_LoRaConfig_ModemPreset_LONG_FAST:
             bw = 250;
             cr = 8;
             sf = 11;
             break;
-        case Config_LoRaConfig_ModemPreset_LongSlow:
+        case Config_LoRaConfig_ModemPreset_LONG_SLOW:
             bw = 125;
             cr = 8;
             sf = 12;
             break;
-        case Config_LoRaConfig_ModemPreset_VLongSlow:
+        case Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW:
             bw = 31.25;
             cr = 8;
             sf = 12;
@@ -479,7 +479,7 @@ size_t RadioInterface::beginSending(MeshPacket *p)
     assert(!sendingPacket);
 
     // DEBUG_MSG("sending queued packet on mesh (txGood=%d,rxGood=%d,rxBad=%d)\n", rf95.txGood(), rf95.rxGood(), rf95.rxBad());
-    assert(p->which_payloadVariant == MeshPacket_encrypted_tag); // It should have already been encoded by now
+    assert(p->which_payload_variant == MeshPacket_encrypted_tag); // It should have already been encoded by now
 
     lastTxStart = millis();
 
