@@ -5,7 +5,6 @@ on:
     branches: [master]
     paths-ignore:
       - "**.md"
-      - "**.yml"
       - "version.properties"
 
   # Note: This is different from "pull_request". Need to specify ref when doing checkouts.
@@ -297,7 +296,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -U platformio adafruit-nrfutil
-          pip install -U --pre meshtastic
+          pip install -U meshtastic meshtastic==1.3a30 # --pre meshtastic
 
       - name: Upgrade platformio
         run: |
