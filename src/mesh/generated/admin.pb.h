@@ -199,12 +199,7 @@ extern const pb_msgdesc_t AdminMessage_msg;
 #define AdminMessage_fields &AdminMessage_msg
 
 /* Maximum encoded size of messages (where known) */
-#if defined(Config_size) && defined(Config_size)
-union AdminMessage_payload_variant_size_union {char f6[(6 + Config_size)]; char f34[(7 + Config_size)]; char f0[204];};
-#endif
-#if defined(Config_size) && defined(Config_size)
-#define AdminMessage_size                        (0 + sizeof(union AdminMessage_payload_variant_size_union))
-#endif
+#define AdminMessage_size                        204
 
 #ifdef __cplusplus
 } /* extern "C" */
