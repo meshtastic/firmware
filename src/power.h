@@ -32,8 +32,8 @@ class Power : private concurrency::OSThread
   protected:
     meshtastic::PowerStatus *statusHandler;
 
-    /// Setup a axp192, return true if found
-    bool axp192Init();
+    /// Setup a xpowers chip axp192/axp2101, return true if found
+    bool axpChipInit();
 
     /// Setup a simple ADC input based battery sensor
     bool analogInit();
