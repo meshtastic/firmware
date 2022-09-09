@@ -55,9 +55,9 @@ RemoteHardwareModule::RemoteHardwareModule()
 bool RemoteHardwareModule::handleReceivedProtobuf(const MeshPacket &req, HardwareMessage *pptr)
 {
     auto p = *pptr;
-    DEBUG_MSG("Received RemoteHardware typ=%d\n", p.typ);
+    DEBUG_MSG("Received RemoteHardware typ=%d\n", p.type);
 
-    switch (p.typ) {
+    switch (p.type) {
     case HardwareMessage_Type_WRITE_GPIOS:
         // Print notification to LCD screen
         screen->print("Write GPIOs\n");
@@ -81,7 +81,7 @@ bool RemoteHardwareModule::handleReceivedProtobuf(const MeshPacket &req, Hardwar
 
         // Send the reply
         HardwareMessage r = HardwareMessage_init_default;
-        r.typ = HardwareMessage_Type_READ_GPIOS_REPLY;
+        r.type = HardwareMessage_Type_READ_GPIOS_REPLY;
         r.gpio_value = res;
         r.gpio_mask = p.gpio_mask;
         MeshPacket *p2 = allocDataProtobuf(r);
@@ -104,7 +104,7 @@ bool RemoteHardwareModule::handleReceivedProtobuf(const MeshPacket &req, Hardwar
         break; // Ignore - we might see our own replies
 
     default:
-        DEBUG_MSG("Hardware operation %d not yet implemented! FIXME\n", p.typ);
+        DEBUG_MSG("Hardware operation %d not yet implemented! FIXME\n", p.type);
         break;
     }
 
@@ -125,7 +125,7 @@ int32_t RemoteHardwareModule::runOnce()
 
                 // Something changed!  Tell the world with a broadcast message
                 HardwareMessage r = HardwareMessage_init_default;
-                r.typ = HardwareMessage_Type_GPIOS_CHANGED;
+                r.type = HardwareMessage_Type_GPIOS_CHANGED;
                 r.gpio_value = curVal;
                 MeshPacket *p = allocDataProtobuf(r);
                 service.sendToMesh(p);

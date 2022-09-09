@@ -100,17 +100,17 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     }
 
     bool validEvent = false;
-    if (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_KEY_UP)) {
+    if (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_UP)) {
         DEBUG_MSG("Canned message event UP\n");
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_UP;
         validEvent = true;
     }
-    if (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_KEY_DOWN)) {
+    if (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_DOWN)) {
         DEBUG_MSG("Canned message event DOWN\n");
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_DOWN;
         validEvent = true;
     }
-    if (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_KEY_SELECT)) {
+    if (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_SELECT)) {
         DEBUG_MSG("Canned message event Select\n");
         // when inactive, call the onebutton shortpress instead. Activate Module only on up/down
         if ((this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED)) {
@@ -309,7 +309,7 @@ AdminMessageHandleResult CannedMessageModule::handleAdminMessageForModule(const 
 {
     AdminMessageHandleResult result;
 
-    switch (request->which_variant) {
+    switch (request->which_payload_variant) {
     case AdminMessage_get_canned_message_module_messages_request_tag:
         DEBUG_MSG("Client is getting radio canned messages\n");
         this->handleGetCannedMessageModuleMessages(mp, response);
@@ -334,7 +334,7 @@ void CannedMessageModule::handleGetCannedMessageModuleMessages(const MeshPacket 
     DEBUG_MSG("*** handleGetCannedMessageModuleMessages\n");
     assert(req.decoded.want_response);
 
-    response->which_variant = AdminMessage_get_canned_message_module_messages_response_tag;
+    response->which_payload_variant = AdminMessage_get_canned_message_module_messages_response_tag;
     strcpy(response->get_canned_message_module_messages_response, cannedMessageModuleConfig.messages);
 }
 

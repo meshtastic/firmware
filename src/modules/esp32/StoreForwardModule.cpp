@@ -21,7 +21,7 @@ int32_t StoreForwardModule::runOnce()
 
     if (moduleConfig.store_forward.enabled) {
 
-        if (config.device.role == Config_DeviceConfig_Role_Router) {
+        if (config.device.role == Config_DeviceConfig_Role_ROUTER) {
 
             // Send out the message queue.
             if (this->busy) {
@@ -397,7 +397,7 @@ StoreForwardModule::StoreForwardModule()
     if (moduleConfig.store_forward.enabled) {
 
         // Router
-        if (config.device.role == Config_DeviceConfig_Role_Router) {
+        if (config.device.role == Config_DeviceConfig_Role_ROUTER) {
             DEBUG_MSG("Initializing Store & Forward Module - Enabled as Router\n");
             if (ESP.getPsramSize()) {
                 if (ESP.getFreePsram() >= 1024 * 1024) {

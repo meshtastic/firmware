@@ -122,7 +122,7 @@ class GPSStatus : public Status
         // Only update the status if values have actually changed
         bool isDirty = matches(newStatus);
 
-        if (isDirty && p.pos_timestamp && (newStatus->p.pos_timestamp == p.pos_timestamp)) {
+        if (isDirty && p.timestamp && (newStatus->p.timestamp == p.timestamp)) {
             // We can NEVER be in two locations at the same time! (also PR #886)
             DEBUG_MSG("BUG!! positional timestamp unchanged from prev solution\n");
         }
@@ -136,7 +136,7 @@ class GPSStatus : public Status
         if (isDirty) {
             if (hasLock) {
                 // In debug logs, identify position by @timestamp:stage (stage 3 = notify)
-                DEBUG_MSG("New GPS pos@%x:3 lat=%f, lon=%f, alt=%d, pdop=%.2f, track=%.2f, sats=%d\n", p.pos_timestamp,
+                DEBUG_MSG("New GPS pos@%x:3 lat=%f, lon=%f, alt=%d, pdop=%.2f, track=%.2f, sats=%d\n", p.timestamp,
                           p.latitude_i * 1e-7, p.longitude_i * 1e-7, p.altitude, p.PDOP * 1e-2, p.ground_track * 1e-5,
                           p.sats_in_view);
             } else

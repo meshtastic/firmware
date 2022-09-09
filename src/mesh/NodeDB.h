@@ -60,7 +60,7 @@ class NodeDB
      *
      * @return true if the config was completely reset, in that case, we should send it back to the client
      */
-    bool resetRadioConfig();
+    bool resetRadioConfig(bool factory_reset = false);
 
     /// given a subpacket sniffed from the network, update our DB state
     /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
@@ -171,7 +171,7 @@ extern NodeDB nodeDB;
 // Our delay functions check for this for times that should never expire
 #define NODE_DELAY_FOREVER 0xffffffff
 
-#define IF_ROUTER(routerVal, normalVal) ((config.device.role == Config_DeviceConfig_Role_Router) ? (routerVal) : (normalVal))
+#define IF_ROUTER(routerVal, normalVal) ((config.device.role == Config_DeviceConfig_Role_ROUTER) ? (routerVal) : (normalVal))
 
 #define default_broadcast_interval_secs IF_ROUTER(12 * 60 * 60, 15 * 60)
 #define default_wait_bluetooth_secs IF_ROUTER(1, 60)

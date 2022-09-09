@@ -540,21 +540,21 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
 
-        if (gpsFormat != Config_DisplayConfig_GpsCoordinateFormat_GpsFormatDMS) {
+        if (gpsFormat != Config_DisplayConfig_GpsCoordinateFormat_DMS) {
             char coordinateLine[22];
             geoCoord.updateCoords(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()), int32_t(gps->getAltitude()));
-            if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_GpsFormatDec) { // Decimal Degrees
+            if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_DEC) { // Decimal Degrees
                 sprintf(coordinateLine, "%f %f", geoCoord.getLatitude() * 1e-7, geoCoord.getLongitude() * 1e-7);
-            } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_GpsFormatUTM) { // Universal Transverse Mercator
+            } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_UTM) { // Universal Transverse Mercator
                 sprintf(coordinateLine, "%2i%1c %06u %07u", geoCoord.getUTMZone(), geoCoord.getUTMBand(),
                         geoCoord.getUTMEasting(), geoCoord.getUTMNorthing());
-            } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_GpsFormatMGRS) { // Military Grid Reference System
+            } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_MGRS) { // Military Grid Reference System
                 sprintf(coordinateLine, "%2i%1c %1c%1c %05u %05u", geoCoord.getMGRSZone(), geoCoord.getMGRSBand(),
                         geoCoord.getMGRSEast100k(), geoCoord.getMGRSNorth100k(), geoCoord.getMGRSEasting(),
                         geoCoord.getMGRSNorthing());
-            } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_GpsFormatOLC) { // Open Location Code
+            } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_OLC) { // Open Location Code
                 geoCoord.getOLCCode(coordinateLine);
-            } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_GpsFormatOSGR) { // Ordnance Survey Grid Reference
+            } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_OSGR) { // Ordnance Survey Grid Reference
                 if (geoCoord.getOSGRE100k() == 'I' || geoCoord.getOSGRN100k() == 'I') // OSGR is only valid around the UK region
                     sprintf(coordinateLine, "%s", "Out of Boundary");
                 else
@@ -1010,7 +1010,7 @@ int32_t Screen::runOnce()
     }
 
 #ifndef DISABLE_WELCOME_UNSET
-    if (showingNormalScreen && config.lora.region == Config_LoRaConfig_RegionCode_Unset) {
+    if (showingNormalScreen && config.lora.region == Config_LoRaConfig_RegionCode_UNSET) {
         setWelcomeFrames();
     }
 #endif
@@ -1366,8 +1366,8 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
 #if HAS_WIFI
-    const char *wifiName = config.wifi.ssid;
-    const char *wifiPsw = config.wifi.psk;
+    const char *wifiName = config.network.wifi_ssid;
+    const char *wifiPsw = config.network.wifi_psk;
 
     displayedNodeNum = 0; // Not currently showing a node pane
 
@@ -1378,7 +1378,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
     if (isSoftAPForced()) {
         display->drawString(x, y, String("WiFi: Software AP (Admin)"));
-    } else if (config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPoint || config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPointHidden) {
+    } else if (config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT || config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN) {
         display->drawString(x, y, String("WiFi: Software AP"));
     } else if (WiFi.status() != WL_CONNECTED) {
         display->drawString(x, y, String("WiFi: Not Connected"));
@@ -1401,8 +1401,8 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
     - WL_NO_SHIELD: assigned when no WiFi shield is present;
 
     */
-    if (WiFi.status() == WL_CONNECTED || isSoftAPForced() || config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPoint || config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPointHidden) {
-        if (config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPoint || config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPointHidden || isSoftAPForced()) {
+    if (WiFi.status() == WL_CONNECTED || isSoftAPForced() || config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT || config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN) {
+        if (config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT || config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN || isSoftAPForced()) {
             display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IP: " + String(WiFi.softAPIP().toString().c_str()));
 
             // Number of connections to the AP. Default max for the esp32 is 4
@@ -1494,7 +1494,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         }
 
     } else {
-        if (config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPoint || config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPointHidden) {
+        if (config.network.wifi_mode== Config_NetworkConfig_WiFiMode_ACCESS_POINT || config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN) {
             if ((millis() / 10000) % 2) {
                 display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
             } else {
@@ -1542,25 +1542,25 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     auto mode = "";
 
     switch (config.lora.modem_preset) {
-    case Config_LoRaConfig_ModemPreset_ShortSlow:
+    case Config_LoRaConfig_ModemPreset_SHORT_SLOW:
         mode = "ShortS";
         break;
-    case Config_LoRaConfig_ModemPreset_ShortFast:
+    case Config_LoRaConfig_ModemPreset_SHORT_FAST:
         mode = "ShortF";
         break;
-    case Config_LoRaConfig_ModemPreset_MedSlow:
+    case Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
         mode = "MedS";
         break;
-    case Config_LoRaConfig_ModemPreset_MedFast:
+    case Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
         mode = "MedF";
         break;
-    case Config_LoRaConfig_ModemPreset_LongSlow:
+    case Config_LoRaConfig_ModemPreset_LONG_SLOW:
         mode = "LongS";
         break;
-    case Config_LoRaConfig_ModemPreset_LongFast:
+    case Config_LoRaConfig_ModemPreset_LONG_FAST:
         mode = "LongF";
         break;
-    case Config_LoRaConfig_ModemPreset_VLongSlow:
+    case Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW:
         mode = "VeryL";
         break;
     default:
@@ -1619,7 +1619,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 
     // Line 3
     if (config.display.gps_format !=
-        Config_DisplayConfig_GpsCoordinateFormat_GpsFormatDMS) // if DMS then don't draw altitude
+        Config_DisplayConfig_GpsCoordinateFormat_DMS) // if DMS then don't draw altitude
         drawGPSAltitude(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
 
     // Line 4
