@@ -13,7 +13,7 @@
 /* TODO: REPLACE */
 typedef enum _TelemetrySensorType { 
     /* No external telemetry sensor explicitly set */
-    TelemetrySensorType_NotSet = 0, 
+    TelemetrySensorType_SENSOR_UNSET = 0, 
     /* High accuracy temperature, pressure, humidity */
     TelemetrySensorType_BME280 = 1, 
     /* High accuracy temperature, pressure, humidity, and air resistance */
@@ -76,7 +76,7 @@ typedef struct _Telemetry {
 
 
 /* Helper constants for enums */
-#define _TelemetrySensorType_MIN TelemetrySensorType_NotSet
+#define _TelemetrySensorType_MIN TelemetrySensorType_SENSOR_UNSET
 #define _TelemetrySensorType_MAX TelemetrySensorType_BMP280
 #define _TelemetrySensorType_ARRAYSIZE ((TelemetrySensorType)(TelemetrySensorType_BMP280+1))
 

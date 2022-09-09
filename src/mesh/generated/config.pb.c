@@ -18,7 +18,7 @@ PB_BIND(Config_PositionConfig, Config_PositionConfig, AUTO)
 PB_BIND(Config_PowerConfig, Config_PowerConfig, AUTO)
 
 
-PB_BIND(Config_WiFiConfig, Config_WiFiConfig, AUTO)
+PB_BIND(Config_NetworkConfig, Config_NetworkConfig, AUTO)
 
 
 PB_BIND(Config_DisplayConfig, Config_DisplayConfig, AUTO)
@@ -28,7 +28,6 @@ PB_BIND(Config_LoRaConfig, Config_LoRaConfig, 2)
 
 
 PB_BIND(Config_BluetoothConfig, Config_BluetoothConfig, AUTO)
-
 
 
 
