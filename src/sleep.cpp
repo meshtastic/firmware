@@ -19,9 +19,9 @@
 esp_sleep_source_t wakeCause; // the reason we booted this time
 #endif
 
-#ifdef HAS_AXP192
-#include "axp20x.h"
-extern AXP20X_Class axp;
+#ifdef HAS_PMU
+#include "XPowersLibInterface.hpp"
+extern XPowersLibInterface *PMU;
 #endif
 
 /// Called to ask any observers if they want to veto sleep. Return 1 to veto or 0 to allow sleep to happen
@@ -78,10 +78,10 @@ void setLed(bool ledOn)
     digitalWrite(LED_PIN, ledOn ^ LED_INVERTED);
 #endif
 
-#ifdef HAS_AXP192
-    if (axp192_found) {
+#ifdef HAS_PMU
+    if (pmu_found && PMU) {
         // blink the axp led
-        axp.setChgLEDMode(ledOn ? AXP20X_LED_LOW_LEVEL : AXP20X_LED_OFF);
+        PMU->setChargingLedMode(ledOn ? XPOWERS_CHG_LED_ON : XPOWERS_CHG_LED_OFF);
     }
 #endif
 }
@@ -90,9 +90,17 @@ void setGPSPower(bool on)
 {
     DEBUG_MSG("Setting GPS power=%d\n", on);
 
-#ifdef HAS_AXP192
-    if (axp192_found)
-        axp.setPowerOutPut(AXP192_LDO3, on ? AXP202_ON : AXP202_OFF); // GPS main power
+#ifdef HAS_PMU
+    if (pmu_found && PMU){
+        uint8_t model = PMU->getChipModel();
+        if(model == XPOWERS_AXP2101){
+            // t-beam-s3-core GNSS  power channel
+            on ? PMU->enablePowerOutput(XPOWERS_ALDO4) : PMU->disablePowerOutput(XPOWERS_ALDO4);
+        }else if(model == XPOWERS_AXP192){
+            // t-beam GNSS  power channel
+            on ? PMU->enablePowerOutput(XPOWERS_LDO3)  : PMU->disablePowerOutput(XPOWERS_LDO3);         
+        }
+    }
 #endif
 }
 
@@ -185,8 +193,8 @@ void doDeepSleep(uint64_t msecToWake)
     digitalWrite(VEXT_ENABLE, 1); // turn off the display power
 #endif
 
-#ifdef HAS_AXP192
-    if (axp192_found) {
+#ifdef HAS_PMU
+    if (pmu_found && PMU) {
         // Obsolete comment: from back when we we used to receive lora packets while CPU was in deep sleep.
         // We no longer do that, because our light-sleep current draws are low enough and it provides fast start/low cost
         // wake.  We currently use deep sleep only for 'we want our device to actually be off - because our battery is
@@ -198,7 +206,12 @@ void doDeepSleep(uint64_t msecToWake)
         // in its sequencer (true?) so the average power draw should be much lower even if we were listinging for packets
         // all the time.
 
-        axp.setPowerOutPut(AXP192_LDO2, AXP202_OFF); // LORA radio
+        uint8_t model = PMU->getChipModel();
+        if(model == XPOWERS_AXP2101){
+            PMU->disablePowerOutput(XPOWERS_ALDO3); // lora radio power channel
+        }else if(model == XPOWERS_AXP192){
+            PMU->disablePowerOutput(XPOWERS_LDO2);  // lora radio power channel
+        }
     }
 #endif
 
@@ -255,7 +268,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #endif
 #ifdef PMU_IRQ
     // wake due to PMU can happen repeatedly if there is no battery installed or the battery fills
-    if (axp192_found)
+    if (pmu_found)
         gpio_wakeup_enable((gpio_num_t)PMU_IRQ, GPIO_INTR_LOW_LEVEL); // pmu irq
 #endif
     assert(esp_sleep_enable_gpio_wakeup() == ESP_OK);
@@ -284,7 +297,12 @@ void enableModemSleep()
 {
     static esp_pm_config_esp32_t esp32_config; // filled with zeros because bss
 
+
+#if CONFIG_IDF_TARGET_ESP32S3
+    esp32_config.max_freq_mhz = CONFIG_ESP32S3_DEFAULT_CPU_FREQ_MHZ;
+#else
     esp32_config.max_freq_mhz = CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ;
+#endif
     esp32_config.min_freq_mhz = 20; // 10Mhz is minimum recommended
     esp32_config.light_sleep_enable = false;
     int rv = esp_pm_configure(&esp32_config);

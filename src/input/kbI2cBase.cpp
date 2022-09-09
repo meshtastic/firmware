@@ -2,6 +2,8 @@
 #include "configuration.h"
 #include <Wire.h>
 
+extern uint8_t cardkb_found;
+
 KbI2cBase::KbI2cBase(const char *name) : concurrency::OSThread(name)
 {
     this->_originName = name;

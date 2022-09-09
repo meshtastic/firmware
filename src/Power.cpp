@@ -7,10 +7,11 @@
 #include "utils.h"
 #include "buzz/buzz.h"
 
-#ifdef HAS_AXP192
-#include "axp20x.h"
-
-AXP20X_Class axp;
+#ifdef HAS_PMU
+#include "XPowersLibInterface.hpp"
+#include "XPowersAXP2101.tpp"
+#include "XPowersAXP192.tpp"
+XPowersLibInterface *PMU = NULL;
 #else
 // Copy of the base class defined in axp20x.h.
 // I'd rather not inlude axp20x.h as it brings Wire dependency.
@@ -20,20 +21,20 @@ class HasBatteryLevel
     /**
      * Battery state of charge, from 0 to 100 or -1 for unknown
      */
-    virtual int getBattPercentage() { return -1; }
+    virtual int getBatteryPercent() { return -1; }
 
     /**
      * The raw voltage of the battery or NAN if unknown
      */
-    virtual float getBattVoltage() { return NAN; }
+    virtual uint16_t getBattVoltage() { return 0; }
 
     /**
      * return true if there is a battery installed in this unit
      */
     virtual bool isBatteryConnect() { return false; }
 
-    virtual bool isVBUSPlug() { return false; }
-    virtual bool isChargeing() { return false; }
+    virtual bool isVbusIn() { return false; }
+    virtual bool isCharging() { return false; }
 };
 #endif
 
@@ -75,7 +76,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
      *
      * FIXME - use a lipo lookup table, the current % full is super wrong
      */
-    virtual int getBattPercentage() override
+    virtual int getBatteryPercent() override
     {
         float v = getBattVoltage();
 
@@ -94,7 +95,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /**
      * The raw voltage of the batteryin millivolts or NAN if unknown
      */
-    virtual float getBattVoltage() override
+    virtual uint16_t getBattVoltage() override
     {
 
 #ifndef ADC_MULTIPLIER
@@ -130,27 +131,27 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #endif
             // DEBUG_MSG("battery gpio %d raw val=%u scaled=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled));
             last_read_value = scaled;
-            return scaled;
+            return scaled * 1000;
         } else {
             return last_read_value;
         }
 #else
-        return NAN;
+        return 0;
 #endif
     }
 
     /**
      * return true if there is a battery installed in this unit
      */
-    virtual bool isBatteryConnect() override { return getBattPercentage() != -1; }
+    virtual bool isBatteryConnect() override { return getBatteryPercent() != -1; }
 
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
     /// in power
-    virtual bool isVBUSPlug() override { return getBattVoltage() > chargingVolt; }
+    virtual bool isVbusIn() override { return getBattVoltage() > chargingVolt; }
 
     /// Assume charging if we have a battery and external power is connected.
     /// we can't be smart enough to say 'full'?
-    virtual bool isChargeing() override { return isBatteryConnect() && isVBUSPlug(); }
+    virtual bool isCharging() override { return isBatteryConnect() && isVbusIn(); }
 
   private:
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
@@ -219,7 +220,7 @@ bool Power::analogInit()
 
 bool Power::setup()
 {
-    bool found = axp192Init();
+    bool found = axpChipInit();
 
     if (!found) {
         found = analogInit();
@@ -232,10 +233,14 @@ bool Power::setup()
 
 void Power::shutdown()
 {
-#ifdef HAS_AXP192
+
+
+#ifdef HAS_PMU
     DEBUG_MSG("Shutting down\n");
-    axp.setChgLEDMode(AXP20X_LED_OFF);
-    axp.shutdown();
+    if(PMU){
+        PMU->setChargingLedMode(XPOWERS_CHG_LED_OFF);
+        PMU->shutdown();
+    }
 #elif defined(ARCH_NRF52)
     playBeep();
     ledOff(PIN_LED1);
@@ -256,8 +261,8 @@ void Power::readPowerStatus()
         if (hasBattery) {
             batteryVoltageMv = batteryLevel->getBattVoltage();
             // If the AXP192 returns a valid battery percentage, use it
-            if (batteryLevel->getBattPercentage() >= 0) {
-                batteryChargePercent = batteryLevel->getBattPercentage();
+            if (batteryLevel->getBatteryPercent() >= 0) {
+                batteryChargePercent = batteryLevel->getBatteryPercent();
             } else {
                 // If the AXP192 returns a percentage less than 0, the feature is either not supported or there is an error
                 // In that case, we compute an estimate of the charge percent based on maximum and minimum voltages defined in
@@ -270,8 +275,8 @@ void Power::readPowerStatus()
 
         // Notify any status instances that are observing us
         const PowerStatus powerStatus2 =
-            PowerStatus(hasBattery ? OptTrue : OptFalse, batteryLevel->isVBUSPlug() ? OptTrue : OptFalse,
-                        batteryLevel->isChargeing() ? OptTrue : OptFalse, batteryVoltageMv, batteryChargePercent);
+            PowerStatus(hasBattery ? OptTrue : OptFalse, batteryLevel->isVbusIn() ? OptTrue : OptFalse,
+                        batteryLevel->isCharging() ? OptTrue : OptFalse, batteryVoltageMv, batteryChargePercent);
         DEBUG_MSG("Battery: usbPower=%d, isCharging=%d, batMv=%d, batPct=%d\n", powerStatus2.getHasUSB(),
                   powerStatus2.getIsCharging(), powerStatus2.getBatteryVoltageMv(), powerStatus2.getBatteryChargePercent());
         newStatus.notifyObservers(&powerStatus2);
@@ -304,41 +309,46 @@ int32_t Power::runOnce()
 {
     readPowerStatus();
 
-#ifdef HAS_AXP192
+#ifdef HAS_PMU
     // WE no longer use the IRQ line to wake the CPU (due to false wakes from sleep), but we do poll
     // the IRQ status by reading the registers over I2C
-    axp.readIRQ();
+    if(PMU){
 
-    if (axp.isVbusRemoveIRQ()) {
-        DEBUG_MSG("USB unplugged\n");
-        powerFSM.trigger(EVENT_POWER_DISCONNECTED);
-    }
-    if (axp.isVbusPlugInIRQ()) {
-        DEBUG_MSG("USB plugged In\n");
-        powerFSM.trigger(EVENT_POWER_CONNECTED);
-    }
-    /*
-    Other things we could check if we cared...
+        PMU->getIrqStatus();
 
-    if (axp.isChargingIRQ()) {
-        DEBUG_MSG("Battery start charging\n");
+        if(PMU->isVbusRemoveIrq()){
+            DEBUG_MSG("USB unplugged\n");
+            powerFSM.trigger(EVENT_POWER_DISCONNECTED);
+        }
+
+        if (PMU->isVbusInsertIrq()) {
+            DEBUG_MSG("USB plugged In\n");
+            powerFSM.trigger(EVENT_POWER_CONNECTED);
+        }
+
+        /*
+        Other things we could check if we cared...
+
+        if (PMU->isBatChagerStartIrq()) {
+            DEBUG_MSG("Battery start charging\n");
+        }
+        if (PMU->isBatChagerDoneIrq()) {
+            DEBUG_MSG("Battery fully charged\n");
+        }
+        if (PMU->isBatInsertIrq()) {
+            DEBUG_MSG("Battery inserted\n");
+        }
+        if (PMU->isBatRemoveIrq()) {
+            DEBUG_MSG("Battery removed\n");
+        }
+        if (PMU->isPekeyShortPressIrq()) {
+            DEBUG_MSG("PEK short button press\n");
+        }
+        */
+
+        PMU->clearIrqStatus();
     }
-    if (axp.isChargingDoneIRQ()) {
-        DEBUG_MSG("Battery fully charged\n");
-    }
-    if (axp.isBattPlugInIRQ()) {
-        DEBUG_MSG("Battery inserted\n");
-    }
-    if (axp.isBattRemoveIRQ()) {
-        DEBUG_MSG("Battery removed\n");
-    }
-    if (axp.isPEKShortPressIRQ()) {
-        DEBUG_MSG("PEK short button press\n");
-    }
-    */
-    axp.clearIRQ();
 #endif
-
     // Only read once every 20 seconds once the power status for the app has been initialized
     return (statusHandler && statusHandler->isInitialized()) ? (1000 * 20) : RUN_SAME;
 }
@@ -351,77 +361,204 @@ int32_t Power::runOnce()
  share the same i2c bus, instead use ssd1306 sleep mode DCDC2 -> unused DCDC3 0.7-3.5V @ 700mA max -> ESP32 (keep this on!) LDO1
  30mA -> charges GPS backup battery // charges the tiny J13 battery by the GPS to power the GPS ram (for a couple of days), can
  not be turned off LDO2 200mA -> LORA LDO3 200mA -> GPS
+ * 
  */
-bool Power::axp192Init()
+bool Power::axpChipInit()
 {
-#ifdef HAS_AXP192
-    if (axp192_found) {
-        if (!axp.begin(Wire, AXP192_SLAVE_ADDRESS)) {
-            batteryLevel = &axp;
 
-            DEBUG_MSG("AXP192 Begin PASS\n");
+#ifdef HAS_PMU
 
-            // axp.setChgLEDMode(LED_BLINK_4HZ);
-            DEBUG_MSG("DCDC1: %s\n", axp.isDCDC1Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("DCDC2: %s\n", axp.isDCDC2Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("LDO2: %s\n", axp.isLDO2Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("LDO3: %s\n", axp.isLDO3Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("DCDC3: %s\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("----------------------------------------\n");
-
-            axp.setPowerOutPut(AXP192_LDO2, AXP202_ON); // LORA radio
-            // axp.setPowerOutPut(AXP192_LDO3, AXP202_ON); // GPS main power - now turned on in setGpsPower
-            axp.setPowerOutPut(AXP192_DCDC2, AXP202_ON);
-            axp.setPowerOutPut(AXP192_EXTEN, AXP202_ON);
-            axp.setPowerOutPut(AXP192_DCDC1, AXP202_ON);
-            axp.setDCDC1Voltage(3300); // for the OLED power
-
-            DEBUG_MSG("DCDC1: %s\n", axp.isDCDC1Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("DCDC2: %s\n", axp.isDCDC2Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("LDO2: %s\n", axp.isLDO2Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("LDO3: %s\n", axp.isLDO3Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("DCDC3: %s\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
-            DEBUG_MSG("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
-
-            // this was the previous 'Unset' default.
-            axp.setChargeControlCur(AXP1XX_CHARGE_CUR_450MA);
-
-#if 0
-
-      // Not connected
-      //val = 0xfc;
-      //axp._writeByte(AXP202_VHTF_CHGSET, 1, &val); // Set temperature protection
-
-      //not used
-      //val = 0x46;
-      //axp._writeByte(AXP202_OFF_CTL, 1, &val); // enable bat detection
-#endif
-            axp.debugCharging();
-
-#ifdef PMU_IRQ
-            pinMode(PMU_IRQ, INPUT);
-            attachInterrupt(
-                PMU_IRQ, [] { pmu_irq = true; }, FALLING);
-
-            axp.adc1Enable(AXP202_BATT_CUR_ADC1, 1);
-            // we do not look for AXP202_CHARGING_FINISHED_IRQ & AXP202_CHARGING_IRQ because it occurs repeatedly while there is
-            // no battery also it could cause inadvertent waking from light sleep just because the battery filled
-            // we don't look for AXP202_BATT_REMOVED_IRQ because it occurs repeatedly while no battery installed
-            // we don't look at AXP202_VBUS_REMOVED_IRQ because we don't have anything hooked to vbus
-            axp.enableIRQ(AXP202_BATT_CONNECT_IRQ | AXP202_VBUS_CONNECT_IRQ | AXP202_PEK_SHORTPRESS_IRQ, 1);
-
-            axp.clearIRQ();
-#endif
-            readPowerStatus();
+    if (!PMU) {
+        PMU = new XPowersAXP2101(Wire, I2C_SDA, I2C_SCL);
+        if (!PMU->init()) {
+            DEBUG_MSG("Warning: Failed to find AXP2101 power management\n");
+            delete PMU;
+            PMU = NULL;
         } else {
-            DEBUG_MSG("AXP192 Begin FAIL\n");
+            DEBUG_MSG("AXP2101 PMU init succeeded, using AXP2101 PMU\n");
         }
-    } else {
-        DEBUG_MSG("AXP192 not found\n");
     }
 
-    return axp192_found;
+    if (!PMU) {
+        PMU = new XPowersAXP192(Wire, I2C_SDA, I2C_SCL);
+        if (!PMU->init()) {
+            DEBUG_MSG("Warning: Failed to find AXP192 power management\n");
+            delete PMU;
+            PMU = NULL;
+        } else {
+            DEBUG_MSG("AXP192 PMU init succeeded, using AXP192 PMU\n");
+        }
+    }
+
+    if (!PMU) {
+                /*
+        * In XPowersLib, if the XPowersAXPxxx object is released, Wire.end() will be called at the same time. 
+        * In order not to affect other devices, if the initialization of the PMU fails, Wire needs to be re-initialized once, 
+        * if there are multiple devices sharing the bus.
+        * * */
+        Wire.begin(I2C_SDA, I2C_SCL);
+        return false;
+    }
+
+    batteryLevel = PMU;
+
+    if (PMU->getChipModel() == XPOWERS_AXP192) {
+        
+        // lora radio power channel
+        PMU->setPowerChannelVoltage(XPOWERS_LDO2, 3300);
+        PMU->enablePowerOutput(XPOWERS_LDO2);
+
+
+        // oled module power channel,
+        // disable it will cause abnormal communication between boot and AXP power supply, 
+        // do not turn it off
+        PMU->setPowerChannelVoltage(XPOWERS_DCDC1, 3300);
+        // enable oled power
+        PMU->enablePowerOutput(XPOWERS_DCDC1);
+
+
+        // gnss module power channel -  now turned on in setGpsPower
+        PMU->setPowerChannelVoltage(XPOWERS_LDO3, 3300);
+        // PMU->enablePowerOutput(XPOWERS_LDO3);
+
+
+        //protected oled power source
+        PMU->setProtectedChannel(XPOWERS_DCDC1);
+        //protected esp32 power source
+        PMU->setProtectedChannel(XPOWERS_DCDC3);
+
+        //disable not use channel
+        PMU->disablePowerOutput(XPOWERS_DCDC2);
+
+        //disable all axp chip interrupt
+        PMU->disableIRQ(XPOWERS_AXP192_ALL_IRQ);
+
+        // Set constant current charging current
+        PMU->setChargerConstantCurr(XPOWERS_AXP192_CHG_CUR_450MA);
+
+    
+    } else if (PMU->getChipModel() == XPOWERS_AXP2101) {
+
+        // t-beam s3 core 
+
+        // gnss module power channel -  now turned on in setGpsPower
+        // PMU->setPowerChannelVoltage(XPOWERS_ALDO4, 3300);
+        // PMU->enablePowerOutput(XPOWERS_ALDO4);
+
+        // lora radio power channel
+        PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300);
+        PMU->enablePowerOutput(XPOWERS_ALDO3);
+
+        // m.2 interface 
+        PMU->setPowerChannelVoltage(XPOWERS_DCDC3, 3300);
+        PMU->enablePowerOutput(XPOWERS_DCDC3);
+
+        // PMU->setPowerChannelVoltage(XPOWERS_DCDC4, 3300);
+        // PMU->enablePowerOutput(XPOWERS_DCDC4);
+
+        //not use channel
+        PMU->disablePowerOutput(XPOWERS_DCDC2); //not elicited
+        PMU->disablePowerOutput(XPOWERS_DCDC5); //not elicited
+        PMU->disablePowerOutput(XPOWERS_DLDO1); //Invalid power channel, it does not exist
+        PMU->disablePowerOutput(XPOWERS_DLDO2); //Invalid power channel, it does not exist
+        PMU->disablePowerOutput(XPOWERS_VBACKUP);
+
+        //disable all axp chip interrupt
+        PMU->disableIRQ(XPOWERS_AXP2101_ALL_IRQ);
+
+        //Set the constant current charging current of AXP2101, temporarily use 500mA by default
+        PMU->setChargerConstantCurr(XPOWERS_AXP2101_CHG_CUR_500MA);
+
+    }
+    
+
+    PMU->clearIrqStatus();
+
+    // TBeam1.1 /T-Beam S3-Core has no external TS detection, 
+    // it needs to be disabled, otherwise it will cause abnormal charging
+    PMU->disableTSPinMeasure();
+
+    // PMU->enableSystemVoltageMeasure();
+    PMU->enableVbusVoltageMeasure();
+    PMU->enableBattVoltageMeasure();
+
+    DEBUG_MSG("=======================================================================\n");
+    if (PMU->isChannelAvailable(XPOWERS_DCDC1)) {
+        DEBUG_MSG("DC1  : %s   Voltage:%u mV \n",  PMU->isPowerChannelEnable(XPOWERS_DCDC1)  ? "+" : "-",  PMU->getPowerChannelVoltage(XPOWERS_DCDC1));
+    }
+    if (PMU->isChannelAvailable(XPOWERS_DCDC2)) {
+        DEBUG_MSG("DC2  : %s   Voltage:%u mV \n",  PMU->isPowerChannelEnable(XPOWERS_DCDC2)  ? "+" : "-",  PMU->getPowerChannelVoltage(XPOWERS_DCDC2));
+    }
+    if (PMU->isChannelAvailable(XPOWERS_DCDC3)) {
+        DEBUG_MSG("DC3  : %s   Voltage:%u mV \n",  PMU->isPowerChannelEnable(XPOWERS_DCDC3)  ? "+" : "-",  PMU->getPowerChannelVoltage(XPOWERS_DCDC3));
+    }
+    if (PMU->isChannelAvailable(XPOWERS_DCDC4)) {
+        DEBUG_MSG("DC4  : %s   Voltage:%u mV \n",  PMU->isPowerChannelEnable(XPOWERS_DCDC4)  ? "+" : "-",  PMU->getPowerChannelVoltage(XPOWERS_DCDC4));
+    }
+    if (PMU->isChannelAvailable(XPOWERS_LDO2)) {
+        DEBUG_MSG("LDO2 : %s   Voltage:%u mV \n",  PMU->isPowerChannelEnable(XPOWERS_LDO2)   ? "+" : "-",  PMU->getPowerChannelVoltage(XPOWERS_LDO2));
+    }
+    if (PMU->isChannelAvailable(XPOWERS_LDO3)) {
+        DEBUG_MSG("LDO3 : %s   Voltage:%u mV \n",  PMU->isPowerChannelEnable(XPOWERS_LDO3)   ? "+" : "-",  PMU->getPowerChannelVoltage(XPOWERS_LDO3));
+    }
+    if (PMU->isChannelAvailable(XPOWERS_ALDO1)) {
+        DEBUG_MSG("ALDO1: %s   Voltage:%u mV \n",  PMU->isPowerChannelEnable(XPOWERS_ALDO1)  ? "+" : "-",  PMU->getPowerChannelVoltage(XPOWERS_ALDO1));
+    }
+    if (PMU->isChannelAvailable(XPOWERS_ALDO2)) {
+        DEBUG_MSG("ALDO2: %s   Voltage:%u mV \n",  PMU->isPowerChannelEnable(XPOWERS_ALDO2)  ? "+" : "-",  PMU->getPowerChannelVoltage(XPOWERS_ALDO2));
+    }
+    if (PMU->isChannelAvailable(XPOWERS_ALDO3)) {
+        DEBUG_MSG("ALDO3: %s   Voltage:%u mV \n",  PMU->isPowerChannelEnable(XPOWERS_ALDO3)  ? "+" : "-",  PMU->getPowerChannelVoltage(XPOWERS_ALDO3));
+    }
+    if (PMU->isChannelAvailable(XPOWERS_ALDO4)) {
+        DEBUG_MSG("ALDO4: %s   Voltage:%u mV \n",  PMU->isPowerChannelEnable(XPOWERS_ALDO4)  ? "+" : "-",  PMU->getPowerChannelVoltage(XPOWERS_ALDO4));
+    }
+    if (PMU->isChannelAvailable(XPOWERS_BLDO1)) {
+        DEBUG_MSG("BLDO1: %s   Voltage:%u mV \n",  PMU->isPowerChannelEnable(XPOWERS_BLDO1)  ? "+" : "-",  PMU->getPowerChannelVoltage(XPOWERS_BLDO1));
+    }
+    if (PMU->isChannelAvailable(XPOWERS_BLDO2)) {
+        DEBUG_MSG("BLDO2: %s   Voltage:%u mV \n",  PMU->isPowerChannelEnable(XPOWERS_BLDO2)  ? "+" : "-",  PMU->getPowerChannelVoltage(XPOWERS_BLDO2));
+    }
+    DEBUG_MSG("=======================================================================\n");
+
+
+    //Set up the charging voltage, AXP2101/AXP192 4.2V gear is the same
+    // XPOWERS_AXP192_CHG_VOL_4V2 = XPOWERS_AXP2101_CHG_VOL_4V2
+    PMU->setChargeTargetVoltage(XPOWERS_AXP192_CHG_VOL_4V2);
+
+    // Set PMU shutdown voltage at 2.6V to maximize battery utilization
+    PMU->setSysPowerDownVoltage(2600);
+
+
+
+#ifdef PMU_IRQ
+        uint64_t pmuIrqMask = 0;
+
+        if (PMU->getChipModel() == XPOWERS_AXP192) {
+            pmuIrqMask = XPOWERS_AXP192_VBUS_INSERT_IRQ | XPOWERS_AXP192_BAT_INSERT_IRQ | XPOWERS_AXP192_PKEY_SHORT_IRQ;
+        } else if (PMU->getChipModel() == XPOWERS_AXP2101) {
+            pmuIrqMask = XPOWERS_AXP2101_VBUS_INSERT_IRQ | XPOWERS_AXP2101_BAT_INSERT_IRQ | XPOWERS_AXP2101_PKEY_SHORT_IRQ;
+        }
+
+        pinMode(PMU_IRQ, INPUT);
+        attachInterrupt(
+            PMU_IRQ, [] { pmu_irq = true; }, FALLING);
+
+        // we do not look for AXPXXX_CHARGING_FINISHED_IRQ & AXPXXX_CHARGING_IRQ because it occurs repeatedly while there is
+        // no battery also it could cause inadvertent waking from light sleep just because the battery filled
+        // we don't look for AXPXXX_BATT_REMOVED_IRQ because it occurs repeatedly while no battery installed
+        // we don't look at AXPXXX_VBUS_REMOVED_IRQ because we don't have anything hooked to vbus
+        PMU->enableIRQ(pmuIrqMask);
+
+        PMU->clearIrqStatus();
+#endif /*PMU_IRQ*/
+
+            readPowerStatus();
+
+    pmu_found = true;
+
+    return pmu_found;
+
 #else
     return false;
 #endif
