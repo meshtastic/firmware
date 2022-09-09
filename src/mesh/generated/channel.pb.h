@@ -38,6 +38,25 @@ typedef PB_BYTES_ARRAY_T(32) ChannelSettings_psk_t;
  FIXME: explain how apps use channels for security.
  explain how remote settings and remote gpio are managed as an example */
 typedef struct _ChannelSettings { 
+    /* NOTE: this field is _independent_ and unrelated to the concepts in channel.proto.
+ this is controlling the actual hardware frequency the radio is transmitting on.
+ In a perfect world we would have called it something else (band?) but I forgot to make this change during the big 1.2 renaming.
+ Most users should never need to be exposed to this field/concept.
+ A channel number between 1 and 13 (or whatever the max is in the current
+ region). If ZERO then the rule is "use the old channel name hash based
+ algorithm to derive the channel number")
+ If using the hash algorithm the channel number will be: hash(channel_name) %
+ NUM_CHANNELS (Where num channels depends on the regulatory region).
+ NUM_CHANNELS_US is 13, for other values see MeshRadio.h in the device code.
+ hash a string into an integer - djb2 by Dan Bernstein. -
+ http://www.cse.yorku.ca/~oz/hash.html
+ unsigned long hash(char *str) {
+   unsigned long hash = 5381; int c;
+   while ((c = *str++) != 0)
+     hash = ((hash << 5) + hash) + (unsigned char) c;
+   return hash;
+ } */
+    uint8_t channel_num;
     /* A simple pre-shared key for now for crypto.
  Must be either 0 bytes (no crypto), 16 bytes (AES128), or 32 bytes (AES256).
  A special shorthand is used for 1 byte long psks.
@@ -58,25 +77,6 @@ typedef struct _ChannelSettings {
  For channel_num hashing empty string will be treated as "X".
  Where "X" is selected based on the English words listed above for ModemPreset */
     char name[12];
-    /* NOTE: this field is _independent_ and unrelated to the concepts in channel.proto.
- this is controlling the actual hardware frequency the radio is transmitting on.
- In a perfect world we would have called it something else (band?) but I forgot to make this change during the big 1.2 renaming.
- Most users should never need to be exposed to this field/concept.
- A channel number between 1 and 13 (or whatever the max is in the current
- region). If ZERO then the rule is "use the old channel name hash based
- algorithm to derive the channel number")
- If using the hash algorithm the channel number will be: hash(channel_name) %
- NUM_CHANNELS (Where num channels depends on the regulatory region).
- NUM_CHANNELS_US is 13, for other values see MeshRadio.h in the device code.
- hash a string into an integer - djb2 by Dan Bernstein. -
- http://www.cse.yorku.ca/~oz/hash.html
- unsigned long hash(char *str) {
-   unsigned long hash = 5381; int c;
-   while ((c = *str++) != 0)
-     hash = ((hash << 5) + hash) + (unsigned char) c;
-   return hash;
- } */
-    uint8_t channel_num;
     /* Used to construct a globally unique channel ID.
  The full globally unique ID will be: "name.id" where ID is shown as base36.
  Assuming that the number of meshtastic users is below 20K (true for a long time)
@@ -120,30 +120,30 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define ChannelSettings_init_default             {{0, {0}}, "", 0, 0, 0, 0}
+#define ChannelSettings_init_default             {0, {0, {0}}, "", 0, 0, 0}
 #define Channel_init_default                     {0, false, ChannelSettings_init_default, _Channel_Role_MIN}
-#define ChannelSettings_init_zero                {{0, {0}}, "", 0, 0, 0, 0}
+#define ChannelSettings_init_zero                {0, {0, {0}}, "", 0, 0, 0}
 #define Channel_init_zero                        {0, false, ChannelSettings_init_zero, _Channel_Role_MIN}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define ChannelSettings_psk_tag                  4
-#define ChannelSettings_name_tag                 5
-#define ChannelSettings_channel_num_tag          9
-#define ChannelSettings_id_tag                   10
-#define ChannelSettings_uplink_enabled_tag       16
-#define ChannelSettings_downlink_enabled_tag     17
+#define ChannelSettings_channel_num_tag          1
+#define ChannelSettings_psk_tag                  2
+#define ChannelSettings_name_tag                 3
+#define ChannelSettings_id_tag                   4
+#define ChannelSettings_uplink_enabled_tag       5
+#define ChannelSettings_downlink_enabled_tag     6
 #define Channel_index_tag                        1
 #define Channel_settings_tag                     2
 #define Channel_role_tag                         3
 
 /* Struct field encoding specification for nanopb */
 #define ChannelSettings_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, BYTES,    psk,               4) \
-X(a, STATIC,   SINGULAR, STRING,   name,              5) \
-X(a, STATIC,   SINGULAR, UINT32,   channel_num,       9) \
-X(a, STATIC,   SINGULAR, FIXED32,  id,               10) \
-X(a, STATIC,   SINGULAR, BOOL,     uplink_enabled,   16) \
-X(a, STATIC,   SINGULAR, BOOL,     downlink_enabled,  17)
+X(a, STATIC,   SINGULAR, UINT32,   channel_num,       1) \
+X(a, STATIC,   SINGULAR, BYTES,    psk,               2) \
+X(a, STATIC,   SINGULAR, STRING,   name,              3) \
+X(a, STATIC,   SINGULAR, FIXED32,  id,                4) \
+X(a, STATIC,   SINGULAR, BOOL,     uplink_enabled,    5) \
+X(a, STATIC,   SINGULAR, BOOL,     downlink_enabled,   6)
 #define ChannelSettings_CALLBACK NULL
 #define ChannelSettings_DEFAULT NULL
 
@@ -163,8 +163,8 @@ extern const pb_msgdesc_t Channel_msg;
 #define Channel_fields &Channel_msg
 
 /* Maximum encoded size of messages (where known) */
-#define ChannelSettings_size                     61
-#define Channel_size                             76
+#define ChannelSettings_size                     59
+#define Channel_size                             74
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -11,7 +11,7 @@
 
 /* Enum definitions */
 typedef enum _ModuleConfig_SerialConfig_Serial_Baud { 
-    ModuleConfig_SerialConfig_Serial_Baud_BAUD_Default = 0, 
+    ModuleConfig_SerialConfig_Serial_Baud_BAUD_DEFAULT = 0, 
     ModuleConfig_SerialConfig_Serial_Baud_BAUD_110 = 1, 
     ModuleConfig_SerialConfig_Serial_Baud_BAUD_300 = 2, 
     ModuleConfig_SerialConfig_Serial_Baud_BAUD_600 = 3, 
@@ -30,20 +30,20 @@ typedef enum _ModuleConfig_SerialConfig_Serial_Baud {
 } ModuleConfig_SerialConfig_Serial_Baud;
 
 typedef enum _ModuleConfig_SerialConfig_Serial_Mode { 
-    ModuleConfig_SerialConfig_Serial_Mode_MODE_Default = 0, 
-    ModuleConfig_SerialConfig_Serial_Mode_MODE_SIMPLE = 1, 
-    ModuleConfig_SerialConfig_Serial_Mode_MODE_PROTO = 2 
+    ModuleConfig_SerialConfig_Serial_Mode_DEFAULT = 0, 
+    ModuleConfig_SerialConfig_Serial_Mode_SIMPLE = 1, 
+    ModuleConfig_SerialConfig_Serial_Mode_PROTO = 2 
 } ModuleConfig_SerialConfig_Serial_Mode;
 
 typedef enum _ModuleConfig_CannedMessageConfig_InputEventChar { 
-    ModuleConfig_CannedMessageConfig_InputEventChar_KEY_NONE = 0, 
-    ModuleConfig_CannedMessageConfig_InputEventChar_KEY_UP = 17, 
-    ModuleConfig_CannedMessageConfig_InputEventChar_KEY_DOWN = 18, 
-    ModuleConfig_CannedMessageConfig_InputEventChar_KEY_LEFT = 19, 
-    ModuleConfig_CannedMessageConfig_InputEventChar_KEY_RIGHT = 20, 
-    ModuleConfig_CannedMessageConfig_InputEventChar_KEY_SELECT = 10, 
-    ModuleConfig_CannedMessageConfig_InputEventChar_KEY_BACK = 27, 
-    ModuleConfig_CannedMessageConfig_InputEventChar_KEY_CANCEL = 24 
+    ModuleConfig_CannedMessageConfig_InputEventChar_NONE = 0, 
+    ModuleConfig_CannedMessageConfig_InputEventChar_UP = 17, 
+    ModuleConfig_CannedMessageConfig_InputEventChar_DOWN = 18, 
+    ModuleConfig_CannedMessageConfig_InputEventChar_LEFT = 19, 
+    ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT = 20, 
+    ModuleConfig_CannedMessageConfig_InputEventChar_SELECT = 10, 
+    ModuleConfig_CannedMessageConfig_InputEventChar_BACK = 27, 
+    ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL = 24 
 } ModuleConfig_CannedMessageConfig_InputEventChar;
 
 /* Struct definitions */
@@ -113,7 +113,7 @@ typedef struct _ModuleConfig_TelemetryConfig {
 
 /* Module Config */
 typedef struct _ModuleConfig { 
-    pb_size_t which_payloadVariant;
+    pb_size_t which_payload_variant;
     union {
         /* TODO: REPLACE */
         ModuleConfig_MQTTConfig mqtt;
@@ -129,22 +129,22 @@ typedef struct _ModuleConfig {
         ModuleConfig_TelemetryConfig telemetry;
         /* TODO: REPLACE */
         ModuleConfig_CannedMessageConfig canned_message;
-    } payloadVariant;
+    } payload_variant;
 } ModuleConfig;
 
 
 /* Helper constants for enums */
-#define _ModuleConfig_SerialConfig_Serial_Baud_MIN ModuleConfig_SerialConfig_Serial_Baud_BAUD_Default
+#define _ModuleConfig_SerialConfig_Serial_Baud_MIN ModuleConfig_SerialConfig_Serial_Baud_BAUD_DEFAULT
 #define _ModuleConfig_SerialConfig_Serial_Baud_MAX ModuleConfig_SerialConfig_Serial_Baud_BAUD_921600
 #define _ModuleConfig_SerialConfig_Serial_Baud_ARRAYSIZE ((ModuleConfig_SerialConfig_Serial_Baud)(ModuleConfig_SerialConfig_Serial_Baud_BAUD_921600+1))
 
-#define _ModuleConfig_SerialConfig_Serial_Mode_MIN ModuleConfig_SerialConfig_Serial_Mode_MODE_Default
-#define _ModuleConfig_SerialConfig_Serial_Mode_MAX ModuleConfig_SerialConfig_Serial_Mode_MODE_PROTO
-#define _ModuleConfig_SerialConfig_Serial_Mode_ARRAYSIZE ((ModuleConfig_SerialConfig_Serial_Mode)(ModuleConfig_SerialConfig_Serial_Mode_MODE_PROTO+1))
+#define _ModuleConfig_SerialConfig_Serial_Mode_MIN ModuleConfig_SerialConfig_Serial_Mode_DEFAULT
+#define _ModuleConfig_SerialConfig_Serial_Mode_MAX ModuleConfig_SerialConfig_Serial_Mode_PROTO
+#define _ModuleConfig_SerialConfig_Serial_Mode_ARRAYSIZE ((ModuleConfig_SerialConfig_Serial_Mode)(ModuleConfig_SerialConfig_Serial_Mode_PROTO+1))
 
-#define _ModuleConfig_CannedMessageConfig_InputEventChar_MIN ModuleConfig_CannedMessageConfig_InputEventChar_KEY_NONE
-#define _ModuleConfig_CannedMessageConfig_InputEventChar_MAX ModuleConfig_CannedMessageConfig_InputEventChar_KEY_BACK
-#define _ModuleConfig_CannedMessageConfig_InputEventChar_ARRAYSIZE ((ModuleConfig_CannedMessageConfig_InputEventChar)(ModuleConfig_CannedMessageConfig_InputEventChar_KEY_BACK+1))
+#define _ModuleConfig_CannedMessageConfig_InputEventChar_MIN ModuleConfig_CannedMessageConfig_InputEventChar_NONE
+#define _ModuleConfig_CannedMessageConfig_InputEventChar_MAX ModuleConfig_CannedMessageConfig_InputEventChar_BACK
+#define _ModuleConfig_CannedMessageConfig_InputEventChar_ARRAYSIZE ((ModuleConfig_CannedMessageConfig_InputEventChar)(ModuleConfig_CannedMessageConfig_InputEventChar_BACK+1))
 
 
 #ifdef __cplusplus
@@ -212,7 +212,7 @@ extern "C" {
 #define ModuleConfig_TelemetryConfig_environment_update_interval_tag 2
 #define ModuleConfig_TelemetryConfig_environment_measurement_enabled_tag 3
 #define ModuleConfig_TelemetryConfig_environment_screen_enabled_tag 4
-#define ModuleConfig_TelemetryConfig_environment_display_fahrenheit_tag 7
+#define ModuleConfig_TelemetryConfig_environment_display_fahrenheit_tag 5
 #define ModuleConfig_mqtt_tag                    1
 #define ModuleConfig_serial_tag                  2
 #define ModuleConfig_external_notification_tag   3
@@ -223,22 +223,22 @@ extern "C" {
 
 /* Struct field encoding specification for nanopb */
 #define ModuleConfig_FIELDLIST(X, a) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,mqtt,payloadVariant.mqtt),   1) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,serial,payloadVariant.serial),   2) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,external_notification,payloadVariant.external_notification),   3) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,store_forward,payloadVariant.store_forward),   4) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,range_test,payloadVariant.range_test),   5) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,telemetry,payloadVariant.telemetry),   6) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,canned_message,payloadVariant.canned_message),   7)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,mqtt,payload_variant.mqtt),   1) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,serial,payload_variant.serial),   2) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,external_notification,payload_variant.external_notification),   3) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,store_forward,payload_variant.store_forward),   4) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,range_test,payload_variant.range_test),   5) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,telemetry,payload_variant.telemetry),   6) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,canned_message,payload_variant.canned_message),   7)
 #define ModuleConfig_CALLBACK NULL
 #define ModuleConfig_DEFAULT NULL
-#define ModuleConfig_payloadVariant_mqtt_MSGTYPE ModuleConfig_MQTTConfig
-#define ModuleConfig_payloadVariant_serial_MSGTYPE ModuleConfig_SerialConfig
-#define ModuleConfig_payloadVariant_external_notification_MSGTYPE ModuleConfig_ExternalNotificationConfig
-#define ModuleConfig_payloadVariant_store_forward_MSGTYPE ModuleConfig_StoreForwardConfig
-#define ModuleConfig_payloadVariant_range_test_MSGTYPE ModuleConfig_RangeTestConfig
-#define ModuleConfig_payloadVariant_telemetry_MSGTYPE ModuleConfig_TelemetryConfig
-#define ModuleConfig_payloadVariant_canned_message_MSGTYPE ModuleConfig_CannedMessageConfig
+#define ModuleConfig_payload_variant_mqtt_MSGTYPE ModuleConfig_MQTTConfig
+#define ModuleConfig_payload_variant_serial_MSGTYPE ModuleConfig_SerialConfig
+#define ModuleConfig_payload_variant_external_notification_MSGTYPE ModuleConfig_ExternalNotificationConfig
+#define ModuleConfig_payload_variant_store_forward_MSGTYPE ModuleConfig_StoreForwardConfig
+#define ModuleConfig_payload_variant_range_test_MSGTYPE ModuleConfig_RangeTestConfig
+#define ModuleConfig_payload_variant_telemetry_MSGTYPE ModuleConfig_TelemetryConfig
+#define ModuleConfig_payload_variant_canned_message_MSGTYPE ModuleConfig_CannedMessageConfig
 
 #define ModuleConfig_MQTTConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
@@ -292,7 +292,7 @@ X(a, STATIC,   SINGULAR, UINT32,   device_update_interval,   1) \
 X(a, STATIC,   SINGULAR, UINT32,   environment_update_interval,   2) \
 X(a, STATIC,   SINGULAR, BOOL,     environment_measurement_enabled,   3) \
 X(a, STATIC,   SINGULAR, BOOL,     environment_screen_enabled,   4) \
-X(a, STATIC,   SINGULAR, BOOL,     environment_display_fahrenheit,   7)
+X(a, STATIC,   SINGULAR, BOOL,     environment_display_fahrenheit,   5)
 #define ModuleConfig_TelemetryConfig_CALLBACK NULL
 #define ModuleConfig_TelemetryConfig_DEFAULT NULL
 
