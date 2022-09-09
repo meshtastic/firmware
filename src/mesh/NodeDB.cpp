@@ -73,14 +73,13 @@ NodeNum getFrom(const MeshPacket *p)
     return (p->from == 0) ? nodeDB.getNodeNum() : p->from;
 }
 
-bool NodeDB::resetRadioConfig()
+bool NodeDB::resetRadioConfig(bool factory_reset)
 {
     bool didFactoryReset = false;
 
     radioGeneration++;
 
-    // radioConfig.has_preferences = true;
-    if (config.device.factory_reset) {
+    if (factory_reset) {
        didFactoryReset = factoryReset();
     }
 
@@ -113,7 +112,6 @@ bool NodeDB::resetRadioConfig()
     initRegion();
 
     if (didFactoryReset) {
-        config.device.factory_reset = false;
         DEBUG_MSG("Rebooting due to factory reset");
         screen->startRebootScreen();
         rebootAtMsec = millis() + (5 * 1000);
@@ -157,13 +155,13 @@ void NodeDB::installDefaultConfig()
     config.has_lora = true;
     config.has_position = true;
     config.has_power = true;
-    config.has_wifi = true;
+    config.has_network = true;
     config.has_bluetooth = true;
 
-    config.lora.region = Config_LoRaConfig_RegionCode_Unset;
-    config.lora.modem_preset = Config_LoRaConfig_ModemPreset_LongFast;
+    config.lora.region = Config_LoRaConfig_RegionCode_UNSET;
+    config.lora.modem_preset = Config_LoRaConfig_ModemPreset_LONG_FAST;
     resetRadioConfig();
-    strncpy(config.device.ntp_server, "0.pool.ntp.org", 32);
+    strncpy(config.network.ntp_server, "0.pool.ntp.org", 32);
     // FIXME: Default to bluetooth capability of platform as default
     config.bluetooth.enabled = true;
     config.bluetooth.fixed_pin = defaultBLEPin;
@@ -172,9 +170,9 @@ void NodeDB::installDefaultConfig()
 #else
     bool hasScreen = screen_found;
 #endif
-    config.bluetooth.mode = hasScreen ? Config_BluetoothConfig_PairingMode_RandomPin : Config_BluetoothConfig_PairingMode_FixedPin;
+    config.bluetooth.mode = hasScreen ? Config_BluetoothConfig_PairingMode_RANDOM_PIN : Config_BluetoothConfig_PairingMode_FIXED_PIN;
     // for backward compat, default position flags are ALT+MSL
-    config.position.position_flags = (Config_PositionConfig_PositionFlags_POS_ALTITUDE | Config_PositionConfig_PositionFlags_POS_ALT_MSL);
+    config.position.position_flags = (Config_PositionConfig_PositionFlags_ALTITUDE | Config_PositionConfig_PositionFlags_ALTITUDE_MSL);
 }
 
 void NodeDB::installDefaultModuleConfig()
@@ -237,7 +235,7 @@ void NodeDB::init()
 
     myNodeInfo.max_channels = MAX_NUM_CHANNELS; // tell others the max # of channels we can understand
 
-    myNodeInfo.error_code = CriticalErrorCode_None; // For the error code, only show values from this boot (discard value from flash)
+    myNodeInfo.error_code = CriticalErrorCode_NONE; // For the error code, only show values from this boot (discard value from flash)
     myNodeInfo.error_address = 0;
 
     // likewise - we always want the app requirements to come from the running appload
@@ -468,7 +466,7 @@ void NodeDB::saveToDisk()
         config.has_lora = true;
         config.has_position = true;
         config.has_power = true;
-        config.has_wifi = true;
+        config.has_network = true;
         config.has_bluetooth = true;
         saveProto(configFileName, LocalConfig_size, sizeof(LocalConfig), LocalConfig_fields, &config);
 
@@ -534,11 +532,11 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p, RxSource src)
 
     if (src == RX_SRC_LOCAL) {
         // Local packet, fully authoritative
-        DEBUG_MSG("updatePosition LOCAL pos@%x, time=%u, latI=%d, lonI=%d, alt=%d\n", p.pos_timestamp, p.time, p.latitude_i,
+        DEBUG_MSG("updatePosition LOCAL pos@%x, time=%u, latI=%d, lonI=%d, alt=%d\n", p.timestamp, p.time, p.latitude_i,
                   p.longitude_i, p.altitude);
         info->position = p;
 
-    } else if ((p.time > 0) && !p.latitude_i && !p.longitude_i && !p.pos_timestamp && !p.location_source) {
+    } else if ((p.time > 0) && !p.latitude_i && !p.longitude_i && !p.timestamp && !p.location_source) {
         // FIXME SPECIAL TIME SETTING PACKET FROM EUD TO RADIO
         // (stop-gap fix for issue #900)
         DEBUG_MSG("updatePosition SPECIAL time setting time=%u\n", p.time);
@@ -623,7 +621,7 @@ void NodeDB::updateUser(uint32_t nodeId, const User &p)
 /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
 void NodeDB::updateFrom(const MeshPacket &mp)
 {
-    if (mp.which_payloadVariant == MeshPacket_decoded_tag && mp.from) {
+    if (mp.which_payload_variant == MeshPacket_decoded_tag && mp.from) {
         DEBUG_MSG("Update DB node 0x%x, rx_time=%u\n", mp.from, mp.rx_time);
 
         NodeInfo *info = getOrCreateNode(getFrom(&mp));

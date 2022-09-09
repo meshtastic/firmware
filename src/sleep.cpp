@@ -146,7 +146,7 @@ static void waitEnterSleep()
         delay(100); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
 
         if (millis() - now > 30 * 1000) { // If we wait too long just report an error and go to sleep
-            RECORD_CRITICALERROR(CriticalErrorCode_SleepEnterWait);
+            RECORD_CRITICALERROR(CriticalErrorCode_SLEEP_ENTER_WAIT);
             assert(0); // FIXME - for now we just restart, need to fix bug #167
             break;
         }

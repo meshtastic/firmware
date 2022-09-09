@@ -303,7 +303,7 @@ void setup()
     // Do this after service.init (because that clears error_code)
 #ifdef HAS_AXP192
     if (!axp192_found)
-        RECORD_CRITICALERROR(CriticalErrorCode_NoAXP192); // Record a hardware fault for missing hardware
+        RECORD_CRITICALERROR(CriticalErrorCode_NO_AXP192); // Record a hardware fault for missing hardware
 #endif
 
         // Don't call screen setup until after nodedb is setup (because we need
@@ -421,7 +421,7 @@ void setup()
     airTime = new AirTime();
 
     if (!rIf)
-        RECORD_CRITICALERROR(CriticalErrorCode_NoRadio);
+        RECORD_CRITICALERROR(CriticalErrorCode_NO_RADIO);
     else {
         router->addInterface(rIf);
 

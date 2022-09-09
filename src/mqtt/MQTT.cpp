@@ -288,7 +288,7 @@ String MQTT::downstreamPacketToJson(MeshPacket *mp)
         msgType = "telemetry";
         Telemetry scratch;
         Telemetry *decoded = NULL;
-        if (mp->which_payloadVariant == MeshPacket_decoded_tag) {
+        if (mp->which_payload_variant == MeshPacket_decoded_tag) {
             memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &Telemetry_msg, &scratch)) {
                 decoded = &scratch;
@@ -318,7 +318,7 @@ String MQTT::downstreamPacketToJson(MeshPacket *mp)
         msgType = "nodeinfo";
         User scratch;
         User *decoded = NULL;
-        if (mp->which_payloadVariant == MeshPacket_decoded_tag) {
+        if (mp->which_payload_variant == MeshPacket_decoded_tag) {
             memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &User_msg, &scratch)) {
                 decoded = &scratch;
@@ -338,13 +338,13 @@ String MQTT::downstreamPacketToJson(MeshPacket *mp)
         msgType = "position";
         Position scratch;
         Position *decoded = NULL;
-        if (mp->which_payloadVariant == MeshPacket_decoded_tag) {
+        if (mp->which_payload_variant == MeshPacket_decoded_tag) {
             memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &Position_msg, &scratch)) {
                 decoded = &scratch;
                 msgPayload = Json::object{
                     {"time", (int)decoded->time},
-                    {"pos_timestamp", (int)decoded->pos_timestamp},
+                    {"pos_timestamp", (int)decoded->timestamp},
                     {"latitude_i", decoded->latitude_i}, 
                     {"longitude_i", decoded->longitude_i}, 
                     {"altitude", decoded->altitude}
@@ -360,7 +360,7 @@ String MQTT::downstreamPacketToJson(MeshPacket *mp)
         msgType = "position";
         Waypoint scratch;
         Waypoint *decoded = NULL;
-        if (mp->which_payloadVariant == MeshPacket_decoded_tag) {
+        if (mp->which_payload_variant == MeshPacket_decoded_tag) {
             memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &Waypoint_msg, &scratch)) {
                 decoded = &scratch;

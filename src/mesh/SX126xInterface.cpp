@@ -116,15 +116,15 @@ bool SX126xInterface<T>::reconfigure()
     // configure publicly accessible settings
     int err = lora.setSpreadingFactor(sf);
     if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(CriticalErrorCode_InvalidRadioSetting);
+        RECORD_CRITICALERROR(CriticalErrorCode_INVALID_RADIO_SETTING);
 
     err = lora.setBandwidth(bw);
     if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(CriticalErrorCode_InvalidRadioSetting);
+        RECORD_CRITICALERROR(CriticalErrorCode_INVALID_RADIO_SETTING);
 
     err = lora.setCodingRate(cr);
     if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(CriticalErrorCode_InvalidRadioSetting);
+        RECORD_CRITICALERROR(CriticalErrorCode_INVALID_RADIO_SETTING);
 
     // Hmm - seems to lower SNR when the signal levels are high.  Leaving off for now...
     // TODO: Confirm gain registers are okay now
@@ -142,7 +142,7 @@ bool SX126xInterface<T>::reconfigure()
 
     err = lora.setFrequency(getFreq());
     if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(CriticalErrorCode_InvalidRadioSetting);
+        RECORD_CRITICALERROR(CriticalErrorCode_INVALID_RADIO_SETTING);
 
     if (power > 22) // This chip has lower power limits than some
         power = 22;

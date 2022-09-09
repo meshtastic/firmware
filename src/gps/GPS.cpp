@@ -273,7 +273,7 @@ uint32_t GPS::getWakeTime() const
         return t; // already maxint
 
     if (t == 0)
-        t = (config.device.role == Config_DeviceConfig_Role_Router)
+        t = (config.device.role == Config_DeviceConfig_Role_ROUTER)
                 ? 5 * 60
                 : 15 * 60; // Allow up to 15 mins for each attempt (probably will be much
                            // less if we can find sats) or less if a router
@@ -297,7 +297,7 @@ uint32_t GPS::getSleepTime() const
         return t; // already maxint
 
     if (t == 0) // default - unset in preferences
-        t = (config.device.role == Config_DeviceConfig_Role_Router) ? 24 * 60 * 60
+        t = (config.device.role == Config_DeviceConfig_Role_ROUTER) ? 24 * 60 * 60
                                                                                    : 2 * 60; // 2 mins or once per day for routers
 
     t *= 1000;
@@ -311,7 +311,7 @@ void GPS::publishUpdate()
         shouldPublish = false;
 
         // In debug logs, identify position by @timestamp:stage (stage 2 = publish)
-        DEBUG_MSG("publishing pos@%x:2, hasVal=%d, GPSlock=%d\n", p.pos_timestamp, hasValidLocation, hasLock());
+        DEBUG_MSG("publishing pos@%x:2, hasVal=%d, GPSlock=%d\n", p.timestamp, hasValidLocation, hasLock());
 
         // Notify any status instances that are observing us
         const meshtastic::GPSStatus status = meshtastic::GPSStatus(hasValidLocation, isConnected(), p);

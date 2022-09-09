@@ -384,59 +384,8 @@ bool Power::axp192Init()
             DEBUG_MSG("DCDC3: %s\n", axp.isDCDC3Enable() ? "ENABLE" : "DISABLE");
             DEBUG_MSG("Exten: %s\n", axp.isExtenEnable() ? "ENABLE" : "DISABLE");
 
-            switch (config.power.charge_current) {
-            case Config_PowerConfig_ChargeCurrent_MAUnset:
-                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_450MA);
-                break;
-            case Config_PowerConfig_ChargeCurrent_MA100:
-                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_100MA);
-                break;
-            case Config_PowerConfig_ChargeCurrent_MA190:
-                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_190MA);
-                break;
-            case Config_PowerConfig_ChargeCurrent_MA280:
-                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_280MA);
-                break;
-            case Config_PowerConfig_ChargeCurrent_MA360:
-                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_360MA);
-                break;
-            case Config_PowerConfig_ChargeCurrent_MA450:
-                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_450MA);
-                break;
-            case Config_PowerConfig_ChargeCurrent_MA550:
-                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_550MA);
-                break;
-            case Config_PowerConfig_ChargeCurrent_MA630:
-                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_630MA);
-                break;
-            case Config_PowerConfig_ChargeCurrent_MA700:
-                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_700MA);
-                break;
-            case Config_PowerConfig_ChargeCurrent_MA780:
-                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_780MA);
-                break;
-            case Config_PowerConfig_ChargeCurrent_MA880:
-                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_880MA);
-                break;
-            case Config_PowerConfig_ChargeCurrent_MA960:
-                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_960MA);
-                break;
-            case Config_PowerConfig_ChargeCurrent_MA1000:
-                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_1000MA);
-                break;
-            case Config_PowerConfig_ChargeCurrent_MA1080:
-                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_1080MA);
-                break;
-            case Config_PowerConfig_ChargeCurrent_MA1160:
-                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_1160MA);
-                break;
-            case Config_PowerConfig_ChargeCurrent_MA1240:
-                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_1240MA);
-                break;
-            case Config_PowerConfig_ChargeCurrent_MA1320:
-                axp.setChargeControlCur(AXP1XX_CHARGE_CUR_1320MA);
-                break;
-            }
+            // this was the previous 'Unset' default.
+            axp.setChargeControlCur(AXP1XX_CHARGE_CUR_450MA);
 
 #if 0
 
