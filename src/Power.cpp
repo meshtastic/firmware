@@ -434,7 +434,7 @@ bool Power::axpChipInit()
         PMU->disableIRQ(XPOWERS_AXP192_ALL_IRQ);
 
         // Set constant current charging current
-        PMU->setChargerConstantCurr(AXP1XX_CHARGE_CUR_450MA);
+        PMU->setChargerConstantCurr(XPOWERS_AXP192_CHG_CUR_450MA);
 
     
     } else if (PMU->getChipModel() == XPOWERS_AXP2101) {
