@@ -1065,11 +1065,9 @@ extern const pb_msgdesc_t Compressed_msg;
 #define Compressed_fields &Compressed_msg
 
 /* Maximum encoded size of messages (where known) */
-#if defined(Config_size)
-union FromRadio_payload_variant_size_union {char f5[(6 + Config_size)]; char f0[324];};
-#endif
 #define Compressed_size                          243
 #define Data_size                                270
+#define FromRadio_size                           330
 #define LogRecord_size                           81
 #define MeshPacket_size                          321
 #define MyNodeInfo_size                          179
@@ -1081,9 +1079,6 @@ union FromRadio_payload_variant_size_union {char f5[(6 + Config_size)]; char f0[
 #define ToRadio_size                             324
 #define User_size                                77
 #define Waypoint_size                            156
-#if defined(Config_size)
-#define FromRadio_size                           (6 + sizeof(union FromRadio_payload_variant_size_union))
-#endif
 
 #ifdef __cplusplus
 } /* extern "C" */
