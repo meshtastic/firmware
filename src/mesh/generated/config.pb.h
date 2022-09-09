@@ -115,9 +115,9 @@ typedef struct _Config_LoRaConfig {
 typedef struct _Config_NetworkConfig { 
     bool wifi_enabled;
     Config_NetworkConfig_WiFiMode wifi_mode;
-    pb_callback_t wifi_ssid;
-    pb_callback_t wifi_psk;
-    pb_callback_t ntp_server;
+    char wifi_ssid[33];
+    char wifi_psk[64];
+    char ntp_server[33];
 } Config_NetworkConfig;
 
 typedef struct _Config_PositionConfig { 
@@ -194,7 +194,7 @@ extern "C" {
 #define Config_DeviceConfig_init_default         {_Config_DeviceConfig_Role_MIN, 0, 0}
 #define Config_PositionConfig_init_default       {0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_default          {0, 0, 0, 0, 0, 0, 0, 0}
-#define Config_NetworkConfig_init_default        {0, _Config_NetworkConfig_WiFiMode_MIN, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define Config_NetworkConfig_init_default        {0, _Config_NetworkConfig_WiFiMode_MIN, "", "", ""}
 #define Config_DisplayConfig_init_default        {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0}
 #define Config_LoRaConfig_init_default           {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, {0, 0, 0}}
 #define Config_BluetoothConfig_init_default      {0, _Config_BluetoothConfig_PairingMode_MIN, 0}
@@ -202,7 +202,7 @@ extern "C" {
 #define Config_DeviceConfig_init_zero            {_Config_DeviceConfig_Role_MIN, 0, 0}
 #define Config_PositionConfig_init_zero          {0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_zero             {0, 0, 0, 0, 0, 0, 0, 0}
-#define Config_NetworkConfig_init_zero           {0, _Config_NetworkConfig_WiFiMode_MIN, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define Config_NetworkConfig_init_zero           {0, _Config_NetworkConfig_WiFiMode_MIN, "", "", ""}
 #define Config_DisplayConfig_init_zero           {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0}
 #define Config_LoRaConfig_init_zero              {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, {0, 0, 0}}
 #define Config_BluetoothConfig_init_zero         {0, _Config_BluetoothConfig_PairingMode_MIN, 0}
@@ -308,10 +308,10 @@ X(a, STATIC,   SINGULAR, UINT32,   min_wake_secs,     8)
 #define Config_NetworkConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     wifi_enabled,      1) \
 X(a, STATIC,   SINGULAR, UENUM,    wifi_mode,         2) \
-X(a, CALLBACK, SINGULAR, STRING,   wifi_ssid,         3) \
-X(a, CALLBACK, SINGULAR, STRING,   wifi_psk,          4) \
-X(a, CALLBACK, SINGULAR, STRING,   ntp_server,        5)
-#define Config_NetworkConfig_CALLBACK pb_default_field_callback
+X(a, STATIC,   SINGULAR, STRING,   wifi_ssid,         3) \
+X(a, STATIC,   SINGULAR, STRING,   wifi_psk,          4) \
+X(a, STATIC,   SINGULAR, STRING,   ntp_server,        5)
+#define Config_NetworkConfig_CALLBACK NULL
 #define Config_NetworkConfig_DEFAULT NULL
 
 #define Config_DisplayConfig_FIELDLIST(X, a) \
@@ -363,14 +363,14 @@ extern const pb_msgdesc_t Config_BluetoothConfig_msg;
 #define Config_BluetoothConfig_fields &Config_BluetoothConfig_msg
 
 /* Maximum encoded size of messages (where known) */
-/* Config_size depends on runtime parameters */
-/* Config_NetworkConfig_size depends on runtime parameters */
 #define Config_BluetoothConfig_size              10
 #define Config_DeviceConfig_size                 6
 #define Config_DisplayConfig_size                16
 #define Config_LoRaConfig_size                   67
+#define Config_NetworkConfig_size                137
 #define Config_PositionConfig_size               30
 #define Config_PowerConfig_size                  43
+#define Config_size                              140
 
 #ifdef __cplusplus
 } /* extern "C" */
