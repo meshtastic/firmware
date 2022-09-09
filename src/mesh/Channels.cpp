@@ -85,7 +85,7 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
     ChannelSettings &channelSettings = ch.settings;
     Config_LoRaConfig &loraConfig = config.lora;
 
-    loraConfig.modem_preset = Config_LoRaConfig_ModemPreset_LongFast; // Default to Long Range & Fast
+    loraConfig.modem_preset = Config_LoRaConfig_ModemPreset_LONG_FAST; // Default to Long Range & Fast
 
     loraConfig.tx_power = 0; // default
     uint8_t defaultpskIndex = 1;
@@ -214,25 +214,25 @@ const char *Channels::getName(size_t chIndex)
             channelName = "Custom";
         else
             switch (config.lora.modem_preset) {
-            case Config_LoRaConfig_ModemPreset_ShortSlow:
+            case Config_LoRaConfig_ModemPreset_SHORT_SLOW:
                 channelName = "ShortS";
                 break;
-            case Config_LoRaConfig_ModemPreset_ShortFast:
+            case Config_LoRaConfig_ModemPreset_SHORT_FAST:
                 channelName = "ShortF";
                 break;
-            case Config_LoRaConfig_ModemPreset_MedSlow:
+            case Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
                 channelName = "MedS";
                 break;
-            case Config_LoRaConfig_ModemPreset_MedFast:
+            case Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
                 channelName = "MedF";
                 break;
-            case Config_LoRaConfig_ModemPreset_LongSlow:
+            case Config_LoRaConfig_ModemPreset_LONG_SLOW:
                 channelName = "LongS";
                 break;
-            case Config_LoRaConfig_ModemPreset_LongFast:
+            case Config_LoRaConfig_ModemPreset_LONG_FAST:
                 channelName = "LongF";
                 break;
-            case Config_LoRaConfig_ModemPreset_VLongSlow:
+            case Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW:
                 channelName = "VeryL";
                 break;
             default:
