@@ -308,8 +308,8 @@ void AdminModule::handleGetConfig(const MeshPacket &req, const uint32_t configTy
             res.get_config_response.which_payload_variant = Config_power_tag;
             res.get_config_response.payload_variant.power = config.power;
             break;
-        case AdminMessage_ConfigType_WIFI_CONFIG:
-            DEBUG_MSG("Getting config: WiFi\n");
+        case AdminMessage_ConfigType_NETWORK_CONFIG:
+            DEBUG_MSG("Getting config: Network\n");
             res.get_config_response.which_payload_variant = Config_network_tag;
             res.get_config_response.payload_variant.network = config.network;
             writeSecret(res.get_config_response.payload_variant.network.wifi_psk, config.network.wifi_psk);
