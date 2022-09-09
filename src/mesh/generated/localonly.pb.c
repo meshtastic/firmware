@@ -6,7 +6,7 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
-PB_BIND(LocalConfig, LocalConfig, 2)
+PB_BIND(LocalConfig, LocalConfig, AUTO)
 
 
 PB_BIND(LocalModuleConfig, LocalModuleConfig, 2)
