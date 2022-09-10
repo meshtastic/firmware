@@ -173,6 +173,7 @@ void NodeDB::installDefaultConfig()
     config.bluetooth.mode = hasScreen ? Config_BluetoothConfig_PairingMode_RANDOM_PIN : Config_BluetoothConfig_PairingMode_FIXED_PIN;
     // for backward compat, default position flags are ALT+MSL
     config.position.position_flags = (Config_PositionConfig_PositionFlags_ALTITUDE | Config_PositionConfig_PositionFlags_ALTITUDE_MSL);
+    
     initConfigIntervals();
 }
 
@@ -201,7 +202,7 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.has_telemetry = true;
     moduleConfig.has_external_notification = true;
     moduleConfig.has_canned_message = true;
-    
+
     initModuleConfigIntervals();
 }
 
