@@ -91,7 +91,7 @@ int32_t SerialModule::runOnce()
 
             uint32_t baud = 0;
 
-            if (moduleConfig.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_Default) {
+            if (moduleConfig.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_DEFAULT) {
                 baud = 38400;
 
             } else if (moduleConfig.serial.baud == ModuleConfig_SerialConfig_Serial_Baud_BAUD_110) {
@@ -237,13 +237,13 @@ ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
 
         } else {
 
-            if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_MODE_Default ||
-                moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_MODE_SIMPLE) {
+            if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_DEFAULT ||
+                moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_SIMPLE) {
                 // DEBUG_MSG("* * Message came from the mesh\n");
                 // Serial2.println("* * Message came from the mesh");
                 Serial2.printf("%s", p.payload.bytes);
 
-            } else if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_MODE_PROTO) {
+            } else if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_PROTO) {
             }
         }
 

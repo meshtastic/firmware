@@ -84,7 +84,7 @@ bool eink_found = true;
 
 uint32_t serialSinceMsec;
 
-bool axp192_found;
+bool pmu_found;
 
 // Array map of sensor types (as array index) and i2c address as value we'll find in the i2c scan
 uint8_t nodeTelemetrySensorsMap[7] = { 0, 0, 0, 0, 0, 0, 0 };
@@ -301,9 +301,9 @@ void setup()
     setupModules();
 
     // Do this after service.init (because that clears error_code)
-#ifdef HAS_AXP192
-    if (!axp192_found)
-        RECORD_CRITICALERROR(CriticalErrorCode_NoAXP192); // Record a hardware fault for missing hardware
+#ifdef HAS_PMU
+    if (!pmu_found)
+        RECORD_CRITICALERROR(CriticalErrorCode_NO_AXP192); // Record a hardware fault for missing hardware
 #endif
 
         // Don't call screen setup until after nodedb is setup (because we need
@@ -421,7 +421,7 @@ void setup()
     airTime = new AirTime();
 
     if (!rIf)
-        RECORD_CRITICALERROR(CriticalErrorCode_NoRadio);
+        RECORD_CRITICALERROR(CriticalErrorCode_NO_RADIO);
     else {
         router->addInterface(rIf);
 

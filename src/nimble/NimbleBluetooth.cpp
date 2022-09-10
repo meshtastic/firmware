@@ -74,9 +74,9 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 
         if (doublepressed > 0 && (doublepressed + (30 * 1000)) > millis()) {
             DEBUG_MSG("User has set BLE pairing mode to fixed-pin\n");
-            config.bluetooth.mode = Config_BluetoothConfig_PairingMode_FixedPin;
+            config.bluetooth.mode = Config_BluetoothConfig_PairingMode_FIXED_PIN;
             nodeDB.saveToDisk();
-        } else if (config.bluetooth.mode == Config_BluetoothConfig_PairingMode_RandomPin) {
+        } else if (config.bluetooth.mode == Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
             DEBUG_MSG("Using random passkey\n");
             // This is the passkey to be entered on peer - we pick a number >100,000 to ensure 6 digits
             passkey = random(100000, 999999); 
@@ -135,7 +135,7 @@ void NimbleBluetooth::setup()
     NimBLEDevice::init(getDeviceName());
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
 
-    if (config.bluetooth.mode != Config_BluetoothConfig_PairingMode_NoPin) {
+    if (config.bluetooth.mode != Config_BluetoothConfig_PairingMode_NO_PIN) {
         NimBLEDevice::setSecurityAuth(true, true, true);
         NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
     }
@@ -154,7 +154,7 @@ void NimbleBluetooth::setupService()
     NimBLECharacteristic *ToRadioCharacteristic;
     NimBLECharacteristic *FromRadioCharacteristic;
     // Define the characteristics that the app is looking for
-    if (config.bluetooth.mode == Config_BluetoothConfig_PairingMode_NoPin) {
+    if (config.bluetooth.mode == Config_BluetoothConfig_PairingMode_NO_PIN) {
         ToRadioCharacteristic = bleService->createCharacteristic(TORADIO_UUID, NIMBLE_PROPERTY::WRITE);
         FromRadioCharacteristic = bleService->createCharacteristic(FROMRADIO_UUID, NIMBLE_PROPERTY::READ);
         fromNumCharacteristic = bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ);

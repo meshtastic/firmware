@@ -64,15 +64,40 @@ bool GPS::setupGPS()
     if (_serial_gps && !didSerialInit) {
         didSerialInit = true;
 
+#if CONFIG_IDF_TARGET_ESP32S3
+    // In esp32s3 framework, setRxBufferSize needs to be initialized before Serial
+    _serial_gps->setRxBufferSize(2048); // the default is 256
+#endif
+
 // ESP32 has a special set of parameters vs other arduino ports
 #if defined(GPS_RX_PIN) && defined(ARCH_ESP32)
         _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
 #else
         _serial_gps->begin(GPS_BAUDRATE);
 #endif
-#ifdef ARCH_ESP32
+
+#if CONFIG_IDF_TARGET_ESP32
         _serial_gps->setRxBufferSize(2048); // the default is 256
 #endif
+
+#ifdef LILYGO_TBEAM_S3_CORE
+        /*
+        * t-beam-s3-core uses the same L76K GNSS module as t-echo. 
+        * Unlike t-echo, L76K uses 9600 baud rate for communication by default.
+        * */
+        _serial_gps->begin(9600);
+        delay(250);
+        // Initialize the L76K Chip, use GPS + GLONASS
+        _serial_gps->write("$PCAS04,5*1C\r\n");
+        delay(250);
+        // only ask for RMC and GGA
+        _serial_gps->write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
+        delay(250);
+        // Switch to Vehicle Mode, since SoftRF enables Aviation < 2g
+        _serial_gps->write("$PCAS11,3*1E\r\n");
+        delay(250);
+#endif
+
 #ifdef TTGO_T_ECHO
         // Switch to 9600 baud, then close and reopen port
         _serial_gps->end();
@@ -273,7 +298,7 @@ uint32_t GPS::getWakeTime() const
         return t; // already maxint
 
     if (t == 0)
-        t = (config.device.role == Config_DeviceConfig_Role_Router)
+        t = (config.device.role == Config_DeviceConfig_Role_ROUTER)
                 ? 5 * 60
                 : 15 * 60; // Allow up to 15 mins for each attempt (probably will be much
                            // less if we can find sats) or less if a router
@@ -297,7 +322,7 @@ uint32_t GPS::getSleepTime() const
         return t; // already maxint
 
     if (t == 0) // default - unset in preferences
-        t = (config.device.role == Config_DeviceConfig_Role_Router) ? 24 * 60 * 60
+        t = (config.device.role == Config_DeviceConfig_Role_ROUTER) ? 24 * 60 * 60
                                                                                    : 2 * 60; // 2 mins or once per day for routers
 
     t *= 1000;
@@ -311,7 +336,7 @@ void GPS::publishUpdate()
         shouldPublish = false;
 
         // In debug logs, identify position by @timestamp:stage (stage 2 = publish)
-        DEBUG_MSG("publishing pos@%x:2, hasVal=%d, GPSlock=%d\n", p.pos_timestamp, hasValidLocation, hasLock());
+        DEBUG_MSG("publishing pos@%x:2, hasVal=%d, GPSlock=%d\n", p.timestamp, hasValidLocation, hasLock());
 
         // Notify any status instances that are observing us
         const meshtastic::GPSStatus status = meshtastic::GPSStatus(hasValidLocation, isConnected(), p);
