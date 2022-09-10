@@ -25,7 +25,11 @@ typedef enum _TelemetrySensorType {
     /* Moderate accuracy current and voltage */
     TelemetrySensorType_INA219 = 5, 
     /* High accuracy temperature and pressure */
-    TelemetrySensorType_BMP280 = 6 
+    TelemetrySensorType_BMP280 = 6, 
+    /* High accuracy temperature and humidity */
+    TelemetrySensorType_SHTC3 = 7, 
+    /* High accuracy pressure */
+    TelemetrySensorType_LPS22 = 8 
 } TelemetrySensorType;
 
 /* Struct definitions */
@@ -77,8 +81,8 @@ typedef struct _Telemetry {
 
 /* Helper constants for enums */
 #define _TelemetrySensorType_MIN TelemetrySensorType_SENSOR_UNSET
-#define _TelemetrySensorType_MAX TelemetrySensorType_BMP280
-#define _TelemetrySensorType_ARRAYSIZE ((TelemetrySensorType)(TelemetrySensorType_BMP280+1))
+#define _TelemetrySensorType_MAX TelemetrySensorType_LPS22
+#define _TelemetrySensorType_ARRAYSIZE ((TelemetrySensorType)(TelemetrySensorType_LPS22+1))
 
 
 #ifdef __cplusplus
