@@ -171,11 +171,20 @@ void AdminModule::handleSetOwner(const User &o)
 void AdminModule::handleSetConfig(const Config &c)
 {
     bool requiresReboot = false;
+    bool isRouter = (config.device.role == Config_DeviceConfig_Role_ROUTER);
+
     switch (c.which_payload_variant) {
         case Config_device_tag:
             DEBUG_MSG("Setting config: Device\n");
             config.has_device = true;
             config.device = c.payload_variant.device;
+            // If we're setting router role for the first time, install its intervals
+            if (!isRouter &&
+                c.payload_variant.device.role == Config_DeviceConfig_Role_ROUTER) {
+                nodeDB.initConfigIntervals();
+                nodeDB.initModuleConfigIntervals();
+            }
+            requiresReboot = true;
             break;
         case Config_position_tag:
             DEBUG_MSG("Setting config: Position\n");
