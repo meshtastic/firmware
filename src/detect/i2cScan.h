@@ -3,8 +3,9 @@
 #include <Wire.h>
 #include "mesh/generated/telemetry.pb.h"
 
-#ifdef HAS_AXP192
-#include "axp20x.h"
+// AXP192 and AXP2101 have the same device address, we just need to identify it in Power.cpp
+#ifndef XPOWERS_AXP192_AXP2101_ADDRESS
+#define XPOWERS_AXP192_AXP2101_ADDRESS      0x34
 #endif
 
 #if HAS_WIRE
@@ -114,10 +115,10 @@ void scanI2Cdevice(void)
                 screen_found = addr;
                 DEBUG_MSG("st7567 display found\n");
             }
-#ifdef HAS_AXP192
-            if (addr == AXP192_SLAVE_ADDRESS) {
-                axp192_found = true;
-                DEBUG_MSG("axp192 PMU found\n");
+#ifdef HAS_PMU
+            if (addr == XPOWERS_AXP192_AXP2101_ADDRESS) {
+                pmu_found = true;
+                DEBUG_MSG("axp192/axp2101 PMU found\n");
             }
 #endif
         if (addr == BME_ADDR || addr == BME_ADDR_ALTERNATE) {

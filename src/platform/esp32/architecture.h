@@ -34,6 +34,9 @@
     #define HAS_RTC 1
 #endif
 
+#if defined(HAS_AXP192) || defined(HAS_AXP2101)
+#define HAS_PMU
+#endif
 //
 // set HW_VENDOR
 //
@@ -43,7 +46,9 @@
 #if defined(TBEAM_V10)
     #define HW_VENDOR HardwareModel_TBEAM
 #elif defined(TBEAM_V07)
-    #define HW_VENDOR HardwareModel_TBEAM0p7
+    #define HW_VENDOR HardwareModel_TBEAM_V0P7
+#elif defined(LILYGO_TBEAM_S3_CORE)
+    #define HW_VENDOR HardwareModel_LILYGO_TBEAM_S3_CORE
 #elif defined(DIY_V1)
     #define HW_VENDOR HardwareModel_DIY_V1
 #elif defined(RAK_11200)
@@ -62,9 +67,9 @@
 #elif defined(TLORA_V2)
     #define HW_VENDOR HardwareModel_TLORA_V2
 #elif defined(TLORA_V1_3)
-    #define HW_VENDOR HardwareModel_TLORA_V1_1p3
+    #define HW_VENDOR HardwareModel_TLORA_V1_1P3
 #elif defined(TLORA_V2_1_16)
-    #define HW_VENDOR HardwareModel_TLORA_V2_1_1p6
+    #define HW_VENDOR HardwareModel_TLORA_V2_1_1P6
 #elif defined(GENIEBLOCKS)
     #define HW_VENDOR HardwareModel_GENIEBLOCKS
 #elif defined(PRIVATE_HW)

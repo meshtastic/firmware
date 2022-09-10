@@ -28,7 +28,7 @@ DNSServer dnsServer;
 WiFiUDP ntpUDP;
 
 #ifndef DISABLE_NTP
-NTPClient timeClient(ntpUDP, config.device.ntp_server);
+NTPClient timeClient(ntpUDP, config.network.ntp_server);
 #endif
 
 uint8_t wifiDisconnectReason = 0;
@@ -59,10 +59,10 @@ static WifiSleepObserver wifiSleepObserver;
 
 static int32_t reconnectWiFi()
 {
-    const char *wifiName = config.wifi.ssid;
-    const char *wifiPsw = config.wifi.psk;
+    const char *wifiName = config.network.wifi_ssid;
+    const char *wifiPsw = config.network.wifi_psk;
 
-    if (config.wifi.enabled && needReconnect && !WiFi.isConnected()) {
+    if (config.network.wifi_enabled && needReconnect && !WiFi.isConnected()) {
         // if (radioConfig.has_preferences && needReconnect && !WiFi.isConnected()) {
 
         if (!*wifiPsw) // Treat empty password as no password
@@ -114,7 +114,7 @@ bool isWifiAvailable()
         return true;
     }
 
-    const char *wifiName = config.wifi.ssid;
+    const char *wifiName = config.network.wifi_ssid;
 
     if (*wifiName) {
         return true;
@@ -184,18 +184,18 @@ bool initWifi(bool forceSoftAP)
 {
     forcedSoftAP = forceSoftAP;
 
-    if (config.wifi.enabled && ((config.wifi.ssid[0]) || forceSoftAP)) {
+    if (config.network.wifi_enabled && ((config.network.wifi_ssid[0]) || forceSoftAP)) {
         // if ((radioConfig.has_preferences && config.wifi.ssid[0]) || forceSoftAP) {
-        const char *wifiName = config.wifi.ssid;
-        const char *wifiPsw = config.wifi.psk;
+        const char *wifiName = config.network.wifi_ssid;
+        const char *wifiPsw = config.network.wifi_psk;
 
         if (forceSoftAP) {
             DEBUG_MSG("WiFi ... Forced AP Mode\n");
-        } else if (config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPoint) {
+        } else if (config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT) {
             DEBUG_MSG("WiFi ... AP Mode\n");
-        } else if (config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPointHidden) {
+        } else if (config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN) {
             DEBUG_MSG("WiFi ... Hidden AP Mode\n");
-        } else if (config.wifi.mode == Config_WiFiConfig_WiFiMode_Client) {
+        } else if (config.network.wifi_mode == Config_NetworkConfig_WiFiMode_CLIENT) {
             DEBUG_MSG("WiFi ... Client Mode\n");
         } else {
             DEBUG_MSG("WiFi ... WiFi Disabled\n");
@@ -207,7 +207,7 @@ bool initWifi(bool forceSoftAP)
             wifiPsw = NULL;
 
         if (*wifiName || forceSoftAP) {
-            if (config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPoint || config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPointHidden || forceSoftAP) {
+            if (config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT || config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN || forceSoftAP) {
 
                 IPAddress apIP(192, 168, 42, 1);
                 WiFi.onEvent(WiFiEvent);
@@ -222,7 +222,7 @@ bool initWifi(bool forceSoftAP)
                 } else {
 
                     // If AP is configured to be hidden hidden
-                    if (config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPointHidden) {
+                    if (config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN) {
 
                         // The configurations on softAP are from the espresif library
                         int ok = WiFi.softAP(wifiName, wifiPsw, 1, 1, 4);
@@ -238,8 +238,10 @@ bool initWifi(bool forceSoftAP)
                 WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
                 DEBUG_MSG("MY IP AP ADDRESS: %s\n", WiFi.softAPIP().toString().c_str());
 
+#if !CONFIG_IDF_TARGET_ESP32S3
                 // This is needed to improve performance.
                 esp_wifi_set_ps(WIFI_PS_NONE); // Disable radio power saving
+#endif
 
                 dnsServer.start(53, "*", apIP);
 
@@ -252,14 +254,19 @@ bool initWifi(bool forceSoftAP)
                 WiFi.setHostname(ourHost);
                 WiFi.onEvent(WiFiEvent);
 
+#if !CONFIG_IDF_TARGET_ESP32S3
                 // This is needed to improve performance.
                 esp_wifi_set_ps(WIFI_PS_NONE); // Disable radio power saving
+#endif
 
                 WiFi.onEvent(
                     [](WiFiEvent_t event, WiFiEventInfo_t info) {
                         Serial.print("\nWiFi lost connection. Reason: ");
+                        #if CONFIG_IDF_TARGET_ESP32S3
+                        Serial.println(info.wifi_sta_disconnected.reason);
+                        wifiDisconnectReason = info.wifi_sta_disconnected.reason;
+                        #else
                         Serial.println(info.disconnected.reason);
-
                         /*
                            If we are disconnected from the AP for some reason,
                            save the error code.
@@ -268,8 +275,14 @@ bool initWifi(bool forceSoftAP)
                              https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/wifi.html#wi-fi-reason-code
                         */
                         wifiDisconnectReason = info.disconnected.reason;
+                        #endif
+
                     },
+#if CONFIG_IDF_TARGET_ESP32S3
+                    WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+#else
                     WiFiEvent_t::SYSTEM_EVENT_STA_DISCONNECTED);
+#endif
 
                 DEBUG_MSG("JOINING WIFI soon: ssid=%s\n", wifiName);
                 wifiReconnect = new Periodic("WifiConnect", reconnectWiFi);
@@ -377,7 +390,7 @@ static void WiFiEvent(WiFiEvent_t event)
 
 void handleDNSResponse()
 {
-    if (config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPoint || config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPointHidden || isSoftAPForced()) {
+    if (config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT || config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN || isSoftAPForced()) {
         dnsServer.processNextRequest();
     }
 }

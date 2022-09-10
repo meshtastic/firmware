@@ -33,8 +33,8 @@ class RotaryEncoderInterruptBase : public Observable<const InputEvent *>, privat
   private:
     uint8_t _pinA = 0;
     uint8_t _pinB = 0;
-    char _eventCw = ModuleConfig_CannedMessageConfig_InputEventChar_KEY_NONE;
-    char _eventCcw = ModuleConfig_CannedMessageConfig_InputEventChar_KEY_NONE;
-    char _eventPressed = ModuleConfig_CannedMessageConfig_InputEventChar_KEY_NONE;
+    char _eventCw = ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+    char _eventCcw = ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+    char _eventPressed = ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
     const char *_originName;
 };

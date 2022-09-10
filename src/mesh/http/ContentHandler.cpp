@@ -610,7 +610,7 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 
     // data->wifi
     String ipStr;
-    if (config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPoint || config.wifi.mode == Config_WiFiConfig_WiFiMode_AccessPointHidden || isSoftAPForced()) {
+    if (config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT || config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN || isSoftAPForced()) {
         ipStr = String(WiFi.softAPIP().toString());
     } else {
         ipStr = String(WiFi.localIP().toString());

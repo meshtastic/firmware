@@ -31,7 +31,7 @@ typedef enum _HardwareMessage_Type {
  (a special channel once multichannel support is included?) */
 typedef struct _HardwareMessage { 
     /* What type of HardwareMessage is this? */
-    HardwareMessage_Type typ;
+    HardwareMessage_Type type;
     /* What gpios are we changing. Not used for all MessageTypes, see MessageType for details */
     uint64_t gpio_mask;
     /* For gpios that were listed in gpio_mask as valid, what are the signal levels for those gpios.
@@ -55,13 +55,13 @@ extern "C" {
 #define HardwareMessage_init_zero                {_HardwareMessage_Type_MIN, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define HardwareMessage_typ_tag                  1
+#define HardwareMessage_type_tag                 1
 #define HardwareMessage_gpio_mask_tag            2
 #define HardwareMessage_gpio_value_tag           3
 
 /* Struct field encoding specification for nanopb */
 #define HardwareMessage_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UENUM,    typ,               1) \
+X(a, STATIC,   SINGULAR, UENUM,    type,              1) \
 X(a, STATIC,   SINGULAR, UINT64,   gpio_mask,         2) \
 X(a, STATIC,   SINGULAR, UINT64,   gpio_value,        3)
 #define HardwareMessage_CALLBACK NULL
