@@ -175,7 +175,15 @@ void AdminModule::handleSetConfig(const Config &c)
         case Config_device_tag:
             DEBUG_MSG("Setting config: Device\n");
             config.has_device = true;
+            auto previousDeviceRole = config.device.role;
             config.device = c.payload_variant.device;
+            // If we're setting router role for the first time, install its intervals
+            if (previousDeviceRole != Config_DeviceConfig_Role_ROUTER &&
+                c.payload_variant.device.role == Config_DeviceConfig_Role_ROUTER) {
+                nodeDB.initConfigIntervals();
+                nodeDB.initModuleConfigIntervals();
+            }
+            requiresReboot = true;
             break;
         case Config_position_tag:
             DEBUG_MSG("Setting config: Position\n");
