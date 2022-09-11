@@ -157,9 +157,13 @@ void NodeDB::installDefaultConfig()
     config.has_power = true;
     config.has_network = true;
     config.has_bluetooth = true;
+    config.lora.tx_enabled = true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
     config.lora.region = Config_LoRaConfig_RegionCode_UNSET;
     config.lora.modem_preset = Config_LoRaConfig_ModemPreset_LONG_FAST;
     config.lora.hop_limit = HOP_RELIABLE;
+    config.position.gps_enabled = true;
+    config.position.position_broadcast_smart_enabled = true;
+    config.device.serial_enabled = true;
     resetRadioConfig();
     strncpy(config.network.ntp_server, "0.pool.ntp.org", 32);
     // FIXME: Default to bluetooth capability of platform as default
