@@ -121,10 +121,10 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
 #ifndef DISABLE_WELCOME_UNSET
 
     if (config.lora.region != Config_LoRaConfig_RegionCode_UNSET) {
-        if (disabled || config.lora.tx_disabled) {
+        if (disabled || !config.lora.tx_enabled) {
 
             if (config.lora.region != Config_LoRaConfig_RegionCode_UNSET) {
-                if (disabled || config.lora.tx_disabled) {
+                if (disabled || !config.lora.tx_enabled) {
                     DEBUG_MSG("send - lora_tx_disabled\n");
                     packetPool.release(p);
                     return ERRNO_DISABLED;
@@ -381,7 +381,7 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
     void RadioLibInterface::startSend(MeshPacket * txp)
     {
         printPacket("Starting low level send", txp);
-        if (disabled || config.lora.tx_disabled) {
+        if (disabled || !config.lora.tx_enabled) {
             DEBUG_MSG("startSend is dropping tx packet because we are disabled\n");
             packetPool.release(txp);
         } else {
