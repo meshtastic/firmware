@@ -34,7 +34,7 @@ bool PositionModule::handleReceivedProtobuf(const MeshPacket &mp, Position *pptr
     // Log packet size and list of fields
     DEBUG_MSG("POSITION node=%08x l=%d %s%s%s%s%s%s%s%s%s%s%s%s%s\n", getFrom(&mp), mp.decoded.payload.size,
               p.latitude_i ? "LAT " : "", p.longitude_i ? "LON " : "", p.altitude ? "MSL " : "", p.altitude_hae ? "HAE " : "",
-              p.PDOP ? "PDOP " : "", p.HDOP ? "HDOP " : "", p.VDOP ? "VDOP " : "",
+              p.altitude_geoidal_seperation ? "GEO " : "", p.PDOP ? "PDOP " : "", p.HDOP ? "HDOP " : "", p.VDOP ? "VDOP " : "",
               p.sats_in_view ? "SIV " : "", p.fix_quality ? "FXQ " : "", p.fix_type ? "FXT " : "", p.timestamp ? "PTS " : "",
               p.time ? "TIME " : "");
 
@@ -75,6 +75,9 @@ MeshPacket *PositionModule::allocReply()
             p.altitude = node->position.altitude;
         else
             p.altitude_hae = node->position.altitude_hae;
+
+        if (pos_flags & Config_PositionConfig_PositionFlags_GEOIDAL_SEPERATION)
+            p.altitude_geoidal_seperation = node->position.altitude_geoidal_seperation;
     }
 
     if (pos_flags & Config_PositionConfig_PositionFlags_DOP) {
