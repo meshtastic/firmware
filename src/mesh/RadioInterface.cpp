@@ -415,6 +415,7 @@ void RadioInterface::applyModemConfig()
     if (power == 0)
         power = 17; // Default to default power if we don't have a valid power
 
+    // Set final tx_power back onto config
     loraConfig.tx_power = power;
     
     // Calculate the number of channels

@@ -175,12 +175,15 @@ extern NodeDB nodeDB;
 
 #define IF_ROUTER(routerVal, normalVal) ((config.device.role == Config_DeviceConfig_Role_ROUTER) ? (routerVal) : (normalVal))
 
-#define default_gps_update_interval IF_ROUTER(30, 15 * 60)
-#define default_broadcast_interval_secs IF_ROUTER(12 * 60 * 60, 15 * 60)
+#define ONE_DAY 24 * 60 * 60
+
+#define default_gps_attempt_time IF_ROUTER(5 * 60, 15 * 60)
+#define default_gps_update_interval IF_ROUTER(ONE_DAY, 2 * 60)
+#define default_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 15 * 60)
 #define default_wait_bluetooth_secs IF_ROUTER(1, 60)
 #define default_mesh_sds_timeout_secs IF_ROUTER(NODE_DELAY_FOREVER, 2 * 60 * 60)
-#define default_sds_secs 365 * 24 * 60 * 60
-#define default_ls_secs IF_ROUTER(24 * 60 * 60, 5 * 60)
+#define default_sds_secs 365 * ONE_DAY
+#define default_ls_secs IF_ROUTER(ONE_DAY, 5 * 60)
 #define default_min_wake_secs 10
 #define default_screen_on_secs 60 * 10
 
