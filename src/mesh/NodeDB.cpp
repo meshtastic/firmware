@@ -157,9 +157,13 @@ void NodeDB::installDefaultConfig()
     config.has_power = true;
     config.has_network = true;
     config.has_bluetooth = true;
-
+    config.lora.tx_enabled = true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
     config.lora.region = Config_LoRaConfig_RegionCode_UNSET;
     config.lora.modem_preset = Config_LoRaConfig_ModemPreset_LONG_FAST;
+    config.lora.hop_limit = HOP_RELIABLE;
+    config.position.gps_enabled = true;
+    config.position.position_broadcast_smart_enabled = true;
+    config.device.serial_enabled = true;
     resetRadioConfig();
     strncpy(config.network.ntp_server, "0.pool.ntp.org", 32);
     // FIXME: Default to bluetooth capability of platform as default
@@ -173,6 +177,21 @@ void NodeDB::installDefaultConfig()
     config.bluetooth.mode = hasScreen ? Config_BluetoothConfig_PairingMode_RANDOM_PIN : Config_BluetoothConfig_PairingMode_FIXED_PIN;
     // for backward compat, default position flags are ALT+MSL
     config.position.position_flags = (Config_PositionConfig_PositionFlags_ALTITUDE | Config_PositionConfig_PositionFlags_ALTITUDE_MSL);
+    
+    initConfigIntervals();
+}
+
+void NodeDB::initConfigIntervals() 
+{
+    config.position.position_broadcast_secs = default_broadcast_interval_secs;
+
+    config.power.ls_secs = default_ls_secs;
+    config.power.mesh_sds_timeout_secs = default_mesh_sds_timeout_secs;
+    config.power.min_wake_secs = default_min_wake_secs;
+    config.power.sds_secs = default_sds_secs;
+    config.power.wait_bluetooth_secs = default_wait_bluetooth_secs;
+    
+    config.display.screen_on_secs = default_screen_on_secs;
 }
 
 void NodeDB::installDefaultModuleConfig()
@@ -187,6 +206,14 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.has_telemetry = true;
     moduleConfig.has_external_notification = true;
     moduleConfig.has_canned_message = true;
+
+    initModuleConfigIntervals();
+}
+
+void NodeDB::initModuleConfigIntervals() 
+{
+    moduleConfig.telemetry.device_update_interval = default_broadcast_interval_secs;
+    moduleConfig.telemetry.environment_update_interval = default_broadcast_interval_secs;
 }
 
 void NodeDB::installDefaultChannels()

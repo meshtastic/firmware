@@ -87,7 +87,7 @@ uint32_t serialSinceMsec;
 bool pmu_found;
 
 // Array map of sensor types (as array index) and i2c address as value we'll find in the i2c scan
-uint8_t nodeTelemetrySensorsMap[7] = { 0, 0, 0, 0, 0, 0, 0 };
+uint8_t nodeTelemetrySensorsMap[TelemetrySensorType_LPS22+1] = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
 
@@ -157,7 +157,7 @@ void setup()
 #endif
 
 #ifdef DEBUG_PORT
-    if (!config.device.serial_disabled) {
+    if (!config.has_device || config.device.serial_enabled) {
         consoleInit(); // Set serial baud rate and init our mesh console
     }
 #endif
