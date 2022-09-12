@@ -313,9 +313,9 @@ uint32_t GPS::getWakeTime() const
 uint32_t GPS::getSleepTime() const
 {
     uint32_t t = config.position.gps_update_interval;
-    bool gps_disabled = config.position.gps_disabled;
+    bool gps_enabled = config.position.gps_enabled;
 
-    if (gps_disabled)
+    if (!gps_enabled)
         t = UINT32_MAX; // Sleep forever now
 
     if (t == UINT32_MAX)
@@ -467,7 +467,7 @@ GPS *createGps()
 #if !HAS_GPS
     return nullptr;
 #else
-    if (!config.position.gps_disabled) {
+    if (config.position.gps_enabled) {
 #ifdef GPS_ALTITUDE_HAE
         DEBUG_MSG("Using HAE altitude model\n");
 #else
