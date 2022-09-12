@@ -375,7 +375,7 @@ typedef struct _Position {
     /* HAE altitude in meters - can be used instead of MSL altitude */
     int32_t altitude_hae;
     /* Geoidal separation in meters */
-    int32_t altitude_geoidal_seperation;
+    int32_t altitude_geoidal_separation;
     /* Horizontal, Vertical and Position Dilution of Precision, in 1/100 units
  - PDOP is sufficient for most cases
  - for higher precision scenarios, HDOP and VDOP can be used instead,
@@ -794,7 +794,7 @@ extern "C" {
 #define Position_timestamp_tag                   7
 #define Position_timestamp_millis_adjust_tag     8
 #define Position_altitude_hae_tag                9
-#define Position_altitude_geoidal_seperation_tag 10
+#define Position_altitude_geoidal_separation_tag 10
 #define Position_PDOP_tag                        11
 #define Position_HDOP_tag                        12
 #define Position_VDOP_tag                        13
@@ -870,7 +870,7 @@ X(a, STATIC,   SINGULAR, UENUM,    altitude_source,   6) \
 X(a, STATIC,   SINGULAR, FIXED32,  timestamp,         7) \
 X(a, STATIC,   SINGULAR, INT32,    timestamp_millis_adjust,   8) \
 X(a, STATIC,   SINGULAR, SINT32,   altitude_hae,      9) \
-X(a, STATIC,   SINGULAR, SINT32,   altitude_geoidal_seperation,  10) \
+X(a, STATIC,   SINGULAR, SINT32,   altitude_geoidal_separation,  10) \
 X(a, STATIC,   SINGULAR, UINT32,   PDOP,             11) \
 X(a, STATIC,   SINGULAR, UINT32,   HDOP,             12) \
 X(a, STATIC,   SINGULAR, UINT32,   VDOP,             13) \
