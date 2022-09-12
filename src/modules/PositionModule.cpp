@@ -148,7 +148,7 @@ int32_t PositionModule::runOnce()
             DEBUG_MSG("Channel utilization is >40 percent. Skipping this opportunity to send.\n");
         }
 
-    } else if (!config.position.position_broadcast_smart_disabled) {
+    } else if (config.position.position_broadcast_smart_enabled) {
 
         // Only send packets if the channel is less than 25% utilized.
         if (airTime->channelUtilizationPercent() < 25) {
