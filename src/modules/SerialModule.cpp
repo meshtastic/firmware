@@ -69,8 +69,7 @@ SerialModuleRadio::SerialModuleRadio() : SinglePortModule("SerialModuleRadio", P
 
 int32_t SerialModule::runOnce()
 {
-#ifdef ARCH_ESP32
-
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(TTGO_T_ECHO)
     /*
         Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
@@ -140,22 +139,29 @@ int32_t SerialModule::runOnce()
                 baud = 921600;
             }
 
+#ifdef ARCH_ESP32
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
                 Serial2.begin(baud, SERIAL_8N1, moduleConfig.serial.rxd, moduleConfig.serial.txd);
 
             } else {
                 Serial2.begin(baud, SERIAL_8N1, RXD2, TXD2);
             }
+#else
+            if (moduleConfig.serial.rxd && moduleConfig.serial.txd)
+                Serial2.setPins(moduleConfig.serial.rxd, moduleConfig.serial.txd);
 
+            Serial2.begin(baud, SERIAL_8N1);
+
+#endif
             if (moduleConfig.serial.timeout) {
-                Serial2.setTimeout(
-                    moduleConfig.serial.timeout); // Number of MS to wait to set the timeout for the string.
-
+                Serial2.setTimeout(moduleConfig.serial.timeout); // Number of MS to wait to set the timeout for the string.
             } else {
                 Serial2.setTimeout(TIMEOUT); // Number of MS to wait to set the timeout for the string.
             }
 
+#ifdef ARCH_ESP32 
             Serial2.setRxBufferSize(RX_BUFFER);
+#endif
 
             serialModuleRadio = new SerialModuleRadio();
 
@@ -209,8 +215,7 @@ void SerialModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 
 ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
 {
-#ifdef ARCH_ESP32
-
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(TTGO_T_ECHO)
     if (moduleConfig.serial.enabled) {
 
         auto &p = mp.decoded;
@@ -244,6 +249,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
                 Serial2.printf("%s", p.payload.bytes);
 
             } else if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_PROTO) {
+                // TODO this needs to be implemented
             }
         }
 
