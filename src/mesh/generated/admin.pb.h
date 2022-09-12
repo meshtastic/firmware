@@ -103,6 +103,8 @@ typedef struct _AdminMessage {
         int32_t shutdown_seconds;
         /* Tell the node to factory reset, all device settings will be returned to factory defaults. */
         int32_t factory_reset;
+        /* Tell the node to reset the nodedb. */
+        int32_t nodedb_reset;
     };
 } AdminMessage;
 
@@ -152,6 +154,7 @@ extern "C" {
 #define AdminMessage_reboot_seconds_tag          97
 #define AdminMessage_shutdown_seconds_tag        98
 #define AdminMessage_factory_reset_tag           99
+#define AdminMessage_nodedb_reset_tag            100
 
 /* Struct field encoding specification for nanopb */
 #define AdminMessage_FIELDLIST(X, a) \
@@ -180,7 +183,8 @@ X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,confirm_set_radio,confirm_se
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,exit_simulator,exit_simulator),  96) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,reboot_seconds,reboot_seconds),  97) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,shutdown_seconds,shutdown_seconds),  98) \
-X(a, STATIC,   ONEOF,    INT32,    (payload_variant,factory_reset,factory_reset),  99)
+X(a, STATIC,   ONEOF,    INT32,    (payload_variant,factory_reset,factory_reset),  99) \
+X(a, STATIC,   ONEOF,    INT32,    (payload_variant,nodedb_reset,nodedb_reset), 100)
 #define AdminMessage_CALLBACK NULL
 #define AdminMessage_DEFAULT NULL
 #define AdminMessage_payload_variant_get_channel_response_MSGTYPE Channel

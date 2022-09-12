@@ -21,7 +21,7 @@ typedef enum _Config_PositionConfig_PositionFlags {
     Config_PositionConfig_PositionFlags_UNSET = 0, 
     Config_PositionConfig_PositionFlags_ALTITUDE = 1, 
     Config_PositionConfig_PositionFlags_ALTITUDE_MSL = 2, 
-    Config_PositionConfig_PositionFlags_GEOIDAL_SEPERATION = 4, 
+    Config_PositionConfig_PositionFlags_GEOIDAL_SEPARATION = 4, 
     Config_PositionConfig_PositionFlags_DOP = 8, 
     Config_PositionConfig_PositionFlags_HVDOP = 16, 
     Config_PositionConfig_PositionFlags_SATINVIEW = 32, 
@@ -45,6 +45,11 @@ typedef enum _Config_DisplayConfig_GpsCoordinateFormat {
     Config_DisplayConfig_GpsCoordinateFormat_OLC = 4, 
     Config_DisplayConfig_GpsCoordinateFormat_OSGR = 5 
 } Config_DisplayConfig_GpsCoordinateFormat;
+
+typedef enum _Config_DisplayConfig_DisplayUnits { 
+    Config_DisplayConfig_DisplayUnits_METRIC = 0, 
+    Config_DisplayConfig_DisplayUnits_IMPERIAL = 1 
+} Config_DisplayConfig_DisplayUnits;
 
 typedef enum _Config_LoRaConfig_RegionCode { 
     Config_LoRaConfig_RegionCode_UNSET = 0, 
@@ -96,6 +101,8 @@ typedef struct _Config_DisplayConfig {
     Config_DisplayConfig_GpsCoordinateFormat gps_format;
     uint32_t auto_screen_carousel_secs;
     bool compass_north_top;
+    bool flip_screen;
+    Config_DisplayConfig_DisplayUnits units;
 } Config_DisplayConfig;
 
 typedef struct _Config_LoRaConfig { 
@@ -173,6 +180,10 @@ typedef struct _Config {
 #define _Config_DisplayConfig_GpsCoordinateFormat_MAX Config_DisplayConfig_GpsCoordinateFormat_OSGR
 #define _Config_DisplayConfig_GpsCoordinateFormat_ARRAYSIZE ((Config_DisplayConfig_GpsCoordinateFormat)(Config_DisplayConfig_GpsCoordinateFormat_OSGR+1))
 
+#define _Config_DisplayConfig_DisplayUnits_MIN Config_DisplayConfig_DisplayUnits_METRIC
+#define _Config_DisplayConfig_DisplayUnits_MAX Config_DisplayConfig_DisplayUnits_IMPERIAL
+#define _Config_DisplayConfig_DisplayUnits_ARRAYSIZE ((Config_DisplayConfig_DisplayUnits)(Config_DisplayConfig_DisplayUnits_IMPERIAL+1))
+
 #define _Config_LoRaConfig_RegionCode_MIN Config_LoRaConfig_RegionCode_UNSET
 #define _Config_LoRaConfig_RegionCode_MAX Config_LoRaConfig_RegionCode_TH
 #define _Config_LoRaConfig_RegionCode_ARRAYSIZE ((Config_LoRaConfig_RegionCode)(Config_LoRaConfig_RegionCode_TH+1))
@@ -196,7 +207,7 @@ extern "C" {
 #define Config_PositionConfig_init_default       {0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_default          {0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_NetworkConfig_init_default        {0, _Config_NetworkConfig_WiFiMode_MIN, "", "", ""}
-#define Config_DisplayConfig_init_default        {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0}
+#define Config_DisplayConfig_init_default        {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _Config_DisplayConfig_DisplayUnits_MIN}
 #define Config_LoRaConfig_init_default           {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, {0, 0, 0}}
 #define Config_BluetoothConfig_init_default      {0, _Config_BluetoothConfig_PairingMode_MIN, 0}
 #define Config_init_zero                         {0, {Config_DeviceConfig_init_zero}}
@@ -204,7 +215,7 @@ extern "C" {
 #define Config_PositionConfig_init_zero          {0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_zero             {0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_NetworkConfig_init_zero           {0, _Config_NetworkConfig_WiFiMode_MIN, "", "", ""}
-#define Config_DisplayConfig_init_zero           {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0}
+#define Config_DisplayConfig_init_zero           {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _Config_DisplayConfig_DisplayUnits_MIN}
 #define Config_LoRaConfig_init_zero              {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, {0, 0, 0}}
 #define Config_BluetoothConfig_init_zero         {0, _Config_BluetoothConfig_PairingMode_MIN, 0}
 
@@ -219,6 +230,8 @@ extern "C" {
 #define Config_DisplayConfig_gps_format_tag      2
 #define Config_DisplayConfig_auto_screen_carousel_secs_tag 3
 #define Config_DisplayConfig_compass_north_top_tag 4
+#define Config_DisplayConfig_flip_screen_tag     5
+#define Config_DisplayConfig_units_tag           6
 #define Config_LoRaConfig_use_preset_tag         1
 #define Config_LoRaConfig_modem_preset_tag       2
 #define Config_LoRaConfig_bandwidth_tag          3
@@ -320,7 +333,9 @@ X(a, STATIC,   SINGULAR, STRING,   ntp_server,        5)
 X(a, STATIC,   SINGULAR, UINT32,   screen_on_secs,    1) \
 X(a, STATIC,   SINGULAR, UENUM,    gps_format,        2) \
 X(a, STATIC,   SINGULAR, UINT32,   auto_screen_carousel_secs,   3) \
-X(a, STATIC,   SINGULAR, BOOL,     compass_north_top,   4)
+X(a, STATIC,   SINGULAR, BOOL,     compass_north_top,   4) \
+X(a, STATIC,   SINGULAR, BOOL,     flip_screen,       5) \
+X(a, STATIC,   SINGULAR, UENUM,    units,             6)
 #define Config_DisplayConfig_CALLBACK NULL
 #define Config_DisplayConfig_DEFAULT NULL
 
@@ -368,7 +383,7 @@ extern const pb_msgdesc_t Config_BluetoothConfig_msg;
 /* Maximum encoded size of messages (where known) */
 #define Config_BluetoothConfig_size              10
 #define Config_DeviceConfig_size                 6
-#define Config_DisplayConfig_size                16
+#define Config_DisplayConfig_size                20
 #define Config_LoRaConfig_size                   69
 #define Config_NetworkConfig_size                137
 #define Config_PositionConfig_size               30
