@@ -40,6 +40,7 @@ jobs:
           - board: station-g1
           - board: m5stack-core
           - board: m5stack-coreink
+          - board: tbeam-s3-core
         # - board: pico
           
     runs-on: ubuntu-latest
@@ -99,6 +100,7 @@ jobs:
           - board: station-g1
           - board: m5stack-core
           - board: m5stack-coreink
+          - board: tbeam-s3-core
 
     runs-on: ubuntu-latest
     steps:
