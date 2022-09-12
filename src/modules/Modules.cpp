@@ -23,7 +23,9 @@
 #endif
 #if defined(ARCH_ESP32) || defined(ARCH_NRF52)
 #include "modules/ExternalNotificationModule.h"
+#if !defined(TTGO_T_ECHO)
 #include "modules/SerialModule.h"
+#endif
 #endif
 /**
  * Create module instances here.  If you are adding a new module, you must 'new' it here (or somewhere else)

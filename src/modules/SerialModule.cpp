@@ -69,7 +69,7 @@ SerialModuleRadio::SerialModuleRadio() : SinglePortModule("SerialModuleRadio", P
 
 int32_t SerialModule::runOnce()
 {
-#if defined(ARCH_ESP32) || defined(ARCH_NRF52)
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(TTGO_T_ECHO)
     /*
         Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
@@ -215,7 +215,7 @@ void SerialModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 
 ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
 {
-#if defined(ARCH_ESP32) || defined(ARCH_NRF52)
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(TTGO_T_ECHO)
     if (moduleConfig.serial.enabled) {
 
         auto &p = mp.decoded;
