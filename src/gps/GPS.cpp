@@ -296,16 +296,7 @@ uint32_t GPS::getWakeTime() const
 
     if (t == UINT32_MAX)
         return t; // already maxint
-
-    if (t == 0)
-        t = (config.device.role == Config_DeviceConfig_Role_ROUTER)
-                ? 5 * 60
-                : 15 * 60; // Allow up to 15 mins for each attempt (probably will be much
-                           // less if we can find sats) or less if a router
-
-    t *= 1000; // msecs
-
-    return t;
+    return t * 1000;
 }
 
 /** Get how long we should sleep between aqusition attempts in msecs
@@ -320,14 +311,8 @@ uint32_t GPS::getSleepTime() const
 
     if (t == UINT32_MAX)
         return t; // already maxint
-
-    if (t == 0) // default - unset in preferences
-        t = (config.device.role == Config_DeviceConfig_Role_ROUTER) ? 24 * 60 * 60
-                                                                                   : 2 * 60; // 2 mins or once per day for routers
-
-    t *= 1000;
-
-    return t;
+    
+    return t * 1000;
 }
 
 void GPS::publishUpdate()
