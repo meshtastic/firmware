@@ -177,7 +177,7 @@ extern NodeDB nodeDB;
 
 #define ONE_DAY 24 * 60 * 60
 
-#define default_gps_attempt_time IF_ROUTER(15 * 60, 5 * 60)
+#define default_gps_attempt_time IF_ROUTER(5 * 60, 15 * 60)
 #define default_gps_update_interval IF_ROUTER(ONE_DAY, 2 * 60)
 #define default_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 15 * 60)
 #define default_wait_bluetooth_secs IF_ROUTER(1, 60)
