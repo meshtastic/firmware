@@ -176,7 +176,8 @@ bool NMEAGPS::lookForLocation()
     p.latitude_i = toDegInt(loc.lat);
     p.longitude_i = toDegInt(loc.lng);
 
-    p.altitude_hae = reader.altitude.meters() + reader.geoidHeight.meters();
+    p.altitude_geoidal_seperation = reader.geoidHeight.meters();
+    p.altitude_hae = reader.altitude.meters() + p.altitude_geoidal_seperation;
     p.altitude = reader.altitude.meters();
 
     p.fix_quality = fixQual;
