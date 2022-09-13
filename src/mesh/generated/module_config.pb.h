@@ -32,7 +32,8 @@ typedef enum _ModuleConfig_SerialConfig_Serial_Baud {
 typedef enum _ModuleConfig_SerialConfig_Serial_Mode { 
     ModuleConfig_SerialConfig_Serial_Mode_DEFAULT = 0, 
     ModuleConfig_SerialConfig_Serial_Mode_SIMPLE = 1, 
-    ModuleConfig_SerialConfig_Serial_Mode_PROTO = 2 
+    ModuleConfig_SerialConfig_Serial_Mode_PROTO = 2, 
+    ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG = 3 
 } ModuleConfig_SerialConfig_Serial_Mode;
 
 typedef enum _ModuleConfig_CannedMessageConfig_InputEventChar { 
@@ -139,8 +140,8 @@ typedef struct _ModuleConfig {
 #define _ModuleConfig_SerialConfig_Serial_Baud_ARRAYSIZE ((ModuleConfig_SerialConfig_Serial_Baud)(ModuleConfig_SerialConfig_Serial_Baud_BAUD_921600+1))
 
 #define _ModuleConfig_SerialConfig_Serial_Mode_MIN ModuleConfig_SerialConfig_Serial_Mode_DEFAULT
-#define _ModuleConfig_SerialConfig_Serial_Mode_MAX ModuleConfig_SerialConfig_Serial_Mode_PROTO
-#define _ModuleConfig_SerialConfig_Serial_Mode_ARRAYSIZE ((ModuleConfig_SerialConfig_Serial_Mode)(ModuleConfig_SerialConfig_Serial_Mode_PROTO+1))
+#define _ModuleConfig_SerialConfig_Serial_Mode_MAX ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG
+#define _ModuleConfig_SerialConfig_Serial_Mode_ARRAYSIZE ((ModuleConfig_SerialConfig_Serial_Mode)(ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG+1))
 
 #define _ModuleConfig_CannedMessageConfig_InputEventChar_MIN ModuleConfig_CannedMessageConfig_InputEventChar_NONE
 #define _ModuleConfig_CannedMessageConfig_InputEventChar_MAX ModuleConfig_CannedMessageConfig_InputEventChar_BACK
