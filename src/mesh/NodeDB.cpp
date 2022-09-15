@@ -259,7 +259,6 @@ void NodeDB::installDefaultDeviceState()
 void NodeDB::init()
 {
     DEBUG_MSG("Initializing NodeDB\n");
-    // saveToDisk();
     loadFromDisk();
 
     myNodeInfo.max_channels = MAX_NUM_CHANNELS; // tell others the max # of channels we can understand
@@ -374,19 +373,7 @@ void NodeDB::loadFromDisk()
     } else {
         if (devicestate.version < DEVICESTATE_MIN_VER) {
             DEBUG_MSG("Warn: devicestate %d is old, discarding\n", devicestate.version);
-            installDefaultDeviceState();
-#ifdef ARCH_ESP32
-            // This will erase what's in NVS including ssl keys, persistant variables and ble pairing
-            nvs_flash_erase();
-#endif
-#ifdef ARCH_NRF52
-            Bluefruit.begin();
-            DEBUG_MSG("Clearing bluetooth bonds!\n");
-            bond_print_list(BLE_GAP_ROLE_PERIPH);
-            bond_print_list(BLE_GAP_ROLE_CENTRAL);
-            Bluefruit.Periph.clearBonds();
-            Bluefruit.Central.clearBonds();
-#endif
+            factoryReset();
         } else {
             DEBUG_MSG("Loaded saved devicestate version %d\n", devicestate.version);
         }
