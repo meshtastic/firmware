@@ -162,7 +162,6 @@ bool GPS::setupGPS()
 #endif
 
 
-#ifdef LILYGO_TBEAM_S3_CORE
         /*
         * T-Beam-S3-Core will be preset to use gps Probe here, and other boards will not be changed first
         */
@@ -251,86 +250,6 @@ bool GPS::setupGPS()
                 DEBUG_MSG("WARNING: Unable to enable NMEA GGA.\n");
             }
         }
-#endif
-
-#ifdef TTGO_T_ECHO
-        // Switch to 9600 baud, then close and reopen port
-        _serial_gps->end();
-        delay(250);
-        _serial_gps->begin(4800);
-        delay(250);
-        _serial_gps->write("$PCAS01,1*1D\r\n");
-        delay(250);
-        _serial_gps->end();
-        delay(250);
-        _serial_gps->begin(9600);
-        delay(250);
-        // Initialize the L76K Chip, use GPS + GLONASS
-        _serial_gps->write("$PCAS04,5*1C\r\n");
-        delay(250);
-        // only ask for RMC and GGA
-        _serial_gps->write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
-        delay(250);
-        // Switch to Vehicle Mode, since SoftRF enables Aviation < 2g
-        _serial_gps->write("$PCAS11,3*1E\r\n");
-        delay(250);
-#endif
-#ifdef GPS_UBLOX
-        delay(250);
-        // Set the UART port to output NMEA only
-        byte _message_nmea[] = {0xB5, 0x62, 0x06, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0xC0, 0x08, 0x00, 0x00,
-                                0x80, 0x25, 0x00, 0x00, 0x07, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x91, 0xAF};
-        _serial_gps->write(_message_nmea, sizeof(_message_nmea));
-        if (!getACK(0x06, 0x00)) {
-            DEBUG_MSG("WARNING: Unable to enable NMEA Mode.\n");
-            return true;
-        }  
-
-        // disable GGL
-        byte _message_GGL[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x01, 0x01, 0x00, 0x01, 0x01, 0x01, 0x01, 0x05, 0x3A};
-        _serial_gps->write(_message_GGL, sizeof(_message_GGL));
-        if (!getACK(0x06, 0x01)) {
-            DEBUG_MSG("WARNING: Unable to disable NMEA GGL.\n");
-            return true;
-        }
-
-        // disable GSA
-        byte _message_GSA[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x02, 0x01, 0x00, 0x01, 0x01, 0x01, 0x01, 0x06, 0x41};
-        _serial_gps->write(_message_GSA, sizeof(_message_GSA));
-        if (!getACK(0x06, 0x01)) {
-            DEBUG_MSG("WARNING: Unable to disable NMEA GSA.\n");
-            return true;
-        }
-
-        // disable GSV
-        byte _message_GSV[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x03, 0x01, 0x00, 0x01, 0x01, 0x01, 0x01, 0x07, 0x48};
-        _serial_gps->write(_message_GSV, sizeof(_message_GSV));
-        if (!getACK(0x06, 0x01)) {
-            DEBUG_MSG("WARNING: Unable to disable NMEA GSV.\n");
-            return true;
-        }
-
-        // disable VTG
-        byte _message_VTG[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x05, 0x01, 0x00, 0x01, 0x01, 0x01, 0x01, 0x09, 0x56};
-        _serial_gps->write(_message_VTG, sizeof(_message_VTG));
-        if (!getACK(0x06, 0x01)) {
-            DEBUG_MSG("WARNING: Unable to disable NMEA VTG.\n");
-            return true;
-        }
-
-        // enable RMC
-        byte _message_RMC[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x04, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x09, 0x54};
-        _serial_gps->write(_message_RMC, sizeof(_message_RMC));
-        if (!getACK(0x06, 0x01)) {
-            DEBUG_MSG("WARNING: Unable to enable NMEA RMC.\n");
-            return true;
-        }
-
-        // enable GGA
-        byte _message_GGA[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x00, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x05, 0x38};
-        _serial_gps->write(_message_GGA, sizeof(_message_GGA));
-        if (!getACK(0x06, 0x01)) DEBUG_MSG("WARNING: Unable to enable NMEA GGA.\n");
-#endif
     }
 
     return true;
@@ -490,7 +409,6 @@ int32_t GPS::runOnce()
         // if we have received valid NMEA claim we are connected
         setConnected();
     } else {
-#if defined(LILYGO_TBEAM_S3_CORE)       
         if(gnssModel == GNSS_MODEL_UBLOX){
             // reset the GPS on next bootup
             if(devicestate.did_gps_reset && (millis() > 60000) && !hasFlow()) {
@@ -499,14 +417,6 @@ int32_t GPS::runOnce()
                 nodeDB.saveDeviceStateToDisk();
             }
         }
-#elif defined(GPS_UBLOX)
-        // reset the GPS on next bootup
-        if(devicestate.did_gps_reset && (millis() > 60000) && !hasFlow()) {
-            DEBUG_MSG("GPS is not communicating, trying factory reset on next bootup.\n");
-            devicestate.did_gps_reset = false;
-            nodeDB.saveDeviceStateToDisk();
-        }
-#endif
     }
 
     // If we are overdue for an update, turn on the GPS and at least publish the current status
