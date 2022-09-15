@@ -114,7 +114,12 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
         handleGetDeviceMetadata(mp);
         break;
     }
-
+    case AdminMessage_factory_reset_tag: {
+        DEBUG_MSG("Initiating factory reset\n");
+        nodeDB.factoryReset();
+        rebootAtMsec = millis() + (5 * 1000);
+        break;
+    }
 #ifdef ARCH_PORTDUINO
     case AdminMessage_exit_simulator_tag:
         DEBUG_MSG("Exiting simulator\n");
