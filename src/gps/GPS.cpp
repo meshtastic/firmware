@@ -490,7 +490,16 @@ int32_t GPS::runOnce()
         // if we have received valid NMEA claim we are connected
         setConnected();
     } else {
-#if defined(GPS_UBLOX) || defined(LILYGO_TBEAM_S3_CORE)       
+#if defined(LILYGO_TBEAM_S3_CORE)       
+        if(gnssModel == GNSS_MODEL_UBLOX){
+            // reset the GPS on next bootup
+            if(devicestate.did_gps_reset && (millis() > 60000) && !hasFlow()) {
+                DEBUG_MSG("GPS is not communicating, trying factory reset on next bootup.\n");
+                devicestate.did_gps_reset = false;
+                nodeDB.saveDeviceStateToDisk();
+            }
+        }
+#elif defined(GPS_UBLOX)
         // reset the GPS on next bootup
         if(devicestate.did_gps_reset && (millis() > 60000) && !hasFlow()) {
             DEBUG_MSG("GPS is not communicating, trying factory reset on next bootup.\n");
