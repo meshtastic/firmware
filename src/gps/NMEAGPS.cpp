@@ -19,7 +19,20 @@ static int32_t toDegInt(RawDegrees d)
 
 bool NMEAGPS::factoryReset()
 {
-#ifdef GPS_UBLOX
+    /**
+     * First use the macro definition to distinguish, 
+     * if there is no problem, the macro definition will be deleted
+     * */
+#if defined(LILYGO_TBEAM_S3_CORE)   
+    if(gnssModel == GNSS_MODEL_UBLOX){
+        // Factory Reset
+        byte _message_reset[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF,
+            0xFB, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xFF, 0xFF, 0x00, 0x00, 0x17, 0x2B, 0x7E};
+        _serial_gps->write(_message_reset,sizeof(_message_reset));
+        delay(1000);
+    }
+#elif defined(GPS_UBLOX)
     // Factory Reset
     byte _message_reset[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF,
         0xFB, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
