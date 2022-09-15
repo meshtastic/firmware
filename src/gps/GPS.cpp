@@ -610,7 +610,8 @@ GnssModel_t GPS::probe()
 
     // Close all NMEA sentences , Only valid for MTK platform
     _serial_gps->write("$PCAS03,0,0,0,0,0,0,0,0,0,0,,,0,0*02\r\n");
-    delay(5);
+    delay(20);
+
     // Get version information
     _serial_gps->write("$PCAS06,0*1B\r\n");
     uint32_t startTimeout = millis() + 500;
@@ -619,12 +620,17 @@ GnssModel_t GPS::probe()
             String ver = _serial_gps->readStringUntil('\r');
             // Get module info , If the correct header is returned, 
             // it can be determined that it is the MTK chip
-            if (ver.startsWith("$GPTXT,01,01,02")) {
-                DEBUG_MSG("L76K GNSS init succeeded, using L76K GNSS Module\n");
-                return GNSS_MODEL_MTK;
+            int index = ver.indexOf("$");
+            if(index != -1){
+                ver = ver.substring(index);
+                if (ver.startsWith("$GPTXT,01,01,02")) {
+                    DEBUG_MSG("L76K GNSS init succeeded, using L76K GNSS Module\n");
+                    return GNSS_MODEL_MTK;
+                }
             }
         }
     }
+  
 
     uint8_t cfg_rate[] = {0xB5, 0x62, 0x06, 0x08, 0x00, 0x00, 0x0E, 0x30};
     _serial_gps->write(cfg_rate, sizeof(cfg_rate));
