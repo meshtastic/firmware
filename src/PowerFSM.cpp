@@ -51,7 +51,7 @@ static uint32_t secsSlept;
 
 static void lsEnter()
 {
-    DEBUG_MSG("lsEnter begin, ls_secs=%u\n", config.power.ls_secs > 0 ? config.power.ls_secs : default_ls_secs);
+    DEBUG_MSG("lsEnter begin, ls_secs=%u\n", config.power.ls_secs);
     screen->setOn(false);
     secsSlept = 0; // How long have we been sleeping this time
 
@@ -65,7 +65,7 @@ static void lsIdle()
 #ifdef ARCH_ESP32
 
     // Do we have more sleeping to do?
-    if (secsSlept < config.power.ls_secs ? config.power.ls_secs : default_ls_secs) {
+    if (secsSlept < config.power.ls_secs) {
         // Briefly come out of sleep long enough to blink the led once every few seconds
         uint32_t sleepTime = 30;
 
