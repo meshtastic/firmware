@@ -116,6 +116,8 @@ class NodeDB
     size_t getNumOnlineNodes();
 
     void initConfigIntervals(), initModuleConfigIntervals();
+    
+    bool factoryReset();
 
   private:
     /// Find a node in our DB, create an empty NodeInfo if missing
@@ -129,7 +131,6 @@ class NodeDB
         newStatus.notifyObservers(&status);
     }
 
-    bool factoryReset();
 
     /// read our db from flash
     void loadFromDisk();
@@ -182,7 +183,7 @@ extern NodeDB nodeDB;
 #define default_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 15 * 60)
 #define default_wait_bluetooth_secs IF_ROUTER(1, 60)
 #define default_mesh_sds_timeout_secs IF_ROUTER(NODE_DELAY_FOREVER, 2 * 60 * 60)
-#define default_sds_secs 365 * ONE_DAY
+#define default_sds_secs IF_ROUTER(ONE_DAY, UINT32_MAX) // Default to forever super deep sleep
 #define default_ls_secs IF_ROUTER(ONE_DAY, 5 * 60)
 #define default_min_wake_secs 10
 #define default_screen_on_secs 60 * 10
