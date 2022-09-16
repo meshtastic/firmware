@@ -116,6 +116,8 @@ class NodeDB
     size_t getNumOnlineNodes();
 
     void initConfigIntervals(), initModuleConfigIntervals();
+    
+    bool factoryReset();
 
   private:
     /// Find a node in our DB, create an empty NodeInfo if missing
@@ -129,7 +131,6 @@ class NodeDB
         newStatus.notifyObservers(&status);
     }
 
-    bool factoryReset();
 
     /// read our db from flash
     void loadFromDisk();
