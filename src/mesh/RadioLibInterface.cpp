@@ -125,7 +125,7 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
 
             if (config.lora.region != Config_LoRaConfig_RegionCode_UNSET) {
                 if (disabled || !config.lora.tx_enabled) {
-                    DEBUG_MSG("send - lora_tx_disabled\n");
+                    DEBUG_MSG("send - !config.lora.tx_enabled\n");
                     packetPool.release(p);
                     return ERRNO_DISABLED;
                 }
@@ -140,8 +140,8 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
 
 #else
 
-    if (disabled || config.lora.tx_disabled) {
-        DEBUG_MSG("send - lora_tx_disabled\n");
+    if (disabled || !config.lora.tx_enabled) {
+        DEBUG_MSG("send - lora tx disabled\n");
         packetPool.release(p);
         return ERRNO_DISABLED;
     }
