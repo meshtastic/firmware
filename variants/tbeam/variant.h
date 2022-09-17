@@ -36,3 +36,4 @@
 // and waking from light sleep
 // #define PMU_IRQ 35
 #define HAS_AXP192
+#define GPS_UBLOX

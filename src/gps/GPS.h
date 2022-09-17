@@ -4,6 +4,20 @@
 #include "Observer.h"
 #include "concurrency/OSThread.h"
 
+
+struct uBloxGnssModelInfo { 
+    char    swVersion[30];
+    char    hwVersion[10];
+    uint8_t extensionNo;
+    char    extension[10][30];
+} ;
+
+typedef enum{
+  GNSS_MODEL_MTK,
+  GNSS_MODEL_UBLOX,
+  GNSS_MODEL_UNKONW,
+}GnssModel_t;
+
 // Generate a string representation of DOP
 const char *getDOPString(uint32_t dop);
 
@@ -146,6 +160,14 @@ class GPS : private concurrency::OSThread
     void publishUpdate();
 
     virtual int32_t runOnce() override;
+
+  // Get GNSS model
+    GnssModel_t probe();
+
+    int getAck(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID);
+
+  protected:
+    GnssModel_t gnssModel = GNSS_MODEL_UNKONW;
 };
 
 // Creates an instance of the GPS class. 
