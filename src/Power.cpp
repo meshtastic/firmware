@@ -441,9 +441,12 @@ bool Power::axpChipInit()
 
         // t-beam s3 core 
 
-        // gnss module power channel -  now turned on in setGpsPower
-        // PMU->setPowerChannelVoltage(XPOWERS_ALDO4, 3300);
-        // PMU->enablePowerOutput(XPOWERS_ALDO4);
+        /**
+         * gnss module power channel 
+         * The default ALDO4 is off, you need to turn on the GNSS power first, otherwise it will be invalid during initialization
+         */
+        PMU->setPowerChannelVoltage(XPOWERS_ALDO4, 3300);
+        PMU->enablePowerOutput(XPOWERS_ALDO4);
 
         // lora radio power channel
         PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300);

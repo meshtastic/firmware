@@ -34,7 +34,7 @@ static void sdsEnter()
 {
     DEBUG_MSG("Enter state: SDS\n");
     // FIXME - make sure GPS and LORA radio are off first - because we want close to zero current draw
-    doDeepSleep(config.power.sds_secs ? config.power.sds_secs : default_sds_secs * 1000LL);
+    doDeepSleep(config.power.sds_secs * 1000);
 }
 
 extern Power *power;
@@ -51,7 +51,7 @@ static uint32_t secsSlept;
 
 static void lsEnter()
 {
-    DEBUG_MSG("lsEnter begin, ls_secs=%u\n", config.power.ls_secs > 0 ? config.power.ls_secs : default_ls_secs);
+    DEBUG_MSG("lsEnter begin, ls_secs=%u\n", config.power.ls_secs);
     screen->setOn(false);
     secsSlept = 0; // How long have we been sleeping this time
 
@@ -65,7 +65,7 @@ static void lsIdle()
 #ifdef ARCH_ESP32
 
     // Do we have more sleeping to do?
-    if (secsSlept < config.power.ls_secs ? config.power.ls_secs : default_ls_secs) {
+    if (secsSlept < config.power.ls_secs) {
         // Briefly come out of sleep long enough to blink the led once every few seconds
         uint32_t sleepTime = 30;
 
@@ -334,8 +334,6 @@ void PowerFSM_setup()
     // On most boards we use light-sleep to be our main state, but on NRF52 we just stay in DARK
     State *lowPowerState = &stateLS;
 
-    uint32_t meshSds = 0;
-
 #ifdef ARCH_ESP32
     // We never enter light-sleep or NB states on NRF52 (because the CPU uses so little power normally)
 
@@ -343,20 +341,14 @@ void PowerFSM_setup()
     if (isRouter || config.power.is_power_saving) {
         powerFSM.add_timed_transition(&stateNB, &stateLS, getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs), NULL, "Min wake timeout");
         powerFSM.add_timed_transition(&stateDARK, &stateLS, getConfiguredOrDefaultMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs), NULL, "Bluetooth timeout");
-        meshSds = config.power.mesh_sds_timeout_secs ? config.power.mesh_sds_timeout_secs : default_mesh_sds_timeout_secs;
+    } 
 
-    } else {
-
-        meshSds = UINT32_MAX;
-    }
-
-#else
+#elif defined (ARCH_NRF52)
     lowPowerState = &stateDARK;
-    meshSds = UINT32_MAX; // Workaround for now: Don't go into deep sleep on the RAK4631
 #endif
 
-    if (meshSds != UINT32_MAX)
-        powerFSM.add_timed_transition(lowPowerState, &stateSDS, meshSds * 1000, NULL, "mesh timeout");
+    if (config.power.sds_secs != UINT32_MAX)
+        powerFSM.add_timed_transition(lowPowerState, &stateSDS, config.power.sds_secs * 1000, NULL, "mesh timeout");
 
     powerFSM.run_machine(); // run one interation of the state machine, so we run our on enter tasks for the initial DARK state
 }
