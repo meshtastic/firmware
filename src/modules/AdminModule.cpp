@@ -177,6 +177,7 @@ void AdminModule::handleSetConfig(const Config &c)
 {
     bool requiresReboot = false;
     bool isRouter = (config.device.role == Config_DeviceConfig_Role_ROUTER);
+    bool isRegionUnset = (config.lora.region == Config_LoRaConfig_RegionCode_UNSET);
 
     switch (c.which_payload_variant) {
         case Config_device_tag:
@@ -216,6 +217,10 @@ void AdminModule::handleSetConfig(const Config &c)
             DEBUG_MSG("Setting config: LoRa\n");
             config.has_lora = true;
             config.lora = c.payload_variant.lora;
+            if (isRegionUnset && 
+                config.lora.region > Config_LoRaConfig_RegionCode_UNSET) {
+                config.lora.tx_enabled = true;
+            }
             requiresReboot = true;
             break;
         case Config_bluetooth_tag:
