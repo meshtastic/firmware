@@ -227,10 +227,10 @@ const char *Channels::getName(size_t chIndex)
                 channelName = "MediumFast";
                 break;
             case Config_LoRaConfig_ModemPreset_LONG_SLOW:
-                channelName = "LongFast";
+                channelName = "LongSlow";
                 break;
             case Config_LoRaConfig_ModemPreset_LONG_FAST:
-                channelName = "LongSlow";
+                channelName = "LongFast";
                 break;
             case Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW:
                 channelName = "VLongSlow";
