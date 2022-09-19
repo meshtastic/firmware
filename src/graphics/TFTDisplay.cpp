@@ -22,13 +22,23 @@ void TFTDisplay::display(void)
 {
     concurrency::LockGuard g(spiLock);
 
-    // FIXME - only draw bits have changed (use backbuf similar to the other displays)
-    // tft.drawBitmap(0, 0, buffer, 128, 64, TFT_YELLOW, TFT_BLACK);
-    for (uint16_t y = 0; y < displayHeight; y++) {
-        for (uint16_t x = 0; x < displayWidth; x++) {
+    uint16_t x,y;
+
+    for (y = 0; y < displayHeight; y++) {
+        for (x = 0; x < displayWidth; x++) {
             // get src pixel in the page based ordering the OLED lib uses FIXME, super inefficent
             auto isset = buffer[x + (y / 8) * displayWidth] & (1 << (y & 7));
-            tft.drawPixel(x, y, isset ? TFT_WHITE : TFT_BLACK);
+            auto dblbuf_isset = buffer_back[x + (y / 8) * displayWidth] & (1 << (y & 7));
+            if (isset != dblbuf_isset) {
+                tft.drawPixel(x, y, isset ? TFT_WHITE : TFT_BLACK);
+            }
+        }
+    }
+    // Copy the Buffer to the Back Buffer
+    for (y = 0; y < (displayHeight / 8); y++) {
+        for (x = 0; x < displayWidth; x++) {
+            uint16_t pos = x + y * displayWidth;
+            buffer_back[pos] = buffer[pos];
         }
     }
 }
