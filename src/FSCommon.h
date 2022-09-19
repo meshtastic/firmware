@@ -23,16 +23,9 @@
 #endif
 
 #if defined(ARCH_ESP32)
-#if CONFIG_IDF_TARGET_ESP32S3
-#include <LittleFS.h>   //esp32s3 uses the framework's built-in LittleFS
-#define FSCom LittleFS
-#else
 // ESP32 version
-#include "LITTLEFS.h"
-#define FSCom LITTLEFS
-#endif
-
-
+#include "LittleFS.h"
+#define FSCom LittleFS
 #define FSBegin() FSCom.begin(true)
 #define FILE_O_WRITE "w"
 #define FILE_O_READ "r"
