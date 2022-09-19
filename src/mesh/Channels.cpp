@@ -215,25 +215,25 @@ const char *Channels::getName(size_t chIndex)
         else
             switch (config.lora.modem_preset) {
             case Config_LoRaConfig_ModemPreset_SHORT_SLOW:
-                channelName = "ShortS";
+                channelName = "ShortSlow";
                 break;
             case Config_LoRaConfig_ModemPreset_SHORT_FAST:
-                channelName = "ShortF";
+                channelName = "ShortFast";
                 break;
             case Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
-                channelName = "MedS";
+                channelName = "MediumSlow";
                 break;
             case Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
-                channelName = "MedF";
+                channelName = "MediumFast";
                 break;
             case Config_LoRaConfig_ModemPreset_LONG_SLOW:
-                channelName = "LongS";
+                channelName = "LongSlow";
                 break;
             case Config_LoRaConfig_ModemPreset_LONG_FAST:
-                channelName = "LongF";
+                channelName = "LongFast";
                 break;
             case Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW:
-                channelName = "VeryL";
+                channelName = "VLongSlow";
                 break;
             default:
                 channelName = "Invalid";
