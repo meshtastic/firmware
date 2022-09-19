@@ -10,6 +10,7 @@
 #include "target_specific.h"
 #include <DNSServer.h>
 #include <ESPmDNS.h>
+#include <esp_wifi.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
 
@@ -239,7 +240,7 @@ bool initWifi(bool forceSoftAP)
                 DEBUG_MSG("MY IP AP ADDRESS: %s\n", WiFi.softAPIP().toString().c_str());
 
                 // This is needed to improve performance.
-                // esp_wifi_set_ps(WIFI_PS_NONE); // Disable radio power saving
+                esp_wifi_set_ps(WIFI_PS_NONE); // Disable radio power saving
 
                 dnsServer.start(53, "*", apIP);
 
@@ -253,7 +254,7 @@ bool initWifi(bool forceSoftAP)
                 WiFi.onEvent(WiFiEvent);
 
                 // This is needed to improve performance.
-                // esp_wifi_set_ps(WIFI_PS_NONE); // Disable radio power saving
+                esp_wifi_set_ps(WIFI_PS_NONE); // Disable radio power saving
 
                 WiFi.onEvent(
                     [](WiFiEvent_t event, WiFiEventInfo_t info) {
