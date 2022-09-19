@@ -10,6 +10,7 @@
 #include "target_specific.h"
 #include <DNSServer.h>
 #include <ESPmDNS.h>
+#include <esp_wifi.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
 
@@ -238,10 +239,8 @@ bool initWifi(bool forceSoftAP)
                 WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
                 DEBUG_MSG("MY IP AP ADDRESS: %s\n", WiFi.softAPIP().toString().c_str());
 
-#if !CONFIG_IDF_TARGET_ESP32S3
                 // This is needed to improve performance.
                 esp_wifi_set_ps(WIFI_PS_NONE); // Disable radio power saving
-#endif
 
                 dnsServer.start(53, "*", apIP);
 
@@ -254,19 +253,14 @@ bool initWifi(bool forceSoftAP)
                 WiFi.setHostname(ourHost);
                 WiFi.onEvent(WiFiEvent);
 
-#if !CONFIG_IDF_TARGET_ESP32S3
                 // This is needed to improve performance.
                 esp_wifi_set_ps(WIFI_PS_NONE); // Disable radio power saving
-#endif
 
                 WiFi.onEvent(
                     [](WiFiEvent_t event, WiFiEventInfo_t info) {
                         Serial.print("\nWiFi lost connection. Reason: ");
-                        #if CONFIG_IDF_TARGET_ESP32S3
                         Serial.println(info.wifi_sta_disconnected.reason);
-                        wifiDisconnectReason = info.wifi_sta_disconnected.reason;
-                        #else
-                        Serial.println(info.disconnected.reason);
+
                         /*
                            If we are disconnected from the AP for some reason,
                            save the error code.
@@ -274,15 +268,9 @@ bool initWifi(bool forceSoftAP)
                            For a reference to the codes:
                              https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/wifi.html#wi-fi-reason-code
                         */
-                        wifiDisconnectReason = info.disconnected.reason;
-                        #endif
-
+                        wifiDisconnectReason = info.wifi_sta_disconnected.reason;
                     },
-#if CONFIG_IDF_TARGET_ESP32S3
                     WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
-#else
-                    WiFiEvent_t::SYSTEM_EVENT_STA_DISCONNECTED);
-#endif
 
                 DEBUG_MSG("JOINING WIFI soon: ssid=%s\n", wifiName);
                 wifiReconnect = new Periodic("WifiConnect", reconnectWiFi);

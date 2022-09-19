@@ -3,6 +3,7 @@
 #include <Wire.h>
 
 extern uint8_t cardkb_found;
+extern uint8_t faceskb_found;
 
 KbI2cBase::KbI2cBase(const char *name) : concurrency::OSThread(name)
 {
@@ -11,6 +12,10 @@ KbI2cBase::KbI2cBase(const char *name) : concurrency::OSThread(name)
 
 int32_t KbI2cBase::runOnce()
 {
+    if ((cardkb_found != CARDKB_ADDR) && (faceskb_found != CARDKB_ADDR)){
+        // Input device is not detected.
+        return INT32_MAX;
+    }
     InputEvent e;
     e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
     e.source = this->_originName;
