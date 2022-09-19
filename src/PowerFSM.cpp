@@ -240,7 +240,7 @@ void PowerFSM_setup()
     bool isRouter = (config.device.role == Config_DeviceConfig_Role_ROUTER ? 1 : 0);
     bool hasPower = isPowered();
 
-    DEBUG_MSG("PowerFSM init, USB power=%d\n", hasPower);
+    DEBUG_MSG("PowerFSM init, USB power=%d\n", hasPower ? 1 : 0);
     powerFSM.add_timed_transition(&stateBOOT, hasPower ? &statePOWER : &stateON, 3 * 1000, NULL, "boot timeout");
 
     // wake timer expired or a packet arrived

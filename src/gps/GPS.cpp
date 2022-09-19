@@ -145,7 +145,7 @@ bool GPS::setupGPS()
     if (_serial_gps && !didSerialInit) {
         didSerialInit = true;
 
-#if CONFIG_IDF_TARGET_ESP32S3
+#if ARCH_ESP32
     // In esp32s3 framework, setRxBufferSize needs to be initialized before Serial
     _serial_gps->setRxBufferSize(2048); // the default is 256
 #endif
@@ -156,11 +156,6 @@ bool GPS::setupGPS()
 #else
         _serial_gps->begin(GPS_BAUDRATE);
 #endif
-
-#if CONFIG_IDF_TARGET_ESP32
-        _serial_gps->setRxBufferSize(2048); // the default is 256
-#endif
-
 
 #ifdef LILYGO_TBEAM_S3_CORE
         /*
