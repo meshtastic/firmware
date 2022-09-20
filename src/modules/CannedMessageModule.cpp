@@ -116,10 +116,40 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         if ((this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED)) {
             powerFSM.trigger(EVENT_PRESS);
         } else {
+            this->payload = this->runState;
             this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
             validEvent = true;
         }
     }
+    if (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL)) {
+        DEBUG_MSG("Canned message event Cancel\n");
+        // emulate a timeout. Same result
+        this->lastTouchMillis = 0;
+        validEvent = true;
+    }
+    if ((event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_BACK)) || 
+        (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) ||
+        (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT))) {
+        DEBUG_MSG("Canned message event (back/left/right)\n");
+        if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
+            // pass the pressed key
+            this->payload = event->kbchar;
+            this->lastTouchMillis = millis();
+            validEvent = true;
+        }
+    }
+    if (event->inputEvent == static_cast<char>(ANYKEY)) {
+        DEBUG_MSG("Canned message event any key pressed\n");
+        // when inactive, this will switch to the freetext mode
+        if ((this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED)) {
+            this->runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+        }
+        // pass the pressed key
+        this->payload = event->kbchar;
+        this->lastTouchMillis = millis();
+        validEvent = true;
+    }
+
 
     if (validEvent) {
         // Let runOnce to be called immediately.
@@ -160,25 +190,32 @@ int32_t CannedMessageModule::runOnce()
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         e.frameChanged = true;
         this->currentMessageIndex = -1;
+        this->freetext = ""; // clear freetext
         this->notifyObservers(&e);
-    } else if ((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) && (millis() - this->lastTouchMillis) > INACTIVATE_AFTER_MS) {
+    } else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) && (millis() - this->lastTouchMillis) > INACTIVATE_AFTER_MS) {
         // Reset module
         DEBUG_MSG("Reset due the lack of activity.\n");
         e.frameChanged = true;
         this->currentMessageIndex = -1;
+        this->freetext = ""; // clear freetext
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         this->notifyObservers(&e);
-    } else if (this->currentMessageIndex == -1) {
+    } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT) {
+        if (this->payload == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
+            sendText(NODENUM_BROADCAST, this->freetext.c_str(), true);
+        } else {
+            sendText(NODENUM_BROADCAST, this->messages[this->currentMessageIndex], true);
+        }
+        this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
+        this->currentMessageIndex = -1;
+        this->freetext = ""; // clear freetext
+        this->notifyObservers(&e);
+        return 2000;
+     } else if ((this->runState != CANNED_MESSAGE_RUN_STATE_FREETEXT) && (this->currentMessageIndex == -1)) {
         this->currentMessageIndex = 0;
         DEBUG_MSG("First touch (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
         e.frameChanged = true;
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
-    } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT) {
-        sendText(NODENUM_BROADCAST, this->messages[this->currentMessageIndex], true);
-        this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
-        this->currentMessageIndex = -1;
-        this->notifyObservers(&e);
-        return 2000;
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_UP) {
         this->currentMessageIndex = getPrevIndex();
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
@@ -187,6 +224,22 @@ int32_t CannedMessageModule::runOnce()
         this->currentMessageIndex = this->getNextIndex();
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
         DEBUG_MSG("MOVE DOWN (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
+    } else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
+        e.frameChanged = true;
+        switch (this->payload) {
+            case 8: // backspace
+                if (this->freetext.length() > 0) {
+                    this->freetext = this->freetext.substring(0, this->freetext.length() - 1);
+                }
+                break;
+            default:
+                this->freetext += this->payload;
+                break;
+        }
+        
+        this->lastTouchMillis = millis();
+        this->notifyObservers(&e);
+        return INACTIVATE_AFTER_MS;
     }
 
     if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
@@ -248,6 +301,11 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_SMALL);
         display->drawString(10 + x, 0 + y + 16, "Canned Message\nModule disabled.");
+    }else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
+        display->setTextAlignment(TEXT_ALIGN_LEFT);
+        display->setFont(FONT_MEDIUM);
+        display->drawString(0 + x, 0 + y, "To: Broadcast");
+        display->drawString(0 + x, 0 + y + 16, this->freetext);
     } else {
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_SMALL);
