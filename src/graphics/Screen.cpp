@@ -117,6 +117,7 @@ static uint16_t displayWidth, displayHeight;
 
 #define FONT_HEIGHT_SMALL fontHeight(FONT_SMALL)
 #define FONT_HEIGHT_MEDIUM fontHeight(FONT_MEDIUM)
+#define FONT_HEIGHT_LARGE fontHeight(FONT_LARGE)
 
 #define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
 
