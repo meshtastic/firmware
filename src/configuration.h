@@ -104,9 +104,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // The m5stack I2C Keyboard (also RAK14004)
 #define CARDKB_ADDR 0x5F
 
-// The older M5 Faces I2C Keyboard
-#define FACESKB_ADDR 0x88
-
 // -----------------------------------------------------------------------------
 // SENSOR
 // -----------------------------------------------------------------------------

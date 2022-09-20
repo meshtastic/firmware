@@ -8,6 +8,7 @@ enum cannedMessageModuleRunState
     CANNED_MESSAGE_RUN_STATE_DISABLED,
     CANNED_MESSAGE_RUN_STATE_INACTIVE,
     CANNED_MESSAGE_RUN_STATE_ACTIVE,
+    CANNED_MESSAGE_RUN_STATE_FREETEXT,
     CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE,
     CANNED_MESSAGE_RUN_STATE_ACTION_SELECT,
     CANNED_MESSAGE_RUN_STATE_ACTION_UP,
@@ -70,6 +71,8 @@ class CannedMessageModule :
 
     int currentMessageIndex = -1;
     cannedMessageModuleRunState runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+    char payload;
+    String freetext;  // Text Buffer for Freetext Editor
 
     char messageStore[CANNED_MESSAGE_MODULE_MESSAGES_SIZE+1];
     char *messages[CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT];
