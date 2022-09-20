@@ -7,7 +7,7 @@
 #include "mesh/generated/cannedmessages.pb.h"
 
 #ifdef OLED_RU
-#include "fonts/OLEDDisplayFontsRU.h"
+#include "graphics/fonts/OLEDDisplayFontsRU.h"
 #endif
 
 #if defined(USE_EINK) || defined(ILI9341_DRIVER)
