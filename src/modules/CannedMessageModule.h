@@ -43,6 +43,8 @@ class CannedMessageModule :
     void handleGetCannedMessageModuleMessages(const MeshPacket &req, AdminMessage *response);
     void handleSetCannedMessageModuleMessages(const char *from_msg);
 
+    String drawWithCursor(String text, int cursor);
+
   protected:
 
     virtual int32_t runOnce() override;
@@ -72,7 +74,8 @@ class CannedMessageModule :
     int currentMessageIndex = -1;
     cannedMessageModuleRunState runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
     char payload;
-    String freetext;  // Text Buffer for Freetext Editor
+    int cursor = 0;
+    String freetext = "";  // Text Buffer for Freetext Editor
 
     char messageStore[CANNED_MESSAGE_MODULE_MESSAGES_SIZE+1];
     char *messages[CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT];
