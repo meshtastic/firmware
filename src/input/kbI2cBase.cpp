@@ -15,14 +15,14 @@ int32_t KbI2cBase::runOnce()
         // Input device is not detected.
         return INT32_MAX;
     }
-    InputEvent e;
-    e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
-    e.source = this->_originName;
 
     Wire.requestFrom(CARDKB_ADDR, 1);
 
     while (Wire.available()) {
         char c = Wire.read();
+        InputEvent e;
+        e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+        e.source = this->_originName;
         switch (c) {
         case 0x1b: // ESC
             e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL;
@@ -56,10 +56,10 @@ int32_t KbI2cBase::runOnce()
             e.kbchar = c;
             break;
         }
-    }
 
-    if (e.inputEvent != ModuleConfig_CannedMessageConfig_InputEventChar_NONE) {
-        this->notifyObservers(&e);
+        if (e.inputEvent != ModuleConfig_CannedMessageConfig_InputEventChar_NONE) {
+            this->notifyObservers(&e);
+        }
     }
     return 500;
 }
