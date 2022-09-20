@@ -141,7 +141,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     if (event->inputEvent == static_cast<char>(ANYKEY)) {
         DEBUG_MSG("Canned message event any key pressed\n");
         // when inactive, this will switch to the freetext mode
-        if ((this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED)) {
+        if ((this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED)) {
             this->runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
         }
         // pass the pressed key
@@ -218,10 +218,12 @@ int32_t CannedMessageModule::runOnce()
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_UP) {
         this->currentMessageIndex = getPrevIndex();
+        this->freetext = ""; // clear freetext
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
         DEBUG_MSG("MOVE UP (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_DOWN) {
         this->currentMessageIndex = this->getNextIndex();
+        this->freetext = ""; // clear freetext
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
         DEBUG_MSG("MOVE DOWN (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
