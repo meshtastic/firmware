@@ -6,6 +6,10 @@
 #include "PowerFSM.h" // neede for button bypass
 #include "mesh/generated/cannedmessages.pb.h"
 
+#ifdef OLED_RU
+#include "fonts/OLEDDisplayFontsRU.h"
+#endif
+
 #if defined(USE_EINK) || defined(ILI9341_DRIVER)
 // The screen is bigger so use bigger fonts
 #define FONT_SMALL ArialMT_Plain_16
@@ -248,7 +252,6 @@ int32_t CannedMessageModule::runOnce()
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
         DEBUG_MSG("MOVE DOWN (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
-        DEBUG_MSG("KEYSTROKE (%d):%x\n", this->cursor, this->payload);
         e.frameChanged = true;
         switch (this->payload) {
             case 0xb4: // left
