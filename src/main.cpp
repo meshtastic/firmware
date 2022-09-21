@@ -74,9 +74,6 @@ uint8_t cardkb_found;
 // 0x02 for RAK14004 and 0x00 for cardkb
 uint8_t kb_model;
 
-// The I2C address of the Faces Keyboard (if found)
-uint8_t faceskb_found;
-
 // The I2C address of the RTC Module (if found)
 uint8_t rtc_found;
 

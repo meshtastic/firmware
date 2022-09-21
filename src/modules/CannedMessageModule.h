@@ -8,6 +8,7 @@ enum cannedMessageModuleRunState
     CANNED_MESSAGE_RUN_STATE_DISABLED,
     CANNED_MESSAGE_RUN_STATE_INACTIVE,
     CANNED_MESSAGE_RUN_STATE_ACTIVE,
+    CANNED_MESSAGE_RUN_STATE_FREETEXT,
     CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE,
     CANNED_MESSAGE_RUN_STATE_ACTION_SELECT,
     CANNED_MESSAGE_RUN_STATE_ACTION_UP,
@@ -42,6 +43,8 @@ class CannedMessageModule :
     void handleGetCannedMessageModuleMessages(const MeshPacket &req, AdminMessage *response);
     void handleSetCannedMessageModuleMessages(const char *from_msg);
 
+    String drawWithCursor(String text, int cursor);
+
   protected:
 
     virtual int32_t runOnce() override;
@@ -70,6 +73,9 @@ class CannedMessageModule :
 
     int currentMessageIndex = -1;
     cannedMessageModuleRunState runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+    char payload;
+    int cursor = 0;
+    String freetext = "";  // Text Buffer for Freetext Editor
 
     char messageStore[CANNED_MESSAGE_MODULE_MESSAGES_SIZE+1];
     char *messages[CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT];
