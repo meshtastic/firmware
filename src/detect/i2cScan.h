@@ -107,10 +107,6 @@ void scanI2Cdevice(void)
                     kb_model = 0x00;
                 }
             }
-            if (addr == FACESKB_ADDR) {
-                faceskb_found = addr;
-                DEBUG_MSG("m5 Faces found\n");
-            }
             if (addr == ST7567_ADDRESS) {
                 screen_found = addr;
                 DEBUG_MSG("st7567 display found\n");
