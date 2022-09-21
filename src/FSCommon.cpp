@@ -9,13 +9,13 @@ bool copyFile(const char* from, const char* to)
    
     File f1 = FSCom.open(from, FILE_O_READ);
     if (!f1){
-        DEBUG_MSG("Failed to open file");
+        DEBUG_MSG("Failed to open source file %s\n", from);
         return false;
     }
 
     File f2 = FSCom.open(to, FILE_O_WRITE);
     if (!f2) {
-        DEBUG_MSG("Failed to open file");
+        DEBUG_MSG("Failed to open destination file %s\n", to);
         return false;
     }
    
@@ -56,10 +56,10 @@ void listDir(const char * dirname, uint8_t levels)
     while(file){
         if(file.isDirectory() && !String(file.name()).endsWith(".")) {
             if(levels){
-                listDir(file.name(), levels -1);
+                listDir(file.path(), levels -1);
             }
         } else {
-            DEBUG_MSG("  %s (%i Bytes)\n", file.name(), file.size());
+            DEBUG_MSG(" %s (%i Bytes)\n", file.path(), file.size());
         }
         file.close();
         file = root.openNextFile();
@@ -94,16 +94,16 @@ void rmDir(const char * dirname)
         strcat(dirpath,entry.name()); // append string two to the result.
         if(entry.isDirectory() && !String(entry.name()).endsWith(".")) {
             entry.close();
-         //   DEBUG_MSG("Descend DIR  %s\n", dirpath);
+            DEBUG_MSG("Descend DIR %s\n", dirpath);
             rmDir(dirpath);
         } else {
             entry.close();
-         //   DEBUG_MSG("Remove FILE  %s\n", entry.name());
+            DEBUG_MSG("Remove FILE %s\n", entry.name());
             FSCom.remove(entry.name());
         }
     }
     FSCom.rmdir(dirname);
-   // DEBUG_MSG("Remove DIR  %s\n", dirname);
+    DEBUG_MSG("Remove DIR %s\n", dirname);
     file.close();
 #endif
 }
@@ -117,7 +117,7 @@ void fsInit()
         assert(0); // FIXME - report failure to phone
     }
 
-    DEBUG_MSG("Filesystem files:\n");
+    DEBUG_MSG("Filesystem files (%d/%d total Bytes):\n", FSCom.usedBytes(), FSCom.totalBytes());
     listDir("/", 10);
 #endif
 }
