@@ -56,10 +56,18 @@ void listDir(const char * dirname, uint8_t levels)
     while(file){
         if(file.isDirectory() && !String(file.name()).endsWith(".")) {
             if(levels){
+#ifdef ARCH_ESP32
                 listDir(file.path(), levels -1);
+#else
+                listDir(file.name(), levels -1);
+#endif
             }
         } else {
+#ifdef ARCH_ESP32
             DEBUG_MSG(" %s (%i Bytes)\n", file.path(), file.size());
+#else
+            DEBUG_MSG(" %s (%i Bytes)\n", file.name(), file.size());
+#endif            
         }
         file.close();
         file = root.openNextFile();
@@ -116,8 +124,11 @@ void fsInit()
         DEBUG_MSG("ERROR filesystem mount Failed. Formatting...\n");
         assert(0); // FIXME - report failure to phone
     }
-
+#ifdef ARCH_ESP32
     DEBUG_MSG("Filesystem files (%d/%d total Bytes):\n", FSCom.usedBytes(), FSCom.totalBytes());
+#else
+    DEBUG_MSG("Filesystem files:\n");
+#endif
     listDir("/", 10);
 #endif
 }
