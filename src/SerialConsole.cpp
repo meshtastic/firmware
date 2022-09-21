@@ -20,7 +20,9 @@ void consolePrintf(const char *format, ...)
     va_start(arg, format);
     console->vprintf(format, arg);
     va_end(arg);
+#ifdef ARCH_ESP32
     console->flush();
+#endif
 }
 
 SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port)
