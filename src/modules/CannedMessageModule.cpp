@@ -34,6 +34,8 @@
 // Remove Canned message screen if no action is taken for some milliseconds
 #define INACTIVATE_AFTER_MS 20000
 
+extern uint8_t cardkb_found;
+
 static const char *cannedMessagesConfigFile = "/prefs/cannedConf.proto";
 
 CannedMessageModuleConfig cannedMessageModuleConfig;
@@ -50,7 +52,7 @@ CannedMessageModule::CannedMessageModule()
 {
     if (moduleConfig.canned_message.enabled) {
         this->loadProtoForModule();
-        if (this->splitConfiguredMessages() <= 0) {
+        if ((this->splitConfiguredMessages() <= 0) && (cardkb_found != CARDKB_ADDR)) {
             DEBUG_MSG("CannedMessageModule: No messages are configured. Module is disabled\n");
             this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
         } else {
@@ -215,7 +217,7 @@ int32_t CannedMessageModule::runOnce()
         this->notifyObservers(&e);
     } else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) && (millis() - this->lastTouchMillis) > INACTIVATE_AFTER_MS) {
         // Reset module
-        DEBUG_MSG("Reset due the lack of activity.\n");
+        DEBUG_MSG("Reset due to lack of activity.\n");
         e.frameChanged = true;
         this->currentMessageIndex = -1;
         this->freetext = ""; // clear freetext
@@ -224,11 +226,24 @@ int32_t CannedMessageModule::runOnce()
         this->notifyObservers(&e);
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT) {
         if (this->payload == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
-            sendText(NODENUM_BROADCAST, this->freetext.c_str(), true);
+            if (this->freetext.length() > 0) {
+                sendText(NODENUM_BROADCAST, this->freetext.c_str(), true);
+                this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
+            } else {
+                DEBUG_MSG("Reset message is empty.\n");
+                this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+                e.frameChanged = true;
+            }
         } else {
-            sendText(NODENUM_BROADCAST, this->messages[this->currentMessageIndex], true);
+            if (strlen(this->messages[this->currentMessageIndex]) > 0) {
+                sendText(NODENUM_BROADCAST, this->messages[this->currentMessageIndex], true);
+                this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
+            } else {
+                DEBUG_MSG("Reset message is empty.\n");
+                this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+                e.frameChanged = true;
+            }
         }
-        this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
         this->currentMessageIndex = -1;
         this->freetext = ""; // clear freetext
         this->cursor = 0;
@@ -266,7 +281,11 @@ int32_t CannedMessageModule::runOnce()
                 break;
             case 8: // backspace
                 if (this->freetext.length() > 0) {
-                    this->freetext = this->freetext.substring(0, this->freetext.length() - 1);
+                    if(this->cursor == this->freetext.length()) {
+                        this->freetext = this->freetext.substring(0, this->freetext.length() - 1);
+                    } else {
+                        this->freetext = this->freetext.substring(0, this->cursor - 1) + this->freetext.substring(this->cursor, this->freetext.length());
+                    }
                     this->cursor--;
                 }
                 break;
