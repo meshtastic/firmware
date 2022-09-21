@@ -103,10 +103,7 @@ void StreamAPI::emitTxBuffer(size_t len)
 
         auto totalLen = len + HEADER_LEN;
         stream->write(txBuf, totalLen);
-        /* for(size_t i = 0; i < totalLen; i++) {
-            stream->write(txBuf[i]);
-            // stream->flush();
-        } */
+        stream->flush();
     }
 }
 
