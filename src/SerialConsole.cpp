@@ -20,6 +20,7 @@ void consolePrintf(const char *format, ...)
     va_start(arg, format);
     console->vprintf(format, arg);
     va_end(arg);
+    console->flush();
 }
 
 SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port)
