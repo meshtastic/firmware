@@ -68,7 +68,7 @@ namespace graphics
 static FrameCallback normalFrames[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
 static uint32_t targetFramerate = IDLE_FRAMERATE;
 static char btPIN[16] = "888888";
-    
+
 // This image definition is here instead of images.h because it's modified dynamically by the drawBattery function
 uint8_t imgBattery[16] = {0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0xE7, 0x3C};
 
@@ -239,7 +239,7 @@ static void drawWelcomeScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
     display->drawString(64 + x, y, "//\\ E S H T /\\ S T / C");
     display->drawString(64 + x, y + FONT_HEIGHT_SMALL, getDeviceName());
     display->setTextAlignment(TEXT_ALIGN_LEFT);
-    
+
     if ((millis() / 10000) % 2) {
         display->drawString(x, y + FONT_HEIGHT_SMALL * 2 - 3, "Set the region using the");
         display->drawString(x, y + FONT_HEIGHT_SMALL * 3 - 3, "Meshtastic Android, iOS,");
@@ -301,7 +301,7 @@ static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->drawString(12 + x, 26 + y, displayPin->substring(0, 3));
     display->drawString(72 + x, 26 + y, displayPin->substring(3, 6));
-    
+
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(FONT_SMALL);
     char buf[30];
@@ -361,7 +361,7 @@ static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
 static bool shouldDrawMessage(const MeshPacket *packet)
 {
     return packet->from != 0 && !moduleConfig.range_test.enabled &&
-           !moduleConfig.store_forward.enabled;
+            !moduleConfig.store_forward.enabled;
 }
 
 /// Draw the last text message we received
@@ -523,6 +523,8 @@ static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GP
     } else {
         geoCoord.updateCoords(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()), int32_t(gps->getAltitude()));
         displayLine = "Altitude: " + String(geoCoord.getAltitude()) + "m";
+        if (config.display.units == Config_DisplayConfig_DisplayUnits_IMPERIAL)
+            displayLine = "Altitude: " + String(geoCoord.getAltitude() * METERS_TO_FEET) + "ft";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     }
 }
@@ -697,7 +699,7 @@ static void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t com
     //If north is supposed to be at the top of the compass we want rotation to be +0
     if(config.display.compass_north_top)
         myHeading = -0;
-    
+
     Point N1(-0.04f, 0.65f), N2(0.04f, 0.65f);
     Point N3(-0.04f, 0.55f), N4(0.04f, 0.55f);
     Point *rosePoints[] = {&N1, &N2, &N3, &N4};
@@ -784,10 +786,18 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             Position &p = node->position;
             float d =
                 GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
-            if (d < 2000)
-                snprintf(distStr, sizeof(distStr), "%.0f m", d);
-            else
-                snprintf(distStr, sizeof(distStr), "%.1f km", d / 1000);
+
+            if (config.display.units == Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+                if (d < (2 * MILES_TO_FEET))
+                    snprintf(distStr, sizeof(distStr), "%.0f ft", d * METERS_TO_FEET);
+                else
+                    snprintf(distStr, sizeof(distStr), "%.1f mi", d * METERS_TO_FEET / MILES_TO_FEET);
+            } else {
+                if (d < 2000)
+                    snprintf(distStr, sizeof(distStr), "%.0f m", d);
+                else
+                    snprintf(distStr, sizeof(distStr), "%.1f km", d / 1000);
+            }
 
             float bearingToOther =
                 GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
