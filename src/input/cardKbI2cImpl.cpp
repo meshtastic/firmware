@@ -16,6 +16,5 @@ void CardKbI2cImpl::init()
         return;
     }
 
-    DEBUG_MSG("registerSource\n");
     inputBroker->registerSource(this);
 }

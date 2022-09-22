@@ -3,7 +3,6 @@
 #include <Wire.h>
 
 extern uint8_t cardkb_found;
-extern uint8_t faceskb_found;
 
 KbI2cBase::KbI2cBase(const char *name) : concurrency::OSThread(name)
 {
@@ -12,24 +11,25 @@ KbI2cBase::KbI2cBase(const char *name) : concurrency::OSThread(name)
 
 int32_t KbI2cBase::runOnce()
 {
-    if ((cardkb_found != CARDKB_ADDR) && (faceskb_found != CARDKB_ADDR)){
+    if (cardkb_found != CARDKB_ADDR){
         // Input device is not detected.
         return INT32_MAX;
     }
-    InputEvent e;
-    e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
-    e.source = this->_originName;
 
     Wire.requestFrom(CARDKB_ADDR, 1);
 
     while (Wire.available()) {
         char c = Wire.read();
+        InputEvent e;
+        e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+        e.source = this->_originName;
         switch (c) {
         case 0x1b: // ESC
             e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL;
             break;
         case 0x08: // Back
             e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_BACK;
+            e.kbchar = c;
             break;
         case 0xb5: // Up
             e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_UP;
@@ -39,18 +39,27 @@ int32_t KbI2cBase::runOnce()
             break;
         case 0xb4: // Left
             e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_LEFT;
+            e.kbchar = c;
             break;
         case 0xb7: // Right
             e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
+            e.kbchar = c;
             break;
         case 0x0d: // Enter
             e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
             break;
+        case 0x00: //nopress
+            e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+            break;
+        default: // all other keys
+            e.inputEvent = ANYKEY;
+            e.kbchar = c;
+            break;
         }
-    }
 
-    if (e.inputEvent != ModuleConfig_CannedMessageConfig_InputEventChar_NONE) {
-        this->notifyObservers(&e);
+        if (e.inputEvent != ModuleConfig_CannedMessageConfig_InputEventChar_NONE) {
+            this->notifyObservers(&e);
+        }
     }
     return 500;
 }
