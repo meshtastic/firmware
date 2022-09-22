@@ -193,10 +193,19 @@ void Channels::setChannel(const Channel &c)
     Channel &old = getByIndex(c.index);
 
     // if this is the new primary, demote any existing roles
-    if (c.role == Channel_Role_PRIMARY)
-        for (int i = 0; i < getNumChannels(); i++)
-            if (channelFile.channels[i].role == Channel_Role_PRIMARY)
+    if (c.role == Channel_Role_PRIMARY) {
+        for (int i = 0; i < getNumChannels(); i++) {
+            if (channelFile.channels[i].role == Channel_Role_PRIMARY) {
                 channelFile.channels[i].role = Channel_Role_SECONDARY;
+            }
+        }
+    }
+    DEBUG_MSG("index=%i\n", c.index);
+    DEBUG_MSG("has_settings=%i\n", c.has_settings);
+    DEBUG_MSG("role=%i\n", c.role);
+    DEBUG_MSG("settings.channel_num=%i\n", c.settings.channel_num);
+    DEBUG_MSG("settings.id=%i\n", c.settings.id);
+    DEBUG_MSG("settings.name=%s\n", c.settings.name);
 
     old = c; // slam in the new settings/role
 }
