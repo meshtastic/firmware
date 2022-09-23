@@ -49,7 +49,9 @@ bool renameFile(const char* pathFrom, const char* pathTo)
 void listDir(const char * dirname, uint8_t levels, boolean del = false)
 {
 #ifdef FSCom
+#if (defined(ARCH_ESP32) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
     char buffer[255];
+#endif
     File root = FSCom.open(dirname, FILE_O_READ);
     if(!root){
         return;
@@ -72,6 +74,16 @@ void listDir(const char * dirname, uint8_t levels, boolean del = false)
                 } else {
                     file.close();
                 }
+#elif (defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
+                listDir(file.name(), levels -1, del);
+                if(del) { 
+                    DEBUG_MSG("Removing %s\n", file.name());
+                    strcpy(buffer, file.name());
+                    file.close();
+                    FSCom.rmdir(buffer);
+                } else {
+                    file.close();
+                }                
 #else
                 listDir(file.name(), levels -1, del);
                 file.close();
@@ -86,6 +98,16 @@ void listDir(const char * dirname, uint8_t levels, boolean del = false)
                 FSCom.remove(buffer);
             } else {
             DEBUG_MSG(" %s (%i Bytes)\n", file.path(), file.size());
+                file.close();
+            }
+#elif (defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
+            if(del) {
+                DEBUG_MSG("Deleting %s\n", file.name());
+                strcpy(buffer, file.name());
+                file.close();
+                FSCom.remove(buffer);
+            } else {
+                DEBUG_MSG(" %s (%i Bytes)\n", file.name(), file.size());
                 file.close();
             }
 #else
@@ -104,6 +126,15 @@ void listDir(const char * dirname, uint8_t levels, boolean del = false)
     } else {
         root.close();
     }
+#elif (defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
+    if(del) { 
+        DEBUG_MSG("Removing %s\n", root.name());
+        strcpy(buffer, root.name());
+        root.close();
+        FSCom.rmdir(buffer);
+    } else {
+        root.close();
+    }
 #else
     root.close();
 #endif
@@ -113,11 +144,9 @@ void listDir(const char * dirname, uint8_t levels, boolean del = false)
 void rmDir(const char * dirname)
 {
 #ifdef FSCom
-#ifdef ARCH_ESP32
-
-    FSCom.rmdir(dirname);
+#if (defined(ARCH_ESP32) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
     listDir(dirname, 10, true);
-#else
+#else if defined(ARCH_NRF52)
     // nRF52 implementation of LittleFS has a recursive delete function
     FSCom.rmdir_r(dirname);
 #endif
