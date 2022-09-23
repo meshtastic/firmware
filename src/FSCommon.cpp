@@ -33,17 +33,23 @@ bool copyFile(const char* from, const char* to)
 bool renameFile(const char* pathFrom, const char* pathTo)
 {
 #ifdef FSCom
+#ifdef ARCH_ESP32
+    // rename was fixed for ESP32 IDF LittleFS in April
+    return FSCom.rename(pathFrom, pathTo);
+#else    
     if (copyFile(pathFrom, pathTo) && FSCom.remove(pathFrom) ) {
         return true;
     } else{
         return false;
     }
 #endif
+#endif
 }
 
-void listDir(const char * dirname, uint8_t levels)
+void listDir(const char * dirname, uint8_t levels, boolean del = false)
 {
 #ifdef FSCom
+    char buffer[255];
     File root = FSCom.open(dirname, FILE_O_READ);
     if(!root){
         return;
@@ -57,62 +63,64 @@ void listDir(const char * dirname, uint8_t levels)
         if(file.isDirectory() && !String(file.name()).endsWith(".")) {
             if(levels){
 #ifdef ARCH_ESP32
-                listDir(file.path(), levels -1);
+                listDir(file.path(), levels -1, del);
+                if(del) { 
+                    DEBUG_MSG("Removing %s\n", file.path());
+                    strcpy(buffer, file.path());
+                    file.close();
+                    FSCom.rmdir(buffer);
+                } else {
+                    file.close();
+                }
 #else
-                listDir(file.name(), levels -1);
+                listDir(file.name(), levels -1, del);
+                file.close();
 #endif
             }
         } else {
 #ifdef ARCH_ESP32
+            if(del) {
+                DEBUG_MSG("Deleting %s\n", file.path());
+                strcpy(buffer, file.path());
+                file.close();
+                FSCom.remove(buffer);
+            } else {
             DEBUG_MSG(" %s (%i Bytes)\n", file.path(), file.size());
+                file.close();
+            }
 #else
             DEBUG_MSG(" %s (%i Bytes)\n", file.name(), file.size());
+            file.close();
 #endif            
         }
-        file.close();
         file = root.openNextFile();
     }
-    file.close();
+#ifdef ARCH_ESP32    
+    if(del) { 
+        DEBUG_MSG("Removing %s\n", root.path());
+        strcpy(buffer, root.path());
+        root.close();
+        FSCom.rmdir(buffer);
+    } else {
+        root.close();
+    }
+#else
+    root.close();
+#endif
 #endif
 }
 
 void rmDir(const char * dirname)
 {
 #ifdef FSCom
-    File file = FSCom.open(dirname, FILE_O_READ);
-    if(!file){
-        return;
-    }
-    if(!file.isDirectory()){
-        file.close();
-        FSCom.remove(file.name());
-      //  DEBUG_MSG("Remove FILE  %s\n", file.name());
-        return;
-    }
+#ifdef ARCH_ESP32
 
-    file.rewindDirectory();
-    while (true) {
-        File entry = file.openNextFile();
-        if (!entry) {
-          break;
-        }
-        char dirpath[100];   // array to hold the result.
-        strcpy(dirpath, dirname); // copy string one into the result.
-        strcat(dirpath,"/"); // append string two to the result.
-        strcat(dirpath,entry.name()); // append string two to the result.
-        if(entry.isDirectory() && !String(entry.name()).endsWith(".")) {
-            entry.close();
-            DEBUG_MSG("Descend DIR %s\n", dirpath);
-            rmDir(dirpath);
-        } else {
-            entry.close();
-            DEBUG_MSG("Remove FILE %s\n", entry.name());
-            FSCom.remove(entry.name());
-        }
-    }
     FSCom.rmdir(dirname);
-    DEBUG_MSG("Remove DIR %s\n", dirname);
-    file.close();
+    listDir(dirname, 10, true);
+#else
+    // nRF52 implementation of LittleFS has a recursive delete function
+    FSCom.rmdir_r(dirname);
+#endif
 #endif
 }
 
@@ -125,7 +133,7 @@ void fsInit()
         assert(0); // FIXME - report failure to phone
     }
 #ifdef ARCH_ESP32
-    DEBUG_MSG("Filesystem files (%d/%d total Bytes):\n", FSCom.usedBytes(), FSCom.totalBytes());
+    DEBUG_MSG("Filesystem files (%d/%d Bytes):\n", FSCom.usedBytes(), FSCom.totalBytes());
 #else
     DEBUG_MSG("Filesystem files:\n");
 #endif
