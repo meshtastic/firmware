@@ -110,14 +110,9 @@ bool isSoftAPForced()
 
 bool isWifiAvailable()
 {
-    // If wifi status is connected, return true regardless of the radio configuration.
-    if (isSoftAPForced()) {
-        return true;
-    }
 
-    const char *wifiName = config.network.wifi_ssid;
+    if (config.network.wifi_enabled && ((config.network.wifi_ssid[0]) || forcedSoftAP)) {
 
-    if (*wifiName) {
         return true;
     } else {
         return false;
