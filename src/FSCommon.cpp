@@ -36,7 +36,7 @@ bool renameFile(const char* pathFrom, const char* pathTo)
 #ifdef ARCH_ESP32
     // rename was fixed for ESP32 IDF LittleFS in April
     return FSCom.rename(pathFrom, pathTo);
-#else    
+#else
     if (copyFile(pathFrom, pathTo) && FSCom.remove(pathFrom) ) {
         return true;
     } else{
@@ -146,7 +146,7 @@ void rmDir(const char * dirname)
 #ifdef FSCom
 #if (defined(ARCH_ESP32) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
     listDir(dirname, 10, true);
-#else if defined(ARCH_NRF52)
+#elif defined(ARCH_NRF52)
     // nRF52 implementation of LittleFS has a recursive delete function
     FSCom.rmdir_r(dirname);
 #endif
