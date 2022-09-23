@@ -57,6 +57,16 @@ class Screen
 #define BRIGHTNESS_DEFAULT 150
 #endif
 
+// Meters to feet conversion
+#ifndef METERS_TO_FEET
+#define METERS_TO_FEET 3.28
+#endif
+
+// Feet to miles conversion
+#ifndef MILES_TO_FEET
+#define MILES_TO_FEET 5280
+#endif
+
 namespace graphics
 {
 

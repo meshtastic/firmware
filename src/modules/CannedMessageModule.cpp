@@ -411,7 +411,7 @@ bool CannedMessageModule::saveProtoForModule()
     FS.mkdir("/prefs");
 #endif
 
-    okay &= saveProto(cannedMessagesConfigFile, CannedMessageModuleConfig_size, sizeof(CannedMessageModuleConfig),
+    okay &= saveProto(cannedMessagesConfigFile, CannedMessageModuleConfig_size, sizeof(cannedMessageModuleConfig),
                       CannedMessageModuleConfig_fields, &cannedMessageModuleConfig);
 
     return okay;
