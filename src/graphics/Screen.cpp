@@ -1307,7 +1307,6 @@ void Screen::handleOnPress()
     // If we are in a transition, the press must have bounced, drop it.
     if (ui.getUiState()->frameState == FIXED) {
         ui.nextFrame();
-        DEBUG_MSG("Setting LastScreenTransition\n");
         lastScreenTransition = millis();
         setFastFramerate();
     }
