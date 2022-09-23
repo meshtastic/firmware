@@ -86,7 +86,7 @@ static char ourId[5];
 GeoCoord geoCoord;
 
 // OEM Config File
-static const char *oemConfigFile = "/prefs/oem.proto";
+static const char *oemConfigFile = "/oem/oem.proto";
 OEMStore oemStore;
 
 #ifdef SHOW_REDRAWS
