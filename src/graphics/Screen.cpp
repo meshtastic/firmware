@@ -1082,7 +1082,6 @@ int32_t Screen::runOnce()
     // otherwise that breaks animations.
     if (targetFramerate != IDLE_FRAMERATE && ui.getUiState()->frameState == FIXED) {
         // oldFrameState = ui.getUiState()->frameState;
-        DEBUG_MSG("Setting idle framerate\n");
         targetFramerate = IDLE_FRAMERATE;
 
         ui.setTargetFPS(targetFramerate);
@@ -1320,8 +1319,6 @@ void Screen::handleOnPress()
 
 void Screen::setFastFramerate()
 {
-    DEBUG_MSG("Setting fast framerate\n");
-
     // We are about to start a transition so speed up fps
     targetFramerate = SCREEN_TRANSITION_FRAMERATE;
 
