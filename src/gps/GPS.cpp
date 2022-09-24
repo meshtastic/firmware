@@ -340,7 +340,9 @@ bool GPS::setup()
 #endif
 
 #ifdef PIN_GPS_RESET
+    //Not sure if other GNSS modules require the RESET pin to be pulled up for a reset.
 #ifdef TTGO_T_ECHO
+    //T-Echo's L76K GNSS module requires the RESET pin to be pulled down for more than 100MS. 
     digitalWrite(PIN_GPS_RESET, 0);
     pinMode(PIN_GPS_RESET, OUTPUT);
     delay(100); //The L76K datasheet calls for at least 100MS delay
