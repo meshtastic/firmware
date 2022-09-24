@@ -99,6 +99,8 @@ class Channels
      * @eturn the (0 to 255) hash for that channel - if no suitable channel could be found, return -1
      */
     int16_t setActiveByIndex(ChannelIndex channelIndex);
+    
+    void printChannel(Channel channel);
 
   private:
     /** Given a channel index, change to use the crypto key specified by that index
@@ -124,7 +126,6 @@ class Channels
      */
     Channel &fixupChannel(ChannelIndex chIndex);
 
-    void printChannel(Channel channel);
 
     /**
      * Write a default channel to the specified channel index
