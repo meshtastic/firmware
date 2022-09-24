@@ -263,8 +263,8 @@ bool GPS::setupGPS()
         // Initialize the L76K Chip, use GPS + GLONASS
         _serial_gps->write("$PCAS04,5*1C\r\n");
         delay(250);
-        // only ask for RMC and GGA
-        _serial_gps->write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
+        // only ask for RMC,GSA and GGA
+        _serial_gps->write("$PCAS03,1,0,1,0,1,0,0,0,0,0,,,0,0*03\r\n");
         delay(250);
         // Switch to Vehicle Mode, since SoftRF enables Aviation < 2g
         _serial_gps->write("$PCAS11,3*1E\r\n");
@@ -340,10 +340,17 @@ bool GPS::setup()
 #endif
 
 #ifdef PIN_GPS_RESET
+#ifdef TTGO_T_ECHO
+    digitalWrite(PIN_GPS_RESET, 0);
+    pinMode(PIN_GPS_RESET, OUTPUT);
+    delay(100); //The L76K datasheet calls for at least 100MS delay
+    digitalWrite(PIN_GPS_RESET, 1);
+#else
     digitalWrite(PIN_GPS_RESET, 1); // assert for 10ms
     pinMode(PIN_GPS_RESET, OUTPUT);
     delay(10);
     digitalWrite(PIN_GPS_RESET, 0);
+#endif
 #endif
 
     setAwake(true); // Wake GPS power before doing any init
