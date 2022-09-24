@@ -72,7 +72,8 @@ Channel &Channels::fixupChannel(ChannelIndex chIndex)
     }
 
     hashes[chIndex] = generateHash(chIndex);
-
+    DEBUG_MSG("FIXUP_CHANNEL\n");
+    printChannel(ch);
     return ch;
 }
 
@@ -95,6 +96,9 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
 
     ch.has_settings = true;
     ch.role = Channel_Role_PRIMARY;
+
+    DEBUG_MSG("initDefaultChannel\n");
+    printChannel(ch);
 }
 
 CryptoKey Channels::getKey(ChannelIndex chIndex)
@@ -181,6 +185,18 @@ void Channels::onConfigChanged()
     }
 }
 
+void Channels::printChannel(Channel channel) 
+{
+    DEBUG_MSG("--------CHANNEL INDEX=%i----------\n", channel.index);
+    DEBUG_MSG("has_settings=%i\n", channel.has_settings);
+    DEBUG_MSG("role=%i\n", channel.role);
+    DEBUG_MSG("settings.channel_num=%i\n", channel.settings.channel_num);
+    DEBUG_MSG("settings.id=%i\n", channel.settings.id);
+    if (channel.settings.name) {
+        DEBUG_MSG("settings.name=%s\n", channel.settings.name);
+    }
+}
+
 Channel &Channels::getByIndex(ChannelIndex chIndex)
 {
     assert(chIndex < channelFile.channels_count); // This should be equal to MAX_NUM_CHANNELS
@@ -200,13 +216,8 @@ void Channels::setChannel(const Channel &c)
             }
         }
     }
-    DEBUG_MSG("index=%i\n", c.index);
-    DEBUG_MSG("has_settings=%i\n", c.has_settings);
-    DEBUG_MSG("role=%i\n", c.role);
-    DEBUG_MSG("settings.channel_num=%i\n", c.settings.channel_num);
-    DEBUG_MSG("settings.id=%i\n", c.settings.id);
-    DEBUG_MSG("settings.name=%s\n", c.settings.name);
-
+    DEBUG_MSG("setChannel\n");
+    printChannel(c);
     old = c; // slam in the new settings/role
 }
 

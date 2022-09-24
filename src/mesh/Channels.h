@@ -124,6 +124,8 @@ class Channels
      */
     Channel &fixupChannel(ChannelIndex chIndex);
 
+    void printChannel(Channel channel);
+
     /**
      * Write a default channel to the specified channel index
      */
