@@ -1,7 +1,5 @@
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
-#define GPS_RX_PIN 36
-#define GPS_TX_PIN 37
 
 #define I2C_SDA 4 // I2C pins for this board
 #define I2C_SCL 15
