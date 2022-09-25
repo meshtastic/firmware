@@ -225,13 +225,20 @@ void NodeDB::installDefaultChannels()
     channelFile.version = DEVICESTATE_CUR_VER;
 }
 
+void NodeDB::resetNodes()
+{
+    devicestate.node_db_count = 0;
+    memset(devicestate.node_db, 0, sizeof(devicestate.node_db));
+    saveDeviceStateToDisk();
+}
+
 void NodeDB::installDefaultDeviceState()
 {
     DEBUG_MSG("Installing default DeviceState\n");
     memset(&devicestate, 0, sizeof(DeviceState));
 
-    *numNodes = 0; // Forget node DB
-
+    *numNodes = 0;
+    
     // init our devicestate with valid flags so protobuf writing/reading will work
     devicestate.has_my_node = true;
     devicestate.has_owner = true;

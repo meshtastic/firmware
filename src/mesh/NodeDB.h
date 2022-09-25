@@ -115,7 +115,7 @@ class NodeDB
     /// Return the number of nodes we've heard from recently (within the last 2 hrs?)
     size_t getNumOnlineNodes();
 
-    void initConfigIntervals(), initModuleConfigIntervals();
+    void initConfigIntervals(), initModuleConfigIntervals(), resetNodes();
     
     bool factoryReset();
 
