@@ -23,7 +23,13 @@ bool NMEAGPS::factoryReset()
      * First use the macro definition to distinguish, 
      * if there is no problem, the macro definition will be deleted
      * */
-#if defined(LILYGO_TBEAM_S3_CORE)   
+#if defined(PIN_GPS_RESET)
+    //The L76K GNSS and UBlox NEO-7 modules requires the RESET pin to be pulled LOW
+    digitalWrite(PIN_GPS_RESET, 0);
+    pinMode(PIN_GPS_RESET, OUTPUT);
+    delay(100); //The L76K datasheet calls for at least 100MS delay
+    digitalWrite(PIN_GPS_RESET, 1);
+#elif defined(LILYGO_TBEAM_S3_CORE)   
     if(gnssModel == GNSS_MODEL_UBLOX){
         // Factory Reset
         byte _message_reset[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF,
@@ -174,7 +180,7 @@ bool NMEAGPS::lookForLocation()
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
     p.HDOP = reader.hdop.value();
     p.PDOP = TinyGPSPlus::parseDecimal(gsapdop.value());
-    DEBUG_MSG("PDOP=%d, HDOP=%d\n", dop, reader.hdop.value());
+    DEBUG_MSG("PDOP=%d, HDOP=%d\n", p.PDOP, p.HDOP);
 #else
     // FIXME! naive PDOP emulation (assumes VDOP==HDOP)
     // correct formula is PDOP = SQRT(HDOP^2 + VDOP^2)

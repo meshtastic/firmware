@@ -340,19 +340,10 @@ bool GPS::setup()
 #endif
 
 #ifdef PIN_GPS_RESET
-    //Not sure if other GNSS modules require the RESET pin to be pulled up for a reset.
-#ifdef TTGO_T_ECHO
-    //T-Echo's L76K GNSS module requires the RESET pin to be pulled down for more than 100MS. 
-    digitalWrite(PIN_GPS_RESET, 0);
-    pinMode(PIN_GPS_RESET, OUTPUT);
-    delay(100); //The L76K datasheet calls for at least 100MS delay
+    //The L76K GNSS datasheet says we could have left this pin floating. When we want to do a reset pull the pin LOW.
+    //The UBlox NEO-7 datasheet says to pull the pin LOW for reset
     digitalWrite(PIN_GPS_RESET, 1);
-#else
-    digitalWrite(PIN_GPS_RESET, 1); // assert for 10ms
     pinMode(PIN_GPS_RESET, OUTPUT);
-    delay(10);
-    digitalWrite(PIN_GPS_RESET, 0);
-#endif
 #endif
 
     setAwake(true); // Wake GPS power before doing any init
@@ -494,23 +485,12 @@ int32_t GPS::runOnce()
         // if we have received valid NMEA claim we are connected
         setConnected();
     } else {
-#if defined(LILYGO_TBEAM_S3_CORE)       
-        if(gnssModel == GNSS_MODEL_UBLOX){
-            // reset the GPS on next bootup
-            if(devicestate.did_gps_reset && (millis() > 60000) && !hasFlow()) {
-                DEBUG_MSG("GPS is not communicating, trying factory reset on next bootup.\n");
-                devicestate.did_gps_reset = false;
-                nodeDB.saveDeviceStateToDisk();
-            }
-        }
-#elif defined(GPS_UBLOX)
         // reset the GPS on next bootup
         if(devicestate.did_gps_reset && (millis() > 60000) && !hasFlow()) {
             DEBUG_MSG("GPS is not communicating, trying factory reset on next bootup.\n");
             devicestate.did_gps_reset = false;
             nodeDB.saveDeviceStateToDisk();
         }
-#endif
     }
 
     // If we are overdue for an update, turn on the GPS and at least publish the current status
