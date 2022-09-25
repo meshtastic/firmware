@@ -175,8 +175,12 @@ void AdminModule::handleSetOwner(const User &o)
         owner.is_licensed = o.is_licensed;
     }
 
-    if (changed) // If nothing really changed, don't broadcast on the network or write to flash
+    if (changed) { // If nothing really changed, don't broadcast on the network or write to flash
         service.reloadOwner();
+        DEBUG_MSG("Rebooting due to owner changes\n");
+        screen->startRebootScreen();
+        rebootAtMsec = millis() + (5 * 1000);
+    }
 }
 
 void AdminModule::handleSetConfig(const Config &c)

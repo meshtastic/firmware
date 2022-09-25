@@ -438,7 +438,6 @@ bool saveProto(const char *filename, size_t protoSize, size_t objSize, const pb_
         } else {
             okay = true;
         }
-
         f.close();
 
         // brief window of risk here ;-)
@@ -461,7 +460,7 @@ void NodeDB::saveChannelsToDisk()
 #ifdef FSCom
         FSCom.mkdir("/prefs");
 #endif
-        saveProto(channelFileName, ChannelFile_size, sizeof(ChannelFile), ChannelFile_fields, &channelFile);
+        saveProto(channelFileName, ChannelFile_size, sizeof(channelFile), ChannelFile_fields, &channelFile);
     }
 }
 
@@ -491,7 +490,7 @@ void NodeDB::saveToDisk()
         config.has_power = true;
         config.has_network = true;
         config.has_bluetooth = true;
-        saveProto(configFileName, LocalConfig_size, sizeof(LocalConfig), LocalConfig_fields, &config);
+        saveProto(configFileName, LocalConfig_size, sizeof(config), LocalConfig_fields, &config);
 
         moduleConfig.has_canned_message = true;
         moduleConfig.has_external_notification = true;
@@ -500,7 +499,7 @@ void NodeDB::saveToDisk()
         moduleConfig.has_serial = true;
         moduleConfig.has_store_forward = true;
         moduleConfig.has_telemetry = true;
-        saveProto(moduleConfigFileName, LocalModuleConfig_size, sizeof(LocalModuleConfig), LocalModuleConfig_fields, &moduleConfig);
+        saveProto(moduleConfigFileName, LocalModuleConfig_size, sizeof(moduleConfig), LocalModuleConfig_fields, &moduleConfig);
 
         saveChannelsToDisk();
     } else {
