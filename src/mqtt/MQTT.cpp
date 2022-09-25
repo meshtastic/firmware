@@ -27,8 +27,7 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
 {
     // parsing ServiceEnvelope
     ServiceEnvelope e = ServiceEnvelope_init_default;
-    if (moduleConfig.mqtt.json_enabled && !pb_decode_from_bytes(payload, length, ServiceEnvelope_fields, &e)) {
-
+    if (!pb_decode_from_bytes(payload, length, ServiceEnvelope_fields, &e) && moduleConfig.mqtt.json_enabled) {
         // check if this is a json payload message
         using namespace json11;
         char payloadStr[length + 1];
