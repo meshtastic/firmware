@@ -137,9 +137,12 @@ jobs:
         with:
           repo: "meshtastic/Meshtastic-OTA"
           file: "firmware.bin"
-          target: "release/bleota.bin"
           token: ${{ secrets.GITHUB_TOKEN }}
-
+          
+      - name: Move OTA Firmware
+        run: |
+          mv firmware.bin release/bleota.bin
+          
       - name: Pull web ui
         uses: dsaltares/fetch-gh-release-asset@master
         with:
