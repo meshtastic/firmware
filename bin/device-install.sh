@@ -50,6 +50,7 @@ if [ -f "${FILENAME}" ]; then
 	"$PYTHON" -m esptool  write_flash 0x1000 system-info.bin
 	"$PYTHON" -m esptool  write_flash 0x8000 partitions.bin
 	"$PYTHON" -m esptool  write_flash 0x300000 littlefs-*.bin
+	"$PYTHON" -m esptool  write_flash 0x260000 bleota.bin
 	"$PYTHON" -m esptool  write_flash 0x10000 ${FILENAME}
 else
 	echo "Invalid file: ${FILENAME}"

@@ -35,6 +35,7 @@ IF EXIST %FILENAME% (
         %PYTHON% -m esptool --baud 115200 write_flash 0x300000 %%f
     )
 	%PYTHON% -m esptool --baud 115200 write_flash 0x10000 %FILENAME%
+	%PYTHON% -m esptool --baud 115200 write_flash 0x260000 bleota.bin
 ) else (
     echo "Invalid file: %FILENAME%"
 	goto HELP
