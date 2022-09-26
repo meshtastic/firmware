@@ -6,13 +6,6 @@ import traceback
 import sys
 from readprops import readProps
 
-Import("env")
-env.Replace( MKSPIFFSTOOL=env.get("PROJECT_DIR") + '/bin/mklittlefs.py' )
-try:
-    import littlefs
-except ImportError:
-    env.Execute("$PYTHONEXE -m pip install littlefs-python")
-
 Import("projenv")
 
 prefsLoc = projenv["PROJECT_DIR"] + "/version.properties"
