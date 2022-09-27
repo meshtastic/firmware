@@ -34,8 +34,9 @@ cp $SRCBIN $OUTDIR/$basename.bin
 
 echo "Building Filesystem for ESP32 targets"
 pio run --environment tbeam -t buildfs
-cp .pio/build/tbeam/spiffs.bin $OUTDIR/littlefs-$VERSION.bin
+cp .pio/build/tbeam/littlefs.bin $OUTDIR/littlefs-$VERSION.bin
 cp images/system-info.bin $OUTDIR/system-info.bin
 
+cp .pio/build/$1/partitions.bin $OUTDIR/partitions.bin
 cp bin/device-install.* $OUTDIR
 cp bin/device-update.* $OUTDIR

@@ -126,12 +126,23 @@ jobs:
       - name: Upgrade python tools
         run: |
           python -m pip install --upgrade pip
-          pip install -U platformio adafruit-nrfutil littlefs-python
+          pip install -U platformio adafruit-nrfutil
 
       - name: Upgrade platformio
         run: |
           pio upgrade
 
+      - name: Pull OTA Firmware
+        uses: dsaltares/fetch-gh-release-asset@master
+        with:
+          repo: "meshtastic/Meshtastic-OTA"
+          file: "firmware.bin"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Move OTA Firmware
+        run: |
+          mv firmware.bin release/bleota.bin
+          
       - name: Pull web ui
         uses: dsaltares/fetch-gh-release-asset@master
         with:
@@ -360,7 +371,7 @@ jobs:
         id: version
 
       - name: Move files up
-        run: mv -b -t ./ ./*tbeam-1*/littlefs*.bin ./*tbeam-1*/system-info.bin ./**/firmware*.bin ./**/*.uf2 ./**/*.elf ./**/meshtasticd_linux_amd64 ./*native*/*device-*.sh ./*native*/*device-*.bat
+        run: mv -b -t ./ ./*tbeam-1*/littlefs*.bin ./*tbeam-1*/bleota.bin ./*tbeam-1*/system-info.bin ./*tbeam-1*/partitions.bin ./**/firmware*.bin ./**/*.uf2 ./**/*.elf ./**/meshtasticd_linux_amd64 ./*native*/*device-*.sh ./*native*/*device-*.bat
 
       - name: Repackage in single firmware zip
         uses: actions/upload-artifact@v2
