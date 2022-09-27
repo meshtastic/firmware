@@ -94,6 +94,9 @@ MeshPacket *PositionModule::allocReply()
     if (pos_flags & Config_PositionConfig_PositionFlags_TIMESTAMP)
         p.timestamp = node->position.timestamp;
 
+    if (pos_flags & Config_PositionConfig_PositionFlags_SEQ_NO)
+        p.seq_number = node->position.seq_number;
+
     // Strip out any time information before sending packets to other nodes - to keep the wire size small (and because other
     // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS to include the time, so that gpsless
     // devices can get time.
