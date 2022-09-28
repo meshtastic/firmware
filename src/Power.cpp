@@ -131,7 +131,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #endif
             // DEBUG_MSG("battery gpio %d raw val=%u scaled=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled));
             last_read_value = scaled;
-            return scaled * 1000;
+            return scaled;
         } else {
             return last_read_value;
         }
