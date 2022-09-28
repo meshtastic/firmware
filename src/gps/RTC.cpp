@@ -47,8 +47,8 @@ void readFromRTC()
         rtc.begin();
         auto tc = rtc.getDateTime();
         tm t;
-        t.tm_year = tc.year;
-        t.tm_mon = tc.month;
+        t.tm_year = tc.year - 1900;
+        t.tm_mon = tc.month - 1;
         t.tm_mday = tc.day;
         t.tm_hour = tc.hour;
         t.tm_min = tc.minute;
@@ -112,7 +112,7 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
             PCF8563_Class rtc;
             rtc.begin();
             tm *t = localtime(&tv->tv_sec);
-            rtc.setDateTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_wday, t->tm_hour, t->tm_min, t->tm_sec);
+            rtc.setDateTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
             DEBUG_MSG("PCF8563_RTC setDateTime %02d-%02d-%02d %02d:%02d:%02d %ld\n", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, tv->tv_sec);
         }
 #elif defined(ARCH_ESP32)
