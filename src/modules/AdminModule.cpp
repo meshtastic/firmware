@@ -120,6 +120,12 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
         rebootAtMsec = millis() + (5 * 1000);
         break;
     }
+    case AdminMessage_nodedb_reset_tag: {
+        DEBUG_MSG("Initiating node-db reset\n");
+        nodeDB.resetNodes();
+        rebootAtMsec = millis() + (5 * 1000);
+        break;
+    }
 #ifdef ARCH_PORTDUINO
     case AdminMessage_exit_simulator_tag:
         DEBUG_MSG("Exiting simulator\n");
