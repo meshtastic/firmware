@@ -7,8 +7,6 @@ from readprops import readProps
 
 Import("env")
 platform = env.PioPlatform()
-sys.path.append(join(platform.get_package_dir("tool-esptoolpy")))
-import esptool
 
 def esp32_create_combined_bin(source, target, env):
     # this sub is borrowed from ESPEasy build toolchain. It's licensed under GPL V3
@@ -57,7 +55,10 @@ def esp32_create_combined_bin(source, target, env):
 
     esptool.main(cmd)
 
-env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", esp32_create_combined_bin)
+if (platform.name == "espressif32"):
+    sys.path.append(join(platform.get_package_dir("tool-esptoolpy")))
+    import esptool
+    env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", esp32_create_combined_bin)    
 
 Import("projenv")
 
