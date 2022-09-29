@@ -12,7 +12,7 @@
 #define I2C_SDA 21 // I2C pins for this board
 #define I2C_SCL 22
 
-#define RESET_OLED 16 // If defined, this pin will be used to reset the display controller
+// #define RESET_OLED 16 // If defined, this pin will be used to reset the display controller. Crashes on newer ESP-IDF and not needed per schematic
 
 #define VEXT_ENABLE 21 // active low, powers the oled display and the lora antenna boost
 #define LED_PIN 25     // If defined we will blink this LED
