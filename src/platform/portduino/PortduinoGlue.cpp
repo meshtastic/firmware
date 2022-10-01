@@ -57,7 +57,7 @@ static GPIOPin *loraIrq;
  */
 void portduinoSetup()
 {
-    printf("Setting up Meshtastic on Porduino...\n");
+    printf("Setting up Meshtastic on Portduino...\n");
 
 #ifdef PORTDUINO_LINUX_HARDWARE
     SPI.begin(); // We need to create SPI 
