@@ -44,7 +44,7 @@ class WiFiServerPort : public WiFiServer, private concurrency::OSThread
     WiFiServerAPI *openAPI = NULL;
 
   public:
-    WiFiServerPort(int port);
+    explicit WiFiServerPort(int port);
 
     void init();
 
