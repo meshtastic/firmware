@@ -28,7 +28,7 @@ IF "__%FILENAME%__" == "____" (
 )
 IF EXIST %FILENAME% (
     echo Trying to flash update %FILENAME%
-    %PYTHON% -m esptool --baud 115200 write_flash 0x10000 %FILENAME%
+    %PYTHON% -m esptool --baud 115200 write_flash 0x00 %FILENAME%
 ) else (
     echo "Invalid file: %FILENAME%"
 	goto HELP
