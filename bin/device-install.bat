@@ -29,13 +29,11 @@ IF "__%FILENAME%__" == "____" (
 IF EXIST %FILENAME% (
     echo Trying to flash update %FILENAME%, but first erasing and writing system information"
 	%PYTHON% -m esptool --baud 115200 erase_flash
-	%PYTHON% -m esptool --baud 115200 write_flash 0x1000 system-info.bin
-	%PYTHON% -m esptool --baud 115200 write_flash 0x8000 partitions.bin
+	%PYTHON% -m esptool --baud 115200 write_flash 0x00 %FILENAME%
+	%PYTHON% -m esptool --baud 115200 write_flash 0x260000 bleota.bin
     for %%f in (littlefs-*.bin) do (
         %PYTHON% -m esptool --baud 115200 write_flash 0x300000 %%f
     )
-	%PYTHON% -m esptool --baud 115200 write_flash 0x10000 %FILENAME%
-	%PYTHON% -m esptool --baud 115200 write_flash 0x260000 bleota.bin
 ) else (
     echo "Invalid file: %FILENAME%"
 	goto HELP
