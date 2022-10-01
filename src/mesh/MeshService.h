@@ -11,7 +11,7 @@
 #include "Observer.h"
 #include "PointerQueue.h"
 #ifdef ARCH_PORTDUINO
-#include "mesh/SimRadio.h"
+#include "../platform/portduino/SimRadio.h"
 #endif
 
 /**
