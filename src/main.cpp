@@ -411,7 +411,7 @@ void setup()
 #endif
 
 #ifdef ARCH_PORTDUINO
-    initApiServer();
+    initApiServer(TCPPort);
 #endif
 
     // Start airtime logger thread.
