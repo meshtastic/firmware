@@ -112,7 +112,7 @@ void MeshModule::callPlugins(const MeshPacket &mp, RxSource src)
             bool rxChannelOk = !pi.boundChannel || (mp.from == 0) ||
                 !ch ||
                 strlen(ch->settings.name) > 0 ||
-                strcmp(ch->settings.name, pi.boundChannel);
+                (strcmp(ch->settings.name, pi.boundChannel) == 0);
 
             if (!rxChannelOk) {
                 // no one should have already replied!
