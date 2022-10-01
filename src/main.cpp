@@ -45,8 +45,8 @@
 #include "RF95Interface.h"
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
-#if !HAS_RADIO
-#include "SimRadio.h"
+#if !HAS_RADIO && defined(ARCH_PORTDUINO)
+#include "platform/portduino/SimRadio.h"
 #endif
 
 #if HAS_BUTTON
@@ -388,7 +388,7 @@ void setup()
     }
 #endif
 
-#if !HAS_RADIO
+#ifdef ARCH_PORTDUINO
     if (!rIf) {
         rIf = new SimRadio;
         if (!rIf->init()) {
