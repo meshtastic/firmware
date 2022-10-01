@@ -45,7 +45,8 @@
 #include "RF95Interface.h"
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
-#if !HAS_RADIO
+
+#if !HAS_RADIO && defined(ARCH_PORTDUINO)
 #include "SimRadio.h"
 #endif
 
