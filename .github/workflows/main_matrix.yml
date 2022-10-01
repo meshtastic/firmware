@@ -153,12 +153,9 @@ jobs:
         with:
           repo: "meshtastic/Meshtastic-OTA"
           file: "firmware.bin"
+          target: "release/bleota.bin"
           token: ${{ secrets.GITHUB_TOKEN }}
           
-      - name: Move OTA Firmware
-        run: |
-          mv firmware.bin release/bleota.bin
-
       - name: Get release version string
         run: echo "::set-output name=version::$(./bin/buildinfo.py long)"
         id: version
@@ -371,7 +368,7 @@ jobs:
         id: version
 
       - name: Move files up
-        run: mv -b -t ./ ./*tbeam-1*/littlefs*.bin ./*tbeam-1*/bleota.bin ./*tbeam-1*/system-info.bin ./*tbeam-1*/partitions.bin ./**/firmware*.bin ./**/*.uf2 ./**/*.elf ./**/meshtasticd_linux_amd64 ./*native*/*device-*.sh ./*native*/*device-*.bat
+        run: mv -b -t ./ ./*tbeam-1*/littlefs*.bin ./*tbeam-1*/bleota.bin ./**/firmware*.bin ./**/*.uf2 ./**/*.elf ./**/meshtasticd_linux_amd64 ./*native*/*device-*.sh ./*native*/*device-*.bat
 
       - name: Repackage in single firmware zip
         uses: actions/upload-artifact@v2
