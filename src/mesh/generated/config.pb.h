@@ -108,14 +108,15 @@ typedef struct _Config_DisplayConfig {
 typedef struct _Config_LoRaConfig { 
     bool use_preset;
     Config_LoRaConfig_ModemPreset modem_preset;
-    uint32_t bandwidth;
+    uint16_t bandwidth;
     uint32_t spread_factor;
-    uint32_t coding_rate;
+    uint8_t coding_rate;
     float frequency_offset;
     Config_LoRaConfig_RegionCode region;
     uint32_t hop_limit;
     bool tx_enabled;
-    int32_t tx_power;
+    int8_t tx_power;
+    uint8_t channel_num;
     pb_size_t ignore_incoming_count;
     uint32_t ignore_incoming[3];
 } Config_LoRaConfig;
@@ -208,7 +209,7 @@ extern "C" {
 #define Config_PowerConfig_init_default          {0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_NetworkConfig_init_default        {0, _Config_NetworkConfig_WiFiMode_MIN, "", "", ""}
 #define Config_DisplayConfig_init_default        {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _Config_DisplayConfig_DisplayUnits_MIN}
-#define Config_LoRaConfig_init_default           {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, {0, 0, 0}}
+#define Config_LoRaConfig_init_default           {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, {0, 0, 0}}
 #define Config_BluetoothConfig_init_default      {0, _Config_BluetoothConfig_PairingMode_MIN, 0}
 #define Config_init_zero                         {0, {Config_DeviceConfig_init_zero}}
 #define Config_DeviceConfig_init_zero            {_Config_DeviceConfig_Role_MIN, 0, 0}
@@ -216,7 +217,7 @@ extern "C" {
 #define Config_PowerConfig_init_zero             {0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_NetworkConfig_init_zero           {0, _Config_NetworkConfig_WiFiMode_MIN, "", "", ""}
 #define Config_DisplayConfig_init_zero           {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _Config_DisplayConfig_DisplayUnits_MIN}
-#define Config_LoRaConfig_init_zero              {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, {0, 0, 0}}
+#define Config_LoRaConfig_init_zero              {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, {0, 0, 0}}
 #define Config_BluetoothConfig_init_zero         {0, _Config_BluetoothConfig_PairingMode_MIN, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -242,6 +243,7 @@ extern "C" {
 #define Config_LoRaConfig_hop_limit_tag          8
 #define Config_LoRaConfig_tx_enabled_tag         9
 #define Config_LoRaConfig_tx_power_tag           10
+#define Config_LoRaConfig_channel_num_tag        11
 #define Config_LoRaConfig_ignore_incoming_tag    103
 #define Config_NetworkConfig_wifi_enabled_tag    1
 #define Config_NetworkConfig_wifi_mode_tag       2
@@ -350,6 +352,7 @@ X(a, STATIC,   SINGULAR, UENUM,    region,            7) \
 X(a, STATIC,   SINGULAR, UINT32,   hop_limit,         8) \
 X(a, STATIC,   SINGULAR, BOOL,     tx_enabled,        9) \
 X(a, STATIC,   SINGULAR, INT32,    tx_power,         10) \
+X(a, STATIC,   SINGULAR, UINT32,   channel_num,      11) \
 X(a, STATIC,   REPEATED, UINT32,   ignore_incoming, 103)
 #define Config_LoRaConfig_CALLBACK NULL
 #define Config_LoRaConfig_DEFAULT NULL
@@ -384,7 +387,7 @@ extern const pb_msgdesc_t Config_BluetoothConfig_msg;
 #define Config_BluetoothConfig_size              10
 #define Config_DeviceConfig_size                 6
 #define Config_DisplayConfig_size                20
-#define Config_LoRaConfig_size                   69
+#define Config_LoRaConfig_size                   67
 #define Config_NetworkConfig_size                137
 #define Config_PositionConfig_size               30
 #define Config_PowerConfig_size                  43
