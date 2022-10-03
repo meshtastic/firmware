@@ -36,7 +36,7 @@
 #include "nimble/NimbleBluetooth.h"
 #endif
 
-#if HAS_WIFI
+#if HAS_WIFI || defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiServerAPI.h"
 #include "mqtt/MQTT.h"
 #endif
@@ -45,6 +45,9 @@
 #include "RF95Interface.h"
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
+#if !HAS_RADIO && defined(ARCH_PORTDUINO)
+#include "platform/portduino/SimRadio.h"
+#endif
 
 #if HAS_BUTTON
 #include "ButtonThread.h"
@@ -385,7 +388,7 @@ void setup()
     }
 #endif
 
-#if !HAS_RADIO
+#ifdef ARCH_PORTDUINO
     if (!rIf) {
         rIf = new SimRadio;
         if (!rIf->init()) {
@@ -411,7 +414,7 @@ void setup()
 #endif
 
 #ifdef ARCH_PORTDUINO
-    initApiServer();
+    initApiServer(TCPPort);
 #endif
 
     // Start airtime logger thread.

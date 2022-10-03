@@ -74,6 +74,11 @@ typedef enum _PortNum {
  Maintained by Github user a-f-G-U-C (a Meshtastic contributor)
  Project files at https://github.com/a-f-G-U-C/Meshtastic-ZPS */
     PortNum_ZPS_APP = 68, 
+    /* Used to let multiple instances of Linux native applications communicate 
+ as if they did using their LoRa chip.
+ Maintained by GitHub user GUVWAF. 
+ Project files at https://github.com/GUVWAF/Meshtasticator */
+    PortNum_SIMULATOR_APP = 69, 
     /* Private applications should use portnums >= 256.
  To simplify initial development and testing you can use "PRIVATE_APP"
  in your code without needing to rebuild protobuf files (via [regen-protos.sh](https://github.com/meshtastic/Meshtastic-device/blob/master/bin/regen-protos.sh)) */

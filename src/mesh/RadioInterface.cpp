@@ -461,12 +461,6 @@ void RadioInterface::limitPower()
     DEBUG_MSG("Set radio: final power level=%d\n", power);
 }
 
-ErrorCode SimRadio::send(MeshPacket *p)
-{
-    DEBUG_MSG("SimRadio.send\n");
-    packetPool.release(p);
-    return ERRNO_OK;
-}
 
 void RadioInterface::deliverToReceiver(MeshPacket *p)
 {
