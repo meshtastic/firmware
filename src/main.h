@@ -20,6 +20,8 @@ extern bool isUSBPowered;
 
 extern uint8_t nodeTelemetrySensorsMap[TelemetrySensorType_LPS22+1];
 
+extern int TCPPort; // set by Portduino
+
 // Global Screen singleton.
 extern graphics::Screen *screen;
 // extern Observable<meshtastic::PowerStatus> newPowerStatus; //TODO: move this to main-esp32.cpp somehow or a helper class

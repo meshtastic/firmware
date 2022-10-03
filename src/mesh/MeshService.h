@@ -10,6 +10,9 @@
 #include "MeshTypes.h"
 #include "Observer.h"
 #include "PointerQueue.h"
+#ifdef ARCH_PORTDUINO
+#include "../platform/portduino/SimRadio.h"
+#endif
 
 /**
  * Top level app for this service.  keeps the mesh, the radio config and the queue of received packets.

@@ -51,13 +51,42 @@ class PolledIrqPin : public GPIOPin
 
 static GPIOPin *loraIrq;
 
+int TCPPort = 4403; 
+
+static error_t parse_opt(int key, char *arg, struct argp_state *state) {
+  switch (key) {
+  case 'p':
+    if (sscanf(arg, "%d", &TCPPort) < 1)
+        return ARGP_ERR_UNKNOWN; 
+    else
+        printf("Using TCP port %d\n", TCPPort);
+    break;
+  case ARGP_KEY_ARG:
+    return 0;
+  default:
+    return ARGP_ERR_UNKNOWN;
+  }
+  return 0;
+}
+
+void portduinoCustomInit() {
+    static struct argp_option options[] = {{"port", 'p', "PORT", 0, "The TCP port to use."}, {0}};
+    static void *childArguments; 
+    static char doc[] = "Meshtastic native build.";
+    static char args_doc[] = "...";
+    static struct argp argp = {options, parse_opt, args_doc, doc, 0, 0, 0};
+    const struct argp_child child = {&argp, OPTION_ARG_OPTIONAL, 0, 0};
+    portduinoAddArguments(child, childArguments);
+}
+
+
 /** apps run under portduino can optionally define a portduinoSetup() to
  * use portduino specific init code (such as gpioBind) to setup portduino on their host machine,
  * before running 'arduino' code.
  */
 void portduinoSetup()
 {
-    printf("Setting up Meshtastic on Porduino...\n");
+    printf("Setting up Meshtastic on Portduino...\n");
 
 #ifdef PORTDUINO_LINUX_HARDWARE
     SPI.begin(); // We need to create SPI 
@@ -86,6 +115,9 @@ void portduinoSetup()
 #endif
 
     {
+        // Set the random seed equal to TCPPort to have a different seed per instance
+        randomSeed(TCPPort);
+
         auto fakeBusy = new SimGPIOPin(SX126X_BUSY, "fakeBusy");
         fakeBusy->writePin(LOW);
         fakeBusy->setSilent(true);
