@@ -947,8 +947,12 @@ void Screen::setup()
 
 #ifdef SCREEN_MIRROR
     dispdev.mirrorScreen();
-#elif defined(SCREEN_FLIP_VERTICALLY)
-    dispdev.flipScreenVertically();
+#else
+    // Standard behaviour is to FLIP the screen (needed on T-Beam). If this config item is set, unflip it, and thereby logically flip it.
+    // If you have a headache now, you're welcome.
+    if (!config.display.flip_screen) {
+        dispdev.flipScreenVertically();
+    }
 #endif
 
     // Get our hardware ID
