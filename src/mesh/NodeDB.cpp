@@ -274,7 +274,7 @@ void NodeDB::init()
     myNodeInfo.error_address = 0;
 
     // likewise - we always want the app requirements to come from the running appload
-    myNodeInfo.min_app_version = 20300; // format is Mmmss (where M is 1+the numeric major number. i.e. 20120 means 1.1.20
+    myNodeInfo.min_app_version = 20341; // format is Mmmss (where M is 1+the numeric major number. i.e. 20120 means 1.1.20
 
     // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we won't
     // keep using that nodenum forever. Crummy guess at our nodenum (but we will check against the nodedb to avoid conflicts)
@@ -305,7 +305,7 @@ void NodeDB::init()
 
     resetRadioConfig(); // If bogus settings got saved, then fix them
     DEBUG_MSG("region=%d, NODENUM=0x%x, dbsize=%d\n", config.lora.region, myNodeInfo.my_node_num, *numNodes);
-    saveToDisk();
+    saveToDisk(SEGMENT_DEVICESTATE | SEGMENT_CONFIG | SEGMENT_CHANNELS);
 }
 
 // We reserve a few nodenums for future use
