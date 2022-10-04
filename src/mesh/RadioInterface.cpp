@@ -354,7 +354,6 @@ void RadioInterface::applyModemConfig()
     // Set up default configuration
     // No Sync Words in LORA mode
     Config_LoRaConfig &loraConfig = config.lora;
-    auto channelSettings = channels.getPrimary();
     if (loraConfig.spread_factor == 0) {
         switch (loraConfig.modem_preset) {
         case Config_LoRaConfig_ModemPreset_SHORT_FAST:
@@ -423,7 +422,7 @@ void RadioInterface::applyModemConfig()
 
     // If user has manually specified a channel num, then use that, otherwise generate one by hashing the name
     const char *channelName = channels.getName(channels.getPrimaryIndex());
-    int channel_num = channelSettings.channel_num ? channelSettings.channel_num - 1 : hash(channelName) % numChannels;
+    int channel_num = loraConfig.channel_num ? loraConfig.channel_num - 1 : hash(channelName) % numChannels;
 
     // Old frequency selection formula
     // float freq = myRegion->freqStart + ((((myRegion->freqEnd - myRegion->freqStart) / numChannels) / 2) * channel_num);

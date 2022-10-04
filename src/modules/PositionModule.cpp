@@ -58,6 +58,8 @@ MeshPacket *PositionModule::allocReply()
     NodeInfo *node = service.refreshMyNodeInfo(); // should guarantee there is now a position
     assert(node->has_position);
 
+    node->position.seq_number++;
+
     // configuration of POSITION packet
     //   consider making this a function argument?
     uint32_t pos_flags = config.position.position_flags;
@@ -96,6 +98,12 @@ MeshPacket *PositionModule::allocReply()
 
     if (pos_flags & Config_PositionConfig_PositionFlags_SEQ_NO)
         p.seq_number = node->position.seq_number;
+
+    if (pos_flags & Config_PositionConfig_PositionFlags_HEADING)
+        p.ground_track = node->position.ground_track;
+
+    if (pos_flags & Config_PositionConfig_PositionFlags_SPEED)
+        p.ground_speed = node->position.ground_speed;
 
     // Strip out any time information before sending packets to other nodes - to keep the wire size small (and because other
     // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS to include the time, so that gpsless
