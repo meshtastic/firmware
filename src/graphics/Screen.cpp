@@ -1646,6 +1646,9 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 // adjust Brightness cycle trough 1 to 254 as long as attachDuringLongPress is true
 void Screen::adjustBrightness()
 {
+    if (!useDisplay)
+        return;
+
     if (brightness == 254) {
         brightness = 0;
     } else {
