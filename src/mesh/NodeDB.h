@@ -13,6 +13,11 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define here.
 */
 
+#define SEGMENT_CONFIG 1
+#define SEGMENT_MODULECONFIG 2
+#define SEGMENT_DEVICESTATE 4
+#define SEGMENT_CHANNELS 8
+
 #define DEVICESTATE_CUR_VER 19
 #define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
 
@@ -52,7 +57,7 @@ class NodeDB
     void init();
 
     /// write to flash
-    void saveToDisk(), saveChannelsToDisk(), saveDeviceStateToDisk();
+    void saveToDisk(int saveWhat=SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS), saveChannelsToDisk(), saveDeviceStateToDisk();
 
     /** Reinit radio config if needed, because either:
      * a) sometimes a buggy android app might send us bogus settings or

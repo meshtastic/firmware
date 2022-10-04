@@ -75,7 +75,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         if (doublepressed > 0 && (doublepressed + (30 * 1000)) > millis()) {
             DEBUG_MSG("User has set BLE pairing mode to fixed-pin\n");
             config.bluetooth.mode = Config_BluetoothConfig_PairingMode_FIXED_PIN;
-            nodeDB.saveToDisk();
+            nodeDB.saveToDisk(SEGMENT_CONFIG);
         } else if (config.bluetooth.mode == Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
             DEBUG_MSG("Using random passkey\n");
             // This is the passkey to be entered on peer - we pick a number >100,000 to ensure 6 digits

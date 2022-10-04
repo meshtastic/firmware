@@ -90,7 +90,7 @@ void MeshService::loop()
 }
 
 /// The radioConfig object just changed, call this to force the hw to change to the new settings
-bool MeshService::reloadConfig()
+bool MeshService::reloadConfig(int saveWhat)
 {
     // If we can successfully set this radio to these settings, save them to disk
 
@@ -98,7 +98,7 @@ bool MeshService::reloadConfig()
     bool didReset = nodeDB.resetRadioConfig(); // Don't let the phone send us fatally bad settings
 
     configChanged.notifyObservers(NULL); // This will cause radio hardware to change freqs etc
-    nodeDB.saveToDisk();
+    nodeDB.saveToDisk(saveWhat);
 
     return didReset;
 }
@@ -113,7 +113,7 @@ void MeshService::reloadOwner()
     // update everyone else
     if (nodeInfoModule)
         nodeInfoModule->sendOurNodeInfo();
-    nodeDB.saveToDisk();
+    nodeDB.saveToDisk(SEGMENT_DEVICESTATE);
 }
 
 /**

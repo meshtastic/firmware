@@ -241,7 +241,7 @@ void AdminModule::handleSetConfig(const Config &c)
             break;
     }
 
-    service.reloadConfig();
+    service.reloadConfig(SEGMENT_CONFIG);
     // Reboot 5 seconds after a config that requires rebooting is set
     if (requiresReboot) {
         DEBUG_MSG("Rebooting due to config changes\n");
@@ -290,7 +290,7 @@ void AdminModule::handleSetModuleConfig(const ModuleConfig &c)
             break;
     }
 
-    service.reloadConfig();
+    service.reloadConfig(SEGMENT_MODULECONFIG);
 }
 
 void AdminModule::handleSetChannel(const Channel &cc)
