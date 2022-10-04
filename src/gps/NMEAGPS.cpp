@@ -224,7 +224,7 @@ bool NMEAGPS::lookForLocation()
     }
 
     if (reader.speed.isUpdated() && reader.speed.isValid()) {
-        p.ground_speed = reader.speed.kmph() * 1e3; // Scale the speed (in km/h * 10^-2) to match the expected m/s * 10^-5
+        p.ground_speed = reader.speed.kmph();
     }
 
     return true;
