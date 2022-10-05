@@ -157,9 +157,7 @@ void setup()
 #endif
 
 #ifdef DEBUG_PORT
-    if (!config.has_device || config.device.serial_enabled) {
         consoleInit(); // Set serial baud rate and init our mesh console
-    }
 #endif
 
     serialSinceMsec = millis();
