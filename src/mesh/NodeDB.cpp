@@ -16,6 +16,7 @@
 #include "mesh-pb-constants.h"
 #include <pb_decode.h>
 #include <pb_encode.h>
+#include <ErriezCRC32.h>
 
 #ifdef ARCH_ESP32
 #include "mesh/http/WiFiAPClient.h"
@@ -268,6 +269,12 @@ void NodeDB::init()
     DEBUG_MSG("Initializing NodeDB\n");
     loadFromDisk();
 
+    uint32_t devicestateCRC = crc32Buffer(&devicestate, sizeof(devicestate));
+    uint32_t configCRC = crc32Buffer(&config, sizeof(config));
+    uint32_t channelFileCRC = crc32Buffer(&channelFile, sizeof(channelFile));
+
+    int saveWhat = 0;
+
     myNodeInfo.max_channels = MAX_NUM_CHANNELS; // tell others the max # of channels we can understand
 
     myNodeInfo.error_code = CriticalErrorCode_NONE; // For the error code, only show values from this boot (discard value from flash)
@@ -305,7 +312,15 @@ void NodeDB::init()
 
     resetRadioConfig(); // If bogus settings got saved, then fix them
     DEBUG_MSG("region=%d, NODENUM=0x%x, dbsize=%d\n", config.lora.region, myNodeInfo.my_node_num, *numNodes);
-    saveToDisk();
+
+    if (devicestateCRC != crc32Buffer(&devicestate, sizeof(devicestate)))
+        saveWhat |= SEGMENT_DEVICESTATE;
+    if (configCRC != crc32Buffer(&config, sizeof(config)))
+        saveWhat |= SEGMENT_CONFIG;
+    if (channelFileCRC != crc32Buffer(&channelFile, sizeof(channelFile)))
+        saveWhat |= SEGMENT_CHANNELS;
+
+    saveToDisk(saveWhat);
 }
 
 // We reserve a few nodenums for future use
@@ -480,11 +495,11 @@ void NodeDB::saveToDisk(int saveWhat)
 #ifdef FSCom
         FSCom.mkdir("/prefs");
 #endif
-        if (saveWhat && SEGMENT_DEVICESTATE) {
+        if (saveWhat & SEGMENT_DEVICESTATE) {
             saveDeviceStateToDisk();
         }
 
-        if (saveWhat && SEGMENT_CONFIG) {
+        if (saveWhat & SEGMENT_CONFIG) {
             config.has_device = true;
             config.has_display = true;
             config.has_lora = true;
@@ -495,7 +510,7 @@ void NodeDB::saveToDisk(int saveWhat)
             saveProto(configFileName, LocalConfig_size, sizeof(config), LocalConfig_fields, &config);
         }
 
-        if (saveWhat && SEGMENT_MODULECONFIG) {
+        if (saveWhat & SEGMENT_MODULECONFIG) {
             moduleConfig.has_canned_message = true;
             moduleConfig.has_external_notification = true;
             moduleConfig.has_mqtt = true;
@@ -506,7 +521,7 @@ void NodeDB::saveToDisk(int saveWhat)
             saveProto(moduleConfigFileName, LocalModuleConfig_size, sizeof(moduleConfig), LocalModuleConfig_fields, &moduleConfig);
         }
 
-        if (saveWhat && SEGMENT_CHANNELS) {
+        if (saveWhat & SEGMENT_CHANNELS) {
             saveChannelsToDisk();
         }
     } else {
