@@ -12,7 +12,7 @@ on:
     branches: [master]
     paths-ignore:
       - "**.md"
-      - "**.yml"
+      #- "**.yml"
 
   workflow_dispatch:
 
