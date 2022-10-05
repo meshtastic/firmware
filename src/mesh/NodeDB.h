@@ -136,7 +136,6 @@ class NodeDB
         newStatus.notifyObservers(&status);
     }
 
-
     /// read our db from flash
     void loadFromDisk();
 
