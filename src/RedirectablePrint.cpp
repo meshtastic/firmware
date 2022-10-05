@@ -1,6 +1,7 @@
 #include "configuration.h"
 #include "RedirectablePrint.h"
 #include "RTC.h"
+#include "NodeDB.h"
 #include "concurrency/OSThread.h"
 // #include "wifi/WiFiServerAPI.h"
 #include <assert.h>
@@ -30,7 +31,9 @@ size_t RedirectablePrint::write(uint8_t c)
     // optionally send chars to TCP also
     //WiFiServerPort::debugOut(c);
 
-    dest->write(c);
+    if (!config.has_lora || config.device.serial_enabled)
+        dest->write(c);
+
     return 1; // We always claim one was written, rather than trusting what the
               // serial port said (which could be zero)
 }
