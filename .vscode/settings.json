@@ -53,7 +53,8 @@
         "iostream": "cpp",
         "esp_nimble_hci.h": "c",
         "map": "cpp",
-        "random": "cpp"
+        "random": "cpp",
+        "*.tpp": "cpp"
     },
     "cSpell.words": [
         "Blox",
