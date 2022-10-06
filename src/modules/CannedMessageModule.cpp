@@ -171,7 +171,15 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         this->lastTouchMillis = millis();
         validEvent = true;
     }
-
+    if (event->inputEvent == static_cast<char>(MATRIXKEY)) {
+        DEBUG_MSG("Canned message event Matrix key pressed\n");
+        // this will send the text immediately on matrix press
+        this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
+        this->payload = event->kbchar;
+        this->currentMessageIndex = event->kbchar -1;
+        this->lastTouchMillis = millis();
+        validEvent = true;
+    }
 
     if (validEvent) {
         // Let runOnce to be called immediately.
@@ -203,7 +211,7 @@ int32_t CannedMessageModule::runOnce()
 {
     if ((!moduleConfig.canned_message.enabled) || (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) ||
         (this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE)) {
-        return 30000; // TODO: should return MAX_VAL
+        return INT32_MAX;
     }
     DEBUG_MSG("Check status\n");
     UIFrameEvent e = {false, true};
@@ -235,7 +243,7 @@ int32_t CannedMessageModule::runOnce()
                 e.frameChanged = true;
             }
         } else {
-            if (strlen(this->messages[this->currentMessageIndex]) > 0) {
+            if ((this->messagesCount > this->currentMessageIndex) && (strlen(this->messages[this->currentMessageIndex]) > 0)) {
                 sendText(NODENUM_BROADCAST, this->messages[this->currentMessageIndex], true);
                 this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
             } else {
@@ -316,7 +324,7 @@ int32_t CannedMessageModule::runOnce()
         return INACTIVATE_AFTER_MS;
     }
 
-    return 30000; // TODO: should return MAX_VAL
+    return INT32_MAX; 
 }
 
 const char *CannedMessageModule::getCurrentMessage()
