@@ -385,7 +385,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         char buffer[9];
         sprintf(buffer, "%d left", Constants_DATA_PAYLOAD_LEN - this->freetext.length());
         display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 0, buffer);
-        display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL, cannedMessageModule->drawWithCursor(cannedMessageModule->freetext, cannedMessageModule->cursor));
+        display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), cannedMessageModule->drawWithCursor(cannedMessageModule->freetext, cannedMessageModule->cursor));
     } else {
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_SMALL);
