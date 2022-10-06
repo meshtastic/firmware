@@ -235,12 +235,11 @@ int32_t CannedMessageModule::runOnce()
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT) {
         if (this->payload == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
             if (this->freetext.length() > 0) {
-                sendText(NODENUM_BROADCAST, this->freetext.c_str(), true);
+                sendText(this->dest, this->freetext.c_str(), true);
                 this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
             } else {
                 DEBUG_MSG("Reset message is empty.\n");
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-                e.frameChanged = true;
             }
         } else {
             if ((this->messagesCount > this->currentMessageIndex) && (strlen(this->messages[this->currentMessageIndex]) > 0)) {
@@ -249,9 +248,9 @@ int32_t CannedMessageModule::runOnce()
             } else {
                 DEBUG_MSG("Reset message is empty.\n");
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-                e.frameChanged = true;
             }
         }
+        e.frameChanged = true;
         this->currentMessageIndex = -1;
         this->freetext = ""; // clear freetext
         this->cursor = 0;
@@ -287,7 +286,7 @@ int32_t CannedMessageModule::runOnce()
                     this->cursor++;
                 }
                 break;
-            case 8: // backspace
+            case 0x08: // backspace
                 if (this->freetext.length() > 0) {
                     if(this->cursor == this->freetext.length()) {
                         this->freetext = this->freetext.substring(0, this->freetext.length() - 1);
@@ -295,6 +294,13 @@ int32_t CannedMessageModule::runOnce()
                         this->freetext = this->freetext.substring(0, this->cursor - 1) + this->freetext.substring(this->cursor, this->freetext.length());
                     }
                     this->cursor--;
+                }
+                break;
+            case 0x09: // tab
+                if(this->destSelect) {
+                    this->destSelect = false;
+                } else {
+                    this->destSelect = true;
                 }
                 break;
             default:
