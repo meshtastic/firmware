@@ -73,9 +73,11 @@ class CannedMessageModule :
 
     int currentMessageIndex = -1;
     cannedMessageModuleRunState runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-    char payload;
+    char payload = 0x00;
     unsigned int cursor = 0;
     String freetext = "";  // Text Buffer for Freetext Editor
+    bool destSelect = false; // Freetext Editor Mode
+    NodeNum dest = NODENUM_BROADCAST;
 
     char messageStore[CANNED_MESSAGE_MODULE_MESSAGES_SIZE+1];
     char *messages[CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT];
