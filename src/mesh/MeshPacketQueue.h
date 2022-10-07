@@ -26,6 +26,12 @@ class MeshPacketQueue
     /** return true if the queue is empty */
     bool empty();
 
+    /** return amount of free packets in Queue */
+    size_t getFree() { return maxLen - queue.size(); }
+
+    /** return total size of the Queue */
+    size_t getMaxLen() { return maxLen; }
+
     MeshPacket *dequeue();
 
     MeshPacket *getFront();

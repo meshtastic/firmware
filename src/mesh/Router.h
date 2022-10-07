@@ -55,6 +55,9 @@ class Router : protected concurrency::OSThread
      */
     MeshPacket *allocForSending();
 
+    /** Return Underlying interface's TX queue status */
+    QueueStatus getQueueStatus();
+
     /**
      * @return our local nodenum */
     NodeNum getNodeNum();
