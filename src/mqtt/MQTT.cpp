@@ -14,9 +14,9 @@
 
 MQTT *mqtt;
 
-String statusTopic = "msh/1/stat/";
-String cryptTopic = "msh/1/c/";   // msh/1/c/CHANNELID/NODEID
-String jsonTopic = "msh/1/json/"; // msh/1/json/CHANNELID/NODEID
+String statusTopic = "msh/2/stat/";
+String cryptTopic = "msh/2/c/";   // msh/2/c/CHANNELID/NODEID
+String jsonTopic = "msh/2/json/"; // msh/2/json/CHANNELID/NODEID
 
 void MQTT::mqttCallback(char *topic, byte *payload, unsigned int length)
 {
