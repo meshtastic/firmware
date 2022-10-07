@@ -145,6 +145,14 @@ void scanI2Cdevice(void)
             nodeTelemetrySensorsMap[TelemetrySensorType_MCP9808] = addr;
             DEBUG_MSG("MCP9808 sensor found at address 0x%x\n", (uint8_t)addr);
         }
+        if(addr == QMC6310_ADDR){
+            DEBUG_MSG("QMC6310 3-Axis magnetic sensor found at address 0x%x\n", (uint8_t)addr);
+            // nodeTelemetrySensorsMap[TelemetrySensorType_QMC6310] = addr; //Uncomment after protobufs PR is merged
+        }
+        if(addr == QMI8658_ADDR){
+            DEBUG_MSG("QMI8658 6-Axis inertial measurement sensor found at address 0x%x\n", (uint8_t)addr);
+            // nodeTelemetrySensorsMap[TelemetrySensorType_QMI8658] = addr; //Uncomment after protobufs PR is merged
+        }
         } else if (err == 4) {
             DEBUG_MSG("Unknow error at address 0x%x\n", addr);
         }
