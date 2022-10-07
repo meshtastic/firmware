@@ -25,5 +25,12 @@ static const uint8_t MOSI  = 11;
 static const uint8_t MISO  = 13;
 static const uint8_t SCK   = 12;
 
+#define SDMMC_CMD                   (35)
+#define SDMMC_CLK                   (36)
+#define SDMMC_DATA                  (37)
+
+#define ACCEL_INT1                  (34)
+#define ACCEL_INT2                  (33)
+#define RTC_INT                     (14)
 
 #endif /* Pins_Arduino_h */
