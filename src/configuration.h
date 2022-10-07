@@ -108,7 +108,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MCP9808_ADDR 0x18
 #define INA_ADDR 0x40
 #define INA_ADDR_ALTERNATE 0x41
-
+#define QMC6310_ADDR 0x1C
+#define QMI8658_ADDR 0x6B
 // -----------------------------------------------------------------------------
 // GPS
 // -----------------------------------------------------------------------------
