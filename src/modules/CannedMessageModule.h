@@ -35,6 +35,7 @@ class CannedMessageModule :
     const char* getCurrentMessage();
     const char* getPrevMessage();
     const char* getNextMessage();
+    const char* getNodeName(NodeNum node);
     bool shouldDraw();
     void eventUp();
     void eventDown();
