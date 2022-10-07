@@ -36,6 +36,7 @@ struct ToneDuration {
 #define NOTE_A3 220
 #define NOTE_AS3 233
 #define NOTE_B3 247
+#define NOTE_CS4 277
 
 const int DURATION_1_8 = 125;  // 1/8 note
 const int DURATION_1_4 = 250;  // 1/4 note
@@ -65,16 +66,17 @@ void playBeep() { tone(PIN_BUZZER, NOTE_B3, DURATION_1_4); }
 #endif
 
 void playStartMelody() {
-  ToneDuration melody[] = {{NOTE_B3, DURATION_1_4},
-                           {NOTE_B3, DURATION_1_8},
-                           {NOTE_B3, DURATION_1_8}};
+  ToneDuration melody[] = {{NOTE_FS3, DURATION_1_8},
+                           {NOTE_AS3, DURATION_1_8},
+                           {NOTE_CS4, DURATION_1_4}};
   playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }
 
+
 void playShutdownMelody() {
-  ToneDuration melody[] = {{NOTE_B3, DURATION_1_4},
-                           {NOTE_G3, DURATION_1_8},
-                           {NOTE_D3, DURATION_1_8}};
+  ToneDuration melody[] = {{NOTE_CS4, DURATION_1_8},
+                           {NOTE_AS3, DURATION_1_8},
+                           {NOTE_FS3, DURATION_1_4}};
   playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }
 #endif
