@@ -368,8 +368,21 @@ bool Power::axpChipInit()
 
 #ifdef HAS_PMU
 
+        TwoWire * w = NULL;
+
+    // Use macro to distinguish which wire is used by PMU
+#ifdef PMU_USE_WIRE1
+        w = &Wire1;
+#else
+        w = &Wire;
+#endif
+
+    /**
+     * It is not necessary to specify the wire pin, 
+     * just input the wire, because the wire has been initialized in main.cpp
+     */
     if (!PMU) {
-        PMU = new XPowersAXP2101(Wire, I2C_SDA, I2C_SCL);
+        PMU = new XPowersAXP2101(*w);
         if (!PMU->init()) {
             DEBUG_MSG("Warning: Failed to find AXP2101 power management\n");
             delete PMU;
@@ -380,7 +393,7 @@ bool Power::axpChipInit()
     }
 
     if (!PMU) {
-        PMU = new XPowersAXP192(Wire, I2C_SDA, I2C_SCL);
+        PMU = new XPowersAXP192(*w);
         if (!PMU->init()) {
             DEBUG_MSG("Warning: Failed to find AXP192 power management\n");
             delete PMU;
@@ -396,7 +409,9 @@ bool Power::axpChipInit()
         * In order not to affect other devices, if the initialization of the PMU fails, Wire needs to be re-initialized once, 
         * if there are multiple devices sharing the bus.
         * * */
-        Wire.begin(I2C_SDA, I2C_SCL);
+#ifndef PMU_USE_WIRE1
+        w->begin(I2C_SDA, I2C_SCL);
+#endif
         return false;
     }
 
@@ -456,6 +471,23 @@ bool Power::axpChipInit()
         PMU->setPowerChannelVoltage(XPOWERS_DCDC3, 3300);
         PMU->enablePowerOutput(XPOWERS_DCDC3);
 
+        /**
+        * ALDO2 cannot be turned off. 
+        * It is a necessary condition for sensor communication. 
+        * It must be turned on to properly access the sensor and screen
+        * It is also responsible for the power supply of PCF8563
+        */
+        PMU->setPowerChannelVoltage(XPOWERS_ALDO2, 3300);
+        PMU->enablePowerOutput(XPOWERS_ALDO2);
+
+        // 6-axis , magnetometer ,bme280 , oled screen power channel 
+        PMU->setPowerChannelVoltage(XPOWERS_ALDO1, 3300);
+        PMU->enablePowerOutput(XPOWERS_ALDO1);
+
+        // sdcard power channle 
+        PMU->setPowerChannelVoltage(XPOWERS_BLDO1, 3300);
+        PMU->enablePowerOutput(XPOWERS_BLDO1);
+        
         // PMU->setPowerChannelVoltage(XPOWERS_DCDC4, 3300);
         // PMU->enablePowerOutput(XPOWERS_DCDC4);
 
