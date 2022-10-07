@@ -147,11 +147,11 @@ void scanI2Cdevice(void)
         }
         if(addr == QMC6310_ADDR){
             DEBUG_MSG("QMC6310 3-Axis magnetic sensor found at address 0x%x\n", (uint8_t)addr);
-            // nodeTelemetrySensorsMap[TelemetrySensorType_QMC6310] = addr; //Uncomment after protobufs PR is merged
+            nodeTelemetrySensorsMap[TelemetrySensorType_QMC6310] = addr;
         }
         if(addr == QMI8658_ADDR){
             DEBUG_MSG("QMI8658 6-Axis inertial measurement sensor found at address 0x%x\n", (uint8_t)addr);
-            // nodeTelemetrySensorsMap[TelemetrySensorType_QMI8658] = addr; //Uncomment after protobufs PR is merged
+            nodeTelemetrySensorsMap[TelemetrySensorType_QMI8658] = addr;
         }
         } else if (err == 4) {
             DEBUG_MSG("Unknow error at address 0x%x\n", addr);

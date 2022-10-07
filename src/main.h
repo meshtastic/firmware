@@ -18,7 +18,7 @@ extern bool pmu_found;
 extern bool isCharging;
 extern bool isUSBPowered;
 
-extern uint8_t nodeTelemetrySensorsMap[TelemetrySensorType_LPS22+1];
+extern uint8_t nodeTelemetrySensorsMap[TelemetrySensorType_QMI8658+1];
 
 extern int TCPPort; // set by Portduino
 
