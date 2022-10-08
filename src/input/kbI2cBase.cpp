@@ -17,7 +17,7 @@ uint8_t read_from_14004(uint8_t reg, uint8_t *data, uint8_t length)
   Wire.write(reg);
   Wire.endTransmission();    // stop transmitting
   delay(20);
-  Wire.requestFrom(CARDKB_ADDR, length);
+  Wire.requestFrom(CARDKB_ADDR, (int)length);
   int i = 0;
   while ( Wire.available() ) // slave may send less than requested
   {

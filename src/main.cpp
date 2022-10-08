@@ -87,7 +87,7 @@ uint32_t serialSinceMsec;
 bool pmu_found;
 
 // Array map of sensor types (as array index) and i2c address as value we'll find in the i2c scan
-uint8_t nodeTelemetrySensorsMap[TelemetrySensorType_LPS22+1] = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+uint8_t nodeTelemetrySensorsMap[TelemetrySensorType_QMI8658+1] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
 
@@ -214,6 +214,10 @@ void setup()
     // router = new DSRRouter();
     router = new ReliableRouter();
 
+#ifdef I2C_SDA1
+    Wire1.begin(I2C_SDA1, I2C_SCL1);
+#endif
+
 #ifdef I2C_SDA
     Wire.begin(I2C_SDA, I2C_SCL);
 #elif HAS_WIRE
@@ -229,7 +233,6 @@ void setup()
     delay(1);
 #endif
 
-    scanI2Cdevice();
 #ifdef RAK4630
     // scanEInkDevice();
 #endif
@@ -269,6 +272,12 @@ void setup()
     powerStatus->observe(&power->newStatus);
     power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
 
+    /*
+    * Move the scanning I2C device to the back of power initialization. 
+    * Some boards need to be powered on to correctly scan to the device address, such as t-beam-s3-core
+    */
+    scanI2Cdevice();
+    
     // Init our SPI controller (must be before screen and lora)
     initSPI();
 #ifndef ARCH_ESP32

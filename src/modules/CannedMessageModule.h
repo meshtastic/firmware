@@ -9,7 +9,6 @@ enum cannedMessageModuleRunState
     CANNED_MESSAGE_RUN_STATE_INACTIVE,
     CANNED_MESSAGE_RUN_STATE_ACTIVE,
     CANNED_MESSAGE_RUN_STATE_FREETEXT,
-    CANNED_MESSAGE_RUN_STATE_MATRIX,
     CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE,
     CANNED_MESSAGE_RUN_STATE_ACTION_SELECT,
     CANNED_MESSAGE_RUN_STATE_ACTION_UP,
@@ -36,6 +35,7 @@ class CannedMessageModule :
     const char* getCurrentMessage();
     const char* getPrevMessage();
     const char* getNextMessage();
+    const char* getNodeName(NodeNum node);
     bool shouldDraw();
     void eventUp();
     void eventDown();
@@ -74,9 +74,11 @@ class CannedMessageModule :
 
     int currentMessageIndex = -1;
     cannedMessageModuleRunState runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-    char payload;
+    char payload = 0x00;
     unsigned int cursor = 0;
     String freetext = "";  // Text Buffer for Freetext Editor
+    bool destSelect = false; // Freetext Editor Mode
+    NodeNum dest = NODENUM_BROADCAST;
 
     char messageStore[CANNED_MESSAGE_MODULE_MESSAGES_SIZE+1];
     char *messages[CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT];
