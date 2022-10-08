@@ -453,13 +453,15 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         display->setColor(WHITE);
         display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), cannedMessageModule->drawWithCursor(cannedMessageModule->freetext, cannedMessageModule->cursor));
     } else {
-        display->setTextAlignment(TEXT_ALIGN_LEFT);
-        display->setFont(FONT_SMALL);
-        display->drawString(0 + x, 0 + y, cannedMessageModule->getPrevMessage());
-        display->setFont(FONT_MEDIUM);
-        display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL, cannedMessageModule->getCurrentMessage());
-        display->setFont(FONT_SMALL);
-        display->drawString(0 + x, 0 + y + FONT_HEIGHT_MEDIUM, cannedMessageModule->getNextMessage());
+        if (this->messagesCount > 0) {
+            display->setTextAlignment(TEXT_ALIGN_LEFT);
+            display->setFont(FONT_SMALL);
+            display->drawString(0 + x, 0 + y, cannedMessageModule->getPrevMessage());
+            display->setFont(FONT_MEDIUM);
+            display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL, cannedMessageModule->getCurrentMessage());
+            display->setFont(FONT_SMALL);
+            display->drawString(0 + x, 0 + y + FONT_HEIGHT_MEDIUM, cannedMessageModule->getNextMessage());
+        }
     }
 }
 
