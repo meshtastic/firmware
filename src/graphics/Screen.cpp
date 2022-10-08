@@ -57,7 +57,6 @@ namespace graphics
 
 // This means the *visible* area (sh1106 can address 132, but shows 128 for example)
 #define IDLE_FRAMERATE 1 // in fps
-#define COMPASS_DIAM 44
 
 // DEBUG
 #define NUM_EXTRA_FRAMES 3 // text message and debug frame
@@ -669,6 +668,26 @@ static bool hasPosition(NodeInfo *n)
     return n->has_position && (n->position.latitude_i != 0 || n->position.longitude_i != 0);
 }
 
+static uint16_t getCompassDiam(OLEDDisplay *display)
+{
+    uint16_t diam = 0;
+    // get the smaller of the 2 dimensions and subtract 20
+    if(display->getWidth() > display->getHeight()) {
+        diam = display->getHeight();
+        // if 2/3 of the other size would be smaller, use that
+        if (diam > (display->getWidth() * 2 / 3)) {
+            diam = display->getWidth() * 2 / 3;
+        }
+    } else {
+        diam = display->getWidth();
+        if (diam > (display->getHeight() * 2 / 3)) {
+            diam = display->getHeight() * 2 / 3;
+        }
+    }
+    
+    return diam - 20;
+};
+
 /// We will skip one node - the one for us, so we just blindly loop over all
 /// nodes
 static size_t nodeIndex;
@@ -685,7 +704,7 @@ static void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t comp
 
     for (int i = 0; i < 4; i++) {
         arrowPoints[i]->rotate(headingRadian);
-        arrowPoints[i]->scale(COMPASS_DIAM * 0.6);
+        arrowPoints[i]->scale(getCompassDiam(display) * 0.6);
         arrowPoints[i]->translate(compassX, compassY);
     }
     drawLine(display, tip, tail);
@@ -707,7 +726,7 @@ static void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t com
     for (int i = 0; i < 4; i++) {
         // North on compass will be negative of heading
         rosePoints[i]->rotate(-myHeading);
-        rosePoints[i]->scale(COMPASS_DIAM);
+        rosePoints[i]->scale(getCompassDiam(display));
         rosePoints[i]->translate(compassX, compassY);
     }
     drawLine(display, N1, N3);
@@ -772,7 +791,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     const char *fields[] = {username, distStr, signalStr, lastStr, NULL};
 
     // coordinates for the center of the compass/circle
-    int16_t compassX = x + SCREEN_WIDTH - COMPASS_DIAM / 2 - 5, compassY = y + SCREEN_HEIGHT / 2;
+    int16_t compassX = x + SCREEN_WIDTH - getCompassDiam(display) / 2 - 5, compassY = y + SCREEN_HEIGHT / 2;
     bool hasNodeHeading = false;
 
     if (ourNode && hasPosition(ourNode)) {
@@ -813,7 +832,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         // Debug info for gps lock errors
         // DEBUG_MSG("ourNode %d, ourPos %d, theirPos %d\n", !!ourNode, ourNode && hasPosition(ourNode), hasPosition(node));
         display->drawString(compassX - FONT_HEIGHT_SMALL / 4, compassY - FONT_HEIGHT_SMALL / 2, "?");
-    display->drawCircle(compassX, compassY, COMPASS_DIAM / 2);
+    display->drawCircle(compassX, compassY, getCompassDiam(display) / 2);
 
     // Must be after distStr is populated
     drawColumns(display, x, y, fields);
