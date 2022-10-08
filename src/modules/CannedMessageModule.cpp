@@ -203,7 +203,7 @@ void CannedMessageModule::sendText(NodeNum dest, const char *message, bool wantR
         p->decoded.payload.size++;
     }
 
-    DEBUG_MSG("Sending message id=%d, msg=%.*s\n", p->id, p->decoded.payload.size, p->decoded.payload.bytes);
+    DEBUG_MSG("Sending message id=%d, dest=%x, msg=%.*s\n", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
 
     service.sendToMesh(p);
 }
@@ -266,19 +266,23 @@ int32_t CannedMessageModule::runOnce()
         e.frameChanged = true;
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_UP) {
-        this->currentMessageIndex = getPrevIndex();
-        this->freetext = ""; // clear freetext
-        this->cursor = 0;
-        this->destSelect = false;
-        this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
-        DEBUG_MSG("MOVE UP (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
+        if (this->messagesCount > 0) {
+            this->currentMessageIndex = getPrevIndex();
+            this->freetext = ""; // clear freetext
+            this->cursor = 0;
+            this->destSelect = false;
+            this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
+            DEBUG_MSG("MOVE UP (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
+        }
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_DOWN) {
-        this->currentMessageIndex = this->getNextIndex();
-        this->freetext = ""; // clear freetext
-        this->cursor = 0;
-        this->destSelect = false;
-        this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
-        DEBUG_MSG("MOVE DOWN (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
+        if (this->messagesCount > 0) {
+            this->currentMessageIndex = this->getNextIndex();
+            this->freetext = ""; // clear freetext
+            this->cursor = 0;
+            this->destSelect = false;
+            this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
+            DEBUG_MSG("MOVE DOWN (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
+        }
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
         e.frameChanged = true;
         switch (this->payload) {
@@ -287,19 +291,15 @@ int32_t CannedMessageModule::runOnce()
                     size_t numNodes = nodeDB.getNumNodes();
                     if(this->dest == NODENUM_BROADCAST) {
                         this->dest = nodeDB.getNodeNum();
-                        DEBUG_MSG("Replacing NodeNum_BROADCAST with %x\n",nodeDB.getNodeNum());
                     }
                     for (int i = 0; i < numNodes; i++) {
-                        DEBUG_MSG("Considering %x\n",nodeDB.getNodeByIndex(i)->num);
                         if (nodeDB.getNodeByIndex(i)->num == this->dest) {
-                            DEBUG_MSG("Match - advance %i-\n",i);
                             this->dest = (i > 0) ? nodeDB.getNodeByIndex(i-1)->num : nodeDB.getNodeByIndex(numNodes-1)->num;
                             break;
                         }
                     }
                     if(this->dest == nodeDB.getNodeNum()) {
                         this->dest = NODENUM_BROADCAST;
-                        DEBUG_MSG("Replacing %x with NodeNum_BROADCAST\n",nodeDB.getNodeNum());
                     }
                 }else{
                     if (this->cursor > 0) {
@@ -312,19 +312,15 @@ int32_t CannedMessageModule::runOnce()
                     size_t numNodes = nodeDB.getNumNodes();
                     if(this->dest == NODENUM_BROADCAST) {
                         this->dest = nodeDB.getNodeNum();
-                        DEBUG_MSG("Replacing NodeNum_BROADCAST with %x\n",nodeDB.getNodeNum());
                     }
                     for (int i = 0; i < numNodes; i++) {
-                        DEBUG_MSG("Considering %x\n",nodeDB.getNodeByIndex(i)->num);
                         if (nodeDB.getNodeByIndex(i)->num == this->dest) {
-                            DEBUG_MSG("Match - advance %i+\n",i);
                             this->dest = (i < numNodes-1) ? nodeDB.getNodeByIndex(i+1)->num : nodeDB.getNodeByIndex(0)->num;
                             break;
                         }
                     }
                     if(this->dest == nodeDB.getNodeNum()) {
                         this->dest = NODENUM_BROADCAST;
-                        DEBUG_MSG("Replacing %x with NodeNum_BROADCAST\n",nodeDB.getNodeNum());
                     }
                 }else{
                     if (this->cursor < this->freetext.length()) {
