@@ -58,12 +58,12 @@ bool ReliableRouter::shouldFilterReceived(MeshPacket *p)
      * this way if an ACK is dropped and a packet is resent we'll ACK the resent packet
      * make sure wasSeenRecently _doesn't_ update
      * finding the channel requires decoding the packet. */
-    if (p->want_ack && (p->to == getNodeNum()) && wasSeenRecently(p, false)) {
+    if (p->want_ack && (p->to == getNodeNum()) && wasSeenRecently(p, false) && !MeshModule::currentReply) {
         if (perhapsDecode(p)) {
             sendAckNak(Routing_Error_NONE, getFrom(p), p->id, p->channel);
             DEBUG_MSG("acking a repeated want_ack packet\n");
         }
-    } else if (wasSeenRecently(p, false) && p->hop_limit == HOP_RELIABLE) {
+    } else if (wasSeenRecently(p, false) && p->hop_limit == HOP_RELIABLE && !MeshModule::currentReply) {
         // retransmission on broadcast has hop_limit still equal to HOP_RELIABLE
         DEBUG_MSG("Resending implicit ack for a repeated floodmsg\n");
         MeshPacket *tosend = packetPool.allocCopy(*p);
@@ -94,7 +94,7 @@ void ReliableRouter::sniffReceived(const MeshPacket *p, const Routing *c)
                             // - not DSR routing)
         if (p->want_ack) {
             if (MeshModule::currentReply)
-                DEBUG_MSG("Someone else has replied to this message, no need for a 2nd ack\n");
+                DEBUG_MSG("Some other module has replied to this message, no need for a 2nd ack\n");
             else
                 sendAckNak(Routing_Error_NONE, getFrom(p), p->id, p->channel);
         }
