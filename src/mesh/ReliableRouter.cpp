@@ -94,7 +94,7 @@ void ReliableRouter::sniffReceived(const MeshPacket *p, const Routing *c)
                             // - not DSR routing)
         if (p->want_ack) {
             if (MeshModule::currentReply)
-                DEBUG_MSG("Someone else has replied to this message, no need for a 2nd ack\n");
+                DEBUG_MSG("Some other module has replied to this message, no need for a 2nd ack\n");
             else
                 sendAckNak(Routing_Error_NONE, getFrom(p), p->id, p->channel);
         }
