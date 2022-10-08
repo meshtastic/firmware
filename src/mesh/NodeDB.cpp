@@ -16,6 +16,7 @@
 #include "mesh-pb-constants.h"
 #include <pb_decode.h>
 #include <pb_encode.h>
+#include <ErriezCRC32.h>
 
 #ifdef ARCH_ESP32
 #include "mesh/http/WiFiAPClient.h"
@@ -128,7 +129,7 @@ bool NodeDB::factoryReset()
     // second, install default state (this will deal with the duplicate mac address issue)
     installDefaultDeviceState();
     installDefaultConfig();
-    // third, write to disk
+    // third, write everything to disk
     saveToDisk();
 #ifdef ARCH_ESP32
     // This will erase what's in NVS including ssl keys, persistant variables and ble pairing
@@ -268,6 +269,12 @@ void NodeDB::init()
     DEBUG_MSG("Initializing NodeDB\n");
     loadFromDisk();
 
+    uint32_t devicestateCRC = crc32Buffer(&devicestate, sizeof(devicestate));
+    uint32_t configCRC = crc32Buffer(&config, sizeof(config));
+    uint32_t channelFileCRC = crc32Buffer(&channelFile, sizeof(channelFile));
+
+    int saveWhat = 0;
+
     myNodeInfo.max_channels = MAX_NUM_CHANNELS; // tell others the max # of channels we can understand
 
     myNodeInfo.error_code = CriticalErrorCode_NONE; // For the error code, only show values from this boot (discard value from flash)
@@ -305,7 +312,15 @@ void NodeDB::init()
 
     resetRadioConfig(); // If bogus settings got saved, then fix them
     DEBUG_MSG("region=%d, NODENUM=0x%x, dbsize=%d\n", config.lora.region, myNodeInfo.my_node_num, *numNodes);
-    saveToDisk();
+
+    if (devicestateCRC != crc32Buffer(&devicestate, sizeof(devicestate)))
+        saveWhat |= SEGMENT_DEVICESTATE;
+    if (configCRC != crc32Buffer(&config, sizeof(config)))
+        saveWhat |= SEGMENT_CONFIG;
+    if (channelFileCRC != crc32Buffer(&channelFile, sizeof(channelFile)))
+        saveWhat |= SEGMENT_CHANNELS;
+
+    saveToDisk(saveWhat);
 }
 
 // We reserve a few nodenums for future use
@@ -474,34 +489,41 @@ void NodeDB::saveDeviceStateToDisk()
     }
 }
 
-void NodeDB::saveToDisk()
+void NodeDB::saveToDisk(int saveWhat)
 {
     if (!devicestate.no_save) {
 #ifdef FSCom
         FSCom.mkdir("/prefs");
 #endif
-        saveProto(prefFileName, DeviceState_size, sizeof(devicestate), DeviceState_fields, &devicestate);
+        if (saveWhat & SEGMENT_DEVICESTATE) {
+            saveDeviceStateToDisk();
+        }
 
-        // save all config segments
-        config.has_device = true;
-        config.has_display = true;
-        config.has_lora = true;
-        config.has_position = true;
-        config.has_power = true;
-        config.has_network = true;
-        config.has_bluetooth = true;
-        saveProto(configFileName, LocalConfig_size, sizeof(config), LocalConfig_fields, &config);
+        if (saveWhat & SEGMENT_CONFIG) {
+            config.has_device = true;
+            config.has_display = true;
+            config.has_lora = true;
+            config.has_position = true;
+            config.has_power = true;
+            config.has_network = true;
+            config.has_bluetooth = true;
+            saveProto(configFileName, LocalConfig_size, sizeof(config), LocalConfig_fields, &config);
+        }
 
-        moduleConfig.has_canned_message = true;
-        moduleConfig.has_external_notification = true;
-        moduleConfig.has_mqtt = true;
-        moduleConfig.has_range_test = true;
-        moduleConfig.has_serial = true;
-        moduleConfig.has_store_forward = true;
-        moduleConfig.has_telemetry = true;
-        saveProto(moduleConfigFileName, LocalModuleConfig_size, sizeof(moduleConfig), LocalModuleConfig_fields, &moduleConfig);
+        if (saveWhat & SEGMENT_MODULECONFIG) {
+            moduleConfig.has_canned_message = true;
+            moduleConfig.has_external_notification = true;
+            moduleConfig.has_mqtt = true;
+            moduleConfig.has_range_test = true;
+            moduleConfig.has_serial = true;
+            moduleConfig.has_store_forward = true;
+            moduleConfig.has_telemetry = true;
+            saveProto(moduleConfigFileName, LocalModuleConfig_size, sizeof(moduleConfig), LocalModuleConfig_fields, &moduleConfig);
+        }
 
-        saveChannelsToDisk();
+        if (saveWhat & SEGMENT_CHANNELS) {
+            saveChannelsToDisk();
+        }
     } else {
         DEBUG_MSG("***** DEVELOPMENT MODE - DO NOT RELEASE - not saving to flash *****\n");
     }

@@ -34,3 +34,4 @@ bin/uf2conv.py $SRCHEX -c -o $OUTDIR/$basename.uf2 -f 0xADA52840
 
 cp bin/device-install.* $OUTDIR
 cp bin/device-update.* $OUTDIR
+cp bin/*.uf2 $OUTDIR

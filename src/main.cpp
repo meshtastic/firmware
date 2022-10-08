@@ -36,7 +36,7 @@
 #include "nimble/NimbleBluetooth.h"
 #endif
 
-#if HAS_WIFI
+#if HAS_WIFI || defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiServerAPI.h"
 #include "mqtt/MQTT.h"
 #endif
@@ -45,6 +45,9 @@
 #include "RF95Interface.h"
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
+#if !HAS_RADIO && defined(ARCH_PORTDUINO)
+#include "platform/portduino/SimRadio.h"
+#endif
 
 #if HAS_BUTTON
 #include "ButtonThread.h"
@@ -84,7 +87,7 @@ uint32_t serialSinceMsec;
 bool pmu_found;
 
 // Array map of sensor types (as array index) and i2c address as value we'll find in the i2c scan
-uint8_t nodeTelemetrySensorsMap[TelemetrySensorType_LPS22+1] = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+uint8_t nodeTelemetrySensorsMap[TelemetrySensorType_QMI8658+1] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
 
@@ -154,9 +157,7 @@ void setup()
 #endif
 
 #ifdef DEBUG_PORT
-    if (!config.has_device || config.device.serial_enabled) {
         consoleInit(); // Set serial baud rate and init our mesh console
-    }
 #endif
 
     serialSinceMsec = millis();
@@ -213,6 +214,10 @@ void setup()
     // router = new DSRRouter();
     router = new ReliableRouter();
 
+#ifdef I2C_SDA1
+    Wire1.begin(I2C_SDA1, I2C_SCL1);
+#endif
+
 #ifdef I2C_SDA
     Wire.begin(I2C_SDA, I2C_SCL);
 #elif HAS_WIRE
@@ -228,7 +233,6 @@ void setup()
     delay(1);
 #endif
 
-    scanI2Cdevice();
 #ifdef RAK4630
     // scanEInkDevice();
 #endif
@@ -268,6 +272,12 @@ void setup()
     powerStatus->observe(&power->newStatus);
     power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
 
+    /*
+    * Move the scanning I2C device to the back of power initialization. 
+    * Some boards need to be powered on to correctly scan to the device address, such as t-beam-s3-core
+    */
+    scanI2Cdevice();
+    
     // Init our SPI controller (must be before screen and lora)
     initSPI();
 #ifndef ARCH_ESP32
@@ -321,7 +331,7 @@ void setup()
         DEBUG_MSG("GPS FactoryReset requested\n");
         if (gps->factoryReset()) { // If we don't succeed try again next time
             devicestate.did_gps_reset = true;
-            nodeDB.saveToDisk();
+            nodeDB.saveToDisk(SEGMENT_DEVICESTATE);
         }
     }
 
@@ -385,7 +395,7 @@ void setup()
     }
 #endif
 
-#if !HAS_RADIO
+#ifdef ARCH_PORTDUINO
     if (!rIf) {
         rIf = new SimRadio;
         if (!rIf->init()) {
@@ -411,7 +421,7 @@ void setup()
 #endif
 
 #ifdef ARCH_PORTDUINO
-    initApiServer();
+    initApiServer(TCPPort);
 #endif
 
     // Start airtime logger thread.

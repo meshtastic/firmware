@@ -25,21 +25,21 @@ class GPSStatus : public Status
   public:
     GPSStatus() { statusType = STATUS_TYPE_GPS; }
 
-    // proposed for deprecation
-    GPSStatus(bool hasLock, bool isConnected, int32_t latitude, int32_t longitude, int32_t altitude, uint32_t dop,
-              uint32_t heading, uint32_t numSatellites)
-        : Status()
-    {
-        this->hasLock = hasLock;
-        this->isConnected = isConnected;
+    // // proposed for deprecation
+    // GPSStatus(bool hasLock, bool isConnected, int32_t latitude, int32_t longitude, int32_t altitude, uint32_t dop,
+    //           uint32_t heading, uint32_t numSatellites)
+    //     : Status()
+    // {
+    //     this->hasLock = hasLock;
+    //     this->isConnected = isConnected;
 
-        this->p.latitude_i = latitude;
-        this->p.longitude_i = longitude;
-        this->p.altitude = altitude;
-        this->p.PDOP = dop;
-        this->p.ground_track = heading;
-        this->p.sats_in_view = numSatellites;
-    }
+    //     this->p.latitude_i = latitude;
+    //     this->p.longitude_i = longitude;
+    //     this->p.altitude = altitude;
+    //     this->p.PDOP = dop;
+    //     this->p.ground_track = heading;
+    //     this->p.sats_in_view = numSatellites;
+    // }
 
     // preferred method
     GPSStatus(bool hasLock, bool isConnected, const Position &pos) : Status()
@@ -114,6 +114,7 @@ class GPSStatus : public Status
                 newStatus->p.latitude_i != p.latitude_i || newStatus->p.longitude_i != p.longitude_i ||
                 newStatus->p.altitude != p.altitude || newStatus->p.altitude_hae != p.altitude_hae ||
                 newStatus->p.PDOP != p.PDOP || newStatus->p.ground_track != p.ground_track ||
+                newStatus->p.ground_speed != p.ground_speed ||
                 newStatus->p.sats_in_view != p.sats_in_view);
     }
 
@@ -136,9 +137,9 @@ class GPSStatus : public Status
         if (isDirty) {
             if (hasLock) {
                 // In debug logs, identify position by @timestamp:stage (stage 3 = notify)
-                DEBUG_MSG("New GPS pos@%x:3 lat=%f, lon=%f, alt=%d, pdop=%.2f, track=%.2f, sats=%d\n", p.timestamp,
+                DEBUG_MSG("New GPS pos@%x:3 lat=%f, lon=%f, alt=%d, pdop=%.2f, track=%.2f, speed=%.2f, sats=%d\n", p.timestamp,
                           p.latitude_i * 1e-7, p.longitude_i * 1e-7, p.altitude, p.PDOP * 1e-2, p.ground_track * 1e-5,
-                          p.sats_in_view);
+                          p.ground_speed * 1e-2, p.sats_in_view);
             } else
                 DEBUG_MSG("No GPS lock\n");
             onNewStatus.notifyObservers(this);

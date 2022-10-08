@@ -90,7 +90,7 @@ void MeshService::loop()
 }
 
 /// The radioConfig object just changed, call this to force the hw to change to the new settings
-bool MeshService::reloadConfig()
+bool MeshService::reloadConfig(int saveWhat)
 {
     // If we can successfully set this radio to these settings, save them to disk
 
@@ -98,7 +98,7 @@ bool MeshService::reloadConfig()
     bool didReset = nodeDB.resetRadioConfig(); // Don't let the phone send us fatally bad settings
 
     configChanged.notifyObservers(NULL); // This will cause radio hardware to change freqs etc
-    nodeDB.saveToDisk();
+    nodeDB.saveToDisk(saveWhat);
 
     return didReset;
 }
@@ -113,7 +113,7 @@ void MeshService::reloadOwner()
     // update everyone else
     if (nodeInfoModule)
         nodeInfoModule->sendOurNodeInfo();
-    nodeDB.saveToDisk();
+    nodeDB.saveToDisk(SEGMENT_DEVICESTATE);
 }
 
 /**
@@ -123,6 +123,29 @@ void MeshService::reloadOwner()
  */
 void MeshService::handleToRadio(MeshPacket &p)
 {
+    #ifdef ARCH_PORTDUINO    
+    // Simulates device is receiving a packet via the LoRa chip
+    if (p.decoded.portnum == PortNum_SIMULATOR_APP) {
+        // Simulator packet (=Compressed packet) is encapsulated in a MeshPacket, so need to unwrap first
+        Compressed scratch;
+        Compressed *decoded = NULL;
+        if (p.which_payload_variant == MeshPacket_decoded_tag) {
+            memset(&scratch, 0, sizeof(scratch));
+            p.decoded.payload.size = pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &Compressed_msg, &scratch);
+            if (p.decoded.payload.size) {
+                decoded = &scratch;
+                // Extract the original payload and replace
+                memcpy(&p.decoded.payload, &decoded->data, sizeof(decoded->data));
+                // Switch the port from PortNum_SIMULATOR_APP back to the original PortNum 
+                p.decoded.portnum = decoded->portnum;
+            } else
+                DEBUG_MSG("Error decoding protobuf for simulator message!\n");
+        }
+        // Let SimRadio receive as if it did via its LoRa chip
+        SimRadio::instance->startReceive(&p); 
+        return; 
+    }
+    #endif
     if (p.from != 0) { // We don't let phones assign nodenums to their sent messages
         DEBUG_MSG("Warning: phone tried to pick a nodenum, we don't allow that.\n");
         p.from = 0;

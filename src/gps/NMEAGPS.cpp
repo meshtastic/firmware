@@ -19,27 +19,21 @@ static int32_t toDegInt(RawDegrees d)
 
 bool NMEAGPS::factoryReset()
 {
-    /**
-     * First use the macro definition to distinguish, 
-     * if there is no problem, the macro definition will be deleted
-     * */
-#if defined(LILYGO_TBEAM_S3_CORE)   
-    if(gnssModel == GNSS_MODEL_UBLOX){
-        // Factory Reset
-        byte _message_reset[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF,
-            0xFB, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0xFF, 0xFF, 0x00, 0x00, 0x17, 0x2B, 0x7E};
-        _serial_gps->write(_message_reset,sizeof(_message_reset));
-        delay(1000);
-    }
-#elif defined(GPS_UBLOX)
+#ifdef PIN_GPS_REINIT
+    //The L76K GNSS on the T-Echo requires the RESET pin to be pulled LOW
+    digitalWrite(PIN_GPS_REINIT, 0);
+    pinMode(PIN_GPS_REINIT, OUTPUT);
+    delay(150); //The L76K datasheet calls for at least 100MS delay
+    digitalWrite(PIN_GPS_REINIT, 1);
+#endif  
+
+    // send the UBLOX Factory Reset Command regardless of detect state, something is very wrong, just assume it's UBLOX.
     // Factory Reset
     byte _message_reset[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF,
         0xFB, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0xFF, 0xFF, 0x00, 0x00, 0x17, 0x2B, 0x7E};
     _serial_gps->write(_message_reset,sizeof(_message_reset));
     delay(1000);
-#endif
     return true;
 }
 
@@ -223,13 +217,10 @@ bool NMEAGPS::lookForLocation()
         }
     }
 
-/*
-    // REDUNDANT?
-    // expect gps pos lat=37.520825, lon=-122.309162, alt=158
-    DEBUG_MSG("new NMEA GPS pos lat=%f, lon=%f, alt=%d, dop=%g, heading=%f\n",
-              latitude * 1e-7, longitude * 1e-7, altitude, dop * 1e-2,
-              heading * 1e-5);
-*/
+    if (reader.speed.isUpdated() && reader.speed.isValid()) {
+        p.ground_speed = reader.speed.kmph();
+    }
+
     return true;
 }
 

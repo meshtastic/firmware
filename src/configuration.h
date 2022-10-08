@@ -94,10 +94,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Define this if you know you have that controller or your "SSD1306" misbehaves.
 //#define USE_SH1106
 
-// Flip the screen upside down by default as it makes more sense on T-BEAM
-// devices. Comment this out to not rotate screen 180 degrees.
-#define SCREEN_FLIP_VERTICALLY
-
 // Define if screen should be mirrored left to right
 // #define SCREEN_MIRROR
 
@@ -112,7 +108,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MCP9808_ADDR 0x18
 #define INA_ADDR 0x40
 #define INA_ADDR_ALTERNATE 0x41
-
+#define QMC6310_ADDR 0x1C
+#define QMI8658_ADDR 0x6B
 // -----------------------------------------------------------------------------
 // GPS
 // -----------------------------------------------------------------------------
