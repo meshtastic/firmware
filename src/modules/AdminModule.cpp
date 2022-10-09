@@ -2,7 +2,9 @@
 #include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#ifdef ARCH_ESP32
 #include "BleOta.h"
+#endif
 #include "Router.h"
 #include "configuration.h"
 #include "main.h"
