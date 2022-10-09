@@ -292,7 +292,7 @@ int32_t CannedMessageModule::runOnce()
                     if(this->dest == NODENUM_BROADCAST) {
                         this->dest = nodeDB.getNodeNum();
                     }
-                    for (int i = 0; i < numNodes; i++) {
+                    for (unsigned int i = 0; i < numNodes; i++) {
                         if (nodeDB.getNodeByIndex(i)->num == this->dest) {
                             this->dest = (i > 0) ? nodeDB.getNodeByIndex(i-1)->num : nodeDB.getNodeByIndex(numNodes-1)->num;
                             break;
@@ -313,7 +313,7 @@ int32_t CannedMessageModule::runOnce()
                     if(this->dest == NODENUM_BROADCAST) {
                         this->dest = nodeDB.getNodeNum();
                     }
-                    for (int i = 0; i < numNodes; i++) {
+                    for (unsigned int i = 0; i < numNodes; i++) {
                         if (nodeDB.getNodeByIndex(i)->num == this->dest) {
                             this->dest = (i < numNodes-1) ? nodeDB.getNodeByIndex(i+1)->num : nodeDB.getNodeByIndex(0)->num;
                             break;
