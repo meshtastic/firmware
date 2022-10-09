@@ -16,8 +16,7 @@
  * Eventually there should be once instance of this class for each live connection (because it has a bit of state
  * for that connection)
  */
-class PhoneAPI
-    : public Observer<uint32_t> // FIXME, we shouldn't be inheriting from Observer, instead use CallbackObserver as a member
+class PhoneAPI : public Observer<uint32_t> // FIXME, we shouldn't be inheriting from Observer, instead use CallbackObserver as a member
 {
     enum State {
         STATE_SEND_NOTHING, // Initial state, don't send anything until the client starts asking for config
@@ -32,7 +31,7 @@ class PhoneAPI
 
     State state = STATE_SEND_NOTHING;
 
-    int8_t config_state = Config_device_tag;
+    uint8_t config_state = Config_device_tag;
 
     /**
      * Each packet sent to the phone has an incrementing count
