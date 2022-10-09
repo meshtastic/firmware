@@ -66,7 +66,7 @@ typedef struct _AdminMessage {
         /* Get the Canned Message Module messages in the response to this message. */
         char get_canned_message_module_messages_response[201];
         /* Request the node to send device metadata (firmware, protobuf version, etc) */
-        uint32_t get_device_metadata_request;
+        bool get_device_metadata_request;
         /* Device metadata response */
         DeviceMetadata get_device_metadata_response;
         /* Set the owner for this node */
@@ -94,6 +94,9 @@ typedef struct _AdminMessage {
         bool confirm_set_channel;
         /* TODO: REPLACE */
         bool confirm_set_radio;
+        /* Tell the node to reboot into the OTA Firmware in this many seconds (or <0 to cancel reboot)
+     Only Implemented for ESP32 Devices. This needs to be issued to send a new main firmware via bluetooth. */
+        int32_t reboot_ota_seconds;
         /* This message is only supported for the simulator porduino build.
      If received the simulator will exit successfully. */
         bool exit_simulator;
@@ -150,6 +153,7 @@ extern "C" {
 #define AdminMessage_confirm_set_module_config_tag 65
 #define AdminMessage_confirm_set_channel_tag     66
 #define AdminMessage_confirm_set_radio_tag       67
+#define AdminMessage_reboot_ota_seconds_tag      95
 #define AdminMessage_exit_simulator_tag          96
 #define AdminMessage_reboot_seconds_tag          97
 #define AdminMessage_shutdown_seconds_tag        98
@@ -169,7 +173,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,get_module_config_response,g
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,get_all_channel_request,get_all_channel_request),   9) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,get_canned_message_module_messages_request,get_canned_message_module_messages_request),  10) \
 X(a, STATIC,   ONEOF,    STRING,   (payload_variant,get_canned_message_module_messages_response,get_canned_message_module_messages_response),  11) \
-X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,get_device_metadata_request,get_device_metadata_request),  12) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,get_device_metadata_request,get_device_metadata_request),  12) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,get_device_metadata_response,get_device_metadata_response),  13) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_owner,set_owner),  32) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_channel,set_channel),  33) \
@@ -180,6 +184,7 @@ X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,confirm_set_config,confirm_s
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,confirm_set_module_config,confirm_set_module_config),  65) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,confirm_set_channel,confirm_set_channel),  66) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,confirm_set_radio,confirm_set_radio),  67) \
+X(a, STATIC,   ONEOF,    INT32,    (payload_variant,reboot_ota_seconds,reboot_ota_seconds),  95) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,exit_simulator,exit_simulator),  96) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,reboot_seconds,reboot_seconds),  97) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,shutdown_seconds,shutdown_seconds),  98) \
