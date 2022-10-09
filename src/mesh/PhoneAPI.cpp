@@ -109,8 +109,10 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
  *
  * Our sending states progress in the following sequence (the client app ASSUMES THIS SEQUENCE, DO NOT CHANGE IT):
  *      STATE_SEND_MY_INFO, // send our my info record
+ *      STATE_SEND_CHANNELS
  *      STATE_SEND_NODEINFO, // states progress in this order as the device sends to the client
         STATE_SEND_CONFIG,
+        STATE_SEND_MODULE_CONFIG,
         STATE_SEND_COMPLETE_ID,
         STATE_SEND_PACKETS // send packets or debug strings
  */
@@ -136,9 +138,21 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         myNodeInfo.has_gps = gps && gps->isConnected(); // Update with latest GPS connect info
         fromRadioScratch.which_payload_variant = FromRadio_my_info_tag;
         fromRadioScratch.my_info = myNodeInfo;
-        state = STATE_SEND_NODEINFO;
+        state = STATE_SEND_CHANNELS;
 
         service.refreshMyNodeInfo(); // Update my NodeInfo because the client will be asking for it soon.
+        break;
+
+    case STATE_SEND_CHANNELS:
+        DEBUG_MSG("getFromRadio=STATE_SEND_CHANNELS\n");
+        fromRadioScratch.which_payload_variant = FromRadio_channel_tag;
+        fromRadioScratch.channel = channels.getByIndex(config_state);
+        config_state++;
+        // Advance when we have sent all of our ModuleConfig objects
+        if (MAX_NUM_CHANNELS > 7) {
+            state = STATE_SEND_NODEINFO;
+            config_state = Config_device_tag;
+        }
         break;
 
     case STATE_SEND_NODEINFO: {
