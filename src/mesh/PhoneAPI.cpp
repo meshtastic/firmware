@@ -318,19 +318,16 @@ bool PhoneAPI::available()
         case STATE_SEND_NOTHING:
             return false;
         case STATE_SEND_MY_INFO:
-            return true;
         case STATE_SEND_CHANNELS:
-            return true;
         case STATE_SEND_CONFIG:
-            return true;        
         case STATE_SEND_MODULECONFIG:
+        case STATE_SEND_COMPLETE_ID:
             return true;
         case STATE_SEND_NODEINFO:
             if (!nodeInfoForPhone)
                 nodeInfoForPhone = nodeDB.readNextInfo();
             return true; // Always say we have something, because we might need to advance our state machine
-        case STATE_SEND_COMPLETE_ID:
-            return true;
+        
         case STATE_SEND_PACKETS: {
             if (!packetForPhone)
                 packetForPhone = service.getForPhone();
