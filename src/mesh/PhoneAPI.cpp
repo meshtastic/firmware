@@ -319,6 +319,8 @@ bool PhoneAPI::available()
             return false;
         case STATE_SEND_MY_INFO:
             return true;
+        case STATE_SEND_CHANNELS:
+            return true;
         case STATE_SEND_CONFIG:
             return true;        
         case STATE_SEND_MODULECONFIG:
