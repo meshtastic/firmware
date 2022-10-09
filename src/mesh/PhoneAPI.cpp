@@ -165,7 +165,6 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
     case STATE_SEND_CHANNELS:
         DEBUG_MSG("getFromRadio=STATE_SEND_CHANNELS\n");
-        config_state
         fromRadioScratch.which_payload_variant = FromRadio_channel_tag;
         fromRadioScratch.channel = channels.getByIndex(config_state);
         config_state++;
