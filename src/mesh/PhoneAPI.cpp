@@ -165,15 +165,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
     case STATE_SEND_CHANNELS:
         DEBUG_MSG("getFromRadio=STATE_SEND_CHANNELS\n");
-        // Skip through non-disabled channels to find the next one to send
-        while(config_state < MAX_NUM_CHANNELS) {
-            // if (channels.getByIndex(config_state).role > Channel_Role_DISABLED) {
-                fromRadioScratch.which_payload_variant = FromRadio_channel_tag;
-                fromRadioScratch.channel = channels.getByIndex(config_state);
-                // break;
-            // } 
-            config_state++;
-        }
+        fromRadioScratch.which_payload_variant = FromRadio_channel_tag;
+        fromRadioScratch.channel = channels.getByIndex(config_state);
+        config_state++;
         // Advance when we have sent all of our Channels
         if (config_state >= MAX_NUM_CHANNELS) {
             state = STATE_SEND_CONFIG;
