@@ -58,6 +58,12 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
         handleGetModuleConfig(mp, r->get_module_config_request);
         break;
 
+    case AdminMessage_get_device_metadata_request_tag: {
+        DEBUG_MSG("Client is getting device metadata\n");
+        handleGetDeviceMetadata(mp);
+        break;
+    }
+
     case AdminMessage_get_channel_request_tag: {
         uint32_t i = r->get_channel_request - 1;
         DEBUG_MSG("Client is getting channel %u\n", i);
@@ -65,6 +71,15 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
             myReply = allocErrorResponse(Routing_Error_BAD_REQUEST, &mp);
         else
             handleGetChannel(mp, i);
+        break;
+    }
+
+    case AdminMessage_get_all_channel_request_tag: {
+        DEBUG_MSG("Client is getting all channels\n");
+        for (size_t i = 0; i < MAX_NUM_CHANNELS; i++)
+        {
+            handleGetChannel(mp, i);
+        }
         break;
     }
 
@@ -107,11 +122,6 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
         int32_t s = r->shutdown_seconds;
         DEBUG_MSG("Shutdown in %d seconds\n", s);
         shutdownAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
-        break;
-    }
-    case AdminMessage_get_device_metadata_request_tag: {
-        DEBUG_MSG("Client is getting device metadata\n");
-        handleGetDeviceMetadata(mp);
         break;
     }
     case AdminMessage_factory_reset_tag: {
