@@ -138,27 +138,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         myNodeInfo.has_gps = gps && gps->isConnected(); // Update with latest GPS connect info
         fromRadioScratch.which_payload_variant = FromRadio_my_info_tag;
         fromRadioScratch.my_info = myNodeInfo;
-        state = STATE_SEND_CHANNELS;
+        state = STATE_SEND_NODEINFO;
 
         service.refreshMyNodeInfo(); // Update my NodeInfo because the client will be asking for it soon.
-        break;
-
-    case STATE_SEND_CHANNELS:
-        DEBUG_MSG("getFromRadio=STATE_SEND_CHANNELS\n");
-        // Iterate through non-disabled channels to find the next one to send
-        while(config_state < MAX_NUM_CHANNELS) {
-            if (channels.getByIndex(config_state).role > Channel_Role_DISABLED) {
-                fromRadioScratch.which_payload_variant = FromRadio_channel_tag;
-                fromRadioScratch.channel = channels.getByIndex(config_state);
-                break;
-            } 
-            config_state++;
-        }
-        // Advance when we have sent all of our Channels
-        if (config_state >= MAX_NUM_CHANNELS) {
-            state = STATE_SEND_NODEINFO;
-            config_state = Config_device_tag;
-        }
         break;
 
     case STATE_SEND_NODEINFO: {
@@ -174,12 +156,30 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             // Stay in current state until done sending nodeinfos
         } else {
             DEBUG_MSG("Done sending nodeinfos\n");
-            state = STATE_SEND_CONFIG;
+            state = STATE_SEND_CHANNELS;
             // Go ahead and send that ID right now
             return getFromRadio(buf);
         }
         break;
     }
+
+    case STATE_SEND_CHANNELS:
+        DEBUG_MSG("getFromRadio=STATE_SEND_CHANNELS\n");
+        // Skip through non-disabled channels to find the next one to send
+        while(config_state < MAX_NUM_CHANNELS) {
+            if (channels.getByIndex(config_state).role > Channel_Role_DISABLED) {
+                fromRadioScratch.which_payload_variant = FromRadio_channel_tag;
+                fromRadioScratch.channel = channels.getByIndex(config_state);
+                break;
+            } 
+            config_state++;
+        }
+        // Advance when we have sent all of our Channels
+        if (config_state >= MAX_NUM_CHANNELS) {
+            state = STATE_SEND_CONFIG;
+            config_state = Config_device_tag;
+        }
+        break;
 
     case STATE_SEND_CONFIG:
         DEBUG_MSG("getFromRadio=STATE_SEND_CONFIG\n");

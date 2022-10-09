@@ -21,8 +21,8 @@ class PhoneAPI : public Observer<uint32_t> // FIXME, we shouldn't be inheriting 
     enum State {
         STATE_SEND_NOTHING, // Initial state, don't send anything until the client starts asking for config
         STATE_SEND_MY_INFO, // send our my info record
-        STATE_SEND_CHANNELS, // Send all channels
         STATE_SEND_NODEINFO, // states progress in this order as the device sends to to the client
+        STATE_SEND_CHANNELS, // Send all channels
         STATE_SEND_CONFIG, // Replacement for the old Radioconfig
         STATE_SEND_MODULECONFIG, // Send Module specific config
         STATE_SEND_COMPLETE_ID,
