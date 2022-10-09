@@ -148,7 +148,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         fromRadioScratch.which_payload_variant = FromRadio_channel_tag;
         fromRadioScratch.channel = channels.getByIndex(config_state);
         config_state++;
-        // Advance when we have sent all of our ModuleConfig objects
+        // Advance when we have sent all of our Channels
         if (config_state > MAX_NUM_CHANNELS) {
             state = STATE_SEND_NODEINFO;
             config_state = Config_device_tag;
