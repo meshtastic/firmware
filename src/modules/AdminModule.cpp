@@ -108,12 +108,16 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
     }
     case AdminMessage_reboot_ota_seconds_tag: {
         int32_t s = r->reboot_ota_seconds;
+#ifdef ARCH_ESP32        
         if (BleOta::getOtaAppVersion().isEmpty()) {
-            DEBUG_MSG("No OTA firmware available, just rebooting\n");
+            DEBUG_MSG("No OTA firmware available, scheduling regular reboot in %d seconds\n", s);
         }else{
             BleOta::switchToOtaApp();
+            DEBUG_MSG("Rebooting to OTA in %d seconds\n", s);
         }
-        DEBUG_MSG("Rebooting to OTA in %d seconds\n", s);
+#else
+        DEBUG_MSG("Not on ESP32, scheduling regular reboot in %d seconds\n", s);
+#endif
         rebootAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
         break;
     }
