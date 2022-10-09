@@ -97,7 +97,7 @@ static uint16_t displayWidth, displayHeight;
 #define SCREEN_WIDTH displayWidth
 #define SCREEN_HEIGHT displayHeight
 
-#if defined(USE_EINK) || defined(ILI9341_DRIVER)
+#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
 // The screen is bigger so use bigger fonts
 #define FONT_SMALL ArialMT_Plain_16
 #define FONT_MEDIUM ArialMT_Plain_24

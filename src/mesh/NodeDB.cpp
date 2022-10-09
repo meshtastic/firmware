@@ -699,11 +699,23 @@ NodeInfo *NodeDB::getOrCreateNode(NodeNum n)
 
     if (!info) {
         if (*numNodes >= MAX_NUM_NODES) {
-            screen->print("error: node_db full!\n");
-            DEBUG_MSG("ERROR! could not create new node, node_db is full! (%d nodes)", *numNodes);
-            return NULL;
+            screen->print("warning: node_db full! erasing oldest entry\n");
+            // look for oldest node and erase it
+            uint32_t oldest = UINT32_MAX;
+            int oldestIndex = -1;
+            for (int i = 0; i < *numNodes; i++) {
+                if (nodes[i].last_heard < oldest) {
+                    oldest = nodes[i].last_heard;
+                    oldestIndex = i;
+                }
+            }
+            // Shove the remaining nodes down the chain
+            for (int i = oldestIndex; i < *numNodes - 1; i++) {
+                nodes[i] = nodes[i + 1];
+            }
+            (*numNodes)--;
         }
-        // add the node
+        // add the node at the end
         info = &nodes[(*numNodes)++];
 
         // everything is missing except the nodenum
