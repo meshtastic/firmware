@@ -31,7 +31,7 @@ class PhoneAPI : public Observer<uint32_t> // FIXME, we shouldn't be inheriting 
 
     State state = STATE_SEND_NOTHING;
 
-    uint8_t config_state = Config_device_tag;
+    uint8_t config_state = 0;
 
     /**
      * Each packet sent to the phone has an incrementing count
