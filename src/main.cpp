@@ -233,6 +233,8 @@ void setup()
     delay(1);
 #endif
 
+    // We need to scan here to decide if we have a screen for nodeDB.init()
+    scanI2Cdevice();
 #ifdef RAK4630
     // scanEInkDevice();
 #endif
@@ -273,10 +275,12 @@ void setup()
     power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
 
     /*
-    * Move the scanning I2C device to the back of power initialization. 
-    * Some boards need to be powered on to correctly scan to the device address, such as t-beam-s3-core
+    * Repeat the scanning for I2C devices after power initialization. 
+    * Boards with an PMU need to be powered on to correctly scan to the device address, such as t-beam-s3-core
     */
-    scanI2Cdevice();
+    if ((HW_VENDOR == HardwareModel_LILYGO_TBEAM_S3_CORE) || (HW_VENDOR == HardwareModel_TBEAM)) {
+        scanI2Cdevice();
+    }
     
     // Init our SPI controller (must be before screen and lora)
     initSPI();
