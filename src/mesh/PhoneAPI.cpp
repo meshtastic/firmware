@@ -255,7 +255,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         // Advance when we have sent all of our ModuleConfig objects
         if (config_state > ModuleConfig_canned_message_tag) {
             state = STATE_SEND_COMPLETE_ID;
-            config_state = Config_device_tag;
+            config_state = 0;
         }
         break;
 
