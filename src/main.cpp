@@ -234,7 +234,11 @@ void setup()
 #endif
 
     // We need to scan here to decide if we have a screen for nodeDB.init()
-    scanI2Cdevice();
+    // In T-Beam-S3-core, the I2C device cannot be scanned before power initialization, otherwise the device will be stuck
+    if ((HW_VENDOR != HardwareModel_LILYGO_TBEAM_S3_CORE)) {
+        scanI2Cdevice();
+    }
+    
 #ifdef RAK4630
     // scanEInkDevice();
 #endif
