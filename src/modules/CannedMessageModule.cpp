@@ -11,7 +11,7 @@
 #include "graphics/fonts/OLEDDisplayFontsRU.h"
 #endif
 
-#if defined(USE_EINK) || defined(ILI9341_DRIVER)
+#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
 // The screen is bigger so use bigger fonts
 #define FONT_SMALL ArialMT_Plain_16
 #define FONT_MEDIUM ArialMT_Plain_24
@@ -292,7 +292,7 @@ int32_t CannedMessageModule::runOnce()
                     if(this->dest == NODENUM_BROADCAST) {
                         this->dest = nodeDB.getNodeNum();
                     }
-                    for (int i = 0; i < numNodes; i++) {
+                    for (unsigned int i = 0; i < numNodes; i++) {
                         if (nodeDB.getNodeByIndex(i)->num == this->dest) {
                             this->dest = (i > 0) ? nodeDB.getNodeByIndex(i-1)->num : nodeDB.getNodeByIndex(numNodes-1)->num;
                             break;
@@ -313,7 +313,7 @@ int32_t CannedMessageModule::runOnce()
                     if(this->dest == NODENUM_BROADCAST) {
                         this->dest = nodeDB.getNodeNum();
                     }
-                    for (int i = 0; i < numNodes; i++) {
+                    for (unsigned int i = 0; i < numNodes; i++) {
                         if (nodeDB.getNodeByIndex(i)->num == this->dest) {
                             this->dest = (i < numNodes-1) ? nodeDB.getNodeByIndex(i+1)->num : nodeDB.getNodeByIndex(0)->num;
                             break;
@@ -453,13 +453,15 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         display->setColor(WHITE);
         display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), cannedMessageModule->drawWithCursor(cannedMessageModule->freetext, cannedMessageModule->cursor));
     } else {
-        display->setTextAlignment(TEXT_ALIGN_LEFT);
-        display->setFont(FONT_SMALL);
-        display->drawString(0 + x, 0 + y, cannedMessageModule->getPrevMessage());
-        display->setFont(FONT_MEDIUM);
-        display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL, cannedMessageModule->getCurrentMessage());
-        display->setFont(FONT_SMALL);
-        display->drawString(0 + x, 0 + y + FONT_HEIGHT_MEDIUM, cannedMessageModule->getNextMessage());
+        if (this->messagesCount > 0) {
+            display->setTextAlignment(TEXT_ALIGN_LEFT);
+            display->setFont(FONT_SMALL);
+            display->drawString(0 + x, 0 + y, cannedMessageModule->getPrevMessage());
+            display->setFont(FONT_MEDIUM);
+            display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL, cannedMessageModule->getCurrentMessage());
+            display->setFont(FONT_SMALL);
+            display->drawString(0 + x, 0 + y + FONT_HEIGHT_MEDIUM, cannedMessageModule->getNextMessage());
+        }
     }
 }
 

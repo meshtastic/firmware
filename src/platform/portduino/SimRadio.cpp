@@ -171,6 +171,8 @@ void SimRadio::onNotify(uint32_t notification)
                     // Packet has been sent, count it toward our TX airtime utilization.
                     uint32_t xmitMsec = getPacketTime(txp);
                     airTime->logAirtime(TX_LOG, xmitMsec);
+
+                    delay(xmitMsec); // Model the time it is busy sending
                     completeSending();
                 }
             }
@@ -207,6 +209,9 @@ void SimRadio::startSend(MeshPacket * txp)
 
 void SimRadio::startReceive(MeshPacket *p) {
     isReceiving = true;
+    size_t length = getPacketLength(p);
+    uint32_t xmitMsec = getPacketTime(length);
+    delay(xmitMsec); // Model the time it is busy receiving
     handleReceiveInterrupt(p);
 }
 
