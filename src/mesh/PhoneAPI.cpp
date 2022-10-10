@@ -79,17 +79,17 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
     memset(&toRadioScratch, 0, sizeof(toRadioScratch));
     if (pb_decode_from_bytes(buf, bufLength, ToRadio_fields, &toRadioScratch)) {
         switch (toRadioScratch.which_payload_variant) {
-            case ToRadio_packet_tag:
-                return handleToRadioPacket(toRadioScratch.packet);
-            case ToRadio_want_config_id_tag:
-                config_nonce = toRadioScratch.want_config_id;
-                DEBUG_MSG("Client wants config, nonce=%u\n", config_nonce);
-                handleStartConfig();
-                break;
-            case ToRadio_disconnect_tag:
-                DEBUG_MSG("Disconnecting from phone\n");
-                close();
-                break;
+        case ToRadio_packet_tag:
+            return handleToRadioPacket(toRadioScratch.packet);
+        case ToRadio_want_config_id_tag:
+            config_nonce = toRadioScratch.want_config_id;
+            DEBUG_MSG("Client wants config, nonce=%u\n", config_nonce);
+            handleStartConfig();
+            break;
+        case ToRadio_disconnect_tag:
+            DEBUG_MSG("Disconnecting from phone\n");
+            close();
+            break;
         default:
             // Ignore nop messages
             // DEBUG_MSG("Error: unexpected ToRadio variant\n");
@@ -109,8 +109,10 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
  *
  * Our sending states progress in the following sequence (the client app ASSUMES THIS SEQUENCE, DO NOT CHANGE IT):
  *      STATE_SEND_MY_INFO, // send our my info record
+ *      STATE_SEND_CHANNELS
  *      STATE_SEND_NODEINFO, // states progress in this order as the device sends to the client
         STATE_SEND_CONFIG,
+        STATE_SEND_MODULE_CONFIG,
         STATE_SEND_COMPLETE_ID,
         STATE_SEND_PACKETS // send packets or debug strings
  */
@@ -128,7 +130,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     case STATE_SEND_NOTHING:
         DEBUG_MSG("getFromRadio=STATE_SEND_NOTHING\n");
         break;
-        
+
     case STATE_SEND_MY_INFO:
         DEBUG_MSG("getFromRadio=STATE_SEND_MY_INFO\n");
         // If the user has specified they don't want our node to share its location, make sure to tell the phone
@@ -154,51 +156,63 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             // Stay in current state until done sending nodeinfos
         } else {
             DEBUG_MSG("Done sending nodeinfos\n");
-            state = STATE_SEND_CONFIG;
+            state = STATE_SEND_CHANNELS;
             // Go ahead and send that ID right now
             return getFromRadio(buf);
         }
         break;
     }
 
+    case STATE_SEND_CHANNELS:
+        DEBUG_MSG("getFromRadio=STATE_SEND_CHANNELS\n");
+        fromRadioScratch.which_payload_variant = FromRadio_channel_tag;
+        fromRadioScratch.channel = channels.getByIndex(config_state);
+        config_state++;
+        // Advance when we have sent all of our Channels
+        if (config_state >= MAX_NUM_CHANNELS) {
+            state = STATE_SEND_CONFIG;
+            config_state = Config_device_tag;
+        }
+        break;
+
     case STATE_SEND_CONFIG:
         DEBUG_MSG("getFromRadio=STATE_SEND_CONFIG\n");
         fromRadioScratch.which_payload_variant = FromRadio_config_tag;
         switch (config_state) {
-            case Config_device_tag:
-                fromRadioScratch.config.which_payload_variant = Config_device_tag;
-                fromRadioScratch.config.payload_variant.device = config.device;
-                break;
-            case Config_position_tag:
-                fromRadioScratch.config.which_payload_variant = Config_position_tag;
-                fromRadioScratch.config.payload_variant.position = config.position;
-                break;
-            case Config_power_tag:
-                fromRadioScratch.config.which_payload_variant = Config_power_tag;
-                fromRadioScratch.config.payload_variant.power = config.power;
-                fromRadioScratch.config.payload_variant.power.ls_secs = default_ls_secs;
-                break;
-            case Config_network_tag:
-                fromRadioScratch.config.which_payload_variant = Config_network_tag;
-                fromRadioScratch.config.payload_variant.network = config.network;
-                break;
-            case Config_display_tag:
-                fromRadioScratch.config.which_payload_variant = Config_display_tag;
-                fromRadioScratch.config.payload_variant.display = config.display;
-                break;
-            case Config_lora_tag:
-                fromRadioScratch.config.which_payload_variant = Config_lora_tag;
-                fromRadioScratch.config.payload_variant.lora = config.lora;
-                break;
-            case Config_bluetooth_tag:
-                fromRadioScratch.config.which_payload_variant = Config_bluetooth_tag;
-                fromRadioScratch.config.payload_variant.bluetooth = config.bluetooth;
-                break;
+        case Config_device_tag:
+            fromRadioScratch.config.which_payload_variant = Config_device_tag;
+            fromRadioScratch.config.payload_variant.device = config.device;
+            break;
+        case Config_position_tag:
+            fromRadioScratch.config.which_payload_variant = Config_position_tag;
+            fromRadioScratch.config.payload_variant.position = config.position;
+            break;
+        case Config_power_tag:
+            fromRadioScratch.config.which_payload_variant = Config_power_tag;
+            fromRadioScratch.config.payload_variant.power = config.power;
+            fromRadioScratch.config.payload_variant.power.ls_secs = default_ls_secs;
+            break;
+        case Config_network_tag:
+            fromRadioScratch.config.which_payload_variant = Config_network_tag;
+            fromRadioScratch.config.payload_variant.network = config.network;
+            break;
+        case Config_display_tag:
+            fromRadioScratch.config.which_payload_variant = Config_display_tag;
+            fromRadioScratch.config.payload_variant.display = config.display;
+            break;
+        case Config_lora_tag:
+            fromRadioScratch.config.which_payload_variant = Config_lora_tag;
+            fromRadioScratch.config.payload_variant.lora = config.lora;
+            break;
+        case Config_bluetooth_tag:
+            fromRadioScratch.config.which_payload_variant = Config_bluetooth_tag;
+            fromRadioScratch.config.payload_variant.bluetooth = config.bluetooth;
+            break;
         }
         // NOTE: The phone app needs to know the ls_secs value so it can properly expect sleep behavior.
         // So even if we internally use 0 to represent 'use default' we still need to send the value we are
         // using to the app (so that even old phone apps work with new device loads).
-        
+
         config_state++;
         // Advance when we have sent all of our config objects
         if (config_state > Config_bluetooth_tag) {
@@ -211,37 +225,37 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         DEBUG_MSG("getFromRadio=STATE_SEND_MODULECONFIG\n");
         fromRadioScratch.which_payload_variant = FromRadio_moduleConfig_tag;
         switch (config_state) {
-            case ModuleConfig_mqtt_tag:
-                fromRadioScratch.moduleConfig.which_payload_variant = ModuleConfig_mqtt_tag;
-                fromRadioScratch.moduleConfig.payload_variant.mqtt = moduleConfig.mqtt;
-                break;
-            case ModuleConfig_serial_tag:
-                fromRadioScratch.moduleConfig.which_payload_variant = ModuleConfig_serial_tag;
-                fromRadioScratch.moduleConfig.payload_variant.serial = moduleConfig.serial;
-                break;
-            case ModuleConfig_external_notification_tag:
-                fromRadioScratch.moduleConfig.which_payload_variant = ModuleConfig_external_notification_tag;
-                fromRadioScratch.moduleConfig.payload_variant.external_notification = moduleConfig.external_notification;
-                break;
-            case ModuleConfig_range_test_tag:
-                fromRadioScratch.moduleConfig.which_payload_variant = ModuleConfig_range_test_tag;
-                fromRadioScratch.moduleConfig.payload_variant.range_test = moduleConfig.range_test;
-                break;
-            case ModuleConfig_telemetry_tag:
-                fromRadioScratch.moduleConfig.which_payload_variant = ModuleConfig_telemetry_tag;
-                fromRadioScratch.moduleConfig.payload_variant.telemetry = moduleConfig.telemetry;
-                break;
-            case ModuleConfig_canned_message_tag:
-                fromRadioScratch.moduleConfig.which_payload_variant = ModuleConfig_canned_message_tag;
-                fromRadioScratch.moduleConfig.payload_variant.canned_message = moduleConfig.canned_message;
-                break;
+        case ModuleConfig_mqtt_tag:
+            fromRadioScratch.moduleConfig.which_payload_variant = ModuleConfig_mqtt_tag;
+            fromRadioScratch.moduleConfig.payload_variant.mqtt = moduleConfig.mqtt;
+            break;
+        case ModuleConfig_serial_tag:
+            fromRadioScratch.moduleConfig.which_payload_variant = ModuleConfig_serial_tag;
+            fromRadioScratch.moduleConfig.payload_variant.serial = moduleConfig.serial;
+            break;
+        case ModuleConfig_external_notification_tag:
+            fromRadioScratch.moduleConfig.which_payload_variant = ModuleConfig_external_notification_tag;
+            fromRadioScratch.moduleConfig.payload_variant.external_notification = moduleConfig.external_notification;
+            break;
+        case ModuleConfig_range_test_tag:
+            fromRadioScratch.moduleConfig.which_payload_variant = ModuleConfig_range_test_tag;
+            fromRadioScratch.moduleConfig.payload_variant.range_test = moduleConfig.range_test;
+            break;
+        case ModuleConfig_telemetry_tag:
+            fromRadioScratch.moduleConfig.which_payload_variant = ModuleConfig_telemetry_tag;
+            fromRadioScratch.moduleConfig.payload_variant.telemetry = moduleConfig.telemetry;
+            break;
+        case ModuleConfig_canned_message_tag:
+            fromRadioScratch.moduleConfig.which_payload_variant = ModuleConfig_canned_message_tag;
+            fromRadioScratch.moduleConfig.payload_variant.canned_message = moduleConfig.canned_message;
+            break;
         }
 
         config_state++;
         // Advance when we have sent all of our ModuleConfig objects
         if (config_state > ModuleConfig_canned_message_tag) {
             state = STATE_SEND_COMPLETE_ID;
-            config_state = Config_device_tag;
+            config_state = 0;
         }
         break;
 
@@ -274,7 +288,8 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     if (fromRadioScratch.which_payload_variant != 0) {
         // Encapsulate as a FromRadio packet
         size_t numbytes = pb_encode_to_bytes(buf, FromRadio_size, FromRadio_fields, &fromRadioScratch);
-        // DEBUG_MSG("encoding toPhone packet to phone variant=%d, %d bytes\n", fromRadioScratch.which_payloadVariant, numbytes);
+
+        DEBUG_MSG("encoding toPhone packet to phone variant=%d, %d bytes\n", fromRadioScratch.which_payload_variant, numbytes);
         return numbytes;
     }
 
@@ -282,7 +297,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     return 0;
 }
 
-void PhoneAPI::handleDisconnect() 
+void PhoneAPI::handleDisconnect()
 {
     DEBUG_MSG("PhoneAPI disconnect\n");
 }
@@ -301,26 +316,25 @@ void PhoneAPI::releasePhonePacket()
 bool PhoneAPI::available()
 {
     switch (state) {
-        case STATE_SEND_NOTHING:
-            return false;
-        case STATE_SEND_MY_INFO:
-            return true;
-        case STATE_SEND_CONFIG:
-            return true;        
-        case STATE_SEND_MODULECONFIG:
-            return true;
-        case STATE_SEND_NODEINFO:
-            if (!nodeInfoForPhone)
-                nodeInfoForPhone = nodeDB.readNextInfo();
-            return true; // Always say we have something, because we might need to advance our state machine
-        case STATE_SEND_COMPLETE_ID:
-            return true;
-        case STATE_SEND_PACKETS: {
-            if (!packetForPhone)
-                packetForPhone = service.getForPhone();
-            bool hasPacket = !!packetForPhone;
-            // DEBUG_MSG("available hasPacket=%d\n", hasPacket);
-            return hasPacket;
+    case STATE_SEND_NOTHING:
+        return false;
+    case STATE_SEND_MY_INFO:
+    case STATE_SEND_CHANNELS:
+    case STATE_SEND_CONFIG:
+    case STATE_SEND_MODULECONFIG:
+    case STATE_SEND_COMPLETE_ID:
+        return true;
+    case STATE_SEND_NODEINFO:
+        if (!nodeInfoForPhone)
+            nodeInfoForPhone = nodeDB.readNextInfo();
+        return true; // Always say we have something, because we might need to advance our state machine
+
+    case STATE_SEND_PACKETS: {
+        if (!packetForPhone)
+            packetForPhone = service.getForPhone();
+        bool hasPacket = !!packetForPhone;
+        // DEBUG_MSG("available hasPacket=%d\n", hasPacket);
+        return hasPacket;
     }
     default:
         assert(0); // unexpected state - FIXME, make an error code and reboot
