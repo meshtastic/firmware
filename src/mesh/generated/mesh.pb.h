@@ -4,6 +4,7 @@
 #ifndef PB_MESH_PB_H_INCLUDED
 #define PB_MESH_PB_H_INCLUDED
 #include <pb.h>
+#include "channel.pb.h"
 #include "config.pb.h"
 #include "module_config.pb.h"
 #include "portnums.pb.h"
@@ -652,6 +653,8 @@ typedef struct _FromRadio {
         bool rebooted;
         /* Include module config */
         ModuleConfig moduleConfig;
+        /* One packet is sent for each channel */
+        Channel channel;
     };
 } FromRadio;
 
@@ -854,6 +857,7 @@ extern "C" {
 #define FromRadio_config_complete_id_tag         7
 #define FromRadio_rebooted_tag                   8
 #define FromRadio_moduleConfig_tag               9
+#define FromRadio_channel_tag                    10
 #define ToRadio_packet_tag                       1
 #define ToRadio_peer_info_tag                    2
 #define ToRadio_want_config_id_tag               3
@@ -1001,7 +1005,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,config,config),   5) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,log_record,log_record),   6) \
 X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,config_complete_id,config_complete_id),   7) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,rebooted,rebooted),   8) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,moduleConfig,moduleConfig),   9)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,moduleConfig,moduleConfig),   9) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,channel,channel),  10)
 #define FromRadio_CALLBACK NULL
 #define FromRadio_DEFAULT NULL
 #define FromRadio_payload_variant_packet_MSGTYPE MeshPacket
@@ -1010,6 +1015,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,moduleConfig,moduleConfig), 
 #define FromRadio_payload_variant_config_MSGTYPE Config
 #define FromRadio_payload_variant_log_record_MSGTYPE LogRecord
 #define FromRadio_payload_variant_moduleConfig_MSGTYPE ModuleConfig
+#define FromRadio_payload_variant_channel_MSGTYPE Channel
 
 #define ToRadio_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,packet,packet),   1) \

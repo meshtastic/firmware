@@ -59,8 +59,6 @@ typedef struct _AdminMessage {
         AdminMessage_ModuleConfigType get_module_config_request;
         /* Send the current Config in the response to this message. */
         ModuleConfig get_module_config_response;
-        /* Send all channels in the response to this message */
-        bool get_all_channel_request;
         /* Get the Canned Message Module messages in the response to this message. */
         bool get_canned_message_module_messages_request;
         /* Get the Canned Message Module messages in the response to this message. */
@@ -139,7 +137,6 @@ extern "C" {
 #define AdminMessage_get_config_response_tag     6
 #define AdminMessage_get_module_config_request_tag 7
 #define AdminMessage_get_module_config_response_tag 8
-#define AdminMessage_get_all_channel_request_tag 9
 #define AdminMessage_get_canned_message_module_messages_request_tag 10
 #define AdminMessage_get_canned_message_module_messages_response_tag 11
 #define AdminMessage_get_device_metadata_request_tag 12
@@ -170,7 +167,6 @@ X(a, STATIC,   ONEOF,    UENUM,    (payload_variant,get_config_request,get_confi
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,get_config_response,get_config_response),   6) \
 X(a, STATIC,   ONEOF,    UENUM,    (payload_variant,get_module_config_request,get_module_config_request),   7) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,get_module_config_response,get_module_config_response),   8) \
-X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,get_all_channel_request,get_all_channel_request),   9) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,get_canned_message_module_messages_request,get_canned_message_module_messages_request),  10) \
 X(a, STATIC,   ONEOF,    STRING,   (payload_variant,get_canned_message_module_messages_response,get_canned_message_module_messages_response),  11) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,get_device_metadata_request,get_device_metadata_request),  12) \
