@@ -108,7 +108,7 @@ MeshPacket *PositionModule::allocReply()
     // Strip out any time information before sending packets to other nodes - to keep the wire size small (and because other
     // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS to include the time, so that gpsless
     // devices can get time.
-    if (getRTCQuality() < RTCQualityGPS) {
+    if (getRTCQuality() < RTCQualityDevice) {
         DEBUG_MSG("Stripping time %u from position send\n", p.time);
         p.time = 0;
     } else
