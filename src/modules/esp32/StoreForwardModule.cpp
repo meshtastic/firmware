@@ -27,7 +27,7 @@ int32_t StoreForwardModule::runOnce()
             if (this->busy) {
 
                 // Only send packets if the channel is less than 25% utilized.
-                if (airTime->channelUtilizationPercent() < 25) {
+                if (airTime->channelUtilizationPercent() < polite_channel_util_percent) {
 
                     // DEBUG_MSG("--- --- --- In busy loop 1 %d\n", this->packetHistoryTXQueue_index);
                     storeForwardModule->sendPayload(this->busyTo, this->packetHistoryTXQueue_index);

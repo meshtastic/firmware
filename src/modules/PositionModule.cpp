@@ -144,7 +144,7 @@ int32_t PositionModule::runOnce()
     if (lastGpsSend == 0 || (now - lastGpsSend) >= intervalMs) {
 
         // Only send packets if the channel is less than 40% utilized.
-        if (airTime->channelUtilizationPercent() < 40) {
+        if (airTime->channelUtilizationPercent() < max_channel_util_percent) {
             if (node->has_position && (node->position.latitude_i != 0 || node->position.longitude_i != 0)) {
                 lastGpsSend = now;
 
@@ -165,7 +165,7 @@ int32_t PositionModule::runOnce()
     } else if (config.position.position_broadcast_smart_enabled) {
 
         // Only send packets if the channel is less than 25% utilized.
-        if (airTime->channelUtilizationPercent() < 25) {
+        if (airTime->channelUtilizationPercent() < polite_channel_util_percent) {
 
             NodeInfo *node2 = service.refreshMyNodeInfo(); // should guarantee there is now a position
 
