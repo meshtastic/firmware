@@ -13,15 +13,16 @@
 int32_t DeviceTelemetryModule::runOnce()
 {
 #ifndef ARCH_PORTDUINO
-    if (firstTime) {
-        // This is the first time the OSThread library has called this function, so do some setup
-        firstTime = 0;
-        DEBUG_MSG("Device Telemetry: Initializing\n");
+    uint32_t now = millis();
+    if ((lastSentToMesh == 0 || (now - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.telemetry.device_update_interval)) 
+        && airTime->channelUtilizationPercent() < max_channel_util_percent) {
+        sendTelemetry();
+        lastSentToMesh = now;
+    } else {
+        // Just send to phone when it's not our time to send to mesh yet
+        sendTelemetry(NODENUM_BROADCAST, true);
     }
-    sendOurTelemetry();
-    // OSThread library.  Multiply the preference value by 1000 to convert seconds to miliseconds
-
-    return getConfiguredOrDefaultMs(moduleConfig.telemetry.device_update_interval);
+    return sendToPhoneIntervalMs;
 #endif
 }
 
@@ -45,7 +46,7 @@ bool DeviceTelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Telemet
     return false; // Let others look at this message also if they want
 }
 
-bool DeviceTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies)
+bool DeviceTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 {
     Telemetry t;
 
@@ -68,11 +69,16 @@ bool DeviceTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies)
 
     MeshPacket *p = allocDataProtobuf(t);
     p->to = dest;
-    p->decoded.want_response = wantReplies;
+    p->decoded.want_response = false;
 
     lastMeasurementPacket = packetPool.allocCopy(*p);
-    DEBUG_MSG("Device Telemetry: Sending packet to mesh\n");
-    service.sendToMesh(p, RX_SRC_LOCAL, true);
     nodeDB.updateTelemetry(nodeDB.getNodeNum(), t, RX_SRC_LOCAL);
+    if (phoneOnly) {
+        DEBUG_MSG("Device Telemetry: Sending packet to phone\n");
+        service.sendToPhone(p);
+    } else {
+        DEBUG_MSG("Device Telemetry: Sending packet to mesh\n");
+        service.sendToMesh(p, RX_SRC_LOCAL, true);
+    }
     return true;
 }
