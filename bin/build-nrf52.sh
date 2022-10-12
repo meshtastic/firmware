@@ -26,7 +26,9 @@ basename=firmware-$1-$VERSION
 
 pio run --environment $1 # -v
 SRCELF=.pio/build/$1/firmware.elf
+DFUPKG=.pio/build/$1/firmware.zip
 cp $SRCELF $OUTDIR/$basename.elf
+cp $DFUPKG $OUTDIR/$basename-ota.zip
 
 echo "Generating NRF52 uf2 file"
 SRCHEX=.pio/build/$1/firmware.hex
