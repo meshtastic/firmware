@@ -378,6 +378,7 @@ jobs:
           path: |
             ./*.bin
             ./*.uf2
+            ./firmware-*-ota.zip
             ./meshtasticd_linux_amd64
             ./device-*.sh
             ./device-*.bat
