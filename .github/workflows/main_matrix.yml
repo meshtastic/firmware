@@ -224,6 +224,7 @@ jobs:
           path: |
             release/*.uf2
             release/*.elf
+            release/*.zip
           retention-days: 90
 
   build-rpi2040:
@@ -368,7 +369,7 @@ jobs:
         id: version
 
       - name: Move files up
-        run: mv -b -t ./ ./*tbeam-1*/littlefs*.bin ./*tbeam-1*/bleota.bin ./**/firmware*.bin ./*t-echo*/Meshtastic_nRF52_factory_erase.uf2 ./**/firmware-*.uf2 ./**/*.elf ./**/meshtasticd_linux_amd64 ./*native*/*device-*.sh ./*native*/*device-*.bat
+        run: mv -b -t ./ ./*tbeam-1*/littlefs*.bin ./*tbeam-1*/bleota.bin ./**/firmware*.bin ./*t-echo*/Meshtastic_nRF52_factory_erase.uf2 ./**/firmware-*.uf2 ./**/firmware-*-ota.zip ./**/*.elf ./**/meshtasticd_linux_amd64 ./*native*/*device-*.sh ./*native*/*device-*.bat
 
       - name: Repackage in single firmware zip
         uses: actions/upload-artifact@v2
