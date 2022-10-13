@@ -80,6 +80,10 @@ uint8_t kb_model;
 // The I2C address of the RTC Module (if found)
 uint8_t rtc_found;
 
+// Keystore Chips
+uint8_t keystore_found;
+ATECCX08A atecc;
+
 bool eink_found = true;
 
 uint32_t serialSinceMsec;
