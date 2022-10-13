@@ -82,7 +82,9 @@ uint8_t rtc_found;
 
 // Keystore Chips
 uint8_t keystore_found;
+#ifndef ARCH_PORTDUINO
 ATECCX08A atecc;
+#endif
 
 bool eink_found = true;
 
