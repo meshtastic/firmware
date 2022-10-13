@@ -1,5 +1,5 @@
 #pragma once
-#ifdef HAS_SCREEN
+#if HAS_SCREEN
 #include "ProtobufModule.h"
 #include "input/InputBroker.h"
 
