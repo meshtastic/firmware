@@ -430,6 +430,8 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 {
     displayedNodeNum = 0; // Not currently showing a node pane
 
+    char buffer[50];
+
     if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->setFont(FONT_MEDIUM);
@@ -445,7 +447,6 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
             display->setColor(BLACK);
         }
-        char buffer[50];
         display->drawStringf(0 + x, 0 + y, buffer, "To: %s", cannedMessageModule->getNodeName(this->dest));
         // used chars right aligned
         sprintf(buffer, "%d left", Constants_DATA_PAYLOAD_LEN - this->freetext.length());
@@ -456,11 +457,13 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         if (this->messagesCount > 0) {
             display->setTextAlignment(TEXT_ALIGN_LEFT);
             display->setFont(FONT_SMALL);
-            display->drawString(0 + x, 0 + y, cannedMessageModule->getPrevMessage());
-            display->setFont(FONT_MEDIUM);
-            display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL, cannedMessageModule->getCurrentMessage());
-            display->setFont(FONT_SMALL);
-            display->drawString(0 + x, 0 + y + FONT_HEIGHT_MEDIUM, cannedMessageModule->getNextMessage());
+            display->drawStringf(0 + x, 0 + y, buffer, "To: %s", cannedMessageModule->getNodeName(this->dest));
+            display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL, cannedMessageModule->getPrevMessage());
+            display->fillRect(0 + x, 0 + y + FONT_HEIGHT_SMALL * 2, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+            display->setColor(BLACK);
+            display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * 2, cannedMessageModule->getCurrentMessage());
+            display->setColor(WHITE);
+            display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * 3, cannedMessageModule->getNextMessage());
         }
     }
 }
