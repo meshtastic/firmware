@@ -225,7 +225,7 @@ int32_t CannedMessageModule::runOnce()
         this->cursor = 0;
         this->destSelect = false;
         this->notifyObservers(&e);
-    } else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) && (millis() - this->lastTouchMillis) > INACTIVATE_AFTER_MS) {
+    } else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) && ((millis() - this->lastTouchMillis) > INACTIVATE_AFTER_MS)) {
         // Reset module
         DEBUG_MSG("Reset due to lack of activity.\n");
         e.frameChanged = true;
