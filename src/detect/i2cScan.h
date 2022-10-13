@@ -12,6 +12,7 @@
 
 void printATECCInfo()
 {
+#ifndef ARCH_PORTDUINO
     atecc.readConfigZone(false);
 
     DEBUG_MSG("ATECC608B Serial Number: ");
@@ -40,6 +41,7 @@ void printATECCInfo()
             DEBUG_MSG("\n");
         }
     }
+#endif
 }
 
 uint16_t getRegisterValue(uint8_t address, uint8_t reg, uint8_t length) {
@@ -112,6 +114,7 @@ void scanI2Cdevice(void)
                     DEBUG_MSG("unknown display found\n");
                 }
             }
+#ifndef ARCH_PORTDUINO
             if (addr == ATECC608B_ADDR){
                 keystore_found = addr;
                 if (atecc.begin(keystore_found) == true) {
@@ -121,6 +124,7 @@ void scanI2Cdevice(void)
                 }
                 printATECCInfo();
             }
+#endif
 #ifdef RV3028_RTC
             if (addr == RV3028_RTC){
                 rtc_found = addr;
