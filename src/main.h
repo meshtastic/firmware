@@ -6,17 +6,21 @@
 #include "PowerStatus.h"
 #include "graphics/Screen.h"
 #include "mesh/generated/telemetry.pb.h"
+#include <SparkFun_ATECCX08a_Arduino_Library.h>
 
 extern uint8_t screen_found;
 extern uint8_t screen_model;
 extern uint8_t cardkb_found;
 extern uint8_t kb_model;
 extern uint8_t rtc_found;
+extern uint8_t keystore_found;
 
 extern bool eink_found;
 extern bool pmu_found;
 extern bool isCharging;
 extern bool isUSBPowered;
+
+extern ATECCX08A atecc;
 
 extern uint8_t nodeTelemetrySensorsMap[TelemetrySensorType_QMI8658+1];
 
