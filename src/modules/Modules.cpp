@@ -60,7 +60,7 @@ void setupModules()
     new DeviceTelemetryModule();
     new EnvironmentTelemetryModule();
 #endif
-#if !defined(TTGO_T_ECHO)
+#if !defined(TTGO_T_ECHO) && !defined(ARCH_PORTDUINO))
     new SerialModule();
 #endif
 #ifdef ARCH_ESP32
