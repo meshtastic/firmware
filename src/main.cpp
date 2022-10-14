@@ -281,12 +281,10 @@ void setup()
     power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
 
     /*
-    * Repeat the scanning for I2C devices after power initialization. 
+    * Repeat the scanning for I2C devices after power initialization or look for 'latecomers'. 
     * Boards with an PMU need to be powered on to correctly scan to the device address, such as t-beam-s3-core
     */
-    if ((HW_VENDOR == HardwareModel_LILYGO_TBEAM_S3_CORE) || (HW_VENDOR == HardwareModel_TBEAM)) {
-        scanI2Cdevice();
-    }
+    scanI2Cdevice();
     
     // Init our SPI controller (must be before screen and lora)
     initSPI();
