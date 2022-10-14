@@ -60,13 +60,15 @@ void setupModules()
     new DeviceTelemetryModule();
     new EnvironmentTelemetryModule();
 #endif
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(TTGO_T_ECHO)
+    new SerialModule();
+#endif
 #ifdef ARCH_ESP32
     // Only run on an esp32 based device.
 
     /*
         Maintained by MC Hamster (Jm Casler) jm@casler.org
     */
-    new SerialModule();
     new ExternalNotificationModule();
 
     storeForwardModule = new StoreForwardModule();
