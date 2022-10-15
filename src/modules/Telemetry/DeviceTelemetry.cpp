@@ -30,14 +30,13 @@ bool DeviceTelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Telemet
 {
     if (t->which_variant == Telemetry_device_metrics_tag) {
         const char *sender = getSenderShortName(mp);
-
-        DEBUG_MSG("-----------------------------------------\n");
-        DEBUG_MSG("Device Telemetry: Received data from %s\n", sender);
-        DEBUG_MSG("Telemetry->time: %i\n", t->time);
-        DEBUG_MSG("Telemetry->air_util_tx: %f\n", t->variant.device_metrics.air_util_tx);
-        DEBUG_MSG("Telemetry->battery_level: %i\n", t->variant.device_metrics.battery_level);
-        DEBUG_MSG("Telemetry->channel_utilization: %f\n", t->variant.device_metrics.channel_utilization);
-        DEBUG_MSG("Telemetry->voltage: %f\n", t->variant.device_metrics.voltage);
+    
+        DEBUG_MSG("(Received from %s): air_util_tx=%f, channel_utilization=%f, battery_level=%i, voltage=%f\n",
+            sender,
+            t->variant.device_metrics.air_util_tx,
+            t->variant.device_metrics.channel_utilization,
+            t->variant.device_metrics.battery_level,
+            t->variant.device_metrics.voltage);
 
         lastMeasurementPacket = packetPool.allocCopy(mp);
 
@@ -58,14 +57,11 @@ bool DeviceTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     t.variant.device_metrics.channel_utilization = myNodeInfo.channel_utilization;
     t.variant.device_metrics.voltage = powerStatus->getBatteryVoltageMv() / 1000.0;
 
-    DEBUG_MSG("-----------------------------------------\n");
-    DEBUG_MSG("Device Telemetry: Read data\n");
-
-    DEBUG_MSG("Telemetry->time: %i\n", t.time);
-    DEBUG_MSG("Telemetry->air_util_tx: %f\n", t.variant.device_metrics.air_util_tx);
-    DEBUG_MSG("Telemetry->battery_level: %i\n", t.variant.device_metrics.battery_level);
-    DEBUG_MSG("Telemetry->channel_utilization: %f\n", t.variant.device_metrics.channel_utilization);
-    DEBUG_MSG("Telemetry->voltage: %f\n", t.variant.device_metrics.voltage);
+    DEBUG_MSG("(Sending): air_util_tx=%f, channel_utilization=%f, battery_level=%i, voltage=%f\n", 
+        t.variant.device_metrics.air_util_tx,
+        t.variant.device_metrics.channel_utilization,
+        t.variant.device_metrics.battery_level,
+        t.variant.device_metrics.voltage);
 
     MeshPacket *p = allocDataProtobuf(t);
     p->to = dest;
@@ -74,10 +70,10 @@ bool DeviceTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     lastMeasurementPacket = packetPool.allocCopy(*p);
     nodeDB.updateTelemetry(nodeDB.getNodeNum(), t, RX_SRC_LOCAL);
     if (phoneOnly) {
-        DEBUG_MSG("Device Telemetry: Sending packet to phone\n");
+        DEBUG_MSG("Sending packet to phone\n");
         service.sendToPhone(p);
     } else {
-        DEBUG_MSG("Device Telemetry: Sending packet to mesh\n");
+        DEBUG_MSG("Sending packet to mesh\n");
         service.sendToMesh(p, RX_SRC_LOCAL, true);
     }
     return true;

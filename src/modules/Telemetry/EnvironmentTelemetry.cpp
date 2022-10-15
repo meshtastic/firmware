@@ -152,7 +152,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, Telemetry_fields, &lastMeasurement)) {
         display->setFont(FONT_SMALL);
         display->drawString(x, y += fontHeight(FONT_MEDIUM), "Measurement Error");
-        DEBUG_MSG("Environment Telemetry: unable to decode last packet");
+        DEBUG_MSG("Unable to decode last packet");
         return;
     }
 
@@ -177,15 +177,14 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Te
     if (t->which_variant == Telemetry_environment_metrics_tag) {
         const char *sender = getSenderShortName(mp);
 
-        DEBUG_MSG("-----------------------------------------\n");
-        DEBUG_MSG("Environment Telemetry: Received data from %s\n", sender);
-        DEBUG_MSG("Telemetry->time: %i\n", t->time);
-        DEBUG_MSG("Telemetry->barometric_pressure: %f\n", t->variant.environment_metrics.barometric_pressure);
-        DEBUG_MSG("Telemetry->current: %f\n", t->variant.environment_metrics.current);
-        DEBUG_MSG("Telemetry->gas_resistance: %f\n", t->variant.environment_metrics.gas_resistance);
-        DEBUG_MSG("Telemetry->relative_humidity: %f\n", t->variant.environment_metrics.relative_humidity);
-        DEBUG_MSG("Telemetry->temperature: %f\n", t->variant.environment_metrics.temperature);
-        DEBUG_MSG("Telemetry->voltage: %f\n", t->variant.environment_metrics.voltage);
+        DEBUG_MSG("(Received from %s): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f, voltage=%f\n",
+            sender,
+            t->variant.environment_metrics.barometric_pressure,
+            t->variant.environment_metrics.current,
+            t->variant.environment_metrics.gas_resistance,
+            t->variant.environment_metrics.relative_humidity,
+            t->variant.environment_metrics.temperature,
+            t->variant.environment_metrics.voltage);
 
         lastMeasurementPacket = packetPool.allocCopy(mp);
     }
@@ -206,9 +205,6 @@ bool EnvironmentTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies
     m.variant.environment_metrics.temperature = 0;
     m.variant.environment_metrics.voltage = 0;
 
-    DEBUG_MSG("-----------------------------------------\n");
-    DEBUG_MSG("Environment Telemetry: Read data\n");
-
     if (lps22hbSensor.hasSensor())
         lps22hbSensor.getMetrics(&m);
     if (shtc3Sensor.hasSensor())
@@ -226,13 +222,13 @@ bool EnvironmentTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies
     if (ina260Sensor.hasSensor())
         ina260Sensor.getMetrics(&m);
 
-    DEBUG_MSG("Telemetry->time: %i\n", m.time);
-    DEBUG_MSG("Telemetry->barometric_pressure: %f\n", m.variant.environment_metrics.barometric_pressure);
-    DEBUG_MSG("Telemetry->current: %f\n", m.variant.environment_metrics.current);
-    DEBUG_MSG("Telemetry->gas_resistance: %f\n", m.variant.environment_metrics.gas_resistance);
-    DEBUG_MSG("Telemetry->relative_humidity: %f\n", m.variant.environment_metrics.relative_humidity);
-    DEBUG_MSG("Telemetry->temperature: %f\n", m.variant.environment_metrics.temperature);
-    DEBUG_MSG("Telemetry->voltage: %f\n", m.variant.environment_metrics.voltage);
+   DEBUG_MSG("(Sending): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f, voltage=%f\n",
+        m.variant.environment_metrics.barometric_pressure,
+        m.variant.environment_metrics.current,
+        m.variant.environment_metrics.gas_resistance,
+        m.variant.environment_metrics.relative_humidity,
+        m.variant.environment_metrics.temperature,
+        m.variant.environment_metrics.voltage);
 
     sensor_read_error_count = 0;
 
@@ -241,7 +237,7 @@ bool EnvironmentTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies
     p->decoded.want_response = wantReplies;
 
     lastMeasurementPacket = packetPool.allocCopy(*p);
-    DEBUG_MSG("Environment Telemetry: Sending packet to mesh");
+    DEBUG_MSG("Sending packet to mesh");
     service.sendToMesh(p, RX_SRC_LOCAL, true);
     return true;
 }
