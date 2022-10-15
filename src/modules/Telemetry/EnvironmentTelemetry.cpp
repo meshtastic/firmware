@@ -18,6 +18,7 @@
 #include "Sensor/INA260Sensor.h"
 #include "Sensor/INA219Sensor.h"
 #include "Sensor/SHTC3Sensor.h"
+#include "Sensor/LPS22HBSensor.h"
 
 BMP280Sensor bmp280Sensor;
 BME280Sensor bme280Sensor;
@@ -26,6 +27,7 @@ MCP9808Sensor mcp9808Sensor;
 INA260Sensor ina260Sensor;
 INA219Sensor ina219Sensor;
 SHTC3Sensor shtc3Sensor;
+LPS22HBSensor lps22hbSensor;
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
@@ -87,6 +89,9 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = ina219Sensor.runOnce();
             if (shtc3Sensor.hasSensor())
                 result = shtc3Sensor.runOnce();
+            if (lps22hbSensor.hasSensor()) {
+                result = lps22hbSensor.runOnce();
+            }
         }
         return result;
     } else {
@@ -204,6 +209,10 @@ bool EnvironmentTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies
     DEBUG_MSG("-----------------------------------------\n");
     DEBUG_MSG("Environment Telemetry: Read data\n");
 
+    if (lps22hbSensor.hasSensor())
+        lps22hbSensor.getMetrics(&m);
+    if (shtc3Sensor.hasSensor())
+        shtc3Sensor.getMetrics(&m);
     if (bmp280Sensor.hasSensor())
         bmp280Sensor.getMetrics(&m);
     if (bme280Sensor.hasSensor())
@@ -216,8 +225,6 @@ bool EnvironmentTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies
         ina219Sensor.getMetrics(&m);
     if (ina260Sensor.hasSensor())
         ina260Sensor.getMetrics(&m);
-    if (shtc3Sensor.hasSensor())
-        shtc3Sensor.getMetrics(&m);
 
     DEBUG_MSG("Telemetry->time: %i\n", m.time);
     DEBUG_MSG("Telemetry->barometric_pressure: %f\n", m.variant.environment_metrics.barometric_pressure);
