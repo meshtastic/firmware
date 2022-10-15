@@ -17,6 +17,7 @@
 #include "Sensor/MCP9808Sensor.h"
 #include "Sensor/INA260Sensor.h"
 #include "Sensor/INA219Sensor.h"
+#include "Sensor/SHTC3Sensor.h"
 
 BMP280Sensor bmp280Sensor;
 BME280Sensor bme280Sensor;
@@ -24,6 +25,7 @@ BME680Sensor bme680Sensor;
 MCP9808Sensor mcp9808Sensor;
 INA260Sensor ina260Sensor;
 INA219Sensor ina219Sensor;
+SHTC3Sensor shtc3Sensor;
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
@@ -83,6 +85,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = ina260Sensor.runOnce();
             if (ina219Sensor.hasSensor())
                 result = ina219Sensor.runOnce();
+            if (shtc3Sensor.hasSensor())
+                result = shtc3Sensor.runOnce();
         }
         return result;
     } else {
@@ -212,6 +216,8 @@ bool EnvironmentTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies
         ina219Sensor.getMetrics(&m);
     if (ina260Sensor.hasSensor())
         ina260Sensor.getMetrics(&m);
+    if (shtc3Sensor.hasSensor())
+        shtc3Sensor.getMetrics(&m);
 
     DEBUG_MSG("Telemetry->time: %i\n", m.time);
     DEBUG_MSG("Telemetry->barometric_pressure: %f\n", m.variant.environment_metrics.barometric_pressure);

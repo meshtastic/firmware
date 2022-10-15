@@ -191,13 +191,17 @@ void scanI2Cdevice(void)
             nodeTelemetrySensorsMap[TelemetrySensorType_MCP9808] = addr;
             DEBUG_MSG("MCP9808 sensor found at address 0x%x\n", (uint8_t)addr);
         }
-        if(addr == QMC6310_ADDR){
+        if (addr == QMC6310_ADDR) {
             DEBUG_MSG("QMC6310 3-Axis magnetic sensor found at address 0x%x\n", (uint8_t)addr);
             nodeTelemetrySensorsMap[TelemetrySensorType_QMC6310] = addr;
         }
-        if(addr == QMI8658_ADDR){
+        if (addr == QMI8658_ADDR) {
             DEBUG_MSG("QMI8658 6-Axis inertial measurement sensor found at address 0x%x\n", (uint8_t)addr);
             nodeTelemetrySensorsMap[TelemetrySensorType_QMI8658] = addr;
+        }
+        if (addr == SHTC3_ADDR) {
+            DEBUG_MSG("SHTC3 sensor found at address 0x%x\n", (uint8_t)addr);
+            nodeTelemetrySensorsMap[TelemetrySensorType_SHTC3] = addr;
         }
         } else if (err == 4) {
             DEBUG_MSG("Unknow error at address 0x%x\n", addr);
