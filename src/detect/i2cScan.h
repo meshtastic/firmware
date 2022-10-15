@@ -203,6 +203,10 @@ void scanI2Cdevice(void)
             DEBUG_MSG("SHTC3 sensor found at address 0x%x\n", (uint8_t)addr);
             nodeTelemetrySensorsMap[TelemetrySensorType_SHTC3] = addr;
         }
+        if (addr == LPS22HB_ADDR || addr == LPS22HB_ADDR_ALT) {
+            DEBUG_MSG("LPS22HB sensor found at address 0x%x\n", (uint8_t)addr);
+            nodeTelemetrySensorsMap[TelemetrySensorType_LPS22] = addr;
+        }
         } else if (err == 4) {
             DEBUG_MSG("Unknow error at address 0x%x\n", addr);
         }
