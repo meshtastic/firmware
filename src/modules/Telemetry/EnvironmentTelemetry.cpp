@@ -9,6 +9,7 @@
 #include "main.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
+#include "MeshService.h"
 
 // Sensors
 #include "Sensor/BMP280Sensor.h"
@@ -98,15 +99,20 @@ int32_t EnvironmentTelemetryModule::runOnce()
         // if we somehow got to a second run of this module with measurement disabled, then just wait forever
         if (!moduleConfig.telemetry.environment_measurement_enabled)
             return result;
-        // this is not the first time OSThread library has called this function
-        // so just do what we intend to do on the interval
-        if (!sendOurTelemetry()) {
-            // if we failed to read the sensor, then try again
-            // as soon as we can according to the maximum polling frequency
-            return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
+
+        uint32_t now = millis();
+        if ((lastSentToMesh == 0 || 
+            (now - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval)) && 
+            airTime->channelUtilizationPercent() < max_channel_util_percent) {
+            sendTelemetry();
+            lastSentToMesh = now;
+        } else if (service.isToPhoneQueueEmpty()) {
+            // Just send to phone when it's not our time to send to mesh yet
+            // Only send while queue is empty (phone assumed connected)
+            sendTelemetry(NODENUM_BROADCAST, true);
         }
     }
-    return getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval);
+    return sendToPhoneIntervalMs;
 #endif
 }
 
@@ -192,7 +198,7 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Te
     return false; // Let others look at this message also if they want
 }
 
-bool EnvironmentTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies)
+bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 {
     Telemetry m;
     m.time = getTime();
@@ -234,10 +240,15 @@ bool EnvironmentTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies
 
     MeshPacket *p = allocDataProtobuf(m);
     p->to = dest;
-    p->decoded.want_response = wantReplies;
+    p->decoded.want_response = false;
 
     lastMeasurementPacket = packetPool.allocCopy(*p);
-    DEBUG_MSG("Sending packet to mesh");
-    service.sendToMesh(p, RX_SRC_LOCAL, true);
+    if (phoneOnly) {
+        DEBUG_MSG("Sending packet to phone\n");
+        service.sendToPhone(p);
+    } else {
+        DEBUG_MSG("Sending packet to mesh\n");
+        service.sendToMesh(p, RX_SRC_LOCAL, true);
+    }
     return true;
 }
