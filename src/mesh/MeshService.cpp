@@ -283,3 +283,8 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
 
     return 0;
 }
+
+bool MeshService::isToPhoneQueueEmpty() 
+{
+    return toPhoneQueue.isEmpty();
+}
