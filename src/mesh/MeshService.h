@@ -89,6 +89,8 @@ class MeshService
       /// Send a packet to the phone
     void sendToPhone(MeshPacket *p);
 
+    bool isToPhoneQueueEmpty();
+
   private:
     /// Called when our gps position has changed - updates nodedb and sends Location message out into the mesh
     /// returns 0 to allow futher processing
