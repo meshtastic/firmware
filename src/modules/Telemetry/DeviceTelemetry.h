@@ -11,7 +11,8 @@ class DeviceTelemetryModule : private concurrency::OSThread, public ProtobufModu
     DeviceTelemetryModule()
         : concurrency::OSThread("DeviceTelemetryModule"), ProtobufModule("DeviceTelemetry", PortNum_TELEMETRY_APP, &Telemetry_msg)
     {
-        lastMeasurementPacket = nullptr;
+      lastMeasurementPacket = nullptr;
+      setIntervalFromNow(10 * 1000);
     }
     virtual bool wantUIFrame() { return false; }
 
