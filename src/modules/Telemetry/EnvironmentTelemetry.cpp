@@ -241,6 +241,7 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     MeshPacket *p = allocDataProtobuf(m);
     p->to = dest;
     p->decoded.want_response = false;
+    p->priority = MeshPacket_Priority_MIN;
 
     lastMeasurementPacket = packetPool.allocCopy(*p);
     if (phoneOnly) {
