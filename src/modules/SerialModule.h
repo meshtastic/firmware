@@ -11,6 +11,8 @@
 class SerialModule : private concurrency::OSThread
 {
     bool firstTime = 1;
+    unsigned long lastNmeaTime = millis();
+    char outbuf[90] = "";
 
   public:
     SerialModule();
@@ -28,6 +30,7 @@ extern SerialModule *serialModule;
 class SerialModuleRadio : public MeshModule
 {
     uint32_t lastRxID = 0;
+    char outbuf[90] = "";
 
   public:
     SerialModuleRadio();
