@@ -11,10 +11,10 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 
-#define RDEF(name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted, frequency_switching)                 \
+#define RDEF(name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted, frequency_switching, wide_lora)                 \
     {                                                                                                                            \
         Config_LoRaConfig_RegionCode_##name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted,            \
-            frequency_switching, #name                                                                                           \
+            frequency_switching, wide_lora, #name                                                                                           \
     }
 
 const RegionInfo regions[] = {
@@ -22,12 +22,12 @@ const RegionInfo regions[] = {
         https://link.springer.com/content/pdf/bbm%3A978-1-4842-4357-2%2F1.pdf
         https://www.thethingsnetwork.org/docs/lorawan/regional-parameters/
     */
-    RDEF(US, 902.0f, 928.0f, 100, 0, 30, true, false),
+    RDEF(US, 902.0f, 928.0f, 100, 0, 30, true, false, false),
 
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
      */
-    RDEF(EU_433, 433.0f, 434.0f, 10, 0, 12, true, false),
+    RDEF(EU_433, 433.0f, 434.0f, 10, 0, 12, true, false, false),
 
     /*
         https://www.thethingsnetwork.org/docs/lorawan/duty-cycle/
@@ -43,23 +43,23 @@ const RegionInfo regions[] = {
         (Please refer to section 4.21 in the following document)
         https://ec.europa.eu/growth/tools-databases/tris/index.cfm/ro/search/?trisaction=search.detail&year=2021&num=528&dLang=EN
      */
-    RDEF(EU_868, 869.4f, 869.65f, 10, 0, 27, false, false),
+    RDEF(EU_868, 869.4f, 869.65f, 10, 0, 27, false, false, false),
 
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
      */
-    RDEF(CN, 470.0f, 510.0f, 100, 0, 19, true, false),
+    RDEF(CN, 470.0f, 510.0f, 100, 0, 19, true, false, false),
 
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
      */
-    RDEF(JP, 920.8f, 927.8f, 100, 0, 16, true, false),
+    RDEF(JP, 920.8f, 927.8f, 100, 0, 16, true, false, false),
 
     /*
         https://www.iot.org.au/wp/wp-content/uploads/2016/12/IoTSpectrumFactSheet.pdf
         https://iotalliance.org.nz/wp-content/uploads/sites/4/2019/05/IoT-Spectrum-in-NZ-Briefing-Paper.pdf
      */
-    RDEF(ANZ, 915.0f, 928.0f, 100, 0, 30, true, false),
+    RDEF(ANZ, 915.0f, 928.0f, 100, 0, 30, true, false, false),
 
     /*
         https://digital.gov.ru/uploaded/files/prilozhenie-12-k-reshenyu-gkrch-18-46-03-1.pdf
@@ -67,38 +67,44 @@ const RegionInfo regions[] = {
         Note:
             - We do LBT, so 100% is allowed.
      */
-    RDEF(RU, 868.7f, 869.2f, 100, 0, 20, true, false),
+    RDEF(RU, 868.7f, 869.2f, 100, 0, 20, true, false, false),
 
     /*
         ???
      */
-    RDEF(KR, 920.0f, 923.0f, 100, 0, 0, true, false),
+    RDEF(KR, 920.0f, 923.0f, 100, 0, 0, true, false, false),
 
     /*
         ???
      */
-    RDEF(TW, 920.0f, 925.0f, 100, 0, 0, true, false),
+    RDEF(TW, 920.0f, 925.0f, 100, 0, 0, true, false, false),
 
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
      */
-    RDEF(IN, 865.0f, 867.0f, 100, 0, 30, true, false),
+    RDEF(IN, 865.0f, 867.0f, 100, 0, 30, true, false, false),
 
     /*
          https://rrf.rsm.govt.nz/smart-web/smart/page/-smart/domain/licence/LicenceSummary.wdk?id=219752
          https://iotalliance.org.nz/wp-content/uploads/sites/4/2019/05/IoT-Spectrum-in-NZ-Briefing-Paper.pdf
       */
-    RDEF(NZ_865, 864.0f, 868.0f, 100, 0, 0, true, false),
+    RDEF(NZ_865, 864.0f, 868.0f, 100, 0, 0, true, false, false),
 
     /*
        https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
     */
-    RDEF(TH, 920.0f, 925.0f, 100, 0, 16, true, false),
+    RDEF(TH, 920.0f, 925.0f, 100, 0, 16, true, false, false),
+
+    /*
+       2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
+    */
+
+    RDEF(LORA_24, 2400.0f, 2483.5f, 100, 0, 10, true, false, true),
 
     /*
         This needs to be last. Same as US.
     */
-    RDEF(UNSET, 902.0f, 928.0f, 100, 0, 30, true, false)
+    RDEF(UNSET, 902.0f, 928.0f, 100, 0, 30, true, false, false)
 
 };
 
@@ -355,39 +361,40 @@ void RadioInterface::applyModemConfig()
     // No Sync Words in LORA mode
     Config_LoRaConfig &loraConfig = config.lora;
     if (loraConfig.spread_factor == 0) {
+
         switch (loraConfig.modem_preset) {
         case Config_LoRaConfig_ModemPreset_SHORT_FAST:
-            bw = 250;
+            bw = myRegion->wideLora ? 800 : 250;
             cr = 8;
             sf = 7;
             break;
         case Config_LoRaConfig_ModemPreset_SHORT_SLOW:
-            bw = 250;
+            bw = myRegion->wideLora ? 800 : 250;
             cr = 8;
             sf = 8;
             break;
         case Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
-            bw = 250;
+            bw = myRegion->wideLora ? 800 : 250;
             cr = 8;
             sf = 9;
             break;
         case Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
-            bw = 250;
+            bw = myRegion->wideLora ? 800 : 250;
             cr = 8;
             sf = 10;
             break;
         case Config_LoRaConfig_ModemPreset_LONG_FAST:
-            bw = 250;
+            bw = myRegion->wideLora ? 800 : 250;
             cr = 8;
             sf = 11;
             break;
         case Config_LoRaConfig_ModemPreset_LONG_SLOW:
-            bw = 125;
+            bw = myRegion->wideLora ? 400 : 125;
             cr = 8;
             sf = 12;
             break;
         case Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW:
-            bw = 31.25;
+            bw = myRegion->wideLora ? 200 : 31.25;
             cr = 8;
             sf = 12;
             break;
