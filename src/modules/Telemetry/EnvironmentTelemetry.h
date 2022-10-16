@@ -31,11 +31,13 @@ class EnvironmentTelemetryModule : private concurrency::OSThread, public Protobu
     /**
      * Send our Telemetry into the mesh
      */
-    bool sendOurTelemetry(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
+    bool sendTelemetry(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
 
   private:
     float CelsiusToFahrenheit(float c);
     bool firstTime = 1;
     const MeshPacket *lastMeasurementPacket;
+    uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute
+    uint32_t lastSentToMesh = 0;
     uint32_t sensor_read_error_count = 0;
 };
