@@ -9,6 +9,7 @@
 #include "main.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
+#include "MeshService.h"
 
 int32_t DeviceTelemetryModule::runOnce()
 {
@@ -18,8 +19,9 @@ int32_t DeviceTelemetryModule::runOnce()
         && airTime->channelUtilizationPercent() < max_channel_util_percent) {
         sendTelemetry();
         lastSentToMesh = now;
-    } else {
+    } else if (service.isToPhoneQueueEmpty()) {
         // Just send to phone when it's not our time to send to mesh yet
+        // Only send while queue is empty (phone assumed connected)
         sendTelemetry(NODENUM_BROADCAST, true);
     }
     return sendToPhoneIntervalMs;
