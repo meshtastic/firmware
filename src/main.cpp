@@ -81,6 +81,8 @@ uint8_t kb_model;
 // The I2C address of the RTC Module (if found)
 uint8_t rtc_found;
 
+bool rIf_wide_lora = false;
+
 // Keystore Chips
 uint8_t keystore_found;
 #ifndef ARCH_PORTDUINO
@@ -374,6 +376,7 @@ void setup()
             rIf = NULL;
         } else {
             DEBUG_MSG("SX1281 Radio init succeeded, using SX1281 radio\n");
+            rIf_wide_lora = true;
         }
     }
 #endif
