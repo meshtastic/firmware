@@ -64,7 +64,8 @@ typedef enum _Config_LoRaConfig_RegionCode {
     Config_LoRaConfig_RegionCode_RU = 9, 
     Config_LoRaConfig_RegionCode_IN = 10, 
     Config_LoRaConfig_RegionCode_NZ_865 = 11, 
-    Config_LoRaConfig_RegionCode_TH = 12 
+    Config_LoRaConfig_RegionCode_TH = 12, 
+    Config_LoRaConfig_RegionCode_LORA_24 = 13 
 } Config_LoRaConfig_RegionCode;
 
 typedef enum _Config_LoRaConfig_ModemPreset { 
@@ -186,8 +187,8 @@ typedef struct _Config {
 #define _Config_DisplayConfig_DisplayUnits_ARRAYSIZE ((Config_DisplayConfig_DisplayUnits)(Config_DisplayConfig_DisplayUnits_IMPERIAL+1))
 
 #define _Config_LoRaConfig_RegionCode_MIN Config_LoRaConfig_RegionCode_UNSET
-#define _Config_LoRaConfig_RegionCode_MAX Config_LoRaConfig_RegionCode_TH
-#define _Config_LoRaConfig_RegionCode_ARRAYSIZE ((Config_LoRaConfig_RegionCode)(Config_LoRaConfig_RegionCode_TH+1))
+#define _Config_LoRaConfig_RegionCode_MAX Config_LoRaConfig_RegionCode_LORA_24
+#define _Config_LoRaConfig_RegionCode_ARRAYSIZE ((Config_LoRaConfig_RegionCode)(Config_LoRaConfig_RegionCode_LORA_24+1))
 
 #define _Config_LoRaConfig_ModemPreset_MIN Config_LoRaConfig_ModemPreset_LONG_FAST
 #define _Config_LoRaConfig_ModemPreset_MAX Config_LoRaConfig_ModemPreset_SHORT_FAST
