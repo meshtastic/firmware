@@ -279,7 +279,7 @@ String MQTT::downstreamPacketToJson(MeshPacket *mp)
             // if it isn't, then we need to create a json object
             // with the string as the value
             DEBUG_MSG("text message payload is of type plaintext\n");
-            msgPayload = Json::object({{"text", payloadStr}});
+            msgPayload = Json::object{{"text", payloadStr}};
         }
         break;
     }
