@@ -1,5 +1,7 @@
 #pragma once
 
+#if !defined(ARCH_PORTDUINO)
+
 #include "RadioLibInterface.h"
 
 /**
@@ -69,3 +71,5 @@ class SX128xInterface : public RadioLibInterface
 
   private:
 };
+
+#endif

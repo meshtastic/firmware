@@ -367,7 +367,7 @@ void setup()
     }
 #endif
 
-#if defined(USE_SX1281)
+#if defined(USE_SX1281) && !defined(ARCH_PORTDUINO)
     if (!rIf) {
         rIf = new SX1281Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
         if (!rIf->init()) {
