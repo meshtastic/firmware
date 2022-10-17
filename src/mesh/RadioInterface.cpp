@@ -423,7 +423,7 @@ void RadioInterface::applyModemConfig()
         power = 17; // Default to default power if we don't have a valid power
 
     // Set final tx_power back onto config
-    loraConfig.tx_power = power;
+    loraConfig.tx_power = (int8_t)power; // cppcheck-suppress assignmentAddressToInteger
     
     // Calculate the number of channels
     uint32_t numChannels = floor((myRegion->freqEnd - myRegion->freqStart) / (myRegion->spacing + (bw / 1000)));
