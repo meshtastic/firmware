@@ -2,6 +2,8 @@
 #include "SX128xInterface.h"
 #include "error.h"
 
+#if !defined(ARCH_PORTDUINO)
+
 // Particular boards might define a different max power based on what their hardware can do
 #ifndef SX128X_MAX_POWER
 #define SX128X_MAX_POWER 22
@@ -241,3 +243,5 @@ bool SX128xInterface<T>::sleep()
 
     return true;
 }
+
+#endif
