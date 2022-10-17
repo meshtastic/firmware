@@ -15,6 +15,7 @@ struct RegionInfo {
     uint8_t powerLimit; // Or zero for not set
     bool audioPermitted;
     bool freqSwitching;
+    bool wideLora;
     const char *name; // EU433 etc
 };
 
