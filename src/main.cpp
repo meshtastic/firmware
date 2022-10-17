@@ -45,6 +45,7 @@
 #include "RF95Interface.h"
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
+#include "SX1281Interface.h"
 #if !HAS_RADIO && defined(ARCH_PORTDUINO)
 #include "platform/portduino/SimRadio.h"
 #endif
@@ -79,6 +80,8 @@ uint8_t kb_model;
 
 // The I2C address of the RTC Module (if found)
 uint8_t rtc_found;
+
+bool rIf_wide_lora = false;
 
 // Keystore Chips
 uint8_t keystore_found;
@@ -360,6 +363,20 @@ void setup()
             rIf = NULL;
         } else {
             DEBUG_MSG("RF95 Radio init succeeded, using RF95 radio\n");
+        }
+    }
+#endif
+
+#if defined(USE_SX1281) && !defined(ARCH_PORTDUINO)
+    if (!rIf) {
+        rIf = new SX1281Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
+        if (!rIf->init()) {
+            DEBUG_MSG("Warning: Failed to find SX1281 radio\n");
+            delete rIf;
+            rIf = NULL;
+        } else {
+            DEBUG_MSG("SX1281 Radio init succeeded, using SX1281 radio\n");
+            rIf_wide_lora = true;
         }
     }
 #endif
