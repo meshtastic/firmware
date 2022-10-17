@@ -6,6 +6,7 @@
 #include "Router.h"
 #include "assert.h"
 #include "configuration.h"
+#include "main.h"
 #include "sleep.h"
 #include <assert.h>
 #include <pb_decode.h>
@@ -364,37 +365,37 @@ void RadioInterface::applyModemConfig()
 
         switch (loraConfig.modem_preset) {
         case Config_LoRaConfig_ModemPreset_SHORT_FAST:
-            bw = myRegion->wideLora ? 800 : 250;
+            bw = (myRegion->wideLora && rIf_wide_lora) ? 800 : 250;
             cr = 8;
             sf = 7;
             break;
         case Config_LoRaConfig_ModemPreset_SHORT_SLOW:
-            bw = myRegion->wideLora ? 800 : 250;
+            bw = (myRegion->wideLora && rIf_wide_lora) ? 800 : 250;
             cr = 8;
             sf = 8;
             break;
         case Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
-            bw = myRegion->wideLora ? 800 : 250;
+            bw = (myRegion->wideLora && rIf_wide_lora) ? 800 : 250;
             cr = 8;
             sf = 9;
             break;
         case Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
-            bw = myRegion->wideLora ? 800 : 250;
+            bw = (myRegion->wideLora && rIf_wide_lora) ? 800 : 250;
             cr = 8;
             sf = 10;
             break;
         case Config_LoRaConfig_ModemPreset_LONG_FAST:
-            bw = myRegion->wideLora ? 800 : 250;
+            bw = (myRegion->wideLora && rIf_wide_lora) ? 800 : 250;
             cr = 8;
             sf = 11;
             break;
         case Config_LoRaConfig_ModemPreset_LONG_SLOW:
-            bw = myRegion->wideLora ? 400 : 125;
+            bw = (myRegion->wideLora && rIf_wide_lora) ? 400 : 125;
             cr = 8;
             sf = 12;
             break;
         case Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW:
-            bw = myRegion->wideLora ? 200 : 31.25;
+            bw = (myRegion->wideLora && rIf_wide_lora) ? 200 : 31.25;
             cr = 8;
             sf = 12;
             break;
