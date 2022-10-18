@@ -70,7 +70,7 @@ size_t RedirectablePrint::logDebug(const char *format, ...)
         va_list arg;
         va_start(arg, format);
 
-        // Cope with 0 len0 format strings, but look for new line terminator
+        // Cope with 0 len format strings, but look for new line terminator
         bool hasNewline = *format && format[strlen(format) - 1] == '\n';
 
         // If we are the first message on a report, include the header
