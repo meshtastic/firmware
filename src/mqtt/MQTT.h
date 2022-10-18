@@ -58,7 +58,7 @@ class MQTT : private concurrency::OSThread
     void onPublish(char *topic, byte *payload, unsigned int length);
 
     /// Called when a new publish arrives from the MQTT server
-    String downstreamPacketToJson(MeshPacket *mp);
+    std::string downstreamPacketToJson(MeshPacket *mp);
 
     /// Return 0 if sleep is okay, veto sleep if we are connected to pubsub server
     // int preflightSleepCb(void *unused = NULL) { return pubSub.connected() ? 1 : 0; }    
