@@ -49,6 +49,13 @@ size_t RedirectablePrint::vprintf(const char *format, va_list arg)
 
     if (len < 0) return 0;
 
+    // If the resulting string is longer than sizeof(printBuf)-1 characters, the remaining characters are still counted for the return value
+
+    if (len > sizeof(printBuf) - 1) {
+        len = sizeof(printBuf) - 1;
+        printBuf[sizeof(printBuf) - 2] = '\n';
+    }
+
     len = Print::write(printBuf, len);
     return len;
 }
