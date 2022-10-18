@@ -79,8 +79,8 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeHotspotAndroid = new ResourceNode("/generate_204", "GET", &handleHotspot);
 
     ResourceNode *nodeAdmin = new ResourceNode("/admin", "GET", &handleAdmin);
-    ResourceNode *nodeAdminSettings = new ResourceNode("/admin/settings", "GET", &handleAdminSettings);
-    ResourceNode *nodeAdminSettingsApply = new ResourceNode("/admin/settings/apply", "POST", &handleAdminSettingsApply);
+    //    ResourceNode *nodeAdminSettings = new ResourceNode("/admin/settings", "GET", &handleAdminSettings);
+    //    ResourceNode *nodeAdminSettingsApply = new ResourceNode("/admin/settings/apply", "POST", &handleAdminSettingsApply);
     //    ResourceNode *nodeAdminFs = new ResourceNode("/admin/fs", "GET", &handleFs);
     //    ResourceNode *nodeUpdateFs = new ResourceNode("/admin/fs/update", "POST", &handleUpdateFs);
     //    ResourceNode *nodeDeleteFs = new ResourceNode("/admin/fs/delete", "GET", &handleDeleteFsContent);
@@ -113,8 +113,8 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     //    secureServer->registerNode(nodeDeleteFs);
     secureServer->registerNode(nodeAdmin);
     //    secureServer->registerNode(nodeAdminFs);
-    secureServer->registerNode(nodeAdminSettings);
-    secureServer->registerNode(nodeAdminSettingsApply);
+    //    secureServer->registerNode(nodeAdminSettings);
+    //    secureServer->registerNode(nodeAdminSettingsApply);
     secureServer->registerNode(nodeRoot); // This has to be last
 
     // Insecure nodes
@@ -134,8 +134,8 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     //    insecureServer->registerNode(nodeDeleteFs);
     insecureServer->registerNode(nodeAdmin);
     //    insecureServer->registerNode(nodeAdminFs);
-    insecureServer->registerNode(nodeAdminSettings);
-    insecureServer->registerNode(nodeAdminSettingsApply);
+    //    insecureServer->registerNode(nodeAdminSettings);
+    //    insecureServer->registerNode(nodeAdminSettingsApply);
     insecureServer->registerNode(nodeRoot); // This has to be last
 }
 
@@ -694,8 +694,8 @@ void handleAdmin(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Methods", "GET");
 
     res->println("<h1>Meshtastic</h1>\n");
-    res->println("<a href=/admin/settings>Settings</a><br>\n");
-    res->println("<a href=/admin/fs>Manage Web Content</a><br>\n");
+    //    res->println("<a href=/admin/settings>Settings</a><br>\n");
+    //    res->println("<a href=/admin/fs>Manage Web Content</a><br>\n");
     res->println("<a href=/json/report>Device Report</a><br>\n");
 }
 
