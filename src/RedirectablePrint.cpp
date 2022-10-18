@@ -49,6 +49,13 @@ size_t RedirectablePrint::vprintf(const char *format, va_list arg)
 
     if (len < 0) return 0;
 
+    // If the resulting string is longer than sizeof(printBuf)-1 characters, the remaining characters are still counted for the return value
+
+    if (len > sizeof(printBuf) - 1) {
+        len = sizeof(printBuf) - 1;
+        printBuf[sizeof(printBuf) - 2] = '\n';
+    }
+
     len = Print::write(printBuf, len);
     return len;
 }
@@ -63,7 +70,7 @@ size_t RedirectablePrint::logDebug(const char *format, ...)
         va_list arg;
         va_start(arg, format);
 
-        // Cope with 0 len format strings, but look for new line terminator
+        // Cope with 0 len0 format strings, but look for new line terminator
         bool hasNewline = *format && format[strlen(format) - 1] == '\n';
 
         // If we are the first message on a report, include the header
