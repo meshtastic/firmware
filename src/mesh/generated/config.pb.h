@@ -117,7 +117,7 @@ typedef struct _Config_LoRaConfig {
     uint32_t hop_limit;
     bool tx_enabled;
     int8_t tx_power;
-    uint8_t channel_num;
+    uint16_t channel_num;
     pb_size_t ignore_incoming_count;
     uint32_t ignore_incoming[3];
 } Config_LoRaConfig;
@@ -388,7 +388,7 @@ extern const pb_msgdesc_t Config_BluetoothConfig_msg;
 #define Config_BluetoothConfig_size              10
 #define Config_DeviceConfig_size                 6
 #define Config_DisplayConfig_size                20
-#define Config_LoRaConfig_size                   67
+#define Config_LoRaConfig_size                   68
 #define Config_NetworkConfig_size                137
 #define Config_PositionConfig_size               30
 #define Config_PowerConfig_size                  43
