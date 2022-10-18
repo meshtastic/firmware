@@ -43,40 +43,25 @@ bool APStartupComplete = 0;
 
 static bool needReconnect = true; // If we create our reconnector, run it once at the beginning
 
-// FIXME, veto light sleep if we have a TCP server running
-#if 0
-class WifiSleepObserver : public Observer<uint32_t> {
-protected:
-
-    /// Return 0 if sleep is okay
-    virtual int onNotify(uint32_t newValue) {
-
-    }
-};
-
-static WifiSleepObserver wifiSleepObserver;
-//preflightSleepObserver.observe(&preflightSleep);
-#endif
-
 static int32_t reconnectWiFi()
 {
     const char *wifiName = config.network.wifi_ssid;
     const char *wifiPsw = config.network.wifi_psk;
 
     if (config.network.wifi_enabled && needReconnect && !WiFi.isConnected()) {
-        // if (radioConfig.has_preferences && needReconnect && !WiFi.isConnected()) {
-
+        
         if (!*wifiPsw) // Treat empty password as no password
             wifiPsw = NULL;
 
         if (*wifiName) {
             needReconnect = false;
 
+            // Make sure we clear old connection credentials
+            WiFi.disconnect(false, true);
+
             DEBUG_MSG("... Reconnecting to WiFi access point\n");
             WiFi.mode(WIFI_MODE_STA);
             WiFi.begin(wifiName, wifiPsw);
-
-            // Starting timeClient;
         }
     }
 
