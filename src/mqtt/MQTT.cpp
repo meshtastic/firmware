@@ -253,7 +253,7 @@ void MQTT::onSend(const MeshPacket &mp, ChannelIndex chIndex)
 }
 
 // converts a downstream packet into a json message
-String MQTT::downstreamPacketToJson(MeshPacket *mp)
+std::string MQTT::downstreamPacketToJson(MeshPacket *mp)
 {
     using namespace json11;
 
@@ -398,8 +398,8 @@ String MQTT::downstreamPacketToJson(MeshPacket *mp)
     };
 
     // serialize and return it
-    static std::string jsonStr = jsonObj.dump();
+    std::string jsonStr = jsonObj.dump();
     DEBUG_MSG("serialized json message: %s\n", jsonStr.c_str());
 
-    return jsonStr.c_str();
+    return jsonStr;
 }
