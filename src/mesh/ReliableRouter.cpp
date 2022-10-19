@@ -63,7 +63,7 @@ bool ReliableRouter::shouldFilterReceived(MeshPacket *p)
             sendAckNak(Routing_Error_NONE, getFrom(p), p->id, p->channel);
             DEBUG_MSG("acking a repeated want_ack packet\n");
         }
-    } else if (wasSeenRecently(p, false) && p->hop_limit == HOP_RELIABLE && !MeshModule::currentReply) {
+    } else if (wasSeenRecently(p, false) && p->hop_limit == HOP_RELIABLE && !MeshModule::currentReply && p->to != nodeDB.getNodeNum()) {
         // retransmission on broadcast has hop_limit still equal to HOP_RELIABLE
         DEBUG_MSG("Resending implicit ack for a repeated floodmsg\n");
         MeshPacket *tosend = packetPool.allocCopy(*p);
