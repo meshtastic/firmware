@@ -69,6 +69,7 @@ typedef struct _DeviceState {
 } DeviceState;
 
 typedef PB_BYTES_ARRAY_T(2048) OEMStore_oem_icon_bits_t;
+typedef PB_BYTES_ARRAY_T(32) OEMStore_oem_aes_key_t;
 /* This can be used for customizing the firmware distribution. If populated,
  show a secondary bootup screen with cuatom logo and text for 2.5 seconds. */
 typedef struct _OEMStore { 
@@ -82,6 +83,8 @@ typedef struct _OEMStore {
     ScreenFonts oem_font;
     /* Use this font for the OEM text. */
     char oem_text[40];
+    /* The default device encryption key, 16 or 32 byte */
+    OEMStore_oem_aes_key_t oem_aes_key;
 } OEMStore;
 
 
@@ -98,10 +101,10 @@ extern "C" {
 /* Initializer values for message structs */
 #define DeviceState_init_default                 {false, MyNodeInfo_init_default, false, User_init_default, 0, {NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default, NodeInfo_init_default}, 0, {MeshPacket_init_default}, false, MeshPacket_init_default, 0, 0, 0}
 #define ChannelFile_init_default                 {0, {Channel_init_default, Channel_init_default, Channel_init_default, Channel_init_default, Channel_init_default, Channel_init_default, Channel_init_default, Channel_init_default}, 0}
-#define OEMStore_init_default                    {0, 0, {0, {0}}, _ScreenFonts_MIN, ""}
+#define OEMStore_init_default                    {0, 0, {0, {0}}, _ScreenFonts_MIN, "", {0, {0}}}
 #define DeviceState_init_zero                    {false, MyNodeInfo_init_zero, false, User_init_zero, 0, {NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero, NodeInfo_init_zero}, 0, {MeshPacket_init_zero}, false, MeshPacket_init_zero, 0, 0, 0}
 #define ChannelFile_init_zero                    {0, {Channel_init_zero, Channel_init_zero, Channel_init_zero, Channel_init_zero, Channel_init_zero, Channel_init_zero, Channel_init_zero, Channel_init_zero}, 0}
-#define OEMStore_init_zero                       {0, 0, {0, {0}}, _ScreenFonts_MIN, ""}
+#define OEMStore_init_zero                       {0, 0, {0, {0}}, _ScreenFonts_MIN, "", {0, {0}}}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define ChannelFile_channels_tag                 1
@@ -119,6 +122,7 @@ extern "C" {
 #define OEMStore_oem_icon_bits_tag               3
 #define OEMStore_oem_font_tag                    4
 #define OEMStore_oem_text_tag                    5
+#define OEMStore_oem_aes_key_tag                 6
 
 /* Struct field encoding specification for nanopb */
 #define DeviceState_FIELDLIST(X, a) \
@@ -150,7 +154,8 @@ X(a, STATIC,   SINGULAR, UINT32,   oem_icon_width,    1) \
 X(a, STATIC,   SINGULAR, UINT32,   oem_icon_height,   2) \
 X(a, STATIC,   SINGULAR, BYTES,    oem_icon_bits,     3) \
 X(a, STATIC,   SINGULAR, UENUM,    oem_font,          4) \
-X(a, STATIC,   SINGULAR, STRING,   oem_text,          5)
+X(a, STATIC,   SINGULAR, STRING,   oem_text,          5) \
+X(a, STATIC,   SINGULAR, BYTES,    oem_aes_key,       6)
 #define OEMStore_CALLBACK NULL
 #define OEMStore_DEFAULT NULL
 
@@ -166,7 +171,7 @@ extern const pb_msgdesc_t OEMStore_msg;
 /* Maximum encoded size of messages (where known) */
 #define ChannelFile_size                         638
 #define DeviceState_size                         21800
-#define OEMStore_size                            2106
+#define OEMStore_size                            2140
 
 #ifdef __cplusplus
 } /* extern "C" */
