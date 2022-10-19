@@ -360,7 +360,7 @@ jobs:
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v3
         with:
           path: ./
 
@@ -384,7 +384,7 @@ jobs:
             ./device-*.bat
           retention-days: 90
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v3
         with:
           name: firmware-${{ steps.version.outputs.version }}
           path: ./output
@@ -437,7 +437,7 @@ jobs:
         run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v3
         with:
           name: firmware-${{ steps.version.outputs.version }}
           path: ./output
@@ -450,7 +450,7 @@ jobs:
       - name: Zip firmware
         run: zip -j -r ./firmware-${{ steps.version.outputs.version }}.zip ./output
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v3
         with:
           name: debug-elfs-${{ steps.version.outputs.version }}.zip
           path: ./elfs
