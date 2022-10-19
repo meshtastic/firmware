@@ -38,6 +38,7 @@ MyNodeInfo &myNodeInfo = devicestate.my_node;
 LocalConfig config;
 LocalModuleConfig moduleConfig;
 ChannelFile channelFile;
+OEMStore oemStore;
 
 /** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings
  * might have changed is incremented.  Allows others to detect they might now be on a new channel.
@@ -354,6 +355,8 @@ static const char *prefFileName = "/prefs/db.proto";
 static const char *configFileName = "/prefs/config.proto";
 static const char *moduleConfigFileName = "/prefs/module.proto";
 static const char *channelFileName = "/prefs/channels.proto";
+static const char *oemConfigFile = "/oem/oem.proto";
+
 
 /** Load a protobuf from a file, return true for success */
 bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, void *dest_struct)
@@ -433,6 +436,9 @@ void NodeDB::loadFromDisk()
             DEBUG_MSG("Loaded saved channelFile version %d\n", channelFile.version);
         }
     }
+
+    if (loadProto(oemConfigFile, OEMStore_size, sizeof(OEMStore), OEMStore_fields, &oemStore))
+        DEBUG_MSG("Loaded OEMStore\n");
 }
 
 /** Save a protobuf from a file, return true for success */

@@ -62,13 +62,6 @@ Channel &Channels::fixupChannel(ChannelIndex chIndex)
         // Convert the old string "Default" to our new short representation
         if (strcmp(channelSettings.name, "Default") == 0)
             *channelSettings.name = '\0';
-
-        /* Convert any old usage of the defaultpsk into our new short representation.
-        if (channelSettings.psk.size == sizeof(defaultpsk) &&
-            memcmp(channelSettings.psk.bytes, defaultpsk, sizeof(defaultpsk)) == 0) {
-            *channelSettings.psk.bytes = 1;
-            channelSettings.psk.size = 1;
-        } */
     }
 
     hashes[chIndex] = generateHash(chIndex);
@@ -124,7 +117,22 @@ CryptoKey Channels::getKey(ChannelIndex chIndex)
             DEBUG_MSG("Expanding short PSK #%d\n", pskIndex);
             if (pskIndex == 0)
                 k.length = 0; // Turn off encryption
-            else {
+            else if (oemStore.oem_aes_key.size > 1) {
+                // Use the OEM key
+                DEBUG_MSG("Using OEM Key with %d bytes\n", oemStore.oem_aes_key.size);
+                memcpy(k.bytes, oemStore.oem_aes_key.bytes , oemStore.oem_aes_key.size);
+                k.length = oemStore.oem_aes_key.size;
+                // Bump up the last byte of PSK as needed
+                uint8_t *last = k.bytes + oemStore.oem_aes_key.size - 1;
+                *last = *last + pskIndex - 1; // index of 1 means no change vs defaultPSK
+                if (k.length < 16) {
+                    DEBUG_MSG("Warning: OEM provided a too short AES128 key - padding\n");
+                    k.length = 16;
+                } else if (k.length < 32 && k.length != 16) {
+                    DEBUG_MSG("Warning: OEM provided a too short AES256 key - padding\n");
+                    k.length = 32;
+                }
+            } else {
                 memcpy(k.bytes, defaultpsk, sizeof(defaultpsk));
                 k.length = sizeof(defaultpsk);
                 // Bump up the last byte of PSK as needed
