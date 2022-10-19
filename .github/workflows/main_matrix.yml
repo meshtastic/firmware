@@ -62,7 +62,7 @@ jobs:
           python-version: 3.x
 
       - name: Cache python libs
-        uses: actions/cache@v1
+        uses: actions/cache@v3
         id: cache-pip # needed in if test
         with:
           path: ~/.cache/pip
@@ -117,7 +117,7 @@ jobs:
           python-version: 3.x
 
       - name: Cache python libs
-        uses: actions/cache@v1
+        uses: actions/cache@v3
         id: cache-pip # needed in if test
         with:
           path: ~/.cache/pip
@@ -195,7 +195,7 @@ jobs:
           python-version: 3.x
 
       - name: Cache python libs
-        uses: actions/cache@v1
+        uses: actions/cache@v3
         id: cache-pip # needed in if test
         with:
           path: ~/.cache/pip
@@ -250,7 +250,7 @@ jobs:
           python-version: 3.x
 
       - name: Cache python libs
-        uses: actions/cache@v1
+        uses: actions/cache@v3
         id: cache-pip # needed in if test
         with:
           path: ~/.cache/pip
@@ -297,7 +297,7 @@ jobs:
           python-version: 3.x
 
       - name: Cache python libs
-        uses: actions/cache@v1
+        uses: actions/cache@v3
         id: cache-pip # needed in if test
         with:
           path: ~/.cache/pip
