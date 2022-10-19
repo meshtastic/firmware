@@ -42,7 +42,6 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
             if (json.object_items().count("sender") != 0 && json.object_items().count("payload") != 0 && json["type"] == "sendtext") {
                 // this is a valid envelope
                 if (json["sender"].string_value().compare(owner.id) != 0) {
-                    json["type"] = "text";
                     std::string jsonPayloadStr = json["payload"].dump();
                     DEBUG_MSG("JSON payload %s, length %u\n", jsonPayloadStr.c_str(), jsonPayloadStr.length());
 
