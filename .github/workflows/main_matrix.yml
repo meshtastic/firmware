@@ -157,7 +157,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           
       - name: Get release version string
-        run: echo "{version}={$(./bin/buildinfo.py long)}" >> $GITHUB_OUTPUT
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
       - name: Store binaries as an artifact
@@ -214,7 +214,7 @@ jobs:
         run: bin/build-nrf52.sh ${{ matrix.board }}
 
       - name: Get release version string
-        run: echo "{version}={$(./bin/buildinfo.py long)}" >> $GITHUB_OUTPUT
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
       - name: Store binaries as an artifact
@@ -269,7 +269,7 @@ jobs:
         run: ./bin/build-rpi2040.sh ${{ matrix.board }}
 
       - name: Get release version string
-        run: echo "{version}={$(./bin/buildinfo.py long)}" >> $GITHUB_OUTPUT
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
       - name: Store binaries as an artifact
@@ -327,7 +327,7 @@ jobs:
         run: bin/build-native.sh
 
       - name: Get release version string
-        run: echo "{version}={$(./bin/buildinfo.py long)}" >> $GITHUB_OUTPUT
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
       - name: Store binaries as an artifact
@@ -365,7 +365,7 @@ jobs:
           path: ./
 
       - name: Get release version string
-        run: echo "{version}={$(./bin/buildinfo.py long)}" >> $GITHUB_OUTPUT
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
       - name: Move files up
@@ -434,7 +434,7 @@ jobs:
           python-version: 3.x
 
       - name: Get release version string
-        run: echo "{version}={$(./bin/buildinfo.py long)}" >> $GITHUB_OUTPUT
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
       - uses: actions/download-artifact@v2
