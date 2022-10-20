@@ -130,6 +130,8 @@ bool NodeDB::factoryReset()
     // second, install default state (this will deal with the duplicate mac address issue)
     installDefaultDeviceState();
     installDefaultConfig();
+    installDefaultModuleConfig();
+    installDefaultChannels();
     // third, write everything to disk
     saveToDisk();
 #ifdef ARCH_ESP32
