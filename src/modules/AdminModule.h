@@ -37,6 +37,7 @@ class AdminModule : public ProtobufModule<AdminMessage>
     void handleSetConfig(const Config &c);
     void handleSetModuleConfig(const ModuleConfig &c);
     void handleSetChannel();
+    void reboot(int32_t seconds);
 };
 
 extern AdminModule *adminModule;
