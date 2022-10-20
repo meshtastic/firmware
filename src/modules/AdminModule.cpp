@@ -219,6 +219,8 @@ void AdminModule::handleSetConfig(const Config &c)
             DEBUG_MSG("Setting config: Position\n");
             config.has_position = true;
             config.position = c.payload_variant.position;
+            // Save nodedb as well in case we got a fixed position packet
+            nodeDB.saveToDisk(SEGMENT_DEVICESTATE);
             break;
         case Config_power_tag:
             DEBUG_MSG("Setting config: Power\n");
