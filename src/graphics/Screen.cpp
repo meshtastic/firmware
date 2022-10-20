@@ -84,10 +84,6 @@ static char ourId[5];
 // GeoCoord object for the screen
 GeoCoord geoCoord;
 
-// OEM Config File
-static const char *oemConfigFile = "/oem/oem.proto";
-OEMStore oemStore;
-
 #ifdef SHOW_REDRAWS
 static bool heartbeat = false;
 #endif
@@ -927,9 +923,6 @@ void Screen::setup()
 #ifdef AutoOLEDWire_h
     dispdev.setDetected(screen_model);
 #endif
-
-    // Load OEM config from Proto file if existent
-    loadProto(oemConfigFile, OEMStore_size, sizeof(oemConfigFile), OEMStore_fields, &oemStore);
 
     // Initialising the UI will init the display too.
     ui.init();
