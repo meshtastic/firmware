@@ -3,8 +3,13 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include "Router.h"
+#include "buzz/buzz.h"
 #include "configuration.h"
 #include <Arduino.h>
+
+#ifndef PIN_BUZZER
+#define PIN_BUZZER false
+#endif
 
 //#include <assert.h>
 
@@ -75,7 +80,9 @@ int32_t ExternalNotificationModule::runOnce()
                                     : EXT_NOTIFICATION_MODULE_OUTPUT_MS) <
             millis()) {
             DEBUG_MSG("Turning off external notification\n");
-            setExternalOff();
+            if (output != PIN_BUZZER) {
+                setExternalOff();
+            }
         }
     }
 
@@ -88,9 +95,7 @@ void ExternalNotificationModule::setExternalOn()
     externalCurrentState = 1;
     externalTurnedOn = millis();
 
-    digitalWrite((moduleConfig.external_notification.output
-                      ? moduleConfig.external_notification.output
-                      : EXT_NOTIFICATION_MODULE_OUTPUT),
+    digitalWrite(output,
                  (moduleConfig.external_notification.active ? true : false));
 #endif
 }
@@ -100,9 +105,7 @@ void ExternalNotificationModule::setExternalOff()
 #ifdef EXT_NOTIFY_OUT
     externalCurrentState = 0;
 
-    digitalWrite((moduleConfig.external_notification.output
-                      ? moduleConfig.external_notification.output
-                      : EXT_NOTIFICATION_MODULE_OUTPUT),
+    digitalWrite(output,
                  (moduleConfig.external_notification.active ? false : true));
 #endif
 }
@@ -135,14 +138,19 @@ ExternalNotificationModule::ExternalNotificationModule()
 
         DEBUG_MSG("Initializing External Notification Module\n");
 
-        // Set the direction of a pin
-        pinMode((moduleConfig.external_notification.output
-                     ? moduleConfig.external_notification.output
-                     : EXT_NOTIFICATION_MODULE_OUTPUT),
-                OUTPUT);
+        output = moduleConfig.external_notification.output
+                        ? moduleConfig.external_notification.output
+                        : EXT_NOTIFICATION_MODULE_OUTPUT;
 
-        // Turn off the pin
-        setExternalOff();
+        if (output != PIN_BUZZER) {
+            // Set the direction of a pin
+            DEBUG_MSG("Using Pin %i in digital mode\n", output);
+            pinMode(output, OUTPUT);
+            // Turn off the pin
+            setExternalOff();
+        } else{
+            DEBUG_MSG("Using Pin %i in PWM mode\n", output);
+        }
     } else {
         DEBUG_MSG("External Notification Module Disabled\n");
         enabled = false;
@@ -165,14 +173,22 @@ ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
                 DEBUG_MSG("externalNotificationModule - Notification Bell\n");
                 for (int i = 0; i < p.payload.size; i++) {
                     if (p.payload.bytes[i] == ASCII_BELL) {
-                        setExternalOn();
+                        if (output != PIN_BUZZER) {
+                            setExternalOn();
+                        } else {
+                            playBeep();
+                        }
                     }
                 }
             }
 
             if (moduleConfig.external_notification.alert_message) {
                 DEBUG_MSG("externalNotificationModule - Notification Module\n");
-                setExternalOn();
+                if (output != PIN_BUZZER) {
+                    setExternalOn();
+                } else {
+                    playBeep();
+                }
             }
         }
 
