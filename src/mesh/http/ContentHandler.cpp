@@ -251,7 +251,7 @@ void htmlDeleteDir(const char *dirname)
 std::vector<std::map<char *, char *>> *htmlListDir(std::vector<std::map<char *, char *>> *fileList, const char *dirname,
                                                    uint8_t levels)
 {
-    File root = FSCom.open(dirname);
+    File root = FSCom.open(dirname, FILE_O_READ);
     if (!root) {
         return NULL;
     }
@@ -264,14 +264,27 @@ std::vector<std::map<char *, char *>> *htmlListDir(std::vector<std::map<char *, 
     while (file) {
         if (file.isDirectory() && !String(file.name()).endsWith(".")) {
             if (levels) {
+#ifdef ARCH_ESP32
+                htmlListDir(fileList, file.path(), levels - 1);
+#else                
                 htmlListDir(fileList, file.name(), levels - 1);
+#endif
+                file.close();
             }
         } else {
             std::map<char *, char *> thisFileMap;
             thisFileMap[strdup("size")] = strdup(String(file.size()).c_str());
+#ifdef ARCH_ESP32            
+            thisFileMap[strdup("name")] = strdup(String(file.path()).substring(1).c_str());
+#else
             thisFileMap[strdup("name")] = strdup(String(file.name()).substring(1).c_str());
+#endif
             if (String(file.name()).substring(1).endsWith(".gz")) {
+#ifdef ARCH_ESP32
+                String modifiedFile = String(file.path()).substring(1);
+#else
                 String modifiedFile = String(file.name()).substring(1);
+#endif
                 modifiedFile.remove((modifiedFile.length() - 3), 3);
                 thisFileMap[strdup("nameModified")] = strdup(modifiedFile.c_str());
             }
@@ -291,7 +304,7 @@ void handleFsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Methods", "GET");
 
     using namespace json11;
-    auto fileList = htmlListDir(new std::vector<std::map<char *, char *>>(), "/", 10);
+    auto fileList = htmlListDir(new std::vector<std::map<char *, char *>>(), "/static", 10);
 
     // create json output structure
     Json filesystemObj = Json::object{
