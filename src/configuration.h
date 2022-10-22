@@ -142,6 +142,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef HAS_WIFI
     #define HAS_WIFI 0
 #endif
+#ifndef HAS_ETHERNET
+    #define ETHERNET 0
+#endif
 #ifndef HAS_SCREEN
     #define HAS_SCREEN 0
 #endif

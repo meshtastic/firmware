@@ -30,6 +30,7 @@
 // #include <driver/rtc_io.h>
 
 #include "mesh/http/WiFiAPClient.h"
+#include "mesh/eth/ethClient.h"
 
 #ifdef ARCH_ESP32
 #include "mesh/http/WebServer.h"
@@ -439,6 +440,9 @@ void setup()
 
     // Initialize Wifi
     initWifi(forceSoftAP);
+
+    // Initialize Ethernet
+    initEthernet();
 
 #ifdef ARCH_ESP32
     // Start web server thread.
