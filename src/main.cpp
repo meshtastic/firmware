@@ -438,11 +438,13 @@ void setup()
     mqttInit();
 #endif
 
+#ifndef ARCH_PORTDUINO
     // Initialize Wifi
     initWifi(forceSoftAP);
 
     // Initialize Ethernet
     initEthernet();
+#endif
 
 #ifdef ARCH_ESP32
     // Start web server thread.
