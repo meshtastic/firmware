@@ -242,6 +242,12 @@ void setup()
     delay(1);
 #endif
 
+#ifdef RAK4630
+    // We need to enable 3.3V periphery in order to scan it
+    pinMode(PIN_3V3_EN, OUTPUT);
+    digitalWrite(PIN_3V3_EN, 1);
+#endif
+
     // We need to scan here to decide if we have a screen for nodeDB.init()
     scanI2Cdevice();
 #ifdef RAK4630
