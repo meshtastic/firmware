@@ -352,7 +352,7 @@ typedef struct _MyNodeInfo {
 
 /* a gps position */
 typedef struct _Position { 
-    /* The new preferred location encoding, divide by 1e-7 to get degrees
+    /* The new preferred location encoding, multiply by 1e-7 to get degrees
  in floating point */
     int32_t latitude_i;
     /* TODO: REPLACE */
