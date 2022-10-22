@@ -226,6 +226,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
 
 #define HAS_RTC 1
 
+#define HAS_ETHERNET 1
+
 #ifdef __cplusplus
 }
 #endif
