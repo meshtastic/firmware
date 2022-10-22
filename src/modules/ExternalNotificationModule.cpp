@@ -91,23 +91,19 @@ int32_t ExternalNotificationModule::runOnce()
 
 void ExternalNotificationModule::setExternalOn()
 {
-#ifdef EXT_NOTIFY_OUT
     externalCurrentState = 1;
     externalTurnedOn = millis();
 
     digitalWrite(output,
                  (moduleConfig.external_notification.active ? true : false));
-#endif
 }
 
 void ExternalNotificationModule::setExternalOff()
 {
-#ifdef EXT_NOTIFY_OUT
     externalCurrentState = 0;
 
     digitalWrite(output,
                  (moduleConfig.external_notification.active ? false : true));
-#endif
 }
 
 // --------
@@ -118,8 +114,6 @@ ExternalNotificationModule::ExternalNotificationModule()
 {
     // restrict to the admin channel for rx
     boundChannel = Channels::gpioChannel;
-
-#ifdef EXT_NOTIFY_OUT
 
     /*
         Uncomment the preferences below if you want to use the module
@@ -155,13 +149,10 @@ ExternalNotificationModule::ExternalNotificationModule()
         DEBUG_MSG("External Notification Module Disabled\n");
         enabled = false;
     }
-#endif
 }
 
 ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
 {
-#ifdef EXT_NOTIFY_OUT
-
     if (moduleConfig.external_notification.enabled) {
 
         if (getFrom(&mp) != nodeDB.getNodeNum()) {
@@ -195,7 +186,6 @@ ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
     } else {
         DEBUG_MSG("External Notification Module Disabled\n");
     }
-#endif
 
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }
