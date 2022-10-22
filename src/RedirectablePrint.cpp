@@ -44,7 +44,7 @@ size_t RedirectablePrint::vprintf(const char *format, va_list arg)
     static char printBuf[160];
 
     va_copy(copy, arg);
-    int len = vsnprintf(printBuf, sizeof(printBuf), format, copy);
+    size_t len = vsnprintf(printBuf, sizeof(printBuf), format, copy);
     va_end(copy);
 
     if (len < 0) return 0;
