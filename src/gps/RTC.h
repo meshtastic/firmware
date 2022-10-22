@@ -16,7 +16,7 @@ enum RTCQuality {
     RTCQualityFromNet = 2,
 
     /// Our time is based on NTP
-    RTCQualityNTP= 3,
+    RTCQualityNTP = 3,
 
     /// Our time is based on our own GPS
     RTCQualityGPS = 4

@@ -244,6 +244,9 @@ void NRF52Bluetooth::setup()
     Bluefruit.Periph.setConnectCallback(onConnect);
     Bluefruit.Periph.setDisconnectCallback(onDisconnect);
 
+    bledfu.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
+    bledfu.begin(); // Install the DFU helper
+    
     // Configure and Start the Device Information Service
     DEBUG_MSG("Configuring the Device Information Service\n");
     bledis.setModel(optstr(HW_VERSION));
@@ -254,7 +257,7 @@ void NRF52Bluetooth::setup()
     DEBUG_MSG("Configuring the Battery Service\n");
     blebas.begin();
     blebas.write(0); // Unknown battery level for now
-    bledfu.begin(); // Install the DFU helper
+
 
     // Setup the Heart Rate Monitor service using
     // BLEService and BLECharacteristic classes

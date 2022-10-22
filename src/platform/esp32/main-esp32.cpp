@@ -4,6 +4,7 @@
 #include "main.h"
 
 #include "nimble/NimbleBluetooth.h"
+#include "BleOta.h"
 #include "mesh/http/WiFiAPClient.h"
 
 #include "sleep.h"
@@ -63,6 +64,12 @@ void esp32Setup()
     preferences.putUInt("rebootCounter", rebootCounter);
     preferences.end();
     DEBUG_MSG("Number of Device Reboots: %d\n", rebootCounter);
+    String BLEOTA=BleOta::getOtaAppVersion();
+    if (BLEOTA.isEmpty()) {
+        DEBUG_MSG("No OTA firmware available\n");
+    }else{
+        DEBUG_MSG("OTA firmware version %s\n", BLEOTA);
+    }
 
     // enableModemSleep();
 

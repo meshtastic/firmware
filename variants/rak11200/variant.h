@@ -59,7 +59,7 @@ static const uint8_t SCK = 33;
 
 // https://docs.rakwireless.com/Product-Categories/WisBlock/RAK13300/
 
-#define LORA_DIO0 26  // a No connect on the SX1262/SX1268 module
+#define LORA_DIO0 -1  // a No connect on the SX1262/SX1268 module
 #define LORA_RESET WB_IO4 // RST for SX1276, and for SX1262/SX1268
 #define LORA_DIO1 WB_IO6  // IRQ for SX1262/SX1268
 #define LORA_DIO2 WB_IO5  // BUSY for SX1262/SX1268
