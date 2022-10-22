@@ -57,12 +57,12 @@ jobs:
           sudo apt-get install -y cppcheck
 
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: 3.x
 
       - name: Cache python libs
-        uses: actions/cache@v1
+        uses: actions/cache@v3
         id: cache-pip # needed in if test
         with:
           path: ~/.cache/pip
@@ -112,12 +112,12 @@ jobs:
           repository: ${{github.event.pull_request.head.repo.full_name}}
 
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: 3.x
 
       - name: Cache python libs
-        uses: actions/cache@v1
+        uses: actions/cache@v3
         id: cache-pip # needed in if test
         with:
           path: ~/.cache/pip
@@ -157,11 +157,11 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           
       - name: Get release version string
-        run: echo "::set-output name=version::$(./bin/buildinfo.py long)"
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
       - name: Store binaries as an artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: firmware-${{ matrix.board }}-${{ steps.version.outputs.version }}.zip
           path: |
@@ -190,12 +190,12 @@ jobs:
           repository: ${{github.event.pull_request.head.repo.full_name}}
 
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: 3.x
 
       - name: Cache python libs
-        uses: actions/cache@v1
+        uses: actions/cache@v3
         id: cache-pip # needed in if test
         with:
           path: ~/.cache/pip
@@ -214,16 +214,17 @@ jobs:
         run: bin/build-nrf52.sh ${{ matrix.board }}
 
       - name: Get release version string
-        run: echo "::set-output name=version::$(./bin/buildinfo.py long)"
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
       - name: Store binaries as an artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: firmware-${{ matrix.board }}-${{ steps.version.outputs.version }}.zip
           path: |
             release/*.uf2
             release/*.elf
+            release/*.zip
           retention-days: 90
 
   build-rpi2040:
@@ -244,12 +245,12 @@ jobs:
           repository: ${{github.event.pull_request.head.repo.full_name}}
 
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: 3.x
 
       - name: Cache python libs
-        uses: actions/cache@v1
+        uses: actions/cache@v3
         id: cache-pip # needed in if test
         with:
           path: ~/.cache/pip
@@ -268,11 +269,11 @@ jobs:
         run: ./bin/build-rpi2040.sh ${{ matrix.board }}
 
       - name: Get release version string
-        run: echo "::set-output name=version::$(./bin/buildinfo.py long)"
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
       - name: Store binaries as an artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: firmware-${{ matrix.board }}-${{ steps.version.outputs.version }}.zip
           path: |
@@ -291,12 +292,12 @@ jobs:
           repository: ${{github.event.pull_request.head.repo.full_name}}
 
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: 3.x
 
       - name: Cache python libs
-        uses: actions/cache@v1
+        uses: actions/cache@v3
         id: cache-pip # needed in if test
         with:
           path: ~/.cache/pip
@@ -326,11 +327,11 @@ jobs:
         run: bin/build-native.sh
 
       - name: Get release version string
-        run: echo "::set-output name=version::$(./bin/buildinfo.py long)"
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
       - name: Store binaries as an artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: firmware-native-${{ steps.version.outputs.version }}.zip
           path: |
@@ -359,30 +360,31 @@ jobs:
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v3
         with:
           path: ./
 
       - name: Get release version string
-        run: echo "::set-output name=version::$(./bin/buildinfo.py long)"
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
       - name: Move files up
-        run: mv -b -t ./ ./*tbeam-1*/littlefs*.bin ./*tbeam-1*/bleota.bin ./**/firmware*.bin ./*t-echo*/Meshtastic_nRF52_factory_erase.uf2 ./**/firmware-*.uf2 ./**/*.elf ./**/meshtasticd_linux_amd64 ./*native*/*device-*.sh ./*native*/*device-*.bat
+        run: mv -b -t ./ ./*tbeam-1*/littlefs*.bin ./*tbeam-1*/bleota.bin ./**/firmware*.bin ./*t-echo*/Meshtastic_nRF52_factory_erase.uf2 ./**/firmware-*.uf2 ./**/firmware-*-ota.zip ./**/*.elf ./**/meshtasticd_linux_amd64 ./*native*/*device-*.sh ./*native*/*device-*.bat
 
       - name: Repackage in single firmware zip
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: firmware-${{ steps.version.outputs.version }}
           path: |
             ./*.bin
             ./*.uf2
+            ./firmware-*-ota.zip
             ./meshtasticd_linux_amd64
             ./device-*.sh
             ./device-*.bat
           retention-days: 90
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v3
         with:
           name: firmware-${{ steps.version.outputs.version }}
           path: ./output
@@ -400,7 +402,7 @@ jobs:
         run: zip -j -r ./firmware-${{ steps.version.outputs.version }}.zip ./output
 
       - name: Repackage in single elfs zip
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: debug-elfs-${{ steps.version.outputs.version }}.zip
           path: ./*.elf
@@ -424,18 +426,18 @@ jobs:
     needs: [gather-artifacts, after-checks]
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
           
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: 3.x
 
       - name: Get release version string
-        run: echo "::set-output name=version::$(./bin/buildinfo.py long)"
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v3
         with:
           name: firmware-${{ steps.version.outputs.version }}
           path: ./output
@@ -448,7 +450,7 @@ jobs:
       - name: Zip firmware
         run: zip -j -r ./firmware-${{ steps.version.outputs.version }}.zip ./output
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v3
         with:
           name: debug-elfs-${{ steps.version.outputs.version }}.zip
           path: ./elfs
@@ -466,7 +468,7 @@ jobs:
         with:
           draft: true
           prerelease: true
-          release_name: Meshtastic Device ${{ steps.version.outputs.version }} alpha - Public Preview
+          release_name: Meshtastic Device ${{ steps.version.outputs.version }} Alpha
           tag_name: v${{ steps.version.outputs.version }}
           body: |
             Autogenerated by github action, developer should edit as required before publishing...

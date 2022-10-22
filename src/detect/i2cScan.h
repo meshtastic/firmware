@@ -9,6 +9,41 @@
 #endif
 
 #if HAS_WIRE
+
+void printATECCInfo()
+{
+#ifndef ARCH_PORTDUINO
+    atecc.readConfigZone(false);
+
+    DEBUG_MSG("ATECC608B Serial Number: ");
+    for (int i = 0 ; i < 9 ; i++) {
+        DEBUG_MSG("%02x",atecc.serialNumber[i]);
+    }
+
+    DEBUG_MSG(", Rev Number: ");
+    for (int i = 0 ; i < 4 ; i++) {
+        DEBUG_MSG("%02x",atecc.revisionNumber[i]);
+    }
+    DEBUG_MSG("\n");
+
+    DEBUG_MSG("ATECC608B Config %s",atecc.configLockStatus ? "Locked" : "Unlocked");
+    DEBUG_MSG(", Data %s",atecc.dataOTPLockStatus ? "Locked" : "Unlocked");
+    DEBUG_MSG(", Slot 0 %s\n",atecc.slot0LockStatus ? "Locked" : "Unlocked");
+
+    if (atecc.configLockStatus && atecc.dataOTPLockStatus && atecc.slot0LockStatus) {
+        if (atecc.generatePublicKey() == false) {
+            DEBUG_MSG("ATECC608B Error generating public key\n");
+        } else {
+            DEBUG_MSG("ATECC608B Public Key: ");
+            for (int i = 0 ; i < 64 ; i++) {
+                DEBUG_MSG("%02x",atecc.publicKey64Bytes[i]);
+            }
+            DEBUG_MSG("\n");
+        }
+    }
+#endif
+}
+
 uint16_t getRegisterValue(uint8_t address, uint8_t reg, uint8_t length) {
     uint16_t value = 0x00;
     Wire.beginTransmission(address);
@@ -79,6 +114,17 @@ void scanI2Cdevice(void)
                     DEBUG_MSG("unknown display found\n");
                 }
             }
+#ifndef ARCH_PORTDUINO
+            if (addr == ATECC608B_ADDR){
+                keystore_found = addr;
+                if (atecc.begin(keystore_found) == true) {
+                    DEBUG_MSG("ATECC608B initialized\n");
+                } else {
+                    DEBUG_MSG("ATECC608B initialization failed\n");
+                }
+                printATECCInfo();
+            }
+#endif
 #ifdef RV3028_RTC
             if (addr == RV3028_RTC){
                 rtc_found = addr;
@@ -145,13 +191,21 @@ void scanI2Cdevice(void)
             nodeTelemetrySensorsMap[TelemetrySensorType_MCP9808] = addr;
             DEBUG_MSG("MCP9808 sensor found at address 0x%x\n", (uint8_t)addr);
         }
-        if(addr == QMC6310_ADDR){
+        if (addr == QMC6310_ADDR) {
             DEBUG_MSG("QMC6310 3-Axis magnetic sensor found at address 0x%x\n", (uint8_t)addr);
             nodeTelemetrySensorsMap[TelemetrySensorType_QMC6310] = addr;
         }
-        if(addr == QMI8658_ADDR){
+        if (addr == QMI8658_ADDR) {
             DEBUG_MSG("QMI8658 6-Axis inertial measurement sensor found at address 0x%x\n", (uint8_t)addr);
             nodeTelemetrySensorsMap[TelemetrySensorType_QMI8658] = addr;
+        }
+        if (addr == SHTC3_ADDR) {
+            DEBUG_MSG("SHTC3 sensor found at address 0x%x\n", (uint8_t)addr);
+            nodeTelemetrySensorsMap[TelemetrySensorType_SHTC3] = addr;
+        }
+        if (addr == LPS22HB_ADDR || addr == LPS22HB_ADDR_ALT) {
+            DEBUG_MSG("LPS22HB sensor found at address 0x%x\n", (uint8_t)addr);
+            nodeTelemetrySensorsMap[TelemetrySensorType_LPS22] = addr;
         }
         } else if (err == 4) {
             DEBUG_MSG("Unknow error at address 0x%x\n", addr);

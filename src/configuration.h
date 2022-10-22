@@ -110,6 +110,16 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define INA_ADDR_ALTERNATE 0x41
 #define QMC6310_ADDR 0x1C
 #define QMI8658_ADDR 0x6B
+#define SHTC3_ADDR 0x70
+#define LPS22HB_ADDR 0x5C
+#define LPS22HB_ADDR_ALT 0x5D
+
+// -----------------------------------------------------------------------------
+// Security
+// -----------------------------------------------------------------------------
+
+#define ATECC608B_ADDR 0x35
+
 // -----------------------------------------------------------------------------
 // GPS
 // -----------------------------------------------------------------------------
