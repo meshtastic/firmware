@@ -361,7 +361,7 @@ void RadioInterface::applyModemConfig()
     // Set up default configuration
     // No Sync Words in LORA mode
     Config_LoRaConfig &loraConfig = config.lora;
-    if (loraConfig.spread_factor == 0) {
+    if (loraConfig.use_preset) {
 
         switch (loraConfig.modem_preset) {
         case Config_LoRaConfig_ModemPreset_SHORT_FAST:
