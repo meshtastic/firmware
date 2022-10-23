@@ -79,7 +79,7 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
     Config_LoRaConfig &loraConfig = config.lora;
 
     loraConfig.modem_preset = Config_LoRaConfig_ModemPreset_LONG_FAST; // Default to Long Range & Fast
-
+    loraConfig.use_preset = true;
     loraConfig.tx_power = 0; // default
     uint8_t defaultpskIndex = 1;
     channelSettings.psk.bytes[0] = defaultpskIndex;
