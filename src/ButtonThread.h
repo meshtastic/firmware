@@ -159,9 +159,7 @@ class ButtonThread : public concurrency::OSThread
 
     static void userButtonDoublePressed()
     {
-#ifdef ARCH_ESP32
-        disablePin();
-#elif defined(USE_EINK)
+#if defined(USE_EINK)
         digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
 #endif
     }
