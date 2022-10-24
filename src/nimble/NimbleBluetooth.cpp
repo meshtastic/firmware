@@ -198,24 +198,3 @@ void clearNVS()
     ESP.restart();
 #endif
 }
-
-void disablePin() 
-{
-    DEBUG_MSG("User Override, disabling bluetooth pin requirement\n");
-    // keep track of when it was pressed, so we know it was within X seconds
-
-    // Flash the LED
-    setLed(true);
-    delay(100);
-    setLed(false);
-    delay(100);
-    setLed(true);
-    delay(100);
-    setLed(false);
-    delay(100);
-    setLed(true);
-    delay(100);
-    setLed(false);
-
-    doublepressed = millis();
-}
