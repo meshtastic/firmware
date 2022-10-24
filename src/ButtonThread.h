@@ -166,7 +166,7 @@ class ButtonThread : public concurrency::OSThread
 
     static void userButtonMultiPressed()
     {
-        screen->print("Sent manual ping\n");
+        screen->print("Sent ad-hoc ping\n");
         service.refreshMyNodeInfo();
         service.sendNetworkPing(NODENUM_BROADCAST, true);
     }
