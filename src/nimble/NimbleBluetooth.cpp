@@ -12,7 +12,6 @@ NimBLECharacteristic *fromNumCharacteristic;
 NimBLEServer *bleServer;
 
 static bool passkeyShowing;
-static uint32_t doublepressed;
 
 class BluetoothPhoneAPI : public PhoneAPI
 {
