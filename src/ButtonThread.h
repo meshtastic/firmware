@@ -166,6 +166,7 @@ class ButtonThread : public concurrency::OSThread
 
     static void userButtonMultiPressed()
     {
+        service.refreshMyNodeInfo();
         service.sendNetworkPing(NODENUM_BROADCAST, true);
     }
 
