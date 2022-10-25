@@ -171,15 +171,9 @@ bool initWifi(bool forceSoftAP)
         const char *wifiPsw = config.network.wifi_psk;
 
         if (forceSoftAP) {
-            DEBUG_MSG("WiFi ... Forced AP Mode\n");
-        } else if (config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT) {
             DEBUG_MSG("WiFi ... AP Mode\n");
-        } else if (config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN) {
-            DEBUG_MSG("WiFi ... Hidden AP Mode\n");
-        } else if (config.network.wifi_mode == Config_NetworkConfig_WiFiMode_CLIENT) {
-            DEBUG_MSG("WiFi ... Client Mode\n");
         } else {
-            DEBUG_MSG("WiFi ... WiFi Disabled\n");
+            DEBUG_MSG("WiFi ... Client Mode\n");
         }
 
         createSSLCert();
@@ -188,7 +182,7 @@ bool initWifi(bool forceSoftAP)
             wifiPsw = NULL;
 
         if (*wifiName || forceSoftAP) {
-            if (config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT || config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN || forceSoftAP) {
+            if (forceSoftAP) {
 
                 IPAddress apIP(192, 168, 42, 1);
                 WiFi.onEvent(WiFiEvent);
@@ -198,22 +192,7 @@ bool initWifi(bool forceSoftAP)
                     const char *softAPssid = "meshtasticAdmin";
                     const char *softAPpasswd = "12345678";
                     int ok = WiFi.softAP(softAPssid, softAPpasswd);
-                    DEBUG_MSG("Starting (Forced) WIFI AP: ssid=%s, ok=%d\n", softAPssid, ok);
-
-                } else {
-
-                    // If AP is configured to be hidden hidden
-                    if (config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN) {
-
-                        // The configurations on softAP are from the espresif library
-                        int ok = WiFi.softAP(wifiName, wifiPsw, 1, 1, 4);
-                        DEBUG_MSG("Starting hidden WIFI AP: ssid=%s, ok=%d\n", wifiName, ok);
-                    } else {
-                        int ok = WiFi.softAP(wifiName, wifiPsw);
-                        DEBUG_MSG("Starting WIFI AP: ssid=%s, ok=%d\n", wifiName, ok);
-                    }
-                    int ok = WiFi.softAP(wifiName, wifiPsw);
-                    DEBUG_MSG("Starting WIFI AP: ssid=%s, ok=%d\n", wifiName, ok);
+                    DEBUG_MSG("Starting WIFI AP: ssid=%s, ok=%d\n", softAPssid, ok);
                 }
 
                 WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
@@ -358,7 +337,7 @@ static void WiFiEvent(WiFiEvent_t event)
 
 void handleDNSResponse()
 {
-    if (config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT || config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN || isSoftAPForced()) {
+    if (isSoftAPForced()) {
         dnsServer.processNextRequest();
     }
 }
