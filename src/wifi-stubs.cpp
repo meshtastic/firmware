@@ -1,11 +1,8 @@
-//#include "mesh/wifi/WebServer.h"
 #include "configuration.h"
 
 #ifndef ARCH_ESP32
 
-//#include "mesh/wifi/WiFiAPClient.h"
-
-bool initWifi(bool forceSoftAP) {
+bool initWifi() {
     return false;
 }
 
