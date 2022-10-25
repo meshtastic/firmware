@@ -55,10 +55,6 @@ static void handleWebResponse()
     if (isWifiAvailable()) {
 
         if (isWebServerReady) {
-            // We're going to handle the DNS responder here so it
-            // will be ignored by the NRF boards.
-            handleDNSResponse();
-
             if (secureServer)
                 secureServer->loop();
             insecureServer->loop();

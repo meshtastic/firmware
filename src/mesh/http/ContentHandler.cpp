@@ -75,8 +75,8 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeAPIv1ToRadio = new ResourceNode("/api/v1/toradio", "PUT", &handleAPIv1ToRadio);
     ResourceNode *nodeAPIv1FromRadio = new ResourceNode("/api/v1/fromradio", "GET", &handleAPIv1FromRadio);
 
-    ResourceNode *nodeHotspotApple = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
-    ResourceNode *nodeHotspotAndroid = new ResourceNode("/generate_204", "GET", &handleHotspot);
+//    ResourceNode *nodeHotspotApple = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
+//    ResourceNode *nodeHotspotAndroid = new ResourceNode("/generate_204", "GET", &handleHotspot);
 
     ResourceNode *nodeAdmin = new ResourceNode("/admin", "GET", &handleAdmin);
     //    ResourceNode *nodeAdminSettings = new ResourceNode("/admin/settings", "GET", &handleAdminSettings);
@@ -100,8 +100,8 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     secureServer->registerNode(nodeAPIv1ToRadioOptions);
     secureServer->registerNode(nodeAPIv1ToRadio);
     secureServer->registerNode(nodeAPIv1FromRadio);
-    secureServer->registerNode(nodeHotspotApple);
-    secureServer->registerNode(nodeHotspotAndroid);
+    //    secureServer->registerNode(nodeHotspotApple);
+    //    secureServer->registerNode(nodeHotspotAndroid);
     secureServer->registerNode(nodeRestart);
     secureServer->registerNode(nodeFormUpload);
     secureServer->registerNode(nodeJsonScanNetworks);
@@ -121,8 +121,8 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     insecureServer->registerNode(nodeAPIv1ToRadioOptions);
     insecureServer->registerNode(nodeAPIv1ToRadio);
     insecureServer->registerNode(nodeAPIv1FromRadio);
-    insecureServer->registerNode(nodeHotspotApple);
-    insecureServer->registerNode(nodeHotspotAndroid);
+    //    insecureServer->registerNode(nodeHotspotApple);
+    //    insecureServer->registerNode(nodeHotspotAndroid);
     insecureServer->registerNode(nodeRestart);
     insecureServer->registerNode(nodeFormUpload);
     insecureServer->registerNode(nodeJsonScanNetworks);
@@ -620,12 +620,8 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     };
 
     // data->wifi
-    String ipStr;
-    if (config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT || config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN || isSoftAPForced()) {
-        ipStr = String(WiFi.softAPIP().toString());
-    } else {
-        ipStr = String(WiFi.localIP().toString());
-    }
+    String ipStr = String(WiFi.localIP().toString());
+
     Json jsonObjWifi = Json::object{{"rssi", String(WiFi.RSSI())}, {"ip", ipStr.c_str()}};
 
     // data->memory
