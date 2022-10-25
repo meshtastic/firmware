@@ -42,6 +42,10 @@
 #include "mqtt/MQTT.h"
 #endif
 
+#if HAS_ETHERNET
+#include "mqtt/MQTT.h"
+#endif
+
 #include "LLCC68Interface.h"
 #include "RF95Interface.h"
 #include "SX1262Interface.h"
@@ -279,10 +283,11 @@ void setup()
 #ifdef ARCH_NRF52
     nrf52Setup();
 #endif
-    playStartMelody();
     // We do this as early as possible because this loads preferences from flash
     // but we need to do this after main cpu iniot (esp32setup), because we need the random seed set
     nodeDB.init();
+
+    playStartMelody();
 
     // Currently only the tbeam has a PMU
     power = new Power();
@@ -440,7 +445,7 @@ void setup()
     }
 #endif
 
-#if HAS_WIFI
+#if HAS_WIFI || HAS_ETHERNET
     mqttInit();
 #endif
 

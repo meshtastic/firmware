@@ -5,7 +5,12 @@
 #include "concurrency/OSThread.h"
 #include "mesh/Channels.h"
 #include <PubSubClient.h>
+#if HAS_WIFI
 #include <WiFiClient.h>
+#endif
+#if HAS_ETHERNET
+#include <EthernetClient.h>
+#endif
 
 /**
  * Our wrapper/singleton for sending/receiving MQTT "udp" packets.  This object isolates the MQTT protocol implementation from
@@ -16,7 +21,12 @@ class MQTT : private concurrency::OSThread
     // supposedly the current version is busted:
     // http://www.iotsharing.com/2017/08/how-to-use-esp32-mqtts-with-mqtts-mosquitto-broker-tls-ssl.html
     // WiFiClientSecure wifiClient;
+#if HAS_WIFI
     WiFiClient mqttClient;
+#endif
+#if HAS_ETHERNET
+    EthernetClient mqttClient;
+#endif
     PubSubClient pubSub;
 
     // instead we supress sleep from our runOnce() callback
