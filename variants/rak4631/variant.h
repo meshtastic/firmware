@@ -231,6 +231,10 @@ static const uint8_t SCK = PIN_SPI_SCK;
 
 #define HAS_ETHERNET 1
 
+#define PIN_ETHERNET_RESET 21
+#define PIN_ETHERNET_SS PIN_EINK_CS
+#define ETH_SPI_PORT SPI1
+
 #ifdef __cplusplus
 }
 #endif

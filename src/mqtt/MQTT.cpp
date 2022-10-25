@@ -8,7 +8,9 @@
 #include "mesh/generated/mqtt.pb.h"
 #include "mesh/generated/telemetry.pb.h"
 #include "sleep.h"
+#if HAS_WIFI
 #include <WiFi.h>
+#endif
 #include <assert.h>
 #include <json11.hpp>
 
@@ -189,7 +191,12 @@ bool MQTT::wantsLink() const
         }
     }
 
+#if HAS_WIFI
     return hasChannel && WiFi.isConnected();
+#endif
+#if HAS_ETHERNET
+    return hasChannel && (Ethernet.linkStatus() == LinkON);
+#endif
 }
 
 int32_t MQTT::runOnce()
@@ -346,9 +353,9 @@ std::string MQTT::downstreamPacketToJson(MeshPacket *mp)
                 msgPayload = Json::object{
                     {"time", (int)decoded->time},
                     {"pos_timestamp", (int)decoded->timestamp},
-                    {"latitude_i", decoded->latitude_i}, 
-                    {"longitude_i", decoded->longitude_i}, 
-                    {"altitude", decoded->altitude}
+                    {"latitude_i", (int)decoded->latitude_i}, 
+                    {"longitude_i", (int)decoded->longitude_i}, 
+                    {"altitude", (int)decoded->altitude}
                 };
             } else {
                 DEBUG_MSG("Error decoding protobuf for position message!\n");
@@ -371,8 +378,8 @@ std::string MQTT::downstreamPacketToJson(MeshPacket *mp)
                     {"description", decoded->description},
                     {"expire", (int)decoded->expire},
                     {"locked", decoded->locked},
-                    {"latitude_i", decoded->latitude_i}, 
-                    {"longitude_i", decoded->longitude_i}, 
+                    {"latitude_i", (int)decoded->latitude_i}, 
+                    {"longitude_i", (int)decoded->longitude_i}, 
                 };
             } else {
                 DEBUG_MSG("Error decoding protobuf for position message!\n");
