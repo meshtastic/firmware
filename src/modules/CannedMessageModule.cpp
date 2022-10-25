@@ -64,6 +64,52 @@ CannedMessageModule::CannedMessageModule()
 }
 
 /**
+ * @brief Fill destination NodeNum in this->destinations for each respective message
+ */
+void CannedMessageModule::fillDestinationForMessages(int messagesCount) {
+    int destIndex = 0;
+    int destStorePtr = 0;
+
+    // collect all destinations
+    strcpy(this->destinationStore, cannedMessageModuleConfig.destinations);
+
+    int currentDestPtr = 0;
+    int upTo = strlen(this->destinationStore);
+    while (destStorePtr < upTo) {
+        char currentDestination[CANNED_MESSAGE_MODULE_MESSAGES_SIZE+1] = "\0";
+        int currentDestLen = 0;
+        while (destStorePtr < upTo && this->destinationStore[destStorePtr] != '|') {
+            currentDestination[currentDestPtr] = this->destinationStore[destStorePtr];
+            currentDestPtr++;
+            destStorePtr++;
+            currentDestLen++;
+        }
+        if (currentDestLen < 1) {
+            DEBUG_MSG("Empty destination found, setting to broadcast\n");
+            this->destinations[destIndex] = NODENUM_BROADCAST;
+        } else {
+            unsigned long intDest = strtoul( &currentDestination[1], NULL, 16); // Omitting ! character in dest
+            if (intDest == 0) {
+                DEBUG_MSG("Failed to convert Destination: %s to NodeNum, setting to broadcast\n", currentDestination);
+                this->destinations[destIndex] = NODENUM_BROADCAST;            
+            } else {
+                this->destinations[destIndex] = (NodeNum) intDest;
+            }
+        }
+        destStorePtr++;
+        destIndex++;
+        currentDestPtr=0;
+    }
+    while (destIndex < messagesCount) {
+        this->destinations[destIndex] = NODENUM_BROADCAST;
+        destIndex++;
+    }
+    for(int i = 0; i < messagesCount; i++) {
+        DEBUG_MSG("Destination %d is: %lu\n", i, this->destinations[i]);
+    }    
+}
+
+/**
  * @brief Items in array this->messages will be set to be pointing on the right
  *     starting points of the string this->messageStore
  *
@@ -106,6 +152,8 @@ int CannedMessageModule::splitConfiguredMessages()
     } else {
         this->messagesCount = messageIndex - 1;
     }
+
+    fillDestinationForMessages(this->messagesCount);
 
     return this->messagesCount;
 }
@@ -246,7 +294,7 @@ int32_t CannedMessageModule::runOnce()
             }
         } else {
             if ((this->messagesCount > this->currentMessageIndex) && (strlen(this->messages[this->currentMessageIndex]) > 0)) {
-                sendText(NODENUM_BROADCAST, this->messages[this->currentMessageIndex], true);
+                sendText(this->destinations[this->currentMessageIndex], this->messages[this->currentMessageIndex], true);
                 this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
             } else {
                 DEBUG_MSG("Reset message is empty.\n");
@@ -502,6 +550,7 @@ bool CannedMessageModule::saveProtoForModule()
 void CannedMessageModule::installDefaultCannedMessageModuleConfig()
 {
     memset(cannedMessageModuleConfig.messages, 0, sizeof(cannedMessageModuleConfig.messages));
+    memset(cannedMessageModuleConfig.destinations, 0, sizeof(cannedMessageModuleConfig.destinations));
 }
 
 /**
@@ -531,6 +580,18 @@ AdminMessageHandleResult CannedMessageModule::handleAdminMessageForModule(const 
         result = AdminMessageHandleResult::HANDLED;
         break;
 
+    case AdminMessage_get_canned_message_module_messages_dests_request_tag:
+        DEBUG_MSG("Client is getting radio canned messages destinations\n");
+        this->handleGetCannedMessageModuleMessagesDests(mp, response);
+        result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
+        break;
+
+    case AdminMessage_set_canned_message_module_messages_dests_tag:
+        DEBUG_MSG("Client is setting radio canned messages destinations\n");
+        this->handleSetCannedMessageModuleMessagesDests(request->set_canned_message_module_messages_dests);
+        result = AdminMessageHandleResult::HANDLED;
+        break;
+
     default:
         result = AdminMessageHandleResult::NOT_HANDLED;
     }
@@ -555,6 +616,31 @@ void CannedMessageModule::handleSetCannedMessageModuleMessages(const char *from_
     if (*from_msg) {
         changed |= strcmp(cannedMessageModuleConfig.messages, from_msg);
         strcpy(cannedMessageModuleConfig.messages, from_msg);
+        DEBUG_MSG("*** from_msg.text:%s\n", from_msg);
+    }
+
+    if (changed) {
+        this->saveProtoForModule();
+    }
+}
+
+void CannedMessageModule::handleGetCannedMessageModuleMessagesDests(const MeshPacket &req, AdminMessage *response)
+{
+    DEBUG_MSG("*** handleGetCannedMessageModuleMessagesDests\n");
+    assert(req.decoded.want_response);
+
+    response->which_payload_variant = AdminMessage_get_canned_message_module_messages_dests_response_tag;
+    strcpy(response->get_canned_message_module_messages_dests_response, cannedMessageModuleConfig.destinations);
+}
+
+
+void CannedMessageModule::handleSetCannedMessageModuleMessagesDests(const char *from_msg)
+{
+    int changed = 0;
+
+    if (*from_msg) {
+        changed |= strcmp(cannedMessageModuleConfig.destinations, from_msg);
+        strcpy(cannedMessageModuleConfig.destinations, from_msg);
         DEBUG_MSG("*** from_msg.text:%s\n", from_msg);
     }
 

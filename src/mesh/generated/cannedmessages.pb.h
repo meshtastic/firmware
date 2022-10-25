@@ -14,6 +14,8 @@
 typedef struct _CannedMessageModuleConfig { 
     /* Predefined messages for canned message module separated by '|' characters. */
     char messages[201];
+    /* Predefined destinations for canned message module separated by '|' characters. */
+    char destinations[201];
 } CannedMessageModuleConfig;
 
 
@@ -22,15 +24,17 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define CannedMessageModuleConfig_init_default   {""}
-#define CannedMessageModuleConfig_init_zero      {""}
+#define CannedMessageModuleConfig_init_default   {"", ""}
+#define CannedMessageModuleConfig_init_zero      {"", ""}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define CannedMessageModuleConfig_messages_tag   1
+#define CannedMessageModuleConfig_destinations_tag 2
 
 /* Struct field encoding specification for nanopb */
 #define CannedMessageModuleConfig_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, STRING,   messages,          1)
+X(a, STATIC,   SINGULAR, STRING,   messages,          1) \
+X(a, STATIC,   SINGULAR, STRING,   destinations,      2)
 #define CannedMessageModuleConfig_CALLBACK NULL
 #define CannedMessageModuleConfig_DEFAULT NULL
 
@@ -40,7 +44,7 @@ extern const pb_msgdesc_t CannedMessageModuleConfig_msg;
 #define CannedMessageModuleConfig_fields &CannedMessageModuleConfig_msg
 
 /* Maximum encoded size of messages (where known) */
-#define CannedMessageModuleConfig_size           203
+#define CannedMessageModuleConfig_size           406
 
 #ifdef __cplusplus
 } /* extern "C" */

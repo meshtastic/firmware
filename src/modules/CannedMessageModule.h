@@ -43,6 +43,8 @@ class CannedMessageModule :
 
     void handleGetCannedMessageModuleMessages(const MeshPacket &req, AdminMessage *response);
     void handleSetCannedMessageModuleMessages(const char *from_msg);
+    void handleGetCannedMessageModuleMessagesDests(const MeshPacket &req, AdminMessage *response);
+    void handleSetCannedMessageModuleMessagesDests(const char *from_msg);
 
     String drawWithCursor(String text, int cursor);
 
@@ -56,6 +58,7 @@ class CannedMessageModule :
         bool wantReplies);
 
     int splitConfiguredMessages();
+    void fillDestinationForMessages(int messagesCount);
     int getNextIndex();
     int getPrevIndex();
 
@@ -83,6 +86,12 @@ class CannedMessageModule :
     char messageStore[CANNED_MESSAGE_MODULE_MESSAGES_SIZE+1];
     char *messages[CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT];
     int messagesCount = 0;
+
+    char destinationStore[CANNED_MESSAGE_MODULE_MESSAGES_SIZE+1];
+    NodeNum destinations[CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT];
+    int destinationsCount = 0;
+
+
     unsigned long lastTouchMillis = 0;
 };
 
