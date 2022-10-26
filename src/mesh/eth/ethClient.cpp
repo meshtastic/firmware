@@ -76,10 +76,6 @@ static int32_t reconnectETH()
 // Startup Ethernet
 bool initEthernet()
 {
-
-    config.network.eth_enabled = true;
-    config.network.eth_mode = Config_NetworkConfig_EthMode_DHCP;
-
     if (config.network.eth_enabled) {
 
 #ifdef PIN_ETHERNET_RESET
