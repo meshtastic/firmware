@@ -21,7 +21,7 @@ PB_BIND(Config_PowerConfig, Config_PowerConfig, AUTO)
 PB_BIND(Config_NetworkConfig, Config_NetworkConfig, AUTO)
 
 
-PB_BIND(Config_NetworkConfig_NetworkConfig, Config_NetworkConfig_NetworkConfig, AUTO)
+PB_BIND(Config_NetworkConfig_IpV4Config, Config_NetworkConfig_IpV4Config, AUTO)
 
 
 PB_BIND(Config_DisplayConfig, Config_DisplayConfig, AUTO)

@@ -127,12 +127,12 @@ typedef struct _Config_LoRaConfig {
     uint32_t ignore_incoming[3];
 } Config_LoRaConfig;
 
-typedef struct _Config_NetworkConfig_NetworkConfig { 
+typedef struct _Config_NetworkConfig_IpV4Config { 
     uint32_t ip;
     uint32_t gateway;
     uint32_t subnet;
     uint32_t dns;
-} Config_NetworkConfig_NetworkConfig;
+} Config_NetworkConfig_IpV4Config;
 
 typedef struct _Config_PositionConfig { 
     uint32_t position_broadcast_secs;
@@ -162,8 +162,8 @@ typedef struct _Config_NetworkConfig {
     char ntp_server[33];
     bool eth_enabled;
     Config_NetworkConfig_EthMode eth_mode;
-    bool has_eth_config;
-    Config_NetworkConfig_NetworkConfig eth_config;
+    bool has_ipv4_config;
+    Config_NetworkConfig_IpV4Config ipv4_config;
 } Config_NetworkConfig;
 
 typedef struct _Config { 
@@ -227,8 +227,8 @@ extern "C" {
 #define Config_DeviceConfig_init_default         {_Config_DeviceConfig_Role_MIN, 0, 0}
 #define Config_PositionConfig_init_default       {0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_default          {0, 0, 0, 0, 0, 0, 0, 0}
-#define Config_NetworkConfig_init_default        {0, "", "", "", 0, _Config_NetworkConfig_EthMode_MIN, false, Config_NetworkConfig_NetworkConfig_init_default}
-#define Config_NetworkConfig_NetworkConfig_init_default {0, 0, 0, 0}
+#define Config_NetworkConfig_init_default        {0, "", "", "", 0, _Config_NetworkConfig_EthMode_MIN, false, Config_NetworkConfig_IpV4Config_init_default}
+#define Config_NetworkConfig_IpV4Config_init_default {0, 0, 0, 0}
 #define Config_DisplayConfig_init_default        {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _Config_DisplayConfig_DisplayUnits_MIN}
 #define Config_LoRaConfig_init_default           {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, {0, 0, 0}}
 #define Config_BluetoothConfig_init_default      {0, _Config_BluetoothConfig_PairingMode_MIN, 0}
@@ -236,8 +236,8 @@ extern "C" {
 #define Config_DeviceConfig_init_zero            {_Config_DeviceConfig_Role_MIN, 0, 0}
 #define Config_PositionConfig_init_zero          {0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_zero             {0, 0, 0, 0, 0, 0, 0, 0}
-#define Config_NetworkConfig_init_zero           {0, "", "", "", 0, _Config_NetworkConfig_EthMode_MIN, false, Config_NetworkConfig_NetworkConfig_init_zero}
-#define Config_NetworkConfig_NetworkConfig_init_zero {0, 0, 0, 0}
+#define Config_NetworkConfig_init_zero           {0, "", "", "", 0, _Config_NetworkConfig_EthMode_MIN, false, Config_NetworkConfig_IpV4Config_init_zero}
+#define Config_NetworkConfig_IpV4Config_init_zero {0, 0, 0, 0}
 #define Config_DisplayConfig_init_zero           {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _Config_DisplayConfig_DisplayUnits_MIN}
 #define Config_LoRaConfig_init_zero              {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, {0, 0, 0}}
 #define Config_BluetoothConfig_init_zero         {0, _Config_BluetoothConfig_PairingMode_MIN, 0}
@@ -267,10 +267,10 @@ extern "C" {
 #define Config_LoRaConfig_tx_power_tag           10
 #define Config_LoRaConfig_channel_num_tag        11
 #define Config_LoRaConfig_ignore_incoming_tag    103
-#define Config_NetworkConfig_NetworkConfig_ip_tag 1
-#define Config_NetworkConfig_NetworkConfig_gateway_tag 2
-#define Config_NetworkConfig_NetworkConfig_subnet_tag 3
-#define Config_NetworkConfig_NetworkConfig_dns_tag 4
+#define Config_NetworkConfig_IpV4Config_ip_tag   1
+#define Config_NetworkConfig_IpV4Config_gateway_tag 2
+#define Config_NetworkConfig_IpV4Config_subnet_tag 3
+#define Config_NetworkConfig_IpV4Config_dns_tag  4
 #define Config_PositionConfig_position_broadcast_secs_tag 1
 #define Config_PositionConfig_position_broadcast_smart_enabled_tag 2
 #define Config_PositionConfig_fixed_position_tag 3
@@ -292,7 +292,7 @@ extern "C" {
 #define Config_NetworkConfig_ntp_server_tag      5
 #define Config_NetworkConfig_eth_enabled_tag     6
 #define Config_NetworkConfig_eth_mode_tag        7
-#define Config_NetworkConfig_eth_config_tag      8
+#define Config_NetworkConfig_ipv4_config_tag     8
 #define Config_device_tag                        1
 #define Config_position_tag                      2
 #define Config_power_tag                         3
@@ -357,18 +357,18 @@ X(a, STATIC,   SINGULAR, STRING,   wifi_psk,          4) \
 X(a, STATIC,   SINGULAR, STRING,   ntp_server,        5) \
 X(a, STATIC,   SINGULAR, BOOL,     eth_enabled,       6) \
 X(a, STATIC,   SINGULAR, UENUM,    eth_mode,          7) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  eth_config,        8)
+X(a, STATIC,   OPTIONAL, MESSAGE,  ipv4_config,       8)
 #define Config_NetworkConfig_CALLBACK NULL
 #define Config_NetworkConfig_DEFAULT NULL
-#define Config_NetworkConfig_eth_config_MSGTYPE Config_NetworkConfig_NetworkConfig
+#define Config_NetworkConfig_ipv4_config_MSGTYPE Config_NetworkConfig_IpV4Config
 
-#define Config_NetworkConfig_NetworkConfig_FIELDLIST(X, a) \
+#define Config_NetworkConfig_IpV4Config_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, FIXED32,  ip,                1) \
 X(a, STATIC,   SINGULAR, FIXED32,  gateway,           2) \
 X(a, STATIC,   SINGULAR, FIXED32,  subnet,            3) \
 X(a, STATIC,   SINGULAR, FIXED32,  dns,               4)
-#define Config_NetworkConfig_NetworkConfig_CALLBACK NULL
-#define Config_NetworkConfig_NetworkConfig_DEFAULT NULL
+#define Config_NetworkConfig_IpV4Config_CALLBACK NULL
+#define Config_NetworkConfig_IpV4Config_DEFAULT NULL
 
 #define Config_DisplayConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   screen_on_secs,    1) \
@@ -408,7 +408,7 @@ extern const pb_msgdesc_t Config_DeviceConfig_msg;
 extern const pb_msgdesc_t Config_PositionConfig_msg;
 extern const pb_msgdesc_t Config_PowerConfig_msg;
 extern const pb_msgdesc_t Config_NetworkConfig_msg;
-extern const pb_msgdesc_t Config_NetworkConfig_NetworkConfig_msg;
+extern const pb_msgdesc_t Config_NetworkConfig_IpV4Config_msg;
 extern const pb_msgdesc_t Config_DisplayConfig_msg;
 extern const pb_msgdesc_t Config_LoRaConfig_msg;
 extern const pb_msgdesc_t Config_BluetoothConfig_msg;
@@ -419,7 +419,7 @@ extern const pb_msgdesc_t Config_BluetoothConfig_msg;
 #define Config_PositionConfig_fields &Config_PositionConfig_msg
 #define Config_PowerConfig_fields &Config_PowerConfig_msg
 #define Config_NetworkConfig_fields &Config_NetworkConfig_msg
-#define Config_NetworkConfig_NetworkConfig_fields &Config_NetworkConfig_NetworkConfig_msg
+#define Config_NetworkConfig_IpV4Config_fields &Config_NetworkConfig_IpV4Config_msg
 #define Config_DisplayConfig_fields &Config_DisplayConfig_msg
 #define Config_LoRaConfig_fields &Config_LoRaConfig_msg
 #define Config_BluetoothConfig_fields &Config_BluetoothConfig_msg
@@ -429,7 +429,7 @@ extern const pb_msgdesc_t Config_BluetoothConfig_msg;
 #define Config_DeviceConfig_size                 6
 #define Config_DisplayConfig_size                20
 #define Config_LoRaConfig_size                   68
-#define Config_NetworkConfig_NetworkConfig_size  20
+#define Config_NetworkConfig_IpV4Config_size     20
 #define Config_NetworkConfig_size                161
 #define Config_PositionConfig_size               30
 #define Config_PowerConfig_size                  43
