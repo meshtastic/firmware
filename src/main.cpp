@@ -197,8 +197,6 @@ void setup()
     digitalWrite(RESET_OLED, 1);
 #endif
 
-    bool forceSoftAP = 0;
-
 #ifdef BUTTON_PIN
 #ifdef ARCH_ESP32
 
@@ -210,12 +208,6 @@ void setup()
     gpio_pullup_en((gpio_num_t)BUTTON_PIN);
     delay(10);
 #endif
-
-    // BUTTON_PIN is pulled high by a 12k resistor.
-    if (!digitalRead(BUTTON_PIN)) {
-        forceSoftAP = 1;
-        DEBUG_MSG("Setting forceSoftAP = 1\n");
-    }
 
 #endif
 #endif
@@ -452,7 +444,7 @@ void setup()
 
 #ifndef ARCH_PORTDUINO
     // Initialize Wifi
-    initWifi(forceSoftAP);
+    initWifi();
 
     // Initialize Ethernet
     initEthernet();
