@@ -94,7 +94,6 @@ bool initEthernet()
         //        createSSLCert();
 
         getMacAddr(mac); // FIXME use the BLE MAC for now...
-        sprintf(ourHost, "Meshtastic-%02x%02x", mac[4], mac[5]);
 
         if (config.network.eth_mode == Config_NetworkConfig_EthMode_DHCP) {
             DEBUG_MSG("starting Ethernet DHCP\n");
