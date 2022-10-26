@@ -43,6 +43,7 @@
 #endif
 
 #if HAS_ETHERNET
+#include "mesh/eth/ethServerAPI.h"
 #include "mqtt/MQTT.h"
 #endif
 

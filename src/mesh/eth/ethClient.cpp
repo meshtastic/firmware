@@ -1,15 +1,98 @@
 #include "mesh/eth/ethClient.h"
 #include "NodeDB.h"
+#include "RTC.h"
+#include "concurrency/Periodic.h"
 #include <SPI.h>
 #include <RAK13800_W5100S.h>
 #include "target_specific.h"
+#include "mesh/eth/ethServerAPI.h"
+#include "mqtt/MQTT.h"
+
+#ifndef DISABLE_NTP
+#include <NTPClient.h>
+
+// NTP
+EthernetUDP ntpUDP;
+
+NTPClient timeClient(ntpUDP, config.network.ntp_server);
+
+uint32_t ntp_renew = 0;
+#endif
+
+// Stores our hostname
+char ourHost[16];
+
+bool ethStartupComplete = 0;
+
+using namespace concurrency;
+
+static Periodic *ethEvent;
+
+static int32_t reconnectETH()
+{
+    if (config.network.eth_enabled) {
+        Ethernet.maintain();
+        if (!ethStartupComplete) {
+            // Start web server
+            DEBUG_MSG("... Starting network services\n");
+
+            // // start mdns
+            // if (!MDNS.begin("Meshtastic")) {
+            //     DEBUG_MSG("Error setting up MDNS responder!\n");
+            // } else {
+            //     DEBUG_MSG("mDNS responder started\n");
+            //     DEBUG_MSG("mDNS Host: Meshtastic.local\n");
+            //     MDNS.addService("http", "tcp", 80);
+            //     MDNS.addService("https", "tcp", 443);
+            // }
+
+    #ifndef DISABLE_NTP
+            DEBUG_MSG("Starting NTP time client\n");
+            timeClient.begin();
+            timeClient.setUpdateInterval(60 * 60); // Update once an hour
+    #endif
+
+            // initWebServer();
+            initApiServer();
+
+            ethStartupComplete = true;
+        }
+
+        // FIXME this is kinda yucky, instead we should just have an observable for 'wifireconnected'
+        if (mqtt && !mqtt->connected()) {
+            mqtt->reconnect();
+        }
+    }
+
+#ifndef DISABLE_NTP
+    if (isEthernetAvailable() && (ntp_renew < millis())) {
+        DEBUG_MSG("Updating NTP time\n");
+        if (timeClient.update()) {
+            DEBUG_MSG("NTP Request Success - Setting RTCQualityNTP if needed\n");
+
+            struct timeval tv;
+            tv.tv_sec = timeClient.getEpochTime();
+            tv.tv_usec = 0;
+
+            perhapsSetRTC(RTCQualityNTP, &tv);
+
+            ntp_renew = millis() + 43200 * 1000; // every 12 hours
+
+        } else {
+            DEBUG_MSG("NTP Update failed\n");
+        }
+    }
+#endif
+
+    return 5000; // every 5 seconds
+}
 
 // Startup Ethernet
 bool initEthernet()
 {
 
-    config.network.eth_enabled = true;
-    config.network.eth_mode = Config_NetworkConfig_EthMode_DHCP;
+    // config.network.eth_enabled = true;
+    // config.network.eth_mode = Config_NetworkConfig_EthMode_DHCP;
 
     if (config.network.eth_enabled) {
 
@@ -25,6 +108,8 @@ bool initEthernet()
         uint8_t mac[6];
 
         int status = 0;
+
+        //        createSSLCert();
 
         getMacAddr(mac); // FIXME use the BLE MAC for now...
 
@@ -56,6 +141,9 @@ bool initEthernet()
             DEBUG_MSG("Gateway IP %u.%u.%u.%u\n",Ethernet.gatewayIP()[0], Ethernet.gatewayIP()[1], Ethernet.gatewayIP()[2], Ethernet.gatewayIP()[3]);
             DEBUG_MSG("DNS Server IP %u.%u.%u.%u\n",Ethernet.dnsServerIP()[0], Ethernet.dnsServerIP()[1], Ethernet.dnsServerIP()[2], Ethernet.dnsServerIP()[3]);
         }
+
+        ethEvent = new Periodic("ethConnect", reconnectETH);
+
         return true;
 
     } else {
