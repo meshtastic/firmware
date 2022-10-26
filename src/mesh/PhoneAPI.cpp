@@ -224,6 +224,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     case STATE_SEND_MODULECONFIG:
         DEBUG_MSG("getFromRadio=STATE_SEND_MODULECONFIG\n");
         fromRadioScratch.which_payload_variant = FromRadio_moduleConfig_tag;
+        DEBUG_MSG("DEBUG state:%u\n", config_state);
         switch (config_state) {
         case ModuleConfig_mqtt_tag:
             fromRadioScratch.moduleConfig.which_payload_variant = ModuleConfig_mqtt_tag;
@@ -249,6 +250,8 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.moduleConfig.which_payload_variant = ModuleConfig_canned_message_tag;
             fromRadioScratch.moduleConfig.payload_variant.canned_message = moduleConfig.canned_message;
             break;
+        default:
+            DEBUG_MSG("Case fell through");
         }
 
         config_state++;
