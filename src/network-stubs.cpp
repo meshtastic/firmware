@@ -2,7 +2,7 @@
 
 #if (HAS_WIFI == 0)
 
-bool initWifi(bool forceSoftAP) {
+bool initWifi() {
     return false;
 }
 
