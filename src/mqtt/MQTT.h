@@ -48,6 +48,8 @@ class MQTT : private concurrency::OSThread
     /** Attempt to connect to server if necessary
      */
     void reconnect();
+
+    bool connected();
     
   protected:
     virtual int32_t runOnce() override;

@@ -107,6 +107,11 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), pubSub(mqttClient)
     // preflightSleepObserver.observe(&preflightSleep);
 }
 
+bool MQTT::connected()
+{
+    return pubSub.connected();
+}
+
 void MQTT::reconnect()
 {
     if (wantsLink()) {
@@ -197,6 +202,7 @@ bool MQTT::wantsLink() const
 #if HAS_ETHERNET
     return hasChannel && (Ethernet.linkStatus() == LinkON);
 #endif
+    return false;
 }
 
 int32_t MQTT::runOnce()
