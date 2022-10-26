@@ -4,7 +4,6 @@
 #include "concurrency/Periodic.h"
 #include <SPI.h>
 #include <RAK13800_W5100S.h>
-#include <ArduinoMDNS.h>
 #include "target_specific.h"
 #include "mesh/eth/ethServerAPI.h"
 #include "mqtt/MQTT.h"
