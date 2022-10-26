@@ -243,8 +243,11 @@ typedef enum _LogRecord_Level {
 
 /* Struct definitions */
 typedef PB_BYTES_ARRAY_T(237) Compressed_data_t;
+/* Compressed message payload */
 typedef struct _Compressed { 
+    /* PortNum to determine the how to handle the compressed payload. */
     PortNum portnum;
+    /* Compressed data. */
     Compressed_data_t data;
 } Compressed;
 
@@ -424,14 +427,6 @@ typedef struct _RouteDiscovery {
     pb_size_t route_count;
     uint32_t route[8];
 } RouteDiscovery;
-
-/* Compressed message payload */
-typedef struct _ToRadio_PeerInfo { 
-    /* PortNum to determine the how to handle the compressed payload. */
-    uint32_t app_version;
-    /* Compressed data. */
-    bool mqtt_gateway;
-} ToRadio_PeerInfo;
 
 /* Broadcast when a newly powered mesh node wants to find a node num it can use
  Sent from the phone over bluetooth to set the user id for the owner of this node.
@@ -665,9 +660,6 @@ typedef struct _ToRadio {
     union {
         /* Send this packet on the mesh */
         MeshPacket packet;
-        /* Information about the peer, sent after the phone sneds want_config_id.
-     Old clients do not send this, which is fine. */
-        ToRadio_PeerInfo peer_info;
         /* Phone wants radio to send full node db to the phone, This is
      typically the first packet sent to the radio when the phone gets a
      bluetooth connection. The radio will respond by sending back a
@@ -740,7 +732,6 @@ extern "C" {
 #define LogRecord_init_default                   {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_default                   {0, 0, {MeshPacket_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
-#define ToRadio_PeerInfo_init_default            {0, 0}
 #define Compressed_init_default                  {_PortNum_MIN, {0, {0}}}
 #define Position_init_zero                       {0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define User_init_zero                           {"", "", "", {0}, _HardwareModel_MIN, 0}
@@ -754,7 +745,6 @@ extern "C" {
 #define LogRecord_init_zero                      {"", 0, "", _LogRecord_Level_MIN}
 #define FromRadio_init_zero                      {0, 0, {MeshPacket_init_zero}}
 #define ToRadio_init_zero                        {0, {MeshPacket_init_zero}}
-#define ToRadio_PeerInfo_init_zero               {0, 0}
 #define Compressed_init_zero                     {_PortNum_MIN, {0, {0}}}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -811,8 +801,6 @@ extern "C" {
 #define Position_next_update_tag                 21
 #define Position_seq_number_tag                  22
 #define RouteDiscovery_route_tag                 1
-#define ToRadio_PeerInfo_app_version_tag         1
-#define ToRadio_PeerInfo_mqtt_gateway_tag        2
 #define User_id_tag                              1
 #define User_long_name_tag                       2
 #define User_short_name_tag                      3
@@ -859,7 +847,6 @@ extern "C" {
 #define FromRadio_moduleConfig_tag               9
 #define FromRadio_channel_tag                    10
 #define ToRadio_packet_tag                       1
-#define ToRadio_peer_info_tag                    2
 #define ToRadio_want_config_id_tag               3
 #define ToRadio_disconnect_tag                   4
 
@@ -1019,19 +1006,11 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,channel,channel),  10)
 
 #define ToRadio_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,packet,packet),   1) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,peer_info,peer_info),   2) \
 X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,want_config_id,want_config_id),   3) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,disconnect,disconnect),   4)
 #define ToRadio_CALLBACK NULL
 #define ToRadio_DEFAULT NULL
 #define ToRadio_payload_variant_packet_MSGTYPE MeshPacket
-#define ToRadio_payload_variant_peer_info_MSGTYPE ToRadio_PeerInfo
-
-#define ToRadio_PeerInfo_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UINT32,   app_version,       1) \
-X(a, STATIC,   SINGULAR, BOOL,     mqtt_gateway,      2)
-#define ToRadio_PeerInfo_CALLBACK NULL
-#define ToRadio_PeerInfo_DEFAULT NULL
 
 #define Compressed_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    portnum,           1) \
@@ -1051,7 +1030,6 @@ extern const pb_msgdesc_t MyNodeInfo_msg;
 extern const pb_msgdesc_t LogRecord_msg;
 extern const pb_msgdesc_t FromRadio_msg;
 extern const pb_msgdesc_t ToRadio_msg;
-extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 extern const pb_msgdesc_t Compressed_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
@@ -1067,7 +1045,6 @@ extern const pb_msgdesc_t Compressed_msg;
 #define LogRecord_fields &LogRecord_msg
 #define FromRadio_fields &FromRadio_msg
 #define ToRadio_fields &ToRadio_msg
-#define ToRadio_PeerInfo_fields &ToRadio_PeerInfo_msg
 #define Compressed_fields &Compressed_msg
 
 /* Maximum encoded size of messages (where known) */
@@ -1081,7 +1058,6 @@ extern const pb_msgdesc_t Compressed_msg;
 #define Position_size                            137
 #define RouteDiscovery_size                      40
 #define Routing_size                             42
-#define ToRadio_PeerInfo_size                    8
 #define ToRadio_size                             324
 #define User_size                                77
 #define Waypoint_size                            156
