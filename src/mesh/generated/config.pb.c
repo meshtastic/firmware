@@ -6,7 +6,7 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
-PB_BIND(Config, Config, AUTO)
+PB_BIND(Config, Config, 2)
 
 
 PB_BIND(Config_DeviceConfig, Config_DeviceConfig, AUTO)
@@ -18,10 +18,10 @@ PB_BIND(Config_PositionConfig, Config_PositionConfig, AUTO)
 PB_BIND(Config_PowerConfig, Config_PowerConfig, AUTO)
 
 
-PB_BIND(Config_NetworkConfig, Config_NetworkConfig, AUTO)
+PB_BIND(Config_NetworkConfig, Config_NetworkConfig, 2)
 
 
-PB_BIND(Config_NetworkConfig_NetworkConfig, Config_NetworkConfig_NetworkConfig, AUTO)
+PB_BIND(Config_NetworkConfig_TcpConfig, Config_NetworkConfig_TcpConfig, AUTO)
 
 
 PB_BIND(Config_DisplayConfig, Config_DisplayConfig, AUTO)
