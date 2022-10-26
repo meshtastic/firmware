@@ -30,6 +30,7 @@
 // #include <driver/rtc_io.h>
 
 #include "mesh/http/WiFiAPClient.h"
+#include "mesh/eth/ethClient.h"
 
 #ifdef ARCH_ESP32
 #include "mesh/http/WebServer.h"
@@ -38,6 +39,11 @@
 
 #if HAS_WIFI || defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiServerAPI.h"
+#include "mqtt/MQTT.h"
+#endif
+
+#if HAS_ETHERNET
+#include "mesh/eth/ethServerAPI.h"
 #include "mqtt/MQTT.h"
 #endif
 
@@ -191,8 +197,6 @@ void setup()
     digitalWrite(RESET_OLED, 1);
 #endif
 
-    bool forceSoftAP = 0;
-
 #ifdef BUTTON_PIN
 #ifdef ARCH_ESP32
 
@@ -204,12 +208,6 @@ void setup()
     gpio_pullup_en((gpio_num_t)BUTTON_PIN);
     delay(10);
 #endif
-
-    // BUTTON_PIN is pulled high by a 12k resistor.
-    if (!digitalRead(BUTTON_PIN)) {
-        forceSoftAP = 1;
-        DEBUG_MSG("Setting forceSoftAP = 1\n");
-    }
 
 #endif
 #endif
@@ -278,10 +276,11 @@ void setup()
 #ifdef ARCH_NRF52
     nrf52Setup();
 #endif
-    playStartMelody();
     // We do this as early as possible because this loads preferences from flash
     // but we need to do this after main cpu iniot (esp32setup), because we need the random seed set
     nodeDB.init();
+
+    playStartMelody();
 
     // Currently only the tbeam has a PMU
     power = new Power();
@@ -439,12 +438,17 @@ void setup()
     }
 #endif
 
-#if HAS_WIFI
+#if HAS_WIFI || HAS_ETHERNET
     mqttInit();
 #endif
 
+#ifndef ARCH_PORTDUINO
     // Initialize Wifi
-    initWifi(forceSoftAP);
+    initWifi();
+
+    // Initialize Ethernet
+    initEthernet();
+#endif
 
 #ifdef ARCH_ESP32
     // Start web server thread.
