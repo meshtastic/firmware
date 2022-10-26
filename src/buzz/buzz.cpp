@@ -1,5 +1,6 @@
 #include "buzz.h"
 #include "configuration.h"
+#include "NodeDB.h"
 
 #ifndef PIN_BUZZER
 
@@ -42,17 +43,19 @@ const int DURATION_1_8 = 125;  // 1/8 note
 const int DURATION_1_4 = 250;  // 1/4 note
 
 void playTones(const ToneDuration *tone_durations, int size) {
-  for (int i = 0; i < size; i++) {
-    const auto &tone_duration = tone_durations[i];
+  if (config.network.eth_enabled != true) {
+    for (int i = 0; i < size; i++) {
+      const auto &tone_duration = tone_durations[i];
 #ifdef M5STACK
-    Tone.tone(tone_duration.frequency_khz);
-    delay(tone_duration.duration_ms);
-    Tone.mute();
+      Tone.tone(tone_duration.frequency_khz);
+      delay(tone_duration.duration_ms);
+      Tone.mute();
 #else
-    tone(PIN_BUZZER, tone_duration.frequency_khz, tone_duration.duration_ms);
+      tone(PIN_BUZZER, tone_duration.frequency_khz, tone_duration.duration_ms);
 #endif
-    // to distinguish the notes, set a minimum time between them.
-    delay(1.3 * tone_duration.duration_ms);
+      // to distinguish the notes, set a minimum time between them.
+      delay(1.3 * tone_duration.duration_ms);
+    }
   }
 }
 
