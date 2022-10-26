@@ -13,14 +13,9 @@
 
 // NTP
 EthernetUDP ntpUDP;
-
 NTPClient timeClient(ntpUDP, config.network.ntp_server);
-
 uint32_t ntp_renew = 0;
 #endif
-
-// Stores our hostname
-char ourHost[16];
 
 bool ethStartupComplete = 0;
 
@@ -36,22 +31,11 @@ static int32_t reconnectETH()
             // Start web server
             DEBUG_MSG("... Starting network services\n");
 
-            // // start mdns
-            // if (!MDNS.begin("Meshtastic")) {
-            //     DEBUG_MSG("Error setting up MDNS responder!\n");
-            // } else {
-            //     DEBUG_MSG("mDNS responder started\n");
-            //     DEBUG_MSG("mDNS Host: Meshtastic.local\n");
-            //     MDNS.addService("http", "tcp", 80);
-            //     MDNS.addService("https", "tcp", 443);
-            // }
-
-    #ifndef DISABLE_NTP
+#ifndef DISABLE_NTP
             DEBUG_MSG("Starting NTP time client\n");
             timeClient.begin();
             timeClient.setUpdateInterval(60 * 60); // Update once an hour
-    #endif
-
+#endif            
             // initWebServer();
             initApiServer();
 
@@ -66,7 +50,8 @@ static int32_t reconnectETH()
 
 #ifndef DISABLE_NTP
     if (isEthernetAvailable() && (ntp_renew < millis())) {
-        DEBUG_MSG("Updating NTP time\n");
+	    
+        DEBUG_MSG("Updating NTP time from %s\n", config.network.ntp_server);
         if (timeClient.update()) {
             DEBUG_MSG("NTP Request Success - Setting RTCQualityNTP if needed\n");
 
@@ -76,10 +61,11 @@ static int32_t reconnectETH()
 
             perhapsSetRTC(RTCQualityNTP, &tv);
 
-            ntp_renew = millis() + 43200 * 1000; // every 12 hours
+            ntp_renew = millis() + 43200 * 1000; // success, refresh every 12 hours
 
         } else {
             DEBUG_MSG("NTP Update failed\n");
+            ntp_renew = millis() + 300 * 1000; // failure, retry every 5 minutes
         }
     }
 #endif
@@ -90,10 +76,6 @@ static int32_t reconnectETH()
 // Startup Ethernet
 bool initEthernet()
 {
-
-    // config.network.eth_enabled = true;
-    // config.network.eth_mode = Config_NetworkConfig_EthMode_DHCP;
-
     if (config.network.eth_enabled) {
 
 #ifdef PIN_ETHERNET_RESET
