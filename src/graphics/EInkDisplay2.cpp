@@ -14,8 +14,8 @@
 #define TECHO_DISPLAY_MODEL GxEPD2_154_D67
 #elif defined(RAK4630)
 
-//GxEPD2_213_B74 - RAK14000 2.13 inch b/w 250x128 
-#define TECHO_DISPLAY_MODEL GxEPD2_213_B74
+//GxEPD2_213_BN - RAK14000 2.13 inch b/w 250x122 - changed from GxEPD2_213_B74 - which was not going to give partial update support
+#define TECHO_DISPLAY_MODEL GxEPD2_213_BN
 
 //4.2 inch 300x400 - GxEPD2_420_M01
 //#define TECHO_DISPLAY_MODEL GxEPD2_420_M01
@@ -46,9 +46,9 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl)
     setGeometry(GEOMETRY_RAWMODE, TECHO_DISPLAY_MODEL::WIDTH, TECHO_DISPLAY_MODEL::HEIGHT);
     #elif defined(RAK4630)
     
-    //GxEPD2_213_B74 - RAK14000 2.13 inch b/w 250x128 
+    //GxEPD2_213_BN - RAK14000 2.13 inch b/w 250x122 
     setGeometry(GEOMETRY_RAWMODE, 250, 122);
-    
+
     //GxEPD2_420_M01
     //setGeometry(GEOMETRY_RAWMODE, 300, 400);
 
@@ -110,14 +110,17 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
         adafruitDisplay->display(false); // FIXME, use partial update mode
         #elif defined(RAK4630)
         
-        //RAK14000 2.13 inch b/w 250x122 does not support partial updates
-        adafruitDisplay->display(false); // FIXME, use partial update mode
+        //RAK14000 2.13 inch b/w 250x122 actually now does support partial updates
+        
+        //Full update mode (slow)
+        //adafruitDisplay->display(false); // FIXME, use partial update mode
         
         //Only enable for e-Paper with support for partial updates and comment out above adafruitDisplay->display(false); 
         // 1.54 inch 200x200 - GxEPD2_154_M09
+        // 2.13 inch 250x122 - GxEPD2_213_BN
         // 2.9 inch 296x128 - GxEPD2_290_T5D
         // 4.2 inch 300x400 - GxEPD2_420_M01
-        //adafruitDisplay->nextPage();
+        adafruitDisplay->nextPage();
         
         #elif defined(PCA10059) || defined(M5_COREINK)
         adafruitDisplay->nextPage();
@@ -190,11 +193,11 @@ bool EInkDisplay::connect()
         
         adafruitDisplay->init(115200, true, 10, false, SPI1, SPISettings(4000000, MSBFIRST, SPI_MODE0));
 
-        //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
+        //RAK14000 2.13 inch b/w 250x122 does actually now support partial updates 
         adafruitDisplay->setRotation(3);
-        //For 1.54, 2.9 and 4.2
+        //Partial update support for  1.54, 2.13 RAK14000 b/w , 2.9 and 4.2
         //adafruitDisplay->setRotation(1);
-        //adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
+        adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
     } else {
         (void)adafruitDisplay;
     }      
