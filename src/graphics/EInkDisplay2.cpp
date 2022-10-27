@@ -193,9 +193,9 @@ bool EInkDisplay::connect()
         
         adafruitDisplay->init(115200, true, 10, false, SPI1, SPISettings(4000000, MSBFIRST, SPI_MODE0));
 
-        //RAK14000 2.13 inch b/w 250x122 does not support partial updates 
+        //RAK14000 2.13 inch b/w 250x122 does actually now support partial updates 
         adafruitDisplay->setRotation(3);
-        //For 1.54, 2.9 and 4.2
+        //Partial update support for  1.54, 2.13 RAK14000 b/w , 2.9 and 4.2
         //adafruitDisplay->setRotation(1);
         adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
     } else {
