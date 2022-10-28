@@ -100,7 +100,7 @@ bool initEthernet()
             status = Ethernet.begin(mac);
         } else if (config.network.eth_mode == Config_NetworkConfig_EthMode_STATIC) {
             DEBUG_MSG("starting Ethernet Static\n");
-            Ethernet.begin(mac, config.network.eth_config.ip, config.network.eth_config.dns, config.network.eth_config.subnet);
+            Ethernet.begin(mac, config.network.ipv4_config.ip, config.network.ipv4_config.dns, config.network.ipv4_config.subnet);
         } else {
             DEBUG_MSG("Ethernet Disabled\n");
             return false;

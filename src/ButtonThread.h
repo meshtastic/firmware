@@ -159,7 +159,7 @@ class ButtonThread : public concurrency::OSThread
 
     static void userButtonDoublePressed()
     {
-#if defined(USE_EINK)
+#if defined(USE_EINK) && defined(PIN_EINK_EN)
         digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
 #endif
     }
