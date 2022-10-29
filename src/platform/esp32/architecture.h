@@ -80,6 +80,8 @@
     #define HW_VENDOR HardwareModel_M5STACK
 #elif defined(STATION_G1)
     #define HW_VENDOR HardwareModel_STATION_G1
+#elif defined(DR_DEV)
+    #define HW_VENDOR HardwareModel_DR_DEV
 #endif
 
 //
