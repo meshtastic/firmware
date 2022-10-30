@@ -169,6 +169,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef HAS_CPU_SHUTDOWN
     #define HAS_CPU_SHUTDOWN 0
 #endif
+#ifndef HAS_BLUETOOTH
+    #define HAS_BLUETOOTH 0
+#endif
 
 #include "RF95Configuration.h"
 #include "DebugConfiguration.h"
