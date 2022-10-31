@@ -1,5 +1,4 @@
 // For OLED LCD
-#define HAS_WIRE 0
 #define HAS_SCREEN 0
 #define I2C_SDA 4
 #define I2C_SCL 5
