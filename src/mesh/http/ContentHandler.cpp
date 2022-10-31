@@ -58,8 +58,6 @@ char contentTypes[][2][32] = {{".txt", "text/plain"},     {".html", "text/html"}
                               {".css", "text/css"},       {".ico", "image/vnd.microsoft.icon"},
                               {".svg", "image/svg+xml"},  {"", ""}};
 
-// const char *tarURL = "https://www.casler.org/temp/meshtastic-web.tar";
-// const char *tarURL = "https://api-production-871d.up.railway.app/mirror/webui";
 // const char *certificate = NULL; // change this as needed, leave as is for no TLS check (yolo security)
 
 // Our API to handle messages to and from the radio.
@@ -75,8 +73,8 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeAPIv1ToRadio = new ResourceNode("/api/v1/toradio", "PUT", &handleAPIv1ToRadio);
     ResourceNode *nodeAPIv1FromRadio = new ResourceNode("/api/v1/fromradio", "GET", &handleAPIv1FromRadio);
 
-//    ResourceNode *nodeHotspotApple = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
-//    ResourceNode *nodeHotspotAndroid = new ResourceNode("/generate_204", "GET", &handleHotspot);
+    //    ResourceNode *nodeHotspotApple = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
+    //    ResourceNode *nodeHotspotAndroid = new ResourceNode("/generate_204", "GET", &handleHotspot);
 
     ResourceNode *nodeAdmin = new ResourceNode("/admin", "GET", &handleAdmin);
     //    ResourceNode *nodeAdminSettings = new ResourceNode("/admin/settings", "GET", &handleAdminSettings);
@@ -160,7 +158,7 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Content-Type", "application/x-protobuf");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
-    res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/Meshtastic-protobufs/master/mesh.proto");
+    res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/protobufs/master/mesh.proto");
 
     uint8_t txBuf[MAX_STREAM_BUF_SIZE];
     uint32_t len = 1;
@@ -204,7 +202,7 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Headers", "Content-Type");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "PUT, OPTIONS");
-    res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/Meshtastic-protobufs/master/mesh.proto");
+    res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/protobufs/master/mesh.proto");
 
     if (req->getMethod() == "OPTIONS") {
         res->setStatusCode(204); // Success with no content
@@ -266,7 +264,7 @@ std::vector<std::map<char *, char *>> *htmlListDir(std::vector<std::map<char *, 
             if (levels) {
 #ifdef ARCH_ESP32
                 htmlListDir(fileList, file.path(), levels - 1);
-#else                
+#else
                 htmlListDir(fileList, file.name(), levels - 1);
 #endif
                 file.close();
@@ -274,7 +272,7 @@ std::vector<std::map<char *, char *>> *htmlListDir(std::vector<std::map<char *, 
         } else {
             std::map<char *, char *> thisFileMap;
             thisFileMap[strdup("size")] = strdup(String(file.size()).c_str());
-#ifdef ARCH_ESP32            
+#ifdef ARCH_ESP32
             thisFileMap[strdup("name")] = strdup(String(file.path()).substring(1).c_str());
 #else
             thisFileMap[strdup("name")] = strdup(String(file.name()).substring(1).c_str());
