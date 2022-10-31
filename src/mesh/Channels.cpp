@@ -218,9 +218,7 @@ const char *Channels::getName(size_t chIndex)
         // Per mesh.proto spec, if bandwidth is specified we must ignore modemPreset enum, we assume that in that case
         // the app fucked up and forgot to set channelSettings.name
 
-        if (config.lora.use_preset)
-            channelName = "Custom";
-        else
+        if (config.lora.use_preset) {
             switch (config.lora.modem_preset) {
             case Config_LoRaConfig_ModemPreset_SHORT_SLOW:
                 channelName = "ShortSlow";
@@ -247,6 +245,10 @@ const char *Channels::getName(size_t chIndex)
                 channelName = "Invalid";
                 break;
             }
+        }
+        else {
+            channelName = "Custom";
+        }
     }
 
     return channelName;
@@ -265,7 +267,7 @@ their nodes
 *
 * This function will also need to be implemented in GUI apps that talk to the radio.
 *
-* https://github.com/meshtastic/Meshtastic-device/issues/269
+* https://github.com/meshtastic/firmware/issues/269
 */
 const char *Channels::getPrimaryName()
 {
