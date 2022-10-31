@@ -337,7 +337,7 @@ void PowerFSM_setup()
 #ifdef ARCH_ESP32
     // We never enter light-sleep or NB states on NRF52 (because the CPU uses so little power normally)
 
-    // See: https://github.com/meshtastic/Meshtastic-device/issues/1071
+    // See: https://github.com/meshtastic/firmware/issues/1071
     if (isRouter || config.power.is_power_saving) {
         powerFSM.add_timed_transition(&stateNB, &stateLS, getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs), NULL, "Min wake timeout");
         powerFSM.add_timed_transition(&stateDARK, &stateLS, getConfiguredOrDefaultMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs), NULL, "Bluetooth timeout");

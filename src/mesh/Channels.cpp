@@ -267,7 +267,7 @@ their nodes
 *
 * This function will also need to be implemented in GUI apps that talk to the radio.
 *
-* https://github.com/meshtastic/Meshtastic-device/issues/269
+* https://github.com/meshtastic/firmware/issues/269
 */
 const char *Channels::getPrimaryName()
 {
