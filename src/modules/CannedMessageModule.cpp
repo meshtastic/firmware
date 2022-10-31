@@ -88,7 +88,7 @@ void CannedMessageModule::fillDestinationForMessages(int messagesCount) {
             DEBUG_MSG("Empty destination found, setting to broadcast\n");
             this->destinations[destIndex] = NODENUM_BROADCAST;
         } else {
-            unsigned long intDest = strtoul( &currentDestination[1], NULL, 16); // Omitting ! character in dest
+            unsigned long intDest = strtoul( &currentDestination[0], NULL, 16);
             if (intDest == 0) {
                 DEBUG_MSG("Failed to convert Destination: %s to NodeNum, setting to broadcast\n", currentDestination);
                 this->destinations[destIndex] = NODENUM_BROADCAST;            
@@ -100,6 +100,7 @@ void CannedMessageModule::fillDestinationForMessages(int messagesCount) {
         destIndex++;
         currentDestPtr=0;
     }
+    // parsed all available destinations, now set broadcast for the remaining
     while (destIndex < messagesCount) {
         this->destinations[destIndex] = NODENUM_BROADCAST;
         destIndex++;

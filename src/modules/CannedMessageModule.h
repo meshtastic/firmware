@@ -89,7 +89,6 @@ class CannedMessageModule :
 
     char destinationStore[CANNED_MESSAGE_MODULE_MESSAGES_SIZE+1];
     NodeNum destinations[CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT];
-    int destinationsCount = 0;
 
 
     unsigned long lastTouchMillis = 0;

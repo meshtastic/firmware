@@ -13,9 +13,9 @@
 /* Canned message module configuration. */
 typedef struct _CannedMessageModuleConfig { 
     /* Predefined messages for canned message module separated by '|' characters. */
-    char messages[201];
+    char messages[151];
     /* Predefined destinations for canned message module separated by '|' characters. */
-    char destinations[201];
+    char destinations[72];
 } CannedMessageModuleConfig;
 
 
@@ -44,7 +44,7 @@ extern const pb_msgdesc_t CannedMessageModuleConfig_msg;
 #define CannedMessageModuleConfig_fields &CannedMessageModuleConfig_msg
 
 /* Maximum encoded size of messages (where known) */
-#define CannedMessageModuleConfig_size           406
+#define CannedMessageModuleConfig_size           226
 
 #ifdef __cplusplus
 } /* extern "C" */

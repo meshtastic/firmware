@@ -62,7 +62,7 @@ typedef struct _AdminMessage {
         /* Get the Canned Message Module messages in the response to this message. */
         bool get_canned_message_module_messages_request;
         /* Get the Canned Message Module messages in the response to this message. */
-        char get_canned_message_module_messages_response[201];
+        char get_canned_message_module_messages_response[151];
         /* Request the node to send device metadata (firmware, protobuf version, etc) */
         bool get_device_metadata_request;
         /* Device metadata response */
@@ -70,7 +70,7 @@ typedef struct _AdminMessage {
         /* Get the Canned Message Destinations Module messages in the response to this message. */
         bool get_canned_message_module_messages_dests_request;
         /* Get the Canned Message Destinations Module messages in the response to this message. */
-        char get_canned_message_module_messages_dests_response[201];
+        char get_canned_message_module_messages_dests_response[72];
         /* Set the owner for this node */
         User set_owner;
         /* Set channels (using the new API).
@@ -84,9 +84,9 @@ typedef struct _AdminMessage {
         /* Set the current Config */
         ModuleConfig set_module_config;
         /* Set the Canned Message Module messages text. */
-        char set_canned_message_module_messages[201];
+        char set_canned_message_module_messages[151];
         /* Set the Canned Message Destinations Module messages text. */
-        char set_canned_message_module_messages_dests[201];
+        char set_canned_message_module_messages_dests[72];
         /* Sent immediatly after a config change has been sent to ensure comms, if this is not recieved, the config will be reverted after 10 mins */
         bool confirm_set_config;
         /* Sent immediatly after a config change has been sent to ensure comms, if this is not recieved, the config will be reverted after 10 mins */
@@ -216,7 +216,7 @@ extern const pb_msgdesc_t AdminMessage_msg;
 #define AdminMessage_fields &AdminMessage_msg
 
 /* Maximum encoded size of messages (where known) */
-#define AdminMessage_size                        204
+#define AdminMessage_size                        168
 
 #ifdef __cplusplus
 } /* extern "C" */
