@@ -15,4 +15,4 @@ This repository contains the device firmware for the Meshtastic project.
 
 ## Stats
 
-![Alt](https://repobeats.axiom.co/api/embed/99a2cf5622bb4807f9e8c3b86589f1133cce58a2.svg "Repobeats analytics image")
+![Alt](https://repobeats.axiom.co/api/embed/a92f097d9197ae853e780ec53d7d126e545629ab.svg "Repobeats analytics image")
