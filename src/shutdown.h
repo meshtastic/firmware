@@ -17,7 +17,7 @@ void powerCommandsCheck()
 #endif
     }
 
-#if defined(ARCH_NRF52)
+#if defined(ARCH_NRF52) || defined(HAS_PMU)
     if (shutdownAtMsec) {
         screen->startShutdownScreen();
         playBeep();
