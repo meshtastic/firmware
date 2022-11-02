@@ -13,7 +13,8 @@ void powerCommandsCheck()
 #elif defined(ARCH_NRF52)
         NVIC_SystemReset();
 #else
-        DEBUG_MSG("FIXME implement reboot for this platform");
+        rebootAtMsec = -1; 
+        DEBUG_MSG("FIXME implement reboot for this platform. Skipping for now.\n");
 #endif
     }
 
