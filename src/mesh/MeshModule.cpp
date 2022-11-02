@@ -109,10 +109,7 @@ void MeshModule::callPlugins(const MeshPacket &mp, RxSource src)
             /// Also: if a packet comes in on the local PC interface, we don't check for bound channels, because it is TRUSTED and it needs to
             /// to be able to fetch the initial admin packets without yet knowing any channels.
 
-            bool rxChannelOk = !pi.boundChannel || (mp.from == 0) ||
-                !ch ||
-                strlen(ch->settings.name) > 0 ||
-                (strcasecmp(ch->settings.name, pi.boundChannel) == 0);
+            bool rxChannelOk = !pi.boundChannel || (mp.from == 0) || (strcasecmp(ch->settings.name, pi.boundChannel) == 0);
 
             if (!rxChannelOk) {
                 // no one should have already replied!
