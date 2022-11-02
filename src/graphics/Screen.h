@@ -10,7 +10,7 @@ namespace graphics
 class Screen 
 {
   public:
-    Screen(char){}
+    explicit Screen(char){}
     void onPress() {}
     void setup() {}
     void setOn(bool) {}
