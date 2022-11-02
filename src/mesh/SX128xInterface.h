@@ -6,7 +6,7 @@
 
 /**
  * \brief Adapter for SX128x radio family. Implements common logic for child classes.
- * \tparam T RadioLib module type for SX128x: SX1281.
+ * \tparam T RadioLib module type for SX128x: SX1280.
  */
 template<class T>
 class SX128xInterface : public RadioLibInterface
