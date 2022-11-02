@@ -42,6 +42,7 @@ jobs:
           - board: m5stack-core
           - board: m5stack-coreink
           - board: tbeam-s3-core
+          - board: feather_diy
         # - board: pico
 
     runs-on: ubuntu-latest
@@ -181,6 +182,7 @@ jobs:
           - board: rak4631_eink
           - board: t-echo
           - board: pca10059_diy_eink
+          - board: feather_diy
 
     runs-on: ubuntu-latest
     steps:
