@@ -4,7 +4,7 @@
 
 #define BUTTON_PIN 7
 
-#define LORA_DIO0 26  // a No connect on the SX1262/SX1268 module
+#define LORA_DIO0 -1  // a No connect on the SX1262/SX1268 module
 #define LORA_RESET 13 // RST for SX1276, and for SX1262/SX1268
 #define LORA_DIO1 11  // IRQ for SX1262/SX1268
 #define LORA_DIO2 12  // BUSY for SX1262/SX1268
@@ -19,7 +19,7 @@
 #define USE_SX1262
 
 // common pinouts for SX126X modules
-#define SX126X_CS 18 // NSS for SX126X
+#define SX126X_CS RF95_NSS // NSS for SX126X
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET
