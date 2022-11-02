@@ -2,6 +2,8 @@
 #define I2C_SDA 22
 #define I2C_SCL 23
 
+#define PIN_LED1 4
+
 #define BUTTON_PIN 7
 
 #define LORA_DIO0 -1  // a No connect on the SX1262/SX1268 module
