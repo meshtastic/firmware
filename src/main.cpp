@@ -51,7 +51,7 @@
 #include "RF95Interface.h"
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
-#include "SX1281Interface.h"
+#include "SX1280Interface.h"
 #if !HAS_RADIO && defined(ARCH_PORTDUINO)
 #include "platform/portduino/SimRadio.h"
 #endif
@@ -372,15 +372,15 @@ void setup()
     }
 #endif
 
-#if defined(USE_SX1281) && !defined(ARCH_PORTDUINO)
+#if defined(USE_SX1280) && !defined(ARCH_PORTDUINO)
     if (!rIf) {
-        rIf = new SX1281Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
+        rIf = new SX1280Interface(SX128X_CS, SX128X_DIO1, SX128X_RESET, SX128X_BUSY, SPI);
         if (!rIf->init()) {
-            DEBUG_MSG("Warning: Failed to find SX1281 radio\n");
+            DEBUG_MSG("Warning: Failed to find SX1280 radio\n");
             delete rIf;
             rIf = NULL;
         } else {
-            DEBUG_MSG("SX1281 Radio init succeeded, using SX1281 radio\n");
+            DEBUG_MSG("SX1280 Radio init succeeded, using SX1280 radio\n");
             rIf_wide_lora = true;
         }
     }
