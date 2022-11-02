@@ -22,10 +22,3 @@
 #include "nrf.h"
 #include "wiring_constants.h"
 #include "wiring_digital.h"
-
-void initVariant()
-{
-    // LED1 & LED2
-    pinMode(PIN_LED1, OUTPUT);
-    ledOff(PIN_LED1);
-}
