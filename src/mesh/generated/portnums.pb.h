@@ -51,6 +51,9 @@ typedef enum _PortNum {
     /* Waypoint payloads.
  Payload is a [Waypoint](/docs/developers/protobufs/api#waypoint) message */
     PortNum_WAYPOINT_APP = 8, 
+    /* Audio Payloads.
+ Encapsulated codec2 packets. On 2.4 GHZ Bandwidths only for now */
+    PortNum_AUDIO_APP = 9, 
     /* Provides a 'ping' service that replies to any packet it receives.
  Also serves as a small example module. */
     PortNum_REPLY_APP = 32, 
