@@ -1,8 +1,79 @@
-// For OLED LCD
-#define I2C_SDA 22
-#define I2C_SCL 23
+/*
+  Copyright (c) 2014-2015 Arduino LLC.  All right reserved.
+  Copyright (c) 2016 Sandeep Mistry All right reserved.
+  Copyright (c) 2018, Adafruit Industries (adafruit.com)
+
+  This library is free software; you can redistribute it and/or
+  modify it under the terms of the GNU Lesser General Public
+  License as published by the Free Software Foundation; either
+  version 2.1 of the License, or (at your option) any later version.
+  This library is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU Lesser General Public License for more details.
+  You should have received a copy of the GNU Lesser General Public
+  License along with this library; if not, write to the Free Software
+  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+*/
+
+#ifndef _VARIANT_FEATHER_DIY_
+#define _VARIANT_FEATHER_DIY_
+
+/** Master clock frequency */
+#define VARIANT_MCK (64000000ul)
+
+#define USE_LFXO // Board uses 32khz crystal for LF
+// define USE_LFRC    // Board uses RC for LF
+
+/*----------------------------------------------------------------------------
+ *        Headers
+ *----------------------------------------------------------------------------*/
+
+#include "WVariant.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif // __cplusplus
+
+// Number of pins defined in PinDescription array
+#define PINS_COUNT (48)
+#define NUM_DIGITAL_PINS (48)
+#define NUM_ANALOG_INPUTS (6)
+#define NUM_ANALOG_OUTPUTS (0)
+
+#define WIRE_INTERFACES_COUNT 1
+
+#define PIN_WIRE_SDA 22
+#define PIN_WIRE_SCL 23
+
+#define PIN_LED1 3
+#define PIN_LED2 4
+
+#define LED_BUILTIN PIN_LED1
+
+#define LED_GREEN PIN_LED2 // Actually red
+#define LED_BLUE PIN_LED1
+
+#define LED_STATE_ON 1 // State when LED is litted
 
 #define BUTTON_PIN 7
+
+/*
+ * Serial interfaces
+ */
+#define PIN_SERIAL1_RX 1
+#define PIN_SERIAL1_TX 0
+
+#define PIN_SERIAL2_RX (-1)
+#define PIN_SERIAL2_TX (-1)
+
+#define SPI_INTERFACES_COUNT 1
+
+#define PIN_SPI_MISO 24
+#define PIN_SPI_MOSI 25
+#define PIN_SPI_SCK 26
+
+#define SS 2
 
 #define LORA_DIO0 -1  // a No connect on the SX1262/SX1268 module
 #define LORA_RESET 13 // RST for SX1276, and for SX1262/SX1268
@@ -13,7 +84,12 @@
 #define RF95_SCK SCK
 #define RF95_MISO MI
 #define RF95_MOSI MO
-#define RF95_NSS D2
+#define RF95_NSS SS
+
+// enables 3.3V periphery like GPS or IO Module
+#define PIN_3V3_EN (34)
+
+#undef USE_EINK
 
 // supported modules list
 #define USE_SX1262
@@ -30,4 +106,14 @@
 // Internally the TTGO module hooks the SX126x-DIO2 in to control the TX/RX switch
 // (which is the default for the sx1262interface code)
 #define SX126X_E22
+#endif
+
+#ifdef __cplusplus
+}
+#endif
+
+/*----------------------------------------------------------------------------
+ *        Arduino objects - C++ only
+ *----------------------------------------------------------------------------*/
+
 #endif
