@@ -10,7 +10,7 @@ namespace graphics
 class Screen 
 {
   public:
-    Screen(char){}
+    explicit Screen(char){}
     void onPress() {}
     void setup() {}
     void setOn(bool) {}
@@ -131,8 +131,7 @@ class Screen : public concurrency::OSThread
     void setOn(bool on)
     {
         if (!on)
-            handleSetOn(
-                false); // We handle off commands immediately, because they might be called because the CPU is shutting down
+            handleSetOn(false); // We handle off commands immediately, because they might be called because the CPU is shutting down
         else
             enqueueCmd(ScreenCmd{.cmd = on ? Cmd::SET_ON : Cmd::SET_OFF});
     }

@@ -441,6 +441,10 @@ void AdminModule::handleGetDeviceMetadata(const MeshPacket &req) {
     DeviceMetadata deviceMetadata;
     strncpy(deviceMetadata.firmware_version, myNodeInfo.firmware_version, 18);
     deviceMetadata.device_state_version = DEVICESTATE_CUR_VER;
+    deviceMetadata.canShutdown = pmu_found || HAS_CPU_SHUTDOWN;
+    deviceMetadata.hasBluetooth = HAS_BLUETOOTH;
+    deviceMetadata.hasWifi = HAS_WIFI;
+    deviceMetadata.hasEthernet = HAS_ETHERNET;
 
     r.get_device_metadata_response = deviceMetadata;
     r.which_payload_variant = AdminMessage_get_device_metadata_response_tag;
