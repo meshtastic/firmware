@@ -1390,7 +1390,6 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
 {
 #if HAS_WIFI
     const char *wifiName = config.network.wifi_ssid;
-    const char *wifiPsw = config.network.wifi_psk;
 
     displayedNodeNum = 0; // Not currently showing a node pane
 
@@ -1399,11 +1398,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
     // The coordinates define the left starting point of the text
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    if (isSoftAPForced()) {
-        display->drawString(x, y, String("WiFi: Software AP (Admin)"));
-    } else if (config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT || config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN) {
-        display->drawString(x, y, String("WiFi: Software AP"));
-    } else if (WiFi.status() != WL_CONNECTED) {
+    if (WiFi.status() != WL_CONNECTED) {
         display->drawString(x, y, String("WiFi: Not Connected"));
     } else {
         display->drawString(x, y, String("WiFi: Connected"));
@@ -1424,25 +1419,14 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
     - WL_NO_SHIELD: assigned when no WiFi shield is present;
 
     */
-    if (WiFi.status() == WL_CONNECTED || isSoftAPForced() || config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT || config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN) {
-        if (config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT || config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN || isSoftAPForced()) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IP: " + String(WiFi.softAPIP().toString().c_str()));
-
-            // Number of connections to the AP. Default max for the esp32 is 4
-            display->drawString(x + SCREEN_WIDTH - display->getStringWidth("(" + String(WiFi.softAPgetStationNum()) + "/4)"),
-                                y + FONT_HEIGHT_SMALL * 1, "(" + String(WiFi.softAPgetStationNum()) + "/4)");
-        } else {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IP: " + String(WiFi.localIP().toString().c_str()));
-        }
-
+    if (WiFi.status() == WL_CONNECTED) {
+        display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IP: " + String(WiFi.localIP().toString().c_str()));
     } else if (WiFi.status() == WL_NO_SSID_AVAIL) {
         display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "SSID Not Found");
     } else if (WiFi.status() == WL_CONNECTION_LOST) {
         display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Connection Lost");
     } else if (WiFi.status() == WL_CONNECT_FAILED) {
         display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Connection Failed");
-        //} else if (WiFi.status() == WL_DISCONNECTED) {
-        //    display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Disconnected");
     } else if (WiFi.status() == WL_IDLE_STATUS) {
         display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Idle ... Reconnecting");
     } else {
@@ -1509,24 +1493,8 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         }
     }
 
-    if (isSoftAPForced()) {
-        if ((millis() / 10000) % 2) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: meshtasticAdmin");
-        } else {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "PWD: 12345678");
-        }
+    display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
 
-    } else {
-        if (config.network.wifi_mode== Config_NetworkConfig_WiFiMode_ACCESS_POINT || config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN) {
-            if ((millis() / 10000) % 2) {
-                display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
-            } else {
-                display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "PWD: " + String(wifiPsw));
-            }
-        } else {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
-        }
-    }
     display->drawString(x, y + FONT_HEIGHT_SMALL * 3, "http://meshtastic.local");
 
     /* Display a heartbeat pixel that blinks every time the frame is redrawn */

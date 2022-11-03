@@ -3,7 +3,7 @@
 set -e
 
 echo "This script requires https://jpa.kapsi.fi/nanopb/download/ version 0.4.6 to be located in the"
-echo "meshtastic-device root directory if the following step fails, you should download the correct"
+echo "firmware root directory if the following step fails, you should download the correct"
 echo "prebuilt binaries for your computer into nanopb-0.4.6"
 
 # the nanopb tool seems to require that the .options file be in the current directory!

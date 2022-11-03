@@ -16,10 +16,10 @@
 /*
 
     Documentation:
-        https://github.com/meshtastic/Meshtastic-device/blob/master/docs/software/modules/ExternalNotificationModule.md
+        https://github.com/meshtastic/firmware/blob/master/docs/software/modules/ExternalNotificationModule.md
 
     This module supports:
-        https://github.com/meshtastic/Meshtastic-device/issues/654
+        https://github.com/meshtastic/firmware/issues/654
 
 
     Quick reference:

@@ -26,6 +26,9 @@
 #ifndef HAS_RADIO
     #define HAS_RADIO 1
 #endif
+#ifdef HAS_CPU_SHUTDOWN
+    #define HAS_CPU_SHUTDOWN 1
+#endif
 
 //
 // set HW_VENDOR
@@ -42,7 +45,7 @@
     #define HW_VENDOR HardwareModel_T_ECHO
 #elif defined(NORDIC_PCA10059)
     #define HW_VENDOR HardwareModel_NRF52840_PCA10059
-#elif defined(PRIVATE_HW)
+#elif defined(PRIVATE_HW) || defined(FEATHER_DIY)
     #define HW_VENDOR HardwareModel_PRIVATE_HW
 #else
     #define HW_VENDOR HardwareModel_NRF52_UNKNOWN
