@@ -37,7 +37,7 @@
 #include "nimble/NimbleBluetooth.h"
 #endif
 
-#if HAS_WIFI || defined(ARCH_PORTDUINO)
+#if HAS_WIFI
 #include "mesh/wifi/WiFiServerAPI.h"
 #include "mqtt/MQTT.h"
 #endif
