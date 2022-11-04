@@ -116,9 +116,6 @@ ExternalNotificationModule::ExternalNotificationModule()
     : SinglePortModule("ExternalNotificationModule", PortNum_TEXT_MESSAGE_APP), concurrency::OSThread(
                                                                                     "ExternalNotificationModule")
 {
-    // restrict to the admin channel for rx
-    boundChannel = Channels::gpioChannel;
-
     /*
         Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
@@ -131,6 +128,11 @@ ExternalNotificationModule::ExternalNotificationModule()
     // moduleConfig.external_notification.alert_bell = 1;
     // moduleConfig.external_notification.output_ms = 1000;
     // moduleConfig.external_notification.output = 13;
+    
+    if (moduleConfig.external_notification.alert_message) {
+        // restrict to the gpio channel for rx
+        boundChannel = Channels::gpioChannel;
+    }
 
     if (moduleConfig.external_notification.enabled) {
 
