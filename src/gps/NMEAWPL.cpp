@@ -15,7 +15,7 @@
  * -------------------------------------------
  */
 
-uint printWPL(char *buf, const Position &pos, const char *name)
+uint32_t printWPL(char *buf, const Position &pos, const char *name)
 {
     uint len = sprintf(buf, "$GNWPL,%07.2f,%c,%08.2f,%c,%s", pos.latitude_i * 1e-5, pos.latitude_i < 0 ? 'S' : 'N', pos.longitude_i * 1e-5, pos.longitude_i < 0 ? 'W' : 'E', name);
     uint chk = 0;
@@ -50,9 +50,9 @@ uint printWPL(char *buf, const Position &pos, const char *name)
  * -------------------------------------------
  */
 
-uint printGGA(char *buf, const Position &pos)
+uint32_t printGGA(char *buf, const Position &pos)
 {
-    uint len = sprintf(buf, "$GNGGA,%06u.%03u,%07.2f,%c,%08.2f,%c,%u,%02u,%04u,%04d,%c,%04d,%c,%d,%04d",
+    uint32_t len = sprintf(buf, "$GNGGA,%06u.%03u,%07.2f,%c,%08.2f,%c,%u,%02u,%04u,%04d,%c,%04d,%c,%d,%04d",
         pos.time / 1000,
         pos.time % 1000,
         pos.latitude_i * 1e-5, pos.latitude_i < 0 ? 'S' : 'N',
@@ -67,8 +67,8 @@ uint printGGA(char *buf, const Position &pos)
         0,
         0);
 
-    uint chk = 0;
-    for (uint i = 1; i < len; i++) {
+    uint32_t chk = 0;
+    for (uint32_t i = 1; i < len; i++) {
         chk ^= buf[i];
     }
     len += sprintf(buf + len, "*%02X\r\n", chk);
