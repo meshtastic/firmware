@@ -150,8 +150,8 @@ extern const pb_msgdesc_t LocalModuleConfig_msg;
 #define LocalModuleConfig_fields &LocalModuleConfig_msg
 
 /* Maximum encoded size of messages (where known) */
-#define LocalConfig_size                         359
-#define LocalModuleConfig_size                   270
+#define LocalConfig_size                         363
+#define LocalModuleConfig_size                   294
 
 #ifdef __cplusplus
 } /* extern "C" */
