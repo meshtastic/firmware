@@ -3,5 +3,5 @@
 #include <Arduino.h>
 #include "main.h"
 
-uint printWPL(char *buf, const Position &pos, const char *name);
-uint printGGA(char *buf, const Position &pos);
+uin32_t printWPL(char *buf, const Position &pos, const char *name);
+uin32_t printGGA(char *buf, const Position &pos);
