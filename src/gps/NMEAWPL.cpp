@@ -17,8 +17,8 @@
 
 uint32_t printWPL(char *buf, const Position &pos, const char *name)
 {
-    uint len = sprintf(buf, "$GNWPL,%07.2f,%c,%08.2f,%c,%s", pos.latitude_i * 1e-5, pos.latitude_i < 0 ? 'S' : 'N', pos.longitude_i * 1e-5, pos.longitude_i < 0 ? 'W' : 'E', name);
-    uint chk = 0;
+    uint32_t len = sprintf(buf, "$GNWPL,%07.2f,%c,%08.2f,%c,%s", pos.latitude_i * 1e-5, pos.latitude_i < 0 ? 'S' : 'N', pos.longitude_i * 1e-5, pos.longitude_i < 0 ? 'W' : 'E', name);
+    uint32_t chk = 0;
     for (uint i = 1; i < len; i++) {
         chk ^= buf[i];
     }
