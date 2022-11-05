@@ -357,8 +357,9 @@ std::string MQTT::downstreamPacketToJson(MeshPacket *mp)
             if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &Position_msg, &scratch)) {
                 decoded = &scratch;
                 msgPayload = Json::object{
-                    {"time", (int)decoded->time},
-                    {"pos_timestamp", (int)decoded->timestamp},
+                    //FIXME removing time and post_timestamp seem to re-enable transmission of json mqtt packet
+                    //{"time", (int)decoded->time},
+                    //{"pos_timestamp", (int)decoded->timestamp},
                     {"latitude_i", (int)decoded->latitude_i}, 
                     {"longitude_i", (int)decoded->longitude_i}, 
                     {"altitude", (int)decoded->altitude}
