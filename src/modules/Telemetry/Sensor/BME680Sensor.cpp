@@ -14,16 +14,7 @@ int32_t BME680Sensor::runOnce() {
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    status = bme680.begin(nodeTelemetrySensorsMap[sensorType], false);
-
-    // Set up oversampling and filter initialization
-    bme680.setTemperatureOversampling(BME68X_OS_1X);
-    bme680.setHumidityOversampling(BME68X_OS_1X);
-    bme680.setPressureOversampling(BME68X_OS_1X);
-    bme680.setIIRFilterSize(BME68X_FILTER_OFF);
-    bme680.setODR(BME68X_ODR_1000_MS);
-    // BME68X_FORCED_MODE is done in Lib Init already
-    bme680.setGasHeater(320, 150); // 320*C for 150 ms
+    status = bme680.begin(nodeTelemetrySensorsMap[sensorType]);
 
     return initI2CSensor();
 }
