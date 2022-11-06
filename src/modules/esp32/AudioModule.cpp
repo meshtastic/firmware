@@ -42,11 +42,11 @@
 #define AUDIO_MODULE_MODE 7 // 700B
 #define AUDIO_MODULE_ACK 1
 
+#if defined(ARCH_ESP32) && defined(USE_SX1280)
+
 AudioModule *audioModule;
 
-#if defined(ARCH_ESP32) && defined(USE_SX1280)
 ButterworthFilter hp_filter(240, 8000, ButterworthFilter::ButterworthFilter::Highpass, 1);
-#endif
 
 //int16_t 1KHz sine test tone
 int16_t Sine1KHz[8] = { -21210 , -30000, -21210, 0 , 21210 , 30000 , 21210, 0 };
@@ -54,11 +54,12 @@ int Sine1KHz_index = 0;
 
 uint8_t rx_raw_audio_value = 127;
 
-AudioModule::AudioModule() : SinglePortModule("AudioModule", PortNum_AUDIO_APP), concurrency::OSThread("AudioModule") {}
+AudioModule::AudioModule() : SinglePortModule("AudioModule", PortNum_AUDIO_APP), concurrency::OSThread("AudioModule") {
+    audio_fifo.init();
+}
 
 void AudioModule::run_codec2()
 {
-#if defined(ARCH_ESP32) && defined(USE_SX1280)
     if (state == State::tx)
     {
         for (int i = 0; i < ADC_BUFFER_SIZE; i++)
@@ -91,7 +92,6 @@ void AudioModule::run_codec2()
         }
     }
     state = State::standby;
-#endif
 }
 
 void AudioModule::handleInterrupt()
@@ -101,7 +101,6 @@ void AudioModule::handleInterrupt()
 
 void AudioModule::onTimer()
 {
-#if defined(ARCH_ESP32) && defined(USE_SX1280)
     if (state == State::tx) {
         adc_buffer[adc_buffer_index++] = (16 * adc1_get_raw(mic_chan)) - 32768;
 
@@ -129,13 +128,10 @@ void AudioModule::onTimer()
         //Play
         dacWrite(moduleConfig.audio.amp_pin ? moduleConfig.audio.amp_pin : AAMP, rx_raw_audio_value);
     }
-#endif
 }
 
 int32_t AudioModule::runOnce()
 {
-#if defined(ARCH_ESP32) && defined(USE_SX1280)
-
     if (moduleConfig.audio.codec2_enabled) {
 
         if (firstTime) {
@@ -198,9 +194,6 @@ int32_t AudioModule::runOnce()
 
         return INT32_MAX;
     }
-#else
-    return INT32_MAX;
-#endif
 }
 
 MeshPacket *AudioModule::allocReply()
@@ -227,8 +220,6 @@ void AudioModule::sendPayload(NodeNum dest, bool wantReplies)
 
 ProcessMessage AudioModule::handleReceived(const MeshPacket &mp)
 {
-#if defined(ARCH_ESP32) && defined(USE_SX1280)
-
     if (moduleConfig.audio.codec2_enabled) {
         auto &p = mp.decoded;
         if (getFrom(&mp) != nodeDB.getNodeNum()) {
@@ -243,7 +234,7 @@ ProcessMessage AudioModule::handleReceived(const MeshPacket &mp)
         }
     }
 
-#endif
-
     return ProcessMessage::CONTINUE;
 }
+
+#endif
