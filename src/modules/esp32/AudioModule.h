@@ -11,8 +11,6 @@
 #include <codec2.h>
 #include <ButterworthFilter.h>
 #include <FastAudioFIFO.h>
-#else
-typedef int FastAudioFIFO;
 #endif
 
 #define ADC_BUFFER_SIZE 320 // 40ms of voice in 8KHz sampling frequency
@@ -20,6 +18,7 @@ typedef int FastAudioFIFO;
 
 class AudioModule : public SinglePortModule, private concurrency::OSThread
 {
+#if defined(ARCH_ESP32) && defined(USE_SX1280)
   bool firstTime = 1;
   hw_timer_t* adcTimer = NULL;
   uint16_t adc_buffer[ADC_BUFFER_SIZE];
@@ -62,6 +61,7 @@ class AudioModule : public SinglePortModule, private concurrency::OSThread
      * @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for it
      */
     virtual ProcessMessage handleReceived(const MeshPacket &mp) override;
+#endif
 };
 
 extern AudioModule *audioModule;
