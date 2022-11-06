@@ -21,16 +21,16 @@ class AudioModule : public SinglePortModule, private concurrency::OSThread
 #if defined(ARCH_ESP32) && defined(USE_SX1280)
   bool firstTime = 1;
   hw_timer_t* adcTimer = NULL;
-  uint16_t adc_buffer[ADC_BUFFER_SIZE];
-  int16_t speech[ADC_BUFFER_SIZE];
-  int16_t output_buffer[ADC_BUFFER_SIZE];
-  unsigned char rx_encode_frame[ENCODE_FRAME_SIZE];
-  unsigned char tx_encode_frame[ENCODE_FRAME_SIZE];
+  uint16_t adc_buffer[ADC_BUFFER_SIZE] = {};
+  int16_t speech[ADC_BUFFER_SIZE] = {};
+  int16_t output_buffer[ADC_BUFFER_SIZE] = {};
+  unsigned char rx_encode_frame[ENCODE_FRAME_SIZE] = {};
+  unsigned char tx_encode_frame[ENCODE_FRAME_SIZE] = {};
   int tx_encode_frame_index = 0;
   FastAudioFIFO audio_fifo;
   uint16_t adc_buffer_index = 0;
   adc1_channel_t mic_chan = (adc1_channel_t)0;
-  struct CODEC2* codec2_state;
+  struct CODEC2* codec2_state = NULL;
 
   enum State
   {
