@@ -1,5 +1,23 @@
 version: "3.7"
 
 services:
-  meshtastic-device:
+  meshtastic-node-1:
     build: .
+    command: ["./meshtasticd_linux_amd64", "--hwid", "12:2E:9C:CF:65:7C"]
+    ports: 
+      - 4403:4403
+  meshtastic-node-2:
+    build: .
+    command: ["./meshtasticd_linux_amd64", "--hwid", "93:DD:85:BB:36:54"]
+    ports: 
+      - 4404:4403
+  meshtastic-node-3:
+    build: .
+    command: ["./meshtasticd_linux_amd64", "--hwid", "05:97:96:0A:0B:B4"]
+    ports: 
+      - 4405:4403
+  meshtastic-node-4:
+    build: .
+    command: ["./meshtasticd_linux_amd64", "--hwid", "07:67:32:9D:84:00"]
+    ports: 
+      - 4406:4403
