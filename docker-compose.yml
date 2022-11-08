@@ -1,5 +1,13 @@
 version: "3.7"
 
 services:
-  meshtastic-device:
+  meshtastic-node:
     build: .
+    deploy:
+      mode: replicated
+      replicas: 80
+    networks:
+      - mesh
+    
+networks:
+  mesh:
