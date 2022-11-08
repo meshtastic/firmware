@@ -295,6 +295,11 @@ void AdminModule::handleSetModuleConfig(const ModuleConfig &c)
             moduleConfig.has_canned_message = true;
             moduleConfig.canned_message = c.payload_variant.canned_message;
             break;
+        case ModuleConfig_audio_tag:
+            DEBUG_MSG("Setting module config: Audio\n");
+            moduleConfig.has_audio = true;
+            moduleConfig.audio = c.payload_variant.audio;
+            break;
     }
     
     service.reloadConfig(SEGMENT_MODULECONFIG);
@@ -420,6 +425,11 @@ void AdminModule::handleGetModuleConfig(const MeshPacket &req, const uint32_t co
             DEBUG_MSG("Getting module config: Canned Message\n");
             res.get_module_config_response.which_payload_variant = ModuleConfig_canned_message_tag;
             res.get_module_config_response.payload_variant.canned_message = moduleConfig.canned_message;
+            break;
+        case AdminMessage_ModuleConfigType_AUDIO_CONFIG:
+            DEBUG_MSG("Getting module config: Audio\n");
+            res.get_module_config_response.which_payload_variant = ModuleConfig_audio_tag;
+            res.get_module_config_response.payload_variant.audio = moduleConfig.audio;
             break;
         }
 
