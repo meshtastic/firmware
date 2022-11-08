@@ -31,12 +31,6 @@ typedef enum _Config_PositionConfig_PositionFlags {
     Config_PositionConfig_PositionFlags_SPEED = 512 
 } Config_PositionConfig_PositionFlags;
 
-typedef enum _Config_NetworkConfig_WiFiMode { 
-    Config_NetworkConfig_WiFiMode_CLIENT = 0, 
-    Config_NetworkConfig_WiFiMode_ACCESS_POINT = 1, 
-    Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN = 2 
-} Config_NetworkConfig_WiFiMode;
-
 typedef enum _Config_NetworkConfig_EthMode { 
     Config_NetworkConfig_EthMode_DHCP = 0, 
     Config_NetworkConfig_EthMode_STATIC = 1 
@@ -164,6 +158,7 @@ typedef struct _Config_PowerConfig {
 
 typedef struct _Config_NetworkConfig { 
     bool wifi_enabled;
+    Config_NetworkConfig_EthMode wifi_mode;
     char wifi_ssid[33];
     char wifi_psk[64];
     char ntp_server[33];
@@ -195,10 +190,6 @@ typedef struct _Config {
 #define _Config_PositionConfig_PositionFlags_MIN Config_PositionConfig_PositionFlags_UNSET
 #define _Config_PositionConfig_PositionFlags_MAX Config_PositionConfig_PositionFlags_SPEED
 #define _Config_PositionConfig_PositionFlags_ARRAYSIZE ((Config_PositionConfig_PositionFlags)(Config_PositionConfig_PositionFlags_SPEED+1))
-
-#define _Config_NetworkConfig_WiFiMode_MIN Config_NetworkConfig_WiFiMode_CLIENT
-#define _Config_NetworkConfig_WiFiMode_MAX Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN
-#define _Config_NetworkConfig_WiFiMode_ARRAYSIZE ((Config_NetworkConfig_WiFiMode)(Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN+1))
 
 #define _Config_NetworkConfig_EthMode_MIN Config_NetworkConfig_EthMode_DHCP
 #define _Config_NetworkConfig_EthMode_MAX Config_NetworkConfig_EthMode_STATIC
@@ -238,7 +229,7 @@ extern "C" {
 #define Config_DeviceConfig_init_default         {_Config_DeviceConfig_Role_MIN, 0, 0}
 #define Config_PositionConfig_init_default       {0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_default          {0, 0, 0, 0, 0, 0, 0, 0}
-#define Config_NetworkConfig_init_default        {0, "", "", "", 0, _Config_NetworkConfig_EthMode_MIN, false, Config_NetworkConfig_IpV4Config_init_default}
+#define Config_NetworkConfig_init_default        {0, _Config_NetworkConfig_EthMode_MIN, "", "", "", 0, _Config_NetworkConfig_EthMode_MIN, false, Config_NetworkConfig_IpV4Config_init_default}
 #define Config_NetworkConfig_IpV4Config_init_default {0, 0, 0, 0}
 #define Config_DisplayConfig_init_default        {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _Config_DisplayConfig_DisplayUnits_MIN, _Config_DisplayConfig_OledType_MIN}
 #define Config_LoRaConfig_init_default           {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, {0, 0, 0}}
@@ -247,7 +238,7 @@ extern "C" {
 #define Config_DeviceConfig_init_zero            {_Config_DeviceConfig_Role_MIN, 0, 0}
 #define Config_PositionConfig_init_zero          {0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_zero             {0, 0, 0, 0, 0, 0, 0, 0}
-#define Config_NetworkConfig_init_zero           {0, "", "", "", 0, _Config_NetworkConfig_EthMode_MIN, false, Config_NetworkConfig_IpV4Config_init_zero}
+#define Config_NetworkConfig_init_zero           {0, _Config_NetworkConfig_EthMode_MIN, "", "", "", 0, _Config_NetworkConfig_EthMode_MIN, false, Config_NetworkConfig_IpV4Config_init_zero}
 #define Config_NetworkConfig_IpV4Config_init_zero {0, 0, 0, 0}
 #define Config_DisplayConfig_init_zero           {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _Config_DisplayConfig_DisplayUnits_MIN, _Config_DisplayConfig_OledType_MIN}
 #define Config_LoRaConfig_init_zero              {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, {0, 0, 0}}
@@ -299,6 +290,7 @@ extern "C" {
 #define Config_PowerConfig_ls_secs_tag           7
 #define Config_PowerConfig_min_wake_secs_tag     8
 #define Config_NetworkConfig_wifi_enabled_tag    1
+#define Config_NetworkConfig_wifi_mode_tag       2
 #define Config_NetworkConfig_wifi_ssid_tag       3
 #define Config_NetworkConfig_wifi_psk_tag        4
 #define Config_NetworkConfig_ntp_server_tag      5
@@ -364,6 +356,7 @@ X(a, STATIC,   SINGULAR, UINT32,   min_wake_secs,     8)
 
 #define Config_NetworkConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     wifi_enabled,      1) \
+X(a, STATIC,   SINGULAR, UENUM,    wifi_mode,         2) \
 X(a, STATIC,   SINGULAR, STRING,   wifi_ssid,         3) \
 X(a, STATIC,   SINGULAR, STRING,   wifi_psk,          4) \
 X(a, STATIC,   SINGULAR, STRING,   ntp_server,        5) \
@@ -443,10 +436,10 @@ extern const pb_msgdesc_t Config_BluetoothConfig_msg;
 #define Config_DisplayConfig_size                22
 #define Config_LoRaConfig_size                   68
 #define Config_NetworkConfig_IpV4Config_size     20
-#define Config_NetworkConfig_size                161
+#define Config_NetworkConfig_size                163
 #define Config_PositionConfig_size               30
 #define Config_PowerConfig_size                  43
-#define Config_size                              164
+#define Config_size                              166
 
 #ifdef __cplusplus
 } /* extern "C" */

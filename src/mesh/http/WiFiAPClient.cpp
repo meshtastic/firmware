@@ -169,6 +169,11 @@ bool initWifi()
             WiFi.mode(WIFI_MODE_STA);
             WiFi.setHostname(ourHost);
             WiFi.onEvent(WiFiEvent);
+            WiFi.setAutoReconnect(true);
+            WiFi.setSleep(false);
+            if (config.network.wifi_mode == Config_NetworkConfig_EthMode_STATIC && config.network.ipv4_config.ip != 0) {
+                WiFi.config(config.network.ipv4_config.ip,config.network.ipv4_config.gateway,config.network.ipv4_config.subnet,config.network.ipv4_config.dns,config.network.ipv4_config.dns);
+            }
 
             // This is needed to improve performance.
             esp_wifi_set_ps(WIFI_PS_NONE); // Disable radio power saving
@@ -222,8 +227,6 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
         DEBUG_MSG("Disconnected from WiFi access point\n");
-        // Event 5
-
         needReconnect = true;
         break;
     case SYSTEM_EVENT_STA_AUTHMODE_CHANGE:
@@ -236,6 +239,7 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case SYSTEM_EVENT_STA_LOST_IP:
         DEBUG_MSG("Lost IP address and IP address is reset to 0\n");
+        needReconnect = true;
         break;
     case SYSTEM_EVENT_STA_WPS_ER_SUCCESS:
         DEBUG_MSG("WiFi Protected Setup (WPS): succeeded in enrollee mode\n");
@@ -251,7 +255,6 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case SYSTEM_EVENT_AP_START:
         DEBUG_MSG("WiFi access point started\n");
-
         onNetworkConnected();
         break;
     case SYSTEM_EVENT_AP_STOP:
