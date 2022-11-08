@@ -12,4 +12,4 @@ FROM frolvlad/alpine-glibc
 WORKDIR /root/
 COPY --from=builder /firmware/release/meshtasticd_linux_amd64 ./
 RUN apk --update add --no-cache g++
-CMD ["./meshtasticd_linux_amd64"]
+CMD sh -cx "./meshtasticd_linux_amd64 --hwid '$RANDOM'"
