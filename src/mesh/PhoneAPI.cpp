@@ -249,11 +249,15 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.moduleConfig.which_payload_variant = ModuleConfig_canned_message_tag;
             fromRadioScratch.moduleConfig.payload_variant.canned_message = moduleConfig.canned_message;
             break;
+        case ModuleConfig_audio_tag:
+            fromRadioScratch.moduleConfig.which_payload_variant = ModuleConfig_audio_tag;
+            fromRadioScratch.moduleConfig.payload_variant.audio = moduleConfig.audio;
+            break;
         }
 
         config_state++;
         // Advance when we have sent all of our ModuleConfig objects
-        if (config_state > ModuleConfig_canned_message_tag) {
+        if (config_state > ModuleConfig_audio_tag) {
             state = STATE_SEND_COMPLETE_ID;
             config_state = 0;
         }
