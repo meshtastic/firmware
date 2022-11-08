@@ -263,8 +263,8 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #ifdef BUTTON_PIN
     gpio_wakeup_enable((gpio_num_t)BUTTON_PIN, GPIO_INTR_LOW_LEVEL); // when user presses, this button goes low
 #endif
-#ifdef RF95_IRQ_GPIO
-    gpio_wakeup_enable((gpio_num_t)RF95_IRQ_GPIO, GPIO_INTR_HIGH_LEVEL); // RF95 interrupt, active high
+#ifdef RF95_IRQ
+    gpio_wakeup_enable((gpio_num_t)RF95_IRQ, GPIO_INTR_HIGH_LEVEL); // RF95 interrupt, active high
 #endif
 #ifdef PMU_IRQ
     // wake due to PMU can happen repeatedly if there is no battery installed or the battery fills
