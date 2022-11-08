@@ -2,14 +2,14 @@ name: CI
 on:
   # # Triggers the workflow on push but only for the master branch
   push:
-    branches: [master]
+    branches: [master, develop]
     paths-ignore:
       - "**.md"
       - "version.properties"
 
   # Note: This is different from "pull_request". Need to specify ref when doing checkouts.
   pull_request_target:
-    branches: [master]
+    branches: [master, develop]
     paths-ignore:
       - "**.md"
       #- "**.yml"
@@ -170,7 +170,7 @@ jobs:
           path: |
             release/*.bin
             release/*.elf
-          retention-days: 90
+          retention-days: 30
 
   build-nrf52:
     strategy:
@@ -229,7 +229,7 @@ jobs:
             release/*.uf2
             release/*.elf
             release/*.zip
-          retention-days: 90
+          retention-days: 30
 
   build-rpi2040:
     strategy:
@@ -283,7 +283,7 @@ jobs:
           path: |
             release/*.uf2
             release/*.elf
-          retention-days: 90
+          retention-days: 30
 
   build-native:
     runs-on: ubuntu-latest
@@ -342,7 +342,7 @@ jobs:
             release/meshtasticd_linux_amd64
             release/device-*.sh
             release/device-*.bat
-          retention-days: 90
+          retention-days: 30
 
   after-checks:
     runs-on: ubuntu-latest
