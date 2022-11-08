@@ -19,6 +19,9 @@
 #ifdef ARCH_ESP32
 #include "modules/esp32/RangeTestModule.h"
 #include "modules/esp32/StoreForwardModule.h"
+#ifdef USE_SX1280
+#include "modules/esp32/AudioModule.h"
+#endif
 #endif
 #if defined(ARCH_ESP32) || defined(ARCH_NRF52)
 #include "modules/ExternalNotificationModule.h"
@@ -65,17 +68,16 @@ void setupModules()
 #endif
 #ifdef ARCH_ESP32
     // Only run on an esp32 based device.
-
-    /*
-        Maintained by MC Hamster (Jm Casler) jm@casler.org
-    */
+#ifdef USE_SX1280
+    new AudioModule();
+#endif
     new ExternalNotificationModule();
 
     storeForwardModule = new StoreForwardModule();
 
     new RangeTestModule();
 #elif defined(ARCH_NRF52)
-new ExternalNotificationModule();
+    new ExternalNotificationModule();
 #endif
 
     // NOTE! This module must be added LAST because it likes to check for replies from other modules and avoid sending extra acks
