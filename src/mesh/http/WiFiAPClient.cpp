@@ -171,8 +171,12 @@ bool initWifi()
             WiFi.onEvent(WiFiEvent);
             WiFi.setAutoReconnect(true);
             WiFi.setSleep(false);
-            if (config.network.wifi_mode == Config_NetworkConfig_EthMode_STATIC && config.network.ipv4_config.ip != 0) {
-                WiFi.config(config.network.ipv4_config.ip,config.network.ipv4_config.gateway,config.network.ipv4_config.subnet,config.network.ipv4_config.dns,config.network.ipv4_config.dns);
+            if (config.network.eth_mode == Config_NetworkConfig_EthMode_STATIC && config.network.ipv4_config.ip != 0) {
+                WiFi.config(config.network.ipv4_config.ip,
+                            config.network.ipv4_config.gateway,
+                            config.network.ipv4_config.subnet,
+                            config.network.ipv4_config.dns, 
+                            config.network.ipv4_config.dns); // Wifi wants two DNS servers... set both to the same value
             }
 
             // This is needed to improve performance.
