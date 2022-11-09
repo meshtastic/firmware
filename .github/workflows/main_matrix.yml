@@ -410,7 +410,7 @@ jobs:
         with:
           name: debug-elfs-${{ steps.version.outputs.version }}.zip
           path: ./*.elf
-          retention-days: 90
+          retention-days: 30
 
       - name: Create request artifacts
         if: ${{ github.event_name == 'pull_request_target' || github.event_name == 'pull_request' }}
