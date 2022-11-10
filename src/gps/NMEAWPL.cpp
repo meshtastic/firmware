@@ -1,4 +1,5 @@
 #include "NMEAWPL.h"
+#include "GeoCoord.h"
 
 /* -------------------------------------------
  *        1       2 3        4 5    6
@@ -17,9 +18,14 @@
 
 uint32_t printWPL(char *buf, const Position &pos, const char *name)
 {
-    uint32_t len = sprintf(buf, "$GNWPL,%07.2f,%c,%08.2f,%c,%s",
-        abs(pos.latitude_i) * 1e-5, pos.latitude_i < 0 ? 'S' : 'N',
-        abs(pos.longitude_i) * 1e-5, pos.longitude_i < 0 ? 'W' : 'E',
+    GeoCoord geoCoord(pos.latitude_i,pos.longitude_i,pos.altitude);
+    uint32_t len = sprintf(buf, "$GNWPL,%02d%10.7f,%c,%03d%10.7f,%c,%s",
+        geoCoord.getDMSLatDeg(),
+        (abs(geoCoord.getLatitude()) - geoCoord.getDMSLatDeg() * 1e+7) * 6e-6,
+        geoCoord.getDMSLatCP(),
+        geoCoord.getDMSLatDeg(),
+        (abs(geoCoord.getLongitude()) - geoCoord.getDMSLonDeg() * 1e+7) * 6e-6,
+        geoCoord.getDMSLonCP(),
         name);
     uint32_t chk = 0;
     for (uint32_t i = 1; i < len; i++) {
@@ -55,15 +61,20 @@ uint32_t printWPL(char *buf, const Position &pos, const char *name)
 
 uint32_t printGGA(char *buf, const Position &pos)
 {
-    uint32_t len = sprintf(buf, "$GNGGA,%06u.%03u,%07.2f,%c,%08.2f,%c,%u,%02u,%04u,%04d,%c,%04d,%c,%d,%04d",
+    GeoCoord geoCoord(pos.latitude_i,pos.longitude_i,pos.altitude);
+    uint32_t len = sprintf(buf, "$GNGGA,%06u.%03u,%02d%10.7f,%c,%03d%10.7f,%c,%u,%02u,%04u,%04d,%c,%04d,%c,%d,%04d",
         pos.time / 1000,
         pos.time % 1000,
-        abs(pos.latitude_i) * 1e-5, pos.latitude_i < 0 ? 'S' : 'N',
-        abs(pos.longitude_i) * 1e-5, pos.longitude_i < 0 ? 'W' : 'E',
+        geoCoord.getDMSLatDeg(),
+        (abs(geoCoord.getLatitude()) - geoCoord.getDMSLatDeg() * 1e+7) * 6e-6,
+        geoCoord.getDMSLatCP(),
+        geoCoord.getDMSLonDeg(),
+        (abs(geoCoord.getLongitude()) - geoCoord.getDMSLonDeg() * 1e+7) * 6e-6,
+        geoCoord.getDMSLonCP(),
         pos.fix_type,
         pos.sats_in_view,
         pos.HDOP,
-        pos.altitude,
+        geoCoord.getAltitude(),
         'M',
         pos.altitude_geoidal_separation,
         'M',
@@ -77,3 +88,11 @@ uint32_t printGGA(char *buf, const Position &pos)
     len += sprintf(buf + len, "*%02X\r\n", chk);
     return len;
 }
+
+/*
+
+(location.lat() - location.rawLat().deg) * 60,
+
+double latMin = ;
+
+*/
