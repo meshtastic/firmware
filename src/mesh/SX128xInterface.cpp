@@ -61,7 +61,7 @@ bool SX128xInterface<T>::init()
 #endif
 
     if (res == RADIOLIB_ERR_NONE)
-        res = lora.setCRC(RADIOLIB_SX128X_LORA_CRC_ON);
+        res = lora.setCRC(2);
 
     if (res == RADIOLIB_ERR_NONE)
         startReceive(); // start receiving
