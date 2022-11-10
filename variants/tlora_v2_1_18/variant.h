@@ -12,20 +12,17 @@
 #define I2C_SDA 21 // I2C pins for this board
 #define I2C_SCL 22
 
-// #define RESET_OLED 16 // If defined, this pin will be used to reset the display controller. Crashes on newer ESP-IDF and not needed per schematic
-
-#define VEXT_ENABLE 21 // active low, powers the oled display and the lora antenna boost
 #define LED_PIN 25     // If defined we will blink this LED
 #define BUTTON_PIN 12  // If defined, this will be used for user button presses,
 
 #define BUTTON_NEED_PULLUP
 
 #define USE_SX1280
-#define LORA_DIO0 26 // a No connect on the SX1262 module
 #define LORA_RESET 23
 
 #define SX128X_CS 18 // FIXME - we really should define LORA_CS instead
-#define SX128X_DIO1 33
+#define SX128X_DIO1 26
+#define SX128X_DIO2 33
 #define SX128X_BUSY 32
 #define SX128X_RESET LORA_RESET
 #define SX128X_E22 // Not really an E22 but TTGO seems to be trying to clone that
