@@ -17,7 +17,6 @@ extern uint8_t kb_model;
 extern uint8_t rtc_found;
 extern uint8_t keystore_found;
 
-extern bool rIf_wide_lora;
 extern bool eink_found;
 extern bool pmu_found;
 extern bool isCharging;
