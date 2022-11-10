@@ -23,7 +23,7 @@ uint32_t printWPL(char *buf, const Position &pos, const char *name)
         geoCoord.getDMSLatDeg(),
         (abs(geoCoord.getLatitude()) - geoCoord.getDMSLatDeg() * 1e+7) * 6e-6,
         geoCoord.getDMSLatCP(),
-        geoCoord.getDMSLatDeg(),
+        geoCoord.getDMSLonDeg(),
         (abs(geoCoord.getLongitude()) - geoCoord.getDMSLonDeg() * 1e+7) * 6e-6,
         geoCoord.getDMSLonCP(),
         name);
