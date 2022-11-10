@@ -538,9 +538,10 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
 
+        geoCoord.updateCoords(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()), int32_t(gps->getAltitude()));
+
         if (gpsFormat != Config_DisplayConfig_GpsCoordinateFormat_DMS) {
             char coordinateLine[22];
-            geoCoord.updateCoords(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()), int32_t(gps->getAltitude()));
             if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_DEC) { // Decimal Degrees
                 sprintf(coordinateLine, "%f %f", geoCoord.getLatitude() * 1e-7, geoCoord.getLongitude() * 1e-7);
             } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_UTM) { // Universal Transverse Mercator
