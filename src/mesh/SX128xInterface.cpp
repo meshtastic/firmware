@@ -6,7 +6,7 @@
 
 // Particular boards might define a different max power based on what their hardware can do
 #ifndef SX128X_MAX_POWER
-#define SX128X_MAX_POWER 22
+#define SX128X_MAX_POWER 13
 #endif
 
 template<typename T>
