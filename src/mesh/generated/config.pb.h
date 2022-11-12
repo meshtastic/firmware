@@ -31,11 +31,10 @@ typedef enum _Config_PositionConfig_PositionFlags {
     Config_PositionConfig_PositionFlags_SPEED = 512 
 } Config_PositionConfig_PositionFlags;
 
-typedef enum _Config_NetworkConfig_WiFiMode { 
-    Config_NetworkConfig_WiFiMode_CLIENT = 0, 
-    Config_NetworkConfig_WiFiMode_ACCESS_POINT = 1, 
-    Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN = 2 
-} Config_NetworkConfig_WiFiMode;
+typedef enum _Config_NetworkConfig_EthMode { 
+    Config_NetworkConfig_EthMode_DHCP = 0, 
+    Config_NetworkConfig_EthMode_STATIC = 1 
+} Config_NetworkConfig_EthMode;
 
 typedef enum _Config_DisplayConfig_GpsCoordinateFormat { 
     Config_DisplayConfig_GpsCoordinateFormat_DEC = 0, 
@@ -50,6 +49,12 @@ typedef enum _Config_DisplayConfig_DisplayUnits {
     Config_DisplayConfig_DisplayUnits_METRIC = 0, 
     Config_DisplayConfig_DisplayUnits_IMPERIAL = 1 
 } Config_DisplayConfig_DisplayUnits;
+
+typedef enum _Config_DisplayConfig_OledType { 
+    Config_DisplayConfig_OledType_OLED_AUTO = 0, 
+    Config_DisplayConfig_OledType_OLED_SSD1306 = 1, 
+    Config_DisplayConfig_OledType_OLED_SH1106 = 2 
+} Config_DisplayConfig_OledType;
 
 typedef enum _Config_LoRaConfig_RegionCode { 
     Config_LoRaConfig_RegionCode_UNSET = 0, 
@@ -104,6 +109,7 @@ typedef struct _Config_DisplayConfig {
     bool compass_north_top;
     bool flip_screen;
     Config_DisplayConfig_DisplayUnits units;
+    Config_DisplayConfig_OledType oled;
 } Config_DisplayConfig;
 
 typedef struct _Config_LoRaConfig { 
@@ -122,13 +128,12 @@ typedef struct _Config_LoRaConfig {
     uint32_t ignore_incoming[3];
 } Config_LoRaConfig;
 
-typedef struct _Config_NetworkConfig { 
-    bool wifi_enabled;
-    Config_NetworkConfig_WiFiMode wifi_mode;
-    char wifi_ssid[33];
-    char wifi_psk[64];
-    char ntp_server[33];
-} Config_NetworkConfig;
+typedef struct _Config_NetworkConfig_IpV4Config { 
+    uint32_t ip;
+    uint32_t gateway;
+    uint32_t subnet;
+    uint32_t dns;
+} Config_NetworkConfig_IpV4Config;
 
 typedef struct _Config_PositionConfig { 
     uint32_t position_broadcast_secs;
@@ -150,6 +155,17 @@ typedef struct _Config_PowerConfig {
     uint32_t ls_secs;
     uint32_t min_wake_secs;
 } Config_PowerConfig;
+
+typedef struct _Config_NetworkConfig { 
+    bool wifi_enabled;
+    char wifi_ssid[33];
+    char wifi_psk[64];
+    char ntp_server[33];
+    bool eth_enabled;
+    Config_NetworkConfig_EthMode eth_mode;
+    bool has_ipv4_config;
+    Config_NetworkConfig_IpV4Config ipv4_config;
+} Config_NetworkConfig;
 
 typedef struct _Config { 
     pb_size_t which_payload_variant;
@@ -174,9 +190,9 @@ typedef struct _Config {
 #define _Config_PositionConfig_PositionFlags_MAX Config_PositionConfig_PositionFlags_SPEED
 #define _Config_PositionConfig_PositionFlags_ARRAYSIZE ((Config_PositionConfig_PositionFlags)(Config_PositionConfig_PositionFlags_SPEED+1))
 
-#define _Config_NetworkConfig_WiFiMode_MIN Config_NetworkConfig_WiFiMode_CLIENT
-#define _Config_NetworkConfig_WiFiMode_MAX Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN
-#define _Config_NetworkConfig_WiFiMode_ARRAYSIZE ((Config_NetworkConfig_WiFiMode)(Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN+1))
+#define _Config_NetworkConfig_EthMode_MIN Config_NetworkConfig_EthMode_DHCP
+#define _Config_NetworkConfig_EthMode_MAX Config_NetworkConfig_EthMode_STATIC
+#define _Config_NetworkConfig_EthMode_ARRAYSIZE ((Config_NetworkConfig_EthMode)(Config_NetworkConfig_EthMode_STATIC+1))
 
 #define _Config_DisplayConfig_GpsCoordinateFormat_MIN Config_DisplayConfig_GpsCoordinateFormat_DEC
 #define _Config_DisplayConfig_GpsCoordinateFormat_MAX Config_DisplayConfig_GpsCoordinateFormat_OSGR
@@ -185,6 +201,10 @@ typedef struct _Config {
 #define _Config_DisplayConfig_DisplayUnits_MIN Config_DisplayConfig_DisplayUnits_METRIC
 #define _Config_DisplayConfig_DisplayUnits_MAX Config_DisplayConfig_DisplayUnits_IMPERIAL
 #define _Config_DisplayConfig_DisplayUnits_ARRAYSIZE ((Config_DisplayConfig_DisplayUnits)(Config_DisplayConfig_DisplayUnits_IMPERIAL+1))
+
+#define _Config_DisplayConfig_OledType_MIN Config_DisplayConfig_OledType_OLED_AUTO
+#define _Config_DisplayConfig_OledType_MAX Config_DisplayConfig_OledType_OLED_SH1106
+#define _Config_DisplayConfig_OledType_ARRAYSIZE ((Config_DisplayConfig_OledType)(Config_DisplayConfig_OledType_OLED_SH1106+1))
 
 #define _Config_LoRaConfig_RegionCode_MIN Config_LoRaConfig_RegionCode_UNSET
 #define _Config_LoRaConfig_RegionCode_MAX Config_LoRaConfig_RegionCode_LORA_24
@@ -208,16 +228,18 @@ extern "C" {
 #define Config_DeviceConfig_init_default         {_Config_DeviceConfig_Role_MIN, 0, 0}
 #define Config_PositionConfig_init_default       {0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_default          {0, 0, 0, 0, 0, 0, 0, 0}
-#define Config_NetworkConfig_init_default        {0, _Config_NetworkConfig_WiFiMode_MIN, "", "", ""}
-#define Config_DisplayConfig_init_default        {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _Config_DisplayConfig_DisplayUnits_MIN}
+#define Config_NetworkConfig_init_default        {0, "", "", "", 0, _Config_NetworkConfig_EthMode_MIN, false, Config_NetworkConfig_IpV4Config_init_default}
+#define Config_NetworkConfig_IpV4Config_init_default {0, 0, 0, 0}
+#define Config_DisplayConfig_init_default        {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _Config_DisplayConfig_DisplayUnits_MIN, _Config_DisplayConfig_OledType_MIN}
 #define Config_LoRaConfig_init_default           {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, {0, 0, 0}}
 #define Config_BluetoothConfig_init_default      {0, _Config_BluetoothConfig_PairingMode_MIN, 0}
 #define Config_init_zero                         {0, {Config_DeviceConfig_init_zero}}
 #define Config_DeviceConfig_init_zero            {_Config_DeviceConfig_Role_MIN, 0, 0}
 #define Config_PositionConfig_init_zero          {0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_zero             {0, 0, 0, 0, 0, 0, 0, 0}
-#define Config_NetworkConfig_init_zero           {0, _Config_NetworkConfig_WiFiMode_MIN, "", "", ""}
-#define Config_DisplayConfig_init_zero           {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _Config_DisplayConfig_DisplayUnits_MIN}
+#define Config_NetworkConfig_init_zero           {0, "", "", "", 0, _Config_NetworkConfig_EthMode_MIN, false, Config_NetworkConfig_IpV4Config_init_zero}
+#define Config_NetworkConfig_IpV4Config_init_zero {0, 0, 0, 0}
+#define Config_DisplayConfig_init_zero           {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _Config_DisplayConfig_DisplayUnits_MIN, _Config_DisplayConfig_OledType_MIN}
 #define Config_LoRaConfig_init_zero              {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, {0, 0, 0}}
 #define Config_BluetoothConfig_init_zero         {0, _Config_BluetoothConfig_PairingMode_MIN, 0}
 
@@ -234,6 +256,7 @@ extern "C" {
 #define Config_DisplayConfig_compass_north_top_tag 4
 #define Config_DisplayConfig_flip_screen_tag     5
 #define Config_DisplayConfig_units_tag           6
+#define Config_DisplayConfig_oled_tag            7
 #define Config_LoRaConfig_use_preset_tag         1
 #define Config_LoRaConfig_modem_preset_tag       2
 #define Config_LoRaConfig_bandwidth_tag          3
@@ -246,11 +269,10 @@ extern "C" {
 #define Config_LoRaConfig_tx_power_tag           10
 #define Config_LoRaConfig_channel_num_tag        11
 #define Config_LoRaConfig_ignore_incoming_tag    103
-#define Config_NetworkConfig_wifi_enabled_tag    1
-#define Config_NetworkConfig_wifi_mode_tag       2
-#define Config_NetworkConfig_wifi_ssid_tag       3
-#define Config_NetworkConfig_wifi_psk_tag        4
-#define Config_NetworkConfig_ntp_server_tag      5
+#define Config_NetworkConfig_IpV4Config_ip_tag   1
+#define Config_NetworkConfig_IpV4Config_gateway_tag 2
+#define Config_NetworkConfig_IpV4Config_subnet_tag 3
+#define Config_NetworkConfig_IpV4Config_dns_tag  4
 #define Config_PositionConfig_position_broadcast_secs_tag 1
 #define Config_PositionConfig_position_broadcast_smart_enabled_tag 2
 #define Config_PositionConfig_fixed_position_tag 3
@@ -266,6 +288,13 @@ extern "C" {
 #define Config_PowerConfig_sds_secs_tag          6
 #define Config_PowerConfig_ls_secs_tag           7
 #define Config_PowerConfig_min_wake_secs_tag     8
+#define Config_NetworkConfig_wifi_enabled_tag    1
+#define Config_NetworkConfig_wifi_ssid_tag       3
+#define Config_NetworkConfig_wifi_psk_tag        4
+#define Config_NetworkConfig_ntp_server_tag      5
+#define Config_NetworkConfig_eth_enabled_tag     6
+#define Config_NetworkConfig_eth_mode_tag        7
+#define Config_NetworkConfig_ipv4_config_tag     8
 #define Config_device_tag                        1
 #define Config_position_tag                      2
 #define Config_power_tag                         3
@@ -325,12 +354,23 @@ X(a, STATIC,   SINGULAR, UINT32,   min_wake_secs,     8)
 
 #define Config_NetworkConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     wifi_enabled,      1) \
-X(a, STATIC,   SINGULAR, UENUM,    wifi_mode,         2) \
 X(a, STATIC,   SINGULAR, STRING,   wifi_ssid,         3) \
 X(a, STATIC,   SINGULAR, STRING,   wifi_psk,          4) \
-X(a, STATIC,   SINGULAR, STRING,   ntp_server,        5)
+X(a, STATIC,   SINGULAR, STRING,   ntp_server,        5) \
+X(a, STATIC,   SINGULAR, BOOL,     eth_enabled,       6) \
+X(a, STATIC,   SINGULAR, UENUM,    eth_mode,          7) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  ipv4_config,       8)
 #define Config_NetworkConfig_CALLBACK NULL
 #define Config_NetworkConfig_DEFAULT NULL
+#define Config_NetworkConfig_ipv4_config_MSGTYPE Config_NetworkConfig_IpV4Config
+
+#define Config_NetworkConfig_IpV4Config_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, FIXED32,  ip,                1) \
+X(a, STATIC,   SINGULAR, FIXED32,  gateway,           2) \
+X(a, STATIC,   SINGULAR, FIXED32,  subnet,            3) \
+X(a, STATIC,   SINGULAR, FIXED32,  dns,               4)
+#define Config_NetworkConfig_IpV4Config_CALLBACK NULL
+#define Config_NetworkConfig_IpV4Config_DEFAULT NULL
 
 #define Config_DisplayConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   screen_on_secs,    1) \
@@ -338,7 +378,8 @@ X(a, STATIC,   SINGULAR, UENUM,    gps_format,        2) \
 X(a, STATIC,   SINGULAR, UINT32,   auto_screen_carousel_secs,   3) \
 X(a, STATIC,   SINGULAR, BOOL,     compass_north_top,   4) \
 X(a, STATIC,   SINGULAR, BOOL,     flip_screen,       5) \
-X(a, STATIC,   SINGULAR, UENUM,    units,             6)
+X(a, STATIC,   SINGULAR, UENUM,    units,             6) \
+X(a, STATIC,   SINGULAR, UENUM,    oled,              7)
 #define Config_DisplayConfig_CALLBACK NULL
 #define Config_DisplayConfig_DEFAULT NULL
 
@@ -370,6 +411,7 @@ extern const pb_msgdesc_t Config_DeviceConfig_msg;
 extern const pb_msgdesc_t Config_PositionConfig_msg;
 extern const pb_msgdesc_t Config_PowerConfig_msg;
 extern const pb_msgdesc_t Config_NetworkConfig_msg;
+extern const pb_msgdesc_t Config_NetworkConfig_IpV4Config_msg;
 extern const pb_msgdesc_t Config_DisplayConfig_msg;
 extern const pb_msgdesc_t Config_LoRaConfig_msg;
 extern const pb_msgdesc_t Config_BluetoothConfig_msg;
@@ -380,6 +422,7 @@ extern const pb_msgdesc_t Config_BluetoothConfig_msg;
 #define Config_PositionConfig_fields &Config_PositionConfig_msg
 #define Config_PowerConfig_fields &Config_PowerConfig_msg
 #define Config_NetworkConfig_fields &Config_NetworkConfig_msg
+#define Config_NetworkConfig_IpV4Config_fields &Config_NetworkConfig_IpV4Config_msg
 #define Config_DisplayConfig_fields &Config_DisplayConfig_msg
 #define Config_LoRaConfig_fields &Config_LoRaConfig_msg
 #define Config_BluetoothConfig_fields &Config_BluetoothConfig_msg
@@ -387,12 +430,13 @@ extern const pb_msgdesc_t Config_BluetoothConfig_msg;
 /* Maximum encoded size of messages (where known) */
 #define Config_BluetoothConfig_size              10
 #define Config_DeviceConfig_size                 6
-#define Config_DisplayConfig_size                20
+#define Config_DisplayConfig_size                22
 #define Config_LoRaConfig_size                   68
-#define Config_NetworkConfig_size                137
+#define Config_NetworkConfig_IpV4Config_size     20
+#define Config_NetworkConfig_size                161
 #define Config_PositionConfig_size               30
 #define Config_PowerConfig_size                  43
-#define Config_size                              140
+#define Config_size                              164
 
 #ifdef __cplusplus
 } /* extern "C" */

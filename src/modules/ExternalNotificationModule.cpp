@@ -3,18 +3,23 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include "Router.h"
+#include "buzz/buzz.h"
 #include "configuration.h"
 #include <Arduino.h>
+
+#ifndef PIN_BUZZER
+#define PIN_BUZZER false
+#endif
 
 //#include <assert.h>
 
 /*
 
     Documentation:
-        https://github.com/meshtastic/Meshtastic-device/blob/master/docs/software/modules/ExternalNotificationModule.md
+        https://github.com/meshtastic/firmware/blob/master/docs/software/modules/ExternalNotificationModule.md
 
     This module supports:
-        https://github.com/meshtastic/Meshtastic-device/issues/654
+        https://github.com/meshtastic/firmware/issues/654
 
 
     Quick reference:
@@ -44,7 +49,11 @@
 */
 
 // Default configurations
+#ifdef EXT_NOTIFY_OUT
 #define EXT_NOTIFICATION_MODULE_OUTPUT EXT_NOTIFY_OUT
+#else
+#define EXT_NOTIFICATION_MODULE_OUTPUT 0
+#endif
 #define EXT_NOTIFICATION_MODULE_OUTPUT_MS 1000
 
 #define ASCII_BELL 0x07
@@ -75,7 +84,9 @@ int32_t ExternalNotificationModule::runOnce()
                                     : EXT_NOTIFICATION_MODULE_OUTPUT_MS) <
             millis()) {
             DEBUG_MSG("Turning off external notification\n");
-            setExternalOff();
+            if (output != PIN_BUZZER) {
+                setExternalOff();
+            }
         }
     }
 
@@ -84,27 +95,19 @@ int32_t ExternalNotificationModule::runOnce()
 
 void ExternalNotificationModule::setExternalOn()
 {
-#ifdef EXT_NOTIFY_OUT
     externalCurrentState = 1;
     externalTurnedOn = millis();
 
-    digitalWrite((moduleConfig.external_notification.output
-                      ? moduleConfig.external_notification.output
-                      : EXT_NOTIFICATION_MODULE_OUTPUT),
+    digitalWrite(output,
                  (moduleConfig.external_notification.active ? true : false));
-#endif
 }
 
 void ExternalNotificationModule::setExternalOff()
 {
-#ifdef EXT_NOTIFY_OUT
     externalCurrentState = 0;
 
-    digitalWrite((moduleConfig.external_notification.output
-                      ? moduleConfig.external_notification.output
-                      : EXT_NOTIFICATION_MODULE_OUTPUT),
+    digitalWrite(output,
                  (moduleConfig.external_notification.active ? false : true));
-#endif
 }
 
 // --------
@@ -113,11 +116,6 @@ ExternalNotificationModule::ExternalNotificationModule()
     : SinglePortModule("ExternalNotificationModule", PortNum_TEXT_MESSAGE_APP), concurrency::OSThread(
                                                                                     "ExternalNotificationModule")
 {
-    // restrict to the admin channel for rx
-    boundChannel = Channels::gpioChannel;
-
-#ifdef EXT_NOTIFY_OUT
-
     /*
         Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
@@ -130,30 +128,37 @@ ExternalNotificationModule::ExternalNotificationModule()
     // moduleConfig.external_notification.alert_bell = 1;
     // moduleConfig.external_notification.output_ms = 1000;
     // moduleConfig.external_notification.output = 13;
+    
+    if (moduleConfig.external_notification.alert_message) {
+        // restrict to the gpio channel for rx
+        boundChannel = Channels::gpioChannel;
+    }
 
     if (moduleConfig.external_notification.enabled) {
 
         DEBUG_MSG("Initializing External Notification Module\n");
 
-        // Set the direction of a pin
-        pinMode((moduleConfig.external_notification.output
-                     ? moduleConfig.external_notification.output
-                     : EXT_NOTIFICATION_MODULE_OUTPUT),
-                OUTPUT);
+        output = moduleConfig.external_notification.output
+                        ? moduleConfig.external_notification.output
+                        : EXT_NOTIFICATION_MODULE_OUTPUT;
 
-        // Turn off the pin
-        setExternalOff();
+        if (output != PIN_BUZZER) {
+            // Set the direction of a pin
+            DEBUG_MSG("Using Pin %i in digital mode\n", output);
+            pinMode(output, OUTPUT);
+            // Turn off the pin
+            setExternalOff();
+        } else{
+            DEBUG_MSG("Using Pin %i in PWM mode\n", output);
+        }
     } else {
         DEBUG_MSG("External Notification Module Disabled\n");
         enabled = false;
     }
-#endif
 }
 
 ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
 {
-#ifdef EXT_NOTIFY_OUT
-
     if (moduleConfig.external_notification.enabled) {
 
         if (getFrom(&mp) != nodeDB.getNodeNum()) {
@@ -165,21 +170,28 @@ ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
                 DEBUG_MSG("externalNotificationModule - Notification Bell\n");
                 for (int i = 0; i < p.payload.size; i++) {
                     if (p.payload.bytes[i] == ASCII_BELL) {
-                        setExternalOn();
+                        if (output != PIN_BUZZER) {
+                            setExternalOn();
+                        } else {
+                            playBeep();
+                        }
                     }
                 }
             }
 
             if (moduleConfig.external_notification.alert_message) {
                 DEBUG_MSG("externalNotificationModule - Notification Module\n");
-                setExternalOn();
+                if (output != PIN_BUZZER) {
+                    setExternalOn();
+                } else {
+                    playBeep();
+                }
             }
         }
 
     } else {
         DEBUG_MSG("External Notification Module Disabled\n");
     }
-#endif
 
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }

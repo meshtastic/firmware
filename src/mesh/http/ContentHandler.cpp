@@ -58,8 +58,6 @@ char contentTypes[][2][32] = {{".txt", "text/plain"},     {".html", "text/html"}
                               {".css", "text/css"},       {".ico", "image/vnd.microsoft.icon"},
                               {".svg", "image/svg+xml"},  {"", ""}};
 
-// const char *tarURL = "https://www.casler.org/temp/meshtastic-web.tar";
-// const char *tarURL = "https://api-production-871d.up.railway.app/mirror/webui";
 // const char *certificate = NULL; // change this as needed, leave as is for no TLS check (yolo security)
 
 // Our API to handle messages to and from the radio.
@@ -75,8 +73,8 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeAPIv1ToRadio = new ResourceNode("/api/v1/toradio", "PUT", &handleAPIv1ToRadio);
     ResourceNode *nodeAPIv1FromRadio = new ResourceNode("/api/v1/fromradio", "GET", &handleAPIv1FromRadio);
 
-    ResourceNode *nodeHotspotApple = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
-    ResourceNode *nodeHotspotAndroid = new ResourceNode("/generate_204", "GET", &handleHotspot);
+    //    ResourceNode *nodeHotspotApple = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
+    //    ResourceNode *nodeHotspotAndroid = new ResourceNode("/generate_204", "GET", &handleHotspot);
 
     ResourceNode *nodeAdmin = new ResourceNode("/admin", "GET", &handleAdmin);
     //    ResourceNode *nodeAdminSettings = new ResourceNode("/admin/settings", "GET", &handleAdminSettings);
@@ -100,8 +98,8 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     secureServer->registerNode(nodeAPIv1ToRadioOptions);
     secureServer->registerNode(nodeAPIv1ToRadio);
     secureServer->registerNode(nodeAPIv1FromRadio);
-    secureServer->registerNode(nodeHotspotApple);
-    secureServer->registerNode(nodeHotspotAndroid);
+    //    secureServer->registerNode(nodeHotspotApple);
+    //    secureServer->registerNode(nodeHotspotAndroid);
     secureServer->registerNode(nodeRestart);
     secureServer->registerNode(nodeFormUpload);
     secureServer->registerNode(nodeJsonScanNetworks);
@@ -121,8 +119,8 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     insecureServer->registerNode(nodeAPIv1ToRadioOptions);
     insecureServer->registerNode(nodeAPIv1ToRadio);
     insecureServer->registerNode(nodeAPIv1FromRadio);
-    insecureServer->registerNode(nodeHotspotApple);
-    insecureServer->registerNode(nodeHotspotAndroid);
+    //    insecureServer->registerNode(nodeHotspotApple);
+    //    insecureServer->registerNode(nodeHotspotAndroid);
     insecureServer->registerNode(nodeRestart);
     insecureServer->registerNode(nodeFormUpload);
     insecureServer->registerNode(nodeJsonScanNetworks);
@@ -160,7 +158,7 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Content-Type", "application/x-protobuf");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
-    res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/Meshtastic-protobufs/master/mesh.proto");
+    res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/protobufs/master/mesh.proto");
 
     uint8_t txBuf[MAX_STREAM_BUF_SIZE];
     uint32_t len = 1;
@@ -204,7 +202,7 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Headers", "Content-Type");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "PUT, OPTIONS");
-    res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/Meshtastic-protobufs/master/mesh.proto");
+    res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/protobufs/master/mesh.proto");
 
     if (req->getMethod() == "OPTIONS") {
         res->setStatusCode(204); // Success with no content
@@ -251,7 +249,7 @@ void htmlDeleteDir(const char *dirname)
 std::vector<std::map<char *, char *>> *htmlListDir(std::vector<std::map<char *, char *>> *fileList, const char *dirname,
                                                    uint8_t levels)
 {
-    File root = FSCom.open(dirname);
+    File root = FSCom.open(dirname, FILE_O_READ);
     if (!root) {
         return NULL;
     }
@@ -264,14 +262,27 @@ std::vector<std::map<char *, char *>> *htmlListDir(std::vector<std::map<char *, 
     while (file) {
         if (file.isDirectory() && !String(file.name()).endsWith(".")) {
             if (levels) {
+#ifdef ARCH_ESP32
+                htmlListDir(fileList, file.path(), levels - 1);
+#else
                 htmlListDir(fileList, file.name(), levels - 1);
+#endif
+                file.close();
             }
         } else {
             std::map<char *, char *> thisFileMap;
             thisFileMap[strdup("size")] = strdup(String(file.size()).c_str());
+#ifdef ARCH_ESP32
+            thisFileMap[strdup("name")] = strdup(String(file.path()).substring(1).c_str());
+#else
             thisFileMap[strdup("name")] = strdup(String(file.name()).substring(1).c_str());
+#endif
             if (String(file.name()).substring(1).endsWith(".gz")) {
+#ifdef ARCH_ESP32
+                String modifiedFile = String(file.path()).substring(1);
+#else
                 String modifiedFile = String(file.name()).substring(1);
+#endif
                 modifiedFile.remove((modifiedFile.length() - 3), 3);
                 thisFileMap[strdup("nameModified")] = strdup(modifiedFile.c_str());
             }
@@ -291,7 +302,7 @@ void handleFsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Methods", "GET");
 
     using namespace json11;
-    auto fileList = htmlListDir(new std::vector<std::map<char *, char *>>(), "/", 10);
+    auto fileList = htmlListDir(new std::vector<std::map<char *, char *>>(), "/static", 10);
 
     // create json output structure
     Json filesystemObj = Json::object{
@@ -607,12 +618,8 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     };
 
     // data->wifi
-    String ipStr;
-    if (config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT || config.network.wifi_mode == Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN || isSoftAPForced()) {
-        ipStr = String(WiFi.softAPIP().toString());
-    } else {
-        ipStr = String(WiFi.localIP().toString());
-    }
+    String ipStr = String(WiFi.localIP().toString());
+
     Json jsonObjWifi = Json::object{{"rssi", String(WiFi.RSSI())}, {"ip", ipStr.c_str()}};
 
     // data->memory

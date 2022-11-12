@@ -8,7 +8,9 @@
 #include "mesh/generated/mqtt.pb.h"
 #include "mesh/generated/telemetry.pb.h"
 #include "sleep.h"
+#if HAS_WIFI
 #include <WiFi.h>
+#endif
 #include <assert.h>
 #include <json11.hpp>
 
@@ -67,22 +69,25 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
             DEBUG_MSG("Invalid MQTT service envelope, topic %s, len %u!\n", topic, length);
         }
     } else {
-        pb_decode_from_bytes(payload, length, ServiceEnvelope_fields, &e);
-        if (strcmp(e.gateway_id, owner.id) == 0)
-            DEBUG_MSG("Ignoring downlink message we originally sent.\n");
-        else {
-            if (e.packet) {
-                DEBUG_MSG("Received MQTT topic %s, len=%u\n", topic, length);
-                MeshPacket *p = packetPool.allocCopy(*e.packet);
+        if (!pb_decode_from_bytes(payload, length, ServiceEnvelope_fields, &e)) {
+            DEBUG_MSG("Invalid MQTT service envelope, topic %s, len %u!\n", topic, length);
+            return;
+        }else {
+            if (strcmp(e.gateway_id, owner.id) == 0)
+                DEBUG_MSG("Ignoring downlink message we originally sent.\n");
+            else {
+                if (e.packet) {
+                    DEBUG_MSG("Received MQTT topic %s, len=%u\n", topic, length);
+                    MeshPacket *p = packetPool.allocCopy(*e.packet);
 
-                // ignore messages sent by us or if we don't have the channel key
-                if (router && p->from != nodeDB.getNodeNum() && perhapsDecode(p))
-                    router->enqueueReceivedMessage(p);
-                else
-                    packetPool.release(p);
+                    // ignore messages sent by us or if we don't have the channel key
+                    if (router && p->from != nodeDB.getNodeNum() && perhapsDecode(p))
+                        router->enqueueReceivedMessage(p);
+                    else
+                        packetPool.release(p);
+                }
             }
         }
-
         // make sure to free both strings and the MeshPacket (passing in NULL is acceptable)
         free(e.channel_id);
         free(e.gateway_id);
@@ -103,6 +108,11 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), pubSub(mqttClient)
     pubSub.setCallback(mqttCallback);
 
     // preflightSleepObserver.observe(&preflightSleep);
+}
+
+bool MQTT::connected()
+{
+    return pubSub.connected();
 }
 
 void MQTT::reconnect()
@@ -189,7 +199,13 @@ bool MQTT::wantsLink() const
         }
     }
 
+#if HAS_WIFI
     return hasChannel && WiFi.isConnected();
+#endif
+#if HAS_ETHERNET
+    return hasChannel && (Ethernet.linkStatus() == LinkON);
+#endif
+    return false;
 }
 
 int32_t MQTT::runOnce()
@@ -346,9 +362,9 @@ std::string MQTT::downstreamPacketToJson(MeshPacket *mp)
                 msgPayload = Json::object{
                     {"time", (int)decoded->time},
                     {"pos_timestamp", (int)decoded->timestamp},
-                    {"latitude_i", decoded->latitude_i}, 
-                    {"longitude_i", decoded->longitude_i}, 
-                    {"altitude", decoded->altitude}
+                    {"latitude_i", (int)decoded->latitude_i}, 
+                    {"longitude_i", (int)decoded->longitude_i}, 
+                    {"altitude", (int)decoded->altitude}
                 };
             } else {
                 DEBUG_MSG("Error decoding protobuf for position message!\n");
@@ -371,8 +387,8 @@ std::string MQTT::downstreamPacketToJson(MeshPacket *mp)
                     {"description", decoded->description},
                     {"expire", (int)decoded->expire},
                     {"locked", decoded->locked},
-                    {"latitude_i", decoded->latitude_i}, 
-                    {"longitude_i", decoded->longitude_i}, 
+                    {"latitude_i", (int)decoded->latitude_i}, 
+                    {"longitude_i", (int)decoded->longitude_i}, 
                 };
             } else {
                 DEBUG_MSG("Error decoding protobuf for position message!\n");

@@ -12,6 +12,9 @@ PB_BIND(ModuleConfig, ModuleConfig, AUTO)
 PB_BIND(ModuleConfig_MQTTConfig, ModuleConfig_MQTTConfig, AUTO)
 
 
+PB_BIND(ModuleConfig_AudioConfig, ModuleConfig_AudioConfig, AUTO)
+
+
 PB_BIND(ModuleConfig_SerialConfig, ModuleConfig_SerialConfig, AUTO)
 
 
@@ -28,6 +31,7 @@ PB_BIND(ModuleConfig_TelemetryConfig, ModuleConfig_TelemetryConfig, AUTO)
 
 
 PB_BIND(ModuleConfig_CannedMessageConfig, ModuleConfig_CannedMessageConfig, AUTO)
+
 
 
 
