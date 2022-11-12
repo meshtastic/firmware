@@ -1,6 +1,18 @@
 #include "configuration.h"
 #include "FSCommon.h"
 
+#ifdef HAS_SDCARD
+#include <SPI.h>
+#include <SD.h>
+
+
+#ifdef SDCARD_USE_SPI1  
+SPIClass SPI1(HSPI);
+#define SDHandler SPI1
+#endif
+
+
+#endif  //HAS_SDCARD
 
 bool copyFile(const char* from, const char* to)
 {
@@ -169,3 +181,39 @@ void fsInit()
     listDir("/", 10);
 #endif
 }
+
+
+void setupSDCard()
+{
+#ifdef HAS_SDCARD
+    SDHandler.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
+
+    if (!SD.begin(SDCARD_CS, SDHandler)) {
+        DEBUG_MSG("No SD_MMC card detected\n");
+        return ;
+    }
+    uint8_t cardType = SD.cardType();
+    if (cardType == CARD_NONE) {
+        DEBUG_MSG("No SD_MMC card attached\n");
+        return ;
+    }
+    DEBUG_MSG("SD_MMC Card Type: ");
+    if (cardType == CARD_MMC) {
+        DEBUG_MSG("MMC\n");
+    } else if (cardType == CARD_SD) {
+        DEBUG_MSG("SDSC\n");
+    } else if (cardType == CARD_SDHC) {
+        DEBUG_MSG("SDHC\n");
+    } else {
+        DEBUG_MSG("UNKNOWN\n");
+    }
+
+    uint64_t cardSize = SD.cardSize() / (1024 * 1024);
+    DEBUG_MSG("SD Card Size: %lluMB\n", cardSize);
+    DEBUG_MSG("Total space: %llu MB\n", SD.totalBytes() / (1024 * 1024));
+    DEBUG_MSG("Used space: %llu MB\n", SD.usedBytes() / (1024 * 1024));
+#endif
+}
+
+
+
