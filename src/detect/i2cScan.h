@@ -90,12 +90,14 @@ uint8_t oled_probe(byte addr)
     return o_probe;
 }
 
-void scanI2Cdevice(void)
+void scanI2Cdevice(bool partial)
 {
     byte err, addr;
     uint16_t registerValue = 0x00;
     int nDevices = 0;
     for (addr = 1; addr < 127; addr++) {
+        if (partial && addr != SSD1306_ADDRESS && addr != ST7567_ADDRESS && addr != XPOWERS_AXP192_AXP2101_ADDRESS)
+            continue;
         Wire.beginTransmission(addr);
         err = Wire.endTransmission();
         if (err == 0) {
@@ -106,16 +108,16 @@ void scanI2Cdevice(void)
             if (addr == SSD1306_ADDRESS) {
                 screen_found = addr;
                 screen_model = oled_probe(addr);
-                if (screen_model == 1){
+                if (screen_model == 1) {
                     DEBUG_MSG("ssd1306 display found\n");
-                } else if (screen_model == 2){
+                } else if (screen_model == 2) {
                     DEBUG_MSG("sh1106 display found\n");
                 } else {
                     DEBUG_MSG("unknown display found\n");
                 }
             }
 #ifndef ARCH_PORTDUINO
-            if (addr == ATECC608B_ADDR){
+            if (addr == ATECC608B_ADDR) {
                 keystore_found = addr;
                 if (atecc.begin(keystore_found) == true) {
                     DEBUG_MSG("ATECC608B initialized\n");
@@ -163,50 +165,56 @@ void scanI2Cdevice(void)
                 DEBUG_MSG("axp192/axp2101 PMU found\n");
             }
 #endif
-        if (addr == BME_ADDR || addr == BME_ADDR_ALTERNATE) {
-            registerValue = getRegisterValue(addr, 0xD0, 1); // GET_ID
-            if (registerValue == 0x61) {
-                DEBUG_MSG("BME-680 sensor found at address 0x%x\n", (uint8_t)addr);
-                nodeTelemetrySensorsMap[TelemetrySensorType_BME680] = addr;
-            } else if (registerValue == 0x60) {
-                DEBUG_MSG("BME-280 sensor found at address 0x%x\n", (uint8_t)addr);
-                nodeTelemetrySensorsMap[TelemetrySensorType_BME280] = addr;
-            } else {
-                DEBUG_MSG("BMP-280 sensor found at address 0x%x\n", (uint8_t)addr);
-                nodeTelemetrySensorsMap[TelemetrySensorType_BMP280] = addr;
+            if (addr == BME_ADDR || addr == BME_ADDR_ALTERNATE) {
+                registerValue = getRegisterValue(addr, 0xD0, 1); // GET_ID
+                if (registerValue == 0x61) {
+                    DEBUG_MSG("BME-680 sensor found at address 0x%x\n", (uint8_t)addr);
+                    nodeTelemetrySensorsMap[TelemetrySensorType_BME680] = addr;
+                } else if (registerValue == 0x60) {
+                    DEBUG_MSG("BME-280 sensor found at address 0x%x\n", (uint8_t)addr);
+                    nodeTelemetrySensorsMap[TelemetrySensorType_BME280] = addr;
+                } else {
+                    DEBUG_MSG("BMP-280 sensor found at address 0x%x\n", (uint8_t)addr);
+                    nodeTelemetrySensorsMap[TelemetrySensorType_BMP280] = addr;
+                }
             }
-        }
-        if (addr == INA_ADDR || addr == INA_ADDR_ALTERNATE) {
-            registerValue = getRegisterValue(addr, 0xFE, 2);
-            DEBUG_MSG("Register MFG_UID: 0x%x\n", registerValue);
-            if (registerValue == 0x5449) {
-                DEBUG_MSG("INA260 sensor found at address 0x%x\n", (uint8_t)addr);
-                nodeTelemetrySensorsMap[TelemetrySensorType_INA260] = addr;
-            } else { // Assume INA219 if INA260 ID is not found
-                DEBUG_MSG("INA219 sensor found at address 0x%x\n", (uint8_t)addr);
-                nodeTelemetrySensorsMap[TelemetrySensorType_INA219] = addr;
+            if (addr == INA_ADDR || addr == INA_ADDR_ALTERNATE) {
+                registerValue = getRegisterValue(addr, 0xFE, 2);
+                DEBUG_MSG("Register MFG_UID: 0x%x\n", registerValue);
+                if (registerValue == 0x5449) {
+                    DEBUG_MSG("INA260 sensor found at address 0x%x\n", (uint8_t)addr);
+                    nodeTelemetrySensorsMap[TelemetrySensorType_INA260] = addr;
+                } else { // Assume INA219 if INA260 ID is not found
+                    DEBUG_MSG("INA219 sensor found at address 0x%x\n", (uint8_t)addr);
+                    nodeTelemetrySensorsMap[TelemetrySensorType_INA219] = addr;
+                }
             }
-        }
-        if (addr == MCP9808_ADDR) {
-            nodeTelemetrySensorsMap[TelemetrySensorType_MCP9808] = addr;
-            DEBUG_MSG("MCP9808 sensor found at address 0x%x\n", (uint8_t)addr);
-        }
-        if (addr == QMC6310_ADDR) {
-            DEBUG_MSG("QMC6310 3-Axis magnetic sensor found at address 0x%x\n", (uint8_t)addr);
-            nodeTelemetrySensorsMap[TelemetrySensorType_QMC6310] = addr;
-        }
-        if (addr == QMI8658_ADDR) {
-            DEBUG_MSG("QMI8658 6-Axis inertial measurement sensor found at address 0x%x\n", (uint8_t)addr);
-            nodeTelemetrySensorsMap[TelemetrySensorType_QMI8658] = addr;
-        }
-        if (addr == SHTC3_ADDR) {
-            DEBUG_MSG("SHTC3 sensor found at address 0x%x\n", (uint8_t)addr);
-            nodeTelemetrySensorsMap[TelemetrySensorType_SHTC3] = addr;
-        }
-        if (addr == LPS22HB_ADDR || addr == LPS22HB_ADDR_ALT) {
-            DEBUG_MSG("LPS22HB sensor found at address 0x%x\n", (uint8_t)addr);
-            nodeTelemetrySensorsMap[TelemetrySensorType_LPS22] = addr;
-        }
+            if (addr == MCP9808_ADDR) {
+                nodeTelemetrySensorsMap[TelemetrySensorType_MCP9808] = addr;
+                DEBUG_MSG("MCP9808 sensor found\n");
+            }
+            if (addr == SHTC3_ADDR) {
+                DEBUG_MSG("SHTC3 sensor found\n");
+                nodeTelemetrySensorsMap[TelemetrySensorType_SHTC3] = addr;
+            }
+            if (addr == LPS22HB_ADDR || addr == LPS22HB_ADDR_ALT) {
+                DEBUG_MSG("LPS22HB sensor found\n");
+                nodeTelemetrySensorsMap[TelemetrySensorType_LPS22] = addr;
+            }
+
+            // High rate sensors, will be processed internally
+            if (addr == QMC6310_ADDR) {
+                DEBUG_MSG("QMC6310 Highrate 3-Axis magnetic sensor found\n");
+                nodeTelemetrySensorsMap[TelemetrySensorType_QMC6310] = addr;
+            }
+            if (addr == QMI8658_ADDR) {
+                DEBUG_MSG("QMI8658 Highrate 6-Axis inertial measurement sensor found\n");
+                nodeTelemetrySensorsMap[TelemetrySensorType_QMI8658] = addr;
+            }
+            if (addr == QMC5883L_ADDR) {
+                DEBUG_MSG("QMC5883L Highrate 3-Axis magnetic sensor found\n");
+                nodeTelemetrySensorsMap[TelemetrySensorType_QMC5883L] = addr;
+            }
         } else if (err == 4) {
             DEBUG_MSG("Unknow error at address 0x%x\n", addr);
         }
@@ -218,5 +226,5 @@ void scanI2Cdevice(void)
         DEBUG_MSG("%i I2C devices found\n",nDevices);
 }
 #else
-void scanI2Cdevice(void) {}
+void scanI2Cdevice(bool partial) {}
 #endif
