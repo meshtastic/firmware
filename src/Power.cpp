@@ -233,11 +233,14 @@ bool Power::setup()
 
 void Power::shutdown()
 {
-
+    screen->setOn(false);
+#if defined(USE_EINK) && defined(PIN_EINK_EN)
+    digitalWrite(PIN_EINK_EN, LOW); //power off backlight first
+#endif
 
 #ifdef HAS_PMU
     DEBUG_MSG("Shutting down\n");
-    if(PMU){
+    if(PMU) {
         PMU->setChargingLedMode(XPOWERS_CHG_LED_OFF);
         PMU->shutdown();
     }
@@ -312,7 +315,7 @@ int32_t Power::runOnce()
 #ifdef HAS_PMU
     // WE no longer use the IRQ line to wake the CPU (due to false wakes from sleep), but we do poll
     // the IRQ status by reading the registers over I2C
-    if(PMU){
+    if(PMU) {
 
         PMU->getIrqStatus();
 
@@ -341,10 +344,11 @@ int32_t Power::runOnce()
         if (PMU->isBatRemoveIrq()) {
             DEBUG_MSG("Battery removed\n");
         }
-        if (PMU->isPekeyShortPressIrq()) {
-            DEBUG_MSG("PEK short button press\n");
-        }
         */
+        if (PMU->isPekeyLongPressIrq()) {
+            DEBUG_MSG("PEK long button press\n");
+            screen->setOn(false);
+        }
 
         PMU->clearIrqStatus();
     }
@@ -451,7 +455,6 @@ bool Power::axpChipInit()
         // Set constant current charging current
         PMU->setChargerConstantCurr(XPOWERS_AXP192_CHG_CUR_450MA);
 
-    
     } else if (PMU->getChipModel() == XPOWERS_AXP2101) {
 
         // t-beam s3 core 
