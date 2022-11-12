@@ -246,18 +246,19 @@ void setup()
     digitalWrite(PIN_3V3_EN, 1);
 #endif
 
-    // We need to scan here to decide if we have a screen for nodeDB.init()
+#ifdef LILYGO_TBEAM_S3_CORE
     // In T-Beam-S3-core, the I2C device cannot be scanned before power initialization, otherwise the device will be stuck
-    if ((HW_VENDOR != HardwareModel_LILYGO_TBEAM_S3_CORE)) {
-        scanI2Cdevice();
-    }else{
-        // PCF8563 RTC in tbeam-s3 uses Wire1 to share I2C bus
-        Wire1.beginTransmission(PCF8563_RTC);
-        if (Wire1.endTransmission() == 0){
-            rtc_found = PCF8563_RTC;
-            DEBUG_MSG("PCF8563 RTC found\n");
-        }
+    // PCF8563 RTC in tbeam-s3 uses Wire1 to share I2C bus
+    Wire1.beginTransmission(PCF8563_RTC);
+    if (Wire1.endTransmission() == 0){
+        rtc_found = PCF8563_RTC;
+        DEBUG_MSG("PCF8563 RTC found\n");
     }
+#else
+    // We need to scan here to decide if we have a screen for nodeDB.init()
+    scanI2Cdevice();
+#endif
+
 
 #ifdef HAS_SDCARD
     setupSDCard();
