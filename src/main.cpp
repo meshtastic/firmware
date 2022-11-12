@@ -254,6 +254,10 @@ void setup()
             DEBUG_MSG("PCF8563 RTC found\n");
         }
     }
+
+#ifdef HAS_SDCARD
+    setupSDCard();
+#endif
     
 #ifdef RAK4630
     // scanEInkDevice();
