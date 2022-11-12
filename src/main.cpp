@@ -100,7 +100,7 @@ uint32_t serialSinceMsec;
 bool pmu_found;
 
 // Array map of sensor types (as array index) and i2c address as value we'll find in the i2c scan
-uint8_t nodeTelemetrySensorsMap[TelemetrySensorType_QMI8658+1] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+uint8_t nodeTelemetrySensorsMap[_TelemetrySensorType_MAX + 1] = { 0 }; // one is enough, missing elements will be initialized to 0 anyway.
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
 
@@ -245,7 +245,7 @@ void setup()
 #endif
 
     // We need to scan here to decide if we have a screen for nodeDB.init()
-    scanI2Cdevice();
+    scanI2Cdevice(true);
 #ifdef RAK4630
     // scanEInkDevice();
 #endif
@@ -290,7 +290,7 @@ void setup()
     * Repeat the scanning for I2C devices after power initialization or look for 'latecomers'. 
     * Boards with an PMU need to be powered on to correctly scan to the device address, such as t-beam-s3-core
     */
-    scanI2Cdevice();
+    scanI2Cdevice(false);
 
     // fixed screen override?
     if (config.display.oled != Config_DisplayConfig_OledType_OLED_AUTO)
