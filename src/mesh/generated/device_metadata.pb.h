@@ -16,6 +16,14 @@ typedef struct _DeviceMetadata {
     char firmware_version[18];
     /* Device state version */
     uint32_t device_state_version;
+    /* Indicates whether the device can shutdown CPU natively or via power management chip */
+    bool canShutdown;
+    /* Indicates that the device has native wifi capability */
+    bool hasWifi;
+    /* Indicates that the device has native bluetooth capability */
+    bool hasBluetooth;
+    /* Indicates that the device has an ethernet peripheral */
+    bool hasEthernet;
 } DeviceMetadata;
 
 
@@ -24,17 +32,25 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define DeviceMetadata_init_default              {"", 0}
-#define DeviceMetadata_init_zero                 {"", 0}
+#define DeviceMetadata_init_default              {"", 0, 0, 0, 0, 0}
+#define DeviceMetadata_init_zero                 {"", 0, 0, 0, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define DeviceMetadata_firmware_version_tag      1
 #define DeviceMetadata_device_state_version_tag  2
+#define DeviceMetadata_canShutdown_tag           3
+#define DeviceMetadata_hasWifi_tag               4
+#define DeviceMetadata_hasBluetooth_tag          5
+#define DeviceMetadata_hasEthernet_tag           6
 
 /* Struct field encoding specification for nanopb */
 #define DeviceMetadata_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   firmware_version,   1) \
-X(a, STATIC,   SINGULAR, UINT32,   device_state_version,   2)
+X(a, STATIC,   SINGULAR, UINT32,   device_state_version,   2) \
+X(a, STATIC,   SINGULAR, BOOL,     canShutdown,       3) \
+X(a, STATIC,   SINGULAR, BOOL,     hasWifi,           4) \
+X(a, STATIC,   SINGULAR, BOOL,     hasBluetooth,      5) \
+X(a, STATIC,   SINGULAR, BOOL,     hasEthernet,       6)
 #define DeviceMetadata_CALLBACK NULL
 #define DeviceMetadata_DEFAULT NULL
 
@@ -44,7 +60,7 @@ extern const pb_msgdesc_t DeviceMetadata_msg;
 #define DeviceMetadata_fields &DeviceMetadata_msg
 
 /* Maximum encoded size of messages (where known) */
-#define DeviceMetadata_size                      25
+#define DeviceMetadata_size                      33
 
 #ifdef __cplusplus
 } /* extern "C" */

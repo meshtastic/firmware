@@ -15,4 +15,3 @@ class NimbleBluetooth
 
 void setBluetoothEnable(bool on);
 void clearNVS();
-void disablePin();

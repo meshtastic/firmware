@@ -13,11 +13,12 @@ void powerCommandsCheck()
 #elif defined(ARCH_NRF52)
         NVIC_SystemReset();
 #else
-        DEBUG_MSG("FIXME implement reboot for this platform");
+        rebootAtMsec = -1; 
+        DEBUG_MSG("FIXME implement reboot for this platform. Skipping for now.\n");
 #endif
     }
 
-#if defined(ARCH_NRF52)
+#if defined(ARCH_NRF52) || defined(HAS_PMU)
     if (shutdownAtMsec) {
         screen->startShutdownScreen();
         playBeep();

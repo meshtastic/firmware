@@ -12,7 +12,6 @@ NimBLECharacteristic *fromNumCharacteristic;
 NimBLEServer *bleServer;
 
 static bool passkeyShowing;
-static uint32_t doublepressed;
 
 class BluetoothPhoneAPI : public PhoneAPI
 {
@@ -71,12 +70,8 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 {
     virtual uint32_t onPassKeyRequest() {
         uint32_t passkey = config.bluetooth.fixed_pin;
-
-        if (doublepressed > 0 && (doublepressed + (30 * 1000)) > millis()) {
-            DEBUG_MSG("User has set BLE pairing mode to fixed-pin\n");
-            config.bluetooth.mode = Config_BluetoothConfig_PairingMode_FIXED_PIN;
-            nodeDB.saveToDisk(SEGMENT_CONFIG);
-        } else if (config.bluetooth.mode == Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
+        
+        if (config.bluetooth.mode == Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
             DEBUG_MSG("Using random passkey\n");
             // This is the passkey to be entered on peer - we pick a number >100,000 to ensure 6 digits
             passkey = random(100000, 999999); 
@@ -201,25 +196,4 @@ void clearNVS()
 #ifdef ARCH_ESP32
     ESP.restart();
 #endif
-}
-
-void disablePin() 
-{
-    DEBUG_MSG("User Override, disabling bluetooth pin requirement\n");
-    // keep track of when it was pressed, so we know it was within X seconds
-
-    // Flash the LED
-    setLed(true);
-    delay(100);
-    setLed(false);
-    delay(100);
-    setLed(true);
-    delay(100);
-    setLed(false);
-    delay(100);
-    setLed(true);
-    delay(100);
-    setLed(false);
-
-    doublepressed = millis();
 }

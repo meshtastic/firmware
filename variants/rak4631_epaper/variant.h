@@ -185,6 +185,9 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define SX126X_RXEN (37)
 #define SX126X_E22 // DIO2 controlls an antenna switch and the TCXO voltage is controlled by DIO3
 
+// enables 3.3V periphery like GPS or IO Module
+#define PIN_3V3_EN (34)
+
 // RAK1910 GPS module
 // If using the wisblock GPS module and pluged into Port A on WisBlock base
 // IO1 is hooked to PPS (pin 12 on header) = gpio 17
@@ -192,7 +195,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // Therefore must be 1 to keep peripherals powered
 // Power is on the controllable 3V3_S rail
 // #define PIN_GPS_RESET (34)
-#define PIN_GPS_EN (34)
+#define PIN_GPS_EN PIN_3V3_EN
 #define PIN_GPS_PPS (17) // Pulse per second input from the GPS
 
 #define GPS_RX_PIN PIN_SERIAL1_RX
