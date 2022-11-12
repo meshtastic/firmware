@@ -1,20 +1,18 @@
 // #define BUTTON_NEED_PULLUP // if set we need to turn on the internal CPU pullup during sleep
 
-#define I2C_SDA1         42         //Used for PMU management
-#define I2C_SCL1         41         //Used for PMU management
+#define I2C_SDA1         42         //Used for PMU management and PCF8563 
+#define I2C_SCL1         41         //Used for PMU management and PCF8563 
 
-#define I2C_SDA          17         //For sensors and screens
-#define I2C_SCL          18         //For sensors and screens
+#define I2C_SDA          17         //For QMC6310 sensors and screens
+#define I2C_SCL          18         //For QMC6310 sensors and screens
 
 #define BUTTON_PIN      0     // The middle button GPIO on the T-Beam S3
 //#define BUTTON_PIN_ALT 13 // Alternate GPIO for an external button if needed. Does anyone use this? It is not documented anywhere.
 // #define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Module.
 
-#define BUTTON1_PIN     47      //Additional keys
 
 
 #define LED_INVERTED    1
-// #define LED_PIN 4 // Newer tbeams (1.1) have an extra led on GPIO4
 
 // TTGO uses a common pinout for their SX1262 vs RF95 modules - both can be enabled and we will probe at runtime for RF95 and if
 // not found then probe for SX1262
@@ -42,8 +40,9 @@
 // #define PMU_IRQ 40
 #define HAS_AXP2101
 
-// Specify the PMU as Wire1. In the t-beam-s3-core, the PMU enjoys a separate bus
+// Specify the PMU as Wire1. In the t-beam-s3 core, PCF8563 and PMU share the bus
 #define PMU_USE_WIRE1
+#define RTC_USE_WIRE1
 
 #define RF95_SCK        12
 #define RF95_MISO       13
@@ -56,10 +55,14 @@
 #define GPS_1PPS_PIN    6
 
 
-#define HAS_SDCARD  //Have 3-bit SDMMC interface SD card slot
+#define HAS_SDCARD  //Have SPI interface SD card slot
+#define SDCARD_USE_SPI1
 
 // PCF8563 RTC Module
 // #define PCF8563_RTC 0x51         //Putting definitions in variant. h does not compile correctly
 
 #define HAS_RTC 1
+
+//has 32768 Hz crystal
+#define HAS_32768HZ
 
