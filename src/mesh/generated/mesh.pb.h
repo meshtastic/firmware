@@ -501,7 +501,7 @@ typedef PB_BYTES_ARRAY_T(256) MeshPacket_encrypted_t;
 typedef struct _MeshPacket { 
     /* The sending node number.
  Note: Our crypto implementation uses this field as well.
- See [crypto](/docs/about/overview/encryption) for details.
+ See [crypto](/docs/overview/encryption) for details.
  FIXME - really should be fixed32 instead, this encoding only hurts the ble link though. */
     uint32_t from;
     /* The (immediatSee Priority description for more details.y should be fixed32 instead, this encoding only
@@ -529,7 +529,7 @@ typedef struct _MeshPacket {
  needs to be unique for a few minutes (long enough to last for the length of
  any ACK or the completion of a mesh broadcast flood).
  Note: Our crypto implementation uses this id as well.
- See [crypto](/docs/about/overview/encryption) for details.
+ See [crypto](/docs/overview/encryption) for details.
  FIXME - really should be fixed32 instead, this encoding only
  hurts the ble link though. */
     uint32_t id;
