@@ -244,8 +244,32 @@ void setup()
     digitalWrite(PIN_3V3_EN, 1);
 #endif
 
+
+    // Currently only the tbeam has a PMU
+    // PMU initialization needs to be placed before scanI2Cdevice
+    power = new Power();
+    power->setStatusHandler(powerStatus);
+    powerStatus->observe(&power->newStatus);
+    power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
+
+
+#ifdef LILYGO_TBEAM_S3_CORE
+    // In T-Beam-S3-core, the I2C device cannot be scanned before power initialization, otherwise the device will be stuck
+    // PCF8563 RTC in tbeam-s3 uses Wire1 to share I2C bus
+    Wire1.beginTransmission(PCF8563_RTC);
+    if (Wire1.endTransmission() == 0){
+        rtc_found = PCF8563_RTC;
+        DEBUG_MSG("PCF8563 RTC found\n");
+    }
+#endif
+
     // We need to scan here to decide if we have a screen for nodeDB.init()
-    scanI2Cdevice(true);
+    scanI2Cdevice();
+
+#ifdef HAS_SDCARD
+    setupSDCard();
+#endif
+    
 #ifdef RAK4630
     // scanEInkDevice();
 #endif
@@ -280,17 +304,12 @@ void setup()
 
     playStartMelody();
 
-    // Currently only the tbeam has a PMU
-    power = new Power();
-    power->setStatusHandler(powerStatus);
-    powerStatus->observe(&power->newStatus);
-    power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
 
     /*
     * Repeat the scanning for I2C devices after power initialization or look for 'latecomers'. 
     * Boards with an PMU need to be powered on to correctly scan to the device address, such as t-beam-s3-core
     */
-    scanI2Cdevice(false);
+    // scanI2Cdevice();
 
     // fixed screen override?
     if (config.display.oled != Config_DisplayConfig_OledType_OLED_AUTO)
