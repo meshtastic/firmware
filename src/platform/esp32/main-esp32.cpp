@@ -43,7 +43,7 @@ void setBluetoothEnable(bool on) {
 static uint32_t calibrate_one(rtc_cal_sel_t cal_clk, const char *name)
 {
     const uint32_t cal_count = 1000;
-    const float factor = (1 << 19) * 1000.0f;
+    // const float factor = (1 << 19) * 1000.0f; unused var?
     uint32_t cali_val;
     for (int i = 0; i < 5; ++i) {
         cali_val = rtc_clk_cal(cal_clk, cal_count);

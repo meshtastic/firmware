@@ -10,7 +10,7 @@ CardKbI2cImpl::CardKbI2cImpl() :
 
 void CardKbI2cImpl::init()
 {
-    if (cardkb_found != CARDKB_ADDR)
+    if (i2cScanMap[CARDKB_ADDR].addr != CARDKB_ADDR)
     {
         // Input device is not detected.
         return;

@@ -79,16 +79,9 @@ meshtastic::NodeStatus *nodeStatus = new meshtastic::NodeStatus();
 uint8_t screen_found;
 uint8_t screen_model;
 
-// The I2C address of the cardkb or RAK14004 (if found)
-uint8_t cardkb_found;
 // 0x02 for RAK14004 and 0x00 for cardkb
 uint8_t kb_model;
 
-// The I2C address of the RTC Module (if found)
-uint8_t rtc_found;
-
-// Keystore Chips
-uint8_t keystore_found;
 #ifndef ARCH_PORTDUINO
 ATECCX08A atecc;
 #endif
@@ -101,6 +94,8 @@ bool pmu_found;
 
 // Array map of sensor types (as array index) and i2c address as value we'll find in the i2c scan
 uint8_t nodeTelemetrySensorsMap[_TelemetrySensorType_MAX + 1] = { 0 }; // one is enough, missing elements will be initialized to 0 anyway.
+
+scanmap i2cScanMap[128] = { 0 };
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
 
@@ -179,7 +174,8 @@ void setup()
 
     initDeepSleep();
 
-    // Testing this fix für erratic T-Echo boot behaviour
+// The T-Echo needs to switch the peripheral power rail on before we can do anything else
+// this controls much more than just the display, so we do it first
 #if defined(TTGO_T_ECHO) && defined(PIN_EINK_PWR_ON)
     pinMode(PIN_EINK_PWR_ON, OUTPUT);
     digitalWrite(PIN_EINK_PWR_ON, HIGH);
@@ -216,7 +212,6 @@ void setup()
 
     fsInit();
 
-    // router = new DSRRouter();
     router = new ReliableRouter();
 
 #ifdef I2C_SDA1
@@ -252,19 +247,12 @@ void setup()
     powerStatus->observe(&power->newStatus);
     power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
 
-
-#ifdef LILYGO_TBEAM_S3_CORE
-    // In T-Beam-S3-core, the I2C device cannot be scanned before power initialization, otherwise the device will be stuck
-    // PCF8563 RTC in tbeam-s3 uses Wire1 to share I2C bus
-    Wire1.beginTransmission(PCF8563_RTC);
-    if (Wire1.endTransmission() == 0){
-        rtc_found = PCF8563_RTC;
-        DEBUG_MSG("PCF8563 RTC found\n");
-    }
-#endif
-
     // We need to scan here to decide if we have a screen for nodeDB.init()
-    scanI2Cdevice();
+    scanI2Cdevice(Wire,0);
+
+#ifdef I2C_SDA1
+    scanI2Cdevice(Wire1,1);
+#endif
 
 #ifdef HAS_SDCARD
     setupSDCard();
@@ -304,13 +292,6 @@ void setup()
 
     playStartMelody();
 
-
-    /*
-    * Repeat the scanning for I2C devices after power initialization or look for 'latecomers'. 
-    * Boards with an PMU need to be powered on to correctly scan to the device address, such as t-beam-s3-core
-    */
-    // scanI2Cdevice();
-
     // fixed screen override?
     if (config.display.oled != Config_DisplayConfig_OledType_OLED_AUTO)
         screen_model = config.display.oled;
@@ -346,7 +327,7 @@ void setup()
 
     // Do this after service.init (because that clears error_code)
 #ifdef HAS_PMU
-    if (!pmu_found)
+    if (i2cScanMap[XPOWERS_AXP192_AXP2101_ADDRESS].addr == 0)
         RECORD_CRITICALERROR(CriticalErrorCode_NO_AXP192); // Record a hardware fault for missing hardware
 #endif
 
