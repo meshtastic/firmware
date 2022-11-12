@@ -221,5 +221,5 @@ void scanI2Cdevice(TwoWire myWire, uint8_t busnum)
         DEBUG_MSG("%i I2C devices found\n",nDevices);
 }
 #else
-void scanI2Cdevice() {}
+void scanI2Cdevice(TwoWire myWire, uint8_t busnum) {}
 #endif
