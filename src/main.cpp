@@ -246,6 +246,13 @@ void setup()
     // In T-Beam-S3-core, the I2C device cannot be scanned before power initialization, otherwise the device will be stuck
     if ((HW_VENDOR != HardwareModel_LILYGO_TBEAM_S3_CORE)) {
         scanI2Cdevice();
+    }else{
+        // PCF8563 RTC in tbeam-s3 uses Wire1 to share I2C bus
+        Wire1.beginTransmission(PCF8563_RTC);
+        if (Wire1.endTransmission() == 0){
+            rtc_found = PCF8563_RTC;
+            DEBUG_MSG("PCF8563 RTC found\n");
+        }
     }
     
 #ifdef RAK4630
