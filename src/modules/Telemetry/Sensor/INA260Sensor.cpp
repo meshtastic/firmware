@@ -14,7 +14,13 @@ int32_t INA260Sensor::runOnce() {
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    status = ina260.begin(nodeTelemetrySensorsMap[sensorType]);
+    if(i2cScanMap[nodeTelemetrySensorsMap[sensorType]].bus == 1) {
+#ifdef I2C_SDA1
+        status = ina260.begin(nodeTelemetrySensorsMap[sensorType], &Wire1);
+#endif
+    } else {
+        status = ina260.begin(nodeTelemetrySensorsMap[sensorType], &Wire);
+    }
     return initI2CSensor();
 }
 

@@ -14,6 +14,13 @@ int32_t BME680Sensor::runOnce() {
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
+    if(i2cScanMap[nodeTelemetrySensorsMap[sensorType]].bus == 1) {
+#ifdef I2C_SDA1
+        bme680 = Adafruit_BME680(&Wire1);
+#endif
+    } else {
+        bme680 = Adafruit_BME680(&Wire);
+    }
     status = bme680.begin(nodeTelemetrySensorsMap[sensorType]);
 
     return initI2CSensor();

@@ -15,8 +15,14 @@ int32_t BME280Sensor::runOnce() {
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    status = bme280.begin(nodeTelemetrySensorsMap[sensorType]); 
-    
+    if(i2cScanMap[nodeTelemetrySensorsMap[sensorType]].bus == 1) {
+#ifdef I2C_SDA1
+        status = bme280.begin(nodeTelemetrySensorsMap[sensorType], &Wire1);
+#endif
+    } else {
+        status = bme280.begin(nodeTelemetrySensorsMap[sensorType], &Wire);
+    }
+
     bme280.setSampling( Adafruit_BME280::MODE_FORCED,
                         Adafruit_BME280::SAMPLING_X1, // Temp. oversampling
                         Adafruit_BME280::SAMPLING_X1, // Pressure oversampling

@@ -15,6 +15,14 @@ int32_t BMP280Sensor::runOnce() {
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
+    if(i2cScanMap[nodeTelemetrySensorsMap[sensorType]].bus == 1) {
+#ifdef I2C_SDA1
+        bmp280 = Adafruit_BMP280(&Wire1);
+#endif
+    } else {
+        bmp280 = Adafruit_BMP280(&Wire);
+    }
+
     status = bmp280.begin(nodeTelemetrySensorsMap[sensorType]); 
 
     bmp280.setSampling( Adafruit_BMP280::MODE_FORCED,
