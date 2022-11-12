@@ -51,6 +51,9 @@ typedef enum _PortNum {
     /* Waypoint payloads.
  Payload is a [Waypoint](/docs/developers/protobufs/api#waypoint) message */
     PortNum_WAYPOINT_APP = 8, 
+    /* Audio Payloads.
+ Encapsulated codec2 packets. On 2.4 GHZ Bandwidths only for now */
+    PortNum_AUDIO_APP = 9, 
     /* Provides a 'ping' service that replies to any packet it receives.
  Also serves as a small example module. */
     PortNum_REPLY_APP = 32, 
@@ -81,7 +84,7 @@ typedef enum _PortNum {
     PortNum_SIMULATOR_APP = 69, 
     /* Private applications should use portnums >= 256.
  To simplify initial development and testing you can use "PRIVATE_APP"
- in your code without needing to rebuild protobuf files (via [regen-protos.sh](https://github.com/meshtastic/Meshtastic-device/blob/master/bin/regen-protos.sh)) */
+ in your code without needing to rebuild protobuf files (via [regen-protos.sh](https://github.com/meshtastic/firmware/blob/master/bin/regen-protos.sh)) */
     PortNum_PRIVATE_APP = 256, 
     /* ATAK Forwarder Module https://github.com/paulmandal/atak-forwarder */
     PortNum_ATAK_FORWARDER = 257, 

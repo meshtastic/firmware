@@ -159,21 +159,16 @@ class ButtonThread : public concurrency::OSThread
 
     static void userButtonDoublePressed()
     {
-#ifdef ARCH_ESP32
-        disablePin();
-#elif defined(USE_EINK)
+#if defined(USE_EINK) && defined(PIN_EINK_EN)
         digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
 #endif
     }
 
     static void userButtonMultiPressed()
     {
-#ifdef ARCH_ESP32
-        clearNVS();
-#endif
-#ifdef ARCH_NRF52
-        clearBonds();
-#endif
+        screen->print("Sent ad-hoc ping\n");
+        service.refreshMyNodeInfo();
+        service.sendNetworkPing(NODENUM_BROADCAST, true);
     }
 
     static void userButtonPressedLongStart()

@@ -142,6 +142,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef HAS_WIFI
     #define HAS_WIFI 0
 #endif
+#ifndef HAS_ETHERNET
+    #define HAS_ETHERNET 0
+#endif
 #ifndef HAS_SCREEN
     #define HAS_SCREEN 0
 #endif
@@ -162,6 +165,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #ifndef HAS_RTC
     #define HAS_RTC 0
+#endif
+#ifndef HAS_CPU_SHUTDOWN
+    #define HAS_CPU_SHUTDOWN 0
+#endif
+#ifndef HAS_BLUETOOTH
+    #define HAS_BLUETOOTH 0
 #endif
 
 #include "RF95Configuration.h"
