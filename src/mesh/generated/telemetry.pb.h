@@ -33,7 +33,9 @@ typedef enum _TelemetrySensorType {
     /* 3-Axis magnetic sensor */
     TelemetrySensorType_QMC6310 = 9, 
     /* 6-Axis inertial measurement sensor */
-    TelemetrySensorType_QMI8658 = 10 
+    TelemetrySensorType_QMI8658 = 10, 
+    /* 3-Axis magnetic sensor */
+    TelemetrySensorType_QMC5883L = 11 
 } TelemetrySensorType;
 
 /* Struct definitions */
@@ -85,8 +87,8 @@ typedef struct _Telemetry {
 
 /* Helper constants for enums */
 #define _TelemetrySensorType_MIN TelemetrySensorType_SENSOR_UNSET
-#define _TelemetrySensorType_MAX TelemetrySensorType_QMI8658
-#define _TelemetrySensorType_ARRAYSIZE ((TelemetrySensorType)(TelemetrySensorType_QMI8658+1))
+#define _TelemetrySensorType_MAX TelemetrySensorType_QMC5883L
+#define _TelemetrySensorType_ARRAYSIZE ((TelemetrySensorType)(TelemetrySensorType_QMC5883L+1))
 
 
 #ifdef __cplusplus
