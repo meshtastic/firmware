@@ -1,10 +1,7 @@
 #define LED_PIN LED
 
+#define HAS_SCREEN 0
 #define HAS_GPS 0
-
-#define RESET_OLED RST_OLED
-#define I2C_SDA SDA_OLED // I2C pins for this board
-#define I2C_SCL SCL_OLED
 
 #define VEXT_ENABLE Vext // active low, powers the oled display and the lora antenna boost
 #define BUTTON_PIN 0
