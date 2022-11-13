@@ -5,7 +5,6 @@
 #include "NodeDB.h"
 #include "MeshService.h"
 #include "PowerFSM.h" // neede for button bypass
-#include "main.h"
 #include "mesh/generated/cannedmessages.pb.h"
 
 #ifdef OLED_RU
@@ -36,6 +35,8 @@
 // Remove Canned message screen if no action is taken for some milliseconds
 #define INACTIVATE_AFTER_MS 20000
 
+extern uint8_t cardkb_found;
+
 static const char *cannedMessagesConfigFile = "/prefs/cannedConf.proto";
 
 CannedMessageModuleConfig cannedMessageModuleConfig;
@@ -52,7 +53,7 @@ CannedMessageModule::CannedMessageModule()
 {
     if (moduleConfig.canned_message.enabled) {
         this->loadProtoForModule();
-        if ((this->splitConfiguredMessages() <= 0) && (i2cScanMap[CARDKB_ADDR].addr != CARDKB_ADDR)) {
+        if ((this->splitConfiguredMessages() <= 0) && (cardkb_found != CARDKB_ADDR)) {
             DEBUG_MSG("CannedMessageModule: No messages are configured. Module is disabled\n");
             this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
         } else {

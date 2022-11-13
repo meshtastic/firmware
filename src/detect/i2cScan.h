@@ -44,25 +44,25 @@ void printATECCInfo()
 #endif
 }
 
-uint16_t getRegisterValue(uint8_t address, uint8_t reg, uint8_t length, TwoWire myWire) {
+uint16_t getRegisterValue(uint8_t address, uint8_t reg, uint8_t length) {
     uint16_t value = 0x00;
-    myWire.beginTransmission(address);
-    myWire.write(reg);
-    myWire.endTransmission();
+    Wire.beginTransmission(address);
+    Wire.write(reg);
+    Wire.endTransmission();
     delay(20);
-    myWire.requestFrom(address, length);
-    DEBUG_MSG("Wire.available() = %d\n", myWire.available());
-    if (myWire.available() == 2) {
+    Wire.requestFrom(address, length);
+    DEBUG_MSG("Wire.available() = %d\n", Wire.available());
+    if (Wire.available() == 2) {
         // Read MSB, then LSB
-        value = (uint16_t)myWire.read() << 8;  
-        value |= myWire.read();
-    } else if (myWire.available()) {
-        value = myWire.read();
+        value = (uint16_t)Wire.read() << 8;  
+        value |= Wire.read();
+    } else if (Wire.available()) {
+        value = Wire.read();
     }
     return value;
 }
 
-uint8_t oled_probe(byte addr, TwoWire myWire)
+uint8_t oled_probe(byte addr)
 {
     uint8_t r = 0;
     uint8_t r_prev = 0;
@@ -70,12 +70,12 @@ uint8_t oled_probe(byte addr, TwoWire myWire)
     uint8_t o_probe = 0;
     do {
         r_prev = r;
-        myWire.beginTransmission(addr);
-        myWire.write(0x00);
-        myWire.endTransmission();
-        myWire.requestFrom((int)addr, 1);
-        if (myWire.available()) {
-            r = myWire.read();
+        Wire.beginTransmission(addr);
+        Wire.write(0x00);
+        Wire.endTransmission();
+        Wire.requestFrom((int)addr, 1);
+        if (Wire.available()) {
+            r = Wire.read();
         }
         r &= 0x0f;
 
@@ -90,24 +90,24 @@ uint8_t oled_probe(byte addr, TwoWire myWire)
     return o_probe;
 }
 
-void scanI2Cdevice(TwoWire myWire, uint8_t busnum)
+void scanI2Cdevice(bool partial)
 {
     byte err, addr;
     uint16_t registerValue = 0x00;
     int nDevices = 0;
     for (addr = 1; addr < 127; addr++) {
-        myWire.beginTransmission(addr);
-        err = myWire.endTransmission();
+        if (partial && addr != SSD1306_ADDRESS && addr != ST7567_ADDRESS && addr != XPOWERS_AXP192_AXP2101_ADDRESS)
+            continue;
+        Wire.beginTransmission(addr);
+        err = Wire.endTransmission();
         if (err == 0) {
             DEBUG_MSG("I2C device found at address 0x%x\n", addr);
-
-            i2cScanMap[addr] = {addr, busnum};
 
             nDevices++;
 
             if (addr == SSD1306_ADDRESS) {
                 screen_found = addr;
-                screen_model = oled_probe(addr, myWire);
+                screen_model = oled_probe(addr);
                 if (screen_model == 1) {
                     DEBUG_MSG("ssd1306 display found\n");
                 } else if (screen_model == 2) {
@@ -118,7 +118,8 @@ void scanI2Cdevice(TwoWire myWire, uint8_t busnum)
             }
 #ifndef ARCH_PORTDUINO
             if (addr == ATECC608B_ADDR) {
-                if (atecc.begin(ATECC608B_ADDR) == true) {
+                keystore_found = addr;
+                if (atecc.begin(keystore_found) == true) {
                     DEBUG_MSG("ATECC608B initialized\n");
                 } else {
                     DEBUG_MSG("ATECC608B initialization failed\n");
@@ -128,21 +129,24 @@ void scanI2Cdevice(TwoWire myWire, uint8_t busnum)
 #endif
 #ifdef RV3028_RTC
             if (addr == RV3028_RTC){
+                rtc_found = addr;
                 DEBUG_MSG("RV3028 RTC found\n");
                 Melopero_RV3028 rtc;
-                rtc.initI2C(myWire);
+                rtc.initI2C();
                 rtc.writeToRegister(0x35,0x07); // no Clkout
                 rtc.writeToRegister(0x37,0xB4);
             }
 #endif
 #ifdef PCF8563_RTC
             if (addr == PCF8563_RTC){
+                rtc_found = addr;
                 DEBUG_MSG("PCF8563 RTC found\n");
             }
 #endif
             if (addr == CARDKB_ADDR) {
+                cardkb_found = addr;
                 // Do we have the RAK14006 instead?
-                registerValue = getRegisterValue(addr, 0x04, 1, myWire);
+                registerValue = getRegisterValue(addr, 0x04, 1);
                 if (registerValue == 0x02) { // KEYPAD_VERSION
                     DEBUG_MSG("RAK14004 found\n");
                     kb_model = 0x02;
@@ -157,11 +161,12 @@ void scanI2Cdevice(TwoWire myWire, uint8_t busnum)
             }
 #ifdef HAS_PMU
             if (addr == XPOWERS_AXP192_AXP2101_ADDRESS) {
+                pmu_found = true;
                 DEBUG_MSG("axp192/axp2101 PMU found\n");
             }
 #endif
             if (addr == BME_ADDR || addr == BME_ADDR_ALTERNATE) {
-                registerValue = getRegisterValue(addr, 0xD0, 1, myWire); // GET_ID
+                registerValue = getRegisterValue(addr, 0xD0, 1); // GET_ID
                 if (registerValue == 0x61) {
                     DEBUG_MSG("BME-680 sensor found at address 0x%x\n", (uint8_t)addr);
                     nodeTelemetrySensorsMap[TelemetrySensorType_BME680] = addr;
@@ -174,7 +179,7 @@ void scanI2Cdevice(TwoWire myWire, uint8_t busnum)
                 }
             }
             if (addr == INA_ADDR || addr == INA_ADDR_ALTERNATE) {
-                registerValue = getRegisterValue(addr, 0xFE, 2, myWire);
+                registerValue = getRegisterValue(addr, 0xFE, 2);
                 DEBUG_MSG("Register MFG_UID: 0x%x\n", registerValue);
                 if (registerValue == 0x5449) {
                     DEBUG_MSG("INA260 sensor found at address 0x%x\n", (uint8_t)addr);
@@ -221,5 +226,5 @@ void scanI2Cdevice(TwoWire myWire, uint8_t busnum)
         DEBUG_MSG("%i I2C devices found\n",nDevices);
 }
 #else
-void scanI2Cdevice() {}
+void scanI2Cdevice(bool partial) {}
 #endif

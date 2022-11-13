@@ -12,7 +12,10 @@
 
 extern uint8_t screen_found;
 extern uint8_t screen_model;
+extern uint8_t cardkb_found;
 extern uint8_t kb_model;
+extern uint8_t rtc_found;
+extern uint8_t keystore_found;
 
 extern bool eink_found;
 extern bool pmu_found;
@@ -22,13 +25,6 @@ extern bool isUSBPowered;
 #ifndef ARCH_PORTDUINO
 extern ATECCX08A atecc;
 #endif
-
-typedef struct _scanmap {
-    uint8_t addr;
-    uint8_t bus;
-} scanmap;
-
-extern scanmap i2cScanMap[128];
 
 extern uint8_t nodeTelemetrySensorsMap[_TelemetrySensorType_MAX + 1];
 

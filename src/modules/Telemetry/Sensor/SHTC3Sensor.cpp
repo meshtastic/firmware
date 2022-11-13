@@ -14,18 +14,7 @@ int32_t SHTC3Sensor::runOnce() {
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    if (i2cScanMap[nodeTelemetrySensorsMap[sensorType]].addr == 0) {
-        DEBUG_MSG("SHTC3 not found on i2c bus\n");
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-    }
-    if(i2cScanMap[nodeTelemetrySensorsMap[sensorType]].bus == 1) {
-#ifdef I2C_SDA1
-        status = shtc3.begin(&Wire1); 
-#endif
-    } else {
-        status = shtc3.begin(&Wire); 
-    }
-    
+    status = shtc3.begin(); 
     return initI2CSensor();
 }
 

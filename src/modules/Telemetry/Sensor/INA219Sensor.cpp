@@ -15,13 +15,7 @@ int32_t INA219Sensor::runOnce() {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
     ina219 = Adafruit_INA219(nodeTelemetrySensorsMap[sensorType]);
-    if(i2cScanMap[nodeTelemetrySensorsMap[sensorType]].bus == 1) {
-#ifdef I2C_SDA1
-        status = ina219.begin(&Wire1);
-#endif
-    } else {
-        status = ina219.begin(&Wire);
-    }
+    status = ina219.begin();
     return initI2CSensor();
 }
 
