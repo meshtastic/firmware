@@ -872,7 +872,7 @@ void _screen_header()
 //     }
 // }
 // #else
-Screen::Screen(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY g, HW_I2C i2cBus) : OSThread("Screen"), cmdQueue(32), dispdev(address, sda, scl, g, i2cBus), ui(&dispdev)
+Screen::Screen(uint8_t address, int sda, int scl) : OSThread("Screen"), cmdQueue(32), dispdev(address, sda, scl), ui(&dispdev)
 {
     address_found = address;
     cmdQueue.setReader(this);

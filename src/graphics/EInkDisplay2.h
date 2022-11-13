@@ -22,7 +22,7 @@ class EInkDisplay : public OLEDDisplay
     /* constructor
     FIXME - the parameters are not used, just a temporary hack to keep working like the old displays
     */
-    EInkDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY g, HW_I2C i2cBus);
+    EInkDisplay(uint8_t address, int sda, int scl);
 
     // Write the buffer to the display memory (for eink we only do this occasionally)
     virtual void display(void) override;

@@ -15,13 +15,7 @@ int32_t LPS22HBSensor::runOnce() {
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    if(i2cScanMap[nodeTelemetrySensorsMap[sensorType]].bus == 1) {
-#ifdef I2C_SDA1
-        status = lps22hb.begin_I2C(nodeTelemetrySensorsMap[sensorType], &Wire1);
-#endif
-    } else {
-        status = lps22hb.begin_I2C(nodeTelemetrySensorsMap[sensorType], &Wire);
-    }
+    status = lps22hb.begin_I2C(nodeTelemetrySensorsMap[sensorType]);
     return initI2CSensor();
 }
 

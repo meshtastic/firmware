@@ -1,8 +1,6 @@
 #include "cardKbI2cImpl.h"
 #include "InputBroker.h"
 
-#if HAS_WIRE
-
 CardKbI2cImpl *cardKbI2cImpl;
 
 CardKbI2cImpl::CardKbI2cImpl() :
@@ -12,7 +10,7 @@ CardKbI2cImpl::CardKbI2cImpl() :
 
 void CardKbI2cImpl::init()
 {
-    if (i2cScanMap[CARDKB_ADDR].addr != CARDKB_ADDR)
+    if (cardkb_found != CARDKB_ADDR)
     {
         // Input device is not detected.
         return;
@@ -20,5 +18,3 @@ void CardKbI2cImpl::init()
 
     inputBroker->registerSource(this);
 }
-
-#endif
