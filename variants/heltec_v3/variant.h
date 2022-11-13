@@ -23,12 +23,8 @@
 #define RF95_MOSI       10
 #define RF95_NSS        8
 
-#ifdef USE_SX1262
 #define SX126X_CS       RF95_NSS
 #define SX126X_DIO1     LORA_DIO1
 #define SX126X_BUSY     LORA_DIO2
 #define SX126X_RESET    LORA_RESET
 #define SX126X_E22
-#endif
-
-
