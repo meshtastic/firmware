@@ -21,8 +21,9 @@
         1) Enable the module by setting audio.codec2_enabled to 1.
         2) Set the pins (audio.mic_pin / audio.amp_pin) for your preferred microphone and amplifier GPIO pins.
            On tbeam, recommend to use:
-                audio.mic_chan 7 (GPIO 35)
-                audio.amp_pin 25 (GPIO 25)
+                audio.mic_chan 6 (GPIO 34)
+                audio.amp_pin 14
+                audio.ptt_pin 39 
         3) Set audio.timeout to the amount of time to wait before we consider
            your voice stream as "done".
         4) Set audio.bitrate to the desired codec2 rate (CODEC2_3200, CODEC2_2400, CODEC2_1600, CODEC2_1400, CODEC2_1300, CODEC2_1200, CODEC2_700, CODEC2_700B)
@@ -33,8 +34,8 @@
         * Will not work on NRF and the Linux device targets.
 */
 
-#define AMIC 7
-#define AAMP 25
+#define AMIC 6
+#define AAMP 14
 #define PTT_PIN 39
 
 #define AUDIO_MODULE_RX_BUFFER 128
