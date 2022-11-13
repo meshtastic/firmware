@@ -247,8 +247,10 @@ void setup()
     powerStatus->observe(&power->newStatus);
     power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
 
+#if HAS_WIRE
     // We need to scan here to decide if we have a screen for nodeDB.init()
     scanI2Cdevice(Wire,0);
+#endif
 
 #ifdef I2C_SDA1
     scanI2Cdevice(Wire1,1);
