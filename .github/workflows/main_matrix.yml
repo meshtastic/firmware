@@ -87,6 +87,8 @@ jobs:
           - board: heltec-v1
           - board: heltec-v2.0
           - board: heltec-v2.1
+          - board: heltec-v3
+          - board: heltec-wsl-v3
           - board: tbeam0.7
           - board: meshtastic-diy-v1
           - board: meshtastic-dr-dev
