@@ -8,9 +8,9 @@
 #define BUTTON_PIN 0
 
 #define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+#define ADC_MULTIPLIER 5.22
 
 #define USE_SX1262
-#define ADC_MULTIPLIER 5.22
 
 #define LORA_DIO0       -1  // a No connect on the SX1262 module
 #define LORA_RESET      12
