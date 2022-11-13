@@ -86,6 +86,8 @@
     #define HW_VENDOR HardwareModel_DR_DEV
 #elif defined(HELTEC_V3)
     #define HW_VENDOR HardwareModel_HELTEC_V3
+#elif defined(HELTEC_WSL_V3)
+    #define HW_VENDOR HardwareModel_HELTEC_WSL_V3
 #endif
 
 //
