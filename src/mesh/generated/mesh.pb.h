@@ -78,6 +78,10 @@ typedef enum _HardwareModel {
     HardwareModel_DR_DEV = 41, 
     /* M5 esp32 based MCU modules with enclosure, TFT and LORA Shields. All Variants (Basic, Core, Fire, Core2, Paper) https://m5stack.com/ */
     HardwareModel_M5STACK = 42, 
+    /* New Heltec LoRA32 with ESP32-S3 CPU */
+    HardwareModel_HELTEC_V3 = 43, 
+    /* New Heltec Wireless Stick Lite with ESP32-S3 CPU */
+    HardwareModel_HELTEC_WSL_V3 = 44, 
     /* Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits. */
     HardwareModel_PRIVATE_HW = 255 
 } HardwareModel;
