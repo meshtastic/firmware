@@ -3,6 +3,7 @@
 #include "main.h"
 #include <Wire.h>
 
+#if HAS_WIRE
 
 KbI2cBase::KbI2cBase(const char *name) : concurrency::OSThread(name)
 {
@@ -120,3 +121,5 @@ int32_t KbI2cBase::runOnce()
     }
     return 500;
 }
+
+#endif

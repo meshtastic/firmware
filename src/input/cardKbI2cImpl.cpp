@@ -1,6 +1,8 @@
 #include "cardKbI2cImpl.h"
 #include "InputBroker.h"
 
+#if HAS_WIRE
+
 CardKbI2cImpl *cardKbI2cImpl;
 
 CardKbI2cImpl::CardKbI2cImpl() :
@@ -18,3 +20,5 @@ void CardKbI2cImpl::init()
 
     inputBroker->registerSource(this);
 }
+
+#endif
