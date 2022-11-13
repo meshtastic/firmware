@@ -224,5 +224,5 @@ void scanI2Cdevice()
         DEBUG_MSG("%i I2C devices found\n",nDevices);
 }
 #else
-void scanI2Cdevice(bool partial) {}
+void scanI2Cdevice() {}
 #endif
