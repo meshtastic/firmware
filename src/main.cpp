@@ -303,14 +303,7 @@ void setup()
     nodeDB.init();
 
     playStartMelody();
-
-
-    /*
-    * Repeat the scanning for I2C devices after power initialization or look for 'latecomers'. 
-    * Boards with an PMU need to be powered on to correctly scan to the device address, such as t-beam-s3-core
-    */
-    // scanI2Cdevice();
-
+    
     // fixed screen override?
     if (config.display.oled != Config_DisplayConfig_OledType_OLED_AUTO)
         screen_model = config.display.oled;

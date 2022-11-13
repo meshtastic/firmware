@@ -90,14 +90,12 @@ uint8_t oled_probe(byte addr)
     return o_probe;
 }
 
-void scanI2Cdevice(bool partial)
+void scanI2Cdevice()
 {
     byte err, addr;
     uint16_t registerValue = 0x00;
     int nDevices = 0;
     for (addr = 1; addr < 127; addr++) {
-        if (partial && addr != SSD1306_ADDRESS && addr != ST7567_ADDRESS && addr != XPOWERS_AXP192_AXP2101_ADDRESS)
-            continue;
         Wire.beginTransmission(addr);
         err = Wire.endTransmission();
         if (err == 0) {
