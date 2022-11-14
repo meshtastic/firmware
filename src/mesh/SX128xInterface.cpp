@@ -2,7 +2,7 @@
 #include "SX128xInterface.h"
 #include "error.h"
 
-#if !defined(ARCH_PORTDUINO)
+#if defined(RADIOLIB_GODMODE)
 
 // Particular boards might define a different max power based on what their hardware can do
 #ifndef SX128X_MAX_POWER
@@ -107,7 +107,7 @@ bool SX128xInterface<T>::reconfigure()
 
     if (power > SX128X_MAX_POWER) // This chip has lower power limits than some
         power = SX128X_MAX_POWER;
-        
+
     err = lora.setOutputPower(power);
     assert(err == RADIOLIB_ERR_NONE);
 
