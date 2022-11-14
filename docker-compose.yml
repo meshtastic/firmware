@@ -5,7 +5,7 @@ services:
     build: .
     deploy:
       mode: replicated
-      replicas: 80
+      replicas: 4
     networks:
       - mesh
     
