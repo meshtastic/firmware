@@ -105,8 +105,9 @@ bool SX128xInterface<T>::reconfigure()
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(CriticalErrorCode_INVALID_RADIO_SETTING);
 
-    if (power > 22) // This chip has lower power limits than some
-        power = 22;
+    if (power > SX128X_MAX_POWER) // This chip has lower power limits than some
+        power = SX128X_MAX_POWER;
+        
     err = lora.setOutputPower(power);
     assert(err == RADIOLIB_ERR_NONE);
 
@@ -218,7 +219,11 @@ bool SX128xInterface<T>::isChannelActive()
 template<typename T>
 bool SX128xInterface<T>::isActivelyReceiving()
 {
-    return isChannelActive();
+    // return isChannelActive();
+
+    uint16_t irq = lora.getIrqStatus();
+    bool hasPreamble = (irq & RADIOLIB_SX128X_IRQ_HEADER_VALID);
+    return hasPreamble;
 }
 
 template<typename T>
