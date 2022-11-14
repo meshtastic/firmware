@@ -144,8 +144,9 @@ bool SX126xInterface<T>::reconfigure()
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(CriticalErrorCode_INVALID_RADIO_SETTING);
 
-    if (power > 22) // This chip has lower power limits than some
-        power = 22;
+    if (power > SX126X_MAX_POWER) // This chip has lower power limits than some
+        power = SX126X_MAX_POWER;
+        
     err = lora.setOutputPower(power);
     assert(err == RADIOLIB_ERR_NONE);
 
