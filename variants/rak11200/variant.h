@@ -79,6 +79,5 @@ static const uint8_t SCK = 33;
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET
-#define SX126X_TXEN RADIOLIB_NC
-#define SX126X_RXEN WB_IO3
+#define SX126X_POWER_EN WB_IO3
 #define SX126X_E22 // DIO2 controlls an antenna switch and the TCXO voltage is controlled by DIO3
