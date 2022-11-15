@@ -4,7 +4,9 @@
 #ifndef PB_MESH_PB_H_INCLUDED
 #define PB_MESH_PB_H_INCLUDED
 #include <pb.h>
+#include "channel.pb.h"
 #include "config.pb.h"
+#include "module_config.pb.h"
 #include "portnums.pb.h"
 #include "telemetry.pb.h"
 
@@ -25,18 +27,18 @@ typedef enum _HardwareModel {
     /* TODO: REPLACE */
     HardwareModel_TLORA_V1 = 2, 
     /* TODO: REPLACE */
-    HardwareModel_TLORA_V2_1_1p6 = 3, 
+    HardwareModel_TLORA_V2_1_1P6 = 3, 
     /* TODO: REPLACE */
     HardwareModel_TBEAM = 4, 
     /* The original heltec WiFi_Lora_32_V2, which had battery voltage sensing hooked to GPIO 13
  (see HELTEC_V2 for the new version). */
     HardwareModel_HELTEC_V2_0 = 5, 
     /* TODO: REPLACE */
-    HardwareModel_TBEAM0p7 = 6, 
+    HardwareModel_TBEAM_V0P7 = 6, 
     /* TODO: REPLACE */
     HardwareModel_T_ECHO = 7, 
     /* TODO: REPLACE */
-    HardwareModel_TLORA_V1_1p3 = 8, 
+    HardwareModel_TLORA_V1_1P3 = 8, 
     /* TODO: REPLACE */
     HardwareModel_RAK4631 = 9, 
     /* The new version of the heltec WiFi_Lora_32_V2 board that has battery sensing hooked to GPIO 37.
@@ -44,6 +46,16 @@ typedef enum _HardwareModel {
     HardwareModel_HELTEC_V2_1 = 10, 
     /* Ancient heltec WiFi_Lora_32 board */
     HardwareModel_HELTEC_V1 = 11, 
+    /* New T-BEAM with ESP32-S3 CPU */
+    HardwareModel_LILYGO_TBEAM_S3_CORE = 12, 
+    /* RAK WisBlock ESP32 core: https://docs.rakwireless.com/Product-Categories/WisBlock/RAK11200/Overview/ */
+    HardwareModel_RAK11200 = 13, 
+    /* B&Q Consulting Nano Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:nano */
+    HardwareModel_NANO_G1 = 14, 
+    /* TODO: REPLACE */
+    HardwareModel_TLORA_V2_1_1P8 = 15, 
+    /* B&Q Consulting Station Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:station */
+    HardwareModel_STATION_G1 = 25, 
     /* Less common/prototype boards listed here (needs one more byte over the air) */
     HardwareModel_LORA_RELAY_V1 = 32, 
     /* TODO: REPLACE */
@@ -60,16 +72,16 @@ typedef enum _HardwareModel {
     HardwareModel_ANDROID_SIM = 38, 
     /* Custom DIY device based on @NanoVHF schematics: https://github.com/NanoVHF/Meshtastic-DIY/tree/main/Schematics */
     HardwareModel_DIY_V1 = 39, 
-    /* RAK WisBlock ESP32 core: https://docs.rakwireless.com/Product-Categories/WisBlock/RAK11200/Overview/ */
-    HardwareModel_RAK11200 = 40, 
-    /* B&Q Consulting Nano Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:nano */
-    HardwareModel_NANO_G1 = 41, 
     /* nRF52840 Dongle : https://www.nordicsemi.com/Products/Development-hardware/nrf52840-dongle/ */
-    HardwareModel_NRF52840_PCA10059 = 42, 
+    HardwareModel_NRF52840_PCA10059 = 40, 
     /* Custom Disaster Radio esp32 v3 device https://github.com/sudomesh/disaster-radio/tree/master/hardware/board_esp32_v3 */
-    HardwareModel_DR_DEV = 43, 
+    HardwareModel_DR_DEV = 41, 
     /* M5 esp32 based MCU modules with enclosure, TFT and LORA Shields. All Variants (Basic, Core, Fire, Core2, Paper) https://m5stack.com/ */
-    HardwareModel_M5STACK = 44, 
+    HardwareModel_M5STACK = 42, 
+    /* New Heltec LoRA32 with ESP32-S3 CPU */
+    HardwareModel_HELTEC_V3 = 43, 
+    /* New Heltec Wireless Stick Lite with ESP32-S3 CPU */
+    HardwareModel_HELTEC_WSL_V3 = 44, 
     /* Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits. */
     HardwareModel_PRIVATE_HW = 255 
 } HardwareModel;
@@ -78,7 +90,7 @@ typedef enum _HardwareModel {
 typedef enum _Constants { 
     /* First enum must be zero, and we are just using this enum to
  pass int constants between two very different environments */
-    Constants_Unused = 0, 
+    Constants_ZERO = 0, 
     /* From mesh.options
  note: this payload length is ONLY the bytes that are sent inside of the Data protobuf (excluding protobuf overhead). The 16 byte header is
  outside of this envelope */
@@ -91,32 +103,32 @@ typedef enum _Constants {
  and we'll try to help. */
 typedef enum _CriticalErrorCode { 
     /* TODO: REPLACE */
-    CriticalErrorCode_None = 0, 
+    CriticalErrorCode_NONE = 0, 
     /* A software bug was detected while trying to send lora */
-    CriticalErrorCode_TxWatchdog = 1, 
+    CriticalErrorCode_TX_WATCHDOG = 1, 
     /* A software bug was detected on entry to sleep */
-    CriticalErrorCode_SleepEnterWait = 2, 
+    CriticalErrorCode_SLEEP_ENTER_WAIT = 2, 
     /* No Lora radio hardware could be found */
-    CriticalErrorCode_NoRadio = 3, 
+    CriticalErrorCode_NO_RADIO = 3, 
     /* Not normally used */
-    CriticalErrorCode_Unspecified = 4, 
+    CriticalErrorCode_UNSPECIFIED = 4, 
     /* We failed while configuring a UBlox GPS */
-    CriticalErrorCode_UBloxInitFailed = 5, 
+    CriticalErrorCode_UBLOX_UNIT_FAILED = 5, 
     /* This board was expected to have a power management chip and it is missing or broken */
-    CriticalErrorCode_NoAXP192 = 6, 
+    CriticalErrorCode_NO_AXP192 = 6, 
     /* The channel tried to set a radio setting which is not supported by this chipset,
  radio comms settings are now undefined. */
-    CriticalErrorCode_InvalidRadioSetting = 7, 
+    CriticalErrorCode_INVALID_RADIO_SETTING = 7, 
     /* Radio transmit hardware failure. We sent data to the radio chip, but it didn't
  reply with an interrupt. */
-    CriticalErrorCode_TransmitFailed = 8, 
+    CriticalErrorCode_TRANSMIT_FAILED = 8, 
     /* We detected that the main CPU voltage dropped below the minumum acceptable value */
-    CriticalErrorCode_Brownout = 9, 
+    CriticalErrorCode_BROWNOUT = 9, 
     /* Selftest of SX1262 radio chip failed */
-    CriticalErrorCode_SX1262Failure = 10, 
+    CriticalErrorCode_SX1262_FAILURE = 10, 
     /* A (likely software but possibly hardware) failure was detected while trying to send packets.
  If this occurs on your board, please post in the forum so that we can ask you to collect some information to allow fixing this bug */
-    CriticalErrorCode_RadioSpiBug = 11 
+    CriticalErrorCode_RADIO_SPI_BUG = 11 
 } CriticalErrorCode;
 
 /* Note: these enum names must EXACTLY match the string used in the device
@@ -125,27 +137,27 @@ typedef enum _CriticalErrorCode {
  To match the old style filenames, _ is converted to -, p is converted to . */
 typedef enum _Position_LocSource { 
     /* TODO: REPLACE */
-    Position_LocSource_LOCSRC_UNSPECIFIED = 0, 
+    Position_LocSource_LOC_UNSET = 0, 
     /* TODO: REPLACE */
-    Position_LocSource_LOCSRC_MANUAL_ENTRY = 1, 
+    Position_LocSource_LOC_MANUAL = 1, 
     /* TODO: REPLACE */
-    Position_LocSource_LOCSRC_GPS_INTERNAL = 2, 
+    Position_LocSource_LOC_INTERNAL = 2, 
     /* TODO: REPLACE */
-    Position_LocSource_LOCSRC_GPS_EXTERNAL = 3 
+    Position_LocSource_LOC_EXTERNAL = 3 
 } Position_LocSource;
 
 /* Shared constants between device and phone */
 typedef enum _Position_AltSource { 
     /* First enum must be zero, and we are just using this enum to
  pass int constants between two very different environments */
-    Position_AltSource_ALTSRC_UNSPECIFIED = 0, 
+    Position_AltSource_ALT_UNSET = 0, 
     /* From mesh.options
  note: this payload length is ONLY the bytes that are sent inside of the Data protobuf (excluding protobuf overhead). The 16 byte header is
  outside of this envelope */
-    Position_AltSource_ALTSRC_MANUAL_ENTRY = 1, 
-    Position_AltSource_ALTSRC_GPS_INTERNAL = 2, 
-    Position_AltSource_ALTSRC_GPS_EXTERNAL = 3, 
-    Position_AltSource_ALTSRC_BAROMETRIC = 4 
+    Position_AltSource_ALT_MANUAL = 1, 
+    Position_AltSource_ALT_INTERNAL = 2, 
+    Position_AltSource_ALT_EXTERNAL = 3, 
+    Position_AltSource_ALT_BAROMETRIC = 4 
 } Position_AltSource;
 
 /* Note: these enum names must EXACTLY match the string used in the device
@@ -237,24 +249,46 @@ typedef enum _LogRecord_Level {
 
 /* Struct definitions */
 typedef PB_BYTES_ARRAY_T(237) Compressed_data_t;
+/* Compressed message payload */
 typedef struct _Compressed { 
+    /* PortNum to determine the how to handle the compressed payload. */
     PortNum portnum;
+    /* Compressed data. */
     Compressed_data_t data;
 } Compressed;
 
-/* Location of a waypoint to associate with a message */
-typedef struct _Location { 
-    /* Id of the location */
-    uint32_t id;
-    /* latitude_i */
-    int32_t latitude_i;
-    /* longitude_i */
-    int32_t longitude_i;
-    /* Time the location is to expire (epoch) */
-    uint32_t expire;
-    /* If true, only allow the original sender to update the location. */
-    bool locked;
-} Location;
+typedef PB_BYTES_ARRAY_T(237) Data_payload_t;
+/* (Formerly called SubPacket)
+ The payload portion fo a packet, this is the actual bytes that are sent
+ inside a radio packet (because from/to are broken out by the comms library) */
+typedef struct _Data { 
+    /* Formerly named typ and of type Type */
+    PortNum portnum;
+    /* TODO: REPLACE */
+    Data_payload_t payload;
+    /* Not normally used, but for testing a sender can request that recipient
+ responds in kind (i.e. if it received a position, it should unicast back it's position).
+ Note: that if you set this on a broadcast you will receive many replies. */
+    bool want_response;
+    /* The address of the destination node.
+ This field is is filled in by the mesh radio device software, application
+ layer software should never need it.
+ RouteDiscovery messages _must_ populate this.
+ Other message types might need to if they are doing multihop routing. */
+    uint32_t dest;
+    /* The address of the original sender for this message.
+ This field should _only_ be populated for reliable multihop packets (to keep
+ packets small). */
+    uint32_t source;
+    /* Only used in routing or response messages.
+ Indicates the original message ID that this message is reporting failure on. (formerly called original_id) */
+    uint32_t request_id;
+    /* If set, this message is intened to be a reply to a previously sent message with the defined id. */
+    uint32_t reply_id;
+    /* Defaults to false. If true, then what is in the payload should be treated as an emoji like giving
+ a message a heart or poop emoji. */
+    uint32_t emoji;
+} Data;
 
 /* Debug output from the device.
  To minimize the size of records inside the device code, if a time/source/level is not set
@@ -282,6 +316,8 @@ typedef struct _MyNodeInfo {
     /* Note: This flag merely means we detected a hardware GPS in our node.
  Not the same as UserPreferences.location_sharing */
     bool has_gps;
+    /* The maximum number of 'software' channels that can be set on this node. */
+    uint32_t max_channels;
     /* 0.0.5 etc... */
     char firmware_version[18];
     /* An error message we'd like to report back to the mothership through analytics.
@@ -309,8 +345,6 @@ typedef struct _MyNodeInfo {
     /* The minimum app version that can talk to this device.
  Phone/PC apps should compare this to their build number and if too low tell the user they must update their app */
     uint32_t min_app_version;
-    /* The maximum number of 'software' channels that can be set on this node. */
-    uint32_t max_channels;
     /* 24 time windows of 1hr each with the airtime transmitted out of the device per hour. */
     pb_size_t air_period_tx_count;
     uint32_t air_period_tx[8];
@@ -327,7 +361,7 @@ typedef struct _MyNodeInfo {
 
 /* a gps position */
 typedef struct _Position { 
-    /* The new preferred location encoding, divide by 1e-7 to get degrees
+    /* The new preferred location encoding, multiply by 1e-7 to get degrees
  in floating point */
     int32_t latitude_i;
     /* TODO: REPLACE */
@@ -345,13 +379,13 @@ typedef struct _Position {
     /* TODO: REPLACE */
     Position_AltSource altitude_source;
     /* Positional timestamp (actual timestamp of GPS solution) in integer epoch seconds */
-    uint32_t pos_timestamp;
+    uint32_t timestamp;
     /* Pos. timestamp milliseconds adjustment (rarely available or required) */
-    int32_t pos_time_millis;
+    int32_t timestamp_millis_adjust;
     /* HAE altitude in meters - can be used instead of MSL altitude */
     int32_t altitude_hae;
     /* Geoidal separation in meters */
-    int32_t alt_geoid_sep;
+    int32_t altitude_geoidal_separation;
     /* Horizontal, Vertical and Position Dilution of Precision, in 1/100 units
  - PDOP is sufficient for most cases
  - for higher precision scenarios, HDOP and VDOP can be used instead,
@@ -387,10 +421,10 @@ typedef struct _Position {
  - if we update at fixed intervals of X seconds, use X
  - if we update at dynamic intervals (based on relative movement etc),
    but "AT LEAST every Y seconds", use Y */
-    uint32_t pos_next_update;
+    uint32_t next_update;
     /* A sequence number, incremented with each Position message to help
    detect lost updates if needed */
-    uint32_t pos_seq_number;
+    uint32_t seq_number;
 } Position;
 
 /* A message used in our Dynamic Source Routing protocol (RFC 4728 based) */
@@ -399,14 +433,6 @@ typedef struct _RouteDiscovery {
     pb_size_t route_count;
     uint32_t route[8];
 } RouteDiscovery;
-
-/* Compressed message payload */
-typedef struct _ToRadio_PeerInfo { 
-    /* PortNum to determine the how to handle the compressed payload. */
-    uint32_t app_version;
-    /* Compressed data. */
-    bool mqtt_gateway;
-} ToRadio_PeerInfo;
 
 /* Broadcast when a newly powered mesh node wants to find a node num it can use
  Sent from the phone over bluetooth to set the user id for the owner of this node.
@@ -451,54 +477,98 @@ typedef struct _User {
  If this user is a licensed operator, set this flag.
  Also, "long_name" should be their licence number. */
     bool is_licensed;
-    /* Transmit power at antenna connector, in decibel-milliwatt
- An optional self-reported value useful in network planning, discovery
- and positioning - along with ant_gain_dbi and ant_azimuth below */
-    uint32_t tx_power_dbm;
-    /* Antenna gain (applicable to both Tx and Rx), in decibel-isotropic */
-    uint32_t ant_gain_dbi;
-    /* Directional antenna true azimuth *if applicable*, in degrees (0-360)
- Only applicable in case of stationary nodes with a directional antenna
- Zero = not applicable (mobile or omni) or not specified
- (use a value of 360 to indicate an antenna azimuth of zero degrees) */
-    uint32_t ant_azimuth;
 } User;
 
-typedef PB_BYTES_ARRAY_T(237) Data_payload_t;
-/* (Formerly called SubPacket)
- The payload portion fo a packet, this is the actual bytes that are sent
- inside a radio packet (because from/to are broken out by the comms library) */
-typedef struct _Data { 
-    /* Formerly named typ and of type Type */
-    PortNum portnum;
-    /* TODO: REPLACE */
-    Data_payload_t payload;
-    /* Not normally used, but for testing a sender can request that recipient
- responds in kind (i.e. if it received a position, it should unicast back it's position).
- Note: that if you set this on a broadcast you will receive many replies. */
-    bool want_response;
-    /* The address of the destination node.
- This field is is filled in by the mesh radio device software, application
- layer software should never need it.
- RouteDiscovery messages _must_ populate this.
- Other message types might need to if they are doing multihop routing. */
-    uint32_t dest;
-    /* The address of the original sender for this message.
- This field should _only_ be populated for reliable multihop packets (to keep
- packets small). */
-    uint32_t source;
-    /* Only used in routing or response messages.
- Indicates the original message ID that this message is reporting failure on. (formerly called original_id) */
-    uint32_t request_id;
-    /* If set, this message is intened to be a reply to a previously sent message with the defined id. */
-    uint32_t reply_id;
-    /* Defaults to false. If true, then what is in the payload should be treated as an emoji like giving
- a message a heart or poop emoji. */
-    uint32_t emoji;
-    /* Location structure */
-    bool has_location;
-    Location location;
-} Data;
+/* Waypoint message, used to share arbitrary locations across the mesh */
+typedef struct _Waypoint { 
+    /* Id of the waypoint */
+    uint32_t id;
+    /* latitude_i */
+    int32_t latitude_i;
+    /* longitude_i */
+    int32_t longitude_i;
+    /* Time the waypoint is to expire (epoch) */
+    uint32_t expire;
+    /* If true, only allow the original sender to update the waypoint. */
+    bool locked;
+    /* Name of the waypoint - max 30 chars */
+    char name[30];
+    /* *
+ Description of the waypoint - max 100 chars */
+    char description[100];
+} Waypoint;
+
+typedef PB_BYTES_ARRAY_T(256) MeshPacket_encrypted_t;
+/* A packet envelope sent/received over the mesh
+ only payload_variant is sent in the payload portion of the LORA packet.
+ The other fields are either not sent at all, or sent in the special 16 byte LORA header. */
+typedef struct _MeshPacket { 
+    /* The sending node number.
+ Note: Our crypto implementation uses this field as well.
+ See [crypto](/docs/overview/encryption) for details.
+ FIXME - really should be fixed32 instead, this encoding only hurts the ble link though. */
+    uint32_t from;
+    /* The (immediatSee Priority description for more details.y should be fixed32 instead, this encoding only
+ hurts the ble link though. */
+    uint32_t to;
+    /* (Usually) If set, this indicates the index in the secondary_channels table that this packet was sent/received on.
+ If unset, packet was on the primary channel.
+ A particular node might know only a subset of channels in use on the mesh.
+ Therefore channel_index is inherently a local concept and meaningless to send between nodes.
+ Very briefly, while sending and receiving deep inside the device Router code, this field instead
+ contains the 'channel hash' instead of the index.
+ This 'trick' is only used while the payload_variant is an 'encrypted'. */
+    uint8_t channel;
+    pb_size_t which_payload_variant;
+    union {
+        /* TODO: REPLACE */
+        Data decoded;
+        /* TODO: REPLACE */
+        MeshPacket_encrypted_t encrypted;
+    };
+    /* A unique ID for this packet.
+ Always 0 for no-ack packets or non broadcast packets (and therefore take zero bytes of space).
+ Otherwise a unique ID for this packet, useful for flooding algorithms.
+ ID only needs to be unique on a _per sender_ basis, and it only
+ needs to be unique for a few minutes (long enough to last for the length of
+ any ACK or the completion of a mesh broadcast flood).
+ Note: Our crypto implementation uses this id as well.
+ See [crypto](/docs/overview/encryption) for details.
+ FIXME - really should be fixed32 instead, this encoding only
+ hurts the ble link though. */
+    uint32_t id;
+    /* The time this message was received by the esp32 (secs since 1970).
+ Note: this field is _never_ sent on the radio link itself (to save space) Times
+ are typically not sent over the mesh, but they will be added to any Packet
+ (chain of SubPacket) sent to the phone (so the phone can know exact time of reception) */
+    uint32_t rx_time;
+    /* *Never* sent over the radio links.
+ Set during reception to indicate the SNR of this packet.
+ Used to collect statistics on current link quality. */
+    float rx_snr;
+    /* If unset treated as zero (no forwarding, send to adjacent nodes only)
+ if 1, allow hopping through one node, etc...
+ For our usecase real world topologies probably have a max of about 3.
+ This field is normally placed into a few of bits in the header. */
+    uint8_t hop_limit;
+    /* This packet is being sent as a reliable message, we would prefer it to arrive at the destination.
+ We would like to receive a ack packet in response.
+ Broadcasts messages treat this flag specially: Since acks for broadcasts would
+ rapidly flood the channel, the normal ack behavior is suppressed.
+ Instead, the original sender listens to see if at least one node is rebroadcasting this packet (because naive flooding algorithm).
+ If it hears that the odds (given typical LoRa topologies) the odds are very high that every node should eventually receive the message.
+ So FloodingRouter.cpp generates an implicit ack which is delivered to the original sender.
+ If after some time we don't hear anyone rebroadcast our packet, we will timeout and retransmit, using the regular resend logic.
+ Note: This flag is normally sent in a flag bit in the header when sent over the wire */
+    bool want_ack;
+    /* The priority of this message for sending.
+ See MeshPacket.Priority description for more details. */
+    MeshPacket_Priority priority;
+    /* rssi of received packet. Only sent to phone for dispay purposes. */
+    int32_t rx_rssi;
+    /* Describe if this message is delayed */
+    MeshPacket_Delayed delayed;
+} MeshPacket;
 
 /* The bluetooth to device link:
  Old BTLE protocol docs from TODO, merge in above and make real docs...
@@ -550,78 +620,6 @@ typedef struct _Routing {
     };
 } Routing;
 
-typedef PB_BYTES_ARRAY_T(256) MeshPacket_encrypted_t;
-/* A packet envelope sent/received over the mesh
- only payloadVariant is sent in the payload portion of the LORA packet.
- The other fields are either not sent at all, or sent in the special 16 byte LORA header. */
-typedef struct _MeshPacket { 
-    /* The sending node number.
- Note: Our crypto implementation uses this field as well.
- See [crypto](/docs/developers/firmware/encryption) for details.
- FIXME - really should be fixed32 instead, this encoding only hurts the ble link though. */
-    uint32_t from;
-    /* The (immediatSee Priority description for more details.y should be fixed32 instead, this encoding only
- hurts the ble link though. */
-    uint32_t to;
-    /* (Usually) If set, this indicates the index in the secondary_channels table that this packet was sent/received on.
- If unset, packet was on the primary channel.
- A particular node might know only a subset of channels in use on the mesh.
- Therefore channel_index is inherently a local concept and meaningless to send between nodes.
- Very briefly, while sending and receiving deep inside the device Router code, this field instead
- contains the 'channel hash' instead of the index.
- This 'trick' is only used while the payloadVariant is an 'encrypted'. */
-    uint8_t channel;
-    pb_size_t which_payloadVariant;
-    union {
-        /* TODO: REPLACE */
-        Data decoded;
-        /* TODO: REPLACE */
-        MeshPacket_encrypted_t encrypted;
-    };
-    /* A unique ID for this packet.
- Always 0 for no-ack packets or non broadcast packets (and therefore take zero bytes of space).
- Otherwise a unique ID for this packet, useful for flooding algorithms.
- ID only needs to be unique on a _per sender_ basis, and it only
- needs to be unique for a few minutes (long enough to last for the length of
- any ACK or the completion of a mesh broadcast flood).
- Note: Our crypto implementation uses this id as well.
- See [crypto](/docs/developers/firmware/encryption) for details.
- FIXME - really should be fixed32 instead, this encoding only
- hurts the ble link though. */
-    uint32_t id;
-    /* The time this message was received by the esp32 (secs since 1970).
- Note: this field is _never_ sent on the radio link itself (to save space) Times
- are typically not sent over the mesh, but they will be added to any Packet
- (chain of SubPacket) sent to the phone (so the phone can know exact time of reception) */
-    uint32_t rx_time;
-    /* *Never* sent over the radio links.
- Set during reception to indicate the SNR of this packet.
- Used to collect statistics on current link quality. */
-    float rx_snr;
-    /* If unset treated as zero (no forwarding, send to adjacent nodes only)
- if 1, allow hopping through one node, etc...
- For our usecase real world topologies probably have a max of about 3.
- This field is normally placed into a few of bits in the header. */
-    uint8_t hop_limit;
-    /* This packet is being sent as a reliable message, we would prefer it to arrive at the destination.
- We would like to receive a ack packet in response.
- Broadcasts messages treat this flag specially: Since acks for broadcasts would
- rapidly flood the channel, the normal ack behavior is suppressed.
- Instead, the original sender listens to see if at least one node is rebroadcasting this packet (because naive flooding algorithm).
- If it hears that the odds (given typical LoRa topologies) the odds are very high that every node should eventually receive the message.
- So FloodingRouter.cpp generates an implicit ack which is delivered to the original sender.
- If after some time we don't hear anyone rebroadcast our packet, we will timeout and retransmit, using the regular resend logic.
- Note: This flag is normally sent in a flag bit in the header when sent over the wire */
-    bool want_ack;
-    /* The priority of this message for sending.
- See MeshPacket.Priority description for more details. */
-    MeshPacket_Priority priority;
-    /* rssi of received packet. Only sent to phone for dispay purposes. */
-    int32_t rx_rssi;
-    /* Describe if this message is delayed */
-    MeshPacket_Delayed delayed;
-} MeshPacket;
-
 /* Packets from the radio to the phone will appear on the fromRadio characteristic.
  It will support READ and NOTIFY. When a new packet arrives the device will BLE notify?
  It will sit in that descriptor until consumed by the phone,
@@ -630,8 +628,10 @@ typedef struct _FromRadio {
     /* The packet id, used to allow the phone to request missing read packets from the FIFO,
  see our bluetooth docs */
     uint32_t id;
-    pb_size_t which_payloadVariant;
+    pb_size_t which_payload_variant;
     union {
+        /* Log levels, chosen to match python logging conventions. */
+        MeshPacket packet;
         /* Tells the phone what our node number is, can be -1 if we've not yet joined a mesh.
      NOTE: This ID must not change - to keep (minimal) compatibility with <1.2 version of android apps. */
         MyNodeInfo my_info;
@@ -652,21 +652,20 @@ typedef struct _FromRadio {
      Not used on all transports, currently just used for the serial console.
      NOTE: This ID must not change - to keep (minimal) compatibility with <1.2 version of android apps. */
         bool rebooted;
-        /* Log levels, chosen to match python logging conventions. */
-        MeshPacket packet;
+        /* Include module config */
+        ModuleConfig moduleConfig;
+        /* One packet is sent for each channel */
+        Channel channel;
     };
 } FromRadio;
 
 /* Packets/commands to the radio will be written (reliably) to the toRadio characteristic.
  Once the write completes the phone can assume it is handled. */
 typedef struct _ToRadio { 
-    pb_size_t which_payloadVariant;
+    pb_size_t which_payload_variant;
     union {
         /* Send this packet on the mesh */
         MeshPacket packet;
-        /* Information about the peer, sent after the phone sneds want_config_id.
-     Old clients do not send this, which is fine. */
-        ToRadio_PeerInfo peer_info;
         /* Phone wants radio to send full node db to the phone, This is
      typically the first packet sent to the radio when the phone gets a
      bluetooth connection. The radio will respond by sending back a
@@ -689,21 +688,21 @@ typedef struct _ToRadio {
 #define _HardwareModel_MAX HardwareModel_PRIVATE_HW
 #define _HardwareModel_ARRAYSIZE ((HardwareModel)(HardwareModel_PRIVATE_HW+1))
 
-#define _Constants_MIN Constants_Unused
+#define _Constants_MIN Constants_ZERO
 #define _Constants_MAX Constants_DATA_PAYLOAD_LEN
 #define _Constants_ARRAYSIZE ((Constants)(Constants_DATA_PAYLOAD_LEN+1))
 
-#define _CriticalErrorCode_MIN CriticalErrorCode_None
-#define _CriticalErrorCode_MAX CriticalErrorCode_RadioSpiBug
-#define _CriticalErrorCode_ARRAYSIZE ((CriticalErrorCode)(CriticalErrorCode_RadioSpiBug+1))
+#define _CriticalErrorCode_MIN CriticalErrorCode_NONE
+#define _CriticalErrorCode_MAX CriticalErrorCode_RADIO_SPI_BUG
+#define _CriticalErrorCode_ARRAYSIZE ((CriticalErrorCode)(CriticalErrorCode_RADIO_SPI_BUG+1))
 
-#define _Position_LocSource_MIN Position_LocSource_LOCSRC_UNSPECIFIED
-#define _Position_LocSource_MAX Position_LocSource_LOCSRC_GPS_EXTERNAL
-#define _Position_LocSource_ARRAYSIZE ((Position_LocSource)(Position_LocSource_LOCSRC_GPS_EXTERNAL+1))
+#define _Position_LocSource_MIN Position_LocSource_LOC_UNSET
+#define _Position_LocSource_MAX Position_LocSource_LOC_EXTERNAL
+#define _Position_LocSource_ARRAYSIZE ((Position_LocSource)(Position_LocSource_LOC_EXTERNAL+1))
 
-#define _Position_AltSource_MIN Position_AltSource_ALTSRC_UNSPECIFIED
-#define _Position_AltSource_MAX Position_AltSource_ALTSRC_BAROMETRIC
-#define _Position_AltSource_ARRAYSIZE ((Position_AltSource)(Position_AltSource_ALTSRC_BAROMETRIC+1))
+#define _Position_AltSource_MIN Position_AltSource_ALT_UNSET
+#define _Position_AltSource_MAX Position_AltSource_ALT_BAROMETRIC
+#define _Position_AltSource_ARRAYSIZE ((Position_AltSource)(Position_AltSource_ALT_BAROMETRIC+1))
 
 #define _Routing_Error_MIN Routing_Error_NONE
 #define _Routing_Error_MAX Routing_Error_NOT_AUTHORIZED
@@ -728,96 +727,35 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define Position_init_default                    {0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define User_init_default                        {"", "", "", {0}, _HardwareModel_MIN, 0, 0, 0, 0}
+#define User_init_default                        {"", "", "", {0}, _HardwareModel_MIN, 0}
 #define RouteDiscovery_init_default              {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_default                     {0, {RouteDiscovery_init_default}}
-#define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, Location_init_default}
-#define Location_init_default                    {0, 0, 0, 0, 0}
+#define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
+#define Waypoint_init_default                    {0, 0, 0, 0, 0, "", ""}
 #define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
 #define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0, false, DeviceMetrics_init_default}
-#define MyNodeInfo_init_default                  {0, 0, "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
+#define MyNodeInfo_init_default                  {0, 0, 0, "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
 #define LogRecord_init_default                   {"", 0, "", _LogRecord_Level_MIN}
-#define FromRadio_init_default                   {0, 0, {MyNodeInfo_init_default}}
+#define FromRadio_init_default                   {0, 0, {MeshPacket_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
-#define ToRadio_PeerInfo_init_default            {0, 0}
 #define Compressed_init_default                  {_PortNum_MIN, {0, {0}}}
 #define Position_init_zero                       {0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define User_init_zero                           {"", "", "", {0}, _HardwareModel_MIN, 0, 0, 0, 0}
+#define User_init_zero                           {"", "", "", {0}, _HardwareModel_MIN, 0}
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_zero                        {0, {RouteDiscovery_init_zero}}
-#define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, Location_init_zero}
-#define Location_init_zero                       {0, 0, 0, 0, 0}
+#define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
+#define Waypoint_init_zero                       {0, 0, 0, 0, 0, "", ""}
 #define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
 #define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0, false, DeviceMetrics_init_zero}
-#define MyNodeInfo_init_zero                     {0, 0, "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
+#define MyNodeInfo_init_zero                     {0, 0, 0, "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
 #define LogRecord_init_zero                      {"", 0, "", _LogRecord_Level_MIN}
-#define FromRadio_init_zero                      {0, 0, {MyNodeInfo_init_zero}}
+#define FromRadio_init_zero                      {0, 0, {MeshPacket_init_zero}}
 #define ToRadio_init_zero                        {0, {MeshPacket_init_zero}}
-#define ToRadio_PeerInfo_init_zero               {0, 0}
 #define Compressed_init_zero                     {_PortNum_MIN, {0, {0}}}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define Compressed_portnum_tag                   1
 #define Compressed_data_tag                      2
-#define Location_id_tag                          1
-#define Location_latitude_i_tag                  2
-#define Location_longitude_i_tag                 3
-#define Location_expire_tag                      4
-#define Location_locked_tag                      5
-#define LogRecord_message_tag                    1
-#define LogRecord_time_tag                       2
-#define LogRecord_source_tag                     3
-#define LogRecord_level_tag                      4
-#define MyNodeInfo_my_node_num_tag               1
-#define MyNodeInfo_has_gps_tag                   2
-#define MyNodeInfo_firmware_version_tag          6
-#define MyNodeInfo_error_code_tag                7
-#define MyNodeInfo_error_address_tag             8
-#define MyNodeInfo_error_count_tag               9
-#define MyNodeInfo_reboot_count_tag              10
-#define MyNodeInfo_bitrate_tag                   11
-#define MyNodeInfo_message_timeout_msec_tag      13
-#define MyNodeInfo_min_app_version_tag           14
-#define MyNodeInfo_max_channels_tag              15
-#define MyNodeInfo_air_period_tx_tag             16
-#define MyNodeInfo_air_period_rx_tag             17
-#define MyNodeInfo_has_wifi_tag                  18
-#define MyNodeInfo_channel_utilization_tag       19
-#define MyNodeInfo_air_util_tx_tag               20
-#define Position_latitude_i_tag                  1
-#define Position_longitude_i_tag                 2
-#define Position_altitude_tag                    3
-#define Position_time_tag                        9
-#define Position_location_source_tag             10
-#define Position_altitude_source_tag             11
-#define Position_pos_timestamp_tag               12
-#define Position_pos_time_millis_tag             13
-#define Position_altitude_hae_tag                14
-#define Position_alt_geoid_sep_tag               15
-#define Position_PDOP_tag                        16
-#define Position_HDOP_tag                        17
-#define Position_VDOP_tag                        18
-#define Position_gps_accuracy_tag                19
-#define Position_ground_speed_tag                20
-#define Position_ground_track_tag                21
-#define Position_fix_quality_tag                 22
-#define Position_fix_type_tag                    23
-#define Position_sats_in_view_tag                24
-#define Position_sensor_id_tag                   25
-#define Position_pos_next_update_tag             40
-#define Position_pos_seq_number_tag              41
-#define RouteDiscovery_route_tag                 2
-#define ToRadio_PeerInfo_app_version_tag         1
-#define ToRadio_PeerInfo_mqtt_gateway_tag        2
-#define User_id_tag                              1
-#define User_long_name_tag                       2
-#define User_short_name_tag                      3
-#define User_macaddr_tag                         4
-#define User_hw_model_tag                        6
-#define User_is_licensed_tag                     7
-#define User_tx_power_dbm_tag                    10
-#define User_ant_gain_dbi_tag                    11
-#define User_ant_azimuth_tag                     12
 #define Data_portnum_tag                         1
 #define Data_payload_tag                         2
 #define Data_want_response_tag                   3
@@ -826,7 +764,75 @@ extern "C" {
 #define Data_request_id_tag                      6
 #define Data_reply_id_tag                        7
 #define Data_emoji_tag                           8
-#define Data_location_tag                        9
+#define LogRecord_message_tag                    1
+#define LogRecord_time_tag                       2
+#define LogRecord_source_tag                     3
+#define LogRecord_level_tag                      4
+#define MyNodeInfo_my_node_num_tag               1
+#define MyNodeInfo_has_gps_tag                   2
+#define MyNodeInfo_max_channels_tag              3
+#define MyNodeInfo_firmware_version_tag          4
+#define MyNodeInfo_error_code_tag                5
+#define MyNodeInfo_error_address_tag             6
+#define MyNodeInfo_error_count_tag               7
+#define MyNodeInfo_reboot_count_tag              8
+#define MyNodeInfo_bitrate_tag                   9
+#define MyNodeInfo_message_timeout_msec_tag      10
+#define MyNodeInfo_min_app_version_tag           11
+#define MyNodeInfo_air_period_tx_tag             12
+#define MyNodeInfo_air_period_rx_tag             13
+#define MyNodeInfo_has_wifi_tag                  14
+#define MyNodeInfo_channel_utilization_tag       15
+#define MyNodeInfo_air_util_tx_tag               16
+#define Position_latitude_i_tag                  1
+#define Position_longitude_i_tag                 2
+#define Position_altitude_tag                    3
+#define Position_time_tag                        4
+#define Position_location_source_tag             5
+#define Position_altitude_source_tag             6
+#define Position_timestamp_tag                   7
+#define Position_timestamp_millis_adjust_tag     8
+#define Position_altitude_hae_tag                9
+#define Position_altitude_geoidal_separation_tag 10
+#define Position_PDOP_tag                        11
+#define Position_HDOP_tag                        12
+#define Position_VDOP_tag                        13
+#define Position_gps_accuracy_tag                14
+#define Position_ground_speed_tag                15
+#define Position_ground_track_tag                16
+#define Position_fix_quality_tag                 17
+#define Position_fix_type_tag                    18
+#define Position_sats_in_view_tag                19
+#define Position_sensor_id_tag                   20
+#define Position_next_update_tag                 21
+#define Position_seq_number_tag                  22
+#define RouteDiscovery_route_tag                 1
+#define User_id_tag                              1
+#define User_long_name_tag                       2
+#define User_short_name_tag                      3
+#define User_macaddr_tag                         4
+#define User_hw_model_tag                        5
+#define User_is_licensed_tag                     6
+#define Waypoint_id_tag                          1
+#define Waypoint_latitude_i_tag                  2
+#define Waypoint_longitude_i_tag                 3
+#define Waypoint_expire_tag                      4
+#define Waypoint_locked_tag                      5
+#define Waypoint_name_tag                        6
+#define Waypoint_description_tag                 7
+#define MeshPacket_from_tag                      1
+#define MeshPacket_to_tag                        2
+#define MeshPacket_channel_tag                   3
+#define MeshPacket_decoded_tag                   4
+#define MeshPacket_encrypted_tag                 5
+#define MeshPacket_id_tag                        6
+#define MeshPacket_rx_time_tag                   7
+#define MeshPacket_rx_snr_tag                    8
+#define MeshPacket_hop_limit_tag                 9
+#define MeshPacket_want_ack_tag                  10
+#define MeshPacket_priority_tag                  11
+#define MeshPacket_rx_rssi_tag                   12
+#define MeshPacket_delayed_tag                   13
 #define NodeInfo_num_tag                         1
 #define NodeInfo_user_tag                        2
 #define NodeInfo_position_tag                    3
@@ -836,56 +842,44 @@ extern "C" {
 #define Routing_route_request_tag                1
 #define Routing_route_reply_tag                  2
 #define Routing_error_reason_tag                 3
-#define MeshPacket_from_tag                      1
-#define MeshPacket_to_tag                        2
-#define MeshPacket_channel_tag                   3
-#define MeshPacket_decoded_tag                   4
-#define MeshPacket_encrypted_tag                 5
-#define MeshPacket_id_tag                        6
-#define MeshPacket_rx_time_tag                   7
-#define MeshPacket_rx_snr_tag                    8
-#define MeshPacket_hop_limit_tag                 10
-#define MeshPacket_want_ack_tag                  11
-#define MeshPacket_priority_tag                  12
-#define MeshPacket_rx_rssi_tag                   13
-#define MeshPacket_delayed_tag                   15
 #define FromRadio_id_tag                         1
+#define FromRadio_packet_tag                     2
 #define FromRadio_my_info_tag                    3
 #define FromRadio_node_info_tag                  4
-#define FromRadio_config_tag                     6
-#define FromRadio_log_record_tag                 7
-#define FromRadio_config_complete_id_tag         8
-#define FromRadio_rebooted_tag                   9
-#define FromRadio_packet_tag                     11
-#define ToRadio_packet_tag                       2
-#define ToRadio_peer_info_tag                    3
-#define ToRadio_want_config_id_tag               100
-#define ToRadio_disconnect_tag                   104
+#define FromRadio_config_tag                     5
+#define FromRadio_log_record_tag                 6
+#define FromRadio_config_complete_id_tag         7
+#define FromRadio_rebooted_tag                   8
+#define FromRadio_moduleConfig_tag               9
+#define FromRadio_channel_tag                    10
+#define ToRadio_packet_tag                       1
+#define ToRadio_want_config_id_tag               3
+#define ToRadio_disconnect_tag                   4
 
 /* Struct field encoding specification for nanopb */
 #define Position_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, SFIXED32, latitude_i,        1) \
 X(a, STATIC,   SINGULAR, SFIXED32, longitude_i,       2) \
 X(a, STATIC,   SINGULAR, INT32,    altitude,          3) \
-X(a, STATIC,   SINGULAR, FIXED32,  time,              9) \
-X(a, STATIC,   SINGULAR, UENUM,    location_source,  10) \
-X(a, STATIC,   SINGULAR, UENUM,    altitude_source,  11) \
-X(a, STATIC,   SINGULAR, FIXED32,  pos_timestamp,    12) \
-X(a, STATIC,   SINGULAR, INT32,    pos_time_millis,  13) \
-X(a, STATIC,   SINGULAR, SINT32,   altitude_hae,     14) \
-X(a, STATIC,   SINGULAR, SINT32,   alt_geoid_sep,    15) \
-X(a, STATIC,   SINGULAR, UINT32,   PDOP,             16) \
-X(a, STATIC,   SINGULAR, UINT32,   HDOP,             17) \
-X(a, STATIC,   SINGULAR, UINT32,   VDOP,             18) \
-X(a, STATIC,   SINGULAR, UINT32,   gps_accuracy,     19) \
-X(a, STATIC,   SINGULAR, UINT32,   ground_speed,     20) \
-X(a, STATIC,   SINGULAR, UINT32,   ground_track,     21) \
-X(a, STATIC,   SINGULAR, UINT32,   fix_quality,      22) \
-X(a, STATIC,   SINGULAR, UINT32,   fix_type,         23) \
-X(a, STATIC,   SINGULAR, UINT32,   sats_in_view,     24) \
-X(a, STATIC,   SINGULAR, UINT32,   sensor_id,        25) \
-X(a, STATIC,   SINGULAR, UINT32,   pos_next_update,  40) \
-X(a, STATIC,   SINGULAR, UINT32,   pos_seq_number,   41)
+X(a, STATIC,   SINGULAR, FIXED32,  time,              4) \
+X(a, STATIC,   SINGULAR, UENUM,    location_source,   5) \
+X(a, STATIC,   SINGULAR, UENUM,    altitude_source,   6) \
+X(a, STATIC,   SINGULAR, FIXED32,  timestamp,         7) \
+X(a, STATIC,   SINGULAR, INT32,    timestamp_millis_adjust,   8) \
+X(a, STATIC,   SINGULAR, SINT32,   altitude_hae,      9) \
+X(a, STATIC,   SINGULAR, SINT32,   altitude_geoidal_separation,  10) \
+X(a, STATIC,   SINGULAR, UINT32,   PDOP,             11) \
+X(a, STATIC,   SINGULAR, UINT32,   HDOP,             12) \
+X(a, STATIC,   SINGULAR, UINT32,   VDOP,             13) \
+X(a, STATIC,   SINGULAR, UINT32,   gps_accuracy,     14) \
+X(a, STATIC,   SINGULAR, UINT32,   ground_speed,     15) \
+X(a, STATIC,   SINGULAR, UINT32,   ground_track,     16) \
+X(a, STATIC,   SINGULAR, UINT32,   fix_quality,      17) \
+X(a, STATIC,   SINGULAR, UINT32,   fix_type,         18) \
+X(a, STATIC,   SINGULAR, UINT32,   sats_in_view,     19) \
+X(a, STATIC,   SINGULAR, UINT32,   sensor_id,        20) \
+X(a, STATIC,   SINGULAR, UINT32,   next_update,      21) \
+X(a, STATIC,   SINGULAR, UINT32,   seq_number,       22)
 #define Position_CALLBACK NULL
 #define Position_DEFAULT NULL
 
@@ -894,16 +888,13 @@ X(a, STATIC,   SINGULAR, STRING,   id,                1) \
 X(a, STATIC,   SINGULAR, STRING,   long_name,         2) \
 X(a, STATIC,   SINGULAR, STRING,   short_name,        3) \
 X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, macaddr,           4) \
-X(a, STATIC,   SINGULAR, UENUM,    hw_model,          6) \
-X(a, STATIC,   SINGULAR, BOOL,     is_licensed,       7) \
-X(a, STATIC,   SINGULAR, UINT32,   tx_power_dbm,     10) \
-X(a, STATIC,   SINGULAR, UINT32,   ant_gain_dbi,     11) \
-X(a, STATIC,   SINGULAR, UINT32,   ant_azimuth,      12)
+X(a, STATIC,   SINGULAR, UENUM,    hw_model,          5) \
+X(a, STATIC,   SINGULAR, BOOL,     is_licensed,       6)
 #define User_CALLBACK NULL
 #define User_DEFAULT NULL
 
 #define RouteDiscovery_FIELDLIST(X, a) \
-X(a, STATIC,   REPEATED, FIXED32,  route,             2)
+X(a, STATIC,   REPEATED, FIXED32,  route,             1)
 #define RouteDiscovery_CALLBACK NULL
 #define RouteDiscovery_DEFAULT NULL
 
@@ -924,38 +915,38 @@ X(a, STATIC,   SINGULAR, FIXED32,  dest,              4) \
 X(a, STATIC,   SINGULAR, FIXED32,  source,            5) \
 X(a, STATIC,   SINGULAR, FIXED32,  request_id,        6) \
 X(a, STATIC,   SINGULAR, FIXED32,  reply_id,          7) \
-X(a, STATIC,   SINGULAR, FIXED32,  emoji,             8) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  location,          9)
+X(a, STATIC,   SINGULAR, FIXED32,  emoji,             8)
 #define Data_CALLBACK NULL
 #define Data_DEFAULT NULL
-#define Data_location_MSGTYPE Location
 
-#define Location_FIELDLIST(X, a) \
+#define Waypoint_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   id,                1) \
 X(a, STATIC,   SINGULAR, SFIXED32, latitude_i,        2) \
 X(a, STATIC,   SINGULAR, SFIXED32, longitude_i,       3) \
 X(a, STATIC,   SINGULAR, UINT32,   expire,            4) \
-X(a, STATIC,   SINGULAR, BOOL,     locked,            5)
-#define Location_CALLBACK NULL
-#define Location_DEFAULT NULL
+X(a, STATIC,   SINGULAR, BOOL,     locked,            5) \
+X(a, STATIC,   SINGULAR, STRING,   name,              6) \
+X(a, STATIC,   SINGULAR, STRING,   description,       7)
+#define Waypoint_CALLBACK NULL
+#define Waypoint_DEFAULT NULL
 
 #define MeshPacket_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, FIXED32,  from,              1) \
 X(a, STATIC,   SINGULAR, FIXED32,  to,                2) \
 X(a, STATIC,   SINGULAR, UINT32,   channel,           3) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,decoded,decoded),   4) \
-X(a, STATIC,   ONEOF,    BYTES,    (payloadVariant,encrypted,encrypted),   5) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,decoded,decoded),   4) \
+X(a, STATIC,   ONEOF,    BYTES,    (payload_variant,encrypted,encrypted),   5) \
 X(a, STATIC,   SINGULAR, FIXED32,  id,                6) \
 X(a, STATIC,   SINGULAR, FIXED32,  rx_time,           7) \
 X(a, STATIC,   SINGULAR, FLOAT,    rx_snr,            8) \
-X(a, STATIC,   SINGULAR, UINT32,   hop_limit,        10) \
-X(a, STATIC,   SINGULAR, BOOL,     want_ack,         11) \
-X(a, STATIC,   SINGULAR, UENUM,    priority,         12) \
-X(a, STATIC,   SINGULAR, INT32,    rx_rssi,          13) \
-X(a, STATIC,   SINGULAR, UENUM,    delayed,          15)
+X(a, STATIC,   SINGULAR, UINT32,   hop_limit,         9) \
+X(a, STATIC,   SINGULAR, BOOL,     want_ack,         10) \
+X(a, STATIC,   SINGULAR, UENUM,    priority,         11) \
+X(a, STATIC,   SINGULAR, INT32,    rx_rssi,          12) \
+X(a, STATIC,   SINGULAR, UENUM,    delayed,          13)
 #define MeshPacket_CALLBACK NULL
 #define MeshPacket_DEFAULT NULL
-#define MeshPacket_payloadVariant_decoded_MSGTYPE Data
+#define MeshPacket_payload_variant_decoded_MSGTYPE Data
 
 #define NodeInfo_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   num,               1) \
@@ -973,20 +964,20 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  device_metrics,    6)
 #define MyNodeInfo_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   my_node_num,       1) \
 X(a, STATIC,   SINGULAR, BOOL,     has_gps,           2) \
-X(a, STATIC,   SINGULAR, STRING,   firmware_version,   6) \
-X(a, STATIC,   SINGULAR, UENUM,    error_code,        7) \
-X(a, STATIC,   SINGULAR, UINT32,   error_address,     8) \
-X(a, STATIC,   SINGULAR, UINT32,   error_count,       9) \
-X(a, STATIC,   SINGULAR, UINT32,   reboot_count,     10) \
-X(a, STATIC,   SINGULAR, FLOAT,    bitrate,          11) \
-X(a, STATIC,   SINGULAR, UINT32,   message_timeout_msec,  13) \
-X(a, STATIC,   SINGULAR, UINT32,   min_app_version,  14) \
-X(a, STATIC,   SINGULAR, UINT32,   max_channels,     15) \
-X(a, STATIC,   REPEATED, UINT32,   air_period_tx,    16) \
-X(a, STATIC,   REPEATED, UINT32,   air_period_rx,    17) \
-X(a, STATIC,   SINGULAR, BOOL,     has_wifi,         18) \
-X(a, STATIC,   SINGULAR, FLOAT,    channel_utilization,  19) \
-X(a, STATIC,   SINGULAR, FLOAT,    air_util_tx,      20)
+X(a, STATIC,   SINGULAR, UINT32,   max_channels,      3) \
+X(a, STATIC,   SINGULAR, STRING,   firmware_version,   4) \
+X(a, STATIC,   SINGULAR, UENUM,    error_code,        5) \
+X(a, STATIC,   SINGULAR, UINT32,   error_address,     6) \
+X(a, STATIC,   SINGULAR, UINT32,   error_count,       7) \
+X(a, STATIC,   SINGULAR, UINT32,   reboot_count,      8) \
+X(a, STATIC,   SINGULAR, FLOAT,    bitrate,           9) \
+X(a, STATIC,   SINGULAR, UINT32,   message_timeout_msec,  10) \
+X(a, STATIC,   SINGULAR, UINT32,   min_app_version,  11) \
+X(a, STATIC,   REPEATED, UINT32,   air_period_tx,    12) \
+X(a, STATIC,   REPEATED, UINT32,   air_period_rx,    13) \
+X(a, STATIC,   SINGULAR, BOOL,     has_wifi,         14) \
+X(a, STATIC,   SINGULAR, FLOAT,    channel_utilization,  15) \
+X(a, STATIC,   SINGULAR, FLOAT,    air_util_tx,      16)
 #define MyNodeInfo_CALLBACK NULL
 #define MyNodeInfo_DEFAULT NULL
 
@@ -1000,36 +991,32 @@ X(a, STATIC,   SINGULAR, UENUM,    level,             4)
 
 #define FromRadio_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   id,                1) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,my_info,my_info),   3) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,node_info,node_info),   4) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,config,config),   6) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,log_record,log_record),   7) \
-X(a, STATIC,   ONEOF,    UINT32,   (payloadVariant,config_complete_id,config_complete_id),   8) \
-X(a, STATIC,   ONEOF,    BOOL,     (payloadVariant,rebooted,rebooted),   9) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,packet,packet),  11)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,packet,packet),   2) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,my_info,my_info),   3) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,node_info,node_info),   4) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,config,config),   5) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,log_record,log_record),   6) \
+X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,config_complete_id,config_complete_id),   7) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,rebooted,rebooted),   8) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,moduleConfig,moduleConfig),   9) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,channel,channel),  10)
 #define FromRadio_CALLBACK NULL
 #define FromRadio_DEFAULT NULL
-#define FromRadio_payloadVariant_my_info_MSGTYPE MyNodeInfo
-#define FromRadio_payloadVariant_node_info_MSGTYPE NodeInfo
-#define FromRadio_payloadVariant_config_MSGTYPE Config
-#define FromRadio_payloadVariant_log_record_MSGTYPE LogRecord
-#define FromRadio_payloadVariant_packet_MSGTYPE MeshPacket
+#define FromRadio_payload_variant_packet_MSGTYPE MeshPacket
+#define FromRadio_payload_variant_my_info_MSGTYPE MyNodeInfo
+#define FromRadio_payload_variant_node_info_MSGTYPE NodeInfo
+#define FromRadio_payload_variant_config_MSGTYPE Config
+#define FromRadio_payload_variant_log_record_MSGTYPE LogRecord
+#define FromRadio_payload_variant_moduleConfig_MSGTYPE ModuleConfig
+#define FromRadio_payload_variant_channel_MSGTYPE Channel
 
 #define ToRadio_FIELDLIST(X, a) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,packet,packet),   2) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payloadVariant,peer_info,peer_info),   3) \
-X(a, STATIC,   ONEOF,    UINT32,   (payloadVariant,want_config_id,want_config_id), 100) \
-X(a, STATIC,   ONEOF,    BOOL,     (payloadVariant,disconnect,disconnect), 104)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,packet,packet),   1) \
+X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,want_config_id,want_config_id),   3) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,disconnect,disconnect),   4)
 #define ToRadio_CALLBACK NULL
 #define ToRadio_DEFAULT NULL
-#define ToRadio_payloadVariant_packet_MSGTYPE MeshPacket
-#define ToRadio_payloadVariant_peer_info_MSGTYPE ToRadio_PeerInfo
-
-#define ToRadio_PeerInfo_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UINT32,   app_version,       1) \
-X(a, STATIC,   SINGULAR, BOOL,     mqtt_gateway,      2)
-#define ToRadio_PeerInfo_CALLBACK NULL
-#define ToRadio_PeerInfo_DEFAULT NULL
+#define ToRadio_payload_variant_packet_MSGTYPE MeshPacket
 
 #define Compressed_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    portnum,           1) \
@@ -1042,14 +1029,13 @@ extern const pb_msgdesc_t User_msg;
 extern const pb_msgdesc_t RouteDiscovery_msg;
 extern const pb_msgdesc_t Routing_msg;
 extern const pb_msgdesc_t Data_msg;
-extern const pb_msgdesc_t Location_msg;
+extern const pb_msgdesc_t Waypoint_msg;
 extern const pb_msgdesc_t MeshPacket_msg;
 extern const pb_msgdesc_t NodeInfo_msg;
 extern const pb_msgdesc_t MyNodeInfo_msg;
 extern const pb_msgdesc_t LogRecord_msg;
 extern const pb_msgdesc_t FromRadio_msg;
 extern const pb_msgdesc_t ToRadio_msg;
-extern const pb_msgdesc_t ToRadio_PeerInfo_msg;
 extern const pb_msgdesc_t Compressed_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
@@ -1058,31 +1044,29 @@ extern const pb_msgdesc_t Compressed_msg;
 #define RouteDiscovery_fields &RouteDiscovery_msg
 #define Routing_fields &Routing_msg
 #define Data_fields &Data_msg
-#define Location_fields &Location_msg
+#define Waypoint_fields &Waypoint_msg
 #define MeshPacket_fields &MeshPacket_msg
 #define NodeInfo_fields &NodeInfo_msg
 #define MyNodeInfo_fields &MyNodeInfo_msg
 #define LogRecord_fields &LogRecord_msg
 #define FromRadio_fields &FromRadio_msg
 #define ToRadio_fields &ToRadio_msg
-#define ToRadio_PeerInfo_fields &ToRadio_PeerInfo_msg
 #define Compressed_fields &Compressed_msg
 
 /* Maximum encoded size of messages (where known) */
 #define Compressed_size                          243
-#define Data_size                                296
-#define FromRadio_size                           356
-#define Location_size                            24
+#define Data_size                                270
+#define FromRadio_size                           330
 #define LogRecord_size                           81
-#define MeshPacket_size                          347
-#define MyNodeInfo_size                          197
-#define NodeInfo_size                            281
-#define Position_size                            142
+#define MeshPacket_size                          321
+#define MyNodeInfo_size                          179
+#define NodeInfo_size                            258
+#define Position_size                            137
 #define RouteDiscovery_size                      40
 #define Routing_size                             42
-#define ToRadio_PeerInfo_size                    8
-#define ToRadio_size                             350
-#define User_size                                95
+#define ToRadio_size                             324
+#define User_size                                77
+#define Waypoint_size                            156
 
 #ifdef __cplusplus
 } /* extern "C" */

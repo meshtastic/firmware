@@ -12,6 +12,8 @@
  */
 class ExternalNotificationModule : public SinglePortModule, private concurrency::OSThread
 {
+  uint32_t output = 0;
+
   public:
     ExternalNotificationModule();
 

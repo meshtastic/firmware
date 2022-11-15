@@ -16,12 +16,8 @@ ErrorCode ReliableRouter::send(MeshPacket *p)
         // If someone asks for acks on broadcast, we need the hop limit to be at least one, so that first node that receives our
         // message will rebroadcast.  But asking for hop_limit 0 in that context means the client app has no preference on hop
         // counts and we want this message to get through the whole mesh, so use the default.
-        if (p->to == NODENUM_BROADCAST && p->hop_limit == 0) {
-            if (config.lora.hop_limit && config.lora.hop_limit <= HOP_MAX) {
-                p->hop_limit = (config.lora.hop_limit >= HOP_MAX) ? HOP_MAX : config.lora.hop_limit;
-            } else {
-                p->hop_limit = HOP_RELIABLE;
-            }
+        if (p->hop_limit == 0) {
+            p->hop_limit = (config.lora.hop_limit >= HOP_MAX) ? HOP_MAX : config.lora.hop_limit;
         }
 
         auto copy = packetPool.allocCopy(*p);
@@ -34,7 +30,7 @@ ErrorCode ReliableRouter::send(MeshPacket *p)
 bool ReliableRouter::shouldFilterReceived(MeshPacket *p)
 {
     // Note: do not use getFrom() here, because we want to ignore messages sent from phone
-    if (p->to == NODENUM_BROADCAST && p->from == getNodeNum()) {
+    if (p->from == getNodeNum()) {
         printPacket("Rx someone rebroadcasting for us", p);
 
         // We are seeing someone rebroadcast one of our broadcast attempts.
@@ -62,11 +58,17 @@ bool ReliableRouter::shouldFilterReceived(MeshPacket *p)
      * this way if an ACK is dropped and a packet is resent we'll ACK the resent packet
      * make sure wasSeenRecently _doesn't_ update
      * finding the channel requires decoding the packet. */
-    if (p->want_ack && (p->to == getNodeNum()) && wasSeenRecently(p, false)) {
+    if (p->want_ack && (p->to == getNodeNum()) && wasSeenRecently(p, false) && !MeshModule::currentReply) {
         if (perhapsDecode(p)) {
             sendAckNak(Routing_Error_NONE, getFrom(p), p->id, p->channel);
             DEBUG_MSG("acking a repeated want_ack packet\n");
         }
+    } else if (wasSeenRecently(p, false) && p->hop_limit == HOP_RELIABLE && !MeshModule::currentReply && p->to != nodeDB.getNodeNum()) {
+        // retransmission on broadcast has hop_limit still equal to HOP_RELIABLE
+        DEBUG_MSG("Resending implicit ack for a repeated floodmsg\n");
+        MeshPacket *tosend = packetPool.allocCopy(*p);
+        tosend->hop_limit--; // bump down the hop count
+        Router::send(tosend);
     }
 
     return FloodingRouter::shouldFilterReceived(p);
@@ -92,7 +94,7 @@ void ReliableRouter::sniffReceived(const MeshPacket *p, const Routing *c)
                             // - not DSR routing)
         if (p->want_ack) {
             if (MeshModule::currentReply)
-                DEBUG_MSG("Someone else has replied to this message, no need for a 2nd ack\n");
+                DEBUG_MSG("Some other module has replied to this message, no need for a 2nd ack\n");
             else
                 sendAckNak(Routing_Error_NONE, getFrom(p), p->id, p->channel);
         }
@@ -106,7 +108,7 @@ void ReliableRouter::sniffReceived(const MeshPacket *p, const Routing *c)
         // We intentionally don't check wasSeenRecently, because it is harmless to delete non existent retransmission records
         if (ackId || nakId) {
             if (ackId) {
-                DEBUG_MSG("Received a ack for 0x%x, stopping retransmissions\n", ackId);
+                DEBUG_MSG("Received an ack for 0x%x, stopping retransmissions\n", ackId);
                 stopRetransmission(p->to, ackId);
             } else {
                 DEBUG_MSG("Received a nak for 0x%x, stopping retransmissions\n", nakId);

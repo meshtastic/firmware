@@ -17,17 +17,17 @@ StoreForwardModule *storeForwardModule;
 int32_t StoreForwardModule::runOnce()
 {
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 
     if (moduleConfig.store_forward.enabled) {
 
-        if (config.device.role == Config_DeviceConfig_Role_Router) {
+        if (config.device.role == Config_DeviceConfig_Role_ROUTER) {
 
             // Send out the message queue.
             if (this->busy) {
 
                 // Only send packets if the channel is less than 25% utilized.
-                if (airTime->channelUtilizationPercent() < 25) {
+                if (airTime->channelUtilizationPercent() < polite_channel_util_percent) {
 
                     // DEBUG_MSG("--- --- --- In busy loop 1 %d\n", this->packetHistoryTXQueue_index);
                     storeForwardModule->sendPayload(this->busyTo, this->packetHistoryTXQueue_index);
@@ -241,7 +241,7 @@ void StoreForwardModule::sendMessage(NodeNum dest, char *str)
 
 ProcessMessage StoreForwardModule::handleReceived(const MeshPacket &mp)
 {
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
     if (moduleConfig.store_forward.enabled) {
 
         DEBUG_MSG("--- S&F Received something\n");
@@ -381,7 +381,7 @@ StoreForwardModule::StoreForwardModule()
     : SinglePortModule("StoreForwardModule", PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("StoreForwardModule")
 {
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 
     isPromiscuous = true; // Brown chicken brown cow
 
@@ -397,7 +397,7 @@ StoreForwardModule::StoreForwardModule()
     if (moduleConfig.store_forward.enabled) {
 
         // Router
-        if (config.device.role == Config_DeviceConfig_Role_Router) {
+        if (config.device.role == Config_DeviceConfig_Role_ROUTER) {
             DEBUG_MSG("Initializing Store & Forward Module - Enabled as Router\n");
             if (ESP.getPsramSize()) {
                 if (ESP.getFreePsram() >= 1024 * 1024) {

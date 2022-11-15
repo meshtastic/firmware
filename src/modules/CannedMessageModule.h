@@ -1,6 +1,5 @@
 #pragma once
-#ifdef NO_SCREEN
-#else
+#if HAS_SCREEN
 #include "ProtobufModule.h"
 #include "input/InputBroker.h"
 
@@ -9,6 +8,7 @@ enum cannedMessageModuleRunState
     CANNED_MESSAGE_RUN_STATE_DISABLED,
     CANNED_MESSAGE_RUN_STATE_INACTIVE,
     CANNED_MESSAGE_RUN_STATE_ACTIVE,
+    CANNED_MESSAGE_RUN_STATE_FREETEXT,
     CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE,
     CANNED_MESSAGE_RUN_STATE_ACTION_SELECT,
     CANNED_MESSAGE_RUN_STATE_ACTION_UP,
@@ -35,20 +35,16 @@ class CannedMessageModule :
     const char* getCurrentMessage();
     const char* getPrevMessage();
     const char* getNextMessage();
+    const char* getNodeName(NodeNum node);
     bool shouldDraw();
     void eventUp();
     void eventDown();
     void eventSelect();
 
-    void handleGetCannedMessageModulePart1(const MeshPacket &req, AdminMessage *response);
-    void handleGetCannedMessageModulePart2(const MeshPacket &req, AdminMessage *response);
-    void handleGetCannedMessageModulePart3(const MeshPacket &req, AdminMessage *response);
-    void handleGetCannedMessageModulePart4(const MeshPacket &req, AdminMessage *response);
+    void handleGetCannedMessageModuleMessages(const MeshPacket &req, AdminMessage *response);
+    void handleSetCannedMessageModuleMessages(const char *from_msg);
 
-    void handleSetCannedMessageModulePart1(const char *from_msg);
-    void handleSetCannedMessageModulePart2(const char *from_msg);
-    void handleSetCannedMessageModulePart3(const char *from_msg);
-    void handleSetCannedMessageModulePart4(const char *from_msg);
+    String drawWithCursor(String text, int cursor);
 
   protected:
 
@@ -78,6 +74,11 @@ class CannedMessageModule :
 
     int currentMessageIndex = -1;
     cannedMessageModuleRunState runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+    char payload = 0x00;
+    unsigned int cursor = 0;
+    String freetext = "";  // Text Buffer for Freetext Editor
+    bool destSelect = false; // Freetext Editor Mode
+    NodeNum dest = NODENUM_BROADCAST;
 
     char messageStore[CANNED_MESSAGE_MODULE_MESSAGES_SIZE+1];
     char *messages[CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT];

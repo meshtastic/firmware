@@ -28,3 +28,5 @@
 // code)
 #endif
 
+// different screen
+#define USE_SH1106

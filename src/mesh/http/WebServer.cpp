@@ -11,7 +11,7 @@
 #include <WebServer.h>
 #include <WiFi.h>
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 #include "esp_task_wdt.h"
 #endif
 
@@ -55,10 +55,6 @@ static void handleWebResponse()
     if (isWifiAvailable()) {
 
         if (isWebServerReady) {
-            // We're going to handle the DNS responder here so it
-            // will be ignored by the NRF boards.
-            handleDNSResponse();
-
             if (secureServer)
                 secureServer->loop();
             insecureServer->loop();
@@ -152,7 +148,7 @@ void createSSLCert()
 
                     yield();
                     esp_task_wdt_reset();
-#ifndef NO_SCREEN
+#if HAS_SCREEN
                     if (millis() / 1000 >= 3) {
                         screen->setSSLFrames();
                     }

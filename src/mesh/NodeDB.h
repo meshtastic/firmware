@@ -8,11 +8,25 @@
 #include "NodeStatus.h"
 #include "mesh-pb-constants.h"
 
+/*
+DeviceState versions used to be defined in the .proto file but really only this function cares.  So changed to a
+#define here.
+*/
+
+#define SEGMENT_CONFIG 1
+#define SEGMENT_MODULECONFIG 2
+#define SEGMENT_DEVICESTATE 4
+#define SEGMENT_CHANNELS 8
+
+#define DEVICESTATE_CUR_VER 20
+#define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
+
 extern DeviceState devicestate;
 extern ChannelFile channelFile;
 extern MyNodeInfo &myNodeInfo;
 extern LocalConfig config;
 extern LocalModuleConfig moduleConfig;
+extern OEMStore oemStore;
 extern User &owner;
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
@@ -44,7 +58,7 @@ class NodeDB
     void init();
 
     /// write to flash
-    void saveToDisk(), saveChannelsToDisk();
+    void saveToDisk(int saveWhat=SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS), saveChannelsToDisk(), saveDeviceStateToDisk();
 
     /** Reinit radio config if needed, because either:
      * a) sometimes a buggy android app might send us bogus settings or
@@ -52,7 +66,7 @@ class NodeDB
      *
      * @return true if the config was completely reset, in that case, we should send it back to the client
      */
-    bool resetRadioConfig();
+    bool resetRadioConfig(bool factory_reset = false);
 
     /// given a subpacket sniffed from the network, update our DB state
     /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
@@ -107,6 +121,10 @@ class NodeDB
     /// Return the number of nodes we've heard from recently (within the last 2 hrs?)
     size_t getNumOnlineNodes();
 
+    void initConfigIntervals(), initModuleConfigIntervals(), resetNodes();
+    
+    bool factoryReset();
+
   private:
     /// Find a node in our DB, create an empty NodeInfo if missing
     NodeInfo *getOrCreateNode(NodeNum n);
@@ -118,6 +136,7 @@ class NodeDB
         const meshtastic::NodeStatus status = meshtastic::NodeStatus(getNumOnlineNodes(), getNumNodes(), forceUpdate);
         newStatus.notifyObservers(&status);
     }
+
 
     /// read our db from flash
     void loadFromDisk();
@@ -161,21 +180,30 @@ extern NodeDB nodeDB;
 // Our delay functions check for this for times that should never expire
 #define NODE_DELAY_FOREVER 0xffffffff
 
-#define IF_ROUTER(routerVal, normalVal) ((config.device.role == Config_DeviceConfig_Role_Router) ? (routerVal) : (normalVal))
+#define IF_ROUTER(routerVal, normalVal) ((config.device.role == Config_DeviceConfig_Role_ROUTER) ? (routerVal) : (normalVal))
 
-#define default_broadcast_interval_secs IF_ROUTER(12 * 60 * 60, 15 * 60)
+#define ONE_DAY 24 * 60 * 60
+
+#define default_gps_attempt_time IF_ROUTER(5 * 60, 15 * 60)
+#define default_gps_update_interval IF_ROUTER(ONE_DAY, 2 * 60)
+#define default_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 15 * 60)
 #define default_wait_bluetooth_secs IF_ROUTER(1, 60)
 #define default_mesh_sds_timeout_secs IF_ROUTER(NODE_DELAY_FOREVER, 2 * 60 * 60)
-#define default_sds_secs 365 * 24 * 60 * 60
-#define default_ls_secs IF_ROUTER(24 * 60 * 60, 5 * 60)
+#define default_sds_secs IF_ROUTER(ONE_DAY, UINT32_MAX) // Default to forever super deep sleep
+#define default_ls_secs IF_ROUTER(ONE_DAY, 5 * 60)
 #define default_min_wake_secs 10
+#define default_screen_on_secs 60 * 10
 
-
-inline uint32_t getIntervalOrDefaultMs(uint32_t interval)
+inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval)
 {
-    if (interval > 0)
-        return interval * 1000;
+    if (configuredInterval > 0) return configuredInterval * 1000;
     return default_broadcast_interval_secs * 1000;
+}
+
+inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t defaultInterval)
+{
+    if (configuredInterval > 0) return configuredInterval * 1000;
+    return defaultInterval * 1000;
 }
 
 /** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings

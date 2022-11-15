@@ -1,6 +1,8 @@
 #pragma once
 
-#ifdef NO_SCREEN
+#include "configuration.h"
+
+#if !HAS_SCREEN
 #include "power.h"
 namespace graphics
 {
@@ -8,7 +10,7 @@ namespace graphics
 class Screen 
 {
   public:
-    Screen(char){}
+    explicit Screen(char){}
     void onPress() {}
     void setup() {}
     void setOn(bool) {}
@@ -18,6 +20,7 @@ class Screen
     void forceDisplay() {}
     void startBluetoothPinScreen(uint32_t pin) {}
     void stopBluetoothPinScreen() {}
+    void startRebootScreen() {}
 };
 }
 
@@ -52,6 +55,16 @@ class Screen
 // 0 to 255, though particular variants might define different defaults
 #ifndef BRIGHTNESS_DEFAULT
 #define BRIGHTNESS_DEFAULT 150
+#endif
+
+// Meters to feet conversion
+#ifndef METERS_TO_FEET
+#define METERS_TO_FEET 3.28
+#endif
+
+// Feet to miles conversion
+#ifndef MILES_TO_FEET
+#define MILES_TO_FEET 5280
 #endif
 
 namespace graphics
@@ -118,8 +131,7 @@ class Screen : public concurrency::OSThread
     void setOn(bool on)
     {
         if (!on)
-            handleSetOn(
-                false); // We handle off commands immediately, because they might be called because the CPU is shutting down
+            handleSetOn(false); // We handle off commands immediately, because they might be called because the CPU is shutting down
         else
             enqueueCmd(ScreenCmd{.cmd = on ? Cmd::SET_ON : Cmd::SET_OFF});
     }
@@ -165,6 +177,13 @@ class Screen : public concurrency::OSThread
         enqueueCmd(cmd);
     }
 
+    void startRebootScreen()
+    {
+        ScreenCmd cmd;
+        cmd.cmd = Cmd::START_REBOOT_SCREEN;
+        enqueueCmd(cmd);
+    }
+
     /// Stops showing the bluetooth PIN screen.
     void stopBluetoothPinScreen() { enqueueCmd(ScreenCmd{.cmd = Cmd::STOP_BLUETOOTH_PIN_SCREEN}); }
 
@@ -202,19 +221,34 @@ class Screen : public concurrency::OSThread
         uint8_t last = LASTCHAR; // get last char
         LASTCHAR = ch;
 
-        switch (last) { // conversion depnding on first UTF8-character
-        case 0xC2: {
-            SKIPREST = false;
-            return (uint8_t)ch;
-        }
-        case 0xC3: {
-            SKIPREST = false;
-            return (uint8_t)(ch | 0xC0);
-        }
+        switch (last) { // conversion depending on first UTF8-character
+            case 0xC2: {
+                SKIPREST = false;
+                return (uint8_t)ch;
+            }
+            case 0xC3: {
+                SKIPREST = false;
+                return (uint8_t)(ch | 0xC0);
+            }
+            // map UTF-8 cyrillic chars to it Windows-1251 (CP-1251) ASCII codes
+            // note: in this case we must use compatible font - provided ArialMT_Plain_10/16/24 by 'ThingPulse/esp8266-oled-ssd1306' library
+            // have empty chars for non-latin ASCII symbols
+            case 0xD0: {
+                SKIPREST = false;
+                if (ch == 129) return (uint8_t)(168); // Ё
+                if (ch > 143 && ch < 192) return (uint8_t)(ch + 48);
+                break;
+            }
+            case 0xD1: {
+                SKIPREST = false;
+                if (ch == 145) return (uint8_t)(184); // ё
+                if (ch > 127 && ch < 144) return (uint8_t)(ch + 112);
+                break;
+            }
         }
 
         // We want to strip out prefix chars for two-byte char formats
-        if (ch == 0xC2 || ch == 0xC3 || ch == 0x82)
+        if (ch == 0xC2 || ch == 0xC3 || ch == 0x82 || ch == 0xD0 || ch == 0xD1)
             return (uint8_t)0;
 
         // If we already returned an unconvertable-character symbol for this unconvertable-character sequence, return NULs for the
@@ -278,6 +312,7 @@ class Screen : public concurrency::OSThread
     void handlePrint(const char *text);
     void handleStartFirmwareUpdateScreen();
     void handleShutdownScreen();
+    void handleRebootScreen();
     /// Rebuilds our list of frames (screens) to default ones.
     void setFrames();
 
@@ -315,7 +350,7 @@ class Screen : public concurrency::OSThread
     SSD1306Wire dispdev;
 #elif defined(ST7735_CS) || defined(ILI9341_DRIVER)
     TFTDisplay dispdev;
-#elif defined(HAS_EINK)
+#elif defined(USE_EINK)
     EInkDisplay dispdev;
 #elif defined(USE_ST7567)
     ST7567Wire dispdev;

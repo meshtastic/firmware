@@ -14,7 +14,7 @@ rm -r $OUTDIR/* || true
 git submodule update 
 
 # Important to pull latest version of libs into all device flavors, otherwise some devices might be stale
-platformio lib update 
+platformio pkg update 
 
 echo "Building for $1 with $PLATFORMIO_BUILD_FLAGS"
 rm -f .pio/build/$1/firmware.*
@@ -29,13 +29,11 @@ SRCELF=.pio/build/$1/firmware.elf
 cp $SRCELF $OUTDIR/$basename.elf
 
 echo "Copying ESP32 bin file"
-SRCBIN=.pio/build/$1/firmware.bin
+SRCBIN=.pio/build/$1/firmware.factory.bin
 cp $SRCBIN $OUTDIR/$basename.bin
 
 echo "Building Filesystem for ESP32 targets"
 pio run --environment tbeam -t buildfs
-cp .pio/build/tbeam/spiffs.bin $OUTDIR/littlefs-$VERSION.bin
-cp images/system-info.bin $OUTDIR/system-info.bin
-
+cp .pio/build/tbeam/littlefs.bin $OUTDIR/littlefs-$VERSION.bin
 cp bin/device-install.* $OUTDIR
 cp bin/device-update.* $OUTDIR

@@ -20,6 +20,9 @@ void consolePrintf(const char *format, ...)
     va_start(arg, format);
     console->vprintf(format, arg);
     va_end(arg);
+#ifdef ARCH_ESP32
+    console->flush();
+#endif
 }
 
 SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port)
@@ -30,7 +33,7 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port)
                       // setDestination(&noopPrint); for testing, try turning off 'all' debug output and see what leaks
 
     Port.begin(SERIAL_BAUD);
-#ifdef NRF52_SERIES
+#ifdef ARCH_NRF52
     time_t timeout = millis();
     while (!Port) {
         if ((millis() - timeout) < 5000) {
@@ -57,10 +60,15 @@ bool SerialConsole::checkIsConnected()
  */
 bool SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
 {
-    // Turn off debug serial printing once the API is activated, because other threads could print and corrupt packets
-    if (!config.device.debug_log_enabled)
-        setDestination(&noopPrint);
-    canWrite = true;
+    // only talk to the API once the configuration has been loaded and we're sure the serial port is not disabled.
+    if (config.has_lora && config.device.serial_enabled) {
+        // Turn off debug serial printing once the API is activated, because other threads could print and corrupt packets
+        if (!config.device.debug_log_enabled)
+            setDestination(&noopPrint);
+        canWrite = true;
 
-    return StreamAPI::handleToRadio(buf, len);
+        return StreamAPI::handleToRadio(buf, len);
+    }else{
+        return false;
+    }
 }

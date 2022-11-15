@@ -10,7 +10,6 @@
 /// returns the encoded packet size
 size_t pb_encode_to_bytes(uint8_t *destbuf, size_t destbufsize, const pb_msgdesc_t *fields, const void *src_struct)
 {
-
     pb_ostream_t stream = pb_ostream_from_buffer(destbuf, destbufsize);
     if (!pb_encode(&stream, fields, src_struct)) {
         DEBUG_MSG("Panic: can't encode protobuf reason='%s'\n", PB_GET_ERROR(&stream));
@@ -32,6 +31,7 @@ bool pb_decode_from_bytes(const uint8_t *srcbuf, size_t srcbufsize, const pb_msg
     }
 }
 
+#ifdef FSCom
 /// Read from an Arduino File
 bool readcb(pb_istream_t *stream, uint8_t *buf, size_t count)
 {
@@ -59,6 +59,7 @@ bool writecb(pb_ostream_t *stream, const uint8_t *buf, size_t count)
     // DEBUG_MSG("writing %d bytes to protobuf file\n", count);
     return file->write(buf, count) == count;
 }
+#endif
 
 bool is_in_helper(uint32_t n, const uint32_t *array, pb_size_t count)
 {

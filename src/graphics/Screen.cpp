@@ -20,7 +20,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 #include "configuration.h"
-#ifndef NO_SCREEN
+#if HAS_SCREEN
 #include <OLEDDisplay.h>
 
 #include "GPS.h"
@@ -39,21 +39,22 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "target_specific.h"
 #include "utils.h"
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 #include "esp_task_wdt.h"
 #include "mesh/http/WiFiAPClient.h"
 #endif
 
-using namespace meshtastic; /** @todo remove */
+#ifdef OLED_RU
+#include "fonts/OLEDDisplayFontsRU.h"
+#endif
 
-extern bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, void *dest_struct);
+using namespace meshtastic; /** @todo remove */
 
 namespace graphics
 {
 
 // This means the *visible* area (sh1106 can address 132, but shows 128 for example)
 #define IDLE_FRAMERATE 1 // in fps
-#define COMPASS_DIAM 44
 
 // DEBUG
 #define NUM_EXTRA_FRAMES 3 // text message and debug frame
@@ -65,6 +66,8 @@ static FrameCallback normalFrames[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
 static uint32_t targetFramerate = IDLE_FRAMERATE;
 static char btPIN[16] = "888888";
 
+uint32_t logo_timeout = 5000; // 4 seconds for EACH logo
+    
 // This image definition is here instead of images.h because it's modified dynamically by the drawBattery function
 uint8_t imgBattery[16] = {0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0xE7, 0x3C};
 
@@ -81,10 +84,6 @@ static char ourId[5];
 // GeoCoord object for the screen
 GeoCoord geoCoord;
 
-// OEM Config File
-static const char *oemConfigFile = "/prefs/oem.proto";
-OEMStore oemStore;
-
 #ifdef SHOW_REDRAWS
 static bool heartbeat = false;
 #endif
@@ -94,13 +93,17 @@ static uint16_t displayWidth, displayHeight;
 #define SCREEN_WIDTH displayWidth
 #define SCREEN_HEIGHT displayHeight
 
-#if defined(HAS_EINK) || defined(ILI9341_DRIVER)
+#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
 // The screen is bigger so use bigger fonts
 #define FONT_SMALL ArialMT_Plain_16
 #define FONT_MEDIUM ArialMT_Plain_24
 #define FONT_LARGE ArialMT_Plain_24
 #else
+#ifdef OLED_RU
+#define FONT_SMALL ArialMT_Plain_10_RU
+#else
 #define FONT_SMALL ArialMT_Plain_10
+#endif
 #define FONT_MEDIUM ArialMT_Plain_16
 #define FONT_LARGE ArialMT_Plain_24
 #endif
@@ -109,12 +112,10 @@ static uint16_t displayWidth, displayHeight;
 
 #define FONT_HEIGHT_SMALL fontHeight(FONT_SMALL)
 #define FONT_HEIGHT_MEDIUM fontHeight(FONT_MEDIUM)
+#define FONT_HEIGHT_LARGE fontHeight(FONT_LARGE)
 
 #define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
 
-#ifndef SCREEN_TRANSITION_MSECS
-#define SCREEN_TRANSITION_MSECS 300
-#endif
 
 /**
  * Draw the icon with extra info printed around the corners
@@ -212,7 +213,7 @@ static void drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     display->setFont(FONT_SMALL);
     display->drawString(64 + x, y, "Creating SSL certificate");
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
     yield();
     esp_task_wdt_reset();
 #endif
@@ -228,38 +229,29 @@ static void drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 // Used when booting without a region set
 static void drawWelcomeScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-
+    display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->drawString(64 + x, y, "//\\ E S H T /\\ S T / C");
+    display->drawString(64 + x, y + FONT_HEIGHT_SMALL, getDeviceName());
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    
     if ((millis() / 10000) % 2) {
-        display->setFont(FONT_SMALL);
-
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->drawString(64 + x, y, "//\\ E S H T /\\ S T / C");
-
-        display->setTextAlignment(TEXT_ALIGN_LEFT);
-
         display->drawString(x, y + FONT_HEIGHT_SMALL * 2 - 3, "Set the region using the");
         display->drawString(x, y + FONT_HEIGHT_SMALL * 3 - 3, "Meshtastic Android, iOS,");
         display->drawString(x, y + FONT_HEIGHT_SMALL * 4 - 3, "Flasher or CLI client.");
     } else {
-        display->setFont(FONT_SMALL);
-
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->drawString(64 + x, y, "//\\ E S H T /\\ S T / C");
-
-        display->setTextAlignment(TEXT_ALIGN_LEFT);
-
         display->drawString(x, y + FONT_HEIGHT_SMALL * 2 - 3, "Visit meshtastic.org");
         display->drawString(x, y + FONT_HEIGHT_SMALL * 3 - 3, "for more information.");
         display->drawString(x, y + FONT_HEIGHT_SMALL * 4 - 3, "");
     }
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
     yield();
     esp_task_wdt_reset();
 #endif
 }
 
-#ifdef HAS_EINK
+#ifdef USE_EINK
 /// Used on eink displays while in deep sleep
 static void drawSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -299,8 +291,13 @@ static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, 
     display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Enter this code");
 
     display->setFont(FONT_LARGE);
-    display->drawString(64 + x, 26 + y, btPIN);
 
+    auto displayPin = new String(btPIN);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->drawString(12 + x, 26 + y, displayPin->substring(0, 3));
+    display->drawString(72 + x, 26 + y, displayPin->substring(3, 6));
+    
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(FONT_SMALL);
     char buf[30];
     const char *name = "Name: ";
@@ -317,6 +314,14 @@ static void drawFrameShutdown(OLEDDisplay *display, OLEDDisplayUiState *state, i
     display->drawString(64 + x, 26 + y, "Shutting down...");
 }
 
+static void drawFrameReboot(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+
+    display->setFont(FONT_MEDIUM);
+    display->drawString(64 + x, 26 + y, "Rebooting...");
+}
+
 static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->setTextAlignment(TEXT_ALIGN_CENTER);
@@ -329,9 +334,6 @@ static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, i
     } else {
         display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . .  ");
     }
-
-    // display->setFont(FONT_LARGE);
-    // display->drawString(64 + x, 26 + y, btPIN);
 }
 
 /// Draw the last text message we received
@@ -516,6 +518,8 @@ static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GP
     } else {
         geoCoord.updateCoords(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()), int32_t(gps->getAltitude()));
         displayLine = "Altitude: " + String(geoCoord.getAltitude()) + "m";
+        if (config.display.units == Config_DisplayConfig_DisplayUnits_IMPERIAL)
+            displayLine = "Altitude: " + String(geoCoord.getAltitude() * METERS_TO_FEET) + "ft";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     }
 }
@@ -534,21 +538,22 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
 
-        if (gpsFormat != Config_DisplayConfig_GpsCoordinateFormat_GpsFormatDMS) {
+        geoCoord.updateCoords(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()), int32_t(gps->getAltitude()));
+
+        if (gpsFormat != Config_DisplayConfig_GpsCoordinateFormat_DMS) {
             char coordinateLine[22];
-            geoCoord.updateCoords(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()), int32_t(gps->getAltitude()));
-            if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_GpsFormatDec) { // Decimal Degrees
+            if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_DEC) { // Decimal Degrees
                 sprintf(coordinateLine, "%f %f", geoCoord.getLatitude() * 1e-7, geoCoord.getLongitude() * 1e-7);
-            } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_GpsFormatUTM) { // Universal Transverse Mercator
+            } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_UTM) { // Universal Transverse Mercator
                 sprintf(coordinateLine, "%2i%1c %06u %07u", geoCoord.getUTMZone(), geoCoord.getUTMBand(),
                         geoCoord.getUTMEasting(), geoCoord.getUTMNorthing());
-            } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_GpsFormatMGRS) { // Military Grid Reference System
+            } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_MGRS) { // Military Grid Reference System
                 sprintf(coordinateLine, "%2i%1c %1c%1c %05u %05u", geoCoord.getMGRSZone(), geoCoord.getMGRSBand(),
                         geoCoord.getMGRSEast100k(), geoCoord.getMGRSNorth100k(), geoCoord.getMGRSEasting(),
                         geoCoord.getMGRSNorthing());
-            } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_GpsFormatOLC) { // Open Location Code
+            } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_OLC) { // Open Location Code
                 geoCoord.getOLCCode(coordinateLine);
-            } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_GpsFormatOSGR) { // Ordnance Survey Grid Reference
+            } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_OSGR) { // Ordnance Survey Grid Reference
                 if (geoCoord.getOSGRE100k() == 'I' || geoCoord.getOSGRN100k() == 'I') // OSGR is only valid around the UK region
                     sprintf(coordinateLine, "%s", "Out of Boundary");
                 else
@@ -595,7 +600,7 @@ class Point
     void rotate(float radian)
     {
         float cos = cosf(radian), sin = sinf(radian);
-        float rx = x * cos - y * sin, ry = x * sin + y * cos;
+        float rx = x * cos + y * sin, ry = -x * sin + y * cos;
 
         x = rx;
         y = ry;
@@ -609,8 +614,10 @@ class Point
 
     void scale(float f)
     {
+        //We use -f here to counter the flip that happens
+        //on the y axis when drawing and rotating on screen
         x *= f;
-        y *= f;
+        y *= -f;
     }
 };
 
@@ -658,6 +665,26 @@ static bool hasPosition(NodeInfo *n)
     return n->has_position && (n->position.latitude_i != 0 || n->position.longitude_i != 0);
 }
 
+static uint16_t getCompassDiam(OLEDDisplay *display)
+{
+    uint16_t diam = 0;
+    // get the smaller of the 2 dimensions and subtract 20
+    if(display->getWidth() > display->getHeight()) {
+        diam = display->getHeight();
+        // if 2/3 of the other size would be smaller, use that
+        if (diam > (display->getWidth() * 2 / 3)) {
+            diam = display->getWidth() * 2 / 3;
+        }
+    } else {
+        diam = display->getWidth();
+        if (diam > (display->getHeight() * 2 / 3)) {
+            diam = display->getHeight() * 2 / 3;
+        }
+    }
+    
+    return diam - 20;
+};
+
 /// We will skip one node - the one for us, so we just blindly loop over all
 /// nodes
 static size_t nodeIndex;
@@ -674,7 +701,7 @@ static void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t comp
 
     for (int i = 0; i < 4; i++) {
         arrowPoints[i]->rotate(headingRadian);
-        arrowPoints[i]->scale(COMPASS_DIAM * 0.6);
+        arrowPoints[i]->scale(getCompassDiam(display) * 0.6);
         arrowPoints[i]->translate(compassX, compassY);
     }
     drawLine(display, tip, tail);
@@ -682,16 +709,21 @@ static void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t comp
     drawLine(display, rightArrow, tip);
 }
 
-// Draw the compass heading
-static void drawCompassHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading)
+// Draw north
+static void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading)
 {
-    Point N1(-0.04f, -0.65f), N2(0.04f, -0.65f);
-    Point N3(-0.04f, -0.55f), N4(0.04f, -0.55f);
+    //If north is supposed to be at the top of the compass we want rotation to be +0
+    if(config.display.compass_north_top)
+        myHeading = -0;
+    
+    Point N1(-0.04f, 0.65f), N2(0.04f, 0.65f);
+    Point N3(-0.04f, 0.55f), N4(0.04f, 0.55f);
     Point *rosePoints[] = {&N1, &N2, &N3, &N4};
 
     for (int i = 0; i < 4; i++) {
-        rosePoints[i]->rotate(myHeading);
-        rosePoints[i]->scale(-1 * COMPASS_DIAM);
+        // North on compass will be negative of heading
+        rosePoints[i]->rotate(-myHeading);
+        rosePoints[i]->scale(getCompassDiam(display));
         rosePoints[i]->translate(compassX, compassY);
     }
     drawLine(display, N1, N3);
@@ -756,13 +788,13 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     const char *fields[] = {username, distStr, signalStr, lastStr, NULL};
 
     // coordinates for the center of the compass/circle
-    int16_t compassX = x + SCREEN_WIDTH - COMPASS_DIAM / 2 - 5, compassY = y + SCREEN_HEIGHT / 2;
+    int16_t compassX = x + SCREEN_WIDTH - getCompassDiam(display) / 2 - 5, compassY = y + SCREEN_HEIGHT / 2;
     bool hasNodeHeading = false;
 
     if (ourNode && hasPosition(ourNode)) {
         Position &op = ourNode->position;
         float myHeading = estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
-        drawCompassHeading(display, compassX, compassY, myHeading);
+        drawCompassNorth(display, compassX, compassY, myHeading);
 
         if (hasPosition(node)) {
             // display direction toward node
@@ -770,17 +802,26 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             Position &p = node->position;
             float d =
                 GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
-            if (d < 2000)
-                snprintf(distStr, sizeof(distStr), "%.0f m", d);
-            else
-                snprintf(distStr, sizeof(distStr), "%.1f km", d / 1000);
 
-            // FIXME, also keep the guess at the operators heading and add/substract
-            // it.  currently we don't do this and instead draw north up only.
+            if (config.display.units == Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+                if (d < (2 * MILES_TO_FEET))
+                    snprintf(distStr, sizeof(distStr), "%.0f ft", d * METERS_TO_FEET);
+                else
+                    snprintf(distStr, sizeof(distStr), "%.1f mi", d * METERS_TO_FEET / MILES_TO_FEET);
+            } else {
+                if (d < 2000)
+                    snprintf(distStr, sizeof(distStr), "%.0f m", d);
+                else
+                    snprintf(distStr, sizeof(distStr), "%.1f km", d / 1000);
+            }
+
             float bearingToOther =
-                GeoCoord::bearing(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
-            float headingRadian = bearingToOther - myHeading;
-            drawNodeHeading(display, compassX, compassY, headingRadian);
+                GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
+            // If the top of the compass is a static north then bearingToOther can be drawn on the compass directly
+            // If the top of the compass is not a static north we need adjust bearingToOther based on heading
+            if(!config.display.compass_north_top)
+                bearingToOther -= myHeading;
+            drawNodeHeading(display, compassX, compassY, bearingToOther);
         }
     }
     if (!hasNodeHeading)
@@ -788,7 +829,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         // Debug info for gps lock errors
         // DEBUG_MSG("ourNode %d, ourPos %d, theirPos %d\n", !!ourNode, ourNode && hasPosition(ourNode), hasPosition(node));
         display->drawString(compassX - FONT_HEIGHT_SMALL / 4, compassY - FONT_HEIGHT_SMALL / 2, "?");
-    display->drawCircle(compassX, compassY, COMPASS_DIAM / 2);
+    display->drawCircle(compassX, compassY, getCompassDiam(display) / 2);
 
     // Must be after distStr is populated
     drawColumns(display, x, y, fields);
@@ -843,7 +884,7 @@ Screen::Screen(uint8_t address, int sda, int scl) : OSThread("Screen"), cmdQueue
  */
 void Screen::doDeepSleep()
 {
-#ifdef HAS_EINK
+#ifdef USE_EINK
     static FrameCallback sleepFrames[] = {drawSleepScreen};
     static const int sleepFrameCount = sizeof(sleepFrames) / sizeof(sleepFrames[0]);
     ui.setFrames(sleepFrames, sleepFrameCount);
@@ -884,16 +925,13 @@ void Screen::setup()
     dispdev.setDetected(screen_model);
 #endif
 
-    // Load OEM config from Proto file if existent
-    loadProto(oemConfigFile, OEMStore_size, sizeof(oemConfigFile), OEMStore_fields, &oemStore);
-
     // Initialising the UI will init the display too.
     ui.init();
 
     displayWidth = dispdev.width();
     displayHeight = dispdev.height();
 
-    ui.setTimePerTransition(SCREEN_TRANSITION_MSECS);
+    ui.setTimePerTransition(0);
 
     ui.setIndicatorPosition(BOTTOM);
     // Defines where the first frame is located in the bar.
@@ -906,6 +944,9 @@ void Screen::setup()
 
     // Set the utf8 conversion function
     dispdev.setFontTableLookupFunction(customFontTableLookup);
+
+    if (strlen(oemStore.oem_text) > 0)
+        logo_timeout *= 2;
 
     // Add frames.
     static FrameCallback bootFrames[] = {drawBootScreen};
@@ -922,8 +963,12 @@ void Screen::setup()
 
 #ifdef SCREEN_MIRROR
     dispdev.mirrorScreen();
-#elif defined(SCREEN_FLIP_VERTICALLY)
-    dispdev.flipScreenVertically();
+#else
+    // Standard behaviour is to FLIP the screen (needed on T-Beam). If this config item is set, unflip it, and thereby logically flip it.
+    // If you have a headache now, you're welcome.
+    if (!config.display.flip_screen) {
+        dispdev.flipScreenVertically();
+    }
 #endif
 
     // Get our hardware ID
@@ -935,9 +980,11 @@ void Screen::setup()
     handleSetOn(true);
 
     // On some ssd1306 clones, the first draw command is discarded, so draw it
-    // twice initially.
+    // twice initially. Skip this for EINK Displays to save a few seconds during boot
     ui.update();
+#ifndef USE_EINK
     ui.update();
+#endif
     serialSinceMsec = millis();
 
     // Subscribe to status updates
@@ -954,7 +1001,7 @@ void Screen::setup()
 void Screen::forceDisplay()
 {
     // Nasty hack to force epaper updates for 'key' frames.  FIXME, cleanup.
-#ifdef HAS_EINK
+#ifdef USE_EINK
     dispdev.forceDisplay();
 #endif
 }
@@ -969,32 +1016,34 @@ int32_t Screen::runOnce()
         return RUN_SAME;
     }
 
-    // Show boot screen for first 5 seconds, then switch to normal operation.
+    // Show boot screen for first logo_timeout seconds, then switch to normal operation.
     // serialSinceMsec adjusts for additional serial wait time during nRF52 bootup
     static bool showingBootScreen = true;
-    if (showingBootScreen && (millis() > (5000 + serialSinceMsec))) {
+    if (showingBootScreen && (millis() > (logo_timeout + serialSinceMsec))) {
         DEBUG_MSG("Done with boot screen...\n");
         stopBootScreen();
         showingBootScreen = false;
     }
 
-    // If we have an OEM Boot screen, toggle after 2,5 seconds
+    // If we have an OEM Boot screen, toggle after logo_timeout seconds
     if (strlen(oemStore.oem_text) > 0) {
         static bool showingOEMBootScreen = true;
-        if (showingOEMBootScreen && (millis() > (2500 + serialSinceMsec))) {
+        if (showingOEMBootScreen && (millis() > ((logo_timeout / 2) + serialSinceMsec))) {
             DEBUG_MSG("Switch to OEM screen...\n");
             // Change frames.
             static FrameCallback bootOEMFrames[] = {drawOEMBootScreen};
             static const int bootOEMFrameCount = sizeof(bootOEMFrames) / sizeof(bootOEMFrames[0]);
             ui.setFrames(bootOEMFrames, bootOEMFrameCount);
             ui.update();
+#ifndef USE_EINK            
             ui.update();
+#endif
             showingOEMBootScreen = false;
         }
     }
 
 #ifndef DISABLE_WELCOME_UNSET
-    if (showingNormalScreen && config.lora.region == Config_LoRaConfig_RegionCode_Unset) {
+    if (showingNormalScreen && config.lora.region == Config_LoRaConfig_RegionCode_UNSET) {
         setWelcomeFrames();
     }
 #endif
@@ -1032,6 +1081,9 @@ int32_t Screen::runOnce()
         case Cmd::START_SHUTDOWN_SCREEN:
             handleShutdownScreen();
             break;
+        case Cmd::START_REBOOT_SCREEN:
+            handleRebootScreen();
+            break;
         default:
             DEBUG_MSG("BUG: invalid cmd\n");
         }
@@ -1052,12 +1104,7 @@ int32_t Screen::runOnce()
     // otherwise that breaks animations.
     if (targetFramerate != IDLE_FRAMERATE && ui.getUiState()->frameState == FIXED) {
         // oldFrameState = ui.getUiState()->frameState;
-        DEBUG_MSG("Setting idle framerate\n");
         targetFramerate = IDLE_FRAMERATE;
-
-#ifndef NO_ESP32
-        setCPUFast(false); // Turn up the CPU to improve screen animations
-#endif
 
         ui.setTargetFPS(targetFramerate);
         forceDisplay();
@@ -1180,7 +1227,7 @@ void Screen::setFrames()
     // call a method on debugInfoScreen object (for more details)
     normalFrames[numframes++] = &Screen::drawDebugInfoSettingsTrampoline;
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
     if (isWifiAvailable()) {
         // call a method on debugInfoScreen object (for more details)
         normalFrames[numframes++] = &Screen::drawDebugInfoWiFiTrampoline;
@@ -1221,6 +1268,18 @@ void Screen::handleShutdownScreen()
 
     ui.disableAllIndicators();
     ui.setFrames(shutdownFrames, 1);
+    setFastFramerate();
+}
+
+void Screen::handleRebootScreen()
+{
+    DEBUG_MSG("showing reboot screen\n");
+    showingNormalScreen = false;
+
+    static FrameCallback rebootFrames[] = {drawFrameReboot};
+
+    ui.disableAllIndicators();
+    ui.setFrames(rebootFrames, 1);
     setFastFramerate();
 }
 
@@ -1270,7 +1329,6 @@ void Screen::handleOnPress()
     // If we are in a transition, the press must have bounced, drop it.
     if (ui.getUiState()->frameState == FIXED) {
         ui.nextFrame();
-        DEBUG_MSG("Setting LastScreenTransition\n");
         lastScreenTransition = millis();
         setFastFramerate();
     }
@@ -1282,14 +1340,8 @@ void Screen::handleOnPress()
 
 void Screen::setFastFramerate()
 {
-    DEBUG_MSG("Setting fast framerate\n");
-
     // We are about to start a transition so speed up fps
     targetFramerate = SCREEN_TRANSITION_FRAMERATE;
-
-#ifndef NO_ESP32
-    setCPUFast(true); // Turn up the CPU to improve screen animations
-#endif
 
     ui.setTargetFPS(targetFramerate);
     setInterval(0); // redraw ASAP
@@ -1342,9 +1394,8 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 // Jm
 void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-#ifdef HAS_WIFI
-    const char *wifiName = config.wifi.ssid;
-    const char *wifiPsw = config.wifi.psk;
+#if HAS_WIFI
+    const char *wifiName = config.network.wifi_ssid;
 
     displayedNodeNum = 0; // Not currently showing a node pane
 
@@ -1353,11 +1404,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
     // The coordinates define the left starting point of the text
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    if (isSoftAPForced()) {
-        display->drawString(x, y, String("WiFi: Software AP (Admin)"));
-    } else if (config.wifi.ap_mode) {
-        display->drawString(x, y, String("WiFi: Software AP"));
-    } else if (WiFi.status() != WL_CONNECTED) {
+    if (WiFi.status() != WL_CONNECTED) {
         display->drawString(x, y, String("WiFi: Not Connected"));
     } else {
         display->drawString(x, y, String("WiFi: Connected"));
@@ -1378,25 +1425,14 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
     - WL_NO_SHIELD: assigned when no WiFi shield is present;
 
     */
-    if (WiFi.status() == WL_CONNECTED || isSoftAPForced() || config.wifi.ap_mode) {
-        if (config.wifi.ap_mode || isSoftAPForced()) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IP: " + String(WiFi.softAPIP().toString().c_str()));
-
-            // Number of connections to the AP. Default max for the esp32 is 4
-            display->drawString(x + SCREEN_WIDTH - display->getStringWidth("(" + String(WiFi.softAPgetStationNum()) + "/4)"),
-                                y + FONT_HEIGHT_SMALL * 1, "(" + String(WiFi.softAPgetStationNum()) + "/4)");
-        } else {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IP: " + String(WiFi.localIP().toString().c_str()));
-        }
-
+    if (WiFi.status() == WL_CONNECTED) {
+        display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IP: " + String(WiFi.localIP().toString().c_str()));
     } else if (WiFi.status() == WL_NO_SSID_AVAIL) {
         display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "SSID Not Found");
     } else if (WiFi.status() == WL_CONNECTION_LOST) {
         display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Connection Lost");
     } else if (WiFi.status() == WL_CONNECT_FAILED) {
         display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Connection Failed");
-        //} else if (WiFi.status() == WL_DISCONNECTED) {
-        //    display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Disconnected");
     } else if (WiFi.status() == WL_IDLE_STATUS) {
         display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Idle ... Reconnecting");
     } else {
@@ -1463,24 +1499,8 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         }
     }
 
-    if (isSoftAPForced()) {
-        if ((millis() / 10000) % 2) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: meshtasticAdmin");
-        } else {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "PWD: 12345678");
-        }
+    display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
 
-    } else {
-        if (config.wifi.ap_mode) {
-            if ((millis() / 10000) % 2) {
-                display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
-            } else {
-                display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "PWD: " + String(wifiPsw));
-            }
-        } else {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
-        }
-    }
     display->drawString(x, y + FONT_HEIGHT_SMALL * 3, "http://meshtastic.local");
 
     /* Display a heartbeat pixel that blinks every time the frame is redrawn */
@@ -1519,26 +1539,26 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     auto mode = "";
 
     switch (config.lora.modem_preset) {
-    case Config_LoRaConfig_ModemPreset_ShortSlow:
-        mode = "ShortSlow";
+    case Config_LoRaConfig_ModemPreset_SHORT_SLOW:
+        mode = "ShortS";
         break;
-    case Config_LoRaConfig_ModemPreset_ShortFast:
-        mode = "ShortFast";
+    case Config_LoRaConfig_ModemPreset_SHORT_FAST:
+        mode = "ShortF";
         break;
-    case Config_LoRaConfig_ModemPreset_MidSlow:
-        mode = "MediumSlow";
+    case Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
+        mode = "MedS";
         break;
-    case Config_LoRaConfig_ModemPreset_MidFast:
-        mode = "MediumFast";
+    case Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
+        mode = "MedF";
         break;
-    case Config_LoRaConfig_ModemPreset_LongFast:
-        mode = "LongFast";
+    case Config_LoRaConfig_ModemPreset_LONG_SLOW:
+        mode = "LongS";
         break;
-    case Config_LoRaConfig_ModemPreset_LongSlow:
-        mode = "LongSlow";
+    case Config_LoRaConfig_ModemPreset_LONG_FAST:
+        mode = "LongF";
         break;
-    case Config_LoRaConfig_ModemPreset_VLongSlow:
-        mode = "VLongSlow";
+    case Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW:
+        mode = "VeryL";
         break;
     default:
         mode = "Custom";
@@ -1596,7 +1616,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 
     // Line 3
     if (config.display.gps_format !=
-        Config_DisplayConfig_GpsCoordinateFormat_GpsFormatDMS) // if DMS then don't draw altitude
+        Config_DisplayConfig_GpsCoordinateFormat_DMS) // if DMS then don't draw altitude
         drawGPSAltitude(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
 
     // Line 4
@@ -1612,6 +1632,9 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 // adjust Brightness cycle trough 1 to 254 as long as attachDuringLongPress is true
 void Screen::adjustBrightness()
 {
+    if (!useDisplay)
+        return;
+
     if (brightness == 254) {
         brightness = 0;
     } else {
@@ -1665,4 +1688,5 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 }
 
 } // namespace graphics
-#endif // NO_SCREEN
+
+#endif // HAS_SCREEN

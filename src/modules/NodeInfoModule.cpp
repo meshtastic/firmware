@@ -54,8 +54,7 @@ NodeInfoModule::NodeInfoModule()
     : ProtobufModule("nodeinfo", PortNum_NODEINFO_APP, User_fields), concurrency::OSThread("NodeInfoModule")
 {
     isPromiscuous = true; // We always want to update our nodedb, even if we are sniffing on others
-    setIntervalFromNow(30 *
-                       1000); // Send our initial owner announcement 30 seconds after we start (to give network time to setup)
+    setIntervalFromNow(30 * 1000); // Send our initial owner announcement 30 seconds after we start (to give network time to setup)
 }
 
 int32_t NodeInfoModule::runOnce()
@@ -69,6 +68,5 @@ int32_t NodeInfoModule::runOnce()
     DEBUG_MSG("Sending our nodeinfo to mesh (wantReplies=%d)\n", requestReplies);
     sendOurNodeInfo(NODENUM_BROADCAST, requestReplies); // Send our info (don't request replies)
 
-    return config.position.position_broadcast_secs ? config.position.position_broadcast_secs
-                                                                  : default_broadcast_interval_secs * 1000;
+    return default_broadcast_interval_secs * 1000;
 }

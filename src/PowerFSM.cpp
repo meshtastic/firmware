@@ -12,11 +12,11 @@
 static bool isPowered()
 {
     // Circumvent the battery sensing logic and assumes constant power if no battery pin or power mgmt IC
-    #if !defined(BATTERY_PIN) && !defined(AXP192_SLAVE_ADDRESS)
+    #if !defined(BATTERY_PIN) && !defined(HAS_AXP192) && !defined(HAS_AXP2101)
         return true;
     #endif
 
-    bool isRouter = (config.device.role == Config_DeviceConfig_Role_Router ? 1 : 0);
+    bool isRouter = (config.device.role == Config_DeviceConfig_Role_ROUTER ? 1 : 0);
 
     // If we are not a router and we already have AC power go to POWER state after init, otherwise go to ON
     // We assume routers might be powered all the time, but from a low current (solar) source
@@ -34,7 +34,7 @@ static void sdsEnter()
 {
     DEBUG_MSG("Enter state: SDS\n");
     // FIXME - make sure GPS and LORA radio are off first - because we want close to zero current draw
-    doDeepSleep(config.power.sds_secs ? config.power.sds_secs : default_sds_secs * 1000LL);
+    doDeepSleep(config.power.sds_secs * 1000);
 }
 
 extern Power *power;
@@ -51,8 +51,7 @@ static uint32_t secsSlept;
 
 static void lsEnter()
 {
-    DEBUG_MSG("lsEnter begin, ls_secs=%u\n",
-              config.power.ls_secs ? config.power.ls_secs : default_ls_secs);
+    DEBUG_MSG("lsEnter begin, ls_secs=%u\n", config.power.ls_secs);
     screen->setOn(false);
     secsSlept = 0; // How long have we been sleeping this time
 
@@ -63,10 +62,10 @@ static void lsIdle()
 {
     // DEBUG_MSG("lsIdle begin ls_secs=%u\n", getPref_ls_secs());
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 
     // Do we have more sleeping to do?
-    if (secsSlept < config.power.ls_secs ? config.power.ls_secs : default_ls_secs * 1000) {
+    if (secsSlept < config.power.ls_secs) {
         // Briefly come out of sleep long enough to blink the led once every few seconds
         uint32_t sleepTime = 30;
 
@@ -200,8 +199,7 @@ static void onEnter()
 
     uint32_t now = millis();
 
-    if (now - lastPingMs >
-        30 * 1000) { // if more than a minute since our last press, ask node we are looking at to update their state
+    if ((now - lastPingMs) > 30 * 1000) { // if more than a minute since our last press, ask node we are looking at to update their state
         if (displayedNodeNum)
             service.sendNetworkPing(displayedNodeNum, true); // Refresh the currently displayed node
         lastPingMs = now;
@@ -239,10 +237,10 @@ Fsm powerFSM(&stateBOOT);
 
 void PowerFSM_setup()
 {
-    bool isRouter = (config.device.role == Config_DeviceConfig_Role_Router ? 1 : 0);
+    bool isRouter = (config.device.role == Config_DeviceConfig_Role_ROUTER ? 1 : 0);
     bool hasPower = isPowered();
 
-    DEBUG_MSG("PowerFSM init, USB power=%d\n", hasPower);
+    DEBUG_MSG("PowerFSM init, USB power=%d\n", hasPower ? 1 : 0);
     powerFSM.add_timed_transition(&stateBOOT, hasPower ? &statePOWER : &stateON, 3 * 1000, NULL, "boot timeout");
 
     // wake timer expired or a packet arrived
@@ -251,8 +249,7 @@ void PowerFSM_setup()
 
     // We need this transition, because we might not transition if we were waiting to enter light-sleep, because when we wake from
     // light sleep we _always_ transition to NB or dark and
-    powerFSM.add_transition(&stateLS, isRouter ? &stateNB : &stateDARK, EVENT_PACKET_FOR_PHONE, NULL,
-                            "Received packet, exiting light sleep");
+    powerFSM.add_transition(&stateLS, isRouter ? &stateNB : &stateDARK, EVENT_PACKET_FOR_PHONE, NULL, "Received packet, exiting light sleep");
     powerFSM.add_transition(&stateNB, &stateNB, EVENT_PACKET_FOR_PHONE, NULL, "Received packet, resetting win wake");
 
     // Handle press events - note: we ignore button presses when in API mode
@@ -261,8 +258,7 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_PRESS, NULL, "Press");
     powerFSM.add_transition(&statePOWER, &statePOWER, EVENT_PRESS, screenPress, "Press");
     powerFSM.add_transition(&stateON, &stateON, EVENT_PRESS, screenPress, "Press"); // reenter On to restart our timers
-    powerFSM.add_transition(&stateSERIAL, &stateSERIAL, EVENT_PRESS, screenPress,
-                            "Press"); // Allow button to work while in serial API
+    powerFSM.add_transition(&stateSERIAL, &stateSERIAL, EVENT_PRESS, screenPress, "Press"); // Allow button to work while in serial API
 
     // Handle critically low power battery by forcing deep sleep
     powerFSM.add_transition(&stateBOOT, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
@@ -333,45 +329,26 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_FIRMWARE_UPDATE, NULL, "Got firmware update");
     powerFSM.add_transition(&stateON, &stateON, EVENT_FIRMWARE_UPDATE, NULL, "Got firmware update");
 
-    powerFSM.add_timed_transition(&stateON, &stateDARK,
-                                  config.display.screen_on_secs ? config.display.screen_on_secs
-                                                                               : 60 * 1000 * 10,
-                                  NULL, "Screen-on timeout");
+    powerFSM.add_timed_transition(&stateON, &stateDARK, getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL, "Screen-on timeout");
 
     // On most boards we use light-sleep to be our main state, but on NRF52 we just stay in DARK
     State *lowPowerState = &stateLS;
 
-    uint32_t meshSds = 0;
-
-#ifndef NRF52_SERIES
+#ifdef ARCH_ESP32
     // We never enter light-sleep or NB states on NRF52 (because the CPU uses so little power normally)
 
-    // See: https://github.com/meshtastic/Meshtastic-device/issues/1071
+    // See: https://github.com/meshtastic/firmware/issues/1071
     if (isRouter || config.power.is_power_saving) {
-        powerFSM.add_timed_transition(&stateNB, &stateLS,
-                                      config.power.min_wake_secs ? config.power.min_wake_secs
-                                                                                : default_min_wake_secs * 1000,
-                                      NULL, "Min wake timeout");
-        powerFSM.add_timed_transition(&stateDARK, &stateLS,
-                                      config.power.wait_bluetooth_secs
-                                          ? config.power.wait_bluetooth_secs
-                                          : default_wait_bluetooth_secs * 1000,
-                                      NULL, "Bluetooth timeout");
-        meshSds = config.power.mesh_sds_timeout_secs ? config.power.mesh_sds_timeout_secs
-                                                                    : default_mesh_sds_timeout_secs;
+        powerFSM.add_timed_transition(&stateNB, &stateLS, getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs), NULL, "Min wake timeout");
+        powerFSM.add_timed_transition(&stateDARK, &stateLS, getConfiguredOrDefaultMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs), NULL, "Bluetooth timeout");
+    } 
 
-    } else {
-
-        meshSds = UINT32_MAX;
-    }
-
-#else
+#elif defined (ARCH_NRF52)
     lowPowerState = &stateDARK;
-    meshSds = UINT32_MAX; // Workaround for now: Don't go into deep sleep on the RAK4631
 #endif
 
-    if (meshSds != UINT32_MAX)
-        powerFSM.add_timed_transition(lowPowerState, &stateSDS, meshSds * 1000, NULL, "mesh timeout");
+    if (config.power.sds_secs != UINT32_MAX)
+        powerFSM.add_timed_transition(lowPowerState, &stateSDS, config.power.sds_secs * 1000, NULL, "mesh timeout");
 
     powerFSM.run_machine(); // run one interation of the state machine, so we run our on enter tasks for the initial DARK state
 }

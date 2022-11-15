@@ -44,11 +44,15 @@ void readFromRTC()
     if(rtc_found == PCF8563_RTC) {
         uint32_t now = millis();
         PCF8563_Class rtc;
+#ifdef RTC_USE_WIRE1
+        rtc.begin(Wire1);
+#else
         rtc.begin();
+#endif
         auto tc = rtc.getDateTime();
         tm t;
-        t.tm_year = tc.year;
-        t.tm_mon = tc.month;
+        t.tm_year = tc.year - 1900;
+        t.tm_mon = tc.month - 1;
         t.tm_mday = tc.day;
         t.tm_hour = tc.hour;
         t.tm_min = tc.minute;
@@ -110,17 +114,21 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
 #elif defined(PCF8563_RTC)
         if(rtc_found == PCF8563_RTC) {
             PCF8563_Class rtc;
-            rtc.begin();
+#ifdef RTC_USE_WIRE1
+        rtc.begin(Wire1);
+#else
+        rtc.begin();
+#endif
             tm *t = localtime(&tv->tv_sec);
-            rtc.setDateTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_wday, t->tm_hour, t->tm_min, t->tm_sec);
+            rtc.setDateTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
             DEBUG_MSG("PCF8563_RTC setDateTime %02d-%02d-%02d %02d:%02d:%02d %ld\n", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, tv->tv_sec);
         }
-#elif !defined(NO_ESP32)
+#elif defined(ARCH_ESP32)
         settimeofday(tv, NULL);
 #endif
 
         // nrf52 doesn't have a readable RTC (yet - software not written)
-#if defined(PORTDUINO) || !defined(NO_ESP32) || defined(RV3028_RTC) || defined(PCF8563_RTC)
+#ifdef HAS_RTC
         readFromRTC();
 #endif
 

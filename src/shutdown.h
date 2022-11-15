@@ -8,32 +8,40 @@ void powerCommandsCheck()
 {
     if (rebootAtMsec && millis() > rebootAtMsec) {
         DEBUG_MSG("Rebooting\n");
-#ifndef NO_ESP32
+#if defined(ARCH_ESP32)
         ESP.restart();
-#elif NRF52_SERIES
+#elif defined(ARCH_NRF52)
         NVIC_SystemReset();
 #else
-        DEBUG_MSG("FIXME implement reboot for this platform");
+        rebootAtMsec = -1; 
+        DEBUG_MSG("FIXME implement reboot for this platform. Skipping for now.\n");
 #endif
     }
 
-#if NRF52_SERIES
+#if defined(ARCH_NRF52) || defined(HAS_PMU)
     if (shutdownAtMsec) {
         screen->startShutdownScreen();
         playBeep();
+#ifdef PIN_LED1
         ledOff(PIN_LED1);
+#endif
+#ifdef PIN_LED2        
         ledOff(PIN_LED2);
+#endif
+#ifdef PIN_LED3        
+        ledOff(PIN_LED3);
+#endif
     }
 #endif
 
     if (shutdownAtMsec && millis() > shutdownAtMsec) {
         DEBUG_MSG("Shutting down from admin command\n");
-#ifdef TBEAM_V10
-        if (axp192_found == true) {
+#ifdef HAS_PMU
+        if (pmu_found == true) {
             playShutdownMelody();
             power->shutdown();
         }
-#elif NRF52_SERIES
+#elif defined(ARCH_NRF52)
         playShutdownMelody();
         power->shutdown();
 #else

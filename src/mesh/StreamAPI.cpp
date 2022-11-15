@@ -103,10 +103,7 @@ void StreamAPI::emitTxBuffer(size_t len)
 
         auto totalLen = len + HEADER_LEN;
         stream->write(txBuf, totalLen);
-        /* for(size_t i = 0; i < totalLen; i++) {
-            stream->write(txBuf[i]);
-            // stream->flush();
-        } */
+        stream->flush();
     }
 }
 
@@ -114,7 +111,7 @@ void StreamAPI::emitRebooted()
 {
     // In case we send a FromRadio packet
     memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
-    fromRadioScratch.which_payloadVariant = FromRadio_rebooted_tag;
+    fromRadioScratch.which_payload_variant = FromRadio_rebooted_tag;
     fromRadioScratch.rebooted = true;
 
     // DEBUG_MSG("Emitting reboot packet for serial shell\n");

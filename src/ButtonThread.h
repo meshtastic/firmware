@@ -7,10 +7,6 @@
 #include "power.h"
 #include <OneButton.h>
 
-#ifndef NO_ESP32
-#include "nimble/BluetoothUtil.h"
-#endif
-
 namespace concurrency
 {
 /**
@@ -127,25 +123,32 @@ class ButtonThread : public concurrency::OSThread
     static void userButtonPressedLong()
     {
         // DEBUG_MSG("Long press!\n");
-#ifndef NRF52_SERIES
+#ifdef ARCH_ESP32
         screen->adjustBrightness();
 #endif
         // If user button is held down for 5 seconds, shutdown the device.
         if ((millis() - longPressTime > 5 * 1000) && (longPressTime > 0)) {
-#ifdef TBEAM_V10
-            if (axp192_found == true) {
+#ifdef HAS_PMU
+            if (pmu_found == true) {
                 setLed(false);
                 power->shutdown();
             }
-#elif NRF52_SERIES
+#elif defined(ARCH_NRF52)
             // Do actual shutdown when button released, otherwise the button release
             // may wake the board immediatedly.
             if ((!shutdown_on_long_stop) && (millis() > 30 * 1000)) {
                 screen->startShutdownScreen();
                 DEBUG_MSG("Shutdown from long press");
                 playBeep();
+#ifdef PIN_LED1
                 ledOff(PIN_LED1);
+#endif
+#ifdef PIN_LED2        
                 ledOff(PIN_LED2);
+#endif
+#ifdef PIN_LED3        
+                ledOff(PIN_LED3);
+#endif
                 shutdown_on_long_stop = true;
             }
 #endif
@@ -156,21 +159,16 @@ class ButtonThread : public concurrency::OSThread
 
     static void userButtonDoublePressed()
     {
-#ifndef NO_ESP32
-        disablePin();
-#elif defined(HAS_EINK)
+#if defined(USE_EINK) && defined(PIN_EINK_EN)
         digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
 #endif
     }
 
     static void userButtonMultiPressed()
     {
-#ifndef NO_ESP32
-        clearNVS();
-#endif
-#ifdef NRF52_SERIES
-        clearBonds();
-#endif
+        screen->print("Sent ad-hoc ping\n");
+        service.refreshMyNodeInfo();
+        service.sendNetworkPing(NODENUM_BROADCAST, true);
     }
 
     static void userButtonPressedLongStart()

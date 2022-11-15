@@ -32,6 +32,6 @@ def readProps(prefsLoc):
         # traceback.print_exc()
         verObj['long'] = verObj['short']
 
-    # print("firmare version " + verStr)
+    # print("firmware version " + verStr)
     return verObj
 # print("path is" + ','.join(sys.path))

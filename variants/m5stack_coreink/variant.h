@@ -32,12 +32,11 @@
 #define LORA_DIO1 RADIOLIB_NC
 #define LORA_DIO2 RADIOLIB_NC
 
-#define NO_GPS
 // This board has no GPS for now
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 
-#define HAS_EINK
+#define USE_EINK
 //https://docs.m5stack.com/en/core/coreink
 //https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/docs/schematic/Core/coreink/coreink_sch.pdf
 #define PIN_EINK_EN    -1
@@ -47,3 +46,5 @@
 #define PIN_EINK_RES   -1          // Connected to GPIO0 but no needed !!!! maybe causing issue ?
 #define PIN_EINK_SCLK  18           // EPD_SCLK
 #define PIN_EINK_MOSI  23          // EPD_MOSI
+
+#define HAS_RTC 1

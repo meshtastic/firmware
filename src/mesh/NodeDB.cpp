@@ -16,15 +16,16 @@
 #include "mesh-pb-constants.h"
 #include <pb_decode.h>
 #include <pb_encode.h>
+#include <ErriezCRC32.h>
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 #include "mesh/http/WiFiAPClient.h"
 #include "modules/esp32/StoreForwardModule.h"
 #include <Preferences.h>
 #include <nvs_flash.h>
 #endif
 
-#ifdef NRF52_SERIES
+#ifdef ARCH_NRF52
 #include <bluefruit.h>
 #include <utility/bonding.h>
 #endif
@@ -37,19 +38,12 @@ MyNodeInfo &myNodeInfo = devicestate.my_node;
 LocalConfig config;
 LocalModuleConfig moduleConfig;
 ChannelFile channelFile;
+OEMStore oemStore;
 
 /** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings
  * might have changed is incremented.  Allows others to detect they might now be on a new channel.
  */
 uint32_t radioGeneration;
-
-/*
-DeviceState versions used to be defined in the .proto file but really only this function cares.  So changed to a
-#define here.
-*/
-
-#define DEVICESTATE_CUR_VER 13
-#define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
 
 // FIXME - move this somewhere else
 extern void getMacAddr(uint8_t *dmac);
@@ -81,34 +75,14 @@ NodeNum getFrom(const MeshPacket *p)
     return (p->from == 0) ? nodeDB.getNodeNum() : p->from;
 }
 
-bool NodeDB::resetRadioConfig()
+bool NodeDB::resetRadioConfig(bool factory_reset)
 {
     bool didFactoryReset = false;
 
     radioGeneration++;
 
-    // radioConfig.has_preferences = true;
-    if (config.device.factory_reset) {
-        DEBUG_MSG("Performing factory reset!\n");
-        // first, remove the "/prefs" (this removes most prefs)
-        rmDir("/prefs");
-        // second, install default state (this will deal with the duplicate mac address issue)
-        installDefaultDeviceState();
-        // third, write to disk
-        saveToDisk();
-#ifndef NO_ESP32
-        // This will erase what's in NVS including ssl keys, persistant variables and ble pairing
-        nvs_flash_erase();
-#endif
-#ifdef NRF52_SERIES
-        Bluefruit.begin();
-        DEBUG_MSG("Clearing bluetooth bonds!\n");
-        bond_print_list(BLE_GAP_ROLE_PERIPH);
-        bond_print_list(BLE_GAP_ROLE_CENTRAL);
-        Bluefruit.Periph.clearBonds();
-        Bluefruit.Central.clearBonds();
-#endif
-        didFactoryReset = true;
+    if (factory_reset) {
+       didFactoryReset = factoryReset();
     }
 
     if (channelFile.channels_count != MAX_NUM_CHANNELS) {
@@ -139,11 +113,45 @@ bool NodeDB::resetRadioConfig()
     // Update the global myRegion
     initRegion();
 
+    if (didFactoryReset) {
+        DEBUG_MSG("Rebooting due to factory reset");
+        screen->startRebootScreen();
+        rebootAtMsec = millis() + (5 * 1000);
+    }
+
     return didFactoryReset;
+}
+
+bool NodeDB::factoryReset() 
+{
+    DEBUG_MSG("Performing factory reset!\n");
+    // first, remove the "/prefs" (this removes most prefs)
+    rmDir("/prefs");
+    // second, install default state (this will deal with the duplicate mac address issue)
+    installDefaultDeviceState();
+    installDefaultConfig();
+    installDefaultModuleConfig();
+    installDefaultChannels();
+    // third, write everything to disk
+    saveToDisk();
+#ifdef ARCH_ESP32
+    // This will erase what's in NVS including ssl keys, persistant variables and ble pairing
+    nvs_flash_erase();
+#endif
+#ifdef ARCH_NRF52
+    Bluefruit.begin();
+    DEBUG_MSG("Clearing bluetooth bonds!\n");
+    bond_print_list(BLE_GAP_ROLE_PERIPH);
+    bond_print_list(BLE_GAP_ROLE_CENTRAL);
+    Bluefruit.Periph.clearBonds();
+    Bluefruit.Central.clearBonds();
+#endif
+    return true;
 }
 
 void NodeDB::installDefaultConfig()
 {
+    DEBUG_MSG("Installing default LocalConfig\n");
     memset(&config, 0, sizeof(LocalConfig));
     config.version = DEVICESTATE_CUR_VER;
     config.has_device = true;
@@ -151,42 +159,90 @@ void NodeDB::installDefaultConfig()
     config.has_lora = true;
     config.has_position = true;
     config.has_power = true;
-    config.has_wifi = true;
-
-    config.lora.region = Config_LoRaConfig_RegionCode_Unset;
-    config.lora.modem_preset = Config_LoRaConfig_ModemPreset_LongFast;
+    config.has_network = true;
+    config.has_bluetooth = true;
+    config.lora.tx_enabled = true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
+    config.lora.region = Config_LoRaConfig_RegionCode_UNSET;
+    config.lora.modem_preset = Config_LoRaConfig_ModemPreset_LONG_FAST;
+    config.lora.hop_limit = HOP_RELIABLE;
+    config.position.gps_enabled = true;
+    config.position.position_broadcast_smart_enabled = true;
+    config.device.serial_enabled = true;
     resetRadioConfig();
-    strncpy(config.device.ntp_server, "0.pool.ntp.org", 32);
+    strncpy(config.network.ntp_server, "0.pool.ntp.org", 32);
+    // FIXME: Default to bluetooth capability of platform as default
+    config.bluetooth.enabled = true;
+    config.bluetooth.fixed_pin = defaultBLEPin;
+#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER)
+    bool hasScreen = true;
+#else
+    bool hasScreen = screen_found;
+#endif
+    config.bluetooth.mode = hasScreen ? Config_BluetoothConfig_PairingMode_RANDOM_PIN : Config_BluetoothConfig_PairingMode_FIXED_PIN;
     // for backward compat, default position flags are ALT+MSL
-    config.position.position_flags =
-        (Config_PositionConfig_PositionFlags_POS_ALTITUDE | Config_PositionConfig_PositionFlags_POS_ALT_MSL);
+    config.position.position_flags = (Config_PositionConfig_PositionFlags_ALTITUDE | Config_PositionConfig_PositionFlags_ALTITUDE_MSL);
+    
+    initConfigIntervals();
+}
+
+void NodeDB::initConfigIntervals() 
+{
+    config.position.gps_update_interval = default_gps_update_interval;
+    config.position.gps_attempt_time = default_gps_attempt_time;
+    config.position.position_broadcast_secs = default_broadcast_interval_secs;
+
+    config.power.ls_secs = default_ls_secs;
+    config.power.mesh_sds_timeout_secs = default_mesh_sds_timeout_secs;
+    config.power.min_wake_secs = default_min_wake_secs;
+    config.power.sds_secs = default_sds_secs;
+    config.power.wait_bluetooth_secs = default_wait_bluetooth_secs;
+    
+    config.display.screen_on_secs = default_screen_on_secs;
 }
 
 void NodeDB::installDefaultModuleConfig()
 {
+    DEBUG_MSG("Installing default ModuleConfig\n");
     memset(&moduleConfig, 0, sizeof(ModuleConfig));
     moduleConfig.version = DEVICESTATE_CUR_VER;
-    moduleConfig.has_canned_message = true;
-    moduleConfig.has_external_notification = true;
     moduleConfig.has_mqtt = true;
     moduleConfig.has_range_test = true;
     moduleConfig.has_serial = true;
     moduleConfig.has_store_forward = true;
     moduleConfig.has_telemetry = true;
+    moduleConfig.has_external_notification = true;
+    moduleConfig.has_canned_message = true;
+
+    initModuleConfigIntervals();
+}
+
+void NodeDB::initModuleConfigIntervals() 
+{
+    moduleConfig.telemetry.device_update_interval = default_broadcast_interval_secs;
+    moduleConfig.telemetry.environment_update_interval = default_broadcast_interval_secs;
 }
 
 void NodeDB::installDefaultChannels()
 {
+    DEBUG_MSG("Installing default ChannelFile\n");
     memset(&channelFile, 0, sizeof(ChannelFile));
     channelFile.version = DEVICESTATE_CUR_VER;
 }
 
+void NodeDB::resetNodes()
+{
+    devicestate.node_db_count = 0;
+    memset(devicestate.node_db, 0, sizeof(devicestate.node_db));
+    saveDeviceStateToDisk();
+}
+
 void NodeDB::installDefaultDeviceState()
 {
+    DEBUG_MSG("Installing default DeviceState\n");
     memset(&devicestate, 0, sizeof(DeviceState));
 
-    *numNodes = 0; // Forget node DB
-
+    *numNodes = 0;
+    
     // init our devicestate with valid flags so protobuf writing/reading will work
     devicestate.has_my_node = true;
     devicestate.has_owner = true;
@@ -209,23 +265,22 @@ void NodeDB::installDefaultDeviceState()
 
     sprintf(owner.id, "!%08x", getNodeNum()); // Default node ID now based on nodenum
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
-
-    installDefaultChannels();
-    installDefaultConfig();
 }
 
 void NodeDB::init()
 {
-    installDefaultDeviceState();
-
-    // saveToDisk();
+    DEBUG_MSG("Initializing NodeDB\n");
     loadFromDisk();
-    // saveToDisk();
+
+    uint32_t devicestateCRC = crc32Buffer(&devicestate, sizeof(devicestate));
+    uint32_t configCRC = crc32Buffer(&config, sizeof(config));
+    uint32_t channelFileCRC = crc32Buffer(&channelFile, sizeof(channelFile));
+
+    int saveWhat = 0;
 
     myNodeInfo.max_channels = MAX_NUM_CHANNELS; // tell others the max # of channels we can understand
 
-    myNodeInfo.error_code =
-        CriticalErrorCode_None; // For the error code, only show values from this boot (discard value from flash)
+    myNodeInfo.error_code = CriticalErrorCode_NONE; // For the error code, only show values from this boot (discard value from flash)
     myNodeInfo.error_address = 0;
 
     // likewise - we always want the app requirements to come from the running appload
@@ -245,7 +300,7 @@ void NodeDB::init()
 
     strncpy(myNodeInfo.firmware_version, optstr(APP_VERSION), sizeof(myNodeInfo.firmware_version));
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
     Preferences preferences;
     preferences.begin("meshtastic", false);
     myNodeInfo.reboot_count = preferences.getUInt("rebootCounter", 0);
@@ -259,8 +314,16 @@ void NodeDB::init()
 #endif
 
     resetRadioConfig(); // If bogus settings got saved, then fix them
-
     DEBUG_MSG("region=%d, NODENUM=0x%x, dbsize=%d\n", config.lora.region, myNodeInfo.my_node_num, *numNodes);
+
+    if (devicestateCRC != crc32Buffer(&devicestate, sizeof(devicestate)))
+        saveWhat |= SEGMENT_DEVICESTATE;
+    if (configCRC != crc32Buffer(&config, sizeof(config)))
+        saveWhat |= SEGMENT_CONFIG;
+    if (channelFileCRC != crc32Buffer(&channelFile, sizeof(channelFile)))
+        saveWhat |= SEGMENT_CHANNELS;
+
+    saveToDisk(saveWhat);
 }
 
 // We reserve a few nodenums for future use
@@ -290,10 +353,12 @@ void NodeDB::pickNewNodeNum()
     myNodeInfo.my_node_num = r;
 }
 
-static const char *preffile = "/prefs/db.proto";
-static const char *configfile = "/prefs/config.proto";
-static const char *moduleConfigfile = "/prefs/module.proto";
-static const char *channelfile = "/prefs/channels.proto";
+static const char *prefFileName = "/prefs/db.proto";
+static const char *configFileName = "/prefs/config.proto";
+static const char *moduleConfigFileName = "/prefs/module.proto";
+static const char *channelFileName = "/prefs/channels.proto";
+static const char *oemConfigFile = "/oem/oem.proto";
+
 
 /** Load a protobuf from a file, return true for success */
 bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, void *dest_struct)
@@ -302,7 +367,7 @@ bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_
 #ifdef FSCom
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
 
-    auto f = FSCom.open(filename);
+    auto f = FSCom.open(filename, FILE_O_READ);
 
     if (f) {
         DEBUG_MSG("Loading %s\n", filename);
@@ -330,30 +395,18 @@ bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_
 void NodeDB::loadFromDisk()
 {
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
-    if (!loadProto(preffile, DeviceState_size, sizeof(devicestate), DeviceState_fields, &devicestate)) {
+    if (!loadProto(prefFileName, DeviceState_size, sizeof(devicestate), DeviceState_fields, &devicestate)) {
         installDefaultDeviceState(); // Our in RAM copy might now be corrupt
     } else {
         if (devicestate.version < DEVICESTATE_MIN_VER) {
             DEBUG_MSG("Warn: devicestate %d is old, discarding\n", devicestate.version);
-            installDefaultDeviceState();
-#ifndef NO_ESP32
-        // This will erase what's in NVS including ssl keys, persistant variables and ble pairing
-        nvs_flash_erase();
-#endif
-#ifdef NRF52_SERIES
-        Bluefruit.begin();
-        DEBUG_MSG("Clearing bluetooth bonds!\n");
-        bond_print_list(BLE_GAP_ROLE_PERIPH);
-        bond_print_list(BLE_GAP_ROLE_CENTRAL);
-        Bluefruit.Periph.clearBonds();
-        Bluefruit.Central.clearBonds();
-#endif
+            factoryReset();
         } else {
             DEBUG_MSG("Loaded saved devicestate version %d\n", devicestate.version);
         }
     }
 
-    if (!loadProto(configfile, LocalConfig_size, sizeof(LocalConfig), LocalConfig_fields, &config)) {
+    if (!loadProto(configFileName, LocalConfig_size, sizeof(LocalConfig), LocalConfig_fields, &config)) {
         installDefaultConfig(); // Our in RAM copy might now be corrupt
     } else {
         if (config.version < DEVICESTATE_MIN_VER) {
@@ -364,7 +417,7 @@ void NodeDB::loadFromDisk()
         }
     }
 
-    if (!loadProto(moduleConfigfile, LocalModuleConfig_size, sizeof(LocalModuleConfig), LocalModuleConfig_fields, &moduleConfig)) {
+    if (!loadProto(moduleConfigFileName, LocalModuleConfig_size, sizeof(LocalModuleConfig), LocalModuleConfig_fields, &moduleConfig)) {
         installDefaultModuleConfig(); // Our in RAM copy might now be corrupt
     } else {
         if (moduleConfig.version < DEVICESTATE_MIN_VER) {
@@ -375,7 +428,7 @@ void NodeDB::loadFromDisk()
         }
     }
 
-    if (!loadProto(channelfile, ChannelFile_size, sizeof(ChannelFile), ChannelFile_fields, &channelFile)) {
+    if (!loadProto(channelFileName, ChannelFile_size, sizeof(ChannelFile), ChannelFile_fields, &channelFile)) {
         installDefaultChannels(); // Our in RAM copy might now be corrupt
     } else {
         if (channelFile.version < DEVICESTATE_MIN_VER) {
@@ -385,6 +438,9 @@ void NodeDB::loadFromDisk()
             DEBUG_MSG("Loaded saved channelFile version %d\n", channelFile.version);
         }
     }
+
+    if (loadProto(oemConfigFile, OEMStore_size, sizeof(OEMStore), OEMStore_fields, &oemStore))
+        DEBUG_MSG("Loaded OEMStore\n");
 }
 
 /** Save a protobuf from a file, return true for success */
@@ -405,13 +461,12 @@ bool saveProto(const char *filename, size_t protoSize, size_t objSize, const pb_
         } else {
             okay = true;
         }
-
         f.close();
 
         // brief window of risk here ;-)
         if (FSCom.exists(filename) && !FSCom.remove(filename))
             DEBUG_MSG("Warning: Can't remove old pref file\n");
-        if (!FSCom.rename(filenameTmp.c_str(), filename))
+        if (!renameFile(filenameTmp.c_str(), filename))
             DEBUG_MSG("Error: can't rename new pref file\n");
     } else {
         DEBUG_MSG("Can't write prefs\n");
@@ -428,38 +483,55 @@ void NodeDB::saveChannelsToDisk()
 #ifdef FSCom
         FSCom.mkdir("/prefs");
 #endif
-        saveProto(channelfile, ChannelFile_size, sizeof(ChannelFile), ChannelFile_fields, &channelFile);
+        saveProto(channelFileName, ChannelFile_size, sizeof(channelFile), ChannelFile_fields, &channelFile);
     }
 }
 
-void NodeDB::saveToDisk()
+void NodeDB::saveDeviceStateToDisk() 
 {
     if (!devicestate.no_save) {
 #ifdef FSCom
         FSCom.mkdir("/prefs");
 #endif
-        saveProto(preffile, DeviceState_size, sizeof(devicestate), DeviceState_fields, &devicestate);
+        saveProto(prefFileName, DeviceState_size, sizeof(devicestate), DeviceState_fields, &devicestate);
+    }
+}
 
-        // save all config segments
-        config.has_device = true;
-        config.has_display = true;
-        config.has_lora = true;
-        config.has_position = true;
-        config.has_power = true;
-        config.has_wifi = true;
-        saveProto(configfile, LocalConfig_size, sizeof(LocalConfig), LocalConfig_fields, &config);
+void NodeDB::saveToDisk(int saveWhat)
+{
+    if (!devicestate.no_save) {
+#ifdef FSCom
+        FSCom.mkdir("/prefs");
+#endif
+        if (saveWhat & SEGMENT_DEVICESTATE) {
+            saveDeviceStateToDisk();
+        }
 
-        moduleConfig.has_canned_message = true;
-        moduleConfig.has_external_notification = true;
-        moduleConfig.has_mqtt = true;
-        moduleConfig.has_range_test = true;
-        moduleConfig.has_serial = true;
-        moduleConfig.has_store_forward = true;
-        moduleConfig.has_telemetry = true;
-        saveProto(moduleConfigfile, LocalModuleConfig_size, sizeof(LocalModuleConfig), LocalModuleConfig_fields, &moduleConfig);
+        if (saveWhat & SEGMENT_CONFIG) {
+            config.has_device = true;
+            config.has_display = true;
+            config.has_lora = true;
+            config.has_position = true;
+            config.has_power = true;
+            config.has_network = true;
+            config.has_bluetooth = true;
+            saveProto(configFileName, LocalConfig_size, sizeof(config), LocalConfig_fields, &config);
+        }
 
-        saveChannelsToDisk();
+        if (saveWhat & SEGMENT_MODULECONFIG) {
+            moduleConfig.has_canned_message = true;
+            moduleConfig.has_external_notification = true;
+            moduleConfig.has_mqtt = true;
+            moduleConfig.has_range_test = true;
+            moduleConfig.has_serial = true;
+            moduleConfig.has_store_forward = true;
+            moduleConfig.has_telemetry = true;
+            saveProto(moduleConfigFileName, LocalModuleConfig_size, sizeof(moduleConfig), LocalModuleConfig_fields, &moduleConfig);
+        }
 
+        if (saveWhat & SEGMENT_CHANNELS) {
+            saveChannelsToDisk();
+        }
     } else {
         DEBUG_MSG("***** DEVELOPMENT MODE - DO NOT RELEASE - not saving to flash *****\n");
     }
@@ -512,11 +584,11 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p, RxSource src)
 
     if (src == RX_SRC_LOCAL) {
         // Local packet, fully authoritative
-        DEBUG_MSG("updatePosition LOCAL pos@%x, time=%u, latI=%d, lonI=%d, alt=%d\n", p.pos_timestamp, p.time, p.latitude_i,
+        DEBUG_MSG("updatePosition LOCAL pos@%x, time=%u, latI=%d, lonI=%d, alt=%d\n", p.timestamp, p.time, p.latitude_i,
                   p.longitude_i, p.altitude);
         info->position = p;
 
-    } else if ((p.time > 0) && !p.latitude_i && !p.longitude_i && !p.pos_timestamp && !p.location_source) {
+    } else if ((p.time > 0) && !p.latitude_i && !p.longitude_i && !p.timestamp && !p.location_source) {
         // FIXME SPECIAL TIME SETTING PACKET FROM EUD TO RADIO
         // (stop-gap fix for issue #900)
         DEBUG_MSG("updatePosition SPECIAL time setting time=%u\n", p.time);
@@ -601,7 +673,7 @@ void NodeDB::updateUser(uint32_t nodeId, const User &p)
 /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
 void NodeDB::updateFrom(const MeshPacket &mp)
 {
-    if (mp.which_payloadVariant == MeshPacket_decoded_tag && mp.from) {
+    if (mp.which_payload_variant == MeshPacket_decoded_tag && mp.from) {
         DEBUG_MSG("Update DB node 0x%x, rx_time=%u\n", mp.from, mp.rx_time);
 
         NodeInfo *info = getOrCreateNode(getFrom(&mp));
@@ -635,11 +707,23 @@ NodeInfo *NodeDB::getOrCreateNode(NodeNum n)
 
     if (!info) {
         if (*numNodes >= MAX_NUM_NODES) {
-            screen->print("error: node_db full!\n");
-            DEBUG_MSG("ERROR! could not create new node, node_db is full! (%d nodes)", *numNodes);
-            return NULL;
+            screen->print("warning: node_db full! erasing oldest entry\n");
+            // look for oldest node and erase it
+            uint32_t oldest = UINT32_MAX;
+            int oldestIndex = -1;
+            for (int i = 0; i < *numNodes; i++) {
+                if (nodes[i].last_heard < oldest) {
+                    oldest = nodes[i].last_heard;
+                    oldestIndex = i;
+                }
+            }
+            // Shove the remaining nodes down the chain
+            for (int i = oldestIndex; i < *numNodes - 1; i++) {
+                nodes[i] = nodes[i + 1];
+            }
+            (*numNodes)--;
         }
-        // add the node
+        // add the node at the end
         info = &nodes[(*numNodes)++];
 
         // everything is missing except the nodenum
@@ -667,7 +751,7 @@ void recordCriticalError(CriticalErrorCode code, uint32_t address, const char *f
     myNodeInfo.error_count++;
 
     // Currently portuino is mostly used for simulation.  Make sue the user notices something really bad happend
-#ifdef PORTDUINO
+#ifdef ARCH_PORTDUINO
     DEBUG_MSG("A critical failure occurred, portduino is exiting...");
     exit(2);
 #endif

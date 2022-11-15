@@ -21,7 +21,7 @@ PB_BIND(Routing, Routing, AUTO)
 PB_BIND(Data, Data, 2)
 
 
-PB_BIND(Location, Location, AUTO)
+PB_BIND(Waypoint, Waypoint, AUTO)
 
 
 PB_BIND(MeshPacket, MeshPacket, 2)
@@ -40,9 +40,6 @@ PB_BIND(FromRadio, FromRadio, 2)
 
 
 PB_BIND(ToRadio, ToRadio, 2)
-
-
-PB_BIND(ToRadio_PeerInfo, ToRadio_PeerInfo, AUTO)
 
 
 PB_BIND(Compressed, Compressed, AUTO)

@@ -379,7 +379,7 @@ float GeoCoord::latLongToMeter(double lat_a, double lng_a, double lat_b, double 
  * Latitude of the second point
  * @param lon2
  * Longitude of the second point
- * @return Bearing between the two points in radians. A value of 0 means due
+ * @return Bearing from point 1 to point 2 in radians. A value of 0 means due
  * north.
  */
 float GeoCoord::bearing(double lat1, double lon1, double lat2, double lon2)

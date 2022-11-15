@@ -44,4 +44,5 @@ void RoutingModule::sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom, C
 RoutingModule::RoutingModule() : ProtobufModule("routing", PortNum_ROUTING_APP, Routing_fields)
 {
     isPromiscuous = true;
+    encryptedOk = true;
 }

@@ -1,3 +1,4 @@
 [submodule "protobufs"]
 	path = protobufs
-	url = https://github.com/meshtastic/Meshtastic-protobufs.git
+	url = https://github.com/meshtastic/protobufs.git
+	branch = develop

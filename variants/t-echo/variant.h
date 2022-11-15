@@ -124,6 +124,7 @@ External serial flash WP25R1635FZUIL0
  */
 
 #define USE_SX1262
+#define USE_SX1268
 #define SX126X_CS (0 + 24) // FIXME - we really should define LORA_CS instead
 #define SX126X_DIO1 (0 + 20)
 // Note DIO2 is attached internally to the module to an analog switch for TX/RX switching
@@ -139,7 +140,6 @@ External serial flash WP25R1635FZUIL0
 // #define LORA_DISABLE_SENDING // Define this to disable transmission for testing (power testing etc...)
 
 // #undef SX126X_CS
-// #define USE_SIM_RADIO // define to not use the lora radio hardware at all
 
 /*
  * eink display pins
@@ -157,10 +157,7 @@ External serial flash WP25R1635FZUIL0
 // FIXME - I think this is actually just the board power enable - it enables power to the CPU also 
 #define PIN_EINK_PWR_ON (0 + 12)
 
-#define HAS_EINK
-
-// No screen wipes on eink
-#define SCREEN_TRANSITION_MSECS 0
+#define USE_EINK
 
 #define PIN_SPI1_MISO                                                                                                            \
     (32 + 7) // FIXME not really needed, but for now the SPI code requires something to be defined, pick an used GPIO
@@ -170,6 +167,9 @@ External serial flash WP25R1635FZUIL0
 /*
  * GPS pins
  */
+
+#define GPS_L76K
+#define PIN_GPS_REINIT (32 + 5) // An output to reset L76K GPS. As per datasheet, low for > 100ms will reset the L76K
 
 #define PIN_GPS_WAKE (32 + 2) // An output to wake GPS, low means allow sleep, high means force wake
 // Seems to be missing on this new board
@@ -219,6 +219,8 @@ External serial flash WP25R1635FZUIL0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER VBAT_DIVIDER_COMP 
 #define VBAT_RAW_TO_SCALED(x) (REAL_VBAT_MV_PER_LSB * x)
+
+#define HAS_RTC 1
 
 #ifdef __cplusplus
 }

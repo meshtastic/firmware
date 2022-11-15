@@ -27,6 +27,7 @@ class AdminModule : public ProtobufModule<AdminMessage>
     void handleGetConfig(const MeshPacket &req, uint32_t configType);
     void handleGetModuleConfig(const MeshPacket &req, uint32_t configType);
     void handleGetChannel(const MeshPacket &req, uint32_t channelIndex);
+    void handleGetDeviceMetadata(const MeshPacket &req);
 
     /**
      * Setters
@@ -36,6 +37,7 @@ class AdminModule : public ProtobufModule<AdminMessage>
     void handleSetConfig(const Config &c);
     void handleSetModuleConfig(const ModuleConfig &c);
     void handleSetChannel();
+    void reboot(int32_t seconds);
 };
 
 extern AdminModule *adminModule;

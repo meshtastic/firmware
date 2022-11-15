@@ -4,11 +4,12 @@
 
 static WiFiServerPort *apiPort;
 
-void initApiServer()
+void initApiServer(int port)
 {
     // Start API server on port 4403
     if (!apiPort) {
-        apiPort = new WiFiServerPort();
+        apiPort = new WiFiServerPort(port);
+        DEBUG_MSG("API server listening on TCP port %d\n", port);
         apiPort->init();
     }
 }
@@ -56,13 +57,11 @@ void WiFiServerPort::debugOut(char c)
         apiPort->openAPI->debugOut(c);
 }
 
-#define MESHTASTIC_PORTNUM 4403
 
-WiFiServerPort::WiFiServerPort() : WiFiServer(MESHTASTIC_PORTNUM), concurrency::OSThread("ApiServer") {}
+WiFiServerPort::WiFiServerPort(int port) : WiFiServer(port), concurrency::OSThread("ApiServer") {}
 
 void WiFiServerPort::init()
 {
-    DEBUG_MSG("API server listening on TCP port %d\n", MESHTASTIC_PORTNUM);
     begin();
 }
 

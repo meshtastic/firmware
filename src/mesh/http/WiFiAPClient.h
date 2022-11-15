@@ -4,20 +4,15 @@
 #include <Arduino.h>
 #include <functional>
 
-#ifdef HAS_WIFI
-#include <DNSServer.h>
+#ifdef ARCH_ESP32
 #include <WiFi.h>
 #endif
 
 /// @return true if wifi is now in use
-bool initWifi(bool forceSoftAP);
+bool initWifi();
 
 void deinitWifi();
 
 bool isWifiAvailable();
-
-void handleDNSResponse();
-
-bool isSoftAPForced();
 
 uint8_t getWifiDisconnectReason();

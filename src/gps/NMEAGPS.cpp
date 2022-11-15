@@ -19,14 +19,21 @@ static int32_t toDegInt(RawDegrees d)
 
 bool NMEAGPS::factoryReset()
 {
-#ifdef GPS_UBLOX
+#ifdef PIN_GPS_REINIT
+    //The L76K GNSS on the T-Echo requires the RESET pin to be pulled LOW
+    digitalWrite(PIN_GPS_REINIT, 0);
+    pinMode(PIN_GPS_REINIT, OUTPUT);
+    delay(150); //The L76K datasheet calls for at least 100MS delay
+    digitalWrite(PIN_GPS_REINIT, 1);
+#endif  
+
+    // send the UBLOX Factory Reset Command regardless of detect state, something is very wrong, just assume it's UBLOX.
     // Factory Reset
     byte _message_reset[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF,
         0xFB, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0xFF, 0xFF, 0x00, 0x00, 0x17, 0x2B, 0x7E};
     _serial_gps->write(_message_reset,sizeof(_message_reset));
     delay(1000);
-#endif
     return true;
 }
 
@@ -155,7 +162,7 @@ bool NMEAGPS::lookForLocation()
         return false;
     }
 
-    p.location_source = Position_LocSource_LOCSRC_GPS_INTERNAL;
+    p.location_source = Position_LocSource_LOC_INTERNAL;
 
     // Dilution of precision (an accuracy metric) is reported in 10^2 units, so we need to scale down when we use it
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
@@ -176,8 +183,8 @@ bool NMEAGPS::lookForLocation()
     p.latitude_i = toDegInt(loc.lat);
     p.longitude_i = toDegInt(loc.lng);
 
-    p.alt_geoid_sep = reader.geoidHeight.meters();
-    p.altitude_hae = reader.altitude.meters() + p.alt_geoid_sep;
+    p.altitude_geoidal_separation = reader.geoidHeight.meters();
+    p.altitude_hae = reader.altitude.meters() + p.altitude_geoidal_separation;
     p.altitude = reader.altitude.meters();
 
     p.fix_quality = fixQual;
@@ -194,7 +201,7 @@ bool NMEAGPS::lookForLocation()
     t.tm_mon = reader.date.month() - 1;
     t.tm_year = reader.date.year() - 1900;
     t.tm_isdst = false;
-    p.pos_timestamp = mktime(&t);
+    p.timestamp = mktime(&t);
 
     // Nice to have, if available
     if (reader.satellites.isUpdated()) {
@@ -210,13 +217,10 @@ bool NMEAGPS::lookForLocation()
         }
     }
 
-/*
-    // REDUNDANT?
-    // expect gps pos lat=37.520825, lon=-122.309162, alt=158
-    DEBUG_MSG("new NMEA GPS pos lat=%f, lon=%f, alt=%d, dop=%g, heading=%f\n",
-              latitude * 1e-7, longitude * 1e-7, altitude, dop * 1e-2,
-              heading * 1e-5);
-*/
+    if (reader.speed.isUpdated() && reader.speed.isValid()) {
+        p.ground_speed = reader.speed.kmph();
+    }
+
     return true;
 }
 

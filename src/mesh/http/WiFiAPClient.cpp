@@ -8,8 +8,8 @@
 #include "mesh/wifi/WiFiServerAPI.h"
 #include "mqtt/MQTT.h"
 #include "target_specific.h"
-#include <DNSServer.h>
 #include <ESPmDNS.h>
+#include <esp_wifi.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
 
@@ -21,14 +21,11 @@ using namespace concurrency;
 
 static void WiFiEvent(WiFiEvent_t event);
 
-// DNS Server for the Captive Portal
-DNSServer dnsServer;
-
 // NTP
 WiFiUDP ntpUDP;
 
 #ifndef DISABLE_NTP
-NTPClient timeClient(ntpUDP, config.device.ntp_server);
+NTPClient timeClient(ntpUDP, config.network.ntp_server);
 #endif
 
 uint8_t wifiDisconnectReason = 0;
@@ -36,46 +33,29 @@ uint8_t wifiDisconnectReason = 0;
 // Stores our hostname
 char ourHost[16];
 
-bool forcedSoftAP = 0;
-
 bool APStartupComplete = 0;
 
 static bool needReconnect = true; // If we create our reconnector, run it once at the beginning
 
-// FIXME, veto light sleep if we have a TCP server running
-#if 0
-class WifiSleepObserver : public Observer<uint32_t> {
-protected:
-
-    /// Return 0 if sleep is okay
-    virtual int onNotify(uint32_t newValue) {
-
-    }
-};
-
-static WifiSleepObserver wifiSleepObserver;
-//preflightSleepObserver.observe(&preflightSleep);
-#endif
-
 static int32_t reconnectWiFi()
 {
-    const char *wifiName = config.wifi.ssid;
-    const char *wifiPsw = config.wifi.psk;
+    const char *wifiName = config.network.wifi_ssid;
+    const char *wifiPsw = config.network.wifi_psk;
 
-    if (needReconnect && !WiFi.isConnected()) {
-        // if (radioConfig.has_preferences && needReconnect && !WiFi.isConnected()) {
-
+    if (config.network.wifi_enabled && needReconnect && !WiFi.isConnected()) {
+        
         if (!*wifiPsw) // Treat empty password as no password
             wifiPsw = NULL;
 
         if (*wifiName) {
             needReconnect = false;
 
+            // Make sure we clear old connection credentials
+            WiFi.disconnect(false, true);
+
             DEBUG_MSG("... Reconnecting to WiFi access point\n");
             WiFi.mode(WIFI_MODE_STA);
             WiFi.begin(wifiName, wifiPsw);
-
-            // Starting timeClient;
         }
     }
 
@@ -102,21 +82,10 @@ static int32_t reconnectWiFi()
 
 static Periodic *wifiReconnect;
 
-bool isSoftAPForced()
-{
-    return forcedSoftAP;
-}
-
 bool isWifiAvailable()
 {
-    // If wifi status is connected, return true regardless of the radio configuration.
-    if (isSoftAPForced()) {
-        return true;
-    }
 
-    const char *wifiName = config.wifi.ssid;
-
-    if (*wifiName) {
+    if (config.network.wifi_enabled && (config.network.wifi_ssid[0])) {
         return true;
     } else {
         return false;
@@ -180,96 +149,57 @@ static void onNetworkConnected()
 }
 
 // Startup WiFi
-bool initWifi(bool forceSoftAP)
+bool initWifi()
 {
-    forcedSoftAP = forceSoftAP;
+    if (config.network.wifi_enabled && config.network.wifi_ssid[0]) {
 
-    if ((config.wifi.ssid[0]) || forceSoftAP) {
-        // if ((radioConfig.has_preferences && config.wifi.ssid[0]) || forceSoftAP) {
-        const char *wifiName = config.wifi.ssid;
-        const char *wifiPsw = config.wifi.psk;
-
-        if (forceSoftAP) {
-            DEBUG_MSG("WiFi ... Forced AP Mode\n");
-        } else if (config.wifi.ap_mode) {
-            DEBUG_MSG("WiFi ... AP Mode\n");
-        } else {
-            DEBUG_MSG("WiFi ... Client Mode\n");
-        }
+        const char *wifiName = config.network.wifi_ssid;
+        const char *wifiPsw = config.network.wifi_psk;
 
         createSSLCert();
 
         if (!*wifiPsw) // Treat empty password as no password
             wifiPsw = NULL;
 
-        if (*wifiName || forceSoftAP) {
-            if (config.wifi.ap_mode || forceSoftAP) {
+        if (*wifiName) {
+            uint8_t dmac[6];
+            getMacAddr(dmac);
+            sprintf(ourHost, "Meshtastic-%02x%02x", dmac[4], dmac[5]);
 
-                IPAddress apIP(192, 168, 42, 1);
-                WiFi.onEvent(WiFiEvent);
-                WiFi.mode(WIFI_AP);
-
-                if (forcedSoftAP) {
-                    const char *softAPssid = "meshtasticAdmin";
-                    const char *softAPpasswd = "12345678";
-                    int ok = WiFi.softAP(softAPssid, softAPpasswd);
-                    DEBUG_MSG("Starting (Forced) WIFI AP: ssid=%s, ok=%d\n", softAPssid, ok);
-
-                } else {
-
-                    // If AP is configured to be hidden hidden
-                    if (config.wifi.ap_hidden) {
-
-                        // The configurations on softAP are from the espresif library
-                        int ok = WiFi.softAP(wifiName, wifiPsw, 1, 1, 4);
-                        DEBUG_MSG("Starting hidden WIFI AP: ssid=%s, ok=%d\n", wifiName, ok);
-                    } else {
-                        int ok = WiFi.softAP(wifiName, wifiPsw);
-                        DEBUG_MSG("Starting WIFI AP: ssid=%s, ok=%d\n", wifiName, ok);
-                    }
-                    int ok = WiFi.softAP(wifiName, wifiPsw);
-                    DEBUG_MSG("Starting WIFI AP: ssid=%s, ok=%d\n", wifiName, ok);
-                }
-
-                WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
-                DEBUG_MSG("MY IP AP ADDRESS: %s\n", WiFi.softAPIP().toString().c_str());
-
-                // This is needed to improve performance.
-                esp_wifi_set_ps(WIFI_PS_NONE); // Disable radio power saving
-
-                dnsServer.start(53, "*", apIP);
-
-            } else {
-                uint8_t dmac[6];
-                getMacAddr(dmac);
-                sprintf(ourHost, "Meshtastic-%02x%02x", dmac[4], dmac[5]);
-
-                WiFi.mode(WIFI_MODE_STA);
-                WiFi.setHostname(ourHost);
-                WiFi.onEvent(WiFiEvent);
-
-                // This is needed to improve performance.
-                esp_wifi_set_ps(WIFI_PS_NONE); // Disable radio power saving
-
-                WiFi.onEvent(
-                    [](WiFiEvent_t event, WiFiEventInfo_t info) {
-                        Serial.print("\nWiFi lost connection. Reason: ");
-                        Serial.println(info.disconnected.reason);
-
-                        /*
-                           If we are disconnected from the AP for some reason,
-                           save the error code.
-
-                           For a reference to the codes:
-                             https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/wifi.html#wi-fi-reason-code
-                        */
-                        wifiDisconnectReason = info.disconnected.reason;
-                    },
-                    WiFiEvent_t::SYSTEM_EVENT_STA_DISCONNECTED);
-
-                DEBUG_MSG("JOINING WIFI soon: ssid=%s\n", wifiName);
-                wifiReconnect = new Periodic("WifiConnect", reconnectWiFi);
+            WiFi.mode(WIFI_MODE_STA);
+            WiFi.setHostname(ourHost);
+            WiFi.onEvent(WiFiEvent);
+            WiFi.setAutoReconnect(true);
+            WiFi.setSleep(false);
+            if (config.network.eth_mode == Config_NetworkConfig_EthMode_STATIC && config.network.ipv4_config.ip != 0) {
+                WiFi.config(config.network.ipv4_config.ip,
+                            config.network.ipv4_config.gateway,
+                            config.network.ipv4_config.subnet,
+                            config.network.ipv4_config.dns, 
+                            config.network.ipv4_config.dns); // Wifi wants two DNS servers... set both to the same value
             }
+
+            // This is needed to improve performance.
+            esp_wifi_set_ps(WIFI_PS_NONE); // Disable radio power saving
+
+            WiFi.onEvent(
+                [](WiFiEvent_t event, WiFiEventInfo_t info) {
+                    Serial.print("\nWiFi lost connection. Reason: ");
+                    Serial.println(info.wifi_sta_disconnected.reason);
+
+                    /*
+                        If we are disconnected from the AP for some reason,
+                        save the error code.
+
+                        For a reference to the codes:
+                            https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/wifi.html#wi-fi-reason-code
+                    */
+                    wifiDisconnectReason = info.wifi_sta_disconnected.reason;
+                },
+                WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+
+            DEBUG_MSG("JOINING WIFI soon: ssid=%s\n", wifiName);
+            wifiReconnect = new Periodic("WifiConnect", reconnectWiFi);
         }
         return true;
     } else {
@@ -301,8 +231,6 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
         DEBUG_MSG("Disconnected from WiFi access point\n");
-        // Event 5
-
         needReconnect = true;
         break;
     case SYSTEM_EVENT_STA_AUTHMODE_CHANGE:
@@ -315,6 +243,7 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case SYSTEM_EVENT_STA_LOST_IP:
         DEBUG_MSG("Lost IP address and IP address is reset to 0\n");
+        needReconnect = true;
         break;
     case SYSTEM_EVENT_STA_WPS_ER_SUCCESS:
         DEBUG_MSG("WiFi Protected Setup (WPS): succeeded in enrollee mode\n");
@@ -330,7 +259,6 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case SYSTEM_EVENT_AP_START:
         DEBUG_MSG("WiFi access point started\n");
-
         onNetworkConnected();
         break;
     case SYSTEM_EVENT_AP_STOP:
@@ -368,13 +296,6 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     default:
         break;
-    }
-}
-
-void handleDNSResponse()
-{
-    if (config.wifi.ap_mode || isSoftAPForced()) {
-        dnsServer.processNextRequest();
     }
 }
 

@@ -14,6 +14,7 @@
 // not found then probe for SX1262
 #define USE_RF95
 #define USE_SX1262
+#define USE_SX1268
 
 #define LORA_DIO0 26 // a No connect on the SX1262 module
 #define LORA_RESET 23
@@ -34,4 +35,5 @@
 // Leave undefined to disable our PMU IRQ handler.  DO NOT ENABLE THIS because the pmuirq can cause sperious interrupts
 // and waking from light sleep
 // #define PMU_IRQ 35
-#define AXP192_SLAVE_ADDRESS 0x34
+#define HAS_AXP192
+#define GPS_UBLOX

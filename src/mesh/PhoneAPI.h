@@ -16,22 +16,22 @@
  * Eventually there should be once instance of this class for each live connection (because it has a bit of state
  * for that connection)
  */
-class PhoneAPI
-    : public Observer<uint32_t> // FIXME, we shouldn't be inheriting from Observer, instead use CallbackObserver as a member
+class PhoneAPI : public Observer<uint32_t> // FIXME, we shouldn't be inheriting from Observer, instead use CallbackObserver as a member
 {
     enum State {
         STATE_SEND_NOTHING, // Initial state, don't send anything until the client starts asking for config
         STATE_SEND_MY_INFO, // send our my info record
-        STATE_SEND_GROUPS, // new in 1.3?
-        STATE_SEND_CONFIG, // Replacement for the old Radioconfig
         STATE_SEND_NODEINFO, // states progress in this order as the device sends to to the client
+        STATE_SEND_CHANNELS, // Send all channels
+        STATE_SEND_CONFIG, // Replacement for the old Radioconfig
+        STATE_SEND_MODULECONFIG, // Send Module specific config
         STATE_SEND_COMPLETE_ID,
         STATE_SEND_PACKETS // send packets or debug strings
     };
 
     State state = STATE_SEND_NOTHING;
 
-    int8_t config_state = Config_device_tag;
+    uint8_t config_state = 0;
 
     /**
      * Each packet sent to the phone has an incrementing count
@@ -59,7 +59,7 @@ class PhoneAPI
     // Call this when the client drops the connection, resets the state to STATE_SEND_NOTHING
     // Unregisters our observer.  A closed connection **can** be reopened by calling init again.
     virtual void close();
-
+    
     /**
      * Handle a ToRadio protobuf
      * @return true true if a packet was queued for sending (so that caller can yield)
@@ -80,6 +80,8 @@ class PhoneAPI
     bool available();
 
     bool isConnected() { return state != STATE_SEND_NOTHING; }
+
+    void setInitialState() { state = STATE_SEND_MY_INFO; }
 
     /// emit a debugging log character, FIXME - implement
     void debugOut(char c) { }

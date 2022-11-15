@@ -62,13 +62,6 @@ Channel &Channels::fixupChannel(ChannelIndex chIndex)
         // Convert the old string "Default" to our new short representation
         if (strcmp(channelSettings.name, "Default") == 0)
             *channelSettings.name = '\0';
-
-        /* Convert any old usage of the defaultpsk into our new short representation.
-        if (channelSettings.psk.size == sizeof(defaultpsk) &&
-            memcmp(channelSettings.psk.bytes, defaultpsk, sizeof(defaultpsk)) == 0) {
-            *channelSettings.psk.bytes = 1;
-            channelSettings.psk.size = 1;
-        } */
     }
 
     hashes[chIndex] = generateHash(chIndex);
@@ -85,8 +78,8 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
     ChannelSettings &channelSettings = ch.settings;
     Config_LoRaConfig &loraConfig = config.lora;
 
-    loraConfig.modem_preset = Config_LoRaConfig_ModemPreset_LongFast; // Default to Long Range & Fast
-
+    loraConfig.modem_preset = Config_LoRaConfig_ModemPreset_LONG_FAST; // Default to Long Range & Fast
+    loraConfig.use_preset = true;
     loraConfig.tx_power = 0; // default
     uint8_t defaultpskIndex = 1;
     channelSettings.psk.bytes[0] = defaultpskIndex;
@@ -124,7 +117,22 @@ CryptoKey Channels::getKey(ChannelIndex chIndex)
             DEBUG_MSG("Expanding short PSK #%d\n", pskIndex);
             if (pskIndex == 0)
                 k.length = 0; // Turn off encryption
-            else {
+            else if (oemStore.oem_aes_key.size > 1) {
+                // Use the OEM key
+                DEBUG_MSG("Using OEM Key with %d bytes\n", oemStore.oem_aes_key.size);
+                memcpy(k.bytes, oemStore.oem_aes_key.bytes , oemStore.oem_aes_key.size);
+                k.length = oemStore.oem_aes_key.size;
+                // Bump up the last byte of PSK as needed
+                uint8_t *last = k.bytes + oemStore.oem_aes_key.size - 1;
+                *last = *last + pskIndex - 1; // index of 1 means no change vs defaultPSK
+                if (k.length < 16) {
+                    DEBUG_MSG("Warning: OEM provided a too short AES128 key - padding\n");
+                    k.length = 16;
+                } else if (k.length < 32 && k.length != 16) {
+                    DEBUG_MSG("Warning: OEM provided a too short AES256 key - padding\n");
+                    k.length = 32;
+                }
+            } else {
                 memcpy(k.bytes, defaultpsk, sizeof(defaultpsk));
                 k.length = sizeof(defaultpsk);
                 // Bump up the last byte of PSK as needed
@@ -210,35 +218,37 @@ const char *Channels::getName(size_t chIndex)
         // Per mesh.proto spec, if bandwidth is specified we must ignore modemPreset enum, we assume that in that case
         // the app fucked up and forgot to set channelSettings.name
 
-        if (config.lora.bandwidth != 0)
-            channelName = "Unset";
-        else
+        if (config.lora.use_preset) {
             switch (config.lora.modem_preset) {
-            case Config_LoRaConfig_ModemPreset_ShortSlow:
+            case Config_LoRaConfig_ModemPreset_SHORT_SLOW:
                 channelName = "ShortSlow";
                 break;
-            case Config_LoRaConfig_ModemPreset_ShortFast:
+            case Config_LoRaConfig_ModemPreset_SHORT_FAST:
                 channelName = "ShortFast";
                 break;
-            case Config_LoRaConfig_ModemPreset_MidSlow:
+            case Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
                 channelName = "MediumSlow";
                 break;
-            case Config_LoRaConfig_ModemPreset_MidFast:
+            case Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
                 channelName = "MediumFast";
                 break;
-            case Config_LoRaConfig_ModemPreset_LongFast:
-                channelName = "LongFast";
-                break;
-            case Config_LoRaConfig_ModemPreset_LongSlow:
+            case Config_LoRaConfig_ModemPreset_LONG_SLOW:
                 channelName = "LongSlow";
                 break;
-            case Config_LoRaConfig_ModemPreset_VLongSlow:
+            case Config_LoRaConfig_ModemPreset_LONG_FAST:
+                channelName = "LongFast";
+                break;
+            case Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW:
                 channelName = "VLongSlow";
                 break;
             default:
                 channelName = "Invalid";
                 break;
             }
+        }
+        else {
+            channelName = "Custom";
+        }
     }
 
     return channelName;
@@ -257,7 +267,7 @@ their nodes
 *
 * This function will also need to be implemented in GUI apps that talk to the radio.
 *
-* https://github.com/meshtastic/Meshtastic-device/issues/269
+* https://github.com/meshtastic/firmware/issues/269
 */
 const char *Channels::getPrimaryName()
 {

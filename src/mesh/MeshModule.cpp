@@ -72,7 +72,7 @@ void MeshModule::callPlugins(const MeshPacket &mp, RxSource src)
     bool moduleFound = false;
 
     // We now allow **encrypted** packets to pass through the modules
-    bool isDecoded = mp.which_payloadVariant == MeshPacket_decoded_tag;
+    bool isDecoded = mp.which_payload_variant == MeshPacket_decoded_tag;
 
     currentReply = NULL; // No reply yet
 
@@ -109,10 +109,7 @@ void MeshModule::callPlugins(const MeshPacket &mp, RxSource src)
             /// Also: if a packet comes in on the local PC interface, we don't check for bound channels, because it is TRUSTED and it needs to
             /// to be able to fetch the initial admin packets without yet knowing any channels.
 
-            bool rxChannelOk = !pi.boundChannel || (mp.from == 0) ||
-                !ch ||
-                strlen(ch->settings.name) > 0 ||
-                strcmp(ch->settings.name, pi.boundChannel);
+            bool rxChannelOk = !pi.boundChannel || (mp.from == 0) || (strcasecmp(ch->settings.name, pi.boundChannel) == 0);
 
             if (!rxChannelOk) {
                 // no one should have already replied!
@@ -211,7 +208,7 @@ void MeshModule::sendResponse(const MeshPacket &req)
  */
 void setReplyTo(MeshPacket *p, const MeshPacket &to)
 {
-    assert(p->which_payloadVariant == MeshPacket_decoded_tag); // Should already be set by now
+    assert(p->which_payload_variant == MeshPacket_decoded_tag); // Should already be set by now
     p->to = getFrom(&to);    // Make sure that if we are sending to the local node, we use our local node addr, not 0
     p->channel = to.channel; // Use the same channel that the request came in on
 
@@ -266,7 +263,7 @@ AdminMessageHandleResult MeshModule::handleAdminMessageForAllPlugins(const MeshP
                 // In case we have a response it always has priority.
                 DEBUG_MSG("Reply prepared by module '%s' of variant: %d\n",
                     pi.name,
-                    response->which_variant);
+                    response->which_payload_variant);
                 handled = h;
             }
             else if ((handled != AdminMessageHandleResult::HANDLED_WITH_RESPONSE) &&

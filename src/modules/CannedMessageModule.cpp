@@ -1,18 +1,41 @@
 #include "configuration.h"
-#ifndef NO_SCREEN
+#if HAS_SCREEN
 #include "CannedMessageModule.h"
 #include "FSCommon.h"
+#include "NodeDB.h"
 #include "MeshService.h"
 #include "PowerFSM.h" // neede for button bypass
 #include "mesh/generated/cannedmessages.pb.h"
 
-// TODO: reuse defined from Screen.cpp
+#ifdef OLED_RU
+#include "graphics/fonts/OLEDDisplayFontsRU.h"
+#endif
+
+#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
+// The screen is bigger so use bigger fonts
+#define FONT_SMALL ArialMT_Plain_16
+#define FONT_MEDIUM ArialMT_Plain_24
+#define FONT_LARGE ArialMT_Plain_24
+#else
+#ifdef OLED_RU
+#define FONT_SMALL ArialMT_Plain_10_RU
+#else
 #define FONT_SMALL ArialMT_Plain_10
+#endif
 #define FONT_MEDIUM ArialMT_Plain_16
 #define FONT_LARGE ArialMT_Plain_24
+#endif
+
+#define fontHeight(font) ((font)[1] + 1) // height is position 1
+
+#define FONT_HEIGHT_SMALL fontHeight(FONT_SMALL)
+#define FONT_HEIGHT_MEDIUM fontHeight(FONT_MEDIUM)
+#define FONT_HEIGHT_LARGE fontHeight(FONT_LARGE)
 
 // Remove Canned message screen if no action is taken for some milliseconds
 #define INACTIVATE_AFTER_MS 20000
+
+extern uint8_t cardkb_found;
 
 static const char *cannedMessagesConfigFile = "/prefs/cannedConf.proto";
 
@@ -30,7 +53,7 @@ CannedMessageModule::CannedMessageModule()
 {
     if (moduleConfig.canned_message.enabled) {
         this->loadProtoForModule();
-        if (this->splitConfiguredMessages() <= 0) {
+        if ((this->splitConfiguredMessages() <= 0) && (cardkb_found != CARDKB_ADDR)) {
             DEBUG_MSG("CannedMessageModule: No messages are configured. Module is disabled\n");
             this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
         } else {
@@ -46,16 +69,14 @@ CannedMessageModule::CannedMessageModule()
  *
  * @return int Returns the number of messages found.
  */
+// FIXME: This is just one set of messages now
 int CannedMessageModule::splitConfiguredMessages()
 {
     int messageIndex = 0;
     int i = 0;
 
     // collect all the message parts
-    strcpy(this->messageStore, cannedMessageModuleConfig.messagesPart1);
-    strcat(this->messageStore, cannedMessageModuleConfig.messagesPart2);
-    strcat(this->messageStore, cannedMessageModuleConfig.messagesPart3);
-    strcat(this->messageStore, cannedMessageModuleConfig.messagesPart4);
+    strcpy(this->messageStore, cannedMessageModuleConfig.messages);
 
     // The first message points to the beginning of the store.
     this->messages[messageIndex++] = this->messageStore;
@@ -102,25 +123,63 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     }
 
     bool validEvent = false;
-    if (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_KEY_UP)) {
+    if (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_UP)) {
         DEBUG_MSG("Canned message event UP\n");
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_UP;
         validEvent = true;
     }
-    if (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_KEY_DOWN)) {
+    if (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_DOWN)) {
         DEBUG_MSG("Canned message event DOWN\n");
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_DOWN;
         validEvent = true;
     }
-    if (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_KEY_SELECT)) {
+    if (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_SELECT)) {
         DEBUG_MSG("Canned message event Select\n");
         // when inactive, call the onebutton shortpress instead. Activate Module only on up/down
         if ((this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED)) {
             powerFSM.trigger(EVENT_PRESS);
         } else {
+            this->payload = this->runState;
             this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
             validEvent = true;
         }
+    }
+    if (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL)) {
+        DEBUG_MSG("Canned message event Cancel\n");
+        // emulate a timeout. Same result
+        this->lastTouchMillis = 0;
+        validEvent = true;
+    }
+    if ((event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_BACK)) || 
+        (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) ||
+        (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT))) {
+        DEBUG_MSG("Canned message event (%x)\n",event->kbchar);
+        if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
+            // pass the pressed key
+            this->payload = event->kbchar;
+            this->lastTouchMillis = millis();
+            validEvent = true;
+        }
+    }
+    if (event->inputEvent == static_cast<char>(ANYKEY)) {
+        DEBUG_MSG("Canned message event any key pressed\n");
+        // when inactive, this will switch to the freetext mode
+        if ((this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED)) {
+            this->runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+        }
+        // pass the pressed key
+        this->payload = event->kbchar;
+        this->lastTouchMillis = millis();
+        validEvent = true;
+    }
+    if (event->inputEvent == static_cast<char>(MATRIXKEY)) {
+        DEBUG_MSG("Canned message event Matrix key pressed\n");
+        // this will send the text immediately on matrix press
+        this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
+        this->payload = event->kbchar;
+        this->currentMessageIndex = event->kbchar -1;
+        this->lastTouchMillis = millis();
+        validEvent = true;
     }
 
     if (validEvent) {
@@ -144,7 +203,7 @@ void CannedMessageModule::sendText(NodeNum dest, const char *message, bool wantR
         p->decoded.payload.size++;
     }
 
-    DEBUG_MSG("Sending message id=%d, msg=%.*s\n", p->id, p->decoded.payload.size, p->decoded.payload.bytes);
+    DEBUG_MSG("Sending message id=%d, dest=%x, msg=%.*s\n", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
 
     service.sendToMesh(p);
 }
@@ -153,7 +212,7 @@ int32_t CannedMessageModule::runOnce()
 {
     if ((!moduleConfig.canned_message.enabled) || (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) ||
         (this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE)) {
-        return 30000; // TODO: should return MAX_VAL
+        return INT32_MAX;
     }
     DEBUG_MSG("Check status\n");
     UIFrameEvent e = {false, true};
@@ -162,33 +221,149 @@ int32_t CannedMessageModule::runOnce()
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         e.frameChanged = true;
         this->currentMessageIndex = -1;
+        this->freetext = ""; // clear freetext
+        this->cursor = 0;
+        this->destSelect = false;
         this->notifyObservers(&e);
-    } else if ((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) && (millis() - this->lastTouchMillis) > INACTIVATE_AFTER_MS) {
+    } else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) && ((millis() - this->lastTouchMillis) > INACTIVATE_AFTER_MS)) {
         // Reset module
-        DEBUG_MSG("Reset due the lack of activity.\n");
+        DEBUG_MSG("Reset due to lack of activity.\n");
         e.frameChanged = true;
         this->currentMessageIndex = -1;
+        this->freetext = ""; // clear freetext
+        this->cursor = 0;
+        this->destSelect = false;
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         this->notifyObservers(&e);
-    } else if (this->currentMessageIndex == -1) {
+    } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT) {
+        if (this->payload == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
+            if (this->freetext.length() > 0) {
+                sendText(this->dest, this->freetext.c_str(), true);
+                this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
+            } else {
+                DEBUG_MSG("Reset message is empty.\n");
+                this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+            }
+        } else {
+            if ((this->messagesCount > this->currentMessageIndex) && (strlen(this->messages[this->currentMessageIndex]) > 0)) {
+                sendText(NODENUM_BROADCAST, this->messages[this->currentMessageIndex], true);
+                this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
+            } else {
+                DEBUG_MSG("Reset message is empty.\n");
+                this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+            }
+        }
+        e.frameChanged = true;
+        this->currentMessageIndex = -1;
+        this->freetext = ""; // clear freetext
+        this->cursor = 0;
+        this->destSelect = false;
+        this->notifyObservers(&e);
+        return 2000;
+     } else if ((this->runState != CANNED_MESSAGE_RUN_STATE_FREETEXT) && (this->currentMessageIndex == -1)) {
         this->currentMessageIndex = 0;
         DEBUG_MSG("First touch (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
         e.frameChanged = true;
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
-    } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT) {
-        sendText(NODENUM_BROADCAST, this->messages[this->currentMessageIndex], true);
-        this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
-        this->currentMessageIndex = -1;
-        this->notifyObservers(&e);
-        return 2000;
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_UP) {
-        this->currentMessageIndex = getPrevIndex();
-        this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
-        DEBUG_MSG("MOVE UP (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
+        if (this->messagesCount > 0) {
+            this->currentMessageIndex = getPrevIndex();
+            this->freetext = ""; // clear freetext
+            this->cursor = 0;
+            this->destSelect = false;
+            this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
+            DEBUG_MSG("MOVE UP (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
+        }
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_DOWN) {
-        this->currentMessageIndex = this->getNextIndex();
-        this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
-        DEBUG_MSG("MOVE DOWN (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
+        if (this->messagesCount > 0) {
+            this->currentMessageIndex = this->getNextIndex();
+            this->freetext = ""; // clear freetext
+            this->cursor = 0;
+            this->destSelect = false;
+            this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
+            DEBUG_MSG("MOVE DOWN (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
+        }
+    } else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
+        e.frameChanged = true;
+        switch (this->payload) {
+            case 0xb4: // left
+                if (this->destSelect){
+                    size_t numNodes = nodeDB.getNumNodes();
+                    if(this->dest == NODENUM_BROADCAST) {
+                        this->dest = nodeDB.getNodeNum();
+                    }
+                    for (unsigned int i = 0; i < numNodes; i++) {
+                        if (nodeDB.getNodeByIndex(i)->num == this->dest) {
+                            this->dest = (i > 0) ? nodeDB.getNodeByIndex(i-1)->num : nodeDB.getNodeByIndex(numNodes-1)->num;
+                            break;
+                        }
+                    }
+                    if(this->dest == nodeDB.getNodeNum()) {
+                        this->dest = NODENUM_BROADCAST;
+                    }
+                }else{
+                    if (this->cursor > 0) {
+                        this->cursor--;
+                    }
+                }
+                break;
+            case 0xb7: // right
+                if (this->destSelect){
+                    size_t numNodes = nodeDB.getNumNodes();
+                    if(this->dest == NODENUM_BROADCAST) {
+                        this->dest = nodeDB.getNodeNum();
+                    }
+                    for (unsigned int i = 0; i < numNodes; i++) {
+                        if (nodeDB.getNodeByIndex(i)->num == this->dest) {
+                            this->dest = (i < numNodes-1) ? nodeDB.getNodeByIndex(i+1)->num : nodeDB.getNodeByIndex(0)->num;
+                            break;
+                        }
+                    }
+                    if(this->dest == nodeDB.getNodeNum()) {
+                        this->dest = NODENUM_BROADCAST;
+                    }
+                }else{
+                    if (this->cursor < this->freetext.length()) {
+                        this->cursor++;
+                    }
+                }
+                break;
+            case 0x08: // backspace
+                if (this->freetext.length() > 0) {
+                    if(this->cursor == this->freetext.length()) {
+                        this->freetext = this->freetext.substring(0, this->freetext.length() - 1);
+                    } else {
+                        this->freetext = this->freetext.substring(0, this->cursor - 1) + this->freetext.substring(this->cursor, this->freetext.length());
+                    }
+                    this->cursor--;
+                }
+                break;
+            case 0x09: // tab
+                if(this->destSelect) {
+                    this->destSelect = false;
+                } else {
+                    this->destSelect = true;
+                }
+                break;
+            default:
+                if(this->cursor == this->freetext.length()) {
+                    this->freetext += this->payload;
+                } else {
+                    this->freetext = this->freetext.substring(0, this->cursor)
+                    + this->payload
+                    + this->freetext.substring(this->cursor);
+                }
+                this->cursor += 1;
+                if (this->freetext.length() > Constants_DATA_PAYLOAD_LEN) {
+                    this->cursor = Constants_DATA_PAYLOAD_LEN;
+                    this->freetext = this->freetext.substring(0, Constants_DATA_PAYLOAD_LEN);
+                }
+                break;
+        }
+        
+        this->lastTouchMillis = millis();
+        this->notifyObservers(&e);
+        return INACTIVATE_AFTER_MS;
     }
 
     if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
@@ -197,7 +372,7 @@ int32_t CannedMessageModule::runOnce()
         return INACTIVATE_AFTER_MS;
     }
 
-    return 30000; // TODO: should return MAX_VAL
+    return INT32_MAX; 
 }
 
 const char *CannedMessageModule::getCurrentMessage()
@@ -212,6 +387,19 @@ const char *CannedMessageModule::getNextMessage()
 {
     return this->messages[this->getNextIndex()];
 }
+const char* CannedMessageModule::getNodeName(NodeNum node) {
+    if (node == NODENUM_BROADCAST){
+        return "Broadcast";
+    }else{
+        NodeInfo *info = nodeDB.getNode(node);
+        if(info != NULL) {
+            return info->user.long_name;
+        }else{
+            return "Unknown";
+        }
+    }
+}
+
 bool CannedMessageModule::shouldDraw()
 {
     if (!moduleConfig.canned_message.enabled) {
@@ -242,6 +430,8 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 {
     displayedNodeNum = 0; // Not currently showing a node pane
 
+    char buffer[50];
+
     if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->setFont(FONT_MEDIUM);
@@ -249,15 +439,32 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
     } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) {
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_SMALL);
-        display->drawString(10 + x, 0 + y + 16, "Canned Message\nModule disabled.");
-    } else {
+        display->drawString(10 + x, 0 + y + FONT_HEIGHT_SMALL, "Canned Message\nModule disabled.");
+    }else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_SMALL);
-        display->drawString(0 + x, 0 + y, cannedMessageModule->getPrevMessage());
-        display->setFont(FONT_MEDIUM);
-        display->drawString(0 + x, 0 + y + 8, cannedMessageModule->getCurrentMessage());
-        display->setFont(FONT_SMALL);
-        display->drawString(0 + x, 0 + y + 24, cannedMessageModule->getNextMessage());
+        if (this->destSelect) {
+            display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+            display->setColor(BLACK);
+        }
+        display->drawStringf(0 + x, 0 + y, buffer, "To: %s", cannedMessageModule->getNodeName(this->dest));
+        // used chars right aligned
+        sprintf(buffer, "%d left", Constants_DATA_PAYLOAD_LEN - this->freetext.length());
+        display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 0, buffer);
+        display->setColor(WHITE);
+        display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), cannedMessageModule->drawWithCursor(cannedMessageModule->freetext, cannedMessageModule->cursor));
+    } else {
+        if (this->messagesCount > 0) {
+            display->setTextAlignment(TEXT_ALIGN_LEFT);
+            display->setFont(FONT_SMALL);
+            display->drawStringf(0 + x, 0 + y, buffer, "To: %s", cannedMessageModule->getNodeName(this->dest));
+            display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL, cannedMessageModule->getPrevMessage());
+            display->fillRect(0 + x, 0 + y + FONT_HEIGHT_SMALL * 2, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+            display->setColor(BLACK);
+            display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * 2, cannedMessageModule->getCurrentMessage());
+            display->setColor(WHITE);
+            display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * 3, cannedMessageModule->getNextMessage());
+        }
     }
 }
 
@@ -283,7 +490,7 @@ bool CannedMessageModule::saveProtoForModule()
     FS.mkdir("/prefs");
 #endif
 
-    okay &= saveProto(cannedMessagesConfigFile, CannedMessageModuleConfig_size, sizeof(CannedMessageModuleConfig),
+    okay &= saveProto(cannedMessagesConfigFile, CannedMessageModuleConfig_size, sizeof(cannedMessageModuleConfig),
                       CannedMessageModuleConfig_fields, &cannedMessageModuleConfig);
 
     return okay;
@@ -294,10 +501,7 @@ bool CannedMessageModule::saveProtoForModule()
  */
 void CannedMessageModule::installDefaultCannedMessageModuleConfig()
 {
-    memset(cannedMessageModuleConfig.messagesPart1, 0, sizeof(cannedMessageModuleConfig.messagesPart1));
-    memset(cannedMessageModuleConfig.messagesPart2, 0, sizeof(cannedMessageModuleConfig.messagesPart2));
-    memset(cannedMessageModuleConfig.messagesPart3, 0, sizeof(cannedMessageModuleConfig.messagesPart3));
-    memset(cannedMessageModuleConfig.messagesPart4, 0, sizeof(cannedMessageModuleConfig.messagesPart4));
+    memset(cannedMessageModuleConfig.messages, 0, sizeof(cannedMessageModuleConfig.messages));
 }
 
 /**
@@ -314,52 +518,16 @@ AdminMessageHandleResult CannedMessageModule::handleAdminMessageForModule(const 
 {
     AdminMessageHandleResult result;
 
-    switch (request->which_variant) {
-    case AdminMessage_get_canned_message_module_part1_request_tag:
-        DEBUG_MSG("Client is getting radio canned message part1\n");
-        this->handleGetCannedMessageModulePart1(mp, response);
+    switch (request->which_payload_variant) {
+    case AdminMessage_get_canned_message_module_messages_request_tag:
+        DEBUG_MSG("Client is getting radio canned messages\n");
+        this->handleGetCannedMessageModuleMessages(mp, response);
         result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
         break;
 
-    case AdminMessage_get_canned_message_module_part2_request_tag:
-        DEBUG_MSG("Client is getting radio canned message part2\n");
-        this->handleGetCannedMessageModulePart2(mp, response);
-        result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
-        break;
-
-    case AdminMessage_get_canned_message_module_part3_request_tag:
-        DEBUG_MSG("Client is getting radio canned message part3\n");
-        this->handleGetCannedMessageModulePart3(mp, response);
-        result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
-        break;
-
-    case AdminMessage_get_canned_message_module_part4_request_tag:
-        DEBUG_MSG("Client is getting radio canned message part4\n");
-        this->handleGetCannedMessageModulePart4(mp, response);
-        result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
-        break;
-
-    case AdminMessage_set_canned_message_module_part1_tag:
-        DEBUG_MSG("Client is setting radio canned message part 1\n");
-        this->handleSetCannedMessageModulePart1(request->set_canned_message_module_part1);
-        result = AdminMessageHandleResult::HANDLED;
-        break;
-
-    case AdminMessage_set_canned_message_module_part2_tag:
-        DEBUG_MSG("Client is setting radio canned message part 2\n");
-        this->handleSetCannedMessageModulePart2(request->set_canned_message_module_part2);
-        result = AdminMessageHandleResult::HANDLED;
-        break;
-
-    case AdminMessage_set_canned_message_module_part3_tag:
-        DEBUG_MSG("Client is setting radio canned message part 3\n");
-        this->handleSetCannedMessageModulePart3(request->set_canned_message_module_part3);
-        result = AdminMessageHandleResult::HANDLED;
-        break;
-
-    case AdminMessage_set_canned_message_module_part4_tag:
-        DEBUG_MSG("Client is setting radio canned message part 4\n");
-        this->handleSetCannedMessageModulePart4(request->set_canned_message_module_part4);
+    case AdminMessage_set_canned_message_module_messages_tag:
+        DEBUG_MSG("Client is setting radio canned messages\n");
+        this->handleSetCannedMessageModuleMessages(request->set_canned_message_module_messages);
         result = AdminMessageHandleResult::HANDLED;
         break;
 
@@ -370,49 +538,23 @@ AdminMessageHandleResult CannedMessageModule::handleAdminMessageForModule(const 
     return result;
 }
 
-void CannedMessageModule::handleGetCannedMessageModulePart1(const MeshPacket &req, AdminMessage *response)
+void CannedMessageModule::handleGetCannedMessageModuleMessages(const MeshPacket &req, AdminMessage *response)
 {
-    DEBUG_MSG("*** handleGetCannedMessageModulePart1\n");
+    DEBUG_MSG("*** handleGetCannedMessageModuleMessages\n");
     assert(req.decoded.want_response);
 
-    response->which_variant = AdminMessage_get_canned_message_module_part1_response_tag;
-    strcpy(response->get_canned_message_module_part1_response, cannedMessageModuleConfig.messagesPart1);
+    response->which_payload_variant = AdminMessage_get_canned_message_module_messages_response_tag;
+    strcpy(response->get_canned_message_module_messages_response, cannedMessageModuleConfig.messages);
 }
 
-void CannedMessageModule::handleGetCannedMessageModulePart2(const MeshPacket &req, AdminMessage *response)
-{
-    DEBUG_MSG("*** handleGetCannedMessageModulePart2\n");
-    assert(req.decoded.want_response);
 
-    response->which_variant = AdminMessage_get_canned_message_module_part2_response_tag;
-    strcpy(response->get_canned_message_module_part2_response, cannedMessageModuleConfig.messagesPart2);
-}
-
-void CannedMessageModule::handleGetCannedMessageModulePart3(const MeshPacket &req, AdminMessage *response)
-{
-    DEBUG_MSG("*** handleGetCannedMessageModulePart3\n");
-    assert(req.decoded.want_response);
-
-    response->which_variant = AdminMessage_get_canned_message_module_part3_response_tag;
-    strcpy(response->get_canned_message_module_part3_response, cannedMessageModuleConfig.messagesPart3);
-}
-
-void CannedMessageModule::handleGetCannedMessageModulePart4(const MeshPacket &req, AdminMessage *response)
-{
-    DEBUG_MSG("*** handleGetCannedMessageModulePart4\n");
-    assert(req.decoded.want_response);
-
-    response->which_variant = AdminMessage_get_canned_message_module_part4_response_tag;
-    strcpy(response->get_canned_message_module_part4_response, cannedMessageModuleConfig.messagesPart4);
-}
-
-void CannedMessageModule::handleSetCannedMessageModulePart1(const char *from_msg)
+void CannedMessageModule::handleSetCannedMessageModuleMessages(const char *from_msg)
 {
     int changed = 0;
 
     if (*from_msg) {
-        changed |= strcmp(cannedMessageModuleConfig.messagesPart1, from_msg);
-        strcpy(cannedMessageModuleConfig.messagesPart1, from_msg);
+        changed |= strcmp(cannedMessageModuleConfig.messages, from_msg);
+        strcpy(cannedMessageModuleConfig.messages, from_msg);
         DEBUG_MSG("*** from_msg.text:%s\n", from_msg);
     }
 
@@ -421,45 +563,12 @@ void CannedMessageModule::handleSetCannedMessageModulePart1(const char *from_msg
     }
 }
 
-void CannedMessageModule::handleSetCannedMessageModulePart2(const char *from_msg)
+String CannedMessageModule::drawWithCursor(String text, int cursor)
 {
-    int changed = 0;
-
-    if (*from_msg) {
-        changed |= strcmp(cannedMessageModuleConfig.messagesPart2, from_msg);
-        strcpy(cannedMessageModuleConfig.messagesPart2, from_msg);
-    }
-
-    if (changed) {
-        this->saveProtoForModule();
-    }
+    String result = text.substring(0, cursor)
+    + "_" 
+    + text.substring(cursor);
+    return result;
 }
 
-void CannedMessageModule::handleSetCannedMessageModulePart3(const char *from_msg)
-{
-    int changed = 0;
-
-    if (*from_msg) {
-        changed |= strcmp(cannedMessageModuleConfig.messagesPart3, from_msg);
-        strcpy(cannedMessageModuleConfig.messagesPart3, from_msg);
-    }
-
-    if (changed) {
-        this->saveProtoForModule();
-    }
-}
-
-void CannedMessageModule::handleSetCannedMessageModulePart4(const char *from_msg)
-{
-    int changed = 0;
-
-    if (*from_msg) {
-        changed |= strcmp(cannedMessageModuleConfig.messagesPart4, from_msg);
-        strcpy(cannedMessageModuleConfig.messagesPart4, from_msg);
-    }
-
-    if (changed) {
-        this->saveProtoForModule();
-    }
-}
 #endif

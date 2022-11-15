@@ -9,29 +9,31 @@
 #include "main.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
+#include "MeshService.h"
 
 // Sensors
+#include "Sensor/BMP280Sensor.h"
 #include "Sensor/BME280Sensor.h"
 #include "Sensor/BME680Sensor.h"
-#include "Sensor/DHTSensor.h"
-#include "Sensor/DallasSensor.h"
 #include "Sensor/MCP9808Sensor.h"
 #include "Sensor/INA260Sensor.h"
 #include "Sensor/INA219Sensor.h"
+#include "Sensor/SHTC3Sensor.h"
+#include "Sensor/LPS22HBSensor.h"
 
-
+BMP280Sensor bmp280Sensor;
 BME280Sensor bme280Sensor;
 BME680Sensor bme680Sensor;
-DHTSensor dhtSensor;
-DallasSensor dallasSensor;
 MCP9808Sensor mcp9808Sensor;
 INA260Sensor ina260Sensor;
 INA219Sensor ina219Sensor;
+SHTC3Sensor shtc3Sensor;
+LPS22HBSensor lps22hbSensor;
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
-#ifdef HAS_EINK
+#ifdef USE_EINK
 // The screen is bigger so use bigger fonts
 #define FONT_SMALL ArialMT_Plain_16
 #define FONT_MEDIUM ArialMT_Plain_24
@@ -49,22 +51,16 @@ INA219Sensor ina219Sensor;
 
 int32_t EnvironmentTelemetryModule::runOnce()
 {
-#ifndef PORTDUINO
+#ifndef ARCH_PORTDUINO
     int32_t result = INT32_MAX;
     /*
         Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
     */
    
-    /*
-    moduleConfig.telemetry.environment_measurement_enabled = 1;
-    moduleConfig.telemetry.environment_screen_enabled = 1;
-    moduleConfig.telemetry.environment_read_error_count_threshold = 5;
-    moduleConfig.telemetry.environment_update_interval = 600;
-    moduleConfig.telemetry.environment_recovery_interval = 60;
-    moduleConfig.telemetry.environment_sensor_pin = 13; // If one-wire
-    moduleConfig.telemetry.environment_sensor_type = TelemetrySensorType::TelemetrySensorType_BME280;
-    */
+    // moduleConfig.telemetry.environment_measurement_enabled = 1;
+    // moduleConfig.telemetry.environment_screen_enabled = 1;
+    // moduleConfig.telemetry.environment_update_interval = 45;
 
     if (!(moduleConfig.telemetry.environment_measurement_enabled ||
           moduleConfig.telemetry.environment_screen_enabled)) {
@@ -80,66 +76,43 @@ int32_t EnvironmentTelemetryModule::runOnce()
             DEBUG_MSG("Environment Telemetry: Initializing\n");
             // it's possible to have this module enabled, only for displaying values on the screen.
             // therefore, we should only enable the sensor loop if measurement is also enabled
-            
-            switch (moduleConfig.telemetry.environment_sensor_type) {
-                case TelemetrySensorType_DHT11:
-                case TelemetrySensorType_DHT12:
-                case TelemetrySensorType_DHT21:
-                case TelemetrySensorType_DHT22:
-                    result = dhtSensor.runOnce();
-                break;
-                case TelemetrySensorType_DS18B20:
-                    result = dallasSensor.runOnce();
-                break;
-                default:
-                    DEBUG_MSG("Environment Telemetry: No sensor type specified; Checking for detected i2c sensors\n");
-                break;
-            }
-            if (bme680Sensor.hasSensor()) 
-                result = bme680Sensor.runOnce();
+            if (bmp280Sensor.hasSensor()) 
+                result = bmp280Sensor.runOnce();
             if (bme280Sensor.hasSensor()) 
                 result = bme280Sensor.runOnce();
+            if (bme680Sensor.hasSensor()) 
+                result = bme680Sensor.runOnce();
             if (mcp9808Sensor.hasSensor()) 
                 result = mcp9808Sensor.runOnce();
             if (ina260Sensor.hasSensor()) 
                 result = ina260Sensor.runOnce();
             if (ina219Sensor.hasSensor())
                 result = ina219Sensor.runOnce();
+            if (shtc3Sensor.hasSensor())
+                result = shtc3Sensor.runOnce();
+            if (lps22hbSensor.hasSensor()) {
+                result = lps22hbSensor.runOnce();
+            }
         }
         return result;
     } else {
         // if we somehow got to a second run of this module with measurement disabled, then just wait forever
         if (!moduleConfig.telemetry.environment_measurement_enabled)
             return result;
-        // this is not the first time OSThread library has called this function
-        // so just do what we intend to do on the interval
-        if (sensor_read_error_count > moduleConfig.telemetry.environment_read_error_count_threshold) {
-            if (moduleConfig.telemetry.environment_recovery_interval > 0) {
-                DEBUG_MSG("Environment Telemetry: TEMPORARILY DISABLED; The "
-                          "telemetry_module_environment_read_error_count_threshold has been exceed: %d. Will retry reads in "
-                          "%d seconds\n",
-                          moduleConfig.telemetry.environment_read_error_count_threshold,
-                          moduleConfig.telemetry.environment_recovery_interval);
-                sensor_read_error_count = 0;
-                return (moduleConfig.telemetry.environment_recovery_interval * 1000);
-            }
-            DEBUG_MSG("Environment Telemetry: DISABLED; The telemetry_module_environment_read_error_count_threshold has "
-                      "been exceed: %d. Reads will not be retried until after device reset\n",
-                      moduleConfig.telemetry.environment_read_error_count_threshold);
-            return result;
 
-        } else if (sensor_read_error_count > 0) {
-            DEBUG_MSG("Environment Telemetry: There have been %d sensor read failures. Will retry %d more times\n",
-                      sensor_read_error_count, sensor_read_error_count, sensor_read_error_count,
-                      moduleConfig.telemetry.environment_read_error_count_threshold - sensor_read_error_count);
-        }
-        if (!sendOurTelemetry()) {
-            // if we failed to read the sensor, then try again
-            // as soon as we can according to the maximum polling frequency
-            return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
+        uint32_t now = millis();
+        if ((lastSentToMesh == 0 || 
+            (now - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval)) && 
+            airTime->channelUtilizationPercent() < max_channel_util_percent) {
+            sendTelemetry();
+            lastSentToMesh = now;
+        } else if (service.isToPhoneQueueEmpty()) {
+            // Just send to phone when it's not our time to send to mesh yet
+            // Only send while queue is empty (phone assumed connected)
+            sendTelemetry(NODENUM_BROADCAST, true);
         }
     }
-    return getIntervalOrDefaultMs(moduleConfig.telemetry.environment_update_interval);
+    return sendToPhoneIntervalMs;
 #endif
 }
 
@@ -185,7 +158,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, Telemetry_fields, &lastMeasurement)) {
         display->setFont(FONT_SMALL);
         display->drawString(x, y += fontHeight(FONT_MEDIUM), "Measurement Error");
-        DEBUG_MSG("Environment Telemetry: unable to decode last packet");
+        DEBUG_MSG("Unable to decode last packet");
         return;
     }
 
@@ -196,11 +169,13 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     }
     display->drawString(x, y += fontHeight(FONT_MEDIUM) - 2, "From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
     display->drawString(x, y += fontHeight(FONT_SMALL) - 2,
-                        "Temp/Hum: " + last_temp + " / " +
-                            String(lastMeasurement.variant.environment_metrics.relative_humidity, 0) + "%");
+        "Temp/Hum: " + last_temp + " / " + String(lastMeasurement.variant.environment_metrics.relative_humidity, 0) + "%");
     if (lastMeasurement.variant.environment_metrics.barometric_pressure != 0)
         display->drawString(x, y += fontHeight(FONT_SMALL),
-                            "Press: " + String(lastMeasurement.variant.environment_metrics.barometric_pressure, 0) + "hPA");
+            "Press: " + String(lastMeasurement.variant.environment_metrics.barometric_pressure, 0) + "hPA");
+    if (lastMeasurement.variant.environment_metrics.voltage != 0)
+        display->drawString(x, y += fontHeight(FONT_SMALL),
+            "Volt/Cur: " + String(lastMeasurement.variant.environment_metrics.voltage, 0) + "V / " + String(lastMeasurement.variant.environment_metrics.current, 0) + "mA");
 }
 
 bool EnvironmentTelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Telemetry *t)
@@ -208,15 +183,14 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Te
     if (t->which_variant == Telemetry_environment_metrics_tag) {
         const char *sender = getSenderShortName(mp);
 
-        DEBUG_MSG("-----------------------------------------\n");
-        DEBUG_MSG("Environment Telemetry: Received data from %s\n", sender);
-        DEBUG_MSG("Telemetry->time: %i\n", t->time);
-        DEBUG_MSG("Telemetry->barometric_pressure: %f\n", t->variant.environment_metrics.barometric_pressure);
-        DEBUG_MSG("Telemetry->current: %f\n", t->variant.environment_metrics.current);
-        DEBUG_MSG("Telemetry->gas_resistance: %f\n", t->variant.environment_metrics.gas_resistance);
-        DEBUG_MSG("Telemetry->relative_humidity: %f\n", t->variant.environment_metrics.relative_humidity);
-        DEBUG_MSG("Telemetry->temperature: %f\n", t->variant.environment_metrics.temperature);
-        DEBUG_MSG("Telemetry->voltage: %f\n", t->variant.environment_metrics.voltage);
+        DEBUG_MSG("(Received from %s): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f, voltage=%f\n",
+            sender,
+            t->variant.environment_metrics.barometric_pressure,
+            t->variant.environment_metrics.current,
+            t->variant.environment_metrics.gas_resistance,
+            t->variant.environment_metrics.relative_humidity,
+            t->variant.environment_metrics.temperature,
+            t->variant.environment_metrics.voltage);
 
         lastMeasurementPacket = packetPool.allocCopy(mp);
     }
@@ -224,7 +198,7 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Te
     return false; // Let others look at this message also if they want
 }
 
-bool EnvironmentTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies)
+bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 {
     Telemetry m;
     m.time = getTime();
@@ -237,24 +211,12 @@ bool EnvironmentTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies
     m.variant.environment_metrics.temperature = 0;
     m.variant.environment_metrics.voltage = 0;
 
-    DEBUG_MSG("-----------------------------------------\n");
-    DEBUG_MSG("Environment Telemetry: Read data\n");
-
-    switch (moduleConfig.telemetry.environment_sensor_type) {
-        case TelemetrySensorType_DS18B20:
-            if (!dallasSensor.getMetrics(&m))
-                sensor_read_error_count++;
-            break;
-        case TelemetrySensorType_DHT11:
-        case TelemetrySensorType_DHT12:
-        case TelemetrySensorType_DHT21:
-        case TelemetrySensorType_DHT22:
-            if (!dhtSensor.getMetrics(&m))
-                sensor_read_error_count++;
-            break;
-        default:
-            DEBUG_MSG("Environment Telemetry: No specified sensor type; Trying any detected i2c sensors\n");
-    }
+    if (lps22hbSensor.hasSensor())
+        lps22hbSensor.getMetrics(&m);
+    if (shtc3Sensor.hasSensor())
+        shtc3Sensor.getMetrics(&m);
+    if (bmp280Sensor.hasSensor())
+        bmp280Sensor.getMetrics(&m);
     if (bme280Sensor.hasSensor())
         bme280Sensor.getMetrics(&m);
     if (bme680Sensor.hasSensor())
@@ -266,22 +228,28 @@ bool EnvironmentTelemetryModule::sendOurTelemetry(NodeNum dest, bool wantReplies
     if (ina260Sensor.hasSensor())
         ina260Sensor.getMetrics(&m);
 
-    DEBUG_MSG("Telemetry->time: %i\n", m.time);
-    DEBUG_MSG("Telemetry->barometric_pressure: %f\n", m.variant.environment_metrics.barometric_pressure);
-    DEBUG_MSG("Telemetry->current: %f\n", m.variant.environment_metrics.current);
-    DEBUG_MSG("Telemetry->gas_resistance: %f\n", m.variant.environment_metrics.gas_resistance);
-    DEBUG_MSG("Telemetry->relative_humidity: %f\n", m.variant.environment_metrics.relative_humidity);
-    DEBUG_MSG("Telemetry->temperature: %f\n", m.variant.environment_metrics.temperature);
-    DEBUG_MSG("Telemetry->voltage: %f\n", m.variant.environment_metrics.voltage);
+   DEBUG_MSG("(Sending): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f, voltage=%f\n",
+        m.variant.environment_metrics.barometric_pressure,
+        m.variant.environment_metrics.current,
+        m.variant.environment_metrics.gas_resistance,
+        m.variant.environment_metrics.relative_humidity,
+        m.variant.environment_metrics.temperature,
+        m.variant.environment_metrics.voltage);
 
     sensor_read_error_count = 0;
 
     MeshPacket *p = allocDataProtobuf(m);
     p->to = dest;
-    p->decoded.want_response = wantReplies;
+    p->decoded.want_response = false;
+    p->priority = MeshPacket_Priority_MIN;
 
     lastMeasurementPacket = packetPool.allocCopy(*p);
-    DEBUG_MSG("Environment Telemetry: Sending packet to mesh");
-    service.sendToMesh(p);
+    if (phoneOnly) {
+        DEBUG_MSG("Sending packet to phone\n");
+        service.sendToPhone(p);
+    } else {
+        DEBUG_MSG("Sending packet to mesh\n");
+        service.sendToMesh(p, RX_SRC_LOCAL, true);
+    }
     return true;
 }

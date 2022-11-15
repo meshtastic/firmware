@@ -212,11 +212,6 @@ class RadioInterface
     }
 };
 
-class SimRadio : public RadioInterface
-{
-  public:
-    virtual ErrorCode send(MeshPacket *p) override;
-};
 
 /// Debug printing for packets
 void printPacket(const char *prefix, const MeshPacket *p);

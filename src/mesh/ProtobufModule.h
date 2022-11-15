@@ -75,7 +75,7 @@ template <class T> class ProtobufModule : protected SinglePortModule
 
         T scratch;
         T *decoded = NULL;
-        if (mp.which_payloadVariant == MeshPacket_decoded_tag && mp.decoded.portnum == ourPortNum) {
+        if (mp.which_payload_variant == MeshPacket_decoded_tag && mp.decoded.portnum == ourPortNum) {
             memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, fields, &scratch)) {
                 decoded = &scratch;

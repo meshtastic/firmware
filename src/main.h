@@ -6,20 +6,29 @@
 #include "PowerStatus.h"
 #include "graphics/Screen.h"
 #include "mesh/generated/telemetry.pb.h"
+#ifndef ARCH_PORTDUINO
+#include <SparkFun_ATECCX08a_Arduino_Library.h>
+#endif
 
 extern uint8_t screen_found;
 extern uint8_t screen_model;
 extern uint8_t cardkb_found;
 extern uint8_t kb_model;
-extern uint8_t faceskb_found;
 extern uint8_t rtc_found;
+extern uint8_t keystore_found;
 
 extern bool eink_found;
-extern bool axp192_found;
+extern bool pmu_found;
 extern bool isCharging;
 extern bool isUSBPowered;
 
-extern uint8_t nodeTelemetrySensorsMap[12];
+#ifndef ARCH_PORTDUINO
+extern ATECCX08A atecc;
+#endif
+
+extern uint8_t nodeTelemetrySensorsMap[_TelemetrySensorType_MAX + 1];
+
+extern int TCPPort; // set by Portduino
 
 // Global Screen singleton.
 extern graphics::Screen *screen;

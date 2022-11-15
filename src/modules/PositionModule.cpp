@@ -34,8 +34,8 @@ bool PositionModule::handleReceivedProtobuf(const MeshPacket &mp, Position *pptr
     // Log packet size and list of fields
     DEBUG_MSG("POSITION node=%08x l=%d %s%s%s%s%s%s%s%s%s%s%s%s%s\n", getFrom(&mp), mp.decoded.payload.size,
               p.latitude_i ? "LAT " : "", p.longitude_i ? "LON " : "", p.altitude ? "MSL " : "", p.altitude_hae ? "HAE " : "",
-              p.alt_geoid_sep ? "GEO " : "", p.PDOP ? "PDOP " : "", p.HDOP ? "HDOP " : "", p.VDOP ? "VDOP " : "",
-              p.sats_in_view ? "SIV " : "", p.fix_quality ? "FXQ " : "", p.fix_type ? "FXT " : "", p.pos_timestamp ? "PTS " : "",
+              p.altitude_geoidal_separation ? "GEO " : "", p.PDOP ? "PDOP " : "", p.HDOP ? "HDOP " : "", p.VDOP ? "VDOP " : "",
+              p.sats_in_view ? "SIV " : "", p.fix_quality ? "FXQ " : "", p.fix_type ? "FXT " : "", p.timestamp ? "PTS " : "",
               p.time ? "TIME " : "");
 
     if (p.time) {
@@ -58,6 +58,8 @@ MeshPacket *PositionModule::allocReply()
     NodeInfo *node = service.refreshMyNodeInfo(); // should guarantee there is now a position
     assert(node->has_position);
 
+    node->position.seq_number++;
+
     // configuration of POSITION packet
     //   consider making this a function argument?
     uint32_t pos_flags = config.position.position_flags;
@@ -70,38 +72,49 @@ MeshPacket *PositionModule::allocReply()
     p.longitude_i = node->position.longitude_i;
     p.time = node->position.time;
 
-    if (pos_flags & Config_PositionConfig_PositionFlags_POS_ALTITUDE) {
-        if (pos_flags & Config_PositionConfig_PositionFlags_POS_ALT_MSL)
+    if (pos_flags & Config_PositionConfig_PositionFlags_ALTITUDE) {
+        if (pos_flags & Config_PositionConfig_PositionFlags_ALTITUDE_MSL)
             p.altitude = node->position.altitude;
         else
             p.altitude_hae = node->position.altitude_hae;
 
-        if (pos_flags & Config_PositionConfig_PositionFlags_POS_GEO_SEP)
-            p.alt_geoid_sep = node->position.alt_geoid_sep;
+        if (pos_flags & Config_PositionConfig_PositionFlags_GEOIDAL_SEPARATION)
+            p.altitude_geoidal_separation = node->position.altitude_geoidal_separation;
     }
 
-    if (pos_flags & Config_PositionConfig_PositionFlags_POS_DOP) {
-        if (pos_flags & Config_PositionConfig_PositionFlags_POS_HVDOP) {
+    if (pos_flags & Config_PositionConfig_PositionFlags_DOP) {
+        if (pos_flags & Config_PositionConfig_PositionFlags_HVDOP) {
             p.HDOP = node->position.HDOP;
             p.VDOP = node->position.VDOP;
         } else
             p.PDOP = node->position.PDOP;
     }
 
-    if (pos_flags & Config_PositionConfig_PositionFlags_POS_SATINVIEW)
+    if (pos_flags & Config_PositionConfig_PositionFlags_SATINVIEW)
         p.sats_in_view = node->position.sats_in_view;
 
-    if (pos_flags & Config_PositionConfig_PositionFlags_POS_TIMESTAMP)
-        p.pos_timestamp = node->position.pos_timestamp;
+    if (pos_flags & Config_PositionConfig_PositionFlags_TIMESTAMP)
+        p.timestamp = node->position.timestamp;
+
+    if (pos_flags & Config_PositionConfig_PositionFlags_SEQ_NO)
+        p.seq_number = node->position.seq_number;
+
+    if (pos_flags & Config_PositionConfig_PositionFlags_HEADING)
+        p.ground_track = node->position.ground_track;
+
+    if (pos_flags & Config_PositionConfig_PositionFlags_SPEED)
+        p.ground_speed = node->position.ground_speed;
 
     // Strip out any time information before sending packets to other nodes - to keep the wire size small (and because other
     // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS to include the time, so that gpsless
     // devices can get time.
-    if (getRTCQuality() < RTCQualityGPS) {
+    if (getRTCQuality() < RTCQualityDevice) {
         DEBUG_MSG("Stripping time %u from position send\n", p.time);
         p.time = 0;
     } else
         DEBUG_MSG("Providing time to mesh %u\n", p.time);
+
+    DEBUG_MSG("Position reply: time=%i, latI=%i, lonI=-%i\n", p.time, p.latitude_i, p.longitude_i);
 
     return allocDataProtobuf(p);
 }
@@ -127,34 +140,32 @@ int32_t PositionModule::runOnce()
 
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();
-    if (lastGpsSend == 0 || now - lastGpsSend >= config.position.position_broadcast_secs
-            ? config.position.position_broadcast_secs
-            : default_broadcast_interval_secs * 1000) {
+    uint32_t intervalMs = config.position.position_broadcast_secs > 0 ? config.position.position_broadcast_secs * 1000 : default_broadcast_interval_secs * 1000;
+    if (lastGpsSend == 0 || (now - lastGpsSend) >= intervalMs) {
 
         // Only send packets if the channel is less than 40% utilized.
-        if (airTime->channelUtilizationPercent() < 40) {
+        if (airTime->channelUtilizationPercent() < max_channel_util_percent) {
+            if (node->has_position && (node->position.latitude_i != 0 || node->position.longitude_i != 0)) {
+                lastGpsSend = now;
 
-            lastGpsSend = now;
+                lastGpsLatitude = node->position.latitude_i;
+                lastGpsLongitude = node->position.longitude_i;
 
-            lastGpsLatitude = node->position.latitude_i;
-            lastGpsLongitude = node->position.longitude_i;
+                // If we changed channels, ask everyone else for their latest info
+                bool requestReplies = currentGeneration != radioGeneration;
+                currentGeneration = radioGeneration;
 
-            // If we changed channels, ask everyone else for their latest info
-            bool requestReplies = currentGeneration != radioGeneration;
-            currentGeneration = radioGeneration;
-
-            DEBUG_MSG("Sending pos@%x:6 to mesh (wantReplies=%d)\n", node->position.pos_timestamp, requestReplies);
-
-            sendOurPosition(NODENUM_BROADCAST, requestReplies);
-
+                DEBUG_MSG("Sending pos@%x:6 to mesh (wantReplies=%d)\n", node->position.timestamp, requestReplies);
+                sendOurPosition(NODENUM_BROADCAST, requestReplies);
+            }
         } else {
-            DEBUG_MSG("Channel utilization is >50 percent. Skipping this opportunity to send.\n");
+            DEBUG_MSG("Channel utilization is >40 percent. Skipping this opportunity to send.\n");
         }
 
-    } else if (!config.position.position_broadcast_smart_disabled) {
+    } else if (config.position.position_broadcast_smart_enabled) {
 
         // Only send packets if the channel is less than 25% utilized.
-        if (airTime->channelUtilizationPercent() < 25) {
+        if (airTime->channelUtilizationPercent() < polite_channel_util_percent) {
 
             NodeInfo *node2 = service.refreshMyNodeInfo(); // should guarantee there is now a position
 
@@ -171,22 +182,25 @@ int32_t PositionModule::runOnce()
 
                 // Yes, this has a bunch of magic numbers. Sorry. This is to make the scale non-linear.
                 const float distanceTravelMath = 1203 / (sqrt(pow(myNodeInfo.bitrate, 1.5) / 1.1));
-                uint32_t distanceTravel =
+                uint32_t distanceTravelThreshold =
                     (distanceTravelMath >= distanceTravelMinimum) ? distanceTravelMath : distanceTravelMinimum;
 
                 // Yes, this has a bunch of magic numbers. Sorry.
                 uint32_t timeTravel =
                     ((1500 / myNodeInfo.bitrate) >= timeTravelMinimum) ? (1500 / myNodeInfo.bitrate) : timeTravelMinimum;
-
-                // If the distance traveled since the last update is greater than 100 meters
-                //   and it's been at least 60 seconds since the last update
-                if ((abs(distance) >= distanceTravel) && (now - lastGpsSend >= timeTravel * 1000)) {
+                // If the distance traveled since the last update is greater than distanceTravelMinimum meters
+                //   and it's been at least timeTravelMinimum seconds since the last update
+                if ((abs(distance) >= distanceTravelThreshold) && (now - lastGpsSend) >= (timeTravel * 1000)) {
                     bool requestReplies = currentGeneration != radioGeneration;
                     currentGeneration = radioGeneration;
 
-                    DEBUG_MSG("Sending smart pos@%x:6 to mesh (wantReplies=%d, dt=%d, tt=%d)\n", node2->position.pos_timestamp,
-                              requestReplies, distanceTravel, timeTravel);
+                    DEBUG_MSG("Sending smart pos@%x:6 to mesh (wantReplies=%d, d=%d, dtt=%d, tt=%d)\n", node2->position.timestamp,
+                              requestReplies, distance, distanceTravelThreshold, timeTravel);
                     sendOurPosition(NODENUM_BROADCAST, requestReplies);
+
+                    // Set the current coords as our last ones, after we've compared distance with current and decided to send
+                    lastGpsLatitude = node->position.latitude_i;
+                    lastGpsLongitude = node->position.longitude_i;
 
                     /* Update lastGpsSend to now. This means if the device is stationary, then
                        getPref_position_broadcast_secs will still apply.

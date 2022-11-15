@@ -29,10 +29,14 @@ bool FloodingRouter::shouldFilterReceived(MeshPacket *p)
 
 void FloodingRouter::sniffReceived(const MeshPacket *p, const Routing *c)
 {
-
-    if ((p->to == NODENUM_BROADCAST) && (p->hop_limit > 0) && (getFrom(p) != getNodeNum())) {
+    bool isAck = ((c && c->error_reason == Routing_Error_NONE)); // consider only ROUTING_APP message without error as ACK
+    if (isAck && p->to != getNodeNum()) {
+        // do not flood direct message that is ACKed 
+        DEBUG_MSG("Receiving an ACK not for me, but don't need to rebroadcast this direct message anymore.\n");
+        Router::cancelSending(p->to, p->decoded.request_id);   // cancel rebroadcast for this DM
+    } else if ((p->to != getNodeNum()) && (p->hop_limit > 0) && (getFrom(p) != getNodeNum())) {
         if (p->id != 0) {
-            if (config.device.role != Config_DeviceConfig_Role_ClientMute) {
+            if (config.device.role != Config_DeviceConfig_Role_CLIENT_MUTE) {
                 MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
 
                 tosend->hop_limit--; // bump down the hop count

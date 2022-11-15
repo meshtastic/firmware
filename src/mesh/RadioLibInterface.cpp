@@ -11,7 +11,7 @@
 // FIXME, we default to 4MHz SPI, SPI mode 0, check if the datasheet says it can really do that
 static SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 
-#ifdef PORTDUINO
+#ifdef ARCH_PORTDUINO
 
 void LockingModule::SPItransfer(uint8_t cmd, uint8_t reg, uint8_t *dataOut, uint8_t *dataIn, uint8_t numBytes)
 {
@@ -43,9 +43,13 @@ RadioLibInterface::RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq
     : NotifiedWorkerThread("RadioIf"), module(cs, irq, rst, busy, spi, spiSettings), iface(_iface)
 {
     instance = this;
+#if defined(ARCH_STM32WL) && defined(USE_SX1262)
+    module.setCb_digitalWrite(stm32wl_emulate_digitalWrite);
+    module.setCb_digitalRead(stm32wl_emulate_digitalRead);
+#endif
 }
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 // ESP32 doesn't use that flag
 #define YIELD_FROM_ISR(x) portYIELD_FROM_ISR()
 #else
@@ -95,8 +99,8 @@ bool RadioLibInterface::canSendImmediately()
         // TX IRQ from the radio, the radio is probably broken.
         if (busyTx && (millis() - lastTxStart > 60000)) {
             DEBUG_MSG("Hardware Failure! busyTx for more than 60s\n");
-            RECORD_CRITICALERROR(CriticalErrorCode_TransmitFailed);
-#ifndef NO_ESP32
+            RECORD_CRITICALERROR(CriticalErrorCode_TRANSMIT_FAILED);
+#ifdef ARCH_ESP32
             if (busyTx && (millis() - lastTxStart > 65000)) // After 5s more, reboot
                 ESP.restart();
 #endif
@@ -116,18 +120,18 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
 
 #ifndef DISABLE_WELCOME_UNSET
 
-    if (config.lora.region != Config_LoRaConfig_RegionCode_Unset) {
-        if (disabled || config.lora.tx_disabled) {
+    if (config.lora.region != Config_LoRaConfig_RegionCode_UNSET) {
+        if (disabled || !config.lora.tx_enabled) {
 
-            if (config.lora.region != Config_LoRaConfig_RegionCode_Unset) {
-                if (disabled || config.lora.tx_disabled) {
-                    DEBUG_MSG("send - lora_tx_disabled\n");
+            if (config.lora.region != Config_LoRaConfig_RegionCode_UNSET) {
+                if (disabled || !config.lora.tx_enabled) {
+                    DEBUG_MSG("send - !config.lora.tx_enabled\n");
                     packetPool.release(p);
                     return ERRNO_DISABLED;
                 }
 
             } else {
-                DEBUG_MSG("send - lora_tx_disabled because RegionCode_Unset\n");
+                DEBUG_MSG("send - lora tx disable because RegionCode_Unset\n");
                 packetPool.release(p);
                 return ERRNO_DISABLED;
             }
@@ -136,8 +140,8 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
 
 #else
 
-    if (disabled || config.lora.tx_disabled) {
-        DEBUG_MSG("send - lora_tx_disabled\n");
+    if (disabled || !config.lora.tx_enabled) {
+        DEBUG_MSG("send - !config.lora.tx_enabled\n");
         packetPool.release(p);
         return ERRNO_DISABLED;
     }
@@ -313,7 +317,13 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
     void RadioLibInterface::handleReceiveInterrupt()
     {
         uint32_t xmitMsec;
-        assert(isReceiving);
+        
+        // when this is called, we should be in receive mode - if we are not, just jump out instead of bombing. Possible Race Condition?
+        if (!isReceiving) {
+            DEBUG_MSG("*** WAS_ASSERT *** handleReceiveInterrupt called when not in receive mode\n");
+            return;
+        }
+        
         isReceiving = false;
 
         // read the number of actually received bytes
@@ -358,7 +368,7 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
 
                 addReceiveMetadata(mp);
 
-                mp->which_payloadVariant = MeshPacket_encrypted_tag; // Mark that the payload is still encrypted at this point
+                mp->which_payload_variant = MeshPacket_encrypted_tag; // Mark that the payload is still encrypted at this point
                 assert(((uint32_t)payloadLen) <= sizeof(mp->encrypted.bytes));
                 memcpy(mp->encrypted.bytes, payload, payloadLen);
                 mp->encrypted.size = payloadLen;
@@ -377,7 +387,7 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
     void RadioLibInterface::startSend(MeshPacket * txp)
     {
         printPacket("Starting low level send", txp);
-        if (disabled || config.lora.tx_disabled) {
+        if (disabled || !config.lora.tx_enabled) {
             DEBUG_MSG("startSend is dropping tx packet because we are disabled\n");
             packetPool.release(txp);
         } else {
@@ -389,7 +399,7 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
 
             int res = iface->startTransmit(radiobuf, numbytes);
             if (res != RADIOLIB_ERR_NONE) {
-                RECORD_CRITICALERROR(CriticalErrorCode_RadioSpiBug);
+                RECORD_CRITICALERROR(CriticalErrorCode_RADIO_SPI_BUG);
 
                 // This send failed, but make sure to 'complete' it properly
                 completeSending();

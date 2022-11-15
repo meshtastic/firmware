@@ -1,6 +1,7 @@
 #include "configuration.h"
 #include "RedirectablePrint.h"
 #include "RTC.h"
+#include "NodeDB.h"
 #include "concurrency/OSThread.h"
 // #include "wifi/WiFiServerAPI.h"
 #include <assert.h>
@@ -30,7 +31,9 @@ size_t RedirectablePrint::write(uint8_t c)
     // optionally send chars to TCP also
     //WiFiServerPort::debugOut(c);
 
-    dest->write(c);
+    if (!config.has_lora || config.device.serial_enabled)
+        dest->write(c);
+
     return 1; // We always claim one was written, rather than trusting what the
               // serial port said (which could be zero)
 }
@@ -38,19 +41,17 @@ size_t RedirectablePrint::write(uint8_t c)
 size_t RedirectablePrint::vprintf(const char *format, va_list arg)
 {
     va_list copy;
+    static char printBuf[160];
 
     va_copy(copy, arg);
-    int len = vsnprintf(printBuf, printBufLen, format, copy);
+    size_t len = vsnprintf(printBuf, sizeof(printBuf), format, copy);
     va_end(copy);
-    if (len < 0) {
-        va_end(arg);
-        return 0;
-    };
-    if (len >= (int)printBufLen) {
-        delete[] printBuf;
-        printBufLen *= 2;
-        printBuf = new char[printBufLen];
-        len = vsnprintf(printBuf, printBufLen, format, arg);
+
+    // If the resulting string is longer than sizeof(printBuf)-1 characters, the remaining characters are still counted for the return value
+
+    if (len > sizeof(printBuf) - 1) {
+        len = sizeof(printBuf) - 1;
+        printBuf[sizeof(printBuf) - 2] = '\n';
     }
 
     len = Print::write(printBuf, len);

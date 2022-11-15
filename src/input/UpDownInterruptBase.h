@@ -16,8 +16,8 @@ class UpDownInterruptBase : public Observable<const InputEvent *>
   private:
     uint8_t _pinDown = 0;
     uint8_t _pinUp = 0;
-    char _eventDown = ModuleConfig_CannedMessageConfig_InputEventChar_KEY_NONE;
-    char _eventUp = ModuleConfig_CannedMessageConfig_InputEventChar_KEY_NONE;
-    char _eventPressed = ModuleConfig_CannedMessageConfig_InputEventChar_KEY_NONE;
+    char _eventDown = ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+    char _eventUp = ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+    char _eventPressed = ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
     const char *_originName;
 };

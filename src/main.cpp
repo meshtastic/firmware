@@ -17,9 +17,9 @@
 #include "SPILock.h"
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
-#include "debug/axpDebug.h"
-#include "debug/einkScan.h"
-#include "debug/i2cScan.h"
+#include "detect/axpDebug.h"
+#include "detect/einkScan.h"
+#include "detect/i2cScan.h"
 #include "graphics/Screen.h"
 #include "main.h"
 #include "modules/Modules.h"
@@ -30,20 +30,20 @@
 // #include <driver/rtc_io.h>
 
 #include "mesh/http/WiFiAPClient.h"
+#include "mesh/eth/ethClient.h"
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 #include "mesh/http/WebServer.h"
-
-#ifdef USE_NEW_ESP32_BLUETOOTH
-#include "esp32/ESP32Bluetooth.h"
-#else
-#include "nimble/BluetoothUtil.h"
+#include "nimble/NimbleBluetooth.h"
 #endif
 
-#endif
-
-#if defined(HAS_WIFI) || defined(PORTDUINO)
+#if HAS_WIFI
 #include "mesh/wifi/WiFiServerAPI.h"
+#include "mqtt/MQTT.h"
+#endif
+
+#if HAS_ETHERNET
+#include "mesh/eth/ethServerAPI.h"
 #include "mqtt/MQTT.h"
 #endif
 
@@ -51,8 +51,14 @@
 #include "RF95Interface.h"
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
+#include "SX1280Interface.h"
+#if !HAS_RADIO && defined(ARCH_PORTDUINO)
+#include "platform/portduino/SimRadio.h"
+#endif
 
+#if HAS_BUTTON
 #include "ButtonThread.h"
+#endif
 #include "PowerFSMThread.h"
 
 using namespace concurrency;
@@ -78,20 +84,23 @@ uint8_t cardkb_found;
 // 0x02 for RAK14004 and 0x00 for cardkb
 uint8_t kb_model;
 
-// The I2C address of the Faces Keyboard (if found)
-uint8_t faceskb_found;
-
 // The I2C address of the RTC Module (if found)
 uint8_t rtc_found;
+
+// Keystore Chips
+uint8_t keystore_found;
+#ifndef ARCH_PORTDUINO
+ATECCX08A atecc;
+#endif
 
 bool eink_found = true;
 
 uint32_t serialSinceMsec;
 
-bool axp192_found;
+bool pmu_found;
 
 // Array map of sensor types (as array index) and i2c address as value we'll find in the i2c scan
-uint8_t nodeTelemetrySensorsMap[12] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+uint8_t nodeTelemetrySensorsMap[_TelemetrySensorType_MAX + 1] = { 0 }; // one is enough, missing elements will be initialized to 0 anyway.
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
 
@@ -105,7 +114,7 @@ const char *getDeviceName()
     static char name[20];
     sprintf(name, "%02x%02x", dmac[4], dmac[5]);
     // if the shortname exists and is NOT the new default of ab3c, use it for BLE name.
-    if ((owner.short_name != NULL) && (owner.short_name != name)) {
+    if ((owner.short_name != NULL) && (strcmp(owner.short_name, name) != 0)) {
         sprintf(name, "%s_%02x%02x", owner.short_name, dmac[4], dmac[5]);
     } else {
         sprintf(name, "Meshtastic_%02x%02x", dmac[4], dmac[5]);
@@ -126,11 +135,15 @@ static int32_t ledBlinker()
 
 uint32_t timeLastPowered = 0;
 
+#if HAS_BUTTON
 bool ButtonThread::shutdown_on_long_stop = false;
+#endif
 
 static Periodic *ledPeriodic;
 static OSThread *powerFSMthread, *buttonThread;
+#if HAS_BUTTON
 uint32_t ButtonThread::longPressTime = 0;
+#endif
 
 RadioInterface *rIf = NULL;
 
@@ -157,9 +170,7 @@ void setup()
 #endif
 
 #ifdef DEBUG_PORT
-    if (!config.device.serial_disabled) {
         consoleInit(); // Set serial baud rate and init our mesh console
-    }
 #endif
 
     serialSinceMsec = millis();
@@ -184,10 +195,8 @@ void setup()
     digitalWrite(RESET_OLED, 1);
 #endif
 
-    bool forceSoftAP = 0;
-
 #ifdef BUTTON_PIN
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
 
     // If the button is connected to GPIO 12, don't enable the ability to use
     // meshtasticAdmin on the device.
@@ -197,12 +206,6 @@ void setup()
     gpio_pullup_en((gpio_num_t)BUTTON_PIN);
     delay(10);
 #endif
-
-    // BUTTON_PIN is pulled high by a 12k resistor.
-    if (!digitalRead(BUTTON_PIN)) {
-        forceSoftAP = 1;
-        DEBUG_MSG("Setting forceSoftAP = 1\n");
-    }
 
 #endif
 #endif
@@ -216,9 +219,13 @@ void setup()
     // router = new DSRRouter();
     router = new ReliableRouter();
 
+#ifdef I2C_SDA1
+    Wire1.begin(I2C_SDA1, I2C_SCL1);
+#endif
+
 #ifdef I2C_SDA
     Wire.begin(I2C_SDA, I2C_SCL);
-#elif !defined(NO_WIRE)
+#elif HAS_WIRE
     Wire.begin();
 #endif
 
@@ -231,13 +238,46 @@ void setup()
     delay(1);
 #endif
 
+#ifdef RAK4630
+    // We need to enable 3.3V periphery in order to scan it
+    pinMode(PIN_3V3_EN, OUTPUT);
+    digitalWrite(PIN_3V3_EN, 1);
+#endif
+
+
+    // Currently only the tbeam has a PMU
+    // PMU initialization needs to be placed before scanI2Cdevice
+    power = new Power();
+    power->setStatusHandler(powerStatus);
+    powerStatus->observe(&power->newStatus);
+    power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
+
+
+#ifdef LILYGO_TBEAM_S3_CORE
+    // In T-Beam-S3-core, the I2C device cannot be scanned before power initialization, otherwise the device will be stuck
+    // PCF8563 RTC in tbeam-s3 uses Wire1 to share I2C bus
+    Wire1.beginTransmission(PCF8563_RTC);
+    if (Wire1.endTransmission() == 0){
+        rtc_found = PCF8563_RTC;
+        DEBUG_MSG("PCF8563 RTC found\n");
+    }
+#endif
+
+    // We need to scan here to decide if we have a screen for nodeDB.init()
     scanI2Cdevice();
+
+#ifdef HAS_SDCARD
+    setupSDCard();
+#endif
+    
 #ifdef RAK4630
     // scanEInkDevice();
 #endif
 
+#if HAS_BUTTON
     // Buttons & LED
     buttonThread = new ButtonThread();
+#endif
 
 #ifdef LED_PIN
     pinMode(LED_PIN, OUTPUT);
@@ -247,7 +287,7 @@ void setup()
     // Hello
     DEBUG_MSG("Meshtastic hwvendor=%d, swver=%s\n", HW_VENDOR, optstr(APP_VERSION));
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
     // Don't init display if we don't have one or we are waking headless due to a timer event
     if (wakeCause == ESP_SLEEP_WAKEUP_TIMER)
         screen_found = 0; // forget we even have the hardware
@@ -255,23 +295,22 @@ void setup()
     esp32Setup();
 #endif
 
-#ifdef NRF52_SERIES
+#ifdef ARCH_NRF52
     nrf52Setup();
 #endif
-    playStartMelody();
     // We do this as early as possible because this loads preferences from flash
     // but we need to do this after main cpu iniot (esp32setup), because we need the random seed set
     nodeDB.init();
 
-    // Currently only the tbeam has a PMU
-    power = new Power();
-    power->setStatusHandler(powerStatus);
-    powerStatus->observe(&power->newStatus);
-    power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
-
+    playStartMelody();
+    
+    // fixed screen override?
+    if (config.display.oled != Config_DisplayConfig_OledType_OLED_AUTO)
+        screen_model = config.display.oled;
+    
     // Init our SPI controller (must be before screen and lora)
     initSPI();
-#ifdef NO_ESP32
+#ifndef ARCH_ESP32
     SPI.begin();
 #else
     // ESP32
@@ -299,14 +338,14 @@ void setup()
     setupModules();
 
     // Do this after service.init (because that clears error_code)
-#ifdef AXP192_SLAVE_ADDRESS
-    if (!axp192_found)
-        RECORD_CRITICALERROR(CriticalErrorCode_NoAXP192); // Record a hardware fault for missing hardware
+#ifdef HAS_PMU
+    if (!pmu_found)
+        RECORD_CRITICALERROR(CriticalErrorCode_NO_AXP192); // Record a hardware fault for missing hardware
 #endif
 
         // Don't call screen setup until after nodedb is setup (because we need
         // the current region name)
-#if defined(ST7735_CS) || defined(HAS_EINK) || defined(ILI9341_DRIVER)
+#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER)
     screen->setup();
 #else
     if (screen_found)
@@ -322,7 +361,7 @@ void setup()
         DEBUG_MSG("GPS FactoryReset requested\n");
         if (gps->factoryReset()) { // If we don't succeed try again next time
             devicestate.did_gps_reset = true;
-            nodeDB.saveToDisk();
+            nodeDB.saveToDisk(SEGMENT_DEVICESTATE);
         }
     }
 
@@ -343,6 +382,19 @@ void setup()
             rIf = NULL;
         } else {
             DEBUG_MSG("RF95 Radio init succeeded, using RF95 radio\n");
+        }
+    }
+#endif
+
+#if defined(USE_SX1280) && !defined(ARCH_PORTDUINO)
+    if (!rIf) {
+        rIf = new SX1280Interface(SX128X_CS, SX128X_DIO1, SX128X_RESET, SX128X_BUSY, SPI);
+        if (!rIf->init()) {
+            DEBUG_MSG("Warning: Failed to find SX1280 radio\n");
+            delete rIf;
+            rIf = NULL;
+        } else {
+            DEBUG_MSG("SX1280 Radio init succeeded, using SX1280 radio\n");
         }
     }
 #endif
@@ -386,7 +438,7 @@ void setup()
     }
 #endif
 
-#ifdef USE_SIM_RADIO
+#ifdef ARCH_PORTDUINO
     if (!rIf) {
         rIf = new SimRadio;
         if (!rIf->init()) {
@@ -399,27 +451,32 @@ void setup()
     }
 #endif
 
-#if defined(PORTDUINO) || defined(HAS_WIFI)
+#if HAS_WIFI || HAS_ETHERNET
     mqttInit();
 #endif
 
+#ifndef ARCH_PORTDUINO
     // Initialize Wifi
-    initWifi(forceSoftAP);
+    initWifi();
 
-#ifndef NO_ESP32
+    // Initialize Ethernet
+    initEthernet();
+#endif
+
+#ifdef ARCH_ESP32
     // Start web server thread.
     webServerThread = new WebServerThread();
 #endif
 
-#ifdef PORTDUINO
-    initApiServer();
+#ifdef ARCH_PORTDUINO
+    initApiServer(TCPPort);
 #endif
 
     // Start airtime logger thread.
     airTime = new AirTime();
 
     if (!rIf)
-        RECORD_CRITICALERROR(CriticalErrorCode_NoRadio);
+        RECORD_CRITICALERROR(CriticalErrorCode_NO_RADIO);
     else {
         router->addInterface(rIf);
 
@@ -452,10 +509,10 @@ void loop()
 
     // heap_caps_check_integrity_all(true); // FIXME - disable this expensive check
 
-#ifndef NO_ESP32
+#ifdef ARCH_ESP32
     esp32Loop();
 #endif
-#ifdef NRF52_SERIES
+#ifdef ARCH_NRF52
     nrf52Loop();
 #endif
     powerCommandsCheck();

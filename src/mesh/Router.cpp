@@ -11,7 +11,7 @@ extern "C" {
 #include "mesh/compression/unishox2.h"
 }
 
-#if defined(HAS_WIFI) || defined(PORTDUINO)
+#if HAS_WIFI || HAS_ETHERNET
 #include "mqtt/MQTT.h"
 #endif
 
@@ -115,14 +115,10 @@ MeshPacket *Router::allocForSending()
 {
     MeshPacket *p = packetPool.allocZeroed();
 
-    p->which_payloadVariant = MeshPacket_decoded_tag; // Assume payload is decoded at start.
+    p->which_payload_variant = MeshPacket_decoded_tag; // Assume payload is decoded at start.
     p->from = nodeDB.getNodeNum();
     p->to = NODENUM_BROADCAST;
-    if (config.lora.hop_limit && config.lora.hop_limit <= HOP_MAX) {
-        p->hop_limit = (config.lora.hop_limit >= HOP_MAX) ? HOP_MAX : config.lora.hop_limit;
-    } else {
-        p->hop_limit = HOP_RELIABLE;
-    }
+    p->hop_limit = (config.lora.hop_limit >= HOP_MAX) ? HOP_MAX : config.lora.hop_limit;
     p->id = generatePacketId();
     p->rx_time =
         getValidTime(RTCQualityFromNet); // Just in case we process the packet locally - make sure it has a valid timestamp
@@ -206,14 +202,14 @@ ErrorCode Router::send(MeshPacket *p)
 
     // If the packet hasn't yet been encrypted, do so now (it might already be encrypted if we are just forwarding it)
 
-    assert(p->which_payloadVariant == MeshPacket_encrypted_tag ||
-           p->which_payloadVariant == MeshPacket_decoded_tag); // I _think_ all packets should have a payload by now
+    assert(p->which_payload_variant == MeshPacket_encrypted_tag ||
+           p->which_payload_variant == MeshPacket_decoded_tag); // I _think_ all packets should have a payload by now
 
     // If the packet is not yet encrypted, do so now
-    if (p->which_payloadVariant == MeshPacket_decoded_tag) {
+    if (p->which_payload_variant == MeshPacket_decoded_tag) {
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
 
-#if defined(HAS_WIFI) || defined(PORTDUINO)
+#if HAS_WIFI || HAS_ETHERNET
         // check if we should send decrypted packets to mqtt
 
         // truth table:
@@ -244,7 +240,7 @@ ErrorCode Router::send(MeshPacket *p)
             return encodeResult; // FIXME - this isn't a valid ErrorCode
         }
 
-#if defined(HAS_WIFI) || defined(PORTDUINO)
+#if HAS_WIFI || HAS_ETHERNET
         // the packet is now encrypted.
         // check if we should send encrypted packets to mqtt
         if (mqtt && shouldActuallyEncrypt)
@@ -277,7 +273,7 @@ bool perhapsDecode(MeshPacket *p)
 
     // DEBUG_MSG("\n\n** perhapsDecode payloadVariant - %d\n\n", p->which_payloadVariant);
 
-    if (p->which_payloadVariant == MeshPacket_decoded_tag)
+    if (p->which_payload_variant == MeshPacket_decoded_tag)
         return true; // If packet was already decoded just return
 
     // assert(p->which_payloadVariant == MeshPacket_encrypted_tag);
@@ -304,7 +300,7 @@ bool perhapsDecode(MeshPacket *p)
                 DEBUG_MSG("Invalid portnum (bad psk?)!\n");
             } else {
                 // parsing was successful
-                p->which_payloadVariant = MeshPacket_decoded_tag; // change type to decoded
+                p->which_payload_variant = MeshPacket_decoded_tag; // change type to decoded
                 p->channel = chIndex;                             // change to store the index instead of the hash
 
                 /*
@@ -349,7 +345,7 @@ bool perhapsDecode(MeshPacket *p)
 Routing_Error perhapsEncode(MeshPacket *p)
 {
     // If the packet is not yet encrypted, do so now
-    if (p->which_payloadVariant == MeshPacket_decoded_tag) {
+    if (p->which_payload_variant == MeshPacket_decoded_tag) {
         static uint8_t bytes[MAX_RHPACKETLEN]; // we have to use a scratch buffer because a union
 
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), Data_fields, &p->decoded);
@@ -407,7 +403,7 @@ Routing_Error perhapsEncode(MeshPacket *p)
         // Copy back into the packet and set the variant type
         memcpy(p->encrypted.bytes, bytes, numbytes);
         p->encrypted.size = numbytes;
-        p->which_payloadVariant = MeshPacket_encrypted_tag;
+        p->which_payload_variant = MeshPacket_encrypted_tag;
     }
 
     return Routing_Error_NONE;

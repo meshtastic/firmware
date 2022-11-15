@@ -10,6 +10,9 @@
 #include "MeshTypes.h"
 #include "Observer.h"
 #include "PointerQueue.h"
+#ifdef ARCH_PORTDUINO
+#include "../platform/portduino/SimRadio.h"
+#endif
 
 /**
  * Top level app for this service.  keeps the mesh, the radio config and the queue of received packets.
@@ -63,7 +66,7 @@ class MeshService
     /** The radioConfig object just changed, call this to force the hw to change to the new settings
      * @return true if client devices should be sent a new set of radio configs
      */
-    bool reloadConfig();
+    bool reloadConfig(int saveWhat=SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
 
     /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
     void reloadOwner();
@@ -85,6 +88,8 @@ class MeshService
 
       /// Send a packet to the phone
     void sendToPhone(MeshPacket *p);
+
+    bool isToPhoneQueueEmpty();
 
   private:
     /// Called when our gps position has changed - updates nodedb and sends Location message out into the mesh

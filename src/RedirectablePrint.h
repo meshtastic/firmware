@@ -12,10 +12,6 @@ class RedirectablePrint : public Print
 {
     Print *dest;
 
-    /// We dynamically grow this scratch buffer if necessary
-    char *printBuf = new char[64];
-    size_t printBufLen = 64;
-
     /// Used to allow multiple logDebug messages to appear on a single log line
     bool isContinuationMessage = false;
 
