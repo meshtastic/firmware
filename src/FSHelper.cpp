@@ -108,6 +108,9 @@ void setupMCS()
 void setupMCS() {}
 #endif
 
+#else
+void setupMCS() {}
+
 #endif /*ARCH_ESP32*/
 
 
