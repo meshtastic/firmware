@@ -1,6 +1,6 @@
 // For OLED LCD
-#define I2C_SDA 21
-#define I2C_SCL 22
+#define I2C_SDA 4
+#define I2C_SCL 5
 
 // GPS
 #undef GPS_RX_PIN
@@ -19,7 +19,7 @@
 // In transmitting, set TXEN as high communication level，RXEN pin is low level;
 // In receiving, set RXEN as high communication level, TXEN is lowlevel;
 // Before powering off, set TXEN、RXEN as low level.
-#define LORA_RXEN 17  // Input - RF switch RX control, connecting external MCU IO, valid in high level
+#define LORA_RXEN 21  // Input - RF switch RX control, connecting external MCU IO, valid in high level
 #define LORA_TXEN -1 // Input - RF switch TX control, connecting external MCU IO or DIO2, valid in high level
 /*  --PINS FOR THE 900M22S
 #undef RF95_SCK
