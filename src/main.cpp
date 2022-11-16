@@ -27,6 +27,7 @@
 #include "sleep.h"
 #include "target_specific.h"
 #include <Wire.h>
+#include "FSHelper.h"
 // #include <driver/rtc_io.h>
 
 #include "mesh/http/WiFiAPClient.h"
@@ -216,6 +217,9 @@ void setup()
 
     fsInit();
 
+    // USB mass storage device init
+    setupMCS();
+    
     // router = new DSRRouter();
     router = new ReliableRouter();
 

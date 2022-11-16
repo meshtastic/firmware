@@ -23,6 +23,15 @@
 #endif
 
 #if defined(ARCH_ESP32)
+
+#if CONFIG_IDF_TARGET_ESP32S3
+// ESP32S3 version
+#include "FFat.h"
+#define FSCom FFat
+#define FSBegin() FSCom.begin(true)
+#define FILE_O_WRITE "w"
+#define FILE_O_READ  "r"
+#else
 // ESP32 version
 #include "LittleFS.h"
 #define FSCom LittleFS
@@ -30,6 +39,8 @@
 #define FILE_O_WRITE "w"
 #define FILE_O_READ "r"
 #endif
+#endif /*CONFIG_IDF_TARGET_ESP32S3*/
+
 
 #if defined(ARCH_NRF52)
 // NRF52 version
