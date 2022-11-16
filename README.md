@@ -5,8 +5,9 @@
 
 This branch is End-of-Life.
 
-Requires platformio =< 6.0.0
-Recommended to add core_dir = .platformio to your cloned platformio.ini and use python-virtualenv to keep newer platformio versions/platform packages separate.
+Requires platformio = 6.0.0
+
+Recommended to add "core_dir = .platformio" to your cloned platformio.ini and use python-virtualenv for compiling this branch. This will keep your system platformio and platform_packages separate.
 
 # Old readme below #
 
