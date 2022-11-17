@@ -35,6 +35,8 @@ char ourHost[16];
 
 bool APStartupComplete = 0;
 
+unsigned long lastrun_ntp = 0;
+
 static bool needReconnect = true; // If we create our reconnector, run it once at the beginning
 
 static int32_t reconnectWiFi()
@@ -58,7 +60,7 @@ static int32_t reconnectWiFi()
     }
 
 #ifndef DISABLE_NTP
-    if (WiFi.isConnected()) {
+    if (WiFi.isConnected() && () && ((millis() - lastrun_ntp) > 43200000)) { // every 12 hours
         DEBUG_MSG("Updating NTP time\n");
         if (timeClient.update()) {
             DEBUG_MSG("NTP Request Success - Setting RTCQualityNTP if needed\n");
@@ -68,6 +70,7 @@ static int32_t reconnectWiFi()
             tv.tv_usec = 0;
 
             perhapsSetRTC(RTCQualityNTP, &tv);
+            lastrun_ntp = millis();
 
         } else {
             DEBUG_MSG("NTP Update failed\n");
@@ -75,7 +78,11 @@ static int32_t reconnectWiFi()
     }
 #endif
 
-    return 43200 * 1000; // every 12 hours
+    if (config.network.wifi_enabled && !WiFi.isConnected()) {
+        return 1000; // check once per second
+    } else {
+        return 300000; // every 5 minutes
+    }
 }
 
 static Periodic *wifiReconnect;
@@ -231,6 +238,7 @@ static void WiFiEvent(WiFiEvent_t event)
         DEBUG_MSG("Disconnected from WiFi access point\n");
         WiFi.disconnect(false, true);
         needReconnect = true;
+        wifiReconnect->setIntervalFromNow(1000);
         break;
     case SYSTEM_EVENT_STA_AUTHMODE_CHANGE:
         DEBUG_MSG("Authentication mode of access point has changed\n");
@@ -244,6 +252,7 @@ static void WiFiEvent(WiFiEvent_t event)
         DEBUG_MSG("Lost IP address and IP address is reset to 0\n");
         WiFi.disconnect(false, true);
         needReconnect = true;
+        wifiReconnect->setIntervalFromNow(1000);
         break;
     case SYSTEM_EVENT_STA_WPS_ER_SUCCESS:
         DEBUG_MSG("WiFi Protected Setup (WPS): succeeded in enrollee mode\n");
