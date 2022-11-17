@@ -23,18 +23,15 @@ jobs:
       matrix:
         include:
           - board: rak11200
-          - board: tlora-v1
           - board: tlora-v2-1-1.6
           - board: tbeam
           - board: heltec-v2.1
           - board: meshtastic-diy-v1
           - board: rak4631
           - board: t-echo
-          - board: nano-g1
           - board: station-g1
           - board: m5stack-coreink
           - board: tbeam-s3-core
-        # - board: pico
 
     runs-on: ubuntu-latest
     steps:
