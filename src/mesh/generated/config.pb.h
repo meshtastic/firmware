@@ -31,12 +31,6 @@ typedef enum _Config_PositionConfig_PositionFlags {
     Config_PositionConfig_PositionFlags_SPEED = 512 
 } Config_PositionConfig_PositionFlags;
 
-typedef enum _Config_NetworkConfig_WiFiMode { 
-    Config_NetworkConfig_WiFiMode_CLIENT = 0, 
-    Config_NetworkConfig_WiFiMode_ACCESS_POINT = 1, 
-    Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN = 2 
-} Config_NetworkConfig_WiFiMode;
-
 typedef enum _Config_NetworkConfig_EthMode { 
     Config_NetworkConfig_EthMode_DHCP = 0, 
     Config_NetworkConfig_EthMode_STATIC = 1 
@@ -195,10 +189,6 @@ typedef struct _Config {
 #define _Config_PositionConfig_PositionFlags_MIN Config_PositionConfig_PositionFlags_UNSET
 #define _Config_PositionConfig_PositionFlags_MAX Config_PositionConfig_PositionFlags_SPEED
 #define _Config_PositionConfig_PositionFlags_ARRAYSIZE ((Config_PositionConfig_PositionFlags)(Config_PositionConfig_PositionFlags_SPEED+1))
-
-#define _Config_NetworkConfig_WiFiMode_MIN Config_NetworkConfig_WiFiMode_CLIENT
-#define _Config_NetworkConfig_WiFiMode_MAX Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN
-#define _Config_NetworkConfig_WiFiMode_ARRAYSIZE ((Config_NetworkConfig_WiFiMode)(Config_NetworkConfig_WiFiMode_ACCESS_POINT_HIDDEN+1))
 
 #define _Config_NetworkConfig_EthMode_MIN Config_NetworkConfig_EthMode_DHCP
 #define _Config_NetworkConfig_EthMode_MAX Config_NetworkConfig_EthMode_STATIC

@@ -89,7 +89,7 @@ const RegionInfo regions[] = {
          https://rrf.rsm.govt.nz/smart-web/smart/page/-smart/domain/licence/LicenceSummary.wdk?id=219752
          https://iotalliance.org.nz/wp-content/uploads/sites/4/2019/05/IoT-Spectrum-in-NZ-Briefing-Paper.pdf
       */
-    RDEF(NZ_865, 864.0f, 868.0f, 100, 0, 0, true, false, false),
+    RDEF(NZ_865, 864.0f, 868.0f, 100, 0, 36, true, false, false),
 
     /*
        https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
@@ -365,37 +365,37 @@ void RadioInterface::applyModemConfig()
 
         switch (loraConfig.modem_preset) {
         case Config_LoRaConfig_ModemPreset_SHORT_FAST:
-            bw = (myRegion->wideLora && rIf_wide_lora) ? 800 : 250;
+            bw = (myRegion->wideLora) ? 812.5 : 250;
             cr = 8;
             sf = 7;
             break;
         case Config_LoRaConfig_ModemPreset_SHORT_SLOW:
-            bw = (myRegion->wideLora && rIf_wide_lora) ? 800 : 250;
+            bw = (myRegion->wideLora) ? 812.5 : 250;
             cr = 8;
             sf = 8;
             break;
         case Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
-            bw = (myRegion->wideLora && rIf_wide_lora) ? 800 : 250;
+            bw = (myRegion->wideLora) ? 812.5 : 250;
             cr = 8;
             sf = 9;
             break;
         case Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
-            bw = (myRegion->wideLora && rIf_wide_lora) ? 800 : 250;
+            bw = (myRegion->wideLora) ? 812.5 : 250;
             cr = 8;
             sf = 10;
             break;
         case Config_LoRaConfig_ModemPreset_LONG_FAST:
-            bw = (myRegion->wideLora && rIf_wide_lora) ? 800 : 250;
+            bw = (myRegion->wideLora) ? 812.5 : 250;
             cr = 8;
             sf = 11;
             break;
         case Config_LoRaConfig_ModemPreset_LONG_SLOW:
-            bw = (myRegion->wideLora && rIf_wide_lora) ? 400 : 125;
+            bw = (myRegion->wideLora) ? 406.25 : 125;
             cr = 8;
             sf = 12;
             break;
         case Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW:
-            bw = (myRegion->wideLora && rIf_wide_lora) ? 200 : 31.25;
+            bw = (myRegion->wideLora) ? 203.125 : 31.25;
             cr = 8;
             sf = 12;
             break;
@@ -411,12 +411,20 @@ void RadioInterface::applyModemConfig()
             bw = 31.25;
         if (bw == 62) // Fix for 62.5Khz bandwidth
             bw = 62.5;
+        if (bw == 200)
+            bw = 203.125;
+        if (bw == 400)
+            bw = 406.25;
+        if (bw == 800)
+            bw = 812.5;
+        if (bw == 1600)
+            bw = 1625.0;
     }
 
     power = loraConfig.tx_power;
     assert(myRegion); // Should have been found in init
 
-    if ((power == 0) || (power > myRegion->powerLimit))
+    if ((power == 0) || ((power > myRegion->powerLimit) && !devicestate.owner.is_licensed))
         power = myRegion->powerLimit;
 
     if (power == 0)
@@ -443,7 +451,7 @@ void RadioInterface::applyModemConfig()
 
     DEBUG_MSG("Set radio: region=%s, name=%s, config=%u, ch=%d, power=%d\n", myRegion->name, channelName, loraConfig.modem_preset, channel_num, power);
     DEBUG_MSG("Radio myRegion->freqStart / myRegion->freqEnd: %f -> %f (%f mhz)\n", myRegion->freqStart, myRegion->freqEnd, myRegion->freqEnd - myRegion->freqStart);
-    DEBUG_MSG("Radio myRegion->numChannels: %d\n", numChannels);
+    DEBUG_MSG("Radio myRegion->numChannels: %d x %.3fkHz\n", numChannels, bw);
     DEBUG_MSG("Radio channel_num: %d\n", channel_num);
     DEBUG_MSG("Radio frequency: %f\n", getFreq());
     DEBUG_MSG("Slot time: %u msec\n", slotTimeMsec);
@@ -460,7 +468,7 @@ void RadioInterface::limitPower()
     if (myRegion->powerLimit)
         maxPower = myRegion->powerLimit;
 
-    if (power > maxPower) {
+    if ((power > maxPower) && !devicestate.owner.is_licensed) {
         DEBUG_MSG("Lowering transmit power because of regulatory limits\n");
         power = maxPower;
     }

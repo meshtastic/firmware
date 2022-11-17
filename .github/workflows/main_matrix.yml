@@ -23,27 +23,15 @@ jobs:
       matrix:
         include:
           - board: rak11200
-          - board: tlora-v2
-          - board: tlora-v1
-          - board: tlora_v1_3
           - board: tlora-v2-1-1.6
           - board: tbeam
-          - board: heltec-v1
-          - board: heltec-v2.0
           - board: heltec-v2.1
-          - board: tbeam0.7
           - board: meshtastic-diy-v1
-          - board: meshtastic-dr-dev
           - board: rak4631
-          - board: rak4631_eink
           - board: t-echo
-          - board: nano-g1
           - board: station-g1
-          - board: m5stack-core
           - board: m5stack-coreink
           - board: tbeam-s3-core
-          - board: feather_diy
-        # - board: pico
 
     runs-on: ubuntu-latest
     steps:
@@ -96,6 +84,8 @@ jobs:
           - board: heltec-v1
           - board: heltec-v2.0
           - board: heltec-v2.1
+          - board: heltec-v3
+          - board: heltec-wsl-v3
           - board: tbeam0.7
           - board: meshtastic-diy-v1
           - board: meshtastic-dr-dev
@@ -170,7 +160,7 @@ jobs:
           path: |
             release/*.bin
             release/*.elf
-          retention-days: 90
+          retention-days: 30
 
   build-nrf52:
     strategy:
@@ -229,7 +219,7 @@ jobs:
             release/*.uf2
             release/*.elf
             release/*.zip
-          retention-days: 90
+          retention-days: 30
 
   build-rpi2040:
     strategy:
@@ -283,7 +273,7 @@ jobs:
           path: |
             release/*.uf2
             release/*.elf
-          retention-days: 90
+          retention-days: 30
 
   build-native:
     runs-on: ubuntu-latest
@@ -342,7 +332,7 @@ jobs:
             release/meshtasticd_linux_amd64
             release/device-*.sh
             release/device-*.bat
-          retention-days: 90
+          retention-days: 30
 
   after-checks:
     runs-on: ubuntu-latest
@@ -410,7 +400,7 @@ jobs:
         with:
           name: debug-elfs-${{ steps.version.outputs.version }}.zip
           path: ./*.elf
-          retention-days: 90
+          retention-days: 30
 
       - name: Create request artifacts
         if: ${{ github.event_name == 'pull_request_target' || github.event_name == 'pull_request' }}

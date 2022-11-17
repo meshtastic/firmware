@@ -16,6 +16,14 @@ int32_t BME280Sensor::runOnce() {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
     status = bme280.begin(nodeTelemetrySensorsMap[sensorType]); 
+    
+    bme280.setSampling( Adafruit_BME280::MODE_FORCED,
+                        Adafruit_BME280::SAMPLING_X1, // Temp. oversampling
+                        Adafruit_BME280::SAMPLING_X1, // Pressure oversampling
+                        Adafruit_BME280::SAMPLING_X1, // Humidity oversampling
+                        Adafruit_BME280::FILTER_OFF,
+                        Adafruit_BME280::STANDBY_MS_1000);
+    
     return initI2CSensor();
 }
 
@@ -23,6 +31,7 @@ void BME280Sensor::setup() { }
 
 bool BME280Sensor::getMetrics(Telemetry *measurement) {
     DEBUG_MSG("BME280Sensor::getMetrics\n");
+    bme280.takeForcedMeasurement();
     measurement->variant.environment_metrics.temperature = bme280.readTemperature();
     measurement->variant.environment_metrics.relative_humidity = bme280.readHumidity();
     measurement->variant.environment_metrics.barometric_pressure = bme280.readPressure() / 100.0F;

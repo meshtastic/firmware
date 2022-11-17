@@ -16,7 +16,7 @@ rm -r $OUTDIR/* || true
 git submodule update 
 
 # Important to pull latest version of libs into all device flavors, otherwise some devices might be stale
-platformio lib update 
+platformio pkg update 
 
 pio run --environment native
 cp .pio/build/native/program $OUTDIR/meshtasticd_linux_amd64

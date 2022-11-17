@@ -14,6 +14,7 @@
 #include <driver/rtc_io.h>
 #include <nvs.h>
 #include <nvs_flash.h>
+#include "soc/rtc.h"
 
 NimbleBluetooth *nimbleBluetooth;
 
@@ -35,6 +36,44 @@ void setBluetoothEnable(bool on) {
         }
     }
 }
+
+#ifdef HAS_32768HZ
+#define CALIBRATE_ONE(cali_clk) calibrate_one(cali_clk, #cali_clk)
+
+static uint32_t calibrate_one(rtc_cal_sel_t cal_clk, const char *name)
+{
+    const uint32_t cal_count = 1000;
+    // const float factor = (1 << 19) * 1000.0f; unused var?
+    uint32_t cali_val;
+    for (int i = 0; i < 5; ++i) {
+        cali_val = rtc_clk_cal(cal_clk, cal_count);
+    }
+    return cali_val;
+}
+
+void enableSlowCLK()
+{
+    rtc_clk_32k_enable(true);
+
+    CALIBRATE_ONE(RTC_CAL_RTC_MUX);
+    uint32_t cal_32k = CALIBRATE_ONE(RTC_CAL_32K_XTAL);
+
+    if (cal_32k == 0) {
+        DEBUG_MSG("32K XTAL OSC has not started up\n");
+    } else {
+        rtc_clk_slow_freq_set(RTC_SLOW_FREQ_32K_XTAL);
+        DEBUG_MSG("Switching RTC Source to 32.768Khz succeeded, using 32K XTAL\n");
+        CALIBRATE_ONE(RTC_CAL_RTC_MUX);
+        CALIBRATE_ONE(RTC_CAL_32K_XTAL);
+    }
+    CALIBRATE_ONE(RTC_CAL_RTC_MUX);
+    CALIBRATE_ONE(RTC_CAL_32K_XTAL);
+    if (rtc_clk_slow_freq_get() != RTC_SLOW_FREQ_32K_XTAL) {
+        DEBUG_MSG("Warning: Failed to switch 32K XTAL RTC source to 32.768Khz !!! \n"); return;
+    }
+}
+#endif
+
 
 void esp32Setup()
 {
@@ -83,6 +122,10 @@ void esp32Setup()
 
     res = esp_task_wdt_add(NULL);
     assert(res == ESP_OK);
+
+#ifdef HAS_32768HZ
+    enableSlowCLK();
+#endif
 }
 
 #if 0

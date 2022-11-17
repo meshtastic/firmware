@@ -78,6 +78,10 @@ typedef enum _HardwareModel {
     HardwareModel_DR_DEV = 41, 
     /* M5 esp32 based MCU modules with enclosure, TFT and LORA Shields. All Variants (Basic, Core, Fire, Core2, Paper) https://m5stack.com/ */
     HardwareModel_M5STACK = 42, 
+    /* New Heltec LoRA32 with ESP32-S3 CPU */
+    HardwareModel_HELTEC_V3 = 43, 
+    /* New Heltec Wireless Stick Lite with ESP32-S3 CPU */
+    HardwareModel_HELTEC_WSL_V3 = 44, 
     /* Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits. */
     HardwareModel_PRIVATE_HW = 255 
 } HardwareModel;
@@ -501,7 +505,7 @@ typedef PB_BYTES_ARRAY_T(256) MeshPacket_encrypted_t;
 typedef struct _MeshPacket { 
     /* The sending node number.
  Note: Our crypto implementation uses this field as well.
- See [crypto](/docs/about/overview/encryption) for details.
+ See [crypto](/docs/overview/encryption) for details.
  FIXME - really should be fixed32 instead, this encoding only hurts the ble link though. */
     uint32_t from;
     /* The (immediatSee Priority description for more details.y should be fixed32 instead, this encoding only
@@ -529,7 +533,7 @@ typedef struct _MeshPacket {
  needs to be unique for a few minutes (long enough to last for the length of
  any ACK or the completion of a mesh broadcast flood).
  Note: Our crypto implementation uses this id as well.
- See [crypto](/docs/about/overview/encryption) for details.
+ See [crypto](/docs/overview/encryption) for details.
  FIXME - really should be fixed32 instead, this encoding only
  hurts the ble link though. */
     uint32_t id;
