@@ -42,21 +42,19 @@ static int32_t reconnectWiFi()
     const char *wifiName = config.network.wifi_ssid;
     const char *wifiPsw = config.network.wifi_psk;
 
-    if (config.network.wifi_enabled && needReconnect && !WiFi.isConnected()) {
+    if (config.network.wifi_enabled && needReconnect) {
         
         if (!*wifiPsw) // Treat empty password as no password
             wifiPsw = NULL;
 
-        if (*wifiName) {
-            needReconnect = false;
+        needReconnect = false;
 
-            // Make sure we clear old connection credentials
-            WiFi.disconnect(false, true);
+        // Make sure we clear old connection credentials
+        WiFi.disconnect(false, true);
 
-            DEBUG_MSG("... Reconnecting to WiFi access point\n");
-            WiFi.mode(WIFI_MODE_STA);
-            WiFi.begin(wifiName, wifiPsw);
-        }
+        DEBUG_MSG("... Reconnecting to WiFi access point\n");
+        WiFi.mode(WIFI_MODE_STA);
+        WiFi.begin(wifiName, wifiPsw);
     }
 
 #ifndef DISABLE_NTP
@@ -169,7 +167,7 @@ bool initWifi()
             WiFi.mode(WIFI_MODE_STA);
             WiFi.setHostname(ourHost);
             WiFi.onEvent(WiFiEvent);
-            WiFi.setAutoReconnect(true);
+            WiFi.setAutoReconnect(false);
             WiFi.setSleep(false);
             if (config.network.eth_mode == Config_NetworkConfig_EthMode_STATIC && config.network.ipv4_config.ip != 0) {
                 WiFi.config(config.network.ipv4_config.ip,
@@ -231,6 +229,7 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
         DEBUG_MSG("Disconnected from WiFi access point\n");
+        WiFi.disconnect(false, true);
         needReconnect = true;
         break;
     case SYSTEM_EVENT_STA_AUTHMODE_CHANGE:
@@ -243,6 +242,7 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case SYSTEM_EVENT_STA_LOST_IP:
         DEBUG_MSG("Lost IP address and IP address is reset to 0\n");
+        WiFi.disconnect(false, true);
         needReconnect = true;
         break;
     case SYSTEM_EVENT_STA_WPS_ER_SUCCESS:
@@ -259,7 +259,6 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case SYSTEM_EVENT_AP_START:
         DEBUG_MSG("WiFi access point started\n");
-        onNetworkConnected();
         break;
     case SYSTEM_EVENT_AP_STOP:
         DEBUG_MSG("WiFi access point stopped\n");
