@@ -165,7 +165,7 @@ void MQTT::reconnect()
             sendSubscriptions();
         } else
             DEBUG_MSG("Failed to contact MQTT server...\n");
-#if HAS_WIFI
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
             WiFi.disconnect(false, true);
             triggerReconnect();
 #endif
