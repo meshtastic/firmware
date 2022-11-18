@@ -39,6 +39,14 @@ unsigned long lastrun_ntp = 0;
 
 static bool needReconnect = true; // If we create our reconnector, run it once at the beginning
 
+static Periodic *wifiReconnect;
+
+void triggerReconnect()
+{
+    needReconnect = true;
+    wifiReconnect->setIntervalFromNow(1000);
+}
+
 static int32_t reconnectWiFi()
 {
     const char *wifiName = config.network.wifi_ssid;
@@ -74,6 +82,9 @@ static int32_t reconnectWiFi()
 
         } else {
             DEBUG_MSG("NTP Update failed\n");
+            WiFi.disconnect(false, true);
+            needReconnect = true;
+            return 1000;
         }
     }
 #endif
@@ -84,8 +95,6 @@ static int32_t reconnectWiFi()
         return 300000; // every 5 minutes
     }
 }
-
-static Periodic *wifiReconnect;
 
 bool isWifiAvailable()
 {
@@ -100,20 +109,10 @@ bool isWifiAvailable()
 // Disable WiFi
 void deinitWifi()
 {
-    /*
-        Note from Jm (jm@casler.org - Sept 16, 2020):
-
-        A bug in the ESP32 SDK was introduced in Oct 2019 that keeps the WiFi radio from
-        turning back on after it's shut off. See:
-            https://github.com/espressif/arduino-esp32/issues/3522
-
-        Until then, WiFi should only be allowed when there's no power
-        saving on the 2.4g transceiver.
-    */
-
     DEBUG_MSG("WiFi deinit\n");
 
     if (isWifiAvailable()) {
+        WiFi.disconnect(true);
         WiFi.mode(WIFI_MODE_NULL);
         DEBUG_MSG("WiFi Turned Off\n");
         // WiFi.printDiag(Serial);
