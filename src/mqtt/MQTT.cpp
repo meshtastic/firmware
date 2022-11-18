@@ -1,5 +1,4 @@
 #include "MQTT.h"
-#include "mesh/http/WiFiAPClient.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -165,10 +164,6 @@ void MQTT::reconnect()
             sendSubscriptions();
         } else
             DEBUG_MSG("Failed to contact MQTT server...\n");
-#if HAS_WIFI && !defined(ARCH_PORTDUINO)
-            WiFi.disconnect(false, true);
-            triggerReconnect();
-#endif
     }
 }
 

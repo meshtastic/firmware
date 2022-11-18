@@ -13,8 +13,6 @@ bool initWifi();
 
 void deinitWifi();
 
-void triggerReconnect();
-
 bool isWifiAvailable();
 
 uint8_t getWifiDisconnectReason();

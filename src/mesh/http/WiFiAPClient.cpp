@@ -41,12 +41,6 @@ static bool needReconnect = true; // If we create our reconnector, run it once a
 
 static Periodic *wifiReconnect;
 
-void triggerReconnect()
-{
-    needReconnect = true;
-    wifiReconnect->setIntervalFromNow(1000);
-}
-
 static int32_t reconnectWiFi()
 {
     const char *wifiName = config.network.wifi_ssid;
@@ -82,9 +76,6 @@ static int32_t reconnectWiFi()
 
         } else {
             DEBUG_MSG("NTP Update failed\n");
-            WiFi.disconnect(false, true);
-            needReconnect = true;
-            return 1000;
         }
     }
 #endif
