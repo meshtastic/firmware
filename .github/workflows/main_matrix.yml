@@ -103,6 +103,9 @@ jobs:
           submodules: "recursive"
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
+            
+      - name: Show contents # For diagnostics
+        run: ls -lR
 
       - uses: ./../.github/workflows/build_esp32.yml
         with:
