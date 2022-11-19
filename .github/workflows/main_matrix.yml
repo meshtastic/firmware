@@ -94,8 +94,6 @@ jobs:
           - board: m5stack-core
           - board: m5stack-coreink
           - board: tbeam-s3-core
-
-    runs-on: ubuntu-latest
     uses: ./.github/workflows/build_esp32.yml
     with:
       board: ${{ matrix.board }}
