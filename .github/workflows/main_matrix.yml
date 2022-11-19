@@ -97,9 +97,9 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
-      uses: ./.github/workflows/build_esp32.yml
-      with:
-        board: ${{ matrix.board }}
+      - uses: ./.github/workflows/build_esp32.yml
+        with:
+          board: ${{ matrix.board }}
 
   build-nrf52:
     strategy:
