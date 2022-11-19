@@ -97,70 +97,9 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          submodules: "recursive"
-          ref: ${{github.event.pull_request.head.ref}}
-          repository: ${{github.event.pull_request.head.repo.full_name}}
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.x
-
-      - name: Cache python libs
-        uses: actions/cache@v3
-        id: cache-pip # needed in if test
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip
-
-      - name: Upgrade python tools
-        run: |
-          python -m pip install --upgrade pip
-          pip install -U platformio adafruit-nrfutil
-
-      - name: Upgrade platformio
-        run: |
-          pio upgrade
-
-      - name: Pull web ui
-        uses: dsaltares/fetch-gh-release-asset@master
-        with:
-          repo: "meshtastic/web"
-          file: "build.tar"
-          target: "build.tar"
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Unpack web ui
-        run: |
-          tar -xf build.tar -C data/static
-          rm build.tar
-
-      - name: Build ESP32
-        run: bin/build-esp32.sh ${{ matrix.board }}
-
-      - name: Pull OTA Firmware
-        uses: dsaltares/fetch-gh-release-asset@master
-        with:
-          repo: "meshtastic/firmware-ota"
-          file: "firmware.bin"
-          target: "release/bleota.bin"
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Get release version string
-        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
-        id: version
-
-      - name: Store binaries as an artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: firmware-${{ matrix.board }}-${{ steps.version.outputs.version }}.zip
-          path: |
-            release/*.bin
-            release/*.elf
-          retention-days: 30
+      uses: ./.github/workflows/build_esp32.yml
+      with:
+        board: ${{ matrix.board }}
 
   build-nrf52:
     strategy:
