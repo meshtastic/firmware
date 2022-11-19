@@ -104,7 +104,7 @@ jobs:
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
 
-      - uses: ./.github/workflows/build_esp32.yml
+      - uses: ./../.github/workflows/build_esp32.yml
         with:
           board: ${{ matrix.board }}
 
