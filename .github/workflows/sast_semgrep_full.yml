@@ -4,7 +4,7 @@ name: Semgrep Full Scan
 on:
   workflow_dispatch:
     branches:
-      - main
+      - master
   schedule:
     - cron:  '0 1 * * 6'
 
