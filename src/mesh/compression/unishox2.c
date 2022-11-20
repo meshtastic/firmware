@@ -25,6 +25,7 @@
  * defined in unishox2.h
  */
 
+#define __STDC_WANT_LIB_EXT1__ 1
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
