@@ -1,12 +1,12 @@
 ---
-name: Flawfinder Full Scan
+name: Flawfinder Scan
 
 on:
-  workflow_dispatch:
-    branches:
-      - master
-  schedule:
-    - cron:  '0 1 * * 6'
+  push:
+    branches: [master, develop]
+    paths-ignore:
+      - "**.md"
+      - "version.properties"
 
 jobs:
   flawfinder:
