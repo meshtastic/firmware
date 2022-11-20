@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Build base
         id: base
-        uses: ./.github/workflows/build_base.yml
+        uses: ./.github/workflows/composite/build-base
 
       - name: Pull web ui
         uses: dsaltares/fetch-gh-release-asset@master
