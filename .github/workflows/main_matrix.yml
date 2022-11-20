@@ -35,37 +35,10 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          submodules: "recursive"
-          ref: ${{github.event.pull_request.head.ref}}
-          repository: ${{github.event.pull_request.head.repo.full_name}}
-
-      - name: Install cppcheck
-        run: |
-          sudo apt-get install -y cppcheck
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.x
-
-      - name: Cache python libs
-        uses: actions/cache@v3
-        id: cache-pip # needed in if test
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip
-
-      - name: Upgrade python tools and install platformio
-        run: |
-          python -m pip install --upgrade pip
-          pip install -U platformio
-
-      - name: Upgrade platformio
-        run: |
-          pio upgrade
+      - uses: actions/checkout@v3
+      - name: Build base
+        id: base
+        uses: ./.github/actions/setup-base
 
       - name: Check ${{ matrix.board }}
         run: bin/check-all.sh ${{ matrix.board }}
@@ -109,53 +82,9 @@ jobs:
           - board: t-echo
           - board: pca10059_diy_eink
           - board: feather_diy
-
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          submodules: "recursive"
-          ref: ${{github.event.pull_request.head.ref}}
-          repository: ${{github.event.pull_request.head.repo.full_name}}
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.x
-
-      - name: Cache python libs
-        uses: actions/cache@v3
-        id: cache-pip # needed in if test
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip
-
-      - name: Upgrade python tools
-        run: |
-          python -m pip install --upgrade pip
-          pip install -U platformio adafruit-nrfutil
-
-      - name: Upgrade platformio
-        run: |
-          pio upgrade
-
-      - name: Build NRF52
-        run: bin/build-nrf52.sh ${{ matrix.board }}
-
-      - name: Get release version string
-        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
-        id: version
-
-      - name: Store binaries as an artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: firmware-${{ matrix.board }}-${{ steps.version.outputs.version }}.zip
-          path: |
-            release/*.uf2
-            release/*.elf
-            release/*.zip
-          retention-days: 30
+      uses: ./.github/workflows/build_nrf52.yml
+      with:
+        board: ${{ matrix.board }}
 
   build-rpi2040:
     strategy:
@@ -164,84 +93,17 @@ jobs:
       matrix:
         include:
           - board: pico
-
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          submodules: "recursive"
-          ref: ${{github.event.pull_request.head.ref}}
-          repository: ${{github.event.pull_request.head.repo.full_name}}
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.x
-
-      - name: Cache python libs
-        uses: actions/cache@v3
-        id: cache-pip # needed in if test
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip
-
-      - name: Upgrade python tools
-        run: |
-          python -m pip install --upgrade pip
-          pip install -U platformio adafruit-nrfutil
-
-      - name: Upgrade platformio
-        run: |
-          pio upgrade
-
-      - name: Build Raspberry Pi 2040
-        run: ./bin/build-rpi2040.sh ${{ matrix.board }}
-
-      - name: Get release version string
-        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
-        id: version
-
-      - name: Store binaries as an artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: firmware-${{ matrix.board }}-${{ steps.version.outputs.version }}.zip
-          path: |
-            release/*.uf2
-            release/*.elf
-          retention-days: 30
+      uses: ./.github/workflows/build_rpi2040.yml
+      with:
+        board: ${{ matrix.board }}
 
   build-native:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          submodules: "recursive"
-          ref: ${{github.event.pull_request.head.ref}}
-          repository: ${{github.event.pull_request.head.repo.full_name}}
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.x
-
-      - name: Cache python libs
-        uses: actions/cache@v3
-        id: cache-pip # needed in if test
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip
-
-      - name: Upgrade python tools
-        run: |
-          python -m pip install --upgrade pip
-          pip install -U platformio adafruit-nrfutil
-          pip install -U meshtastic --pre
-
-      - name: Upgrade platformio
-        run: |
-          pio upgrade
+      - uses: actions/checkout@v3
+      - name: Build base
+        id: base
+        uses: ./.github/actions/setup-base
 
       # We now run integration test before other build steps (to quickly see runtime failures)
       - name: Build for native
