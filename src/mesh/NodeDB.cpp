@@ -741,9 +741,9 @@ void recordCriticalError(CriticalErrorCode code, uint32_t address, const char *f
     String lcd = String("Critical error ") + code + "!\n";
     screen->print(lcd.c_str());
     if (filename)
-        DEBUG_MSG("NOTE! Recording critical error %d at %s:%lx\n", code, filename, address);
+        DEBUG_MSG("NOTE! Recording critical error %d at %s:%lu\n", code, filename, address);
     else
-        DEBUG_MSG("NOTE! Recording critical error %d, address=%lx\n", code, address);
+        DEBUG_MSG("NOTE! Recording critical error %d, address=0x%lx\n", code, address);
 
     // Record error to DB
     myNodeInfo.error_code = code;
