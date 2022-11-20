@@ -87,8 +87,6 @@ uint8_t kb_model;
 // The I2C address of the RTC Module (if found)
 uint8_t rtc_found;
 
-bool rIf_wide_lora = false;
-
 // Keystore Chips
 uint8_t keystore_found;
 #ifndef ARCH_PORTDUINO
@@ -102,7 +100,7 @@ uint32_t serialSinceMsec;
 bool pmu_found;
 
 // Array map of sensor types (as array index) and i2c address as value we'll find in the i2c scan
-uint8_t nodeTelemetrySensorsMap[TelemetrySensorType_QMI8658+1] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+uint8_t nodeTelemetrySensorsMap[_TelemetrySensorType_MAX + 1] = { 0 }; // one is enough, missing elements will be initialized to 0 anyway.
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
 
@@ -246,8 +244,32 @@ void setup()
     digitalWrite(PIN_3V3_EN, 1);
 #endif
 
+
+    // Currently only the tbeam has a PMU
+    // PMU initialization needs to be placed before scanI2Cdevice
+    power = new Power();
+    power->setStatusHandler(powerStatus);
+    powerStatus->observe(&power->newStatus);
+    power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
+
+
+#ifdef LILYGO_TBEAM_S3_CORE
+    // In T-Beam-S3-core, the I2C device cannot be scanned before power initialization, otherwise the device will be stuck
+    // PCF8563 RTC in tbeam-s3 uses Wire1 to share I2C bus
+    Wire1.beginTransmission(PCF8563_RTC);
+    if (Wire1.endTransmission() == 0){
+        rtc_found = PCF8563_RTC;
+        DEBUG_MSG("PCF8563 RTC found\n");
+    }
+#endif
+
     // We need to scan here to decide if we have a screen for nodeDB.init()
     scanI2Cdevice();
+
+#ifdef HAS_SDCARD
+    setupSDCard();
+#endif
+    
 #ifdef RAK4630
     // scanEInkDevice();
 #endif
@@ -281,19 +303,7 @@ void setup()
     nodeDB.init();
 
     playStartMelody();
-
-    // Currently only the tbeam has a PMU
-    power = new Power();
-    power->setStatusHandler(powerStatus);
-    powerStatus->observe(&power->newStatus);
-    power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
-
-    /*
-    * Repeat the scanning for I2C devices after power initialization or look for 'latecomers'. 
-    * Boards with an PMU need to be powered on to correctly scan to the device address, such as t-beam-s3-core
-    */
-    scanI2Cdevice();
-
+    
     // fixed screen override?
     if (config.display.oled != Config_DisplayConfig_OledType_OLED_AUTO)
         screen_model = config.display.oled;
@@ -385,7 +395,6 @@ void setup()
             rIf = NULL;
         } else {
             DEBUG_MSG("SX1280 Radio init succeeded, using SX1280 radio\n");
-            rIf_wide_lora = true;
         }
     }
 #endif

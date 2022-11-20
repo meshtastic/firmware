@@ -10,11 +10,8 @@ OUTDIR=release/
 rm -f $OUTDIR/firmware*
 rm -r $OUTDIR/* || true
 
-# Make sure our submodules are current
-git submodule update 
-
 # Important to pull latest version of libs into all device flavors, otherwise some devices might be stale
-platformio lib update 
+platformio pkg update 
 
 echo "Building for $1 with $PLATFORMIO_BUILD_FLAGS"
 rm -f .pio/build/$1/firmware.*

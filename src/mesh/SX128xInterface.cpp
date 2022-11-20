@@ -6,7 +6,7 @@
 
 // Particular boards might define a different max power based on what their hardware can do
 #ifndef SX128X_MAX_POWER
-#define SX128X_MAX_POWER 22
+#define SX128X_MAX_POWER 13
 #endif
 
 template<typename T>
@@ -61,7 +61,7 @@ bool SX128xInterface<T>::init()
 #endif
 
     if (res == RADIOLIB_ERR_NONE)
-        res = lora.setCRC(RADIOLIB_SX128X_LORA_CRC_ON);
+        res = lora.setCRC(2);
 
     if (res == RADIOLIB_ERR_NONE)
         startReceive(); // start receiving

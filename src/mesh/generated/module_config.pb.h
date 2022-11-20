@@ -10,6 +10,18 @@
 #endif
 
 /* Enum definitions */
+typedef enum _ModuleConfig_AudioConfig_Audio_Baud { 
+    ModuleConfig_AudioConfig_Audio_Baud_CODEC2_DEFAULT = 0, 
+    ModuleConfig_AudioConfig_Audio_Baud_CODEC2_3200 = 1, 
+    ModuleConfig_AudioConfig_Audio_Baud_CODEC2_2400 = 2, 
+    ModuleConfig_AudioConfig_Audio_Baud_CODEC2_1600 = 3, 
+    ModuleConfig_AudioConfig_Audio_Baud_CODEC2_1400 = 4, 
+    ModuleConfig_AudioConfig_Audio_Baud_CODEC2_1300 = 5, 
+    ModuleConfig_AudioConfig_Audio_Baud_CODEC2_1200 = 6, 
+    ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700 = 7, 
+    ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700B = 8 
+} ModuleConfig_AudioConfig_Audio_Baud;
+
 typedef enum _ModuleConfig_SerialConfig_Serial_Baud { 
     ModuleConfig_SerialConfig_Serial_Baud_BAUD_DEFAULT = 0, 
     ModuleConfig_SerialConfig_Serial_Baud_BAUD_110 = 1, 
@@ -49,6 +61,14 @@ typedef enum _ModuleConfig_CannedMessageConfig_InputEventChar {
 } ModuleConfig_CannedMessageConfig_InputEventChar;
 
 /* Struct definitions */
+typedef struct _ModuleConfig_AudioConfig { 
+    bool codec2_enabled;
+    uint32_t mic_chan;
+    uint32_t amp_pin;
+    uint32_t ptt_pin;
+    ModuleConfig_AudioConfig_Audio_Baud bitrate;
+} ModuleConfig_AudioConfig;
+
 typedef struct _ModuleConfig_CannedMessageConfig { 
     bool rotary1_enabled;
     uint32_t inputbroker_pin_a;
@@ -131,11 +151,17 @@ typedef struct _ModuleConfig {
         ModuleConfig_TelemetryConfig telemetry;
         /* TODO: REPLACE */
         ModuleConfig_CannedMessageConfig canned_message;
+        /* TODO: REPLACE */
+        ModuleConfig_AudioConfig audio;
     } payload_variant;
 } ModuleConfig;
 
 
 /* Helper constants for enums */
+#define _ModuleConfig_AudioConfig_Audio_Baud_MIN ModuleConfig_AudioConfig_Audio_Baud_CODEC2_DEFAULT
+#define _ModuleConfig_AudioConfig_Audio_Baud_MAX ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700B
+#define _ModuleConfig_AudioConfig_Audio_Baud_ARRAYSIZE ((ModuleConfig_AudioConfig_Audio_Baud)(ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700B+1))
+
 #define _ModuleConfig_SerialConfig_Serial_Baud_MIN ModuleConfig_SerialConfig_Serial_Baud_BAUD_DEFAULT
 #define _ModuleConfig_SerialConfig_Serial_Baud_MAX ModuleConfig_SerialConfig_Serial_Baud_BAUD_921600
 #define _ModuleConfig_SerialConfig_Serial_Baud_ARRAYSIZE ((ModuleConfig_SerialConfig_Serial_Baud)(ModuleConfig_SerialConfig_Serial_Baud_BAUD_921600+1))
@@ -156,6 +182,7 @@ extern "C" {
 /* Initializer values for message structs */
 #define ModuleConfig_init_default                {0, {ModuleConfig_MQTTConfig_init_default}}
 #define ModuleConfig_MQTTConfig_init_default     {0, "", "", "", 0, 0}
+#define ModuleConfig_AudioConfig_init_default    {0, 0, 0, 0, _ModuleConfig_AudioConfig_Audio_Baud_MIN}
 #define ModuleConfig_SerialConfig_init_default   {0, 0, 0, 0, _ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _ModuleConfig_SerialConfig_Serial_Mode_MIN}
 #define ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0}
 #define ModuleConfig_StoreForwardConfig_init_default {0, 0, 0, 0, 0}
@@ -164,6 +191,7 @@ extern "C" {
 #define ModuleConfig_CannedMessageConfig_init_default {0, 0, 0, 0, _ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define ModuleConfig_init_zero                   {0, {ModuleConfig_MQTTConfig_init_zero}}
 #define ModuleConfig_MQTTConfig_init_zero        {0, "", "", "", 0, 0}
+#define ModuleConfig_AudioConfig_init_zero       {0, 0, 0, 0, _ModuleConfig_AudioConfig_Audio_Baud_MIN}
 #define ModuleConfig_SerialConfig_init_zero      {0, 0, 0, 0, _ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _ModuleConfig_SerialConfig_Serial_Mode_MIN}
 #define ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0}
 #define ModuleConfig_StoreForwardConfig_init_zero {0, 0, 0, 0, 0}
@@ -172,6 +200,11 @@ extern "C" {
 #define ModuleConfig_CannedMessageConfig_init_zero {0, 0, 0, 0, _ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 
 /* Field tags (for use in manual encoding/decoding) */
+#define ModuleConfig_AudioConfig_codec2_enabled_tag 1
+#define ModuleConfig_AudioConfig_mic_chan_tag    2
+#define ModuleConfig_AudioConfig_amp_pin_tag     3
+#define ModuleConfig_AudioConfig_ptt_pin_tag     4
+#define ModuleConfig_AudioConfig_bitrate_tag     5
 #define ModuleConfig_CannedMessageConfig_rotary1_enabled_tag 1
 #define ModuleConfig_CannedMessageConfig_inputbroker_pin_a_tag 2
 #define ModuleConfig_CannedMessageConfig_inputbroker_pin_b_tag 3
@@ -222,6 +255,7 @@ extern "C" {
 #define ModuleConfig_range_test_tag              5
 #define ModuleConfig_telemetry_tag               6
 #define ModuleConfig_canned_message_tag          7
+#define ModuleConfig_audio_tag                   8
 
 /* Struct field encoding specification for nanopb */
 #define ModuleConfig_FIELDLIST(X, a) \
@@ -231,7 +265,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,external_notification,payloa
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,store_forward,payload_variant.store_forward),   4) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,range_test,payload_variant.range_test),   5) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,telemetry,payload_variant.telemetry),   6) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,canned_message,payload_variant.canned_message),   7)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,canned_message,payload_variant.canned_message),   7) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,audio,payload_variant.audio),   8)
 #define ModuleConfig_CALLBACK NULL
 #define ModuleConfig_DEFAULT NULL
 #define ModuleConfig_payload_variant_mqtt_MSGTYPE ModuleConfig_MQTTConfig
@@ -241,6 +276,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,canned_message,payload_varia
 #define ModuleConfig_payload_variant_range_test_MSGTYPE ModuleConfig_RangeTestConfig
 #define ModuleConfig_payload_variant_telemetry_MSGTYPE ModuleConfig_TelemetryConfig
 #define ModuleConfig_payload_variant_canned_message_MSGTYPE ModuleConfig_CannedMessageConfig
+#define ModuleConfig_payload_variant_audio_MSGTYPE ModuleConfig_AudioConfig
 
 #define ModuleConfig_MQTTConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
@@ -251,6 +287,15 @@ X(a, STATIC,   SINGULAR, BOOL,     encryption_enabled,   5) \
 X(a, STATIC,   SINGULAR, BOOL,     json_enabled,      6)
 #define ModuleConfig_MQTTConfig_CALLBACK NULL
 #define ModuleConfig_MQTTConfig_DEFAULT NULL
+
+#define ModuleConfig_AudioConfig_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, BOOL,     codec2_enabled,    1) \
+X(a, STATIC,   SINGULAR, UINT32,   mic_chan,          2) \
+X(a, STATIC,   SINGULAR, UINT32,   amp_pin,           3) \
+X(a, STATIC,   SINGULAR, UINT32,   ptt_pin,           4) \
+X(a, STATIC,   SINGULAR, UENUM,    bitrate,           5)
+#define ModuleConfig_AudioConfig_CALLBACK NULL
+#define ModuleConfig_AudioConfig_DEFAULT NULL
 
 #define ModuleConfig_SerialConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
@@ -315,6 +360,7 @@ X(a, STATIC,   SINGULAR, BOOL,     send_bell,        11)
 
 extern const pb_msgdesc_t ModuleConfig_msg;
 extern const pb_msgdesc_t ModuleConfig_MQTTConfig_msg;
+extern const pb_msgdesc_t ModuleConfig_AudioConfig_msg;
 extern const pb_msgdesc_t ModuleConfig_SerialConfig_msg;
 extern const pb_msgdesc_t ModuleConfig_ExternalNotificationConfig_msg;
 extern const pb_msgdesc_t ModuleConfig_StoreForwardConfig_msg;
@@ -325,6 +371,7 @@ extern const pb_msgdesc_t ModuleConfig_CannedMessageConfig_msg;
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define ModuleConfig_fields &ModuleConfig_msg
 #define ModuleConfig_MQTTConfig_fields &ModuleConfig_MQTTConfig_msg
+#define ModuleConfig_AudioConfig_fields &ModuleConfig_AudioConfig_msg
 #define ModuleConfig_SerialConfig_fields &ModuleConfig_SerialConfig_msg
 #define ModuleConfig_ExternalNotificationConfig_fields &ModuleConfig_ExternalNotificationConfig_msg
 #define ModuleConfig_StoreForwardConfig_fields &ModuleConfig_StoreForwardConfig_msg
@@ -333,6 +380,7 @@ extern const pb_msgdesc_t ModuleConfig_CannedMessageConfig_msg;
 #define ModuleConfig_CannedMessageConfig_fields &ModuleConfig_CannedMessageConfig_msg
 
 /* Maximum encoded size of messages (where known) */
+#define ModuleConfig_AudioConfig_size            22
 #define ModuleConfig_CannedMessageConfig_size    49
 #define ModuleConfig_ExternalNotificationConfig_size 20
 #define ModuleConfig_MQTTConfig_size             105

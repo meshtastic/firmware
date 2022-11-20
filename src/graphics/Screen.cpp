@@ -50,8 +50,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 using namespace meshtastic; /** @todo remove */
 
-extern bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, void *dest_struct);
-
 namespace graphics
 {
 
@@ -67,6 +65,8 @@ namespace graphics
 static FrameCallback normalFrames[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
 static uint32_t targetFramerate = IDLE_FRAMERATE;
 static char btPIN[16] = "888888";
+
+uint32_t logo_timeout = 5000; // 4 seconds for EACH logo
     
 // This image definition is here instead of images.h because it's modified dynamically by the drawBattery function
 uint8_t imgBattery[16] = {0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0xE7, 0x3C};
@@ -538,9 +538,10 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
 
+        geoCoord.updateCoords(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()), int32_t(gps->getAltitude()));
+
         if (gpsFormat != Config_DisplayConfig_GpsCoordinateFormat_DMS) {
             char coordinateLine[22];
-            geoCoord.updateCoords(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()), int32_t(gps->getAltitude()));
             if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_DEC) { // Decimal Degrees
                 sprintf(coordinateLine, "%f %f", geoCoord.getLatitude() * 1e-7, geoCoord.getLongitude() * 1e-7);
             } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_UTM) { // Universal Transverse Mercator
@@ -944,6 +945,9 @@ void Screen::setup()
     // Set the utf8 conversion function
     dispdev.setFontTableLookupFunction(customFontTableLookup);
 
+    if (strlen(oemStore.oem_text) > 0)
+        logo_timeout *= 2;
+
     // Add frames.
     static FrameCallback bootFrames[] = {drawBootScreen};
     static const int bootFrameCount = sizeof(bootFrames) / sizeof(bootFrames[0]);
@@ -1012,26 +1016,28 @@ int32_t Screen::runOnce()
         return RUN_SAME;
     }
 
-    // Show boot screen for first 5 seconds, then switch to normal operation.
+    // Show boot screen for first logo_timeout seconds, then switch to normal operation.
     // serialSinceMsec adjusts for additional serial wait time during nRF52 bootup
     static bool showingBootScreen = true;
-    if (showingBootScreen && (millis() > (5000 + serialSinceMsec))) {
+    if (showingBootScreen && (millis() > (logo_timeout + serialSinceMsec))) {
         DEBUG_MSG("Done with boot screen...\n");
         stopBootScreen();
         showingBootScreen = false;
     }
 
-    // If we have an OEM Boot screen, toggle after 2,5 seconds
+    // If we have an OEM Boot screen, toggle after logo_timeout seconds
     if (strlen(oemStore.oem_text) > 0) {
         static bool showingOEMBootScreen = true;
-        if (showingOEMBootScreen && (millis() > (2500 + serialSinceMsec))) {
+        if (showingOEMBootScreen && (millis() > ((logo_timeout / 2) + serialSinceMsec))) {
             DEBUG_MSG("Switch to OEM screen...\n");
             // Change frames.
             static FrameCallback bootOEMFrames[] = {drawOEMBootScreen};
             static const int bootOEMFrameCount = sizeof(bootOEMFrames) / sizeof(bootOEMFrames[0]);
             ui.setFrames(bootOEMFrames, bootOEMFrameCount);
             ui.update();
+#ifndef USE_EINK            
             ui.update();
+#endif
             showingOEMBootScreen = false;
         }
     }

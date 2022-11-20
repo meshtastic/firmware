@@ -1,0 +1,54 @@
+name: Build ESP32
+
+on:
+  workflow_call:
+    inputs:
+      board:
+        required: true
+        type: string
+
+jobs: 
+  build-esp32:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build base
+        id: base
+        uses: ./.github/actions/setup-base
+
+      - name: Pull web ui
+        uses: dsaltares/fetch-gh-release-asset@master
+        with:
+          repo: "meshtastic/web"
+          file: "build.tar"
+          target: "build.tar"
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Unpack web ui
+        run: |
+          tar -xf build.tar -C data/static
+          rm build.tar
+
+      - name: Build ESP32
+        run: bin/build-esp32.sh ${{ inputs.board }}
+
+      - name: Pull OTA Firmware
+        uses: dsaltares/fetch-gh-release-asset@master
+        with:
+          repo: "meshtastic/firmware-ota"
+          file: "firmware.bin"
+          target: "release/bleota.bin"
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Get release version string
+        shell: bash
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        id: version
+
+      - name: Store binaries as an artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: firmware-${{ inputs.board }}-${{ steps.version.outputs.version }}.zip
+          path: |
+            release/*.bin
+            release/*.elf

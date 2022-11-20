@@ -317,7 +317,13 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
     void RadioLibInterface::handleReceiveInterrupt()
     {
         uint32_t xmitMsec;
-        assert(isReceiving);
+        
+        // when this is called, we should be in receive mode - if we are not, just jump out instead of bombing. Possible Race Condition?
+        if (!isReceiving) {
+            DEBUG_MSG("*** WAS_ASSERT *** handleReceiveInterrupt called when not in receive mode\n");
+            return;
+        }
+        
         isReceiving = false;
 
         // read the number of actually received bytes

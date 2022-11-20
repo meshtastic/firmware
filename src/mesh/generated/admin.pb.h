@@ -32,7 +32,8 @@ typedef enum _AdminMessage_ModuleConfigType {
     AdminMessage_ModuleConfigType_STOREFORWARD_CONFIG = 3, 
     AdminMessage_ModuleConfigType_RANGETEST_CONFIG = 4, 
     AdminMessage_ModuleConfigType_TELEMETRY_CONFIG = 5, 
-    AdminMessage_ModuleConfigType_CANNEDMSG_CONFIG = 6 
+    AdminMessage_ModuleConfigType_CANNEDMSG_CONFIG = 6, 
+    AdminMessage_ModuleConfigType_AUDIO_CONFIG = 7 
 } AdminMessage_ModuleConfigType;
 
 /* Struct definitions */
@@ -122,8 +123,8 @@ typedef struct _AdminMessage {
 #define _AdminMessage_ConfigType_ARRAYSIZE ((AdminMessage_ConfigType)(AdminMessage_ConfigType_BLUETOOTH_CONFIG+1))
 
 #define _AdminMessage_ModuleConfigType_MIN AdminMessage_ModuleConfigType_MQTT_CONFIG
-#define _AdminMessage_ModuleConfigType_MAX AdminMessage_ModuleConfigType_CANNEDMSG_CONFIG
-#define _AdminMessage_ModuleConfigType_ARRAYSIZE ((AdminMessage_ModuleConfigType)(AdminMessage_ModuleConfigType_CANNEDMSG_CONFIG+1))
+#define _AdminMessage_ModuleConfigType_MAX AdminMessage_ModuleConfigType_AUDIO_CONFIG
+#define _AdminMessage_ModuleConfigType_ARRAYSIZE ((AdminMessage_ModuleConfigType)(AdminMessage_ModuleConfigType_AUDIO_CONFIG+1))
 
 
 #ifdef __cplusplus

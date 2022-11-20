@@ -1,4 +1,5 @@
 #include "NMEAWPL.h"
+#include "GeoCoord.h"
 
 /* -------------------------------------------
  *        1       2 3        4 5    6
@@ -15,11 +16,19 @@
  * -------------------------------------------
  */
 
-uint printWPL(char *buf, const Position &pos, const char *name)
+uint32_t printWPL(char *buf, const Position &pos, const char *name)
 {
-    uint len = sprintf(buf, "$GNWPL,%07.2f,%c,%08.2f,%c,%s", pos.latitude_i * 1e-5, pos.latitude_i < 0 ? 'S' : 'N', pos.longitude_i * 1e-5, pos.longitude_i < 0 ? 'W' : 'E', name);
-    uint chk = 0;
-    for (uint i = 1; i < len; i++) {
+    GeoCoord geoCoord(pos.latitude_i,pos.longitude_i,pos.altitude);
+    uint32_t len = sprintf(buf, "$GNWPL,%02d%07.4f,%c,%03d%07.4f,%c,%s",
+        geoCoord.getDMSLatDeg(),
+        (abs(geoCoord.getLatitude()) - geoCoord.getDMSLatDeg() * 1e+7) * 6e-6,
+        geoCoord.getDMSLatCP(),
+        geoCoord.getDMSLonDeg(),
+        (abs(geoCoord.getLongitude()) - geoCoord.getDMSLonDeg() * 1e+7) * 6e-6,
+        geoCoord.getDMSLonCP(),
+        name);
+    uint32_t chk = 0;
+    for (uint32_t i = 1; i < len; i++) {
         chk ^= buf[i];
     }
     len += sprintf(buf + len, "*%02X\r\n", chk);
@@ -50,25 +59,30 @@ uint printWPL(char *buf, const Position &pos, const char *name)
  * -------------------------------------------
  */
 
-uint printGGA(char *buf, const Position &pos)
+uint32_t printGGA(char *buf, const Position &pos)
 {
-    uint len = sprintf(buf, "$GNGGA,%06u.%03u,%07.2f,%c,%08.2f,%c,%u,%02u,%04u,%04d,%c,%04d,%c,%d,%04d",
+    GeoCoord geoCoord(pos.latitude_i,pos.longitude_i,pos.altitude);
+    uint32_t len = sprintf(buf, "$GNGGA,%06u.%03u,%02d%07.4f,%c,%03d%07.4f,%c,%u,%02u,%04u,%04d,%c,%04d,%c,%d,%04d",
         pos.time / 1000,
         pos.time % 1000,
-        pos.latitude_i * 1e-5, pos.latitude_i < 0 ? 'S' : 'N',
-        pos.longitude_i * 1e-5, pos.longitude_i < 0 ? 'W' : 'E',
+        geoCoord.getDMSLatDeg(),
+        (abs(geoCoord.getLatitude()) - geoCoord.getDMSLatDeg() * 1e+7) * 6e-6,
+        geoCoord.getDMSLatCP(),
+        geoCoord.getDMSLonDeg(),
+        (abs(geoCoord.getLongitude()) - geoCoord.getDMSLonDeg() * 1e+7) * 6e-6,
+        geoCoord.getDMSLonCP(),
         pos.fix_type,
         pos.sats_in_view,
         pos.HDOP,
-        pos.altitude,
+        geoCoord.getAltitude(),
         'M',
         pos.altitude_geoidal_separation,
         'M',
         0,
         0);
 
-    uint chk = 0;
-    for (uint i = 1; i < len; i++) {
+    uint32_t chk = 0;
+    for (uint32_t i = 1; i < len; i++) {
         chk ^= buf[i];
     }
     len += sprintf(buf + len, "*%02X\r\n", chk);
