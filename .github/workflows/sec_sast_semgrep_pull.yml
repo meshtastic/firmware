@@ -1,0 +1,28 @@
+---
+name: Semgrep Differential Scan
+on:
+  pull_request
+
+jobs:
+
+  semgrep-diff:
+    runs-on: ubuntu-latest
+    container:
+      image: returntocorp/semgrep
+
+    steps:
+
+      # step 1
+      - name: clone application source code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      # step 2
+      - name: differential scan
+        run: |
+          semgrep scan \
+            --error \
+            --metrics=off \
+            --baseline-commit ${{ github.event.pull_request.base.sha }} \
+            --config="p/default"
