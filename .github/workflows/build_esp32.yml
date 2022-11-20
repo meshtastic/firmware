@@ -11,33 +11,9 @@ jobs:
   build-esp32:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          submodules: "recursive"
-          ref: ${{github.event.pull_request.head.ref}}
-          repository: ${{github.event.pull_request.head.repo.full_name}}
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.x
-
-      - name: Cache python libs
-        uses: actions/cache@v3
-        id: cache-pip # needed in if test
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip
-
-      - name: Upgrade python tools
-        run: |
-          python -m pip install --upgrade pip
-          pip install -U platformio adafruit-nrfutil
-
-      - name: Upgrade platformio
-        run: |
-          pio upgrade
+      - name: Build base
+        id: base
+        uses: ./.github/workflows/build_base.yml
 
       - name: Pull web ui
         uses: dsaltares/fetch-gh-release-asset@master
@@ -63,14 +39,10 @@ jobs:
           target: "release/bleota.bin"
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get release version string
-        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
-        id: version
-
       - name: Store binaries as an artifact
         uses: actions/upload-artifact@v3
         with:
-          name: firmware-${{ inputs.board }}-${{ steps.version.outputs.version }}.zip
+          name: firmware-${{ inputs.board }}-${{ steps.base.outputs.version }}.zip
           path: |
             release/*.bin
             release/*.elf
