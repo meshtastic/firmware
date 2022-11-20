@@ -25,7 +25,6 @@
  * defined in unishox2.h
  */
 
-#define __STDC_WANT_LIB_EXT1__ 1
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
@@ -126,7 +125,7 @@ byte is_inited = 0;
 void init_coder() {
   if (is_inited)
     return;
-  memset_s(usx_code_94, '\0', sizeof(usx_code_94));
+  memset(usx_code_94, '\0', sizeof(usx_code_94));
   for (int i = 0; i < 3; i++) {
     for (int j = 0; j < 28; j++) {
       byte c = usx_sets[i][j];
