@@ -82,9 +82,9 @@ jobs:
           - board: t-echo
           - board: pca10059_diy_eink
           - board: feather_diy
-      uses: ./.github/workflows/build_nrf52.yml
-      with:
-        board: ${{ matrix.board }}
+    uses: ./.github/workflows/build_nrf52.yml
+    with:
+      board: ${{ matrix.board }}
 
   build-rpi2040:
     strategy:
@@ -93,9 +93,9 @@ jobs:
       matrix:
         include:
           - board: pico
-      uses: ./.github/workflows/build_rpi2040.yml
-      with:
-        board: ${{ matrix.board }}
+    uses: ./.github/workflows/build_rpi2040.yml
+    with:
+      board: ${{ matrix.board }}
 
   build-native:
     runs-on: ubuntu-latest
