@@ -12,9 +12,6 @@ rm -f $OUTDIR/firmware*
 mkdir -p $OUTDIR/
 rm -r $OUTDIR/* || true
 
-# Make sure our submodules are current
-git submodule update 
-
 # Important to pull latest version of libs into all device flavors, otherwise some devices might be stale
 platformio pkg update 
 
