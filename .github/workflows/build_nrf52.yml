@@ -1,0 +1,33 @@
+name: Build NRF52
+
+on:
+  workflow_call:
+    inputs:
+      board:
+        required: true
+        type: string
+
+jobs: 
+  build-nrf52:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build base
+        id: base
+        uses: ./.github/actions/setup-base
+
+      - name: Build NRF52
+        run: bin/build-nrf52.sh ${{ inputs.board }}
+
+      - name: Get release version string
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        id: version
+
+      - name: Store binaries as an artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: firmware-${{ inputs.board }}-${{ steps.version.outputs.version }}.zip
+          path: |
+            release/*.uf2
+            release/*.elf
+            release/*.zip

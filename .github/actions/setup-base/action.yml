@@ -1,0 +1,41 @@
+name: 'Setup Build Base Composite Action'
+description: 'Base build actions for Meshtastic Platform IO steps'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        submodules: "recursive"
+        ref: ${{github.event.pull_request.head.ref}}
+        repository: ${{github.event.pull_request.head.repo.full_name}}
+    
+    - name: Install cppcheck
+      shell: bash
+      run: |
+        sudo apt-get install -y cppcheck
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.x
+
+    - name: Cache python libs
+      uses: actions/cache@v3
+      id: cache-pip # needed in if test
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip
+
+    - name: Upgrade python tools
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        pip install -U platformio adafruit-nrfutil
+        pip install -U meshtastic --pre
+
+    - name: Upgrade platformio
+      shell: bash
+      run: |
+        pio upgrade
