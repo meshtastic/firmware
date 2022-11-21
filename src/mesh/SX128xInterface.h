@@ -1,6 +1,6 @@
 #pragma once
 
-#if !defined(ARCH_PORTDUINO)
+#if defined(RADIOLIB_GODMODE)
 
 #include "RadioLibInterface.h"
 
