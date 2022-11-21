@@ -118,24 +118,16 @@ bool MQTT::connected()
 void MQTT::reconnect()
 {
     if (wantsLink()) {
-        const char *serverAddr = "mqtt.meshtastic.org"; // default hostname
-        int serverPort = 1883;                          // default server port
-        const char *mqttUsername = "meshdev";
-        const char *mqttPassword = "large4cats";
+        // Defaults
+        int serverPort = 1883;  
+        const char *serverAddr = default_mqtt_address;
+        const char *mqttUsername = default_mqtt_username;
+        const char *mqttPassword = default_mqtt_password;
 
         if (*moduleConfig.mqtt.address) {
-            serverAddr = moduleConfig.mqtt.address; // Override the default
-            mqttUsername =
-                moduleConfig.mqtt.username; // do not use the hardcoded credentials for a custom mqtt server
+            serverAddr = moduleConfig.mqtt.address;
+            mqttUsername = moduleConfig.mqtt.username;
             mqttPassword = moduleConfig.mqtt.password;
-        } else {
-            // we are using the default server.  Use the hardcoded credentials by default, but allow overriding
-            if (*moduleConfig.mqtt.username && moduleConfig.mqtt.username[0] != '\0') {
-                mqttUsername = moduleConfig.mqtt.username;
-            }
-            if (*moduleConfig.mqtt.password && moduleConfig.mqtt.password[0] != '\0') {
-                mqttPassword = moduleConfig.mqtt.password;
-            }
         }
 
         String server = String(serverAddr);
@@ -148,8 +140,7 @@ void MQTT::reconnect()
         }
         pubSub.setServer(serverAddr, serverPort);
 
-        DEBUG_MSG("Connecting to MQTT server %s, port: %d, username: %s, password: %s\n", serverAddr, serverPort, mqttUsername,
-                  mqttPassword);
+        DEBUG_MSG("Connecting to MQTT server %s, port: %d, username: %s, password: %s\n", serverAddr, serverPort, mqttUsername, mqttPassword);
         auto myStatus = (statusTopic + owner.id);
         bool connected = pubSub.connect(owner.id, mqttUsername, mqttPassword, myStatus.c_str(), 1, true, "offline");
         if (connected) {
