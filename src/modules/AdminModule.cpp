@@ -487,7 +487,10 @@ void AdminModule::reboot(int32_t seconds)
 void AdminModule::saveChanges(int saveWhat, bool shouldReboot) 
 {
     if (!hasOpenEditTransaction) {
+        DEBUG_MSG("Saving changes to disk\n");
         service.reloadConfig(saveWhat); // Calls saveToDisk among other things
+    } else {
+        DEBUG_MSG("Delaying save of changes to disk until the open transaction is committed\n");
     }
     if (shouldReboot)
     {
