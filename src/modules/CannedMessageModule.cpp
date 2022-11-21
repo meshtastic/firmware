@@ -176,7 +176,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         DEBUG_MSG("Canned message event Matrix key pressed\n");
         // this will send the text immediately on matrix press
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
-        this->payload = event->kbchar;
+        this->payload = MATRIXKEY;
         this->currentMessageIndex = event->kbchar -1;
         this->lastTouchMillis = millis();
         validEvent = true;
@@ -246,7 +246,12 @@ int32_t CannedMessageModule::runOnce()
             }
         } else {
             if ((this->messagesCount > this->currentMessageIndex) && (strlen(this->messages[this->currentMessageIndex]) > 0)) {
-                sendText(NODENUM_BROADCAST, this->messages[this->currentMessageIndex], true);
+                if(strcmp (this->messages[this->currentMessageIndex], "~") == 0) {
+                    powerFSM.trigger(EVENT_PRESS);
+                    return INT32_MAX;
+                } else {
+                    sendText(NODENUM_BROADCAST, this->messages[this->currentMessageIndex], true);
+                }
                 this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
             } else {
                 DEBUG_MSG("Reset message is empty.\n");

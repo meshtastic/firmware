@@ -6,7 +6,7 @@
  * Our adapter for SX1280 radios
  */
 
-#if !defined(ARCH_PORTDUINO)
+#if defined(RADIOLIB_GODMODE)
 
 class SX1280Interface : public SX128xInterface<SX1280>
 {

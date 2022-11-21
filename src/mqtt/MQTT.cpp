@@ -167,9 +167,11 @@ void MQTT::sendSubscriptions()
             String topic = cryptTopic + channels.getGlobalId(i) + "/#";
             DEBUG_MSG("Subscribing to %s\n", topic.c_str());
             pubSub.subscribe(topic.c_str(), 1); // FIXME, is QOS 1 right?
-            String topicDecoded = jsonTopic + channels.getGlobalId(i) + "/#";
-            DEBUG_MSG("Subscribing to %s\n", topicDecoded.c_str());
-            pubSub.subscribe(topicDecoded.c_str(), 1); // FIXME, is QOS 1 right?
+            if (moduleConfig.mqtt.json_enabled == true) {
+                String topicDecoded = jsonTopic + channels.getGlobalId(i) + "/#";
+                DEBUG_MSG("Subscribing to %s\n", topicDecoded.c_str());
+                pubSub.subscribe(topicDecoded.c_str(), 1); // FIXME, is QOS 1 right?
+            }
         }
     }
 }
