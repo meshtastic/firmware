@@ -109,7 +109,7 @@ bool NMEAGPS::lookForLocation()
 
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
     fixType = atoi(gsafixtype.value());  // will set to zero if no data
-    DEBUG_MSG("FIX QUAL=%d, TYPE=%d\n", fixQual, fixType);
+    // DEBUG_MSG("FIX QUAL=%d, TYPE=%d\n", fixQual, fixType);
 #endif
 
     // check if GPS has an acceptable lock
@@ -168,7 +168,7 @@ bool NMEAGPS::lookForLocation()
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
     p.HDOP = reader.hdop.value();
     p.PDOP = TinyGPSPlus::parseDecimal(gsapdop.value());
-    DEBUG_MSG("PDOP=%d, HDOP=%d\n", dop, reader.hdop.value());
+    // DEBUG_MSG("PDOP=%d, HDOP=%d\n", p.PDOP, p.HDOP);
 #else
     // FIXME! naive PDOP emulation (assumes VDOP==HDOP)
     // correct formula is PDOP = SQRT(HDOP^2 + VDOP^2)
