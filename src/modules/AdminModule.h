@@ -20,6 +20,9 @@ class AdminModule : public ProtobufModule<AdminMessage>
     virtual bool handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *p) override;
 
   private:
+    bool hasOpenEditTransaction = false;
+
+    void saveChanges(int saveWhat, bool shouldReboot = true);
     /**
      * Getters
      */

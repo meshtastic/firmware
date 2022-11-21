@@ -69,7 +69,7 @@ class MeshService
     bool reloadConfig(int saveWhat=SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
 
     /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
-    void reloadOwner();
+    void reloadOwner(bool shouldSave = true);
 
     /// Called when the user wakes up our GUI, normally sends our latest location to the mesh (if we have it), otherwise at least
     /// sends our owner

@@ -82,10 +82,11 @@ typedef struct _AdminMessage {
         ModuleConfig set_module_config;
         /* Set the Canned Message Module messages text. */
         char set_canned_message_module_messages[201];
-        /* Sent immediatly after a config change has been sent to ensure comms, if this is not recieved, the config will be reverted after 10 mins */
-        bool confirm_set_config;
-        /* Sent immediatly after a config change has been sent to ensure comms, if this is not recieved, the config will be reverted after 10 mins */
-        bool confirm_set_module_config;
+        /* Begins an edit transaction for config, module config, owner, and channel settings changes
+     This will delay the standard *implicit* save to the file system and subsequent reboot behavior until committed (commit_edit_settings) */
+        bool begin_edit_settings;
+        /* Commits an open transaction for any edits made to config, module config, owner, and channel settings */
+        bool commit_edit_settings;
         /* Setting channels/radio config remotely carries the risk that you might send an invalid config and the radio never talks to your mesh again.
      Therefore if setting either of these properties remotely, you must send a confirm_xxx message within 10 minutes.
      If you fail to do so, the radio will assume loss of comms and revert your changes.
@@ -147,8 +148,8 @@ extern "C" {
 #define AdminMessage_set_config_tag              34
 #define AdminMessage_set_module_config_tag       35
 #define AdminMessage_set_canned_message_module_messages_tag 36
-#define AdminMessage_confirm_set_config_tag      64
-#define AdminMessage_confirm_set_module_config_tag 65
+#define AdminMessage_begin_edit_settings_tag     64
+#define AdminMessage_commit_edit_settings_tag    65
 #define AdminMessage_confirm_set_channel_tag     66
 #define AdminMessage_confirm_set_radio_tag       67
 #define AdminMessage_reboot_ota_seconds_tag      95
@@ -177,8 +178,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_channel,set_channel),  3
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_config,set_config),  34) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_module_config,set_module_config),  35) \
 X(a, STATIC,   ONEOF,    STRING,   (payload_variant,set_canned_message_module_messages,set_canned_message_module_messages),  36) \
-X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,confirm_set_config,confirm_set_config),  64) \
-X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,confirm_set_module_config,confirm_set_module_config),  65) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,begin_edit_settings,begin_edit_settings),  64) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,commit_edit_settings,commit_edit_settings),  65) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,confirm_set_channel,confirm_set_channel),  66) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,confirm_set_radio,confirm_set_radio),  67) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,reboot_ota_seconds,reboot_ota_seconds),  95) \
