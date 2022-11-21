@@ -58,7 +58,7 @@ class NodeDB
     void init();
 
     /// write to flash
-    void saveToDisk(int saveWhat=SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS), saveChannelsToDisk(), saveDeviceStateToDisk();
+    void saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS), saveChannelsToDisk(), saveDeviceStateToDisk();
 
     /** Reinit radio config if needed, because either:
      * a) sometimes a buggy android app might send us bogus settings or
