@@ -347,7 +347,7 @@ std::string MQTT::downstreamPacketToJson(MeshPacket *mp)
             if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &Position_msg, &scratch)) {
                 decoded = &scratch;
                 msgPayload["time"] = new JSONValue((int)decoded->time);
-                msgPayload["pos_timestamp"] = new JSONValue((int)decoded->timestamp);
+                msgPayload["timestamp"] = new JSONValue((int)decoded->timestamp);
                 msgPayload["latitude_i"] = new JSONValue((int)decoded->latitude_i);
                 msgPayload["longitude_i"] = new JSONValue((int)decoded->longitude_i);
                 msgPayload["altitude"] = new JSONValue((int)decoded->altitude);
