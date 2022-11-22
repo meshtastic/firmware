@@ -36,7 +36,10 @@ cstyleCast
 // ignore stuff that is not ours
 *:.pio/*
 *:*/libdeps/*
+noExplicitConstructor:*/mqtt/*
+postfixOperator:*/mqtt/*
 
 // these two caused issues
 missingOverride
 virtualCallInConstructor
+
