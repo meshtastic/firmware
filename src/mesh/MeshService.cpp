@@ -104,16 +104,17 @@ bool MeshService::reloadConfig(int saveWhat)
 }
 
 /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
-void MeshService::reloadOwner()
+void MeshService::reloadOwner(bool shouldSave)
 {
     // DEBUG_MSG("reloadOwner()\n");
     // update our local data directly
     nodeDB.updateUser(nodeDB.getNodeNum(), owner);
     assert(nodeInfoModule);
-    // update everyone else
-    if (nodeInfoModule)
+    // update everyone else and save to disk
+    if (nodeInfoModule && shouldSave) {
         nodeInfoModule->sendOurNodeInfo();
-    nodeDB.saveToDisk(SEGMENT_DEVICESTATE);
+        nodeDB.saveToDisk(SEGMENT_DEVICESTATE);
+    }
 }
 
 /**

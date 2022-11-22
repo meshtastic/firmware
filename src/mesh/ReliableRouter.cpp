@@ -96,7 +96,11 @@ void ReliableRouter::sniffReceived(const MeshPacket *p, const Routing *c)
             if (MeshModule::currentReply)
                 DEBUG_MSG("Some other module has replied to this message, no need for a 2nd ack\n");
             else
-                sendAckNak(Routing_Error_NONE, getFrom(p), p->id, p->channel);
+                if (p->which_payload_variant == MeshPacket_decoded_tag)
+                    sendAckNak(Routing_Error_NONE, getFrom(p), p->id, p->channel);
+                else
+                    // Send a 'NO_CHANNEL' error on the primary channel if want_ack packet destined for us cannot be decoded
+                    sendAckNak(Routing_Error_NO_CHANNEL, getFrom(p), p->id, channels.getPrimaryIndex());
         }
 
         // We consider an ack to be either a !routing packet with a request ID or a routing packet with !error
