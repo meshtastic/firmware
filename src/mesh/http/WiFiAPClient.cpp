@@ -62,7 +62,7 @@ static int32_t reconnectWiFi()
     }
 
 #ifndef DISABLE_NTP
-    if (WiFi.isConnected() && ((millis() - lastrun_ntp) > 43200000)) { // every 12 hours
+    if (WiFi.isConnected() && (((millis() - lastrun_ntp) > 43200000) || (lastrun_ntp == 0))) { // every 12 hours
         DEBUG_MSG("Updating NTP time\n");
         if (timeClient.update()) {
             DEBUG_MSG("NTP Request Success - Setting RTCQualityNTP if needed\n");
