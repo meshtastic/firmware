@@ -56,9 +56,24 @@ static int32_t reconnectWiFi()
         // Make sure we clear old connection credentials
         WiFi.disconnect(false, true);
 
-        DEBUG_MSG("... Reconnecting to WiFi access point\n");
-        WiFi.mode(WIFI_MODE_STA);
-        WiFi.begin(wifiName, wifiPsw);
+        DEBUG_MSG("... Reconnecting to WiFi access point %s\n",wifiName);
+
+        int n = WiFi.scanNetworks();
+
+        if (n > 0) {
+            for (int i = 0; i < n; ++i) {
+                DEBUG_MSG("Found WiFi network %s, signal strength %d\n", WiFi.SSID(i).c_str(), WiFi.RSSI(i));
+                yield();
+            }
+            WiFi.mode(WIFI_MODE_STA);
+            WiFi.begin(wifiName, wifiPsw);
+        } else {
+            DEBUG_MSG("No networks found during site survey. Rebooting MCU...\n");
+            screen->startRebootScreen();
+            rebootAtMsec = millis() + 5000;
+        }
+
+
     }
 
 #ifndef DISABLE_NTP
