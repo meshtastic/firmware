@@ -115,11 +115,11 @@ void MeshModule::callPlugins(const MeshPacket &mp, RxSource src)
                 // no one should have already replied!
                 assert(!currentReply);
 
-                if (mp.decoded.want_response || (isDecoded && mp.want_ack)) {
-                      printPacket("Packet on wrong channel, returning error", &mp);
-                      currentReply = pi.allocErrorResponse(Routing_Error_NOT_AUTHORIZED, &mp);
+                if (mp.decoded.want_response) {
+                    printPacket("packet on wrong channel, returning error", &mp);
+                    currentReply = pi.allocErrorResponse(Routing_Error_NOT_AUTHORIZED, &mp);
                 } else
-                    printPacket("Packet on wrong channel, but it didn't require a response or ACK", &mp);
+                    printPacket("packet on wrong channel, but can't respond", &mp);
             } else {
 
                 ProcessMessage handled = pi.handleReceived(mp);
@@ -156,12 +156,12 @@ void MeshModule::callPlugins(const MeshPacket &mp, RxSource src)
         pi.currentRequest = NULL;
     }
 
-    if ((mp.decoded.want_response || mp.want_ack) && toUs) {
+    if (mp.decoded.want_response && toUs) {
         if (currentReply) {
             printPacket("Sending response", currentReply);
             service.sendToMesh(currentReply);
             currentReply = NULL;
-        } else if(mp.decoded.want_response && mp.from != ourNodeNum) {
+        } else if(mp.from != ourNodeNum) {
             // Note: if the message started with the local node we don't want to send a no response reply
 
             // No one wanted to reply to this requst, tell the requster that happened
