@@ -25,22 +25,6 @@ class GPSStatus : public Status
   public:
     GPSStatus() { statusType = STATUS_TYPE_GPS; }
 
-    // // proposed for deprecation
-    // GPSStatus(bool hasLock, bool isConnected, int32_t latitude, int32_t longitude, int32_t altitude, uint32_t dop,
-    //           uint32_t heading, uint32_t numSatellites)
-    //     : Status()
-    // {
-    //     this->hasLock = hasLock;
-    //     this->isConnected = isConnected;
-
-    //     this->p.latitude_i = latitude;
-    //     this->p.longitude_i = longitude;
-    //     this->p.altitude = altitude;
-    //     this->p.PDOP = dop;
-    //     this->p.ground_track = heading;
-    //     this->p.sats_in_view = numSatellites;
-    // }
-
     // preferred method
     GPSStatus(bool hasLock, bool isConnected, const Position &pos) : Status()
     {

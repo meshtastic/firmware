@@ -58,7 +58,7 @@ class NodeDB
     void init();
 
     /// write to flash
-    void saveToDisk(int saveWhat=SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS), saveChannelsToDisk(), saveDeviceStateToDisk();
+    void saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS), saveChannelsToDisk(), saveDeviceStateToDisk();
 
     /** Reinit radio config if needed, because either:
      * a) sometimes a buggy android app might send us bogus settings or
@@ -193,6 +193,10 @@ extern NodeDB nodeDB;
 #define default_ls_secs IF_ROUTER(ONE_DAY, 5 * 60)
 #define default_min_wake_secs 10
 #define default_screen_on_secs 60 * 10
+
+#define default_mqtt_address "mqtt.meshtastic.org"
+#define default_mqtt_username "meshdev"
+#define default_mqtt_password "large4cats"
 
 inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval)
 {

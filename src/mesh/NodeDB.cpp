@@ -204,6 +204,7 @@ void NodeDB::installDefaultModuleConfig()
 {
     DEBUG_MSG("Installing default ModuleConfig\n");
     memset(&moduleConfig, 0, sizeof(ModuleConfig));
+    
     moduleConfig.version = DEVICESTATE_CUR_VER;
     moduleConfig.has_mqtt = true;
     moduleConfig.has_range_test = true;
@@ -212,6 +213,10 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.has_telemetry = true;
     moduleConfig.has_external_notification = true;
     moduleConfig.has_canned_message = true;
+
+    strncpy(moduleConfig.mqtt.address, default_mqtt_address, sizeof(default_mqtt_address));
+    strncpy(moduleConfig.mqtt.username, default_mqtt_username, sizeof(default_mqtt_username));
+    strncpy(moduleConfig.mqtt.password, default_mqtt_password, sizeof(default_mqtt_password));
 
     initModuleConfigIntervals();
 }
@@ -741,9 +746,9 @@ void recordCriticalError(CriticalErrorCode code, uint32_t address, const char *f
     String lcd = String("Critical error ") + code + "!\n";
     screen->print(lcd.c_str());
     if (filename)
-        DEBUG_MSG("NOTE! Recording critical error %d at %s:%lx\n", code, filename, address);
+        DEBUG_MSG("NOTE! Recording critical error %d at %s:%lu\n", code, filename, address);
     else
-        DEBUG_MSG("NOTE! Recording critical error %d, address=%lx\n", code, address);
+        DEBUG_MSG("NOTE! Recording critical error %d, address=0x%lx\n", code, address);
 
     // Record error to DB
     myNodeInfo.error_code = code;

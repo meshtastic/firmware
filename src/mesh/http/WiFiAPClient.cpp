@@ -35,32 +35,34 @@ char ourHost[16];
 
 bool APStartupComplete = 0;
 
+unsigned long lastrun_ntp = 0;
+
 static bool needReconnect = true; // If we create our reconnector, run it once at the beginning
+
+static Periodic *wifiReconnect;
 
 static int32_t reconnectWiFi()
 {
     const char *wifiName = config.network.wifi_ssid;
     const char *wifiPsw = config.network.wifi_psk;
 
-    if (config.network.wifi_enabled && needReconnect && !WiFi.isConnected()) {
+    if (config.network.wifi_enabled && needReconnect) {
         
         if (!*wifiPsw) // Treat empty password as no password
             wifiPsw = NULL;
 
-        if (*wifiName) {
-            needReconnect = false;
+        needReconnect = false;
 
-            // Make sure we clear old connection credentials
-            WiFi.disconnect(false, true);
+        // Make sure we clear old connection credentials
+        WiFi.disconnect(false, true);
 
-            DEBUG_MSG("... Reconnecting to WiFi access point\n");
-            WiFi.mode(WIFI_MODE_STA);
-            WiFi.begin(wifiName, wifiPsw);
-        }
+        DEBUG_MSG("... Reconnecting to WiFi access point\n");
+        WiFi.mode(WIFI_MODE_STA);
+        WiFi.begin(wifiName, wifiPsw);
     }
 
 #ifndef DISABLE_NTP
-    if (WiFi.isConnected()) {
+    if (WiFi.isConnected() && ((millis() - lastrun_ntp) > 43200000)) { // every 12 hours
         DEBUG_MSG("Updating NTP time\n");
         if (timeClient.update()) {
             DEBUG_MSG("NTP Request Success - Setting RTCQualityNTP if needed\n");
@@ -70,6 +72,7 @@ static int32_t reconnectWiFi()
             tv.tv_usec = 0;
 
             perhapsSetRTC(RTCQualityNTP, &tv);
+            lastrun_ntp = millis();
 
         } else {
             DEBUG_MSG("NTP Update failed\n");
@@ -77,10 +80,12 @@ static int32_t reconnectWiFi()
     }
 #endif
 
-    return 43200 * 1000; // every 12 hours
+    if (config.network.wifi_enabled && !WiFi.isConnected()) {
+        return 1000; // check once per second
+    } else {
+        return 300000; // every 5 minutes
+    }
 }
-
-static Periodic *wifiReconnect;
 
 bool isWifiAvailable()
 {
@@ -95,20 +100,10 @@ bool isWifiAvailable()
 // Disable WiFi
 void deinitWifi()
 {
-    /*
-        Note from Jm (jm@casler.org - Sept 16, 2020):
-
-        A bug in the ESP32 SDK was introduced in Oct 2019 that keeps the WiFi radio from
-        turning back on after it's shut off. See:
-            https://github.com/espressif/arduino-esp32/issues/3522
-
-        Until then, WiFi should only be allowed when there's no power
-        saving on the 2.4g transceiver.
-    */
-
     DEBUG_MSG("WiFi deinit\n");
 
     if (isWifiAvailable()) {
+        WiFi.disconnect(true);
         WiFi.mode(WIFI_MODE_NULL);
         DEBUG_MSG("WiFi Turned Off\n");
         // WiFi.printDiag(Serial);
@@ -169,7 +164,7 @@ bool initWifi()
             WiFi.mode(WIFI_MODE_STA);
             WiFi.setHostname(ourHost);
             WiFi.onEvent(WiFiEvent);
-            WiFi.setAutoReconnect(true);
+            WiFi.setAutoReconnect(false);
             WiFi.setSleep(false);
             if (config.network.eth_mode == Config_NetworkConfig_EthMode_STATIC && config.network.ipv4_config.ip != 0) {
                 WiFi.config(config.network.ipv4_config.ip,
@@ -231,7 +226,9 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
         DEBUG_MSG("Disconnected from WiFi access point\n");
+        WiFi.disconnect(false, true);
         needReconnect = true;
+        wifiReconnect->setIntervalFromNow(1000);
         break;
     case SYSTEM_EVENT_STA_AUTHMODE_CHANGE:
         DEBUG_MSG("Authentication mode of access point has changed\n");
@@ -243,7 +240,9 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case SYSTEM_EVENT_STA_LOST_IP:
         DEBUG_MSG("Lost IP address and IP address is reset to 0\n");
+        WiFi.disconnect(false, true);
         needReconnect = true;
+        wifiReconnect->setIntervalFromNow(1000);
         break;
     case SYSTEM_EVENT_STA_WPS_ER_SUCCESS:
         DEBUG_MSG("WiFi Protected Setup (WPS): succeeded in enrollee mode\n");
@@ -259,7 +258,6 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case SYSTEM_EVENT_AP_START:
         DEBUG_MSG("WiFi access point started\n");
-        onNetworkConnected();
         break;
     case SYSTEM_EVENT_AP_STOP:
         DEBUG_MSG("WiFi access point stopped\n");
