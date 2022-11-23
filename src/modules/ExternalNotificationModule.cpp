@@ -129,11 +129,6 @@ ExternalNotificationModule::ExternalNotificationModule()
     // moduleConfig.external_notification.output_ms = 1000;
     // moduleConfig.external_notification.output = 13;
     
-    if (moduleConfig.external_notification.alert_message) {
-        // restrict to the gpio channel for rx
-        boundChannel = Channels::gpioChannel;
-    }
-
     if (moduleConfig.external_notification.enabled) {
 
         DEBUG_MSG("Initializing External Notification Module\n");
