@@ -13,7 +13,10 @@
 #include "unistd.h"
 #endif
 
+#define DEFAULT_REBOOT_SECONDS 5
+
 AdminModule *adminModule;
+bool hasOpenEditTransaction;
 
 /// A special reserved string to indicate strings we can not share with external nodes.  We will use this 'reserved' word instead.
 /// Also, to make setting work correctly, if someone tries to set a string to this reserved value we assume they don't really want
@@ -133,13 +136,23 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
     case AdminMessage_factory_reset_tag: {
         DEBUG_MSG("Initiating factory reset\n");
         nodeDB.factoryReset();
-        reboot(5);
+        reboot(DEFAULT_REBOOT_SECONDS);
         break;
-    }
-    case AdminMessage_nodedb_reset_tag: {
+    } case AdminMessage_nodedb_reset_tag: {
         DEBUG_MSG("Initiating node-db reset\n");
         nodeDB.resetNodes();
-        reboot(5);
+        reboot(DEFAULT_REBOOT_SECONDS);
+        break;
+    }
+    case AdminMessage_begin_edit_settings_tag: {
+        DEBUG_MSG("Beginning transaction for editing settings\n");
+        hasOpenEditTransaction = true;
+        break;
+    }
+    case AdminMessage_commit_edit_settings_tag: {
+        DEBUG_MSG("Committing transaction for edited settings\n");
+        hasOpenEditTransaction = false;
+        saveChanges(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
         break;
     }
 #ifdef ARCH_PORTDUINO
@@ -192,9 +205,8 @@ void AdminModule::handleSetOwner(const User &o)
     }
 
     if (changed) { // If nothing really changed, don't broadcast on the network or write to flash
-        service.reloadOwner();
-        DEBUG_MSG("Rebooting due to owner changes\n");
-        reboot(5);
+        service.reloadOwner(!hasOpenEditTransaction);
+        saveChanges(SEGMENT_DEVICESTATE);
     }
 }
 
@@ -220,7 +232,7 @@ void AdminModule::handleSetConfig(const Config &c)
             config.has_position = true;
             config.position = c.payload_variant.position;
             // Save nodedb as well in case we got a fixed position packet
-            nodeDB.saveToDisk(SEGMENT_DEVICESTATE);
+            saveChanges(SEGMENT_DEVICESTATE, false);
             break;
         case Config_power_tag:
             DEBUG_MSG("Setting config: Power\n");
@@ -252,9 +264,8 @@ void AdminModule::handleSetConfig(const Config &c)
             config.bluetooth = c.payload_variant.bluetooth;
             break;
     }
-
-    service.reloadConfig(SEGMENT_CONFIG);
-    reboot(5);
+    
+    saveChanges(SEGMENT_CONFIG);
 }
 
 void AdminModule::handleSetModuleConfig(const ModuleConfig &c)
@@ -302,15 +313,14 @@ void AdminModule::handleSetModuleConfig(const ModuleConfig &c)
             break;
     }
     
-    service.reloadConfig(SEGMENT_MODULECONFIG);
-    reboot(5);
+    saveChanges(SEGMENT_MODULECONFIG);
 }
 
 void AdminModule::handleSetChannel(const Channel &cc)
 {
     channels.setChannel(cc);
     channels.onConfigChanged(); // tell the radios about this change
-    nodeDB.saveChannelsToDisk();
+    saveChanges(SEGMENT_CHANNELS, false);
 }
 
 /**
@@ -477,6 +487,20 @@ void AdminModule::reboot(int32_t seconds)
     DEBUG_MSG("Rebooting in %d seconds\n", seconds);
     screen->startRebootScreen();
     rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
+}
+
+void AdminModule::saveChanges(int saveWhat, bool shouldReboot) 
+{
+    if (!hasOpenEditTransaction) {
+        DEBUG_MSG("Saving changes to disk\n");
+        service.reloadConfig(saveWhat); // Calls saveToDisk among other things
+    } else {
+        DEBUG_MSG("Delaying save of changes to disk until the open transaction is committed\n");
+    }
+    if (shouldReboot)
+    {
+        reboot(DEFAULT_REBOOT_SECONDS);
+    }
 }
 
 AdminModule::AdminModule() : ProtobufModule("Admin", PortNum_ADMIN_APP, AdminMessage_fields)

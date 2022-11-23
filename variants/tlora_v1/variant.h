@@ -6,7 +6,7 @@
 
 #define RESET_OLED 16 // If defined, this pin will be used to reset the display controller
 
-// #define VEXT_ENABLE 21 // active low, powers the oled display and the lora antenna boost
+#define VEXT_ENABLE 21 // active low, powers the oled display and the lora antenna boost
 #define LED_PIN 2     // If defined we will blink this LED
 #define BUTTON_PIN 0  // If defined, this will be used for user button presses
 #define BUTTON_NEED_PULLUP
