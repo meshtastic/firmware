@@ -2,7 +2,7 @@
 #include "SinglePortModule.h"
 
 /**
- * Black Lager module to send and receive public keys.
+ * Text messaging module with public key signed messages.
  */
 class BlackLagerModule : public SinglePortModule
 {

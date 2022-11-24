@@ -1,10 +1,13 @@
-#include "configuration.h"
 #include "TextMessageModule.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "configuration.h"
 
 TextMessageModule *textMessageModule;
 
+/**
+ * Text messaging module with public key signed messages.
+ */
 ProcessMessage TextMessageModule::handleReceived(const MeshPacket &mp)
 {
     auto &p = mp.decoded;
