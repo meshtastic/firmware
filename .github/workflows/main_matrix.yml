@@ -208,7 +208,7 @@ jobs:
           chmod +x ./output/device-update.sh
 
       - name: Zip firmware
-        run: zip -j -r ./firmware-${{ steps.version.outputs.version }}.zip ./output
+        run: zip -j -9 -r ./firmware-${{ steps.version.outputs.version }}.zip ./output
 
       - name: Repackage in single elfs zip
         uses: actions/upload-artifact@v3
@@ -257,7 +257,7 @@ jobs:
           chmod +x ./output/device-update.sh
 
       - name: Zip firmware
-        run: zip -j -r ./firmware-${{ steps.version.outputs.version }}.zip ./output
+        run: zip -j -9 -r ./firmware-${{ steps.version.outputs.version }}.zip ./output
 
       - uses: actions/download-artifact@v3
         with:
@@ -265,7 +265,7 @@ jobs:
           path: ./elfs
 
       - name: Zip Elfs
-        run: zip -j -r ./debug-elfs-${{ steps.version.outputs.version }}.zip ./elfs
+        run: zip -j -9 -r ./debug-elfs-${{ steps.version.outputs.version }}.zip ./elfs
 
       # For diagnostics
       - name: Show artifacts
