@@ -29,6 +29,10 @@ echo "Copying ESP32 bin file"
 SRCBIN=.pio/build/$1/firmware.factory.bin
 cp $SRCBIN $OUTDIR/$basename.bin
 
+echo "Copying ESP32 update bin file"
+SRCBIN=.pio/build/$1/firmware.bin
+cp $SRCBIN $OUTDIR/$basename-update.bin
+
 echo "Building Filesystem for ESP32 targets"
 pio run --environment tbeam -t buildfs
 cp .pio/build/tbeam/littlefs.bin $OUTDIR/littlefs-$VERSION.bin
