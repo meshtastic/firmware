@@ -4,6 +4,7 @@
 #include "input/UpDownInterruptImpl1.h"
 #include "input/cardKbI2cImpl.h"
 #include "modules/AdminModule.h"
+#include "modules/BlackLagerModule.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/NodeInfoModule.h"
 #include "modules/PositionModule.h"
@@ -39,7 +40,8 @@ void setupModules()
     positionModule = new PositionModule();
     waypointModule = new WaypointModule();
     textMessageModule = new TextMessageModule();
-    
+    blackLagerModule = new BlackLagerModule();
+
     // Note: if the rest of meshtastic doesn't need to explicitly use your module, you do not need to assign the instance
     // to a global variable.
 
@@ -75,7 +77,7 @@ void setupModules()
 
     new RangeTestModule();
 #elif defined(ARCH_NRF52)
-new ExternalNotificationModule();
+    new ExternalNotificationModule();
 #endif
 
     // NOTE! This module must be added LAST because it likes to check for replies from other modules and avoid sending extra acks
