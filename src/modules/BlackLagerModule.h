@@ -2,7 +2,7 @@
 #include "SinglePortModule.h"
 
 /**
- * A simple example module that just replies with "Message received" to any message it receives.
+ * Black Lager module to send and receive public keys.
  */
 class BlackLagerModule : public SinglePortModule
 {
@@ -10,7 +10,7 @@ class BlackLagerModule : public SinglePortModule
     /** Constructor
      * name is for debugging output
      */
-    BlackLagerModule() : SinglePortModule("reply", PortNum_PRIVATE_APP) {}
+    BlackLagerModule() : SinglePortModule("black-lager", PortNum_PRIVATE_APP) {}
 
   protected:
     /** For reply module we do all of our processing in the (normally optional)
