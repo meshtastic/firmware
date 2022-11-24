@@ -5,7 +5,7 @@
 #ifdef M5STACK
 #include "Speaker.h"
 TONE Tone;
-#else
+#elif !defined(ARCH_ESP32)
 #include "Tone.h"
 #endif
 
