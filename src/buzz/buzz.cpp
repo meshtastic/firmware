@@ -2,14 +2,6 @@
 #include "configuration.h"
 #include "NodeDB.h"
 
-#ifndef PIN_BUZZER
-
-// Noop methods for boards w/o buzzer
-void playBeep(){};
-void playStartMelody(){};
-void playShutdownMelody(){};
-
-#else
 #ifdef M5STACK
 #include "Speaker.h"
 TONE Tone;
@@ -43,7 +35,11 @@ const int DURATION_1_8 = 125;  // 1/8 note
 const int DURATION_1_4 = 250;  // 1/4 note
 
 void playTones(const ToneDuration *tone_durations, int size) {
-  if (config.network.eth_enabled != true) {
+#ifdef PIN_BUZZER
+  if (!config.device.buzzer_gpio)
+    config.device.buzzer_gpio = PIN_BUZZER;
+#endif
+  if (config.device.buzzer_gpio) {
     for (int i = 0; i < size; i++) {
       const auto &tone_duration = tone_durations[i];
 #ifdef M5STACK
@@ -51,7 +47,7 @@ void playTones(const ToneDuration *tone_durations, int size) {
       delay(tone_duration.duration_ms);
       Tone.mute();
 #else
-      tone(PIN_BUZZER, tone_duration.frequency_khz, tone_duration.duration_ms);
+      tone(config.device.buzzer_gpio, tone_duration.frequency_khz, tone_duration.duration_ms);
 #endif
       // to distinguish the notes, set a minimum time between them.
       delay(1.3 * tone_duration.duration_ms);
@@ -59,14 +55,11 @@ void playTones(const ToneDuration *tone_durations, int size) {
   }
 }
 
-#ifdef M5STACK
+
 void playBeep() {
   ToneDuration melody[] = {{NOTE_B3, DURATION_1_4}};
   playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }
-#else
-void playBeep() { tone(PIN_BUZZER, NOTE_B3, DURATION_1_4); }
-#endif
 
 void playStartMelody() {
   ToneDuration melody[] = {{NOTE_FS3, DURATION_1_8},
@@ -75,11 +68,9 @@ void playStartMelody() {
   playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }
 
-
 void playShutdownMelody() {
   ToneDuration melody[] = {{NOTE_CS4, DURATION_1_8},
                            {NOTE_AS3, DURATION_1_8},
                            {NOTE_FS3, DURATION_1_4}};
   playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }
-#endif
