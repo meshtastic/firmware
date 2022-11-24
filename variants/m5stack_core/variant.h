@@ -11,7 +11,6 @@
 #define BUTTON_PIN 38
 
 #define PIN_BUZZER 25
-#define TONE_PIN_CHANNEL 0
 
 #undef RF95_SCK
 #undef RF95_MISO

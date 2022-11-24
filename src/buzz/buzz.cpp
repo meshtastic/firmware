@@ -2,10 +2,7 @@
 #include "configuration.h"
 #include "NodeDB.h"
 
-#ifdef M5STACK
-#include "Speaker.h"
-TONE Tone;
-#elif !defined(ARCH_ESP32)
+#ifndef ARCH_ESP32
 #include "Tone.h"
 #endif
 
@@ -42,13 +39,7 @@ void playTones(const ToneDuration *tone_durations, int size) {
   if (config.device.buzzer_gpio) {
     for (int i = 0; i < size; i++) {
       const auto &tone_duration = tone_durations[i];
-#ifdef M5STACK
-      Tone.tone(tone_duration.frequency_khz);
-      delay(tone_duration.duration_ms);
-      Tone.mute();
-#else
       tone(config.device.buzzer_gpio, tone_duration.frequency_khz, tone_duration.duration_ms);
-#endif
       // to distinguish the notes, set a minimum time between them.
       delay(1.3 * tone_duration.duration_ms);
     }
