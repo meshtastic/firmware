@@ -2,7 +2,7 @@
 #include "ProtobufModule.h"
 
 /**
- * Routing module for router control messages
+ * Admin module for admin messages
  */
 class AdminModule : public ProtobufModule<AdminMessage>
 {
