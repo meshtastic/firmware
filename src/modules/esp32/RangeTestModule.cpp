@@ -155,8 +155,8 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const MeshPacket &mp)
             DEBUG_MSG("mp.from          %d\n", mp.from);
             DEBUG_MSG("mp.rx_snr        %f\n", mp.rx_snr);
             DEBUG_MSG("mp.hop_limit     %d\n", mp.hop_limit);
-            DEBUG_MSG("mp.decoded.position.latitude_i     %d\n", mp.decoded.position.latitude_i); // Depricated
-            DEBUG_MSG("mp.decoded.position.longitude_i    %d\n", mp.decoded.position.longitude_i); // Depricated
+            // DEBUG_MSG("mp.decoded.position.latitude_i     %d\n", mp.decoded.position.latitude_i); // Depricated
+            // DEBUG_MSG("mp.decoded.position.longitude_i    %d\n", mp.decoded.position.longitude_i); // Depricated
             DEBUG_MSG("---- Node Information of Received Packet (mp.from):\n");
             DEBUG_MSG("n->user.long_name         %s\n", n->user.long_name);
             DEBUG_MSG("n->user.short_name        %s\n", n->user.short_name);

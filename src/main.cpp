@@ -140,8 +140,9 @@ bool ButtonThread::shutdown_on_long_stop = false;
 #endif
 
 static Periodic *ledPeriodic;
-static OSThread *powerFSMthread, *buttonThread;
+static OSThread *powerFSMthread;
 #if HAS_BUTTON
+static OSThread *buttonThread;
 uint32_t ButtonThread::longPressTime = 0;
 #endif
 
@@ -269,7 +270,7 @@ void setup()
 #ifdef HAS_SDCARD
     setupSDCard();
 #endif
-    
+
 #ifdef RAK4630
     // scanEInkDevice();
 #endif
@@ -303,11 +304,11 @@ void setup()
     nodeDB.init();
 
     playStartMelody();
-    
+
     // fixed screen override?
     if (config.display.oled != Config_DisplayConfig_OledType_OLED_AUTO)
         screen_model = config.display.oled;
-    
+
     // Init our SPI controller (must be before screen and lora)
     initSPI();
 #ifndef ARCH_ESP32

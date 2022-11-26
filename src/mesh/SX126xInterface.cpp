@@ -12,6 +12,7 @@ SX126xInterface<T>::SX126xInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq,
                                  SPIClass &spi)
     : RadioLibInterface(cs, irq, rst, busy, spi, &lora), lora(&module)
 {
+    DEBUG_MSG("SX126xInterface(cs=%d, irq=%d, rst=%d, busy=%d)\n", cs, irq, rst, busy);
 }
 
 /// Initialise the Driver transport hardware and software.
@@ -56,9 +57,9 @@ bool SX126xInterface<T>::init()
     // \todo Display actual typename of the adapter, not just `SX126x`
     DEBUG_MSG("SX126x init result %d\n", res);
 
-    DEBUG_MSG("Frequency set to %f\n", getFreq());    
-    DEBUG_MSG("Bandwidth set to %f\n", bw);    
-    DEBUG_MSG("Power output set to %d\n", power);    
+    DEBUG_MSG("Frequency set to %f\n", getFreq());
+    DEBUG_MSG("Bandwidth set to %f\n", bw);
+    DEBUG_MSG("Power output set to %d\n", power);
 
     // current limit was removed from module' ctor
     // override default value (60 mA)
@@ -69,7 +70,7 @@ bool SX126xInterface<T>::init()
 #if defined(SX126X_TXEN) && (SX126X_TXEN != RADIOLIB_NC)
     // lora.begin sets Dio2 as RF switch control, which is not true if we are manually controlling RX and TX
     if (res == RADIOLIB_ERR_NONE)
-        res = lora.setDio2AsRfSwitch(true);
+        res = lora.setDio2AsRfSwitch(false);
 #endif
 
 #if 0
@@ -81,11 +82,11 @@ bool SX126xInterface<T>::init()
 
     //if(crcLSB != 0x0f)
     //    RECORD_CRITICALERROR(CriticalErrorCode_SX1262Failure);
-    
+
     crcLSB = 0x5a;
     err = lora.writeRegister(SX126X_REG_CRC_POLYNOMIAL_LSB, &crcLSB, 1);
     if(err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(CriticalErrorCode_SX1262Failure);  
+        RECORD_CRITICALERROR(CriticalErrorCode_SX1262Failure);
 
     err = lora.readRegister(SX126X_REG_CRC_POLYNOMIAL_LSB, &crcLSB, 1);
     if(err != RADIOLIB_ERR_NONE)
@@ -146,7 +147,7 @@ bool SX126xInterface<T>::reconfigure()
 
     if (power > SX126X_MAX_POWER) // This chip has lower power limits than some
         power = SX126X_MAX_POWER;
-        
+
     err = lora.setOutputPower(power);
     assert(err == RADIOLIB_ERR_NONE);
 
@@ -165,7 +166,7 @@ template<typename T>
 void SX126xInterface<T>::setStandby()
 {
     checkNotification(); // handle any pending interrupts before we force standby
-    
+
     int err = lora.standby();
 
     if (err != RADIOLIB_ERR_NONE)
@@ -229,7 +230,7 @@ void SX126xInterface<T>::startReceive()
 #if defined(SX126X_TXEN) && (SX126X_TXEN != RADIOLIB_NC)
     digitalWrite(SX126X_TXEN, LOW);
 #endif
-  
+
     // int err = lora.startReceive();
     int err = lora.startReceiveDutyCycleAuto(); // We use a 32 bit preamble so this should save some power by letting radio sit in
                                                 // standby mostly.
@@ -249,13 +250,13 @@ bool SX126xInterface<T>::isChannelActive()
     // check if we can detect a LoRa preamble on the current channel
     int16_t result;
 
-    setStandby(); 
+    setStandby();
     result = lora.scanChannel();
-    if (result == RADIOLIB_PREAMBLE_DETECTED) 
+    if (result == RADIOLIB_PREAMBLE_DETECTED)
         return true;
-    
+
     assert(result != RADIOLIB_ERR_WRONG_MODEM);
-    
+
     return false;
 }
 

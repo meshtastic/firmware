@@ -283,27 +283,27 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
 
 static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    int x_offset = display->width() / 2;
+    int y_offset = display->height() == 64 ? 0 : 32;
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(FONT_MEDIUM);
-    display->drawString(64 + x, y, "Bluetooth");
+    display->drawString(x_offset + x, y_offset + y, "Bluetooth");
 
     display->setFont(FONT_SMALL);
-    display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Enter this code");
+    y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM -4   : y_offset + FONT_HEIGHT_MEDIUM + 5;
+    display->drawString(x_offset + x, y_offset + y, "Enter this code");
 
     display->setFont(FONT_LARGE);
+    String displayPin(btPIN);
+    String pin = displayPin.substring(0, 3) + " " + displayPin.substring(3, 6);
+    y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
+    display->drawString(x_offset + x, y_offset + y, pin);
 
-    auto displayPin = new String(btPIN);
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->drawString(12 + x, 26 + y, displayPin->substring(0, 3));
-    display->drawString(72 + x, 26 + y, displayPin->substring(3, 6));
-    
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(FONT_SMALL);
-    char buf[30];
-    const char *name = "Name: ";
-    strcpy(buf, name);
-    strcat(buf, getDeviceName());
-    display->drawString(64 + x, 48 + y, buf);
+    String deviceName =  "Name: ";
+    deviceName.concat(getDeviceName());
+    y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
+    display->drawString(x_offset + x, y_offset + y, deviceName);
 }
 
 static void drawFrameShutdown(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
