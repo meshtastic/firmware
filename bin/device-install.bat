@@ -26,7 +26,7 @@ IF "__%FILENAME%__" == "____" (
     echo "Missing FILENAME"
 	goto HELP
 )
-IF EXIST %FILENAME% (
+IF EXIST %FILENAME% IF x%FILENAME:update=%==x%FILENAME% (
     echo Trying to flash update %FILENAME%, but first erasing and writing system information"
 	%PYTHON% -m esptool --baud 115200 erase_flash
 	%PYTHON% -m esptool --baud 115200 write_flash 0x00 %FILENAME%
@@ -34,6 +34,9 @@ IF EXIST %FILENAME% (
     for %%f in (littlefs-*.bin) do (
         %PYTHON% -m esptool --baud 115200 write_flash 0x300000 %%f
     )
+) else (
+    echo "Invalid file: %FILENAME%"
+	goto HELP
 ) else (
     echo "Invalid file: %FILENAME%"
 	goto HELP

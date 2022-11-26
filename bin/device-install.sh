@@ -14,6 +14,7 @@ Flash image file to device, but first erasing and writing system information"
     -p ESPTOOL_PORT  Set the environment variable for ESPTOOL_PORT.  If not set, ESPTOOL iterates all ports (Dangerous).
     -P PYTHON        Specify alternate python interpreter to use to invoke esptool. (Default: "$PYTHON")
     -f FILENAME      The .bin file to flash.  Custom to your device type and region.
+
 EOF
 }
 
@@ -44,7 +45,7 @@ shift "$((OPTIND-1))"
     shift
 }
 
-if [ -f "${FILENAME}" ]; then
+if [ -f "${FILENAME}" ] && [ "${FILENAME}" != *"update"* ]; then
 	echo "Trying to flash ${FILENAME}, but first erasing and writing system information"
 	"$PYTHON" -m esptool  erase_flash
 	"$PYTHON" -m esptool  write_flash 0x00 ${FILENAME}
@@ -52,8 +53,8 @@ if [ -f "${FILENAME}" ]; then
 	"$PYTHON" -m esptool  write_flash 0x300000 littlefs-*.bin
 
 else
-	echo "Invalid file: ${FILENAME}"
 	show_help
+	echo "Invalid file: ${FILENAME}"
 fi
 
 exit 0
