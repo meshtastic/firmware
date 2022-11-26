@@ -26,9 +26,12 @@ IF "__%FILENAME%__" == "____" (
     echo "Missing FILENAME"
 	goto HELP
 )
-IF EXIST %FILENAME% (
+IF EXIST %FILENAME% IF NOT x%FILENAME:update=%==x%FILENAME% (
     echo Trying to flash update %FILENAME%
     %PYTHON% -m esptool --baud 115200 write_flash 0x10000 %FILENAME%
+) else (
+    echo "Invalid file: %FILENAME%"
+	goto HELP
 ) else (
     echo "Invalid file: %FILENAME%"
 	goto HELP
