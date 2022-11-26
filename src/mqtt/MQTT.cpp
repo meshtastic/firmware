@@ -12,7 +12,7 @@
 #include <WiFi.h>
 #endif
 #include <assert.h>
-#include <json11.hpp>
+#include "mqtt/JSON.h"
 
 MQTT *mqtt;
 
@@ -32,19 +32,19 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
 
     if (moduleConfig.mqtt.json_enabled && (strncmp(topic, jsonTopic.c_str(), jsonTopic.length()) == 0)) {
         // check if this is a json payload message by comparing the topic start
-        using namespace json11;
         char payloadStr[length + 1];
         memcpy(payloadStr, payload, length);
         payloadStr[length] = 0; // null terminated string
-        std::string err;
-        auto json = Json::parse(payloadStr, err);
-        if (err.empty()) {
+        JSONValue *json_value = JSON::Parse(payloadStr);
+        if (json_value != NULL) {
             DEBUG_MSG("JSON Received on MQTT, parsing..\n");
             // check if it is a valid envelope
-            if (json.object_items().count("sender") != 0 && json.object_items().count("payload") != 0 && json["type"].string_value().compare("sendtext") == 0) {
+            JSONObject json;
+            json = json_value->AsObject();
+            if ((json.find("sender") != json.end()) && (json.find("payload") != json.end()) && (json.find("type") != json.end()) && json["type"]->IsString() && (json["type"]->AsString().compare("sendtext") == 0)) {
                 // this is a valid envelope
-                if (json["sender"].string_value().compare(owner.id) != 0) {
-                    std::string jsonPayloadStr = json["payload"].dump();
+                if (json["payload"]->IsString() && json["type"]->IsString() && (json["sender"]->AsString().compare(owner.id) != 0)) {
+                    std::string jsonPayloadStr = json["payload"]->AsString();
                     DEBUG_MSG("JSON payload %s, length %u\n", jsonPayloadStr.c_str(), jsonPayloadStr.length());
 
                     // construct protobuf data packet using TEXT_MESSAGE, send it to the mesh
@@ -68,6 +68,7 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
             // no json, this is an invalid payload
             DEBUG_MSG("Invalid MQTT service envelope, topic %s, len %u!\n", topic, length);
         }
+        delete json_value;
     } else {
         if (!pb_decode_from_bytes(payload, length, ServiceEnvelope_fields, &e)) {
             DEBUG_MSG("Invalid MQTT service envelope, topic %s, len %u!\n", topic, length);
@@ -250,7 +251,6 @@ void MQTT::onSend(const MeshPacket &mp, ChannelIndex chIndex)
 
         if (moduleConfig.mqtt.json_enabled) {
             // handle json topic
-            using namespace json11;
             auto jsonString = this->downstreamPacketToJson((MeshPacket *)&mp);
             if (jsonString.length() != 0) {
                 String topicJson = jsonTopic + channelId + "/" + owner.id;
@@ -264,12 +264,11 @@ void MQTT::onSend(const MeshPacket &mp, ChannelIndex chIndex)
 // converts a downstream packet into a json message
 std::string MQTT::downstreamPacketToJson(MeshPacket *mp)
 {
-    using namespace json11;
-
     // the created jsonObj is immutable after creation, so
     // we need to do the heavy lifting before assembling it.
     String msgType;
-    Json msgPayload;
+    JSONObject msgPayload;
+    JSONObject jsonObj;
 
     switch (mp->decoded.portnum) {
     case PortNum_TEXT_MESSAGE_APP: {
@@ -280,17 +279,17 @@ std::string MQTT::downstreamPacketToJson(MeshPacket *mp)
         memcpy(payloadStr, mp->decoded.payload.bytes, mp->decoded.payload.size);
         payloadStr[mp->decoded.payload.size] = 0; // null terminated string
         // check if this is a JSON payload
-        std::string err;
-        auto json = Json::parse(payloadStr, err);
-        if (err.empty()) {
+        JSONValue *json_value = JSON::Parse(payloadStr);
+        if (json_value != NULL) {
             DEBUG_MSG("text message payload is of type json\n");
             // if it is, then we can just use the json object
-            msgPayload = json;
+            jsonObj["payload"] = json_value;
         } else {
             // if it isn't, then we need to create a json object
             // with the string as the value
             DEBUG_MSG("text message payload is of type plaintext\n");
-            msgPayload = Json::object{{"text", payloadStr}};
+            msgPayload["text"] = new JSONValue(payloadStr);
+            jsonObj["payload"] = new JSONValue(msgPayload);
         }
         break;
     }
@@ -303,22 +302,19 @@ std::string MQTT::downstreamPacketToJson(MeshPacket *mp)
             if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &Telemetry_msg, &scratch)) {
                 decoded = &scratch;
                 if (decoded->which_variant == Telemetry_device_metrics_tag) {
-                    msgPayload = Json::object{
-                        {"battery_level", (int)decoded->variant.device_metrics.battery_level},
-                        {"voltage", decoded->variant.device_metrics.voltage},
-                        {"channel_utilization", decoded->variant.device_metrics.channel_utilization},
-                        {"air_util_tx", decoded->variant.device_metrics.air_util_tx},
-                    };
+                    msgPayload["battery_level"] = new JSONValue((int)decoded->variant.device_metrics.battery_level);
+                    msgPayload["voltage"] = new JSONValue(decoded->variant.device_metrics.voltage);
+                    msgPayload["channel_utilization"] = new JSONValue(decoded->variant.device_metrics.channel_utilization);
+                    msgPayload["air_util_tx"] = new JSONValue(decoded->variant.device_metrics.air_util_tx);
                 } else if (decoded->which_variant == Telemetry_environment_metrics_tag) {
-                    msgPayload = Json::object{
-                        {"temperature", decoded->variant.environment_metrics.temperature},
-                        {"relative_humidity", decoded->variant.environment_metrics.relative_humidity},
-                        {"barometric_pressure", decoded->variant.environment_metrics.barometric_pressure},
-                        {"gas_resistance", decoded->variant.environment_metrics.gas_resistance},
-                        {"voltage", decoded->variant.environment_metrics.voltage},
-                        {"current", decoded->variant.environment_metrics.current},
-                    };
+                    msgPayload["temperature"] = new JSONValue(decoded->variant.environment_metrics.temperature);
+                    msgPayload["relative_humidity"] = new JSONValue(decoded->variant.environment_metrics.relative_humidity);
+                    msgPayload["barometric_pressure"] = new JSONValue(decoded->variant.environment_metrics.barometric_pressure);
+                    msgPayload["gas_resistance"] = new JSONValue(decoded->variant.environment_metrics.gas_resistance);
+                    msgPayload["voltage"] = new JSONValue(decoded->variant.environment_metrics.voltage);
+                    msgPayload["current"] = new JSONValue(decoded->variant.environment_metrics.current);
                 }
+                jsonObj["payload"] = new JSONValue(msgPayload);
             } else
                 DEBUG_MSG("Error decoding protobuf for telemetry message!\n");
         };
@@ -332,13 +328,11 @@ std::string MQTT::downstreamPacketToJson(MeshPacket *mp)
             memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &User_msg, &scratch)) {
                 decoded = &scratch;
-                msgPayload = Json::object{
-                    {"id", decoded->id},
-                    {"longname", decoded->long_name},
-                    {"shortname", decoded->short_name},
-                    {"hardware", decoded->hw_model}
-                };
-
+                msgPayload["id"] = new JSONValue(decoded->id);
+                msgPayload["longname"] = new JSONValue(decoded->long_name);
+                msgPayload["shortname"] = new JSONValue(decoded->short_name);
+                msgPayload["hardware"] = new JSONValue(decoded->hw_model);
+                jsonObj["payload"] = new JSONValue(msgPayload);
             } else
                 DEBUG_MSG("Error decoding protobuf for nodeinfo message!\n");
         };
@@ -352,13 +346,12 @@ std::string MQTT::downstreamPacketToJson(MeshPacket *mp)
             memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &Position_msg, &scratch)) {
                 decoded = &scratch;
-                msgPayload = Json::object{
-                    {"time", (int)decoded->time},
-                    {"pos_timestamp", (int)decoded->timestamp},
-                    {"latitude_i", (int)decoded->latitude_i}, 
-                    {"longitude_i", (int)decoded->longitude_i}, 
-                    {"altitude", (int)decoded->altitude}
-                };
+                msgPayload["time"] = new JSONValue((int)decoded->time);
+                msgPayload["timestamp"] = new JSONValue((int)decoded->timestamp);
+                msgPayload["latitude_i"] = new JSONValue((int)decoded->latitude_i);
+                msgPayload["longitude_i"] = new JSONValue((int)decoded->longitude_i);
+                msgPayload["altitude"] = new JSONValue((int)decoded->altitude);
+                jsonObj["payload"] = new JSONValue(msgPayload);
             } else {
                 DEBUG_MSG("Error decoding protobuf for position message!\n");
             }
@@ -374,15 +367,14 @@ std::string MQTT::downstreamPacketToJson(MeshPacket *mp)
             memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &Waypoint_msg, &scratch)) {
                 decoded = &scratch;
-                msgPayload = Json::object{
-                    {"id", (int)decoded->id},
-                    {"name", decoded->name},
-                    {"description", decoded->description},
-                    {"expire", (int)decoded->expire},
-                    {"locked", decoded->locked},
-                    {"latitude_i", (int)decoded->latitude_i}, 
-                    {"longitude_i", (int)decoded->longitude_i}, 
-                };
+                msgPayload["id"] = new JSONValue((int)decoded->id);
+                msgPayload["name"] = new JSONValue(decoded->name);
+                msgPayload["description"] = new JSONValue(decoded->description);
+                msgPayload["expire"] = new JSONValue((int)decoded->expire);
+                msgPayload["locked"] = new JSONValue(decoded->locked);
+                msgPayload["latitude_i"] = new JSONValue((int)decoded->latitude_i);
+                msgPayload["longitude_i"] = new JSONValue((int)decoded->longitude_i);
+                jsonObj["payload"] = new JSONValue(msgPayload);
             } else {
                 DEBUG_MSG("Error decoding protobuf for position message!\n");
             }
@@ -394,21 +386,20 @@ std::string MQTT::downstreamPacketToJson(MeshPacket *mp)
         break;
     }
 
-    // assemble the final jsonObj
-    Json jsonObj = Json::object{
-        {"id", Json((int)mp->id)},
-        {"timestamp", Json((int)mp->rx_time)},
-        {"to", Json((int)mp->to)},
-        {"from", Json((int)mp->from)},
-        {"channel", Json((int)mp->channel)},
-        {"type", msgType.c_str()},
-        {"sender", owner.id},
-        {"payload", msgPayload}
-    };
+    jsonObj["id"] = new JSONValue((int)mp->id);
+    jsonObj["timestamp"] = new JSONValue((int)mp->rx_time);
+    jsonObj["to"] = new JSONValue((int)mp->to);
+    jsonObj["from"] = new JSONValue((int)mp->from);
+    jsonObj["channel"] = new JSONValue((int)mp->channel);
+    jsonObj["type"] = new JSONValue(msgType.c_str());
+    jsonObj["sender"] = new JSONValue(owner.id);
 
-    // serialize and return it
-    std::string jsonStr = jsonObj.dump();
+    // serialize and write it to the stream
+    JSONValue *value = new JSONValue(jsonObj);
+    std::string jsonStr = value->Stringify();
+
     DEBUG_MSG("serialized json message: %s\n", jsonStr.c_str());
 
+    delete value;
     return jsonStr;
 }

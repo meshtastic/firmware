@@ -100,6 +100,8 @@ typedef struct _Config_DeviceConfig {
     Config_DeviceConfig_Role role;
     bool serial_enabled;
     bool debug_log_enabled;
+    uint32_t button_gpio;
+    uint32_t buzzer_gpio;
 } Config_DeviceConfig;
 
 typedef struct _Config_DisplayConfig { 
@@ -143,6 +145,8 @@ typedef struct _Config_PositionConfig {
     uint32_t gps_update_interval;
     uint32_t gps_attempt_time;
     uint32_t position_flags;
+    uint32_t rx_gpio;
+    uint32_t tx_gpio;
 } Config_PositionConfig;
 
 typedef struct _Config_PowerConfig { 
@@ -225,8 +229,8 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define Config_init_default                      {0, {Config_DeviceConfig_init_default}}
-#define Config_DeviceConfig_init_default         {_Config_DeviceConfig_Role_MIN, 0, 0}
-#define Config_PositionConfig_init_default       {0, 0, 0, 0, 0, 0, 0}
+#define Config_DeviceConfig_init_default         {_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0}
+#define Config_PositionConfig_init_default       {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_default          {0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_NetworkConfig_init_default        {0, "", "", "", 0, _Config_NetworkConfig_EthMode_MIN, false, Config_NetworkConfig_IpV4Config_init_default}
 #define Config_NetworkConfig_IpV4Config_init_default {0, 0, 0, 0}
@@ -234,8 +238,8 @@ extern "C" {
 #define Config_LoRaConfig_init_default           {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, {0, 0, 0}}
 #define Config_BluetoothConfig_init_default      {0, _Config_BluetoothConfig_PairingMode_MIN, 0}
 #define Config_init_zero                         {0, {Config_DeviceConfig_init_zero}}
-#define Config_DeviceConfig_init_zero            {_Config_DeviceConfig_Role_MIN, 0, 0}
-#define Config_PositionConfig_init_zero          {0, 0, 0, 0, 0, 0, 0}
+#define Config_DeviceConfig_init_zero            {_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0}
+#define Config_PositionConfig_init_zero          {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_zero             {0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_NetworkConfig_init_zero           {0, "", "", "", 0, _Config_NetworkConfig_EthMode_MIN, false, Config_NetworkConfig_IpV4Config_init_zero}
 #define Config_NetworkConfig_IpV4Config_init_zero {0, 0, 0, 0}
@@ -250,6 +254,8 @@ extern "C" {
 #define Config_DeviceConfig_role_tag             1
 #define Config_DeviceConfig_serial_enabled_tag   2
 #define Config_DeviceConfig_debug_log_enabled_tag 3
+#define Config_DeviceConfig_button_gpio_tag      4
+#define Config_DeviceConfig_buzzer_gpio_tag      5
 #define Config_DisplayConfig_screen_on_secs_tag  1
 #define Config_DisplayConfig_gps_format_tag      2
 #define Config_DisplayConfig_auto_screen_carousel_secs_tag 3
@@ -280,6 +286,8 @@ extern "C" {
 #define Config_PositionConfig_gps_update_interval_tag 5
 #define Config_PositionConfig_gps_attempt_time_tag 6
 #define Config_PositionConfig_position_flags_tag 7
+#define Config_PositionConfig_rx_gpio_tag        8
+#define Config_PositionConfig_tx_gpio_tag        9
 #define Config_PowerConfig_is_power_saving_tag   1
 #define Config_PowerConfig_on_battery_shutdown_after_secs_tag 2
 #define Config_PowerConfig_adc_multiplier_override_tag 3
@@ -325,7 +333,9 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,bluetooth,payload_variant.bl
 #define Config_DeviceConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    role,              1) \
 X(a, STATIC,   SINGULAR, BOOL,     serial_enabled,    2) \
-X(a, STATIC,   SINGULAR, BOOL,     debug_log_enabled,   3)
+X(a, STATIC,   SINGULAR, BOOL,     debug_log_enabled,   3) \
+X(a, STATIC,   SINGULAR, UINT32,   button_gpio,       4) \
+X(a, STATIC,   SINGULAR, UINT32,   buzzer_gpio,       5)
 #define Config_DeviceConfig_CALLBACK NULL
 #define Config_DeviceConfig_DEFAULT NULL
 
@@ -336,7 +346,9 @@ X(a, STATIC,   SINGULAR, BOOL,     fixed_position,    3) \
 X(a, STATIC,   SINGULAR, BOOL,     gps_enabled,       4) \
 X(a, STATIC,   SINGULAR, UINT32,   gps_update_interval,   5) \
 X(a, STATIC,   SINGULAR, UINT32,   gps_attempt_time,   6) \
-X(a, STATIC,   SINGULAR, UINT32,   position_flags,    7)
+X(a, STATIC,   SINGULAR, UINT32,   position_flags,    7) \
+X(a, STATIC,   SINGULAR, UINT32,   rx_gpio,           8) \
+X(a, STATIC,   SINGULAR, UINT32,   tx_gpio,           9)
 #define Config_PositionConfig_CALLBACK NULL
 #define Config_PositionConfig_DEFAULT NULL
 
@@ -429,12 +441,12 @@ extern const pb_msgdesc_t Config_BluetoothConfig_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define Config_BluetoothConfig_size              10
-#define Config_DeviceConfig_size                 6
+#define Config_DeviceConfig_size                 18
 #define Config_DisplayConfig_size                22
 #define Config_LoRaConfig_size                   68
 #define Config_NetworkConfig_IpV4Config_size     20
 #define Config_NetworkConfig_size                161
-#define Config_PositionConfig_size               30
+#define Config_PositionConfig_size               42
 #define Config_PowerConfig_size                  43
 #define Config_size                              164
 
