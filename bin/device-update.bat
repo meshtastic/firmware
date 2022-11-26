@@ -10,7 +10,7 @@ echo.
 echo     -h               Display this help and exit
 echo     -p ESPTOOL_PORT  Set the environment variable for ESPTOOL_PORT.  If not set, ESPTOOL iterates all ports (Dangerrous).
 echo     -P PYTHON        Specify alternate python interpreter to use to invoke esptool. (Default: %PYTHON%)
-echo     -f FILENAME      The .bin file to flash.  Custom to your device type and region.
+echo     -f FILENAME      The *update.bin file to flash.  Custom to your device type.
 goto EOF
 
 :GETOPTS
@@ -28,7 +28,7 @@ IF "__%FILENAME%__" == "____" (
 )
 IF EXIST %FILENAME% (
     echo Trying to flash update %FILENAME%
-    %PYTHON% -m esptool --baud 115200 write_flash 0x00 %FILENAME%
+    %PYTHON% -m esptool --baud 115200 write_flash 0x10000 %FILENAME%
 ) else (
     echo "Invalid file: %FILENAME%"
 	goto HELP
