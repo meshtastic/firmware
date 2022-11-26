@@ -1,0 +1,27 @@
+name: Feature Request
+description: Request a new feature
+title: "[Feature Request]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for your request this will not gurantee that we will implement it, but it will be reviewed.
+  - type: dropdown
+    id: soc
+    attributes:
+      label: Platform
+      description: What device platform will support your feature?
+      multiple: true
+      options:
+        - NRF52
+        - ESP32
+    validations:
+      required: true
+  - type: textarea
+    id: body
+    attributes:
+      label: Description
+      description: Please provide details about your enhancement.
+    validations:
+      required: true
