@@ -481,7 +481,7 @@ bool saveProto(const char *filename, size_t protoSize, size_t objSize, const pb_
         if(failedCounter >= 2){
             FSCom.format();
             //After formatting, the device needs to be restarted
-            nodeDB.resetRadioConfig();
+            nodeDB.resetRadioConfig(true);
         }
 #endif
     }
