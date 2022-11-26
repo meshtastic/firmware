@@ -6,7 +6,7 @@
 #include "PowerStatus.h"
 #include "graphics/Screen.h"
 #include "mesh/generated/telemetry.pb.h"
-#ifndef ARCH_PORTDUINO
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 #include <SparkFun_ATECCX08a_Arduino_Library.h>
 #endif
 
@@ -22,7 +22,7 @@ extern bool pmu_found;
 extern bool isCharging;
 extern bool isUSBPowered;
 
-#ifndef ARCH_PORTDUINO
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 extern ATECCX08A atecc;
 #endif
 
