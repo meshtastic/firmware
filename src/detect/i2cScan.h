@@ -12,7 +12,7 @@
 
 void printATECCInfo()
 {
-#ifndef ARCH_PORTDUINO
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
     atecc.readConfigZone(false);
 
     DEBUG_MSG("ATECC608B Serial Number: ");
@@ -114,7 +114,7 @@ void scanI2Cdevice()
                     DEBUG_MSG("unknown display found\n");
                 }
             }
-#ifndef ARCH_PORTDUINO
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
             if (addr == ATECC608B_ADDR) {
                 keystore_found = addr;
                 if (atecc.begin(keystore_found) == true) {

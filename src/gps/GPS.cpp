@@ -150,9 +150,21 @@ bool GPS::setupGPS()
     _serial_gps->setRxBufferSize(2048); // the default is 256
 #endif
 
+// if the overrides are not dialled in, set them from the board definitions, if they exist
+
+#if defined(GPS_RX_PIN)
+if (!config.position.rx_gpio)
+    config.position.rx_gpio = GPS_RX_PIN;
+#endif
+#if defined(GPS_TX_PIN)
+if (!config.position.tx_gpio)
+    config.position.tx_gpio = GPS_TX_PIN;
+#endif
+
 // ESP32 has a special set of parameters vs other arduino ports
-#if defined(GPS_RX_PIN) && defined(ARCH_ESP32)
-        _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+#if defined(ARCH_ESP32)
+        if(config.position.rx_gpio)
+            _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, config.position.rx_gpio, config.position.tx_gpio);
 #else
         _serial_gps->begin(GPS_BAUDRATE);
 #endif

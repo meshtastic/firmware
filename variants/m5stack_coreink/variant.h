@@ -21,7 +21,6 @@
 
 //BUZZER
 #define PIN_BUZZER 2
-#define TONE_PIN_CHANNEL 0
 
 #undef RF95_SCK
 #undef RF95_MISO

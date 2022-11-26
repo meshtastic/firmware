@@ -76,7 +76,7 @@ int32_t ExternalNotificationModule::runOnce()
     // moduleConfig.external_notification.output_ms = 1000;
     // moduleConfig.external_notification.output = 13;
 
-    if (externalCurrentState) {
+    if (externalCurrentState && !moduleConfig.external_notification.use_pwm) {
 
         // If the output is turned on, turn it back off after the given period of time.
         if (externalTurnedOn + (moduleConfig.external_notification.output_ms
@@ -84,13 +84,13 @@ int32_t ExternalNotificationModule::runOnce()
                                     : EXT_NOTIFICATION_MODULE_OUTPUT_MS) <
             millis()) {
             DEBUG_MSG("Turning off external notification\n");
-            if (output != PIN_BUZZER) {
-                setExternalOff();
-            }
+            setExternalOff();
         }
     }
-
-    return (25);
+    if (moduleConfig.external_notification.use_pwm)
+        return INT32_MAX; // we don't need this thread here...
+    else
+        return 25;
 }
 
 void ExternalNotificationModule::setExternalOn()
@@ -129,11 +129,6 @@ ExternalNotificationModule::ExternalNotificationModule()
     // moduleConfig.external_notification.output_ms = 1000;
     // moduleConfig.external_notification.output = 13;
     
-    if (moduleConfig.external_notification.alert_message) {
-        // restrict to the gpio channel for rx
-        boundChannel = Channels::gpioChannel;
-    }
-
     if (moduleConfig.external_notification.enabled) {
 
         DEBUG_MSG("Initializing External Notification Module\n");
@@ -142,14 +137,19 @@ ExternalNotificationModule::ExternalNotificationModule()
                         ? moduleConfig.external_notification.output
                         : EXT_NOTIFICATION_MODULE_OUTPUT;
 
-        if (output != PIN_BUZZER) {
+        if (!moduleConfig.external_notification.use_pwm) {
             // Set the direction of a pin
             DEBUG_MSG("Using Pin %i in digital mode\n", output);
             pinMode(output, OUTPUT);
             // Turn off the pin
             setExternalOff();
-        } else{
-            DEBUG_MSG("Using Pin %i in PWM mode\n", output);
+        } else {
+            config.device.buzzer_gpio = config.device.buzzer_gpio
+                                ? config.device.buzzer_gpio
+                                : PIN_BUZZER;
+                                
+            // in PWM Mode we force the buzzer pin if it is set
+            DEBUG_MSG("Using Pin %i in PWM mode\n", config.device.buzzer_gpio);
         }
     } else {
         DEBUG_MSG("External Notification Module Disabled\n");
@@ -170,7 +170,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
                 DEBUG_MSG("externalNotificationModule - Notification Bell\n");
                 for (int i = 0; i < p.payload.size; i++) {
                     if (p.payload.bytes[i] == ASCII_BELL) {
-                        if (output != PIN_BUZZER) {
+                        if (!moduleConfig.external_notification.use_pwm) {
                             setExternalOn();
                         } else {
                             playBeep();
@@ -181,7 +181,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
 
             if (moduleConfig.external_notification.alert_message) {
                 DEBUG_MSG("externalNotificationModule - Notification Module\n");
-                if (output != PIN_BUZZER) {
+                if (!moduleConfig.external_notification.use_pwm) {
                     setExternalOn();
                 } else {
                     playBeep();
