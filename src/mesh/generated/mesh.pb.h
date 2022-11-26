@@ -185,9 +185,11 @@ typedef enum _Routing_Error {
     /* TODO: REPLACE */
     Routing_Error_NO_RESPONSE = 8, 
     /* TODO: REPLACE */
-    Routing_Error_BAD_REQUEST = 32, 
+    Routing_Error_DUTY_CYCLE_LIMIT = 9, 
     /* The new version of the heltec WiFi_Lora_32_V2 board that has battery sensing hooked to GPIO 37.
  Sadly they did not update anything on the silkscreen to identify this board */
+    Routing_Error_BAD_REQUEST = 32, 
+    /* Ancient heltec WiFi_Lora_32 board */
     Routing_Error_NOT_AUTHORIZED = 33 
 } Routing_Error;
 
