@@ -475,6 +475,15 @@ bool saveProto(const char *filename, size_t protoSize, size_t objSize, const pb_
             DEBUG_MSG("Error: can't rename new pref file\n");
     } else {
         DEBUG_MSG("Can't write prefs\n");
+#ifdef ARCH_NRF52
+        static uint8_t failedCounter = 0;
+        failedCounter++;
+        if(failedCounter >= 2){
+            FSCom.format();
+            //After formatting, the device needs to be restarted
+            nodeDB.resetRadioConfig(true);
+        }
+#endif
     }
 #else
     DEBUG_MSG("ERROR: Filesystem not implemented\n");
