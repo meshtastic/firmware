@@ -24,7 +24,7 @@ void getMacAddr(uint8_t *dmac)
 }
 
 void setBluetoothEnable(bool on) {
-    
+
     if (!isWifiAvailable() && config.bluetooth.enabled == true) {
         if (!nimbleBluetooth) {
             nimbleBluetooth = new NimbleBluetooth();

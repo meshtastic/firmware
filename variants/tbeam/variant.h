@@ -12,7 +12,7 @@
 
 // TTGO uses a common pinout for their SX1262 vs RF95 modules - both can be enabled and we will probe at runtime for RF95 and if
 // not found then probe for SX1262
-#define USE_RF95
+#define USE_RF95 // RFM95/SX127x
 #define USE_SX1262
 #define USE_SX1268
 
