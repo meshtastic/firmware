@@ -96,8 +96,8 @@ typedef struct _ModuleConfig_ExternalNotificationConfig {
 typedef struct _ModuleConfig_MQTTConfig { 
     bool enabled;
     char address[32];
-    char username[32];
-    char password[32];
+    char username[64];
+    char password[64];
     bool encryption_enabled;
     bool json_enabled;
 } ModuleConfig_MQTTConfig;
@@ -386,12 +386,12 @@ extern const pb_msgdesc_t ModuleConfig_CannedMessageConfig_msg;
 #define ModuleConfig_AudioConfig_size            22
 #define ModuleConfig_CannedMessageConfig_size    49
 #define ModuleConfig_ExternalNotificationConfig_size 22
-#define ModuleConfig_MQTTConfig_size             105
+#define ModuleConfig_MQTTConfig_size             169
 #define ModuleConfig_RangeTestConfig_size        10
 #define ModuleConfig_SerialConfig_size           26
 #define ModuleConfig_StoreForwardConfig_size     22
 #define ModuleConfig_TelemetryConfig_size        18
-#define ModuleConfig_size                        107
+#define ModuleConfig_size                        172
 
 #ifdef __cplusplus
 } /* extern "C" */
