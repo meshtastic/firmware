@@ -43,7 +43,7 @@ shift "$((OPTIND-1))"
     shift
 }
 
-if [ -f "${FILENAME}" ] && [[ $FILENAME == *"update"* ]]; then
+if [ -f "${FILENAME}" ] && [ "${FILENAME##*"update"*}" != "$FILENAME" ]; then
 	printf "Trying to flash update ${FILENAME}"
 	$PYTHON -m esptool --baud 115200 write_flash 0x10000 ${FILENAME}
 else
