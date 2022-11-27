@@ -176,6 +176,12 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
         }
         break;
     }
+    
+    // If asked for a response and it is not yet set, generate an 'ACK' response
+    if (mp.decoded.want_response && !myReply) {
+        myReply = allocErrorResponse(Routing_Error_NONE, &mp);
+    }
+
     return handled;
 }
 
