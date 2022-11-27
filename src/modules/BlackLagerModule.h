@@ -1,10 +1,11 @@
 #pragma once
+#include "Observer.h"
 #include "SinglePortModule.h"
 
 /**
  * Text messaging module with public key signed messages.
  */
-class BlackLagerModule : public SinglePortModule
+class BlackLagerModule : public SinglePortModule, public Observable<const MeshPacket *>
 {
   public:
     /** Constructor
