@@ -387,7 +387,7 @@ void setup()
     }
 #endif
 
-#if defined(USE_SX1280) && !defined(ARCH_PORTDUINO)
+#if defined(USE_SX1280)
     if (!rIf) {
         rIf = new SX1280Interface(SX128X_CS, SX128X_DIO1, SX128X_RESET, SX128X_BUSY, SPI);
         if (!rIf->init()) {
@@ -451,6 +451,30 @@ void setup()
         }
     }
 #endif
+
+// check if the radio chip matches the selected region
+
+if((config.lora.region == Config_LoRaConfig_RegionCode_LORA_24) && (!rIf->wideLora())){
+    DEBUG_MSG("Warning: Radio chip does not support 2.4GHz LoRa. Reverting to unset.\n");
+    config.lora.region = Config_LoRaConfig_RegionCode_UNSET;
+    nodeDB.saveToDisk(SEGMENT_CONFIG);
+    if(!rIf->reconfigure()) {
+        DEBUG_MSG("Reconfigure failed, rebooting\n");
+        screen->startRebootScreen();
+        rebootAtMsec = millis() + 5000;
+    }
+}
+
+if((config.lora.region != Config_LoRaConfig_RegionCode_LORA_24) && (rIf->wideLora())){
+    DEBUG_MSG("Warning: Radio chip only supports 2.4GHz LoRa. Adjusting Region.\n");
+    config.lora.region = Config_LoRaConfig_RegionCode_LORA_24;
+    nodeDB.saveToDisk(SEGMENT_CONFIG);
+    if(!rIf->reconfigure()) {
+        DEBUG_MSG("Reconfigure failed, rebooting\n");
+        screen->startRebootScreen();
+        rebootAtMsec = millis() + 5000;
+    }
+}
 
 #if HAS_WIFI || HAS_ETHERNET
     mqttInit();
