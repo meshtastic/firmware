@@ -7,7 +7,10 @@
 
 BlackLagerModule *blackLagerModule;
 
-MeshPacket *BlackLagerModule::allocReply()
+/**
+ * Text messaging module with digital signatures.
+ */
+ProcessMessage BlackLagerModule::handleReceived(const MeshPacket &mp)
 {
     assert(currentRequest); // should always be !NULL
     auto req = *currentRequest;
@@ -22,5 +25,5 @@ MeshPacket *BlackLagerModule::allocReply()
     reply->decoded.payload.size = strlen(replyStr); // You must specify how many bytes are in the reply
     memcpy(reply->decoded.payload.bytes, replyStr, reply->decoded.payload.size);
 
-    return reply;
+    return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }
