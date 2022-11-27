@@ -1,7 +1,7 @@
 #include "BlackLagerModule.h"
-#include "MeshService.h"
+#include "NodeDB.h"
+#include "PowerFSM.h"
 #include "configuration.h"
-#include "main.h"
 
 #include <assert.h>
 
@@ -12,13 +12,8 @@ BlackLagerModule *blackLagerModule;
  */
 ProcessMessage BlackLagerModule::handleReceived(const MeshPacket &mp)
 {
-    assert(currentRequest); // should always be !NULL
-    auto req = *currentRequest;
-    auto &p = req.decoded;
-    // The incoming message is in p.payload
-    DEBUG_MSG("Received Black Lager message from=0x%0x, id=%d, msg=%.*s\n", req.from, req.id, p.payload.size, p.payload.bytes);
-
-    screen->print("Sending Black Lager reply\n");
+    auto &p = mp.decoded;
+    DEBUG_MSG("Received black lager msg from=0x%0x, id=0x%x, msg=%.*s\n", mp.from, mp.id, p.payload.size, p.payload.bytes);
 
     const char *replyStr = "Black Lager message Received";
     auto reply = allocDataPacket();                 // Allocate a packet for sending
