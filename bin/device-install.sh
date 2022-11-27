@@ -45,7 +45,7 @@ shift "$((OPTIND-1))"
     shift
 }
 
-if [ -f "${FILENAME}" ] && [[ "${FILENAME}" != *"update"* ]]; then
+if [ -f "${FILENAME}" ] && [ "${FILENAME##*"update"*}" == "$FILENAME" ]; then
 	echo "Trying to flash ${FILENAME}, but first erasing and writing system information"
 	"$PYTHON" -m esptool  erase_flash
 	"$PYTHON" -m esptool  write_flash 0x00 ${FILENAME}
