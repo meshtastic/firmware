@@ -90,8 +90,7 @@ void ReliableRouter::sniffReceived(const MeshPacket *p, const Routing *c)
 {
     NodeNum ourNode = getNodeNum();
 
-    if (p->to == ourNode) { // ignore ack/nak/want_ack packets that are not address to us (we only handle 0 hop reliability
-                            // - not DSR routing)
+    if (p->to == ourNode) { // ignore ack/nak/want_ack packets that are not address to us (we only handle 0 hop reliability)
         if (p->want_ack) {
             if (MeshModule::currentReply)
                 DEBUG_MSG("Some other module has replied to this message, no need for a 2nd ack\n");
@@ -200,8 +199,7 @@ int32_t ReliableRouter::doRetransmissions()
                 DEBUG_MSG("Reliable send failed, returning a nak for fr=0x%x,to=0x%x,id=0x%x\n", p.packet->from, p.packet->to,
                           p.packet->id);
                 sendAckNak(Routing_Error_MAX_RETRANSMIT, getFrom(p.packet), p.packet->id, p.packet->channel);
-                // Note: we don't stop retransmission here, instead the Nak packet gets processed in sniffReceived - which
-                // allows the DSR version to still be able to look at the PendingPacket
+                // Note: we don't stop retransmission here, instead the Nak packet gets processed in sniffReceived
                 stopRetransmission(it->first);
                 stillValid = false; // just deleted it
             } else {

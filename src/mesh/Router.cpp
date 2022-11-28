@@ -21,7 +21,6 @@ extern "C" {
  * DONE: Implement basic interface and use it elsewhere in app
  * Add naive flooding mixin (& drop duplicate rx broadcasts), add tools for sending broadcasts with incrementing sequence #s
  * Add an optional adjacent node only 'send with ack' mixin.  If we timeout waiting for the ack, call handleAckTimeout(packet)
- * Add DSR mixin
  *
  **/
 
