@@ -38,12 +38,6 @@ struct PendingPacket {
     /** Starts at NUM_RETRANSMISSIONS -1(normally 3) and counts down.  Once zero it will be removed from the list */
     uint8_t numRetransmissions = 0;
 
-    /** True if we have started trying to find a route - for DSR usage
-     * While trying to find a route we don't actually send the data packet.  We just leave it here pending until
-     * we have a route or we've failed to find one.
-     */
-    bool wantRoute = false;
-
     PendingPacket() {}
     explicit PendingPacket(MeshPacket *p);
 };

@@ -8,8 +8,6 @@
 #include "configuration.h"
 #include "error.h"
 #include "power.h"
-// #include "rom/rtc.h"
-//#include "DSRRouter.h"
 #include "ReliableRouter.h"
 // #include "debug.h"
 #include "FSCommon.h"
@@ -217,7 +215,6 @@ void setup()
 
     fsInit();
 
-    // router = new DSRRouter();
     router = new ReliableRouter();
 
 #ifdef I2C_SDA1
