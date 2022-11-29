@@ -6,6 +6,8 @@
 #include "Router.h"
 #include "FSCommon.h"
 
+#include <soc/sens_reg.h>
+#include <soc/sens_struct.h>
 #include <assert.h>
 
 /*
@@ -30,7 +32,7 @@
 
     KNOWN PROBLEMS
         * Until the module is initilized by the startup sequence, the amp_pin pin is in a floating
-          state. This may produce a bit of "noise".
+          radio_state. This may produce a bit of "noise".
         * Will not work on NRF and the Linux device targets.
 */
 
@@ -40,12 +42,20 @@
 
 #define AUDIO_MODULE_RX_BUFFER 128
 #define AUDIO_MODULE_DATA_MAX Constants_DATA_PAYLOAD_LEN
-#define AUDIO_MODULE_MODE 7 // 700B
-#define AUDIO_MODULE_ACK 1
+#define AUDIO_MODULE_MODE ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700
 
-#if defined(ARCH_ESP32) && defined(USE_SX1280)
+#if defined(ARCH_ESP32)
 
 AudioModule *audioModule;
+Codec2Thread *codec2Thread;
+
+FastAudioFIFO audio_fifo;
+uint16_t adc_buffer[ADC_BUFFER_SIZE] = {};
+uint16_t adc_buffer_index = 0;
+portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
+int16_t speech[ADC_BUFFER_SIZE] = {};
+volatile RadioState radio_state = RadioState::tx;
+adc1_channel_t mic_chan = (adc1_channel_t)0;
 
 ButterworthFilter hp_filter(240, 8000, ButterworthFilter::ButterworthFilter::Highpass, 1);
 
@@ -55,55 +65,22 @@ int Sine1KHz_index = 0;
 
 uint8_t rx_raw_audio_value = 127;
 
-AudioModule::AudioModule() : SinglePortModule("AudioModule", PortNum_AUDIO_APP), concurrency::OSThread("AudioModule") {
-    audio_fifo.init();
+int IRAM_ATTR local_adc1_read(int channel) {
+    uint16_t adc_value;
+    SENS.sar_meas_start1.sar1_en_pad = (1 << channel); // only one channel is selected
+    while (SENS.sar_slave_addr1.meas_status != 0);
+    SENS.sar_meas_start1.meas1_start_sar = 0;
+    SENS.sar_meas_start1.meas1_start_sar = 1;
+    while (SENS.sar_meas_start1.meas1_done_sar == 0);
+    adc_value = SENS.sar_meas_start1.meas1_data_sar;
+    return adc_value;
 }
 
-void AudioModule::run_codec2()
+IRAM_ATTR void am_onTimer()
 {
-    if (state == State::tx)
-    {
-        for (int i = 0; i < ADC_BUFFER_SIZE; i++)
-            speech[i] = (int16_t)hp_filter.Update((float)speech[i]);
-
-        codec2_encode(codec2_state, tx_encode_frame + tx_encode_frame_index, speech);	
-
-        //increment the pointer where the encoded frame must be saved
-        tx_encode_frame_index += 8; 
-
-        //If it is the 5th time then we have a ready trasnmission frame
-        if (tx_encode_frame_index == ENCODE_FRAME_SIZE)
-        {
-            tx_encode_frame_index = 0;
-            //Transmit it
-            sendPayload();
-        }
-    }
-    if (state == State::rx) //Receiving
-    {
-        //Make a cycle to get each codec2 frame from the received frame
-        for (int i = 0; i < ENCODE_FRAME_SIZE; i += 8)
-        {
-            //Decode the codec2 frame
-            codec2_decode(codec2_state, output_buffer, rx_encode_frame + i);
-            
-            // Add to the audio buffer the 320 samples resulting of the decode of the codec2 frame.
-            for (int g = 0; g < ADC_BUFFER_SIZE; g++)
-                audio_fifo.put(output_buffer[g]);
-        }
-    }
-    state = State::standby;
-}
-
-void AudioModule::handleInterrupt()
-{
-    audioModule->onTimer();
-}
-
-void AudioModule::onTimer()
-{
-    if (state == State::tx) {
-        adc_buffer[adc_buffer_index++] = (16 * adc1_get_raw(mic_chan)) - 32768;
+    portENTER_CRITICAL_ISR(&timerMux); //Enter crital code without interruptions
+    if (radio_state == RadioState::tx) {
+        adc_buffer[adc_buffer_index++] = (16 * local_adc1_read(mic_chan)) - 32768;
 
         //If you want to test with a 1KHz tone, comment the line above and descomment the three lines below
 
@@ -113,39 +90,96 @@ void AudioModule::onTimer()
 
         if (adc_buffer_index == ADC_BUFFER_SIZE) {
             adc_buffer_index = 0;
+            DEBUG_MSG("--- memcpy\n");
             memcpy((void*)speech, (void*)adc_buffer, 2 * ADC_BUFFER_SIZE);
-            audioModule->setIntervalFromNow(0); // process buffer immediately
+            // Notify codec2 task that the buffer is ready.
+            BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+            DEBUG_MSG("--- notifyFromISR\n");
+            codec2Thread->notifyFromISR(&xHigherPriorityTaskWoken, RadioState::tx, true);
+            if (xHigherPriorityTaskWoken)
+                portYIELD_FROM_ISR();
         }
-    } else if (state == State::rx)	{
+    } else if (radio_state == RadioState::rx)    {
 
         int16_t v;
 
         //Get a value from audio_fifo and convert it to 0 - 255 to play it in the ADC
-        //If none value is available the DAC will play the last one that was read, that's
-        //why the rx_raw_audio_value variable is a global one.
         if (audio_fifo.get(&v))
             rx_raw_audio_value = (uint8_t)((v + 32768) / 256);
-
-        //Play
         dacWrite(moduleConfig.audio.amp_pin ? moduleConfig.audio.amp_pin : AAMP, rx_raw_audio_value);
+    }
+    portEXIT_CRITICAL_ISR(&timerMux); // exit critical code
+}
+
+Codec2Thread::Codec2Thread() : concurrency::NotifiedWorkerThread("Codec2Thread") {
+    if ((moduleConfig.audio.codec2_enabled) && (myRegion->audioPermitted)) {
+        DEBUG_MSG("--- Setting up codec2 in mode %u\n", moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE);
+        codec2_state = codec2_create(moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE);
+        codec2_set_lpc_post_filter(codec2_state, 1, 0, 0.8, 0.2);
+    } else {
+        DEBUG_MSG("--- Codec2 disabled\n");
+    }
+}
+
+AudioModule::AudioModule() : SinglePortModule("AudioModule", PortNum_AUDIO_APP), concurrency::OSThread("AudioModule") {
+    audio_fifo.init();
+    new Codec2Thread();
+}
+
+void Codec2Thread::onNotify(uint32_t notification)
+{
+    switch (notification) {
+        case RadioState::tx:
+            for (int i = 0; i < ADC_BUFFER_SIZE; i++)
+                speech[i] = (int16_t)hp_filter.Update((float)speech[i]);
+
+            codec2_encode(codec2_state, audioModule->tx_encode_frame + audioModule->tx_encode_frame_index, speech);    
+
+            //increment the pointer where the encoded frame must be saved
+            audioModule->tx_encode_frame_index += 8; 
+
+            //If it is the 5th time then we have a ready trasnmission frame
+            if (audioModule->tx_encode_frame_index == ENCODE_FRAME_SIZE)
+            {
+                audioModule->tx_encode_frame_index = 0;
+                //Transmit it
+                audioModule->sendPayload();
+            }
+            break;
+        case RadioState::rx:
+            //Make a cycle to get each codec2 frame from the received frame
+            for (int i = 0; i < ENCODE_FRAME_SIZE; i += ENCODE_CODEC2_SIZE)
+            {
+                //Decode the codec2 frame
+                codec2_decode(codec2_state, output_buffer, audioModule->rx_encode_frame + i);
+                
+                // Add to the audio buffer the 320 samples resulting of the decode of the codec2 frame.
+                for (int g = 0; g < ADC_BUFFER_SIZE; g++)
+                    audio_fifo.put(output_buffer[g]);
+            }
+            break;
+        default:
+            assert(0); // We expected to receive a valid notification from the ISR
+            break;
     }
 }
 
 int32_t AudioModule::runOnce()
 {
-    if (moduleConfig.audio.codec2_enabled) {
-
+    if ((moduleConfig.audio.codec2_enabled) && (myRegion->audioPermitted)) {
         if (firstTime) {
-
-            DEBUG_MSG("Initializing ADC on Channel %u\n", moduleConfig.audio.mic_chan ? moduleConfig.audio.mic_chan : AMIC);
+            DEBUG_MSG("--- Initializing ADC on Channel %u\n", moduleConfig.audio.mic_chan ? moduleConfig.audio.mic_chan : AMIC);
 
             mic_chan = moduleConfig.audio.mic_chan ? (adc1_channel_t)(int)moduleConfig.audio.mic_chan : (adc1_channel_t)AMIC;
             adc1_config_width(ADC_WIDTH_12Bit);
-	        adc1_config_channel_atten(mic_chan, ADC_ATTEN_DB_6);
+            adc1_config_channel_atten(mic_chan, ADC_ATTEN_DB_6);
+            adc1_get_raw(mic_chan);
+
+            radio_state = RadioState::rx;
 
             // Start a timer at 8kHz to sample the ADC and play the audio on the DAC.
             uint32_t cpufreq = getCpuFrequencyMhz();
-	        switch (cpufreq){
+            switch (cpufreq){
                 case 160:
                     adcTimer = timerBegin(3, 1000, true); // 160 MHz / 1000 = 160KHz
                     break;
@@ -160,48 +194,44 @@ int32_t AudioModule::runOnce()
                     adcTimer = timerBegin(3, 500, true); // 80 MHz / 500 = 160KHz
                     break;
             }
-            timerAttachInterrupt(adcTimer, &AudioModule::handleInterrupt, true);
-	        timerAlarmWrite(adcTimer, 20, true); // Interrupts when counter == 20, 8.000 times a second
-	        timerAlarmEnable(adcTimer);
+            DEBUG_MSG("--- Timer CPU Frequency: %u MHz\n", cpufreq);
+            timerAttachInterrupt(adcTimer, &am_onTimer, false);
+            timerAlarmWrite(adcTimer, 20, true); // Interrupts when counter == 20, 8.000 times a second
+            timerAlarmEnable(adcTimer);
 
-            DEBUG_MSG("Initializing DAC on Pin %u\n", moduleConfig.audio.amp_pin ? moduleConfig.audio.amp_pin : AAMP);
-            DEBUG_MSG("Initializing PTT on Pin %u\n", moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN);
+            DEBUG_MSG("--- Initializing DAC on Pin %u\n", moduleConfig.audio.amp_pin ? moduleConfig.audio.amp_pin : AAMP);
+            DEBUG_MSG("--- Initializing PTT on Pin %u\n", moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN);
 
             // Configure PTT input
-	        pinMode(moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN, INPUT_PULLUP);
+            pinMode(moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN, INPUT);
 
-            state = State::rx;
-
-            DEBUG_MSG("Setting up codec2 in mode %u\n", moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE);
-
-            codec2_state = codec2_create(moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE);
-            codec2_set_lpc_post_filter(codec2_state, 1, 0, 0.8, 0.2);
-            
-            firstTime = 0;
+            firstTime = false;
         } else {
-            // Check if we have a PTT press
-            if (digitalRead(moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN) == LOW) {
-                // PTT pressed, recording
-                state = State::tx;
+            // Check if PTT is pressed. TODO hook that into Onebutton/Interrupt drive.
+            if (digitalRead(moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN) == HIGH) {
+                if (radio_state == RadioState::rx) {
+                    DEBUG_MSG("--- PTT pressed, switching to TX\n");
+                    radio_state = RadioState::tx;
+                }
+            } else {
+                if (radio_state == RadioState::tx) {
+                    DEBUG_MSG("--- PTT released, switching to RX\n");
+                    radio_state = RadioState::rx;
+                }
             }
-            if (state != State::standby) {
-                run_codec2();
-            }
+            
         }
-
         return 100;
     } else {
-        DEBUG_MSG("Audio Module Disabled\n");
-
+        DEBUG_MSG("--- Audio Module Disabled\n");
         return INT32_MAX;
     }
+    
 }
 
 MeshPacket *AudioModule::allocReply()
 {
-
     auto reply = allocDataPacket(); // Allocate a packet for sending
-
     return reply;
 }
 
@@ -211,7 +241,8 @@ void AudioModule::sendPayload(NodeNum dest, bool wantReplies)
     p->to = dest;
     p->decoded.want_response = wantReplies;
 
-    p->want_ack = AUDIO_MODULE_ACK;
+    p->want_ack = false; // Audio is shoot&forget. TODO: Is this really suppressing retransmissions?
+    p->priority = MeshPacket_Priority_MAX; // Audio is important, because realtime
 
     p->decoded.payload.size =  ENCODE_FRAME_SIZE;
     memcpy(p->decoded.payload.bytes, tx_encode_frame, p->decoded.payload.size);
@@ -221,16 +252,18 @@ void AudioModule::sendPayload(NodeNum dest, bool wantReplies)
 
 ProcessMessage AudioModule::handleReceived(const MeshPacket &mp)
 {
-    if (moduleConfig.audio.codec2_enabled) {
+    if ((moduleConfig.audio.codec2_enabled) && (myRegion->audioPermitted)) {
         auto &p = mp.decoded;
         if (getFrom(&mp) != nodeDB.getNodeNum()) {
             if (p.payload.size == ENCODE_FRAME_SIZE) {
                 memcpy(rx_encode_frame, p.payload.bytes, p.payload.size);
-                state = State::rx;
-                audioModule->setIntervalFromNow(0);
-                run_codec2();
+                radio_state = RadioState::rx;
+                BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+                codec2Thread->notifyFromISR(&xHigherPriorityTaskWoken, RadioState::rx, true);
+                if (xHigherPriorityTaskWoken)
+                    portYIELD_FROM_ISR();
             } else {
-                DEBUG_MSG("Invalid payload size %u != %u\n", p.payload.size, ENCODE_FRAME_SIZE);
+                DEBUG_MSG("--- Invalid payload size %u != %u\n", p.payload.size, ENCODE_FRAME_SIZE);
             }
         }
     }
