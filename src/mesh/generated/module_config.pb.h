@@ -63,14 +63,14 @@ typedef enum _ModuleConfig_CannedMessageConfig_InputEventChar {
 /* Struct definitions */
 typedef struct _ModuleConfig_AudioConfig { 
     bool codec2_enabled;
-    uint32_t mic_chan;
-    uint32_t amp_pin;
-    uint32_t ptt_pin;
+    uint8_t mic_chan;
+    uint8_t amp_pin;
+    uint8_t ptt_pin;
     ModuleConfig_AudioConfig_Audio_Baud bitrate;
-    uint32_t i2s_ws;
-    uint32_t i2s_sd;
-    uint32_t i2s_din;
-    uint32_t i2s_sck;
+    uint8_t i2s_ws;
+    uint8_t i2s_sd;
+    uint8_t i2s_din;
+    uint8_t i2s_sck;
 } ModuleConfig_AudioConfig;
 
 typedef struct _ModuleConfig_CannedMessageConfig { 
@@ -395,7 +395,7 @@ extern const pb_msgdesc_t ModuleConfig_CannedMessageConfig_msg;
 #define ModuleConfig_CannedMessageConfig_fields &ModuleConfig_CannedMessageConfig_msg
 
 /* Maximum encoded size of messages (where known) */
-#define ModuleConfig_AudioConfig_size            46
+#define ModuleConfig_AudioConfig_size            25
 #define ModuleConfig_CannedMessageConfig_size    49
 #define ModuleConfig_ExternalNotificationConfig_size 22
 #define ModuleConfig_MQTTConfig_size             169
