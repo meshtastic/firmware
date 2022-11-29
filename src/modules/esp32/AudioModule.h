@@ -3,15 +3,14 @@
 #include "SinglePortModule.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
+#if defined(ARCH_ESP32)
 #include "NodeDB.h"
 #include <Arduino.h>
 #include <driver/adc.h>
 #include <functional>
-#if defined(ARCH_ESP32) 
 #include <codec2.h>
 #include <ButterworthFilter.h>
 #include <FastAudioFIFO.h>
-#endif
 
 #define ADC_BUFFER_SIZE 320 // 40ms of voice in 8KHz sampling frequency
 #define ENCODE_CODEC2_SIZE 8
@@ -19,7 +18,6 @@
 
 class Codec2Thread : public concurrency::NotifiedWorkerThread
 {
-#if defined(ARCH_ESP32)
   struct CODEC2* codec2_state = NULL;
   int16_t output_buffer[ADC_BUFFER_SIZE] = {};
 
@@ -28,16 +26,12 @@ class Codec2Thread : public concurrency::NotifiedWorkerThread
 
   protected:
     virtual void onNotify(uint32_t notification) override;
-#endif
 };
 
 class AudioModule : public SinglePortModule, private concurrency::OSThread
 {
-#if defined(ARCH_ESP32)
   bool firstTime = true;
   hw_timer_t* adcTimer = NULL;
-
-  FastAudioFIFO audio_fifo;
   uint16_t adc_buffer_index = 0;
 
 
@@ -64,13 +58,11 @@ class AudioModule : public SinglePortModule, private concurrency::OSThread
      * @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for it
      */
     virtual ProcessMessage handleReceived(const MeshPacket &mp) override;
-#endif
 };
 
 extern AudioModule *audioModule;
 extern Codec2Thread *codec2Thread;
 
-extern FastAudioFIFO audio_fifo;
 extern uint16_t adc_buffer[ADC_BUFFER_SIZE];
 extern uint16_t adc_buffer_index;
 extern portMUX_TYPE timerMux;
@@ -80,4 +72,4 @@ extern volatile RadioState radio_state;
 extern adc1_channel_t mic_chan;
 
 IRAM_ATTR void am_onTimer();
-
+#endif

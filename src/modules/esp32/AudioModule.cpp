@@ -1,4 +1,6 @@
+
 #include "configuration.h"
+#if defined(ARCH_ESP32)
 #include "AudioModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -44,8 +46,6 @@
 #define AUDIO_MODULE_DATA_MAX Constants_DATA_PAYLOAD_LEN
 #define AUDIO_MODULE_MODE ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700
 
-#if defined(ARCH_ESP32)
-
 AudioModule *audioModule;
 Codec2Thread *codec2Thread;
 
@@ -67,12 +67,21 @@ uint8_t rx_raw_audio_value = 127;
 
 int IRAM_ATTR local_adc1_read(int channel) {
     uint16_t adc_value;
+#if CONFIG_IDF_TARGET_ESP32S3
+    SENS.sar_meas1_ctrl2.sar1_en_pad = (1 << channel); // only one channel is selected
+    while (SENS.sar_slave_addr1.meas_status != 0);
+    SENS.sar_meas1_ctrl2.meas1_start_sar = 0;
+    SENS.sar_meas1_ctrl2.meas1_start_sar = 1;
+    while (SENS.sar_meas1_ctrl2.meas1_done_sar == 0);
+    adc_value = SENS.sar_meas1_ctrl2.meas1_data_sar;
+#else
     SENS.sar_meas_start1.sar1_en_pad = (1 << channel); // only one channel is selected
     while (SENS.sar_slave_addr1.meas_status != 0);
     SENS.sar_meas_start1.meas1_start_sar = 0;
     SENS.sar_meas_start1.meas1_start_sar = 1;
     while (SENS.sar_meas_start1.meas1_done_sar == 0);
     adc_value = SENS.sar_meas_start1.meas1_data_sar;
+#endif    
     return adc_value;
 }
 
@@ -106,7 +115,10 @@ IRAM_ATTR void am_onTimer()
         //Get a value from audio_fifo and convert it to 0 - 255 to play it in the ADC
         if (audio_fifo.get(&v))
             rx_raw_audio_value = (uint8_t)((v + 32768) / 256);
+        // comment out for now, S3 does not have Hardware-DAC. Consider I2S instead.
+#if !CONFIG_IDF_TARGET_ESP32S3    
         dacWrite(moduleConfig.audio.amp_pin ? moduleConfig.audio.amp_pin : AAMP, rx_raw_audio_value);
+#endif
     }
     portEXIT_CRITICAL_ISR(&timerMux); // exit critical code
 }
