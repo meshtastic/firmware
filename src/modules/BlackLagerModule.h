@@ -11,7 +11,7 @@ class BlackLagerModule : public SinglePortModule, public Observable<const MeshPa
     /** Constructor
      * name is for debugging output
      */
-    BlackLagerModule() : SinglePortModule("black-lager", PortNum_PRIVATE_PROJECT) {}
+    BlackLagerModule() : SinglePortModule("black-lager", PortNum_BLACK_LAGER) {}
 
   protected:
     /** Called to handle a particular incoming message
