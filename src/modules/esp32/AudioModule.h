@@ -6,6 +6,7 @@
 #if defined(ARCH_ESP32)
 #include "NodeDB.h"
 #include <Arduino.h>
+#include <driver/i2s.h>
 #include <driver/adc.h>
 #include <functional>
 #include <codec2.h>
