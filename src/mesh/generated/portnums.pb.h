@@ -83,6 +83,7 @@ typedef enum _PortNum {
  To simplify initial development and testing you can use "PRIVATE_APP"
  in your code without needing to rebuild protobuf files (via [regen-protos.sh](https://github.com/meshtastic/firmware/blob/master/bin/regen-protos.sh)) */
     PortNum_PRIVATE_APP = 256, 
+    PortNum_BLACK_LAGER = 333, 
     /* ATAK Forwarder Module https://github.com/paulmandal/atak-forwarder */
     PortNum_ATAK_FORWARDER = 257, 
     /* Currently we limit port nums to no higher than this value */
