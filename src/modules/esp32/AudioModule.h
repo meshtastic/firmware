@@ -1,7 +1,7 @@
 #pragma once
 
 #include "SinglePortModule.h"
-#include "concurrency/OSThread.h"
+#include "concurrency/NotifiedWorkerThread.h"
 #include "configuration.h"
 #if defined(ARCH_ESP32)
 #include "NodeDB.h"
@@ -14,8 +14,6 @@
 #include <FastAudioFIFO.h>
 
 #define ADC_BUFFER_SIZE 320 // 40ms of voice in 8KHz sampling frequency
-#define ENCODE_CODEC2_SIZE 8
-#define ENCODE_FRAME_SIZE (ENCODE_CODEC2_SIZE * 5) // 5 codec2 frames of 8 bytes each
 
 class Codec2Thread : public concurrency::NotifiedWorkerThread
 {
@@ -25,7 +23,13 @@ class Codec2Thread : public concurrency::NotifiedWorkerThread
   public:
     Codec2Thread();
 
+    int get_encode_frame_size() { return encode_frame_size; };
+
   protected:
+    int tx_encode_frame_index = 0;
+    int encode_codec_size = 0;
+    int encode_frame_num = 0;
+    int encode_frame_size = 0;
     virtual void onNotify(uint32_t notification) override;
 };
 
@@ -35,11 +39,9 @@ class AudioModule : public SinglePortModule, private concurrency::OSThread
   hw_timer_t* adcTimer = NULL;
   uint16_t adc_buffer_index = 0;
 
-
   public:
-    unsigned char rx_encode_frame[ENCODE_FRAME_SIZE] = {};
-    unsigned char tx_encode_frame[ENCODE_FRAME_SIZE] = {};
-    int tx_encode_frame_index = 0;
+    unsigned char rx_encode_frame[Constants_DATA_PAYLOAD_LEN] = {};
+    unsigned char tx_encode_frame[Constants_DATA_PAYLOAD_LEN] = {};
 
     AudioModule();
 
