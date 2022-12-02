@@ -7,11 +7,9 @@
 #include "NodeDB.h"
 #include <Arduino.h>
 #include <driver/i2s.h>
-// #include <driver/adc.h>
 #include <functional>
 #include <codec2.h>
 #include <ButterworthFilter.h>
-#include <FastAudioFIFO.h>
 
 #define ADC_BUFFER_SIZE_MAX 320
 
@@ -32,11 +30,9 @@ class AudioModule : public SinglePortModule, private concurrency::OSThread
     int encode_codec_size = 0;
     int encode_frame_size = 0;
     volatile RadioState radio_state = RadioState::rx;
-    FastAudioFIFO fifo;
+
     struct CODEC2* codec2 = NULL;
-    int16_t sample;
-    adc1_channel_t mic_chan = (adc1_channel_t)0;
-    uint8_t rx_raw_audio_value = 127;
+    // int16_t sample;
 
     AudioModule();
 
@@ -48,7 +44,6 @@ class AudioModule : public SinglePortModule, private concurrency::OSThread
   protected:
     int encode_frame_num = 0;
     bool firstTime = true;
-
 
     virtual int32_t runOnce() override;
 
