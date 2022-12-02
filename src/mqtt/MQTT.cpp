@@ -346,11 +346,11 @@ std::string MQTT::downstreamPacketToJson(MeshPacket *mp)
             memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &Position_msg, &scratch)) {
                 decoded = &scratch;
-                msgPayload["time"] = new JSONValue((int)decoded->time);
-                msgPayload["timestamp"] = new JSONValue((int)decoded->timestamp);
+                if((int)decoded->time){msgPayload["time"] = new JSONValue((int)decoded->time);}
+                if ((int)decoded->timestamp){msgPayload["timestamp"] = new JSONValue((int)decoded->timestamp);}
                 msgPayload["latitude_i"] = new JSONValue((int)decoded->latitude_i);
                 msgPayload["longitude_i"] = new JSONValue((int)decoded->longitude_i);
-                msgPayload["altitude"] = new JSONValue((int)decoded->altitude);
+                if((int)decoded->altitude){msgPayload["altitude"] = new JSONValue((int)decoded->altitude);}
                 jsonObj["payload"] = new JSONValue(msgPayload);
             } else {
                 DEBUG_MSG("Error decoding protobuf for position message!\n");
