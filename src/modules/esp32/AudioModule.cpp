@@ -29,15 +29,7 @@
         * Will not work on NRF and the Linux device targets (yet?).
 */
 
-#define PTT_PIN 39
-
 ButterworthFilter hp_filter(240, 8000, ButterworthFilter::ButterworthFilter::Highpass, 1);
-
-// Use I2S Processor 0
-#define I2S_PORT I2S_NUM_0
-
-#define AUDIO_MODULE_RX_BUFFER 128
-#define AUDIO_MODULE_MODE ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700
 
 TaskHandle_t codec2HandlerTask;
 AudioModule *audioModule;
@@ -55,6 +47,9 @@ int Sine1KHz_index = 0;
 
 void run_codec2(void* parameter)
 {
+    // 4 bytes of header in each frame Kennung hex c0 de c2 plus the bitrate
+    memcpy(audioModule->tx_encode_frame,&audioModule->tx_header,sizeof(audioModule->tx_header));
+
     while (true) {
         uint32_t tcount = ulTaskNotifyTake(pdFALSE, pdMS_TO_TICKS(10000));
 
@@ -72,12 +67,12 @@ void run_codec2(void* parameter)
                 audioModule->tx_encode_frame_index += audioModule->encode_codec_size; 
 
                 //If it this is reached we have a ready trasnmission frame
-                if (audioModule->tx_encode_frame_index == audioModule->encode_frame_size)
+                if (audioModule->tx_encode_frame_index == (audioModule->encode_frame_size + sizeof(audioModule->tx_header)))
                 {
                     //Transmit it
                     DEBUG_MSG("♪♫♪ Sending %d codec2 bytes\n", audioModule->encode_frame_size);
                     audioModule->sendPayload();
-                    audioModule->tx_encode_frame_index = 0;
+                    audioModule->tx_encode_frame_index = sizeof(audioModule->tx_header);
                 }
             }
             if (audioModule->radio_state == RadioState::rx) {
@@ -99,10 +94,12 @@ AudioModule::AudioModule() : SinglePortModule("AudioModule", PortNum_AUDIO_APP),
     if ((moduleConfig.audio.codec2_enabled) && (myRegion->audioPermitted)) {
         DEBUG_MSG("♪♫♪ Setting up codec2 in mode %u", (moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1);
         codec2 = codec2_create((moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1);
+        memcpy(tx_header.magic,c2_magic,sizeof(c2_magic));
+        tx_header.mode = (moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1;
         codec2_set_lpc_post_filter(codec2, 1, 0, 0.8, 0.2);
         encode_codec_size = (codec2_bits_per_frame(codec2) + 7) / 8;
-        encode_frame_num = Constants_DATA_PAYLOAD_LEN / encode_codec_size;
-        encode_frame_size = encode_frame_num * encode_codec_size; // max 237 bytes
+        encode_frame_num = (Constants_DATA_PAYLOAD_LEN - sizeof(tx_header)) / encode_codec_size;
+        encode_frame_size = encode_frame_num * encode_codec_size; // max 233 bytes + 4 header bytes
         adc_buffer_size = codec2_samples_per_frame(codec2);
         DEBUG_MSG(" using %d frames of %d bytes for a total payload length of %d bytes\n", encode_frame_num, encode_codec_size, encode_frame_size);
         xTaskCreate(&run_codec2, "codec2_task", 30000, NULL, 5, &codec2HandlerTask);
@@ -165,13 +162,13 @@ int32_t AudioModule::runOnce()
                 }
             } else {
                 if (radio_state == RadioState::tx) {
-                    if (tx_encode_frame_index > 0) {
+                    if (tx_encode_frame_index > sizeof(tx_header)) {
                         // Send the incomplete frame
                         DEBUG_MSG("♪♫♪ Sending %d codec2 bytes (incomplete)\n", tx_encode_frame_index);
                         sendPayload();
                     }
                     DEBUG_MSG("♪♫♪ PTT released, switching to RX\n");	
-                    tx_encode_frame_index = 0;
+                    tx_encode_frame_index = sizeof(tx_header);
                     radio_state = RadioState::rx;
                 }
             }

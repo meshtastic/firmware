@@ -11,21 +11,35 @@
 #include <codec2.h>
 #include <ButterworthFilter.h>
 
-#define ADC_BUFFER_SIZE_MAX 320
-
 enum RadioState { standby, rx, tx };
+
+const char c2_magic[3] = {0xc0, 0xde, 0xc2}; // Magic number for codec2 header
+
+struct c2_header {
+    char magic[3];
+    char mode;
+};
+
+#define ADC_BUFFER_SIZE_MAX 320
+#define PTT_PIN 39
+
+#define I2S_PORT I2S_NUM_0
+
+#define AUDIO_MODULE_RX_BUFFER 128
+#define AUDIO_MODULE_MODE ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700
 
 class AudioModule : public SinglePortModule, private concurrency::OSThread
 {
   public:
     unsigned char rx_encode_frame[Constants_DATA_PAYLOAD_LEN] = {};
     unsigned char tx_encode_frame[Constants_DATA_PAYLOAD_LEN] = {};
+    c2_header tx_header = {};
     int16_t speech[ADC_BUFFER_SIZE_MAX] = {};
     int16_t output_buffer[ADC_BUFFER_SIZE_MAX] = {};
     uint16_t adc_buffer[ADC_BUFFER_SIZE_MAX] = {};
     int adc_buffer_size = 0;
     uint16_t adc_buffer_index = 0;
-    int tx_encode_frame_index = 0;
+    int tx_encode_frame_index = sizeof(c2_header); // leave room for header
     int rx_encode_frame_index = 0;
     int encode_codec_size = 0;
     int encode_frame_size = 0;
