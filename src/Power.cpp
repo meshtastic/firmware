@@ -284,7 +284,7 @@ void Power::readPowerStatus()
                   powerStatus2.getIsCharging(), powerStatus2.getBatteryVoltageMv(), powerStatus2.getBatteryChargePercent());
         newStatus.notifyObservers(&powerStatus2);
 #ifdef DEBUG_HEAP
-        DEBUG_MSG("Heap status: %d/%d bytes free\n", ESP.getFreeHeap(), ESP.getHeapSize());
+        DEBUG_MSG("Heap status: %d/%d bytes free, running %d threads\n", ESP.getFreeHeap(), ESP.getHeapSize(), concurrency::mainController.size(false));
 #endif
 
 // If we have a battery at all and it is less than 10% full, force deep sleep if we have more than 3 low readings in a row
