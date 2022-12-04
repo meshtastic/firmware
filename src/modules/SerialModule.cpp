@@ -268,7 +268,9 @@ ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
             } else if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG) {
                 NodeInfo *node = nodeDB.getNode(getFrom(&mp));
                 String sender = (node && node->has_user) ? node->user.short_name : "???";
-                Serial2.printf("\n%s: %s\n\n", sender, p.payload.bytes);
+                Serial2.println();
+                Serial2.printf("%s: %s", sender, p.payload.bytes);
+                Serial2.println();
             } else if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_PROTO) {
                 // TODO this needs to be implemented
             } else if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_NMEA) {
