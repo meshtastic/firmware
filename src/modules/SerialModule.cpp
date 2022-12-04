@@ -214,7 +214,6 @@ int32_t SerialModule::runOnce()
 
 MeshPacket *SerialModuleRadio::allocReply()
 {
-
     auto reply = allocDataPacket(); // Allocate a packet for sending
 
     return reply;
@@ -266,7 +265,12 @@ ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
             if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_DEFAULT ||
                 moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_SIMPLE) {
                 Serial2.printf("%s", p.payload.bytes);
-
+            } else if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG) {
+                NodeInfo *node = nodeDB.getNode(getFrom(&mp));
+                String sender = (node && node->has_user) ? node->user.short_name : "???";
+                Serial2.println();
+                Serial2.printf("%s: %s", sender, p.payload.bytes);
+                Serial2.println();
             } else if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_PROTO) {
                 // TODO this needs to be implemented
             } else if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_NMEA) {
