@@ -13,7 +13,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t msecToWake);
 extern esp_sleep_source_t wakeCause;
 #endif
 void setGPSPower(bool on);
-
+void doGPSpowersave(bool on);
 // Perform power on init that we do on each wake from deep sleep
 void initDeepSleep();
 
