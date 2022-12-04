@@ -167,6 +167,22 @@ static void waitEnterSleep()
     notifySleep.notifyObservers(NULL);
 }
 
+void doGPSpowersave(bool on)
+{
+    if (on)
+    {
+        DEBUG_MSG("Turning GPS back on\n");
+        gps->forceWake(1);
+        setGPSPower(1);
+    }
+    else
+    {
+        DEBUG_MSG("Turning off GPS chip\n");
+        notifySleep.notifyObservers(NULL);
+        setGPSPower(0);
+    }
+}
+
 void doDeepSleep(uint64_t msecToWake)
 {
     DEBUG_MSG("Entering deep sleep for %lu seconds\n", msecToWake / 1000);

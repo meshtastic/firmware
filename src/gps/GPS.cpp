@@ -276,7 +276,6 @@ bool GPS::setup()
     delay(10);
     digitalWrite(PIN_GPS_RESET, 0);
 #endif
-
     setAwake(true); // Wake GPS power before doing any init
     bool ok = setupGPS();
 

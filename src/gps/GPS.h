@@ -77,6 +77,8 @@ class GPS : private concurrency::OSThread
     /// Return true if we are connected to a GPS
     bool isConnected() const { return hasGPS; }
 
+    bool gpsPowerflag; 
+
     /**
      * Restart our lock attempt - try to get and broadcast a GPS reading ASAP
      * called after the CPU wakes from light-sleep state
@@ -128,7 +130,6 @@ class GPS : private concurrency::OSThread
 
     void setNumSatellites(uint8_t n);
 
-  private:
     /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
     /// always returns 0 to indicate okay to sleep
     int prepareSleep(void *unused);
@@ -136,6 +137,7 @@ class GPS : private concurrency::OSThread
     /// Prepare the GPS for the cpu entering deep sleep, expect to be gone for at least 100s of msecs
     /// always returns 0 to indicate okay to sleep
     int prepareDeepSleep(void *unused);
+  private:
 
     /**
      * Switch the GPS into a mode where we are actively looking for a lock, or alternatively switch GPS into a low power mode

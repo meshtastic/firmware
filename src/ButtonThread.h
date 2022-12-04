@@ -5,6 +5,7 @@
 #include "configuration.h"
 #include "graphics/Screen.h"
 #include "power.h"
+#include "GPS.h"
 #include <OneButton.h>
 
 namespace concurrency
@@ -159,9 +160,21 @@ class ButtonThread : public concurrency::OSThread
 
     static void userButtonDoublePressed()
     {
-#if defined(USE_EINK) && defined(PIN_EINK_EN)
+    #if defined(USE_EINK) && defined(PIN_EINK_EN)
         digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
-#endif
+    #endif
+    #if defined(GPS_POWER_TOGGLE)
+        if(gps->gpsPowerflag)
+        {
+        DEBUG_MSG("Flag set to false for gps power\n");
+        } 
+        else 
+        {
+        DEBUG_MSG("Flag set to true to restore power\n");
+        }
+    gps->gpsPowerflag = !(gps->gpsPowerflag);
+    doGPSpowersave(gps->gpsPowerflag);
+    #endif
     }
 
     static void userButtonMultiPressed()
