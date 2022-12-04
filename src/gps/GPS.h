@@ -77,7 +77,7 @@ class GPS : private concurrency::OSThread
     /// Return true if we are connected to a GPS
     bool isConnected() const { return hasGPS; }
 
-    bool gpsPowerflag; 
+    bool gpsPowerflag = 1; 
 
     /**
      * Restart our lock attempt - try to get and broadcast a GPS reading ASAP
