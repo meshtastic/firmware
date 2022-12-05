@@ -27,7 +27,7 @@ static bool isPowered()
 
         2) If we detect USB power from the power management chip, we must be getting power externally.
     */
-    return !isPowerSavingMode && powerStatus && (!powerStatus->getHasBattery() || powerStatus->getHasUSB());
+    return false;//!isPowerSavingMode && powerStatus && (!powerStatus->getHasBattery() || powerStatus->getHasUSB());
 }
 
 static void sdsEnter()
