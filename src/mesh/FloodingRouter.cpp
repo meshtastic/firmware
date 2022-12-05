@@ -41,6 +41,11 @@ void FloodingRouter::sniffReceived(const MeshPacket *p, const Routing *c)
 
                 tosend->hop_limit--; // bump down the hop count
 
+                // If it is a traceRoute request, update the route that it went via me
+                if (p->which_payload_variant == MeshPacket_decoded_tag && traceRouteModule->wantPacket(p)) {
+                    traceRouteModule->updateRoute(tosend);
+                }
+
                 printPacket("Rebroadcasting received floodmsg to neighbors", p);
                 // Note: we are careful to resend using the original senders node id
                 // We are careful not to call our hooked version of send() - because we don't want to check this again
