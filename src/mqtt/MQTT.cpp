@@ -70,6 +70,7 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
                     pos.latitude_i=posit["latitude_i"]->AsNumber();
                     pos.longitude_i=posit["longitude_i"]->AsNumber();
                     pos.altitude=posit["altitude"]->AsNumber();
+                    pos.time=posit["time"]->AsNumber();
 
                     // construct protobuf data packet using POSITION, send it to the mesh
                     MeshPacket *p = router->allocForSending();
