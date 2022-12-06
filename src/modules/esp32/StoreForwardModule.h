@@ -1,6 +1,6 @@
 #pragma once
 
-#include "SinglePortModule.h"
+#include "ProtobufModule.h"
 #include "concurrency/OSThread.h"
 #include "mesh/generated/storeforward.pb.h"
 
@@ -18,9 +18,8 @@ struct PacketHistoryStruct {
     pb_size_t payload_size;
 };
 
-class StoreForwardModule : public SinglePortModule, private concurrency::OSThread
+class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<StoreAndForward>
 {
-    // bool firstTime = 1;
     bool busy = 0;
     uint32_t busyTo = 0;
     char routerMessage[Constants_DATA_PAYLOAD_LEN] = {0};
@@ -34,7 +33,12 @@ class StoreForwardModule : public SinglePortModule, private concurrency::OSThrea
     uint32_t packetHistoryTXQueue_size = 0;
     uint32_t packetHistoryTXQueue_index = 0;
 
-    uint32_t packetTimeMax = 2000;
+    uint32_t packetTimeMax = 5000;
+
+    unsigned long lastHeartbeat = 0;
+
+    bool is_client = false;
+    bool is_server = false;
 
   public:
     StoreForwardModule();
@@ -78,7 +82,7 @@ class StoreForwardModule : public SinglePortModule, private concurrency::OSThrea
     it
     */
     virtual ProcessMessage handleReceived(const MeshPacket &mp) override;
-    virtual ProcessMessage handleReceivedProtobuf(const MeshPacket &mp, StoreAndForward *p);
+    virtual bool handleReceivedProtobuf(const MeshPacket &mp, StoreAndForward *p);
 
 };
 
