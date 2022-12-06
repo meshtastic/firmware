@@ -386,6 +386,7 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
 
             int res = iface->startTransmit(radiobuf, numbytes);
             if (res != RADIOLIB_ERR_NONE) {
+                DEBUG_MSG("startTransmit failed, error=%d\n", res);
                 RECORD_CRITICALERROR(CriticalErrorCode_RADIO_SPI_BUG);
 
                 // This send failed, but make sure to 'complete' it properly
