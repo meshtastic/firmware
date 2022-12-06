@@ -82,6 +82,9 @@ typedef enum _PortNum {
  Maintained by GitHub user GUVWAF. 
  Project files at https://github.com/GUVWAF/Meshtasticator */
     PortNum_SIMULATOR_APP = 69, 
+    /* Provides a traceroute functionality to show the route a packet towards
+ a certain destination would take on the mesh. */
+    PortNum_TRACEROUTE_APP = 70, 
     /* Private applications should use portnums >= 256.
  To simplify initial development and testing you can use "PRIVATE_APP"
  in your code without needing to rebuild protobuf files (via [regen-protos.sh](https://github.com/meshtastic/firmware/blob/master/bin/regen-protos.sh)) */
