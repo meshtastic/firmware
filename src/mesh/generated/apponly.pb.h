@@ -54,7 +54,7 @@ extern const pb_msgdesc_t ChannelSet_msg;
 #define ChannelSet_fields &ChannelSet_msg
 
 /* Maximum encoded size of messages (where known) */
-#define ChannelSet_size                          582
+#define ChannelSet_size                          584
 
 #ifdef __cplusplus
 } /* extern "C" */
