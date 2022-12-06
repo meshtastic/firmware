@@ -126,6 +126,7 @@ typedef struct _Config_LoRaConfig {
     bool tx_enabled;
     int8_t tx_power;
     uint16_t channel_num;
+    bool override_duty_cycle;
     pb_size_t ignore_incoming_count;
     uint32_t ignore_incoming[3];
 } Config_LoRaConfig;
@@ -235,7 +236,7 @@ extern "C" {
 #define Config_NetworkConfig_init_default        {0, "", "", "", 0, _Config_NetworkConfig_EthMode_MIN, false, Config_NetworkConfig_IpV4Config_init_default}
 #define Config_NetworkConfig_IpV4Config_init_default {0, 0, 0, 0}
 #define Config_DisplayConfig_init_default        {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _Config_DisplayConfig_DisplayUnits_MIN, _Config_DisplayConfig_OledType_MIN}
-#define Config_LoRaConfig_init_default           {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, {0, 0, 0}}
+#define Config_LoRaConfig_init_default           {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, {0, 0, 0}}
 #define Config_BluetoothConfig_init_default      {0, _Config_BluetoothConfig_PairingMode_MIN, 0}
 #define Config_init_zero                         {0, {Config_DeviceConfig_init_zero}}
 #define Config_DeviceConfig_init_zero            {_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0}
@@ -244,7 +245,7 @@ extern "C" {
 #define Config_NetworkConfig_init_zero           {0, "", "", "", 0, _Config_NetworkConfig_EthMode_MIN, false, Config_NetworkConfig_IpV4Config_init_zero}
 #define Config_NetworkConfig_IpV4Config_init_zero {0, 0, 0, 0}
 #define Config_DisplayConfig_init_zero           {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _Config_DisplayConfig_DisplayUnits_MIN, _Config_DisplayConfig_OledType_MIN}
-#define Config_LoRaConfig_init_zero              {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, {0, 0, 0}}
+#define Config_LoRaConfig_init_zero              {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, {0, 0, 0}}
 #define Config_BluetoothConfig_init_zero         {0, _Config_BluetoothConfig_PairingMode_MIN, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -274,6 +275,7 @@ extern "C" {
 #define Config_LoRaConfig_tx_enabled_tag         9
 #define Config_LoRaConfig_tx_power_tag           10
 #define Config_LoRaConfig_channel_num_tag        11
+#define Config_LoRaConfig_override_duty_cycle_tag 12
 #define Config_LoRaConfig_ignore_incoming_tag    103
 #define Config_NetworkConfig_IpV4Config_ip_tag   1
 #define Config_NetworkConfig_IpV4Config_gateway_tag 2
@@ -407,6 +409,7 @@ X(a, STATIC,   SINGULAR, UINT32,   hop_limit,         8) \
 X(a, STATIC,   SINGULAR, BOOL,     tx_enabled,        9) \
 X(a, STATIC,   SINGULAR, INT32,    tx_power,         10) \
 X(a, STATIC,   SINGULAR, UINT32,   channel_num,      11) \
+X(a, STATIC,   SINGULAR, BOOL,     override_duty_cycle,  12) \
 X(a, STATIC,   REPEATED, UINT32,   ignore_incoming, 103)
 #define Config_LoRaConfig_CALLBACK NULL
 #define Config_LoRaConfig_DEFAULT NULL
@@ -443,7 +446,7 @@ extern const pb_msgdesc_t Config_BluetoothConfig_msg;
 #define Config_BluetoothConfig_size              10
 #define Config_DeviceConfig_size                 18
 #define Config_DisplayConfig_size                22
-#define Config_LoRaConfig_size                   68
+#define Config_LoRaConfig_size                   70
 #define Config_NetworkConfig_IpV4Config_size     20
 #define Config_NetworkConfig_size                161
 #define Config_PositionConfig_size               42

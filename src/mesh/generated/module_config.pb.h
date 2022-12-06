@@ -63,10 +63,12 @@ typedef enum _ModuleConfig_CannedMessageConfig_InputEventChar {
 /* Struct definitions */
 typedef struct _ModuleConfig_AudioConfig { 
     bool codec2_enabled;
-    uint32_t mic_chan;
-    uint32_t amp_pin;
-    uint32_t ptt_pin;
+    uint8_t ptt_pin;
     ModuleConfig_AudioConfig_Audio_Baud bitrate;
+    uint8_t i2s_ws;
+    uint8_t i2s_sd;
+    uint8_t i2s_din;
+    uint8_t i2s_sck;
 } ModuleConfig_AudioConfig;
 
 typedef struct _ModuleConfig_CannedMessageConfig { 
@@ -183,7 +185,7 @@ extern "C" {
 /* Initializer values for message structs */
 #define ModuleConfig_init_default                {0, {ModuleConfig_MQTTConfig_init_default}}
 #define ModuleConfig_MQTTConfig_init_default     {0, "", "", "", 0, 0}
-#define ModuleConfig_AudioConfig_init_default    {0, 0, 0, 0, _ModuleConfig_AudioConfig_Audio_Baud_MIN}
+#define ModuleConfig_AudioConfig_init_default    {0, 0, _ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define ModuleConfig_SerialConfig_init_default   {0, 0, 0, 0, _ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _ModuleConfig_SerialConfig_Serial_Mode_MIN}
 #define ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0, 0}
 #define ModuleConfig_StoreForwardConfig_init_default {0, 0, 0, 0, 0}
@@ -192,7 +194,7 @@ extern "C" {
 #define ModuleConfig_CannedMessageConfig_init_default {0, 0, 0, 0, _ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define ModuleConfig_init_zero                   {0, {ModuleConfig_MQTTConfig_init_zero}}
 #define ModuleConfig_MQTTConfig_init_zero        {0, "", "", "", 0, 0}
-#define ModuleConfig_AudioConfig_init_zero       {0, 0, 0, 0, _ModuleConfig_AudioConfig_Audio_Baud_MIN}
+#define ModuleConfig_AudioConfig_init_zero       {0, 0, _ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define ModuleConfig_SerialConfig_init_zero      {0, 0, 0, 0, _ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _ModuleConfig_SerialConfig_Serial_Mode_MIN}
 #define ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0, 0}
 #define ModuleConfig_StoreForwardConfig_init_zero {0, 0, 0, 0, 0}
@@ -202,10 +204,12 @@ extern "C" {
 
 /* Field tags (for use in manual encoding/decoding) */
 #define ModuleConfig_AudioConfig_codec2_enabled_tag 1
-#define ModuleConfig_AudioConfig_mic_chan_tag    2
-#define ModuleConfig_AudioConfig_amp_pin_tag     3
-#define ModuleConfig_AudioConfig_ptt_pin_tag     4
-#define ModuleConfig_AudioConfig_bitrate_tag     5
+#define ModuleConfig_AudioConfig_ptt_pin_tag     2
+#define ModuleConfig_AudioConfig_bitrate_tag     3
+#define ModuleConfig_AudioConfig_i2s_ws_tag      4
+#define ModuleConfig_AudioConfig_i2s_sd_tag      5
+#define ModuleConfig_AudioConfig_i2s_din_tag     6
+#define ModuleConfig_AudioConfig_i2s_sck_tag     7
 #define ModuleConfig_CannedMessageConfig_rotary1_enabled_tag 1
 #define ModuleConfig_CannedMessageConfig_inputbroker_pin_a_tag 2
 #define ModuleConfig_CannedMessageConfig_inputbroker_pin_b_tag 3
@@ -292,10 +296,12 @@ X(a, STATIC,   SINGULAR, BOOL,     json_enabled,      6)
 
 #define ModuleConfig_AudioConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     codec2_enabled,    1) \
-X(a, STATIC,   SINGULAR, UINT32,   mic_chan,          2) \
-X(a, STATIC,   SINGULAR, UINT32,   amp_pin,           3) \
-X(a, STATIC,   SINGULAR, UINT32,   ptt_pin,           4) \
-X(a, STATIC,   SINGULAR, UENUM,    bitrate,           5)
+X(a, STATIC,   SINGULAR, UINT32,   ptt_pin,           2) \
+X(a, STATIC,   SINGULAR, UENUM,    bitrate,           3) \
+X(a, STATIC,   SINGULAR, UINT32,   i2s_ws,            4) \
+X(a, STATIC,   SINGULAR, UINT32,   i2s_sd,            5) \
+X(a, STATIC,   SINGULAR, UINT32,   i2s_din,           6) \
+X(a, STATIC,   SINGULAR, UINT32,   i2s_sck,           7)
 #define ModuleConfig_AudioConfig_CALLBACK NULL
 #define ModuleConfig_AudioConfig_DEFAULT NULL
 
@@ -383,7 +389,7 @@ extern const pb_msgdesc_t ModuleConfig_CannedMessageConfig_msg;
 #define ModuleConfig_CannedMessageConfig_fields &ModuleConfig_CannedMessageConfig_msg
 
 /* Maximum encoded size of messages (where known) */
-#define ModuleConfig_AudioConfig_size            22
+#define ModuleConfig_AudioConfig_size            19
 #define ModuleConfig_CannedMessageConfig_size    49
 #define ModuleConfig_ExternalNotificationConfig_size 22
 #define ModuleConfig_MQTTConfig_size             169
