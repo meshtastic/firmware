@@ -329,11 +329,7 @@ static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, i
     display->drawString(64 + x, y, "Updating");
 
     display->setFont(FONT_SMALL);
-    if ((millis() / 1000) % 2) {
-        display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . . .");
-    } else {
-        display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . .  ");
-    }
+    display->drawStringMaxWidth(0 + x, 2 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), "Please be patient and do not power off.");
 }
 
 /// Draw the last text message we received
