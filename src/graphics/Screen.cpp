@@ -360,6 +360,9 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
 {
     displayedNodeNum = 0; // Not currently showing a node pane
 
+    // the max length of this buffer is much longer than we can possibly print
+    static char tempBuf[237];
+
     MeshPacket &mp = devicestate.rx_text_message;
     NodeInfo *node = nodeDB.getNode(getFrom(&mp));
     // DEBUG_MSG("drawing text message from 0x%x: %s\n", mp.from,
@@ -369,16 +372,13 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     // with the third parameter you can define the width after which words will
     // be wrapped. Currently only spaces and "-" are allowed for wrapping
     display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->setFont(FONT_MEDIUM);
-    String sender = (node && node->has_user) ? node->user.short_name : "???";
-    display->drawString(0 + x, 0 + y, sender);
     display->setFont(FONT_SMALL);
-
-    // the max length of this buffer is much longer than we can possibly print
-    static char tempBuf[96];
-    snprintf(tempBuf, sizeof(tempBuf), "         %s", mp.decoded.payload.bytes);
-
-    display->drawStringMaxWidth(4 + x, 10 + y, SCREEN_WIDTH - (6 + x), tempBuf);
+    display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+    display->setColor(BLACK);
+    display->drawStringf(0 + x, 0 + y, tempBuf, "From: %s", (node && node->has_user) ? node->user.short_name : "???");
+    display->setColor(WHITE);
+    snprintf(tempBuf, sizeof(tempBuf), "%s", mp.decoded.payload.bytes);
+    display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), tempBuf);
 }
 
 /// Draw a series of fields in a column, wrapping to multiple colums if needed
