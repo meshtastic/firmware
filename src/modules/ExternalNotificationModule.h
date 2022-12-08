@@ -17,18 +17,19 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
   public:
     ExternalNotificationModule();
 
-    void setExternalOn();
-    void setExternalOff();
-    void getExternal();
+    uint32_t nagCycleCutoff = UINT32_MAX;
+
+    void setExternalOn(uint8_t index = 0);
+    void setExternalOff(uint8_t index = 0);
+    bool getExternal(uint8_t index = 0);
 
   protected:
-    // virtual MeshPacket *allocReply();
-
     /** Called to handle a particular incoming message
-
     @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
     virtual ProcessMessage handleReceived(const MeshPacket &mp) override;
 
     virtual int32_t runOnce() override;
 };
+
+extern ExternalNotificationModule *externalNotificationModule;

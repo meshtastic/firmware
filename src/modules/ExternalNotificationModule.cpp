@@ -11,41 +11,9 @@
 #define PIN_BUZZER false
 #endif
 
-//#include <assert.h>
-
 /*
-
     Documentation:
-        https://github.com/meshtastic/firmware/blob/master/docs/software/modules/ExternalNotificationModule.md
-
-    This module supports:
-        https://github.com/meshtastic/firmware/issues/654
-
-
-    Quick reference:
-
-        moduleConfig.external_notification.enabled
-            0 = Disabled (Default)
-            1 = Enabled
-
-        moduleConfig.external_notification.active
-            0 = Active Low (Default)
-            1 = Active High
-
-        moduleConfig.external_notification.alert_message
-            0 = Disabled (Default)
-            1 = Alert when a text message comes
-
-        moduleConfig.external_notification.alert_bell
-            0 = Disabled (Default)
-            1 = Alert when the bell character is received
-
-        moduleConfig.external_notification.output
-            GPIO of the output. (Default = 13)
-
-        moduleConfig.external_notification.output_ms
-            Amount of time in ms for the alert. Default is 1000.
-
+        https://meshtastic.org/docs/settings/moduleconfig/external-notification
 */
 
 // Default configurations
@@ -58,8 +26,11 @@
 
 #define ASCII_BELL 0x07
 
-bool externalCurrentState = 0;
-uint32_t externalTurnedOn = 0;
+ExternalNotificationModule *externalNotificationModule;
+
+bool externalCurrentState[3] = {};
+
+uint32_t externalTurnedOn[3] = {};
 
 int32_t ExternalNotificationModule::runOnce()
 {
@@ -76,38 +47,89 @@ int32_t ExternalNotificationModule::runOnce()
     // moduleConfig.external_notification.output_ms = 1000;
     // moduleConfig.external_notification.output = 13;
 
-    if (externalCurrentState && !moduleConfig.external_notification.use_pwm) {
+    if (moduleConfig.external_notification.use_pwm || !moduleConfig.external_notification.enabled) {
+        return INT32_MAX; // we don't need this thread here...
+    } else {
 
         // If the output is turned on, turn it back off after the given period of time.
-        if (externalTurnedOn + (moduleConfig.external_notification.output_ms
+        if (nagCycleCutoff != UINT32_MAX) {
+            if (externalTurnedOn[0] + (moduleConfig.external_notification.output_ms
                                     ? moduleConfig.external_notification.output_ms
-                                    : EXT_NOTIFICATION_MODULE_OUTPUT_MS) <
-            millis()) {
-            DEBUG_MSG("Turning off external notification\n");
-            setExternalOff();
+                                    : EXT_NOTIFICATION_MODULE_OUTPUT_MS) < millis()) {
+                getExternal(0) ? setExternalOff(0) : setExternalOn(0);
+            }
+            if (externalTurnedOn[1] + (moduleConfig.external_notification.output_ms
+                                    ? moduleConfig.external_notification.output_ms
+                                    : EXT_NOTIFICATION_MODULE_OUTPUT_MS) < millis()) {
+                getExternal(1) ? setExternalOff(1) : setExternalOn(1);
+            }
+            if (externalTurnedOn[2] + (moduleConfig.external_notification.output_ms
+                                    ? moduleConfig.external_notification.output_ms
+                                    : EXT_NOTIFICATION_MODULE_OUTPUT_MS) < millis()) {
+                getExternal(2) ? setExternalOff(2) : setExternalOn(2);
+            }
         }
-    }
-    if (moduleConfig.external_notification.use_pwm)
-        return INT32_MAX; // we don't need this thread here...
-    else
+
+        if (nagCycleCutoff < millis()) {
+            nagCycleCutoff = UINT32_MAX;
+            DEBUG_MSG("Turning off external notification: ");
+            for (int i = 0; i < 2; i++) {
+                if (getExternal(i)) {
+                    setExternalOff(i);
+                    externalTurnedOn[i] = 0;
+                    DEBUG_MSG("%d ", i);
+                }
+            }
+            DEBUG_MSG("\n");
+            return INT32_MAX; // save cycles till we're needed again
+        }
         return 25;
+    }
 }
 
-void ExternalNotificationModule::setExternalOn()
+void ExternalNotificationModule::setExternalOn(uint8_t index)
 {
-    externalCurrentState = 1;
-    externalTurnedOn = millis();
+    externalCurrentState[index] = 1;
+    externalTurnedOn[index] = millis();
 
-    digitalWrite(output,
-                 (moduleConfig.external_notification.active ? true : false));
+    switch(index) {
+        case 1:
+            if(moduleConfig.external_notification.output_vibra)
+                digitalWrite(moduleConfig.external_notification.output_vibra, true);
+            break;
+        case 2:
+            if(moduleConfig.external_notification.output_buzzer)
+                digitalWrite(moduleConfig.external_notification.output_buzzer, true);
+            break;
+        default:
+            digitalWrite(output, (moduleConfig.external_notification.active ? true : false));
+            break;
+    }
 }
 
-void ExternalNotificationModule::setExternalOff()
+void ExternalNotificationModule::setExternalOff(uint8_t index)
 {
-    externalCurrentState = 0;
+    externalCurrentState[index] = 0;
+    externalTurnedOn[index] = millis();
 
-    digitalWrite(output,
-                 (moduleConfig.external_notification.active ? false : true));
+    switch(index) {
+        case 1:
+            if(moduleConfig.external_notification.output_vibra)
+                digitalWrite(moduleConfig.external_notification.output_vibra, false);
+            break;
+        case 2:
+            if(moduleConfig.external_notification.output_buzzer)
+                digitalWrite(moduleConfig.external_notification.output_buzzer, false);
+            break;
+        default:
+            digitalWrite(output, (moduleConfig.external_notification.active ? false : true));
+            break;
+    }
+}
+
+bool ExternalNotificationModule::getExternal(uint8_t index)
+{
+    return externalCurrentState[index];
 }
 
 // --------
@@ -141,8 +163,20 @@ ExternalNotificationModule::ExternalNotificationModule()
             // Set the direction of a pin
             DEBUG_MSG("Using Pin %i in digital mode\n", output);
             pinMode(output, OUTPUT);
-            // Turn off the pin
-            setExternalOff();
+            setExternalOff(0);
+            externalTurnedOn[0] = 0;
+            if(moduleConfig.external_notification.output_vibra) {
+                DEBUG_MSG("Using Pin %i for vibra motor\n", moduleConfig.external_notification.output_vibra);
+                pinMode(moduleConfig.external_notification.output_vibra, OUTPUT);
+                setExternalOff(1);
+                externalTurnedOn[1] = 0;
+            }
+            if(moduleConfig.external_notification.output_buzzer) {
+                DEBUG_MSG("Using Pin %i for buzzer\n", moduleConfig.external_notification.output_buzzer);
+                pinMode(moduleConfig.external_notification.output_buzzer, OUTPUT);
+                setExternalOff(2);
+                externalTurnedOn[2] = 0;
+            }
         } else {
             config.device.buzzer_gpio = config.device.buzzer_gpio
                                 ? config.device.buzzer_gpio
@@ -163,17 +197,53 @@ ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
 
         if (getFrom(&mp) != nodeDB.getNodeNum()) {
 
-            // TODO: This may be a problem if messages are sent in unicide, but I'm not sure if it will.
-            //   Need to know if and how this could be a problem.
+            // Check if the message contains a bell character. Don't do this loop for every pin, just once.
+            auto &p = mp.decoded;
+            bool containsBell = false;
+            for (int i = 0; i < p.payload.size; i++) {
+                if (p.payload.bytes[i] == ASCII_BELL) {
+                    containsBell = true;
+                }
+            }
+
             if (moduleConfig.external_notification.alert_bell) {
-                auto &p = mp.decoded;
-                DEBUG_MSG("externalNotificationModule - Notification Bell\n");
-                for (int i = 0; i < p.payload.size; i++) {
-                    if (p.payload.bytes[i] == ASCII_BELL) {
-                        if (!moduleConfig.external_notification.use_pwm) {
-                            setExternalOn();
+                if (containsBell) {
+                    DEBUG_MSG("externalNotificationModule - Notification Bell\n");
+                    if (!moduleConfig.external_notification.use_pwm) {
+                        setExternalOn(0);
+                        if (moduleConfig.external_notification.nag_timeout) {
+                            nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
                         } else {
-                            playBeep();
+                            nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
+                        }
+                        // run_once now
+                    } else {
+                        playBeep();
+                    }
+                }
+            }
+
+            if (!moduleConfig.external_notification.use_pwm) {
+                if (moduleConfig.external_notification.alert_bell_vibra) {
+                    if (containsBell) {
+                        DEBUG_MSG("externalNotificationModule - Notification Bell (Vibra)\n");
+                        setExternalOn(1);
+                        if (moduleConfig.external_notification.nag_timeout) {
+                            nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
+                        } else {
+                            nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
+                        }
+                    }
+                }
+
+                if (moduleConfig.external_notification.alert_bell_buzzer) {
+                    if (containsBell) {
+                        DEBUG_MSG("externalNotificationModule - Notification Bell (Buzzer)\n");
+                        setExternalOn(2);
+                        if (moduleConfig.external_notification.nag_timeout) {
+                            nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
+                        } else {
+                            nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
                         }
                     }
                 }
@@ -182,11 +252,39 @@ ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
             if (moduleConfig.external_notification.alert_message) {
                 DEBUG_MSG("externalNotificationModule - Notification Module\n");
                 if (!moduleConfig.external_notification.use_pwm) {
-                    setExternalOn();
+                    setExternalOn(0);
+                    if (moduleConfig.external_notification.nag_timeout) {
+                        nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
+                    } else {
+                        nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
+                    }
                 } else {
                     playBeep();
                 }
             }
+
+            if (!moduleConfig.external_notification.use_pwm) {
+                if (moduleConfig.external_notification.alert_message_vibra) {
+                    DEBUG_MSG("externalNotificationModule - Notification Module (Vibra)\n");
+                    setExternalOn(1);
+                    if (moduleConfig.external_notification.nag_timeout) {
+                        nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
+                    } else {
+                        nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
+                    }
+                }
+
+                if (moduleConfig.external_notification.alert_message_buzzer) {
+                    DEBUG_MSG("externalNotificationModule - Notification Module (Buzzer)\n");
+                    setExternalOn(2);
+                    if (moduleConfig.external_notification.nag_timeout) {
+                        nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
+                    } else {
+                        nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
+                    }
+                }
+            }
+            setIntervalFromNow(0); // run once so we know if we should do something
         }
 
     } else {
