@@ -105,6 +105,9 @@ void scanI2Cdevice()
 
             if (addr == SSD1306_ADDRESS) {
                 screen_found = addr;
+#ifdef LILYGO_TBEAM_S3_CORE
+                screen_model = 2;
+#else
                 screen_model = oled_probe(addr);
                 if (screen_model == 1) {
                     DEBUG_MSG("ssd1306 display found\n");
@@ -113,6 +116,7 @@ void scanI2Cdevice()
                 } else {
                     DEBUG_MSG("unknown display found\n");
                 }
+#endif
             }
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
             if (addr == ATECC608B_ADDR) {
