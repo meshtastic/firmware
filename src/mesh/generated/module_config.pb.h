@@ -93,12 +93,13 @@ typedef struct _ModuleConfig_ExternalNotificationConfig {
     bool alert_message;
     bool alert_bell;
     bool use_pwm;
-    uint32_t output_vibra;
-    uint32_t output_buzzer;
+    uint8_t output_vibra;
+    uint8_t output_buzzer;
     bool alert_message_vibra;
     bool alert_message_buzzer;
     bool alert_bell_vibra;
     bool alert_bell_buzzer;
+    uint16_t nag_timeout;
 } ModuleConfig_ExternalNotificationConfig;
 
 typedef struct _ModuleConfig_MQTTConfig { 
@@ -193,7 +194,7 @@ extern "C" {
 #define ModuleConfig_MQTTConfig_init_default     {0, "", "", "", 0, 0}
 #define ModuleConfig_AudioConfig_init_default    {0, 0, _ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define ModuleConfig_SerialConfig_init_default   {0, 0, 0, 0, _ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _ModuleConfig_SerialConfig_Serial_Mode_MIN}
-#define ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define ModuleConfig_StoreForwardConfig_init_default {0, 0, 0, 0, 0}
 #define ModuleConfig_RangeTestConfig_init_default {0, 0, 0}
 #define ModuleConfig_TelemetryConfig_init_default {0, 0, 0, 0, 0}
@@ -202,7 +203,7 @@ extern "C" {
 #define ModuleConfig_MQTTConfig_init_zero        {0, "", "", "", 0, 0}
 #define ModuleConfig_AudioConfig_init_zero       {0, 0, _ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define ModuleConfig_SerialConfig_init_zero      {0, 0, 0, 0, _ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _ModuleConfig_SerialConfig_Serial_Mode_MIN}
-#define ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define ModuleConfig_StoreForwardConfig_init_zero {0, 0, 0, 0, 0}
 #define ModuleConfig_RangeTestConfig_init_zero   {0, 0, 0}
 #define ModuleConfig_TelemetryConfig_init_zero   {0, 0, 0, 0, 0}
@@ -240,6 +241,7 @@ extern "C" {
 #define ModuleConfig_ExternalNotificationConfig_alert_message_buzzer_tag 11
 #define ModuleConfig_ExternalNotificationConfig_alert_bell_vibra_tag 12
 #define ModuleConfig_ExternalNotificationConfig_alert_bell_buzzer_tag 13
+#define ModuleConfig_ExternalNotificationConfig_nag_timeout_tag 14
 #define ModuleConfig_MQTTConfig_enabled_tag      1
 #define ModuleConfig_MQTTConfig_address_tag      2
 #define ModuleConfig_MQTTConfig_username_tag     3
@@ -341,7 +343,8 @@ X(a, STATIC,   SINGULAR, UINT32,   output_buzzer,     9) \
 X(a, STATIC,   SINGULAR, BOOL,     alert_message_vibra,  10) \
 X(a, STATIC,   SINGULAR, BOOL,     alert_message_buzzer,  11) \
 X(a, STATIC,   SINGULAR, BOOL,     alert_bell_vibra,  12) \
-X(a, STATIC,   SINGULAR, BOOL,     alert_bell_buzzer,  13)
+X(a, STATIC,   SINGULAR, BOOL,     alert_bell_buzzer,  13) \
+X(a, STATIC,   SINGULAR, UINT32,   nag_timeout,      14)
 #define ModuleConfig_ExternalNotificationConfig_CALLBACK NULL
 #define ModuleConfig_ExternalNotificationConfig_DEFAULT NULL
 
@@ -409,7 +412,7 @@ extern const pb_msgdesc_t ModuleConfig_CannedMessageConfig_msg;
 /* Maximum encoded size of messages (where known) */
 #define ModuleConfig_AudioConfig_size            19
 #define ModuleConfig_CannedMessageConfig_size    49
-#define ModuleConfig_ExternalNotificationConfig_size 42
+#define ModuleConfig_ExternalNotificationConfig_size 40
 #define ModuleConfig_MQTTConfig_size             169
 #define ModuleConfig_RangeTestConfig_size        10
 #define ModuleConfig_SerialConfig_size           26
