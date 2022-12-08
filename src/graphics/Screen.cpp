@@ -329,7 +329,8 @@ static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, i
     display->drawString(64 + x, y, "Updating");
 
     display->setFont(FONT_SMALL);
-    display->drawStringMaxWidth(0 + x, 2 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), "Please be patient and do not power off.");
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->drawStringMaxWidth(0 + x, 2 + y + FONT_HEIGHT_SMALL *2, x + display->getWidth(), "Please be patient and do not power off.");
 }
 
 /// Draw the last text message we received
