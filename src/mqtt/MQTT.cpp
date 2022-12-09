@@ -81,6 +81,25 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
                 } else {
                     DEBUG_MSG("JSON Ignoring downlink message we originally sent.\n");
                 }
+             } else if ((json.find("sender") != json.end()) && (json.find("payload") != json.end()) && (json.find("type") != json.end()) && json["type"]->IsString() && (json["type"]->AsString().compare("senduser") == 0)) {
+                //invent the "senduser" type for a valid envelope
+                if (json["payload"]->IsObject() && json["type"]->IsString() && (json["sender"]->AsString().compare(owner.id) != 0)) {
+                    JSONObject usr;
+                    usr=json["payload"]->AsObject(); //get nested JSON User
+                    User u = User_init_default;
+                    strcpy(u.id, usr["id"]->AsString().c_str());
+                    strcpy(u.long_name,usr["long_name"]->AsString().c_str());
+                    strcpy(u.short_name, usr["short_name"]->AsString().c_str());
+
+                    // construct protobuf data packet using NODEINFO, send it to the mesh
+                    MeshPacket *p = router->allocForSending();
+                    p->decoded.portnum = PortNum_NODEINFO_APP;
+                    p->decoded.payload.size=pb_encode_to_bytes(p->decoded.payload.bytes,sizeof(p->decoded.payload.bytes),User_fields, &u); //make the Data protobuf from user
+                    service.sendToMesh(p, RX_SRC_LOCAL);
+
+                } else {
+                    DEBUG_MSG("JSON Ignoring downlink message we originally sent.\n");
+                }   
             } else{
                 DEBUG_MSG("JSON Received payload on MQTT but not a valid envelope\n");
             }
