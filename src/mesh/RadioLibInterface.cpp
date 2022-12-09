@@ -3,6 +3,7 @@
 #include "NodeDB.h"
 #include "SPILock.h"
 #include "configuration.h"
+#include "main.h"
 #include "error.h"
 #include "mesh-pb-constants.h"
 #include <pb_decode.h>
@@ -87,10 +88,8 @@ bool RadioLibInterface::canSendImmediately()
         if (busyTx && (millis() - lastTxStart > 60000)) {
             DEBUG_MSG("Hardware Failure! busyTx for more than 60s\n");
             RECORD_CRITICALERROR(CriticalErrorCode_TRANSMIT_FAILED);
-#ifdef ARCH_ESP32
-            if (busyTx && (millis() - lastTxStart > 65000)) // After 5s more, reboot
-                ESP.restart();
-#endif
+            // reboot in 5 seconds when this condition occurs.
+            rebootAtMsec = lastTxStart + 65000;
         }
         if (busyRx)
             DEBUG_MSG("Can not send yet, busyRx\n");
