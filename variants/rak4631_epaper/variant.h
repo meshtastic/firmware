@@ -169,6 +169,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
    IO4       <->  P0.04 (Arduino GPIO number 4)
    IO5       <->  P0.09 (Arduino GPIO number 9)
    IO6       <->  P0.10 (Arduino GPIO number 10)
+   IO7       <->  P0.28 (Arduino GPIO number 28)
    SW1       <->  P0.01 (Arduino GPIO number 1)
    A0        <->  P0.04/AIN2 (Arduino Analog A2
    A1        <->  P0.31/AIN7 (Arduino Analog A7
