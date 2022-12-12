@@ -336,14 +336,15 @@ void PowerFSM_setup()
     if (isRouter || config.power.is_power_saving) {
         powerFSM.add_timed_transition(&stateNB, &stateLS, getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs), NULL, "Min wake timeout");
         powerFSM.add_timed_transition(&stateDARK, &stateLS, getConfiguredOrDefaultMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs), NULL, "Bluetooth timeout");
-    } 
+    }
+
+    if (config.power.sds_secs != UINT32_MAX)
+        powerFSM.add_timed_transition(lowPowerState, &stateSDS, getConfiguredOrDefaultMs(config.power.sds_secs), NULL, "mesh timeout");
 
 #elif defined (ARCH_NRF52)
     lowPowerState = &stateDARK;
 #endif
 
-    if (config.power.sds_secs != UINT32_MAX)
-        powerFSM.add_timed_transition(lowPowerState, &stateSDS, getConfiguredOrDefaultMs(config.power.sds_secs), NULL, "mesh timeout");
 
     powerFSM.run_machine(); // run one interation of the state machine, so we run our on enter tasks for the initial DARK state
 }
