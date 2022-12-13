@@ -41,9 +41,26 @@ AudioModule *audioModule;
 #define YIELD_FROM_ISR(x) portYIELD_FROM_ISR(x)
 #endif
 
-//int16_t 1KHz sine test tone
-int16_t Sine1KHz[8] = { -21210 , -30000, -21210, 0 , 21210 , 30000 , 21210, 0 };
-int Sine1KHz_index = 0;
+#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
+// The screen is bigger so use bigger fonts
+#define FONT_SMALL ArialMT_Plain_16
+#define FONT_MEDIUM ArialMT_Plain_24
+#define FONT_LARGE ArialMT_Plain_24
+#else
+#ifdef OLED_RU
+#define FONT_SMALL ArialMT_Plain_10_RU
+#else
+#define FONT_SMALL ArialMT_Plain_10
+#endif
+#define FONT_MEDIUM ArialMT_Plain_16
+#define FONT_LARGE ArialMT_Plain_24
+#endif
+
+#define fontHeight(font) ((font)[1] + 1) // height is position 1
+
+#define FONT_HEIGHT_SMALL fontHeight(FONT_SMALL)
+#define FONT_HEIGHT_MEDIUM fontHeight(FONT_MEDIUM)
+#define FONT_HEIGHT_LARGE fontHeight(FONT_LARGE)
 
 void run_codec2(void* parameter)
 {
@@ -124,6 +141,30 @@ AudioModule::AudioModule() : SinglePortModule("AudioModule", PortNum_AUDIO_APP),
     }
 }
 
+void AudioModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    displayedNodeNum = 0; // Not currently showing a node pane
+
+    char buffer[50];
+
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+    display->setColor(BLACK);
+    display->drawStringf(0 + x, 0 + y, buffer, "Codec2 Mode %d Audio", (moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1);
+    display->setColor(WHITE);
+    display->setFont(FONT_LARGE);
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    switch (radio_state) {
+        case RadioState::tx:
+            display->drawString(display->getWidth() / 2 + x, (display->getHeight() - FONT_HEIGHT_SMALL) / 2 + y, "PTT");
+            break;
+        default:
+            display->drawString(display->getWidth() / 2 + x, (display->getHeight() - FONT_HEIGHT_SMALL) / 2 + y, "Receive");
+            break;
+    }
+}
+
 int32_t AudioModule::runOnce()
 {
     if ((moduleConfig.audio.codec2_enabled) && (myRegion->audioPermitted)) {
@@ -170,11 +211,14 @@ int32_t AudioModule::runOnce()
 
             firstTime = false;
         } else {
+            UIFrameEvent e = {false, true};
             // Check if PTT is pressed. TODO hook that into Onebutton/Interrupt drive.
             if (digitalRead(moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN) == HIGH) {
                 if (radio_state == RadioState::rx) {
                     DEBUG_MSG("♪♫♪ PTT pressed, switching to TX\n");
                     radio_state = RadioState::tx;
+                    e.frameChanged = true;
+                    this->notifyObservers(&e);
                 }
             } else {
                 if (radio_state == RadioState::tx) {
@@ -183,9 +227,11 @@ int32_t AudioModule::runOnce()
                         DEBUG_MSG("♪♫♪ Sending %d codec2 bytes (incomplete)\n", tx_encode_frame_index);
                         sendPayload();
                     }
-                    DEBUG_MSG("♪♫♪ PTT released, switching to RX\n");	
+                    DEBUG_MSG("♪♫♪ PTT released, switching to RX\n");
                     tx_encode_frame_index = sizeof(tx_header);
                     radio_state = RadioState::rx;
+                    e.frameChanged = true;
+                    this->notifyObservers(&e);
                 }
             }
             if (radio_state == RadioState::tx) {
@@ -220,6 +266,14 @@ MeshPacket *AudioModule::allocReply()
 {
     auto reply = allocDataPacket(); // Allocate a packet for sending
     return reply;
+}
+
+bool AudioModule::shouldDraw()
+{
+    if (!moduleConfig.audio.codec2_enabled) {
+        return false;
+    }
+    return (radio_state == RadioState::tx);
 }
 
 void AudioModule::sendPayload(NodeNum dest, bool wantReplies)
