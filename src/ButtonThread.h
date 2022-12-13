@@ -5,7 +5,6 @@
 #include "configuration.h"
 #include "graphics/Screen.h"
 #include "power.h"
-#include "GPS.h"
 #include <OneButton.h>
 
 namespace concurrency
@@ -164,7 +163,7 @@ class ButtonThread : public concurrency::OSThread
         digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
     #endif
     #if defined(GPS_POWER_TOGGLE)
-        if(gps->gpsPowerflag)
+        if(config.position.gps_enabled)
         {
         DEBUG_MSG("Flag set to false for gps power\n");
         } 
@@ -172,8 +171,8 @@ class ButtonThread : public concurrency::OSThread
         {
         DEBUG_MSG("Flag set to true to restore power\n");
         }
-    gps->gpsPowerflag = !(gps->gpsPowerflag);
-    doGPSpowersave(gps->gpsPowerflag);
+    config.position.gps_enabled = !(config.position.gps_enabled);
+    doGPSpowersave(config.position.gps_enabled);
     #endif
     }
 
